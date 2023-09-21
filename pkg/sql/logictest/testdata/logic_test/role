@@ -1554,7 +1554,7 @@ user testuser
 # Verify that testuser is not allowed to edit some other role that has ADMIN.
 # The error message is important for this test -- we want to make sure it fails
 # because of a missing ADMIN power, not because of a missing CREATEROLE option.
-statement error only users with the admin role are allowed to ALTER ROLE admin
+statement error only users with the admin role are allowed to alter another admin
 ALTER ROLE other_admin NOCREATEDB
 
 subtest pw_hashes

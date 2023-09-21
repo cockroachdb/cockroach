@@ -11,6 +11,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -19,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/spf13/cobra"
 )
 
@@ -29,6 +31,7 @@ const (
 	configsFlag   = "config"
 	showSQLFlag   = "show-sql"
 	noGenFlag     = "no-gen"
+	forceGenFlag  = "force-gen"
 	flexTypesFlag = "flex-types"
 	workmemFlag   = "default-workmem"
 )
@@ -58,6 +61,7 @@ func makeTestLogicCmd(runE func(cmd *cobra.Command, args []string) error) *cobra
 	testLogicCmd.Flags().Bool(showSQLFlag, false, "show SQL statements/queries immediately before they are tested")
 	testLogicCmd.Flags().Bool(rewriteFlag, false, "rewrite test files using results from test run")
 	testLogicCmd.Flags().Bool(noGenFlag, false, "skip generating logic test files before running logic tests")
+	testLogicCmd.Flags().Bool(forceGenFlag, false, "force generating logic test files before running logic tests")
 	testLogicCmd.Flags().Bool(streamOutputFlag, false, "stream test output during run")
 	testLogicCmd.Flags().Bool(stressFlag, false, "run tests under stress")
 	testLogicCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to go test binary")
@@ -85,6 +89,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		timeout        = mustGetFlagDuration(cmd, timeoutFlag)
 		verbose        = mustGetFlagBool(cmd, vFlag)
 		noGen          = mustGetFlagBool(cmd, noGenFlag)
+		forceGen       = mustGetFlagBool(cmd, forceGenFlag)
 		showSQL        = mustGetFlagBool(cmd, showSQLFlag)
 		count          = mustGetFlagInt(cmd, countFlag)
 		stress         = mustGetFlagBool(cmd, stressFlag)
@@ -127,7 +132,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		return err
 	}
 
-	if !noGen {
+	if !noGen && (forceGen || d.shouldGenerateLogicTests(ctx)) {
 		err := d.generateLogicTest(cmd)
 		if err != nil {
 			return err
@@ -295,6 +300,21 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		return err
 	}
 	return nil
+}
+
+// This function determines if any test_logic or execbuilder/testdata files were
+// modified in the current branch, and if so, determines if we should re-generate logic tests.
+func (d *dev) shouldGenerateLogicTests(ctx context.Context) bool {
+	if buildutil.CrdbTestBuild {
+		return true
+	}
+	base, _ := d.getMergeBaseHash(ctx)
+	// Generate logic tests if the merge base hash isn't found
+	if base == "" {
+		return true
+	}
+	changedFiles, _ := d.exec.CommandContextSilent(ctx, "git", "diff", "--no-ext-diff", "--name-only", base, "--", "pkg/sql/logictest/logictestbase/** ", "pkg/sql/logictest/testdata/**", "pkg/sql/sqlitelogictest/BUILD.bazel", "pkg/sql/sqlitelogictest/sqlitelogictest.go", "pkg/ccl/logictestccl/testdata/**", "pkg/sql/opt/exec/execbuilder/testdata/**")
+	return strings.TrimSpace(string(changedFiles)) != ""
 }
 
 // We know that the regular expressions for files should not contain whitespace

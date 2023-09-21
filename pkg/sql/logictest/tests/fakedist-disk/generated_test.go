@@ -1401,6 +1401,13 @@ func TestLogic_procedure(
 	runLogicTest(t, "procedure")
 }
 
+func TestLogic_procedure_plpgsql(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "procedure_plpgsql")
+}
+
 func TestLogic_propagate_input_ordering(
 	t *testing.T,
 ) {
@@ -2274,6 +2281,13 @@ func TestLogic_unique(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "unique")
+}
+
+func TestLogic_unique_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "unique_read_committed")
 }
 
 func TestLogic_update(

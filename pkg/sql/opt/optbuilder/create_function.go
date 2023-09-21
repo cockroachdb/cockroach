@@ -38,10 +38,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		}
 	}
 
-	if cf.IsProcedure {
-		panic(unimplemented.New("CREATE PROCEDURE", "procedures not supported"))
-	}
-
 	sch, resName := b.resolveSchemaForCreateFunction(&cf.Name)
 	schID := b.factory.Metadata().AddSchema(sch)
 	cf.Name.ObjectNamePrefix = resName
@@ -226,7 +222,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			afterBuildStmt()
 		}
 	case tree.RoutineLangPLpgSQL:
-		if cf.ReturnType.IsSet {
+		if cf.ReturnType.SetOf {
 			panic(unimplemented.NewWithIssueDetail(105240,
 				"set-returning PL/pgSQL functions",
 				"set-returning PL/pgSQL functions are not yet supported",

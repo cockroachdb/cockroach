@@ -13,7 +13,6 @@ package sslocal
 import (
 	"context"
 	"math"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -31,14 +30,6 @@ import (
 type SQLStats struct {
 	st *cluster.Settings
 
-	// uniqueStmtFingerprintLimit is the limit on number of unique statement
-	// fingerprints we can store in memory.
-	uniqueStmtFingerprintLimit *settings.IntSetting
-
-	// uniqueTxnFingerprintLimit is the limit on number of unique transaction
-	// fingerprints we can store in memory.
-	uniqueTxnFingerprintLimit *settings.IntSetting
-
 	mu struct {
 		syncutil.Mutex
 
@@ -50,15 +41,8 @@ type SQLStats struct {
 		apps map[string]*ssmemstorage.Container
 	}
 
-	atomic struct {
-		// uniqueStmtFingerprintCount is the number of unique statement fingerprints
-		// we are storing in memory.
-		uniqueStmtFingerprintCount int64
-
-		// uniqueTxnFingerprintCount is the number of unique transaction fingerprints
-		// we are storing in memory.
-		uniqueTxnFingerprintCount int64
-	}
+	// Server level counter
+	atomic *ssmemstorage.SQLStatsAtomicCounters
 
 	// flushTarget is a Sink that, when the SQLStats resets at the end of its
 	// reset interval, the SQLStats will dump all of the stats into if it is not
@@ -93,14 +77,16 @@ func newSQLStats(
 		st,
 	)
 	s := &SQLStats{
-		st:                         st,
-		uniqueStmtFingerprintLimit: uniqueStmtFingerprintLimit,
-		uniqueTxnFingerprintLimit:  uniqueTxnFingerprintLimit,
-		flushTarget:                flushTarget,
-		knobs:                      knobs,
-		insights:                   insightsWriter,
-		latencyInformation:         latencyInformation,
+		st:                 st,
+		flushTarget:        flushTarget,
+		knobs:              knobs,
+		insights:           insightsWriter,
+		latencyInformation: latencyInformation,
 	}
+	s.atomic = ssmemstorage.NewSQLStatsAtomicCounters(
+		st,
+		uniqueStmtFingerprintLimit,
+		uniqueTxnFingerprintLimit)
 	s.mu.apps = make(map[string]*ssmemstorage.Container)
 	s.mu.mon = monitor
 	s.mu.mon.StartNoReserved(context.Background(), parentMon)
@@ -110,7 +96,7 @@ func newSQLStats(
 // GetTotalFingerprintCount returns total number of unique statement and
 // transaction fingerprints stored in the current SQLStats.
 func (s *SQLStats) GetTotalFingerprintCount() int64 {
-	return atomic.LoadInt64(&s.atomic.uniqueStmtFingerprintCount) + atomic.LoadInt64(&s.atomic.uniqueTxnFingerprintCount)
+	return s.atomic.GetTotalFingerprintCount()
 }
 
 // GetTotalFingerprintBytes returns the total amount of bytes currently
@@ -130,10 +116,7 @@ func (s *SQLStats) getStatsForApplication(appName string) *ssmemstorage.Containe
 	}
 	a := ssmemstorage.New(
 		s.st,
-		s.uniqueStmtFingerprintLimit,
-		s.uniqueTxnFingerprintLimit,
-		&s.atomic.uniqueStmtFingerprintCount,
-		&s.atomic.uniqueTxnFingerprintCount,
+		s.atomic,
 		s.mu.mon,
 		appName,
 		s.knobs,

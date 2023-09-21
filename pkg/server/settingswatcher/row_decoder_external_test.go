@@ -45,12 +45,12 @@ func TestRowDecoder(t *testing.T) {
 		expStr     string
 		expValType string
 	}{
-		"kv.rangefeed.enabled": {
+		"trace.span_registry.enabled": {
 			val:        true,
 			expStr:     "true",
 			expValType: "b",
 		},
-		"kv.queue.process.guaranteed_time_budget": {
+		"sql.trace.txn.enable_threshold": {
 			val:        "17s",
 			expStr:     "17s",
 			expValType: "d",

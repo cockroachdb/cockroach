@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -93,21 +94,27 @@ type IntentScanner interface {
 	Close()
 }
 
-// SeparatedIntentScanner is an IntentScanner that assumes that
-// separated intents are in use.
-//
-// EngineIterator Contract:
-//
-//   - The EngineIterator must have an UpperBound set.
-//   - The range must be using separated intents.
+// SeparatedIntentScanner is an IntentScanner that scans the lock table keyspace
+// and searches for intents.
 type SeparatedIntentScanner struct {
-	iter storage.EngineIterator
+	iter *storage.LockTableIterator
 }
 
 // NewSeparatedIntentScanner returns an IntentScanner appropriate for
 // use when the separated intents migration has completed.
-func NewSeparatedIntentScanner(iter storage.EngineIterator) IntentScanner {
-	return &SeparatedIntentScanner{iter: iter}
+func NewSeparatedIntentScanner(reader storage.Reader, span roachpb.RSpan) (IntentScanner, error) {
+	lowerBound, _ := keys.LockTableSingleKey(span.Key.AsRawKey(), nil)
+	upperBound, _ := keys.LockTableSingleKey(span.EndKey.AsRawKey(), nil)
+	iter, err := storage.NewLockTableIterator(reader, storage.LockTableIteratorOptions{
+		LowerBound: lowerBound,
+		UpperBound: upperBound,
+		// Ignore Shared and Exclusive locks. We only care about intents.
+		MatchMinStr: lock.Intent,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &SeparatedIntentScanner{iter: iter}, nil
 }
 
 // ConsumeIntents implements the IntentScanner interface.
@@ -126,13 +133,16 @@ func (s *SeparatedIntentScanner) ConsumeIntents(
 			break
 		}
 
-		engineKey, err := s.iter.EngineKey()
+		engineKey, err := s.iter.UnsafeEngineKey()
 		if err != nil {
 			return err
 		}
-		lockedKey, err := keys.DecodeLockTableSingleKey(engineKey.Key)
+		ltKey, err := engineKey.ToLockTableKey()
 		if err != nil {
-			return errors.Wrapf(err, "decoding LockTable key: %s", lockedKey)
+			return errors.Wrapf(err, "decoding LockTable key: %s", ltKey)
+		}
+		if ltKey.Strength != lock.Intent {
+			return errors.AssertionFailedf("LockTableKey with strength %s: %s", ltKey.Strength, ltKey)
 		}
 
 		v, err := s.iter.UnsafeValue()
@@ -140,10 +150,10 @@ func (s *SeparatedIntentScanner) ConsumeIntents(
 			return err
 		}
 		if err := protoutil.Unmarshal(v, &meta); err != nil {
-			return errors.Wrapf(err, "unmarshaling mvcc meta for locked key %s", lockedKey)
+			return errors.Wrapf(err, "unmarshaling mvcc meta for locked key %s", ltKey)
 		}
 		if meta.Txn == nil {
-			return errors.Newf("expected transaction metadata but found none for %s", lockedKey)
+			return errors.Newf("expected transaction metadata but found none for %s", ltKey)
 		}
 
 		consumer(enginepb.MVCCWriteIntentOp{
@@ -160,7 +170,7 @@ func (s *SeparatedIntentScanner) ConsumeIntents(
 // Close implements the IntentScanner interface.
 func (s *SeparatedIntentScanner) Close() { s.iter.Close() }
 
-// LegacyIntentScanner is an IntentScanner that assumers intents might
+// LegacyIntentScanner is an IntentScanner that assumes intents might
 // not be separated.
 //
 // MVCCIterator Contract:
@@ -170,6 +180,9 @@ func (s *SeparatedIntentScanner) Close() { s.iter.Close() }
 //	TimeBoundIterator, its MinTimestamp cannot be above the keyspan's largest
 //	known resolved timestamp, if one has ever been recorded. If one has never
 //	been recorded, the TimeBoundIterator cannot have any lower bound.
+//
+// The LegacyIntentScanner is unused outside of tests and will be removed as
+// part of #108278.
 type LegacyIntentScanner struct {
 	iter storage.SimpleMVCCIterator
 }

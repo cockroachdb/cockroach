@@ -1456,6 +1456,11 @@ func (b *changefeedResumer) OnFailOrCancel(
 	return nil
 }
 
+// CollectProfile is part of the jobs.Resumer interface.
+func (b *changefeedResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 // Try to clean up a protected timestamp created by the changefeed.
 func (b *changefeedResumer) maybeCleanUpProtectedTimestamp(
 	ctx context.Context, db isql.DB, pts protectedts.Manager, ptsID uuid.UUID,

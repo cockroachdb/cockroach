@@ -441,7 +441,7 @@ func (sr *schemaResolver) ResolveFunction(
 		return nil, pgerror.Newf(pgcode.InvalidName, "invalid function name: %s", name)
 	}
 
-	fn, err := name.ToFunctionName()
+	fn, err := name.ToRoutineName()
 	if err != nil {
 		return nil, err
 	}
@@ -455,14 +455,14 @@ func (sr *schemaResolver) ResolveFunction(
 	if err != nil {
 		return nil, err
 	}
-	udfDef, err := maybeLookUpUDF(ctx, sr, path, fn)
+	routine, err := maybeLookupRoutine(ctx, sr, path, fn)
 	if err != nil {
 		return nil, err
 	}
 
 	switch {
-	case builtinDef != nil && udfDef != nil:
-		return builtinDef.MergeWith(udfDef)
+	case builtinDef != nil && routine != nil:
+		return builtinDef.MergeWith(routine)
 	case builtinDef != nil:
 		props, _ := builtinsregistry.GetBuiltinProperties(builtinDef.Name)
 		if props.UnsupportedWithIssue != 0 {
@@ -478,8 +478,8 @@ func (sr *schemaResolver) ResolveFunction(
 			return nil, pgerror.Wrapf(unImplErr, pgcode.InvalidParameterValue, "%s()", builtinDef.Name)
 		}
 		return builtinDef, nil
-	case udfDef != nil:
-		return udfDef, nil
+	case routine != nil:
+		return routine, nil
 	default:
 		return nil, makeFunctionUndefinedError(ctx, name, path, fn, sr)
 	}
@@ -526,7 +526,7 @@ func makeFunctionUndefinedError(
 	))
 }
 
-func maybeLookUpUDF(
+func maybeLookupRoutine(
 	ctx context.Context, sr *schemaResolver, path tree.SearchPath, fn tree.RoutineName,
 ) (*tree.ResolvedFunctionDefinition, error) {
 	if sr.txn == nil {
@@ -596,6 +596,18 @@ func (sr *schemaResolver) ResolveFunctionByOID(
 		return nil, nil, err
 	}
 	return fnName, ret, nil
+}
+
+// FunctionDesc returns the descriptor for the function with the given OID.
+func (sr *schemaResolver) FunctionDesc(
+	ctx context.Context, oid oid.Oid,
+) (catalog.FunctionDescriptor, error) {
+	if !funcdesc.IsOIDUserDefinedFunc(oid) {
+		return nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %d not user-defined", oid)
+	}
+	g := sr.byIDGetterBuilder().WithoutNonPublic().WithoutOtherParent(sr.typeResolutionDbID).Get()
+	descID := funcdesc.UserDefinedFunctionOIDToID(oid)
+	return g.Function(ctx, descID)
 }
 
 // NewSkippingCacheSchemaResolver constructs a schemaResolver which always skip

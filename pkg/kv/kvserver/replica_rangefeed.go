@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -46,7 +47,7 @@ import (
 // ranges and ranges covering tables in the system database); this setting
 // covers everything else.
 var RangefeedEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.TenantReadOnly,
 	"kv.rangefeed.enabled",
 	"if set, rangefeed registration is enabled",
 	false,
@@ -79,15 +80,19 @@ var RangeFeedSmearInterval = settings.RegisterDurationSetting(
 
 // RangeFeedUseScheduler controls type of rangefeed processor is used to process
 // raft updates and sends updates to clients.
-// TODO(oleg): add metamorphic variable for processor type selection.
 var RangeFeedUseScheduler = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.rangefeed.scheduler.enabled",
 	"use shared fixed pool of workers for all range feeds instead of a "+
 		"worker per range (worker pool size is determined by "+
 		"COCKROACH_RANGEFEED_SCHEDULER_WORKERS env variable)",
-	false,
+	util.ConstantWithMetamorphicTestBool("kv_rangefeed_scheduler_enabled", false),
 )
+
+// RangefeedSchedulerDisabled is a kill switch for scheduler based rangefeed
+// processors. To be removed in 24.1 after new processor becomes default.
+var RangefeedSchedulerDisabled = envutil.EnvOrDefaultBool("COCKROACH_RANGEFEED_DISABLE_SCHEDULER",
+	false)
 
 func init() {
 	// Inject into kvserverbase to allow usage from kvcoord.
@@ -239,6 +244,7 @@ func (r *Replica) RangeFeed(
 		if err != nil {
 			return future.MakeCompletedErrorFuture(err)
 		}
+
 		// Finish the iterator limit if we exit before the iterator finishes.
 		// The release function will be hooked into the Close method on the
 		// iterator below. The sync.Once prevents any races between exiting early
@@ -407,7 +413,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	feedBudget := r.store.GetStoreConfig().RangefeedBudgetFactory.CreateBudget(r.startKey)
 
 	var sched *rangefeed.Scheduler
-	if RangeFeedUseScheduler.Get(&r.ClusterSettings().SV) {
+	if shouldUseRangefeedScheduler(&r.ClusterSettings().SV) {
 		sched = r.store.getRangefeedScheduler()
 	}
 
@@ -438,17 +444,12 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		// waiting for the Register call below to return.
 		r.raftMu.AssertHeld()
 
-		lowerBound, _ := keys.LockTableSingleKey(desc.StartKey.AsRawKey(), nil)
-		upperBound, _ := keys.LockTableSingleKey(desc.EndKey.AsRawKey(), nil)
-		iter, err := r.store.TODOEngine().NewEngineIterator(storage.IterOptions{
-			LowerBound: lowerBound,
-			UpperBound: upperBound,
-		})
+		scanner, err := rangefeed.NewSeparatedIntentScanner(r.store.TODOEngine(), desc.RSpan())
 		if err != nil {
 			done.Set(err)
 			return nil
 		}
-		return rangefeed.NewSeparatedIntentScanner(iter)
+		return scanner
 	}
 
 	// NB: This only errors if the stopper is stopping, and we have to return here
@@ -842,4 +843,15 @@ func (r *Replica) ensureClosedTimestampStarted(ctx context.Context) *kvpb.Error 
 		}
 	}
 	return nil
+}
+
+func shouldUseRangefeedScheduler(sv *settings.Values) bool {
+	return RangeFeedUseScheduler.Get(sv) && !RangefeedSchedulerDisabled
+}
+
+// TestGetReplicaRangefeedProcessor exposes rangefeed processor for test
+// introspection. Note that while retrieving processor is threadsafe, invoking
+// processor methods should be done with caution to not break any invariants.
+func TestGetReplicaRangefeedProcessor(r *Replica) rangefeed.Processor {
+	return r.getRangefeedProcessor()
 }

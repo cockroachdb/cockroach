@@ -303,7 +303,7 @@ func (r *Replica) canDropLatchesBeforeEval(
 		ctx, 3, "can drop latches early for batch (%v); scanning lock table first to detect conflicts", ba,
 	)
 
-	maxIntents := storage.MaxIntentsPerLockConflictError.Get(&r.store.cfg.Settings.SV)
+	maxLockConflicts := storage.MaxConflictsPerLockConflictError.Get(&r.store.cfg.Settings.SV)
 	var intents []roachpb.Intent
 	// Check if any of the requests within the batch need to resolve any intents
 	// or if any of them need to use an intent interleaving iterator.
@@ -315,7 +315,7 @@ func (r *Replica) canDropLatchesBeforeEval(
 			txnID = ba.Txn.ID
 		}
 		needsIntentInterleavingForThisRequest, err := storage.ScanConflictingIntentsForDroppingLatchesEarly(
-			ctx, rw, txnID, ba.Header.Timestamp, start, end, &intents, maxIntents,
+			ctx, rw, txnID, ba.Header.Timestamp, start, end, &intents, maxLockConflicts,
 		)
 		if err != nil {
 			return false /* ok */, true /* stillNeedsIntentInterleaving */, kvpb.NewError(
@@ -323,7 +323,7 @@ func (r *Replica) canDropLatchesBeforeEval(
 			)
 		}
 		stillNeedsIntentInterleaving = stillNeedsIntentInterleaving || needsIntentInterleavingForThisRequest
-		if maxIntents != 0 && int64(len(intents)) >= maxIntents {
+		if maxLockConflicts != 0 && int64(len(intents)) >= maxLockConflicts {
 			break
 		}
 	}

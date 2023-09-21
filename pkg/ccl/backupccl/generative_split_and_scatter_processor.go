@@ -64,7 +64,7 @@ type generativeSplitAndScatterProcessor struct {
 	chunkEntrySplitAndScatterers []splitAndScatterer
 
 	// cancelScatterAndWaitForWorker cancels the scatter goroutine and waits for
-	// it to finish.
+	// it to finish. It can be called multiple times.
 	cancelScatterAndWaitForWorker func()
 
 	doneScatterCh chan entryNode

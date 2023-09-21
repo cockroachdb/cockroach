@@ -569,8 +569,8 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		rows, err := conn.DB.QueryContext(ctx, `SELECT
 		query,
-		insight.contention::FLOAT,
-		sum(txn_contention.contention_duration)::FLOAT AS durationMs,
+		COALESCE(insight.contention, 0::INTERVAL)::FLOAT,
+		COALESCE(sum(txn_contention.contention_duration), 0::INTERVAL)::FLOAT AS durationMs,
 		txn_contention.schema_name,
 		txn_contention.database_name,
 		txn_contention.table_name,
@@ -667,11 +667,12 @@ func TestInsightsIndexRecommendationIntegration(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, args)
 	defer tc.Stopper().Stop(ctx)
 
+	ts := tc.ApplicationLayer(0)
+	sqlConn := tc.ServerConn(0)
+
 	// Enable detection by setting a latencyThreshold > 0.
 	latencyThreshold := 30 * time.Millisecond
-	insights.LatencyThreshold.Override(ctx, &settings.SV, latencyThreshold)
-
-	sqlConn := tc.ServerConn(0)
+	insights.LatencyThreshold.Override(ctx, &ts.ClusterSettings().SV, latencyThreshold)
 
 	_, err := sqlConn.ExecContext(ctx, "CREATE TABLE t1 (k INT, i INT, f FLOAT, s STRING)")
 	require.NoError(t, err)

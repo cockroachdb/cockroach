@@ -186,5 +186,5 @@ var GatewayNodeEnabled = settings.RegisterBoolSetting(
 	"sql.metrics.statement_details.gateway_node.enabled",
 	"save the gateway node for each statement fingerprint. If false, the value will "+
 		"be stored as 0.",
-	true,
+	false,
 	settings.WithPublic)

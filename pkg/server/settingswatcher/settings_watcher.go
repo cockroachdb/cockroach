@@ -60,11 +60,18 @@ type SettingsWatcher struct {
 		// inside secondary tenants. It will be uninitialized in a system
 		// tenant.
 		storageClusterVersion clusterversion.ClusterVersion
+
+		// Used by TestingRestart.
+		updateWait chan struct{}
 	}
 
 	// testingWatcherKnobs allows the client to inject testing knobs into
 	// the underlying rangefeedcache.Watcher.
 	testingWatcherKnobs *rangefeedcache.TestingKnobs
+
+	// rfc provides access to the underlying rangefeedcache.Watcher for
+	// testing.
+	rfc *rangefeedcache.Watcher
 }
 
 // Storage is used to write a snapshot of KVs out to disk for use upon restart.
@@ -81,7 +88,7 @@ func New(
 	stopper *stop.Stopper,
 	storage Storage, // optional
 ) *SettingsWatcher {
-	return &SettingsWatcher{
+	s := &SettingsWatcher{
 		clock:    clock,
 		codec:    codec,
 		settings: settingsToUpdate,
@@ -90,6 +97,8 @@ func New(
 		dec:      MakeRowDecoder(codec),
 		storage:  storage,
 	}
+	s.mu.updateWait = make(chan struct{})
+	return s
 }
 
 // NewWithOverrides constructs a new SettingsWatcher which allows external
@@ -137,6 +146,9 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 			initialScan.done = true
 			close(initialScan.ch)
 		}
+		// Used by TestingRestart().
+		close(s.mu.updateWait)
+		s.mu.updateWait = make(chan struct{})
 	}
 
 	s.mu.values = make(map[settings.InternalKey]settingsValue)
@@ -216,6 +228,7 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 		},
 		s.testingWatcherKnobs,
 	)
+	s.rfc = c
 
 	// Kick off the rangefeedcache which will retry until the stopper stops.
 	if err := rangefeedcache.Start(ctx, s.stopper, c, func(err error) {
@@ -240,6 +253,18 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 
 	case <-ctx.Done():
 		return errors.Wrap(ctx.Err(), "failed to retrieve initial cluster settings")
+	}
+}
+
+// TestingRestart restarts the rangefeeds and waits for the initial
+// update after the rangefeed update to be processed.
+func (s *SettingsWatcher) TestingRestart() {
+	if s.rfc != nil {
+		s.mu.Lock()
+		waitCh := s.mu.updateWait
+		s.mu.Unlock()
+		s.rfc.TestingRestart()
+		<-waitCh
 	}
 }
 

@@ -251,7 +251,7 @@ type (
 		predecessorFunc        predecessorFunc
 	}
 
-	customOption func(*testOptions)
+	CustomOption func(*testOptions)
 
 	predecessorFunc func(*rand.Rand, *version.Version, int) ([]string, error)
 
@@ -321,7 +321,7 @@ func AlwaysUseFixtures(opts *testOptions) {
 
 // UpgradeTimeout allows test authors to provide a different timeout
 // to apply when waiting for an upgrade to finish.
-func UpgradeTimeout(timeout time.Duration) customOption {
+func UpgradeTimeout(timeout time.Duration) CustomOption {
 	return func(opts *testOptions) {
 		opts.upgradeTimeout = timeout
 	}
@@ -329,7 +329,7 @@ func UpgradeTimeout(timeout time.Duration) customOption {
 
 // MinUpgrades allows callers to set a minimum number of upgrades each
 // test run should exercise.
-func MinUpgrades(n int) customOption {
+func MinUpgrades(n int) CustomOption {
 	return func(opts *testOptions) {
 		opts.minUpgrades = n
 	}
@@ -337,7 +337,7 @@ func MinUpgrades(n int) customOption {
 
 // MaxUpgrades allows callers to set a maximum number of upgrades to
 // be performed during a test run.
-func MaxUpgrades(n int) customOption {
+func MaxUpgrades(n int) CustomOption {
 	return func(opts *testOptions) {
 		opts.maxUpgrades = n
 	}
@@ -345,7 +345,7 @@ func MaxUpgrades(n int) customOption {
 
 // NumUpgrades allows callers to specify the exact number of upgrades
 // every test run should perform.
-func NumUpgrades(n int) customOption {
+func NumUpgrades(n int) CustomOption {
 	return func(opts *testOptions) {
 		opts.minUpgrades = n
 		opts.maxUpgrades = n
@@ -362,11 +362,9 @@ func NumUpgrades(n int) customOption {
 // subsequent patch releases. If possible, this option should be
 // avoided, but it might be necessary in certain cases to reduce noise
 // in case the test is more susceptible to fail due to known bugs.
-func AlwaysUseLatestPredecessors() customOption {
-	return func(opts *testOptions) {
-		opts.predecessorFunc = func(_ *rand.Rand, v *version.Version, n int) ([]string, error) {
-			return release.LatestPredecessorHistory(v, n)
-		}
+func AlwaysUseLatestPredecessors(opts *testOptions) {
+	opts.predecessorFunc = func(_ *rand.Rand, v *version.Version, n int) ([]string, error) {
+		return release.LatestPredecessorHistory(v, n)
 	}
 }
 
@@ -378,7 +376,7 @@ func NewTest(
 	l *logger.Logger,
 	c cluster.Cluster,
 	crdbNodes option.NodeListOption,
-	options ...customOption,
+	options ...CustomOption,
 ) *Test {
 	testLogger, err := prefixedLogger(l, logPrefix)
 	if err != nil {

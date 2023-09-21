@@ -1,0 +1,41 @@
+statement ok
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  i INT,
+  s STRING
+)
+
+statement ok
+CREATE PROCEDURE my_upsert(arg_k INT, new_i INT, new_s STRING) AS $$
+  DECLARE
+    c INT;
+  BEGIN
+    SELECT count(*) INTO c FROM t WHERE k = arg_k;
+    IF c > 0 THEN
+      UPDATE t SET i = new_i, s = new_s WHERE k = arg_k;
+    ELSE
+      INSERT INTO t VALUES (arg_k, new_i, new_s);
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL
+
+statement ok
+CALL my_upsert(1, 10, 'foo')
+
+statement ok
+CALL my_upsert(2, 20, 'bar')
+
+query IIT rowsort
+SELECT * FROM t
+----
+1  10  foo
+2  20  bar
+
+statement ok
+CALL my_upsert(1, 100, 'baz')
+
+query IIT rowsort
+SELECT * FROM t
+----
+1  100  baz
+2  20   bar

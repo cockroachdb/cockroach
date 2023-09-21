@@ -605,6 +605,10 @@ func (r *cancellableImportResumer) OnFailOrCancel(context.Context, interface{}, 
 	return errors.New("bail out")
 }
 
+func (r *cancellableImportResumer) CollectProfile(context.Context, interface{}) error {
+	return nil
+}
+
 func setImportReaderParallelism(parallelism int32) func() {
 	factory := rowexec.NewReadImportDataProcessor
 	rowexec.NewReadImportDataProcessor = func(

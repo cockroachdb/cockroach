@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -497,7 +496,7 @@ func (s mockNodeStore) GetNodeDescriptor(id roachpb.NodeID) (*roachpb.NodeDescri
 			return desc, nil
 		}
 	}
-	return nil, errorutil.NewNodeNotFoundError(id)
+	return nil, kvpb.NewNodeDescNotFoundError(id)
 }
 
 func (s mockNodeStore) GetNodeDescriptorCount() int {
@@ -505,7 +504,7 @@ func (s mockNodeStore) GetNodeDescriptorCount() int {
 }
 
 func (s mockNodeStore) GetStoreDescriptor(id roachpb.StoreID) (*roachpb.StoreDescriptor, error) {
-	return nil, errorutil.NewStoreNotFoundError(id)
+	return nil, kvpb.NewStoreDescNotFoundError(id)
 }
 
 // TestOracle tests the Oracle exposed by this package.

@@ -916,24 +916,41 @@ func (l Locality) AddTier(tier Tier) Locality {
 
 // IsEmpty returns true if hint contains no data.
 func (h *GCHint) IsEmpty() bool {
-	return h.LatestRangeDeleteTimestamp.IsEmpty()
+	return h.LatestRangeDeleteTimestamp.IsEmpty() && h.GCTimestamp.IsEmpty()
 }
 
-// Merge combines GC hints of two ranges. The result is either a hint that
-// covers both ranges or empty hint if it is not possible to merge hints.
-// leftEmpty and rightEmpty arguments are set based on MVCCStats.HasNoUserData
-// of receiver hint (leftEmpty) and argument hint (rightEmpty).
-// Returns true if receiver state was changed.
+// Merge combines GC hints of two adjacent ranges. Updates the receiver to be a
+// GCHint that covers both ranges, and so can be carried by the merged range.
+// Returns true iff the receiver was updated.
+//
+// The leftEmpty and rightEmpty arguments correspond to MVCCStats.HasNoUserData
+// of the receiver hint and the argument RHS hint respectively. These are used
+// by a heuristic, to stop carrying the LatestRangeDeleteTimestamp field of the
+// hint it the range is likely not covered by MVCC range tombstones (anymore).
+//
+// Merge is commutative in a sense that the merged hint does not change if the
+// order of the LHS and RHS hints (and leftEmpty/rightEmpty, correspondingly) is
+// swapped.
 func (h *GCHint) Merge(rhs *GCHint, leftEmpty, rightEmpty bool) bool {
-	// If either side has data but no hint, merged range can't have a hint.
+	updated := h.ScheduleGCFor(rhs.GCTimestamp)
+	// NB: don't swap the operands, we need the side effect of the method call.
+	updated = h.ScheduleGCFor(rhs.GCTimestampNext) || updated
+
+	// If LHS or RHS has data but no LatestRangeDeleteTimestamp hint, then this
+	// side is not known to be covered by range tombstones. Correspondingly, the
+	// union of the two is not too. If so, clear the hint.
 	if (rhs.LatestRangeDeleteTimestamp.IsEmpty() && !rightEmpty) ||
 		(h.LatestRangeDeleteTimestamp.IsEmpty() && !leftEmpty) {
-		updated := h.LatestRangeDeleteTimestamp.IsSet()
+		updated = updated || h.LatestRangeDeleteTimestamp.IsSet()
 		h.LatestRangeDeleteTimestamp = hlc.Timestamp{}
 		return updated
 	}
-	// Otherwise, use the newest hint.
-	return h.ForwardLatestRangeDeleteTimestamp(rhs.LatestRangeDeleteTimestamp)
+	// TODO(pavelkalinnikov): handle the case when some side has a hint (i.e. is
+	// covered by range tombstones), but is not empty. It means that there is data
+	// on top of the range tombstones, so the ClearRange optimization may not be
+	// effective. For now, live with the false positive because this is unlikely.
+
+	return h.ForwardLatestRangeDeleteTimestamp(rhs.LatestRangeDeleteTimestamp) || updated
 }
 
 // ForwardLatestRangeDeleteTimestamp bumps LatestDeleteRangeTimestamp in GC hint
@@ -946,7 +963,56 @@ func (h *GCHint) ForwardLatestRangeDeleteTimestamp(ts hlc.Timestamp) bool {
 	return false
 }
 
-// ResetLatestRangeDeleteTimestamp resets delete range timestamp.
-func (h *GCHint) ResetLatestRangeDeleteTimestamp() {
-	h.LatestRangeDeleteTimestamp = hlc.Timestamp{}
+// ScheduleGCFor updates the hint to schedule eager GC for data up to the given
+// timestamp. When this timestamp falls below the GC threshold/TTL, it will be
+// eagerly enqueued for GC when considered by the MVCC GC queue.
+//
+// Returns true iff the hint was updated.
+func (h *GCHint) ScheduleGCFor(ts hlc.Timestamp) bool {
+	if ts.IsEmpty() {
+		return false
+	}
+	if h.GCTimestamp.IsEmpty() {
+		h.GCTimestamp = ts
+	} else if cmp := h.GCTimestamp.Compare(ts); cmp > 0 {
+		if h.GCTimestampNext.IsEmpty() {
+			h.GCTimestampNext = h.GCTimestamp
+		}
+		h.GCTimestamp = ts
+	} else if cmp == 0 {
+		return false
+	} else if h.GCTimestampNext.IsEmpty() {
+		h.GCTimestampNext = ts
+	} else if ts.LessEq(h.GCTimestampNext) {
+		return false
+	} else {
+		h.GCTimestampNext = ts
+	}
+	return true
+}
+
+// UpdateAfterGC updates the GCHint according to the threshold, up to which the
+// data has been garbage collected. Returns true iff the hint has been updated.
+func (h *GCHint) UpdateAfterGC(gcThreshold hlc.Timestamp) bool {
+	updated := h.advanceGCTimestamp(gcThreshold)
+	if t := h.LatestRangeDeleteTimestamp; t.IsSet() && t.LessEq(gcThreshold) {
+		h.LatestRangeDeleteTimestamp = hlc.Timestamp{}
+		return true
+	}
+	return updated
+}
+
+func (h *GCHint) advanceGCTimestamp(gcThreshold hlc.Timestamp) bool {
+	// If GC threshold is below the minimum, leave the hint intact.
+	if t := h.GCTimestamp; t.IsEmpty() || gcThreshold.Less(t) {
+		return false
+	}
+	// If min <= threshold < max, erase the min and set it to match the max.
+	if t := h.GCTimestampNext; t.IsEmpty() || gcThreshold.Less(t) {
+		h.GCTimestamp, h.GCTimestampNext = h.GCTimestampNext, hlc.Timestamp{}
+		return true
+	}
+	// If threshold >= max, erase both min and max.
+	h.GCTimestamp, h.GCTimestampNext = hlc.Timestamp{}, hlc.Timestamp{}
+	return true
 }

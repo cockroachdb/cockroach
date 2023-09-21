@@ -274,3 +274,13 @@ func fileExistsInGit(branch string, f string) (bool, error) {
 	}
 	return true, nil
 }
+
+// fileContent uses `git cat-file -p ref:file` to get to the file contents without `git checkout`.
+func fileContent(ref string, f string) (string, error) {
+	cmd := exec.Command("git", "cat-file", "-p", ref+":"+f)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git cat-file: %w", err)
+	}
+	return string(out), nil
+}

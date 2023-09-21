@@ -115,7 +115,10 @@ func TestGenerateParse(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%v: %v", stmt, err)
 		}
-		stmt = sqlsmith.TestingPrettyCfg.Pretty(parsed.AST)
+		stmt, err = sqlsmith.TestingPrettyCfg.Pretty(parsed.AST)
+		if err != nil {
+			t.Fatal(err)
+		}
 		fmt.Print("STMT: ", i, "\n", stmt, ";\n\n")
 		if *flagExec {
 			db.Exec(t, `SET statement_timeout = '9s'`)

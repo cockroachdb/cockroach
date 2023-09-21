@@ -61,6 +61,10 @@ func (d fakeExecResumer) OnFailOrCancel(ctx context.Context, _ interface{}, _ er
 	return nil
 }
 
+func (d fakeExecResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 // TestJobExecutionDetailsRouting tests that the request job execution details
 // endpoint redirects the request to the current coordinator node of the job.
 func TestJobExecutionDetailsRouting(t *testing.T) {
@@ -69,10 +73,12 @@ func TestJobExecutionDetailsRouting(t *testing.T) {
 
 	hasStartedCh := make(chan struct{})
 	defer close(hasStartedCh)
+	canContinueCh := make(chan struct{})
 	jobs.RegisterConstructor(jobspb.TypeImport, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return fakeExecResumer{
 			OnResume: func(ctx context.Context) error {
 				hasStartedCh <- struct{}{}
+				<-canContinueCh
 				return nil
 			},
 		}
@@ -130,4 +136,5 @@ func TestJobExecutionDetailsRouting(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, serverpb.RequestJobProfilerExecutionDetailsResponse{}, resp)
 	require.Equal(t, claimInstanceID, int(dialedNodeID))
+	close(canContinueCh)
 }

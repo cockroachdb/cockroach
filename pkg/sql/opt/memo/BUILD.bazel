@@ -102,6 +102,7 @@ go_test(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treewindow",
+        "//pkg/sql/sessiondata",
         "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",

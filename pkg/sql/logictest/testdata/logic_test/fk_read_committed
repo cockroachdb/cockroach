@@ -1,5 +1,8 @@
 # LogicTest: !local-mixed-22.2-23.1
 
+statement ok
+SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true
+
 # Some foreign key checks are prohibited under weaker isolation levels until we
 # improve locking. See #80683, #100156, #100193.
 

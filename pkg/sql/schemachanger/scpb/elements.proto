@@ -673,6 +673,7 @@ message Function {
 
   bool return_set = 3;
   TypeT return_type = 4 [(gogoproto.nullable) = false];
+  bool is_procedure = 5;
 }
 
 message FunctionName {

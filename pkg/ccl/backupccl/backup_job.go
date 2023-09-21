@@ -51,7 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/bulk"
+	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -116,7 +117,7 @@ func backup(
 	settings *cluster.Settings,
 	defaultStore cloud.ExternalStorage,
 	storageByLocalityKV map[string]*cloudpb.ExternalStorage,
-	job *jobs.Job,
+	resumer *backupResumer,
 	backupManifest *backuppb.BackupManifest,
 	makeExternalStorage cloud.ExternalStorageFactory,
 	encryption *jobspb.BackupEncryptionOptions,
@@ -197,6 +198,7 @@ func backup(
 		return roachpb.RowCount{}, 0, errors.Wrap(err, "failed to determine nodes on which to run")
 	}
 
+	job := resumer.job
 	backupSpecs, err := distBackupPlanSpecs(
 		ctx,
 		planCtx,
@@ -328,16 +330,24 @@ func backup(
 		}
 		return nil
 	}
+
+	// tracingAggLoop is responsible for draining the channel on which processors
+	// in the DistSQL flow will send back their tracing aggregator stats. These
+	// stats will be persisted to the job_info table whenever the job is told to
+	// collect a profile.
 	tracingAggCh := make(chan *execinfrapb.TracingAggregatorEvents)
 	tracingAggLoop := func(ctx context.Context) error {
-		if err := bulk.AggregateTracingStats(ctx, job.ID(),
-			execCtx.ExecCfg().Settings, execCtx.ExecCfg().InternalDB, tracingAggCh); err != nil {
-			log.Warningf(ctx, "failed to aggregate tracing stats: %v", err)
-			// Even if we fail to aggregate tracing stats, we must continue draining
-			// the channel so that the sender in the DistSQLReceiver does not block
-			// and allows the backup to continue uninterrupted.
-			for range tracingAggCh {
+		for agg := range tracingAggCh {
+			componentID := execinfrapb.ComponentID{
+				FlowID:        agg.FlowID,
+				SQLInstanceID: agg.SQLInstanceID,
 			}
+
+			// Update the running aggregate of the component with the latest received
+			// aggregate.
+			resumer.mu.Lock()
+			resumer.mu.perNodeAggregatorStats[componentID] = agg.Events
+			resumer.mu.Unlock()
 		}
 		return nil
 	}
@@ -509,6 +519,14 @@ func statShouldBeIncludedInBackupRestore(stat *stats.TableStatisticProto) bool {
 type backupResumer struct {
 	job         *jobs.Job
 	backupStats roachpb.RowCount
+
+	mu struct {
+		syncutil.Mutex
+		// perNodeAggregatorStats is a per component running aggregate of trace
+		// driven AggregatorStats pushed backed to the resumer from all the
+		// processors running the backup.
+		perNodeAggregatorStats bulkutil.ComponentAggregatorStats
+	}
 
 	testingKnobs struct {
 		ignoreProtectedTimestamps bool
@@ -782,7 +800,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			p.ExecCfg().Settings,
 			defaultStore,
 			storageByLocalityKV,
-			b.job,
+			b,
 			backupManifest,
 			p.ExecCfg().DistSQLSrv.ExternalStorage,
 			details.EncryptionOptions,
@@ -1229,6 +1247,23 @@ func (b *backupResumer) OnFailOrCancel(
 	return nil //nolint:returnerrcheck
 }
 
+// CollectProfile is a part of the Resumer interface.
+func (b *backupResumer) CollectProfile(ctx context.Context, execCtx interface{}) error {
+	p := execCtx.(sql.JobExecContext)
+
+	// TODO(adityamaru): We should move the logic that decorates the DistSQL
+	// diagram with per processor progress to this method.
+
+	var aggStatsCopy bulkutil.ComponentAggregatorStats
+	func() {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		aggStatsCopy = b.mu.perNodeAggregatorStats.DeepCopy()
+	}()
+	return bulkutil.FlushTracingAggregatorStats(ctx, b.job.ID(),
+		p.ExecCfg().InternalDB, aggStatsCopy)
+}
+
 func (b *backupResumer) deleteCheckpoint(
 	ctx context.Context, cfg *sql.ExecutorConfig, user username.SQLUsername,
 ) {
@@ -1275,9 +1310,11 @@ func init() {
 	jobs.RegisterConstructor(
 		jobspb.TypeBackup,
 		func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
-			return &backupResumer{
+			b := &backupResumer{
 				job: job,
 			}
+			b.mu.perNodeAggregatorStats = make(bulkutil.ComponentAggregatorStats)
+			return b
 		},
 		jobs.UsesTenantCostControl,
 	)

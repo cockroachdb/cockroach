@@ -246,6 +246,13 @@ func TestCCLLogic_regional_by_row_query_behavior(
 	runCCLLogicTest(t, "regional_by_row_query_behavior")
 }
 
+func TestCCLLogic_regional_by_row_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "regional_by_row_read_committed")
+}
+
 func TestCCLLogic_regional_by_row_rename_column(
 	t *testing.T,
 ) {

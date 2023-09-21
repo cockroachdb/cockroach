@@ -1595,13 +1595,13 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 
 			// If we are modifying TTL, then make sure the schedules are created
 			// or dropped as appropriate.
-			scheduledJobs := jobs.ScheduledJobTxn(txn)
 			if modify := m.AsModifyRowLevelTTL(); modify != nil && !modify.IsRollback() {
 				if fn := sc.testingKnobs.RunBeforeModifyRowLevelTTL; fn != nil {
 					if err := fn(); err != nil {
 						return err
 					}
 				}
+				scheduledJobs := jobs.ScheduledJobTxn(txn)
 				if m.Adding() {
 					scTable.RowLevelTTL = modify.RowLevelTTL()
 					shouldCreateScheduledJob := scTable.RowLevelTTL.ScheduleID == 0
@@ -1642,7 +1642,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 							return err
 						}
 					}
-					scTable.RowLevelTTL = nil
+					scTable.RowLevelTTL = modify.RowLevelTTL()
 				}
 			}
 
@@ -2921,6 +2921,11 @@ func (r schemaChangeResumer) OnFailOrCancel(
 			return err
 		}
 	}
+	return nil
+}
+
+// CollectProfile is part of the jobs.Resumer interface.
+func (r schemaChangeResumer) CollectProfile(context.Context, interface{}) error {
 	return nil
 }
 

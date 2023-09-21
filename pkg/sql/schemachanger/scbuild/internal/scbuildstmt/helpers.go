@@ -637,7 +637,7 @@ func (s indexSpec) SourceIndexID() catid.IndexID {
 // makeIndexSpec constructs an indexSpec based on an existing index element.
 func makeIndexSpec(b BuildCtx, tableID catid.DescID, indexID catid.IndexID) (s indexSpec) {
 	tableElts := b.QueryByID(tableID)
-	idxElts := tableElts.Filter(hasIndexIDAttrFilter(indexID)).Filter(validTargetFilter)
+	idxElts := tableElts.Filter(hasIndexIDAttrFilter(indexID)).Filter(validTargetFilter).Filter(notFilter(ghostElementFilter))
 	var constraintID catid.ConstraintID
 	var n int
 	_, _, s.primary = scpb.FindPrimaryIndex(idxElts)

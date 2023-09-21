@@ -321,7 +321,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	require.NoError(t, err)
 	desc, err = c.GetNodeDescriptor(3)
 	require.Nil(t, desc)
-	require.Regexp(t, "unable to look up descriptor for n3", err)
+	require.Regexp(t, "node descriptor with node ID 3 was not found", err)
 
 	// Test GetStoreDescriptor.
 	storeID1 := roachpb.StoreID(1)
@@ -340,7 +340,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	require.Equal(t, store2, storeDesc)
 	storeDesc, err = c.GetStoreDescriptor(3)
 	require.Nil(t, storeDesc)
-	require.Regexp(t, "unable to look up descriptor for store ID 3", err)
+	require.Regexp(t, "store descriptor with store ID 3 was not found", err)
 
 	// Return updated GossipSubscription response.
 	node1Up := &roachpb.NodeDescriptor{NodeID: 1, Address: util.MakeUnresolvedAddr("tcp", "1.2.3.4")}
@@ -567,7 +567,7 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 	require.NoError(t, err)
 	desc, err = c.GetNodeDescriptor(3)
 	require.Nil(t, desc)
-	require.Regexp(t, "unable to look up descriptor for n3", err)
+	require.Regexp(t, "node descriptor with node ID 3 was not found", err)
 }
 
 // TestConnectorRetriesError tests that connector iterates over each of

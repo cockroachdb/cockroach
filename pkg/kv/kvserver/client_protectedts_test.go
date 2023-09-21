@@ -41,6 +41,7 @@ import (
 // It works by writing a lot of data and waiting for the GC heuristic to allow
 // for GC. Because of this, it's very slow and expensive. It should
 // potentially be made cheaper by injecting hooks to force GC.
+// TODO(pavelkalinnikov): use the GCHint for this.
 //
 // Probably this test should always be skipped until it is made cheaper,
 // nevertheless it's a useful test.

@@ -68,7 +68,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 data: "h"/4.000000000,0 -> /BYTES/h4
 meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-stats: key_count=8 key_bytes=160 val_count=12 val_bytes=111 range_key_count=2 range_key_bytes=27 range_val_count=2 live_count=3 live_bytes=111 gc_bytes_age=17863 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
+stats: key_count=8 key_bytes=160 val_count=12 val_bytes=111 range_key_count=2 range_key_bytes=27 range_val_count=2 live_count=3 live_bytes=111 gc_bytes_age=17863 intent_count=1 intent_bytes=19 lock_count=1 lock_age=93
 
 # Error on intent, no tombstones should be written. We try both the
 # point tombstone and range tombstone paths.
@@ -93,7 +93,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 data: "h"/4.000000000,0 -> /BYTES/h4
 meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-stats: key_count=8 key_bytes=160 val_count=12 val_bytes=111 range_key_count=2 range_key_bytes=27 range_val_count=2 live_count=3 live_bytes=111 gc_bytes_age=17863 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
+stats: key_count=8 key_bytes=160 val_count=12 val_bytes=111 range_key_count=2 range_key_bytes=27 range_val_count=2 live_count=3 live_bytes=111 gc_bytes_age=17863 intent_count=1 intent_bytes=19 lock_count=1 lock_age=93
 error: (*kvpb.LockConflictError:) conflicting locks on "i"
 
 run stats error
@@ -117,7 +117,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 data: "h"/4.000000000,0 -> /BYTES/h4
 meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-stats: key_count=8 key_bytes=160 val_count=12 val_bytes=111 range_key_count=2 range_key_bytes=27 range_val_count=2 live_count=3 live_bytes=111 gc_bytes_age=17863 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
+stats: key_count=8 key_bytes=160 val_count=12 val_bytes=111 range_key_count=2 range_key_bytes=27 range_val_count=2 live_count=3 live_bytes=111 gc_bytes_age=17863 intent_count=1 intent_bytes=19 lock_count=1 lock_age=93
 error: (*kvpb.LockConflictError:) conflicting locks on "i"
 
 # error encountering point key at d5.
@@ -148,7 +148,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 data: "h"/4.000000000,0 -> /BYTES/h4
 meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-stats: key_count=9 key_bytes=174 val_count=13 val_bytes=118 range_key_count=2 range_key_bytes=27 range_val_count=2 live_count=4 live_bytes=132 gc_bytes_age=17863 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
+stats: key_count=9 key_bytes=174 val_count=13 val_bytes=118 range_key_count=2 range_key_bytes=27 range_val_count=2 live_count=4 live_bytes=132 gc_bytes_age=17863 intent_count=1 intent_bytes=19 lock_count=1 lock_age=93
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "d" at timestamp 5.000000000,0 too old; must write at or above 5.000000000,1
 
 # error encountering range key at k4.
@@ -184,7 +184,7 @@ meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0
 data: "i"/7.000000000,0 -> /BYTES/i7
 data: "j"/2.000000000,0 -> /BYTES/j2
 data: "q"/2.000000000,0 -> /BYTES/q2
-stats: key_count=11 key_bytes=202 val_count=15 val_bytes=132 range_key_count=2 range_key_bytes=27 range_val_count=2 live_count=6 live_bytes=174 gc_bytes_age=17863 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
+stats: key_count=11 key_bytes=202 val_count=15 val_bytes=132 range_key_count=2 range_key_bytes=27 range_val_count=2 live_count=6 live_bytes=174 gc_bytes_age=17863 intent_count=1 intent_bytes=19 lock_count=1 lock_age=93
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 4.000000000,0 too old; must write at or above 4.000000000,1
 
 # At this point the keyspace looks like this:
@@ -224,7 +224,7 @@ meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0
 data: "i"/7.000000000,0 -> /BYTES/i7
 data: "j"/2.000000000,0 -> /BYTES/j2
 data: "q"/2.000000000,0 -> /BYTES/q2
-stats: key_count=11 key_bytes=202 val_count=15 val_bytes=132 range_key_count=2 range_key_bytes=27 range_val_count=2 live_count=6 live_bytes=174 gc_bytes_age=17863 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
+stats: key_count=11 key_bytes=202 val_count=15 val_bytes=132 range_key_count=2 range_key_bytes=27 range_val_count=2 live_count=6 live_bytes=174 gc_bytes_age=17863 intent_count=1 intent_bytes=19 lock_count=1 lock_age=93
 
 # try the same call as above, except with startTime set to 1
 # check that delrange properly continues the run over a range tombstone
@@ -254,7 +254,7 @@ meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0
 data: "i"/7.000000000,0 -> /BYTES/i7
 data: "j"/2.000000000,0 -> /BYTES/j2
 data: "q"/2.000000000,0 -> /BYTES/q2
-stats: key_count=11 key_bytes=202 val_count=15 val_bytes=132 range_key_count=4 range_key_bytes=63 range_val_count=5 live_count=4 live_bytes=132 gc_bytes_age=25269 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
+stats: key_count=11 key_bytes=202 val_count=15 val_bytes=132 range_key_count=4 range_key_bytes=63 range_val_count=5 live_count=4 live_bytes=132 gc_bytes_age=25269 intent_count=1 intent_bytes=19 lock_count=1 lock_age=93
 
 # check that we flush with a range tombstone, if maxBytes is exceeded
 # even though range tombstone threshold has not been met.
@@ -289,7 +289,7 @@ meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0
 data: "i"/7.000000000,0 -> /BYTES/i7
 data: "j"/2.000000000,0 -> /BYTES/j2
 data: "q"/2.000000000,0 -> /BYTES/q2
-stats: key_count=11 key_bytes=202 val_count=15 val_bytes=132 range_key_count=5 range_key_bytes=77 range_val_count=6 live_count=3 live_bytes=111 gc_bytes_age=28559 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
+stats: key_count=11 key_bytes=202 val_count=15 val_bytes=132 range_key_count=5 range_key_bytes=77 range_val_count=6 live_count=3 live_bytes=111 gc_bytes_age=28559 intent_count=1 intent_bytes=19 lock_count=1 lock_age=93
 
 # check that we flush properly if maxBatchSize is exceeded.
 # Since max is 1, write a tombstone to e, and as soon as it sees the
@@ -328,7 +328,7 @@ meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0
 data: "i"/7.000000000,0 -> /BYTES/i7
 data: "j"/2.000000000,0 -> /BYTES/j2
 data: "q"/2.000000000,0 -> /BYTES/q2
-stats: key_count=11 key_bytes=226 val_count=17 val_bytes=139 range_key_count=5 range_key_bytes=77 range_val_count=6 live_count=3 live_bytes=111 gc_bytes_age=31438 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
+stats: key_count=11 key_bytes=226 val_count=17 val_bytes=139 range_key_count=5 range_key_bytes=77 range_val_count=6 live_count=3 live_bytes=111 gc_bytes_age=31438 intent_count=1 intent_bytes=19 lock_count=1 lock_age=93
 
 # Run the same DeleteRange as above at ts 8
 # No resume span should get returned because the iterator goes through
@@ -363,7 +363,7 @@ meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0
 data: "i"/7.000000000,0 -> /BYTES/i7
 data: "j"/2.000000000,0 -> /BYTES/j2
 data: "q"/2.000000000,0 -> /BYTES/q2
-stats: key_count=11 key_bytes=238 val_count=18 val_bytes=139 range_key_count=5 range_key_bytes=77 range_val_count=6 live_count=2 live_bytes=90 gc_bytes_age=34474 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
+stats: key_count=11 key_bytes=238 val_count=18 val_bytes=139 range_key_count=5 range_key_bytes=77 range_val_count=6 live_count=2 live_bytes=90 gc_bytes_age=34474 intent_count=1 intent_bytes=19 lock_count=1 lock_age=93
 
 # Write some new keys on a and b and ensure a run of point tombstones gets properly written
 run stats ok
@@ -406,4 +406,4 @@ meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0
 data: "i"/7.000000000,0 -> /BYTES/i7
 data: "j"/2.000000000,0 -> /BYTES/j2
 data: "q"/2.000000000,0 -> /BYTES/q2
-stats: key_count=11 key_bytes=286 val_count=22 val_bytes=153 range_key_count=5 range_key_bytes=77 range_val_count=6 live_count=1 live_bytes=69 gc_bytes_age=42291 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
+stats: key_count=11 key_bytes=286 val_count=22 val_bytes=153 range_key_count=5 range_key_bytes=77 range_val_count=6 live_count=1 live_bytes=69 gc_bytes_age=42291 intent_count=1 intent_bytes=19 lock_count=1 lock_age=93

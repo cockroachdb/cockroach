@@ -26,10 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -39,6 +41,14 @@ import (
 
 type streamIngestionResumer struct {
 	job *jobs.Job
+
+	mu struct {
+		syncutil.Mutex
+		// perNodeAggregatorStats is a per component running aggregate of trace
+		// driven AggregatorStats pushed backed to the resumer from all the
+		// processors running the backup.
+		perNodeAggregatorStats bulkutil.ComponentAggregatorStats
+	}
 }
 
 func getStreamAddresses(ctx context.Context, ingestionJob *jobs.Job) []string {
@@ -145,7 +155,10 @@ func completeProducerJob(
 	}
 }
 
-func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job) error {
+func ingest(
+	ctx context.Context, execCtx sql.JobExecContext, resumer *streamIngestionResumer,
+) error {
+	ingestionJob := resumer.job
 	// Cutover should be the *first* thing checked upon resumption as it is the
 	// most critical task in disaster recovery.
 	reverted, err := maybeRevertToCutoverTimestamp(ctx, execCtx, ingestionJob)
@@ -165,7 +178,7 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 	// processors shut down gracefully, i.e stopped ingesting any additional
 	// events from the replication stream. At this point it is safe to revert to
 	// the cutoff time to leave the cluster in a consistent state.
-	if err = startDistIngestion(ctx, execCtx, ingestionJob); err != nil {
+	if err = startDistIngestion(ctx, execCtx, resumer); err != nil {
 		return err
 	}
 	if err := revertToCutoverTimestamp(ctx, execCtx, ingestionJob); err != nil {
@@ -186,13 +199,14 @@ func getRetryPolicy(knobs *sql.StreamingTestingKnobs) retry.Options {
 }
 
 func ingestWithRetries(
-	ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job,
+	ctx context.Context, execCtx sql.JobExecContext, resumer *streamIngestionResumer,
 ) error {
+	ingestionJob := resumer.job
 	ro := getRetryPolicy(execCtx.ExecCfg().StreamingTestingKnobs)
 	var err error
 	var lastReplicatedTime hlc.Timestamp
 	for r := retry.Start(ro); r.Next(); {
-		err = ingest(ctx, execCtx, ingestionJob)
+		err = ingest(ctx, execCtx, resumer)
 		if err == nil {
 			break
 		}
@@ -258,7 +272,7 @@ func (s *streamIngestionResumer) Resume(ctx context.Context, execCtx interface{}
 	}
 
 	// Start ingesting KVs from the replication stream.
-	err = ingestWithRetries(ctx, jobExecCtx, s.job)
+	err = ingestWithRetries(ctx, jobExecCtx, s)
 	if err != nil {
 		return s.handleResumeError(ctx, jobExecCtx, err)
 	}
@@ -512,6 +526,20 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 	})
 }
 
+// CollectProfile implements the jobs.Resumer interface.
+func (s *streamIngestionResumer) CollectProfile(ctx context.Context, execCtx interface{}) error {
+	p := execCtx.(sql.JobExecContext)
+
+	var aggStatsCopy bulkutil.ComponentAggregatorStats
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		aggStatsCopy = s.mu.perNodeAggregatorStats.DeepCopy()
+	}()
+	return bulkutil.FlushTracingAggregatorStats(ctx, s.job.ID(),
+		p.ExecCfg().InternalDB, aggStatsCopy)
+}
+
 func closeAndLog(ctx context.Context, d streamclient.Dialer) {
 	if err := d.Close(ctx); err != nil {
 		log.Warningf(ctx, "error closing stream client: %s", err.Error())
@@ -646,7 +674,9 @@ func init() {
 		jobspb.TypeReplicationStreamIngestion,
 		func(job *jobs.Job,
 			settings *cluster.Settings) jobs.Resumer {
-			return &streamIngestionResumer{job: job}
+			s := &streamIngestionResumer{job: job}
+			s.mu.perNodeAggregatorStats = make(bulkutil.ComponentAggregatorStats)
+			return s
 		},
 		jobs.UsesTenantCostControl,
 	)

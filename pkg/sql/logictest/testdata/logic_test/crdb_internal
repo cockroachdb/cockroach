@@ -747,7 +747,7 @@ select crdb_internal.set_vmodule('')
 query error insufficient privilege
 select crdb_internal.get_vmodule()
 
-query error pq: only users with the admin role are allowed to access the node runtime information
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.node_runtime_info
 
 query error pq: only users with the VIEWACTIVITY or VIEWACTIVITYREDACTED or ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases
@@ -756,28 +756,28 @@ select * from crdb_internal.ranges
 query error pq: only users with the VIEWACTIVITY or VIEWACTIVITYREDACTED or ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases
 SHOW RANGES FROM TABLE foo
 
-query error pq: only users with the admin role are allowed to read crdb_internal.gossip_nodes
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.gossip_nodes
 
-query error pq: only users with the admin role are allowed to read crdb_internal.gossip_liveness
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.gossip_liveness
 
-query error pq: only users with the admin role are allowed to read crdb_internal.node_metrics
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.node_metrics
 
-query error pq: only users with the admin role are allowed to read crdb_internal.kv_node_status
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.kv_node_status
 
-query error pq: only users with the admin role are allowed to read crdb_internal.kv_store_status
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.kv_store_status
 
-query error pq: only users with the admin role are allowed to read crdb_internal.gossip_alerts
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.gossip_alerts
 
-query error pq: only users with the admin role are allowed to read crdb_internal.node_inflight_trace_spans
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.node_inflight_trace_spans
 
-query error pq: crdb_internal.check_consistency requires admin privileges
+query error user testuser does not have REPAIRCLUSTERMETADATA system privilege
 SELECT * FROM crdb_internal.check_consistency(true, b'\x02', b'\x04')
 
 # Anyone can see the executable version.

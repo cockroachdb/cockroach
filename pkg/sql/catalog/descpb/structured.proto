@@ -1550,6 +1550,8 @@ message SchemaDescriptor {
     optional sql.sem.types.T return_type = 3;
 
     optional bool return_set = 4 [(gogoproto.nullable) = false];
+
+    optional bool is_procedure = 5 [(gogoproto.nullable) = false];
   }
 
   // Function contains a group of UDFs with the same name.
@@ -1655,7 +1657,10 @@ message FunctionDescriptor {
   // descriptor being changed as part of a declarative schema change.
   optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 20;
 
-  // Next field id is 21
+  // IsProcedure is true if the descriptor represents a procedure.
+  optional bool is_procedure = 21 [(gogoproto.nullable) = false];
+
+  // Next field id is 22
 }
 
 // Descriptor is a union type for descriptors for tables, schemas, databases,

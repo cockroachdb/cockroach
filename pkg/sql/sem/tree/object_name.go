@@ -240,8 +240,8 @@ func (u *UnresolvedObjectName) ToTableName() TableName {
 	return TableName{u.toObjName()}
 }
 
-// ToFunctionName converts the unresolved name to a function name.
-func (u *UnresolvedObjectName) ToFunctionName() RoutineName {
+// ToRoutineName converts the unresolved name to a function name.
+func (u *UnresolvedObjectName) ToRoutineName() RoutineName {
 	return RoutineName{u.toObjName()}
 }
 

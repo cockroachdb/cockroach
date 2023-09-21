@@ -39,7 +39,7 @@ const (
 )
 
 var _ = settings.RegisterEnumSetting(
-	settings.SystemOnly,
+	settings.TenantWritable,
 	"ui.display_timezone",
 	"the timezone used to format timestamps in the ui",
 	"Etc/UTC",

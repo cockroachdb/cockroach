@@ -42,3 +42,11 @@ var StatsActivityUIEnabled = settings.RegisterBoolSetting(
 	"sql.stats.activity.ui.enabled",
 	"enable the combined statistics endpoint to get data from the system activity tables",
 	true)
+
+// PersistedInsightsUIEnabled controls if the insights endpoint uses
+// the persisted statement_execution_insights and transaction_execution_insights tables.
+var PersistedInsightsUIEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.stats.persisted_insights.ui.enabled",
+	"enable the insights endpoint to get data from the persisted insights tables",
+	false)

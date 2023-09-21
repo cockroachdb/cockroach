@@ -101,8 +101,8 @@ func (wo WindowOverload) Window() {}
 func init() {
 	builtinsregistry.AddSubscription(func(name string, _ *tree.FunctionProperties, overloads []tree.Overload) {
 		for _, fn := range overloads {
-			if fn.IsUDF {
-				panic(errors.AssertionFailedf("%s: IsUDF is set for a builtin in the registry: %v", name, fn))
+			if fn.Type != tree.BuiltinRoutine {
+				panic(errors.AssertionFailedf("%s: built-in routine type must be used for builtins: %v", name, fn))
 			}
 			var numSet int
 			if fn.AggregateFunc != nil {

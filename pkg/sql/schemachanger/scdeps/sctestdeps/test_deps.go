@@ -1239,7 +1239,7 @@ func (s *TestState) AddTableForStatsRefresh(id descpb.ID) {
 func (s *TestState) ResolveFunction(
 	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
-	fnName, err := name.ToFunctionName()
+	fnName, err := name.ToRoutineName()
 	if err != nil {
 		return nil, err
 	}

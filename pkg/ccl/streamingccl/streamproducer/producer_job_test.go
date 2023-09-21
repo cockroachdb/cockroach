@@ -97,6 +97,10 @@ func (c coordinatedResumer) OnFailOrCancel(
 	return err
 }
 
+func (c coordinatedResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 func TestStreamReplicationProducerJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

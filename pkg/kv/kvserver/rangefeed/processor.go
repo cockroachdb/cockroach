@@ -342,6 +342,8 @@ type CatchUpIteratorConstructor func(roachpb.Span, hlc.Timestamp) (*CatchUpItera
 func (p *LegacyProcessor) Start(stopper *stop.Stopper, newRtsIter IntentScannerConstructor) error {
 	ctx := p.AnnotateCtx(context.Background())
 	if err := stopper.RunAsyncTask(ctx, "rangefeed.LegacyProcessor", func(ctx context.Context) {
+		p.Metrics.RangeFeedProcessorsGO.Inc(1)
+		defer p.Metrics.RangeFeedProcessorsGO.Dec(1)
 		p.run(ctx, p.RangeID, newRtsIter, stopper)
 	}); err != nil {
 		p.reg.DisconnectWithErr(all, kvpb.NewError(err))

@@ -68,6 +68,7 @@ const (
 
 // IntentAgeThreshold is the threshold after which an extant intent
 // will be resolved.
+// TODO(nvanbenschoten): rename to LockAgeThreshold.
 var IntentAgeThreshold = settings.RegisterDurationSetting(
 	settings.SystemOnly,
 	"kv.gc.intent_age_threshold",

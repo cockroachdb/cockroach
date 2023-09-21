@@ -566,6 +566,14 @@ const (
 	// push request and leaving the push outcome to the server-side logic.
 	V23_2_RemoveLockTableWaiterTouchPush
 
+	// V23_2_ChangefeedLaggingRangesOpts is used to version gate the changefeed
+	// options lagging_ranges_threshold and lagging_ranges_polling_interval.
+	V23_2_ChangefeedLaggingRangesOpts
+
+	// V23_2_GrantExecuteToPublic grants the EXECUTE privilege to the public
+	// role for all existing functions.
+	V23_2_GrantExecuteToPublic
+
 	// *************************************************
 	// Step (1) Add new versions here.
 	// Do not add new versions to a patch release.
@@ -986,6 +994,14 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_2_RemoveLockTableWaiterTouchPush,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 22},
+	},
+	{
+		Key:     V23_2_ChangefeedLaggingRangesOpts,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 24},
+	},
+	{
+		Key:     V23_2_GrantExecuteToPublic,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 26},
 	},
 
 	// *************************************************

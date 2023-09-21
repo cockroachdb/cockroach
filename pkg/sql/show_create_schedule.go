@@ -32,8 +32,8 @@ var showCreateTableColumns = colinfo.ResultColumns{
 }
 
 const (
-	scheduleID = iota
-	createStmt
+	scheduleIDIdx = iota
+	createStmtIdx
 )
 
 func loadSchedules(params runParams, n *tree.ShowCreateSchedules) ([]*jobs.ScheduledJob, error) {
@@ -118,8 +118,8 @@ func (p *planner) ShowCreateSchedule(
 				}
 
 				row := tree.Datums{
-					scheduleID: tree.NewDInt(tree.DInt(sj.ScheduleID())),
-					createStmt: tree.NewDString(createStmtStr),
+					scheduleIDIdx: tree.NewDInt(tree.DInt(sj.ScheduleID())),
+					createStmtIdx: tree.NewDString(createStmtStr),
 				}
 				rows = append(rows, row)
 			}

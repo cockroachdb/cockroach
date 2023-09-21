@@ -361,7 +361,7 @@ See: `sql/logictest/testdata/logic_test/system_privileges`
 ```sql
 user testuser
 
-statement error pq: user testuser does not have MODIFYCLUSTERSETTING privilege on Global
+statement error pq: user testuser does not have MODIFYCLUSTERSETTING system privilege
 SELECT * FROM crdb_internal.cluster_settings;
 
 user root
@@ -386,7 +386,7 @@ REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
 
 user testuser
 
-statement error pq: user testuser does not have MODIFYCLUSTERSETTING privilege on Global
+statement error pq: user testuser does not have MODIFYCLUSTERSETTING system privilege
 SELECT * FROM crdb_internal.cluster_settings;
 
 user root

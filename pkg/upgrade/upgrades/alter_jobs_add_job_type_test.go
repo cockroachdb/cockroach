@@ -44,9 +44,14 @@ func (*fakeResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	return nil
 }
 
-// Resume implements the jobs.Resumer interface.
+// OnFailOrCancel implements the jobs.Resumer interface.
 func (*fakeResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}, jobErr error) error {
 	return jobErr
+}
+
+// CollectProfile implements the jobs.Resumer interface.
+func (*fakeResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
 }
 
 // TestCreateAdoptableJobPopulatesJobType verifies that the job_type column in system.jobs is populated

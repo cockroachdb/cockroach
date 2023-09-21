@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -133,7 +132,7 @@ func ScanSST(
 	return nil
 }
 
-func GetStreamIngestionStatsNoHeartbeat(
+func GetStreamIngestionStats(
 	ctx context.Context,
 	streamIngestionDetails jobspb.StreamIngestionDetails,
 	jobProgress jobspb.Progress,
@@ -267,47 +266,6 @@ func fingerprintClustersByTable(
 	}
 	return fingerprintutils.CompareMultipleDatabaseFingerprints(srcFingerprints,
 		dstFingerprints)
-}
-
-func GetStreamIngestionStats(
-	ctx context.Context,
-	streamIngestionDetails jobspb.StreamIngestionDetails,
-	jobProgress jobspb.Progress,
-) (*streampb.StreamIngestionStats, error) {
-	stats, err := GetStreamIngestionStatsNoHeartbeat(ctx, streamIngestionDetails, jobProgress)
-	if err != nil {
-		return nil, err
-	}
-	// No need to pass a db into this call because the StreamAddresses do not have
-	// an external connection url scheme.
-	client, err := streamclient.GetFirstActiveClient(ctx, stats.IngestionProgress.StreamAddresses, nil)
-	if err != nil {
-		return nil, err
-	}
-	streamStatus, err := client.Heartbeat(ctx, streampb.StreamID(stats.IngestionDetails.StreamID), hlc.MaxTimestamp)
-	if err != nil {
-		stats.ProducerError = err.Error()
-	} else {
-		stats.ProducerStatus = &streamStatus
-	}
-	return stats, client.Close(ctx)
-}
-
-func TestingGetStreamIngestionStatsNoHeartbeatFromReplicationJob(
-	t *testing.T, ctx context.Context, sqlRunner *sqlutils.SQLRunner, ingestionJobID int,
-) *streampb.StreamIngestionStats {
-	var payloadBytes []byte
-	var progressBytes []byte
-	var payload jobspb.Payload
-	var progress jobspb.Progress
-	stmt := fmt.Sprintf(`SELECT payload, progress FROM (%s)`, jobutils.InternalSystemJobsBaseQuery)
-	sqlRunner.QueryRow(t, stmt, ingestionJobID).Scan(&payloadBytes, &progressBytes)
-	require.NoError(t, protoutil.Unmarshal(payloadBytes, &payload))
-	require.NoError(t, protoutil.Unmarshal(progressBytes, &progress))
-	details := payload.GetStreamIngestion()
-	stats, err := GetStreamIngestionStatsNoHeartbeat(ctx, *details, progress)
-	require.NoError(t, err)
-	return stats
 }
 
 func TestingGetStreamIngestionStatsFromReplicationJob(

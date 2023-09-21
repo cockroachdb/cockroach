@@ -229,11 +229,11 @@ func (u *UnresolvedName) ToUnresolvedObjectName(idx AnnotationIdx) (UnresolvedOb
 	)
 }
 
-// ToFunctionName converts an UnresolvedName to a RoutineName.
-func (u *UnresolvedName) ToFunctionName() (RoutineName, error) {
+// ToRoutineName converts an UnresolvedName to a RoutineName.
+func (u *UnresolvedName) ToRoutineName() (RoutineName, error) {
 	un, err := u.ToUnresolvedObjectName(NoAnnotation)
 	if err != nil {
 		return RoutineName{}, errors.Newf("invalid function name: %s", u.String())
 	}
-	return un.ToFunctionName(), nil
+	return un.ToRoutineName(), nil
 }

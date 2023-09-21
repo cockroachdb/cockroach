@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -46,6 +47,10 @@ func (d *fakeResumer) Resume(ctx context.Context, execCtx interface{}) error {
 }
 
 func (d *fakeResumer) OnFailOrCancel(context.Context, interface{}, error) error {
+	return nil
+}
+
+func (d *fakeResumer) CollectProfile(context.Context, interface{}) error {
 	return nil
 }
 
@@ -238,12 +243,21 @@ func TestShowChangefeedJobsStatusChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
+
 	var params base.TestServerArgs
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
-	s, rawSQLDB, _ := serverutils.StartServer(t, params)
-	registry := s.ApplicationLayer().JobRegistry().(*jobs.Registry)
+	srv, rawSQLDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+
+	for _, l := range []serverutils.ApplicationLayerInterface{s, srv.SystemLayer()} {
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
+	}
+
+	registry := s.JobRegistry().(*jobs.Registry)
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
-	defer s.Stopper().Stop(context.Background())
 
 	query := `CREATE TABLE foo (a string)`
 	sqlDB.Exec(t, query)
@@ -258,9 +272,6 @@ func TestShowChangefeedJobsStatusChange(t *testing.T) {
 			}
 			return &r
 		})
-
-	query = `SET CLUSTER SETTING kv.rangefeed.enabled = true`
-	sqlDB.Exec(t, query)
 
 	var changefeedID jobspb.JobID
 

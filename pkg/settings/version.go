@@ -174,9 +174,6 @@ func (v *VersionSetting) SetInternal(ctx context.Context, sv *Values, newVal int
 // setToDefault is part of the extendingSetting interface. This is a no-op for
 // VersionSetting. They don't have defaults that they can go back to at any
 // time.
-//
-// TODO(irfansharif): Is this true? Shouldn't the default here just the the
-// version we initialize with?
 func (v *VersionSetting) setToDefault(ctx context.Context, sv *Values) {}
 
 // RegisterVersionSetting adds the provided version setting to the global

@@ -1,0 +1,118 @@
+# tenant-cluster-setting-override-opt: sql.zone_configs.allow_for_secondary_tenant.enabled=true sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true
+# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-vec-off multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-no-los
+
+statement ok
+SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE REGION FAILURE
+
+statement ok
+USE multi_region_test_db
+
+# Create a table with a computed region column.
+
+statement ok
+CREATE TABLE university (
+  name STRING NOT NULL,
+  mascot STRING NOT NULL,
+  postal_code STRING NOT NULL,
+  region crdb_internal_region NOT NULL AS (
+    CASE
+      WHEN left(postal_code, 2) = '97' THEN 'ca-central-1'   -- Oregon
+      WHEN left(postal_code, 2) = '98' THEN 'ap-southeast-2' -- Washington
+      ELSE 'us-east-1'                                       -- British Columbia
+    END
+  ) STORED,
+  PRIMARY KEY (name),
+  UNIQUE INDEX (mascot),
+  FAMILY (name, mascot, postal_code, region)
+)
+LOCALITY REGIONAL BY ROW AS region
+
+# Create a table with a non-computed region column.
+
+statement ok
+CREATE TABLE volcano (
+  name STRING NOT NULL,
+  origin STRING NOT NULL,
+  location GEOGRAPHY NOT NULL,
+  region crdb_internal_region NOT NULL,
+  PRIMARY KEY (name),
+  UNIQUE INDEX (origin),
+  INVERTED INDEX (location),
+  FAMILY (name, origin, location, region)
+)
+LOCALITY REGIONAL BY ROW AS region
+
+# TODO(michae2): statement ok
+statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+INSERT INTO university (name, mascot, postal_code) VALUES ('Western Oregon', 'wolves', '97361')
+
+# TODO(michae2): statement ok
+statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+INSERT INTO volcano
+VALUES ('Mount Hood', 'Fought over Loowit and was transformed by Saghalie.', 'POINT(-121.695833 45.373611)', 'ca-central-1')
+
+# TODO(michae2): statement error pgcode 23505 pq: duplicate key value violates unique constraint "university_mascot_key"\nDETAIL: Key \(mascot\)=\('wolves'\) already exists.
+statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+INSERT INTO university (name, mascot, postal_code) VALUES ('Thompson Rivers', 'wolves', 'V2C 0C8')
+
+# TODO(michae2): statement error pgcode 23505 pq: duplicate key value violates unique constraint "volcano_origin_key"\nDETAIL: Key \(origin\)=\('Fought over Loowit and was transformed by Saghalie.'\) already exists.
+statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+INSERT INTO volcano VALUES
+('Mount Adams', 'Fought over Loowit and was transformed by Saghalie.', 'POINT(-121.490895 46.202412)', 'ap-southeast-2')
+
+# TODO(michae2): statement ok
+statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+INSERT INTO university (name, mascot, postal_code)
+VALUES ('Thompson Rivers', 'wolves', 'V2C 0C8'), ('Evergreen State', 'geoducks', '98505')
+ON CONFLICT (mascot) DO NOTHING
+
+# TODO(michae2): statement ok
+statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+INSERT INTO volcano VALUES
+('Mount Adams', 'Fought over Loowit and was transformed by Saghalie.', 'POINT(-121.490895 46.202412)', 'ap-southeast-2'),
+('Mount St. Helens', 'Fair maiden Loowit could not choose between Wyeast and Pahto and was transformed by Saghalie.', 'POINT(-122.1944 46.1912)', 'ap-southeast-2')
+ON CONFLICT (origin) DO NOTHING
+
+query TTT
+SELECT name, mascot, postal_code FROM university ORDER BY name
+----
+
+query TTT
+SELECT name, origin, location FROM volcano ORDER BY name
+----
+
+# TODO(michae2): statement error pgcode 23505 pq: duplicate key value violates unique constraint "university_mascot_key"\nDETAIL: Key \(mascot\)=\('wolves'\) already exists.
+statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+UPSERT INTO university (name, mascot, postal_code) VALUES ('Thompson Rivers', 'wolves', 'V2C 0C8')
+
+# TODO(michae2): statement error pgcode 23505 pq: duplicate key value violates unique constraint "volcano_origin_key"\nDETAIL: Key \(origin\)=\('Fought over Loowit and was transformed by Saghalie.'\) already exists.
+statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+UPSERT INTO volcano VALUES
+('Mount Adams', 'Fought over Loowit and was transformed by Saghalie.', 'POINT(-121.490895 46.202412)', 'ap-southeast-2')
+
+# TODO(michae2): statement error pgcode 23505 pq: duplicate key value violates unique constraint "university_mascot_key"\nDETAIL: Key \(mascot\)=\('wolves'\) already exists.
+statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+UPDATE university SET mascot = 'wolves' WHERE name = 'Evergreen State'
+
+# TODO(michae2): statement error pgcode 23505 pq: duplicate key value violates unique constraint "volcano_origin_key"\nDETAIL: Key \(origin\)=\('Fought over Loowit and was transformed by Saghalie.'\) already exists.
+statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+UPDATE volcano SET origin = 'Fought over Loowit and was transformed by Saghalie.' WHERE name = 'Mount St. Helens'
+
+# TODO(michae2): statement error pgcode 23505 pq: duplicate key value violates unique constraint "university_pkey"\nDETAIL: Key \(name\)=\('Evergreen State'\) already exists.
+statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+INSERT INTO university (name, mascot, postal_code)
+VALUES ('Thompson Rivers', 'wolves', 'V2C 0C8'), ('Oregon Tech', 'owls', '97601')
+ON CONFLICT (mascot) DO UPDATE SET name = 'Evergreen State', mascot = 'banana slugs'
+
+# TODO(michae2): statement error pgcode 23505 pq: duplicate key value violates unique constraint "volcano_pkey"\nDETAIL: Key \(name\)=\('Mount St. Helens'\) already exists.
+statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+INSERT INTO volcano VALUES
+('Mount Adams', 'Fought over Loowit and was transformed by Saghalie.', 'POINT(-121.490895 46.202412)', 'ap-southeast-2'),
+('Mount Garibaldi', 'Lightning from thunderbird eyes struck the ground.', 'POINT(-123.004722 49.850278)', 'us-east-1')
+ON CONFLICT (origin) DO UPDATE SET name = 'Mount St. Helens', origin = 'Discovered by the Vancouver expedition in 1792.', region = 'us-east-1'

@@ -70,6 +70,7 @@ BNF_SRCS = [
     "//docs/generated/sql/bnf:backup_options.bnf",
     "//docs/generated/sql/bnf:begin_stmt.bnf",
     "//docs/generated/sql/bnf:begin_transaction.bnf",
+    "//docs/generated/sql/bnf:call_stmt.bnf",
     "//docs/generated/sql/bnf:cancel_all_jobs_stmt.bnf",
     "//docs/generated/sql/bnf:cancel_job.bnf",
     "//docs/generated/sql/bnf:cancel_query.bnf",

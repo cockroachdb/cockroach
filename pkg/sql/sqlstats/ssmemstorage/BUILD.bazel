@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "ssmemstorage",
     srcs = [
+        "ss_mem_counter.go",
         "ss_mem_iterator.go",
         "ss_mem_storage.go",
         "ss_mem_writer.go",

@@ -31,11 +31,11 @@ const { Option } = Select;
 export interface ActivateDiagnosticsModalProps {
   activate: (insertStmtDiagnosticsRequest: InsertStmtDiagnosticRequest) => void;
   refreshDiagnosticsReports: () => void;
-  onOpenModal?: (statement: string) => void;
+  onOpenModal?: (statement: string, planGists: string[]) => void;
 }
 
 export interface ActivateDiagnosticsModalRef {
-  showModalFor: (statement: string) => void;
+  showModalFor: (statement: string, planGists: string[]) => void;
 }
 
 export const ActivateStatementDiagnosticsModal = React.forwardRef(
@@ -45,7 +45,10 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef(
   ) => {
     const [visible, setVisible] = useState(false);
     const [statement, setStatement] = useState<string>();
+    const [planGists, setPlanGists] = useState<string[]>();
     const [conditional, setConditional] = useState(true);
+    const [filterPerPlanGist, setFilterPerPlanGist] = useState(false);
+    const [selectedPlanGist, setSelectedPlanGist] = useState<string>("");
     const [expires, setExpires] = useState(true);
     const [minExecLatency, setMinExecLatency] = useState(100);
     const [minExecLatencyUnit, setMinExecLatencyUnit] =
@@ -84,6 +87,7 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef(
     const onOkHandler = useCallback(() => {
       activate({
         stmtFingerprint: statement,
+        planGist: filterPerPlanGist ? selectedPlanGist : null,
         minExecutionLatencySeconds: getMinExecLatency(
           conditional,
           minExecLatency,
@@ -102,19 +106,29 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef(
       expires,
       expiresAfter,
       traceSampleRate,
+      filterPerPlanGist,
+      selectedPlanGist,
     ]);
 
     const onCancelHandler = useCallback(() => setVisible(false), []);
 
     useImperativeHandle(ref, () => {
       return {
-        showModalFor: (forwardStatement: string) => {
+        showModalFor: (
+          forwardStatement: string,
+          forwardPlanGists: string[],
+        ) => {
           setStatement(forwardStatement);
+          setPlanGists(forwardPlanGists);
           setVisible(true);
-          onOpenModal && onOpenModal(forwardStatement);
+          onOpenModal && onOpenModal(forwardStatement, forwardPlanGists);
         },
       };
     });
+
+    if (planGists && selectedPlanGist == "") {
+      setSelectedPlanGist(planGists[0]);
+    }
 
     return (
       <Modal
@@ -214,6 +228,51 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef(
                 onChange={() => setConditional(false)}
               >
                 Trace and collect diagnostics on the next statement execution
+              </Radio>
+            </Button.Group>
+          </Radio.Group>
+          <Divider type="horizontal" />
+
+          <Radio.Group
+            value={filterPerPlanGist}
+            className={cx("diagnostic__plan-gist-group")}
+          >
+            <Button.Group className={cx("diagnostic__btn-group")}>
+              <Radio
+                value={false}
+                className={cx("diagnostic__radio-btn", "margin-bottom")}
+                onChange={() => setFilterPerPlanGist(false)}
+              >
+                For all plan gists
+              </Radio>
+              <br />
+              <Radio
+                value={true}
+                className={cx("diagnostic__radio-btn")}
+                onChange={() => setFilterPerPlanGist(true)}
+              >
+                For the following plan gist:
+                <div className={cx("diagnostic__plan-gist-container")}>
+                  <Select
+                    disabled={!filterPerPlanGist}
+                    value={selectedPlanGist}
+                    defaultValue={planGists ? planGists[0] : ""}
+                    onChange={(selected: string) =>
+                      setSelectedPlanGist(selected)
+                    }
+                    className={cx("diagnostic__select__plan-gist")}
+                    size="large"
+                    showSearch={true}
+                  >
+                    {planGists?.map((gist: string) => {
+                      return (
+                        <Option value={gist} key={gist}>
+                          {gist}
+                        </Option>
+                      );
+                    })}
+                  </Select>
+                </div>
               </Radio>
             </Button.Group>
           </Radio.Group>

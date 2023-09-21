@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1459,43 +1460,47 @@ func Scan(reader Reader, start, end roachpb.Key, max int64) ([]MVCCKeyValue, err
 	return kvs, err
 }
 
-// ScanIntents scans intents using only the separated intents lock table. It
-// does not take interleaved intents into account at all.
-func ScanIntents(
-	ctx context.Context, reader Reader, start, end roachpb.Key, maxIntents int64, targetBytes int64,
-) ([]roachpb.Intent, error) {
-	var intents []roachpb.Intent
+// ScanLocks scans locks (shared, exclusive, and intent) using only the lock
+// table keyspace. It does not scan over the MVCC keyspace.
+func ScanLocks(
+	ctx context.Context, reader Reader, start, end roachpb.Key, maxLocks int64, targetBytes int64,
+) ([]roachpb.Lock, error) {
+	var locks []roachpb.Lock
 
 	if bytes.Compare(start, end) >= 0 {
-		return intents, nil
+		return locks, nil
 	}
 
 	ltStart, _ := keys.LockTableSingleKey(start, nil)
 	ltEnd, _ := keys.LockTableSingleKey(end, nil)
-	iter, err := reader.NewEngineIterator(IterOptions{LowerBound: ltStart, UpperBound: ltEnd})
+	iter, err := NewLockTableIterator(reader, LockTableIteratorOptions{
+		LowerBound:  ltStart,
+		UpperBound:  ltEnd,
+		MatchMinStr: lock.Shared, // all locks
+	})
 	if err != nil {
 		return nil, err
 	}
 	defer iter.Close()
 
 	var meta enginepb.MVCCMetadata
-	var intentBytes int64
+	var lockBytes int64
 	var ok bool
 	for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: ltStart}); ok; ok, err = iter.NextEngineKey() {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if maxIntents != 0 && int64(len(intents)) >= maxIntents {
+		if maxLocks != 0 && int64(len(locks)) >= maxLocks {
 			break
 		}
-		if targetBytes != 0 && intentBytes >= targetBytes {
+		if targetBytes != 0 && lockBytes >= targetBytes {
 			break
 		}
 		key, err := iter.EngineKey()
 		if err != nil {
 			return nil, err
 		}
-		lockedKey, err := keys.DecodeLockTableSingleKey(key.Key)
+		ltKey, err := key.ToLockTableKey()
 		if err != nil {
 			return nil, err
 		}
@@ -1506,13 +1511,13 @@ func ScanIntents(
 		if err = protoutil.Unmarshal(v, &meta); err != nil {
 			return nil, err
 		}
-		intents = append(intents, roachpb.MakeIntent(meta.Txn, lockedKey))
-		intentBytes += int64(len(lockedKey)) + int64(len(v))
+		locks = append(locks, roachpb.MakeLock(meta.Txn, ltKey.Key, ltKey.Strength))
+		lockBytes += int64(len(ltKey.Key)) + int64(len(v))
 	}
 	if err != nil {
 		return nil, err
 	}
-	return intents, nil
+	return locks, nil
 }
 
 // WriteSyncNoop carries out a synchronous no-op write to the engine.
@@ -1940,17 +1945,21 @@ func assertMVCCIteratorInvariants(iter MVCCIterator) error {
 		return errors.AssertionFailedf("unknown type for engine key %s", engineKey)
 	}
 
-	// Value must equal UnsafeValue.
-	u, err := iter.UnsafeValue()
-	if err != nil {
-		return err
-	}
-	v, err := iter.Value()
-	if err != nil {
-		return err
-	}
-	if !bytes.Equal(v, u) {
-		return errors.AssertionFailedf("Value %x does not match UnsafeValue %x at %s", v, u, key)
+	// If the iterator position has a point key, Value must equal UnsafeValue.
+	// NB: It's only valid to read an iterator's Value if the iterator is
+	// positioned at a point key.
+	if hasPoint, _ := iter.HasPointAndRange(); hasPoint {
+		u, err := iter.UnsafeValue()
+		if err != nil {
+			return err
+		}
+		v, err := iter.Value()
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(v, u) {
+			return errors.AssertionFailedf("Value %x does not match UnsafeValue %x at %s", v, u, key)
+		}
 	}
 
 	// For prefix iterators, any range keys must be point-sized. We've already
@@ -1971,7 +1980,9 @@ func assertMVCCIteratorInvariants(iter MVCCIterator) error {
 // latches early. If found, conflicting intents are added to the supplied
 // `intents` slice, which indicates to the caller that evaluation should not
 // proceed until the intents are resolved. Intents that don't conflict with the
-// transaction referenced by txnID[1] at the supplied `ts` are ignored.
+// transaction referenced by txnID[1] at the supplied `ts` are ignored; so are
+// {Shared,Exclusive} replicated locks, as they do not conflict with non-locking
+// reads.
 //
 // The `needsIntentHistory` return value indicates whether the caller needs to
 // consult intent history when performing a scan over the MVCC keyspace to
@@ -1987,7 +1998,7 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 	ts hlc.Timestamp,
 	start, end roachpb.Key,
 	intents *[]roachpb.Intent,
-	maxIntents int64,
+	maxLockConflicts int64,
 ) (needIntentHistory bool, err error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
@@ -1998,14 +2009,24 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 		return true, errors.AssertionFailedf("start key must be less than end key")
 	}
 	ltStart, _ := keys.LockTableSingleKey(start, nil)
-	opts := IterOptions{LowerBound: ltStart}
+	opts := LockTableIteratorOptions{
+		LowerBound: ltStart,
+		// Ignore Exclusive and Shared locks; we only drop latches early for
+		// non-locking reads, which do not conflict with Shared or
+		// Exclusive[1] locks.
+		//
+		// [1] Specifically replicated Exclusive locks. Interaction with
+		// unreplicated locks is governed by the ExclusiveLocksBlockNonLockingReads
+		// cluster setting.
+		MatchMinStr: lock.Intent,
+	}
 	if upperBoundUnset {
 		opts.Prefix = true
 	} else {
 		ltEnd, _ := keys.LockTableSingleKey(end, nil)
 		opts.UpperBound = ltEnd
 	}
-	iter, err := reader.NewEngineIterator(opts)
+	iter, err := NewLockTableIterator(reader, opts)
 	if err != nil {
 		return false, err
 	}
@@ -2014,16 +2035,13 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 	var meta enginepb.MVCCMetadata
 	var ok bool
 	for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: ltStart}); ok; ok, err = iter.NextEngineKey() {
-		if maxIntents != 0 && int64(len(*intents)) >= maxIntents {
+		if maxLockConflicts != 0 && int64(len(*intents)) >= maxLockConflicts {
 			// Return early if we're done accumulating intents; make no claims about
 			// not needing intent history.
 			return true /* needsIntentHistory */, nil
 		}
-		v, err := iter.UnsafeValue()
+		err := iter.ValueProto(&meta)
 		if err != nil {
-			return false, err
-		}
-		if err = protoutil.Unmarshal(v, &meta); err != nil {
 			return false, err
 		}
 		if meta.Txn == nil {
@@ -2070,11 +2088,14 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 		if err != nil {
 			return false, err
 		}
-		lockedKey, err := keys.DecodeLockTableSingleKey(key.Key)
+		ltKey, err := key.ToLockTableKey()
 		if err != nil {
 			return false, err
 		}
-		*intents = append(*intents, roachpb.MakeIntent(meta.Txn, lockedKey))
+		if ltKey.Strength != lock.Intent {
+			return false, errors.AssertionFailedf("unexpected strength for LockTableKey %s", ltKey.Strength)
+		}
+		*intents = append(*intents, roachpb.MakeIntent(meta.Txn, ltKey.Key))
 	}
 	if err != nil {
 		return false, err

@@ -173,7 +173,10 @@ func prettyify(r io.Reader, n int, exprgen bool) (string, error) {
 		exprs = parser.Exprs()
 	}
 	d := p.toDoc(exprs)
-	s := pretty.Pretty(d, n, false, 4, nil)
+	s, err := pretty.Pretty(d, n, false, 4, nil)
+	if err != nil {
+		return "", err
+	}
 
 	// Remove any whitespace at EOL. This can happen in define rules where
 	// we always insert a blank line above comments which are nested with

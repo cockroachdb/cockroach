@@ -195,6 +195,19 @@ func (o *OS) Setenv(key, value string) error {
 	return err
 }
 
+func (o *OS) Chmod(filename string, mode uint32) error {
+	command := fmt.Sprintf("chmod %s %#o", filename, mode)
+	if !o.knobs.silent {
+		o.logger.Print(command)
+	}
+
+	_, err := o.Next(command, func() (string, error) {
+		err := os.Chmod(filename, fs.FileMode(mode))
+		return "", err
+	})
+	return err
+}
+
 // IsSymlink wraps around os.Lstat to determine if filename is a symbolic link
 // or not.
 func (o *OS) IsSymlink(filename string) (bool, error) {

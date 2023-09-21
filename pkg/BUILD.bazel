@@ -2419,6 +2419,7 @@ GO_TARGETS = [
     "//pkg/util/sdnotify:sdnotify_test",
     "//pkg/util/search:search",
     "//pkg/util/search:search_test",
+    "//pkg/util/sentryutil:sentryutil",
     "//pkg/util/shuffle:shuffle",
     "//pkg/util/shuffle:shuffle_test",
     "//pkg/util/slidingwindow:slidingwindow",

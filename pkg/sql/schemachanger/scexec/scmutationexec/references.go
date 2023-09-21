@@ -561,10 +561,11 @@ func (i *immediateVisitor) SetObjectParentID(ctx context.Context, op scop.SetObj
 		t.ParentSchemaID = sc.GetID()
 
 		ol := descpb.SchemaDescriptor_FunctionSignature{
-			ID:         obj.GetID(),
-			ArgTypes:   make([]*types.T, len(t.GetParams())),
-			ReturnType: t.GetReturnType().Type,
-			ReturnSet:  t.GetReturnType().ReturnSet,
+			ID:          obj.GetID(),
+			ArgTypes:    make([]*types.T, len(t.GetParams())),
+			ReturnType:  t.GetReturnType().Type,
+			ReturnSet:   t.GetReturnType().ReturnSet,
+			IsProcedure: t.IsProcedure,
 		}
 		for i := range t.Params {
 			ol.ArgTypes[i] = t.Params[i].Type
