@@ -82,6 +82,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -256,7 +257,7 @@ CREATE TABLE crdb_internal.node_runtime_info (
   value     STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireAdminRole(ctx, "access the node runtime information"); err != nil {
+		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 			return err
 		}
 
@@ -1831,7 +1832,7 @@ CREATE TABLE crdb_internal.node_txn_stats (
   implicit_count     INT NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireAdminRole(ctx, "access application statistics"); err != nil {
+		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 			return err
 		}
 
@@ -1987,14 +1988,12 @@ CREATE TABLE crdb_internal.node_inflight_trace_spans (
   operation      STRING NULL      -- The span's operation.
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		hasAdmin, err := p.HasAdminRole(ctx)
-		if err != nil {
+		if err := p.CheckPrivilege(
+			ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA,
+		); err != nil {
 			return err
 		}
-		if !hasAdmin {
-			return pgerror.Newf(pgcode.InsufficientPrivilege,
-				"only users with the admin role are allowed to read crdb_internal.node_inflight_trace_spans")
-		}
+
 		return p.ExecCfg().AmbientCtx.Tracer.VisitSpans(func(span tracing.RegistrySpan) error {
 			trace := span.GetFullRecording(tracingpb.RecordingVerbose)
 			for _, rec := range trace.Flatten() {
@@ -2973,7 +2972,7 @@ var crdbInternalLocalMetricsTable = virtualSchemaTable{
   value							 FLOAT NOT NULL    -- value of the metric
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireAdminRole(ctx, "read crdb_internal.node_metrics"); err != nil {
+		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 			return err
 		}
 
@@ -4554,7 +4553,7 @@ CREATE TABLE crdb_internal.gossip_nodes (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireAdminRole(ctx, "read crdb_internal.gossip_nodes"); err != nil {
+		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 			return err
 		}
 
@@ -4672,7 +4671,7 @@ CREATE TABLE crdb_internal.kv_node_liveness (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireAdminRole(ctx, "read crdb_internal.node_liveness"); err != nil {
+		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 			return err
 		}
 
@@ -4731,7 +4730,7 @@ CREATE TABLE crdb_internal.gossip_liveness (
 		// which is highly available. DO NOT CALL functions which require the
 		// cluster to be healthy, such as NodesStatusServer.ListNodesInternal().
 
-		if err := p.RequireAdminRole(ctx, "read crdb_internal.gossip_liveness"); err != nil {
+		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 			return err
 		}
 
@@ -4807,7 +4806,7 @@ CREATE TABLE crdb_internal.gossip_alerts (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireAdminRole(ctx, "read crdb_internal.gossip_alerts"); err != nil {
+		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 			return err
 		}
 
@@ -5128,7 +5127,7 @@ CREATE TABLE crdb_internal.kv_node_status (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireAdminRole(ctx, "read crdb_internal.kv_node_status"); err != nil {
+		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 			return err
 		}
 		ss, err := p.extendedEvalCtx.NodesStatusServer.OptionalNodesStatusServer(
@@ -5242,7 +5241,7 @@ CREATE TABLE crdb_internal.kv_store_status (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireAdminRole(ctx, "read crdb_internal.kv_store_status"); err != nil {
+		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 			return err
 		}
 		ss, err := p.ExecCfg().NodesStatusServer.OptionalNodesStatusServer(
@@ -8130,7 +8129,7 @@ CREATE TABLE crdb_internal.node_tenant_capabilities_cache (
 );`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		const op = "node_tenant_capabilities_cache"
-		if err := p.RequireAdminRole(ctx, op); err != nil {
+		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 			return err
 		}
 		tenantCapabilitiesReader, err := p.ExecCfg().TenantCapabilitiesReader.Get(op)

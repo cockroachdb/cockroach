@@ -25,12 +25,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -1969,12 +1971,10 @@ var _ eval.ValueGenerator = &checkConsistencyGenerator{}
 func makeCheckConsistencyGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
-	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-	if err != nil {
+	if err := evalCtx.SessionAccessor.CheckPrivilege(
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+	); err != nil {
 		return nil, err
-	}
-	if !isAdmin {
-		return nil, pgerror.New(pgcode.InsufficientPrivilege, "crdb_internal.check_consistency requires admin privileges")
 	}
 
 	keyFrom := roachpb.Key(*args[1].(*tree.DBytes))
@@ -2340,16 +2340,10 @@ type payloadsForSpanGenerator struct {
 func makePayloadsForSpanGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
-	// The user must be an admin to use this builtin.
-	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-	if err != nil {
+	if err := evalCtx.SessionAccessor.CheckPrivilege(
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA,
+	); err != nil {
 		return nil, err
-	}
-	if !isAdmin {
-		return nil, pgerror.Newf(
-			pgcode.InsufficientPrivilege,
-			"only users with the admin role are allowed to use crdb_internal.payloads_for_span",
-		)
 	}
 	spanID := tracingpb.SpanID(*(args[0].(*tree.DInt)))
 	span := evalCtx.Tracer.GetActiveSpanByID(spanID)
@@ -2443,16 +2437,10 @@ type payloadsForTraceGenerator struct {
 func makePayloadsForTraceGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
-	// The user must be an admin to use this builtin.
-	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-	if err != nil {
+	if err := evalCtx.SessionAccessor.CheckPrivilege(
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA,
+	); err != nil {
 		return nil, err
-	}
-	if !isAdmin {
-		return nil, pgerror.Newf(
-			pgcode.InsufficientPrivilege,
-			"only users with the admin role are allowed to use crdb_internal.payloads_for_trace",
-		)
 	}
 	traceID := uint64(*(args[0].(*tree.DInt)))
 	return &payloadsForTraceGenerator{traceID: traceID, planner: evalCtx.Planner}, nil
