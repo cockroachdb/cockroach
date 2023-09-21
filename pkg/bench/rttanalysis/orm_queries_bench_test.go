@@ -499,6 +499,55 @@ WHERE
 ORDER BY
   namespace, table_name, ordinal_position`,
 		},
+		{
+			// The query below was modified to alter the pg_class query to
+			// add a filter on reltype > 0, which avoids scanning the secondary
+			// partial index on oid for pg_class. Misses on virtual partial indexes
+			// force the entire table result set to be re-generated per-row which
+			// is super expensive.
+			//See: Prisma: https://github.com/prisma/prisma-engines/issues/4250
+			Name:  "prisma column descriptions updated",
+			Setup: buildNTables(20),
+			Stmt: `SELECT
+  oid.namespace,
+  info.table_name,
+  info.column_name,
+  format_type(att.atttypid, att.atttypmod) AS formatted_type,
+  info.numeric_precision,
+  info.numeric_scale,
+  info.numeric_precision_radix,
+  info.datetime_precision,
+  info.data_type,
+  info.udt_schema AS type_schema_name,
+  info.udt_name AS full_data_type,
+  pg_get_expr(attdef.adbin, attdef.adrelid) AS column_default,
+  info.is_nullable,
+  info.is_identity,
+  info.character_maximum_length,
+  description.description
+FROM
+  information_schema.columns AS info
+  JOIN pg_attribute AS att ON att.attname = info.column_name
+  JOIN (
+      SELECT
+        pg_class.oid, relname, pg_namespace.nspname AS namespace
+      FROM
+        pg_class
+        JOIN pg_namespace ON
+            pg_namespace.oid = pg_class.relnamespace AND pg_namespace.nspname = ANY (ARRAY['public'])
+      	WHERE reltype > 0
+    )
+      AS oid ON
+      oid.oid = att.attrelid AND relname = info.table_name AND namespace = info.table_schema
+  LEFT JOIN pg_attrdef AS attdef ON
+      attdef.adrelid = att.attrelid AND attdef.adnum = att.attnum AND table_schema = namespace
+  LEFT JOIN pg_description AS description ON
+      description.objoid = att.attrelid AND description.objsubid = ordinal_position
+WHERE
+  table_schema = ANY (ARRAY['public']) AND info.is_hidden = 'NO'
+ORDER BY
+  namespace, table_name, ordinal_position`,
+		},
 	})
 }
 
