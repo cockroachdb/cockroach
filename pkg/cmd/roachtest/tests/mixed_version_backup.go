@@ -2165,7 +2165,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 				// that might exist in the cluster by the time the upgrade is
 				// attempted.
 				mixedversion.UpgradeTimeout(30*time.Minute),
-				mixedversion.AlwaysUseLatestPredecessors(),
+				mixedversion.AlwaysUseLatestPredecessors,
 			)
 			testRNG := mvt.RNG()
 

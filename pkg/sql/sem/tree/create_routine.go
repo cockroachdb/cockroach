@@ -116,7 +116,7 @@ func (node *CreateRoutine) Format(ctx *FmtCtx) {
 	ctx.WriteString(")\n\t")
 	if !node.IsProcedure {
 		ctx.WriteString("RETURNS ")
-		if node.ReturnType.IsSet {
+		if node.ReturnType.SetOf {
 			ctx.WriteString("SETOF ")
 		}
 		ctx.FormatTypeReference(node.ReturnType.Type)
@@ -385,7 +385,7 @@ const (
 // RoutineReturnType represent the return type of UDF.
 type RoutineReturnType struct {
 	Type  ResolvableTypeReference
-	IsSet bool
+	SetOf bool
 }
 
 // DropFunction represents a DROP FUNCTION statement.

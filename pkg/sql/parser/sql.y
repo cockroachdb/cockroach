@@ -4601,7 +4601,7 @@ create_func_stmt:
       Params: $6.routineParams(),
       ReturnType: tree.RoutineReturnType{
         Type: $11.typeReference(),
-        IsSet: $10.bool(),
+        SetOf: $10.bool(),
       },
       Options: $12.routineOptions(),
       RoutineBody: $13.routineBody(),
@@ -4632,7 +4632,6 @@ create_proc_stmt:
       RoutineBody: $9.routineBody(),
       ReturnType: tree.RoutineReturnType{
         Type: types.Void,
-        IsSet: true,
       },
     }
   }

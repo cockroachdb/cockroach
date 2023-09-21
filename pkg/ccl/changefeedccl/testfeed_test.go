@@ -1933,6 +1933,35 @@ func (k *kafkaFeed) Close() error {
 	return errors.CombineErrors(k.jobFeed.Close(), k.tg.wait())
 }
 
+// DiscardMessages spins up a goroutine to discard messages produced into the
+// sink. Returns cleanup function.
+func DiscardMessages(f cdctest.TestFeed) func() {
+	switch t := f.(type) {
+	case *kafkaFeed:
+		ctx, cancel := context.WithCancel(context.Background())
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.shutdown:
+					return
+				case <-t.source:
+				}
+			}
+		}()
+		return func() {
+			cancel()
+			wg.Wait()
+		}
+	default:
+		return func() {}
+	}
+}
+
 type webhookFeedFactory struct {
 	enterpriseFeedFactory
 	useSecureServer bool
