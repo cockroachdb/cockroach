@@ -589,21 +589,12 @@ func (r *registration) waitForCaughtUp() error {
 
 // maybeConstructCatchUpIter calls the catchUpIterConstructor and attaches
 // the catchUpIter to be detached in the catchUpScan or closed on disconnect.
-func (r *registration) maybeConstructCatchUpIter() error {
-	if r.catchUpIterConstructor == nil {
-		return nil
-	}
-
-	catchUpIter, err := r.catchUpIterConstructor(r.span, r.catchUpTimestamp)
-	if err != nil {
-		return err
-	}
-	r.catchUpIterConstructor = nil
+func (r *registration) maybeConstructCatchUpIter() {
+	catchUpIter := r.catchUpIterConstructor()
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.mu.catchUpIter = catchUpIter
-	return nil
 }
 
 // detachCatchUpIter detaches the catchUpIter that was previously attached.

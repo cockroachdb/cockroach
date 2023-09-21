@@ -107,7 +107,7 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 		const withDiff = false
 		streams[i] = &noopStream{ctx: ctx}
 		futures[i] = &future.ErrorFuture{}
-		ok, _ := p.Register(span, hlc.MinTimestamp, nil, withDiff, streams[i], nil, futures[i])
+		ok, _ := p.Register(span, hlc.MinTimestamp, nilCatchUpIter, withDiff, streams[i], nil, futures[i])
 		require.True(b, ok)
 	}
 

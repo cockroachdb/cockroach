@@ -23,6 +23,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -331,6 +332,10 @@ func waitErrorFuture(f *future.ErrorFuture) error {
 	return resultErr
 }
 
+var nilCatchUpIter = func() *CatchUpIterator {
+	return nil
+}
+
 func TestProcessorBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testutils.RunValues(t, "proc type", testTypes, func(t *testing.T, pt procType) {
@@ -363,7 +368,7 @@ func TestProcessorBasic(t *testing.T) {
 		r1OK, r1Filter := p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nilCatchUpIter,
 			false, /* withDiff */
 			r1Stream,
 			func() {},
@@ -496,7 +501,7 @@ func TestProcessorBasic(t *testing.T) {
 		r2OK, r1And2Filter := p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 			hlc.Timestamp{WallTime: 1},
-			nil,  /* catchUpIter */
+			nilCatchUpIter,
 			true, /* withDiff */
 			r2Stream,
 			func() {},
@@ -592,7 +597,7 @@ func TestProcessorBasic(t *testing.T) {
 		r3OK, _ := p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nilCatchUpIter,
 			false, /* withDiff */
 			r3Stream,
 			func() {},
@@ -615,7 +620,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 		_, _ = p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nilCatchUpIter,
 			false, /* withDiff */
 			r1Stream,
 			func() {},
@@ -626,7 +631,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 		p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nilCatchUpIter,
 			false, /* withDiff */
 			r2Stream,
 			func() {},
@@ -722,7 +727,7 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 		_, _ = p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nilCatchUpIter,
 			false, /* withDiff */
 			r1Stream,
 			func() {},
@@ -777,7 +782,7 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 		p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nilCatchUpIter,
 			false, /* withDiff */
 			r1Stream,
 			func() {},
@@ -854,7 +859,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 		p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nilCatchUpIter,
 			false, /* withDiff */
 			r1Stream,
 			func() {},
@@ -1110,7 +1115,7 @@ func TestProcessorConcurrentStop(t *testing.T) {
 				runtime.Gosched()
 				s := newTestStream()
 				var done future.ErrorFuture
-				p.Register(h.span, hlc.Timestamp{}, nil, false, s,
+				p.Register(h.span, hlc.Timestamp{}, nilCatchUpIter, false, s,
 					func() {}, &done)
 			}()
 			go func() {
@@ -1183,7 +1188,7 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 				s := newTestStream()
 				regs[s] = firstIdx
 				var done future.ErrorFuture
-				p.Register(h.span, hlc.Timestamp{}, nil, false,
+				p.Register(h.span, hlc.Timestamp{}, nilCatchUpIter, false,
 					s, func() {}, &done)
 				regDone <- struct{}{}
 			}
@@ -1243,7 +1248,7 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 		_, _ = p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nilCatchUpIter,
 			false, /* withDiff */
 			rStream,
 			func() {},
@@ -1324,7 +1329,7 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 		_, _ = p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nilCatchUpIter,
 			false, /* withDiff */
 			rStream,
 			func() {},
@@ -1395,7 +1400,7 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 		_, _ = p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nilCatchUpIter,
 			false, /* withDiff */
 			r1Stream,
 			func() {},
@@ -1409,7 +1414,7 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 		p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nilCatchUpIter,
 			false, /* withDiff */
 			r2Stream,
 			func() {},
@@ -1561,7 +1566,7 @@ func TestProcessorBackpressure(t *testing.T) {
 	// Add a registration.
 	stream := newTestStream()
 	done := &future.ErrorFuture{}
-	ok, _ := p.Register(span, hlc.MinTimestamp, nil, false, stream, nil, done)
+	ok, _ := p.Register(span, hlc.MinTimestamp, nilCatchUpIter, false, stream, nil, done)
 	require.True(t, ok)
 
 	// Wait for the initial checkpoint.
@@ -1609,4 +1614,44 @@ func TestProcessorBackpressure(t *testing.T) {
 			ResolvedTS: hlc.Timestamp{WallTime: numEvents},
 		},
 	}, events[len(events)-1])
+}
+
+func TestIteratorContainer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	eng := storage.NewDefaultInMemForTesting(storage.If(smallEngineBlocks, storage.BlockSize(1)))
+	defer eng.Close()
+	span := roachpb.Span{
+		Key: keys.LocalMax,
+		EndKey: roachpb.KeyMax,
+	}
+
+	t.Run("empty container", func(t *testing.T) {
+		container := NewCatchUpIteratorContainer(nil)
+		require.NotPanics(t, container.Close, "close empty container")
+	})
+
+	t.Run("close attached", func(t *testing.T) {
+		var closed bool
+		iter, err := NewCatchUpIterator(eng, span, hlc.Timestamp{WallTime: 1}, func() {
+			closed = true
+		}, nil)
+		require.NoError(t, err, "failed to create iterator for test")
+		container := NewCatchUpIteratorContainer(iter)
+		container.Close()
+		require.True(t, closed, "iterator in container is not closed")
+	})
+
+	t.Run("closed detached", func(t *testing.T) {
+		var closed bool
+		iter, err := NewCatchUpIterator(eng, span, hlc.Timestamp{WallTime: 1}, func() {
+			closed = true
+		}, nil)
+		require.NoError(t, err, "failed to create iterator for test")
+		container := NewCatchUpIteratorContainer(iter)
+		detached := container.Detach()
+		defer detached.Close()
+		container.Close()
+		require.False(t, closed, "iterator in container is not closed")
+	})
 }

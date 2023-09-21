@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -330,7 +331,41 @@ type IntentScannerConstructor func() IntentScanner
 // for catchup-scans. Takes the key span and exclusive start time to run the
 // catchup scan for. It should be called from underneath a stopper task to
 // ensure that the engine has not been closed.
-type CatchUpIteratorConstructor func(roachpb.Span, hlc.Timestamp) (*CatchUpIterator, error)
+type CatchUpIteratorConstructor func() *CatchUpIterator
+
+// CatchUpIteratorContainer manages catchup iterator lifecycle during
+// rangefeed registration creation. Iterator is created by replica under the
+// lock to get a consistent state. Container is then passed to registration.
+// If registration is created successfully, iterator ownership is moved to
+// registration. If registration creation fails on any stage before that,
+// container could be closed to release iterator. Since ownership is moved
+// out of container, it is safe to close it regardless of startup success or
+// failure.
+type CatchUpIteratorContainer struct {
+	iter atomic.Pointer[CatchUpIterator]
+}
+
+// NewCatchUpIteratorContainer constructs new container. It is safe to pass nil
+// iterator.
+func NewCatchUpIteratorContainer(iter *CatchUpIterator) *CatchUpIteratorContainer {
+	c := &CatchUpIteratorContainer{}
+	c.iter.Store(iter)
+	return c
+}
+
+// Detach moves iterator out of container. Calling Close on container won't close
+// the iterator after that. Safe to call on empty container.
+func (c *CatchUpIteratorContainer) Detach() (iter *CatchUpIterator) {
+	return c.iter.Swap(nil)
+}
+
+// Close closes underlying iterator if it was contained and was not moved out
+// by Get.
+func (c *CatchUpIteratorContainer) Close() {
+	if iter := c.Detach(); iter != nil {
+		iter.Close()
+	}
+}
 
 // Start implements Processor interface.
 //
@@ -405,12 +440,10 @@ func (p *LegacyProcessor) run(
 			}
 
 			// Construct the catchUpIter before notifying the registration that it
-			// has been registered. Note that if the catchUpScan is never run, then
-			// the iterator constructed here will be closed in disconnect.
-			if err := r.maybeConstructCatchUpIter(); err != nil {
-				r.disconnect(kvpb.NewError(err))
-				return
-			}
+			// has been registered. This will move ownership of iterator to
+			// registration. Note that if the catchUpScan is never run, then
+			// the iterator obtained here will be closed in disconnect.
+			r.maybeConstructCatchUpIter()
 
 			// Add the new registration to the registry.
 			p.reg.Register(&r)
