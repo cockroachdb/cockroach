@@ -14,32 +14,82 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
+	"github.com/dustin/go-humanize"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/require"
 )
+
+const LATENCY = "LATENCY"
+const SIZE = "SIZE"
 
 // TestHistogramBuckets is used to generate additional prometheus buckets to be
 // used with Histogram. Please include obs-inf in the review process of new
 // buckets.
 func TestHistogramBuckets(t *testing.T) {
-	verifyAndPrint := func(t *testing.T, exp []float64, category string) string {
+	verifyAndPrint := func(t *testing.T, exp, act []float64, histType string) {
 		t.Helper()
 		var buf strings.Builder
 		for idx, f := range exp {
 			if idx == 0 {
-				fmt.Fprintf(&buf, "%s", category)
+				fmt.Fprintf(&buf, "// Generated via %s.", t.Name())
 			}
-			fmt.Fprintf(&buf, "\n%f", f)
+			switch histType {
+			case LATENCY:
+				fmt.Fprintf(&buf, "\n%f, // %s", f, time.Duration(f))
+			case SIZE:
+				fmt.Fprintf(&buf, "\n%f, // %s", f, humanize.Bytes(uint64(f)))
+			default:
+				fmt.Fprintf(&buf, "\n%f,", f)
+			}
 		}
-		return buf.String()
+		t.Logf("%s", &buf)
+		require.InDeltaSlice(t, exp, act, 1 /* delta */, "Please update the bucket boundaries for %s", t.Name())
 	}
+	t.Run("IOLatencyBuckets", func(t *testing.T) {
+		exp := prometheus.ExponentialBucketsRange(10e3, 10e9, 60)
+		verifyAndPrint(t, exp, IOLatencyBuckets, LATENCY)
+	})
 
-	for _, config := range StaticBucketConfigs {
-		exp := config.GetBucketsFromBucketConfig()
-		buf := verifyAndPrint(t, exp, config.category)
+	t.Run("BatchProcessLatencyBuckets", func(t *testing.T) {
+		exp := prometheus.ExponentialBucketsRange(500e6, 300e9, 60)
+		verifyAndPrint(t, exp, BatchProcessLatencyBuckets, LATENCY)
+	})
 
-		echotest.Require(t, buf, datapathutils.TestDataPath(t, config.category))
-	}
+	t.Run("LongRunning60mLatencyBuckets", func(t *testing.T) {
+		exp := prometheus.ExponentialBucketsRange(500e6, 3600e9, 60)
+		verifyAndPrint(t, exp, LongRunning60mLatencyBuckets, LATENCY)
+	})
+
+	t.Run("Count1KBuckets", func(t *testing.T) {
+		exp := prometheus.ExponentialBuckets(1, 2, 11)
+		verifyAndPrint(t, exp, Count1KBuckets, "")
+	})
+
+	t.Run("Percent100Buckets", func(t *testing.T) {
+		exp := prometheus.LinearBuckets(10, 10, 10)
+		verifyAndPrint(t, exp, Percent100Buckets, "")
+	})
+
+	t.Run("DataSize16MBBuckets", func(t *testing.T) {
+		exp := prometheus.ExponentialBuckets(1e3, 2, 15)
+		verifyAndPrint(t, exp, DataSize16MBBuckets, SIZE)
+	})
+
+	t.Run("MemoryUsage64MBBuckets", func(t *testing.T) {
+		exp := prometheus.ExponentialBucketsRange(1, 64e6, 15)
+		verifyAndPrint(t, exp, MemoryUsage64MBBuckets, SIZE)
+	})
+
+	t.Run("ReplicaCPUTimeBuckets", func(t *testing.T) {
+		exp := prometheus.ExponentialBucketsRange(50e4 /* 50µs */, 5e9 /* 5s */, 20)
+		verifyAndPrint(t, exp, ReplicaCPUTimeBuckets, LATENCY)
+	})
+
+	t.Run("ReplicaBatchRequestCountBuckets", func(t *testing.T) {
+		exp := prometheus.ExponentialBucketsRange(1, 16e3, 20)
+		verifyAndPrint(t, exp, ReplicaBatchRequestCountBuckets, "")
+	})
 
 }

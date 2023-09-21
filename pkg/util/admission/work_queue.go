@@ -1733,10 +1733,10 @@ func makeWorkQueueMetricsSingle(name string) workQueueMetricsSingle {
 		Admitted:  metric.NewCounter(addName(name, admittedMeta)),
 		Errored:   metric.NewCounter(addName(name, erroredMeta)),
 		WaitDurations: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePreferHdrLatency,
-			Metadata:     addName(name, waitDurationsMeta),
-			Duration:     base.DefaultHistogramWindowInterval(),
-			BucketConfig: metric.IOLatencyBuckets,
+			Mode:     metric.HistogramModePreferHdrLatency,
+			Metadata: addName(name, waitDurationsMeta),
+			Duration: base.DefaultHistogramWindowInterval(),
+			Buckets:  metric.IOLatencyBuckets,
 		}),
 		WaitQueueLength: metric.NewGauge(addName(name, waitQueueLengthMeta)),
 	}
