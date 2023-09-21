@@ -88,7 +88,8 @@ type ClusterSpec struct {
 	Lifetime             time.Duration
 	ReusePolicy          clusterReusePolicy
 	TerminateOnMigration bool
-
+	// Use a spot instance or equivalent of a cloud provider.
+	UseSpot bool
 	// FileSystem determines the underlying FileSystem
 	// to be used. The default is ext4.
 	FileSystem fileSystemType
@@ -190,6 +191,7 @@ func getGCEOpts(
 	minCPUPlatform string,
 	arch vm.CPUArch,
 	volumeType string,
+	useSpot bool,
 ) vm.ProviderOpts {
 	opts := gce.DefaultProviderOpts()
 	opts.MachineType = machineType
@@ -214,6 +216,7 @@ func getGCEOpts(
 		opts.UseMultipleDisks = !RAID0
 	}
 	opts.TerminateOnMigration = terminateOnMigration
+	opts.UseSpot = useSpot
 	if volumeType != "" {
 		opts.PDVolumeType = volumeType
 	}
@@ -374,7 +377,7 @@ func (s *ClusterSpec) RoachprodOpts(
 	case GCE:
 		providerOpts = getGCEOpts(machineType, zones, s.VolumeSize, ssdCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
-			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCE.VolumeType,
+			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCE.VolumeType, s.UseSpot,
 		)
 	case Azure:
 		providerOpts = getAzureOpts(machineType, zones)

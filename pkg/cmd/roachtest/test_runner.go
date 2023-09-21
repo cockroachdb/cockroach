@@ -653,6 +653,9 @@ func (r *testRunner) runWorker(
 		} else {
 			l.PrintfCtx(ctx, "Using specified arch=%q, %s", arch, testToRun.spec.Name)
 		}
+		if testToRun.spec.Benchmark && testToRun.spec.Cluster.Cloud != spec.Local {
+			testToRun.spec.Cluster.UseSpot = true
+		}
 		// N.B. if canReuseCluster is false, then the previous cluster has been destroyed; new one will be created below.
 		if testToRun.canReuseCluster && c != nil && c.arch != arch {
 			// Non-local cluster that's being reused must have the same architecture as was ensured above.
