@@ -1439,8 +1439,17 @@ func (r *DistSQLReceiver) Push(
 	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) execinfra.ConsumerStatus {
 	r.checkConcurrentError()
+	var injectedMeta bool
 	if r.testingKnobs.pushCallback != nil {
+		if meta == nil {
+			meta = execinfrapb.GetProducerMeta()
+			injectedMeta = true
+		}
 		r.testingKnobs.pushCallback(row, nil /* batch */, meta)
+	}
+	if injectedMeta && meta.Err == nil {
+		meta.Release()
+		meta = nil
 	}
 	if meta != nil {
 		return r.pushMeta(meta)
@@ -1954,6 +1963,9 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	} else {
 		finalizePlanWithRowCount(ctx, planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
 		recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
+		if t, ok := logtags.FromContext(ctx).GetTag("intExec"); ok && t.ValueStr() == "system-jobs-scan" {
+			fmt.Printf("distribution: %s\n", physPlan.Distribution)
+		}
 		dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, finishedSetupFn)
 	}
 	if planCtx.isLocal {

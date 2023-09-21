@@ -1636,6 +1636,63 @@ func TestVirtualTableDoesntHangOnQueryCanceledError(t *testing.T) {
 	require.Greater(t, numCallbacksAdded.Load(), int32(0))
 }
 
+func TestIENodeShutdown(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var addCallback atomic.Bool
+	err := errors.Newf("connection refused: n2")
+	_ = err
+	var stopServer func()
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		//ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLExecutor: &sql.ExecutorTestingKnobs{
+					DistSQLReceiverPushCallbackFactory: func(query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
+						if !addCallback.Load() {
+							return nil
+						}
+						if !strings.Contains(query, "system.jobs") || !strings.Contains(query, "WHERE job_type =") {
+							return nil
+						}
+						if stopServer != nil {
+							stopServer()
+							stopServer = nil
+						}
+						return nil
+						//var injected bool
+						//return func(_ rowenc.EncDatumRow, _ coldata.Batch, meta *execinfrapb.ProducerMetadata) {
+						//	if meta != nil && !injected {
+						//		*meta = execinfrapb.ProducerMetadata{}
+						//		meta.Err = err
+						//		injected = true
+						//	}
+						//}
+					},
+				},
+			},
+			Insecure: true,
+		}})
+	defer tc.Stopper().Stop(ctx)
+
+	db := tc.ServerConn(0 /* idx */)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, "ALTER TABLE system.jobs EXPERIMENTAL_RELOCATE LEASE VALUES (2, 2)")
+	sqlDB.Exec(t, "ALTER TABLE system.job_info EXPERIMENTAL_RELOCATE LEASE VALUES (2, 2)")
+	sqlDB.Exec(t, "SET CLUSTER SETTING sql.defaults.distsql = on")
+
+	//sqlDB.QueryRow(t, "SELECT * FROM crdb_internal.system_jobs WHERE job_type = 'KEY VISUALIZER'")
+	stopServer = func() {
+		tc.Server(1).Stopper().Stop(ctx)
+	}
+	addCallback.Store(true)
+	defer func() {
+		addCallback.Store(false)
+	}()
+	sqlDB.QueryRow(t, "SELECT * FROM crdb_internal.system_jobs WHERE job_type = 'KEY VISUALIZER'")
+}
+
 // systemPTSTableRow is a struct representing a row in system.protected_ts_records.
 type systemPTSTableRow struct {
 	id       string
