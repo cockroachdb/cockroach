@@ -60,6 +60,7 @@ go_test(
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_gogo_protobuf//proto",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
