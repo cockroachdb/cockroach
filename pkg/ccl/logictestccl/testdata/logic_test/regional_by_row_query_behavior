@@ -3919,6 +3919,32 @@ vectorized: true
                       estimated row count: 1
                       label: buffer 1
 
+statement ok
+CREATE TABLE users5 (
+  id UUID PRIMARY KEY,
+  name STRING NOT NULL,
+  email STRING NOT NULL,
+  INDEX (email, name) USING HASH,
+  UNIQUE INDEX (email)
+) LOCALITY REGIONAL BY ROW
+
+# Check that the users5_email_key unique index is used to perform the uniqueness
+# check instead of users5_email_name_idx. Either could be used, but using the
+# the unique index may be more performant when duplicates are present.
+query T
+EXPLAIN INSERT INTO users5 (id, name, email)
+VALUES ('68088706-02c6-47d1-b993-a421cd761f2b', 'Craig Roacher', 'craig@cockroachlabs.com')
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  into: users5(id, name, email, crdb_region, crdb_internal_email_name_shard_16)
+  auto commit
+  uniqueness check: users5@users5_pkey
+  uniqueness check: users5@users5_email_key
+  size: 7 columns, 1 row
+
 query T
 EXPLAIN INSERT INTO multi_region_test_db.regional_by_row_table (pk, pk2, a, b) VALUES
 (1, 1, 1, -5)
