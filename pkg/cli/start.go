@@ -415,6 +415,9 @@ func runStartInternal(
 	// signals later, some startup logging might be lost.
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, DrainSignals...)
+	if exitAbruptlySignal != nil {
+		signal.Notify(signalCh, exitAbruptlySignal)
+	}
 
 	// Check for stores with full disks and exit with an informative exit
 	// code. This needs to happen early during start, before we perform any
@@ -945,9 +948,13 @@ func waitForShutdown(
 		// timely, and we don't want logs to be lost.
 		log.StartAlwaysFlush()
 
+		if sig == exitAbruptlySignal {
+			log.Ops.Shoutf(shutdownCtx, severity.ERROR, "received signal '%s', exiting", redact.Safe(sig))
+			exit.WithCode(exit.Killed())
+		}
+
 		log.Ops.Infof(shutdownCtx, "received signal '%s'", sig)
-		switch sig {
-		case os.Interrupt:
+		if sig == os.Interrupt {
 			// Graceful shutdown after an interrupt should cause the process
 			// to terminate with a non-zero exit code; however SIGTERM is
 			// "legitimate" and should be acknowledged with a success exit
