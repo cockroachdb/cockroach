@@ -191,7 +191,7 @@ func TestValidateFuncDesc(t *testing.T) {
 			},
 		},
 		{
-			"user testuser must not have [SELECT] privileges on function \"f\"",
+			"user testuser must not have [SELECT] privileges on routine \"f\"",
 			descpb.FunctionDescriptor{
 				Name:           "f",
 				ID:             funcDescID,

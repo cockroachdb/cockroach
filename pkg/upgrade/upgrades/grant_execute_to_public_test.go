@@ -79,7 +79,7 @@ func TestGrantExecuteToPublicOnAllFunctions(t *testing.T) {
 				err := mut.Privileges.Revoke(
 					username.PublicRoleName(),
 					privilege.List{privilege.EXECUTE},
-					privilege.Function,
+					privilege.Routine,
 					false, /* grantWithOption */
 				)
 				if err != nil {
