@@ -32,9 +32,6 @@ type TestingKnobs struct {
 	// DefaultZoneConfigOverride, if set, overrides the default zone config
 	// defined in `pkg/config/zone.go`.
 	DefaultZoneConfigOverride *zonepb.ZoneConfig
-	// DefaultSystemZoneConfigOverride, if set, overrides the default system
-	// zone config defined in `pkg/config/zone.go`
-	DefaultSystemZoneConfigOverride *zonepb.ZoneConfig
 	// SignalAfterGettingRPCAddress, if non-nil, is closed after the server gets
 	// an RPC server address, and prior to waiting on PauseAfterGettingRPCAddress below.
 	SignalAfterGettingRPCAddress chan struct{}

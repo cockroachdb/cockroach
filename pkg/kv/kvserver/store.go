@@ -26,7 +26,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -66,6 +65,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -316,13 +316,20 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 		ProtectedTimestampReader:    spanconfig.EmptyProtectedTSReader(clock),
 		SnapshotSendLimit:           DefaultSnapshotSendLimit,
 		SnapshotApplyLimit:          DefaultSnapshotApplyLimit,
-
-		// Use a constant empty system config, which mirrors the previously
-		// existing logic to install an empty system config in gossip.
-		SystemConfigProvider: config.NewConstantSystemConfigProvider(
-			config.NewSystemConfig(zonepb.DefaultZoneConfigRef()),
-		),
 	}
+
+	sc.SpanConfigSubscriber = spanconfigkvsubscriber.New(
+		clock,
+		nil,
+		keys.SpanConfigurationsTableID,
+		1<<20, /* 1 MB */
+		zonepb.DefaultZoneConfig().AsSpanConfig(),
+		st,
+		spanconfigstore.NewEmptyBoundsReader(),
+		nil, /* knobs */
+		nil, /* registry */
+	)
+
 	sc.TestingKnobs.TenantRateKnobs.Authorizer = tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer()
 
 	// Use shorter Raft tick settings in order to minimize start up and failover
@@ -1225,13 +1232,6 @@ type StoreConfig struct {
 	// that's then used to adjust various admission control components (like how
 	// many CPU tokens are granted to elastic work like backups).
 	SchedulerLatencyListener admission.SchedulerLatencyListener
-
-	// SystemConfigProvider is used to drive replication decision-making in the
-	// mixed-version state, before the span configuration infrastructure has been
-	// bootstrapped.
-	//
-	// TODO(ajwerner): Remove in 22.2.
-	SystemConfigProvider config.SystemConfigProvider
 
 	// RangeLogWriter is used to write entries to the system.rangelog table.
 	RangeLogWriter RangeLogWriter
@@ -2146,22 +2146,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.cfg.NodeLiveness.RegisterCallback(s.nodeIsLiveCallback)
 	}
 
-	// SystemConfigProvider can be nil during some tests.
-	if scp := s.cfg.SystemConfigProvider; scp != nil {
-		systemCfgUpdateC, _ := scp.RegisterSystemConfigChannel()
-		_ = s.stopper.RunAsyncTask(ctx, "syscfg-listener", func(context.Context) {
-			for {
-				select {
-				case <-systemCfgUpdateC:
-					cfg := scp.GetSystemConfig()
-					s.systemGossipUpdate(cfg)
-				case <-s.stopper.ShouldQuiesce():
-					return
-				}
-			}
-		})
-	}
-
 	// Gossip is only ever nil while bootstrapping a cluster and
 	// in unittests.
 	if s.cfg.Gossip != nil {
@@ -2239,13 +2223,8 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 		return s.cfg.TestingKnobs.ConfReaderInterceptor(), nil
 	}
 
-	if s.cfg.SpanConfigSubscriber == nil ||
-		s.TestingKnobs().UseSystemConfigSpanForQueues {
-		sysCfg := s.cfg.SystemConfigProvider.GetSystemConfig()
-		if sysCfg == nil {
-			return nil, errSpanConfigsUnavailable
-		}
-		return sysCfg, nil
+	if s.cfg.SpanConfigSubscriber == nil {
+		return nil, errSpanConfigsUnavailable
 	}
 
 	if s.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty() {

@@ -18,10 +18,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -124,12 +122,6 @@ type Connector interface {
 
 	// OverridesMonitor provides access to tenant cluster setting overrides.
 	settingswatcher.OverridesMonitor
-
-	// SystemConfigProvider provides access to basic host-tenant controlled
-	// information regarding tenant zone configs. This is critical for the
-	// mixed version 21.2->22.1 state where the tenant has not yet configured
-	// its own zones.
-	config.SystemConfigProvider
 }
 
 // TokenBucketProvider supplies an endpoint (to tenants) for the TokenBucket API
@@ -173,11 +165,9 @@ type connector struct {
 
 	mu struct {
 		syncutil.RWMutex
-		client               *client
-		nodeDescs            map[roachpb.NodeID]*roachpb.NodeDescriptor
-		storeDescs           map[roachpb.StoreID]*roachpb.StoreDescriptor
-		systemConfig         *config.SystemConfig
-		systemConfigChannels map[chan<- struct{}]struct{}
+		client     *client
+		nodeDescs  map[roachpb.NodeID]*roachpb.NodeDescriptor
+		storeDescs map[roachpb.StoreID]*roachpb.StoreDescriptor
 	}
 
 	settingsMu struct {
@@ -240,12 +230,6 @@ var _ kvcoord.NodeDescStore = (*connector)(nil)
 // requested owned by the requesting tenant?).
 var _ rangecache.RangeDescriptorDB = (*connector)(nil)
 
-// connector is capable of providing a filtered view of the SystemConfig
-// containing only information applicable to secondary tenants. This obviates
-// the need for SQL-only tenant servers to join the cluster-wide gossip
-// network.
-var _ config.SystemConfigProvider = (*connector)(nil)
-
 // connector is capable of finding debug information about the current
 // tenant within the cluster. This is necessary for things such as
 // debug zip and range reports.
@@ -286,7 +270,6 @@ func NewConnector(cfg ConnectorConfig, addrs []string) Connector {
 
 	c.mu.nodeDescs = make(map[roachpb.NodeID]*roachpb.NodeDescriptor)
 	c.mu.storeDescs = make(map[roachpb.StoreID]*roachpb.StoreDescriptor)
-	c.mu.systemConfigChannels = make(map[chan<- struct{}]struct{})
 	c.settingsMu.allTenantOverrides = make(map[settings.InternalKey]settings.EncodedValue)
 	c.settingsMu.specificOverrides = make(map[settings.InternalKey]settings.EncodedValue)
 	c.settingsMu.notifyCh = make(chan struct{})
@@ -445,8 +428,6 @@ var gossipSubsHandlers = map[string]func(*connector, context.Context, string, ro
 	gossip.MakePrefixPattern(gossip.KeyNodeDescPrefix): (*connector).updateNodeAddress,
 	// Subscribe to all *StoreDescriptor updates.
 	gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix): (*connector).updateStoreMap,
-	// Subscribe to a filtered view of *SystemConfig updates.
-	gossip.KeyDeprecatedSystemConfig: (*connector).updateSystemConfig,
 }
 
 var gossipSubsPatterns = func() []string {
@@ -537,59 +518,6 @@ func (c *connector) GetStoreDescriptor(storeID roachpb.StoreID) (*roachpb.StoreD
 		return nil, kvpb.NewStoreDescNotFoundError(storeID)
 	}
 	return desc, nil
-}
-
-// updateSystemConfig handles updates to a filtered view of the "system-db"
-// gossip key, performing the corresponding update to the connector's cached
-// SystemConfig.
-func (c *connector) updateSystemConfig(ctx context.Context, key string, content roachpb.Value) {
-	cfg := config.NewSystemConfig(c.defaultZoneCfg)
-	if err := content.GetProto(&cfg.SystemConfigEntries); err != nil {
-		log.Errorf(ctx, "could not unmarshal system config: %v", err)
-		return
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.mu.systemConfig = cfg
-	for c := range c.mu.systemConfigChannels {
-		select {
-		case c <- struct{}{}:
-		default:
-		}
-	}
-}
-
-// GetSystemConfig implements the config.SystemConfigProvider interface.
-func (c *connector) GetSystemConfig() *config.SystemConfig {
-	// TODO(nvanbenschoten): we need to wait in `(*connector).Start()` until the
-	// system config is populated. As is, there's a small chance that we return
-	// nil, which SQL does not handle.
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.mu.systemConfig
-}
-
-// RegisterSystemConfigChannel implements the config.SystemConfigProvider
-// interface.
-func (c *connector) RegisterSystemConfigChannel() (_ <-chan struct{}, unregister func()) {
-	// Create channel that receives new system config notifications. The channel
-	// has a size of 1 to prevent connector from having to block on it.
-	ch := make(chan struct{}, 1)
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.mu.systemConfigChannels[ch] = struct{}{}
-
-	// Notify the channel right away if we have a config.
-	if c.mu.systemConfig != nil {
-		ch <- struct{}{}
-	}
-	return ch, func() {
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		delete(c.mu.systemConfigChannels, ch)
-	}
 }
 
 // RangeLookup implements the kvcoord.RangeDescriptorDB interface.
@@ -1024,16 +952,6 @@ func AddressResolver(s kvcoord.NodeDescStore) nodedialer.AddressResolver {
 		return &nd.Address, nil
 	}
 }
-
-// GossipSubscriptionSystemConfigMask filters a system config down to just the
-// keys that a tenant SQL servers needs access to. All system tenant objects are
-// filtered out (e.g. system tenant descriptors and users).
-var GossipSubscriptionSystemConfigMask = config.MakeSystemConfigMask(
-	// Tenant SQL servers need just enough of the zone hierarchy to understand
-	// which zone configurations apply to their keyspace.
-	config.MakeZoneKey(keys.SystemSQLCodec, keys.RootNamespaceID),
-	config.MakeZoneKey(keys.SystemSQLCodec, keys.TenantsRangesID),
-)
 
 // CombineKVAddresses combines the remote and loopback addresses into a single
 // slice, while aldo de-duplicating the loopback address if it's present in the

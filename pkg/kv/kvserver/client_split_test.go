@@ -2593,13 +2593,6 @@ func TestUnsplittableRange(t *testing.T) {
 		TTLSeconds: int32(ttl.Seconds()),
 	}
 	zoneConfig.NumReplicas = proto.Int32(1)
-	zoneSystemConfig := zonepb.DefaultSystemZoneConfig()
-	zoneSystemConfig.RangeMinBytes = proto.Int64(minBytes)
-	zoneSystemConfig.RangeMaxBytes = proto.Int64(maxBytes)
-	zoneSystemConfig.GC = &zonepb.GCPolicy{
-		TTLSeconds: int32(ttl.Seconds()),
-	}
-	zoneSystemConfig.NumReplicas = proto.Int32(1)
 	splitQueuePurgatoryChan := make(chan time.Time, 1)
 
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
@@ -2612,9 +2605,8 @@ func TestUnsplittableRange(t *testing.T) {
 				DisableCanAckBeforeApplication: true,
 			},
 			Server: &server.TestingKnobs{
-				WallClock:                       manualClock,
-				DefaultZoneConfigOverride:       &zoneConfig,
-				DefaultSystemZoneConfigOverride: &zoneSystemConfig,
+				WallClock:                 manualClock,
+				DefaultZoneConfigOverride: &zoneConfig,
 			},
 			SpanConfig: &spanconfig.TestingKnobs{
 				ProtectedTSReaderOverrideFn: spanconfig.EmptyProtectedTSReader,

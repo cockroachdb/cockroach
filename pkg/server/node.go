@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
@@ -444,10 +443,8 @@ func allocateStoreIDs(
 
 // GetBootstrapSchema returns the schema which will be used to bootstrap a new
 // server.
-func GetBootstrapSchema(
-	defaultZoneConfig *zonepb.ZoneConfig, defaultSystemZoneConfig *zonepb.ZoneConfig,
-) bootstrap.MetadataSchema {
-	return bootstrap.MakeMetadataSchema(keys.SystemSQLCodec, defaultZoneConfig, defaultSystemZoneConfig)
+func GetBootstrapSchema(defaultZoneConfig *zonepb.ZoneConfig) bootstrap.MetadataSchema {
+	return bootstrap.MakeMetadataSchema(keys.SystemSQLCodec, defaultZoneConfig)
 }
 
 // bootstrapCluster initializes the passed-in engines for a new cluster.
@@ -495,9 +492,8 @@ func bootstrapCluster(
 		// first store.
 		if i == 0 {
 			initialValuesOpts := bootstrap.InitialValuesOpts{
-				DefaultZoneConfig:       &initCfg.defaultZoneConfig,
-				DefaultSystemZoneConfig: &initCfg.defaultSystemZoneConfig,
-				Codec:                   keys.SystemSQLCodec,
+				DefaultZoneConfig: &initCfg.defaultZoneConfig,
+				Codec:             keys.SystemSQLCodec,
 			}
 			if initCfg.testingKnobs.Server != nil {
 				knobs := initCfg.testingKnobs.Server.(*TestingKnobs)
@@ -2012,8 +2008,6 @@ func (n *Node) GossipSubscription(
 	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
 	ctxDone := ctx.Done()
 
-	_, isSecondaryTenant := roachpb.ClientTenantFromContext(ctx)
-
 	// Register a callback for each of the requested patterns. We don't want to
 	// block the gossip callback goroutine on a slow consumer, so we instead
 	// handle all communication asynchronously. We could pick a channel size and
@@ -2024,7 +2018,6 @@ func (n *Node) GossipSubscription(
 	entC := make(chan *kvpb.GossipSubscriptionEvent, 256)
 	entCClosed := false
 	var callbackMu syncutil.Mutex
-	var systemConfigUpdateCh <-chan struct{}
 	for i := range args.Patterns {
 		pattern := args.Patterns[i] // copy for closure
 		switch pattern {
@@ -2038,12 +2031,8 @@ func (n *Node) GossipSubscription(
 		// that those zone configurations won't really map to reality, but that's
 		// okay, we just need to tell the pods something.
 		//
-		// TODO(ajwerner): Remove support for the system config key in the
-		// in 22.2, or leave it and make it a no-op.
+		// TODO(baptist): Remove support for the system config key.
 		case gossip.KeyDeprecatedSystemConfig:
-			var unregister func()
-			systemConfigUpdateCh, unregister = n.storeCfg.SystemConfigProvider.RegisterSystemConfigChannel()
-			defer unregister()
 		default:
 			callback := func(key string, content roachpb.Value) {
 				callbackMu.Lock()
@@ -2073,29 +2062,8 @@ func (n *Node) GossipSubscription(
 			defer unregister()
 		}
 	}
-	handleSystemConfigUpdate := func() error {
-		cfg := n.storeCfg.SystemConfigProvider.GetSystemConfig()
-		ents := cfg.SystemConfigEntries
-		if isSecondaryTenant {
-			ents = kvtenant.GossipSubscriptionSystemConfigMask.Apply(ents)
-		}
-		var event kvpb.GossipSubscriptionEvent
-		var content roachpb.Value
-		if err := content.SetProto(&ents); err != nil {
-			event.Error = kvpb.NewError(errors.Wrap(err, "could not marshal system config"))
-		} else {
-			event.Key = gossip.KeyDeprecatedSystemConfig
-			event.Content = content
-			event.PatternMatched = gossip.KeyDeprecatedSystemConfig
-		}
-		return stream.Send(&event)
-	}
 	for {
 		select {
-		case <-systemConfigUpdateCh:
-			if err := handleSystemConfigUpdate(); err != nil {
-				return errors.Wrap(err, "handling system config update")
-			}
 		case e, ok := <-entC:
 			if !ok {
 				// The consumer was not keeping up with gossip updates, so its

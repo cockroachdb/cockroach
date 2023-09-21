@@ -49,8 +49,7 @@ func TestShowTraceReplica(t *testing.T) {
 			ScanMaxIdleTime: 10 * time.Millisecond, // speed up replicate queue
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					DefaultZoneConfigOverride:       &zoneConfig,
-					DefaultSystemZoneConfigOverride: &zoneConfig,
+					DefaultZoneConfigOverride: &zoneConfig,
 				},
 			},
 			StoreSpecs: []base.StoreSpec{{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{node}}}},

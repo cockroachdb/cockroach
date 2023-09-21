@@ -1510,7 +1510,6 @@ func (t *logicTest) newCluster(
 	stats.DefaultRefreshInterval = time.Millisecond
 
 	t.cluster = serverutils.StartCluster(t.rootT, cfg.NumNodes, params)
-	t.purgeZoneConfig()
 	if cfg.UseFakeSpanResolver {
 		// We need to update the DistSQL span resolver with the fake resolver.
 		// Note that DistSQL was disabled in makeClusterSetting above, so we
@@ -2419,20 +2418,6 @@ func fetchSubtests(path string) ([]subtestDetails, error) {
 	return subtests, nil
 }
 
-func (t *logicTest) purgeZoneConfig() {
-	if t.cluster == nil {
-		// We can only purge zone configs for in-memory test clusters.
-		return
-	}
-	for i := 0; i < t.cluster.NumServers(); i++ {
-		sysconfigProvider := t.cluster.Server(i).SystemConfigProvider()
-		sysconfig := sysconfigProvider.GetSystemConfig()
-		if sysconfig != nil {
-			sysconfig.PurgeZoneConfigCache()
-		}
-	}
-}
-
 func (t *logicTest) processSubtest(
 	subtest subtestDetails, path string, config logictestbase.TestClusterConfig,
 ) error {
@@ -2568,7 +2553,6 @@ func (t *logicTest) processSubtest(
 					var err error
 					if t.retry {
 						err = testutils.SucceedsSoonError(func() error {
-							t.purgeZoneConfig()
 							var tempErr error
 							cont, tempErr = t.execStatement(stmt)
 							return tempErr
@@ -2904,14 +2888,12 @@ func (t *logicTest) processSubtest(
 				for i := 0; i < repeat; i++ {
 					if t.retry && !*rewriteResultsInTestfiles {
 						if err := testutils.SucceedsSoonError(func() error {
-							t.purgeZoneConfig()
 							return t.execQuery(query)
 						}); err != nil {
 							t.Error(err)
 						}
 					} else {
 						if t.retry && *rewriteResultsInTestfiles {
-							t.purgeZoneConfig()
 							// The presence of the retry flag indicates that we expect this
 							// query may need some time to succeed. If we are rewriting, wait
 							// 2s before executing the query.

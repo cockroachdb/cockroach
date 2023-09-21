@@ -182,10 +182,9 @@ func (p *planner) createTenantInternal(
 	}
 
 	initialValuesOpts := bootstrap.InitialValuesOpts{
-		DefaultZoneConfig:       initialTenantZoneConfig,
-		DefaultSystemZoneConfig: initialTenantZoneConfig,
-		OverrideKey:             bootstrapVersionOverride,
-		Codec:                   codec,
+		DefaultZoneConfig: initialTenantZoneConfig,
+		OverrideKey:       bootstrapVersionOverride,
+		Codec:             codec,
 	}
 	kvs, splits, err = initialValuesOpts.GenerateInitialValues()
 	if err != nil {

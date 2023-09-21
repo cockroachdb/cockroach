@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -31,12 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
 )
-
-func init() {
-	// TODO(marc): we use a hook to avoid a dependency on the sql package. We
-	// should probably move keys/protos elsewhere.
-	config.ZoneConfigHook = zoneConfigHook
-}
 
 var errNoZoneConfigApplies = errors.New("no zone config applies")
 
@@ -161,39 +154,6 @@ func completeZoneConfig(
 	}
 	zone.InheritFromParent(defaultZone)
 	return nil
-}
-
-// zoneConfigHook returns the zone config and optional placeholder config for
-// the object with id using the cached system config. The returned boolean is
-// set to true when the zone config returned can be cached.
-//
-// zoneConfigHook is a pure function whose only inputs are a system config and
-// an object ID. It does not make any external KV calls to look up additional
-// state.
-func zoneConfigHook(
-	cfg *config.SystemConfig, codec keys.SQLCodec, id config.ObjectID,
-) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, bool, error) {
-	helper := &systemZoneConfigHelper{cfg: cfg, codec: codec}
-
-	const mayBeTable = true
-	zoneID, zone, _, placeholder, err := getZoneConfig(
-		context.TODO(), // This context won't actually be used.
-		descpb.ID(id),
-		nil, /* txn */
-		helper,
-		false, /* getInheritedDefault */
-		mayBeTable,
-	)
-	if errors.Is(err, errNoZoneConfigApplies) {
-		return nil, nil, true, nil
-	} else if err != nil {
-		return nil, nil, false, err
-	}
-	// The context passed in won't actually be used.
-	if err = completeZoneConfig(context.TODO(), zone, nil /* txn */, helper, zoneID); err != nil {
-		return nil, nil, false, err
-	}
-	return zone, placeholder, true, nil
 }
 
 // GetZoneConfigInTxn looks up the zone and subzone for the specified object ID,

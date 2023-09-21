@@ -109,7 +109,6 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",
-        "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/docs",
         "//pkg/gossip",
@@ -180,6 +179,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
+        "//pkg/spanconfig/spanconfigkvsubscriber",
         "//pkg/spanconfig/spanconfigstore",
         "//pkg/storage",
         "//pkg/storage/enginepb",

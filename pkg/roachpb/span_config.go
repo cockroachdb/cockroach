@@ -174,12 +174,6 @@ func TestingDefaultSpanConfig() SpanConfig {
 	}
 }
 
-// TestingDefaultSystemSpanConfiguration exports the default span config that
-// applies to spanconfig.SystemTargets for testing purposes.
-func TestingDefaultSystemSpanConfiguration() SpanConfig {
-	return SpanConfig{}
-}
-
 // TestingSystemSpanConfig exports the system span config for testing purposes.
 func TestingSystemSpanConfig() SpanConfig {
 	config := TestingDefaultSpanConfig()

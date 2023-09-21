@@ -57,10 +57,9 @@ func TestSupportedReleases(t *testing.T) {
 	for k := range initialValuesFactoryByKey {
 		actual[clusterversion.ByKey(k)] = struct{}{}
 		opts := InitialValuesOpts{
-			DefaultZoneConfig:       zonepb.DefaultZoneConfigRef(),
-			DefaultSystemZoneConfig: zonepb.DefaultZoneConfigRef(),
-			OverrideKey:             k,
-			Codec:                   keys.SystemSQLCodec,
+			DefaultZoneConfig: zonepb.DefaultZoneConfigRef(),
+			OverrideKey:       k,
+			Codec:             keys.SystemSQLCodec,
 		}
 		_, _, err := opts.GenerateInitialValues()
 		require.NoErrorf(t, err, "error generating initial values for system codec in version %s", k)
@@ -94,7 +93,7 @@ func TestInitialValuesToString(t *testing.T) {
 			}
 			var expectedHash string
 			d.ScanArgs(t, "hash", &expectedHash)
-			ms := MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+			ms := MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef())
 			result := InitialValuesToString(ms)
 			h := sha256.Sum256([]byte(result))
 			if actualHash := hex.EncodeToString(h[:]); expectedHash != actualHash {
@@ -156,5 +155,5 @@ func makeMetadataSchema(tenantID uint64) MetadataSchema {
 	if tenantID > 0 {
 		codec = keys.MakeSQLCodec(roachpb.MustMakeTenantID(tenantID))
 	}
-	return MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+	return MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef())
 }

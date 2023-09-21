@@ -421,11 +421,6 @@ type KVConfig struct {
 	// Environment Variable: COCKROACH_SCAN_MAX_IDLE_TIME
 	ScanMaxIdleTime time.Duration
 
-	// DefaultSystemZoneConfig is used to set the default system zone config
-	// inside the server. It can be overridden during tests by setting the
-	// DefaultSystemZoneConfigOverride server testing knob.
-	DefaultSystemZoneConfig zonepb.ZoneConfig
-
 	// EventLogEnabled is a switch which enables recording into cockroach's SQL
 	// event log tables. These tables record transactional events about changes
 	// to cluster metadata, such as DDL statements and range rebalancing
@@ -464,7 +459,6 @@ func MakeKVConfig() KVConfig {
 func (kvCfg *KVConfig) SetDefaults() {
 	*kvCfg = KVConfig{}
 	kvCfg.RaftConfig.SetDefaults()
-	kvCfg.DefaultSystemZoneConfig = zonepb.DefaultSystemZoneConfig()
 	kvCfg.CacheSize = DefaultCacheSize
 	kvCfg.ScanInterval = defaultScanInterval
 	kvCfg.ScanMinIdleTime = defaultScanMinIdleTime

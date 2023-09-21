@@ -61,7 +61,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
-	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -87,7 +86,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
@@ -184,8 +182,6 @@ type SQLServer struct {
 	spanconfigSQLTranslatorFactory *spanconfigsqltranslator.Factory
 	spanconfigSQLWatcher           *spanconfigsqlwatcher.SQLWatcher
 	settingsWatcher                *settingswatcher.SettingsWatcher
-
-	systemConfigWatcher *systemconfigwatcher.Cache
 
 	isMeta1Leaseholder func(context.Context, hlc.ClockTimestamp) (bool, error)
 
@@ -296,9 +292,6 @@ type sqlServerArgs struct {
 
 	// Used by DistSQLPlanner.
 	nodeDescs kvcoord.NodeDescStore
-
-	// Used by the executor config.
-	systemConfigWatcher *systemconfigwatcher.Cache
 
 	// Used by the span config reconciliation job.
 	spanConfigAccessor spanconfig.KVAccessor
@@ -750,8 +743,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	hydratedDescCache := hydrateddesccache.NewCache(cfg.Settings)
 	cfg.registry.AddMetricStruct(hydratedDescCache.Metrics())
 
-	gcJobNotifier := gcjobnotifier.New(cfg.Settings, cfg.systemConfigWatcher, codec, cfg.stopper)
-
 	spanConfig := struct {
 		manager              *spanconfigmanager.Manager
 		sqlTranslatorFactory *spanconfigsqltranslator.Factory
@@ -933,7 +924,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		DB:                      cfg.db,
 		Gossip:                  cfg.gossip,
 		NodeLiveness:            cfg.nodeLiveness,
-		SystemConfig:            cfg.systemConfigWatcher,
 		MetricsRecorder:         cfg.recorder,
 		DistSender:              cfg.distSender,
 		RPCContext:              cfg.rpcContext,
@@ -1009,7 +999,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		InternalRowMetrics:         &internalRowMetrics,
 		ProtectedTimestampProvider: cfg.protectedtsProvider,
 		ExternalIODirConfig:        cfg.ExternalIODirConfig,
-		GCJobNotifier:              gcJobNotifier,
 		RangeFeedFactory:           cfg.rangeFeedFactory,
 		CollectionFactory:          collectionFactory,
 		SystemTableIDResolver:      descs.MakeSystemTableIDResolver(collectionFactory, cfg.internalDB),
@@ -1169,7 +1158,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.InternalDB,
 		execCfg.Codec,
 		execCfg.ProtectedTimestampProvider,
-		execCfg.SystemConfig,
 		execCfg.JobRegistry,
 	)
 	execCfg.Validator = scdeps.NewValidator(
@@ -1386,7 +1374,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		spanconfigSQLTranslatorFactory: spanConfig.sqlTranslatorFactory,
 		spanconfigSQLWatcher:           spanConfig.sqlWatcher,
 		settingsWatcher:                settingsWatcher,
-		systemConfigWatcher:            cfg.systemConfigWatcher,
 		isMeta1Leaseholder:             cfg.isMeta1Leaseholder,
 		cfg:                            cfg.BaseConfig,
 		internalDBMemMonitor:           internalDBMonitor,
@@ -1537,7 +1524,6 @@ func (s *SQLServer) preStart(
 	// it, we'd be unable to plan any queries.
 	s.sqlInstanceReader.Start(ctx, instance)
 
-	s.execCfg.GCJobNotifier.Start(ctx)
 	s.temporaryObjectCleaner.Start(ctx, stopper)
 	s.distSQLServer.Start()
 	s.pgServer.Start(ctx, stopper)
@@ -1594,10 +1580,6 @@ func (s *SQLServer) preStart(
 		// doing more work than strictly necessary during the first time that the
 		// upgrades are run.
 		bootstrapVersion = roachpb.Version{Major: 20, Minor: 1, Internal: 1}
-	}
-
-	if err := s.systemConfigWatcher.Start(ctx, s.stopper); err != nil {
-		return errors.Wrap(err, "initializing system config watcher")
 	}
 
 	clusterVersionMetrics := clusterversion.MakeMetricsAndRegisterOnVersionChangeCallback(&s.cfg.Settings.SV)

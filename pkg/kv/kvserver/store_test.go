@@ -129,7 +129,7 @@ type testStoreOpts struct {
 
 func (opts *testStoreOpts) splits() (_kvs []roachpb.KeyValue, _splits []roachpb.RKey) {
 	kvs, splits := bootstrap.MakeMetadataSchema(
-		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(),
 	).GetInitialValues()
 	if !opts.createSystemRanges {
 		return kvs, nil
@@ -222,9 +222,8 @@ func createTestStoreWithoutStart(
 	// dependency reasons. Tests using this harness can probably be refactored
 	// to do the same (with some effort). That's unlikely to happen soon, so
 	// let's continue to use the system config span.
-	cfg.SystemConfigProvider = config.NewConstantSystemConfigProvider(
-		config.NewSystemConfig(zonepb.DefaultZoneConfigRef()),
-	)
+	cfg.DefaultSpanConfig = zonepb.DefaultZoneConfig().AsSpanConfig()
+
 	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
 	require.Nil(t, cfg.Transport)
@@ -3536,44 +3535,30 @@ func (m *mockSpanConfigReader) GetSpanConfigForKey(
 var _ spanconfig.StoreReader = &mockSpanConfigReader{}
 
 // TestAllocatorCheckRangeUnconfigured tests evaluating the allocation decisions
-// for a range with a single replica using the default system configuration and
-// no other available allocation targets.
+// for a range with a single replica with no span configs available.
 func TestAllocatorCheckRangeUnconfigured(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunTrueAndFalse(t, "confAvailable", func(t *testing.T, confAvailable bool) {
-		ctx := context.Background()
-		stopper := stop.NewStopper()
-		defer stopper.Stop(ctx)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 
-		tc := testContext{}
-		tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 123))
-		cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
-		if !confAvailable {
-			cfg.TestingKnobs.MakeSystemConfigSpanUnavailableToQueues = true
-		}
+	tc := testContext{}
+	tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 123))
+	cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
+	s := tc.store
 
-		tc.StartWithStoreConfig(ctx, t, stopper, cfg)
-		s := tc.store
+	action, _, _, err := s.AllocatorCheckRange(ctx, tc.repl.Desc(),
+		false /* collectTraces */, nil, /* overrideStorePool */
+	)
+	require.Error(t, err)
 
-		action, _, _, err := s.AllocatorCheckRange(ctx, tc.repl.Desc(),
-			false /* collectTraces */, nil, /* overrideStorePool */
-		)
-		require.Error(t, err)
-
-		if confAvailable {
-			// Expect allocator error if range has nowhere to upreplicate.
-			var allocatorError allocator.AllocationError
-			require.ErrorAs(t, err, &allocatorError)
-			require.Equal(t, allocatorimpl.AllocatorAddVoter, action)
-		} else {
-			// Expect error looking up spanConfig if we can't use the system config span,
-			// as the spanconfig.KVSubscriber infrastructure is not initialized.
-			require.ErrorIs(t, err, errSpanConfigsUnavailable)
-			require.Equal(t, allocatorimpl.AllocatorNoop, action)
-		}
-	})
+	// Expect error looking up spanConfig  as the spanconfig.KVSubscriber
+	// infrastructure is not initialized.
+	require.ErrorIs(t, err, errSpanConfigsUnavailable)
+	require.Equal(t, allocatorimpl.AllocatorNoop, action)
 }
 
 // TestAllocatorCheckRange runs a number of tests to check the allocator's
@@ -3585,9 +3570,8 @@ func TestAllocatorCheckRange(t *testing.T) {
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
+	defaultSpanConfig := zonepb.DefaultZoneConfig().AsSpanConfig()
 	defer stopper.Stop(ctx)
-
-	defaultSystemSpanConfig := zonepb.DefaultSystemZoneConfigRef().AsSpanConfig()
 
 	for _, tc := range []struct {
 		name               string
@@ -3686,7 +3670,7 @@ func TestAllocatorCheckRange(t *testing.T) {
 				{NodeID: 4, StoreID: 4, ReplicaID: 4},
 				{NodeID: 5, StoreID: 5, ReplicaID: 5},
 			},
-			spanConfig: &defaultSystemSpanConfig,
+			spanConfig: &defaultSpanConfig,
 			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
 				3: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
 			},
@@ -3704,7 +3688,7 @@ func TestAllocatorCheckRange(t *testing.T) {
 				{NodeID: 4, StoreID: 4, ReplicaID: 4},
 				{NodeID: 5, StoreID: 5, ReplicaID: 5},
 			},
-			spanConfig: &defaultSystemSpanConfig,
+			spanConfig: &defaultSpanConfig,
 			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
 				3: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
 				4: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
@@ -3728,7 +3712,7 @@ func TestAllocatorCheckRange(t *testing.T) {
 				// Region "c"
 				{NodeID: 7, StoreID: 7, ReplicaID: 5},
 			},
-			spanConfig: &defaultSystemSpanConfig,
+			spanConfig: &defaultSpanConfig,
 			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
 				// Downsize to one node per region: 3,6,9.
 				1: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
@@ -3755,7 +3739,7 @@ func TestAllocatorCheckRange(t *testing.T) {
 				// Region "c"
 				{NodeID: 7, StoreID: 7, ReplicaID: 5},
 			},
-			spanConfig: &defaultSystemSpanConfig,
+			spanConfig: &defaultSpanConfig,
 			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
 				// Downsize to: 1,4,7,9 but 7 is dead.
 				// Replica on n7 should be replaced first.
@@ -3982,7 +3966,7 @@ func TestAllocatorCheckRange(t *testing.T) {
 			cfg.StorePool = sp
 			if tc.spanConfig != nil {
 				mockSr := &mockSpanConfigReader{
-					real: cfg.SystemConfigProvider.GetSystemConfig(),
+					real: cfg.SpanConfigSubscriber,
 					overrides: map[string]roachpb.SpanConfig{
 						"a": *tc.spanConfig,
 					},

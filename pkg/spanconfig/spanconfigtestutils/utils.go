@@ -571,12 +571,8 @@ func PrintSpanConfigRecord(t testing.TB, record spanconfig.Record) string {
 // given config against the default system span config that applies to
 // spanconfig.SystemTargets, and returns a string for the mismatched fields.
 func PrintSystemSpanConfigDiffedAgainstDefault(conf roachpb.SpanConfig) string {
-	if conf.Equal(roachpb.TestingDefaultSystemSpanConfiguration()) {
-		return "default system span config"
-	}
-
 	var diffs []string
-	defaultSystemTargetConf := roachpb.TestingDefaultSystemSpanConfiguration()
+	defaultSystemTargetConf := roachpb.SpanConfig{}
 	if !reflect.DeepEqual(conf.GCPolicy.ProtectionPolicies,
 		defaultSystemTargetConf.GCPolicy.ProtectionPolicies) {
 		sort.Slice(conf.GCPolicy.ProtectionPolicies, func(i, j int) bool {

@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/inspectz"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
@@ -55,7 +54,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/structlogging"
-	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfiglimiter"
@@ -1174,11 +1172,6 @@ func makeTenantSQLServerArgs(
 
 	sTS := ts.MakeTenantServer(baseCfg.AmbientCtx, tenantConnect, rpcContext.TenantID)
 
-	systemConfigWatcher := systemconfigwatcher.NewWithAdditionalProvider(
-		keys.MakeSQLCodec(sqlCfg.TenantID), clock, rangeFeedFactory, &baseCfg.DefaultZoneConfig,
-		tenantConnect,
-	)
-
 	// Define structures which have circular dependencies. The underlying structures
 	// will be filled in during the construction of the sql server.
 	circularInternalExecutor := &sql.InternalExecutor{}
@@ -1296,7 +1289,6 @@ func makeTenantSQLServerArgs(
 		runtime:                  runtime,
 		rpcContext:               rpcContext,
 		nodeDescs:                tenantConnect,
-		systemConfigWatcher:      systemConfigWatcher,
 		spanConfigAccessor:       tenantConnect,
 		kvNodeDialer:             kvNodeDialer,
 		distSender:               ds,

@@ -59,7 +59,7 @@ func TestInitialKeys(t *testing.T) {
 			nonDescKeys = 4
 		}
 
-		ms := bootstrap.MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+		ms := bootstrap.MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef())
 		kv, _ /* splits */ := ms.GetInitialValues()
 		expected := nonDescKeys + keysPerDesc*ms.SystemDescriptorCount()
 		if actual := len(kv); actual != expected {
@@ -134,7 +134,7 @@ func TestInitialKeysAndSplits(t *testing.T) {
 			}
 
 			ms := bootstrap.MakeMetadataSchema(
-				codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+				codec, zonepb.DefaultZoneConfigRef(),
 			)
 			kvs, splits := ms.GetInitialValues()
 

@@ -79,11 +79,10 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	dzcfg := s.DefaultZoneConfig()
-	dszcfg := s.DefaultSystemZoneConfig()
 
 	expectedInitialRanges, err := server.ExpectedInitialRangeCount(
 		keys.SystemSQLCodec,
-		&dzcfg, &dszcfg,
+		&dzcfg,
 	)
 	if err != nil {
 		t.Fatal(err)

@@ -101,8 +101,6 @@ func (oc *optCatalog) reset() {
 	if len(oc.dataSources) > 100 {
 		oc.dataSources = make(map[catalog.TableDescriptor]cat.DataSource)
 	}
-
-	oc.cfg = oc.planner.execCfg.SystemConfig.GetSystemConfig()
 }
 
 // optSchema represents the parent database and schema for an object. It
@@ -599,10 +597,8 @@ var emptyZoneConfig = cat.EmptyZone()
 // is gossiped around the cluster. Note that the returned ZoneConfig might be
 // somewhat stale, since it's taken from the gossiped SystemConfig.
 func (oc *optCatalog) getZoneConfig(desc catalog.TableDescriptor) (cat.Zone, error) {
-	// Lookup table's zone if system config is available (it may not be as node
-	// is starting up and before it's received the gossiped config). If it is
-	// not available, use an empty config that has no zone constraints.
-	if oc.cfg == nil || desc.IsVirtualTable() {
+	// Virtual tables don't have a zone config.
+	if desc.IsVirtualTable() {
 		return emptyZoneConfig, nil
 	}
 	zone, err := oc.cfg.GetZoneConfigForObject(

@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
@@ -253,12 +252,6 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 		nil, /* knobs */
 		nil, /* registry */
 	)
-	cfg.SystemConfigProvider = systemconfigwatcher.New(
-		keys.SystemSQLCodec,
-		cfg.Clock,
-		rangeFeedFactory,
-		zonepb.DefaultZoneConfigRef(),
-	)
 
 	ltc.Store = kvserver.NewStore(ctx, cfg, ltc.Eng, nodeDesc)
 
@@ -266,7 +259,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	var splits []roachpb.RKey
 	if !ltc.DontCreateSystemRanges {
 		schema := bootstrap.MakeMetadataSchema(
-			keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+			keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(),
 		)
 		var tableSplits []roachpb.RKey
 		initialValues, tableSplits = schema.GetInitialValues()

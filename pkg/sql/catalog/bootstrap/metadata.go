@@ -51,13 +51,9 @@ type MetadataSchema struct {
 
 // MakeMetadataSchema constructs a new MetadataSchema value which constructs
 // the "system" database.
-func MakeMetadataSchema(
-	codec keys.SQLCodec,
-	defaultZoneConfig *zonepb.ZoneConfig,
-	defaultSystemZoneConfig *zonepb.ZoneConfig,
-) MetadataSchema {
+func MakeMetadataSchema(codec keys.SQLCodec, defaultZoneConfig *zonepb.ZoneConfig) MetadataSchema {
 	ms := MetadataSchema{codec: codec}
-	addSystemDatabaseToSchema(&ms, defaultZoneConfig, defaultSystemZoneConfig)
+	addSystemDatabaseToSchema(&ms, defaultZoneConfig)
 	return ms
 }
 
@@ -499,9 +495,7 @@ func addSplitIDs(target *MetadataSchema) {
 // InitialZoneConfigKVs returns a list of KV pairs to seed `system.zones`. The
 // list contains extra entries for the system tenant.
 func InitialZoneConfigKVs(
-	codec keys.SQLCodec,
-	defaultZoneConfig *zonepb.ZoneConfig,
-	defaultSystemZoneConfig *zonepb.ZoneConfig,
+	codec keys.SQLCodec, defaultZoneConfig *zonepb.ZoneConfig,
 ) (ret []roachpb.KeyValue) {
 	const skippedColumnFamilyID = 0
 	w := MakeKVWriter(codec, systemschema.ZonesTable, skippedColumnFamilyID)
@@ -528,9 +522,9 @@ func InitialZoneConfigKVs(
 	// Only the system tenant has zone configs over {META, LIVENESS, SYSTEM}
 	// ranges. Additionally, some reporting tables have custom zone configs set,
 	// but only for the system tenant.
-	systemZoneConf := defaultSystemZoneConfig
-	metaRangeZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*zonepb.ZoneConfig)
-	livenessZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*zonepb.ZoneConfig)
+	systemZoneConf := defaultZoneConfig
+	metaRangeZoneConf := protoutil.Clone(defaultZoneConfig).(*zonepb.ZoneConfig)
+	livenessZoneConf := protoutil.Clone(defaultZoneConfig).(*zonepb.ZoneConfig)
 
 	// .meta zone config entry with a shorter GC time.
 	metaRangeZoneConf.GC.TTLSeconds = 60 * 60 // 1h
@@ -562,25 +556,17 @@ func InitialZoneConfigKVs(
 
 // addZoneConfigKVsToSchema adds a kv pair for each of the statically defined
 // zone configurations that should be populated in a newly bootstrapped cluster.
-func addZoneConfigKVsToSchema(
-	target *MetadataSchema,
-	defaultZoneConfig *zonepb.ZoneConfig,
-	defaultSystemZoneConfig *zonepb.ZoneConfig,
-) {
-	kvs := InitialZoneConfigKVs(target.codec, defaultZoneConfig, defaultSystemZoneConfig)
+func addZoneConfigKVsToSchema(target *MetadataSchema, defaultZoneConfig *zonepb.ZoneConfig) {
+	kvs := InitialZoneConfigKVs(target.codec, defaultZoneConfig)
 	target.otherKV = append(target.otherKV, kvs...)
 }
 
 // addSystemDatabaseToSchema populates the supplied MetadataSchema with the
 // System database, its tables and zone configurations.
-func addSystemDatabaseToSchema(
-	target *MetadataSchema,
-	defaultZoneConfig *zonepb.ZoneConfig,
-	defaultSystemZoneConfig *zonepb.ZoneConfig,
-) {
+func addSystemDatabaseToSchema(target *MetadataSchema, defaultZoneConfig *zonepb.ZoneConfig) {
 	addSystemDescriptorsToSchema(target)
 	addSplitIDs(target)
-	addZoneConfigKVsToSchema(target, defaultZoneConfig, defaultSystemZoneConfig)
+	addZoneConfigKVsToSchema(target, defaultZoneConfig)
 	addSystemTenantEntry(target)
 }
 
@@ -625,7 +611,7 @@ func addSystemTenantEntry(target *MetadataSchema) {
 }
 
 func testingMinUserDescID(codec keys.SQLCodec) uint32 {
-	ms := MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+	ms := MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef())
 	return uint32(ms.FirstNonSystemDescriptorID())
 }
 

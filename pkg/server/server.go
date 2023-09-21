@@ -58,7 +58,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	serverrangefeed "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/reports"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
@@ -77,7 +76,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverrules"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/structlogging"
-	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/server/tenantsettingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -190,7 +188,6 @@ type topLevelServer struct {
 	kvProber       *kvprober.Prober
 	inspectzServer *inspectz.Server
 
-	replicationReporter *reports.Reporter
 	protectedtsProvider protectedts.Provider
 
 	spanConfigSubscriber spanconfig.KVSubscriber
@@ -720,10 +717,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		sqlMonitorAndMetrics.rootSQLMemoryMonitor, stopper,
 	)
 
-	systemConfigWatcher := systemconfigwatcher.New(
-		keys.SystemSQLCodec, clock, rangeFeedFactory, &cfg.DefaultZoneConfig,
-	)
-
 	tenantCapabilitiesWatcher := tenantcapabilitieswatcher.New(
 		clock,
 		cfg.Settings,
@@ -850,7 +843,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		KVMemoryMonitor:              kvMemoryMonitor,
 		RangefeedBudgetFactory:       rangeReedBudgetFactory,
 		SharedStorageEnabled:         cfg.SharedStorage != "",
-		SystemConfigProvider:         systemConfigWatcher,
 		SpanConfigSubscriber:         spanConfig.subscriber,
 		SnapshotApplyLimit:           cfg.SnapshotApplyLimit,
 		SnapshotSendLimit:            cfg.SnapshotSendLimit,
@@ -928,10 +920,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		return nil, errors.Wrap(err, "creating blob service")
 	}
 	blobspb.RegisterBlobServer(grpcServer.Server, blobService)
-
-	replicationReporter := reports.NewReporter(
-		db, node.stores, storePool, st, nodeLiveness, internalExecutor, systemConfigWatcher,
-	)
 
 	lateBoundServer := &topLevelServer{}
 
@@ -1120,7 +1108,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		runtime:                  runtimeSampler,
 		rpcContext:               rpcContext,
 		nodeDescs:                g,
-		systemConfigWatcher:      systemConfigWatcher,
 		spanConfigAccessor:       spanConfig.kvAccessor,
 		keyVisServerAccessor:     keyVisServerAccessor,
 		kvNodeDialer:             kvNodeDialer,
@@ -1296,7 +1283,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		stopTrigger:               stopTrigger,
 		debug:                     debugServer,
 		kvProber:                  kvProber,
-		replicationReporter:       replicationReporter,
 		protectedtsProvider:       protectedtsProvider,
 		spanConfigSubscriber:      spanConfig.subscriber,
 		spanConfigReporter:        spanConfig.reporter,
@@ -1847,7 +1833,6 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	if err := s.startPersistingHLCUpperBound(ctx, hlcUpperBoundExists); err != nil {
 		return err
 	}
-	s.replicationReporter.Start(workersCtx, s.stopper)
 
 	// Configure the Sentry reporter to add some additional context to reports.
 	sentry.ConfigureScope(func(scope *sentry.Scope) {

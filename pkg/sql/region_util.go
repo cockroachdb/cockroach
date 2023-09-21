@@ -1992,7 +1992,7 @@ func (p *planner) validateZoneConfigForMultiRegionDatabase(
 		// for the system database at startup, we should treat it as though it has
 		// no zone configs set.
 		(dbDesc.GetID() == keys.SystemDatabaseID &&
-			currentZoneConfig.Equal(zonepb.DefaultSystemZoneConfigRef())) {
+			currentZoneConfig.Equal(zonepb.DefaultZoneConfigRef())) {
 		currentZoneConfig = zonepb.NewZoneConfig()
 	}
 
