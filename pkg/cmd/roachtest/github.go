@@ -64,15 +64,19 @@ func generateHelpCommand(
 		)(renderer)
 		// An empty clusterName corresponds to a cluster creation failure.
 		// We only scrape metrics from GCE clusters for now.
-		if spec.GCE == cloud && clusterName != "" {
-			// N.B. This assumes we are posting from a source that does not run a test more than once.
-			// Otherwise, we'd need to use `testRunId`, which encodes the run number and allows us
-			// to distinguish between multiple runs of the same test, instead of `testName`.
-			issues.HelpCommandAsLink(
-				"Grafana",
-				fmt.Sprintf("https://go.crdb.dev/roachtest-grafana/%s/%s/%d/%d", vm.SanitizeLabel(runID),
-					vm.SanitizeLabel(testName), start.UnixMilli(), end.Add(2*time.Minute).UnixMilli()),
-			)(renderer)
+		if clusterName != "" {
+			if spec.GCE == cloud {
+				// N.B. This assumes we are posting from a source that does not run a test more than once.
+				// Otherwise, we'd need to use `testRunId`, which encodes the run number and allows us
+				// to distinguish between multiple runs of the same test, instead of `testName`.
+				issues.HelpCommandAsLink(
+					"Grafana",
+					fmt.Sprintf("https://go.crdb.dev/roachtest-grafana/%s/%s/%d/%d", vm.SanitizeLabel(runID),
+						vm.SanitizeLabel(testName), start.UnixMilli(), end.Add(2*time.Minute).UnixMilli()),
+				)(renderer)
+			} else {
+				renderer.Escaped(fmt.Sprintf("_Grafana is not yet available for %s clusters_", cloud))
+			}
 		}
 	}
 }
