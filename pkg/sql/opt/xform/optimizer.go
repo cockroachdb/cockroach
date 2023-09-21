@@ -1081,6 +1081,12 @@ func (o *Optimizer) disableRulesRandom(probability float64) {
 		// Needed to ensure that all uncorrelated EXISTS subqueries are
 		// converted to COALESCE+subquery expressions.
 		int(opt.ConvertUncorrelatedExistsToCoalesceSubquery),
+		// Prevent re-occurance of #103616 on release-23.1 branch (fixed in 23.2).
+		int(opt.FoldEqZeroSTDistance),
+		int(opt.FoldCmpSTDistanceLeft),
+		int(opt.FoldCmpSTDistanceRight),
+		int(opt.FoldCmpSTMaxDistanceLeft),
+		int(opt.FoldCmpSTMaxDistanceRight),
 	)
 
 	var disabledRules RuleSet
