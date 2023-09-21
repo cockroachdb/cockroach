@@ -276,6 +276,7 @@ func TestNewHistogramRotate(t *testing.T) {
 		Mode:     HistogramModePrometheus,
 		Metadata: emptyMetadata,
 		Duration: 10 * time.Second,
+		Buckets:  nil,
 	})
 	for i := 0; i < 4; i++ {
 		// Windowed histogram is initially empty.
@@ -305,10 +306,10 @@ func TestHistogramWindowed(t *testing.T) {
 	duration := 10 * time.Second
 
 	h := NewHistogram(HistogramOptions{
-		Mode:         HistogramModePrometheus,
-		Metadata:     Metadata{},
-		Duration:     duration,
-		BucketConfig: IOLatencyBuckets,
+		Mode:     HistogramModePrometheus,
+		Metadata: Metadata{},
+		Duration: duration,
+		Buckets:  IOLatencyBuckets,
 	})
 
 	measurements := []int64{200000000, 0, 4000000, 5000000, 10000000, 20000000,
@@ -326,8 +327,6 @@ func TestHistogramWindowed(t *testing.T) {
 	// greater than each measurement.
 	count := 0
 	j := 0
-	IOLatencyBuckets := IOLatencyBuckets.
-		GetBucketsFromBucketConfig()
 	var expQuantileValues []float64
 	for i := range IOLatencyBuckets {
 		if j < len(sortedMeasurements) && IOLatencyBuckets[i] > float64(
@@ -401,8 +400,7 @@ func TestHistogramWindowed(t *testing.T) {
 func TestMergeWindowedHistogram(t *testing.T) {
 	measurements := []int64{4000000, 90000000}
 	opts := prometheus.HistogramOpts{
-		Buckets: IOLatencyBuckets.
-			GetBucketsFromBucketConfig(),
+		Buckets: IOLatencyBuckets,
 	}
 
 	prevWindow := prometheus.NewHistogram(opts)
