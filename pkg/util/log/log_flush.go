@@ -133,12 +133,14 @@ func flushDaemon() {
 	}
 }
 
-// signalFlusher flushes the log(s) every time SIGHUP is received.
+// signalFlusher updates any keys/header values from files in the http sinks
+// and also flushes the log(s) every time SIGHUP is received.
 // This handles both the primary and secondary loggers.
 func signalFlusher() {
 	ch := sysutil.RefreshSignaledChan()
 	for sig := range ch {
 		Ops.Infof(context.Background(), "%s received, flushing logs", sig)
+		RefreshHttpSinkHeaders()
 		FlushFiles()
 	}
 }
@@ -152,4 +154,13 @@ func StartAlwaysFlush() {
 	logging.flushWrites.Set(true)
 	// There may be something in the buffers already; flush it.
 	FlushFiles()
+}
+
+// RefreshHttpSinkHeaders will iterate over all http sinks and replace the sink's
+// dynamicHeaders with newly generated dynamicHeaders.
+func RefreshHttpSinkHeaders() {
+	_ = logging.allSinkInfos.iterHttpSinks(func(hs *httpSink) error {
+		hs.RefreshDynamicHeaders()
+		return nil
+	})
 }

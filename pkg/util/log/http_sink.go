@@ -13,14 +13,17 @@ package log
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -38,9 +41,10 @@ func newHTTPSink(c logconfig.HTTPSinkConfig) (*httpSink, error) {
 			Transport: transport,
 			Timeout:   *c.Timeout,
 		},
-		address:     *c.Address,
-		doRequest:   doPost,
-		contentType: "application/octet-stream",
+		address:        *c.Address,
+		doRequest:      doPost,
+		contentType:    "application/octet-stream",
+		dynamicHeaders: &dynamicHeaders{},
 	}
 
 	if *c.UnsafeTLS {
@@ -62,6 +66,23 @@ func newHTTPSink(c logconfig.HTTPSinkConfig) (*httpSink, error) {
 
 	hs.config = &c
 
+	staticHeaders := make(map[string]string, len(c.Headers))
+	dhFilepathMap := make(map[string]string, len(c.Headers))
+	for key, hVal := range c.Headers {
+		if hVal.Value != nil {
+			staticHeaders[key] = *hVal.Value
+		} else if hVal.Filepath != nil {
+			dhFilepathMap[key] = *hVal.Filepath
+		}
+	}
+	hs.staticHeaders = staticHeaders
+	if len(dhFilepathMap) > 0 {
+		hs.dynamicHeaders.filepathMap = dhFilepathMap
+		err := hs.generateDynamicHeadersValueMap()
+		if err != nil {
+			return nil, err
+		}
+	}
 	return hs, nil
 }
 
@@ -71,6 +92,18 @@ type httpSink struct {
 	contentType string
 	doRequest   func(sink *httpSink, logEntry []byte) (*http.Response, error)
 	config      *logconfig.HTTPSinkConfig
+	// staticHeaders holds all the config headers defined by direct values.
+	staticHeaders map[string]string
+	// dynamicHeaders holds all the config headers defined by values from files.
+	dynamicHeaders *dynamicHeaders
+}
+
+type dynamicHeaders struct {
+	filepathMap map[string]string
+	mu          struct {
+		syncutil.Mutex
+		valueMap map[string]string
+	}
 }
 
 // output emits some formatted bytes to this sink.
@@ -123,8 +156,19 @@ func doPost(hs *httpSink, b []byte) (*http.Response, error) {
 		req.Header.Add(httputil.ContentEncodingHeader, httputil.GzipEncoding)
 	}
 
-	for k, v := range hs.config.Headers {
+	// Add both the staticHeaders and dynamicHeaders to the request.
+	for k, v := range hs.staticHeaders {
 		req.Header.Add(k, v)
+	}
+	// If the filepathMap was populated we know to check the valueMap.
+	if hs.dynamicHeaders.filepathMap != nil {
+		func() {
+			hs.dynamicHeaders.mu.Lock()
+			defer hs.dynamicHeaders.mu.Unlock()
+			for k, v := range hs.dynamicHeaders.mu.valueMap {
+				req.Header.Add(k, v)
+			}
+		}()
 	}
 	req.Header.Add(httputil.ContentTypeHeader, hs.contentType)
 	resp, err := hs.client.Do(req)
@@ -171,4 +215,32 @@ func (e HTTPLogError) Error() string {
 	return fmt.Sprintf(
 		"received %v response attempting to log to [%v]",
 		e.StatusCode, e.Address)
+}
+
+// RefreshDynamicHeaders loads and sets the new dynamic headers for a given sink.
+func (hs *httpSink) RefreshDynamicHeaders() {
+	err := hs.generateDynamicHeadersValueMap()
+	if err != nil {
+		Ops.Infof(context.Background(), "failed to generate dynamic headers: %s", err.Error())
+	}
+}
+
+// generateDynamicHeadersValueMap takes a headers map and creates a new string map
+// by reading the values that any headers provide by a filepath.
+func (hs *httpSink) generateDynamicHeadersValueMap() error {
+	if hs.dynamicHeaders.filepathMap == nil {
+		return nil
+	}
+	dhValMap := make(map[string]string, len(hs.dynamicHeaders.filepathMap))
+	for key, filepath := range hs.dynamicHeaders.filepathMap {
+		data, err := os.ReadFile(filepath)
+		if err != nil {
+			return err
+		}
+		dhValMap[key] = string(data)
+	}
+	hs.dynamicHeaders.mu.Lock()
+	defer hs.dynamicHeaders.mu.Unlock()
+	hs.dynamicHeaders.mu.valueMap = dhValMap
+	return nil
 }
