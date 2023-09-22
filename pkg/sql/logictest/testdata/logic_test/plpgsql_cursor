@@ -263,16 +263,6 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
-statement error pgcode 0A000 pq: unimplemented: bound cursor declarations are not yet supported.
-CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
-  DECLARE
-    curs CURSOR FOR SELECT 1;
-  BEGIN
-    OPEN curs;
-    RETURN 0;
-  END
-$$ LANGUAGE PLpgSQL;
-
 statement error pgcode 42P11 pq: cannot open INSERT query as cursor
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
@@ -398,3 +388,306 @@ BEGIN;
 
 statement error pgcode 42P03 pq: cursor \"foo\" already exists
 SELECT f();
+
+statement ok
+ABORT;
+
+statement ok
+DELETE FROM xy WHERE x <> 1 AND x <> 3;
+
+# Testing bound cursors.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs CURSOR FOR SELECT 1;
+  BEGIN
+    curs := 'foo';
+    OPEN curs;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+statement ok
+SELECT f();
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+1
+
+# Bound cursors should reflect the database state when they are opened, not
+# when they are declared.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    curs CURSOR FOR SELECT * FROM xy;
+  BEGIN
+    curs := 'foo';
+    IF n = 0 THEN
+      OPEN curs;
+    END IF;
+    INSERT INTO xy VALUES (10, 10);
+    IF n = 1 THEN
+      OPEN curs;
+    END IF;
+    DELETE FROM xy WHERE x = 10;
+    IF n = 2 THEN
+      OPEN curs;
+    END IF;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# The cursor is opened before the insert.
+statement ok
+BEGIN;
+SELECT f(0);
+
+query II rowsort
+FETCH FORWARD 5 FROM foo;
+----
+1  2
+3  4
+
+# The cursor is opened after the insert, before the delete.
+statement ok
+ABORT;
+BEGIN;
+SELECT f(1);
+
+query II rowsort
+FETCH FORWARD 5 FROM foo;
+----
+1   2
+3   4
+10  10
+
+# The cursor is opened after the delete.
+statement ok
+ABORT;
+BEGIN;
+SELECT f(2);
+
+query II rowsort
+FETCH FORWARD 5 FROM foo;
+----
+1  2
+3  4
+
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+    curs CURSOR FOR SELECT count(*) FROM xy;
+  BEGIN
+    curs := 'foo';
+    IF b <= 0 OR a >= b THEN
+      OPEN curs;
+    END IF;
+    WHILE i < b LOOP
+      INSERT INTO xy VALUES (100, 100);
+      IF i = a THEN
+        OPEN curs;
+      END IF;
+      i := i + 1;
+    END LOOP;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+BEGIN;
+SELECT f(0, 0);
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+2
+
+statement ok
+ABORT;
+BEGIN;
+SELECT f(0, 3);
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+3
+
+statement ok
+ABORT;
+BEGIN;
+SELECT f(1, 3);
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+4
+
+statement ok
+ABORT;
+BEGIN;
+SELECT f(2, 3);
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+5
+
+# The cursor query can reference parameters and PLpgSQL variables.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    curs CURSOR FOR SELECT 1 // n;
+  BEGIN
+    curs := 'foo';
+    OPEN curs;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+statement ok
+SELECT f(-1);
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+-1
+
+statement ok
+CLOSE foo;
+
+statement error pgcode 22012 pq: division by zero
+SELECT f(0);
+
+# The cursor query observes variables as of the time when OPEN is called.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+    curs CURSOR FOR SELECT i;
+  BEGIN
+    curs := 'foo';
+    WHILE i < b LOOP
+      IF i = a THEN
+        OPEN curs;
+      END IF;
+      i := i + 1;
+    END LOOP;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+BEGIN;
+SELECT f(0, 3);
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+0
+
+statement ok
+ABORT;
+BEGIN;
+SELECT f(1, 3);
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+1
+
+statement ok
+ABORT;
+BEGIN;
+SELECT f(2, 3);
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+2
+
+# A declared cursor does not have to be opened. If it is not opened, it should
+# not have side-effects.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    curs CURSOR FOR SELECT 1 // n;
+  BEGIN
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+statement ok
+SELECT f(1);
+SELECT f(-1);
+SELECT f(0);
+
+query I
+SELECT count(*) FROM pg_cursors;
+----
+0
+
+# It is currently necessary to assign the cursor a name, since one is not
+# automatically generated.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs CURSOR FOR SELECT 1;
+  BEGIN
+    OPEN curs;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+statement error pgcode 0A000 pq: unimplemented: opening an unnamed cursor is not yet supported
+SELECT f();
+
+statement ok
+ABORT;
+
+# A query must be bound to the cursor in either the declaration or the OPEN
+# statement.
+statement error pgcode 42601 pq: expected \"FOR\" at or near \"OPEN\"\nHINT: no query was specified for cursor \"curs\"
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := 'foo';
+  BEGIN
+    OPEN curs;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# A query cannot be bound to a cursor in both the declaration and OPEN
+# statement.
+statement error pgcode 42601 pq: syntax error at or near \"FOR\"\nHINT: cannot specify a query during OPEN for bound cursor \"curs\"
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs CURSOR FOR SELECT 1;
+  BEGIN
+    curs := 'foo';
+    OPEN curs FOR SELECT 2;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P11 pq: cannot open INSERT query as cursor
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs CURSOR FOR INSERT INTO xy VALUES (1, 1);
+  BEGIN
+    curs := 'foo';
+    OPEN curs;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
