@@ -662,7 +662,7 @@ func DefaultStartOpts() install.StartOpts {
 		NumFilesLimit:      config.DefaultNumFilesLimit,
 		SkipInit:           false,
 		StoreCount:         1,
-		TenantID:           2,
+		VirtualClusterID:   2,
 		ScheduleBackups:    false,
 		ScheduleBackupArgs: "",
 		InitTarget:         1,
@@ -892,10 +892,10 @@ func Get(ctx context.Context, l *logger.Logger, clusterName, src, dest string) e
 }
 
 type PGURLOptions struct {
-	Secure         bool
-	External       bool
-	TenantName     string
-	TenantInstance int
+	Secure             bool
+	External           bool
+	VirtualClusterName string
+	SQLInstance        int
 }
 
 // PgURL generates pgurls for the nodes in a cluster.
@@ -927,14 +927,14 @@ func PgURL(
 
 	var urls []string
 	for i, ip := range ips {
-		desc, err := c.DiscoverService(ctx, nodes[i], opts.TenantName, install.ServiceTypeSQL, opts.TenantInstance)
+		desc, err := c.DiscoverService(ctx, nodes[i], opts.VirtualClusterName, install.ServiceTypeSQL, opts.SQLInstance)
 		if err != nil {
 			return nil, err
 		}
 		if ip == "" {
 			return nil, errors.Errorf("empty ip: %v", ips)
 		}
-		urls = append(urls, c.NodeURL(ip, desc.Port, opts.TenantName))
+		urls = append(urls, c.NodeURL(ip, desc.Port, opts.VirtualClusterName))
 	}
 	if len(urls) != len(nodes) {
 		return nil, errors.Errorf("have nodes %v, but urls %v from ips %v", nodes, urls, ips)

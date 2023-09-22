@@ -110,34 +110,34 @@ func (e *expander) maybeExpandMap(
 	return strings.Join(result, " "), nil
 }
 
-// extractTenantInfo extracts the tenant name and tenant instance from the given
-// tenant group match, if available. If no tenant information is provided, the
-// system tenant is assumed and if no tenant instance is provided, the first
-// instance is assumed.
-func extractTenantInfo(matches []string) (string, int, error) {
-	// Defaults if the passed in tenant group match is empty.
-	tenantName := SystemTenantName
-	tenantInstance := 0
+// extractVirtualClusterInfo extracts the virtual cluster name and
+// instance from the given group match, if available. If no
+// information is provided, the system interface is assumed and if no
+// instance is provided, the first instance is assumed.
+func extractVirtualClusterInfo(matches []string) (string, int, error) {
+	// Defaults if the passed in group match is empty.
+	virtualClusterName := SystemInterfaceName
+	sqlInstance := 0
 
-	// Extract the tenant name and instance matches.
+	// Extract the cluster name and instance matches.
 	trim := func(s string) string {
 		// Trim off the leading ':' in the capture group.
 		return s[1:]
 	}
-	tenantNameMatch := matches[0]
-	tenantInstanceMatch := matches[1]
+	virtualClusterNameMatch := matches[0]
+	sqlInstanceMatch := matches[1]
 
-	if tenantNameMatch != "" {
-		tenantName = trim(tenantNameMatch)
+	if virtualClusterNameMatch != "" {
+		virtualClusterName = trim(virtualClusterNameMatch)
 	}
-	if tenantInstanceMatch != "" {
+	if sqlInstanceMatch != "" {
 		var err error
-		tenantInstance, err = strconv.Atoi(trim(tenantInstanceMatch))
+		sqlInstance, err = strconv.Atoi(trim(sqlInstanceMatch))
 		if err != nil {
 			return "", 0, err
 		}
 	}
-	return tenantName, tenantInstance, nil
+	return virtualClusterName, sqlInstance, nil
 }
 
 // maybeExpandPgURL is an expanderFunc for {pgurl:<nodeSpec>}
@@ -153,17 +153,17 @@ func (e *expander) maybeExpandPgURL(
 	if e.pgURLs == nil {
 		e.pgURLs = make(map[string]map[Node]string)
 	}
-	tenantName, tenantInstance, err := extractTenantInfo(m[2:])
+	virtualClusterName, sqlInstance, err := extractVirtualClusterInfo(m[2:])
 	if err != nil {
 		return "", false, err
 	}
-	if e.pgURLs[tenantName] == nil {
-		e.pgURLs[tenantName], err = c.pgurls(ctx, l, allNodes(len(c.VMs)), tenantName, tenantInstance)
+	if e.pgURLs[virtualClusterName] == nil {
+		e.pgURLs[virtualClusterName], err = c.pgurls(ctx, l, allNodes(len(c.VMs)), virtualClusterName, sqlInstance)
 		if err != nil {
 			return "", false, err
 		}
 	}
-	s, err = e.maybeExpandMap(c, e.pgURLs[tenantName], m[1])
+	s, err = e.maybeExpandMap(c, e.pgURLs[virtualClusterName], m[1])
 	return s, err == nil, err
 }
 
@@ -196,7 +196,7 @@ func (e *expander) maybeExpandPgPort(
 	if m == nil {
 		return s, false, nil
 	}
-	tenantName, tenantInstance, err := extractTenantInfo(m[2:])
+	virtualClusterName, sqlInstance, err := extractVirtualClusterInfo(m[2:])
 	if err != nil {
 		return "", false, err
 	}
@@ -204,7 +204,7 @@ func (e *expander) maybeExpandPgPort(
 	if e.pgPorts == nil {
 		e.pgPorts = make(map[Node]string, len(c.VMs))
 		for _, node := range allNodes(len(c.VMs)) {
-			desc, err := c.DiscoverService(ctx, node, tenantName, ServiceTypeSQL, tenantInstance)
+			desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
 			if err != nil {
 				return s, false, err
 			}
@@ -228,7 +228,7 @@ func (e *expander) maybeExpandUIPort(
 	if e.uiPorts == nil {
 		e.uiPorts = make(map[Node]string, len(c.VMs))
 		for _, node := range allNodes(len(c.VMs)) {
-			// TODO(herko): Add support for external tenants.
+			// TODO(herko): Add support for separate-process services.
 			e.uiPorts[node] = fmt.Sprint(c.NodeUIPort(ctx, node))
 		}
 	}
@@ -255,11 +255,11 @@ func (e *expander) maybeExpandLogDir(
 	if m == nil {
 		return s, false, nil
 	}
-	tenantName, tenantInstance, err := extractTenantInfo(m[1:])
+	virtualClusterName, sqlInstance, err := extractVirtualClusterInfo(m[1:])
 	if err != nil {
 		return "", false, err
 	}
-	return c.LogDir(e.node, tenantName, tenantInstance), true, nil
+	return c.LogDir(e.node, virtualClusterName, sqlInstance), true, nil
 }
 
 // maybeExpandCertsDir is an expanderFunc for "{certs-dir}"
