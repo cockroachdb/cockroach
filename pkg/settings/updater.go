@@ -145,7 +145,6 @@ func (u updater) setInternal(
 ) error {
 	// Mark the setting as modified, such that
 	// (updater).ResetRemaining() does not touch it.
-	u.sv.container.modified[d.getSlot()] = true
 	u.sv.setValueOrigin(ctx, d.getSlot(), origin)
 
 	switch setting := d.(type) {
@@ -218,7 +217,6 @@ func (u updater) SetToDefault(ctx context.Context, key InternalKey) error {
 		return errors.Errorf("unknown setting '%s'", key)
 	}
 
-	u.sv.container.modified[d.getSlot()] = false
 	u.sv.setValueOrigin(ctx, d.getSlot(), OriginDefault)
 	d.setToDefault(ctx, u.sv)
 	return nil
@@ -227,18 +225,11 @@ func (u updater) SetToDefault(ctx context.Context, key InternalKey) error {
 // ResetRemaining sets all settings not updated by the updater to their default values.
 func (u updater) ResetRemaining(ctx context.Context) {
 	for _, v := range registry {
-		slot := v.getSlot()
-		if hasOverride := u.sv.container.modified[slot]; hasOverride {
-			u.sv.setValueOrigin(ctx, slot, OriginExplicitlySet)
-		} else {
-			u.sv.setValueOrigin(ctx, slot, OriginDefault)
-		}
-
 		if u.sv.SpecializedToVirtualCluster() && v.Class() == SystemOnly {
 			// Don't try to reset system settings on a non-system tenant.
 			continue
 		}
-		if m := u.sv.container.modified[slot]; !m {
+		if u.sv.getValueOrigin(ctx, v.getSlot()) == OriginDefault {
 			v.setToDefault(ctx, u.sv)
 		}
 	}

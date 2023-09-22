@@ -86,12 +86,8 @@ type valuesContainer struct {
 	// tenant). Reading or writing such a setting causes panics in test builds.
 	forbidden [numSlots]bool
 
+	// hasValue contains the origin of the current value of the setting.
 	hasValue [numSlots]uint32
-
-	// modified is set when a setting is explictly set via Set()
-	// in the updater.
-	// TODO(knz): Check if this can be merged with hasValue above.
-	modified [numSlots]bool
 }
 
 func (c *valuesContainer) setGenericVal(slot slotIdx, newVal interface{}) {
