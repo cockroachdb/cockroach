@@ -81,6 +81,9 @@ public         test_priv_f1   int8              ·                    func      
 public         test_priv_f2   int8              int8                 func           volatile
 test_priv_sc1  test_priv_f3   int8              ·                    func           volatile
 
+statement error pgcode 42809 "test_priv_f1" is not a procedure
+GRANT EXECUTE ON PROCEDURE test_priv_f1() TO udf_test_user WITH GRANT OPTION;
+
 statement ok
 GRANT EXECUTE ON FUNCTION test_priv_f1(), test_priv_f2(int), test_priv_sc1.test_priv_f3 TO udf_test_user WITH GRANT OPTION;
 
@@ -162,6 +165,9 @@ test           test_priv_sc1  100109       test_priv_f3()      public         EX
 test           test_priv_sc1  100109       test_priv_f3()      root           ALL             true
 test           test_priv_sc1  100109       test_priv_f3()      udf_test_user  EXECUTE         false
 
+statement error pgcode 42809 "test_priv_f1" is not a procedure
+REVOKE EXECUTE ON PROCEDURE test_priv_f1() FROM udf_test_user;
+
 statement ok
 REVOKE EXECUTE ON FUNCTION test_priv_f1(), test_priv_f2(int), test_priv_sc1.test_priv_f3 FROM udf_test_user;
 
@@ -194,6 +200,26 @@ test           public         100108       test_priv_f2(int8)  root     ALL     
 test           test_priv_sc1  100109       test_priv_f3()      admin    ALL             true
 test           test_priv_sc1  100109       test_priv_f3()      public   EXECUTE         false
 test           test_priv_sc1  100109       test_priv_f3()      root     ALL             true
+
+# Granting on procedures should have no effect on functions.
+statement ok
+GRANT EXECUTE ON ALL PROCEDURES IN SCHEMA public, test_priv_sc1 TO udf_test_user WITH GRANT OPTION;
+
+query TTTTTTTTTT colnames
+SELECT * FROM information_schema.role_routine_grants
+WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
+ORDER BY grantee, routine_name;
+----
+grantor  grantee  specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
+NULL     admin    test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
+NULL     admin    test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
+NULL     admin    test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
+NULL     public   test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         NO
+NULL     public   test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         NO
+NULL     public   test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
+NULL     root     test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
+NULL     root     test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
+NULL     root     test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
 
 statement ok
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public, test_priv_sc1 TO udf_test_user WITH GRANT OPTION;
@@ -233,6 +259,29 @@ test           test_priv_sc1  100109       test_priv_f3()      admin          AL
 test           test_priv_sc1  100109       test_priv_f3()      public         EXECUTE         false
 test           test_priv_sc1  100109       test_priv_f3()      root           ALL             true
 test           test_priv_sc1  100109       test_priv_f3()      udf_test_user  EXECUTE         true
+
+# Revoking on procedures should have no effect on functions.
+statement ok
+REVOKE GRANT OPTION FOR EXECUTE ON ALL PROCEDURES in schema public, test_priv_sc1 FROM udf_test_user;
+
+query TTTTTTTTTT colnames
+SELECT * FROM information_schema.role_routine_grants
+WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
+ORDER BY grantee, routine_name;
+----
+grantor  grantee        specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
+NULL     admin          test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
+NULL     admin          test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
+NULL     admin          test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
+NULL     public         test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         NO
+NULL     public         test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         NO
+NULL     public         test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
+NULL     root           test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
+NULL     root           test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
+NULL     root           test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
+NULL     udf_test_user  test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         YES
+NULL     udf_test_user  test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         YES
+NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
 
 statement ok
 REVOKE GRANT OPTION FOR EXECUTE ON ALL FUNCTIONS in schema public, test_priv_sc1 FROM udf_test_user;
@@ -677,6 +726,8 @@ DROP USER u_test_owner;
 
 subtest end
 
+subtest check_privileges
+
 statement ok
 CREATE USER tester
 
@@ -721,7 +772,7 @@ SELECT * FROM (VALUES (1), (2)) AS v(i) WHERE i = test.my_add(1,2)
 statement ok
 SET ROLE root
 
-# Re-grant execut privilege to the public role.
+# Re-grant execute privilege to the public role.
 statement ok
 GRANT EXECUTE ON FUNCTION test.my_add TO public
 
@@ -730,3 +781,5 @@ SET ROLE tester
 
 statement ok
 SELECT test.my_add(1,2)
+
+subtest end

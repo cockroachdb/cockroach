@@ -119,6 +119,11 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 		))
 	}
 
+	// Check for execution privileges.
+	if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid); err != nil {
+		panic(err)
+	}
+
 	// Build the routine.
 	routine, _, _ := b.buildRoutine(c.Proc, def, inScope, nil /* colRefs */)
 	routine = b.finishBuildScalar(nil /* texpr */, routine, inScope,
