@@ -279,12 +279,22 @@ hosts file.
 			}
 		} else {
 			machineType := func(clusterVMs vm.List) string {
-				res := clusterVMs[0].MachineType
-				// Display CPU architecture, other than amd64 (default).
-				if arch := clusterVMs[0].Labels["arch"]; arch != "" && arch != string(vm.ArchAMD64) {
-					res += fmt.Sprintf(" [%s]", arch)
+				return clusterVMs[0].MachineType
+			}
+			cpuArch := func(clusterVMs vm.List) string {
+				// Display CPU architecture and family.
+				if clusterVMs[0].CPUArch == "" {
+					// N.B. Either a local cluster or unsupported cloud provider.
+					return ""
 				}
-				return res
+				if clusterVMs[0].CPUFamily != "" {
+					return clusterVMs[0].CPUFamily
+				}
+				if clusterVMs[0].CPUArch != vm.ArchAMD64 {
+					return string(clusterVMs[0].CPUArch)
+				}
+				// AMD64 is the default, so don't display it.
+				return ""
 			}
 			// Align columns left and separate with at least two spaces.
 			tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', tabwriter.AlignRight)
@@ -293,14 +303,14 @@ hosts file.
 			// [1] https://github.com/golang/go/issues/12073
 
 			// Print header.
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n",
-				"Cluster", "Clouds", "Size", "VM",
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n",
+				"Cluster", "Clouds", "Size", "VM", "Arch",
 				color.HiWhiteString("$/hour"), color.HiWhiteString("$ Spent"),
 				color.HiWhiteString("Uptime"), color.HiWhiteString("TTL"),
 				color.HiWhiteString("$/TTL"))
 			// Print separator.
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n",
-				"", "", "",
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n",
+				"", "", "", "",
 				color.HiWhiteString(""), color.HiWhiteString(""),
 				color.HiWhiteString(""), color.HiWhiteString(""),
 				color.HiWhiteString(""))
@@ -312,8 +322,8 @@ hosts file.
 				} else {
 					// N.B. Tabwriter doesn't support per-column alignment. It looks odd to have the cluster names right-aligned,
 					// so we make it left-aligned.
-					fmt.Fprintf(tw, "%s\t%s\t%d\t%s", name+strings.Repeat(" ", maxClusterName-len(name)), c.Clouds(),
-						len(c.VMs), machineType(c.VMs))
+					fmt.Fprintf(tw, "%s\t%s\t%d\t%s\t%s", name+strings.Repeat(" ", maxClusterName-len(name)), c.Clouds(),
+						len(c.VMs), machineType(c.VMs), cpuArch(c.VMs))
 					if !c.IsLocal() {
 						colorByCostBucket := func(cost float64) func(string, ...interface{}) string {
 							switch {
