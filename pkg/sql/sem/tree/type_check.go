@@ -214,6 +214,10 @@ const (
 	// checking condition expressions CASE, COALESCE, and IF. Used to reject
 	// set-returning functions within conditional expressions.
 	ConditionalAncestor
+
+	// CallAncestor is added to ScalarAncestors while type checking children of
+	// a CALL statement. Used to print sensible error messages for procedures.
+	CallAncestor
 )
 
 // Push adds the given ancestor to s.
@@ -1112,6 +1116,11 @@ func (expr *FuncExpr) TypeCheck(
 
 	def, err := expr.Func.Resolve(ctx, searchPath, resolver)
 	if err != nil {
+		if errors.Is(err, ErrFunctionUndefined) {
+			if procErr := procedureDoesNotExistErr(expr.Func.String(), semaCtx); procErr != nil {
+				return nil, procErr
+			}
+		}
 		return nil, err
 	}
 
@@ -1208,6 +1217,9 @@ func (expr *FuncExpr) TypeCheck(
 	}
 
 	if len(s.overloadIdxs) == 0 {
+		if procErr := procedureDoesNotExistErr(expr.Func.String(), semaCtx); procErr != nil {
+			return nil, procErr
+		}
 		return nil, pgerror.Newf(pgcode.UndefinedFunction, "unknown signature: %s", getFuncSig(expr, s.typedExprs, desired))
 	}
 
@@ -1312,6 +1324,25 @@ func (expr *FuncExpr) TypeCheck(
 		(*overloadImpl.OnTypeCheck)()
 	}
 	return expr, nil
+}
+
+// procedureDoesNotExistErr returns a "procedure does not exist" error if the
+// current ancestors indicate that type checking is occuring at the top-level
+// child of a CALL statement.
+//
+// TODO(#111139): We'll need to reconsider how we determine that we're looking
+// for a procedure once we support calling procedures from within UDFs.
+func procedureDoesNotExistErr(fnName string, semaCtx *SemaContext) error {
+	if semaCtx != nil &&
+		semaCtx.Properties.Ancestors.Has(CallAncestor) &&
+		!semaCtx.Properties.Ancestors.Has(FuncExprAncestor) {
+		return errors.WithHint(
+			pgerror.Newf(pgcode.UndefinedFunction, "procedure %s does not exist", fnName),
+			"No procedure matches the given name and argument types. "+
+				"You might need to add explicit type casts.",
+		)
+	}
+	return nil
 }
 
 // TypeCheck implements the Expr interface.
