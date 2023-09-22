@@ -252,9 +252,11 @@ func registerAutoUpgrade(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    `autoupgrade`,
-		Owner:   registry.OwnerTestEng,
-		Cluster: r.MakeClusterSpec(5),
+		Name:             `autoupgrade`,
+		Owner:            registry.OwnerTestEng,
+		Cluster:          r.MakeClusterSpec(5),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			pred, err := release.LatestPredecessor(t.BuildVersion())
 			if err != nil {
