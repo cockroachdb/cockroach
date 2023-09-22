@@ -11,7 +11,6 @@
 package main
 
 import (
-	"archive/zip"
 	"context"
 	gosql "database/sql"
 	"fmt"
@@ -1678,78 +1677,18 @@ func (we *workerErrors) Err() error {
 	return we.mu.errs[0]
 }
 
-func zipArtifacts(path string) error {
-	f, err := os.Create(filepath.Join(path, "artifacts.zip"))
+// zipArtifacts moves everything inside the artifacts dir except any zip files
+// (like debug.zip) into an artifacts.zip file.
+func zipArtifacts(artifactsDir string) error {
+	list, err := filterDirEntries(artifactsDir, func(entry os.DirEntry) bool {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".zip") {
+			// Skip any zip files.
+			return false
+		}
+		return true
+	})
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	z := zip.NewWriter(f)
-	rel := func(targetpath string) string {
-		relpath, err := filepath.Rel(path, targetpath)
-		if err != nil {
-			return targetpath
-		}
-		return relpath
-	}
-
-	walk := func(visitor func(string, os.FileInfo) error) error {
-		return filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			dir, _ := filepath.Split(rel(path))
-			isTopLevel := dir == ""
-			if !info.IsDir() && isTopLevel && strings.HasSuffix(path, ".zip") {
-				// Skip any top-level zip files, which notably includes itself
-				// and, if present, the debug.zip.
-				return nil
-			}
-			return visitor(path, info)
-		})
-	}
-
-	// Zip all of the files.
-	if err := walk(func(path string, info os.FileInfo) error {
-		if info.IsDir() {
-			return nil
-		}
-		w, err := z.Create(rel(path))
-		if err != nil {
-			return err
-		}
-		r, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer r.Close()
-		if _, err := io.Copy(w, r); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-	if err := z.Close(); err != nil {
-		return err
-	}
-	if err := f.Sync(); err != nil {
-		return err
-	}
-
-	// Now that the zip file is there, remove all of the files that went into it.
-	// Note that 'walk' skips the debug.zip and our newly written zip file.
-	root := path
-	return walk(func(path string, info os.FileInfo) error {
-		if path == root {
-			return nil
-		}
-		if err := os.RemoveAll(path); err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return filepath.SkipDir
-		}
-		return nil
-	})
+	return moveToZipArchive("artifacts.zip", artifactsDir, list...)
 }
