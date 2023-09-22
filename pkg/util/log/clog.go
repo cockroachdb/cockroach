@@ -264,6 +264,7 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 	var fatalTrigger chan struct{}
 	extraFlush := false
 	isFatal := entry.sev == severity.FATAL
+	logging.metrics.IncrementCounter(LogMessageCount, 1)
 
 	if isFatal {
 		extraFlush = true
