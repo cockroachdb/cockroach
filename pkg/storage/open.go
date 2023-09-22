@@ -171,11 +171,14 @@ func BallastSize(size int64) ConfigOption {
 func SharedStorage(sharedStorage cloud.ExternalStorage) ConfigOption {
 	return func(cfg *engineConfig) error {
 		cfg.SharedStorage = sharedStorage
-		// TODO(bilal): Do the format major version ratchet while accounting for
-		// version upgrade finalization. However, seeing as shared storage is
-		// an experimental feature and upgrading from existing stores is not
-		// supported, this is fine.
-		cfg.Opts.FormatMajorVersion = pebble.FormatVirtualSSTables
+		return nil
+	}
+}
+
+// SecondaryCache enables use of a secondary cache to store shared objects.
+func SecondaryCache(size int64) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.Opts.Experimental.SecondaryCacheSizeBytes = size
 		return nil
 	}
 }

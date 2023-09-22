@@ -231,6 +231,10 @@ type BaseConfig struct {
 	SharedStorage string
 	*cloud.ExternalStorageAccessor
 
+	// SecondaryCache is the size of the secondary cache used for each store, to
+	// store blocks from disaggregated shared storage. For use with SharedStorage.
+	SecondaryCache base.SizeSpec
+
 	// StartDiagnosticsReporting starts the asynchronous goroutine that
 	// checks for CockroachDB upgrades and periodically reports
 	// diagnostics to Cockroach Labs.
@@ -818,6 +822,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			if sharedStorage != nil {
 				addCfgOpt(storage.SharedStorage(sharedStorage))
 			}
+			addCfgOpt(storage.SecondaryCache(storage.SecondaryCacheBytes(cfg.SecondaryCache, du)))
 			// If the spec contains Pebble options, set those too.
 			if spec.PebbleOptions != "" {
 				addCfgOpt(storage.PebbleOptions(spec.PebbleOptions, &pebble.ParseHooks{
