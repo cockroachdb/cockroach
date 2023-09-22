@@ -168,6 +168,10 @@ func TestClusterMachineType(t *testing.T) {
 		{"n2-standard-32", 32},
 		{"n2-standard-64", 64},
 		{"n2-standard-96", 96},
+		// GCE machine types
+		{"n2-highmem-8", 8},
+		{"n2-highcpu-16-2048", 16},
+		{"n2-custom-32-65536", 32},
 		{"t2a-standard-2", 2},
 		{"t2a-standard-4", 4},
 		{"t2a-standard-8", 8},
