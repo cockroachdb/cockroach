@@ -119,6 +119,40 @@ export function executeInternalSql<RowType>(
 }
 
 /**
+ * executeInternalSqlHelper is an extension on top of executeInternalSql
+ * to add the ability to handle max size errors.
+ *
+ * @param req execution request details
+ */
+export async function executeInternalSqlHelper<RowType>(
+  req: () => SqlExecutionRequest,
+  resultSetCallback: (response: SqlTxnResult<RowType>[]) => void,
+): Promise<SqlExecutionErrorMessage> {
+  let lastResponse: SqlExecutionResponse<RowType> = undefined;
+  do {
+    const sqlRequest = req();
+    lastResponse = await executeSqlAndAddToResponse(
+      sqlRequest,
+      resultSetCallback,
+    );
+  } while (lastResponse && isMaxSizeError(lastResponse.error?.message));
+
+  return lastResponse.error;
+}
+
+async function executeSqlAndAddToResponse<RowType>(
+  req: SqlExecutionRequest,
+  resultSetCallback: (response: SqlTxnResult<RowType>[]) => void,
+): Promise<SqlExecutionResponse<RowType>> {
+  const response = await executeInternalSql<RowType>(req);
+  if (!sqlResultsAreEmpty(response)) {
+    resultSetCallback(response.execution.txn_results);
+  }
+
+  return response;
+}
+
+/**
  * sqlResultsAreEmpty returns true if the provided result
  * does not contain any rows.
  * @param result the sql execution result returned by the server
@@ -250,5 +284,14 @@ export function combineQueryErrors(
 }
 
 export function txnResultIsEmpty(txn_result: SqlTxnResult<unknown>): boolean {
-  return !txn_result.rows || txn_result.rows?.length === 0;
+  return !txn_result || !txn_result.rows || txn_result.rows?.length === 0;
+}
+
+export function txnResultSetIsEmpty(
+  txn_results: SqlTxnResult<unknown>[],
+): boolean {
+  if (!txn_results || txn_results.length === 0) {
+    return true;
+  }
+  return txn_results.every(x => txnResultIsEmpty(x));
 }
