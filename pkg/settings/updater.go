@@ -60,7 +60,6 @@ func EncodeProtobuf(p protoutil.Message) string {
 
 type updater struct {
 	sv *Values
-	m  map[InternalKey]struct{}
 }
 
 // Updater is a helper for updating the in-memory settings.
@@ -92,7 +91,6 @@ func NewUpdater(sv *Values) Updater {
 		return NoopUpdater{}
 	}
 	return updater{
-		m:  make(map[InternalKey]struct{}, len(registry)),
 		sv: sv,
 	}
 }
@@ -108,7 +106,7 @@ func (u updater) Set(ctx context.Context, key InternalKey, value EncodedValue) e
 		return errors.Errorf("unknown setting '%s'", key)
 	}
 
-	u.m[key] = struct{}{}
+	u.sv.container.modified[d.getSlot()] = true
 
 	if expected := d.Typ(); value.Type != expected {
 		return errors.Errorf("setting '%s' defined as type %s, not %s", d.Name(), expected, value.Type)
@@ -167,19 +165,19 @@ func (u updater) Set(ctx context.Context, key InternalKey, value EncodedValue) e
 
 // ResetRemaining sets all settings not updated by the updater to their default values.
 func (u updater) ResetRemaining(ctx context.Context) {
-	for k, v := range registry {
-
-		if _, hasOverride := u.m[k]; hasOverride {
-			u.sv.setValueOrigin(ctx, v.getSlot(), OriginExplicitlySet)
+	for _, v := range registry {
+		slot := v.getSlot()
+		if hasOverride := u.sv.container.modified[slot]; hasOverride {
+			u.sv.setValueOrigin(ctx, slot, OriginExplicitlySet)
 		} else {
-			u.sv.setValueOrigin(ctx, v.getSlot(), OriginDefault)
+			u.sv.setValueOrigin(ctx, slot, OriginDefault)
 		}
 
 		if u.sv.SpecializedToVirtualCluster() && v.Class() == SystemOnly {
 			// Don't try to reset system settings on a non-system tenant.
 			continue
 		}
-		if _, ok := u.m[k]; !ok {
+		if m := u.sv.container.modified[slot]; !m {
 			v.setToDefault(ctx, u.sv)
 		}
 	}
