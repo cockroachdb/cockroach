@@ -76,15 +76,27 @@ func makeIntent(key string, txnID uuid.UUID, txnKey string, txnTS int64) storage
 	})
 }
 
+func makeTxn(key string, id uuid.UUID, iso isolation.Level, ts hlc.Timestamp) roachpb.Transaction {
+	txnMeta := enginepb.TxnMeta{
+		Key:            []byte(key),
+		ID:             id,
+		IsoLevel:       iso,
+		Epoch:          1,
+		WriteTimestamp: ts,
+		MinTimestamp:   ts,
+	}
+	return roachpb.Transaction{
+		TxnMeta:       txnMeta,
+		ReadTimestamp: ts,
+	}
+}
+
 type testIterator struct {
 	kvs        []storage.MVCCKeyValue
 	cur        int
 	upperBound roachpb.Key
 
 	closed bool
-	err    error
-	block  chan struct{}
-	done   chan struct{}
 }
 
 func newTestIterator(kvs []storage.MVCCKeyValue, upperBound roachpb.Key) *testIterator {
@@ -124,25 +136,17 @@ func newTestIterator(kvs []storage.MVCCKeyValue, upperBound roachpb.Key) *testIt
 	return &testIterator{
 		kvs:        kvs,
 		cur:        -1,
-		done:       make(chan struct{}),
 		upperBound: upperBound,
 	}
 }
 
 func (s *testIterator) Close() {
 	s.closed = true
-	close(s.done)
 }
 
 func (s *testIterator) SeekGE(key storage.MVCCKey) {
 	if s.closed {
 		panic("testIterator closed")
-	}
-	if s.block != nil {
-		<-s.block
-	}
-	if s.err != nil {
-		return
 	}
 	if s.cur == -1 {
 		s.cur++
@@ -155,9 +159,6 @@ func (s *testIterator) SeekGE(key storage.MVCCKey) {
 }
 
 func (s *testIterator) Valid() (bool, error) {
-	if s.err != nil {
-		return false, s.err
-	}
 	if s.cur == -1 || s.cur >= len(s.kvs) {
 		return false, nil
 	}
@@ -233,21 +234,6 @@ func TestInitResolvedTSScan(t *testing.T) {
 		EndKey: endKey,
 	}
 
-	makeTxn := func(key string, id uuid.UUID, iso isolation.Level, ts hlc.Timestamp) roachpb.Transaction {
-		txnMeta := enginepb.TxnMeta{
-			Key:            []byte(key),
-			ID:             id,
-			IsoLevel:       iso,
-			Epoch:          1,
-			WriteTimestamp: ts,
-			MinTimestamp:   ts,
-		}
-		return roachpb.Transaction{
-			TxnMeta:       txnMeta,
-			ReadTimestamp: ts,
-		}
-	}
-
 	txn1ID := uuid.MakeV4()
 	txn1TS := hlc.Timestamp{WallTime: 15}
 	txn1Key := "txnKey1"
@@ -258,15 +244,8 @@ func TestInitResolvedTSScan(t *testing.T) {
 	txn2Key := "txnKey2"
 	txn2 := makeTxn(txn2Key, txn2ID, isolation.ReadCommitted, txn2TS)
 
-	type op struct {
-		kv  storage.MVCCKeyValue
-		txn *roachpb.Transaction
-	}
-
 	makeEngine := func() storage.Engine {
-		ctx := context.Background()
-		engine := storage.NewDefaultInMemForTesting()
-		testData := []op{
+		engine, err := makeTestEngineWithData([]storeOp{
 			{kv: makeKV("a", "val1", 10)},
 			{kv: makeKV("c", "val4", 9)},
 			{kv: makeKV("c", "val3", 11)},
@@ -303,12 +282,8 @@ func TestInitResolvedTSScan(t *testing.T) {
 				txn: &txn2,
 				kv:  makeProvisionalKV("z", "txnKey2", 21),
 			},
-		}
-		for _, op := range testData {
-			kv := op.kv
-			err := storage.MVCCPut(ctx, engine, kv.Key.Key, kv.Key.Timestamp, roachpb.Value{RawBytes: kv.Value}, storage.MVCCWriteOptions{Txn: op.txn})
-			require.NoError(t, err)
-		}
+		})
+		require.NoError(t, err, "failed to populate store with data")
 
 		// Add some replicated locks to test that they are ignored.
 		// NOTE: these must be on keys that don't already have intents, or the
@@ -318,7 +293,7 @@ func TestInitResolvedTSScan(t *testing.T) {
 			roachpb.MakeLock(&txn1.TxnMeta, roachpb.Key("p"), lock.Exclusive),
 		}
 		for _, l := range testLocks {
-			err := storage.MVCCAcquireLock(ctx, engine, &txn1, l.Strength, l.Key, nil, 0)
+			err := storage.MVCCAcquireLock(context.Background(), engine, &txn1, l.Strength, l.Key, nil, 0)
 			require.NoError(t, err)
 		}
 		return engine
@@ -337,52 +312,25 @@ func TestInitResolvedTSScan(t *testing.T) {
 		{initRTS: true},
 	}
 
-	testCases := map[string]struct {
-		intentScanner func() (IntentScanner, func())
-	}{
-		"legacy intent scanner": {
-			intentScanner: func() (IntentScanner, func()) {
-				engine := makeEngine()
-				iter, err := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
-					UpperBound: endKey.AsRawKey(),
-				})
-				if err != nil {
-					t.Fatal(err)
-				}
-				return NewLegacyIntentScanner(iter), func() { engine.Close() }
-			},
+	engine := makeEngine()
+	defer engine.Close()
+
+	// Mock processor. We just needs its eventC.
+	p := LegacyProcessor{
+		Config: Config{
+			Span: span,
 		},
-		"separated intent scanner": {
-			intentScanner: func() (IntentScanner, func()) {
-				engine := makeEngine()
-				scanner, err := NewSeparatedIntentScanner(engine, span)
-				if err != nil {
-					t.Fatal(err)
-				}
-				return scanner, func() { engine.Close() }
-			},
-		},
+		eventC: make(chan *event, 100),
 	}
 
-	for name, tc := range testCases {
-		t.Run(name, func(t *testing.T) {
-			// Mock processor. We just needs its eventC.
-			p := LegacyProcessor{
-				Config: Config{
-					Span: span,
-				},
-				eventC: make(chan *event, 100),
-			}
-			isc, cleanup := tc.intentScanner()
-			defer cleanup()
-			initScan := newInitResolvedTSScan(p.Span, &p, isc)
-			initScan.Run(context.Background())
-			// Compare the event channel to the expected events.
-			require.Equal(t, len(expEvents), len(p.eventC))
-			for _, expEvent := range expEvents {
-				require.Equal(t, expEvent, <-p.eventC)
-			}
-		})
+	scanner, err := NewSeparatedIntentScanner(engine, span)
+	require.NoError(t, err, "failed to create scanner")
+	initScan := newInitResolvedTSScan(p.Span, &p, scanner)
+	initScan.Run(context.Background())
+	// Compare the event channel to the expected events.
+	require.Equal(t, len(expEvents), len(p.eventC))
+	for _, expEvent := range expEvents {
+		require.Equal(t, expEvent, <-p.eventC)
 	}
 }
 
