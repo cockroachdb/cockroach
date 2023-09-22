@@ -41,12 +41,35 @@ const (
 	// TagArch is the CPU architecture tag const.
 	TagArch = "arch"
 
-	ArchARM64 = CPUArch("arm64")
-	ArchAMD64 = CPUArch("amd64")
-	ArchFIPS  = CPUArch("fips")
+	ArchARM64   = CPUArch("arm64")
+	ArchAMD64   = CPUArch("amd64")
+	ArchFIPS    = CPUArch("fips")
+	ArchUnknown = CPUArch("unknown")
 )
 
 type CPUArch string
+
+// ParseArch parses a string into a CPUArch using a simple, non-exhaustive heuristic.
+// Supported input values were extracted from the following CLI tools/binaries: file, gcloud, aws
+func ParseArch(s string) CPUArch {
+	if s == "" {
+		return ArchUnknown
+	}
+	arch := strings.ToLower(s)
+
+	if strings.Contains(arch, "amd64") || strings.Contains(arch, "x86_64") ||
+		strings.Contains(arch, "intel") {
+		return ArchAMD64
+	}
+	if strings.Contains(arch, "arm64") || strings.Contains(arch, "aarch64") ||
+		strings.Contains(arch, "ampere") || strings.Contains(arch, "graviton") {
+		return ArchARM64
+	}
+	if strings.Contains(arch, "fips") {
+		return ArchFIPS
+	}
+	return ArchUnknown
+}
 
 // GetDefaultLabelMap returns a label map for a common set of labels.
 func GetDefaultLabelMap(opts CreateOpts) map[string]string {
@@ -100,7 +123,11 @@ type VM struct {
 	// their public or private IP.
 	VPC         string `json:"vpc"`
 	MachineType string `json:"machine_type"`
-	Zone        string `json:"zone"`
+	// When available, either vm.ArchAMD64 or vm.ArchARM64.
+	CPUArch CPUArch `json:"cpu_architecture"`
+	// When available, 'Haswell', 'Skylake', etc.
+	CPUFamily string `json:"cpu_family"`
+	Zone      string `json:"zone"`
 	// Project represents the project to which this vm belongs, if the VM is in a
 	// cloud that supports project (i.e. GCE). Empty otherwise.
 	Project string `json:"project"`
