@@ -1401,6 +1401,13 @@ func TestLogic_procedure_plpgsql(
 	runLogicTest(t, "procedure_plpgsql")
 }
 
+func TestLogic_procedure_privileges(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "procedure_privileges")
+}
+
 func TestLogic_propagate_input_ordering(
 	t *testing.T,
 ) {
