@@ -11,6 +11,7 @@
 package main
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -173,6 +174,9 @@ func TestClusterMachineType(t *testing.T) {
 		{"n2-standard-32", 32},
 		{"n2-standard-64", 64},
 		{"n2-standard-96", 96},
+		{"n2-highmem-8", 8},
+		{"n2-highcpu-16-2048", 16},
+		{"n2-custom-32-65536", 32},
 		{"t2a-standard-2", 2},
 		{"t2a-standard-4", 4},
 		{"t2a-standard-8", 8},
@@ -186,6 +190,233 @@ func TestClusterMachineType(t *testing.T) {
 			if tc.expectedCPUCount != cpuCount {
 				t.Fatalf("expected %d CPUs, but found %d", tc.expectedCPUCount, cpuCount)
 			}
+		})
+	}
+}
+
+type machineTypeTestCase struct {
+	cpus                int
+	mem                 spec.MemPerCPU
+	localSSD            bool
+	arch                vm.CPUArch
+	expectedMachineType string
+	expectedArch        vm.CPUArch
+}
+
+func TestAWSMachineType(t *testing.T) {
+	testCases := []machineTypeTestCase{}
+
+	xlarge := func(cpus int) string {
+		var size string
+		switch {
+		case cpus <= 2:
+			size = "large"
+		case cpus <= 4:
+			size = "xlarge"
+		case cpus <= 8:
+			size = "2xlarge"
+		case cpus <= 16:
+			size = "4xlarge"
+		case cpus <= 32:
+			size = "8xlarge"
+		case cpus <= 48:
+			size = "12xlarge"
+		case cpus <= 64:
+			size = "16xlarge"
+		case cpus <= 96:
+			size = "24xlarge"
+		default:
+			size = "24xlarge"
+		}
+		return size
+	}
+
+	addAMD := func(mem spec.MemPerCPU) {
+		family := func() string {
+			switch mem {
+			case spec.Auto:
+				return "m6i"
+			case spec.Standard:
+				return "m6i"
+			case spec.High:
+				return "r6i"
+			}
+			return ""
+		}
+
+		for _, arch := range []vm.CPUArch{vm.ArchAMD64, vm.ArchFIPS} {
+			family := family()
+
+			testCases = append(testCases, machineTypeTestCase{1, mem, false, arch,
+				fmt.Sprintf("%s.%s", family, xlarge(1)), arch})
+			testCases = append(testCases, machineTypeTestCase{1, mem, true, arch,
+				fmt.Sprintf("%sd.%s", family, xlarge(1)), arch})
+			for i := 2; i <= 128; i += 2 {
+				if i > 16 && mem == spec.Auto {
+					family = "c6i"
+				}
+				testCases = append(testCases, machineTypeTestCase{i, mem, false, arch,
+					fmt.Sprintf("%s.%s", family, xlarge(i)), arch})
+				testCases = append(testCases, machineTypeTestCase{i, mem, true, arch,
+					fmt.Sprintf("%sd.%s", family, xlarge(i)), arch})
+			}
+		}
+	}
+	addARM := func(mem spec.MemPerCPU) {
+		fallback := false
+		var family string
+
+		switch mem {
+		case spec.Auto:
+			family = "m7g"
+		case spec.Standard:
+			family = "m7g"
+		case spec.High:
+			family = "r6i"
+			fallback = true
+		}
+
+		if fallback {
+			testCases = append(testCases, machineTypeTestCase{1, mem, false, vm.ArchARM64,
+				fmt.Sprintf("%s.%s", family, xlarge(1)), vm.ArchAMD64})
+			testCases = append(testCases, machineTypeTestCase{1, mem, true, vm.ArchARM64,
+				fmt.Sprintf("%sd.%s", family, xlarge(1)), vm.ArchAMD64})
+		} else {
+			testCases = append(testCases, machineTypeTestCase{1, mem, false, vm.ArchARM64,
+				fmt.Sprintf("%s.%s", family, xlarge(1)), vm.ArchARM64})
+			testCases = append(testCases, machineTypeTestCase{1, mem, true, vm.ArchARM64,
+				fmt.Sprintf("%sd.%s", family, xlarge(1)), vm.ArchARM64})
+		}
+		for i := 2; i <= 128; i += 2 {
+			if i > 16 && mem == spec.Auto {
+				family = "c7g"
+			}
+			fallback = fallback || i > 64
+
+			if fallback {
+				if mem == spec.Auto {
+					family = "c6i"
+				} else if mem == spec.Standard {
+					family = "m6i"
+				}
+				// Expect fallback to AMD64.
+				testCases = append(testCases, machineTypeTestCase{i, mem, false, vm.ArchARM64,
+					fmt.Sprintf("%s.%s", family, xlarge(i)), vm.ArchAMD64})
+				testCases = append(testCases, machineTypeTestCase{i, mem, true, vm.ArchARM64,
+					fmt.Sprintf("%sd.%s", family, xlarge(i)), vm.ArchAMD64})
+			} else {
+				testCases = append(testCases, machineTypeTestCase{i, mem, false, vm.ArchARM64,
+					fmt.Sprintf("%s.%s", family, xlarge(i)), vm.ArchARM64})
+				testCases = append(testCases, machineTypeTestCase{i, mem, true, vm.ArchARM64,
+					fmt.Sprintf("%sd.%s", family, xlarge(i)), vm.ArchARM64})
+			}
+		}
+	}
+	for _, mem := range []spec.MemPerCPU{spec.Auto, spec.Standard, spec.High} {
+		addAMD(mem)
+		addARM(mem)
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%d/%s/%t/%s", tc.cpus, tc.mem, tc.localSSD, tc.arch), func(t *testing.T) {
+			machineType, selectedArch := spec.AWSMachineType(tc.cpus, tc.mem, tc.localSSD, tc.arch)
+
+			require.Equal(t, tc.expectedMachineType, machineType)
+			require.Equal(t, tc.expectedArch, selectedArch)
+		})
+	}
+	// spec.Low is not supported.
+	require.Panics(t, func() { spec.AWSMachineType(4, spec.Low, false, vm.ArchAMD64) })
+	require.Panics(t, func() { spec.AWSMachineType(16, spec.Low, false, vm.ArchARM64) })
+}
+
+func TestGCEMachineType(t *testing.T) {
+	testCases := []machineTypeTestCase{}
+
+	addAMD := func(mem spec.MemPerCPU) {
+		series := func() string {
+			switch mem {
+			case spec.Auto:
+				return "standard"
+			case spec.Standard:
+				return "standard"
+			case spec.High:
+				return "highmem"
+			case spec.Low:
+				return "highcpu"
+			}
+			return ""
+		}
+
+		for _, arch := range []vm.CPUArch{vm.ArchAMD64, vm.ArchFIPS} {
+			series := series()
+
+			testCases = append(testCases, machineTypeTestCase{1, mem, false, arch,
+				fmt.Sprintf("n2-%s-%d", series, 2), arch})
+			for i := 2; i <= 128; i += 2 {
+				if i > 16 && mem == spec.Auto {
+					// n2-custom with 2GB per CPU.
+					testCases = append(testCases, machineTypeTestCase{i, mem, false, arch,
+						fmt.Sprintf("n2-custom-%d-%d", i, i*2048), arch})
+				} else {
+					testCases = append(testCases, machineTypeTestCase{i, mem, false, arch,
+						fmt.Sprintf("n2-%s-%d", series, i), arch})
+				}
+			}
+		}
+	}
+	addARM := func(mem spec.MemPerCPU) {
+		fallback := false
+		var series string
+
+		switch mem {
+		case spec.Auto:
+			series = "standard"
+		case spec.Standard:
+			series = "standard"
+		case spec.High:
+			fallback = true
+			series = "highmem"
+		case spec.Low:
+			fallback = true
+			series = "highcpu"
+		}
+
+		if fallback {
+			testCases = append(testCases, machineTypeTestCase{1, mem, false, vm.ArchARM64,
+				fmt.Sprintf("n2-%s-%d", series, 2), vm.ArchAMD64})
+		} else {
+			testCases = append(testCases, machineTypeTestCase{1, mem, false, vm.ArchARM64,
+				fmt.Sprintf("t2a-%s-%d", series, 1), vm.ArchARM64})
+		}
+		for i := 2; i <= 128; i += 2 {
+			fallback = fallback || i > 48 || (i > 16 && mem == spec.Auto)
+
+			if fallback {
+				expectedMachineType := fmt.Sprintf("n2-%s-%d", series, i)
+				if i > 16 && mem == spec.Auto {
+					expectedMachineType = fmt.Sprintf("n2-custom-%d-%d", i, i*2048)
+				}
+				// Expect fallback to AMD64.
+				testCases = append(testCases, machineTypeTestCase{i, mem, false, vm.ArchARM64,
+					expectedMachineType, vm.ArchAMD64})
+			} else {
+				testCases = append(testCases, machineTypeTestCase{i, mem, false, vm.ArchARM64,
+					fmt.Sprintf("t2a-%s-%d", series, i), vm.ArchARM64})
+			}
+		}
+	}
+	for _, mem := range []spec.MemPerCPU{spec.Auto, spec.Standard, spec.High, spec.Low} {
+		addAMD(mem)
+		addARM(mem)
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%d/%s/%s", tc.cpus, tc.mem, tc.arch), func(t *testing.T) {
+			machineType, selectedArch := spec.GCEMachineType(tc.cpus, tc.mem, tc.arch)
+
+			require.Equal(t, tc.expectedMachineType, machineType)
+			require.Equal(t, tc.expectedArch, selectedArch)
 		})
 	}
 }

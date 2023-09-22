@@ -543,7 +543,7 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry, backupCloud string
 		// https://github.com/cockroachdb/cockroach/issues/98783.
 		//
 		// TODO(srosenberg): Remove this workaround when 98783 is addressed.
-		s.InstanceType, _ = spec.AWSMachineType(s.CPUs, s.Mem, vm.ArchAMD64)
+		s.InstanceType, _ = spec.AWSMachineType(s.CPUs, s.Mem, s.PreferLocalSSD && s.VolumeSize == 0, vm.ArchAMD64)
 		s.InstanceType = strings.Replace(s.InstanceType, "d.", ".", 1)
 		s.Arch = vm.ArchAMD64
 	}
