@@ -114,9 +114,8 @@ func TestRandomDatums(t *testing.T) {
 	rng := rand.New(seed)
 	t.Logf("random seed %d", seed.Int63())
 
-	numRows := 64
+	numRows := 256
 	numCols := 128
-	maxRowGroupSize := int64(8)
 
 	sch := makeRandSchema(numCols, randTestingType, rng)
 	datums := makeRandDatums(numRows, sch, rng, true)
@@ -128,18 +127,25 @@ func TestRandomDatums(t *testing.T) {
 	schemaDef, err := NewSchema(sch.columnNames, sch.columnTypes)
 	require.NoError(t, err)
 
-	writer, err := NewWriter(schemaDef, f, WithMaxRowGroupLength(maxRowGroupSize))
+	writer, err := NewWriter(schemaDef, f, WithMaxRowGroupLength(20))
 	require.NoError(t, err)
 
+	var numExplicitFlushes int
 	for _, row := range datums {
 		err = writer.AddRow(row)
 		require.NoError(t, err)
+		// Flush every 10 datums on average.
+		if rng.Float32() < 0.1 {
+			err = writer.Flush()
+			require.NoError(t, err)
+			numExplicitFlushes += 1
+		}
 	}
 
 	err = writer.Close()
 	require.NoError(t, err)
 
-	ReadFileAndVerifyDatums(t, f.Name(), numRows, numCols, writer, datums)
+	ReadFileAndVerifyDatums(t, f.Name(), numRows, numCols, datums)
 }
 
 // TestBasicDatums tests roundtripability for all supported scalar data types
@@ -512,7 +518,9 @@ func TestBasicDatums(t *testing.T) {
 			err = writer.Close()
 			require.NoError(t, err)
 
-			ReadFileAndVerifyDatums(t, f.Name(), numRows, numCols, writer, datums)
+			meta := ReadFileAndVerifyDatums(t, f.Name(), numRows, numCols, datums)
+			expectedNumRowGroups := int(math.Ceil(float64(numRows) / float64(maxRowGroupSize)))
+			require.EqualValues(t, expectedNumRowGroups, meta.NumRowGroups)
 		})
 	}
 }
@@ -661,4 +669,86 @@ func TestSquashTuples(t *testing.T) {
 		squashedDatums := squashTuples(datums, tc.tupleIntervals, labels)
 		require.Equal(t, tc.tupleOutput, fmt.Sprint(squashedDatums))
 	}
+}
+
+// TestBufferedBytes asserts that the `BufferedBytesEstimate` method
+// on the Writer is somewhat accurate (it increases every time a few rows are
+// added, it resets after flushing, it is updated for each physical column etc.)
+func TestBufferedBytes(t *testing.T) {
+	fileName := "TestBufferedBytes.parquet"
+	f, err := os.CreateTemp("", fileName)
+	require.NoError(t, err)
+
+	tupleTyp := types.MakeTuple([]*types.T{types.Int, types.Int, types.String})
+	da := tree.NewDArray(types.Int)
+	sch, err := NewSchema([]string{"a", "b", "c", "d"}, []*types.T{types.Int, types.String, tupleTyp, types.IntArray})
+	require.NoError(t, err)
+
+	// The parquet format is efficient at encoding similar data, so we use various datums with different
+	// values so the estimate changes significantly after writing.
+	da.Array = tree.Datums{tree.NewDInt(0), tree.NewDInt(1)}
+	datums := [][]tree.Datum{{
+		tree.NewDInt(1),
+		tree.NewDString("string"),
+		tree.NewDTuple(tupleTyp, tree.NewDInt(1), tree.NewDInt(2), tree.NewDString("test")),
+		da,
+	}, {
+		tree.NewDInt(2),
+		tree.NewDString("asdf"),
+		tree.NewDTuple(tupleTyp, tree.NewDInt(5), tree.NewDInt(6), tree.NewDString("lkjh")),
+		da,
+	}, {
+		tree.NewDInt(3),
+		tree.NewDString("qwer"),
+		tree.NewDTuple(tupleTyp, tree.NewDInt(8), tree.NewDInt(9), tree.NewDString("uiop")),
+		da,
+	}}
+
+	callbackCount := 0
+	knobs := testingKnobs{
+		byteEstimateCallback: func(i int64) {
+			require.Greater(t, i, int64(0))
+			callbackCount += 1
+		},
+	}
+
+	// Write a few datums at a time so the estimate calculated by the library actually changes.
+	addFiveDatums := func(writer *Writer) {
+		for i := 0; i < 5; i++ {
+			for _, d := range datums {
+				err := writer.AddRow(d)
+				require.NoError(t, err)
+
+				// There are 4 columns but 6 physical columns because the tuple has 3 fields.
+				// Assert that every time we add a row each one of these physical columns
+				// contributes to the byte estimate.
+				require.Equal(t, 6, callbackCount)
+				callbackCount = 0
+			}
+		}
+	}
+
+	writer, err := NewWriter(sch, f, WithTestingKnobs(knobs))
+	require.NoError(t, err)
+	require.Equal(t, int64(0), writer.BufferedBytesEstimate())
+
+	// The first estimate is large because of the overhead of the encoder.
+	// The deltas are small because parquet is good at bit packing.
+	expectedEstimates := []int64{754, 792, 830, 866, 904}
+	var observedEstimates []int64
+	for i := 0; i < 5; i++ {
+		addFiveDatums(writer)
+		newEst := writer.BufferedBytesEstimate()
+		observedEstimates = append(observedEstimates, newEst)
+	}
+	require.Equal(t, expectedEstimates, observedEstimates)
+
+	// Flush the writer and assert the byte estimate goes back to 0
+	require.NoError(t, writer.Flush())
+	require.Equal(t, int64(0), writer.BufferedBytesEstimate())
+
+	// Add 5 datums again and assert the estimate is the same as the first
+	// estimate.
+	addFiveDatums(writer)
+	require.Equal(t, writer.BufferedBytesEstimate(), expectedEstimates[0])
 }

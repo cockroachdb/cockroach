@@ -29,6 +29,8 @@ type config struct {
 
 	// Arbitrary kv metadata.
 	metadata metadata.KeyValueMetadata
+
+	knobs testingKnobs
 }
 
 // An Option is a configurable setting for the Writer.
@@ -39,7 +41,8 @@ func (f Option) apply(c *config) error {
 }
 
 // WithMaxRowGroupLength specifies the maximum number of rows to include
-// in a row group when writing data.
+// in a row group when writing data. This means that the writer will flush
+// data to the sink at least once every `l` rows automatically.
 func WithMaxRowGroupLength(l int64) Option {
 	return func(c *config) error {
 		if l <= 0 {
@@ -128,6 +131,9 @@ const (
 // A Writer writes datums into an io.Writer sink. The Writer should be Close()ed
 // before attempting to read from the output sink so all data is flushed and
 // parquet metadata is written.
+//
+// NB: The writer may buffer all the written data in memory until it is
+// Flush()ed to the sink.
 type Writer struct {
 	sch    *SchemaDefinition
 	writer *file.Writer
@@ -136,7 +142,10 @@ type Writer struct {
 	ba *batchAlloc
 
 	// The current number of rows written to the row group writer.
-	currentRowGroupSize   int64
+	currentRowGroupSize int64
+	// bufferedBytesEstimate is the number of bytes buffered by the row group
+	// writer. This does not include bytes written out to the sink.
+	bufferedBytesEstimate int64
 	currentRowGroupWriter file.BufferedRowGroupWriter
 	// Caches the file.ColumnChunkWriters for each datumColumn in the schema
 	// definition. The array at columnChunkWriterCache[i] has has
@@ -210,6 +219,7 @@ func (w *Writer) setNewRowGroupWriter() error {
 		}
 	}
 
+	w.bufferedBytesEstimate = 0
 	w.currentRowGroupSize = 0
 	return nil
 }
@@ -226,23 +236,41 @@ func (w *Writer) AddRow(datums []tree.Datum) error {
 		if err := w.setNewRowGroupWriter(); err != nil {
 			return err
 		}
-	} else if w.currentRowGroupSize == w.cfg.maxRowGroupLength {
-		if err := w.currentRowGroupWriter.Close(); err != nil {
-			return err
-		}
-		if err := w.setNewRowGroupWriter(); err != nil {
+	}
+	if w.currentRowGroupSize == w.cfg.maxRowGroupLength {
+		if err := w.Flush(); err != nil {
 			return err
 		}
 	}
 
+	w.bufferedBytesEstimate = 0
 	for datumColIdx, d := range datums {
-		if err := w.sch.cols[datumColIdx].colWriter.Write(d, w.columnChunkWriterCache[datumColIdx], w.ba); err != nil {
+		if err := w.sch.cols[datumColIdx].colWriter.Write(d, w.columnChunkWriterCache[datumColIdx], w.ba, w.updateByteEstimate); err != nil {
 			return err
 		}
 	}
 
 	w.currentRowGroupSize += 1
 	return nil
+}
+
+// BufferedBytesEstimate is the approximate number of bytes which are
+// buffered by the writer and not yet written to the sink.
+func (w *Writer) BufferedBytesEstimate() int64 {
+	return w.bufferedBytesEstimate
+}
+
+// Flush flushes any data buffered in memory out to the sink. It is a noop of
+// the current row group writer is empty or uninitialized (which is true
+// IFF no data is buffered).
+func (w *Writer) Flush() error {
+	if w.currentRowGroupWriter == nil || w.currentRowGroupSize == 0 {
+		return nil
+	}
+	if err := w.currentRowGroupWriter.Close(); err != nil {
+		return err
+	}
+	return w.setNewRowGroupWriter()
 }
 
 // Close closes the writer and flushes any buffered data to the sink.
@@ -254,4 +282,26 @@ func (w *Writer) Close() error {
 		}
 	}
 	return w.writer.Close()
+}
+
+// updateByteEstimate updates the number of bytes which are currently
+// buffered by this column chunk writer.
+func (w *Writer) updateByteEstimate(cw file.ColumnChunkWriter) error {
+	internalCw, ok := cw.(internalColumnWriter)
+	if !ok {
+		return errors.AssertionFailedf(
+			"column writer for type %d does not implement internal column writer", cw.Type())
+	}
+	w.bufferedBytesEstimate += internalCw.EstimatedBufferedValueBytes()
+	if w.cfg.knobs.byteEstimateCallback != nil {
+		w.cfg.knobs.byteEstimateCallback(internalCw.EstimatedBufferedValueBytes())
+	}
+	return nil
+}
+
+// internalColumnWriter is an interface used to expose methods on the column
+// chunk writers below which are not a part of the file.ColumnChunkWriter
+// inteface.
+type internalColumnWriter interface {
+	EstimatedBufferedValueBytes() int64
 }
