@@ -48,3 +48,12 @@ const FluentSinkConnectionError MetricName = "log.fluent.sink.conn.errors"
 // buffer is already full, it drops the oldest buffered messages to make
 // space for the new message.
 const BufferedSinkMessagesDropped MetricName = "log.buffered.messages.dropped"
+
+// LogMessageCount is the MetricName for the metric used to count log
+// messages that are output to log sinks. This is effectively a count
+// of log volume on the node. Note that this does *not* measure the
+// fan-out of individual log messages to various underlying log sinks.
+// For example, a single log.Info call would increment this metric by
+// a value of 1, even if that single log message would be routed to
+// more than 1 logging sink.
+const LogMessageCount MetricName = "log.messages.count"
