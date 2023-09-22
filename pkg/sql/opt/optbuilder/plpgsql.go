@@ -123,6 +123,11 @@ type plpgsqlBuilder struct {
 	// constants tracks the variables that were declared as constant.
 	constants map[tree.Name]struct{}
 
+	// cursors is the set of cursor declarations for a PL/pgSQL routine. It is set
+	// for bound cursor declarations, which allow a query to be associated with a
+	// cursor before it is opened.
+	cursors map[tree.Name]ast.CursorDeclaration
+
 	// returnType is the return type of the PL/pgSQL function.
 	returnType *types.T
 
@@ -152,16 +157,21 @@ func (b *plpgsqlBuilder) init(
 	b.ob = ob
 	b.colRefs = colRefs
 	b.params = params
+	b.returnType = returnType
+	b.varTypes = make(map[tree.Name]*types.T)
+	b.cursors = make(map[tree.Name]ast.CursorDeclaration)
 	for i := range block.Decls {
 		switch dec := block.Decls[i].(type) {
 		case *ast.Declaration:
 			b.decls = append(b.decls, *dec)
 		case *ast.CursorDeclaration:
-			panic(unimplemented.New("bound cursors", "bound cursor declarations are not yet supported."))
+			// Declaration of a bound cursor declares a variable of type refcursor.
+			// For now, we use String instead of the special refcursor type.
+			// TODO(drewk): add support for refcursor types.
+			b.decls = append(b.decls, ast.Declaration{Var: dec.Name, Typ: types.String})
+			b.cursors[dec.Name] = *dec
 		}
 	}
-	b.returnType = returnType
-	b.varTypes = make(map[tree.Name]*types.T)
 	for _, dec := range b.decls {
 		typ, err := tree.ResolveType(b.ob.ctx, dec.Typ, b.ob.semaCtx.TypeResolver)
 		if err != nil {
@@ -520,19 +530,8 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			if t.Scroll == tree.Scroll {
 				panic(unimplemented.NewWithIssue(77102, "DECLARE SCROLL CURSOR"))
 			}
-			if t.Query == nil {
-				panic(unimplemented.New("bound cursor", "opening a bound cursor is not yet supported"))
-			}
-			if _, ok := t.Query.(*tree.Select); !ok {
-				panic(pgerror.Newf(
-					pgcode.InvalidCursorDefinition, "cannot open %s query as cursor",
-					t.Query.StatementTag(),
-				))
-			}
 			openCon := b.makeContinuation("_stmt_open")
 			openCon.def.Volatility = volatility.Volatile
-			fmtCtx := b.ob.evalCtx.FmtCtx(tree.FmtSimple)
-			fmtCtx.FormatNode(t.Query)
 			_, source, _, err := openCon.s.FindSourceProvidingColumn(b.ob.ctx, t.CurVar)
 			if err != nil {
 				if pgerror.GetPGCode(err) == pgcode.UndefinedColumn {
@@ -542,12 +541,15 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			}
 			// Initialize the routine with the information needed to pipe the first
 			// body statement into a cursor.
+			query := b.resolveOpenQuery(t)
+			fmtCtx := b.ob.evalCtx.FmtCtx(tree.FmtSimple)
+			fmtCtx.FormatNode(query)
 			openCon.def.CursorDeclaration = &tree.RoutineOpenCursor{
 				NameArgIdx: source.(*scopeColumn).getParamOrd(),
 				Scroll:     t.Scroll,
 				CursorSQL:  fmtCtx.CloseAndGetString(),
 			}
-			openScope := b.ob.buildStmtAtRootWithScope(t.Query, nil /* desiredTypes */, openCon.s)
+			openScope := b.ob.buildStmtAtRootWithScope(query, nil /* desiredTypes */, openCon.s)
 			if openScope.expr.Relational().CanMutate {
 				// Cursors with mutations are invalid.
 				panic(pgerror.Newf(pgcode.FeatureNotSupported,
@@ -567,6 +569,44 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 	}
 	// Call the parent continuation to execute the rest of the function.
 	return b.callContinuation(b.getContinuation(), s)
+}
+
+// resolveOpenQuery finds and validates the query that is bound to cursor for
+// the given OPEN statement.
+func (b *plpgsqlBuilder) resolveOpenQuery(open *ast.Open) tree.Statement {
+	var boundStmt tree.Statement
+	for name := range b.cursors {
+		if open.CurVar == name {
+			boundStmt = b.cursors[name].Query
+			break
+		}
+	}
+	stmt := open.Query
+	if stmt != nil && boundStmt != nil {
+		// A bound cursor cannot be opened with "OPEN FOR" syntax.
+		panic(errors.WithHintf(
+			pgerror.New(pgcode.Syntax, "syntax error at or near \"FOR\""),
+			"cannot specify a query during OPEN for bound cursor \"%s\"", open.CurVar,
+		))
+	}
+	if stmt == nil && boundStmt == nil {
+		// The query was not specified either during cursor declaration or in the
+		// open statement.
+		panic(errors.WithHintf(
+			pgerror.New(pgcode.Syntax, "expected \"FOR\" at or near \"OPEN\""),
+			"no query was specified for cursor \"%s\"", open.CurVar,
+		))
+	}
+	if stmt == nil {
+		// This is a bound cursor.
+		stmt = boundStmt
+	}
+	if _, ok := stmt.(*tree.Select); !ok {
+		panic(pgerror.Newf(
+			pgcode.InvalidCursorDefinition, "cannot open %s query as cursor", stmt.StatementTag(),
+		))
+	}
+	return stmt
 }
 
 // addPLpgSQLAssign adds a PL/pgSQL assignment to the current scope as a
