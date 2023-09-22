@@ -485,7 +485,7 @@ type SessionAccessor interface {
 
 	// HasViewActivityOrViewActivityRedactedRole returns true iff the current session user has the
 	// VIEWACTIVITY or VIEWACTIVITYREDACTED permission.
-	HasViewActivityOrViewActivityRedactedRole(ctx context.Context) (bool, error)
+	HasViewActivityOrViewActivityRedactedRole(ctx context.Context) (bool, bool, error)
 }
 
 // PreparedStatementState is a limited interface that exposes metadata about

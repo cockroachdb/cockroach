@@ -3396,7 +3396,7 @@ func makeTableSpanStatsGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	// The user must have ADMIN role or VIEWACTIVITY/VIEWACTIVITYREDACTED permission to use this builtin.
-	hasViewActivity, err := evalCtx.SessionAccessor.HasViewActivityOrViewActivityRedactedRole(ctx)
+	hasViewActivity, _, err := evalCtx.SessionAccessor.HasViewActivityOrViewActivityRedactedRole(ctx)
 	if err != nil {
 		return nil, err
 	}

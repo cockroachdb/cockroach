@@ -91,7 +91,11 @@ message Transaction {
   int64 cpu_sql_nanos = 17 [(gogoproto.customname) = "CPUSQLNanos"];
   // The error code of the last failed statement in the transaction.
   string last_error_code = 18; 
+  // The error message of the last failed statement in the transaction.
+  string last_error_msg = 20 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
   Status status = 19;
+
+  // Next ID: 21.
 }
 
 message Statement {
@@ -127,7 +131,10 @@ message Statement {
   Problem problem = 21;
   repeated Cause causes = 22;
   int64 cpu_sql_nanos = 23 [(gogoproto.customname) = "CPUSQLNanos"];
+  // The most recent error code experienced by this statement.
   string error_code = 24;
+  // The most recent error experienced by this statement.
+  string error_msg = 25 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
 }
 
 

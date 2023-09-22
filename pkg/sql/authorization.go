@@ -1001,25 +1001,35 @@ func (p *planner) HasOwnershipOnSchema(
 	return hasOwnership, nil
 }
 
-// HasViewActivityOrViewActivityRedactedRole implements the AuthorizationAccessor interface.
+// HasViewActivityOrViewActivityRedactedRole is part of the eval.SessionAccessor interface.
+// It returns 2 boolean values - the first indicating if we have either privilege requested,
+// and the second indicating  whether or not it was VIEWACTIVITYREDACTED.
 // Requires a valid transaction to be open.
-func (p *planner) HasViewActivityOrViewActivityRedactedRole(ctx context.Context) (bool, error) {
+func (p *planner) HasViewActivityOrViewActivityRedactedRole(
+	ctx context.Context,
+) (hasPrivs bool, shouldRedact bool, err error) {
 	if hasAdmin, err := p.HasAdminRole(ctx); err != nil {
-		return hasAdmin, err
+		return hasAdmin, false, err
 	} else if hasAdmin {
-		return true, nil
+		return true, false, nil
 	}
-	if hasView, err := p.HasViewActivity(ctx); err != nil {
-		return false, err
-	} else if hasView {
-		return true, nil
-	}
+
+	// We check for VIEWACTIVITYREDACTED first as users can have both
+	// VIEWACTIVITY and VIEWACTIVITYREDACTED, where VIEWACTIVITYREDACTED
+	// takes precedence (i.e. we must redact senstitive values).
 	if hasViewRedacted, err := p.HasViewActivityRedacted(ctx); err != nil {
-		return false, err
+		return false, false, err
 	} else if hasViewRedacted {
-		return true, nil
+		return true, true, nil
 	}
-	return false, nil
+
+	if hasView, err := p.HasViewActivity(ctx); err != nil {
+		return false, false, err
+	} else if hasView {
+		return true, false, nil
+	}
+
+	return false, false, nil
 }
 
 func (p *planner) HasViewActivityRedacted(ctx context.Context) (bool, error) {
