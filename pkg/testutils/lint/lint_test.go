@@ -507,6 +507,7 @@ func TestLint(t *testing.T) {
 					":!cli/start.go",                      // The CLI needs the GOMEMLIMIT variable.
 					":!internal/codeowners/codeowners.go", // For BAZEL_TEST.
 					":!internal/team/team.go",             // For BAZEL_TEST.
+					":!testutils/backup.go",               // For BACKUP_TESTING_BUCKET
 				},
 			},
 		} {
