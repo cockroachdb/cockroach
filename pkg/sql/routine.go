@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -389,15 +388,21 @@ func (g *routineGenerator) makeCursorHelper(
 	if open.NameArgIdx < 0 || open.NameArgIdx >= len(g.args) {
 		panic(errors.AssertionFailedf("unexpected name argument index: %d", open.NameArgIdx))
 	}
-	if g.args[open.NameArgIdx] == tree.DNull {
-		return nil, unimplemented.New("unnamed cursor",
-			"opening an unnamed cursor is not yet supported",
-		)
+	var cursorName tree.Name
+	if g.args[open.NameArgIdx] != tree.DNull {
+		cursorName = tree.Name(tree.MustBeDString(g.args[open.NameArgIdx]))
+		if cursorName == "" {
+			// Specifying the empty string as a cursor name conflicts with the
+			// "unnamed" portal, which always exists. Also, returning the error here
+			// allows us to use the empty string to indicate an unnamed (NULL) cursor,
+			// for which a unique name is automatically generated.
+			return nil, pgerror.Newf(pgcode.DuplicateCursor, "cursor \"\" already in use")
+		}
 	}
 	planCols := plan.main.planColumns()
 	cursorHelper := &plpgsqlCursorHelper{
 		ctx:        ctx,
-		cursorName: tree.Name(tree.MustBeDString(g.args[open.NameArgIdx])),
+		cursorName: cursorName,
 		resultCols: make(colinfo.ResultColumns, len(planCols)),
 	}
 	copy(cursorHelper.resultCols, planCols)
@@ -437,6 +442,10 @@ func (h *plpgsqlCursorHelper) createCursor(p *planner) error {
 		txn:        p.txn,
 		statement:  h.cursorSql,
 		created:    timeutil.Now(),
+	}
+	if h.cursorName == "" {
+		// This is an unnamed cursor. Generate a unique name for it.
+		h.cursorName = p.sqlCursors.genUniqueName()
 	}
 	if err := p.checkIfCursorExists(h.cursorName); err != nil {
 		return err

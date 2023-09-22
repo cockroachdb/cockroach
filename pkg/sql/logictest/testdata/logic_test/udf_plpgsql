@@ -2025,24 +2025,6 @@ statement ok
 ABORT;
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := '';
-  BEGIN
-    OPEN curs FOR SELECT 1;
-    RETURN 0;
-  END
-$$ LANGUAGE PLpgSQL;
-BEGIN;
-SELECT f();
-
-query I
-FETCH FORWARD 3 FROM "";
-----
-1
-
-statement ok
-ABORT;
-CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
-  DECLARE
     curs STRING := 'foo';
     curs2 STRING := 'bar';
     curs3 STRING := 'baz';
@@ -2098,6 +2080,22 @@ query II
 FETCH FORWARD 3 FROM bar;
 ----
 99  99
+
+# The empty string conflicts with the unnamed portal, which always exists.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := '';
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+statement error pgcode 42P03 pq: cursor \"\" already in use
+SELECT f();
 
 statement ok
 ABORT;
@@ -2184,23 +2182,6 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
-statement ok
-CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
-  DECLARE
-    curs STRING;
-  BEGIN
-    OPEN curs FOR SELECT 1;
-    RETURN 0;
-  END
-$$ LANGUAGE PLpgSQL;
-BEGIN;
-
-statement error pgcode 0A000 pq: unimplemented: opening an unnamed cursor is not yet supported
-SELECT f();
-
-statement ok
-ABORT;
-
 statement error pgcode 0A000 pq: unimplemented: opening a cursor in a routine with an exception block is not yet supported
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
@@ -2213,7 +2194,6 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
       RETURN -1;
   END
 $$ LANGUAGE PLpgSQL;
-BEGIN;
 
 statement ok
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
@@ -2265,3 +2245,99 @@ BEGIN;
 
 statement error pgcode 42P03 pq: cursor \"foo\" already exists
 SELECT f();
+
+statement ok
+ABORT;
+
+# Testing unnamed cursors.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING;
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+BEGIN;
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+
+statement ok
+SELECT f();
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+<unnamed portal 1>
+
+statement ok
+SELECT f();
+SELECT f();
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+<unnamed portal 1>
+<unnamed portal 2>
+<unnamed portal 3>
+
+# The generated name does not "fill in gaps".
+statement ok
+CLOSE "<unnamed portal 2>";
+CLOSE "<unnamed portal 1>";
+
+statement ok
+SELECT f();
+SELECT f();
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+<unnamed portal 4>
+<unnamed portal 5>
+<unnamed portal 3>
+
+statement ok
+ABORT;
+BEGIN;
+
+statement ok
+SELECT f();
+
+# The counter for the generated name keeps incrementing as long as the session
+# is open.
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+<unnamed portal 6>
+
+# The generated name will not conflict with manually created cursors.
+statement ok
+DECLARE "<unnamed portal 7>" CURSOR FOR SELECT 1;
+DECLARE "<unnamed portal 8>" CURSOR FOR SELECT 1;
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+<unnamed portal 7>
+<unnamed portal 8>
+<unnamed portal 6>
+
+statement ok
+SELECT f();
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+<unnamed portal 6>
+<unnamed portal 7>
+<unnamed portal 8>
+<unnamed portal 9>
+
+statement ok
+ABORT;
