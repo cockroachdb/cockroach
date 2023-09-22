@@ -360,10 +360,12 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 func registerQuitTransfersLeases(r registry.Registry) {
 	registerTest := func(name, minver string, method func(context.Context, test.Test, cluster.Cluster, int)) {
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("transfer-leases/%s", name),
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(3),
-			Leases:  registry.MetamorphicLeases,
+			Name:             fmt.Sprintf("transfer-leases/%s", name),
+			Owner:            registry.OwnerKV,
+			Cluster:          r.MakeClusterSpec(3),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runQuitTransfersLeases(ctx, t, c, name, method)
 			},

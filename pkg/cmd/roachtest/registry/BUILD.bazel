@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "registry",
@@ -17,5 +17,16 @@ go_library(
         "//pkg/cmd/roachtest/spec",
         "//pkg/cmd/roachtest/test",
         "@com_github_prometheus_client_golang//prometheus/promauto",
+    ],
+)
+
+go_test(
+    name = "registry_test",
+    srcs = ["test_spec_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":registry"],
+    deps = [
+        "//pkg/cmd/roachtest/spec",
+        "@com_github_stretchr_testify//require",
     ],
 )

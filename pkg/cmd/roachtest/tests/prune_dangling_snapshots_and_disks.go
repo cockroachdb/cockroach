@@ -32,10 +32,12 @@ func registerPruneDanglingSnapshotsAndDisks(r registry.Registry) {
 	)
 
 	r.Add(registry.TestSpec{
-		Name:            "prune-dangling",
-		Owner:           registry.OwnerTestEng,
-		Cluster:         clusterSpec,
-		RequiresLicense: true,
+		Name:             "prune-dangling",
+		Owner:            registry.OwnerTestEng,
+		Cluster:          clusterSpec,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			snapshots, err := c.ListSnapshots(ctx, vm.VolumeSnapshotListOpts{
 				CreatedBefore: timeutil.Now().Add(-1 * roachprod.SnapshotTTL),

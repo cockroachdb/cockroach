@@ -30,11 +30,13 @@ func registerExportParquet(r registry.Registry) {
 	// the TPC-C database containing 250 warehouses. Then, it executes 30 `EXPORT
 	// INTO PARQUET` statements concurrently, repeatedly for 10 minutes.
 	r.Add(registry.TestSpec{
-		Name:            "export/parquet/bench",
-		Owner:           registry.OwnerCDC,
-		Tags:            registry.Tags("manual"),
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(8)),
-		RequiresLicense: false,
+		Name:             "export/parquet/bench",
+		Owner:            registry.OwnerCDC,
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.ManualOnly,
+		Tags:             registry.Tags("manual"),
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(8)),
+		RequiresLicense:  false,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().NodeCount < 4 {
 				t.Fatalf("expected at least 4 nodes, found %d", c.Spec().NodeCount)
@@ -120,10 +122,12 @@ func registerExportParquet(r registry.Registry) {
 	// the TPC-C database containing 100 warehouses. Then, it executes concurrent
 	// exports until the entire database is exported.
 	r.Add(registry.TestSpec{
-		Name:            "export/parquet/tpcc-100",
-		Owner:           registry.OwnerCDC,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(8)),
-		RequiresLicense: false,
+		Name:             "export/parquet/tpcc-100",
+		Owner:            registry.OwnerCDC,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(8)),
+		RequiresLicense:  false,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().NodeCount < 4 {
 				t.Fatalf("expected at least 4 nodes, found %d", c.Spec().NodeCount)

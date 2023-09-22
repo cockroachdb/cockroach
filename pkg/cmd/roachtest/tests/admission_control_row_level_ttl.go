@@ -32,12 +32,14 @@ func registerElasticControlForRowLevelTTL(r registry.Registry) {
 
 func makeElasticControlRowLevelTTL(spec spec.ClusterSpec, expiredRows bool) registry.TestSpec {
 	return registry.TestSpec{
-		Name:      fmt.Sprintf("admission-control/row-level-ttl/expired-rows=%t", expiredRows),
-		Owner:     registry.OwnerAdmissionControl,
-		Benchmark: true,
-		Tags:      registry.Tags(`weekly`),
-		Cluster:   spec,
-		Leases:    registry.MetamorphicLeases,
+		Name:             fmt.Sprintf("admission-control/row-level-ttl/expired-rows=%t", expiredRows),
+		Owner:            registry.OwnerAdmissionControl,
+		Benchmark:        true,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Weekly),
+		Tags:             registry.Tags(`weekly`),
+		Cluster:          spec,
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			crdbNodes := c.Spec().NodeCount - 1
 			workloadNode := crdbNodes + 1

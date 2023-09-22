@@ -172,10 +172,12 @@ func registerTPCHBenchSpec(r registry.Registry, b tpchBenchSpec) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:      strings.Join(nameParts, "/"),
-		Owner:     registry.OwnerSQLQueries,
-		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(numNodes),
+		Name:             strings.Join(nameParts, "/"),
+		Owner:            registry.OwnerSQLQueries,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHBench(ctx, t, c, b)
 		},
