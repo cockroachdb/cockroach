@@ -36,11 +36,13 @@ var supportedSQLAlchemyTag = "2.0.20"
 // node.
 func registerSQLAlchemy(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "sqlalchemy",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(1),
-		Leases:  registry.MetamorphicLeases,
-		Tags:    registry.Tags(`default`, `orm`),
+		Name:             "sqlalchemy",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly, registry.ORM),
+		Tags:             registry.Tags(`default`, `orm`),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSQLAlchemy(ctx, t, c)
 		},

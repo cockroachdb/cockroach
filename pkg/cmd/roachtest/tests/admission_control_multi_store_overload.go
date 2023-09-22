@@ -92,12 +92,14 @@ func registerMultiStoreOverload(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:      "admission-control/multi-store-with-overload",
-		Owner:     registry.OwnerAdmissionControl,
-		Benchmark: true,
-		Tags:      registry.Tags(`weekly`),
-		Cluster:   r.MakeClusterSpec(2, spec.CPU(8), spec.SSD(2)),
-		Leases:    registry.MetamorphicLeases,
+		Name:             "admission-control/multi-store-with-overload",
+		Owner:            registry.OwnerAdmissionControl,
+		Benchmark:        true,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Weekly),
+		Tags:             registry.Tags(`weekly`),
+		Cluster:          r.MakeClusterSpec(2, spec.CPU(8), spec.SSD(2)),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runKV(ctx, t, c)
 		},
