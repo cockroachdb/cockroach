@@ -584,8 +584,8 @@ func (ep *DummySessionAccessor) HasRoleOption(
 // HasViewActivityOrViewActivityRedactedRole is part of the eval.SessionAccessor interface.
 func (ep *DummySessionAccessor) HasViewActivityOrViewActivityRedactedRole(
 	context.Context,
-) (bool, error) {
-	return false, errors.WithStack(errEvalSessionVar)
+) (bool, bool, error) {
+	return false, false, errors.WithStack(errEvalSessionVar)
 }
 
 // DummyClientNoticeSender implements the eval.ClientNoticeSender interface.
