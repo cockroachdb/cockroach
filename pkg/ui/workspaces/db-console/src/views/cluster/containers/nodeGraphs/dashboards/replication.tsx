@@ -42,6 +42,9 @@ export default function (props: GraphDashboardProps) {
       title="Ranges"
       sources={storeSources}
       tenantSource={tenantSource}
+      tooltip={`Various details about the status of ranges. In the node view,
+        shows details about ranges the node is responsible for. In the cluster
+        view, shows details about ranges all across the cluster.`}
     >
       <Axis label="ranges">
         <Metric name="cr.store.ranges" title="Ranges" />
