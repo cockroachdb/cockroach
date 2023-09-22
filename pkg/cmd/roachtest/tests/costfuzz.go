@@ -36,14 +36,16 @@ func registerCostFuzz(r registry.Registry) {
 			clusterSpec = r.MakeClusterSpec(1)
 		}
 		r.Add(registry.TestSpec{
-			Name:            fmt.Sprintf("costfuzz/%s", setupName),
-			Owner:           registry.OwnerSQLQueries,
-			Timeout:         time.Hour * 1,
-			RequiresLicense: true,
-			Tags:            nil,
-			Cluster:         clusterSpec,
-			Leases:          registry.MetamorphicLeases,
-			NativeLibs:      registry.LibGEOS,
+			Name:             fmt.Sprintf("costfuzz/%s", setupName),
+			Owner:            registry.OwnerSQLQueries,
+			Timeout:          time.Hour * 1,
+			RequiresLicense:  true,
+			Tags:             nil,
+			Cluster:          clusterSpec,
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
+			NativeLibs:       registry.LibGEOS,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runQueryComparison(ctx, t, c, &queryComparisonTest{
 					name: "costfuzz", setupName: setupName, run: runCostFuzzQuery,

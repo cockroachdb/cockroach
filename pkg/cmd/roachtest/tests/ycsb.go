@@ -109,7 +109,9 @@ func registerYCSB(r registry.Registry) {
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runYCSB(ctx, t, c, wl, cpus, false /* rangeTombstone */)
 				},
-				Tags: registry.Tags(`aws`),
+				CompatibleClouds: registry.AllClouds,
+				Suites:           registry.Suites(registry.Nightly),
+				Tags:             registry.Tags(`aws`),
 			})
 
 			if wl == "A" {
@@ -121,6 +123,8 @@ func registerYCSB(r registry.Registry) {
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 						runYCSB(ctx, t, c, wl, cpus, false /* rangeTombstone */)
 					},
+					CompatibleClouds: registry.AllExceptAWS,
+					Suites:           registry.Suites(registry.Nightly),
 				})
 			}
 
@@ -133,7 +137,9 @@ func registerYCSB(r registry.Registry) {
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 						runYCSB(ctx, t, c, wl, cpus, true /* rangeTombstone */)
 					},
-					Tags: registry.Tags(`aws`),
+					CompatibleClouds: registry.AllClouds,
+					Suites:           registry.Suites(registry.Nightly),
+					Tags:             registry.Tags(`aws`),
 				})
 			}
 		}

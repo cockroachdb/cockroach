@@ -93,6 +93,8 @@ func registerAcceptance(r registry.Registry) {
 				Skip:              tc.skip,
 				EncryptionSupport: tc.encryptionSupport,
 				Timeout:           10 * time.Minute,
+				CompatibleClouds:  registry.AllExceptAWS,
+				Suites:            registry.Suites(registry.Nightly, registry.Quick),
 				Tags:              registry.Tags("default", "quick"),
 			}
 

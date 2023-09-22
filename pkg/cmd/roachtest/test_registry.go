@@ -75,6 +75,7 @@ func (r *testRegistryImpl) Add(spec registry.TestSpec) {
 		fmt.Fprintf(os.Stderr, "%+v\n", err)
 		os.Exit(1)
 	}
+	spec.CrossCheckTags()
 	r.m[spec.Name] = &spec
 }
 
@@ -101,6 +102,9 @@ func (r *testRegistryImpl) prepareSpec(spec *registry.TestSpec) error {
 	if matched, err := regexp.MatchString(testNameRE, spec.Name); err != nil || !matched {
 		return fmt.Errorf("%s: Name must match this regexp: %s", spec.Name, testNameRE)
 	}
+
+	spec.CompatibleClouds.AssertInitialized()
+	spec.Suites.AssertInitialized()
 
 	if spec.Run == nil {
 		return fmt.Errorf("%s: must specify Run", spec.Name)

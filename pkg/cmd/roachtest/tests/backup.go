@@ -217,6 +217,8 @@ func registerBackupNodeShutdown(r registry.Registry) {
 		Cluster:           backupNodeRestartSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
+		CompatibleClouds:  registry.AllExceptAWS,
+		Suites:            registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 3
@@ -239,6 +241,8 @@ func registerBackupNodeShutdown(r registry.Registry) {
 		Cluster:           backupNodeRestartSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
+		CompatibleClouds:  registry.AllExceptAWS,
+		Suites:            registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 2
@@ -387,6 +391,8 @@ func registerBackup(r registry.Registry) {
 		Owner:             registry.OwnerDisasterRecovery,
 		Benchmark:         true,
 		Cluster:           backup2TBSpec,
+		CompatibleClouds:  registry.AllExceptAWS,
+		Suites:            registry.Suites(registry.Nightly),
 		EncryptionSupport: registry.EncryptionAlwaysDisabled,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			rows := rows2TiB
@@ -436,6 +442,8 @@ func registerBackup(r registry.Registry) {
 			Cluster:           r.MakeClusterSpec(3),
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			Leases:            registry.MetamorphicLeases,
+			CompatibleClouds:  registry.AllExceptAWS,
+			Suites:            registry.Suites(registry.Nightly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.Spec().Cloud != item.machine {
 					t.Skip("backup assumeRole is only configured to run on "+item.machine, "")
@@ -531,10 +539,11 @@ func registerBackup(r registry.Registry) {
 	for _, item := range []struct {
 		kmsProvider string
 		machine     string
+		clouds      registry.CloudSet
 		tags        map[string]struct{}
 	}{
-		{kmsProvider: "GCS", machine: spec.GCE},
-		{kmsProvider: "AWS", machine: spec.AWS, tags: registry.Tags("aws")},
+		{kmsProvider: "GCS", machine: spec.GCE, clouds: registry.AllExceptAWS},
+		{kmsProvider: "AWS", machine: spec.AWS, clouds: registry.AllClouds, tags: registry.Tags("aws")},
 	} {
 		item := item
 		r.Add(registry.TestSpec{
@@ -543,6 +552,8 @@ func registerBackup(r registry.Registry) {
 			Cluster:           KMSSpec,
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			Leases:            registry.MetamorphicLeases,
+			CompatibleClouds:  item.clouds,
+			Suites:            registry.Suites(registry.Nightly),
 			Tags:              item.tags,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.Spec().Cloud != item.machine {
@@ -679,6 +690,8 @@ func registerBackup(r registry.Registry) {
 		Leases:            registry.MetamorphicLeases,
 		Timeout:           1 * time.Hour,
 		EncryptionSupport: registry.EncryptionMetamorphic,
+		CompatibleClouds:  registry.AllExceptAWS,
+		Suites:            registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
@@ -885,6 +898,8 @@ func registerBackup(r registry.Registry) {
 		Cluster:           r.MakeClusterSpec(3, spec.CPU(8)),
 		Leases:            registry.MetamorphicLeases,
 		EncryptionSupport: registry.EncryptionMetamorphic,
+		CompatibleClouds:  registry.AllExceptAWS,
+		Suites:            registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().Cloud != spec.GCE {
 				t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")

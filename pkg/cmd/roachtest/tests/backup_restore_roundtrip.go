@@ -38,6 +38,8 @@ func registerBackupRestoreRoundTrip(r registry.Registry) {
 		Timeout:           8 * time.Hour,
 		Owner:             registry.OwnerDisasterRecovery,
 		Cluster:           r.MakeClusterSpec(4),
+		CompatibleClouds:  registry.AllExceptAWS,
+		Suites:            registry.Suites(registry.Nightly),
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		RequiresLicense:   true,
 		Run:               backupRestoreRoundTrip,

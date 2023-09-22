@@ -28,11 +28,13 @@ func registerQueue(r registry.Registry) {
 	// One node runs the workload generator, all other nodes host CockroachDB.
 	const numNodes = 2
 	r.Add(registry.TestSpec{
-		Skip:    "https://github.com/cockroachdb/cockroach/issues/17229",
-		Name:    fmt.Sprintf("queue/nodes=%d", numNodes-1),
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(numNodes),
-		Leases:  registry.MetamorphicLeases,
+		Skip:             "https://github.com/cockroachdb/cockroach/issues/17229",
+		Name:             fmt.Sprintf("queue/nodes=%d", numNodes-1),
+		Owner:            registry.OwnerKV,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runQueue(ctx, t, c)
 		},

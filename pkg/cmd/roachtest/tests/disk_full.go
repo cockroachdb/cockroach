@@ -27,10 +27,12 @@ import (
 
 func registerDiskFull(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "disk-full",
-		Owner:   registry.OwnerStorage,
-		Cluster: r.MakeClusterSpec(5),
-		Leases:  registry.MetamorphicLeases,
+		Name:             "disk-full",
+		Owner:            registry.OwnerStorage,
+		Cluster:          r.MakeClusterSpec(5),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.IsLocal() {
 				t.Skip("you probably don't want to fill your local disk")

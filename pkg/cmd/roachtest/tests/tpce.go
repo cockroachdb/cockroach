@@ -27,14 +27,10 @@ import (
 
 func registerTPCE(r registry.Registry) {
 	type tpceOptions struct {
-		owner     registry.Owner // defaults to test-eng
 		customers int
 		nodes     int
 		cpus      int
 		ssds      int
-
-		tags    map[string]struct{}
-		timeout time.Duration
 	}
 
 	runTPCE := func(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptions) {
@@ -106,26 +102,42 @@ func registerTPCE(r registry.Registry) {
 		m.Wait()
 	}
 
-	for _, opts := range []tpceOptions{
-		// Nightly, small scale configurations.
-		{customers: 5_000, nodes: 3, cpus: 4, ssds: 1},
-		// Weekly, large scale configurations.
-		{customers: 100_000, nodes: 5, cpus: 32, ssds: 2, tags: registry.Tags("weekly"), timeout: 36 * time.Hour},
-	} {
-		opts := opts
-		owner := registry.OwnerTestEng
-		if opts.owner != "" {
-			owner = opts.owner
-		}
-		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("tpce/c=%d/nodes=%d", opts.customers, opts.nodes),
-			Owner:   owner,
-			Tags:    opts.tags,
-			Timeout: opts.timeout,
-			Cluster: r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.SSD(opts.ssds)),
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runTPCE(ctx, t, c, opts)
-			},
-		})
+	// Nightly, small scale configuration.
+	smallNightly := tpceOptions{
+		customers: 5_000,
+		nodes:     3,
+		cpus:      4,
+		ssds:      1,
 	}
+	r.Add(registry.TestSpec{
+		Name:             fmt.Sprintf("tpce/c=%d/nodes=%d", smallNightly.customers, smallNightly.nodes),
+		Owner:            registry.OwnerTestEng,
+		Timeout:          4 * time.Hour,
+		Cluster:          r.MakeClusterSpec(smallNightly.nodes+1, spec.CPU(smallNightly.cpus), spec.SSD(smallNightly.ssds)),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runTPCE(ctx, t, c, smallNightly)
+		},
+	})
+
+	// Weekly, large scale configuration.
+	largeWeekly := tpceOptions{
+		customers: 100_000,
+		nodes:     5,
+		cpus:      32,
+		ssds:      2,
+	}
+	r.Add(registry.TestSpec{
+		Name:             fmt.Sprintf("tpce/c=%d/nodes=%d", largeWeekly.customers, largeWeekly.nodes),
+		Owner:            registry.OwnerTestEng,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Weekly),
+		Tags:             registry.Tags("weekly"),
+		Timeout:          36 * time.Hour,
+		Cluster:          r.MakeClusterSpec(largeWeekly.nodes+1, spec.CPU(largeWeekly.cpus), spec.SSD(largeWeekly.ssds)),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runTPCE(ctx, t, c, largeWeekly)
+		},
+	})
 }
