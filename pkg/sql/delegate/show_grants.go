@@ -103,14 +103,14 @@ SELECT *
                ) AS a
        )
 `
-	// Query grants data for user-defined functions. Builtin functions are not
-	// included.
-	udfQuery := fmt.Sprintf(`
+	// Query grants data for user-defined functions and procedures. Builtin
+	// functions are not included.
+	routineQuery := fmt.Sprintf(`
 WITH fn_grants AS (
   SELECT routine_catalog as database_name,
          routine_schema as schema_name,
-         reverse(split_part(reverse(specific_name), '_', 1))::OID as function_id,
-         routine_name as function_name,
+         reverse(split_part(reverse(specific_name), '_', 1))::OID as routine_id,
+         routine_name,
          grantee,
          privilege_type,
          is_grantable::boolean
@@ -119,13 +119,13 @@ WITH fn_grants AS (
 )
 SELECT database_name,
        schema_name,
-       function_id,
+       routine_id,
        concat(
-				 function_name,
+				 routine_name,
          '(',
-				 pg_get_function_identity_arguments(function_id),
+				 pg_get_function_identity_arguments(routine_id),
          ')'
-			 ) as function_signature,
+			 ) as routine_signature,
        grantee,
        privilege_type,
        is_grantable
@@ -248,11 +248,15 @@ SELECT database_name,
 				strings.Join(params, ","),
 			)
 		}
-	} else if n.Targets != nil && len(n.Targets.Functions) > 0 {
-		fmt.Fprint(&source, udfQuery)
-		nameCols = "database_name, schema_name, function_id, function_signature,"
+	} else if n.Targets != nil && (len(n.Targets.Functions) > 0 || len(n.Targets.Procedures) > 0) {
+		fmt.Fprint(&source, routineQuery)
+		nameCols = "database_name, schema_name, routine_id, routine_signature,"
 		fnResolved := intsets.MakeFast()
-		for _, fn := range n.Targets.Functions {
+		routines := n.Targets.Functions
+		if len(n.Targets.Procedures) > 0 {
+			routines = n.Targets.Procedures
+		}
+		for _, fn := range routines {
 			un := fn.FuncName.ToUnresolvedObjectName().ToUnresolvedName()
 			fd, err := d.catalog.ResolveFunction(d.ctx, un, &d.evalCtx.SessionData().SearchPath)
 			if err != nil {
@@ -272,7 +276,7 @@ SELECT database_name,
 		for i, fnID := range fnResolved.Ordered() {
 			params[i] = strconv.Itoa(fnID)
 		}
-		fmt.Fprintf(&cond, `WHERE function_id IN (%s)`, strings.Join(params, ","))
+		fmt.Fprintf(&cond, `WHERE routine_id IN (%s)`, strings.Join(params, ","))
 	} else if n.Targets != nil && n.Targets.System {
 		fmt.Fprint(&source, systemPrivilegeQuery)
 		cond.WriteString(`WHERE true`)
@@ -340,8 +344,8 @@ SELECT database_name,
 		source.WriteString(typePrivQuery)
 		source.WriteByte(')')
 		source.WriteString(` UNION ALL ` +
-			`SELECT database_name, schema_name, function_signature AS relation_name, grantee, privilege_type, is_grantable FROM (`)
-		source.WriteString(udfQuery)
+			`SELECT database_name, schema_name, routine_signature AS relation_name, grantee, privilege_type, is_grantable FROM (`)
+		source.WriteString(routineQuery)
 		source.WriteByte(')')
 		// If the current database is set, restrict the command to it.
 		if currDB := d.evalCtx.SessionData().Database; currDB != "" {
