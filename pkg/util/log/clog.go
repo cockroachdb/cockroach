@@ -264,6 +264,13 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 	var fatalTrigger chan struct{}
 	extraFlush := false
 	isFatal := entry.sev == severity.FATAL
+	// NB: Generally, we don't need to make this nil check. However, logging.metrics
+	// is injected from an external package's init() function, but this code path
+	// can be exercised via pkg/util/log's *own* init() function, which is called first.
+	// Therefore, we need to protect against this case.
+	if logging.metrics != nil {
+		logging.metrics.IncrementCounter(LogMessageCount, 1)
+	}
 
 	if isFatal {
 		extraFlush = true
