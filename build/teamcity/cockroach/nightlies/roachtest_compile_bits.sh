@@ -1,16 +1,41 @@
 #!/usr/bin/env bash
 
-# Determine host cpu architecture, which we'll need for libgeos, below.
-if [[ "$(uname -m)" =~ (arm64|aarch64)$ ]]; then
-  export host_arch=arm64
-else
-  export host_arch=amd64
+set -euo pipefail
+
+if [ "$#" -eq 0 ]; then
+  echo "Builds all bits needed for roachtests and stages them in bin/ and lib/."
+  echo ""
+  echo "Usage: $0 arch [arch...]"
+  echo "  where arch is one of: amd64, arm64, amd64-fips"
+  exit 1
 fi
 
-echo "Host architecture: $host_arch"
+os=linux
+function arch_to_config() {
+  case "$1" in
+    amd64)
+      echo "crosslinux"
+      ;;
+    arm64)
+      echo "crosslinuxarm"
+      ;;
+    amd64-fips)
+      echo "crosslinuxfips"
+      ;;
+    *)
+      echo "Error: invalid arch '$1'" >&2
+      exit 1
+      ;;
+  esac
+}
 
-# Builds all bits needed for roachtests, stages them in bin/ and lib/.
-cross_builds=(crosslinux crosslinuxarm crosslinuxfips)
+# Determine host cpu architecture, which we'll need for libgeos, below.
+if [[ "$(uname -m)" =~ (arm64|aarch64)$ ]]; then
+  host_arch=arm64
+else
+  host_arch=amd64
+fi
+echo "Host architecture: $host_arch"
 
 # Prepare the bin/ and lib/ directories.
 mkdir -p bin
@@ -18,38 +43,17 @@ chmod o+rwx bin
 mkdir -p lib
 chmod o+rwx lib
 
-for platform in "${cross_builds[@]}"; do
-  if [[ $platform == crosslinux ]]; then
-    os=linux
-    arch=amd64
-  elif [[ $platform == crosslinuxarm ]]; then
-    os=linux
-    arch=arm64
-  elif [[ $platform == crosslinuxfips ]]; then
-    os=linux
-    arch=amd64-fips
-  else
-    echo "unknown or unsupported platform $platform"
-    exit 1
-  fi
-
-  echo "Building $platform, os=$os, arch=$arch..."
+for arch in "$@"; do
+  config=$(arch_to_config $arch)
+  echo "Building $config, os=$os, arch=$arch..."
   # Build cockroach, workload and geos libs.
-  bazel build --config $platform --config ci -c opt --config force_build_cdeps \
+  bazel build --config $config --config ci -c opt --config force_build_cdeps \
         //pkg/cmd/cockroach //pkg/cmd/workload \
         //c-deps:libgeos
-  BAZEL_BIN=$(bazel info bazel-bin --config $platform --config ci -c opt)
+  BAZEL_BIN=$(bazel info bazel-bin --config $config --config ci -c opt)
 
-  # N.B. roachtest is built once, for the host architecture.
-  if [[ $os == "linux" && $arch == $host_arch ]]; then
-    bazel build --config $platform --config ci  -c opt //pkg/cmd/roachtest
-
-    cp $BAZEL_BIN/pkg/cmd/roachtest/roachtest_/roachtest bin/roachtest
-    # Make it writable to simplify cleanup and copying (e.g., scp retry).
-    chmod a+w bin/roachtest
-  fi
   # Build cockroach-short with assertions enabled.
-  bazel build --config $platform --config ci -c opt //pkg/cmd/cockroach-short --crdb_test
+  bazel build --config $config --config ci -c opt //pkg/cmd/cockroach-short --crdb_test
   # Copy the binaries.
   cp $BAZEL_BIN/pkg/cmd/cockroach/cockroach_/cockroach bin/cockroach.$os-$arch
   cp $BAZEL_BIN/pkg/cmd/workload/workload_/workload    bin/workload.$os-$arch
@@ -63,18 +67,26 @@ for platform in "${cross_builds[@]}"; do
   cp $BAZEL_BIN/c-deps/libgeos_foreign/lib/libgeos_c.so lib/libgeos_c.$os-$arch.so
   # Make it writable to simplify cleanup and copying (e.g., scp retry).
   chmod a+w lib/libgeos.$os-$arch.so lib/libgeos_c.$os-$arch.so
-
-  if [[ $os == "linux" && $arch == $host_arch ]]; then
-    # Copy geos libs for the host architecture; e.g., roachtest runner may require them locally.
-    # N.B. we must drop the architecture suffix since geos doesn't support it (see getLibraryExt() in geos.go).
-    cp $BAZEL_BIN/c-deps/libgeos_foreign/lib/libgeos.so   lib/libgeos.so
-    cp $BAZEL_BIN/c-deps/libgeos_foreign/lib/libgeos_c.so lib/libgeos_c.so
-    # Make it writable to simplify cleanup and copying (e.g., scp retry).
-    chmod a+w lib/libgeos.so lib/libgeos_c.so
-  fi
-
 done
+
+# Build roachtest itself, for the host architecture.
+# We also build geos libs; roachtest runner may require them locally.
+config=$(arch_to_config $host_arch)
+echo "Building roachtest and libgeos ($config, os=$os, arch=$host_arch)..."
+
+bazel build --config $config --config ci  -c opt //pkg/cmd/roachtest
+bazel build --config $config --config ci -c opt --config force_build_cdeps \
+      //c-deps:libgeos
+
+BAZEL_BIN=$(bazel info bazel-bin --config $config --config ci -c opt)
+cp $BAZEL_BIN/pkg/cmd/roachtest/roachtest_/roachtest bin/roachtest
+# N.B. geos does not support the architecture suffix (see getLibraryExt() in
+# geos.go).
+cp $BAZEL_BIN/c-deps/libgeos_foreign/lib/libgeos.so   lib/libgeos.so
+cp $BAZEL_BIN/c-deps/libgeos_foreign/lib/libgeos_c.so lib/libgeos_c.so
+
+# Make files writable to simplify cleanup and copying (e.g., scp retry).
+chmod a+w bin/roachtest lib/libgeos.so lib/libgeos_c.so
 
 ls -l bin
 ls -l lib
-

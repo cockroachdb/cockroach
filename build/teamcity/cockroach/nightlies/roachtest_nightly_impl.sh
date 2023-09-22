@@ -10,7 +10,11 @@ if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
   ssh-keygen -q -C "roachtest-nightly-bazel $(date)" -N "" -f ~/.ssh/id_rsa
 fi
 
-source $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh
+arch=amd64
+if [[ ${FIPS_ENABLED:-0} == 1 ]]; then
+  arch=amd64-fips
+fi
+$root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh $arch
 
 artifacts=/artifacts
 source $root/build/teamcity/util/roachtest_util.sh
