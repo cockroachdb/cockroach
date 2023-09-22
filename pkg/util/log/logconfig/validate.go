@@ -461,6 +461,12 @@ func (c *Config) validateHTTPSinkConfig(hsc *HTTPSinkConfig) error {
 	if *hsc.Compression != GzipCompression && *hsc.Compression != NoneCompression {
 		return errors.New("compression must be 'gzip' or 'none'")
 	}
+	// verify no headers have both a filepath and value.
+	for _, hVal := range hsc.Headers {
+		if hVal.Filepath != "" && hVal.Value != "" {
+			return errors.New("header has both filepath and value")
+		}
+	}
 	return c.ValidateCommonSinkConfig(hsc.CommonSinkConfig)
 }
 

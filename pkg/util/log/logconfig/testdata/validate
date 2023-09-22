@@ -597,13 +597,13 @@ sinks:
     a:
       address: a
       channels: STORAGE
-      headers: {X-CRDB-HEADER: header-value-a}
+      headers: {X-CRDB-HEADER: {filepath: "", value: header-value-a}}
       buffering:
         max-staleness: 10s
     b:
       address: b
       channels: OPS
-      headers: {X-CRDB-HEADER: header-value-b, X-ANOTHER-HEADER: zz-yy-bb}
+      headers: {X-CRDB-HEADER: {filepath: "", value: header-value-b}, X-ANOTHER-HEADER: {filepath: "", value: zz-yy-bb}}
       buffering:
         flush-trigger-size: 5.0KiB
     c:
@@ -629,7 +629,7 @@ sinks:
       unsafe-tls: false
       timeout: 2s
       disable-keep-alives: false
-      headers: {X-CRDB-HEADER: header-value-a}
+      headers: {X-CRDB-HEADER: {filepath: "", value: header-value-a}}
       compression: gzip
       filter: INFO
       format: json-compact
@@ -649,7 +649,7 @@ sinks:
       unsafe-tls: false
       timeout: 2s
       disable-keep-alives: false
-      headers: {X-ANOTHER-HEADER: zz-yy-bb, X-CRDB-HEADER: header-value-b}
+      headers: {X-ANOTHER-HEADER: {filepath: "", value: zz-yy-bb}, X-CRDB-HEADER: {filepath: "", value: header-value-b}}
       compression: gzip
       filter: INFO
       format: json-compact

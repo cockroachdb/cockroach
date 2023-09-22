@@ -16,6 +16,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -305,6 +307,12 @@ func TestHTTPSinkHeadersAndCompression(t *testing.T) {
 	format := "json"
 	expectedContentType := "application/json"
 	expectedContentEncoding := logconfig.GzipCompression
+	headerValue := &logconfig.HeaderValue{Value: "secret-value"}
+	// Test filepath method of providing header values.
+	tempDir := t.TempDir()
+	filename := filepath.Join(tempDir, "filepath_test.txt")
+	require.NoError(t, os.WriteFile(filename, []byte("another-secret-value"), 0777))
+	anotherHeaderValue := &logconfig.HeaderValue{Filepath: filename}
 	defaults := logconfig.HTTPDefaults{
 		Address: &address,
 		Timeout: &timeout,
@@ -318,7 +326,7 @@ func TestHTTPSinkHeadersAndCompression(t *testing.T) {
 		},
 
 		Compression: &logconfig.GzipCompression,
-		Headers:     map[string]string{"X-CRDB-TEST": "secret-value"},
+		Headers:     map[string]*logconfig.HeaderValue{"X-CRDB-TEST": headerValue, "X-CRDB-TEST-2": anotherHeaderValue},
 	}
 
 	testFn := func(header http.Header, body string) error {
@@ -340,14 +348,18 @@ func TestHTTPSinkHeadersAndCompression(t *testing.T) {
 		if !isGzipped([]byte(body)) {
 			return errors.New("expected gzipped body")
 		}
+		var matchCount int
 		for k, v := range header {
-			if k == "X-Crdb-Test" {
+			if k == "X-Crdb-Test" || k == "X-Crdb-Test-2" {
 				for _, vv := range v {
-					if vv == "secret-value" {
-						return nil
+					if vv == "secret-value" || vv == "another-secret-value" {
+						matchCount++
 					}
 				}
 			}
+		}
+		if matchCount == 2 {
+			return nil
 		}
 		return errors.New("expected to find special header in request")
 	}

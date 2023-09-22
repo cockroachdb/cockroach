@@ -511,13 +511,18 @@ type HTTPDefaults struct {
 	DisableKeepAlives *bool `yaml:"disable-keep-alives,omitempty"`
 
 	// Headers is a list of headers to attach to each HTTP request
-	Headers map[string]string `yaml:",omitempty,flow"`
+	Headers map[string]*HeaderValue `yaml:",omitempty,flow"`
 
 	// Compression can be "none" or "gzip" to enable gzip compression.
 	// Set to "gzip" by default.
 	Compression *string `yaml:",omitempty"`
 
 	CommonSinkConfig `yaml:",inline"`
+}
+
+type HeaderValue struct {
+	Filepath string
+	Value    string
 }
 
 // HTTPSinkConfig represents the configuration for one http sink.

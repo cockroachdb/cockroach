@@ -133,12 +133,14 @@ func flushDaemon() {
 	}
 }
 
-// signalFlusher flushes the log(s) every time SIGHUP is received.
+// signalFlusher updates any keys from files in the http sinks
+// and also flushes the log(s) every time SIGHUP is received.
 // This handles both the primary and secondary loggers.
 func signalFlusher() {
 	ch := sysutil.RefreshSignaledChan()
 	for sig := range ch {
 		Ops.Infof(context.Background(), "%s received, flushing logs", sig)
+		RefreshValuesFromFiles()
 		FlushFiles()
 	}
 }
