@@ -23,8 +23,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cenkalti/backoff"
-	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -2347,14 +2345,6 @@ func (testServerFactoryImpl) New(params base.TestServerArgs) (interface{}, error
 		return nil, err
 	}
 	ts.topLevelServer = srv.(*topLevelServer)
-
-	// Create a breaker which never trips and never backs off to avoid
-	// introducing timing-based flakes.
-	ts.rpcContext.BreakerFactory = func() *circuit.Breaker {
-		return circuit.NewBreakerWithOptions(&circuit.Options{
-			BackOff: &backoff.ZeroBackOff{},
-		})
-	}
 
 	// Our context must be shared with our server.
 	ts.Cfg = &ts.topLevelServer.cfg

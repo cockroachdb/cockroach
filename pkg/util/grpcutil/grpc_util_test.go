@@ -14,8 +14,8 @@ import (
 	"fmt"
 	"testing"
 
-	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -58,7 +58,7 @@ func TestRequestDidNotStart_Errors(t *testing.T) {
 		"unauthenticated":     {status.Error(codes.Unauthenticated, "unauthenticated"), true},
 		"permission denied":   {status.Error(codes.PermissionDenied, "permission denied"), true},
 		"failed precondition": {status.Error(codes.FailedPrecondition, "failed precondition"), true},
-		"circuit breaker":     {circuit.ErrBreakerOpen, true},
+		"circuit breaker":     {circuit.ErrBreakerOpen, false},
 		"plain":               {errors.New("foo"), false},
 	}
 	for name, tc := range testcases {

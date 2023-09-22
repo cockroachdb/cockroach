@@ -102,11 +102,9 @@ require (
 	github.com/blevesearch/snowballstem v0.9.0
 	github.com/buchgr/bazel-remote v1.3.3
 	github.com/bufbuild/buf v0.56.0
-	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/charmbracelet/bubbles v0.15.1-0.20230123181021-a6a12c4a31eb
 	github.com/client9/misspell v0.3.4
 	github.com/cockroachdb/apd/v3 v3.2.1
-	github.com/cockroachdb/circuitbreaker v2.2.2-0.20190114160014-a614b14ccf63+incompatible
 	github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292
 	github.com/cockroachdb/cockroach-go/v2 v2.3.5
 	github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548
@@ -280,7 +278,6 @@ require (
 	github.com/eapache/go-resiliency v1.3.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20230111030713-bf00bc1b83b6 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
-	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a // indirect
 	github.com/fatih/structs v1.1.0 // indirect
 	github.com/felixge/httpsnoop v1.0.1 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
@@ -421,7 +418,6 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/opennota/wd v0.0.0-20180911144301-b446539ab1e7 // indirect
-	github.com/peterbourgon/g2s v0.0.0-20170223122336-d4e7ad98afea // indirect
 	// The indicated commit is required on top of v1.0.0-RC3 because
 	// it fixes an import comment that otherwise breaks our prereqs tool.
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.3.0 // indirect
