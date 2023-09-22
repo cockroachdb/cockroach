@@ -44,7 +44,7 @@ func TestStopNonEmpty(t *testing.T) {
 
 	s := NewScheduler(SchedulerConfig{Workers: 1})
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
-	c := createAndRegisterConsumerOrFail(t, s, 1)
+	c := createAndRegisterConsumerOrFail(t, s, 1, false /* priority */)
 	s.stopProcessor(c.id)
 	assertStopsWithinTimeout(t, s)
 	c.requireStopped(t, time.Second*30)
@@ -64,7 +64,7 @@ type schedulerConsumer struct {
 }
 
 func createAndRegisterConsumerOrFail(
-	t *testing.T, scheduler *Scheduler, id int64,
+	t *testing.T, scheduler *Scheduler, id int64, priority bool,
 ) *schedulerConsumer {
 	t.Helper()
 	c := &schedulerConsumer{
@@ -73,7 +73,7 @@ func createAndRegisterConsumerOrFail(
 		sched:      scheduler,
 		id:         id,
 	}
-	err := c.sched.register(id, c.process)
+	err := c.sched.register(id, c.process, priority)
 	require.NoError(t, err, "failed to register processor")
 	return c
 }
@@ -216,7 +216,7 @@ func TestDeliverEvents(t *testing.T) {
 
 	s := NewScheduler(SchedulerConfig{Workers: 1})
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
-	c := createAndRegisterConsumerOrFail(t, s, 1)
+	c := createAndRegisterConsumerOrFail(t, s, 1, false /* priority */)
 	s.enqueue(c.id, te1)
 	c.requireEvent(t, time.Second*30000, te1, 1)
 	assertStopsWithinTimeout(t, s)
@@ -230,7 +230,7 @@ func TestNoParallel(t *testing.T) {
 
 	s := NewScheduler(SchedulerConfig{Workers: 2})
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
-	c := createAndRegisterConsumerOrFail(t, s, 1)
+	c := createAndRegisterConsumerOrFail(t, s, 1, false /* priority */)
 	c.pause()
 	s.enqueue(c.id, te1)
 	c.waitPaused()
@@ -248,8 +248,8 @@ func TestProcessOtherWhilePaused(t *testing.T) {
 
 	s := NewScheduler(SchedulerConfig{Workers: 2})
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
-	c1 := createAndRegisterConsumerOrFail(t, s, 1)
-	c2 := createAndRegisterConsumerOrFail(t, s, 2)
+	c1 := createAndRegisterConsumerOrFail(t, s, 1, false /* priority */)
+	c2 := createAndRegisterConsumerOrFail(t, s, 2, false /* priority */)
 	c1.pause()
 	s.enqueue(c1.id, te1)
 	c1.waitPaused()
@@ -270,7 +270,7 @@ func TestEventsCombined(t *testing.T) {
 
 	s := NewScheduler(SchedulerConfig{Workers: 2})
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
-	c := createAndRegisterConsumerOrFail(t, s, 1)
+	c := createAndRegisterConsumerOrFail(t, s, 1, false /* priority */)
 	c.pause()
 	s.enqueue(c.id, te1)
 	c.waitPaused()
@@ -289,7 +289,7 @@ func TestRescheduleEvent(t *testing.T) {
 
 	s := NewScheduler(SchedulerConfig{Workers: 2})
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
-	c := createAndRegisterConsumerOrFail(t, s, 1)
+	c := createAndRegisterConsumerOrFail(t, s, 1, false /* priority */)
 	c.pause()
 	s.enqueue(c.id, te1)
 	c.waitPaused()
@@ -316,9 +316,9 @@ func TestClientScheduler(t *testing.T) {
 		sched:      s,
 		id:         1,
 	}
-	require.NoError(t, cs.Register(c.process), "failed to register consumer")
+	require.NoError(t, cs.Register(c.process, false), "failed to register consumer")
 	require.Error(t,
-		cs.Register(func(event processorEventType) (remaining processorEventType) { return 0 }),
+		cs.Register(func(event processorEventType) (remaining processorEventType) { return 0 }, false),
 		"reregistration must fail")
 	c.pause()
 	cs.Enqueue(te2)
@@ -342,7 +342,7 @@ func TestScheduleBatch(t *testing.T) {
 	batch := s.NewEnqueueBatch()
 	defer batch.Close()
 	for i := 0; i < consumerNumber; i++ {
-		consumers[i] = createAndRegisterConsumerOrFail(t, s, int64(i+1))
+		consumers[i] = createAndRegisterConsumerOrFail(t, s, int64(i+1), false /* priority */)
 		batch.Add(consumers[i].id)
 	}
 	s.EnqueueBatch(batch, te1)
@@ -360,7 +360,7 @@ func TestPartialProcessing(t *testing.T) {
 
 	s := NewScheduler(SchedulerConfig{Workers: 1})
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
-	c := createAndRegisterConsumerOrFail(t, s, 1)
+	c := createAndRegisterConsumerOrFail(t, s, 1, false /* priority */)
 	// Set process response to trigger process once again.
 	c.rescheduleNext(te1)
 	s.enqueue(c.id, te1)
@@ -389,7 +389,7 @@ func TestUnregisterWithoutStop(t *testing.T) {
 
 	s := NewScheduler(SchedulerConfig{Workers: 1})
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
-	c := createAndRegisterConsumerOrFail(t, s, 1)
+	c := createAndRegisterConsumerOrFail(t, s, 1, false /* priority */)
 	s.enqueue(c.id, te1)
 	c.requireHistory(t, time.Second*30, []processorEventType{te1})
 	s.unregister(c.id)
@@ -416,8 +416,8 @@ func TestSchedulerShutdown(t *testing.T) {
 
 	s := NewScheduler(SchedulerConfig{Workers: 2, ShardSize: 1})
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
-	c1 := createAndRegisterConsumerOrFail(t, s, 1)
-	c2 := createAndRegisterConsumerOrFail(t, s, 2)
+	c1 := createAndRegisterConsumerOrFail(t, s, 1, false /* priority */)
+	c2 := createAndRegisterConsumerOrFail(t, s, 2, false /* priority */)
 	s.stopProcessor(c2.id)
 	s.Stop()
 	// Ensure that we are not stopped twice.
@@ -470,49 +470,61 @@ func TestQueueReadEmpty(t *testing.T) {
 func TestNewSchedulerShards(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	pri := 2 // priority workers
+
 	testcases := []struct {
-		workers      int
-		shardSize    int
-		expectShards []int
+		priorityWorkers int
+		workers         int
+		shardSize       int
+		expectShards    []int
 	}{
+		// We always assign at least 1 priority worker to the priority shard.
+		{-1, 1, 1, []int{1, 1}},
+		{0, 1, 1, []int{1, 1}},
+		{2, 1, 1, []int{2, 1}},
+
 		// We balance workers across shards instead of filling up shards. We assume
 		// ranges are evenly distributed across shards, and want ranges to have
 		// about the same number of workers available on average.
-		{-1, -1, []int{1}},
-		{0, 0, []int{1}},
-		{1, -1, []int{1}},
-		{1, 0, []int{1}},
-		{1, 1, []int{1}},
-		{1, 2, []int{1}},
-		{2, 2, []int{2}},
-		{3, 2, []int{2, 1}},
-		{1, 3, []int{1}},
-		{2, 3, []int{2}},
-		{3, 3, []int{3}},
-		{4, 3, []int{2, 2}},
-		{5, 3, []int{3, 2}},
-		{6, 3, []int{3, 3}},
-		{7, 3, []int{3, 2, 2}},
-		{8, 3, []int{3, 3, 2}},
-		{9, 3, []int{3, 3, 3}},
-		{10, 3, []int{3, 3, 2, 2}},
-		{11, 3, []int{3, 3, 3, 2}},
-		{12, 3, []int{3, 3, 3, 3}},
+		{pri, -1, -1, []int{pri, 1}},
+		{pri, 0, 0, []int{pri, 1}},
+		{pri, 1, -1, []int{pri, 1}},
+		{pri, 1, 0, []int{pri, 1}},
+		{pri, 1, 1, []int{pri, 1}},
+		{pri, 1, 2, []int{pri, 1}},
+		{pri, 2, 2, []int{pri, 2}},
+		{pri, 3, 2, []int{pri, 2, 1}},
+		{pri, 1, 3, []int{pri, 1}},
+		{pri, 2, 3, []int{pri, 2}},
+		{pri, 3, 3, []int{pri, 3}},
+		{pri, 4, 3, []int{pri, 2, 2}},
+		{pri, 5, 3, []int{pri, 3, 2}},
+		{pri, 6, 3, []int{pri, 3, 3}},
+		{pri, 7, 3, []int{pri, 3, 2, 2}},
+		{pri, 8, 3, []int{pri, 3, 3, 2}},
+		{pri, 9, 3, []int{pri, 3, 3, 3}},
+		{pri, 10, 3, []int{pri, 3, 3, 2, 2}},
+		{pri, 11, 3, []int{pri, 3, 3, 3, 2}},
+		{pri, 12, 3, []int{pri, 3, 3, 3, 3}},
 
 		// Typical examples, using 4 workers per CPU core and 8 workers per shard.
 		// Note that we cap workers at 64 by default.
-		{1 * 4, 8, []int{4}},
-		{2 * 4, 8, []int{8}},
-		{3 * 4, 8, []int{6, 6}},
-		{4 * 4, 8, []int{8, 8}},
-		{6 * 4, 8, []int{8, 8, 8}},
-		{8 * 4, 8, []int{8, 8, 8, 8}},
-		{12 * 4, 8, []int{8, 8, 8, 8, 8, 8}},
-		{16 * 4, 8, []int{8, 8, 8, 8, 8, 8, 8, 8}}, // 64 workers
+		{pri, 1 * 4, 8, []int{pri, 4}},
+		{pri, 2 * 4, 8, []int{pri, 8}},
+		{pri, 3 * 4, 8, []int{pri, 6, 6}},
+		{pri, 4 * 4, 8, []int{pri, 8, 8}},
+		{pri, 6 * 4, 8, []int{pri, 8, 8, 8}},
+		{pri, 8 * 4, 8, []int{pri, 8, 8, 8, 8}},
+		{pri, 12 * 4, 8, []int{pri, 8, 8, 8, 8, 8, 8}},
+		{pri, 16 * 4, 8, []int{pri, 8, 8, 8, 8, 8, 8, 8, 8}}, // 64 workers
 	}
 	for _, tc := range testcases {
 		t.Run(fmt.Sprintf("workers=%d/shardSize=%d", tc.workers, tc.shardSize), func(t *testing.T) {
-			s := NewScheduler(SchedulerConfig{Workers: tc.workers, ShardSize: tc.shardSize})
+			s := NewScheduler(SchedulerConfig{
+				Workers:         tc.workers,
+				PriorityWorkers: tc.priorityWorkers,
+				ShardSize:       tc.shardSize,
+			})
 
 			var shardWorkers []int
 			for _, shard := range s.shards {
@@ -521,4 +533,37 @@ func TestNewSchedulerShards(t *testing.T) {
 			require.Equal(t, tc.expectShards, shardWorkers)
 		})
 	}
+}
+
+// TestSchedulerPriority tests that the scheduler correctly registers
+// and enqueues events for priority processors.
+func TestSchedulerPriority(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	s := NewScheduler(SchedulerConfig{Workers: 1, PriorityWorkers: 1, ShardSize: 1, BulkChunkSize: 1})
+	require.NoError(t, s.Start(ctx, stopper))
+	defer s.Stop()
+
+	// Create one regular and one priority consumer.
+	c := createAndRegisterConsumerOrFail(t, s, 1, false /* priority */)
+	cPri := createAndRegisterConsumerOrFail(t, s, 2, true /* priority */)
+
+	// Block the regular consumer.
+	c.pause()
+	s.enqueue(c.id, te1)
+	c.waitPaused()
+
+	// The priority consumer should be able to process events.
+	s.enqueue(cPri.id, te1)
+	cPri.requireHistory(t, 5*time.Second, []processorEventType{te1})
+
+	// Resuming the regular consumer should process its queued event.
+	c.resume()
+	c.requireHistory(t, 5*time.Second, []processorEventType{te1})
+	assertStopsWithinTimeout(t, s)
+	c.requireStopped(t, 5*time.Second)
+	cPri.requireStopped(t, 5*time.Second)
 }
