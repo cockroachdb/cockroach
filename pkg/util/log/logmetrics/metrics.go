@@ -35,6 +35,13 @@ var (
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
 	}
+	LogMessageCount = metric.Metadata{
+		Name:        string(log.LogMessageCount),
+		Help:        "Count of messages logged on the node since startup. Note that this does not measure the fan-out of single log messages to the various configured logging sinks.",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
 )
 
 // Inject our singleton LogMetricsRegistry into the logging
@@ -59,6 +66,7 @@ func init() {
 type logMetricsStruct struct {
 	FluentSinkConnErrors        *metric.Counter
 	BufferedSinkMessagesDropped *metric.Counter
+	LogMessageCount             *metric.Counter
 }
 
 // LogMetricsRegistry is a log.LogMetrics implementation used in the
@@ -97,11 +105,13 @@ func (l *LogMetricsRegistry) registerCounters() {
 	l.mu.metricsStruct = logMetricsStruct{
 		FluentSinkConnErrors:        metric.NewCounter(FluentSinkConnErrors),
 		BufferedSinkMessagesDropped: metric.NewCounter(BufferedSinkMessagesDropped),
+		LogMessageCount:             metric.NewCounter(LogMessageCount),
 	}
 	// Be sure to also add the metrics to our internal store, for
 	// recall in functions such as IncrementCounter.
 	l.mu.counters[log.MetricName(FluentSinkConnErrors.Name)] = l.mu.metricsStruct.FluentSinkConnErrors
 	l.mu.counters[log.MetricName(BufferedSinkMessagesDropped.Name)] = l.mu.metricsStruct.BufferedSinkMessagesDropped
+	l.mu.counters[log.MetricName(LogMessageCount.Name)] = l.mu.metricsStruct.LogMessageCount
 }
 
 // NewRegistry initializes and returns a new metric.Registry, populated with metrics
