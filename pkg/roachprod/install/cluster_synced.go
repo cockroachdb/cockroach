@@ -1734,15 +1734,24 @@ func (c *SyncedCluster) Put(
 	if potentialSymlinkPath, err = filepath.EvalSymlinks(src); err != nil {
 		return err
 	}
+
+	absSrc, err := filepath.Abs(src)
+	if err != nil {
+		return fmt.Errorf("error computing absolute path for %s: %w", src, err)
+	}
+	absSymlink, err := filepath.Abs(potentialSymlinkPath)
+	if err != nil {
+		return fmt.Errorf("error computing absolute path for %s: %w", potentialSymlinkPath, err)
+	}
 	// Different paths imply it is a symlink.
-	if potentialSymlinkPath != src {
+	if absSrc != absSymlink {
 		// Get target symlink access mode.
 		var symlinkTargetInfo fs.FileInfo
 		if symlinkTargetInfo, err = os.Stat(potentialSymlinkPath); err != nil {
 			return err
 		}
 		redColor, resetColor := "\033[31m", "\033[0m"
-		l.Printf(redColor + "WARNING: Source file is a symlink." + resetColor)
+		l.Printf(redColor+"WARNING: Source file is a symlink to %s"+resetColor, absSymlink)
 		l.Printf(redColor+"WARNING: Remote file will inherit the target permissions '%v'."+resetColor, symlinkTargetInfo.Mode())
 	}
 
