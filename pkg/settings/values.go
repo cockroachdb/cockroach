@@ -87,6 +87,11 @@ type valuesContainer struct {
 	forbidden [numSlots]bool
 
 	hasValue [numSlots]uint32
+
+	// modified is set when a setting is explictly set via Set()
+	// in the updater.
+	// TODO(knz): Check if this can be merged with hasValue above.
+	modified [numSlots]bool
 }
 
 func (c *valuesContainer) setGenericVal(slot slotIdx, newVal interface{}) {
