@@ -297,7 +297,11 @@ func newTestProcessor(
 		o(&cfg)
 	}
 	if cfg.useScheduler {
-		sch := NewScheduler(SchedulerConfig{Workers: 1, PriorityWorkers: 1})
+		sch := NewScheduler(SchedulerConfig{
+			Workers:         1,
+			PriorityWorkers: 1,
+			Metrics:         NewSchedulerMetrics(time.Second),
+		})
 		require.NoError(t, sch.Start(context.Background(), stopper))
 		cfg.Scheduler = sch
 		// Also create a dummy priority processor to populate priorityIDs for

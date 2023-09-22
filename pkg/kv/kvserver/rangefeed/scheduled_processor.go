@@ -159,8 +159,6 @@ func (p *ScheduledProcessor) processRequests(ctx context.Context) {
 
 // Transform and route pending events.
 func (p *ScheduledProcessor) processEvents(ctx context.Context) {
-	// TODO(oleg): maybe limit max count and allow returning some data for
-	// further processing on next iteration.
 	// Only process as much data as was present at the start of the processing
 	// run to avoid starving other processors.
 	for max := len(p.eventC); max > 0; max-- {
@@ -294,7 +292,7 @@ func (p *ScheduledProcessor) sendStop(pErr *kvpb.Error) {
 func (p *ScheduledProcessor) Register(
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
-	catchUpIterConstructor CatchUpIteratorConstructor,
+	catchUpIter *CatchUpIterator,
 	withDiff bool,
 	stream Stream,
 	disconnectFn func(),
@@ -307,7 +305,7 @@ func (p *ScheduledProcessor) Register(
 
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
 	r := newRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchUpIterConstructor, withDiff,
+		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff,
 		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, done,
 	)
 
@@ -317,14 +315,6 @@ func (p *ScheduledProcessor) Register(
 		}
 		if !p.Span.AsRawSpanWithNoLocals().Contains(r.span) {
 			log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
-		}
-
-		// Construct the catchUpIter before notifying the registration that it
-		// has been registered. Note that if the catchUpScan is never run, then
-		// the iterator constructed here will be closed in disconnect.
-		if err := r.maybeConstructCatchUpIter(); err != nil {
-			r.disconnect(kvpb.NewError(err))
-			return nil
 		}
 
 		// Add the new registration to the registry.

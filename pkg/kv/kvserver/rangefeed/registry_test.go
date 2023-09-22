@@ -100,16 +100,16 @@ type testRegistration struct {
 	stream *testStream
 }
 
-func makeCatchUpIteratorConstructor(iter storage.SimpleMVCCIterator) CatchUpIteratorConstructor {
+func makeCatchUpIterator(
+	iter storage.SimpleMVCCIterator, span roachpb.Span, startTime hlc.Timestamp,
+) *CatchUpIterator {
 	if iter == nil {
 		return nil
 	}
-	return func(span roachpb.Span, startTime hlc.Timestamp) (*CatchUpIterator, error) {
-		return &CatchUpIterator{
-			simpleCatchupIter: simpleCatchupIterAdapter{iter},
-			span:              span,
-			startTime:         startTime,
-		}, nil
+	return &CatchUpIterator{
+		simpleCatchupIter: simpleCatchupIterAdapter{iter},
+		span:              span,
+		startTime:         startTime,
 	}
 }
 
@@ -120,7 +120,7 @@ func newTestRegistration(
 	r := newRegistration(
 		span,
 		ts,
-		makeCatchUpIteratorConstructor(catchup),
+		makeCatchUpIterator(catchup, span, ts),
 		withDiff,
 		5,
 		false, /* blockWhenFull */
@@ -129,9 +129,6 @@ func newTestRegistration(
 		func() {},
 		&future.ErrorFuture{},
 	)
-	if err := r.maybeConstructCatchUpIter(); err != nil {
-		panic(err)
-	}
 	return &testRegistration{
 		registration: r,
 		stream:       s,
