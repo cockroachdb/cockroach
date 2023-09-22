@@ -11,56 +11,19 @@
 package tests_test
 
 import (
-	"bytes"
 	"context"
+	"fmt"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
-
-// getRangeKeys returns the end keys of all ranges.
-func getRangeKeys(db *kv.DB) ([]roachpb.Key, error) {
-	rows, err := db.Scan(context.Background(), keys.Meta2Prefix, keys.MetaMax, 0)
-	if err != nil {
-		return nil, err
-	}
-	ret := make([]roachpb.Key, len(rows))
-	for i := 0; i < len(rows); i++ {
-		ret[i] = bytes.TrimPrefix(rows[i].Key, keys.Meta2Prefix)
-	}
-	return ret, nil
-}
-
-func getNumRanges(db *kv.DB) (int, error) {
-	rows, err := getRangeKeys(db)
-	if err != nil {
-		return 0, err
-	}
-	return len(rows), nil
-}
-
-func rangesMatchSplits(ranges []roachpb.Key, splits []roachpb.RKey) bool {
-	if len(ranges) != len(splits) {
-		return false
-	}
-	for i := 0; i < len(ranges); i++ {
-		if !splits[i].Equal(ranges[i]) {
-			return false
-		}
-	}
-	return true
-}
 
 // TestSplitOnTableBoundaries verifies that ranges get split
 // as new tables get created.
@@ -68,80 +31,45 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		// The test needs to be refactored to work with the secondary tenants.
-		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(107289),
-		// We want fast scan.
-		ScanInterval:       time.Millisecond,
-		ScanMinIdleTime:    time.Millisecond,
-		ScanMaxIdleTime:    time.Millisecond,
-		DisableSpanConfigs: true,
-	})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	dzcfg := s.DefaultZoneConfig()
-	dszcfg := s.DefaultSystemZoneConfig()
-
-	expectedInitialRanges, err := server.ExpectedInitialRangeCount(
-		keys.SystemSQLCodec,
-		&dzcfg, &dszcfg,
-	)
-	if err != nil {
-		t.Fatal(err)
+	// speeds up test
+	{
+		sysDB := sqlutils.MakeSQLRunner(s.SystemLayer().SQLConn(t, ""))
+		sysDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 	}
 
-	if _, err := sqlDB.Exec(`CREATE DATABASE test`); err != nil {
-		t.Fatal(err)
-	}
+	sqlConn := sqlutils.MakeSQLRunner(sqlDB)
+	sqlConn.Exec(t, `CREATE DATABASE test`)
 
 	// We split up to the largest allocated descriptor ID, if it's a table.
 	// Ensure that no split happens if a database is created.
-	testutils.SucceedsSoon(t, func() error {
-		num, err := getNumRanges(kvDB)
-		if err != nil {
-			return err
-		}
-		if e := expectedInitialRanges; num != e {
-			return errors.Errorf("expected %d splits, found %d", e, num)
-		}
-		return nil
-	})
-
-	// Verify the actual splits.
-	splits := []roachpb.RKey{roachpb.RKeyMax}
-	ranges, err := getRangeKeys(kvDB)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if a, e := ranges[expectedInitialRanges-1:], splits; !rangesMatchSplits(a, e) {
-		t.Fatalf("Found ranges: %v\nexpected: %v", a, e)
-	}
+	var rangeCount int
+	require.NoError(t, sqlDB.QueryRow("SELECT count(*) FROM [SHOW RANGES FROM DATABASE test]").Scan(&rangeCount))
+	require.Equalf(t, rangeCount, 0, "expected 0 splits, found %d", rangeCount)
 
 	// Let's create a table.
-	if _, err := sqlDB.Exec(`CREATE TABLE test.test (k INT PRIMARY KEY, v INT)`); err != nil {
-		t.Fatal(err)
-	}
+	sqlConn.Exec(t, `CREATE TABLE test.test (k INT PRIMARY KEY, v INT)`)
 
+	// Get the KV key for the start of the table.
+	tableID := sqlutils.QueryTableID(t, sqlDB, "test", "public", "test")
+	expectedSplit := fmt.Sprintf("%s", s.ApplicationLayer().Codec().TablePrefix(tableID))
+
+	// Wait for the span config update to trigger the split.
 	testutils.SucceedsSoon(t, func() error {
-		num, err := getNumRanges(kvDB)
-		if err != nil {
-			return err
+		var rangeCount int
+		require.NoError(t, sqlDB.QueryRow("SELECT count(*) FROM [SHOW RANGES FROM DATABASE test]").Scan(&rangeCount))
+		if rangeCount != 1 {
+			return errors.Errorf("expected 1 split, found %d", rangeCount)
 		}
-		if e := expectedInitialRanges + 1; num != e {
-			return errors.Errorf("expected %d splits, found %d", e, num)
+
+		// Verify the split key is at the table boundary.
+		var startKey string
+		require.NoError(t, sqlDB.QueryRow("SELECT start_key FROM [SHOW RANGES FROM DATABASE test]").Scan(&startKey))
+		if expectedSplit != startKey {
+			return errors.Errorf("expected %s found %s", expectedSplit, startKey)
 		}
 		return nil
 	})
-
-	// Verify the actual splits.
-	tableID := sqlutils.QueryTableID(t, sqlDB, "test", "public", "test")
-
-	splits = []roachpb.RKey{roachpb.RKey(keys.SystemSQLCodec.TablePrefix(tableID)), roachpb.RKeyMax}
-	ranges, err = getRangeKeys(kvDB)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if a, e := ranges[expectedInitialRanges-1:], splits; !rangesMatchSplits(a, e) {
-		t.Fatalf("Found ranges: %v\nexpected: %v", a, e)
-	}
 }
