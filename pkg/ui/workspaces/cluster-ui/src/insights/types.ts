@@ -59,6 +59,7 @@ export type InsightEventBase = {
   transactionFingerprintID: string;
   username: string;
   errorCode: string;
+  errorMsg: string;
 };
 
 export type TxnInsightEvent = InsightEventBase & {
@@ -114,6 +115,7 @@ export type StmtInsightEvent = InsightEventBase & {
   databaseName: string;
   execType?: InsightExecEnum;
   status: StatementStatus;
+  errorMsg?: string;
 };
 
 export type Insight = {
@@ -344,6 +346,7 @@ export interface ExecutionDetails {
   transactionExecutionID?: string;
   execType?: InsightExecEnum;
   errorCode?: string;
+  errorMsg?: string;
   status?: string;
 }
 
