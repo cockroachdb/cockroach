@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "lease",
@@ -60,6 +61,12 @@ go_library(
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
     ],
+)
+
+stringer(
+    name = "gen-lease-mode-stringer",
+    src = "lease.go",
+    typ = "SessionBasedLeasingMode",
 )
 
 go_test(
