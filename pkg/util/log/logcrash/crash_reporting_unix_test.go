@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 //go:build !windows
-// +build !windows
 
 package logcrash
 

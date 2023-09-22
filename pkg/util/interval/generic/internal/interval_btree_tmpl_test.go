@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 //go:build ignore
-// +build ignore
 
 package internal
 

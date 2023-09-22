@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 //go:build acceptance
-// +build acceptance
 
 // Acceptance tests are comparatively slow to run, so we use the above build
 // tag to separate invocations of `go test` which are intended to run the

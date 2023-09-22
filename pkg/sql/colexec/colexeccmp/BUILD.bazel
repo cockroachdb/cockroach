@@ -5,6 +5,7 @@ go_library(
     name = "colexeccmp",
     srcs = [
         "default_cmp_expr.go",
+        "default_cmp_expr_tmpl.go",
         "like_ops.go",
         ":gen-exec",  # keep
     ],

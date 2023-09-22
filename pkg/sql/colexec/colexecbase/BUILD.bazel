@@ -5,7 +5,10 @@ load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 go_library(
     name = "colexecbase",
     srcs = [
+        "cast_tmpl.go",
+        "const_tmpl.go",
         "distinct.go",
+        "distinct_tmpl.go",
         "fn_op.go",
         "ordinality.go",
         "simple_project.go",

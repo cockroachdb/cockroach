@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 //go:build race
-// +build race
 
 package util
 

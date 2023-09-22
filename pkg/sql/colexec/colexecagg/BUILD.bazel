@@ -7,6 +7,14 @@ go_library(
     srcs = [
         "aggregate_funcs.go",
         "aggregators_util.go",
+        "any_not_null_agg_tmpl.go",
+        "avg_agg_tmpl.go",
+        "bool_and_or_agg_tmpl.go",
+        "concat_agg_tmpl.go",
+        "count_agg_tmpl.go",
+        "default_agg_tmpl.go",
+        "min_max_agg_tmpl.go",
+        "sum_agg_tmpl.go",
         ":gen-exec",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg",

@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 //go:build nightly
-// +build nightly
 
 package tree_test
 

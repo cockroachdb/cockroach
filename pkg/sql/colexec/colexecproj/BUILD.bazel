@@ -5,6 +5,8 @@ load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 go_library(
     name = "colexecproj",
     srcs = [
+        "default_cmp_proj_ops_tmpl.go",
+        "proj_non_const_ops_tmpl.go",
         ":gen-exec",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecproj",  # keep

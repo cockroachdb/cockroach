@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 //go:build !deadlock && !race
-// +build !deadlock,!race
 
 package syncutil
 

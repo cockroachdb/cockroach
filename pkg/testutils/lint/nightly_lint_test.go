@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 //go:build lint && nightly
-// +build lint,nightly
 
 package lint
 

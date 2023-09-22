@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 //go:build execgen_template
-// +build execgen_template
 
 package colexec
 

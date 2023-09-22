@@ -6,8 +6,12 @@ go_library(
     name = "colexecjoin",
     srcs = [
         "crossjoiner.go",
+        "crossjoiner_tmpl.go",
         "hashjoiner.go",
+        "hashjoiner_tmpl.go",
+        "mergejoinbase_tmpl.go",
         "mergejoiner.go",
+        "mergejoiner_tmpl.go",
         "mergejoiner_util.go",
         ":gen-exec",  # keep
     ],

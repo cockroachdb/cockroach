@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 //go:build deadlock
-// +build deadlock
 
 package syncutil
 

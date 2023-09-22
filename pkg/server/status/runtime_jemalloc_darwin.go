@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 //go:build !stdmalloc && darwin
-// +build !stdmalloc,darwin
 
 package status
 

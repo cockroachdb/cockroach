@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 //go:build gccgo
-// +build gccgo
 
 package storage
 

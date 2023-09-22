@@ -8,6 +8,7 @@ go_library(
     srcs = [
         "like_ops.go",
         "proj_const_ops_base.go",
+        "proj_const_ops_tmpl.go",
         ":gen-default-cmp-proj-const-op",  # keep
         ":gen-exec",  # keep
     ],

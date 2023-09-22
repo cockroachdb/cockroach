@@ -8,6 +8,7 @@ go_library(
         "interval.go",
         "llrb_based_interval.go",
         "range_group.go",
+        "td234.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/interval",
     visibility = ["//visibility:public"],

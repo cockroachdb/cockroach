@@ -12,7 +12,6 @@
 // within docker compose.
 
 //go:build compose
-// +build compose
 
 package compare
 

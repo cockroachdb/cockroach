@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "errcheck",
-    srcs = ["errcheck.go"],
+    srcs = [
+        "errcheck.go",
+        "errcheck_no_bazel.go",
+    ],
     embedsrcs = ["errcheck_excludes.txt"],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/errcheck",
     visibility = ["//visibility:public"],

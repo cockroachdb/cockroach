@@ -7,7 +7,9 @@ go_library(
     srcs = [
         "hash.go",
         "hash_utils.go",
+        "hash_utils_tmpl.go",
         "hashtable.go",
+        "hashtable_tmpl.go",
         ":gen-exec",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash",

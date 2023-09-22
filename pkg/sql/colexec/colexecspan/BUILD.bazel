@@ -6,6 +6,7 @@ go_library(
     name = "colexecspan",
     srcs = [
         "span_assembler.go",
+        "span_encoder_tmpl.go",
         ":gen-exec",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecspan",  # keep

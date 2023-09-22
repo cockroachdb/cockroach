@@ -14,7 +14,6 @@
 
 // {{/*
 //go:build execgen_template
-// +build execgen_template
 
 // */}}
 

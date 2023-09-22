@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "shadow",
-    srcs = ["shadow.go"],
+    srcs = [
+        "shadow.go",
+        "shadow_no_bazel.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/shadow",
     visibility = ["//visibility:public"],
     deps = [

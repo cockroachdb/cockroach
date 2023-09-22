@@ -6,6 +6,8 @@ go_library(
     name = "colconv",
     srcs = [
         "batch.go",
+        "datum_to_vec_tmpl.go",
+        "vec_to_datum_tmpl.go",
         ":gen-exec",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colconv",

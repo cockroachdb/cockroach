@@ -12,12 +12,14 @@ go_library(
         "nulls.go",
         "testutils.go",
         "vec.go",
+        "vec_tmpl.go",
         ":gen-vec",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/col/coldata",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/col/typeconv",
+        "//pkg/sql/colexec/execgen",
         "//pkg/sql/colexecerror",
         "//pkg/sql/types",
         "//pkg/util",

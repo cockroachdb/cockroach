@@ -7,6 +7,7 @@ go_library(
         "conn.go",
         "doc.go",
         "encoding.go",
+        "fuzz.go",
         "msg.go",
         "too_big_error.go",
         ":gen-clientmessagetype-stringer",  # keep
@@ -21,6 +22,7 @@ go_library(
     deps = [
         "//pkg/geo",
         "//pkg/settings",
+        "//pkg/settings/cluster",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/lex",
         "//pkg/sql/oidext",

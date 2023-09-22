@@ -10,7 +10,6 @@
 
 // {{/*
 //go:build execgen_template
-// +build execgen_template
 
 //
 // This file is the execgen template for min_max_removable_agg.eg.go. It's

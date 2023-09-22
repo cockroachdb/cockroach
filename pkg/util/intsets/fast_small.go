@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 //go:build fast_int_set_small
-// +build fast_int_set_small
 
 package intsets
 

@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 //go:build !windows && !freebsd && !dragonfly
-// +build !windows,!freebsd,!dragonfly
 
 package server
 
