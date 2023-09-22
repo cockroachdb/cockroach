@@ -47,8 +47,8 @@ var (
 	listMine              bool
 	listPattern           string
 	secure                = false
-	tenantName            string
-	tenantInstance        int
+	virtualClusterName    string
+	sqlInstance           int
 	extraSSHOptions       = ""
 	nodeEnv               []string
 	tag                   string
@@ -78,8 +78,8 @@ var (
 	monitorOpts        install.MonitorOpts
 	cachedHostsCluster string
 
-	// hostCluster is used for multi-tenant functionality.
-	hostCluster string
+	// storageCluster is used for cluster virtualization and multi-tenant functionality.
+	storageCluster string
 
 	revertUpdate bool
 )
@@ -208,13 +208,13 @@ func initFlags() {
 		`Recurrence and scheduled backup options specification.
 Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS first_run = 'now'"`)
 
-	startTenantCmd.Flags().StringVarP(&hostCluster,
-		"host-cluster", "H", "", "host cluster")
-	_ = startTenantCmd.MarkFlagRequired("host-cluster")
+	startTenantCmd.Flags().StringVarP(&storageCluster,
+		"storage-cluster", "H", "", "storage cluster")
+	_ = startTenantCmd.MarkFlagRequired("storage-cluster")
 	startTenantCmd.Flags().IntVarP(&startOpts.TenantID,
 		"tenant-id", "t", startOpts.TenantID, "tenant ID")
-	startTenantCmd.Flags().IntVar(&startOpts.TenantInstance,
-		"tenant-instance", 0, "specific tenant instance to connect to")
+	startTenantCmd.Flags().IntVar(&startOpts.SQLInstance,
+		"sql-instance", 0, "specific SQL/HTTP instance to connect to")
 
 	stopCmd.Flags().IntVar(&sig, "sig", sig, "signal to pass to kill")
 	stopCmd.Flags().BoolVar(&waitFlag, "wait", waitFlag, "wait for processes to exit")
@@ -358,10 +358,10 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 			"secure", false, "use a secure cluster")
 	}
 	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd, adminurlCmd} {
-		cmd.Flags().StringVar(&tenantName,
-			"tenant-name", "", "specific tenant to connect to")
-		cmd.Flags().IntVar(&tenantInstance,
-			"tenant-instance", 0, "specific tenant instance to connect to")
+		cmd.Flags().StringVar(&virtualClusterName,
+			"cluster", "", "specific virtual cluster to connect to")
+		cmd.Flags().IntVar(&sqlInstance,
+			"sql-instance", 0, "specific SQL/HTTP instance to connect to")
 	}
 
 }

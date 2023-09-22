@@ -515,14 +515,16 @@ SIGHUP), unless you also configure --max-wait.
 }
 
 var startTenantCmd = &cobra.Command{
-	Use:   "start-tenant <tenant-cluster> --host-cluster <host-cluster>",
-	Short: "start a tenant",
-	Long: `Start SQL instances for a non-system tenant.
+	Use:   "start-tenant <virtual-cluster> --storage-cluster <storage-cluster>",
+	Short: "start the SQL/HTTP service for a virtual cluster",
+	Long: `Start SQL/HTTP instances for a virtual cluster.
 
-The --host-cluster flag must be used to specify a host cluster (with optional
-node selector) which is already running. The command will create the tenant on
-the host cluster if it does not exist already. The host and tenant can use the
-same underlying cluster, as long as different subsets of nodes are selected.
+The --storage-cluster flag must be used to specify a storage cluster
+(with optional node selector) which is already running. The command
+will create the virtual cluster on the storage cluster if it does not
+exist already. The storage cluster and virtual cluster can use the
+same underlying roachprod VM cluster, as long as different subsets of
+nodes are selected.
 
 The --tenant-id flag can be used to specify the tenant ID; it defaults to 2.
 
@@ -544,7 +546,7 @@ environment variables to the cockroach process.
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		tenantCluster := args[0]
+		targetRoachprodCluster := args[0]
 		clusterSettingsOpts := []install.ClusterSettingOption{
 			install.TagOption(tag),
 			install.PGUrlCertsDirOption(pgurlCertsDir),
@@ -553,7 +555,8 @@ environment variables to the cockroach process.
 			install.EnvOption(nodeEnv),
 			install.NumRacksOption(numRacks),
 		}
-		return roachprod.StartTenant(context.Background(), config.Logger, tenantCluster, hostCluster, startOpts, clusterSettingsOpts...)
+		return roachprod.StartServiceForVirtualCluster(context.Background(),
+			config.Logger, targetRoachprodCluster, storageCluster, startOpts, clusterSettingsOpts...)
 	}),
 }
 
@@ -887,7 +890,7 @@ var sqlCmd = &cobra.Command{
 	Long:  "Run `cockroach sql` on a remote cluster.\n",
 	Args:  cobra.MinimumNArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.SQL(context.Background(), config.Logger, args[0], secure, tenantName, tenantInstance, args[1:])
+		return roachprod.SQL(context.Background(), config.Logger, args[0], secure, virtualClusterName, sqlInstance, args[1:])
 	}),
 }
 
@@ -899,10 +902,10 @@ var pgurlCmd = &cobra.Command{
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		urls, err := roachprod.PgURL(context.Background(), config.Logger, args[0], pgurlCertsDir, roachprod.PGURLOptions{
-			External:       external,
-			Secure:         secure,
-			TenantName:     tenantName,
-			TenantInstance: tenantInstance,
+			External:           external,
+			Secure:             secure,
+			VirtualClusterName: virtualClusterName,
+			SQLInstance:        sqlInstance,
 		})
 		if err != nil {
 			return err
@@ -947,7 +950,7 @@ var adminurlCmd = &cobra.Command{
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		urls, err := roachprod.AdminURL(
-			context.Background(), config.Logger, args[0], tenantName, tenantInstance, adminurlPath, adminurlIPs, adminurlOpen, secure,
+			context.Background(), config.Logger, args[0], virtualClusterName, sqlInstance, adminurlPath, adminurlIPs, adminurlOpen, secure,
 		)
 		if err != nil {
 			return err
