@@ -163,7 +163,10 @@ type Processor interface {
 	// provided an error when the registration closes.
 	//
 	// The optionally provided "catch-up" iterator is used to read changes from the
-	// engine which occurred after the provided start timestamp (exclusive).
+	// engine which occurred after the provided start timestamp (exclusive). If
+	// this method succeeds, registration must take ownership of iterator and
+	// subsequently close it. If method fails, iterator must be kept intact and
+	// would be closed by caller.
 	//
 	// If the method returns false, the processor will have been stopped, so calling
 	// Stop is not necessary. If the method returns true, it will also return an
@@ -174,7 +177,7 @@ type Processor interface {
 	Register(
 		span roachpb.RSpan,
 		startTS hlc.Timestamp, // exclusive
-		catchUpIterConstructor CatchUpIteratorConstructor,
+		catchUpIter *CatchUpIterator,
 		withDiff bool,
 		stream Stream,
 		disconnectFn func(),
@@ -332,12 +335,6 @@ func NewLegacyProcessor(cfg Config) *LegacyProcessor {
 // engine has not been closed.
 type IntentScannerConstructor func() IntentScanner
 
-// CatchUpIteratorConstructor is used to construct an iterator that can be used
-// for catchup-scans. Takes the key span and exclusive start time to run the
-// catchup scan for. It should be called from underneath a stopper task to
-// ensure that the engine has not been closed.
-type CatchUpIteratorConstructor func(roachpb.Span, hlc.Timestamp) (*CatchUpIterator, error)
-
 // Start implements Processor interface.
 //
 // LegacyProcessor launches a goroutine to process rangefeed events and send
@@ -408,14 +405,6 @@ func (p *LegacyProcessor) run(
 		case r := <-p.regC:
 			if !p.Span.AsRawSpanWithNoLocals().Contains(r.span) {
 				log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
-			}
-
-			// Construct the catchUpIter before notifying the registration that it
-			// has been registered. Note that if the catchUpScan is never run, then
-			// the iterator constructed here will be closed in disconnect.
-			if err := r.maybeConstructCatchUpIter(); err != nil {
-				r.disconnect(kvpb.NewError(err))
-				return
 			}
 
 			// Add the new registration to the registry.
@@ -565,7 +554,7 @@ func (p *LegacyProcessor) sendStop(pErr *kvpb.Error) {
 func (p *LegacyProcessor) Register(
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
-	catchUpIterConstructor CatchUpIteratorConstructor,
+	catchUpIter *CatchUpIterator,
 	withDiff bool,
 	stream Stream,
 	disconnectFn func(),
@@ -578,7 +567,7 @@ func (p *LegacyProcessor) Register(
 
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
 	r := newRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchUpIterConstructor, withDiff,
+		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff,
 		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, done,
 	)
 	select {

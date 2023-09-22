@@ -80,12 +80,12 @@ GRANT SYSTEM EXTERNALCONNECTION TO testuser
 query-sql user=testuser
 SHOW CREATE ALL EXTERNAL CONNECTIONS
 ----
-pq: must be admin to run `SHOW CREATE ALL EXTERNAL CONNECTIONS
+pq: must have VIEWCLUSTERMETADATA privilege to run `SHOW CREATE ALL EXTERNAL CONNECTIONS`
 
 query-sql user=testuser
 SHOW CREATE EXTERNAL CONNECTION foo
 ----
-pq: must be admin or owner of the External Connection "foo"
+pq: must have VIEWCLUSTERMETADATA privilege or be owner of the External Connection "foo"
 
 # Create External Connection where testuser is the owner, they should be able to SHOW this object.
 exec-sql user=testuser
@@ -95,7 +95,7 @@ CREATE EXTERNAL CONNECTION bar AS 'nodelocal://1/foo'
 query-sql user=testuser
 SHOW CREATE ALL EXTERNAL CONNECTIONS
 ----
-pq: must be admin to run `SHOW CREATE ALL EXTERNAL CONNECTIONS
+pq: must have VIEWCLUSTERMETADATA privilege to run `SHOW CREATE ALL EXTERNAL CONNECTIONS`
 
 # TODO(aditymaru): Synthetic privileges do not have a concept of owners. Once they do, testuser will
 # be able to run this query successfully since they are the owner of the External Connection object.

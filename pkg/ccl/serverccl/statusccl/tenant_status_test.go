@@ -159,6 +159,17 @@ func testTenantSpanStats(ctx context.Context, t *testing.T, helper serverccl.Ten
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "Forbidden")
 
+		// VIEWCLUSTERMETADATA should allow the user to see the span stats.
+		grantStmt := `GRANT SYSTEM VIEWCLUSTERMETADATA TO authentic_user_noadmin;`
+		helper.TestCluster().TenantConn(0).Exec(t, grantStmt)
+
+		err = client.PostJSONChecked("/_status/span", &req, &resp)
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.SpanToStats)
+
+		revokeStmt := `REVOKE SYSTEM VIEWCLUSTERMETADATA FROM authentic_user_noadmin;`
+		helper.TestCluster().TenantConn(0).Exec(t, revokeStmt)
+
 		adminClient := helper.TestCluster().TenantHTTPClient(t, 1, true)
 		adminClient.PostJSON("/_status/span", &req, &resp)
 		require.Greaterf(t, resp.SpanToStats[aSpan.String()].RangeCount, int32(0), "positive range count")
@@ -1508,6 +1519,9 @@ func testTenantHotRanges(_ context.Context, t *testing.T, helper serverccl.Tenan
 
 		client.PostJSON("/_status/v2/hotranges", &req, &resp)
 		require.NotEmpty(t, resp.Ranges)
+
+		revokeStmt := `REVOKE SYSTEM VIEWCLUSTERMETADATA FROM authentic_user_noadmin;`
+		helper.TestCluster().TenantConn(0).Exec(t, revokeStmt)
 	})
 
 	t.Run("test tenant hot ranges respects tenant isolation", func(t *testing.T) {

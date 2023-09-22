@@ -271,25 +271,22 @@ func (r *Replica) RangeFeed(
 	}
 
 	// Register the stream with a catch-up iterator.
-	var catchUpIterFunc rangefeed.CatchUpIteratorConstructor
+	var catchUpIter *rangefeed.CatchUpIterator
 	if usingCatchUpIter {
-		catchUpIterFunc = func(span roachpb.Span, startTime hlc.Timestamp) (*rangefeed.CatchUpIterator, error) {
-			// Assert that we still hold the raftMu when this is called to ensure
-			// that the catchUpIter reads from the current snapshot.
-			r.raftMu.AssertHeld()
-			i, err := rangefeed.NewCatchUpIterator(r.store.TODOEngine(), span, startTime, iterSemRelease, pacer)
-			if err != nil {
-				return nil, err
-			}
-			if f := r.store.TestingKnobs().RangefeedValueHeaderFilter; f != nil {
-				i.OnEmit = f
-			}
-			return i, nil
+		catchUpIter, err = rangefeed.NewCatchUpIterator(r.store.TODOEngine(), rSpan.AsRawSpanWithNoLocals(),
+			args.Timestamp, iterSemRelease, pacer)
+		if err != nil {
+			r.raftMu.Unlock()
+			iterSemRelease()
+			return future.MakeCompletedErrorFuture(err)
+		}
+		if f := r.store.TestingKnobs().RangefeedValueHeaderFilter; f != nil {
+			catchUpIter.OnEmit = f
 		}
 	}
 	var done future.ErrorFuture
 	p := r.registerWithRangefeedRaftMuLocked(
-		ctx, rSpan, args.Timestamp, catchUpIterFunc, args.WithDiff, lockedStream, &done,
+		ctx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, lockedStream, &done,
 	)
 	r.raftMu.Unlock()
 
@@ -373,17 +370,31 @@ func logSlowRangefeedRegistration(ctx context.Context) func() {
 // registerWithRangefeedRaftMuLocked sets up a Rangefeed registration over the
 // provided span. It initializes a rangefeed for the Replica if one is not
 // already running. Requires raftMu be locked.
-// Returns Future[*roachpb.Error] which will return an error once rangefeed completes.
+// Returns Future[*roachpb.Error] which will return an error once rangefeed
+// completes.
+// Note that caller delegates lifecycle of catchUpIter to this method in both
+// success and failure cases. So it is important that this method closes
+// iterator in case registration fails. Successful registration takes iterator
+// ownership and ensures it is closed when catch up is complete or aborted.
 func (r *Replica) registerWithRangefeedRaftMuLocked(
 	ctx context.Context,
 	span roachpb.RSpan,
 	startTS hlc.Timestamp, // exclusive
-	catchUpIter rangefeed.CatchUpIteratorConstructor,
+	catchUpIter *rangefeed.CatchUpIterator,
 	withDiff bool,
 	stream rangefeed.Stream,
 	done *future.ErrorFuture,
 ) rangefeed.Processor {
 	defer logSlowRangefeedRegistration(ctx)()
+
+	// Always defer closing iterator to cover old and new failure cases.
+	// On successful path where registration succeeds reset catchUpIter to prevent
+	// closing it.
+	defer func() {
+		if catchUpIter != nil {
+			catchUpIter.Close()
+		}
+	}()
 
 	// Attempt to register with an existing Rangefeed processor, if one exists.
 	// The locking here is a little tricky because we need to handle the case
@@ -399,6 +410,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 			// that this new registration might be interested in.
 			r.setRangefeedFilterLocked(filter)
 			r.rangefeedMu.Unlock()
+			catchUpIter = nil
 			return p
 		}
 		// If the registration failed, the processor was already being shut
@@ -487,6 +499,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 			panic("unexpected Stopped processor")
 		}
 	}
+	catchUpIter = nil
 
 	// Set the rangefeed processor and filter reference.
 	r.setRangefeedProcessor(p)

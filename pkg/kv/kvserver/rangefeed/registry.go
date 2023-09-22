@@ -81,15 +81,6 @@ type registration struct {
 	withDiff         bool
 	metrics          *Metrics
 
-	// catchUpIterConstructor is used to construct the catchUpIter if necessary.
-	// The reason this constructor is plumbed down is to make sure that the
-	// iterator does not get constructed too late in server shutdown. However,
-	// it must also be stored in the struct to ensure that it is not constructed
-	// too late, after the raftMu has been dropped. Thus, this function, if
-	// non-nil, will be used to populate mu.catchUpIter while the registration
-	// is being registered by the processor.
-	catchUpIterConstructor CatchUpIteratorConstructor
-
 	// Output.
 	stream Stream
 	done   *future.ErrorFuture
@@ -113,9 +104,10 @@ type registration struct {
 		outputLoopCancelFn func()
 		disconnected       bool
 
-		// catchUpIter is populated on the Processor's goroutine while the
-		// Replica.raftMu is still held. If it is non-nil at the time that
-		// disconnect is called, it is closed by disconnect.
+		// catchUpIter is created by replcia under raftMu lock when registration is
+		// created. It is detached by output loop for processing and closed.
+		// If output loop was not started and catchUpIter is non-nil at the time
+		// that disconnect is called, it is closed by disconnect.
 		catchUpIter *CatchUpIterator
 	}
 }
@@ -123,7 +115,7 @@ type registration struct {
 func newRegistration(
 	span roachpb.Span,
 	startTS hlc.Timestamp,
-	catchUpIterConstructor CatchUpIteratorConstructor,
+	catchUpIter *CatchUpIterator,
 	withDiff bool,
 	bufferSz int,
 	blockWhenFull bool,
@@ -133,19 +125,19 @@ func newRegistration(
 	done *future.ErrorFuture,
 ) registration {
 	r := registration{
-		span:                   span,
-		catchUpTimestamp:       startTS,
-		catchUpIterConstructor: catchUpIterConstructor,
-		withDiff:               withDiff,
-		metrics:                metrics,
-		stream:                 stream,
-		done:                   done,
-		unreg:                  unregisterFn,
-		buf:                    make(chan *sharedEvent, bufferSz),
-		blockWhenFull:          blockWhenFull,
+		span:             span,
+		catchUpTimestamp: startTS,
+		withDiff:         withDiff,
+		metrics:          metrics,
+		stream:           stream,
+		done:             done,
+		unreg:            unregisterFn,
+		buf:              make(chan *sharedEvent, bufferSz),
+		blockWhenFull:    blockWhenFull,
 	}
 	r.mu.Locker = &syncutil.Mutex{}
 	r.mu.caughtUp = true
+	r.mu.catchUpIter = catchUpIter
 	return r
 }
 
@@ -597,25 +589,6 @@ func (r *registration) waitForCaughtUp() error {
 		}
 	}
 	return errors.Errorf("registration %v failed to empty in time", r.Range())
-}
-
-// maybeConstructCatchUpIter calls the catchUpIterConstructor and attaches
-// the catchUpIter to be detached in the catchUpScan or closed on disconnect.
-func (r *registration) maybeConstructCatchUpIter() error {
-	if r.catchUpIterConstructor == nil {
-		return nil
-	}
-
-	catchUpIter, err := r.catchUpIterConstructor(r.span, r.catchUpTimestamp)
-	if err != nil {
-		return err
-	}
-	r.catchUpIterConstructor = nil
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.mu.catchUpIter = catchUpIter
-	return nil
 }
 
 // detachCatchUpIter detaches the catchUpIter that was previously attached.
