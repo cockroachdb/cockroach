@@ -6,7 +6,7 @@ dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
 
 source "$dir/teamcity-support.sh"
 
-source $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh crosslinux
+$root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh amd64
 
 artifacts=/artifacts
 source $root/build/teamcity/util/roachtest_util.sh
