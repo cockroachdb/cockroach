@@ -195,7 +195,7 @@ func (parquetSink *parquetCloudStorageSink) EncodeAndEmitRow(
 	if err != nil {
 		return err
 	}
-	file.alloc.Merge(&alloc)
+	file.mergeAlloc(&alloc)
 
 	if file.parquetCodec == nil {
 		var err error
@@ -231,7 +231,7 @@ func (parquetSink *parquetCloudStorageSink) EncodeAndEmitRow(
 	// the number of bytes in the file and the number of buffered bytes.
 	prevAllocSize := file.alloc.Bytes()
 	newAllocSize := int64(file.buf.Len()) + bufferedBytesEstimate
-	file.alloc.AdjustBytesToTarget(ctx, newAllocSize)
+	file.adjustBytesToTarget(ctx, newAllocSize)
 
 	if log.V(1) && parquetSink.everyN.ShouldLog() {
 		log.Infof(ctx, "topic: %d/%d, written: %d, buffered %d, new alloc: %d, old alloc: %d",

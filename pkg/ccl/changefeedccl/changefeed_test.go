@@ -8871,3 +8871,72 @@ func TestChangefeedPubsubResolvedMessages(t *testing.T) {
 
 	cdcTest(t, testFn, feedTestForceSink("pubsub"))
 }
+
+// TestCloudstorageBufferedBytesMetric tests the metric which tracks the number
+// of buffered bytes in the cloudstorage sink.
+func TestCloudstorageBufferedBytesMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	rng, _ := randutil.NewTestRand()
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		metrics := registry.MetricsStruct().Changefeed.(*Metrics)
+		defaultSLI, err := metrics.getSLIMetrics(defaultSLIScope)
+		require.NoError(t, err)
+
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+
+		var shouldEmit atomic.Bool
+		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) (bool, error) {
+			return !shouldEmit.Load(), nil
+		}
+		db := sqlutils.MakeSQLRunner(s.DB)
+		db.Exec(t, `
+		  CREATE TABLE foo (key INT PRIMARY KEY);
+		  INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000);
+  		`)
+
+		require.Equal(t, int64(0), defaultSLI.CloudstorageBufferedBytes.Value())
+
+		format := "json"
+		if rng.Float32() < 0.5 {
+			format = "parquet"
+		}
+		foo, err := f.Feed(fmt.Sprintf("CREATE CHANGEFEED FOR TABLE foo WITH format='%s'", format))
+		require.NoError(t, err)
+
+		// Because checkpoints are disabled, we should have some bytes build up
+		// in the sink.
+		targetBytes := int64(40000)
+		if format == "parquet" {
+			// Parquet is a much more efficient format, so the buffered files will
+			// be much smaller.
+			targetBytes = 2000
+		}
+		testutils.SucceedsSoon(t, func() error {
+			numBytes := defaultSLI.CloudstorageBufferedBytes.Value()
+			if defaultSLI.CloudstorageBufferedBytes.Value() < targetBytes {
+				return errors.Newf("expected at least %d buffered bytes but found %d", targetBytes, numBytes)
+			}
+			return nil
+		})
+
+		// Allow checkpoints to pass through and flush the sink. We should see
+		// zero bytes buffered after that.
+		shouldEmit.Store(true)
+		testutils.SucceedsSoon(t, func() error {
+			numBytes := defaultSLI.CloudstorageBufferedBytes.Value()
+			if defaultSLI.CloudstorageBufferedBytes.Value() != 0 {
+				return errors.Newf("expected at least %d buffered bytes but found %d", 0, numBytes)
+			}
+			return nil
+		})
+
+		require.NoError(t, foo.Close())
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
+}

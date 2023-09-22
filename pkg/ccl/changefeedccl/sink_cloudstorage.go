@@ -70,14 +70,33 @@ func cloudStorageFormatTime(ts hlc.Timestamp) string {
 
 type cloudStorageSinkFile struct {
 	cloudStorageSinkKey
-	created      time.Time
-	codec        io.WriteCloser
-	rawSize      int
-	numMessages  int
-	buf          bytes.Buffer
-	alloc        kvevent.Alloc
-	oldestMVCC   hlc.Timestamp
-	parquetCodec *parquetWriter
+	created       time.Time
+	codec         io.WriteCloser
+	rawSize       int
+	numMessages   int
+	buf           bytes.Buffer
+	alloc         kvevent.Alloc
+	oldestMVCC    hlc.Timestamp
+	parquetCodec  *parquetWriter
+	allocCallback func(delta int64)
+}
+
+func (f *cloudStorageSinkFile) mergeAlloc(other *kvevent.Alloc) {
+	prev := f.alloc.Bytes()
+	f.alloc.Merge(other)
+	f.allocCallback(f.alloc.Bytes() - prev)
+}
+
+func (f *cloudStorageSinkFile) releaseAlloc(ctx context.Context) {
+	prev := f.alloc.Bytes()
+	f.alloc.Release(ctx)
+	f.allocCallback(-prev)
+}
+
+func (f *cloudStorageSinkFile) adjustBytesToTarget(ctx context.Context, targetBytes int64) {
+	prev := f.alloc.Bytes()
+	f.alloc.AdjustBytesToTarget(ctx, targetBytes)
+	f.allocCallback(f.alloc.Bytes() - prev)
 }
 
 var _ io.Writer = &cloudStorageSinkFile{}
@@ -510,6 +529,7 @@ func (s *cloudStorageSink) getOrCreateFile(
 		created:             timeutil.Now(),
 		cloudStorageSinkKey: key,
 		oldestMVCC:          eventMVCC,
+		allocCallback:       s.metrics.makeCloudstorageFileAllocCallback(),
 	}
 
 	if s.compression.enabled() {
@@ -557,7 +577,7 @@ func (s *cloudStorageSink) EmitRow(
 	if err != nil {
 		return err
 	}
-	file.alloc.Merge(&alloc)
+	file.mergeAlloc(&alloc)
 
 	if _, err := file.Write(value); err != nil {
 		return err
@@ -814,7 +834,7 @@ func (s *cloudStorageSink) asyncFlusher(ctx context.Context) error {
 func (f *cloudStorageSinkFile) flushToStorage(
 	ctx context.Context, es cloud.ExternalStorage, dest string, m metricsRecorder,
 ) error {
-	defer f.alloc.Release(ctx)
+	defer f.releaseAlloc(ctx)
 
 	if f.rawSize == 0 {
 		// This method shouldn't be called with an empty file, but be defensive
