@@ -421,7 +421,7 @@ func (c *SyncedCluster) Signal(ctx context.Context, l *logger.Logger, sig int) e
 // cmdName and display specify the roachprod subcommand and a status message,
 // for output/logging. If wait is true, the command will wait for the processes
 // to exit, up to maxWait seconds.
-// TODO(herko): This command does not support tenants yet.
+// TODO(herko): This command does not support virtual clusters yet.
 func (c *SyncedCluster) kill(
 	ctx context.Context, l *logger.Logger, cmdName, display string, sig int, wait bool, maxWait int,
 ) error {
@@ -1998,7 +1998,7 @@ func (c *SyncedCluster) Put(
 // <user> allows retrieval of logs from a roachprod cluster being run by another
 // user and assumes that the current user used to create c has the ability to
 // sudo into <user>.
-// TODO(herko): This command does not support tenants yet.
+// TODO(herko): This command does not support virtual clusters yet.
 func (c *SyncedCluster) Logs(
 	l *logger.Logger,
 	src, dest, user, filter, programFilter string,
@@ -2358,7 +2358,7 @@ func (c *SyncedCluster) Get(
 
 // pgurls returns a map of PG URLs for the given nodes.
 func (c *SyncedCluster) pgurls(
-	ctx context.Context, l *logger.Logger, nodes Nodes, tenantName string, tenantInstance int,
+	ctx context.Context, l *logger.Logger, nodes Nodes, virtualClusterName string, sqlInstance int,
 ) (map[Node]string, error) {
 	hosts, err := c.pghosts(ctx, l, nodes)
 	if err != nil {
@@ -2366,15 +2366,15 @@ func (c *SyncedCluster) pgurls(
 	}
 	m := make(map[Node]string, len(hosts))
 	for node, host := range hosts {
-		desc, err := c.DiscoverService(ctx, node, tenantName, ServiceTypeSQL, tenantInstance)
+		desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
 		if err != nil {
 			return nil, err
 		}
-		sharedTenantName := ""
+		sharedClusterName := ""
 		if desc.ServiceMode == ServiceModeShared {
-			sharedTenantName = tenantName
+			sharedClusterName = virtualClusterName
 		}
-		m[node] = c.NodeURL(host, desc.Port, sharedTenantName)
+		m[node] = c.NodeURL(host, desc.Port, sharedClusterName)
 	}
 	return m, nil
 }

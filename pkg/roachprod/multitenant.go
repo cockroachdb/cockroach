@@ -20,17 +20,21 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// StartTenant starts nodes on a cluster in "tenant" mode (each node is a SQL
-// instance). A tenant cluster needs an existing, running host cluster. The
-// tenant metadata is created on the host cluster if it doesn't exist already.
+// StartServiceForVirtualCluster starts SQL/HTTP instances for a
+// virtual cluster. This runs processes on an underlying
+// roachprod-created cluster of VMs. The SQL/HTTP instances connect to
+// a storage cluster, which must be running alrady. The metadata for
+// the virtual cluster is created on the storage cluster if it doesn't
+// exist already.
 //
-// The host and tenant can use the same underlying cluster, as long as different
-// subsets of nodes are selected (e.g. "local:1,2" and "local:3,4").
-func StartTenant(
+// The storage cluster and the virtual cluster instances can use the
+// same underlying roachprod cluster, as long as different subsets of
+// nodes are selected (e.g. "local:1,2" and "local:3,4").
+func StartServiceForVirtualCluster(
 	ctx context.Context,
 	l *logger.Logger,
 	tenantCluster string,
-	hostCluster string,
+	storageCluster string,
 	startOpts install.StartOpts,
 	clusterSettingsOpts ...install.ClusterSettingOption,
 ) error {
@@ -39,29 +43,30 @@ func StartTenant(
 		return err
 	}
 
-	// TODO(radu): do we need separate clusterSettingsOpts for the host cluster?
-	hc, err := newCluster(l, hostCluster, clusterSettingsOpts...)
+	// TODO(radu): do we need separate clusterSettingsOpts for the storage cluster?
+	hc, err := newCluster(l, storageCluster, clusterSettingsOpts...)
 	if err != nil {
 		return err
 	}
 
-	startOpts.Target = install.StartTenantSQL
-	if startOpts.TenantID < 2 {
-		return errors.Errorf("invalid tenant ID %d (must be 2 or higher)", startOpts.TenantID)
+	startOpts.Target = install.StartServiceForVirtualCluster
+	if startOpts.VirtualClusterID < 2 {
+		return errors.Errorf("invalid tenant ID %d (must be 2 or higher)", startOpts.VirtualClusterID)
 	}
-	// TODO(herko): Allow users to pass in a tenant name.
-	startOpts.TenantName = fmt.Sprintf("tenant-%d", startOpts.TenantID)
+	// TODO(herko): Allow users to pass in a virtual cluster name.
+	startOpts.VirtualClusterName = fmt.Sprintf("tenant-%d", startOpts.VirtualClusterID)
 
-	// Create tenant, if necessary. We need to run this SQL against a single host.
+	// Create virtual cluster, if necessary. We only need to run this
+	// SQL against a single connection to the storage cluster.
 	l.Printf("Creating tenant metadata")
 	if err := hc.ExecSQL(ctx, l, hc.Nodes[:1], "", 0, []string{
 		`-e`,
-		fmt.Sprintf(createTenantIfNotExistsQuery, startOpts.TenantID),
+		fmt.Sprintf(createVirtualClusterIfNotExistsQuery, startOpts.VirtualClusterID),
 	}); err != nil {
 		return err
 	}
 
-	l.Printf("Starting tenant nodes")
+	l.Printf("Starting SQL/HTTP instances for the virtual cluster")
 	var kvAddrs []string
 	for _, node := range hc.Nodes {
 		port, err := hc.NodePort(ctx, node)
@@ -75,10 +80,11 @@ func StartTenant(
 	return tc.Start(ctx, l, startOpts)
 }
 
-// createTenantIfNotExistsQuery is used to initialize the tenant metadata, if
-// it's not initialized already. We set up the tenant with a lot of initial RUs
-// so that we don't encounter throttling by default.
-const createTenantIfNotExistsQuery = `
+// createVirtualClusterIfNotExistsQuery is used to initialize the
+// metadata for the virtual cluster, if it's not initialized already.
+// We set up the tvirtual cluster with a lot of initial RUs so that we
+// don't encounter throttling by default.
+const createVirtualClusterIfNotExistsQuery = `
 SELECT
   CASE (SELECT 1 FROM system.tenants WHERE id = %[1]d) IS NULL
   WHEN true

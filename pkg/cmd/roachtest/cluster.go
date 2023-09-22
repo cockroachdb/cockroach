@@ -2306,9 +2306,9 @@ func (c *clusterImpl) pgURLErr(
 	ctx context.Context, l *logger.Logger, node option.NodeListOption, external bool, tenant string,
 ) ([]string, error) {
 	urls, err := roachprod.PgURL(ctx, l, c.MakeNodes(node), c.localCertsDir, roachprod.PGURLOptions{
-		External:   external,
-		Secure:     c.localCertsDir != "",
-		TenantName: tenant})
+		External:           external,
+		Secure:             c.localCertsDir != "",
+		VirtualClusterName: tenant})
 	if err != nil {
 		return nil, err
 	}
