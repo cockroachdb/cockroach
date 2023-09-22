@@ -103,6 +103,19 @@ func BallastSizeBytes(spec base.StoreSpec, diskUsage vfs.DiskUsage) int64 {
 	return v
 }
 
+// SecondaryCacheBytes returns the desired size of the secondary cache, calculated
+// from the provided store spec and disk usage. If the store spec contains an
+// explicit ballast size (either in bytes or as a percentage of the disk's total
+// capacity), that size is used. A zero value for cacheSize results in no
+// secondary cache.
+func SecondaryCacheBytes(cacheSize base.SizeSpec, diskUsage vfs.DiskUsage) int64 {
+	v := cacheSize.InBytes
+	if cacheSize.Percent != 0 {
+		v = int64(float64(diskUsage.TotalBytes) * cacheSize.Percent / 100)
+	}
+	return v
+}
+
 func maybeEstablishBallast(
 	fs vfs.FS, ballastPath string, ballastSizeBytes int64, diskUsage vfs.DiskUsage,
 ) (resized bool, err error) {
