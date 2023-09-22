@@ -346,13 +346,19 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 		return descs, nil
 	}
 
-	if targets.Functions != nil {
-		if len(targets.Functions) == 0 {
+	if targets.Functions != nil || targets.Procedures != nil {
+		targetRoutines := targets.Functions
+		isFuncs := true
+		if targets.Functions == nil {
+			targetRoutines = targets.Procedures
+			isFuncs = false
+		}
+		if len(targetRoutines) == 0 {
 			return nil, errNoFunction
 		}
-		descs := make([]DescriptorWithObjectType, 0, len(targets.Functions))
+		descs := make([]DescriptorWithObjectType, 0, len(targetRoutines))
 		fnResolved := catalog.DescriptorIDSet{}
-		for _, f := range targets.Functions {
+		for _, f := range targetRoutines {
 			overload, err := p.matchUDF(ctx, &f, true /* required */)
 			if err != nil {
 				return nil, err
@@ -365,6 +371,14 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 			fnDesc, err := p.Descriptors().MutableByID(p.txn).Function(ctx, fnID)
 			if err != nil {
 				return nil, err
+			}
+			if isFuncs && fnDesc.IsProcedure {
+				return nil, pgerror.Newf(pgcode.WrongObjectType, "%q is not a %s",
+					fnDesc.Name, "function")
+			}
+			if !isFuncs && !fnDesc.IsProcedure {
+				return nil, pgerror.Newf(pgcode.WrongObjectType, "%q is not a %s",
+					fnDesc.Name, "procedure")
 			}
 			descs = append(descs, DescriptorWithObjectType{
 				descriptor: fnDesc,
@@ -435,7 +449,11 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 			}
 
 			return descs, nil
-		} else if targets.AllFunctionsInSchema {
+		} else if targets.AllFunctionsInSchema || targets.AllProceduresInSchema {
+			isProcs := true
+			if targets.AllFunctionsInSchema {
+				isProcs = false
+			}
 			var descs []DescriptorWithObjectType
 			for _, scName := range targets.Schemas {
 				dbName := p.CurrentDatabase()
@@ -454,6 +472,11 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 					fn, err := p.Descriptors().MutableByID(p.txn).Function(ctx, sig.ID)
 					if err != nil {
 						return err
+					}
+					if isProcs != fn.IsProcedure {
+						// Skip functions if ALL PROCEDURES was specified, and
+						// skip procedures if ALL FUNCTIONS was specified.
+						return nil
 					}
 					descs = append(descs, DescriptorWithObjectType{
 						descriptor: fn,
