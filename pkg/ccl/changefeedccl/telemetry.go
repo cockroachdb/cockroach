@@ -146,6 +146,10 @@ func (r *telemetryMetricsRecorder) recordMessageSize(sz int64) {
 	r.inner.recordMessageSize(sz)
 }
 
+func (r *telemetryMetricsRecorder) makeCloudstorageFileAllocCallback() func(delta int64) {
+	return r.inner.makeCloudstorageFileAllocCallback()
+}
+
 func (r *telemetryMetricsRecorder) recordInternalRetry(numMessages int64, reducedBatchSize bool) {
 	r.inner.recordInternalRetry(numMessages, reducedBatchSize)
 }
