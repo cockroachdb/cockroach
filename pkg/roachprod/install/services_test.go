@@ -89,8 +89,8 @@ func TestStringToIntegers(t *testing.T) {
 func TestServiceNameComponents(t *testing.T) {
 	z := local.NewDNSProvider(t.TempDir(), "z1")
 	dnsName := serviceDNSName(z, "tenant-100", ServiceTypeSQL, "test-cluster")
-	tenantName, serviceType, err := serviceNameComponents(dnsName)
+	virtualClusterName, serviceType, err := serviceNameComponents(dnsName)
 	require.NoError(t, err)
-	require.Equal(t, "tenant-100", tenantName)
+	require.Equal(t, "tenant-100", virtualClusterName)
 	require.Equal(t, ServiceTypeSQL, serviceType)
 }
