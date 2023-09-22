@@ -512,6 +512,18 @@ func (reg *registry) Unregister(ctx context.Context, r *registration) {
 	r.drainAllocations(ctx)
 }
 
+// DisconnectAllOnShutdown disconnectes all registrations on processor shutdown.
+// This is different from normal disconnect as registrations won't be able to
+// perform Unregister when processor's work loop is already terminated.
+// This method will cleanup metrics controlled by registry itself beside posting
+// errors to registrations.
+// TODO: this should be revisited as part of
+// https://github.com/cockroachdb/cockroach/issues/110634
+func (reg *registry) DisconnectAllOnShutdown(pErr *kvpb.Error) {
+	reg.metrics.RangeFeedRegistrations.Dec(int64(reg.tree.Len()))
+	reg.DisconnectWithErr(all, pErr)
+}
+
 // Disconnect disconnects all registrations that overlap the specified span with
 // a nil error.
 func (reg *registry) Disconnect(span roachpb.Span) {

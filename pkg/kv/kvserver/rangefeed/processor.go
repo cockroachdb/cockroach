@@ -511,13 +511,13 @@ func (p *LegacyProcessor) run(
 
 		// Close registrations and exit when signaled.
 		case pErr := <-p.stopC:
-			p.reg.DisconnectWithErr(all, pErr)
+			p.reg.DisconnectAllOnShutdown(pErr)
 			return
 
 		// Exit on stopper.
 		case <-stopper.ShouldQuiesce():
 			pErr := kvpb.NewError(&kvpb.NodeUnavailableError{})
-			p.reg.DisconnectWithErr(all, pErr)
+			p.reg.DisconnectAllOnShutdown(pErr)
 			return
 		}
 	}
