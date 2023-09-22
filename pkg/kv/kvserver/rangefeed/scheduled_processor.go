@@ -218,16 +218,16 @@ func (p *ScheduledProcessor) processStop() {
 }
 
 func (p *ScheduledProcessor) cleanup() {
-	// Cleanup is called when all registrations were already disconnected prior to
-	// triggering processor stop (or before we accepted first registration if we
-	// failed to start).
-	// However, we want some defence in depth if lifecycle bug will allow shutdown
-	// before registrations are disconnected and drained. To handle that we will
-	// perform disconnect so that registrations have a chance to stop their work
-	// loop and terminate. This would at least trigger a warning that we are using
-	// memory budget already released by processor.
+	// Cleanup is normally called when all registrations are disconnected and
+	// unregistered or were not created yet (processor start failure).
+	// However, there's a case where processor is stopped by replica action while
+	// registrations are still active. In that case registrations won't have a
+	// chance to unregister themselves after their work loop terminates because
+	// processor is already disconnected from scheduler.
+	// To avoid leaking any registry resources and metrics, processor performs
+	// explicit registry termination in that case.
 	pErr := kvpb.NewError(&kvpb.NodeUnavailableError{})
-	p.reg.DisconnectWithErr(all, pErr)
+	p.reg.DisconnectAllOnShutdown(pErr)
 
 	// Unregister callback from scheduler
 	p.scheduler.Unregister()
