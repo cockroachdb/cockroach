@@ -91,6 +91,8 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 	outScope := inScope.push()
 
 	// Type-check the procedure.
+	defer b.semaCtx.Properties.Ancestors.PopTo(b.semaCtx.Properties.Ancestors)
+	b.semaCtx.Properties.Ancestors.Push(tree.CallAncestor)
 	typedExpr, err := tree.TypeCheck(b.ctx, c.Proc, b.semaCtx, types.Any)
 	if err != nil {
 		panic(err)
