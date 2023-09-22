@@ -76,6 +76,7 @@ var _ = (*BoolSetting).Default
 //
 // For testing usage only.
 func (b *BoolSetting) Override(ctx context.Context, sv *Values, v bool) {
+	sv.setValueOrigin(ctx, b.slot, OriginExplicitlySet)
 	b.set(ctx, sv, v)
 	sv.setDefaultOverride(b.slot, v)
 }
