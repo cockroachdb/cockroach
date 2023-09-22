@@ -20,7 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -28,7 +30,9 @@ import (
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/impersonate"
 	"google.golang.org/api/option"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 )
 
@@ -290,11 +294,19 @@ func makePublisherClient(
 		return nil, err
 	}
 
-	client, err := pubsub.NewPublisherClient(
-		ctx,
-		option.WithEndpoint(endpoint),
-		creds,
-	)
+	opts := []option.ClientOption{creds, option.WithEndpoint(endpoint)}
+
+	// See https://pkg.go.dev/cloud.google.com/go/pubsub#hdr-Emulator for emulator information.
+	if addr, _ := envutil.ExternalEnvString("PUBSUB_EMULATOR_HOST", 1); addr != "" {
+		log.Infof(ctx, "Establishing connection to pubsub emulator at %s", addr)
+		conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			return nil, errors.Newf("grpc.Dial: %w", err)
+		}
+		opts = append(opts, option.WithGRPCConn(conn), option.WithTelemetryDisabled())
+	}
+
+	client, err := pubsub.NewPublisherClient(ctx, opts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "opening client")
 	}
