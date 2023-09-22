@@ -175,7 +175,7 @@ func SharedStorage(sharedStorage cloud.ExternalStorage) ConfigOption {
 		// version upgrade finalization. However, seeing as shared storage is
 		// an experimental feature and upgrading from existing stores is not
 		// supported, this is fine.
-		cfg.Opts.FormatMajorVersion = pebble.ExperimentalFormatVirtualSSTables
+		cfg.Opts.FormatMajorVersion = pebble.FormatVirtualSSTables
 		return nil
 	}
 }
