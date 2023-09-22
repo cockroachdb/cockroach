@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 //go:build !crdb_test || crdb_test_off
-// +build !crdb_test crdb_test_off
 
 package kvnemesisutil
 

@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 //go:build docker
-// +build docker
 
 package docker
 

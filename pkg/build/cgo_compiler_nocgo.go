@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 //go:build !cgo
-// +build !cgo
 
 package build
 

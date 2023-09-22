@@ -9,6 +9,7 @@ go_library(
         "authenticator.go",
         "command_result.go",
         "conn.go",
+        "fuzz.go",
         "hba_conf.go",
         "ident_map_conf.go",
         "pre_serve.go",

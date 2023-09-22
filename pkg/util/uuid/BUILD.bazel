@@ -4,6 +4,7 @@ go_library(
     name = "uuid",
     srcs = [
         "codec.go",
+        "fuzz.go",
         "generator.go",
         "sql.go",
         "uuid.go",

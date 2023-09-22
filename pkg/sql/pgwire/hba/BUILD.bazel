@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "hba",
     srcs = [
+        "fuzz.go",
         "hba.go",
         "parser.go",
     ],
@@ -16,6 +17,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/util/errorutil/unimplemented",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_kr_pretty//:pretty",
         "@com_github_olekukonko_tablewriter//:tablewriter",
     ],
 )

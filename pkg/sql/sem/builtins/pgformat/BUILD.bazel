@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "pgformat",
-    srcs = ["format.go"],
+    srcs = [
+        "format.go",
+        "fuzz.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/pgformat",
     visibility = ["//visibility:public"],
     deps = [

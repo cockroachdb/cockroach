@@ -35,6 +35,7 @@ go_library(
         "row_counter.go",
         "shared_storage.go",
         "slice.go",
+        "slice_gccgo.go",
         "slice_go1.9.go",
         "sst.go",
         "sst_writer.go",

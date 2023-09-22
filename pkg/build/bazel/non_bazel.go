@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 //go:build !bazel
-// +build !bazel
 
 package bazel
 

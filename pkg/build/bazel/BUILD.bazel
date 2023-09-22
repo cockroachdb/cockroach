@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "bazel",
-    srcs = ["bazel.go"],
+    srcs = [
+        "bazel.go",
+        "non_bazel.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/build/bazel",
     visibility = ["//visibility:public"],
     deps = [

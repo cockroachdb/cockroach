@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 //go:build fast_int_set_small || fast_int_set_large
-// +build fast_int_set_small fast_int_set_large
 
 // This file implements two variants of Fast used for testing which always
 // behaves like in either the "small" or "large" case (depending on

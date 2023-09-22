@@ -10,7 +10,6 @@
 // Cockroach binary.
 
 //go:build bazel
-// +build bazel
 
 package distccl
 

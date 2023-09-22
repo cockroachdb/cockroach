@@ -20,7 +20,7 @@
 //
 // To exclude this file except during fuzzing, tag it with:
 //
-//	// +build gofuzz
+//	//go:build gofuzz
 package main
 
 import (

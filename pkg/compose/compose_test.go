@@ -12,7 +12,6 @@
 // during nightlies or when invoked by "make compose".
 
 //go:build compose
-// +build compose
 
 // Package compose contains nightly tests that need docker-compose.
 package compose

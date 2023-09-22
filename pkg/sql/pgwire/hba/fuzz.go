@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 //go:build gofuzz
-// +build gofuzz
 
 package hba
 

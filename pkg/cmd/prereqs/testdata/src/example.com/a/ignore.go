@@ -9,6 +9,5 @@
 // licenses/APL.txt.
 
 //go:build notme
-// +build notme
 
 package a

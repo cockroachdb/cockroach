@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 //go:build !stdmalloc
-// +build !stdmalloc
 
 package cli
 

@@ -13,7 +13,6 @@
 // still match with those in go/src/runtime.
 
 //go:build gc && go1.20 && !go1.21
-// +build gc,go1.20,!go1.21
 
 package goschedstats
 

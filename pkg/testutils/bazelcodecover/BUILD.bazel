@@ -17,7 +17,7 @@ go_library(
     }),
 )
 
-REMOVE_GO_BUILD_CONSTRAINTS = "cat $< | grep -v '//go:build' | grep -v '// +build' > $@"
+REMOVE_GO_BUILD_CONSTRAINTS = "cat $< | grep -v '//go:build' > $@"
 
 genrule(
     name = "gen-bazel-code-cover-on",

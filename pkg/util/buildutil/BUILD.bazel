@@ -14,7 +14,7 @@ go_library(
     visibility = ["//visibility:public"],
 )
 
-REMOVE_GO_BUILD_CONSTRAINTS = "cat $< | grep -v '//go:build' | grep -v '// +build' > $@"
+REMOVE_GO_BUILD_CONSTRAINTS = "cat $< | grep -v '//go:build' > $@"
 
 genrule(
     name = "gen-crdb-test-on",

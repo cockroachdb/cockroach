@@ -9,7 +9,6 @@
 // See comment on build tag in gssapi.go.
 
 //go:build gss
-// +build gss
 
 package gssapiccl
 
