@@ -41,3 +41,10 @@ type MetricName string
 // used to count fluent-server log sink connection errors. Please
 // refer to its metric metadata for more details (hint: see usages).
 const FluentSinkConnectionError MetricName = "log.fluent.sink.conn.errors"
+
+// BufferedSinkMessagesDropped is the MetricName for the metric used to
+// count log messages that are dropped by buffered log sinks. When
+// CRDB attempts to buffer a log message in a buffered log sink whose
+// buffer is already full, it drops the oldest buffered messages to make
+// space for the new message.
+const BufferedSinkMessagesDropped MetricName = "log.buffered.messages.dropped"

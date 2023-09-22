@@ -15,7 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
-	io_prometheus_client "github.com/prometheus/client_model/go"
+	"github.com/prometheus/client_model/go"
 )
 
 var (
@@ -25,6 +25,13 @@ var (
 		Name:        string(log.FluentSinkConnectionError),
 		Help:        "Number of connection errors experienced by fluent-server logging sinks",
 		Measurement: "Errors",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
+	BufferedSinkMessagesDropped = metric.Metadata{
+		Name:        string(log.BufferedSinkMessagesDropped),
+		Help:        "Count of log messages that are dropped by buffered log sinks. When CRDB attempts to buffer a log message in a buffered log sink whose buffer is already full, it drops the oldest buffered messages to make space for the new message",
+		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
 	}
@@ -46,8 +53,12 @@ func init() {
 // tracked by the LogMetricsRegistry. This container is necessary
 // to register all the metrics with the Registry internal to the
 // LogMetricsRegistry.
+//
+// NB: If adding metrics to this struct, be sure to also add in
+// (*LogMetricsRegistry).registerCounters
 type logMetricsStruct struct {
-	FluentSinkConnErrors *metric.Counter
+	FluentSinkConnErrors        *metric.Counter
+	BufferedSinkMessagesDropped *metric.Counter
 }
 
 // LogMetricsRegistry is a log.LogMetrics implementation used in the
@@ -82,13 +93,15 @@ func (l *LogMetricsRegistry) registerCounters() {
 	// Create the metrics struct for us to add to registries as they're
 	// requested.
 	l.metricsStruct = logMetricsStruct{
-		FluentSinkConnErrors: metric.NewCounter(FluentSinkConnErrors),
+		FluentSinkConnErrors:        metric.NewCounter(FluentSinkConnErrors),
+		BufferedSinkMessagesDropped: metric.NewCounter(BufferedSinkMessagesDropped),
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	// Be sure to also add the metrics to our internal store, for
 	// recall in functions such as IncrementCounter.
 	l.mu.counters[log.MetricName(FluentSinkConnErrors.Name)] = l.metricsStruct.FluentSinkConnErrors
+	l.mu.counters[log.MetricName(BufferedSinkMessagesDropped.Name)] = l.metricsStruct.BufferedSinkMessagesDropped
 }
 
 // NewRegistry initializes and returns a new metric.Registry, populated with metrics
