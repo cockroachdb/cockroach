@@ -16,8 +16,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -364,7 +362,7 @@ func (f *BudgetFactory) Stop(ctx context.Context) {
 // CreateBudget creates feed budget using memory pools configured in the
 // factory. It is safe to call on nil factory as it will produce nil budget
 // which in turn disables memory accounting on range feed.
-func (f *BudgetFactory) CreateBudget(key roachpb.RKey) *FeedBudget {
+func (f *BudgetFactory) CreateBudget(isSystem bool) *FeedBudget {
 	if f == nil {
 		return nil
 	}
@@ -373,7 +371,7 @@ func (f *BudgetFactory) CreateBudget(key roachpb.RKey) *FeedBudget {
 		return nil
 	}
 	// We use any table with reserved ID in system tenant as system case.
-	if key.Less(roachpb.RKey(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1))) {
+	if isSystem {
 		acc := f.systemFeedBytesMon.MakeBoundAccount()
 		return NewFeedBudget(&acc, 0, f.settings)
 	}

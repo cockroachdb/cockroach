@@ -99,7 +99,7 @@ func (p *ScheduledProcessor) Start(
 
 	// Note that callback registration must be performed before starting resolved
 	// timestamp init because resolution posts resolvedTS event when it is done.
-	if err := p.scheduler.Register(p.process); err != nil {
+	if err := p.scheduler.Register(p.process, p.Priority); err != nil {
 		p.cleanup()
 		return err
 	}
