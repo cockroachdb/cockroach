@@ -1422,3 +1422,47 @@ NULL
 NULL
 4
 5
+
+# Regression test for #110952 - providing invalid arguments to unnest should
+# not trigger an internal error.
+statement error pgcode 42804 pq: could not determine polymorphic type: unnest\(string\)
+SELECT unnest('{}');
+
+statement error pgcode 42804 pq: could not determine polymorphic type: unnest\(string, string, string\)
+SELECT unnest('{}', '{}', '{}');
+
+statement error pgcode 42883 pq: unknown signature: unnest\(int\)
+SELECT unnest(1);
+
+statement error pgcode 42883 pq: unknown signature: unnest\(int, int, int\)
+SELECT unnest(1, 2, 3);
+
+statement error pgcode 42804 pq: could not determine polymorphic type: unnest\(unknown\)
+SELECT unnest(NULL);
+
+statement error pgcode 42804 pq: could not determine polymorphic type: unnest\(unknown, unknown, unknown\)
+SELECT unnest(NULL, NULL, NULL);
+
+# pg_expandarray handles return types similarly to unnest.
+statement error pgcode 42804 pq: could not determine polymorphic type: information_schema._pg_expandarray\(string\)
+SELECT information_schema._pg_expandarray('{}');
+
+query T
+SELECT unnest('{1}'::int[], '{2}', '{3}');
+----
+(1,2,3)
+
+query T
+SELECT unnest('{1}'::int[], '{}', '{}');
+----
+(1,,)
+
+query T
+SELECT unnest('{1}', '{2}', '{3}'::int[]);
+----
+(1,2,3)
+
+query T
+SELECT unnest('{}', '{}', '{3}'::int[]);
+----
+(,,3)
