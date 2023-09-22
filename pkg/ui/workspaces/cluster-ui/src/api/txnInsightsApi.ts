@@ -298,6 +298,7 @@ type TxnInsightsResponseRow = {
   stmt_execution_ids: string[];
   cpu_sql_nanos: number;
   last_error_code: string;
+  last_error_redactable: string;
   status: TransactionStatus;
 };
 
@@ -334,6 +335,7 @@ causes,
 stmt_execution_ids,
 cpu_sql_nanos,
 last_error_code,
+last_error_redactable,
 status`;
 
   if (filters?.execID) {
@@ -403,6 +405,7 @@ function formatTxnInsightsRow(row: TxnInsightsResponseRow): TxnInsightEvent {
     stmtExecutionIDs: row.stmt_execution_ids,
     cpuSQLNanos: row.cpu_sql_nanos,
     errorCode: row.last_error_code,
+    errorMsg: row.last_error_redactable,
     status: row.status,
   };
 }

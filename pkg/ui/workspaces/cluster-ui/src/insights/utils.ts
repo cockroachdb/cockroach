@@ -408,6 +408,7 @@ export function getStmtInsightRecommendations(
     transactionExecutionID: insightDetails.transactionExecutionID,
     execType: InsightExecEnum.STATEMENT,
     errorCode: insightDetails.errorCode,
+    errorMsg: insightDetails.errorMsg,
     status: insightDetails.status,
   };
 
@@ -431,6 +432,7 @@ export function getTxnInsightRecommendations(
     elapsedTimeMillis: insightDetails.elapsedTimeMillis,
     execType: InsightExecEnum.TRANSACTION,
     errorCode: insightDetails.errorCode,
+    errorMsg: insightDetails.errorMsg,
   };
   const recs: InsightRecommendation[] = [];
 
