@@ -1024,6 +1024,20 @@ only present for backward compatibility.
 `,
 	}
 
+	SecondaryCache = FlagInfo{
+		Name: "experimental-secondary-cache",
+		Description: `
+Enables the use of a secondary cache to store objects from shared storage (see
+--experimental-shared-storage) inside local paths for each store. A size must
+be specified with this flag, which will be the maximum size for the secondary
+cache on each store on this node:
+<PRE>
+
+  --experimental-secondary-cache=20GiB
+
+</PRE>`,
+	}
+
 	SharedStorage = FlagInfo{
 		Name: "experimental-shared-storage",
 		Description: fmt.Sprintf(`
