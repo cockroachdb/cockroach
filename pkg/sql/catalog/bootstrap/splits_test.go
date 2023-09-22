@@ -48,10 +48,9 @@ func TestInitialSplitPoints(t *testing.T) {
 			codec = keys.MakeSQLCodec(roachpb.MustMakeTenantID(tenID))
 		}
 		opts := bootstrap.InitialValuesOpts{
-			DefaultZoneConfig:       zonepb.DefaultZoneConfigRef(),
-			DefaultSystemZoneConfig: zonepb.DefaultZoneConfigRef(),
-			OverrideKey:             0, // most recent
-			Codec:                   codec,
+			DefaultZoneConfig: zonepb.DefaultZoneConfigRef(),
+			OverrideKey:       0, // most recent
+			Codec:             codec,
 		}
 
 		ctx := context.Background()

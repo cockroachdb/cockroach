@@ -91,7 +91,7 @@ func updateStatusForGCElements(
 	progress *jobspb.SchemaChangeGCProgress,
 ) (expired, missing bool, timeToNextTrigger time.Time) {
 	defTTL := execCfg.DefaultZoneConfig.GC.TTLSeconds
-	cfg := execCfg.SystemConfig.GetSystemConfig()
+	cfg := execCfg.SystemConfig
 	// If the system config is nil, it means we have not seen an initial system
 	// config. Because we register for notifications when the system config
 	// changes before we get here, we'll get notified to update statuses as soon
@@ -462,7 +462,7 @@ func refreshTenant(
 
 	tenID := details.Tenant.ID
 	// Read the tenant's GC TTL to check if the tenant's data has expired.
-	cfg := execCfg.SystemConfig.GetSystemConfig()
+	cfg := execCfg.SystemConfig
 	tenantTTLSeconds := execCfg.DefaultZoneConfig.GC.TTLSeconds
 	zoneCfg, err := cfg.GetZoneConfigForObject(keys.SystemSQLCodec, keys.TenantsRangesID)
 	if err == nil {

@@ -200,11 +200,6 @@ type BaseConfig struct {
 	// instantiate stores.
 	StorageEngine enginepb.EngineType
 
-	// SpanConfigsDisabled disables the use of the span configs infrastructure.
-	//
-	// Environment Variable: COCKROACH_DISABLE_SPAN_CONFIGS
-	SpanConfigsDisabled bool
-
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
 
@@ -426,11 +421,6 @@ type KVConfig struct {
 	// Environment Variable: COCKROACH_SCAN_MAX_IDLE_TIME
 	ScanMaxIdleTime time.Duration
 
-	// DefaultSystemZoneConfig is used to set the default system zone config
-	// inside the server. It can be overridden during tests by setting the
-	// DefaultSystemZoneConfigOverride server testing knob.
-	DefaultSystemZoneConfig zonepb.ZoneConfig
-
 	// EventLogEnabled is a switch which enables recording into cockroach's SQL
 	// event log tables. These tables record transactional events about changes
 	// to cluster metadata, such as DDL statements and range rebalancing
@@ -469,7 +459,6 @@ func MakeKVConfig() KVConfig {
 func (kvCfg *KVConfig) SetDefaults() {
 	*kvCfg = KVConfig{}
 	kvCfg.RaftConfig.SetDefaults()
-	kvCfg.DefaultSystemZoneConfig = zonepb.DefaultSystemZoneConfig()
 	kvCfg.CacheSize = DefaultCacheSize
 	kvCfg.ScanInterval = defaultScanInterval
 	kvCfg.ScanMinIdleTime = defaultScanMinIdleTime
@@ -649,9 +638,6 @@ func (cfg *Config) String() string {
 	fmt.Fprintln(w, "event log enabled\t", cfg.EventLogEnabled)
 	if cfg.Linearizable {
 		fmt.Fprintln(w, "linearizable\t", cfg.Linearizable)
-	}
-	if !cfg.SpanConfigsDisabled {
-		fmt.Fprintln(w, "span configs enabled\t", !cfg.SpanConfigsDisabled)
 	}
 	_ = w.Flush()
 
@@ -934,7 +920,6 @@ func (cfg *BaseConfig) InsecureWebAccess() bool {
 }
 
 func (cfg *Config) readSQLEnvironmentVariables() {
-	cfg.SpanConfigsDisabled = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_SPAN_CONFIGS", cfg.SpanConfigsDisabled)
 	cfg.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_LINEARIZABLE", cfg.Linearizable)
 }
 

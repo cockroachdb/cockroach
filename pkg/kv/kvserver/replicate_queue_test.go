@@ -135,7 +135,6 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	initialRanges, err := server.ExpectedInitialRangeCount(
 		keys.SystemSQLCodec,
 		zonepb.DefaultZoneConfigRef(),
-		zonepb.DefaultSystemZoneConfigRef(),
 	)
 	if err != nil {
 		t.Fatal(err)

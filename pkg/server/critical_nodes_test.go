@@ -32,7 +32,7 @@ func TestCriticalNodes(t *testing.T) {
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{Server: &TestingKnobs{
-				DefaultSystemZoneConfigOverride: zonepb.DefaultZoneConfigRef(),
+				DefaultZoneConfigOverride: zonepb.DefaultZoneConfigRef(),
 			}},
 		},
 	})

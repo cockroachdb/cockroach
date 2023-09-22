@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher/systemconfigwatchertest"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
@@ -415,11 +414,6 @@ func TestTenantInstanceIDReclaimLoop(t *testing.T) {
 		}
 		return fmt.Errorf("waiting for preallocated rows")
 	})
-}
-
-func TestSystemConfigWatcherCache(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	systemconfigwatchertest.TestSystemConfigWatcher(t, false /* skipSecondary */)
 }
 
 // TestStartTenantWithStaleInstance covers the following scenario:

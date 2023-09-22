@@ -71,7 +71,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -1240,7 +1239,7 @@ type ExecutorConfig struct {
 	DB                *kv.DB
 	Gossip            gossip.OptionalGossip
 	NodeLiveness      optionalnodeliveness.Container
-	SystemConfig      config.SystemConfigProvider
+	SystemConfig      *config.SystemConfig
 	DistSender        *kvcoord.DistSender
 	RPCContext        *rpc.Context
 	LeaseManager      *lease.Manager
@@ -1316,8 +1315,6 @@ type ExecutorConfig struct {
 	StmtDiagnosticsRecorder *stmtdiagnostics.Registry
 
 	ExternalIODirConfig base.ExternalIODirConfig
-
-	GCJobNotifier *gcjobnotifier.Notifier
 
 	RangeFeedFactory *rangefeed.Factory
 

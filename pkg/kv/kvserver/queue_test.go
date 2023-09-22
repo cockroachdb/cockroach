@@ -611,8 +611,6 @@ func TestNeedsSystemConfig(t *testing.T) {
 
 	tc := testContext{}
 	cfg := TestStoreConfig(nil)
-	// Configure a gossip instance that won't have the system config available in it.
-	cfg.TestingKnobs.MakeSystemConfigSpanUnavailableToQueues = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	{

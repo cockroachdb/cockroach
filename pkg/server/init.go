@@ -627,7 +627,6 @@ type initServerCfg struct {
 	advertiseAddr             string
 	binaryMinSupportedVersion roachpb.Version
 	binaryVersion             roachpb.Version // the version used during bootstrap
-	defaultSystemZoneConfig   zonepb.ZoneConfig
 	defaultZoneConfig         zonepb.ZoneConfig
 
 	// getDialOpts retrieves the gRPC dial options to use to issue Join RPCs.
@@ -682,7 +681,6 @@ func newInitServerConfig(
 		advertiseAddr:             cfg.AdvertiseAddr,
 		binaryMinSupportedVersion: binaryMinSupportedVersion,
 		binaryVersion:             binaryVersion,
-		defaultSystemZoneConfig:   cfg.DefaultSystemZoneConfig,
 		defaultZoneConfig:         cfg.DefaultZoneConfig,
 		getDialOpts:               getDialOpts,
 		bootstrapAddresses:        bootstrapAddresses,

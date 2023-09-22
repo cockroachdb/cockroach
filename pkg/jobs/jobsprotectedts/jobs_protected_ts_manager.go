@@ -14,7 +14,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -40,7 +39,6 @@ type Manager struct {
 	db                  isql.DB
 	codec               keys.SQLCodec
 	protectedTSProvider protectedts.Manager
-	systemConfig        config.SystemConfigProvider
 	jr                  *jobs.Registry
 }
 
@@ -80,17 +78,12 @@ func getProtectedTSOnJob(details jobspb.Details) *uuid.UUID {
 // NewManager creates a new protected timestamp manager
 // for jobs.
 func NewManager(
-	db isql.DB,
-	codec keys.SQLCodec,
-	protectedTSProvider protectedts.Manager,
-	systemConfig config.SystemConfigProvider,
-	jr *jobs.Registry,
+	db isql.DB, codec keys.SQLCodec, protectedTSProvider protectedts.Manager, jr *jobs.Registry,
 ) *Manager {
 	return &Manager{
 		db:                  db,
 		codec:               codec,
 		protectedTSProvider: protectedTSProvider,
-		systemConfig:        systemConfig,
 		jr:                  jr,
 	}
 }
@@ -112,26 +105,17 @@ func (p *Manager) TryToProtectBeforeGC(
 	protectedTSInstallCancel := make(chan struct{})
 	var unprotectCallback Cleaner
 	waitGrp.GoCtx(func(ctx context.Context) error {
-		// If we are starting up the system config can be nil, we are okay letting
-		// the job restart, due to the GC interval and lack of protected timestamp.
-		systemConfig := p.systemConfig.GetSystemConfig()
-		if systemConfig == nil {
-			return nil
-		}
 		// Determine what the GC interval is on the table, which will help us
 		// figure out when to apply a protected timestamp, as a percentage of this
 		// time.
-		zoneCfg, err := systemConfig.GetZoneConfigForObject(p.codec,
-			config.ObjectID(tableDesc.GetID()))
-		if err != nil {
-			return err
-		}
-		waitBeforeProtectedTS := time.Duration((time.Duration(zoneCfg.GC.TTLSeconds) * time.Second).Seconds() *
-			timedProtectTimeStampGCPct)
+		// FIXME: waitTime := zoneCfg.GC.TTLSeconds - where do we get the config from
+		waitTime := 3600
+		waitBeforeProtectedTS := time.Duration(float64(waitTime) * timedProtectTimeStampGCPct)
 
 		select {
 		case <-time.After(waitBeforeProtectedTS):
 			target := ptpb.MakeSchemaObjectsTarget(descpb.IDs{tableDesc.GetID()})
+			var err error
 			unprotectCallback, err = p.Protect(ctx, job, target, readAsOf)
 			if err != nil {
 				return err

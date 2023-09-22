@@ -17,11 +17,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -157,61 +155,6 @@ func (s *Store) startGossip() {
 }
 
 var errSpanConfigsUnavailable = errors.New("span configs not available")
-
-// systemGossipUpdate is a callback for gossip updates to
-// the system config which affect range split boundaries.
-//
-// TODO(kvoli): Refactor this function to sit on the store gossip struct,
-// rather than on the store.
-func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
-	if !s.cfg.SpanConfigsDisabled && spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) {
-		return // nothing to do
-	}
-
-	ctx := s.AnnotateCtx(context.Background())
-	s.computeInitialMetrics.Do(func() {
-		// Metrics depend in part on the system config. Compute them as soon as we
-		// get the first system config, then periodically in the background
-		// (managed by the Node).
-		if err := s.ComputeMetrics(ctx); err != nil {
-			log.Infof(ctx, "%s: failed initial metrics computation: %s", s, err)
-		}
-		log.Event(ctx, "computed initial metrics")
-	})
-
-	// We'll want to offer all replicas to the split and merge queues. Be a little
-	// careful about not spawning too many individual goroutines.
-	shouldQueue := s.systemConfigUpdateQueueRateLimiter.AdmitN(1)
-
-	// For every range, update its zone config and check if it needs to
-	// be split or merged.
-	now := s.cfg.Clock.NowAsClockTimestamp()
-	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
-		key := repl.Desc().StartKey
-		conf, err := sysCfg.GetSpanConfigForKey(ctx, key)
-		if err != nil {
-			if log.V(1) {
-				log.Infof(context.TODO(), "failed to get span config for key %s", key)
-			}
-			conf = s.cfg.DefaultSpanConfig
-		}
-
-		if s.cfg.SpanConfigsDisabled ||
-			!spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) {
-			repl.SetSpanConfig(conf)
-		}
-
-		if shouldQueue {
-			s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
-				h.MaybeAdd(ctx, repl, now)
-			})
-			s.mergeQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
-				h.MaybeAdd(ctx, repl, now)
-			})
-		}
-		return true // more
-	})
-}
 
 // cachedCapacity caches information on store capacity to prevent
 // expensive recomputations in case leases or replicas are rapidly

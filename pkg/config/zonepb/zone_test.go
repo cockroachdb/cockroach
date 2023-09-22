@@ -1136,8 +1136,6 @@ func tableSpecifier(
 // in the default zone configs are what the author intended.
 func TestDefaultRangeSizesAreSane(t *testing.T) {
 	require.Regexp(t, "range_min_bytes:134217728 range_max_bytes:536870912",
-		DefaultSystemZoneConfigRef().String())
-	require.Regexp(t, "range_min_bytes:134217728 range_max_bytes:536870912",
 		DefaultZoneConfigRef().String())
 }
 
@@ -1438,9 +1436,5 @@ func TestHardCodedSpanConfigs(t *testing.T) {
 	{
 		converted := DefaultZoneConfigRef().AsSpanConfig()
 		require.True(t, converted.Equal(roachpb.TestingDefaultSpanConfig()))
-	}
-	{
-		converted := DefaultSystemZoneConfigRef().AsSpanConfig()
-		require.True(t, converted.Equal(roachpb.TestingSystemSpanConfig()))
 	}
 }

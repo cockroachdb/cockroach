@@ -14,27 +14,21 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
@@ -42,64 +36,18 @@ import (
 var configID = descpb.ID(1)
 var configDescKey = catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(bootstrap.TestingUserDescID(0)))
 
-// forceNewConfig forces a system config update by writing a bogus descriptor with an
-// incremented value inside. It then repeatedly fetches the gossip config until the
-// just-written descriptor is found.
-func forceNewConfig(t testing.TB, s serverutils.TestServerInterface) *config.SystemConfig {
-	configID++
-	configDesc := &descpb.Descriptor{
-		Union: &descpb.Descriptor_Database{
-			Database: &descpb.DatabaseDescriptor{
-				Name:       "sentinel",
-				ID:         configID,
-				Privileges: &catpb.PrivilegeDescriptor{},
-			},
-		},
-	}
-
-	// This needs to be done in a transaction with the system trigger set.
-	if err := s.DB().Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-		return txn.Put(ctx, configDescKey, configDesc)
-	}); err != nil {
-		t.Fatal(err)
-	}
-	return waitForConfigChange(t, s)
-}
-
-func waitForConfigChange(t testing.TB, s serverutils.TestServerInterface) *config.SystemConfig {
-	var foundDesc descpb.Descriptor
-	var cfg *config.SystemConfig
-	testutils.SucceedsSoon(t, func() error {
-		if cfg = s.SystemConfigProvider().GetSystemConfig(); cfg != nil {
-			if val := cfg.GetValue(configDescKey); val != nil {
-				if err := val.GetProto(&foundDesc); err != nil {
-					t.Fatal(err)
-				}
-				_, db, _, _, _ := descpb.GetDescriptors(&foundDesc)
-				if db.ID != configID {
-					return errors.Errorf("expected database id %d; got %d", configID, db.ID)
-				}
-				return nil
-			}
-		}
-		return errors.Errorf("got nil system config")
-	})
-	return cfg
-}
-
 func TestGetZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	params, _ := createTestServerParams()
-	defaultZoneConfig := zonepb.DefaultSystemZoneConfig()
+	defaultZoneConfig := zonepb.DefaultZoneConfig()
 	defaultZoneConfig.NumReplicas = proto.Int32(1)
 	defaultZoneConfig.RangeMinBytes = proto.Int64(1 << 20)
 	defaultZoneConfig.RangeMaxBytes = proto.Int64(100 << 20)
 	defaultZoneConfig.GC = &zonepb.GCPolicy{TTLSeconds: 60}
 	require.NoError(t, defaultZoneConfig.Validate())
 	params.Knobs.Server = &server.TestingKnobs{
-		DefaultZoneConfigOverride:       &defaultZoneConfig,
-		DefaultSystemZoneConfigOverride: &defaultZoneConfig,
+		DefaultZoneConfigOverride: &defaultZoneConfig,
 	}
 
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -120,22 +68,7 @@ func TestGetZoneConfig(t *testing.T) {
 		zoneCfg zonepb.ZoneConfig
 	}
 	verifyZoneConfigs := func(testCases []testCase) {
-		cfg := forceNewConfig(t, s)
-
 		for tcNum, tc := range testCases {
-			// Verify SystemConfig.GetZoneConfigForKey.
-			{
-				key := append(roachpb.RKey(keys.SystemSQLCodec.TablePrefix(tc.objectID)), tc.keySuffix...)
-				_, zoneCfg, err := config.TestingGetSystemTenantZoneConfigForKey(cfg, key) // Complete ZoneConfig
-				if err != nil {
-					t.Fatalf("#%d: err=%s", tcNum, err)
-				}
-
-				if !tc.zoneCfg.Equal(zoneCfg) {
-					t.Errorf("#%d: bad zone config.\nexpected: %+v\ngot: %+v", tcNum, tc.zoneCfg, zoneCfg)
-				}
-			}
-
 			// Verify sql.GetZoneConfigInTxn.
 			dummyIndex := systemschema.CommentsTable.GetPrimaryIndex()
 			if err := sql.TestingDescsTxn(context.Background(), s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
@@ -334,8 +267,7 @@ func TestCascadingZoneConfig(t *testing.T) {
 	defaultZoneConfig.GC = &zonepb.GCPolicy{TTLSeconds: 60}
 	require.NoError(t, defaultZoneConfig.Validate())
 	params.Knobs.Server = &server.TestingKnobs{
-		DefaultZoneConfigOverride:       &defaultZoneConfig,
-		DefaultSystemZoneConfigOverride: &defaultZoneConfig,
+		DefaultZoneConfigOverride: &defaultZoneConfig,
 	}
 
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -356,22 +288,7 @@ func TestCascadingZoneConfig(t *testing.T) {
 		zoneCfg zonepb.ZoneConfig
 	}
 	verifyZoneConfigs := func(testCases []testCase) {
-		cfg := forceNewConfig(t, s)
-
 		for tcNum, tc := range testCases {
-			// Verify SystemConfig.GetZoneConfigForKey.
-			{
-				key := append(roachpb.RKey(keys.SystemSQLCodec.TablePrefix(tc.objectID)), tc.keySuffix...)
-				_, zoneCfg, err := config.TestingGetSystemTenantZoneConfigForKey(cfg, key) // Complete ZoneConfig
-				if err != nil {
-					t.Fatalf("#%d: err=%s", tcNum, err)
-				}
-
-				if !tc.zoneCfg.Equal(zoneCfg) {
-					t.Errorf("#%d: bad zone config.\nexpected: %+v\ngot: %+v", tcNum, &tc.zoneCfg, zoneCfg)
-				}
-			}
-
 			// Verify sql.GetZoneConfigInTxn.
 			dummyIndex := systemschema.CommentsTable.GetPrimaryIndex()
 			if err := sql.TestingDescsTxn(context.Background(), s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
@@ -643,29 +560,4 @@ func TestCascadingZoneConfig(t *testing.T) {
 		{tb22, []byte{1}, "p0", expectedP221Cfg},
 		{tb22, []byte{255}, "", defaultZoneConfig},
 	})
-}
-
-func BenchmarkGetZoneConfig(b *testing.B) {
-	defer leaktest.AfterTest(b)()
-	defer log.Scope(b).Close(b)
-
-	params, _ := createTestServerParams()
-	s, sqlDB, _ := serverutils.StartServer(b, params)
-	defer s.Stopper().Stop(context.Background())
-	// Set the closed_timestamp interval to be short to shorten the test duration.
-	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	tdb.Exec(b, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
-	tdb.Exec(b, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
-	tdb.Exec(b, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '20ms'`)
-	cfg := forceNewConfig(b, s)
-
-	key := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(bootstrap.TestingUserDescID(0)))
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _, err := config.TestingGetSystemTenantZoneConfigForKey(cfg, key)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-	b.StopTimer()
 }

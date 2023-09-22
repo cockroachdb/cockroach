@@ -26,10 +26,9 @@ import (
 // InitialValuesOpts is used to get initial values for system/secondary tenants
 // and allows overriding initial values with ones from previous releases.
 type InitialValuesOpts struct {
-	DefaultZoneConfig       *zonepb.ZoneConfig
-	DefaultSystemZoneConfig *zonepb.ZoneConfig
-	OverrideKey             clusterversion.Key
-	Codec                   keys.SQLCodec
+	DefaultZoneConfig *zonepb.ZoneConfig
+	OverrideKey       clusterversion.Key
+	Codec             keys.SQLCodec
 }
 
 // GenerateInitialValues generates the initial values with which to bootstrap
@@ -71,7 +70,7 @@ var initialValuesFactoryByKey = map[clusterversion.Key]initialValuesFactoryFn{
 func buildLatestInitialValues(
 	opts InitialValuesOpts,
 ) (kvs []roachpb.KeyValue, splits []roachpb.RKey, _ error) {
-	schema := MakeMetadataSchema(opts.Codec, opts.DefaultZoneConfig, opts.DefaultSystemZoneConfig)
+	schema := MakeMetadataSchema(opts.Codec, opts.DefaultZoneConfig)
 	kvs, splits = schema.GetInitialValues()
 	return kvs, splits, nil
 }
@@ -103,7 +102,7 @@ func (f hardCodedInitialValues) build(
 		return nil, nil, err
 	}
 	// Replace system.zones entries.
-	kvs = InitialZoneConfigKVs(opts.Codec, opts.DefaultZoneConfig, opts.DefaultSystemZoneConfig)
+	kvs = InitialZoneConfigKVs(opts.Codec, opts.DefaultZoneConfig)
 	zonesTablePrefix := opts.Codec.TablePrefix(keys.ZonesTableID)
 	for _, kv := range initialKVs {
 		if !bytes.Equal(zonesTablePrefix, kv.Key[:len(zonesTablePrefix)]) {

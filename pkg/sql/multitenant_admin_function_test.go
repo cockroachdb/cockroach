@@ -66,8 +66,7 @@ func createTestClusterArgs(ctx context.Context, numReplicas, numVoters int32) ba
 			Settings: clusterSettings,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					DefaultZoneConfigOverride:       &zoneCfg,
-					DefaultSystemZoneConfigOverride: &zoneCfg,
+					DefaultZoneConfigOverride: &zoneCfg,
 				},
 			},
 		},

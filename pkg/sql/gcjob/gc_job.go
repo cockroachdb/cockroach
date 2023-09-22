@@ -285,11 +285,6 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 
 	// Clone the ExecConfig so that fields can be overwritten for testing knobs.
 	execCfg := *p.ExecCfg()
-	if n := execCfg.GCJobTestingKnobs.Notifier; n != nil {
-		execCfg.GCJobNotifier = n
-	}
-	// Use the same SystemConfigProvider as the notifier.
-	execCfg.SystemConfig = execCfg.GCJobNotifier.SystemConfigProvider()
 
 	if err := execCfg.JobRegistry.CheckPausepoint("gcjob.before_resume"); err != nil {
 		return err
@@ -428,9 +423,6 @@ func (r schemaChangeGCResumer) legacyWaitAndClearTableData(
 ) error {
 	tableDropTimes, indexDropTimes := getDropTimes(details)
 
-	gossipUpdateC, cleanup := execCfg.GCJobNotifier.AddNotifyee(ctx)
-	defer cleanup()
-
 	// Now that we've registered to be notified, check to see if we raced
 	// with the new version becoming active.
 	if shouldUseDelRange(ctx, details, execCfg.Settings, execCfg.GCJobTestingKnobs) {
@@ -442,9 +434,7 @@ func (r schemaChangeGCResumer) legacyWaitAndClearTableData(
 
 	for {
 		idleWait := idleWaitDuration.Get(execCfg.SV())
-		if err := waitForWork(
-			ctx, r.job.MarkIdle, ts, timerDuration, idleWait, gossipUpdateC,
-		); err != nil {
+		if err := waitForWork(ctx, r.job.MarkIdle, ts, timerDuration, idleWait); err != nil {
 			return err
 		}
 		// We'll be notified if the new version becomes active, so check and
@@ -521,7 +511,6 @@ func waitForWork(
 	markIdle func(isIdle bool),
 	source timeutil.TimeSource,
 	workTimerDuration, idleWaitDuration time.Duration,
-	gossipUpdateC <-chan struct{},
 ) error {
 	var markedIdle bool
 	defer func() {
@@ -545,11 +534,6 @@ func waitForWork(
 			markIdle(true)
 			markedIdle = true
 			return false
-
-		case <-gossipUpdateC:
-			if log.V(2) {
-				log.Info(ctx, "received a new system config")
-			}
 
 		case <-workTimer.Ch():
 			workTimer.MarkRead()

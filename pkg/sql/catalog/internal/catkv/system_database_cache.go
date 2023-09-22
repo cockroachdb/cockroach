@@ -54,7 +54,6 @@ func NewSystemDatabaseCache(codec keys.SQLCodec, settings *cluster.Settings) *Sy
 	ms := bootstrap.MakeMetadataSchema(
 		codec,
 		zonepb.DefaultZoneConfigRef(),
-		zonepb.DefaultSystemZoneConfigRef(),
 	)
 	var warm nstree.MutableCatalog
 	_ = ms.ForEachCatalogDescriptor(func(desc catalog.Descriptor) error {

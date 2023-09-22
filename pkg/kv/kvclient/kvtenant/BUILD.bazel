@@ -12,10 +12,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/gossip",
-        "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvclient/rangecache",

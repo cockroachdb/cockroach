@@ -249,22 +249,6 @@ func DefaultZoneConfigRef() *ZoneConfig {
 	return &zoneConfig
 }
 
-// DefaultSystemZoneConfig is the default zone configuration used when no custom
-// config has been specified. The DefaultSystemZoneConfig is like the
-// DefaultZoneConfig but has a replication factor of 5 instead of 3.
-func DefaultSystemZoneConfig() ZoneConfig {
-	defaultSystemZoneConfig := DefaultZoneConfig()
-	defaultSystemZoneConfig.NumReplicas = proto.Int32(5)
-	return defaultSystemZoneConfig
-}
-
-// DefaultSystemZoneConfigRef is the default zone configuration used when no custom
-// config has been specified.
-func DefaultSystemZoneConfigRef() *ZoneConfig {
-	systemZoneConfig := DefaultSystemZoneConfig()
-	return &systemZoneConfig
-}
-
 // IsComplete returns whether all the fields are set.
 func (z *ZoneConfig) IsComplete() bool {
 	return ((z.NumReplicas != nil) && (z.RangeMinBytes != nil) &&

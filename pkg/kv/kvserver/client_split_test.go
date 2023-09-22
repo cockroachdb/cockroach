@@ -2593,13 +2593,6 @@ func TestUnsplittableRange(t *testing.T) {
 		TTLSeconds: int32(ttl.Seconds()),
 	}
 	zoneConfig.NumReplicas = proto.Int32(1)
-	zoneSystemConfig := zonepb.DefaultSystemZoneConfig()
-	zoneSystemConfig.RangeMinBytes = proto.Int64(minBytes)
-	zoneSystemConfig.RangeMaxBytes = proto.Int64(maxBytes)
-	zoneSystemConfig.GC = &zonepb.GCPolicy{
-		TTLSeconds: int32(ttl.Seconds()),
-	}
-	zoneSystemConfig.NumReplicas = proto.Int32(1)
 	splitQueuePurgatoryChan := make(chan time.Time, 1)
 
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
@@ -2612,9 +2605,8 @@ func TestUnsplittableRange(t *testing.T) {
 				DisableCanAckBeforeApplication: true,
 			},
 			Server: &server.TestingKnobs{
-				WallClock:                       manualClock,
-				DefaultZoneConfigOverride:       &zoneConfig,
-				DefaultSystemZoneConfigOverride: &zoneSystemConfig,
+				WallClock:                 manualClock,
+				DefaultZoneConfigOverride: &zoneConfig,
 			},
 			SpanConfig: &spanconfig.TestingKnobs{
 				ProtectedTSReaderOverrideFn: spanconfig.EmptyProtectedTSReader,
@@ -3629,11 +3621,17 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 		}
 		return nil
 	}
+	// Set global reads.
+	zoneConfig := zonepb.DefaultZoneConfig()
+	zoneConfig.GlobalReads = proto.Bool(true)
 
 	ctx := context.Background()
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DisableSpanConfigs: true,
 		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				DefaultZoneConfigOverride: &zoneConfig,
+			},
+
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue:     true,
 				TestingResponseFilter: respFilter,
@@ -3660,11 +3658,6 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	_, pErr := kv.SendWrapped(ctx, store.TestSender(), splitArgs)
 	require.Nil(t, pErr)
 
-	// Set global reads.
-	zoneConfig := zonepb.DefaultZoneConfig()
-	zoneConfig.GlobalReads = proto.Bool(true)
-	config.TestingSetZoneConfig(config.ObjectID(descID), zoneConfig)
-
 	// Perform a write to the system config span being watched by
 	// the SystemConfigProvider.
 	tdb.Exec(t, "CREATE TABLE foo ()")
@@ -3672,6 +3665,19 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 		repl := store.LookupReplica(roachpb.RKey(descKey))
 		if repl.ClosedTimestampPolicy() != roachpb.LEAD_FOR_GLOBAL_READS {
 			return errors.Errorf("expected LEAD_FOR_GLOBAL_READS policy")
+		}
+		return nil
+	})
+
+	// The commit wait count is 1 due to the split above since global reads are
+	// set for the default config.
+	var splitCount = int64(1)
+	testutils.SucceedsSoon(t, func() error {
+		if splitCount != store.Metrics().CommitWaitsBeforeCommitTrigger.Count() {
+			return errors.Errorf("commit wait count is %d", store.Metrics().CommitWaitsBeforeCommitTrigger.Count())
+		}
+		if splitCount != atomic.LoadInt64(&splitsWithSyntheticTS) {
+			return errors.Errorf("num splits is %d", atomic.LoadInt64(&splitsWithSyntheticTS))
 		}
 		return nil
 	})
@@ -3686,8 +3692,9 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	splitArgs = adminSplitArgs(splitKey)
 	_, pErr = kv.SendWrapped(ctx, store.TestSender(), splitArgs)
 	require.Nil(t, pErr)
-	require.Equal(t, int64(1), store.Metrics().CommitWaitsBeforeCommitTrigger.Count())
-	require.Equal(t, int64(1), atomic.LoadInt64(&splitsWithSyntheticTS))
+	splitCount++
+	require.Equal(t, splitCount, store.Metrics().CommitWaitsBeforeCommitTrigger.Count())
+	require.Equal(t, splitCount, atomic.LoadInt64(&splitsWithSyntheticTS))
 
 	repl := store.LookupReplica(roachpb.RKey(splitKey))
 	require.Equal(t, splitKey, repl.Desc().StartKey.AsRawKey())
@@ -3696,7 +3703,7 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	mergeArgs := adminMergeArgs(descKey)
 	_, pErr = kv.SendWrapped(ctx, store.TestSender(), mergeArgs)
 	require.Nil(t, pErr)
-	require.Equal(t, int64(2), store.Metrics().CommitWaitsBeforeCommitTrigger.Count())
+	require.Equal(t, splitCount+1, store.Metrics().CommitWaitsBeforeCommitTrigger.Count())
 	require.Equal(t, int64(1), atomic.LoadInt64(&mergesWithSyntheticTS))
 
 	repl = store.LookupReplica(roachpb.RKey(splitKey))
@@ -3876,7 +3883,6 @@ func TestLBSplitUnsafeKeys(t *testing.T) {
 			}
 
 			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-				DisableSpanConfigs: true,
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
 						LoadBasedSplittingOverrideKey: overrideLBSplitFn,
