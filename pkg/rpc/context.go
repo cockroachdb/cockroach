@@ -21,7 +21,6 @@ import (
 	"net"
 	"time"
 
-	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
@@ -230,7 +229,6 @@ type Context struct {
 	metrics Metrics
 
 	// For unittesting.
-	BreakerFactory  func() *circuit.Breaker
 	testingDialOpts []grpc.DialOption
 
 	// For testing. See the comment on the same field in HeartbeatService.

@@ -11,10 +11,8 @@
 package joberror
 
 import (
-	"fmt"
 	"testing"
 
-	circuitbreaker "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -30,16 +28,5 @@ func TestErrBreakerOpenIsRetriable(t *testing.T) {
 		EventHandler: &circuit.EventLogger{Log: func(redact.StringBuilder) {}},
 	})
 	br.Report(errors.New("test error"))
-	utilBreakderErr := br.Signal().Err()
-	// NB: This matches the error that dial produces.
-	dialErr := errors.Wrapf(circuitbreaker.ErrBreakerOpen, "unable to dial n%d", 9)
-
-	for _, e := range []error{
-		utilBreakderErr,
-		dialErr,
-	} {
-		t.Run(fmt.Sprintf("%s", e), func(t *testing.T) {
-			require.False(t, IsPermanentBulkJobError(e))
-		})
-	}
+	require.False(t, IsPermanentBulkJobError(br.Signal().Err()))
 }
