@@ -695,6 +695,13 @@ func TestTenantLogic_drop_role_with_default_privileges_in_schema(
 	runLogicTest(t, "drop_role_with_default_privileges_in_schema")
 }
 
+func TestTenantLogic_drop_routine(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "drop_routine")
+}
+
 func TestTenantLogic_drop_schema(
 	t *testing.T,
 ) {
