@@ -107,7 +107,6 @@ var (
 // iter_new_incremental [k=<key>] [end=<key>] [startTs=<int>[,<int>]] [endTs=<int>[,<int>]] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [maskBelow=<int>[,<int>]] [intents=error|aggregate|emit]
 // iter_seek_ge   k=<key> [ts=<int>[,<int>]]
 // iter_seek_lt   k=<key> [ts=<int>[,<int>]]
-// iter_seek_intent_ge k=<key> txn=<name>
 // iter_next
 // iter_next_ignoring_time
 // iter_next_key_ignoring_time
@@ -805,7 +804,6 @@ var commands = map[string]cmd{
 	"iter_new_read_as_of":         {typReadOnly, cmdIterNewReadAsOf},    // readAsOfIterator
 	"iter_seek_ge":                {typReadOnly, cmdIterSeekGE},
 	"iter_seek_lt":                {typReadOnly, cmdIterSeekLT},
-	"iter_seek_intent_ge":         {typReadOnly, cmdIterSeekIntentGE},
 	"iter_next":                   {typReadOnly, cmdIterNext},
 	"iter_next_ignoring_time":     {typReadOnly, cmdIterNextIgnoringTime},    // MVCCIncrementalIterator
 	"iter_next_key_ignoring_time": {typReadOnly, cmdIterNextKeyIgnoringTime}, // MVCCIncrementalIterator
@@ -1921,16 +1919,6 @@ func cmdIterSeekGE(e *evalCtx) error {
 	key := e.getKey()
 	ts := e.getTs(nil)
 	e.iter.SeekGE(storage.MVCCKey{Key: key, Timestamp: ts})
-	printIter(e)
-	return nil
-}
-
-func cmdIterSeekIntentGE(e *evalCtx) error {
-	key := e.getKey()
-	var txnName string
-	e.scanArg("txn", &txnName)
-	txn := e.txns[txnName]
-	e.mvccIter().SeekIntentGE(key, txn.ID)
 	printIter(e)
 	return nil
 }

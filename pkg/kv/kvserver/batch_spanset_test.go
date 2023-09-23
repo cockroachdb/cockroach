@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -581,7 +582,7 @@ func TestSpanSetMVCCResolveWriteIntentRange(t *testing.T) {
 	defer batch.Close()
 	intent := roachpb.LockUpdate{
 		Span:   roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b\x00")},
-		Txn:    enginepb.TxnMeta{}, // unused
+		Txn:    enginepb.TxnMeta{ID: uuid.MakeV4()}, // unused
 		Status: roachpb.PENDING,
 	}
 	if _, _, _, _, err := storage.MVCCResolveWriteIntentRange(

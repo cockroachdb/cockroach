@@ -4722,7 +4722,7 @@ func TestEndTxnRollbackAbortedTransaction(t *testing.T) {
 
 			if pErr := tc.store.intentResolver.ResolveIntents(ctx,
 				[]roachpb.LockUpdate{
-					roachpb.MakeLockUpdate(&txnRecord, roachpb.Span{Key: key}),
+					roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
 				}, intentresolver.ResolveOptions{Poison: true}); pErr != nil {
 				t.Fatal(pErr)
 			}
