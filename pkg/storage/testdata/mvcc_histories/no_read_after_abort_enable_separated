@@ -13,7 +13,7 @@ txn: "A" meta={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=22.0
 meta: "a"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=22.000000000,0 min=0,0 seq=0} ts=22.000000000,0 del=false klen=12 vlen=8 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/22.000000000,0 -> /BYTES/cde
 >> resolve_intent status=ABORTED t=A k=a
-called ClearEngineKey(/Local/Lock/Intent"a"/0300000001000000000000000000000000)
+called ClearEngineKey(/Local/Lock"a"/0300000001000000000000000000000000)
 resolve_intent: "a" -> resolved key = true
 <no data>
 >> txn_remove t=A k=a
