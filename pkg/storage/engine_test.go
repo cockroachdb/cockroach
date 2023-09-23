@@ -1495,51 +1495,77 @@ func TestGetIntent(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	reader, err := Open(ctx, InMemory(), cluster.MakeClusterSettings(), CacheSize(1<<20 /* 1 MiB */))
+	eng, err := Open(ctx, InMemory(), cluster.MakeClusterSettings(), CacheSize(1<<20 /* 1 MiB */))
 	require.NoError(t, err)
-	defer reader.Close()
+	defer eng.Close()
+
+	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+	keyD, keyE, keyF := roachpb.Key("d"), roachpb.Key("e"), roachpb.Key("f")
+	val := stringValue("val").Value
 
 	txn1ID := uuid.MakeV4()
 	txn1TS := hlc.Timestamp{Logical: 1}
-	txn1 := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 1, WriteTimestamp: txn1TS, MinTimestamp: txn1TS, CoordinatorNodeID: 1}, ReadTimestamp: txn1TS}
-
-	for _, keyName := range []string{"a", "aa"} {
-		key := roachpb.Key(keyName)
-		err := MVCCPut(ctx, reader, key, txn1.ReadTimestamp, roachpb.Value{RawBytes: key}, MVCCWriteOptions{Txn: txn1})
-		require.NoError(t, err)
-	}
-
+	txn1 := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: keyA, ID: txn1ID, Epoch: 1, WriteTimestamp: txn1TS, MinTimestamp: txn1TS, CoordinatorNodeID: 1}, ReadTimestamp: txn1TS}
 	txn2ID := uuid.MakeV4()
 	txn2TS := hlc.Timestamp{Logical: 2}
-	txn2 := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn2ID, Epoch: 2, WriteTimestamp: txn2TS, MinTimestamp: txn2TS, CoordinatorNodeID: 2}, ReadTimestamp: txn2TS}
+	txn2 := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: keyA, ID: txn2ID, Epoch: 2, WriteTimestamp: txn2TS, MinTimestamp: txn2TS, CoordinatorNodeID: 2}, ReadTimestamp: txn2TS}
 
-	key := roachpb.Key("b")
-	err = MVCCPut(ctx, reader, key, txn2.ReadTimestamp, roachpb.Value{RawBytes: key}, MVCCWriteOptions{Txn: txn2})
+	// Key "a" only has an intent from txn1.
+	err = MVCCPut(ctx, eng, keyA, txn1.ReadTimestamp, val, MVCCWriteOptions{Txn: txn1})
 	require.NoError(t, err)
 
+	// Key "b" has an intent, an exclusive lock, and a shared lock from txn1.
+	// NOTE: acquire in increasing strength order so that acquisition is never
+	// skipped.
+	err = MVCCAcquireLock(ctx, eng, txn1, lock.Shared, keyB, nil, 0)
+	require.NoError(t, err)
+	err = MVCCAcquireLock(ctx, eng, txn1, lock.Exclusive, keyB, nil, 0)
+	require.NoError(t, err)
+	err = MVCCPut(ctx, eng, keyB, txn1.ReadTimestamp, val, MVCCWriteOptions{Txn: txn1})
+	require.NoError(t, err)
+
+	// Key "c" only has an intent from txn2.
+	err = MVCCPut(ctx, eng, keyC, txn2.ReadTimestamp, val, MVCCWriteOptions{Txn: txn2})
+	require.NoError(t, err)
+
+	// Key "d" has an exclusive lock and a shared lock from txn2.
+	err = MVCCAcquireLock(ctx, eng, txn2, lock.Shared, keyD, nil, 0)
+	require.NoError(t, err)
+	err = MVCCAcquireLock(ctx, eng, txn2, lock.Exclusive, keyD, nil, 0)
+	require.NoError(t, err)
+
+	// Key "e" has a shared lock from each txn.
+	err = MVCCAcquireLock(ctx, eng, txn1, lock.Shared, keyE, nil, 0)
+	require.NoError(t, err)
+	err = MVCCAcquireLock(ctx, eng, txn2, lock.Shared, keyE, nil, 0)
+	require.NoError(t, err)
+
+	// Key "f" has no intent/locks.
+
 	tests := []struct {
-		name  string
-		key   string
-		txn   *roachpb.Transaction
-		err   bool
-		found bool
+		key         roachpb.Key
+		expErr      bool
+		expFound    bool
+		expFoundTxn *roachpb.Transaction
 	}{
-		{"found a", "a", txn1, false, true},
-		{"found aa", "aa", txn1, false, true},
-		{"found b", "b", txn2, false, true},
-		{"not found", "c", nil, false, false},
+		{key: keyA, expErr: false, expFound: true, expFoundTxn: txn1},
+		{key: keyB, expErr: false, expFound: true, expFoundTxn: txn1},
+		{key: keyC, expErr: false, expFound: true, expFoundTxn: txn2},
+		{key: keyD, expErr: false, expFound: false, expFoundTxn: nil},
+		{key: keyE, expErr: false, expFound: false, expFoundTxn: nil},
+		{key: keyF, expErr: false, expFound: false, expFoundTxn: nil},
 	}
 	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			intent, err := GetIntent(reader, roachpb.Key(test.key))
-			if test.err {
+		t.Run(string(test.key), func(t *testing.T) {
+			intent, err := GetIntent(eng, test.key)
+			if test.expErr {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				if test.found {
+				if test.expFound {
 					require.NotNil(t, intent)
-					require.Equal(t, roachpb.Key(test.key), intent.Key)
-					require.Equal(t, test.txn.TxnMeta, intent.Txn)
+					require.Equal(t, test.key, intent.Key)
+					require.Equal(t, test.expFoundTxn.TxnMeta, intent.Txn)
 				} else {
 					require.Nil(t, intent)
 				}

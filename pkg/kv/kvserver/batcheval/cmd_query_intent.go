@@ -74,8 +74,6 @@ func QueryIntent(
 	}
 
 	// Read from the lock table to see if an intent exists.
-	// Iterate over the lock key space with this key as a lower bound.
-	// With prefix set to true there should be at most one result.
 	intent, err := storage.GetIntent(reader, args.Key)
 	if err != nil {
 		return result.Result{}, err
