@@ -411,14 +411,24 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, name string, user string) *
 //lint:ignore U1000 unused
 func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 	// This test uses this mock HTTP server to pass the backup files between tenants.
-	//lint:ignore SA4006 unused
 	httpAddr, httpServerCleanup := makeInsecureHTTPServer(t)
 	defer httpServerCleanup()
 
-	//lint:ignore SA4006 unused
 	ctx := context.Background()
-	path, err := bazel.Runfile(testFilePathFromWorkspace)
-	require.NoError(t, err)
+	var path string
+	// Runfile can't be generally implemented outside of Bazel - for testdata scripts, they will always
+	// be relative to the test binary.
+	if bazel.BuiltWithBazel() {
+		var err error
+		path, err = bazel.Runfile(testFilePathFromWorkspace)
+		require.NoError(t, err)
+	} else {
+		idx := strings.Index(testFilePathFromWorkspace, "testdata")
+		if idx == -1 {
+			t.Fatalf("%q doesn't contain 'testdata' - can't run outside of Bazel", testFilePathFromWorkspace)
+		}
+		path = testFilePathFromWorkspace[idx:]
+	}
 
 	var lastCreatedCluster string
 	ds := newDatadrivenTestState()
