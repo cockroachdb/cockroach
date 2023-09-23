@@ -4792,7 +4792,7 @@ func mvccResolveWriteIntent(
 	// remains, the rolledBackVal is set to a non-nil value.
 	var rolledBackVal *MVCCValue
 	var err error
-	if len(intent.IgnoredSeqNums) > 0 {
+	if epochsMatch && len(intent.IgnoredSeqNums) > 0 {
 		// NOTE: mvccMaybeRewriteIntentHistory mutates its meta argument.
 		// TODO(nvanbenschoten): this is an awkward interface. We shouldn't
 		// be mutating meta and we shouldn't be restoring the previous value
