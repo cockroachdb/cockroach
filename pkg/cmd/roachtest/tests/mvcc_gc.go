@@ -38,12 +38,14 @@ import (
 
 func registerMVCCGC(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "mvcc_gc",
-		Owner:   registry.OwnerKV,
-		Timeout: 30 * time.Minute,
-		Cluster: r.MakeClusterSpec(3),
-		Leases:  registry.MetamorphicLeases,
-		Run:     runMVCCGC,
+		Name:             "mvcc_gc",
+		Owner:            registry.OwnerKV,
+		Timeout:          30 * time.Minute,
+		Cluster:          r.MakeClusterSpec(3),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		Run:              runMVCCGC,
 	})
 }
 

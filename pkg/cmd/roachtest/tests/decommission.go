@@ -43,10 +43,12 @@ func registerDecommission(r registry.Registry) {
 		duration := time.Hour
 
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("decommission/nodes=%d/duration=%s", numNodes, duration),
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(numNodes),
-			Leases:  registry.MetamorphicLeases,
+			Name:             fmt.Sprintf("decommission/nodes=%d/duration=%s", numNodes, duration),
+			Owner:            registry.OwnerKV,
+			Cluster:          r.MakeClusterSpec(numNodes),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.IsLocal() {
 					duration = 5 * time.Minute
@@ -60,10 +62,12 @@ func registerDecommission(r registry.Registry) {
 		numNodes := 9
 		duration := 30 * time.Minute
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("drain-and-decommission/nodes=%d", numNodes),
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(numNodes),
-			Leases:  registry.MetamorphicLeases,
+			Name:             fmt.Sprintf("drain-and-decommission/nodes=%d", numNodes),
+			Owner:            registry.OwnerKV,
+			Cluster:          r.MakeClusterSpec(numNodes),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDrainAndDecommission(ctx, t, c, numNodes, duration)
 			},
@@ -72,10 +76,12 @@ func registerDecommission(r registry.Registry) {
 	{
 		numNodes := 4
 		r.Add(registry.TestSpec{
-			Name:    "decommission/drains",
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(numNodes),
-			Leases:  registry.MetamorphicLeases,
+			Name:             "decommission/drains",
+			Owner:            registry.OwnerKV,
+			Cluster:          r.MakeClusterSpec(numNodes),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionDrains(ctx, t, c)
 			},
@@ -84,11 +90,13 @@ func registerDecommission(r registry.Registry) {
 	{
 		numNodes := 6
 		r.Add(registry.TestSpec{
-			Name:    "decommission/randomized",
-			Owner:   registry.OwnerKV,
-			Timeout: 10 * time.Minute,
-			Cluster: r.MakeClusterSpec(numNodes),
-			Leases:  registry.MetamorphicLeases,
+			Name:             "decommission/randomized",
+			Owner:            registry.OwnerKV,
+			Timeout:          10 * time.Minute,
+			Cluster:          r.MakeClusterSpec(numNodes),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionRandomized(ctx, t, c)
 			},
@@ -97,9 +105,11 @@ func registerDecommission(r registry.Registry) {
 	{
 		numNodes := 4
 		r.Add(registry.TestSpec{
-			Name:    "decommission/mixed-versions",
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(numNodes),
+			Name:             "decommission/mixed-versions",
+			Owner:            registry.OwnerKV,
+			Cluster:          r.MakeClusterSpec(numNodes),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionMixedVersions(ctx, t, c, t.BuildVersion())
 			},
@@ -108,10 +118,12 @@ func registerDecommission(r registry.Registry) {
 	{
 		numNodes := 6
 		r.Add(registry.TestSpec{
-			Name:    "decommission/slow",
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(numNodes),
-			Leases:  registry.MetamorphicLeases,
+			Name:             "decommission/slow",
+			Owner:            registry.OwnerKV,
+			Cluster:          r.MakeClusterSpec(numNodes),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionSlow(ctx, t, c)
 			},

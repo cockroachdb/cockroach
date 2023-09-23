@@ -630,10 +630,12 @@ const tpchVecNodeCount = 3
 
 func registerTPCHVec(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:      "tpchvec/perf",
-		Owner:     registry.OwnerSQLQueries,
-		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(tpchVecNodeCount),
+		Name:             "tpchvec/perf",
+		Owner:            registry.OwnerSQLQueries,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(tpchVecNodeCount),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
 				"sql.defaults.vectorize", /* settingName */
@@ -644,29 +646,35 @@ func registerTPCHVec(r registry.Registry) {
 	})
 
 	r.Add(registry.TestSpec{
-		Name:    "tpchvec/disk",
-		Owner:   registry.OwnerSQLQueries,
-		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
+		Name:             "tpchvec/disk",
+		Owner:            registry.OwnerSQLQueries,
+		Cluster:          r.MakeClusterSpec(tpchVecNodeCount),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, tpchVecDiskTest{}, baseTestRun)
 		},
 	})
 
 	r.Add(registry.TestSpec{
-		Name:            "tpchvec/smithcmp",
-		Owner:           registry.OwnerSQLQueries,
-		Cluster:         r.MakeClusterSpec(tpchVecNodeCount),
-		RequiresLicense: true,
+		Name:             "tpchvec/smithcmp",
+		Owner:            registry.OwnerSQLQueries,
+		Cluster:          r.MakeClusterSpec(tpchVecNodeCount),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, tpchVecSmithcmpTest{}, smithcmpTestRun)
 		},
 	})
 
 	r.Add(registry.TestSpec{
-		Name:      "tpchvec/streamer",
-		Owner:     registry.OwnerSQLQueries,
-		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(tpchVecNodeCount),
+		Name:             "tpchvec/streamer",
+		Owner:            registry.OwnerSQLQueries,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(tpchVecNodeCount),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
 				"sql.distsql.use_streamer.enabled", /* settingName */
@@ -677,10 +685,12 @@ func registerTPCHVec(r registry.Registry) {
 	})
 
 	r.Add(registry.TestSpec{
-		Name:      "tpchvec/direct_scans",
-		Owner:     registry.OwnerSQLQueries,
-		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(tpchVecNodeCount),
+		Name:             "tpchvec/direct_scans",
+		Owner:            registry.OwnerSQLQueries,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(tpchVecNodeCount),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
 				"sql.distsql.direct_columnar_scans.enabled", /* settingName */
@@ -691,10 +701,12 @@ func registerTPCHVec(r registry.Registry) {
 	})
 
 	r.Add(registry.TestSpec{
-		Name:      "tpchvec/direct_scans/mt-shared-process",
-		Owner:     registry.OwnerSQLQueries,
-		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(tpchVecNodeCount),
+		Name:             "tpchvec/direct_scans/mt-shared-process",
+		Owner:            registry.OwnerSQLQueries,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(tpchVecNodeCount),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
 				"sql.distsql.direct_columnar_scans.enabled", /* settingName */
@@ -705,9 +717,11 @@ func registerTPCHVec(r registry.Registry) {
 	})
 
 	r.Add(registry.TestSpec{
-		Name:    "tpchvec/bench",
-		Owner:   registry.OwnerSQLQueries,
-		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
+		Name:             "tpchvec/bench",
+		Owner:            registry.OwnerSQLQueries,
+		Cluster:          r.MakeClusterSpec(tpchVecNodeCount),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Skip: "This config can be used to perform some benchmarking and is not " +
 			"meant to be run on a nightly basis",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

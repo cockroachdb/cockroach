@@ -135,11 +135,13 @@ func registerLibPQ(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "lib/pq",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(1),
-		Leases:  registry.MetamorphicLeases,
-		Tags:    registry.Tags(`default`, `driver`),
-		Run:     runLibPQ,
+		Name:             "lib/pq",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly, registry.Driver),
+		Tags:             registry.Tags(`default`, `driver`),
+		Run:              runLibPQ,
 	})
 }

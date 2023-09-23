@@ -31,9 +31,11 @@ import (
 func registerProcessLock(r registry.Registry) {
 	const runDuration = 5 * time.Minute
 	r.Add(registry.TestSpec{
-		Name:    "process-lock",
-		Owner:   registry.OwnerStorage,
-		Cluster: r.MakeClusterSpec(4, spec.ReuseNone()),
+		Name:             "process-lock",
+		Owner:            registry.OwnerStorage,
+		Cluster:          r.MakeClusterSpec(4, spec.ReuseNone()),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		// Encryption is implemented within the virtual filesystem layer,
 		// just like disk-health monitoring. It's important to exercise
 		// encryption-at-rest to ensure we don't corrupt the encryption-at-rest

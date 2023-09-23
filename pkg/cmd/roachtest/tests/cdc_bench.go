@@ -94,11 +94,13 @@ func registerCDCBench(r registry.Registry) {
 					Name: fmt.Sprintf(
 						"cdc/scan/%s/nodes=%d/cpu=%d/rows=%s/ranges=%s/protocol=%s/format=%s/sink=null",
 						scanType, nodes, cpus, formatSI(rows), formatSI(ranges), protocol, format),
-					Owner:           registry.OwnerCDC,
-					Benchmark:       true,
-					Cluster:         r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
-					RequiresLicense: true,
-					Timeout:         2 * time.Hour, // catchup scans with 100k ranges can take >1 hour
+					Owner:            registry.OwnerCDC,
+					Benchmark:        true,
+					Cluster:          r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
+					CompatibleClouds: registry.AllExceptAWS,
+					Suites:           registry.Suites(registry.Nightly),
+					RequiresLicense:  true,
+					Timeout:          2 * time.Hour, // catchup scans with 100k ranges can take >1 hour
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 						runCDCBenchScan(ctx, t, c, scanType, rows, ranges, protocol, format)
 					},
@@ -122,11 +124,13 @@ func registerCDCBench(r registry.Registry) {
 				Name: fmt.Sprintf(
 					"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%s/control",
 					readPercent, nodes, cpus, formatSI(ranges)),
-				Owner:           registry.OwnerCDC,
-				Benchmark:       true,
-				Cluster:         r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
-				RequiresLicense: true,
-				Timeout:         time.Hour,
+				Owner:            registry.OwnerCDC,
+				Benchmark:        true,
+				Cluster:          r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
+				CompatibleClouds: registry.AllExceptAWS,
+				Suites:           registry.Suites(registry.Nightly),
+				RequiresLicense:  true,
+				Timeout:          time.Hour,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runCDCBenchWorkload(ctx, t, c, ranges, readPercent, "", "", "")
 				},
@@ -140,11 +144,13 @@ func registerCDCBench(r registry.Registry) {
 						Name: fmt.Sprintf(
 							"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%s/server=%s/protocol=%s/format=%s/sink=null",
 							readPercent, nodes, cpus, formatSI(ranges), server, protocol, format),
-						Owner:           registry.OwnerCDC,
-						Benchmark:       true,
-						Cluster:         r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
-						RequiresLicense: true,
-						Timeout:         time.Hour,
+						Owner:            registry.OwnerCDC,
+						Benchmark:        true,
+						Cluster:          r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
+						CompatibleClouds: registry.AllExceptAWS,
+						Suites:           registry.Suites(registry.Nightly),
+						RequiresLicense:  true,
+						Timeout:          time.Hour,
 						Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 							runCDCBenchWorkload(ctx, t, c, ranges, readPercent, server, protocol, format)
 						},

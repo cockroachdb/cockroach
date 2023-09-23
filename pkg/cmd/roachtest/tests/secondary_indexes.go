@@ -135,9 +135,11 @@ func verifyTableData(node int, expected [][]int) versionStep {
 
 func registerSecondaryIndexesMultiVersionCluster(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "schemachange/secondary-index-multi-version",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(3),
+		Name:             "schemachange/secondary-index-multi-version",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(3),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			predV, err := release.LatestPredecessor(t.BuildVersion())
 			if err != nil {

@@ -30,13 +30,15 @@ import (
 // an increase in foreground latency.
 func registerElasticControlForCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:            "admission-control/elastic-cdc",
-		Owner:           registry.OwnerAdmissionControl,
-		Benchmark:       true,
-		Tags:            registry.Tags(`weekly`),
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(8)),
-		RequiresLicense: true,
-		Leases:          registry.MetamorphicLeases,
+		Name:             "admission-control/elastic-cdc",
+		Owner:            registry.OwnerAdmissionControl,
+		Benchmark:        true,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Weekly),
+		Tags:             registry.Tags(`weekly`),
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(8)),
+		RequiresLicense:  true,
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().NodeCount < 4 {
 				t.Fatalf("expected at least 4 nodes, found %d", c.Spec().NodeCount)

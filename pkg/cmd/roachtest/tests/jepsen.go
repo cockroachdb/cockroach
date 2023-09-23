@@ -490,8 +490,10 @@ func registerJepsen(r registry.Registry) {
 				// clusters because they have a lengthy setup step, but avoid doing it
 				// if they detect that the machines have already been properly
 				// initialized.
-				Cluster: r.MakeClusterSpec(6, spec.ReuseTagged("jepsen")),
-				Leases:  registry.MetamorphicLeases,
+				Cluster:          r.MakeClusterSpec(6, spec.ReuseTagged("jepsen")),
+				CompatibleClouds: registry.AllExceptAWS,
+				Suites:           registry.Suites(registry.Nightly),
+				Leases:           registry.MetamorphicLeases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runJepsen(ctx, t, c, testName, nemesis.config)
 				},

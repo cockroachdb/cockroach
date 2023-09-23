@@ -298,10 +298,12 @@ sudo iptables-save
 func registerNetwork(r registry.Registry) {
 	const numNodes = 4
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("network/authentication/nodes=%d", numNodes),
-		Owner:   registry.OwnerKV, // Should be moved to new security team once one exists.
-		Cluster: r.MakeClusterSpec(numNodes),
-		Leases:  registry.MetamorphicLeases,
+		Name:             fmt.Sprintf("network/authentication/nodes=%d", numNodes),
+		Owner:            registry.OwnerKV, // Should be moved to new security team once one exists.
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runNetworkAuthentication(ctx, t, c)
 		},

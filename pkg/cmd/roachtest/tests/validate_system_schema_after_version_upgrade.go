@@ -31,9 +31,11 @@ func registerValidateSystemSchemaAfterVersionUpgrade(r registry.Registry) {
 	// Specifically, we do the check with `USE system; SHOW CREATE ALL TABLES;`
 	// and assert that the output matches the expected output content.
 	r.Add(registry.TestSpec{
-		Name:    "systemschema/validate-after-version-upgrade",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(1),
+		Name:             "systemschema/validate-after-version-upgrade",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			predecessorVersion, err := release.LatestPredecessor(t.BuildVersion())
 			if err != nil {

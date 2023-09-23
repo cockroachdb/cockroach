@@ -29,6 +29,8 @@ func registerDisaggRebalance(r registry.Registry) {
 	disaggRebalanceSpec := r.MakeClusterSpec(4)
 	r.Add(registry.TestSpec{
 		Name:              fmt.Sprintf("disagg-rebalance/aws/%s", disaggRebalanceSpec),
+		CompatibleClouds:  registry.AllClouds,
+		Suites:            registry.Suites(registry.Nightly),
 		Tags:              registry.Tags("aws"),
 		Owner:             registry.OwnerStorage,
 		Cluster:           disaggRebalanceSpec,

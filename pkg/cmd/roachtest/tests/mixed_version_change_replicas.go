@@ -30,11 +30,13 @@ import (
 
 func registerChangeReplicasMixedVersion(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "change-replicas/mixed-version",
-		Owner:   registry.OwnerReplication,
-		Cluster: r.MakeClusterSpec(4),
-		Run:     runChangeReplicasMixedVersion,
-		Timeout: 20 * time.Minute,
+		Name:             "change-replicas/mixed-version",
+		Owner:            registry.OwnerReplication,
+		Cluster:          r.MakeClusterSpec(4),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Run:              runChangeReplicasMixedVersion,
+		Timeout:          20 * time.Minute,
 	})
 }
 

@@ -30,10 +30,12 @@ import (
 func registerReplicaGC(r registry.Registry) {
 	for _, restart := range []bool{true, false} {
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("replicagc-changed-peers/restart=%t", restart),
-			Owner:   registry.OwnerReplication,
-			Cluster: r.MakeClusterSpec(6),
-			Leases:  registry.MetamorphicLeases,
+			Name:             fmt.Sprintf("replicagc-changed-peers/restart=%t", restart),
+			Owner:            registry.OwnerReplication,
+			Cluster:          r.MakeClusterSpec(6),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runReplicaGCChangedPeers(ctx, t, c, restart)
 			},
