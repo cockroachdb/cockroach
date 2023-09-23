@@ -1370,19 +1370,22 @@ type EncryptionRegistries struct {
 // GetIntent will look up an intent given a key. It there is no intent for a
 // key, it will return nil rather than an error. Errors are returned for problem
 // at the storage layer, problem decoding the key, problem unmarshalling the
-// intent, missing transaction on the intent or multiple intents for this key.
+// intent, missing transaction on the intent, or multiple intents for this key.
 func GetIntent(reader Reader, key roachpb.Key) (*roachpb.Intent, error) {
-	// Translate this key from a regular key to one in the lock space so it can be
-	// used for queries.
-	lbKey, _ := keys.LockTableSingleKey(key, nil)
-
-	iter, err := reader.NewEngineIterator(IterOptions{Prefix: true, LowerBound: lbKey})
+	// Probe the lock table at key using a lock-table iterator.
+	opts := LockTableIteratorOptions{
+		Prefix: true,
+		// Ignore Exclusive and Shared locks. We only care about intents.
+		MatchMinStr: lock.Intent,
+	}
+	iter, err := NewLockTableIterator(reader, opts)
 	if err != nil {
 		return nil, err
 	}
 	defer iter.Close()
 
-	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: lbKey})
+	seekKey, _ := keys.LockTableSingleKey(key, nil)
+	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: seekKey})
 	if err != nil {
 		return nil, err
 	}
@@ -1394,21 +1397,20 @@ func GetIntent(reader Reader, key roachpb.Key) (*roachpb.Intent, error) {
 	if err != nil {
 		return nil, err
 	}
-	checkKey, err := keys.DecodeLockTableSingleKey(engineKey.Key)
+	ltKey, err := engineKey.ToLockTableKey()
 	if err != nil {
 		return nil, err
 	}
-	if !checkKey.Equal(key) {
+	if !ltKey.Key.Equal(key) {
 		// This should not be possible, a key and using prefix match means that it
 		// must match.
-		return nil, errors.AssertionFailedf("key does not match expected %v != %v", checkKey, key)
+		return nil, errors.AssertionFailedf("key does not match expected %v != %v", ltKey.Key, key)
+	}
+	if ltKey.Strength != lock.Intent {
+		return nil, errors.AssertionFailedf("unexpected strength for LockTableKey %s: %v", ltKey.Strength, ltKey)
 	}
 	var meta enginepb.MVCCMetadata
-	v, err := iter.UnsafeValue()
-	if err != nil {
-		return nil, err
-	}
-	if err = protoutil.Unmarshal(v, &meta); err != nil {
+	if err = iter.ValueProto(&meta); err != nil {
 		return nil, err
 	}
 	if meta.Txn == nil {
