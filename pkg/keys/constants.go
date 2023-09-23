@@ -229,11 +229,7 @@ var (
 	// key (see EngineKey.Version). This permits the storage engine to use
 	// bloom filters when searching for all locks for a lockable key.
 	//
-	// Different lock strengths may use different value types. The exclusive
-	// lock strength uses MVCCMetadata as the value type, since it does
-	// double duty as a reference to a provisional MVCC value.
-	// TODO(sumeer): remember to adjust this comment when adding locks of
-	// other strengths, or range locks.
+	// All lock strengths use MVCCMetadata as the value type.
 	LocalRangeLockTablePrefix = roachpb.Key(makeKey(LocalPrefix, roachpb.RKey("z")))
 	LockTableSingleKeyInfix   = []byte("k")
 	// LockTableSingleKeyStart is the inclusive start key of the key range

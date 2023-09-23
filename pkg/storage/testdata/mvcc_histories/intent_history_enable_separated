@@ -58,7 +58,7 @@ data: "a"/2.000000000,0 -> /BYTES/first
 data: "a"/1.000000000,0 -> /BYTES/default
 stats: val_bytes=+16 live_count=+1 live_bytes=+111 gc_bytes_age=-9310 intent_bytes=+10
 >> resolve_intent k=a t=A
-called ClearEngineKey(/Local/Lock/Intent"a"/0300000002000000000000000000000000)
+called ClearEngineKey(/Local/Lock"a"/0300000002000000000000000000000000)
 resolve_intent: "a" -> resolved key = true
 data: "a"/2.000000000,0 -> /BYTES/first
 data: "a"/1.000000000,0 -> /BYTES/default
