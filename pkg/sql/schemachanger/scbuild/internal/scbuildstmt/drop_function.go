@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-func DropFunction(b BuildCtx, n *tree.DropFunction) {
+func DropFunction(b BuildCtx, n *tree.DropRoutine) {
 	if n.DropBehavior == tree.DropCascade {
 		// TODO(chengxiong): remove this when we allow UDF usage.
 		panic(scerrors.NotImplementedErrorf(n, "cascade dropping functions"))
@@ -29,7 +29,7 @@ func DropFunction(b BuildCtx, n *tree.DropFunction) {
 
 	var toCheckBackRefs []catid.DescID
 	var toCheckBackRefsNames []*scpb.FunctionName
-	for _, f := range n.Functions {
+	for _, f := range n.Routines {
 		elts := b.ResolveUDF(&f, ResolveParams{
 			IsExistenceOptional: n.IfExists,
 		})
