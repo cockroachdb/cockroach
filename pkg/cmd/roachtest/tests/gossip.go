@@ -141,10 +141,12 @@ SELECT node_id
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "gossip/chaos/nodes=9",
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(9),
-		Leases:  registry.MetamorphicLeases,
+		Name:             "gossip/chaos/nodes=9",
+		Owner:            registry.OwnerKV,
+		Cluster:          r.MakeClusterSpec(9),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runGossipChaos(ctx, t, c)
 		},

@@ -103,6 +103,8 @@ func registerLeasePreferences(r registry.Registry) {
 		// validation.
 		SkipPostValidations: registry.PostValidationNoDeadNodes,
 		Cluster:             r.MakeClusterSpec(5, spec.CPU(4)),
+		CompatibleClouds:    registry.AllExceptAWS,
+		Suites:              registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLeasePreferences(ctx, t, c, leasePreferencesSpec{
 				preferences:           `[+dc=1],[+dc=2]`,
@@ -127,6 +129,8 @@ func registerLeasePreferences(r registry.Registry) {
 		// validation.
 		SkipPostValidations: registry.PostValidationNoDeadNodes,
 		Cluster:             r.MakeClusterSpec(5, spec.CPU(4)),
+		CompatibleClouds:    registry.AllExceptAWS,
+		Suites:              registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLeasePreferences(ctx, t, c, leasePreferencesSpec{
 				preferences:           `[+dc=1],[+dc=2]`,
@@ -143,10 +147,12 @@ func registerLeasePreferences(r registry.Registry) {
 		// NB: This test manually transfers leases onto [+dc=3], which violates the
 		// lease preferences. This test then waits until all the leases are back on
 		// the most preferred locality.
-		Name:    "lease-preferences/manual-violating-transfer",
-		Owner:   registry.OwnerKV,
-		Timeout: 30 * time.Minute,
-		Cluster: r.MakeClusterSpec(5, spec.CPU(4)),
+		Name:             "lease-preferences/manual-violating-transfer",
+		Owner:            registry.OwnerKV,
+		Timeout:          30 * time.Minute,
+		Cluster:          r.MakeClusterSpec(5, spec.CPU(4)),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLeasePreferences(ctx, t, c, leasePreferencesSpec{
 				preferences: `[+dc=1],[+dc=2]`,

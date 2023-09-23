@@ -153,11 +153,13 @@ func registerMultiTenantTPCH(r registry.Registry) {
 				name += "/enable_direct_scans"
 			}
 			r.Add(registry.TestSpec{
-				Name:      name,
-				Owner:     registry.OwnerSQLQueries,
-				Benchmark: true,
-				Cluster:   r.MakeClusterSpec(1 /* nodeCount */),
-				Leases:    registry.MetamorphicLeases,
+				Name:             name,
+				Owner:            registry.OwnerSQLQueries,
+				Benchmark:        true,
+				Cluster:          r.MakeClusterSpec(1 /* nodeCount */),
+				CompatibleClouds: registry.AllExceptAWS,
+				Suites:           registry.Suites(registry.Nightly),
+				Leases:           registry.MetamorphicLeases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runMultiTenantTPCH(ctx, t, c, enableDirectScans, sharedProcess)
 				},

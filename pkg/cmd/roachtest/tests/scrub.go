@@ -54,11 +54,13 @@ func makeScrubTPCCTest(
 	}
 
 	return registry.TestSpec{
-		Name:      fmt.Sprintf("scrub/%s/tpcc/w=%d", optionName, warehouses),
-		Owner:     registry.OwnerSQLQueries,
-		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(numNodes),
-		Leases:    registry.MetamorphicLeases,
+		Name:             fmt.Sprintf("scrub/%s/tpcc/w=%d", optionName, warehouses),
+		Owner:            registry.OwnerSQLQueries,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses:   warehouses,

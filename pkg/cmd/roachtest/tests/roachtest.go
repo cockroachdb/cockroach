@@ -24,16 +24,20 @@ import (
 
 func registerRoachtest(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "roachtest/noop",
-		Tags:    registry.Tags("roachtest"),
-		Owner:   registry.OwnerTestEng,
-		Run:     func(_ context.Context, _ test.Test, _ cluster.Cluster) {},
-		Cluster: r.MakeClusterSpec(0),
+		Name:             "roachtest/noop",
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Roachtest),
+		Tags:             registry.Tags("roachtest"),
+		Owner:            registry.OwnerTestEng,
+		Run:              func(_ context.Context, _ test.Test, _ cluster.Cluster) {},
+		Cluster:          r.MakeClusterSpec(0),
 	})
 	r.Add(registry.TestSpec{
-		Name:  "roachtest/noop-maybefail",
-		Tags:  registry.Tags("roachtest"),
-		Owner: registry.OwnerTestEng,
+		Name:             "roachtest/noop-maybefail",
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Roachtest),
+		Tags:             registry.Tags("roachtest"),
+		Owner:            registry.OwnerTestEng,
 		Run: func(_ context.Context, t test.Test, _ cluster.Cluster) {
 			if rand.Float64() <= 0.2 {
 				t.Fatal("randomly failing")
@@ -44,9 +48,11 @@ func registerRoachtest(r registry.Registry) {
 	// This test can be run manually to check what happens if a test times out.
 	// In particular, can manually verify that suitable artifacts are created.
 	r.Add(registry.TestSpec{
-		Name:  "roachtest/hang",
-		Tags:  registry.Tags("roachtest"),
-		Owner: registry.OwnerTestEng,
+		Name:             "roachtest/hang",
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Roachtest),
+		Tags:             registry.Tags("roachtest"),
+		Owner:            registry.OwnerTestEng,
 		Run: func(_ context.Context, t test.Test, c cluster.Cluster) {
 			ctx := context.Background() // intentional
 			c.Put(ctx, t.Cockroach(), "cockroach", c.All())

@@ -128,9 +128,11 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 	// This test requires us to come back and change the to-be-tests stmts to be those
 	// supported in the "previous" major release.
 	r.Add(registry.TestSpec{
-		Name:    "declarative_schema_changer/job-compatibility-mixed-version-V222-V231",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(4),
+		Name:             "declarative_schema_changer/job-compatibility-mixed-version-V222-V231",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(4),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			predV, err := release.LatestPredecessor(t.BuildVersion())
 			require.NoError(t, err)
