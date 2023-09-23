@@ -2127,13 +2127,13 @@ func (*RoutineReturn) StatementType() StatementType { return TypeDML }
 func (*RoutineReturn) StatementTag() string { return "RETURN" }
 
 // StatementReturnType implements the Statement interface.
-func (*DropFunction) StatementReturnType() StatementReturnType { return DDL }
+func (*DropRoutine) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*DropFunction) StatementType() StatementType { return TypeDDL }
+func (*DropRoutine) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*DropFunction) StatementTag() string { return DropFunctionTag }
+func (*DropRoutine) StatementTag() string { return DropFunctionTag }
 
 // StatementReturnType implements the Statement interface.
 func (*AlterFunctionOptions) StatementReturnType() StatementReturnType { return DDL }
@@ -2268,7 +2268,7 @@ func (n *Deallocate) String() string                          { return AsString(
 func (n *Delete) String() string                              { return AsString(n) }
 func (n *DeclareCursor) String() string                       { return AsString(n) }
 func (n *DropDatabase) String() string                        { return AsString(n) }
-func (n *DropFunction) String() string                        { return AsString(n) }
+func (n *DropRoutine) String() string                         { return AsString(n) }
 func (n *DropIndex) String() string                           { return AsString(n) }
 func (n *DropOwnedBy) String() string                         { return AsString(n) }
 func (n *DropSchema) String() string                          { return AsString(n) }

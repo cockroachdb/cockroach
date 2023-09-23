@@ -38,9 +38,7 @@ type dropFunctionNode struct {
 }
 
 // DropFunction drops a function.
-func (p *planner) DropFunction(
-	ctx context.Context, n *tree.DropFunction,
-) (ret planNode, err error) {
+func (p *planner) DropFunction(ctx context.Context, n *tree.DropRoutine) (ret planNode, err error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
 		p.ExecCfg(),
@@ -54,11 +52,11 @@ func (p *planner) DropFunction(
 		return nil, unimplemented.Newf("DROP FUNCTION...CASCADE", "drop function cascade not supported")
 	}
 	dropNode := &dropFunctionNode{
-		toDrop:       make([]*funcdesc.Mutable, 0, len(n.Functions)),
+		toDrop:       make([]*funcdesc.Mutable, 0, len(n.Routines)),
 		dropBehavior: n.DropBehavior,
 	}
 	fnResolved := intsets.MakeFast()
-	for _, fn := range n.Functions {
+	for _, fn := range n.Routines {
 		ol, err := p.matchUDF(ctx, &fn, !n.IfExists)
 		if err != nil {
 			return nil, err
