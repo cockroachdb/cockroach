@@ -990,9 +990,24 @@ func cmdResolveIntentRange(e *evalCtx) error {
 	}
 
 	return e.withWriter("resolve_intent_range", func(rw storage.ReadWriter) error {
-		_, _, _, _, err := storage.MVCCResolveWriteIntentRange(e.ctx, rw, e.ms, intent,
-			storage.MVCCResolveWriteIntentRangeOptions{MaxKeys: maxKeys, TargetBytes: targetBytes})
-		return err
+		opts := storage.MVCCResolveWriteIntentRangeOptions{MaxKeys: maxKeys, TargetBytes: targetBytes}
+		numKeys, numBytes, resumeSpan, resumeReason, err := storage.MVCCResolveWriteIntentRange(
+			e.ctx, rw, e.ms, intent, opts)
+		if err != nil {
+			return err
+		}
+		var maybeNumBytes string
+		if e.hasArg("batched") {
+			// If !batched, we don't reliably track the number of bytes resolved and
+			// don't want the output to change depending on the mvccHistoriesUseBatch
+			// metamorphic variable.
+			maybeNumBytes = fmt.Sprintf(", %d bytes", numBytes)
+		}
+		e.results.buf.Printf("resolve_intent_range: %v-%v -> resolved %d key(s)%s\n", start, end, numKeys, maybeNumBytes)
+		if resumeSpan != nil {
+			e.results.buf.Printf("resolve_intent_range: resume span [%s,%s) %s\n", resumeSpan.Key, resumeSpan.EndKey, resumeReason)
+		}
+		return nil
 	})
 }
 
@@ -1007,9 +1022,23 @@ func (e *evalCtx) resolveIntent(
 	intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key})
 	intent.Status = resolveStatus
 	intent.ClockWhilePending = roachpb.ObservedTimestamp{Timestamp: clockWhilePending}
-	_, _, _, err := storage.MVCCResolveWriteIntent(e.ctx, rw, e.ms, intent,
+	ok, numBytes, resumeSpan, err := storage.MVCCResolveWriteIntent(e.ctx, rw, e.ms, intent,
 		storage.MVCCResolveWriteIntentOptions{TargetBytes: targetBytes})
-	return err
+	if err != nil {
+		return err
+	}
+	var maybeNumBytes string
+	if e.hasArg("batched") {
+		// If !batched, we don't reliably track the number of bytes resolved and
+		// don't want the output to change depending on the mvccHistoriesUseBatch
+		// metamorphic variable.
+		maybeNumBytes = fmt.Sprintf(", %d bytes", numBytes)
+	}
+	e.results.buf.Printf("resolve_intent: %v -> resolved key = %t%s\n", key, ok, maybeNumBytes)
+	if resumeSpan != nil {
+		e.results.buf.Printf("resolve_intent: resume span [%s,%s)\n", resumeSpan.Key, resumeSpan.EndKey)
+	}
+	return nil
 }
 
 func cmdCheckIntent(e *evalCtx) error {

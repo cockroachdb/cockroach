@@ -7,6 +7,7 @@ with t=A
   txn_remove
 ----
 >> put k=a v=default resolve t=A
+resolve_intent: "a" -> resolved key = true
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+12 live_count=+1 live_bytes=+26
 >> at end:
 data: "a"/1.000000000,0 -> /BYTES/default
@@ -58,6 +59,7 @@ data: "a"/1.000000000,0 -> /BYTES/default
 stats: val_bytes=+16 live_count=+1 live_bytes=+111 gc_bytes_age=-9310 intent_bytes=+10
 >> resolve_intent k=a t=A
 called ClearEngineKey(/Local/Lock/Intent"a"/0300000002000000000000000000000000)
+resolve_intent: "a" -> resolved key = true
 data: "a"/2.000000000,0 -> /BYTES/first
 data: "a"/1.000000000,0 -> /BYTES/default
 stats: val_bytes=-87 live_bytes=-87 intent_count=-1 intent_bytes=-22 lock_count=-1 lock_age=-98

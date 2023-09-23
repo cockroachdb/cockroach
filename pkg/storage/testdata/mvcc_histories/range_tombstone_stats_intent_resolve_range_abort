@@ -218,6 +218,7 @@ run stats ok
 resolve_intent_range t=A k=a end=z status=ABORTED
 ----
 >> resolve_intent_range t=A k=a end=z status=ABORTED
+resolve_intent_range: "a"-"z" -> resolved 18 key(s)
 stats: key_count=-6 key_bytes=-228 val_count=-18 val_bytes=-966 live_count=-5 live_bytes=-537 gc_bytes_age=-61033 intent_count=-18 intent_bytes=-318 lock_count=-18 lock_age=-1674
 >> at end:
 rangekey: g{-gg}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
@@ -248,6 +249,7 @@ run stats ok
 resolve_intent_range t=A k=a end=z status=ABORTED
 ----
 >> resolve_intent_range t=A k=a end=z status=ABORTED
+resolve_intent_range: "a"-"z" -> resolved 0 key(s)
 stats: no change
 >> at end:
 rangekey: g{-gg}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]

@@ -100,6 +100,7 @@ meta: "k5" -> txn={id=00000002 key="k5" iso=Serializable pri=0.00000000 epo=0 ts
 stats: no change
 meta: "k5" -> txn={id=00000002 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=40} ts=5.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 >> resolve_intent status=COMMITTED t=B k=k5
+resolve_intent: "k5" -> resolved key = true
 stats: val_bytes=-64 live_bytes=-64 intent_count=-1 intent_bytes=-18 lock_count=-1 lock_age=-95
 >> at end:
 txn: "B" meta={id=00000002 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0 isn=1
