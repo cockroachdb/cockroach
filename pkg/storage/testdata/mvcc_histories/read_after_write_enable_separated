@@ -17,6 +17,7 @@ data: "a"/11.000000000,0 -> /BYTES/abc
 get: "a" -> /BYTES/abc @11.000000000,0
 >> resolve_intent k=a t=A
 called SingleClearEngineKey(/Local/Lock/Intent"a"/0300000001000000000000000000000000)
+resolve_intent: "a" -> resolved key = true
 data: "a"/11.000000000,0 -> /BYTES/abc
 
 run ok
@@ -27,6 +28,10 @@ with t=A resolve
   put   k=c   v=hhh
   txn_remove
 ----
+resolve_intent: "a/1" -> resolved key = true
+resolve_intent: "b" -> resolved key = true
+resolve_intent: "b/2" -> resolved key = true
+resolve_intent: "c" -> resolved key = true
 >> at end:
 data: "a"/11.000000000,0 -> /BYTES/abc
 data: "a/1"/11.000000000,0 -> /BYTES/eee

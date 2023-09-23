@@ -397,28 +397,40 @@ with t=A
   resolve_intent k=k12 status=COMMITTED clockWhilePending=40
 ----
 >> resolve_intent k=k1 status=ABORTED t=A
+resolve_intent: "k1" -> resolved key = true
 stats: key_count=-1 key_bytes=-15 val_count=-1 val_bytes=-93 live_count=-1 live_bytes=-108 intent_count=-1 intent_bytes=-32 lock_count=-1 lock_age=-70
 >> resolve_intent k=k2 status=ABORTED clockWhilePending=20 t=A
+resolve_intent: "k2" -> resolved key = true
 stats: key_count=-1 key_bytes=-15 val_count=-1 val_bytes=-93 live_count=-1 live_bytes=-108 intent_count=-1 intent_bytes=-32 lock_count=-1 lock_age=-70
 >> resolve_intent k=k3 status=ABORTED clockWhilePending=30 t=A
+resolve_intent: "k3" -> resolved key = true
 stats: key_count=-1 key_bytes=-15 val_count=-1 val_bytes=-93 live_count=-1 live_bytes=-108 intent_count=-1 intent_bytes=-32 lock_count=-1 lock_age=-70
 >> resolve_intent k=k4 status=ABORTED clockWhilePending=40 t=A
+resolve_intent: "k4" -> resolved key = true
 stats: key_count=-1 key_bytes=-15 val_count=-1 val_bytes=-93 live_count=-1 live_bytes=-108 intent_count=-1 intent_bytes=-32 lock_count=-1 lock_age=-70
 >> resolve_intent k=k5 status=PENDING t=A
+resolve_intent: "k5" -> resolved key = true
 stats: val_bytes=+2 live_bytes=+2 lock_age=-10
 >> resolve_intent k=k6 status=PENDING clockWhilePending=20 t=A
+resolve_intent: "k6" -> resolved key = true
 stats: val_bytes=+2 live_bytes=+2 lock_age=-10
 >> resolve_intent k=k7 status=PENDING clockWhilePending=30 t=A
+resolve_intent: "k7" -> resolved key = true
 stats: val_bytes=+2 live_bytes=+2 lock_age=-10
 >> resolve_intent k=k8 status=PENDING clockWhilePending=40 t=A
+resolve_intent: "k8" -> resolved key = true
 stats: val_bytes=-11 live_bytes=-11 intent_bytes=-13 lock_age=-10
 >> resolve_intent k=k9 status=COMMITTED t=A
+resolve_intent: "k9" -> resolved key = true
 stats: val_bytes=-73 live_bytes=-73 intent_count=-1 intent_bytes=-32 lock_count=-1 lock_age=-70
 >> resolve_intent k=k10 status=COMMITTED clockWhilePending=20 t=A
+resolve_intent: "k10" -> resolved key = true
 stats: val_bytes=-73 live_bytes=-73 intent_count=-1 intent_bytes=-32 lock_count=-1 lock_age=-70
 >> resolve_intent k=k11 status=COMMITTED clockWhilePending=30 t=A
+resolve_intent: "k11" -> resolved key = true
 stats: val_bytes=-73 live_bytes=-73 intent_count=-1 intent_bytes=-32 lock_count=-1 lock_age=-70
 >> resolve_intent k=k12 status=COMMITTED clockWhilePending=40 t=A
+resolve_intent: "k12" -> resolved key = true
 stats: val_bytes=-86 live_bytes=-86 intent_count=-1 intent_bytes=-32 lock_count=-1 lock_age=-70
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
