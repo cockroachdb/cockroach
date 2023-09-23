@@ -62,7 +62,7 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {fn: CommentOnColumn, statementTag: tree.CommentOnColumnTag, on: true, checks: isV222Active},
 	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {fn: CommentOnIndex, statementTag: tree.CommentOnIndexTag, on: true, checks: isV222Active},
 	reflect.TypeOf((*tree.DropIndex)(nil)):           {fn: DropIndex, statementTag: tree.DropIndexTag, on: true, checks: isV231Active},
-	reflect.TypeOf((*tree.DropFunction)(nil)):        {fn: DropFunction, statementTag: tree.DropFunctionTag, on: true, checks: isV231Active},
+	reflect.TypeOf((*tree.DropRoutine)(nil)):         {fn: DropFunction, statementTag: tree.DropFunctionTag, on: true, checks: isV231Active},
 	reflect.TypeOf((*tree.CreateRoutine)(nil)):       {fn: CreateFunction, statementTag: tree.CreateRoutineTag, on: true, checks: isV231Active},
 	reflect.TypeOf((*tree.CreateSchema)(nil)):        {fn: CreateSchema, statementTag: tree.CreateSchemaTag, on: false, checks: isV232Active},
 	reflect.TypeOf((*tree.CreateSequence)(nil)):      {fn: CreateSequence, statementTag: tree.CreateSequenceTag, on: false, checks: isV232Active},

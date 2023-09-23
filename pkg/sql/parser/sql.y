@@ -859,7 +859,7 @@ func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
 func (u *sqlSymUnion) functionObj() tree.RoutineObj {
     return u.val.(tree.RoutineObj)
 }
-func (u *sqlSymUnion) functionObjs() tree.RoutineObjs {
+func (u *sqlSymUnion) routineObjs() tree.RoutineObjs {
     return u.val.(tree.RoutineObjs)
 }
 func (u *sqlSymUnion) tenantReplicationOptions() *tree.TenantReplicationOptions {
@@ -4902,14 +4902,14 @@ opt_link_sym:
 drop_func_stmt:
   DROP FUNCTION function_with_paramtypes_list opt_drop_behavior
   {
-    $$.val = &tree.DropFunction{
-      Functions: $3.functionObjs(),
+    $$.val = &tree.DropRoutine{
+      Routines: $3.routineObjs(),
       DropBehavior: $4.dropBehavior(),
     }
   }
 | DROP FUNCTION IF EXISTS function_with_paramtypes_list opt_drop_behavior
   {
-    $$.val = &tree.DropFunction{
+    $$.val = &tree.DropRoutine{
       IfExists: true,
       Functions: $5.functionObjs(),
       DropBehavior: $6.dropBehavior(),
@@ -4924,7 +4924,7 @@ function_with_paramtypes_list:
   }
   | function_with_paramtypes_list ',' function_with_paramtypes
   {
-    $$.val = append($1.functionObjs(), $3.functionObj())
+    $$.val = append($1.routineObjs(), $3.functionObj())
   }
 
 function_with_paramtypes:
@@ -9131,11 +9131,11 @@ grant_targets:
   }
 | FUNCTION function_with_paramtypes_list
   {
-    $$.val = tree.GrantTargetList{Functions: $2.functionObjs()}
+    $$.val = tree.GrantTargetList{Functions: $2.routineObjs()}
   }
 | PROCEDURE function_with_paramtypes_list
   {
-    $$.val = tree.GrantTargetList{Procedures: $2.functionObjs()}
+    $$.val = tree.GrantTargetList{Procedures: $2.routineObjs()}
   }
 
 // backup_targets is similar to grant_targets but used by backup and restore, and thus
