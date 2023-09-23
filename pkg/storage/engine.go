@@ -257,13 +257,6 @@ type MVCCIterator interface {
 	// the first key.
 	Prev()
 
-	// SeekIntentGE is a specialized version of SeekGE(MVCCKey{Key: key}), when
-	// the caller expects to find an intent, and additionally has the txnUUID
-	// for the intent it is looking for. When running with separated intents,
-	// this can optimize the behavior of the underlying Engine for write heavy
-	// keys by avoiding the need to iterate over many deleted intents.
-	SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID)
-
 	// UnsafeRawKey returns the current raw key which could be an encoded
 	// MVCCKey, or the more general EngineKey (for a lock table key).
 	// This is a low-level and dangerous method since it will expose the
