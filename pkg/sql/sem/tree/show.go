@@ -1397,12 +1397,17 @@ var _ Statement = &ShowCompletions{}
 // ShowCreateRoutine represents a SHOW CREATE FUNCTION or SHOW CREATE PROCEDURE
 // statement.
 type ShowCreateRoutine struct {
-	Name ResolvableFunctionReference
+	Name      ResolvableFunctionReference
+	Procedure bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowCreateRoutine) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW CREATE FUNCTION ")
+	if node.Procedure {
+		ctx.WriteString("SHOW CREATE PROCEDURE ")
+	} else {
+		ctx.WriteString("SHOW CREATE FUNCTION ")
+	}
 	ctx.FormatNode(&node.Name)
 }
 
