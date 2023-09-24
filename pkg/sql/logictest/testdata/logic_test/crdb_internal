@@ -1443,3 +1443,115 @@ CREATE TABLE t76710_1 AS SELECT * FROM crdb_internal.statement_statistics;
 
 statement ok
 CREATE MATERIALIZED VIEW t76710_2 AS SELECT fingerprint_id FROM crdb_internal.cluster_statement_statistics;
+
+subtest end
+
+
+subtest create_function_statements
+
+statement ok
+CREATE FUNCTION f(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE FUNCTION f(STRING, b INT) RETURNS STRING STRICT IMMUTABLE LEAKPROOF LANGUAGE SQL AS $$ SELECT 'hello' $$;
+
+statement ok
+CREATE SCHEMA sc;
+
+statement
+CREATE FUNCTION sc.f2(STRING) RETURNS STRING LANGUAGE SQL AS $$ SELECT 'hello' $$;
+
+query TITITIT
+SELECT create_statement, database_id, database_name, schema_id, schema_name, function_id, function_name
+FROM crdb_internal.create_function_statements
+WHERE function_name IN ('f', 'f2')
+ORDER BY function_id;
+----
+CREATE FUNCTION public.f(IN INT8)               104  test  105  public  129  f
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+CREATE FUNCTION public.f(IN STRING, IN b INT8)  104  test  105  public  130  f
+  RETURNS STRING
+  IMMUTABLE
+  LEAKPROOF
+  STRICT
+  LANGUAGE SQL
+  AS $$
+  SELECT 'hello';
+$$
+CREATE FUNCTION sc.f2(IN STRING)                104  test  131  sc      132  f2
+  RETURNS STRING
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 'hello';
+$$
+
+statement ok
+CREATE DATABASE test_cross_db;
+USE test_cross_db;
+CREATE FUNCTION f_cross_db() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+USE test;
+
+query TITITIT
+SELECT create_statement, database_id, database_name, schema_id, schema_name, function_id, function_name
+FROM "".crdb_internal.create_function_statements
+WHERE function_name IN ('f', 'f2', 'f_cross_db')
+ORDER BY function_id;
+----
+CREATE FUNCTION public.f(IN INT8)               104  test           105  public  129  f
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+CREATE FUNCTION public.f(IN STRING, IN b INT8)  104  test           105  public  130  f
+  RETURNS STRING
+  IMMUTABLE
+  LEAKPROOF
+  STRICT
+  LANGUAGE SQL
+  AS $$
+  SELECT 'hello';
+$$
+CREATE FUNCTION sc.f2(IN STRING)                104  test           131  sc      132  f2
+  RETURNS STRING
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 'hello';
+$$
+CREATE FUNCTION public.f_cross_db()             133  test_cross_db  134  public  135  f_cross_db
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+statement ok
+DROP FUNCTION f(INT);
+DROP FUNCTION f(STRING, INT);
+DROP FUNCTION sc.f2(STRING);
+DROP SCHEMA sc;
+USE test_cross_db;
+DROP FUNCTION f_cross_db;
+USE test;
+DROP DATABASE test_cross_db;
+
+subtest end
