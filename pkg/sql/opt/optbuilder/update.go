@@ -192,7 +192,6 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 	// Project additional column(s) for each update expression (can be multiple
 	// columns in case of tuple assignment).
 	projectionsScope := mb.outScope.replace()
-	projectionsScope.appendColumnsFromScope(mb.outScope)
 
 	addCol := func(expr tree.Expr, targetColID opt.ColumnID) {
 		ord := mb.tabID.ColumnOrdinal(targetColID)
