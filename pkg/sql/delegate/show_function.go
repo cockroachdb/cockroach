@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func (d *delegator) delegateShowCreateFunction(n *tree.ShowCreateFunction) (tree.Statement, error) {
+func (d *delegator) delegateShowCreateFunction(n *tree.ShowCreateRoutine) (tree.Statement, error) {
 	// We don't need to filter by db since we don't allow cross-database
 	// references.
 	query := `

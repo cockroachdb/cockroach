@@ -8562,7 +8562,7 @@ show_create_stmt:
 | SHOW CREATE FUNCTION db_object_name
   {
     /* SKIP DOC */
-    $$.val = &tree.ShowCreateFunction{
+    $$.val = &tree.ShowCreateRoutine{
       Name: tree.ResolvableFunctionReference{
         FunctionReference: $4.unresolvedObjectName().ToUnresolvedName(),
       },
