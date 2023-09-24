@@ -372,11 +372,11 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 			if err != nil {
 				return nil, err
 			}
-			if isFuncs && fnDesc.IsProcedure {
+			if isFuncs && fnDesc.IsProcedure() {
 				return nil, pgerror.Newf(pgcode.WrongObjectType, "%q is not a %s",
 					fnDesc.Name, "function")
 			}
-			if !isFuncs && !fnDesc.IsProcedure {
+			if !isFuncs && !fnDesc.IsProcedure() {
 				return nil, pgerror.Newf(pgcode.WrongObjectType, "%q is not a %s",
 					fnDesc.Name, "procedure")
 			}
@@ -473,7 +473,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 					if err != nil {
 						return err
 					}
-					if isProcs != fn.IsProcedure {
+					if isProcs != fn.IsProcedure() {
 						// Skip functions if ALL PROCEDURES was specified, and
 						// skip procedures if ALL FUNCTIONS was specified.
 						return nil
