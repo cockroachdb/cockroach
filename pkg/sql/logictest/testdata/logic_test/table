@@ -572,6 +572,7 @@ cluster_transaction_statistics          NULL
 cluster_transactions                    NULL
 cluster_txn_execution_insights          NULL
 create_function_statements              NULL
+create_procedure_statements             NULL
 create_schema_statements                NULL
 create_statements                       NULL
 create_type_statements                  NULL
@@ -601,8 +602,8 @@ kv_flow_token_deductions                NULL
 kv_inherited_role_members               NULL
 kv_node_liveness                        NULL
 kv_node_status                          NULL
-kv_repairable_catalog_corruptions       NULL
 kv_protected_ts_records                 NULL
+kv_repairable_catalog_corruptions       NULL
 kv_store_status                         NULL
 kv_system_privileges                    NULL
 leases                                  NULL

@@ -298,6 +298,16 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"crdb_internal.hide_sql_constants(create_statement) as create_statement",
 		},
 	},
+	`"".crdb_internal.create_procedure_statements`: {
+		nonSensitiveCols: NonSensitiveColumns{
+			"database_id",
+			"database_name",
+			"schema_id",
+			"procedure_id",
+			"procedure_name",
+			"crdb_internal.hide_sql_constants(create_statement) as create_statement",
+		},
+	},
 	// The synthetic SQL CREATE statements for all tables.
 	// Note the "". to collect across all databases.
 	`"".crdb_internal.create_schema_statements`: {

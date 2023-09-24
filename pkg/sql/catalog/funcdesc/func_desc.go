@@ -681,7 +681,7 @@ func (desc *immutable) GetObjectType() privilege.ObjectType {
 
 // GetObjectTypeString implements the Object interface.
 func (desc *immutable) GetObjectTypeString() string {
-	if desc.IsProcedure {
+	if desc.IsProcedure() {
 		return "procedure"
 	}
 	return "function"
@@ -699,7 +699,7 @@ func (desc *immutable) GetLanguage() catpb.Function_Language {
 
 func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 	routineType := tree.UDFRoutine
-	if desc.IsProcedure {
+	if desc.IsProcedure() {
 		routineType = tree.ProcedureRoutine
 	}
 	ret = &tree.Overload{
@@ -773,7 +773,8 @@ func (desc *immutable) calledOnNullInput() (bool, error) {
 // ToCreateExpr implements the FunctionDescriptor interface.
 func (desc *immutable) ToCreateExpr() (ret *tree.CreateRoutine, err error) {
 	ret = &tree.CreateRoutine{
-		Name: tree.MakeRoutineNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(desc.Name)),
+		Name:        tree.MakeRoutineNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(desc.Name)),
+		IsProcedure: desc.IsProcedure(),
 		ReturnType: tree.RoutineReturnType{
 			Type:  desc.ReturnType.Type,
 			SetOf: desc.ReturnType.ReturnSet,
@@ -802,6 +803,11 @@ func (desc *immutable) ToCreateExpr() (ret *tree.CreateRoutine, err error) {
 	ret.Options = append(ret.Options, tree.RoutineBodyStr(desc.FunctionBody))
 	ret.Options = append(ret.Options, desc.getCreateExprLang())
 	return ret, nil
+}
+
+// IsProcedure implements the FunctionDescriptor interface.
+func (desc *immutable) IsProcedure() bool {
+	return desc.FunctionDescriptor.IsProcedure
 }
 
 func (desc *immutable) getCreateExprLang() tree.RoutineLanguage {

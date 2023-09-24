@@ -42,6 +42,7 @@ crdb_internal  cluster_transaction_statistics          table  node  NULL  NULL
 crdb_internal  cluster_transactions                    table  node  NULL  NULL
 crdb_internal  cluster_txn_execution_insights          table  node  NULL  NULL
 crdb_internal  create_function_statements              table  node  NULL  NULL
+crdb_internal  create_procedure_statements             table  node  NULL  NULL
 crdb_internal  create_schema_statements                table  node  NULL  NULL
 crdb_internal  create_statements                       table  node  NULL  NULL
 crdb_internal  create_type_statements                  table  node  NULL  NULL
