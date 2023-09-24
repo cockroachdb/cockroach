@@ -20,7 +20,6 @@ go_library(
         "//pkg/roachpb",
         "//pkg/server/serverpb",
         "//pkg/settings/cluster",
-        "//pkg/spanconfig",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/resolver",
