@@ -8568,6 +8568,16 @@ show_create_stmt:
       },
     }
   }
+| SHOW CREATE PROCEDURE db_object_name
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ShowCreateRoutine{
+      Name: tree.ResolvableFunctionReference{
+        FunctionReference: $4.unresolvedObjectName().ToUnresolvedName(),
+      },
+      Procedure: true,
+    }
+  }
 | SHOW CREATE ALL SCHEMAS
   {
     $$.val = &tree.ShowCreateAllSchemas{}

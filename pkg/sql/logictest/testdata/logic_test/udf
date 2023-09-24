@@ -167,65 +167,6 @@ statement ok
 USE test;
 subtest end
 
-subtest show_create_function
-
-query T
-SELECT create_statement FROM [SHOW CREATE FUNCTION proc_f] ORDER BY 1
-----
-CREATE FUNCTION public.proc_f(IN INT8)
-  RETURNS INT8
-  VOLATILE
-  NOT LEAKPROOF
-  CALLED ON NULL INPUT
-  LANGUAGE SQL
-  AS $$
-  SELECT 1;
-$$
-CREATE FUNCTION public.proc_f(IN STRING, IN b INT8)
-  RETURNS STRING
-  IMMUTABLE
-  LEAKPROOF
-  STRICT
-  LANGUAGE SQL
-  AS $$
-  SELECT 'hello';
-$$
-
-statement error pgcode 42883 pq: unknown function: proc_f_2()
-SHOW CREATE FUNCTION proc_f_2;
-
-query T
-SELECT create_statement FROM [SHOW CREATE FUNCTION sc.proc_f_2];
-----
-CREATE FUNCTION sc.proc_f_2(IN STRING)
-  RETURNS STRING
-  VOLATILE
-  NOT LEAKPROOF
-  CALLED ON NULL INPUT
-  LANGUAGE SQL
-  AS $$
-  SELECT 'hello';
-$$
-
-statement ok
-SET search_path = sc;
-
-query T
-SELECT create_statement FROM [SHOW CREATE FUNCTION proc_f_2];
-----
-CREATE FUNCTION sc.proc_f_2(IN STRING)
-  RETURNS STRING
-  VOLATILE
-  NOT LEAKPROOF
-  CALLED ON NULL INPUT
-  LANGUAGE SQL
-  AS $$
-  SELECT 'hello';
-$$
-
-statement ok
-SET search_path = public;
-subtest end
 
 subtest udf_regproc
 
