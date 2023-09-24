@@ -2013,7 +2013,12 @@ func (*ShowCreateRoutine) StatementReturnType() StatementReturnType { return Row
 func (*ShowCreateRoutine) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*ShowCreateRoutine) StatementTag() string { return "SHOW CREATE FUNCTION" }
+func (n *ShowCreateRoutine) StatementTag() string {
+	if n.Procedure {
+		return "SHOW CREATE PROCEDURE"
+	}
+	return "SHOW CREATE FUNCTION"
+}
 
 // StatementReturnType implements the Statement interface.
 func (*ShowCreateExternalConnections) StatementReturnType() StatementReturnType { return Rows }
