@@ -16,7 +16,7 @@ update child
  │    └── p_new:9 => child.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: p_new:9!null c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    ├── columns: p_new:9!null c:5!null child.p:6!null
  │    ├── scan child
  │    │    └── columns: c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
  │    └── projections
@@ -45,7 +45,7 @@ update parent
  │    └── p_new:11 => parent.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: p_new:11!null x:6 parent.p:7!null other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
+ │    ├── columns: p_new:11!null x:6 parent.p:7!null other:8
  │    ├── scan parent
  │    │    └── columns: x:6 parent.p:7!null other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
  │    └── projections
@@ -86,7 +86,7 @@ update child
  │    └── c_new:9 => child.c:1
  ├── input binding: &1
  ├── project
- │    ├── columns: c_new:9!null child.c:5!null p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    ├── columns: c_new:9!null child.c:5!null p:6!null
  │    ├── scan child
  │    │    └── columns: child.c:5!null p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
  │    └── projections
@@ -124,7 +124,7 @@ update child
  │    └── p_new:9 => child.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: p_new:9!null c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    ├── columns: p_new:9!null c:5!null child.p:6!null
  │    ├── scan child
  │    │    └── columns: c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
  │    └── projections
@@ -152,8 +152,10 @@ update child
  ├── update-mapping:
  │    └── child.p:6 => child.p:2
  ├── input binding: &1
- ├── scan child
- │    └── columns: c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ ├── project
+ │    ├── columns: c:5!null child.p:6!null
+ │    └── scan child
+ │         └── columns: c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
@@ -179,7 +181,7 @@ update child
  │    └── p_new:9 => child.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: p_new:9!null c_new:10!null child.c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    ├── columns: p_new:9!null c_new:10!null child.c:5!null child.p:6!null
  │    ├── scan child
  │    │    └── columns: child.c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
  │    └── projections
@@ -234,7 +236,7 @@ update child_nullable
  ├── update-mapping:
  │    └── p_new:9 => p:2
  └── project
-      ├── columns: p_new:9 c:5!null p:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+      ├── columns: p_new:9 c:5!null p:6
       ├── scan child_nullable
       │    └── columns: c:5!null p:6 crdb_internal_mvcc_timestamp:7 tableoid:8
       └── projections
@@ -255,7 +257,7 @@ update child
  │    └── p_new:9 => child.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: p_new:9!null c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    ├── columns: p_new:9!null c:5!null child.p:6!null
  │    ├── scan child
  │    │    └── columns: c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
  │    └── projections
@@ -288,7 +290,7 @@ update self
  │    └── y_new:9 => self.y:2
  ├── input binding: &1
  ├── project
- │    ├── columns: y_new:9!null x:5!null self.y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    ├── columns: y_new:9!null x:5!null self.y:6!null
  │    ├── scan self
  │    │    └── columns: x:5!null self.y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
  │    └── projections
@@ -317,7 +319,7 @@ update self
  │    └── x_new:9 => self.x:1
  ├── input binding: &1
  ├── project
- │    ├── columns: x_new:9!null self.x:5!null y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    ├── columns: x_new:9!null self.x:5!null y:6!null
  │    ├── scan self
  │    │    └── columns: self.x:5!null y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
  │    └── projections
@@ -368,7 +370,7 @@ update child_multicol_simple
  │    ├── b_new:14 => b:3
  │    └── a_new:13 => c:4
  └── project
-      ├── columns: a_new:13!null b_new:14 k:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      ├── columns: a_new:13!null b_new:14 k:7!null a:8 b:9 c:10
       ├── select
       │    ├── columns: k:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    ├── scan child_multicol_simple
@@ -400,7 +402,7 @@ update child_multicol_full
  │    └── a_new:13 => child_multicol_full.c:4
  ├── input binding: &1
  ├── project
- │    ├── columns: a_new:13!null b_new:14 k:7!null child_multicol_full.a:8 child_multicol_full.b:9 child_multicol_full.c:10 child_multicol_full.crdb_internal_mvcc_timestamp:11 child_multicol_full.tableoid:12
+ │    ├── columns: a_new:13!null b_new:14 k:7!null child_multicol_full.a:8 child_multicol_full.b:9 child_multicol_full.c:10
  │    ├── select
  │    │    ├── columns: k:7!null child_multicol_full.a:8 child_multicol_full.b:9 child_multicol_full.c:10 child_multicol_full.crdb_internal_mvcc_timestamp:11 child_multicol_full.tableoid:12
  │    │    ├── scan child_multicol_full
@@ -439,7 +441,7 @@ update child_multicol_full
  │    ├── a_new:13 => b:3
  │    └── a_new:13 => c:4
  └── project
-      ├── columns: a_new:13 k:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      ├── columns: a_new:13 k:7!null a:8 b:9 c:10
       ├── select
       │    ├── columns: k:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    ├── scan child_multicol_full
@@ -551,7 +553,7 @@ update child
  │    └── p_new:9 => child.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: p_new:9!null c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    ├── columns: p_new:9!null c:5!null child.p:6!null
  │    ├── scan child
  │    │    └── columns: c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
  │    └── projections
@@ -583,7 +585,7 @@ update child
  │    └── p_new:9 => child.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: p_new:9!null c_new:10!null child.c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    ├── columns: p_new:9!null c_new:10!null child.c:5!null child.p:6!null
  │    ├── scan child
  │    │    └── columns: child.c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
  │    └── projections
@@ -654,7 +656,7 @@ update self
  │    └── y_new:9 => self.y:2
  ├── input binding: &1
  ├── project
- │    ├── columns: y_new:9!null x:5!null self.y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    ├── columns: y_new:9!null x:5!null self.y:6!null
  │    ├── scan self
  │    │    └── columns: x:5!null self.y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
  │    └── projections
@@ -684,7 +686,7 @@ update self
  │    └── x_new:9 => self.x:1
  ├── input binding: &1
  ├── project
- │    ├── columns: x_new:9!null self.x:5!null y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    ├── columns: x_new:9!null self.x:5!null y:6!null
  │    ├── scan self
  │    │    └── columns: self.x:5!null y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
  │    └── projections

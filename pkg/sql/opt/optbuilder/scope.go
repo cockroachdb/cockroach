@@ -220,6 +220,23 @@ func (s *scope) appendColumnsFromScope(src *scope) {
 	}
 }
 
+// appendColumnsFromScopeInColSet adds newly bound variables to this scope from
+// the `src` scope having column IDs in `colSet`. The expressions in the new
+// columns are reset to nil.
+func (s *scope) appendColumnsFromScopeInColSet(src *scope, colSet opt.ColSet) {
+	l := len(s.cols)
+	for _, col := range src.cols {
+		if colSet.Contains(col.id) {
+			s.appendColumn(&col)
+		}
+	}
+	// We want to reset the expressions, as these become pass-through columns in
+	// the new scope.
+	for i := l; i < len(s.cols); i++ {
+		s.cols[i].scalar = nil
+	}
+}
+
 // appendOrdinaryColumnsFromTable adds all non-mutation and non-system columns from the
 // given table metadata to this scope.
 func (s *scope) appendOrdinaryColumnsFromTable(tabMeta *opt.TableMeta, alias *tree.TableName) {

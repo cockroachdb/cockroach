@@ -30,23 +30,23 @@ update abcde
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: d_comp:19(int!null) a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid) b_new:17(int!null) e_default:18(int!null)
+      ├── columns: d_comp:19(int!null) a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) b_new:17(int!null) e_default:18(int!null)
       ├── immutable
       ├── key: (13)
-      ├── fd: ()-->(9,17,18), (13)-->(10-12,14-16), (10,11)-->(12), (11)-->(19)
-      ├── prune: (9-19)
+      ├── fd: ()-->(9,17,18), (13)-->(10-12,14), (10,11)-->(12), (11)-->(19)
+      ├── prune: (9-14,17-19)
       ├── interesting orderings: (+13 opt(9,17,18))
       ├── project
-      │    ├── columns: e_default:18(int!null) a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid) b_new:17(int!null)
+      │    ├── columns: e_default:18(int!null) a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) b_new:17(int!null)
       │    ├── key: (13)
-      │    ├── fd: ()-->(9,17,18), (13)-->(10-12,14-16), (10,11)-->(12)
-      │    ├── prune: (9-18)
+      │    ├── fd: ()-->(9,17,18), (13)-->(10-12,14), (10,11)-->(12)
+      │    ├── prune: (9-14,17,18)
       │    ├── interesting orderings: (+13 opt(9,17,18))
       │    ├── project
-      │    │    ├── columns: b_new:17(int!null) a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
+      │    │    ├── columns: b_new:17(int!null) a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int)
       │    │    ├── key: (13)
-      │    │    ├── fd: ()-->(9,17), (13)-->(10-12,14-16), (10,11)-->(12)
-      │    │    ├── prune: (9-17)
+      │    │    ├── fd: ()-->(9,17), (13)-->(10-12,14), (10,11)-->(12)
+      │    │    ├── prune: (9-14,17)
       │    │    ├── interesting orderings: (+13 opt(9,17))
       │    │    ├── select
       │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)

@@ -1701,7 +1701,7 @@ update abc
  ├── update-mapping:
  │    └── c_new:23 => c:3
  └── project
-      ├── columns: c_new:23!null a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      ├── columns: c_new:23!null a:6!null b:7 c:8
       ├── select
       │    ├── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    ├── scan abc

@@ -505,9 +505,9 @@ update t
  │    ├── a_new:11 => a:1
  │    └── v_comp:12 => v:3
  └── project
-      ├── columns: v_comp:12 a:6!null b:7 v:8 crdb_internal_mvcc_timestamp:9 tableoid:10 a_new:11!null
+      ├── columns: v_comp:12 a:6!null b:7 v:8 a_new:11!null
       ├── project
-      │    ├── columns: a_new:11!null a:6!null b:7 v:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── columns: a_new:11!null a:6!null b:7 v:8
       │    ├── project
       │    │    ├── columns: v:8 a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    │    ├── scan t
@@ -532,9 +532,9 @@ update t
  │    ├── a_new:11 => a:1
  │    └── v_comp:12 => v:3
  └── project
-      ├── columns: v_comp:12 a:6!null b:7 v:8!null crdb_internal_mvcc_timestamp:9 tableoid:10 a_new:11!null
+      ├── columns: v_comp:12 a:6!null b:7 v:8!null a_new:11!null
       ├── project
-      │    ├── columns: a_new:11!null a:6!null b:7 v:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── columns: a_new:11!null a:6!null b:7 v:8!null
       │    ├── select
       │    │    ├── columns: a:6!null b:7 v:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
       │    │    ├── project
@@ -563,9 +563,9 @@ update t
  │    ├── a_new:11 => a:1
  │    └── v_comp:12 => v:3
  └── project
-      ├── columns: v_comp:12 a:6!null b:7 v:8 crdb_internal_mvcc_timestamp:9 tableoid:10 a_new:11!null
+      ├── columns: v_comp:12 a:6!null b:7 v:8 a_new:11!null
       ├── project
-      │    ├── columns: a_new:11!null a:6!null b:7 v:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── columns: a_new:11!null a:6!null b:7 v:8
       │    ├── select
       │    │    ├── columns: a:6!null b:7 v:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    │    ├── project
@@ -628,9 +628,9 @@ update t_idx
  │    ├── a_new:11 => a:1
  │    └── v_comp:12 => v:3
  └── project
-      ├── columns: v_comp:12 a:6!null b:7 v:8 crdb_internal_mvcc_timestamp:9 tableoid:10 a_new:11!null
+      ├── columns: v_comp:12 a:6!null b:7 v:8 a_new:11!null
       ├── project
-      │    ├── columns: a_new:11!null a:6!null b:7 v:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── columns: a_new:11!null a:6!null b:7 v:8
       │    ├── project
       │    │    ├── columns: v:8 a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    │    ├── scan t_idx
@@ -655,9 +655,9 @@ update t_idx
  │    ├── a_new:11 => a:1
  │    └── v_comp:12 => v:3
  └── project
-      ├── columns: v_comp:12 a:6!null b:7 v:8!null crdb_internal_mvcc_timestamp:9 tableoid:10 a_new:11!null
+      ├── columns: v_comp:12 a:6!null b:7 v:8!null a_new:11!null
       ├── project
-      │    ├── columns: a_new:11!null a:6!null b:7 v:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── columns: a_new:11!null a:6!null b:7 v:8!null
       │    ├── select
       │    │    ├── columns: a:6!null b:7 v:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
       │    │    ├── project
@@ -686,9 +686,9 @@ update t_idx
  │    ├── a_new:11 => a:1
  │    └── v_comp:12 => v:3
  └── project
-      ├── columns: v_comp:12 a:6!null b:7 v:8 crdb_internal_mvcc_timestamp:9 tableoid:10 a_new:11!null
+      ├── columns: v_comp:12 a:6!null b:7 v:8 a_new:11!null
       ├── project
-      │    ├── columns: a_new:11!null a:6!null b:7 v:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── columns: a_new:11!null a:6!null b:7 v:8
       │    ├── select
       │    │    ├── columns: a:6!null b:7 v:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    │    ├── project
@@ -791,11 +791,11 @@ update t_check
  │    └── w_comp:15 => w:4
  ├── check columns: check1:16 check2:17
  └── project
-      ├── columns: check1:16 check2:17 a:7!null b:8 v:9 w:10 crdb_internal_mvcc_timestamp:11 tableoid:12 b_new:13 v_comp:14 w_comp:15
+      ├── columns: check1:16 check2:17 a:7!null b:8 v:9 w:10 b_new:13 v_comp:14 w_comp:15
       ├── project
-      │    ├── columns: v_comp:14 w_comp:15 a:7!null b:8 v:9 w:10 crdb_internal_mvcc_timestamp:11 tableoid:12 b_new:13
+      │    ├── columns: v_comp:14 w_comp:15 a:7!null b:8 v:9 w:10 b_new:13
       │    ├── project
-      │    │    ├── columns: b_new:13 a:7!null b:8 v:9 w:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    ├── columns: b_new:13 a:7!null b:8 v:9 w:10
       │    │    ├── project
       │    │    │    ├── columns: v:9 w:10 a:7!null b:8 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    ├── scan t_check

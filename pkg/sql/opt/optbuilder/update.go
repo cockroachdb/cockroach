@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -91,6 +92,9 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	var mb mutationBuilder
 	mb.init(b, "update", tab, alias)
 
+	tabMeta := mb.md.TableMeta(mb.tabID)
+	b.addComputedColsForTable(tabMeta, intsets.Fast{} /* virtualMutationColOrds */)
+
 	// Build the input expression that selects the rows that will be updated:
 	//
 	//   WITH <with>
@@ -98,13 +102,13 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	//   ORDER BY <order-by> LIMIT <limit>
 	//
 	// All columns from the update table will be projected.
-	mb.buildInputForUpdate(inScope, upd.Table, upd.From, upd.Where, upd.Limit, upd.OrderBy)
+	mb.buildInputForUpdate(inScope, upd.Table, upd.From, upd.Where, upd.Limit, upd.OrderBy, upd.Returning)
 
 	// Derive the columns that will be updated from the SET expressions.
 	mb.addTargetColsForUpdate(upd.Exprs)
 
 	// Build each of the SET expressions.
-	mb.addUpdateCols(upd.Exprs)
+	mb.addUpdateCols(upd.Exprs, resultsNeeded(upd.Returning))
 
 	// Build the final update statement, including any returned expressions.
 	if resultsNeeded(upd.Returning) {
@@ -180,19 +184,39 @@ func (mb *mutationBuilder) addTargetColsForUpdate(exprs tree.UpdateExprs) {
 // Multiple subqueries result in multiple left joins successively wrapping the
 // input. A final Project operator is built if any single-column or tuple SET
 // expressions are present.
-func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
+// If skipProjectionPruning is false, only fetch columns and update columns are
+// projected to the update operation. If true, all UPDATE input columns are
+// projected and accessible to SET and RETURNING expressions.
+// skipProjectionPruning should be false when there is a RETURNING clause.
+func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs, skipProjectionPruning bool) {
 	// SET expressions should reject aggregates, generators, etc.
 	scalarProps := &mb.b.semaCtx.Properties
 	defer scalarProps.Restore(*scalarProps)
 	mb.b.semaCtx.Properties.Require("UPDATE SET", tree.RejectSpecial)
 
-	// UPDATE input columns are accessible to SET expressions.
+	// UPDATE input columns are accessible to SET and RETURNING expressions.
 	inScope := mb.outScope
 
 	// Project additional column(s) for each update expression (can be multiple
 	// columns in case of tuple assignment).
 	projectionsScope := mb.outScope.replace()
-	projectionsScope.appendColumnsFromScope(mb.outScope)
+	if skipProjectionPruning {
+		projectionsScope.appendColumnsFromScope(mb.outScope)
+	} else {
+		var colsToProject opt.ColSet
+		for i := range mb.updateColIDs {
+			// SET expressions only need to know the final value of each column, so
+			// exclude all other columns. This may enable UPDATE ... FROM to use a
+			// semijoin in place of regular inner join.
+			includedColID := mb.mapToReturnColID(i)
+			if includedColID != 0 {
+				colsToProject.Add(includedColID)
+			}
+		}
+		if !colsToProject.Empty() {
+			projectionsScope.appendColumnsFromScopeInColSet(mb.outScope, colsToProject)
+		}
+	}
 
 	addCol := func(expr tree.Expr, targetColID opt.ColumnID) {
 		ord := mb.tabID.ColumnOrdinal(targetColID)

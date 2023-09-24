@@ -196,7 +196,7 @@ update abcd
  │    ├── a_new:15 => a:1
  │    └── b_new:16 => b:2
  └── project
-      ├── columns: a_new:15 b_new:16 a:8!null b:9 c:10 d:11 rowid:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
+      ├── columns: a_new:15 b_new:16 a:8!null b:9 c:10 d:11 rowid:12!null
       ├── select
       │    ├── columns: a:8!null b:9 c:10 d:11 rowid:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
       │    ├── scan abcd

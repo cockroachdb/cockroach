@@ -19,7 +19,7 @@ root
  │    ├── cascades
  │    │    └── child_p_fkey
  │    └── project
- │         ├── columns: p_new:7!null p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── columns: p_new:7!null p:4!null
  │         ├── select
  │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         │    ├── scan parent
@@ -36,7 +36,7 @@ root
            │    └── p_new:18 => child.p:9
            ├── input binding: &2
            ├── project
-           │    ├── columns: p_new:18!null c:12!null child.p:13!null p_old:16!null p_new:17!null
+           │    ├── columns: p_new:18!null c:12!null child.p:13!null
            │    ├── inner-join (hash)
            │    │    ├── columns: c:12!null child.p:13!null p_old:16!null p_new:17!null
            │    │    ├── scan child
@@ -104,7 +104,7 @@ root
  │    ├── cascades
  │    │    └── fk
  │    └── project
- │         ├── columns: p_new:11 q_new:12 pk:6!null p:7 q:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+ │         ├── columns: p_new:11 q_new:12 pk:6!null p:7 q:8
  │         ├── select
  │         │    ├── columns: pk:6!null p:7 q:8 crdb_internal_mvcc_timestamp:9 tableoid:10
  │         │    ├── scan parent_multi
@@ -123,7 +123,7 @@ root
            │    └── q_new:28 => child_multi.q:15
            ├── input binding: &2
            ├── project
-           │    ├── columns: p_new:27!null q_new:28!null c:18!null child_multi.p:19!null child_multi.q:20!null p_old:23!null p_new:24 q_old:25!null q_new:26
+           │    ├── columns: p_new:27!null q_new:28!null c:18!null child_multi.p:19!null child_multi.q:20!null
            │    ├── inner-join (hash)
            │    │    ├── columns: c:18!null child_multi.p:19!null child_multi.q:20!null p_old:23!null p_new:24 q_old:25!null q_new:26
            │    │    ├── scan child_multi
@@ -177,7 +177,7 @@ root
  │    ├── cascades
  │    │    └── fk
  │    └── project
- │         ├── columns: p_new:11!null pk:6!null p:7!null q:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+ │         ├── columns: p_new:11!null pk:6!null p:7!null q:8
  │         ├── select
  │         │    ├── columns: pk:6!null p:7!null q:8 crdb_internal_mvcc_timestamp:9 tableoid:10
  │         │    ├── scan parent_multi
@@ -195,7 +195,7 @@ root
            │    └── q_new:27 => child_multi.q:14
            ├── input binding: &2
            ├── project
-           │    ├── columns: p_new:26!null q_new:27!null c:17!null child_multi.p:18!null child_multi.q:19!null p_old:22!null p_new:23!null q_old:24!null q_new:25
+           │    ├── columns: p_new:26!null q_new:27!null c:17!null child_multi.p:18!null child_multi.q:19!null
            │    ├── inner-join (hash)
            │    │    ├── columns: c:17!null child_multi.p:18!null child_multi.q:19!null p_old:22!null p_new:23!null q_old:24!null q_new:25
            │    │    ├── scan child_multi
@@ -256,7 +256,7 @@ root
  │    ├── cascades
  │    │    └── fk
  │    └── project
- │         ├── columns: q_new:11 pk:6!null p:7!null q:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+ │         ├── columns: q_new:11 pk:6!null p:7!null q:8
  │         ├── select
  │         │    ├── columns: pk:6!null p:7!null q:8 crdb_internal_mvcc_timestamp:9 tableoid:10
  │         │    ├── scan parent_multi
@@ -276,7 +276,7 @@ root
       │    ├── cascades
       │    │    └── fk2
       │    ├── project
-      │    │    ├── columns: p_new:26!null q_new:27!null c:17!null child_multi.p:18!null child_multi.q:19!null p_old:22!null p_new:23!null q_old:24!null q_new:25
+      │    │    ├── columns: p_new:26!null q_new:27!null c:17!null child_multi.p:18!null child_multi.q:19!null
       │    │    ├── inner-join (hash)
       │    │    │    ├── columns: c:17!null child_multi.p:18!null child_multi.q:19!null p_old:22!null p_new:23!null q_old:24!null q_new:25
       │    │    │    ├── scan child_multi
@@ -323,7 +323,7 @@ root
                 │    └── q_new:50 => grandchild.q:37
                 ├── input binding: &3
                 ├── project
-                │    ├── columns: c_new:49!null q_new:50!null g:40!null grandchild.c:41!null grandchild.q:42!null c_old:45!null c_new:46!null q_old:47!null q_new:48!null
+                │    ├── columns: c_new:49!null q_new:50!null g:40!null grandchild.c:41!null grandchild.q:42!null
                 │    ├── inner-join (hash)
                 │    │    ├── columns: g:40!null grandchild.c:41!null grandchild.q:42!null c_old:45!null c_new:46!null q_old:47!null q_new:48!null
                 │    │    ├── scan grandchild
@@ -415,7 +415,7 @@ root
       │    ├── cascades
       │    │    └── fk2
       │    ├── project
-      │    │    ├── columns: p_new:29!null q_new:30!null c:20!null child_multi.p:21!null child_multi.q:22!null p_old:25!null p_new:26!null q_old:27!null q_new:28!null
+      │    │    ├── columns: p_new:29!null q_new:30!null c:20!null child_multi.p:21!null child_multi.q:22!null
       │    │    ├── inner-join (hash)
       │    │    │    ├── columns: c:20!null child_multi.p:21!null child_multi.q:22!null p_old:25!null p_new:26!null q_old:27!null q_new:28!null
       │    │    │    ├── scan child_multi
@@ -462,7 +462,7 @@ root
                 │    └── q_new:53 => grandchild.q:40
                 ├── input binding: &3
                 ├── project
-                │    ├── columns: c_new:52!null q_new:53!null g:43!null grandchild.c:44!null grandchild.q:45!null c_old:48!null c_new:49!null q_old:50!null q_new:51!null
+                │    ├── columns: c_new:52!null q_new:53!null g:43!null grandchild.c:44!null grandchild.q:45!null
                 │    ├── inner-join (hash)
                 │    │    ├── columns: g:43!null grandchild.c:44!null grandchild.q:45!null c_old:48!null c_new:49!null q_old:50!null q_new:51!null
                 │    │    ├── scan grandchild
@@ -559,7 +559,7 @@ root
       │    ├── cascades
       │    │    └── fk2
       │    ├── project
-      │    │    ├── columns: p_new:30!null q_new:31!null c:21!null child_multi.p:22!null child_multi.q:23!null p_old:26!null p_new:27!null q_old:28!null q_new:29
+      │    │    ├── columns: p_new:30!null q_new:31!null c:21!null child_multi.p:22!null child_multi.q:23!null
       │    │    ├── inner-join (hash)
       │    │    │    ├── columns: c:21!null child_multi.p:22!null child_multi.q:23!null p_old:26!null p_new:27!null q_old:28!null q_new:29
       │    │    │    ├── scan child_multi
@@ -606,7 +606,7 @@ root
                 │    └── q_new:54 => grandchild.q:41
                 ├── input binding: &3
                 ├── project
-                │    ├── columns: c_new:53!null q_new:54!null g:44!null grandchild.c:45!null grandchild.q:46!null c_old:49!null c_new:50!null q_old:51!null q_new:52!null
+                │    ├── columns: c_new:53!null q_new:54!null g:44!null grandchild.c:45!null grandchild.q:46!null
                 │    ├── inner-join (hash)
                 │    │    ├── columns: g:44!null grandchild.c:45!null grandchild.q:46!null c_old:49!null c_new:50!null q_old:51!null q_new:52!null
                 │    │    ├── scan grandchild
@@ -702,7 +702,7 @@ root
       │    ├── cascades
       │    │    └── fk2
       │    ├── project
-      │    │    ├── columns: p_new:32!null q_new:33!null c:23!null child_multi.p:24!null child_multi.q:25!null p_old:28!null p_new:29!null q_old:30!null q_new:31
+      │    │    ├── columns: p_new:32!null q_new:33!null c:23!null child_multi.p:24!null child_multi.q:25!null
       │    │    ├── inner-join (hash)
       │    │    │    ├── columns: c:23!null child_multi.p:24!null child_multi.q:25!null p_old:28!null p_new:29!null q_old:30!null q_new:31
       │    │    │    ├── scan child_multi
@@ -749,7 +749,7 @@ root
                 │    └── q_new:56 => grandchild.q:43
                 ├── input binding: &3
                 ├── project
-                │    ├── columns: c_new:55!null q_new:56!null g:46!null grandchild.c:47!null grandchild.q:48!null c_old:51!null c_new:52!null q_old:53!null q_new:54!null
+                │    ├── columns: c_new:55!null q_new:56!null g:46!null grandchild.c:47!null grandchild.q:48!null
                 │    ├── inner-join (hash)
                 │    │    ├── columns: g:46!null grandchild.c:47!null grandchild.q:48!null c_old:51!null c_new:52!null q_old:53!null q_new:54!null
                 │    │    ├── scan grandchild
@@ -815,7 +815,7 @@ root
  │    ├── cascades
  │    │    └── child_assn_cast_p_fkey
  │    └── project
- │         ├── columns: p_new:9!null p:5!null p2:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         ├── columns: p_new:9!null p:5!null p2:6
  │         ├── select
  │         │    ├── columns: p:5!null p2:6 crdb_internal_mvcc_timestamp:7 tableoid:8
  │         │    ├── scan parent_assn_cast
@@ -832,9 +832,9 @@ root
            │    └── p_cast:21 => child_assn_cast.p:11
            ├── input binding: &2
            ├── project
-           │    ├── columns: p_cast:21!null c:14!null child_assn_cast.p:15!null p_old:18!null p_new:19!null
+           │    ├── columns: p_cast:21!null c:14!null child_assn_cast.p:15!null
            │    ├── project
-           │    │    ├── columns: p_new:20!null c:14!null child_assn_cast.p:15!null p_old:18!null p_new:19!null
+           │    │    ├── columns: p_new:20!null c:14!null child_assn_cast.p:15!null
            │    │    ├── inner-join (cross)
            │    │    │    ├── columns: c:14!null child_assn_cast.p:15!null p_old:18!null p_new:19!null
            │    │    │    ├── scan child_assn_cast
@@ -922,9 +922,9 @@ root
            │    └── p2_cast:23 => child_assn_cast_p2.p2:13
            ├── input binding: &2
            ├── project
-           │    ├── columns: p2_cast:23!null c:16!null child_assn_cast_p2.p2:17!null p2_old:20!null p2_new:21!null
+           │    ├── columns: p2_cast:23!null c:16!null child_assn_cast_p2.p2:17!null
            │    ├── project
-           │    │    ├── columns: p2_new:22!null c:16!null child_assn_cast_p2.p2:17!null p2_old:20!null p2_new:21!null
+           │    │    ├── columns: p2_new:22!null c:16!null child_assn_cast_p2.p2:17!null
            │    │    ├── inner-join (cross)
            │    │    │    ├── columns: c:16!null child_assn_cast_p2.p2:17!null p2_old:20!null p2_new:21!null
            │    │    │    ├── scan child_assn_cast_p2
@@ -1010,9 +1010,9 @@ root
            │    └── p2_cast:25 => child_assn_cast_p2.p2:15
            ├── input binding: &2
            ├── project
-           │    ├── columns: p2_cast:25!null c:18!null child_assn_cast_p2.p2:19!null p2_old:22!null p2_new:23!null
+           │    ├── columns: p2_cast:25!null c:18!null child_assn_cast_p2.p2:19!null
            │    ├── project
-           │    │    ├── columns: p2_new:24!null c:18!null child_assn_cast_p2.p2:19!null p2_old:22!null p2_new:23!null
+           │    │    ├── columns: p2_new:24!null c:18!null child_assn_cast_p2.p2:19!null
            │    │    ├── inner-join (cross)
            │    │    │    ├── columns: c:18!null child_assn_cast_p2.p2:19!null p2_old:22!null p2_new:23!null
            │    │    │    ├── scan child_assn_cast_p2
@@ -1076,7 +1076,7 @@ root
  │    ├── cascades
  │    │    └── child_partial_p_fkey
  │    └── project
- │         ├── columns: p_new:7!null p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── columns: p_new:7!null p:4!null
  │         ├── select
  │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         │    ├── scan parent_partial
@@ -1095,9 +1095,9 @@ root
            ├── partial index del columns: partial_index_put1:21 partial_index_del2:23
            ├── input binding: &2
            ├── project
-           │    ├── columns: partial_index_put1:21 partial_index_put2:22!null partial_index_del2:23!null c:13!null child_partial.p:14!null i:15 p_old:18!null p_new:19!null p_new:20!null
+           │    ├── columns: partial_index_put1:21 partial_index_put2:22!null partial_index_del2:23!null c:13!null child_partial.p:14!null i:15 p_new:20!null
            │    ├── project
-           │    │    ├── columns: p_new:20!null c:13!null child_partial.p:14!null i:15 p_old:18!null p_new:19!null
+           │    │    ├── columns: p_new:20!null c:13!null child_partial.p:14!null i:15
            │    │    ├── inner-join (hash)
            │    │    │    ├── columns: c:13!null child_partial.p:14!null i:15 p_old:18!null p_new:19!null
            │    │    │    ├── scan child_partial
@@ -1165,7 +1165,7 @@ root
  │    ├── cascades
  │    │    └── child_virt_p_fkey
  │    └── project
- │         ├── columns: p_new:7!null p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── columns: p_new:7!null p:4!null
  │         ├── select
  │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         │    ├── scan parent_virt
@@ -1183,7 +1183,7 @@ root
            │    └── p_new:20 => v:10
            ├── input binding: &2
            ├── project
-           │    ├── columns: p_new:20!null c:13!null child_virt.p:14!null v:15!null p_old:18!null p_new:19!null
+           │    ├── columns: p_new:20!null c:13!null child_virt.p:14!null v:15!null
            │    ├── inner-join (hash)
            │    │    ├── columns: c:13!null child_virt.p:14!null v:15!null p_old:18!null p_new:19!null
            │    │    ├── project

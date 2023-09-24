@@ -158,7 +158,7 @@ update kj
  ├── update-mapping:
  │    └── j_new:11 => j:2
  └── project
-      ├── columns: j_new:11!null k:6!null j:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      ├── columns: j_new:11!null k:6!null j:7
       ├── select
       │    ├── columns: k:6!null j:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    ├── scan kj
