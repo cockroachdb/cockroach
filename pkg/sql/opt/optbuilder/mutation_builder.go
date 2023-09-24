@@ -271,6 +271,7 @@ func (mb *mutationBuilder) buildInputForUpdate(
 	where *tree.Where,
 	limit *tree.Limit,
 	orderBy tree.OrderBy,
+	returning tree.ReturningClause,
 ) {
 	var indexFlags *tree.IndexFlags
 	if source, ok := texpr.(*tree.AliasedTableExpr); ok && source.IndexFlags != nil {
@@ -313,7 +314,9 @@ func (mb *mutationBuilder) buildInputForUpdate(
 
 		// The FROM table columns can be accessed by the RETURNING clause of the
 		// query and so we have to make them accessible.
-		mb.extraAccessibleCols = fromScope.cols
+		if resultsNeeded(returning) {
+			mb.extraAccessibleCols = fromScope.cols
+		}
 
 		// Add the columns in the FROM scope.
 		// We create a new scope so that fetchScope is not modified. It will be

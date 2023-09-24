@@ -338,7 +338,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		mb.addTargetColsForUpdate(ins.OnConflict.Exprs)
 
 		// Build each of the SET expressions.
-		mb.addUpdateCols(ins.OnConflict.Exprs)
+		mb.addUpdateCols(ins.OnConflict.Exprs, true /* skipProjectionPruning */)
 
 		// Build the final upsert statement, including any returned expressions.
 		mb.buildUpsert(returning)

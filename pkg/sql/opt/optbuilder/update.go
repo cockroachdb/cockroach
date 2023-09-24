@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -91,6 +92,9 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	var mb mutationBuilder
 	mb.init(b, "update", tab, alias)
 
+	tabMeta := mb.md.TableMeta(mb.tabID)
+	b.addComputedColsForTable(tabMeta, intsets.Fast{} /* virtualMutationColOrds */)
+
 	// Build the input expression that selects the rows that will be updated:
 	//
 	//   WITH <with>
@@ -98,13 +102,13 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	//   ORDER BY <order-by> LIMIT <limit>
 	//
 	// All columns from the update table will be projected.
-	mb.buildInputForUpdate(inScope, upd.Table, upd.From, upd.Where, upd.Limit, upd.OrderBy)
+	mb.buildInputForUpdate(inScope, upd.Table, upd.From, upd.Where, upd.Limit, upd.OrderBy, upd.Returning)
 
 	// Derive the columns that will be updated from the SET expressions.
 	mb.addTargetColsForUpdate(upd.Exprs)
 
 	// Build each of the SET expressions.
-	mb.addUpdateCols(upd.Exprs)
+	mb.addUpdateCols(upd.Exprs, resultsNeeded(upd.Returning))
 
 	// Build the final update statement, including any returned expressions.
 	if resultsNeeded(upd.Returning) {
@@ -180,7 +184,7 @@ func (mb *mutationBuilder) addTargetColsForUpdate(exprs tree.UpdateExprs) {
 // Multiple subqueries result in multiple left joins successively wrapping the
 // input. A final Project operator is built if any single-column or tuple SET
 // expressions are present.
-func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
+func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs, skipProjectionPruning bool) {
 	// SET expressions should reject aggregates, generators, etc.
 	scalarProps := &mb.b.semaCtx.Properties
 	defer scalarProps.Restore(*scalarProps)
@@ -192,6 +196,34 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 	// Project additional column(s) for each update expression (can be multiple
 	// columns in case of tuple assignment).
 	projectionsScope := mb.outScope.replace()
+	//projectionsScope.appendColumnsFromScope(mb.outScope) // msirek-temp
+	// var ordsToProject intsets.Fast
+	//for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+	//	ord := mb.tab.Column(i).Ordinal()
+	//	includedColID := mb.mapToReturnColID(i)
+	//	if includedColID != 0 {
+	//		ordsToProject.Add(ord)
+	//	}
+	//}
+
+	if skipProjectionPruning {
+		projectionsScope.appendColumnsFromScope(mb.outScope)
+	} else {
+		var colsToProject opt.ColSet
+		for i := range mb.updateColIDs {
+			if mb.updateColIDs[i] != 0 {
+				colsToProject.Add(mb.updateColIDs[i])
+			}
+		}
+		for i := range mb.fetchColIDs {
+			if mb.fetchColIDs[i] != 0 {
+				colsToProject.Add(mb.fetchColIDs[i])
+			}
+		}
+		if !colsToProject.Empty() {
+			projectionsScope.appendColumnsFromScopeInColSet(mb.outScope, colsToProject) // msirek-temp
+		}
+	}
 
 	addCol := func(expr tree.Expr, targetColID opt.ColumnID) {
 		ord := mb.tabID.ColumnOrdinal(targetColID)
@@ -275,6 +307,18 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 			n++
 		}
 	}
+	//tabMeta := mb.md.TableMeta(mb.tabID)
+	//
+	//for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+	//	ord := mb.tab.Column(i).Ordinal()
+	//	// includedColID := mb.mapToReturnColID(i)
+	//	if tabMeta.ColsInComputedColsExpressions.Contains(mb.tabID.ColumnID(ord)) && mb.updateColIDs[ord] == 0 {
+	//		ordsToProject.Add(ord)
+	//	}
+	//}
+	//if !ordsToProject.Empty() {
+	//	projectionsScope.appendColumnsFromScopeInOrdinalSet(mb.outScope, ordsToProject)
+	//} // msirek-temp
 
 	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 	mb.outScope = projectionsScope
