@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -43,12 +42,6 @@ type TenantDeps struct {
 
 	// TODO(ajwerner): Remove this in favor of the descs.DB above.
 	InternalExecutor isql.Executor
-
-	SpanConfig struct { // deps for span config upgrades; can be removed accordingly
-		spanconfig.KVAccessor
-		spanconfig.Splitter
-		Default roachpb.SpanConfig
-	}
 
 	TestingKnobs              *upgradebase.TestingKnobs
 	SchemaResolverConstructor func( // A constructor that returns a schema resolver for `descriptors` in `currDb`.
