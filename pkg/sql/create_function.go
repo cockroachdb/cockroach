@@ -149,7 +149,7 @@ func (n *createFunctionNode) createNewFunction(
 			ArgTypes:    paramTypes,
 			ReturnType:  returnType,
 			ReturnSet:   udfDesc.ReturnType.ReturnSet,
-			IsProcedure: udfDesc.IsProcedure,
+			IsProcedure: udfDesc.IsProcedure(),
 		},
 	)
 	if err := params.p.writeSchemaDescChange(params.ctx, scDesc, "Create Function"); err != nil {

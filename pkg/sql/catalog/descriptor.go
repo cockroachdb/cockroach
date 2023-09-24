@@ -974,9 +974,14 @@ type FunctionDescriptor interface {
 	// GetLanguage returns the language of this function.
 	GetLanguage() catpb.Function_Language
 
-	// ToCreateExpr converts a function descriptor back to a CREATE FUNCTION
-	// statement. This is mainly used for formatting, e.g. SHOW CREATE FUNCTION.
+	// ToCreateExpr converts a function descriptor back to a CREATE FUNCTION or
+	// CREATE PROCEDURE statement. This is mainly used for formatting, e.g.,
+	// SHOW CREATE FUNCTION and SHOW CREATE PROCEDURE.
 	ToCreateExpr() (*tree.CreateRoutine, error)
+
+	// IsProcedure returns true if the descriptor represents a procedure. It
+	// returns false if the descriptor represents a user-defined function.
+	IsProcedure() bool
 }
 
 // FilterDroppedDescriptor returns an error if the descriptor state is DROP.
