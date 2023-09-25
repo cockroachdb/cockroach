@@ -1787,6 +1787,7 @@ func (tc *TestCluster) RestartServerWithInspect(
 	// node. This is useful to avoid flakes: the newly restarted node is now on a
 	// different port, and a cycle of gossip is necessary to make all other nodes
 	// aware.
+	id := s.StorageLayer().NodeID()
 	return timeutil.RunWithTimeout(
 		ctx, "check-conn", 15*time.Second,
 		func(ctx context.Context) error {
@@ -1803,9 +1804,9 @@ func (tc *TestCluster) RestartServerWithInspect(
 						}
 						for i := 0; i < rpc.NumConnectionClasses; i++ {
 							class := rpc.ConnectionClass(i)
-							sl := s.StorageLayer()
-							if _, err := s.SystemLayer().NodeDialer().(*nodedialer.Dialer).Dial(ctx, sl.NodeID(), class); err != nil {
-								return errors.Wrapf(err, "connecting n%d->n%d (class %v)", sl.NodeID(), sl.NodeID(), class)
+							otherID := s.StorageLayer().NodeID()
+							if _, err := s.SystemLayer().NodeDialer().(*nodedialer.Dialer).Dial(ctx, id, class); err != nil {
+								return errors.Wrapf(err, "connecting n%d->n%d (class %v)", otherID, id, class)
 							}
 						}
 					}
