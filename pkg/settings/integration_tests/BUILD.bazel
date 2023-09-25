@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_test(
     name = "integration_tests_test",
@@ -7,6 +7,7 @@ go_test(
         "settings_test.go",
     ],
     args = ["-test.timeout=295s"],
+    embed = [":integration_tests"],
     deps = [
         "//pkg/base",
         "//pkg/security/securityassets",
@@ -19,5 +20,23 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_library(
+    name = "integration_tests",
+    srcs = ["propagation.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/settings/integration_tests",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/settings",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )
