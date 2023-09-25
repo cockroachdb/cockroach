@@ -530,7 +530,7 @@ func TestStaleRowsDoNotCauseSettingsToRegress(t *testing.T) {
 	// The tenant prefix, if one exists, will have been stripped from the
 	// key.
 	getSettingKVForFakeSetting := func(t *testing.T) roachpb.KeyValue {
-		codec := s.ExecutorConfig().(sql.ExecutorConfig).Codec
+		codec := s.Codec()
 		k := codec.TablePrefix(keys.SettingsTableID)
 		rows, err := s.DB().Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
 		require.NoError(t, err)
