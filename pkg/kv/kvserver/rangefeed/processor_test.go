@@ -141,6 +141,25 @@ func rangeFeedCheckpoint(span roachpb.Span, ts hlc.Timestamp) *kvpb.RangeFeedEve
 	})
 }
 
+type storeOp struct {
+	kv  storage.MVCCKeyValue
+	txn *roachpb.Transaction
+}
+
+func makeTestEngineWithData(ops []storeOp) (storage.Engine, error) {
+	ctx := context.Background()
+	engine := storage.NewDefaultInMemForTesting()
+	for _, op := range ops {
+		kv := op.kv
+		err := storage.MVCCPut(ctx, engine, kv.Key.Key, kv.Key.Timestamp, roachpb.Value{RawBytes: kv.Value}, storage.MVCCWriteOptions{Txn: op.txn})
+		if err != nil {
+			engine.Close()
+			return nil, err
+		}
+	}
+	return engine, nil
+}
+
 const testProcessorEventCCap = 16
 const testProcessorEventCTimeout = 10 * time.Millisecond
 
@@ -238,9 +257,13 @@ func withMetrics(m *Metrics) option {
 	}
 }
 
-func withRtsIter(rtsIter storage.SimpleMVCCIterator) option {
+func withRtsScanner(scanner IntentScanner) option {
 	return func(config *testConfig) {
-		config.isc = makeIntentScannerConstructor(rtsIter)
+		if scanner != nil {
+			config.isc = func() IntentScanner {
+				return scanner
+			}
+		}
 	}
 }
 
@@ -268,11 +291,52 @@ func withSpan(span roachpb.RSpan) option {
 	}
 }
 
-func makeIntentScannerConstructor(rtsIter storage.SimpleMVCCIterator) IntentScannerConstructor {
-	if rtsIter == nil {
-		return nil
+// blockingScanner is a test intent scanner that allows test to track lifecycle
+// of tasks.
+//  1. it will always block on startup and will wait for block to be closed to
+//     proceed
+//  2. when closed it will close done channel to signal completion
+type blockingScanner struct {
+	wrapped IntentScanner
+
+	block chan interface{}
+	done  chan interface{}
+}
+
+func (s *blockingScanner) ConsumeIntents(
+	ctx context.Context, startKey roachpb.Key, endKey roachpb.Key, consumer eventConsumer,
+) error {
+	if s.block != nil {
+		select {
+		case <-s.block:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
-	return func() IntentScanner { return NewLegacyIntentScanner(rtsIter) }
+	return s.wrapped.ConsumeIntents(ctx, startKey, endKey, consumer)
+}
+
+func (s *blockingScanner) Close() {
+	s.wrapped.Close()
+	close(s.done)
+}
+
+func makeIntentScanner(data []storeOp, span roachpb.RSpan) (*blockingScanner, func(), error) {
+	engine, err := makeTestEngineWithData(data)
+	if err != nil {
+		return nil, nil, err
+	}
+	scanner, err := NewSeparatedIntentScanner(engine, span)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &blockingScanner{
+			wrapped: scanner,
+			block:   make(chan interface{}),
+			done:    make(chan interface{}),
+		}, func() {
+			engine.Close()
+		}, nil
 }
 
 func newTestProcessor(
@@ -828,32 +892,36 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testutils.RunValues(t, "proc type", testTypes, func(t *testing.T, pt procType) {
-		txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
-		rtsIter := newTestIterator([]storage.MVCCKeyValue{
-			makeKV("a", "val1", 10),
-			makeIntent("c", txn1, "txnKey1", 15),
-			makeProvisionalKV("c", "txnKey1", 15),
-			makeKV("c", "val3", 11),
-			makeKV("c", "val4", 9),
-			makeIntent("d", txn2, "txnKey2", 21),
-			makeProvisionalKV("d", "txnKey2", 21),
-			makeKV("d", "val5", 20),
-			makeKV("d", "val6", 19),
-			makeKV("m", "val8", 1),
-			makeIntent("n", txn1, "txnKey1", 12),
-			makeProvisionalKV("n", "txnKey1", 12),
-			makeIntent("r", txn1, "txnKey1", 19),
-			makeProvisionalKV("r", "txnKey1", 19),
-			makeKV("r", "val9", 4),
-			makeIntent("w", txn1, "txnKey1", 3),
-			makeProvisionalKV("w", "txnKey1", 3),
-			makeIntent("z", txn2, "txnKey2", 21),
-			makeProvisionalKV("z", "txnKey2", 21),
-			makeKV("z", "val11", 4),
-		}, nil)
-		rtsIter.block = make(chan struct{})
+		txn1 := makeTxn("txn1", uuid.MakeV4(), isolation.Serializable, hlc.Timestamp{})
+		txn2 := makeTxn("txn2", uuid.MakeV4(), isolation.Serializable, hlc.Timestamp{})
+		txnWithTs := func(txn roachpb.Transaction, ts int64) *roachpb.Transaction {
+			txnTs := hlc.Timestamp{WallTime: ts}
+			txn.TxnMeta.MinTimestamp = txnTs
+			txn.TxnMeta.WriteTimestamp = txnTs
+			txn.ReadTimestamp = txnTs
+			return &txn
+		}
+		data := []storeOp{
+			{kv: makeKV("a", "val1", 10)},
+			{kv: makeKV("c", "val4", 9)},
+			{kv: makeKV("c", "val3", 11)},
+			{kv: makeProvisionalKV("c", "txnKey1", 15), txn: txnWithTs(txn1, 15)},
+			{kv: makeKV("d", "val6", 19)},
+			{kv: makeKV("d", "val5", 20)},
+			{kv: makeProvisionalKV("d", "txnKey2", 21), txn: txnWithTs(txn2, 21)},
+			{kv: makeKV("m", "val8", 1)},
+			{kv: makeProvisionalKV("n", "txnKey1", 12), txn: txnWithTs(txn1, 12)},
+			{kv: makeKV("r", "val9", 4)},
+			{kv: makeProvisionalKV("r", "txnKey1", 19), txn: txnWithTs(txn1, 19)},
+			{kv: makeProvisionalKV("w", "txnKey1", 3), txn: txnWithTs(txn1, 3)},
+			{kv: makeKV("z", "val11", 4)},
+			{kv: makeProvisionalKV("z", "txnKey2", 21), txn: txnWithTs(txn2, 21)},
+		}
+		scanner, cleanup, err := makeIntentScanner(data, roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("zz")})
+		require.NoError(t, err, "failed to prepare test data")
+		defer cleanup()
 
-		p, h, stopper := newTestProcessor(t, withRtsIter(rtsIter), withProcType(pt))
+		p, h, stopper := newTestProcessor(t, withRtsScanner(scanner), withProcType(pt))
 		ctx := context.Background()
 		defer stopper.Stop(ctx)
 
@@ -897,9 +965,8 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 		require.Equal(t, hlc.Timestamp{}, h.rts.Get())
 
 		// Let the scan proceed.
-		close(rtsIter.block)
-		<-rtsIter.done
-		require.True(t, rtsIter.closed)
+		close(scanner.block)
+		<-scanner.done
 
 		// Synchronize the event channel then verify that the resolved timestamp is
 		// initialized and that it's blocked on the oldest unresolved intent's txn
