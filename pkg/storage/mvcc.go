@@ -128,16 +128,65 @@ var rocksdbConcurrency = envutil.EnvOrDefaultInt(
 		return max
 	}())
 
-// The sub-level threshold at which to allow an increase in compaction
-// concurrency. The maximum is still controlled by
-// pebble.Options.MaxConcurrentCompactions. The default of 2 will allow an
-// additional compaction (so total 1 + 1 = 2 compactions) when the sub-level
-// count is 2, and increment concurrency by 1 whenever sub-level count
-// increases by 2 (so 1 + 3 = 4 compactions) when sub-level count is 6.
-// Admission control starts shaping regular traffic at a sub-level count of 5,
-// and elastic traffic at a sub-level count of 1, hence this default of 2. See
-// https://github.com/cockroachdb/pebble/issues/2832#issuecomment-1699743392
-// for some discussion on the bad behavior caused by not setting this option.
+// l0SubLevelCompactionConcurrency is the sub-level threshold at which to
+// allow an increase in compaction concurrency. The maximum is still
+// controlled by pebble.Options.MaxConcurrentCompactions. The default of 2
+// allows an additional compaction (so total 1 + 1 = 2 compactions) when the
+// sub-level count is 2, and increments concurrency by 1 whenever sub-level
+// count increases by 2 (so 1 + 2 = 3 compactions) when sub-level count is 4,
+// and so on, i.e., floor(1 + x/2), where x is the number of sub-levels. See
+// the logic in
+// https://github.com/cockroachdb/pebble/blob/86593692e09f904f4ea739e065074f44f40ec9ba/compaction_picker.go#L1204-L1220.
+//
+// Admission control (see admission.ioLoadListener) starts shaping regular
+// traffic at a sub-level count of 5, with twice the tokens as compaction
+// bandwidth (out of L0) at sub-level count 5, and tokens equal to the
+// compaction bandwidth at sub-level count of 10. At sub-level count 5, the
+// permitted compaction concurrency is floor(1+5/2)=3, so the tokens are representative of
+// a concurrency of 3*2=6. At sub-level count of 10, the permitted compaction
+// concurrency is floor(1+10/2)=6, so tokens are also representative of a compaction
+// concurrency of 6. Note that this analysis is placing an upper bound on
+// the tokens -- we are not saying that this will be the tokens actually handed out.
+// This upper bound computation is important, since an upper bound that is
+// not high enough will cause admission control to give out fewer tokens and
+// thereby shape traffic before we have an opportunity to increase the compaction
+// concurrency to accommodate that traffic.
+//
+// The regular traffic token shaping behavior is hard-wired in ioLoadListener
+// (with code constants), and we don't currently have a reason to change it,
+// but if we run stores with pebble.Options.MaxConcurrentCompactions > 6, we
+// may need to make the ioLoadListener behavior configurable so that it allows
+// more tokens at sub-level count 5 (or reduce l0SubLevelCompactionConcurrency
+// as discussed below).
+//
+// For elastic traffic, admission control starts shaping traffic at sub-level
+// count of 2, with tokens equal to 1.25x the compaction bandwidth (tokens
+// representative of 1.25*floor(1+2/2)=2.5 compaction concurrency), and at
+// sub-level count of 6, the tokens are equal to 0.75x the compaction
+// bandwidth (tokens representative of 0.75*floor(1+6/2)=3 compaction
+// concurrency). This is acceptable with the default value of
+// MaxConcurrentCompactions=3, but deployments which use machines with a large
+// number of CPUs are sometimes configured with a larger value of
+// MaxConcurrentCompactions. In those cases elastic traffic will be shaped
+// even though there is an opportunity to increase compaction concurrency to
+// allow more elastic traffic.
+//
+// If a deployment administrator knows that the system is provisioned such
+// that aggressively increasing up to MaxConcurrentCompactions is harmless to
+// foreground traffic, they should set l0SubLevelCompactionConcurrency=1. The
+// tokens will be (in terms of max compaction concurrency):
+//
+//   - Elastic: sub-level=2, 1.25*3=3.75. sub-level=4, 1*5=5. sub-level=6,
+//     0.75*7=5.25. So elastic tokens will be able to utilize a compaction
+//     concurrency of approximately 5.
+//
+//   - Regular: sub-level=5, 2*6=12. sub-level=10, 1*11=11. Regular traffic will
+//     be able to utilize a compaction concurrency of approximately 11. Note
+//     that for regular traffic this analysis may be conservative, since at the
+//     stable point of ~10 sub-levels, the L0 score is high enough that
+//     compaction debt also builds up in other levels. When that happens,
+//     compaction concurrency is also increased (regardless of the number of
+//     sub-levels).
 var l0SubLevelCompactionConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_L0_SUB_LEVEL_CONCURRENCY", 2)
 
