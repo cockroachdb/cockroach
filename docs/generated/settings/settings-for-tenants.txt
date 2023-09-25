@@ -9,7 +9,7 @@ bulkio.backup.deprecated_full_backup_with_subdir.enabled	boolean	false	when true
 bulkio.backup.file_size	byte size	128 MiB	target size for individual data files produced during BACKUP	application
 bulkio.backup.read_timeout	duration	5m0s	amount of time after which a read attempt is considered timed out, which causes the backup to fail	application
 bulkio.backup.read_with_priority_after	duration	1m0s	amount of time since the read-as-of time above which a BACKUP should use priority when retrying reads	application
-bulkio.stream_ingestion.minimum_flush_interval	duration	5s	the minimum timestamp between flushes; flushes may still occur if internal buffers fill up	application
+physical_replication.consumer.minimum_flush_interval	duration	5s	the minimum timestamp between flushes; flushes may still occur if internal buffers fill up	application
 changefeed.backfill.concurrent_scan_requests	integer	0	number of concurrent scan requests per node issued during a backfill	application
 changefeed.backfill.scan_request_size	integer	524288	the maximum number of bytes returned by each scan request	application
 changefeed.balance_range_distribution.enabled	boolean	false	if enabled, the ranges are balanced equally among all nodes	application

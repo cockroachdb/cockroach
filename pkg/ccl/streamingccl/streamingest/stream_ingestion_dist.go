@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -40,23 +39,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-)
-
-var replanThreshold = settings.RegisterFloatSetting(
-	settings.ApplicationLevel,
-	"stream_replication.replan_flow_threshold",
-	"fraction of nodes in the producer or consumer job that would need to change to refresh the"+
-		" physical execution plan. If set to 0, the physical plan will not automatically refresh.",
-	0,
-	settings.NonNegativeFloatWithMaximum(1),
-)
-
-var replanFrequency = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
-	"stream_replication.replan_flow_frequency",
-	"frequency at which the consumer job checks to refresh its physical execution plan",
-	10*time.Minute,
-	settings.PositiveDuration,
 )
 
 // replicationPartitionInfoFilename is the filename at which the replication job
@@ -136,7 +118,7 @@ func startDistIngestion(
 	replanOracle := sql.ReplanOnCustomFunc(
 		measurePlanChange,
 		func() float64 {
-			return replanThreshold.Get(execCtx.ExecCfg().SV())
+			return streamingccl.ReplanThreshold.Get(execCtx.ExecCfg().SV())
 		},
 	)
 
@@ -145,7 +127,7 @@ func startDistIngestion(
 		planner.generatePlan,
 		execCtx,
 		replanOracle,
-		func() time.Duration { return replanFrequency.Get(execCtx.ExecCfg().SV()) },
+		func() time.Duration { return streamingccl.ReplanFrequency.Get(execCtx.ExecCfg().SV()) },
 	)
 
 	tracingAggCh := make(chan *execinfrapb.TracingAggregatorEvents)
