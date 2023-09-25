@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -1439,23 +1440,36 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 		}
 	}
 
-	l.tc = testcluster.StartTestCluster(t, 2,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-			ServerArgs: base.TestServerArgs{
-				Knobs: base.TestingKnobs{
-					Store: &kvserver.StoreTestingKnobs{
-						EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
-							TestingEvalFilter: testingEvalFilter,
-						},
-						TestingProposalFilter:                testingProposalFilter,
-						LeaseTransferBlockedOnExtensionEvent: leaseTransferBlockedOnExtensionEvent,
+	const numNodes = 2
+	serverArgs := make(map[int]base.TestServerArgs, numNodes)
+	for i := 0; i < numNodes; i++ {
+		st := cluster.MakeClusterSettings()
+		// leaseTransferTest tests manually control the clock and may induce clock
+		// jumps. Disable the suspect timer to prevent nodes from becoming suspect
+		// and being excluded as lease transfer targets when we bump clocks.
+		storepool.TimeAfterStoreSuspect.Override(context.Background(), &st.SV, 0)
+
+		serverArgs[i] = base.TestServerArgs{
+			Settings: st,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+						TestingEvalFilter: testingEvalFilter,
 					},
-					Server: &server.TestingKnobs{
-						WallClock: l.manualClock,
-					},
+					TestingProposalFilter:                testingProposalFilter,
+					LeaseTransferBlockedOnExtensionEvent: leaseTransferBlockedOnExtensionEvent,
+				},
+				Server: &server.TestingKnobs{
+					WallClock: l.manualClock,
 				},
 			},
+		}
+	}
+
+	l.tc = testcluster.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode:   base.ReplicationManual,
+			ServerArgsPerNode: serverArgs,
 		})
 	key := l.tc.ScratchRangeWithExpirationLease(t)
 	l.tc.AddVotersOrFatal(t, key, l.tc.Target(1))
