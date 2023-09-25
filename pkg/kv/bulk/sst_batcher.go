@@ -104,6 +104,10 @@ type SSTBatcher struct {
 	mem      *mon.ConcurrentBoundAccount
 	limiter  limit.ConcurrentRequestLimiter
 
+	// priroity is the admission priority used for AddSSTable
+	// requests.
+	priority admissionpb.WorkPriority
+
 	// disallowShadowingBelow is described on kvpb.AddSSTableRequest.
 	disallowShadowingBelow hlc.Timestamp
 
@@ -229,6 +233,7 @@ func MakeSSTBatcher(
 		disableScatters:        !scatterSplitRanges,
 		mem:                    mem,
 		limiter:                sendLimiter,
+		priority:               admissionpb.BulkNormalPri,
 	}
 	b.mu.lastFlush = timeutil.Now()
 	b.mu.tracingSpan = tracing.SpanFromContext(ctx)
@@ -254,6 +259,7 @@ func MakeStreamSSTBatcher(
 		ingestAll: true,
 		mem:       mem,
 		limiter:   sendLimiter,
+		priority:  admissionpb.NormalPri,
 	}
 	b.mu.lastFlush = timeutil.Now()
 	b.mu.tracingSpan = tracing.SpanFromContext(ctx)
@@ -280,6 +286,7 @@ func MakeTestingSSTBatcher(
 		ingestAll:      ingestAll,
 		mem:            mem,
 		limiter:        sendLimiter,
+		priority:       admissionpb.BulkNormalPri,
 	}
 	b.Reset(ctx)
 	return b, nil
@@ -815,7 +822,7 @@ func (b *SSTBatcher) addSSTable(
 				ba := &kvpb.BatchRequest{
 					Header: kvpb.Header{Timestamp: batchTS, ClientRangeInfo: roachpb.ClientRangeInfo{ExplicitlyRequested: true}},
 					AdmissionHeader: kvpb.AdmissionHeader{
-						Priority:                 int32(admissionpb.BulkNormalPri),
+						Priority:                 int32(b.priority),
 						CreateTime:               timeutil.Now().UnixNano(),
 						Source:                   kvpb.AdmissionHeader_FROM_SQL,
 						NoMemoryReservedAtSource: true,
