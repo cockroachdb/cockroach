@@ -13,6 +13,7 @@ package colexecjoin
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -65,7 +66,8 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 							if done := b.helper.AccountForSet(outStartIndex); done {
 								// Use a smaller output capacity for the current set of rows if
 								// producing the output causes the budget to be exceeded.
-								outputCapacity = outStartIndex + 1
+								//outputCapacity = outStartIndex + 1
+								// fmt.Println("overflowed")  // msirek-temp
 								break
 							}
 							outStartIndex++
@@ -707,6 +709,22 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", b.left.types[colIdx].String()))
 						}
 					}
+					if b.isCrossJoin {
+						curSrcStartIdx := bs.curSrcStartIdx
+						outStartIndex := destStartIdx
+						for curSrcStartIdx < leftSrcEndIdx && outStartIndex < outputCapacity {
+							if done := b.helper.AccountForSet(outStartIndex); done {
+								// Use a smaller output capacity for the current set of rows if
+								// producing the output causes the budget to be exceeded.
+								//outputCapacity = outStartIndex + 1
+								fmt.Println("overflowed")
+								break
+							}
+							outStartIndex++
+							curSrcStartIdx++
+						}
+					}
+
 					// If there are no columns projected from the left input, simply advance the
 					// cross-joiner state according to the number of input rows.
 					if len(b.left.types) == 0 {
@@ -754,7 +772,8 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 							if done := b.helper.AccountForSet(outStartIndex); done {
 								// Use a smaller output capacity for the current set of rows if
 								// producing the output causes the budget to be exceeded.
-								outputCapacity = outStartIndex + 1
+								//outputCapacity = outStartIndex + 1
+								// fmt.Println("overflowed")  // msirek-temp
 								break
 							}
 							outStartIndex++
@@ -1396,6 +1415,22 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", b.left.types[colIdx].String()))
 						}
 					}
+					if b.isCrossJoin {
+						curSrcStartIdx := bs.curSrcStartIdx
+						outStartIndex := destStartIdx
+						for curSrcStartIdx < leftSrcEndIdx && outStartIndex < outputCapacity {
+							if done := b.helper.AccountForSet(outStartIndex); done {
+								// Use a smaller output capacity for the current set of rows if
+								// producing the output causes the budget to be exceeded.
+								//outputCapacity = outStartIndex + 1
+								fmt.Println("overflowed")
+								break
+							}
+							outStartIndex++
+							curSrcStartIdx++
+						}
+					}
+
 					// If there are no columns projected from the left input, simply advance the
 					// cross-joiner state according to the number of input rows.
 					if len(b.left.types) == 0 {

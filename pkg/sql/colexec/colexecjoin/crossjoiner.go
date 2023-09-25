@@ -388,6 +388,10 @@ func (b *crossJoinerBase) setupLeftBuilder() {
 		}
 	default:
 		b.builderState.setup.leftNumRepeats = b.numRightTuples
+		if b.builderState.setup.leftNumRepeats == 3 {
+			i := 0
+			i++ // msirek-temp
+		}
 	}
 }
 
@@ -419,6 +423,10 @@ func (b *crossJoinerBase) prepareForNextLeftBatch(batch coldata.Batch, startIdx,
 	switch b.joinType {
 	case descpb.InnerJoin, descpb.LeftOuterJoin, descpb.RightOuterJoin, descpb.FullOuterJoin:
 		b.builderState.setup.rightNumRepeats = endIdx - startIdx
+		if b.builderState.setup.rightNumRepeats == 2 {
+			i := 0
+			i++ // msirek-temp
+		}
 	case descpb.RightSemiJoin, descpb.RightAntiJoin:
 		b.builderState.setup.rightNumRepeats = 1
 	}
