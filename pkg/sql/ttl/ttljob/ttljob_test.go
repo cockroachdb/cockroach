@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -59,7 +58,6 @@ type ttlServer interface {
 type rowLevelTTLTestJobTestHelper struct {
 	server           ttlServer
 	env              *jobstest.JobSchedulerTestEnv
-	cfg              *scheduledjobs.JobExecutionConfig
 	testCluster      serverutils.TestClusterInterface
 	sqlDB            *sqlutils.SQLRunner
 	kvDB             *kv.DB
@@ -85,9 +83,6 @@ func newRowLevelTTLTestJobTestHelper(
 					defer th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 					return fn(context.Background(), 0 /* allSchedules */)
 				}
-			},
-			CaptureJobExecutionConfig: func(config *scheduledjobs.JobExecutionConfig) {
-				th.cfg = config
 			},
 		},
 		TTL: testingKnobs,
@@ -128,7 +123,6 @@ func newRowLevelTTLTestJobTestHelper(
 		th.sqlDB = sqlutils.MakeSQLRunner(db)
 		th.server = ts
 	}
-	require.NotNil(t, th.cfg)
 
 	th.kvDB = ts.DB()
 
