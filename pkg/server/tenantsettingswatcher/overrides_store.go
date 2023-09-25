@@ -11,6 +11,7 @@
 package tenantsettingswatcher
 
 import (
+	"context"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -65,7 +66,7 @@ func (s *overridesStore) Init() {
 	s.mu.tenants = make(map[roachpb.TenantID]*tenantOverrides)
 }
 
-// SetAll initializes the overrides for all tenants. Any existing overrides are
+// setAll initializes the overrides for all tenants. Any existing overrides are
 // replaced.
 //
 // The store takes ownership of the overrides slices in the map (the caller can
@@ -73,7 +74,9 @@ func (s *overridesStore) Init() {
 //
 // This method is called once we complete a full initial scan of the
 // tenant_setting table.
-func (s *overridesStore) SetAll(allOverrides map[roachpb.TenantID][]kvpb.TenantSetting) {
+func (s *overridesStore) setAll(
+	ctx context.Context, allOverrides map[roachpb.TenantID][]kvpb.TenantSetting,
+) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -102,7 +105,9 @@ func (s *overridesStore) SetAll(allOverrides map[roachpb.TenantID][]kvpb.TenantS
 //
 // The caller can listen for closing of changeCh, which is guaranteed to happen
 // if the tenant's overrides change.
-func (s *overridesStore) GetTenantOverrides(tenantID roachpb.TenantID) *tenantOverrides {
+func (s *overridesStore) GetTenantOverrides(
+	ctx context.Context, tenantID roachpb.TenantID,
+) *tenantOverrides {
 	s.mu.RLock()
 	res, ok := s.mu.tenants[tenantID]
 	s.mu.RUnlock()
@@ -128,7 +133,9 @@ func (s *overridesStore) GetTenantOverrides(tenantID roachpb.TenantID) *tenantOv
 // SetTenantOverride changes an override for the given tenant. If the setting
 // has an empty value, the existing override is removed; otherwise a new
 // override is added.
-func (s *overridesStore) SetTenantOverride(tenantID roachpb.TenantID, setting kvpb.TenantSetting) {
+func (s *overridesStore) SetTenantOverride(
+	ctx context.Context, tenantID roachpb.TenantID, setting kvpb.TenantSetting,
+) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var before []kvpb.TenantSetting
