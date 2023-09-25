@@ -22,7 +22,6 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/config",
-        "//pkg/config/zonepb",
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/rpc",

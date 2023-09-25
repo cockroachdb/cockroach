@@ -15,7 +15,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
@@ -74,7 +73,7 @@ func NewStorePool(
 	ambientCtx := log.MakeTestingAmbientContext(stopper.Tracer())
 
 	// Never gossip, pass in nil values.
-	g := gossip.NewTest(1, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	g := gossip.NewTest(1, stopper, metric.NewRegistry())
 	sp := storepool.NewStorePool(
 		ambientCtx,
 		st,

@@ -967,16 +967,13 @@ func validateNoRepeatKeysInConstraints(constraints []zonepb.Constraint) error {
 func accumulateUniqueConstraints(zone *zonepb.ZoneConfig) []zonepb.Constraint {
 	constraints := make([]zonepb.Constraint, 0)
 	addToValidate := func(c zonepb.Constraint) {
-		var alreadyInList bool
 		for _, val := range constraints {
 			if c == val {
-				alreadyInList = true
-				break
+				// Already in the list, nothing to do.
+				return
 			}
 		}
-		if !alreadyInList {
-			constraints = append(constraints, c)
-		}
+		constraints = append(constraints, c)
 	}
 	for _, constraints := range zone.Constraints {
 		for _, constraint := range constraints.Constraints {
@@ -1004,7 +1001,7 @@ func accumulateUniqueConstraints(zone *zonepb.ZoneConfig) []zonepb.Constraint {
 // validateZoneAttrsAndLocalities is tenant aware in its validation. Secondary
 // tenants don't have access to the NodeStatusServer, and as such, aren't
 // allowed to set non-locality attributes in their constraints. Furthermore,
-// their access is validated using the RegionProvider.
+// their access is validated using the descs.RegionProvider.
 func validateZoneAttrsAndLocalities(
 	ctx context.Context,
 	regionProvider descs.RegionProvider,

@@ -158,7 +158,6 @@ go_test(
         "//pkg/base",
         "//pkg/clusterversion",
         "//pkg/config",
-        "//pkg/config/zonepb",
         "//pkg/gossip",
         "//pkg/gossip/simulation",
         "//pkg/keys",
