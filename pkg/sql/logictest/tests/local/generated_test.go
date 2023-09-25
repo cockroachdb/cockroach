@@ -2038,6 +2038,13 @@ func TestLogic_show_tables(
 	runLogicTest(t, "show_tables")
 }
 
+func TestLogic_show_tenant_fingerprints(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_tenant_fingerprints")
+}
+
 func TestLogic_show_transfer_state(
 	t *testing.T,
 ) {

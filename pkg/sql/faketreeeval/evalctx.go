@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/errors"
@@ -342,6 +343,12 @@ func (ep *DummyEvalPlanner) CurrentDatabaseRegionConfig(
 	_ context.Context,
 ) (eval.DatabaseRegionConfig, error) {
 	return nil, errors.WithStack(errEvalPlanner)
+}
+
+func (ep *DummyEvalPlanner) FingerprintSpan(
+	_ context.Context, _ roachpb.Span, _ hlc.Timestamp, _ bool, _ bool,
+) (uint64, error) {
+	return 0, errors.AssertionFailedf("FingerprintSpan unimplemented")
 }
 
 // ResetMultiRegionZoneConfigsForTable is part of the eval.RegionOperator
