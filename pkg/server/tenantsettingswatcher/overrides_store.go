@@ -17,7 +17,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // overridesStore is the data structure that maintains all the tenant overrides
@@ -55,7 +59,18 @@ type tenantOverrides struct {
 	changeCh chan struct{}
 }
 
-func newTenantOverrides(overrides []kvpb.TenantSetting) *tenantOverrides {
+func newTenantOverrides(
+	ctx context.Context, tenID roachpb.TenantID, overrides []kvpb.TenantSetting,
+) *tenantOverrides {
+	if log.V(1) {
+		var buf redact.StringBuilder
+		buf.Printf("loaded overrides for tenant %d (%s)\n", tenID.InternalValue, util.GetSmallTrace(2))
+		for _, v := range overrides {
+			buf.Printf("%v = %+v", v.InternalKey, v.Value)
+			buf.SafeRune('\n')
+		}
+		log.VEventf(ctx, 1, "%v", buf)
+	}
 	return &tenantOverrides{
 		overrides: overrides,
 		changeCh:  make(chan struct{}),
@@ -94,10 +109,10 @@ func (s *overridesStore) setAll(
 		// Sanity check.
 		for i := 1; i < len(overrides); i++ {
 			if overrides[i].InternalKey == overrides[i-1].InternalKey {
-				panic("duplicate setting")
+				panic(errors.AssertionFailedf("duplicate setting: %s", overrides[i].InternalKey))
 			}
 		}
-		s.mu.tenants[tenantID] = newTenantOverrides(overrides)
+		s.mu.tenants[tenantID] = newTenantOverrides(ctx, tenantID, overrides)
 	}
 }
 
@@ -125,7 +140,7 @@ func (s *overridesStore) GetTenantOverrides(
 	if res, ok = s.mu.tenants[tenantID]; ok {
 		return res
 	}
-	res = newTenantOverrides(nil /* overrides */)
+	res = newTenantOverrides(ctx, tenantID, nil /* overrides */)
 	s.mu.tenants[tenantID] = res
 	return res
 }
@@ -159,5 +174,5 @@ func (s *overridesStore) SetTenantOverride(
 	}
 	// 3. Append all settings after setting.InternalKey.
 	after = append(after, before...)
-	s.mu.tenants[tenantID] = newTenantOverrides(after)
+	s.mu.tenants[tenantID] = newTenantOverrides(ctx, tenantID, after)
 }
