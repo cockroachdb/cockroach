@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -292,7 +293,7 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 	settingsValues := &serverCfg.Settings.SV
 	for {
 		// Check the job is enabled on every iteration.
-		if err := checkEnabled(settingsValues); err != nil {
+		if err := ttlbase.CheckJobEnabled(settingsValues); err != nil {
 			return spanRowCount, err
 		}
 
