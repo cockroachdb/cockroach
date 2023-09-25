@@ -2007,7 +2007,7 @@ oid     typname                typcategory  typispreferred  typisdefined  typdel
 2207    _regprocedure          A            false           true          ,         0         2202     0
 2210    _regclass              A            false           true          ,         0         2205     0
 2211    _regtype               A            false           true          ,         0         2206     0
-2249    record                 P            false           true          ,         0         0        2287
+2249    record                 P            false           true          ,         2249      0        2287
 2277    anyarray               P            false           true          ,         0         0        0
 2278    void                   P            false           true          ,         0         0        0
 2283    anyelement             P            false           true          ,         0         0        2277
@@ -5001,3 +5001,80 @@ oid    lanname   lanowner    lanispl  lanpltrusted  lanplcallfoid  laninline  la
 12     internal  2310524507  false    false         0              0          0             NULL
 14     sql       2310524507  false    true          0              0          0             NULL
 14024  plpgsql   2310524507  true     true          0              0          0             NULL
+
+subtest pg_class_composite_types
+
+statement ok
+CREATE TYPE u AS (ufoo int, ubar int);
+
+query TTI colnames,rowsort
+SELECT
+    relname,
+    relkind,
+    relnatts
+FROM
+    pg_catalog.pg_class
+WHERE
+    relname = 'u';
+----
+relname  relkind  relnatts
+u        c        2
+
+# query that utilizes the "virtual index"
+query TTI colnames,rowsort
+SELECT
+    relname,
+    relkind,
+    relnatts
+FROM
+    pg_catalog.pg_class
+WHERE
+    oid = 'u'::regtype::oid;
+----
+relname  relkind  relnatts
+u        c        2
+
+subtest end
+
+subtest pg_attribute_composite_types
+
+query TII colnames,rowsort
+SELECT
+    attname,
+    attlen,
+    attnum
+FROM
+    pg_catalog.pg_attribute
+WHERE
+    attname IN ('ufoo', 'ubar');
+----
+attname  attlen  attnum
+ufoo     8       1
+ubar     8       2
+
+# query that utilizes the "virtual index"
+query TII colnames,rowsort
+SELECT
+    attname,
+    attlen,
+    attnum
+FROM
+    pg_catalog.pg_attribute
+WHERE
+    attrelid = 'u'::regtype::oid;
+----
+attname  attlen  attnum
+ufoo     8       1
+ubar     8       2
+
+subtest end
+
+subtest pg_type_composite_types
+
+query TO colnames,rowsort
+SELECT typname, typrelid FROM pg_catalog.pg_type WHERE typrelid = 'u'::regtype::oid;
+----
+typname  typrelid
+u        100207
+
+subtest end
