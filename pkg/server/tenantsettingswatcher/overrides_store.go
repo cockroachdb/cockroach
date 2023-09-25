@@ -116,11 +116,11 @@ func (s *overridesStore) setAll(
 	}
 }
 
-// GetTenantOverrides retrieves the overrides for a given tenant.
+// getTenantOverrides retrieves the overrides for a given tenant.
 //
 // The caller can listen for closing of changeCh, which is guaranteed to happen
 // if the tenant's overrides change.
-func (s *overridesStore) GetTenantOverrides(
+func (s *overridesStore) getTenantOverrides(
 	ctx context.Context, tenantID roachpb.TenantID,
 ) *tenantOverrides {
 	s.mu.RLock()
@@ -145,10 +145,10 @@ func (s *overridesStore) GetTenantOverrides(
 	return res
 }
 
-// SetTenantOverride changes an override for the given tenant. If the setting
+// setTenantOverride changes an override for the given tenant. If the setting
 // has an empty value, the existing override is removed; otherwise a new
 // override is added.
-func (s *overridesStore) SetTenantOverride(
+func (s *overridesStore) setTenantOverride(
 	ctx context.Context, tenantID roachpb.TenantID, setting kvpb.TenantSetting,
 ) {
 	s.mu.Lock()
