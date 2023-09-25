@@ -230,8 +230,10 @@ func (c *connector) processSettingsEvent(
 	for _, o := range e.Overrides {
 		if o.Value == (settings.EncodedValue{}) {
 			// Empty value indicates that the override is removed.
+			log.VEventf(ctx, 1, "removing %v override for %q", e.Precedence, o.InternalKey)
 			delete(m, o.InternalKey)
 		} else {
+			log.VEventf(ctx, 1, "adding %v override for %q = %q", e.Precedence, o.InternalKey, o.Value.Value)
 			m[o.InternalKey] = o.Value
 		}
 	}
