@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -567,6 +568,7 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 	require.NoError(t, err)
 	desc, err = c.GetNodeDescriptor(3)
 	require.Nil(t, desc)
+	require.True(t, errors.HasType(err, &kvpb.DescNotFoundError{}))
 	require.Regexp(t, "node descriptor with node ID 3 was not found", err)
 }
 

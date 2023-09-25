@@ -519,7 +519,11 @@ func generateAndSendImportSpans(
 			return err
 		}
 		for _, sp := range importSpans {
-			spanCh <- sp
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case spanCh <- sp:
+			}
 		}
 		return nil
 	}

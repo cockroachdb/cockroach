@@ -7,6 +7,7 @@ go_library(
         "output.go",
         "rand_framework.go",
         "rand_gen.go",
+        "rand_util.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/tests",
     visibility = ["//visibility:public"],
@@ -20,6 +21,10 @@ go_library(
         "//pkg/kv/kvserver/asim/scheduled",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/roachpb",
+        "//pkg/sql",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/multiregion",
     ],
 )
 

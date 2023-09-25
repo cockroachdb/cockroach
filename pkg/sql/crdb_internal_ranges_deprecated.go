@@ -201,7 +201,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				replicaLocalityDatum := tree.DNull
 				nodeDesc, err := p.ExecCfg().NodeDescs.GetNodeDescriptor(replica.NodeID)
 				if err != nil {
-					if !errors.Is(err, &kvpb.DescNotFoundError{}) {
+					if !errors.HasType(err, &kvpb.DescNotFoundError{}) {
 						return nil, err
 					}
 				} else {
