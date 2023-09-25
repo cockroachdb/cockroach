@@ -523,8 +523,8 @@ func TestTxnPushAttempt(t *testing.T) {
 		{ops: []enginepb.MVCCLogicalOp{
 			updateIntentOp(txn1, hlc.Timestamp{WallTime: 15}),
 			updateIntentOp(txn2, hlc.Timestamp{WallTime: 2}),
-			abortTxnOp(txn3),
-			abortTxnOp(txn4),
+			// abortTxnOp(txn3),
+			// abortTxnOp(txn4),
 		}},
 	}
 	require.Equal(t, len(expEvents), len(p.eventC))

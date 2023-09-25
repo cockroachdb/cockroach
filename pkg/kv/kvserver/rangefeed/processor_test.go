@@ -110,12 +110,6 @@ func abortIntentOp(txnID uuid.UUID) enginepb.MVCCLogicalOp {
 	})
 }
 
-func abortTxnOp(txnID uuid.UUID) enginepb.MVCCLogicalOp {
-	return makeLogicalOp(&enginepb.MVCCAbortTxnOp{
-		TxnID: txnID,
-	})
-}
-
 func makeRangeFeedEvent(val interface{}) *kvpb.RangeFeedEvent {
 	var event kvpb.RangeFeedEvent
 	event.MustSetValue(val)
@@ -1019,8 +1013,16 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 				return nil
 			}
 
-			<-pausePushAttemptsC
-			<-resumePushAttemptsC
+			select {
+			case <-pausePushAttemptsC:
+				select {
+				case <-resumePushAttemptsC:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 			return nil
 		})
 
@@ -1084,6 +1086,13 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 		resumePushAttemptsC <- struct{}{}
 		h.triggerTxnPushUntilPushed(t, pausePushAttemptsC, 30*time.Second)
 
+		// The resolved timestamp should not move as aborted transaction status can't
+		// guarantee that transaction was actually aborted.
+		h.syncEventC()
+		require.Equal(t, hlc.Timestamp{WallTime: 59}, h.rts.Get())
+		// "Wait" for txn 2 to resolve when pushed intents "arrive".
+		p.ConsumeLogicalOps(ctx, commitIntentOp(txn2MetaT3Post.ID, txn2MetaT3Post.WriteTimestamp))
+		p.ConsumeLogicalOps(ctx, commitIntentOp(txn2MetaT3Post.ID, txn2MetaT3Post.WriteTimestamp))
 		// The resolved timestamp should have moved forwards to the closed
 		// timestamp.
 		h.syncEventC()

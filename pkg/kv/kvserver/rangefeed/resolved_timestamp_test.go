@@ -256,11 +256,8 @@ func TestResolvedTimestamp(t *testing.T) {
 
 	// First transaction aborted. Resolved timestamp moves to next earliest
 	// intent.
-	fwd = rts.ConsumeLogicalOp(abortTxnOp(txn1))
-	require.True(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 24}, rts.Get())
 	fwd = rts.ConsumeLogicalOp(abortIntentOp(txn1))
-	require.False(t, fwd)
+	require.True(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 24}, rts.Get())
 
 	// Third transaction at higher timestamp. No effect.
@@ -273,9 +270,6 @@ func TestResolvedTimestamp(t *testing.T) {
 	require.Equal(t, hlc.Timestamp{WallTime: 24}, rts.Get())
 
 	// Third transaction aborted. No effect.
-	fwd = rts.ConsumeLogicalOp(abortTxnOp(txn3))
-	require.False(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 24}, rts.Get())
 	fwd = rts.ConsumeLogicalOp(abortIntentOp(txn3))
 	require.False(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 24}, rts.Get())
@@ -476,11 +470,6 @@ func TestResolvedTimestampInit(t *testing.T) {
 		require.False(t, fwd)
 		require.Equal(t, hlc.Timestamp{}, rts.Get())
 
-		// Abort that intent's transaction. Not initialized so no-op.
-		fwd = rts.ConsumeLogicalOp(abortTxnOp(txn1))
-		require.False(t, fwd)
-		require.Equal(t, hlc.Timestamp{}, rts.Get())
-
 		// Later, write an intent for the same transaction. This should cancel
 		// out with the out-of-order intent abort operation. If this abort hadn't
 		// allowed the unresolvedTxn's ref count to drop below 0, this would
@@ -514,60 +503,6 @@ func TestResolvedTimestampInit(t *testing.T) {
 	})
 }
 
-func TestResolvedTimestampTxnAborted(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	rts := makeResolvedTimestamp()
-	rts.Init()
-
-	// Set a closed timestamp. Resolved timestamp advances.
-	fwd := rts.ForwardClosedTS(hlc.Timestamp{WallTime: 5})
-	require.True(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 5}, rts.Get())
-
-	// Add an intent for a new transaction.
-	txn1 := uuid.MakeV4()
-	fwd = rts.ConsumeLogicalOp(writeIntentOp(txn1, hlc.Timestamp{WallTime: 10}))
-	require.False(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 5}, rts.Get())
-
-	// Set a new closed timestamp. Resolved timestamp advances.
-	fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 15})
-	require.True(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 9}, rts.Get())
-
-	// Abort txn1 after a periodic txn push. Resolved timestamp advances.
-	fwd = rts.ConsumeLogicalOp(abortTxnOp(txn1))
-	require.True(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 15}, rts.Get())
-
-	// Update one of txn1's intents. Should be ignored.
-	fwd = rts.ConsumeLogicalOp(updateIntentOp(txn1, hlc.Timestamp{WallTime: 20}))
-	require.False(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 15}, rts.Get())
-
-	// Abort one of txn1's intents. Should be ignored.
-	fwd = rts.ConsumeLogicalOp(abortIntentOp(txn1))
-	require.False(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 15}, rts.Get())
-
-	// Write another intent as txn1. Should add txn1 back into queue.
-	// This will eventually require another txn push to evict.
-	fwd = rts.ConsumeLogicalOp(writeIntentOp(txn1, hlc.Timestamp{WallTime: 20}))
-	require.False(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 15}, rts.Get())
-
-	// Set a new closed timestamp. Resolved timestamp advances, but only up to
-	// the timestamp of txn1's intent, which we fail remember is uncommittable.
-	fwd = rts.ForwardClosedTS(hlc.Timestamp{WallTime: 25})
-	require.True(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 19}, rts.Get())
-
-	// Abort txn1 again after another periodic push. Resolved timestamp advances.
-	fwd = rts.ConsumeLogicalOp(abortTxnOp(txn1))
-	require.True(t, fwd)
-	require.Equal(t, hlc.Timestamp{WallTime: 25}, rts.Get())
-}
-
 // Test that things go well when the closed timestamp has non-zero logical part.
 func TestClosedTimestampLogicalPart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -593,8 +528,8 @@ func TestClosedTimestampLogicalPart(t *testing.T) {
 	require.False(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 10, Logical: 0}, rts.Get())
 
-	// Abort txn1. Resolved timestamp advances.
-	fwd = rts.ConsumeLogicalOp(abortTxnOp(txn1))
+	// Abort txn1 intent. Resolved timestamp advances.
+	fwd = rts.ConsumeLogicalOp(abortIntentOp(txn1))
 	require.True(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 11, Logical: 0}, rts.Get())
 

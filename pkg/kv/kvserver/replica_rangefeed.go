@@ -594,7 +594,6 @@ func populatePrevValsInLogicalOpLog(
 		case *enginepb.MVCCWriteIntentOp,
 			*enginepb.MVCCUpdateIntentOp,
 			*enginepb.MVCCAbortIntentOp,
-			*enginepb.MVCCAbortTxnOp,
 			*enginepb.MVCCDeleteRangeOp:
 			// Nothing to do.
 			continue
@@ -668,8 +667,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 			key, ts, valPtr = t.Key, t.Timestamp, &t.Value
 		case *enginepb.MVCCWriteIntentOp,
 			*enginepb.MVCCUpdateIntentOp,
-			*enginepb.MVCCAbortIntentOp,
-			*enginepb.MVCCAbortTxnOp:
+			*enginepb.MVCCAbortIntentOp:
 			// Nothing to do.
 			continue
 		case *enginepb.MVCCDeleteRangeOp:

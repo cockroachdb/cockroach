@@ -323,26 +323,29 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 	// Inform the Processor of the results of the push for each transaction.
 	ops := make([]enginepb.MVCCLogicalOp, len(pushedTxns))
 	var intentsToCleanup []roachpb.LockUpdate
-	for i, txn := range pushedTxns {
+	pushed := 0
+	for _, txn := range pushedTxns {
 		switch txn.Status {
 		case roachpb.PENDING, roachpb.STAGING:
 			// The transaction is still in progress but its timestamp was moved
 			// forward to the current time. Inform the Processor that it can
 			// forward the txn's timestamp in its unresolvedIntentQueue.
-			ops[i].SetValue(&enginepb.MVCCUpdateIntentOp{
+			ops[pushed].SetValue(&enginepb.MVCCUpdateIntentOp{
 				TxnID:     txn.ID,
 				Timestamp: txn.WriteTimestamp,
 			})
+			pushed++
 		case roachpb.COMMITTED:
 			// The transaction is committed and its timestamp may have moved
 			// forward since we last saw an intent. Inform the Processor
 			// immediately in case this is the transaction that is holding back
 			// the resolved timestamp. However, we still need to wait for the
 			// transaction's intents to actually be resolved.
-			ops[i].SetValue(&enginepb.MVCCUpdateIntentOp{
+			ops[pushed].SetValue(&enginepb.MVCCUpdateIntentOp{
 				TxnID:     txn.ID,
 				Timestamp: txn.WriteTimestamp,
 			})
+			pushed++
 
 			// Clean up the transaction's intents within the processor's range, which
 			// should eventually cause all unresolved intents for this transaction on
@@ -353,34 +356,20 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 			txnIntents := intentsInBound(txn, a.span.AsRawSpanWithNoLocals())
 			intentsToCleanup = append(intentsToCleanup, txnIntents...)
 		case roachpb.ABORTED:
-			// The transaction is aborted, so it doesn't need to be tracked
-			// anymore nor does it need to prevent the resolved timestamp from
-			// advancing. Inform the Processor that it can remove the txn from
-			// its unresolvedIntentQueue.
-			//
-			// NOTE: the unresolvedIntentQueue will ignore MVCCAbortTxn operations
-			// before it has been initialized. This is not a concern here though
-			// because we never launch txnPushAttempt tasks before the queue has
-			// been initialized.
-			ops[i].SetValue(&enginepb.MVCCAbortTxnOp{
-				TxnID: txn.ID,
-			})
-
-			// We just informed the Processor about this txn being aborted, so from
-			// its perspective, there's nothing more to do — the txn's intents are no
-			// longer holding up the resolved timestamp.
-			//
-			// However, if the txn happens to have its LockSpans populated, then lets
-			// clean up the intents within the processor's range as an optimization to
-			// help others and to prevent any rangefeed reconnections from needing to
-			// push the same txn. If we aborted the txn, then it won't have its
-			// LockSpans populated. If, however, we ran into a transaction that its
-			// coordinator tried to rollback but didn't follow up with garbage
-			// collection, then LockSpans will be populated.
+			// If transaction is aborted theoretically we don't need to track its
+			// intents and prevent resolved timestamp from advancing any more.
+			// Unfortunately there are cases where we don't have transaction record
+			// for committed transaction and we assume that transaction was aborted
+			// while in reality we just didn't catch up with its intent cleanups.
+			// Since this situation is ambiguous, we can't safely ignore this txn, so
+			// we resort to resolving intents and waiting for intent cleanup's to
+			// reach us the normal way.
+			// See https://github.com/cockroachdb/cockroach/issues/104309
 			txnIntents := intentsInBound(txn, a.span.AsRawSpanWithNoLocals())
 			intentsToCleanup = append(intentsToCleanup, txnIntents...)
 		}
 	}
+	ops = ops[:pushed]
 
 	// Inform the processor of all logical ops.
 	a.p.sendEvent(ctx, event{ops: ops}, 0)

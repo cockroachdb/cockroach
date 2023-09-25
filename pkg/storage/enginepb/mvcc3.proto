@@ -306,16 +306,6 @@ message MVCCAbortIntentOp {
     (gogoproto.nullable) = false];
 }
 
-// MVCCAbortTxnOp corresponds to an entire transaction being aborted. The
-// operation indicates that none of the transaction's intents will ever be
-// committed.
-message MVCCAbortTxnOp {
-  bytes txn_id = 1 [
-    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
-    (gogoproto.customname) = "TxnID",
-    (gogoproto.nullable) = false];
-}
-
 // MVCCDeleteRangeOp corresponds to a range deletion using an MVCC range
 // tombstone.
 message MVCCDeleteRangeOp {
@@ -334,6 +324,6 @@ message MVCCLogicalOp {
   MVCCUpdateIntentOp update_intent = 3;
   MVCCCommitIntentOp commit_intent = 4;
   MVCCAbortIntentOp  abort_intent  = 5;
-  MVCCAbortTxnOp     abort_txn     = 6;
   MVCCDeleteRangeOp  delete_range  = 7;
+  reserved 6;
 }

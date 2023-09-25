@@ -652,9 +652,6 @@ func (p *ScheduledProcessor) consumeLogicalOps(
 		case *enginepb.MVCCAbortIntentOp:
 			// No updates to publish.
 
-		case *enginepb.MVCCAbortTxnOp:
-			// No updates to publish.
-
 		default:
 			panic(errors.AssertionFailedf("unknown logical op %T", t))
 		}
