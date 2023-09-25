@@ -23,7 +23,6 @@ package colexecjoin
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -194,7 +193,7 @@ func buildFromLeftBatch(b *crossJoinerBase, currentBatch coldata.Batch, sel []in
 				// Use a smaller output capacity for the current set of rows if
 				// producing the output causes the budget to be exceeded.
 				//outputCapacity = outStartIndex + 1
-				fmt.Println("overflowed")
+				//fmt.Println("overflowed") // msirek-temp
 				break
 			}
 			outStartIndex++
