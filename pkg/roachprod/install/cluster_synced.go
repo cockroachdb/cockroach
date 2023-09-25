@@ -105,7 +105,7 @@ func NewSyncedCluster(
 var ErrAfterRetry = errors.New("error occurred after retries")
 
 // The first retry is after 5s, the second and final is after 25s
-var defaultRetryOpt = retry.Options{
+var DefaultRetryOpt = &retry.Options{
 	InitialBackoff: 5 * time.Second,
 	Multiplier:     5,
 	MaxBackoff:     1 * time.Minute,
@@ -113,29 +113,27 @@ var defaultRetryOpt = retry.Options{
 	MaxRetries: 2,
 }
 
-var DefaultSSHRetryOpts = NewRetryOpts(defaultRetryOpt, func(res *RunResultDetails) bool { return errors.Is(res.Err, rperrors.ErrSSH255) })
+var DefaultShouldRetryFn = func(res *RunResultDetails) bool { return errors.Is(res.Err, rperrors.ErrSSH255) }
 
 // defaultSCPRetry won't retry if the error output contains any of the following
 // substrings, in which cases retries are unlikely to help.
 var noScpRetrySubstrings = []string{"no such file or directory", "permission denied", "connection timed out"}
-var defaultSCPRetry = NewRetryOpts(defaultRetryOpt,
-	func(res *RunResultDetails) bool {
-		out := strings.ToLower(res.Output(false))
-		for _, s := range noScpRetrySubstrings {
-			if strings.Contains(out, s) {
-				return false
-			}
+var defaulSCPShouldRetryFn = func(res *RunResultDetails) bool {
+	out := strings.ToLower(res.Output(false))
+	for _, s := range noScpRetrySubstrings {
+		if strings.Contains(out, s) {
+			return false
 		}
-		return true
-	},
-)
+	}
+	return true
+}
 
 // runWithMaybeRetry will run the specified function `f` at least once, or only
 // once if `runRetryOpts` is nil
 //
-// Any RunResultDetails containing a non nil err from `f` is passed to `runRetryOpts.ShouldRetryFn` which,
-// if it returns true, will result in `f` being retried using the `retryOpts`
-// If the `ShouldRetryFn` is not specified (nil), then retries will be performed
+// Any RunResultDetails containing a non nil err from `f` is passed to `shouldRetryFn` which,
+// if it returns true, will result in `f` being retried using the `RetryOpts`
+// If the `shouldRetryFn` is not specified (nil), then retries will be performed
 // regardless of the previous result / error.
 //
 // If a non-nil error (as opposed to the result containing a non-nil error) is returned,
@@ -147,7 +145,8 @@ var defaultSCPRetry = NewRetryOpts(defaultRetryOpt,
 func runWithMaybeRetry(
 	ctx context.Context,
 	l *logger.Logger,
-	retryOpts *RetryOpts,
+	retryOpts *retry.Options,
+	shouldRetryFn func(*RunResultDetails) bool,
 	f func(ctx context.Context) (*RunResultDetails, error),
 ) (*RunResultDetails, error) {
 	if retryOpts == nil {
@@ -162,7 +161,7 @@ func runWithMaybeRetry(
 	var res = &RunResultDetails{}
 	var cmdErr, err error
 
-	for r := retry.StartWithCtx(ctx, retryOpts.Options); r.Next(); {
+	for r := retry.StartWithCtx(ctx, *retryOpts); r.Next(); {
 		res, err = f(ctx)
 		if err != nil {
 			// non retryable roachprod error
@@ -171,7 +170,7 @@ func runWithMaybeRetry(
 		res.Attempt = r.CurrentAttempt() + 1
 		if res.Err != nil {
 			cmdErr = errors.CombineErrors(cmdErr, res.Err)
-			if retryOpts.ShouldRetryFn == nil || retryOpts.ShouldRetryFn(res) {
+			if shouldRetryFn == nil || shouldRetryFn(res) {
 				l.Printf("encountered [%v] on attempt %v of %v", res.Err, r.CurrentAttempt()+1, retryOpts.MaxRetries+1)
 				continue
 			}
@@ -194,7 +193,8 @@ func runWithMaybeRetry(
 func scpWithRetry(
 	ctx context.Context, l *logger.Logger, src, dest string,
 ) (*RunResultDetails, error) {
-	return runWithMaybeRetry(ctx, l, defaultSCPRetry, func(ctx context.Context) (*RunResultDetails, error) { return scp(l, src, dest) })
+	return runWithMaybeRetry(ctx, l, DefaultRetryOpt, defaulSCPShouldRetryFn,
+		func(ctx context.Context) (*RunResultDetails, error) { return scp(l, src, dest) })
 }
 
 // Host returns the public IP of a node.
@@ -496,7 +496,7 @@ fi`,
 		)
 
 		return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("kill"))
-	}, WithDisplay(display), WithRetryOpts(nil)) // Disable SSH Retries
+	}, WithDisplay(display), WithRetryDisabled()) // Disable SSH Retries
 }
 
 // Wipe TODO(peter): document
@@ -1198,7 +1198,7 @@ func (c *SyncedCluster) Run(
 	if !stream {
 		display = fmt.Sprintf("%s:%v: %s", c.Name, nodes, title)
 	}
-
+	defaultOpts := []RunOption{WithDisplay(display)}
 	results, _, err := c.ParallelE(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
 		opts := RunCmdOptions{
 			combinedOut:             !stream,
@@ -1208,7 +1208,7 @@ func (c *SyncedCluster) Run(
 		}
 		result, err := c.runCmdOnSingleNode(ctx, l, node, cmd, opts)
 		return result, err
-	}, append(opts, WithDisplay(display))...)
+	}, append(defaultOpts, opts...)...)
 
 	if err != nil {
 		return err
@@ -1267,11 +1267,12 @@ func processResults(results []*RunResultDetails, stream bool, stdout io.Writer) 
 }
 
 // RunWithDetails runs a command on the specified nodes and returns results details and an error.
-// This will wait for all commands to complete before returning unless encountering a roachprod error.
+// By default, this will wait for all commands to complete before returning unless encountering a roachprod error.
 func (c *SyncedCluster) RunWithDetails(
-	ctx context.Context, l *logger.Logger, nodes Nodes, title, cmd string,
+	ctx context.Context, l *logger.Logger, nodes Nodes, title, cmd string, opts ...RunOption,
 ) ([]RunResultDetails, error) {
 	display := fmt.Sprintf("%s:%v: %s", c.Name, nodes, title)
+	defaultOpts := []RunOption{WithDisplay(display), WithFailSlow(true)}
 
 	// Failing slow here allows us to capture the output of all nodes even if one fails with a command error.
 	resultPtrs, _, err := c.ParallelE(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
@@ -1282,7 +1283,7 @@ func (c *SyncedCluster) RunWithDetails(
 		}
 		result, err := c.runCmdOnSingleNode(ctx, l, node, cmd, opts)
 		return result, err
-	}, WithDisplay(display), WithWaitOnFail())
+	}, append(defaultOpts, opts...)...)
 
 	if err != nil {
 		return nil, err
@@ -1350,7 +1351,7 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 		res.Err = errors.New("timed out after 5m")
 		l.Printf("  %2d: %v", node, res.Err)
 		return res, nil
-	}, WithDisplay(display), WithRetryOpts(nil))
+	}, WithDisplay(display), WithRetryDisabled())
 
 	if err != nil {
 		return err
@@ -2722,7 +2723,7 @@ type ParallelResult struct {
 //
 // By default, this will fail fast if a command error occurs on any node, and return
 // a slice containing all results up to that point, along with a boolean indicating
-// that at least one error occurred. If `WithWaitOnFail()` is passed in, then the function
+// that at least one error occurred. If `WithFailSlow(true)` is passed in, then the function
 // will wait for all invocations to complete before returning.
 //
 // ParallelE only returns an error for roachprod itself, not any command errors run
@@ -2746,7 +2747,11 @@ func (c *SyncedCluster) ParallelE(
 	fn func(ctx context.Context, n Node) (*RunResultDetails, error),
 	opts ...RunOption,
 ) ([]*RunResultDetails, bool, error) {
-	options := RunOptions{RetryOpts: DefaultSSHRetryOpts}
+	// Default options, which can be overridden by those passed in
+	options := RunOptions{
+		RetryOptions:  DefaultRetryOpt,
+		ShouldRetryFn: DefaultShouldRetryFn,
+	}
 	for _, opt := range opts {
 		opt(&options)
 	}
@@ -2777,7 +2782,7 @@ func (c *SyncedCluster) ParallelE(
 			defer wg.Done()
 			// This is rarely expected to return an error, but we fail fast in case.
 			// Command errors, which are far more common, will be contained within the result.
-			res, err := runWithMaybeRetry(groupCtx, l, options.RetryOpts, func(ctx context.Context) (*RunResultDetails, error) { return fn(ctx, nodes[i]) })
+			res, err := runWithMaybeRetry(groupCtx, l, options.RetryOptions, options.ShouldRetryFn, func(ctx context.Context) (*RunResultDetails, error) { return fn(ctx, nodes[i]) })
 			if err != nil {
 				errorChannel <- err
 				return
@@ -2834,7 +2839,7 @@ func (c *SyncedCluster) ParallelE(
 				n++
 				if r.Err != nil { // Command error
 					hasError = true
-					if !options.WaitOnFail {
+					if !options.FailSlow {
 						groupCancel()
 						return results, true, nil
 					}
