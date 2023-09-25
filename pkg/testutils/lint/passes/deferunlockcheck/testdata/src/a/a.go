@@ -10,15 +10,14 @@
 
 package a
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-)
+import "github.com/cockroachdb/cockroach/pkg/util/syncutil"
 
 type TestUnlockLint struct {
 	mu struct {
 		syncutil.Mutex
 		foo string
 		too bool
+		boo []string
 	}
 	amended bool
 }
@@ -93,6 +92,10 @@ func basicCases() {
 	// Function calls between lock/unlock pair.
 	t.mu.Lock()
 	testFnCall() // want `function call between Lock and Unlock may be unsafe, move Unlock to a defer statement after Lock`
+	t.mu.Unlock()
+
+	t.mu.Lock()
+	t.mu.boo = append(t.mu.boo, "heyo")
 	t.mu.Unlock()
 
 	t.mu.Lock()

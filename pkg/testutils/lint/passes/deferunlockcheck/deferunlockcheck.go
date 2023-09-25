@@ -16,7 +16,6 @@ import (
 	"go/token"
 	"go/types"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/loopvarcapture"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/passesutil"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
@@ -40,7 +39,17 @@ var Analyzer = &analysis.Analyzer{
 	Run:      run,
 }
 
-var mutexFunctions = []loopvarcapture.Function{
+// Function defines the location of a function (package-level or
+// method on a type).
+type Function struct {
+	Pkg  string
+	Type string // empty for package-level functions
+	Name string
+}
+
+var allowedCallsUnderLock = []Function{}
+
+var mutexFunctions = []Function{
 	{Pkg: "github.com/cockroachdb/cockroach/pkg/util/syncutil", Type: "Mutex", Name: "Lock"},
 	{Pkg: "github.com/cockroachdb/cockroach/pkg/util/syncutil", Type: "Mutex", Name: "Unlock"},
 	{Pkg: "github.com/cockroachdb/cockroach/pkg/util/syncutil", Type: "RWMutex", Name: "Lock"},
@@ -155,6 +164,35 @@ func (lt *LockTracker) traverseBody(n ast.Node) bool {
 	return true
 }
 
+func functionFromFunc(n *types.Func) (Function, bool) {
+	pkg := n.Pkg()
+	if pkg == nil {
+		return Function{}, false
+	}
+
+	calleeObj := ""
+	recv := n.Type().(*types.Signature).Recv()
+	if recv != nil {
+		// if there is a receiver (i.e., this is a method call), get the
+		// name of the type of the receiver
+		recvType := recv.Type()
+		if pointerType, ok := recvType.(*types.Pointer); ok {
+			recvType = pointerType.Elem()
+		}
+		named, ok := recvType.(*types.Named)
+		if !ok {
+			return Function{}, false
+		}
+		calleeObj = named.Obj().Name()
+	}
+
+	return Function{
+		Pkg:  pkg.Path(),
+		Type: calleeObj,
+		Name: n.Name(),
+	}, true
+}
+
 // isMutexCall determines where the given *ast.CallExpr is a Lock/Unlock.
 // If it is a Lock/Unlock it will return true but will first:
 //   - If it is a Lock it calls addLock
@@ -166,32 +204,13 @@ func (lt *LockTracker) isMutexCall(call *ast.CallExpr) bool {
 	if !ok {
 		return false
 	}
-	pkg := callee.Pkg()
-	if pkg == nil {
+	calledFunc, ok := functionFromFunc(callee)
+	if !ok {
 		return false
 	}
-	calleePkg := pkg.Path()
-	calleeFunc := callee.Name()
-	calleeObj := ""
-
-	recv := callee.Type().(*types.Signature).Recv()
-	if recv != nil {
-		// if there is a receiver (i.e., this is a method call), get the
-		// name of the type of the receiver
-		recvType := recv.Type()
-		if pointerType, ok := recvType.(*types.Pointer); ok {
-			recvType = pointerType.Elem()
-		}
-		named, ok := recvType.(*types.Named)
-		if !ok {
-			return false
-		}
-
-		calleeObj = named.Obj().Name()
-	}
 	for _, fn := range mutexFunctions {
-		if fn.Pkg == calleePkg && fn.Type == calleeObj && fn.Name == calleeFunc {
-			switch calleeFunc {
+		if fn == calledFunc {
+			switch calledFunc.Name {
 			case "Lock":
 				lt.addLock(call, false)
 			case "RLock":
@@ -292,6 +311,33 @@ func (lt *LockTracker) maybeReportUnlock(call *ast.CallExpr, isRead bool) {
 	}
 }
 
+func (lt *LockTracker) isAllowedCall(node ast.Node) bool {
+	switch n := node.(type) {
+	case *ast.CallExpr:
+		callee := typeutil.Callee(lt.pass.TypesInfo, n)
+		switch cn := callee.(type) {
+		case *types.Func:
+			calledFunc, ok := functionFromFunc(cn)
+			if !ok {
+				return true
+			}
+			for _, fn := range allowedCallsUnderLock {
+				if fn == calledFunc {
+					return true
+				}
+			}
+			return false
+		case *types.Builtin:
+			// Allow builtins such as append, copy, delete, etc.
+			return true
+		default:
+			return false
+		}
+	default:
+		return false
+	}
+}
+
 // shouldReportNonLinearControlFlow checks if locks has a *LockInfo without a matching unlock
 // and if the node has a nolint comment near it. If it finds both it returns true.
 func (lt *LockTracker) shouldReportNonLinearControlFlow(node ast.Node) bool {
@@ -299,6 +345,10 @@ func (lt *LockTracker) shouldReportNonLinearControlFlow(node ast.Node) bool {
 	if hasNoLintComment {
 		return false
 	}
+	if lt.isAllowedCall(node) {
+		return false
+	}
+
 	for i := len(lt.locks) - 1; i >= 0; i-- {
 		lock := lt.locks[i]
 		if !lock.foundUnlockMatch && !hasNoLintComment {
