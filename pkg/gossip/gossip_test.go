@@ -20,7 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -44,7 +43,7 @@ func TestGossipInfoStore(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	g := NewTest(1, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	g := NewTest(1, stopper, metric.NewRegistry())
 	slice := []byte("b")
 	if err := g.AddInfo("s", slice, time.Hour); err != nil {
 		t.Fatal(err)
@@ -64,7 +63,7 @@ func TestGossipMoveNode(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	g := NewTest(1, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	g := NewTest(1, stopper, metric.NewRegistry())
 	var nodes []*roachpb.NodeDescriptor
 	for i := 1; i <= 3; i++ {
 		node := &roachpb.NodeDescriptor{
@@ -114,7 +113,7 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 		util.MakeUnresolvedAddr("tcp", "localhost:9004"),
 	}
 
-	g := NewTest(0, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	g := NewTest(0, stopper, metric.NewRegistry())
 	g.setAddresses(addresses)
 
 	// Using specified addresses, fetch bootstrap addresses 3 times
@@ -173,7 +172,7 @@ func TestGossipLocalityResolver(t *testing.T) {
 	var node2LocalityList []roachpb.LocalityAddress
 	node2LocalityList = append(node2LocalityList, nodeLocalityAddress2)
 
-	g := NewTestWithLocality(1, stopper, metric.NewRegistry(), gossipLocalityAdvertiseList, zonepb.DefaultZoneConfigRef())
+	g := NewTestWithLocality(1, stopper, metric.NewRegistry(), gossipLocalityAdvertiseList)
 	node1 := &roachpb.NodeDescriptor{
 		NodeID:          1,
 		Address:         node1PublicAddressRPC,
@@ -711,7 +710,7 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 		require.NoError(t, err)
 
 		// node ID must be non-zero
-		gnode := NewTest(roachpb.NodeID(i+1), stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+		gnode := NewTest(roachpb.NodeID(i+1), stopper, metric.NewRegistry())
 		RegisterGossipServer(server, gnode)
 		g = append(g, gnode)
 		gnode.SetStallInterval(interval)

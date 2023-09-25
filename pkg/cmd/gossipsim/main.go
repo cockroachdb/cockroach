@@ -62,7 +62,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/simulation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -302,7 +301,7 @@ func main() {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 
-	n := simulation.NewNetwork(stopper, nodeCount, true, zonepb.DefaultZoneConfigRef())
+	n := simulation.NewNetwork(stopper, nodeCount, true)
 	n.SimulateNetwork(
 		func(cycle int, network *simulation.Network) bool {
 			// Output dot graph.

@@ -316,7 +316,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		stopper,
 		nodeRegistry,
 		cfg.Locality,
-		&cfg.DefaultZoneConfig,
 	)
 
 	tenantCapabilitiesTestingKnobs, _ := cfg.TestingKnobs.TenantCapabilitiesTestingKnobs.(*tenantcapabilities.TestingKnobs)

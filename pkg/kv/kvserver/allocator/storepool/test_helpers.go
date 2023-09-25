@@ -14,7 +14,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -79,7 +78,7 @@ func CreateTestStorePool(
 	mc := timeutil.NewManualTime(time.Date(2020, 0, 0, 0, 0, 0, 0, time.UTC))
 	clock := hlc.NewClockForTesting(mc)
 	ambientCtx := log.MakeTestingAmbientContext(stopper.Tracer())
-	g := gossip.NewTest(1, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	g := gossip.NewTest(1, stopper, metric.NewRegistry())
 	mnl := NewMockNodeLiveness(defaultNodeStatus)
 
 	liveness.TimeUntilNodeDead.Override(ctx, &st.SV, timeUntilNodeDeadValue)
