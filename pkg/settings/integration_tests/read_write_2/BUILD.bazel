@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "read_write_2_test",
+    srcs = [
+        "main_test.go",
+        "propagation_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    deps = [
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/settings",
+        "//pkg/settings/integration_tests",
+        "//pkg/testutils/serverutils",
+        "//pkg/util/leaktest",
+    ],
+)
