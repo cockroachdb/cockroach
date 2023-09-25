@@ -738,6 +738,9 @@ func recreateAllSecondaryIndexes(
 			}
 		}
 		in, temp := makeSwapIndexSpec(b, out, sourcePrimaryIndex.IndexID, inColumns, false /* inUseTempIDs */)
+		if b.ClusterSettings().Version.IsActive(b, clusterversion.V23_1) {
+			in.secondary.RecreateSourceIndexID = out.indexID()
+		}
 		out.apply(b.Drop)
 		in.apply(b.Add)
 		temp.apply(b.AddTransient)

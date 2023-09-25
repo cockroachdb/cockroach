@@ -13,7 +13,7 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› D
       │    │    ├── ABSENT        → PUBLIC      ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j+)}
       │    │    ├── WRITE_ONLY    → PUBLIC      Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr+)}
       │    │    ├── ABSENT        → PUBLIC      ColumnName:{DescID: 104 (t), Name: "crdb_internal_idx_expr", ColumnID: 3 (crdb_internal_idx_expr+)}
-      │    │    └── VALIDATED     → PUBLIC      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_idx+)}
+      │    │    └── VALIDATED     → PUBLIC      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_idx+), RecreateSourceIndexID: 0}
       │    ├── 4 elements transitioning toward ABSENT
       │    │    ├── BACKFILL_ONLY → ABSENT      PrimaryIndex:{DescID: 104 (t), IndexID: 3 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1 (t_pkey+)}
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3 (t_pkey-)}

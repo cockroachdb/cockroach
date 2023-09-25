@@ -86,9 +86,25 @@ func init() {
 			}
 		},
 	)
+	registerDepRule(
+		"secondary index named before public (with index swap)",
+		scgraph.Precedence,
+		"index", "index-name",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				to.Type((*scpb.IndexName)(nil)),
+				from.Type(
+					(*scpb.SecondaryIndex)(nil),
+				),
+				JoinOnIndexID(from, to, "table-id", "index-id"),
+				StatusesToPublicOrTransient(from, scpb.Status_VALIDATED, to, scpb.Status_PUBLIC),
+				rel.And(isPotentialSecondaryIndexSwap("index-id", "table-id")...),
+			}
+		},
+	)
 
 	registerDepRule(
-		"secondary index named before validation",
+		"secondary index named before validation (without index swap)",
 		scgraph.Precedence,
 		"index-name", "index",
 		func(from, to NodeVars) rel.Clauses {
@@ -98,6 +114,7 @@ func init() {
 					(*scpb.SecondaryIndex)(nil),
 				),
 				JoinOnIndexID(from, to, "table-id", "index-id"),
+				isNotPotentialSecondaryIndexSwap("table-id", "index-id"),
 				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_VALIDATED),
 			}
 		},

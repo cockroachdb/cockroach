@@ -9,7 +9,7 @@ CREATE INDEX id1 ON defaultdb.t1(id, name) STORING (money)
   {indexId: 1, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
-- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
+- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1, RecreateSourceIndexID: 0}, PUBLIC], ABSENT]
   {indexId: 2, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
   {columnId: 1, indexId: 2, tableId: 104}
@@ -40,7 +40,7 @@ CREATE INVERTED INDEX CONCURRENTLY id2
   {indexId: 1, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
-- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
+- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1, RecreateSourceIndexID: 0}, PUBLIC], ABSENT]
   {indexId: 2, isConcurrently: true, isInverted: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
   {columnId: 1, indexId: 2, tableId: 104}
@@ -69,7 +69,7 @@ CREATE INDEX id3
   {indexId: 1, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
-- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
+- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1, RecreateSourceIndexID: 0}, PUBLIC], ABSENT]
   {indexId: 2, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
 - [[IndexPartitioning:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   {indexId: 2, partitioning: {list: [{name: p1, subpartitioning: {}, values: [AwI=]}], numColumns: 1}, tableId: 104}
@@ -116,7 +116,7 @@ CREATE INDEX id4
   {constraintId: 2, expr: '"crdb_internal_id_name_shard_8" IN (0,1,2,3,4,5,6,7)', fromHashShardedColumn: true, indexIdForValidation: 1, referencedColumnIds: [4], tableId: 104}
 - [[ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_id_name_shard_8, ConstraintID: 2}, PUBLIC], ABSENT]
   {constraintId: 2, name: check_crdb_internal_id_name_shard_8, tableId: 104}
-- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
+- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1, RecreateSourceIndexID: 0}, PUBLIC], ABSENT]
   {indexId: 2, sharding: {columnNames: [id, name], isSharded: true, name: crdb_internal_id_name_shard_8, shardBuckets: 8}, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
 - [[IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 2}, PUBLIC], ABSENT]
   {columnId: 4, indexId: 2, tableId: 104}
