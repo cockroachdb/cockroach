@@ -236,40 +236,58 @@ with t=A status=COMMITTED
   resolve_intent k=r
 ----
 >> resolve_intent k=a t=A status=COMMITTED
+resolve_intent: "a" -> resolved key = true
 stats: val_bytes=-48 live_bytes=-48 intent_count=-1 intent_bytes=-19 lock_count=-1 lock_age=-93
 >> resolve_intent k=b t=A status=COMMITTED
+resolve_intent: "b" -> resolved key = true
 stats: val_bytes=-48 live_bytes=-48 intent_count=-1 intent_bytes=-19 lock_count=-1 lock_age=-93
 >> resolve_intent k=c t=A status=COMMITTED
+resolve_intent: "c" -> resolved key = true
 stats: val_bytes=-48 live_bytes=-48 intent_count=-1 intent_bytes=-19 lock_count=-1 lock_age=-93
 >> resolve_intent k=d t=A status=COMMITTED
+resolve_intent: "d" -> resolved key = true
 stats: val_bytes=-48 gc_bytes_age=-4464 intent_count=-1 intent_bytes=-12 lock_count=-1 lock_age=-93
 >> resolve_intent k=e t=A status=COMMITTED
+resolve_intent: "e" -> resolved key = true
 stats: val_bytes=-48 gc_bytes_age=-4464 intent_count=-1 intent_bytes=-12 lock_count=-1 lock_age=-93
 >> resolve_intent k=f t=A status=COMMITTED
+resolve_intent: "f" -> resolved key = true
 stats: val_bytes=-48 gc_bytes_age=-4464 intent_count=-1 intent_bytes=-25 lock_count=-1 lock_age=-93
 >> resolve_intent k=g t=A status=COMMITTED
+resolve_intent: "g" -> resolved key = true
 stats: val_bytes=-48 live_bytes=-48 intent_count=-1 intent_bytes=-19 lock_count=-1 lock_age=-93
 >> resolve_intent k=h t=A status=COMMITTED
+resolve_intent: "h" -> resolved key = true
 stats: val_bytes=-48 live_bytes=-48 intent_count=-1 intent_bytes=-19 lock_count=-1 lock_age=-93
 >> resolve_intent k=i t=A status=COMMITTED
+resolve_intent: "i" -> resolved key = true
 stats: val_bytes=-48 live_bytes=-48 intent_count=-1 intent_bytes=-19 lock_count=-1 lock_age=-93
 >> resolve_intent k=j t=A status=COMMITTED
+resolve_intent: "j" -> resolved key = true
 stats: val_bytes=-48 gc_bytes_age=-4464 intent_count=-1 intent_bytes=-12 lock_count=-1 lock_age=-93
 >> resolve_intent k=k t=A status=COMMITTED
+resolve_intent: "k" -> resolved key = true
 stats: val_bytes=-48 gc_bytes_age=-4464 intent_count=-1 intent_bytes=-12 lock_count=-1 lock_age=-93
 >> resolve_intent k=l t=A status=COMMITTED
+resolve_intent: "l" -> resolved key = true
 stats: val_bytes=-48 gc_bytes_age=-4464 intent_count=-1 intent_bytes=-25 lock_count=-1 lock_age=-93
 >> resolve_intent k=m t=A status=COMMITTED
+resolve_intent: "m" -> resolved key = true
 stats: val_bytes=-48 live_bytes=-48 intent_count=-1 intent_bytes=-19 lock_count=-1 lock_age=-93
 >> resolve_intent k=n t=A status=COMMITTED
+resolve_intent: "n" -> resolved key = true
 stats: val_bytes=-48 live_bytes=-48 intent_count=-1 intent_bytes=-19 lock_count=-1 lock_age=-93
 >> resolve_intent k=o t=A status=COMMITTED
+resolve_intent: "o" -> resolved key = true
 stats: val_bytes=-48 live_bytes=-48 intent_count=-1 intent_bytes=-19 lock_count=-1 lock_age=-93
 >> resolve_intent k=p t=A status=COMMITTED
+resolve_intent: "p" -> resolved key = true
 stats: val_bytes=-48 gc_bytes_age=-4464 intent_count=-1 intent_bytes=-12 lock_count=-1 lock_age=-93
 >> resolve_intent k=q t=A status=COMMITTED
+resolve_intent: "q" -> resolved key = true
 stats: val_bytes=-48 gc_bytes_age=-4464 intent_count=-1 intent_bytes=-12 lock_count=-1 lock_age=-93
 >> resolve_intent k=r t=A status=COMMITTED
+resolve_intent: "r" -> resolved key = true
 stats: val_bytes=-48 gc_bytes_age=-4464 intent_count=-1 intent_bytes=-25 lock_count=-1 lock_age=-93
 >> at end:
 rangekey: g{-gg}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
@@ -325,16 +343,22 @@ with t=A status=COMMITTED
   resolve_intent k=j
 ----
 >> resolve_intent k=aaa t=A status=COMMITTED
+resolve_intent: "aaa" -> resolved key = false
 stats: no change
 >> resolve_intent k=a t=A status=COMMITTED
+resolve_intent: "a" -> resolved key = false
 stats: no change
 >> resolve_intent k=d t=A status=COMMITTED
+resolve_intent: "d" -> resolved key = false
 stats: no change
 >> resolve_intent k=ggg t=A status=COMMITTED
+resolve_intent: "ggg" -> resolved key = false
 stats: no change
 >> resolve_intent k=g t=A status=COMMITTED
+resolve_intent: "g" -> resolved key = false
 stats: no change
 >> resolve_intent k=j t=A status=COMMITTED
+resolve_intent: "j" -> resolved key = false
 stats: no change
 >> at end:
 rangekey: g{-gg}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]

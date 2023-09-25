@@ -379,6 +379,10 @@ func TestMVCCHistories(t *testing.T) {
 				if err != nil {
 					return errors.Wrapf(err, "decoding LockTable key: %v", eKey)
 				}
+				if ltKey.Strength == lock.Intent {
+					// Ignore intents, which are reported by reportDataEntries.
+					continue
+				}
 				// Unmarshal.
 				v, err := iter.UnsafeValue()
 				if err != nil {
@@ -601,11 +605,11 @@ func TestMVCCHistories(t *testing.T) {
 					}
 
 					cmd := e.getCmd()
-					txnChange = txnChange || cmd.typ == typTxnUpdate
-					dataChange = dataChange || cmd.typ == typDataUpdate
-					locksChange = locksChange || cmd.typ == typLocksUpdate
+					txnChange = txnChange || cmd.typ&typTxnUpdate != 0
+					dataChange = dataChange || cmd.typ&typDataUpdate != 0
+					locksChange = locksChange || cmd.typ&typLocksUpdate != 0
 
-					if trace || (stats && cmd.typ == typDataUpdate) {
+					if trace || (stats && cmd.typ&typDataUpdate != 0) {
 						// If tracing is also requested by the datadriven input,
 						// we'll trace the statement in the actual results too.
 						buf.Printf(">> %s", d.Cmd)
@@ -638,10 +642,10 @@ func TestMVCCHistories(t *testing.T) {
 						// If tracing is enabled, we report the intermediate results
 						// after each individual step in the script.
 						// This may modify foundErr too.
-						reportResults(cmd.typ == typTxnUpdate, cmd.typ == typDataUpdate, cmd.typ == typLocksUpdate)
+						reportResults(cmd.typ&typTxnUpdate != 0, cmd.typ&typDataUpdate != 0, cmd.typ&typLocksUpdate != 0)
 					}
 
-					if stats && cmd.typ == typDataUpdate {
+					if stats && cmd.typ&typDataUpdate != 0 {
 						// If stats are enabled, emit evaluated stats returned by the
 						// command, and compare them with the real computed stats diff.
 						var msEngineDiff enginepb.MVCCStats
@@ -753,7 +757,7 @@ type cmd struct {
 type cmdType int
 
 const (
-	typReadOnly cmdType = iota
+	typReadOnly cmdType = 1 << iota
 	typTxnUpdate
 	typDataUpdate
 	typLocksUpdate
@@ -770,8 +774,8 @@ var commands = map[string]cmd{
 	"txn_step":        {typTxnUpdate, cmdTxnStep},
 	"txn_update":      {typTxnUpdate, cmdTxnUpdate},
 
-	"resolve_intent":         {typDataUpdate, cmdResolveIntent},
-	"resolve_intent_range":   {typDataUpdate, cmdResolveIntentRange},
+	"resolve_intent":         {typDataUpdate | typLocksUpdate, cmdResolveIntent},
+	"resolve_intent_range":   {typDataUpdate | typLocksUpdate, cmdResolveIntentRange},
 	"check_intent":           {typReadOnly, cmdCheckIntent},
 	"add_unreplicated_lock":  {typLocksUpdate, cmdAddUnreplicatedLock},
 	"check_for_acquire_lock": {typReadOnly, cmdCheckForAcquireLock},
@@ -990,9 +994,24 @@ func cmdResolveIntentRange(e *evalCtx) error {
 	}
 
 	return e.withWriter("resolve_intent_range", func(rw storage.ReadWriter) error {
-		_, _, _, _, err := storage.MVCCResolveWriteIntentRange(e.ctx, rw, e.ms, intent,
-			storage.MVCCResolveWriteIntentRangeOptions{MaxKeys: maxKeys, TargetBytes: targetBytes})
-		return err
+		opts := storage.MVCCResolveWriteIntentRangeOptions{MaxKeys: maxKeys, TargetBytes: targetBytes}
+		numKeys, numBytes, resumeSpan, resumeReason, err := storage.MVCCResolveWriteIntentRange(
+			e.ctx, rw, e.ms, intent, opts)
+		if err != nil {
+			return err
+		}
+		var maybeNumBytes string
+		if e.hasArg("batched") {
+			// If !batched, we don't reliably track the number of bytes resolved and
+			// don't want the output to change depending on the mvccHistoriesUseBatch
+			// metamorphic variable.
+			maybeNumBytes = fmt.Sprintf(", %d bytes", numBytes)
+		}
+		e.results.buf.Printf("resolve_intent_range: %v-%v -> resolved %d key(s)%s\n", start, end, numKeys, maybeNumBytes)
+		if resumeSpan != nil {
+			e.results.buf.Printf("resolve_intent_range: resume span [%s,%s) %s\n", resumeSpan.Key, resumeSpan.EndKey, resumeReason)
+		}
+		return nil
 	})
 }
 
@@ -1007,9 +1026,23 @@ func (e *evalCtx) resolveIntent(
 	intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key})
 	intent.Status = resolveStatus
 	intent.ClockWhilePending = roachpb.ObservedTimestamp{Timestamp: clockWhilePending}
-	_, _, _, err := storage.MVCCResolveWriteIntent(e.ctx, rw, e.ms, intent,
+	ok, numBytes, resumeSpan, err := storage.MVCCResolveWriteIntent(e.ctx, rw, e.ms, intent,
 		storage.MVCCResolveWriteIntentOptions{TargetBytes: targetBytes})
-	return err
+	if err != nil {
+		return err
+	}
+	var maybeNumBytes string
+	if e.hasArg("batched") {
+		// If !batched, we don't reliably track the number of bytes resolved and
+		// don't want the output to change depending on the mvccHistoriesUseBatch
+		// metamorphic variable.
+		maybeNumBytes = fmt.Sprintf(", %d bytes", numBytes)
+	}
+	e.results.buf.Printf("resolve_intent: %v -> resolved key = %t%s\n", key, ok, maybeNumBytes)
+	if resumeSpan != nil {
+		e.results.buf.Printf("resolve_intent: resume span [%s,%s)\n", resumeSpan.Key, resumeSpan.EndKey)
+	}
+	return nil
 }
 
 func cmdCheckIntent(e *evalCtx) error {
