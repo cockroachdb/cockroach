@@ -397,7 +397,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-attrdef.html`,
 			}
 		}
 		return nil
-	})
+	},
+	nil)
 
 var pgCatalogAttributeTable = makeAllRelationsVirtualTableWithDescriptorIDIndex(
 	`table columns (incomplete - see also information_schema.columns)
@@ -567,7 +568,8 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 			}
 			return nil
 		})
-	})
+	},
+	addPGAttributeRow)
 
 var pgCatalogCastTable = virtualSchemaTable{
 	comment: `casts (empty - needs filling out)
@@ -862,7 +864,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 				tree.DNull, // relminmxid
 			)
 		})
-	})
+	},
+	addPGClassRow)
 
 var pgCatalogCollationTable = virtualSchemaTable{
 	comment: `available collations (incomplete)
@@ -1151,8 +1154,8 @@ func (r oneAtATimeSchemaResolver) getSchemaByID(id descpb.ID) (catalog.SchemaDes
 }
 
 // makeAllRelationsVirtualTableWithDescriptorIDIndex creates a virtual table that searches through
-// all table descriptors in the system. It automatically adds a virtual index implementation to the
-// table id column as well. The input schema must have a single INDEX definition
+// all table and type descriptors in the system. It automatically adds a virtual index implementation
+// to the table id column as well. The input schema must have a single INDEX definition
 // with a single column, which must be the column that contains the table id.
 // includesIndexEntries should be set to true if the indexed column produces
 // index ids as well as just ordinary table descriptor ids. In this case, the
@@ -1166,14 +1169,48 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 		sc catalog.SchemaDescriptor, table catalog.TableDescriptor, lookup simpleSchemaResolver,
 		addRow func(...tree.Datum) error,
 	) error,
+	populateFromType func(h oidHasher, nspOid tree.Datum, owner tree.Datum, typ *types.T, addRow func(...tree.Datum) error,
+	) error,
 ) virtualSchemaTable {
 	populateAll := func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		return forEachTableDescWithTableLookup(ctx, p, dbContext, virtualOpts,
+		if err := forEachTableDescWithTableLookup(
+			ctx,
+			p,
+			dbContext,
+			virtualOpts,
 			func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor, lookup tableLookupFn) error {
 				return populateFromTable(ctx, p, h, db, sc, table, lookup, addRow)
-			})
+			},
+		); err != nil {
+			return err
+		}
+
+		// Generate rows for user defined types.
+		if populateFromType != nil {
+			return forEachTypeDesc(
+				ctx,
+				p,
+				dbContext,
+				func(_ catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, tableDesc catalog.TypeDescriptor) error {
+					nspOid := schemaOid(sc.GetID())
+					tn := tree.NewQualifiedTypeName(dbContext.GetName(), sc.GetName(), tableDesc.GetName())
+					typ, err := typedesc.HydratedTFromDesc(ctx, tn, tableDesc, p)
+					if err != nil {
+						return err
+					}
+					ownerOid, err := getOwnerOID(ctx, p, tableDesc)
+					if err != nil {
+						return err
+					}
+					return populateFromType(h, nspOid, ownerOid, typ, addRow)
+				},
+			)
+		}
+
+		return nil
 	}
+
 	return virtualSchemaTable{
 		comment: comment,
 		schema:  schemaDef,
@@ -1267,7 +1304,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-constraint.html`,
 	vtable.PGCatalogConstraint,
 	hideVirtual, /* Virtual tables have no constraints */
 	false,       /* includesIndexEntries */
-	populateTableConstraints)
+	populateTableConstraints,
+	nil)
 
 // colIDArrayToDatum returns an int[] containing the ColumnIDs, or NULL if there
 // are no ColumnIDs.
@@ -3313,6 +3351,110 @@ func addPGTypeRow(
 		tree.DNull,      // typdefault
 		tree.DNull,      // typacl
 	)
+}
+
+func addPGClassRow(
+	h oidHasher, nspOid tree.Datum, owner tree.Datum, typ *types.T, addRow func(...tree.Datum) error,
+) error {
+	var typType *tree.DString
+	var tupLen int
+
+	switch typ.Family() {
+	case types.TupleFamily:
+		typType = typTypeComposite
+		tupLen = len(typ.TupleContents())
+	default:
+		return nil
+	}
+	typname := typ.PGName()
+	return addRow(
+		oidZero,                         // oid
+		tree.NewDName(typname),          // relname
+		nspOid,                          // relnamespace
+		tree.NewDOid(typ.Oid()),         // reltype
+		oidZero,                         // reloftype (used for type tables, which us unsupported)
+		owner,                           // relowner
+		oidZero,                         // relam
+		oidZero,                         // refilenode
+		oidZero,                         // reltablespace
+		tree.DNull,                      // relpages
+		tree.DNull,                      // reltuples
+		zeroVal,                         // relallvisible
+		oidZero,                         // reltoastrelid
+		tree.DBoolFalse,                 // relhasindex (composite types implemented as virtual tables - no indexes)
+		tree.DBoolFalse,                 // relisshared
+		relPersistencePermanent,         // relpersistance
+		tree.DBoolFalse,                 // relistemp
+		typType,                         // relkind
+		tree.NewDInt(tree.DInt(tupLen)), // relnatts
+		zeroVal,                         // relchecks
+		tree.DBoolFalse,                 // relhasoids
+		tree.DBoolFalse,                 // relhaspkey
+		tree.DBoolFalse,                 // relhasrules
+		tree.DBoolFalse,                 // relhastriggers
+		tree.DBoolFalse,                 // relhassubclass
+		zeroVal,                         // relfrozenxid
+		tree.DNull,                      // relacl
+		tree.DNull,                      // reloptions
+		tree.DNull,                      // relforcerowsecurity
+		tree.DNull,                      // relispartition
+		tree.DNull,                      // relispopulated
+		tree.NewDString("n"),            // relreplident (compositite types are views)
+		tree.DNull,                      // relrewrite
+		tree.DNull,                      // relrowsecurity
+		tree.DNull,                      // relpartbound
+		tree.DNull,                      // relminmxid
+	)
+}
+
+func addPGAttributeRow(
+	h oidHasher, nspOid tree.Datum, owner tree.Datum, typ *types.T, addRow func(...tree.Datum) error,
+) error {
+	var tupLabels []string
+	var tupContents []*types.T
+
+	switch typ.Family() {
+	case types.TupleFamily:
+		tupLabels = typ.TupleLabels()
+		tupContents = typ.TupleContents()
+	default:
+		return nil
+	}
+
+	for i, colTyp := range tupContents {
+		if err := addRow(
+			oidZero,                      // attrelid
+			tree.NewDName(tupLabels[i]),  // attname
+			typOid(colTyp),               // atttypid
+			zeroVal,                      // attstattarget
+			typLen(colTyp),               // attlen
+			tree.NewDInt(tree.DInt(i+1)), // attnum
+			zeroVal,                      // attndims
+			negOneVal,                    // attcacheoff
+			tree.NewDInt(tree.DInt(colTyp.TypeModifier())), // atttypmod
+			tree.DNull,          // attbyval (see pg_type.typbyval)
+			tree.DNull,          // attstorage
+			tree.DNull,          // attalign
+			tree.DBoolFalse,     // attnotnull
+			tree.DBoolFalse,     // atthasdef
+			tree.NewDString(""), // attidentity
+			tree.NewDString(""), // attgenerated
+			tree.DBoolFalse,     // attisdropped
+			tree.DBoolTrue,      // attislocal
+			zeroVal,             // attinhcount
+			typColl(colTyp, h),  // attcollation
+			tree.DNull,          // attacl
+			tree.DNull,          // attoptions
+			tree.DNull,          // attfdwoptions
+			// These columns were automatically created by pg_catalog_test's missing column generator.
+			tree.DNull, // atthasmissing
+			// These columns were automatically created by pg_catalog_test's missing column generator.
+			tree.DNull, // attmissingval
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func getSchemaAndTypeByTypeID(

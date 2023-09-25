@@ -4911,3 +4911,41 @@ oid    lanname   lanowner    lanispl  lanpltrusted  lanplcallfoid  laninline  la
 12     internal  2310524507  false    false         0              0          0             NULL
 14     sql       2310524507  false    true          0              0          0             NULL
 14024  plpgsql   2310524507  true     true          0              0          0             NULL
+
+subtest pg_class
+
+statement ok
+CREATE TYPE u AS (i int, j int);
+
+query TTI colnames,rowsort
+SELECT
+    relname,
+    relkind,
+    relnatts
+FROM
+    pg_catalog.pg_class
+WHERE
+    relname = 'u';
+----
+relname  relkind  relnatts
+u        c        2
+
+subtest end
+
+subtest pg_attribute
+
+query TII colnames,rowsort
+SELECT
+    attname,
+    attlen,
+    attnum
+FROM
+    pg_catalog.pg_attribute
+WHERE
+    attname IN ('i', 'j');
+----
+attname  attlen  attnum
+i        8       1
+j        8       2
+
+subtest end

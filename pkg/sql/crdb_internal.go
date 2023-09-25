@@ -3741,7 +3741,8 @@ CREATE TABLE crdb_internal.create_statements (
 			tree.MakeDBool(tree.DBool(table.IsVirtualTable())),
 			tree.MakeDBool(tree.DBool(table.IsTemporary())),
 		)
-	})
+	},
+	nil)
 
 func showAlterStatement(
 	ctx context.Context,
