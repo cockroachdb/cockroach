@@ -608,5 +608,26 @@ export default function (props: GraphDashboardProps) {
         />
       </Axis>
     </LineGraph>,
+
+    <LineGraph
+      title="Distributed Query Error Reruns"
+      isKvGraph={false}
+      sources={nodeSources}
+      tenantSource={tenantSource}
+      tooltip={`The total number of times the distributed query errors were rerun as local ${tooltipSelection}.`}
+    >
+      <Axis label="queries">
+        <Metric
+          name="cr.node.sql.distsql.dist_query_rerun_locally.count"
+          title="Reruns"
+          downsampleMax
+        />
+        <Metric
+          name="cr.node.sql.distsql.dist_query_rerun_locally.failure_count"
+          title="Failures"
+          downsampleMax
+        />
+      </Axis>
+    </LineGraph>,
   ];
 }
