@@ -185,7 +185,6 @@ func TestSettingsRefresh(t *testing.T) {
 		}
 		return nil
 	})
-
 }
 
 func TestSettingsSetAndShow(t *testing.T) {
