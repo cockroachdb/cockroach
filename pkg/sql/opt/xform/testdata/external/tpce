@@ -5279,23 +5279,22 @@ UPDATE settlement
 update settlement
  ├── columns: <none>
  ├── fetch columns: se_t_id:7 se_cash_type:8 se_cash_due_date:9 se_amt:10
- ├── passthrough columns: unnest:13 unnest:14
  ├── update-mapping:
  │    └── se_cash_type_cast:16 => se_cash_type:2
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: se_cash_type_cast:16!null se_t_id:7!null se_cash_type:8!null se_cash_due_date:9!null se_amt:10!null unnest:13!null unnest:14!null
+      ├── columns: se_cash_type_cast:16!null se_t_id:7!null se_cash_type:8!null se_cash_due_date:9!null se_amt:10!null
       ├── cardinality: [0 - 4]
       ├── immutable
       ├── key: (7)
-      ├── fd: (7)-->(8-10,13,14), (7)==(13), (13)==(7), (8,14)-->(16)
+      ├── fd: (7)-->(8-10,16)
       ├── distinct-on
-      │    ├── columns: se_t_id:7!null se_cash_type:8!null se_cash_due_date:9!null se_amt:10!null unnest:13!null unnest:14!null
+      │    ├── columns: se_t_id:7!null se_cash_type:8!null se_cash_due_date:9!null se_amt:10!null unnest:14!null
       │    ├── grouping columns: se_t_id:7!null
       │    ├── cardinality: [0 - 4]
       │    ├── key: (7)
-      │    ├── fd: (7)-->(8-10,13,14), (7)==(13), (13)==(7)
+      │    ├── fd: (7)-->(8-10,14)
       │    ├── inner-join (lookup settlement)
       │    │    ├── columns: se_t_id:7!null se_cash_type:8!null se_cash_due_date:9!null se_amt:10!null unnest:13!null unnest:14!null
       │    │    ├── key columns: [13] = [7]
@@ -5317,8 +5316,6 @@ update settlement
       │         │    └── se_cash_due_date:9
       │         ├── first-agg [as=se_amt:10, outer=(10)]
       │         │    └── se_amt:10
-      │         ├── first-agg [as=unnest:13, outer=(13)]
-      │         │    └── unnest:13
       │         └── first-agg [as=unnest:14, outer=(14)]
       │              └── unnest:14
       └── projections
@@ -5542,23 +5539,22 @@ UPDATE cash_transaction
 update cash_transaction
  ├── columns: <none>
  ├── fetch columns: ct_t_id:7 ct_dts:8 ct_amt:9 ct_name:10
- ├── passthrough columns: unnest:13 unnest:14 unnest:15 unnest:16
  ├── update-mapping:
  │    └── ct_name_cast:18 => ct_name:4
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: ct_name_cast:18 ct_t_id:7!null ct_dts:8!null ct_amt:9!null ct_name:10 unnest:13!null unnest:14!null unnest:15!null unnest:16!null
+      ├── columns: ct_name_cast:18 ct_t_id:7!null ct_dts:8!null ct_amt:9!null ct_name:10
       ├── cardinality: [0 - 4]
       ├── immutable
       ├── key: (7)
-      ├── fd: (7)-->(8-10,13-16), (7)==(13), (13)==(7), (10,14-16)-->(18)
+      ├── fd: (7)-->(8-10,18)
       ├── distinct-on
-      │    ├── columns: ct_t_id:7!null ct_dts:8!null ct_amt:9!null ct_name:10 unnest:13!null unnest:14!null unnest:15!null unnest:16!null
+      │    ├── columns: ct_t_id:7!null ct_dts:8!null ct_amt:9!null ct_name:10 unnest:14!null unnest:15!null unnest:16!null
       │    ├── grouping columns: ct_t_id:7!null
       │    ├── cardinality: [0 - 4]
       │    ├── key: (7)
-      │    ├── fd: (7)-->(8-10,13-16), (7)==(13), (13)==(7)
+      │    ├── fd: (7)-->(8-10,14-16)
       │    ├── inner-join (lookup cash_transaction)
       │    │    ├── columns: ct_t_id:7!null ct_dts:8!null ct_amt:9!null ct_name:10 unnest:13!null unnest:14!null unnest:15!null unnest:16!null
       │    │    ├── key columns: [13] = [7]
@@ -5580,8 +5576,6 @@ update cash_transaction
       │         │    └── ct_amt:9
       │         ├── first-agg [as=ct_name:10, outer=(10)]
       │         │    └── ct_name:10
-      │         ├── first-agg [as=unnest:13, outer=(13)]
-      │         │    └── unnest:13
       │         ├── first-agg [as=unnest:14, outer=(14)]
       │         │    └── unnest:14
       │         ├── first-agg [as=unnest:15, outer=(15)]
@@ -6144,35 +6138,30 @@ UPDATE watch_item
 update watch_item
  ├── columns: <none>
  ├── fetch columns: wi_wl_id:5 watch_item.wi_s_symb:6
- ├── passthrough columns: wl_id:9 wl_c_id:10 watch_list.crdb_internal_mvcc_timestamp:11 watch_list.tableoid:12
  ├── update-mapping:
  │    └── wi_s_symb_cast:14 => watch_item.wi_s_symb:2
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── project
- │    ├── columns: wi_s_symb_cast:14!null wi_wl_id:5!null watch_item.wi_s_symb:6!null wl_id:9!null wl_c_id:10!null watch_list.crdb_internal_mvcc_timestamp:11 watch_list.tableoid:12
- │    ├── key: (9)
- │    ├── fd: ()-->(6,10,14), (9)-->(11,12), (5)==(9), (9)==(5)
+ │    ├── columns: wi_s_symb_cast:14!null wi_wl_id:5!null watch_item.wi_s_symb:6!null
+ │    ├── key: (5)
+ │    ├── fd: ()-->(6,14)
  │    ├── inner-join (lookup watch_item)
- │    │    ├── columns: wi_wl_id:5!null watch_item.wi_s_symb:6!null wl_id:9!null wl_c_id:10!null watch_list.crdb_internal_mvcc_timestamp:11 watch_list.tableoid:12
+ │    │    ├── columns: wi_wl_id:5!null watch_item.wi_s_symb:6!null wl_id:9!null wl_c_id:10!null
  │    │    ├── key columns: [9 35] = [5 6]
  │    │    ├── lookup columns are key
  │    │    ├── key: (9)
- │    │    ├── fd: ()-->(6,10), (9)-->(11,12), (5)==(9), (9)==(5)
+ │    │    ├── fd: ()-->(6,10), (5)==(9), (9)==(5)
  │    │    ├── project
- │    │    │    ├── columns: "lookup_join_const_col_@6":35!null wl_id:9!null wl_c_id:10!null watch_list.crdb_internal_mvcc_timestamp:11 watch_list.tableoid:12
+ │    │    │    ├── columns: "lookup_join_const_col_@6":35!null wl_id:9!null wl_c_id:10!null
  │    │    │    ├── key: (9)
- │    │    │    ├── fd: ()-->(10,35), (9)-->(11,12)
- │    │    │    ├── index-join watch_list
- │    │    │    │    ├── columns: wl_id:9!null wl_c_id:10!null watch_list.crdb_internal_mvcc_timestamp:11 watch_list.tableoid:12
+ │    │    │    ├── fd: ()-->(10,35)
+ │    │    │    ├── scan watch_list@watch_list_wl_c_id_idx
+ │    │    │    │    ├── columns: wl_id:9!null wl_c_id:10!null
+ │    │    │    │    ├── constraint: /10/9: [/0 - /0]
  │    │    │    │    ├── key: (9)
- │    │    │    │    ├── fd: ()-->(10), (9)-->(11,12)
- │    │    │    │    └── scan watch_list@watch_list_wl_c_id_idx
- │    │    │    │         ├── columns: wl_id:9!null wl_c_id:10!null
- │    │    │    │         ├── constraint: /10/9: [/0 - /0]
- │    │    │    │         ├── key: (9)
- │    │    │    │         └── fd: ()-->(10)
+ │    │    │    │    └── fd: ()-->(10)
  │    │    │    └── projections
  │    │    │         └── 'ROACH' [as="lookup_join_const_col_@6":35]
  │    │    └── filters (true)

@@ -1496,7 +1496,7 @@ update inaccessible
  ├── update-mapping:
  │    └── k_new:9 => k:1
  └── project
-      ├── columns: k_new:9!null k:5!null v:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+      ├── columns: k_new:9!null k:5!null v:6
       ├── scan inaccessible
       │    └── columns: k:5!null v:6 crdb_internal_mvcc_timestamp:7 tableoid:8
       └── projections

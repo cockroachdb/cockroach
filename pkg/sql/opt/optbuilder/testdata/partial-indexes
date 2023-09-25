@@ -294,9 +294,9 @@ update partial_indexes
  ├── partial index put columns: partial_index_put1:12 partial_index_put2:13 partial_index_put3:15 partial_index_put4:16
  ├── partial index del columns: partial_index_put1:12 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16
  └── project
-      ├── columns: partial_index_put1:12 partial_index_put2:13 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16 a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10 a_new:11!null
+      ├── columns: partial_index_put1:12 partial_index_put2:13 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16 a:6!null b:7 c:8 a_new:11!null
       ├── project
-      │    ├── columns: a_new:11!null a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── columns: a_new:11!null a:6!null b:7 c:8
       │    ├── scan partial_indexes
       │    │    ├── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    │    └── partial index predicates
@@ -361,49 +361,50 @@ UPDATE partial_indexes SET a = v.a FROM (VALUES (1), (2)) AS v(a) WHERE partial_
 update partial_indexes
  ├── columns: <none>
  ├── fetch columns: a:6 b:7 c:8
- ├── passthrough columns: column1:11
  ├── update-mapping:
  │    └── column1:11 => a:1
  ├── partial index put columns: partial_index_put1:12 partial_index_put2:13 partial_index_put3:15 partial_index_put4:16
  ├── partial index del columns: partial_index_put1:12 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16
  └── project
-      ├── columns: partial_index_put1:12 partial_index_put2:13 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16 a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10 column1:11!null
-      ├── distinct-on
-      │    ├── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10 column1:11!null
-      │    ├── grouping columns: a:6!null
-      │    ├── select
-      │    │    ├── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10 column1:11!null
-      │    │    ├── inner-join (cross)
-      │    │    │    ├── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10 column1:11!null
-      │    │    │    ├── scan partial_indexes
-      │    │    │    │    ├── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    │    │    └── partial index predicates
-      │    │    │    │         ├── partial_indexes_b_idx1: filters
-      │    │    │    │         │    └── c:8 = 'foo'
-      │    │    │    │         ├── partial_indexes_c_idx: filters
-      │    │    │    │         │    └── (a:6 > b:7) AND (c:8 = 'bar')
-      │    │    │    │         ├── b: filters
-      │    │    │    │         │    └── c:8 = 'delete-only'
-      │    │    │    │         └── b: filters
-      │    │    │    │              └── c:8 = 'write-only'
-      │    │    │    ├── values
-      │    │    │    │    ├── columns: column1:11!null
-      │    │    │    │    ├── (1,)
-      │    │    │    │    └── (2,)
-      │    │    │    └── filters (true)
-      │    │    └── filters
-      │    │         └── a:6 = column1:11
-      │    └── aggregations
-      │         ├── first-agg [as=b:7]
-      │         │    └── b:7
-      │         ├── first-agg [as=c:8]
-      │         │    └── c:8
-      │         ├── first-agg [as=crdb_internal_mvcc_timestamp:9]
-      │         │    └── crdb_internal_mvcc_timestamp:9
-      │         ├── first-agg [as=tableoid:10]
-      │         │    └── tableoid:10
-      │         └── first-agg [as=column1:11]
-      │              └── column1:11
+      ├── columns: partial_index_put1:12 partial_index_put2:13 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16 a:6!null b:7 c:8 column1:11!null
+      ├── project
+      │    ├── columns: a:6!null b:7 c:8 column1:11!null
+      │    └── distinct-on
+      │         ├── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10 column1:11!null
+      │         ├── grouping columns: a:6!null
+      │         ├── select
+      │         │    ├── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10 column1:11!null
+      │         │    ├── inner-join (cross)
+      │         │    │    ├── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10 column1:11!null
+      │         │    │    ├── scan partial_indexes
+      │         │    │    │    ├── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │         │    │    │    └── partial index predicates
+      │         │    │    │         ├── partial_indexes_b_idx1: filters
+      │         │    │    │         │    └── c:8 = 'foo'
+      │         │    │    │         ├── partial_indexes_c_idx: filters
+      │         │    │    │         │    └── (a:6 > b:7) AND (c:8 = 'bar')
+      │         │    │    │         ├── b: filters
+      │         │    │    │         │    └── c:8 = 'delete-only'
+      │         │    │    │         └── b: filters
+      │         │    │    │              └── c:8 = 'write-only'
+      │         │    │    ├── values
+      │         │    │    │    ├── columns: column1:11!null
+      │         │    │    │    ├── (1,)
+      │         │    │    │    └── (2,)
+      │         │    │    └── filters (true)
+      │         │    └── filters
+      │         │         └── a:6 = column1:11
+      │         └── aggregations
+      │              ├── first-agg [as=b:7]
+      │              │    └── b:7
+      │              ├── first-agg [as=c:8]
+      │              │    └── c:8
+      │              ├── first-agg [as=crdb_internal_mvcc_timestamp:9]
+      │              │    └── crdb_internal_mvcc_timestamp:9
+      │              ├── first-agg [as=tableoid:10]
+      │              │    └── tableoid:10
+      │              └── first-agg [as=column1:11]
+      │                   └── column1:11
       └── projections
            ├── c:8 = 'foo' [as=partial_index_put1:12]
            ├── (column1:11 > b:7) AND (c:8 = 'bar') [as=partial_index_put2:13]
@@ -426,11 +427,11 @@ update ambig
  ├── partial index put columns: partial_index_put1:16 partial_index_put2:18 partial_index_put3:20
  ├── partial index del columns: partial_index_del1:17 partial_index_del2:19 partial_index_put3:20
  └── project
-      ├── columns: partial_index_put1:16!null partial_index_del1:17!null partial_index_put2:18!null partial_index_del2:19!null partial_index_put3:20 ambig.partial_index_put1:7!null ambig.partial_index_del1:8!null ambig.check1:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 partial_index_put1_new:13!null partial_index_del1_new:14!null check1:15!null
+      ├── columns: partial_index_put1:16!null partial_index_del1:17!null partial_index_put2:18!null partial_index_del2:19!null partial_index_put3:20 ambig.partial_index_put1:7!null ambig.partial_index_del1:8!null ambig.check1:9 rowid:10!null partial_index_put1_new:13!null partial_index_del1_new:14!null check1:15!null
       ├── project
-      │    ├── columns: check1:15!null ambig.partial_index_put1:7!null ambig.partial_index_del1:8!null ambig.check1:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 partial_index_put1_new:13!null partial_index_del1_new:14!null
+      │    ├── columns: check1:15!null ambig.partial_index_put1:7!null ambig.partial_index_del1:8!null ambig.check1:9 rowid:10!null partial_index_put1_new:13!null partial_index_del1_new:14!null
       │    ├── project
-      │    │    ├── columns: partial_index_put1_new:13!null partial_index_del1_new:14!null ambig.partial_index_put1:7!null ambig.partial_index_del1:8!null ambig.check1:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    ├── columns: partial_index_put1_new:13!null partial_index_del1_new:14!null ambig.partial_index_put1:7!null ambig.partial_index_del1:8!null ambig.check1:9 rowid:10!null
       │    │    ├── select
       │    │    │    ├── columns: ambig.partial_index_put1:7!null ambig.partial_index_del1:8!null ambig.check1:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    ├── scan ambig
@@ -467,11 +468,11 @@ update comp
  ├── partial index put columns: partial_index_put1:18 partial_index_put2:19
  ├── partial index del columns: partial_index_put1:18 partial_index_put2:19
  └── project
-      ├── columns: partial_index_put1:18 partial_index_put2:19 a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14 b_new:15!null d_comp:16 e_comp:17
+      ├── columns: partial_index_put1:18 partial_index_put2:19 a:8!null b:9 c:10 d:11 e:12 b_new:15!null d_comp:16 e_comp:17
       ├── project
-      │    ├── columns: d_comp:16 e_comp:17 a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14 b_new:15!null
+      │    ├── columns: d_comp:16 e_comp:17 a:8!null b:9 c:10 d:11 e:12 b_new:15!null
       │    ├── project
-      │    │    ├── columns: b_new:15!null a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    ├── columns: b_new:15!null a:8!null b:9 c:10 d:11 e:12
       │    │    ├── project
       │    │    │    ├── columns: d:11 a:8!null b:9 c:10 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
       │    │    │    ├── scan comp
@@ -510,11 +511,11 @@ update comp
  ├── partial index put columns: partial_index_put1:18 partial_index_put2:20
  ├── partial index del columns: partial_index_del1:19 partial_index_del2:21
  └── project
-      ├── columns: partial_index_put1:18 partial_index_del1:19 partial_index_put2:20 partial_index_del2:21 a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14 c_new:15!null d_comp:16 e_comp:17
+      ├── columns: partial_index_put1:18 partial_index_del1:19 partial_index_put2:20 partial_index_del2:21 a:8!null b:9 c:10 d:11 e:12 c_new:15!null d_comp:16 e_comp:17
       ├── project
-      │    ├── columns: d_comp:16 e_comp:17 a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14 c_new:15!null
+      │    ├── columns: d_comp:16 e_comp:17 a:8!null b:9 c:10 d:11 e:12 c_new:15!null
       │    ├── project
-      │    │    ├── columns: c_new:15!null a:8!null b:9 c:10 d:11 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    ├── columns: c_new:15!null a:8!null b:9 c:10 d:11 e:12
       │    │    ├── project
       │    │    │    ├── columns: d:11 a:8!null b:9 c:10 e:12 crdb_internal_mvcc_timestamp:13 tableoid:14
       │    │    │    ├── scan comp

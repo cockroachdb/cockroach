@@ -17,13 +17,11 @@ vectorized: true
 │
 └── • render
     │
-    └── • render
-        │
-        └── • scan
-              missing stats
-              table: abc@abc_pkey
-              spans: FULL SCAN
-              locking strength: for update
+    └── • scan
+          missing stats
+          table: abc@abc_pkey
+          spans: FULL SCAN
+          locking strength: for update
 
 # Update from another table.
 statement ok

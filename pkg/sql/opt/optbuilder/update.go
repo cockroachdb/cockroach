@@ -211,13 +211,9 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs, skipProjectionP
 	} else {
 		var colsToProject opt.ColSet
 		for i := range mb.updateColIDs {
-			if mb.updateColIDs[i] != 0 {
-				colsToProject.Add(mb.updateColIDs[i])
-			}
-		}
-		for i := range mb.fetchColIDs {
-			if mb.fetchColIDs[i] != 0 {
-				colsToProject.Add(mb.fetchColIDs[i])
+			includedColID := mb.mapToReturnColID(i)
+			if includedColID != 0 {
+				colsToProject.Add(includedColID)
 			}
 		}
 		if !colsToProject.Empty() {

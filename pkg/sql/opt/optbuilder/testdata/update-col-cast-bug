@@ -19,11 +19,11 @@ with &1 (cte)
       │    ├── a_new:16 => a:1
       │    └── c_cast:18 => t.c:3
       └── project
-           ├── columns: c_cast:18(int2) a:7(int2) b:8(int2) t.c:9(int2) rowid:10(int!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid) a_new:16(int2)
+           ├── columns: c_cast:18(int2) a:7(int2) b:8(int2) t.c:9(int2) rowid:10(int!null) a_new:16(int2)
            ├── project
-           │    ├── columns: c_comp:17(int) a:7(int2) b:8(int2) t.c:9(int2) rowid:10(int!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid) a_new:16(int2)
+           │    ├── columns: c_comp:17(int) a:7(int2) b:8(int2) t.c:9(int2) rowid:10(int!null) a_new:16(int2)
            │    ├── project
-           │    │    ├── columns: a_new:16(int2) a:7(int2) b:8(int2) t.c:9(int2) rowid:10(int!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid)
+           │    │    ├── columns: a_new:16(int2) a:7(int2) b:8(int2) t.c:9(int2) rowid:10(int!null)
            │    │    ├── project
            │    │    │    ├── columns: t.c:9(int2) a:7(int2) b:8(int2) rowid:10(int!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid)
            │    │    │    ├── scan t

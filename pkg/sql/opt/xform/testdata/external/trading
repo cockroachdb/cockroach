@@ -1442,50 +1442,49 @@ WHERE ci.cardid = Updates.c AND ci.dealerid = 1
 update cardsinfo [as=ci]
  ├── columns: <none>
  ├── fetch columns: ci.dealerid:17 ci.cardid:18 buyprice:19 sellprice:20 discount:21 desiredinventory:22 actualinventory:23 maxinventory:24 ci.version:25
- ├── passthrough columns: c:28 q:29
  ├── update-mapping:
  │    └── actualinventory_new:39 => actualinventory:12
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: actualinventory_new:39 ci.dealerid:17!null ci.cardid:18!null buyprice:19!null sellprice:20!null discount:21!null desiredinventory:22!null actualinventory:23!null maxinventory:24!null ci.version:25!null c:28!null q:29!null
+      ├── columns: actualinventory_new:39 ci.dealerid:17!null ci.cardid:18!null buyprice:19!null sellprice:20!null discount:21!null desiredinventory:22!null actualinventory:23!null maxinventory:24!null ci.version:25!null
       ├── key: (18)
-      ├── fd: ()-->(17), (18)-->(19-25,28,29,39), (25)-->(18-24), (18)==(28), (28)==(18)
+      ├── fd: ()-->(17), (18)-->(19-25,39), (25)-->(18-24)
       ├── group-by (hash)
-      │    ├── columns: ci.dealerid:17!null ci.cardid:18!null buyprice:19!null sellprice:20!null discount:21!null desiredinventory:22!null actualinventory:23!null maxinventory:24!null ci.version:25!null c:28!null q:29!null sum_int:37
+      │    ├── columns: ci.dealerid:17!null ci.cardid:18!null buyprice:19!null sellprice:20!null discount:21!null desiredinventory:22!null actualinventory:23!null maxinventory:24!null ci.version:25!null sum_int:37
       │    ├── grouping columns: ci.cardid:18!null
       │    ├── key: (18)
-      │    ├── fd: ()-->(17), (18)-->(17,19-25,28,29,37), (25)-->(18-24), (18)==(28), (28)==(18)
+      │    ├── fd: ()-->(17), (18)-->(17,19-25,37), (25)-->(18-24)
       │    ├── left-join (lookup inventorydetails [as=id])
-      │    │    ├── columns: ci.dealerid:17!null ci.cardid:18!null buyprice:19!null sellprice:20!null discount:21!null desiredinventory:22!null actualinventory:23!null maxinventory:24!null ci.version:25!null c:28!null q:29!null id.dealerid:30 id.cardid:31 quantity:33
+      │    │    ├── columns: ci.dealerid:17!null ci.cardid:18!null buyprice:19!null sellprice:20!null discount:21!null desiredinventory:22!null actualinventory:23!null maxinventory:24!null ci.version:25!null id.dealerid:30 id.cardid:31 quantity:33
       │    │    ├── key columns: [42 18] = [30 31]
-      │    │    ├── fd: ()-->(17), (18)-->(19-25,28,29), (25)-->(18-24), (18)==(28), (28)==(18)
+      │    │    ├── fd: ()-->(17), (18)-->(19-25), (25)-->(18-24)
       │    │    ├── project
-      │    │    │    ├── columns: "lookup_join_const_col_@30":42!null ci.dealerid:17!null ci.cardid:18!null buyprice:19!null sellprice:20!null discount:21!null desiredinventory:22!null actualinventory:23!null maxinventory:24!null ci.version:25!null c:28!null q:29!null
+      │    │    │    ├── columns: "lookup_join_const_col_@30":42!null ci.dealerid:17!null ci.cardid:18!null buyprice:19!null sellprice:20!null discount:21!null desiredinventory:22!null actualinventory:23!null maxinventory:24!null ci.version:25!null
       │    │    │    ├── cardinality: [0 - 2]
       │    │    │    ├── key: (18)
-      │    │    │    ├── fd: ()-->(17,42), (18)-->(19-25,28,29), (25)-->(18-24), (18)==(28), (28)==(18)
+      │    │    │    ├── fd: ()-->(17,42), (18)-->(19-25), (25)-->(18-24)
       │    │    │    ├── distinct-on
-      │    │    │    │    ├── columns: ci.dealerid:17!null ci.cardid:18!null buyprice:19!null sellprice:20!null discount:21!null desiredinventory:22!null actualinventory:23!null maxinventory:24!null ci.version:25!null c:28!null q:29!null
+      │    │    │    │    ├── columns: ci.dealerid:17!null ci.cardid:18!null buyprice:19!null sellprice:20!null discount:21!null desiredinventory:22!null actualinventory:23!null maxinventory:24!null ci.version:25!null
       │    │    │    │    ├── grouping columns: ci.cardid:18!null
       │    │    │    │    ├── cardinality: [0 - 2]
       │    │    │    │    ├── key: (18)
-      │    │    │    │    ├── fd: ()-->(17), (18)-->(17,19-25,28,29), (25)-->(18-24), (18)==(28), (28)==(18)
+      │    │    │    │    ├── fd: ()-->(17), (18)-->(17,19-25), (25)-->(18-24)
       │    │    │    │    ├── inner-join (lookup cardsinfo [as=ci])
-      │    │    │    │    │    ├── columns: ci.dealerid:17!null ci.cardid:18!null buyprice:19!null sellprice:20!null discount:21!null desiredinventory:22!null actualinventory:23!null maxinventory:24!null ci.version:25!null c:28!null q:29!null
+      │    │    │    │    │    ├── columns: ci.dealerid:17!null ci.cardid:18!null buyprice:19!null sellprice:20!null discount:21!null desiredinventory:22!null actualinventory:23!null maxinventory:24!null ci.version:25!null c:28!null
       │    │    │    │    │    ├── key columns: [40 28] = [17 18]
       │    │    │    │    │    ├── lookup columns are key
       │    │    │    │    │    ├── cardinality: [0 - 2]
       │    │    │    │    │    ├── fd: ()-->(17), (18)-->(19-25), (25)-->(18-24), (18)==(28), (28)==(18)
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: "lookup_join_const_col_@17":40!null c:28!null q:29!null
+      │    │    │    │    │    │    ├── columns: "lookup_join_const_col_@17":40!null c:28!null
       │    │    │    │    │    │    ├── cardinality: [2 - 2]
       │    │    │    │    │    │    ├── fd: ()-->(40)
       │    │    │    │    │    │    ├── values
-      │    │    │    │    │    │    │    ├── columns: c:28!null q:29!null
+      │    │    │    │    │    │    │    ├── columns: c:28!null
       │    │    │    │    │    │    │    ├── cardinality: [2 - 2]
-      │    │    │    │    │    │    │    ├── (42948, 3)
-      │    │    │    │    │    │    │    └── (24924, 4)
+      │    │    │    │    │    │    │    ├── (42948,)
+      │    │    │    │    │    │    │    └── (24924,)
       │    │    │    │    │    │    └── projections
       │    │    │    │    │    │         └── 1 [as="lookup_join_const_col_@17":40]
       │    │    │    │    │    └── filters (true)
@@ -1504,10 +1503,6 @@ update cardsinfo [as=ci]
       │    │    │    │         │    └── maxinventory:24
       │    │    │    │         ├── first-agg [as=ci.version:25, outer=(25)]
       │    │    │    │         │    └── ci.version:25
-      │    │    │    │         ├── first-agg [as=c:28, outer=(28)]
-      │    │    │    │         │    └── c:28
-      │    │    │    │         ├── first-agg [as=q:29, outer=(29)]
-      │    │    │    │         │    └── q:29
       │    │    │    │         └── const-agg [as=ci.dealerid:17, outer=(17)]
       │    │    │    │              └── ci.dealerid:17
       │    │    │    └── projections
@@ -1530,11 +1525,7 @@ update cardsinfo [as=ci]
       │         │    └── actualinventory:23
       │         ├── const-agg [as=maxinventory:24, outer=(24)]
       │         │    └── maxinventory:24
-      │         ├── const-agg [as=ci.version:25, outer=(25)]
-      │         │    └── ci.version:25
-      │         ├── const-agg [as=c:28, outer=(28)]
-      │         │    └── c:28
-      │         └── const-agg [as=q:29, outer=(29)]
-      │              └── q:29
+      │         └── const-agg [as=ci.version:25, outer=(25)]
+      │              └── ci.version:25
       └── projections
            └── COALESCE(sum_int:37, 0) [as=actualinventory_new:39, outer=(37)]

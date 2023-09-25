@@ -17,25 +17,16 @@ UPDATE abc SET b = other.b + 1, c = other.c + 1 FROM abc AS other WHERE abc.a = 
 update abc
  ├── columns: <none>
  ├── fetch columns: abc.a:6 abc.b:7 abc.c:8
- ├── passthrough columns: other.a:11 other.b:12 other.c:13 other.crdb_internal_mvcc_timestamp:14 other.tableoid:15
  ├── update-mapping:
  │    ├── b_new:16 => abc.b:2
  │    └── c_new:17 => abc.c:3
  └── project
-      ├── columns: b_new:16 c_new:17 abc.a:6!null abc.b:7 abc.c:8 other.a:11!null other.b:12 other.c:13 other.crdb_internal_mvcc_timestamp:14 other.tableoid:15
-      ├── project
-      │    ├── columns: other.a:11!null other.b:12 other.c:13 other.crdb_internal_mvcc_timestamp:14 other.tableoid:15 abc.a:6!null abc.b:7 abc.c:8
-      │    ├── scan abc
-      │    │    └── columns: abc.a:6!null abc.b:7 abc.c:8 abc.crdb_internal_mvcc_timestamp:9 abc.tableoid:10
-      │    └── projections
-      │         ├── abc.a:6 [as=other.a:11]
-      │         ├── abc.b:7 [as=other.b:12]
-      │         ├── abc.c:8 [as=other.c:13]
-      │         ├── abc.crdb_internal_mvcc_timestamp:9 [as=other.crdb_internal_mvcc_timestamp:14]
-      │         └── abc.tableoid:10 [as=other.tableoid:15]
+      ├── columns: b_new:16 c_new:17 abc.a:6!null abc.b:7 abc.c:8
+      ├── scan abc
+      │    └── columns: abc.a:6!null abc.b:7 abc.c:8
       └── projections
-           ├── other.b:12 + 1 [as=b_new:16]
-           └── other.c:13 + 1 [as=c_new:17]
+           ├── abc.b:7 + 1 [as=b_new:16]
+           └── abc.c:8 + 1 [as=c_new:17]
 
 # Test when Update uses multiple tables.
 opt
@@ -44,19 +35,18 @@ UPDATE abc SET b = other.b, c = other.c FROM new_abc AS other WHERE abc.a = othe
 update abc
  ├── columns: <none>
  ├── fetch columns: abc.a:6 abc.b:7 abc.c:8
- ├── passthrough columns: other.a:11 other.b:12 other.c:13 rowid:14 other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
  ├── update-mapping:
  │    ├── other.b:12 => abc.b:2
  │    └── other.c:13 => abc.c:3
  └── distinct-on
-      ├── columns: abc.a:6!null abc.b:7 abc.c:8 other.a:11!null other.b:12 other.c:13 rowid:14!null other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+      ├── columns: abc.a:6!null abc.b:7 abc.c:8 other.b:12 other.c:13
       ├── grouping columns: abc.a:6!null
       ├── inner-join (hash)
-      │    ├── columns: abc.a:6!null abc.b:7 abc.c:8 other.a:11!null other.b:12 other.c:13 rowid:14!null other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+      │    ├── columns: abc.a:6!null abc.b:7 abc.c:8 other.a:11!null other.b:12 other.c:13
       │    ├── scan abc
       │    │    └── columns: abc.a:6!null abc.b:7 abc.c:8
       │    ├── scan new_abc [as=other]
-      │    │    └── columns: other.a:11 other.b:12 other.c:13 rowid:14!null other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
+      │    │    └── columns: other.a:11 other.b:12 other.c:13
       │    └── filters
       │         └── abc.a:6 = other.a:11
       └── aggregations
@@ -64,18 +54,10 @@ update abc
            │    └── abc.b:7
            ├── first-agg [as=abc.c:8]
            │    └── abc.c:8
-           ├── first-agg [as=other.a:11]
-           │    └── other.a:11
            ├── first-agg [as=other.b:12]
            │    └── other.b:12
-           ├── first-agg [as=other.c:13]
-           │    └── other.c:13
-           ├── first-agg [as=rowid:14]
-           │    └── rowid:14
-           ├── first-agg [as=other.crdb_internal_mvcc_timestamp:15]
-           │    └── other.crdb_internal_mvcc_timestamp:15
-           └── first-agg [as=other.tableoid:16]
-                └── other.tableoid:16
+           └── first-agg [as=other.c:13]
+                └── other.c:13
 
 # Check if UPDATE FROM works well with RETURNING expressions that reference the FROM tables.
 opt
@@ -149,19 +131,18 @@ UPDATE abc SET b = old.b + 1, c = old.c + 2 FROM abc AS old WHERE abc.a = old.a 
 update abc
  ├── columns: <none>
  ├── fetch columns: abc.a:6 abc.b:7 abc.c:8
- ├── passthrough columns: old.a:11 old.b:12 old.c:13 old.crdb_internal_mvcc_timestamp:14 old.tableoid:15
  ├── update-mapping:
  │    ├── b_new:16 => abc.b:2
  │    └── c_new:17 => abc.c:3
  └── project
-      ├── columns: b_new:16 c_new:17 abc.a:6!null abc.b:7 abc.c:8 old.a:11!null old.b:12 old.c:13 old.crdb_internal_mvcc_timestamp:14 old.tableoid:15
+      ├── columns: b_new:16 c_new:17 abc.a:6!null abc.b:7 abc.c:8
       ├── inner-join (cross)
-      │    ├── columns: abc.a:6!null abc.b:7 abc.c:8 old.a:11!null old.b:12 old.c:13 old.crdb_internal_mvcc_timestamp:14 old.tableoid:15
+      │    ├── columns: abc.a:6!null abc.b:7 abc.c:8 old.a:11!null old.b:12 old.c:13
       │    ├── scan abc
       │    │    ├── columns: abc.a:6!null abc.b:7 abc.c:8
       │    │    └── constraint: /6: [/2 - /2]
       │    ├── scan abc [as=old]
-      │    │    ├── columns: old.a:11!null old.b:12 old.c:13 old.crdb_internal_mvcc_timestamp:14 old.tableoid:15
+      │    │    ├── columns: old.a:11!null old.b:12 old.c:13
       │    │    └── constraint: /11: [/2 - /2]
       │    └── filters (true)
       └── projections
@@ -175,12 +156,11 @@ UPDATE abc SET b = other.b, c = other.c FROM (values (1, 2, 3), (2, 3, 4)) as ot
 update abc
  ├── columns: <none>
  ├── fetch columns: a:6 b:7 c:8
- ├── passthrough columns: column1:11 column2:12 column3:13
  ├── update-mapping:
  │    ├── column2:12 => b:2
  │    └── column3:13 => c:3
  └── distinct-on
-      ├── columns: a:6!null b:7 c:8 column1:11!null column2:12!null column3:13!null
+      ├── columns: a:6!null b:7 c:8 column2:12!null column3:13!null
       ├── grouping columns: a:6!null
       ├── inner-join (lookup abc)
       │    ├── columns: a:6!null b:7 c:8 column1:11!null column2:12!null column3:13!null
@@ -196,8 +176,6 @@ update abc
            │    └── b:7
            ├── first-agg [as=c:8]
            │    └── c:8
-           ├── first-agg [as=column1:11]
-           │    └── column1:11
            ├── first-agg [as=column2:12]
            │    └── column2:12
            └── first-agg [as=column3:13]
@@ -218,23 +196,22 @@ UPDATE abc SET b = ab.b, c = ac.c FROM ab, ac WHERE abc.a = ab.a AND abc.a = ac.
 update abc
  ├── columns: <none>
  ├── fetch columns: abc.a:6 abc.b:7 abc.c:8
- ├── passthrough columns: ab.a:11 ab.b:12 ab.rowid:13 ab.crdb_internal_mvcc_timestamp:14 ab.tableoid:15 ac.a:16 ac.c:17 ac.rowid:18 ac.crdb_internal_mvcc_timestamp:19 ac.tableoid:20
  ├── update-mapping:
  │    ├── ab.b:12 => abc.b:2
  │    └── ac.c:17 => abc.c:3
  └── distinct-on
-      ├── columns: abc.a:6!null abc.b:7 abc.c:8 ab.a:11!null ab.b:12 ab.rowid:13!null ab.crdb_internal_mvcc_timestamp:14 ab.tableoid:15 ac.a:16!null ac.c:17 ac.rowid:18!null ac.crdb_internal_mvcc_timestamp:19 ac.tableoid:20
+      ├── columns: abc.a:6!null abc.b:7 abc.c:8 ab.b:12 ac.c:17
       ├── grouping columns: abc.a:6!null
       ├── inner-join (hash)
-      │    ├── columns: abc.a:6!null abc.b:7 abc.c:8 ab.a:11!null ab.b:12 ab.rowid:13!null ab.crdb_internal_mvcc_timestamp:14 ab.tableoid:15 ac.a:16!null ac.c:17 ac.rowid:18!null ac.crdb_internal_mvcc_timestamp:19 ac.tableoid:20
+      │    ├── columns: abc.a:6!null abc.b:7 abc.c:8 ab.a:11!null ab.b:12 ac.a:16!null ac.c:17
       │    ├── scan ab
-      │    │    └── columns: ab.a:11 ab.b:12 ab.rowid:13!null ab.crdb_internal_mvcc_timestamp:14 ab.tableoid:15
+      │    │    └── columns: ab.a:11 ab.b:12
       │    ├── inner-join (hash)
-      │    │    ├── columns: abc.a:6!null abc.b:7 abc.c:8 ac.a:16!null ac.c:17 ac.rowid:18!null ac.crdb_internal_mvcc_timestamp:19 ac.tableoid:20
+      │    │    ├── columns: abc.a:6!null abc.b:7 abc.c:8 ac.a:16!null ac.c:17
       │    │    ├── scan abc
       │    │    │    └── columns: abc.a:6!null abc.b:7 abc.c:8
       │    │    ├── scan ac
-      │    │    │    └── columns: ac.a:16 ac.c:17 ac.rowid:18!null ac.crdb_internal_mvcc_timestamp:19 ac.tableoid:20
+      │    │    │    └── columns: ac.a:16 ac.c:17
       │    │    └── filters
       │    │         └── abc.a:6 = ac.a:16
       │    └── filters
@@ -244,26 +221,10 @@ update abc
            │    └── abc.b:7
            ├── first-agg [as=abc.c:8]
            │    └── abc.c:8
-           ├── first-agg [as=ab.a:11]
-           │    └── ab.a:11
            ├── first-agg [as=ab.b:12]
            │    └── ab.b:12
-           ├── first-agg [as=ab.rowid:13]
-           │    └── ab.rowid:13
-           ├── first-agg [as=ab.crdb_internal_mvcc_timestamp:14]
-           │    └── ab.crdb_internal_mvcc_timestamp:14
-           ├── first-agg [as=ab.tableoid:15]
-           │    └── ab.tableoid:15
-           ├── first-agg [as=ac.a:16]
-           │    └── ac.a:16
-           ├── first-agg [as=ac.c:17]
-           │    └── ac.c:17
-           ├── first-agg [as=ac.rowid:18]
-           │    └── ac.rowid:18
-           ├── first-agg [as=ac.crdb_internal_mvcc_timestamp:19]
-           │    └── ac.crdb_internal_mvcc_timestamp:19
-           └── first-agg [as=ac.tableoid:20]
-                └── ac.tableoid:20
+           └── first-agg [as=ac.c:17]
+                └── ac.c:17
 
 # Make sure UPDATE ... FROM works with LATERAL.
 opt
@@ -384,20 +345,19 @@ UPDATE abc SET b = other.d FROM dec AS other WHERE abc.a = other.k
 update abc
  ├── columns: <none>
  ├── fetch columns: a:6 b:7 c:8
- ├── passthrough columns: k:11 d:12 other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
  ├── update-mapping:
  │    └── b_cast:15 => b:2
  └── project
-      ├── columns: b_cast:15 a:6!null b:7 c:8 k:11!null d:12 other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
+      ├── columns: b_cast:15 a:6!null b:7 c:8
       ├── inner-join (merge)
-      │    ├── columns: a:6!null b:7 c:8 k:11!null d:12 other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
+      │    ├── columns: a:6!null b:7 c:8 k:11!null d:12
       │    ├── left ordering: +6
       │    ├── right ordering: +11
       │    ├── scan abc
       │    │    ├── columns: a:6!null b:7 c:8
       │    │    └── ordering: +6
       │    ├── scan dec [as=other]
-      │    │    ├── columns: k:11!null d:12 other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
+      │    │    ├── columns: k:11!null d:12
       │    │    └── ordering: +11
       │    └── filters (true)
       └── projections
