@@ -91,10 +91,10 @@ const maxCutoverTimeoutDefault = 5 * time.Minute
 var c2cPromMetrics = map[string]clusterstats.ClusterStat{
 	"LogicalMegabytes": {
 		LabelName: "node",
-		Query:     "replication_logical_bytes / 1e6"},
+		Query:     "physical_replication_logical_bytes / 1e6"},
 	"PhysicalMegabytes": {
 		LabelName: "node",
-		Query:     "replication_sst_bytes / 1e6"},
+		Query:     "physical_replication_sst_bytes / 1e6"},
 	"PhysicalReplicatedMegabytes": {
 		LabelName: "node",
 		Query:     "capacity_used / 1e6"},
@@ -330,11 +330,11 @@ func (kv replicateKV) checkRegionalConstraints(
 	t.L().Printf("Checking replica localities in destination side kv table, id %d and table prefix %s", kvTableID, tablePrefix)
 
 	distinctQuery := fmt.Sprintf(`
-SELECT 
+SELECT
   DISTINCT replica_localities
-FROM 
+FROM
   [SHOW CLUSTER RANGES]
-WHERE 
+WHERE
   start_key ~ '%s'
 `, tablePrefix)
 
