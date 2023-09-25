@@ -1835,6 +1835,13 @@ func TestLogic_show_indexes(
 	runLogicTest(t, "show_indexes")
 }
 
+func TestLogic_show_tenant_fingerprints(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_tenant_fingerprints")
+}
+
 func TestLogic_show_transfer_state(
 	t *testing.T,
 ) {
