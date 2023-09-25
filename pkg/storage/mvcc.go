@@ -1485,18 +1485,11 @@ var trueValue = true
 func (b *putBuffer) putLockMeta(
 	writer Writer, key MVCCKey, str lock.Strength, meta *enginepb.MVCCMetadata, alreadyExists bool,
 ) (keyBytes, valBytes int64, err error) {
-	if str == lock.Intent {
-		if meta.Timestamp.ToTimestamp() != meta.Txn.WriteTimestamp {
-			// The timestamps are supposed to be in sync. If they weren't, it wouldn't
-			// be clear for readers which one to use for what.
-			return 0, 0, errors.AssertionFailedf(
-				"meta.Timestamp != meta.Txn.WriteTimestamp: %s != %s", meta.Timestamp, meta.Txn.WriteTimestamp)
-		}
-	} else {
-		if !meta.Timestamp.ToTimestamp().IsEmpty() {
-			return 0, 0, errors.AssertionFailedf(
-				"meta.Timestamp not zero for lock with strength %s", str.String())
-		}
+	if meta.Timestamp.ToTimestamp() != meta.Txn.WriteTimestamp {
+		// The timestamps are supposed to be in sync. If they weren't, it wouldn't
+		// be clear for readers which one to use for what.
+		return 0, 0, errors.AssertionFailedf(
+			"meta.Timestamp != meta.Txn.WriteTimestamp: %s != %s", meta.Timestamp, meta.Txn.WriteTimestamp)
 	}
 	lockTableKey := b.lockTableKey(key.Key, str, meta.Txn.ID)
 	if alreadyExists {
@@ -5452,9 +5445,11 @@ func MVCCAcquireLock(
 	buf := newPutBuffer()
 	defer buf.release()
 
+	metaKey := MakeMVCCMetadataKey(key)
 	newMeta := &buf.newMeta
 	newMeta.Txn = &txn.TxnMeta
-	keyBytes, valBytes, err := buf.putLockMeta(rw, MakeMVCCMetadataKey(key), str, newMeta, rolledBack)
+	newMeta.Timestamp = txn.WriteTimestamp.ToLegacyTimestamp()
+	keyBytes, valBytes, err := buf.putLockMeta(rw, metaKey, str, newMeta, rolledBack)
 	if err != nil {
 		return err
 	}

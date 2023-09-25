@@ -33,6 +33,13 @@ message MVCCMetadata {
   // value that may have multiple versions. For values which may have
   // only one version, the data is stored inline (via raw_bytes), and
   // timestamp is set to zero.
+  //
+  // For lock table keys, this is the write timestamp of the lock holder, at
+  // the time that the lock was acquired. The lock holder cannot commit at a
+  // timestamp earlier than this timestamp.
+  //
+  // INVARIANT: if txn == nil, timestamp is zero
+  // INVARIANT: if txn != nil, timestamp == txn.WriteTimestamp
   optional util.hlc.LegacyTimestamp timestamp = 2 [(gogoproto.nullable) = false];
   // Is the most recent value a deletion tombstone?
   optional bool deleted = 3 [(gogoproto.nullable) = false];
