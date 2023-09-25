@@ -152,7 +152,7 @@ func (w *Watcher) startRangeFeed(
 			allOverrides[tenantID] = append(allOverrides[tenantID], setting)
 		} else {
 			// We are processing incremental changes.
-			w.store.SetTenantOverride(ctx, tenantID, setting)
+			w.store.setTenantOverride(ctx, tenantID, setting)
 		}
 		return nil
 	}
@@ -251,7 +251,7 @@ func (w *Watcher) TestingRestart() {
 func (w *Watcher) GetTenantOverrides(
 	ctx context.Context, tenantID roachpb.TenantID,
 ) (overrides []kvpb.TenantSetting, changeCh <-chan struct{}) {
-	o := w.store.GetTenantOverrides(ctx, tenantID)
+	o := w.store.getTenantOverrides(ctx, tenantID)
 	return o.overrides, o.changeCh
 }
 
