@@ -411,3 +411,16 @@ func TestNotLeaseholderError(t *testing.T) {
 		})
 	}
 }
+
+func TestDescNotFoundError(t *testing.T) {
+	t.Run("store not found", func(t *testing.T) {
+		err := NewStoreDescNotFoundError(42)
+		require.Equal(t, `store descriptor with store ID 42 was not found`, err.Error())
+		require.True(t, errors.HasType(err, &DescNotFoundError{}))
+	})
+	t.Run("node not found", func(t *testing.T) {
+		err := NewNodeDescNotFoundError(42)
+		require.Equal(t, `node descriptor with node ID 42 was not found`, err.Error())
+		require.True(t, errors.HasType(err, &DescNotFoundError{}))
+	})
+}
