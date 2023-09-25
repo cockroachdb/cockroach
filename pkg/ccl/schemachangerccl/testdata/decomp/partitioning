@@ -417,6 +417,7 @@ ElementState:
     isInverted: true
     isNotVisible: false
     isUnique: false
+    recreateSourceId: 0
     sharding: null
     sourceIndexId: 0
     tableId: 104
@@ -745,6 +746,7 @@ ElementState:
     isInverted: false
     isNotVisible: false
     isUnique: true
+    recreateSourceId: 0
     sharding: null
     sourceIndexId: 0
     tableId: 105
