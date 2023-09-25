@@ -58,7 +58,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -77,7 +76,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -86,7 +84,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
@@ -6150,68 +6147,47 @@ func TestRestoreErrorPropagates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderStressRace(t, "multinode cluster setup times out under stressrace, likely due to resource starvation.")
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Fail put requests that have the word "RESTORE" in the value.
+	var RESTORE = regexp.MustCompile(`RESTORE`)
+
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
-	params := base.TestClusterArgs{}
-	params.ServerArgs.ExternalIODir = dir
-	// TODO(ssd): The way we inject the error requires that we
-	// intercept the actual batch request for job table write. To
-	// keep this from being flakey, we need to disable various
-	// automatic jobs.  Unfortunately, if we disable the span
-	// configuration job, we can't start a tenant.
-	params.ServerArgs.DefaultTestTenant = base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs
-	var jobsTableKey = struct {
-		syncutil.Mutex
-		key roachpb.Key
-	}{}
-
 	var shouldFail, failures int64
-	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
-			// Intercept Put and ConditionalPut requests to the jobs table
-			// and, if shouldFail is positive, increment failures and return an
-			// injected error.
-			if !ba.IsWrite() {
-				return nil
-			}
-			jobsTableKey.Lock()
-			defer jobsTableKey.Unlock()
-			if len(jobsTableKey.key) == 0 {
-				return nil
-			}
 
-			for _, ru := range ba.Requests {
-				r := ru.GetInner()
-				switch r.(type) {
-				case *kvpb.ConditionalPutRequest, *kvpb.PutRequest:
-					key := r.Header().Key
-					if bytes.HasPrefix(key, jobsTableKey.key) && atomic.LoadInt64(&shouldFail) > 0 {
-						return kvpb.NewError(errors.Errorf("boom %d", atomic.AddInt64(&failures, 1)))
-					}
-				}
-			}
-			return nil
+	params := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			ExternalIODir: dir,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+						if atomic.LoadInt64(&shouldFail) == 0 {
+							return nil
+						}
+						// Intercept ConditionalPut requests with RESTORE in the value and,
+						// if shouldFail is positive, increment failures and return an
+						// injected error.
+						for _, ru := range ba.Requests {
+							if r, valid := ru.GetInner().(*kvpb.ConditionalPutRequest); valid && RESTORE.FindString(r.Value.String()) != "" {
+								return kvpb.NewError(errors.Errorf("boom %d", atomic.AddInt64(&failures, 1)))
+							}
+						}
+						return nil
+					},
+				},
+			},
 		},
 	}
-	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
-	params.ServerArgs.Knobs.KeyVisualizer = &keyvisualizer.TestingKnobs{SkipJobBootstrap: true}
-	params.ServerArgs.Knobs.SQLStatsKnobs = &sqlstats.TestingKnobs{SkipZoneConfigBootstrap: true}
-	params.ServerArgs.DisableSpanConfigs = true
+
 	tc := testcluster.StartTestCluster(t, 3, params)
 	defer tc.Stopper().Stop(ctx)
 	db := tc.ServerConn(0)
 	runner := sqlutils.MakeSQLRunner(db)
 
-	jobsTableKey.Lock()
-	jobsTableKey.key = tc.ApplicationLayer(0).Codec().TablePrefix(uint32(systemschema.JobsTable.GetID()))
-	jobsTableKey.Unlock()
-
-	runner.Exec(t, `SET CLUSTER SETTING jobs.metrics.interval.poll = '30s'`)
-	runner.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
-	runner.Exec(t, `SET CLUSTER SETTING sql.stats.system_tables_autostats.enabled = false`)
 	runner.Exec(t, "CREATE TABLE foo ()")
 	runner.Exec(t, "CREATE DATABASE into_db")
 	url := `nodelocal://1/foo`
