@@ -18,12 +18,12 @@ WHERE variable IN (
 'sql.create_virtual_cluster.default_template',
 'server.controller.default_target_cluster',
 'kv.rangefeed.enabled',
-'cross_cluster_replication.enabled'
+'physical_replication.enabled'
 )
 ORDER BY variable
 ----
-cross_cluster_replication.enabled true
 kv.rangefeed.enabled true
+physical_replication.enabled true
 server.controller.default_target_cluster system
 spanconfig.range_coalescing.application.enabled false
 spanconfig.range_coalescing.system.enabled false
