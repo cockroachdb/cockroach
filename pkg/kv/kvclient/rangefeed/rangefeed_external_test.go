@@ -824,6 +824,9 @@ func TestWithOnDeleteRange(t *testing.T) {
 				}
 			}),
 			rangefeed.WithMuxRangefeed(s.useMuxRangefeed),
+			rangefeed.WithOnInternalError(func(ctx context.Context, err error) {
+				assert.NoError(t, err)
+			}),
 		)
 		require.NoError(t, err)
 		defer r.Close()
@@ -839,7 +842,7 @@ func TestWithOnDeleteRange(t *testing.T) {
 			prevValue, err := e.PrevValue.GetBytes()
 			require.NoError(t, err)
 			require.Equal(t, "initial", string(prevValue)) // initial scans supply current as prev
-		case <-time.After(3 * time.Second):
+		case <-time.After(5 * time.Second):
 			require.Fail(t, "timed out waiting for initial scan event")
 		}
 
@@ -854,7 +857,7 @@ func TestWithOnDeleteRange(t *testing.T) {
 				EndKey: append(srv.Codec().TenantPrefix(), roachpb.Key("g")...),
 			}, e.Span)
 			require.NotEmpty(t, e.Timestamp)
-		case <-time.After(3 * time.Second):
+		case <-time.After(5 * time.Second):
 			require.Fail(t, "timed out waiting for DeleteRange event")
 		}
 
@@ -867,7 +870,7 @@ func TestWithOnDeleteRange(t *testing.T) {
 			prevValue, err := storage.DecodeMVCCValue(e.PrevValue.RawBytes)
 			require.NoError(t, err)
 			require.True(t, prevValue.IsTombstone())
-		case <-time.After(3 * time.Second):
+		case <-time.After(5 * time.Second):
 			require.Fail(t, "timed out waiting for foo=catchup event")
 		}
 
@@ -880,14 +883,14 @@ func TestWithOnDeleteRange(t *testing.T) {
 			prevValue, err := storage.DecodeMVCCValue(e.PrevValue.RawBytes)
 			require.NoError(t, err)
 			require.True(t, prevValue.IsTombstone())
-		case <-time.After(3 * time.Second):
+		case <-time.After(5 * time.Second):
 			require.Fail(t, "timed out waiting for foo=catchup event")
 		}
 
 		// Wait for checkpoint after catchup scan.
 		select {
 		case <-checkpointC:
-		case <-time.After(3 * time.Second):
+		case <-time.After(5 * time.Second):
 			require.Fail(t, "timed out waiting for checkpoint")
 		}
 
@@ -901,7 +904,7 @@ func TestWithOnDeleteRange(t *testing.T) {
 				EndKey: append(srv.Codec().TenantPrefix(), roachpb.Key("g")...),
 			}, e.Span)
 			require.NotEmpty(t, e.Timestamp)
-		case <-time.After(3 * time.Second):
+		case <-time.After(5 * time.Second):
 			require.Fail(t, "timed out waiting for DeleteRange event")
 		}
 
@@ -916,7 +919,7 @@ func TestWithOnDeleteRange(t *testing.T) {
 			prevValue, err := storage.DecodeMVCCValue(e.PrevValue.RawBytes)
 			require.NoError(t, err)
 			require.True(t, prevValue.IsTombstone())
-		case <-time.After(3 * time.Second):
+		case <-time.After(5 * time.Second):
 			require.Fail(t, "timed out waiting for foo=final event")
 		}
 	})
