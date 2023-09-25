@@ -80,6 +80,7 @@ func newRowLevelTTLTestJobTestHelper(
 			JobSchedulerEnv: th.env,
 			TakeOverJobsScheduling: func(fn func(ctx context.Context, maxSchedules int64) error) {
 				th.executeSchedules = func() error {
+					th.env.SetTime(timeutil.Now().Add(time.Hour * 24))
 					defer th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 					return fn(context.Background(), 0 /* allSchedules */)
 				}
@@ -134,7 +135,6 @@ func newRowLevelTTLTestJobTestHelper(
 func (h *rowLevelTTLTestJobTestHelper) waitForScheduledJob(
 	t *testing.T, expectedStatus jobs.Status, expectedErrorRe string,
 ) {
-	h.env.SetTime(timeutil.Now().Add(time.Hour * 24))
 	require.NoError(t, h.executeSchedules())
 
 	query := fmt.Sprintf(
