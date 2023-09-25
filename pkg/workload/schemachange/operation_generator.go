@@ -96,10 +96,10 @@ type OpGenLogMessage struct {
 
 // LogQueryResults logs a string query result.
 func (og *operationGenerator) LogQueryResults(
-	queryName string, result interface{}, queryArgs ...interface{},
+	sql string, result interface{}, queryArgs ...interface{},
 ) {
-	formattedQuery := queryName
-	parsedQuery, err := parser.Parse(queryName)
+	formattedQuery := sql
+	parsedQuery, err := parser.Parse(sql)
 	if err == nil {
 		formattedQuery = parsedQuery.String()
 	}
@@ -491,10 +491,7 @@ func (og *operationGenerator) getDatabaseRegionNames(
 }
 
 func (og *operationGenerator) getDatabase(ctx context.Context, tx pgx.Tx) (string, error) {
-	var database string
-	err := tx.QueryRow(ctx, "SHOW DATABASE").Scan(&database)
-	og.LogQueryResults("SHOW DATABASE", database)
-	return database, err
+	return Scan[string](ctx, og, tx, `SHOW DATABASE`)
 }
 
 type getRegionsResult struct {
