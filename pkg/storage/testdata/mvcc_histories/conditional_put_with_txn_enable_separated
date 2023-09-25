@@ -60,6 +60,7 @@ with t=A
   txn_remove
 ----
 >> resolve_intent k=k t=A
+resolve_intent: "k" -> resolved key = true
 stats: val_bytes=-38 live_bytes=-38 intent_count=-1 intent_bytes=-19 lock_count=-1 lock_age=+23
 >> at end:
 data: "k"/124.000000000,0 -> {localTs=123.000000000,0}/BYTES/v3
