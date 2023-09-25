@@ -253,7 +253,7 @@ func Init(
 		// NB: when upgrading here, make sure to target a version that picks up this PR:
 		// https://github.com/prometheus/node_exporter/pull/2311
 		// At time of writing, there hasn't been a release in over half a year.
-		if err := c.RepeatRun(ctx, l, l.Stdout, l.Stderr, cfg.NodeExporter,
+		if err := c.Run(ctx, l, l.Stdout, l.Stderr, cfg.NodeExporter,
 			"download node exporter",
 			fmt.Sprintf(`
 (sudo systemctl stop node_exporter || true) &&
@@ -274,7 +274,7 @@ sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 			return nil, errors.Wrap(err, "grafana-start currently cannot run on darwin")
 		}
 	}
-	if err := c.RepeatRun(
+	if err := c.Run(
 		ctx,
 		l,
 		l.Stdout,
@@ -286,7 +286,7 @@ sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 		return nil, err
 	}
 
-	if err := c.RepeatRun(
+	if err := c.Run(
 		ctx,
 		l,
 		l.Stdout,
@@ -295,7 +295,8 @@ sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 		"download prometheus",
 		fmt.Sprintf(`sudo rm -rf /tmp/prometheus && mkdir /tmp/prometheus && cd /tmp/prometheus &&
 			curl -fsSL https://storage.googleapis.com/cockroach-fixtures/prometheus/prometheus-2.27.1.linux-%s.tar.gz | tar zxv --strip-components=1`,
-			binArch)); err != nil {
+			binArch),
+	); err != nil {
 		return nil, err
 	}
 	// create and upload prom config
@@ -336,7 +337,7 @@ sudo systemd-run --unit prometheus --same-dir \
 
 	if cfg.Grafana.Enabled {
 		// Install Grafana.
-		if err := c.RepeatRun(ctx, l,
+		if err := c.Run(ctx, l,
 			l.Stdout,
 			l.Stderr, cfg.PrometheusNode, "install grafana",
 			fmt.Sprintf(`
@@ -352,7 +353,7 @@ sudo mkdir -p /var/lib/grafana/dashboards`,
 		}
 
 		// Provision local prometheus instance as data source.
-		if err := c.RepeatRun(ctx, l,
+		if err := c.Run(ctx, l,
 			l.Stdout,
 			l.Stderr, cfg.PrometheusNode, "permissions",
 			`sudo chmod -R 777 /etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards /var/lib/grafana/dashboards /etc/grafana/grafana.ini`,
@@ -516,7 +517,7 @@ func Shutdown(
 		shutdownErr = errors.CombineErrors(shutdownErr, err)
 	}
 
-	if err := c.RepeatRun(
+	if err := c.Run(
 		ctx,
 		l,
 		l.Stdout,
