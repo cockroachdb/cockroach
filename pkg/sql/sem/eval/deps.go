@@ -348,6 +348,12 @@ type Planner interface {
 	// it is invalid.
 	RepairTTLScheduledJobForTable(ctx context.Context, tableID int64) error
 
+	// FingerprintSpan calculates a fingerprint for the given span. If a
+	// startTime is passed and allRevisions is true, then the fingerprint
+	// includes the MVCC history between startTime and the read timestamp of
+	// the transaction.
+	FingerprintSpan(ctx context.Context, span roachpb.Span, startTime hlc.Timestamp, allRevisions bool, stripped bool) (uint64, error)
+
 	// QueryRowEx executes the supplied SQL statement and returns a single row, or
 	// nil if no row is found, or an error if more that one row is returned.
 	//

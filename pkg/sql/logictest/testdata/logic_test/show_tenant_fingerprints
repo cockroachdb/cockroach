@@ -1,0 +1,31 @@
+# LogicTest: !3node-tenant-default-configs !local-mixed-22.2-23.1 !fakedist !fakedist-vec-off !fakedist-disk
+
+# Because tenant initialization includes data tied to particular
+# timestamps, we can't easily make an assertion about the "correct"
+# fingerprint for an entire tenant. But, we can assert that we get the
+# same result.
+statement ok
+CREATE VIRTUAL CLUSTER target;
+
+let $aost
+SELECT cluster_logical_timestamp();
+
+let $fingerprint
+SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT target] AS OF SYSTEM TIME $aost
+
+query T
+SELECT * FROM (SELECT 'fingerprint matches' FROM [ SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT target] WHERE fingerprint = $fingerprint) AS OF SYSTEM TIME $aost;
+----
+fingerprint matches
+
+# Test virtual cluster alias as well
+query T
+SELECT * FROM (SELECT 'fingerprint matches' FROM [ SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER target] WHERE fingerprint = $fingerprint) AS OF SYSTEM TIME $aost;
+----
+fingerprint matches
+
+
+user testuser
+
+statement error user testuser does not have MANAGETENANT system privilege
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT target

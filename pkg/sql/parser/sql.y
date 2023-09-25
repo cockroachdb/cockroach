@@ -8869,6 +8869,12 @@ show_fingerprints_stmt:
     /* SKIP DOC */
     $$.val = &tree.ShowFingerprints{Table: $5.unresolvedObjectName()}
   }
+|
+  SHOW EXPERIMENTAL_FINGERPRINTS FROM virtual_cluster virtual_cluster_spec
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ShowFingerprints{TenantSpec: $5.tenantSpec()}
+  }
 
 show_full_scans_stmt:
   SHOW FULL TABLE SCANS
