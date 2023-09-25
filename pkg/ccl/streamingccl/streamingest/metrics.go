@@ -23,44 +23,44 @@ const (
 
 var (
 	metaReplicationEventsIngested = metric.Metadata{
-		Name:        "replication.events_ingested",
+		Name:        "physical_replication.events_ingested",
 		Help:        "Events ingested by all replication jobs",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaReplicationResolvedEventsIngested = metric.Metadata{
-		Name:        "replication.resolved_events_ingested",
+		Name:        "physical_replication.resolved_events_ingested",
 		Help:        "Resolved events ingested by all replication jobs",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaReplicationIngestedBytes = metric.Metadata{
-		Name:        "replication.logical_bytes",
+		Name:        "physical_replication.logical_bytes",
 		Help:        "Logical bytes (sum of keys + values) ingested by all replication jobs",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	metaReplicationSSTBytes = metric.Metadata{
-		Name:        "replication.sst_bytes",
+		Name:        "physical_replication.sst_bytes",
 		Help:        "SST bytes (compressed) sent to KV by all replication jobs",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	metaReplicationFlushes = metric.Metadata{
-		Name:        "replication.flushes",
+		Name:        "physical_replication.flushes",
 		Help:        "Total flushes across all replication jobs",
 		Measurement: "Flushes",
 		Unit:        metric.Unit_COUNT,
 	}
 
 	metaReplicationFlushHistNanos = metric.Metadata{
-		Name:        "replication.flush_hist_nanos",
+		Name:        "physical_replication.flush_hist_nanos",
 		Help:        "Time spent flushing messages across all replication streams",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaReplicationCommitLatency = metric.Metadata{
-		Name: "replication.commit_latency",
+		Name: "physical_replication.commit_latency",
 		Help: "Event commit latency: a difference between event MVCC timestamp " +
 			"and the time it was flushed into disk. If we batch events, then the difference " +
 			"between the oldest event in the batch and flush is recorded",
@@ -68,51 +68,51 @@ var (
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaReplicationAdmitLatency = metric.Metadata{
-		Name: "replication.admit_latency",
+		Name: "physical_replication.admit_latency",
 		Help: "Event admission latency: a difference between event MVCC timestamp " +
 			"and the time it was admitted into ingestion processor",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaStreamsRunning = metric.Metadata{
-		Name:        "replication.running",
+		Name:        "physical_replication.running",
 		Help:        "Number of currently running replication streams",
 		Measurement: "Replication Streams",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaEarliestDataCheckpointSpan = metric.Metadata{
-		Name:        "replication.earliest_data_checkpoint_span",
+		Name:        "physical_replication.earliest_data_checkpoint_span",
 		Help:        "The earliest timestamp of the last checkpoint forwarded by an ingestion data processor",
 		Measurement: "Timestamp",
 		Unit:        metric.Unit_TIMESTAMP_NS,
 	}
 	metaLatestDataCheckpointSpan = metric.Metadata{
-		Name:        "replication.latest_data_checkpoint_span",
+		Name:        "physical_replication.latest_data_checkpoint_span",
 		Help:        "The latest timestamp of the last checkpoint forwarded by an ingestion data processor",
 		Measurement: "Timestamp",
 		Unit:        metric.Unit_TIMESTAMP_NS,
 	}
 	metaDataCheckpointSpanCount = metric.Metadata{
-		Name:        "replication.data_checkpoint_span_count",
+		Name:        "physical_replication.data_checkpoint_span_count",
 		Help:        "The number of resolved spans in the last checkpoint forwarded by an ingestion data processor",
 		Measurement: "Resolved Spans",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaFrontierCheckpointSpanCount = metric.Metadata{
-		Name:        "replication.frontier_checkpoint_span_count",
+		Name:        "physical_replication.frontier_checkpoint_span_count",
 		Help:        "The number of resolved spans last persisted to the ingestion job's checkpoint record",
 		Measurement: "Resolved Spans",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaFrontierLagNanos = metric.Metadata{
-		Name: "replication.frontier_lag_nanos",
+		Name: "physical_replication.frontier_lag_nanos",
 		Help: "Time between the wall clock and replicated time of the replication stream. " +
 			"This metric tracks how far behind the replication stream is relative to now",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaJobProgressUpdates = metric.Metadata{
-		Name:        "replication.job_progress_updates",
+		Name:        "physical_replication.job_progress_updates",
 		Help:        "Total number of updates to the ingestion job progress",
 		Measurement: "Job Updates",
 		Unit:        metric.Unit_COUNT,
@@ -123,13 +123,13 @@ var (
 	// ranges left to be reverted, but some may not have writes and therefore the
 	// revert will be a no-op for those ranges.
 	metaReplicationCutoverProgress = metric.Metadata{
-		Name:        "replication.cutover_progress",
+		Name:        "physical_replication.cutover_progress",
 		Help:        "The number of ranges left to revert in order to complete an inflight cutover",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaDistSQLReplanCount = metric.Metadata{
-		Name:        "replication.distsql_replan_count",
+		Name:        "physical_replication.distsql_replan_count",
 		Help:        "Total number of dist sql replanning events",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
