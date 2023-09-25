@@ -79,36 +79,13 @@ func (og *operationGenerator) tableHasRows(
 func (og *operationGenerator) scanInt(
 	ctx context.Context, tx pgx.Tx, query string, args ...interface{},
 ) (i int, err error) {
-	err = tx.QueryRow(ctx, query, args...).Scan(&i)
-	if err == nil {
-		og.LogQueryResults(
-			query,
-			i,
-			args...,
-		)
-	}
-	return i, errors.Wrapf(err, "scanBool: %q %q", query, args)
+	return Scan[int](ctx, og, tx, query, args...)
 }
 
 func (og *operationGenerator) scanBool(
 	ctx context.Context, tx pgx.Tx, query string, args ...interface{},
 ) (b bool, err error) {
-	err = tx.QueryRow(ctx, query, args...).Scan(&b)
-	if err == nil {
-		og.LogQueryResults(
-			query,
-			b,
-			args...,
-		)
-	}
-	return b, errors.Wrapf(err, "scanBool: %q %q", query, args)
-}
-
-func scanString(
-	ctx context.Context, tx pgx.Tx, query string, args ...interface{},
-) (s string, err error) {
-	err = tx.QueryRow(ctx, query, args...).Scan(&s)
-	return s, errors.Wrapf(err, "scanString: %q %q", query, args)
+	return Scan[bool](ctx, og, tx, query, args...)
 }
 
 func (og *operationGenerator) schemaExists(
@@ -1582,10 +1559,7 @@ func (og *operationGenerator) getRegionColumn(
 			tableName.String())
 	}
 
-	regionCol, err := scanString(
-		ctx,
-		tx,
-		`
+	regionCol, err := Scan[string](ctx, og, tx, `
 WITH
 	descriptors
 		AS (
