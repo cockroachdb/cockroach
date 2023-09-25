@@ -9,6 +9,7 @@ go_library(
         "error_screening.go",
         "operation_generator.go",
         "optype.go",
+        "query_util.go",
         "schemachange.go",
         "type_resolver.go",
         "watch_dog.go",
