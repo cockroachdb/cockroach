@@ -132,7 +132,8 @@ SELECT connection_name,
        crdb_internal.pb_to_json('cockroach.cloud.externalconn.connectionpb.ConnectionDetails', connection_details),
        owner,
        owner_id
-FROM system.external_connections;
+FROM system.external_connections
+ORDER BY connection_name;
 `)
 				output, err := sqlutils.RowsToDataDrivenOutput(rows)
 				require.NoError(t, err)
