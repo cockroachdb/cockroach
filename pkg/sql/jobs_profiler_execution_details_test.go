@@ -198,7 +198,8 @@ func TestReadWriteProfilerExecutionDetails(t *testing.T) {
 		runner.QueryRow(t, `IMPORT INTO t CSV DATA ('nodelocal://1/foo') WITH DETACHED`).Scan(&importJobID)
 		<-isRunning
 		runner.Exec(t, `SELECT crdb_internal.request_job_execution_details($1)`, importJobID)
-		distSQLDiagram := checkExecutionDetails(t, s, jobspb.JobID(importJobID), "distsql")
+		distSQLDiagram, err := checkExecutionDetails(t, s, jobspb.JobID(importJobID), "distsql")
+		require.NoError(t, err)
 		require.Regexp(t, "<meta http-equiv=\"Refresh\" content=\"0\\; url=https://cockroachdb\\.github\\.io/distsqlplan/decode.html.*>", string(distSQLDiagram))
 		close(continueRunning)
 		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(importJobID))
@@ -224,7 +225,8 @@ func TestReadWriteProfilerExecutionDetails(t *testing.T) {
 		runner.QueryRow(t, `IMPORT INTO t CSV DATA ('nodelocal://1/foo') WITH DETACHED`).Scan(&importJobID)
 		<-blockCh
 		runner.Exec(t, `SELECT crdb_internal.request_job_execution_details($1)`, importJobID)
-		goroutines := checkExecutionDetails(t, s, jobspb.JobID(importJobID), "goroutines")
+		goroutines, err := checkExecutionDetails(t, s, jobspb.JobID(importJobID), "goroutines")
+		require.NoError(t, err)
 		continueCh <- struct{}{}
 		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(importJobID))
 		require.True(t, strings.Contains(string(goroutines), fmt.Sprintf("labels: {\"foo\":\"bar\", \"job\":\"IMPORT id=%d\", \"n\":\"1\"}", importJobID)))
@@ -249,7 +251,14 @@ func TestReadWriteProfilerExecutionDetails(t *testing.T) {
 		var importJobID int
 		runner.QueryRow(t, `IMPORT INTO t CSV DATA ('nodelocal://1/foo') WITH DETACHED`).Scan(&importJobID)
 		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(importJobID))
-		trace := checkExecutionDetails(t, s, jobspb.JobID(importJobID), "resumer-trace")
+		var trace []byte
+		// There may be some delay between the job finishing and the trace being
+		// persisted.
+		testutils.SucceedsSoon(t, func() error {
+			var err error
+			trace, err = checkExecutionDetails(t, s, jobspb.JobID(importJobID), "resumer-trace")
+			return err
+		})
 		require.Contains(t, string(trace), "should see this")
 	})
 
@@ -273,7 +282,8 @@ func TestReadWriteProfilerExecutionDetails(t *testing.T) {
 		runner.QueryRow(t, `IMPORT INTO t CSV DATA ('nodelocal://1/foo') WITH DETACHED`).Scan(&importJobID)
 		<-blockCh
 		runner.Exec(t, `SELECT crdb_internal.request_job_execution_details($1)`, importJobID)
-		activeTraces := checkExecutionDetails(t, s, jobspb.JobID(importJobID), "trace")
+		activeTraces, err := checkExecutionDetails(t, s, jobspb.JobID(importJobID), "trace")
+		require.NoError(t, err)
 		continueCh <- struct{}{}
 		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(importJobID))
 		unzip, err := zip.NewReader(bytes.NewReader(activeTraces), int64(len(activeTraces)))
@@ -369,6 +379,14 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 		continueCh <- struct{}{}
 		jobutils.WaitForJobToPause(t, runner, jobspb.JobID(importJobID))
 
+		testutils.SucceedsSoon(t, func() error {
+			files = listExecutionDetails(t, s, jobspb.JobID(importJobID))
+			if len(files) != 5 {
+				return errors.Newf("expected 5 files, got %d: %v", len(files), files)
+			}
+			return nil
+		})
+
 		// Resume the job, so it can write another DistSQL diagram and goroutine
 		// snapshot.
 		runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
@@ -378,8 +396,13 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 		runner.Exec(t, `SELECT crdb_internal.request_job_execution_details($1)`, importJobID)
 		continueCh <- struct{}{}
 		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(importJobID))
-		files = listExecutionDetails(t, s, jobspb.JobID(importJobID))
-		require.Len(t, files, 10)
+		testutils.SucceedsSoon(t, func() error {
+			files = listExecutionDetails(t, s, jobspb.JobID(importJobID))
+			if len(files) != 10 {
+				return errors.Newf("expected 10 files, got %d: %v", len(files), files)
+			}
+			return nil
+		})
 		require.Regexp(t, "[0-9]/resumer-trace/.*~cockroach\\.sql\\.jobs\\.jobspb\\.TraceData\\.binpb", files[0])
 		require.Regexp(t, "[0-9]/resumer-trace/.*~cockroach\\.sql\\.jobs\\.jobspb\\.TraceData\\.binpb.txt", files[1])
 		require.Regexp(t, "[0-9]/resumer-trace/.*~cockroach\\.sql\\.jobs\\.jobspb\\.TraceData\\.binpb", files[2])
@@ -423,30 +446,44 @@ func listExecutionDetails(
 
 func checkExecutionDetails(
 	t *testing.T, s serverutils.TestServerInterface, jobID jobspb.JobID, filename string,
-) []byte {
+) ([]byte, error) {
 	t.Helper()
 
 	client, err := s.GetAdminHTTPClient()
-	require.NoError(t, err)
+	if err != nil {
+		return nil, err
+	}
 
 	url := s.AdminURL().String() + fmt.Sprintf("/_status/job_profiler_execution_details/%d?%s", jobID, filename)
 	req, err := http.NewRequest("GET", url, nil)
-	require.NoError(t, err)
+	if err != nil {
+		return nil, err
+	}
 
 	req.Header.Set("Content-Type", httputil.ProtoContentType)
 	resp, err := client.Do(req)
-	require.NoError(t, err)
+	if err != nil {
+		return nil, err
+	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
+	if err != nil {
+		return nil, err
+	}
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	edResp := serverpb.GetJobProfilerExecutionDetailResponse{}
-	require.NoError(t, protoutil.Unmarshal(body, &edResp))
+	if err := protoutil.Unmarshal(body, &edResp); err != nil {
+		return nil, err
+	}
 
 	r := bytes.NewReader(edResp.Data)
 	data, err := io.ReadAll(r)
-	require.NoError(t, err)
-	require.NotEmpty(t, data)
-	return data
+	if err != nil {
+		return data, err
+	}
+	if len(data) == 0 {
+		return data, errors.New("no data returned")
+	}
+	return data, nil
 }
