@@ -24,16 +24,19 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// DefaultAOSTDuration is the default duration to use in the AS OF SYSTEM TIME
-// clause used in the SELECT query.
-const DefaultAOSTDuration = -time.Second * 30
+const (
+	// DefaultAOSTDuration is the default duration to use in the AS OF SYSTEM TIME
+	// clause used in the SELECT query.
+	DefaultAOSTDuration         = -time.Second * 30
+	DefaultSelectBatchSizeValue = 500
+)
 
 var (
 	defaultSelectBatchSize = settings.RegisterIntSetting(
 		settings.TenantWritable,
 		"sql.ttl.default_select_batch_size",
 		"default amount of rows to select in a single query during a TTL job",
-		500,
+		DefaultSelectBatchSizeValue,
 		settings.PositiveInt,
 		settings.WithPublic,
 	)
