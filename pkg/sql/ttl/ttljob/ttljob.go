@@ -111,7 +111,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		ttlSpecAOST = time.Time{}
 	}
 
-	var rowLevelTTL catpb.RowLevelTTL
+	var rowLevelTTL *catpb.RowLevelTTL
 	var relationName string
 	var entirePKSpan roachpb.Span
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -134,7 +134,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			return errors.Newf("unable to find TTL on table %s", desc.GetName())
 		}
 
-		rowLevelTTL = *desc.GetRowLevelTTL()
+		rowLevelTTL = desc.GetRowLevelTTL()
 
 		if rowLevelTTL.Pause {
 			return pgerror.Newf(pgcode.OperatorIntervention, "ttl jobs on table %s are currently paused", tree.Name(desc.GetName()))
@@ -336,7 +336,7 @@ func checkEnabled(settingsValues *settings.Values) error {
 	return nil
 }
 
-func getSelectBatchSize(sv *settings.Values, ttl catpb.RowLevelTTL) int64 {
+func getSelectBatchSize(sv *settings.Values, ttl *catpb.RowLevelTTL) int64 {
 	bs := ttl.SelectBatchSize
 	if bs == 0 {
 		bs = defaultSelectBatchSize.Get(sv)
@@ -344,7 +344,7 @@ func getSelectBatchSize(sv *settings.Values, ttl catpb.RowLevelTTL) int64 {
 	return bs
 }
 
-func getDeleteBatchSize(sv *settings.Values, ttl catpb.RowLevelTTL) int64 {
+func getDeleteBatchSize(sv *settings.Values, ttl *catpb.RowLevelTTL) int64 {
 	bs := ttl.DeleteBatchSize
 	if bs == 0 {
 		bs = defaultDeleteBatchSize.Get(sv)
@@ -352,7 +352,7 @@ func getDeleteBatchSize(sv *settings.Values, ttl catpb.RowLevelTTL) int64 {
 	return bs
 }
 
-func getDeleteRateLimit(sv *settings.Values, ttl catpb.RowLevelTTL) int64 {
+func getDeleteRateLimit(sv *settings.Values, ttl *catpb.RowLevelTTL) int64 {
 	rl := ttl.DeleteRateLimit
 	if rl == 0 {
 		rl = defaultDeleteRateLimit.Get(sv)
