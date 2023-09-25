@@ -626,3 +626,104 @@ func TestStaleRowsDoNotCauseSettingsToRegress(t *testing.T) {
 	require.NoError(t, stream.Send(newRangeFeedEvent(setting1KV, ts1)))
 	settingStillHasValueAfterAShortWhile(t, defaultFakeSettingValue)
 }
+
+var _ = settings.RegisterStringSetting(settings.TenantReadOnly, "str.baz", "desc", "initial")
+var _ = settings.RegisterStringSetting(settings.SystemOnly, "str.yay", "desc", "")
+
+// TestNotifyCalledUponReadOnlySettingChanges verifies that the notify
+// function callback is called when a TenantReadOnly setting is
+// updated in system.settings.
+func TestNotifyCalledUponReadOnlySettingChanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	sysDB := sqlutils.MakeSQLRunner(s.SystemLayer().SQLConn(t, ""))
+
+	ts := s.ApplicationLayer()
+	st := ts.ClusterSettings()
+	stopper := ts.AppStopper()
+
+	mu := struct {
+		syncutil.Mutex
+		updated []kvpb.TenantSetting
+	}{}
+	reset := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		mu.updated = nil
+	}
+	contains := func(key settings.InternalKey) (bool, string) {
+		mu.Lock()
+		defer mu.Unlock()
+		for _, s := range mu.updated {
+			if s.InternalKey == key {
+				return true, s.Value.Value
+			}
+		}
+		return false, ""
+	}
+
+	notify := func(_ context.Context, updated []kvpb.TenantSetting) {
+		mu.Lock()
+		defer mu.Unlock()
+		mu.updated = append(mu.updated, updated...)
+	}
+
+	f, err := rangefeed.NewFactory(stopper, kvDB, st, &rangefeed.TestingKnobs{})
+	require.NoError(t, err)
+	w := settingswatcher.NewWithNotifier(ctx, ts.Clock(), ts.Codec(), st, f, stopper, notify, nil)
+	require.NoError(t, w.Start(ctx))
+
+	t.Run("initial scan", func(t *testing.T) {
+		// The notifier is called at least once for all the
+		// pre-existing TenantReadOnly settings.
+		testutils.SucceedsSoon(t, func() error {
+			for _, k := range settings.TenantReadOnlyKeys() {
+				seen, v := contains(k)
+				if !seen {
+					return errors.Newf("%s not seen yet", k)
+				}
+				if k == "str.baz" {
+					require.Equal(t, "initial", v)
+				}
+			}
+			return nil
+		})
+	})
+
+	t.Run("update", func(t *testing.T) {
+		reset()
+
+		// Update a setting using SQL and verify the notifier is called for
+		// it eventually. Also verify that changes to other settings are
+		// not notified.
+		sysDB.Exec(t, "SET CLUSTER SETTING str.yay = 'newval'")
+		sysDB.Exec(t, "SET CLUSTER SETTING str.foo = 'newval'")
+		sysDB.Exec(t, "SET CLUSTER SETTING str.baz = 'newval'")
+		testutils.SucceedsSoon(t, func() error {
+			seen, v := contains("str.baz")
+			if !seen {
+				return errors.New("not seen yet")
+			}
+			require.Equal(t, "newval", v)
+
+			// The rangefeed event for str.baz was delivered after those for
+			// str.foo and str.yay. If we had incorrectly notified an update
+			// for non-TenantReadOnly setting, they would show up in the
+			// updated list.
+			mu.Lock()
+			defer mu.Unlock()
+			if len(mu.updated) != 1 {
+				t.Errorf("expected 1 setting update, got: %+v", mu.updated)
+			}
+			return nil
+		})
+	})
+}
