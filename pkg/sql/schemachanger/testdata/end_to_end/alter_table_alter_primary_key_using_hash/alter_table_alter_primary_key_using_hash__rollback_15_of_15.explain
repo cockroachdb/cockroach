@@ -22,7 +22,7 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
       │    │    ├── PUBLIC                → VALIDATED   CheckConstraint:{DescID: 104 (t), IndexID: 4 (t_pkey-), ConstraintID: 2 (check_crdb_internal_j_shard_3-)}
       │    │    ├── PUBLIC                → ABSENT      ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_crdb_internal_j_shard_3", ConstraintID: 2 (check_crdb_internal_j_shard_3-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-), IndexID: 5}
-      │    │    ├── WRITE_ONLY            → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key-), ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey-)}
+      │    │    ├── WRITE_ONLY            → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key-), ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey-), RecreateSourceIndexID: 0}
       │    │    ├── TRANSIENT_DELETE_ONLY → ABSENT      TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 4, SourceIndexID: 4 (t_pkey-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (t_i_key-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3}
@@ -64,7 +64,7 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
       │    │    ├── VALIDATED   → ABSENT      ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-), IndexID: 4 (t_pkey-)}
       │    │    ├── VALIDATED   → ABSENT      CheckConstraint:{DescID: 104 (t), IndexID: 4 (t_pkey-), ConstraintID: 2 (check_crdb_internal_j_shard_3-)}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-), IndexID: 4 (t_pkey-)}
-      │    │    └── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key-), ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey-)}
+      │    │    └── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key-), ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey-), RecreateSourceIndexID: 0}
       │    └── 10 Mutation operations
       │         ├── RemoveColumnNotNull {"ColumnID":3,"TableID":104}
       │         ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":104}

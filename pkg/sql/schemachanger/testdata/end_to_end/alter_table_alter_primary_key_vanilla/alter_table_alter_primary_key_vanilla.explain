@@ -110,7 +110,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │    │    ├── 7 elements transitioning toward PUBLIC
  │    │    │    ├── VALIDATED → PUBLIC        PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey+), ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey-)}
  │    │    │    ├── ABSENT    → PUBLIC        IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 4 (t_pkey+)}
- │    │    │    ├── ABSENT    → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey+)}
+ │    │    │    ├── ABSENT    → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey+), RecreateSourceIndexID: 0}
  │    │    │    ├── ABSENT    → PUBLIC        IndexData:{DescID: 104 (t), IndexID: 2 (t_i_key+)}
  │    │    │    ├── ABSENT    → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (t_i_key+)}
  │    │    │    ├── ABSENT    → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 2 (t_i_key+)}
@@ -148,31 +148,31 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    ├── Stage 10 of 15 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── BACKFILL_ONLY → BACKFILLED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey+)}
+ │    │    │    └── BACKFILL_ONLY → BACKFILLED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey+), RecreateSourceIndexID: 0}
  │    │    └── 1 Backfill operation
  │    │         └── BackfillIndex {"IndexID":2,"SourceIndexID":4,"TableID":104}
  │    ├── Stage 11 of 15 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── BACKFILLED → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey+)}
+ │    │    │    └── BACKFILLED → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey+), RecreateSourceIndexID: 0}
  │    │    └── 3 Mutation operations
  │    │         ├── MakeBackfillingIndexDeleteOnly {"IndexID":2,"TableID":104}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
  │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    ├── Stage 12 of 15 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── DELETE_ONLY → MERGE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey+)}
+ │    │    │    └── DELETE_ONLY → MERGE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey+), RecreateSourceIndexID: 0}
  │    │    └── 3 Mutation operations
  │    │         ├── MakeBackfilledIndexMerging {"IndexID":2,"TableID":104}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
  │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    ├── Stage 13 of 15 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── MERGE_ONLY → MERGED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey+)}
+ │    │    │    └── MERGE_ONLY → MERGED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey+), RecreateSourceIndexID: 0}
  │    │    └── 1 Backfill operation
  │    │         └── MergeIndex {"BackfilledIndexID":2,"TableID":104,"TemporaryIndexID":3}
  │    ├── Stage 14 of 15 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── MERGED     → WRITE_ONLY            SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey+)}
+ │    │    │    └── MERGED     → WRITE_ONLY            SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey+), RecreateSourceIndexID: 0}
  │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
  │    │    │    └── WRITE_ONLY → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 4 (t_pkey+)}
  │    │    └── 4 Mutation operations
@@ -182,13 +182,13 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    └── Stage 15 of 15 in PostCommitPhase
  │         ├── 1 element transitioning toward PUBLIC
- │         │    └── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey+)}
+ │         │    └── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey+), RecreateSourceIndexID: 0}
  │         └── 1 Validation operation
  │              └── ValidateIndex {"IndexID":2,"TableID":104}
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 1 element transitioning toward PUBLIC
-      │    │    └── VALIDATED             → PUBLIC           SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey+)}
+      │    │    └── VALIDATED             → PUBLIC           SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4 (t_pkey+), RecreateSourceIndexID: 0}
       │    ├── 6 elements transitioning toward TRANSIENT_ABSENT
       │    │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 5, SourceIndexID: 1 (t_pkey-)}
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 5}

@@ -3432,6 +3432,25 @@ deprules
     - $index-Node[CurrentStatus] = TRANSIENT_ABSENT
     - joinTargetNode($index-column, $index-column-Target, $index-column-Node)
     - joinTargetNode($index, $index-Target, $index-Node)
+- name: replacement secondary index should be validated before the old one becomes invisible
+  from: new-index-Node
+  kind: Precedence
+  to: old-index-Node
+  query:
+    - $old-index[Type] = '*scpb.SecondaryIndex'
+    - $new-index[Type] = '*scpb.SecondaryIndex'
+    - $old-index-Target[TargetStatus] = ABSENT
+    - $new-index-Target[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
+    - joinOnDescID($old-index, $new-index, $table-id)
+    - $new-index[IndexID] = $index-id
+    - $old-index[IndexID] = $old-index-id
+    - $new-index[RecreateSourceIndexID] = $old-index-id
+    - joinTargetNode($old-index, $old-index-Target, $old-index-Node)
+    - joinTargetNode($new-index, $new-index-Target, $new-index-Node)
+    - $new-index-Node[CurrentStatus] = PUBLIC
+    - $old-index-Node[CurrentStatus] = VALIDATED
+    - joinTargetNode($new-index, $new-index-Target, $new-index-Node)
+    - joinTargetNode($old-index, $old-index-Target, $old-index-Node)
 - name: schedule all GC jobs for a descriptor in the same stage
   from: data-a-Node
   kind: SameStagePrecedence
@@ -3490,7 +3509,30 @@ deprules
     - $data-b-Node[CurrentStatus] = TRANSIENT_DROPPED
     - joinTargetNode($data-a, $data-a-Target, $data-a-Node)
     - joinTargetNode($data-b, $data-b-Target, $data-b-Node)
-- name: secondary index named before validation
+- name: secondary index named before public (with index swap)
+  from: index-Node
+  kind: Precedence
+  to: index-name-Node
+  query:
+    - $index-name[Type] = '*scpb.IndexName'
+    - $index[Type] = '*scpb.SecondaryIndex'
+    - joinOnIndexID($index, $index-name, $table-id, $index-id)
+    - ToPublicOrTransient($index-Target, $index-name-Target)
+    - $index-Node[CurrentStatus] = VALIDATED
+    - $index-name-Node[CurrentStatus] = PUBLIC
+    - $old-index[Type] = '*scpb.SecondaryIndex'
+    - $new-index[Type] = '*scpb.SecondaryIndex'
+    - $old-index-Target[TargetStatus] = ABSENT
+    - $new-index-Target[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
+    - joinOnDescID($old-index, $new-index, $table-id)
+    - $new-index[IndexID] = $index-id
+    - $old-index[IndexID] = $old-index-id
+    - $new-index[RecreateSourceIndexID] = $old-index-id
+    - joinTargetNode($old-index, $old-index-Target, $old-index-Node)
+    - joinTargetNode($new-index, $new-index-Target, $new-index-Node)
+    - joinTargetNode($index, $index-Target, $index-Node)
+    - joinTargetNode($index-name, $index-name-Target, $index-name-Node)
+- name: secondary index named before validation (without index swap)
   from: index-name-Node
   kind: Precedence
   to: index-Node
@@ -3498,6 +3540,7 @@ deprules
     - $index-name[Type] = '*scpb.IndexName'
     - $index[Type] = '*scpb.SecondaryIndex'
     - joinOnIndexID($index-name, $index, $table-id, $index-id)
+    - no secondary index swap is on going($table-id, $index-id)
     - ToPublicOrTransient($index-name-Target, $index-Target)
     - $index-name-Node[CurrentStatus] = PUBLIC
     - $index-Node[CurrentStatus] = VALIDATED
@@ -7243,6 +7286,25 @@ deprules
     - $index-Node[CurrentStatus] = TRANSIENT_ABSENT
     - joinTargetNode($index-column, $index-column-Target, $index-column-Node)
     - joinTargetNode($index, $index-Target, $index-Node)
+- name: replacement secondary index should be validated before the old one becomes invisible
+  from: new-index-Node
+  kind: Precedence
+  to: old-index-Node
+  query:
+    - $old-index[Type] = '*scpb.SecondaryIndex'
+    - $new-index[Type] = '*scpb.SecondaryIndex'
+    - $old-index-Target[TargetStatus] = ABSENT
+    - $new-index-Target[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
+    - joinOnDescID($old-index, $new-index, $table-id)
+    - $new-index[IndexID] = $index-id
+    - $old-index[IndexID] = $old-index-id
+    - $new-index[RecreateSourceIndexID] = $old-index-id
+    - joinTargetNode($old-index, $old-index-Target, $old-index-Node)
+    - joinTargetNode($new-index, $new-index-Target, $new-index-Node)
+    - $new-index-Node[CurrentStatus] = PUBLIC
+    - $old-index-Node[CurrentStatus] = VALIDATED
+    - joinTargetNode($new-index, $new-index-Target, $new-index-Node)
+    - joinTargetNode($old-index, $old-index-Target, $old-index-Node)
 - name: schedule all GC jobs for a descriptor in the same stage
   from: data-a-Node
   kind: SameStagePrecedence
@@ -7301,7 +7363,30 @@ deprules
     - $data-b-Node[CurrentStatus] = TRANSIENT_DROPPED
     - joinTargetNode($data-a, $data-a-Target, $data-a-Node)
     - joinTargetNode($data-b, $data-b-Target, $data-b-Node)
-- name: secondary index named before validation
+- name: secondary index named before public (with index swap)
+  from: index-Node
+  kind: Precedence
+  to: index-name-Node
+  query:
+    - $index-name[Type] = '*scpb.IndexName'
+    - $index[Type] = '*scpb.SecondaryIndex'
+    - joinOnIndexID($index, $index-name, $table-id, $index-id)
+    - ToPublicOrTransient($index-Target, $index-name-Target)
+    - $index-Node[CurrentStatus] = VALIDATED
+    - $index-name-Node[CurrentStatus] = PUBLIC
+    - $old-index[Type] = '*scpb.SecondaryIndex'
+    - $new-index[Type] = '*scpb.SecondaryIndex'
+    - $old-index-Target[TargetStatus] = ABSENT
+    - $new-index-Target[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
+    - joinOnDescID($old-index, $new-index, $table-id)
+    - $new-index[IndexID] = $index-id
+    - $old-index[IndexID] = $old-index-id
+    - $new-index[RecreateSourceIndexID] = $old-index-id
+    - joinTargetNode($old-index, $old-index-Target, $old-index-Node)
+    - joinTargetNode($new-index, $new-index-Target, $new-index-Node)
+    - joinTargetNode($index, $index-Target, $index-Node)
+    - joinTargetNode($index-name, $index-name-Target, $index-name-Node)
+- name: secondary index named before validation (without index swap)
   from: index-name-Node
   kind: Precedence
   to: index-Node
@@ -7309,6 +7394,7 @@ deprules
     - $index-name[Type] = '*scpb.IndexName'
     - $index[Type] = '*scpb.SecondaryIndex'
     - joinOnIndexID($index-name, $index, $table-id, $index-id)
+    - no secondary index swap is on going($table-id, $index-id)
     - ToPublicOrTransient($index-name-Target, $index-Target)
     - $index-name-Node[CurrentStatus] = PUBLIC
     - $index-Node[CurrentStatus] = VALIDATED
