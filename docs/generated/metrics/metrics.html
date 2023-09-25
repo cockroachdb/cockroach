@@ -313,6 +313,8 @@
 <tr><td>STORAGE</td><td>liveness.heartbeatsinflight</td><td>Number of in-flight liveness heartbeats from this node</td><td>Requests</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>liveness.heartbeatsuccesses</td><td>Number of successful node liveness heartbeats from this node</td><td>Messages</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>STORAGE</td><td>liveness.livenodes</td><td>Number of live nodes in the cluster (will be 0 if this node is not itself live)</td><td>Nodes</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>STORAGE</td><td>lockbytes</td><td>Number of bytes taken up by replicated lock key-values (shared and exclusive strength, not intent strength)</td><td>Storage</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>STORAGE</td><td>lockcount</td><td>Count of replicated locks (shared, exclusive, and intent strength)</td><td>Locks</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>node-id</td><td>node ID with labels for advertised RPC and HTTP addresses</td><td>Node ID</td><td>GAUGE</td><td>CONST</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>queue.consistency.pending</td><td>Number of pending replicas in the consistency checker queue</td><td>Replicas</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>queue.consistency.process.failure</td><td>Number of replicas which failed processing in the consistency checker queue</td><td>Replicas</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>

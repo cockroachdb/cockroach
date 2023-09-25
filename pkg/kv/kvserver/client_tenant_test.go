@@ -127,6 +127,8 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 			"rangevalcount": aggregateStats.RangeValCount,
 			"intentbytes":   aggregateStats.IntentBytes,
 			"intentcount":   aggregateStats.IntentCount,
+			"lockbytes":     aggregateStats.LockBytes,
+			"lockcount":     aggregateStats.LockCount,
 			"sysbytes":      aggregateStats.SysBytes,
 			"syscount":      aggregateStats.SysCount,
 		}
