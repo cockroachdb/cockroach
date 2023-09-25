@@ -7928,6 +7928,14 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, errors.New("crdb_internal.fingerprint() requires admin privilege")
+				}
+
 				if len(args) != 2 {
 					return nil, errors.New("argument list must have two elements")
 				}
@@ -7936,8 +7944,14 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 					return nil, err
 				}
 				skipTimestamp := bool(tree.MustBeDBool(args[1]))
-				return fingerprint(ctx, evalCtx, span, hlc.Timestamp{} /* allRevisions */, false,
+				fingerprint, err := evalCtx.Planner.FingerprintSpan(ctx, span,
+					hlc.Timestamp{}, /* startTime */
+					false,           /* allRevisions */
 					skipTimestamp)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(fingerprint)), nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Stable,
@@ -9031,6 +9045,45 @@ func txnTimeWithPrecisionBuiltin(preferTZOverload bool) builtinDefinition {
 			Volatility: volatility.Stable,
 		},
 	)
+}
+
+func verboseFingerprint(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (tree.Datum, error) {
+	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !isAdmin {
+		return nil, errors.New("crdb_internal.fingerprint() requires admin privilege")
+	}
+
+	if len(args) != 3 {
+		return nil, errors.New("argument list must have three elements")
+	}
+	span, err := parseSpan(args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	// The startTime can either be a timestampTZ or a decimal.
+	var startTimestamp hlc.Timestamp
+	if parsedDecimal, ok := tree.AsDDecimal(args[1]); ok {
+		startTimestamp, err = hlc.DecimalToHLC(&parsedDecimal.Decimal)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		startTime := tree.MustBeDTimestampTZ(args[1]).Time
+		startTimestamp = hlc.Timestamp{WallTime: startTime.UnixNano()}
+	}
+
+	allRevisions := bool(tree.MustBeDBool(args[2]))
+	fp, err := evalCtx.Planner.FingerprintSpan(ctx, span, startTimestamp, allRevisions, false /* stripped */)
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDInt(tree.DInt(fp)), nil
 }
 
 func currentDate(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
