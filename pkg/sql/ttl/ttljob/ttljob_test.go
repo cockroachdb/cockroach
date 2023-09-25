@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1010,4 +1011,63 @@ func TestInboundForeignKeyOnDeleteRestrictNull(t *testing.T) {
 
 	results = sqlDB.QueryStr(t, "SELECT * FROM child")
 	require.Len(t, results, 1)
+}
+
+func TestMakeTTLJobDescription(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		desc                 string
+		tableSelectBatchSize int
+		jobSelectBatchSize   int
+	}{
+		{
+			desc:                 "default ttl_select_batch_size",
+			tableSelectBatchSize: 0,
+			jobSelectBatchSize:   ttlbase.DefaultSelectBatchSizeValue,
+		},
+		{
+			desc:                 "override ttl_select_batch_size",
+			tableSelectBatchSize: 1,
+			jobSelectBatchSize:   1,
+		},
+	}
+
+	getCreateTable := func(selectBatchSize int) string {
+		const createTable = `CREATE TABLE t (
+    id INT PRIMARY KEY,
+    expire_at TIMESTAMPTZ
+) WITH (
+    %s
+    ttl_expiration_expression = 'expire_at',
+    ttl_job_cron = '* * * * *'
+)`
+		selectBatchSizeClause := ""
+		if selectBatchSize > 0 {
+			selectBatchSizeClause = fmt.Sprintf("ttl_select_batch_size = %d,", selectBatchSize)
+		}
+		return fmt.Sprintf(createTable, selectBatchSizeClause)
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.desc, func(t *testing.T) {
+			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
+				t,
+				&sql.TTLTestingKnobs{
+					AOSTDuration: &zeroDuration,
+				},
+				false, /* testMultiTenant */
+				1,     /* numNodes */
+			)
+			defer cleanupFunc()
+			createTable := getCreateTable(testCase.tableSelectBatchSize)
+			th.sqlDB.Exec(t, createTable)
+			th.waitForScheduledJob(t, jobs.StatusSucceeded, "")
+			rows := th.sqlDB.QueryStr(t, "SELECT description FROM [SHOW JOBS] WHERE job_type = 'ROW LEVEL TTL'")
+			require.Len(t, rows, 1)
+			row := rows[0]
+			require.Contains(t, row[0], fmt.Sprintf("LIMIT %d", testCase.jobSelectBatchSize))
+		})
+	}
 }
