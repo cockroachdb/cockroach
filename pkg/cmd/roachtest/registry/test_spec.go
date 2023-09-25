@@ -149,39 +149,24 @@ const (
 	PostValidationNoDeadNodes
 )
 
-// MatchType is the type of match a file has to a TestFilter.
-type MatchType int
-
-const (
-	// Matched means that the file passes the filter and the tags.
-	Matched MatchType = iota
-	// FailedFilter means that the file fails the filter.
-	FailedFilter
-	// FailedTags means that the file passed the filter but failed the tags
-	// match.
-	FailedTags
-)
-
-// Match returns Matched if the filter matches the test. If the filter does
-// not match the test because the tag filter does not match, the test is
-// marked as FailedTags.
-func (t *TestSpec) Match(filter *TestFilter) MatchType {
+// Match returns true if the filter matches the test.
+func (t *TestSpec) Match(filter *TestFilter) bool {
 	if !filter.Name.MatchString(t.Name) {
-		return FailedFilter
+		return false
 	}
 
 	if len(filter.Tags) == 0 {
-		return Matched
+		return true
 	}
 
 	for tag := range filter.Tags {
 		// If the tag is a single CSV e.g. "foo,bar,baz", we match all the tags
 		if matchesAll(t.Tags, strings.Split(tag, ",")) {
-			return Matched
+			return true
 		}
 	}
 
-	return FailedTags
+	return false
 }
 
 // PromSub replaces all non prometheus friendly chars with "_". Note,

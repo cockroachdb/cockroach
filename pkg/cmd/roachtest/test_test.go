@@ -52,27 +52,27 @@ func TestMatchOrSkip(t *testing.T) {
 		filter   []string
 		name     string
 		tags     map[string]struct{}
-		expected registry.MatchType
+		expected bool
 	}{
-		{nil, "foo", nil, registry.Matched},
-		{nil, "foo", registry.Tags("bar"), registry.Matched},
-		{[]string{"tag:bar"}, "foo", registry.Tags("bar"), registry.Matched},
+		{nil, "foo", nil, true},
+		{nil, "foo", registry.Tags("bar"), true},
+		{[]string{"tag:bar"}, "foo", registry.Tags("bar"), true},
 		// Partial tag match is not supported
-		{[]string{"tag:b"}, "foo", registry.Tags("bar"), registry.FailedTags},
-		{[]string{"tag:b"}, "foo", nil, registry.FailedTags},
-		{[]string{"tag:f"}, "foo", registry.Tags("bar"), registry.FailedTags},
+		{[]string{"tag:b"}, "foo", registry.Tags("bar"), false},
+		{[]string{"tag:b"}, "foo", nil, false},
+		{[]string{"tag:f"}, "foo", registry.Tags("bar"), false},
 		// Specifying no tag filters matches all tags.
-		{[]string{"f"}, "foo", registry.Tags("bar"), registry.Matched},
-		{[]string{"f"}, "bar", registry.Tags("bar"), registry.FailedFilter},
-		{[]string{"f", "tag:bar"}, "foo", registry.Tags("bar"), registry.Matched},
-		{[]string{"f", "tag:b"}, "foo", registry.Tags("bar"), registry.FailedTags},
-		{[]string{"f", "tag:f"}, "foo", registry.Tags("bar"), registry.FailedTags},
+		{[]string{"f"}, "foo", registry.Tags("bar"), true},
+		{[]string{"f"}, "bar", registry.Tags("bar"), false},
+		{[]string{"f", "tag:bar"}, "foo", registry.Tags("bar"), true},
+		{[]string{"f", "tag:b"}, "foo", registry.Tags("bar"), false},
+		{[]string{"f", "tag:f"}, "foo", registry.Tags("bar"), false},
 		// Match tests that have both tags 'abc' and 'bar'
-		{[]string{"f", "tag:abc,bar"}, "foo", registry.Tags("abc", "bar"), registry.Matched},
-		{[]string{"f", "tag:abc,bar"}, "foo", registry.Tags("abc"), registry.FailedTags},
+		{[]string{"f", "tag:abc,bar"}, "foo", registry.Tags("abc", "bar"), true},
+		{[]string{"f", "tag:abc,bar"}, "foo", registry.Tags("abc"), false},
 		// Match tests that have tag 'abc' but not 'bar'
-		{[]string{"f", "tag:abc,!bar"}, "foo", registry.Tags("abc"), registry.Matched},
-		{[]string{"f", "tag:abc,!bar"}, "foo", registry.Tags("abc", "bar"), registry.FailedTags},
+		{[]string{"f", "tag:abc,!bar"}, "foo", registry.Tags("abc"), true},
+		{[]string{"f", "tag:abc,!bar"}, "foo", registry.Tags("abc", "bar"), false},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {

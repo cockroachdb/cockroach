@@ -167,34 +167,23 @@ func (r *testRegistryImpl) PromFactory() promauto.Factory {
 }
 
 // GetTests returns all the tests that match the given filter, sorted by name.
-func (r testRegistryImpl) GetTests(
-	filter *registry.TestFilter,
-) ([]registry.TestSpec, []registry.TestSpec) {
+func (r testRegistryImpl) GetTests(filter *registry.TestFilter) []registry.TestSpec {
 	var tests []registry.TestSpec
-	var tagMismatch []registry.TestSpec
 	for _, t := range r.m {
-		switch t.Match(filter) {
-		case registry.Matched:
+		if t.Match(filter) {
 			tests = append(tests, *t)
-		case registry.FailedTags:
-			tagMismatch = append(tagMismatch, *t)
-		case registry.FailedFilter:
 		}
 	}
 	sort.Slice(tests, func(i, j int) bool {
 		return tests[i].Name < tests[j].Name
 	})
-	sort.Slice(tagMismatch, func(i, j int) bool {
-		return tagMismatch[i].Name < tagMismatch[j].Name
-	})
-	return tests, tagMismatch
+	return tests
 }
 
 // List lists tests that match one of the filters.
 func (r testRegistryImpl) List(filters []string) []registry.TestSpec {
 	filter := registry.NewTestFilter(filters)
-	tests, _ := r.GetTests(filter)
-	return tests
+	return r.GetTests(filter)
 }
 
 func (r testRegistryImpl) Cloud() string {
