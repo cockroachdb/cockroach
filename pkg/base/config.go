@@ -153,7 +153,7 @@ var (
 	// second in order to fail fast, but with large default timeouts to tolerate
 	// high-latency multiregion clusters. The gRPC server keepalive interval is
 	// also affected by this.
-	PingInterval = envutil.EnvOrDefaultDuration("COCKROACH_PING_INTERVAL", time.Second)
+	PingInterval = envutil.EnvOrDefaultDuration("COCKROACH_PING_INTERVAL", 10*time.Second)
 
 	// defaultRangeLeaseDuration specifies the default range lease duration.
 	//

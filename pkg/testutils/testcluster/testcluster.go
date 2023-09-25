@@ -1787,6 +1787,7 @@ func (tc *TestCluster) RestartServerWithInspect(
 	// node. This is useful to avoid flakes: the newly restarted node is now on a
 	// different port, and a cycle of gossip is necessary to make all other nodes
 	// aware.
+	s.NodeID()
 	return timeutil.RunWithTimeout(
 		ctx, "check-conn", 15*time.Second,
 		func(ctx context.Context) error {

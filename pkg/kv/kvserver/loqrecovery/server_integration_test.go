@@ -649,6 +649,7 @@ func TestRejectBadVersionApplication(t *testing.T) {
 	tc.StopServer(1)
 	require.NoError(t, pss[1].SavePlan(plan), "failed to inject plan into storage")
 	require.NoError(t, tc.RestartServer(1), "failed to restart server")
+	time.Sleep(5 * time.Second)
 
 	r, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
 	require.NoError(t, err, "failed to run recovery verify")
