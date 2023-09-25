@@ -232,7 +232,7 @@ func TestMVCCGCQueueMakeGCScoreIntentCooldown(t *testing.T) {
 		tc := tc
 		t.Run(name, func(t *testing.T) {
 			ms := enginepb.MVCCStats{
-				IntentCount: 1e9,
+				LockCount: 1e9,
 			}
 			if tc.mvccGC {
 				ms.ValBytes = 1e9

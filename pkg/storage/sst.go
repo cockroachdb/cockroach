@@ -1263,6 +1263,7 @@ func UpdateSSTTimestamps(
 		statsDelta.LiveBytes -= stats.LiveBytes
 		statsDelta.IntentBytes -= stats.IntentBytes
 		statsDelta.IntentCount -= stats.IntentCount
+		statsDelta.LockCount -= stats.LockCount
 		statsDelta.AgeTo(to.WallTime)
 		statsDelta.KeyBytes += stats.KeyBytes
 		statsDelta.ValBytes += stats.ValBytes
@@ -1271,6 +1272,7 @@ func UpdateSSTTimestamps(
 		statsDelta.LiveBytes += stats.LiveBytes
 		statsDelta.IntentBytes += stats.IntentBytes
 		statsDelta.IntentCount += stats.IntentCount
+		statsDelta.LockCount += stats.LockCount
 	}
 
 	// Fancy optimized Pebble SST rewriter.
