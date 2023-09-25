@@ -163,7 +163,7 @@ func registerIndexBackfill(r registry.Registry) {
 				nodes:            clusterSpec.NodeCount - 1,
 				cpus:             clusterSpec.CPUs,
 				prometheusConfig: promCfg,
-				workloadDuration: time.Hour,
+				workloadDuration: time.Hour + 30*time.Minute,
 				during: func(ctx context.Context) error {
 					db := c.Conn(ctx, t.L(), 1)
 					defer db.Close()
@@ -178,33 +178,40 @@ func registerIndexBackfill(r registry.Registry) {
 					t.Status(fmt.Sprintf("recording baseline performance (<%s)", 5*time.Minute))
 					time.Sleep(5 * time.Minute)
 
-					// Choose index creations that would take ~30 minutes each.
-					// Offset them by 5 minutes.
+					// Choose index creations and primary key changes that would
+					// take ~30 minutes each. Offset them by 5 minutes.
+					//
+					// TODO(irfansharif): These now take closer to an hour after
+					// https://github.com/cockroachdb/cockroach/pull/109085. Do
+					// something about it if customers complain.
 					m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
 					m.Go(func(ctx context.Context) error {
-						t.Status(fmt.Sprintf("starting first index creation (<%s)", 30*time.Minute))
+						t.Status(fmt.Sprintf("starting index creation (<%s)", 30*time.Minute))
 						_, err := db.ExecContext(ctx,
 							fmt.Sprintf("CREATE INDEX index_%s ON tpce.cash_transaction (ct_dts)",
 								timeutil.Now().Format("20060102_T150405"),
 							),
 						)
-						t.Status("finished first index creation")
+						t.Status("finished index creation")
 						return err
 					})
 					m.Go(func(ctx context.Context) error {
+						// TODO(irfansharif): Is the re-entrant? As in,
+						// effective when re-running the roachtest against the
+						// same cluster that's already run the test once? Useful
+						// to make it so if possible, to run things more
+						// iteratively.
 						time.Sleep(5 * time.Minute)
-						t.Status(fmt.Sprintf("starting second index creation (<%s)", 30*time.Minute))
+						t.Status(fmt.Sprintf("starting primary key change (<%s)", 30*time.Minute))
 						_, err := db.ExecContext(ctx,
-							fmt.Sprintf("CREATE INDEX index_%s ON tpce.holding_history (hh_before_qty)",
-								timeutil.Now().Format("20060102_T150405"),
-							),
+							"ALTER TABLE tpce.holding_history ALTER PRIMARY KEY USING COLUMNS (hh_h_t_id ASC, hh_t_id ASC, hh_before_qty ASC)",
 						)
-						t.Status("finished second index creation")
+						t.Status("finished primary key change")
 						return err
 					})
 					m.Wait()
 
-					t.Status(fmt.Sprintf("waiting for workload to finish (<%s)", 20*time.Minute))
+					t.Status(fmt.Sprintf("waiting for workload to finish (<%s)", 50*time.Minute))
 					return nil
 				},
 			})
