@@ -656,7 +656,10 @@ func makeVisitAvailableNodes(
 				log.Infof(ctx, "visiting node n%d, attempt %d", node.NodeID, r.CurrentAttempt())
 				addr := node.AddressForLocality(loc)
 				var conn *grpc.ClientConn
-				conn, err = rpcCtx.GRPCDialNode(addr.String(), node.NodeID, rpc.DefaultClass).Connect(ctx)
+				// Note that we use ConnectNoBreaker here to avoid any race with probe
+				// running on current node and target node restarting. Errors from circuit
+				// breaker probes could confuse us and present node as unavailable.
+				conn, err = rpcCtx.GRPCDialNode(addr.String(), node.NodeID, rpc.DefaultClass).ConnectNoBreaker(ctx)
 				// Nodes would contain dead nodes that we don't need to visit. We can skip
 				// them and let caller handle incomplete info.
 				if err != nil {
@@ -724,7 +727,10 @@ func makeVisitNode(g *gossip.Gossip, loc roachpb.Locality, rpcCtx *rpc.Context) 
 			log.Infof(ctx, "visiting node n%d, attempt %d", node.NodeID, r.CurrentAttempt())
 			addr := node.AddressForLocality(loc)
 			var conn *grpc.ClientConn
-			conn, err = rpcCtx.GRPCDialNode(addr.String(), node.NodeID, rpc.DefaultClass).Connect(ctx)
+			// Note that we use ConnectNoBreaker here to avoid any race with probe
+			// running on current node and target node restarting. Errors from circuit
+			// breaker probes could confuse us and present node as unavailable.
+			conn, err = rpcCtx.GRPCDialNode(addr.String(), node.NodeID, rpc.DefaultClass).ConnectNoBreaker(ctx)
 			if err != nil {
 				if grpcutil.IsClosedConnection(err) {
 					return err
