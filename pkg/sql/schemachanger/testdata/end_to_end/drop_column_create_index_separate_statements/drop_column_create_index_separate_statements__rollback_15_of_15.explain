@@ -14,7 +14,7 @@ Schema change plan for rolling back CREATE UNIQUE INDEX ‹idx› ON ‹defaultd
       │    │    ├── WRITE_ONLY            → PUBLIC      Column:{DescID: 104 (t), ColumnID: 4 (crdb_internal_idx_expr+)}
       │    │    ├── VALIDATED             → PUBLIC      PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey+), ConstraintID: 1}
       │    │    ├── ABSENT                → PUBLIC      IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 1 (t_pkey+)}
-      │    │    ├── VALIDATED             → PUBLIC      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_k_idx+)}
+      │    │    ├── VALIDATED             → PUBLIC      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_k_idx+), RecreateSourceIndexID: 0}
       │    │    ├── ABSENT                → PUBLIC      ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j+)}
       │    │    └── ABSENT                → PUBLIC      ColumnName:{DescID: 104 (t), Name: "crdb_internal_idx_expr", ColumnID: 4 (crdb_internal_idx_expr+)}
       │    ├── 12 elements transitioning toward ABSENT
@@ -23,7 +23,7 @@ Schema change plan for rolling back CREATE UNIQUE INDEX ‹idx› ON ‹defaultd
       │    │    ├── PUBLIC                → VALIDATED   PrimaryIndex:{DescID: 104 (t), IndexID: 3 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 4 (crdb_internal_index_4_name_placeholder), SourceIndexID: 1 (t_pkey+)}
       │    │    ├── PUBLIC                → ABSENT      IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 3 (t_pkey-)}
       │    │    ├── TRANSIENT_DELETE_ONLY → ABSENT      TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
-      │    │    ├── WRITE_ONLY            → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 5 (idx-), ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3 (t_pkey-)}
+      │    │    ├── WRITE_ONLY            → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 5 (idx-), ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3 (t_pkey-), RecreateSourceIndexID: 0}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 3 (k), IndexID: 5 (idx-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 5 (idx-)}
       │    │    ├── PUBLIC                → ABSENT      IndexName:{DescID: 104 (t), Name: "idx", IndexID: 5 (idx-)}
@@ -60,7 +60,7 @@ Schema change plan for rolling back CREATE UNIQUE INDEX ‹idx› ON ‹defaultd
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3 (t_pkey-)}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 3 (k), IndexID: 3 (t_pkey-)}
       │    │    ├── VALIDATED   → DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 3 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 4 (crdb_internal_index_4_name_placeholder), SourceIndexID: 1 (t_pkey+)}
-      │    │    └── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 104 (t), IndexID: 5 (idx-), ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3 (t_pkey-)}
+      │    │    └── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 104 (t), IndexID: 5 (idx-), ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3 (t_pkey-), RecreateSourceIndexID: 0}
       │    └── 6 Mutation operations
       │         ├── MakeIndexAbsent {"IndexID":5,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":104}

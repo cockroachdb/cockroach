@@ -19,7 +19,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │         │    ├── PUBLIC → ABSENT        ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j-)}
  │         │    ├── PUBLIC → WRITE_ONLY    Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr-)}
  │         │    ├── PUBLIC → ABSENT        ColumnName:{DescID: 104 (t), Name: "crdb_internal_idx_expr", ColumnID: 3 (crdb_internal_idx_expr-)}
- │         │    └── PUBLIC → VALIDATED     SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_idx-)}
+ │         │    └── PUBLIC → VALIDATED     SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_idx-), RecreateSourceIndexID: 0}
  │         └── 9 Mutation operations
  │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":104}
  │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":104}
@@ -44,7 +44,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │    │    │    ├── ABSENT        → PUBLIC ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j-)}
  │    │    │    ├── WRITE_ONLY    → PUBLIC Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr-)}
  │    │    │    ├── ABSENT        → PUBLIC ColumnName:{DescID: 104 (t), Name: "crdb_internal_idx_expr", ColumnID: 3 (crdb_internal_idx_expr-)}
- │    │    │    └── VALIDATED     → PUBLIC SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_idx-)}
+ │    │    │    └── VALIDATED     → PUBLIC SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_idx-), RecreateSourceIndexID: 0}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
@@ -60,7 +60,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │         │    ├── PUBLIC → ABSENT        ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j-)}
  │         │    ├── PUBLIC → WRITE_ONLY    Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr-)}
  │         │    ├── PUBLIC → ABSENT        ColumnName:{DescID: 104 (t), Name: "crdb_internal_idx_expr", ColumnID: 3 (crdb_internal_idx_expr-)}
- │         │    └── PUBLIC → VALIDATED     SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_idx-)}
+ │         │    └── PUBLIC → VALIDATED     SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_idx-), RecreateSourceIndexID: 0}
  │         └── 13 Mutation operations
  │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":104}
  │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":104}
@@ -138,7 +138,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
       │    │    ├── PUBLIC                → ABSENT           IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 1 (t_pkey-)}
       │    │    ├── PUBLIC                → ABSENT           IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr-), IndexID: 2 (t_expr_idx-)}
       │    │    ├── PUBLIC                → ABSENT           IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (t_expr_idx-)}
-      │    │    ├── VALIDATED             → DELETE_ONLY      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_idx-)}
+      │    │    ├── VALIDATED             → DELETE_ONLY      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_idx-), RecreateSourceIndexID: 0}
       │    │    └── PUBLIC                → ABSENT           IndexName:{DescID: 104 (t), Name: "t_expr_idx", IndexID: 2 (t_expr_idx-)}
       │    └── 14 Mutation operations
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":104}
@@ -162,7 +162,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 1 (t_pkey-)}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (j-), IndexID: 1 (t_pkey-)}
       │    │    ├── VALIDATED   → DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
-      │    │    └── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_idx-)}
+      │    │    └── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_idx-), RecreateSourceIndexID: 0}
       │    └── 7 Mutation operations
       │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
       │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":104}

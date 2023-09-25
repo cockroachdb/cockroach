@@ -68,6 +68,9 @@ const (
 	// SourceIndexID is the index ID of the source index for a newly created
 	// index.
 	SourceIndexID
+	// RecreateSourceIndexID is the index ID that we are replacing with
+	// this new index.
+	RecreateSourceIndexID
 
 	// TargetStatus is the target status of an element.
 	TargetStatus
@@ -170,6 +173,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(ConstraintID, "ConstraintID"),
 		rel.EntityAttr(TemporaryIndexID, "TemporaryIndexID"),
 		rel.EntityAttr(SourceIndexID, "SourceIndexID"),
+		rel.EntityAttr(RecreateSourceIndexID, "RecreateSourceIndexID"),
 	),
 	rel.EntityMapping(t((*scpb.TemporaryIndex)(nil)),
 		rel.EntityAttr(DescID, "TableID"),

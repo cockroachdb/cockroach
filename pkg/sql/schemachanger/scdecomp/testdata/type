@@ -564,6 +564,7 @@ ElementState:
     isInverted: false
     isNotVisible: false
     isUnique: false
+    recreateSourceId: 0
     referencedColumnIds:
     - 2
     sharding: null
@@ -1428,6 +1429,7 @@ ElementState:
     isInverted: false
     isNotVisible: false
     isUnique: false
+    recreateSourceId: 0
     referencedColumnIds:
     - 2
     sharding: null

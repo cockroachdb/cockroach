@@ -55,7 +55,7 @@ func init() {
 				descriptorIsNotBeingDropped(ic.El),
 				rel.Filter("isIndexKeyColumnKey", ic.El)(
 					func(ic *scpb.IndexColumn) bool {
-						return ic.Kind == scpb.IndexColumn_KEY
+						return ic.Kind == scpb.IndexColumn_KEY || ic.Kind == scpb.IndexColumn_KEY_SUFFIX
 					},
 				),
 			}

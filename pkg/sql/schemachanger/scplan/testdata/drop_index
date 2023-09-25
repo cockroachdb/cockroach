@@ -20,20 +20,20 @@ DROP INDEX idx1 CASCADE
 ----
 StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
-    [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC] -> VALIDATED
+    [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
   ops:
     *scop.MakePublicSecondaryIndexWriteOnly
       IndexID: 2
       TableID: 104
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT], VALIDATED] -> PUBLIC
+    [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], VALIDATED] -> PUBLIC
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 3 MutationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC] -> VALIDATED
+    [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
   ops:
     *scop.MakePublicSecondaryIndexWriteOnly
       IndexID: 2
@@ -58,7 +58,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops
   transitions:
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT], VALIDATED] -> DELETE_ONLY
+    [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[IndexName:{DescID: 104, Name: idx1, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MakeWriteOnlyIndexDeleteOnly
@@ -84,7 +84,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops
       JobID: 1
 PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], DELETE_ONLY] -> ABSENT
     [[IndexData:{DescID: 104, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MakeIndexAbsent
@@ -108,47 +108,47 @@ deps
 DROP INDEX idx1 CASCADE
 ----
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexName:{DescID: 104, Name: idx1, IndexID: 2}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   to:   [IndexData:{DescID: 104, IndexID: 2}, DROPPED]
   kind: Precedence
   rule: index removed before garbage collection
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, DELETE_ONLY]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index drop mutation visible before cleaning up index columns
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, DELETE_ONLY]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index drop mutation visible before cleaning up index columns
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, DELETE_ONLY]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, DELETE_ONLY]
   to:   [IndexName:{DescID: 104, Name: idx1, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index no longer public before index name
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, DELETE_ONLY]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, DELETE_ONLY]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   kind: PreviousTransactionPrecedence
   rule: SecondaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, PUBLIC]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, VALIDATED]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, VALIDATED]
   kind: PreviousTransactionPrecedence
   rule: SecondaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, VALIDATED]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, VALIDATED]
   to:   [IndexName:{DescID: 104, Name: idx1, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index no longer public before dependents, excluding columns
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, VALIDATED]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, WRITE_ONLY]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, VALIDATED]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, WRITE_ONLY]
   kind: PreviousTransactionPrecedence
   rule: SecondaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY
 
@@ -159,7 +159,7 @@ StatementPhase stage 1 of 1 with 3 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 4}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 4}, ABSENT], PUBLIC] -> ABSENT
-    [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT], PUBLIC] -> VALIDATED
+    [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
   ops:
     *scop.MakePublicSecondaryIndexWriteOnly
       IndexID: 4
@@ -175,7 +175,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[Column:{DescID: 104, ColumnID: 4}, ABSENT], WRITE_ONLY] -> PUBLIC
     [[ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 4}, ABSENT], ABSENT] -> PUBLIC
-    [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT], VALIDATED] -> PUBLIC
+    [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], VALIDATED] -> PUBLIC
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
@@ -183,7 +183,7 @@ PreCommitPhase stage 2 of 2 with 5 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 4}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 4}, ABSENT], PUBLIC] -> ABSENT
-    [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT], PUBLIC] -> VALIDATED
+    [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
   ops:
     *scop.MakePublicSecondaryIndexWriteOnly
       IndexID: 4
@@ -216,7 +216,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 8 MutationType ops
     [[Column:{DescID: 104, ColumnID: 4}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 4}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}, ABSENT], PUBLIC] -> ABSENT
-    [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT], VALIDATED] -> DELETE_ONLY
+    [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[IndexName:{DescID: 104, Name: idx2, IndexID: 4}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MakeWriteOnlyColumnDeleteOnly
@@ -250,7 +250,7 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 4}, ABSENT], DELETE_ONLY] -> ABSENT
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4}, ABSENT], PUBLIC] -> ABSENT
-    [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], DELETE_ONLY] -> ABSENT
     [[IndexData:{DescID: 104, IndexID: 4}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MakeIndexAbsent
@@ -309,7 +309,7 @@ DROP INDEX idx2 CASCADE
   kind: SameStagePrecedence
   rules: [dependents removed before column; column type removed right before column when not dropping relation]
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 4}, ABSENT]
@@ -317,51 +317,51 @@ DROP INDEX idx2 CASCADE
   kind: Precedence
   rule: dependents removed before column
 - from: [IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 4}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexName:{DescID: 104, Name: idx2, IndexID: 4}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   to:   [Column:{DescID: 104, ColumnID: 4}, ABSENT]
   kind: Precedence
   rule: indexes containing column reach absent before column
-- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   to:   [IndexData:{DescID: 104, IndexID: 4}, DROPPED]
   kind: Precedence
   rule: index removed before garbage collection
-- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, DELETE_ONLY]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}, ABSENT]
   kind: Precedence
   rule: index drop mutation visible before cleaning up index columns
-- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, DELETE_ONLY]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 4}, ABSENT]
   kind: Precedence
   rule: index drop mutation visible before cleaning up index columns
-- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, DELETE_ONLY]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0}, DELETE_ONLY]
   to:   [IndexName:{DescID: 104, Name: idx2, IndexID: 4}, ABSENT]
   kind: Precedence
   rule: index no longer public before index name
-- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, DELETE_ONLY]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0}, DELETE_ONLY]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   kind: PreviousTransactionPrecedence
   rule: SecondaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT
-- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, PUBLIC]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, VALIDATED]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0}, VALIDATED]
   kind: PreviousTransactionPrecedence
   rule: SecondaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED
-- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, VALIDATED]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0}, VALIDATED]
   to:   [Column:{DescID: 104, ColumnID: 4}, WRITE_ONLY]
   kind: Precedence
   rule: secondary indexes containing column as key reach write-only before column
-- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, VALIDATED]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0}, VALIDATED]
   to:   [IndexName:{DescID: 104, Name: idx2, IndexID: 4}, ABSENT]
   kind: Precedence
   rule: index no longer public before dependents, excluding columns
-- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, VALIDATED]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, WRITE_ONLY]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0}, VALIDATED]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0}, WRITE_ONLY]
   kind: PreviousTransactionPrecedence
   rule: SecondaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY
 
@@ -373,7 +373,7 @@ StatementPhase stage 1 of 1 with 6 MutationType ops
     [[Column:{DescID: 104, ColumnID: 5}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 104, Name: crdb_internal_i_shard_16, ColumnID: 5}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnNotNull:{DescID: 104, ColumnID: 5, IndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
-    [[SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT], PUBLIC] -> VALIDATED
+    [[SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, ABSENT], PUBLIC] -> VALIDATED
     [[ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_i_shard_16, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
@@ -402,7 +402,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[Column:{DescID: 104, ColumnID: 5}, ABSENT], WRITE_ONLY] -> PUBLIC
     [[ColumnName:{DescID: 104, Name: crdb_internal_i_shard_16, ColumnID: 5}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnNotNull:{DescID: 104, ColumnID: 5, IndexID: 0}, ABSENT], VALIDATED] -> PUBLIC
-    [[SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT], VALIDATED] -> PUBLIC
+    [[SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], VALIDATED] -> PUBLIC
     [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, ABSENT], VALIDATED] -> PUBLIC
     [[ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_i_shard_16, ConstraintID: 2}, ABSENT], ABSENT] -> PUBLIC
   ops:
@@ -413,7 +413,7 @@ PreCommitPhase stage 2 of 2 with 8 MutationType ops
     [[Column:{DescID: 104, ColumnID: 5}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 104, Name: crdb_internal_i_shard_16, ColumnID: 5}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnNotNull:{DescID: 104, ColumnID: 5, IndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
-    [[SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT], PUBLIC] -> VALIDATED
+    [[SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, ABSENT], PUBLIC] -> VALIDATED
     [[ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_i_shard_16, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
@@ -460,7 +460,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 10 MutationType ops
     [[IndexColumn:{DescID: 104, ColumnID: 5, IndexID: 6}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 6}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 6}, ABSENT], PUBLIC] -> ABSENT
-    [[SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT], VALIDATED] -> DELETE_ONLY
+    [[SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[IndexName:{DescID: 104, Name: idx3, IndexID: 6}, ABSENT], PUBLIC] -> ABSENT
     [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, ABSENT], VALIDATED] -> ABSENT
   ops:
@@ -503,7 +503,7 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 5}, ABSENT], DELETE_ONLY] -> ABSENT
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 5}, ABSENT], PUBLIC] -> ABSENT
-    [[SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], DELETE_ONLY] -> ABSENT
     [[IndexData:{DescID: 104, IndexID: 6}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MakeIndexAbsent
@@ -598,11 +598,11 @@ DROP INDEX idx3 CASCADE
   kind: Precedence
   rule: Constraint should be hidden before name
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 6}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 6}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexColumn:{DescID: 104, ColumnID: 5, IndexID: 6}, ABSENT]
@@ -610,55 +610,55 @@ DROP INDEX idx3 CASCADE
   kind: Precedence
   rule: dependents removed before column
 - from: [IndexColumn:{DescID: 104, ColumnID: 5, IndexID: 6}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexName:{DescID: 104, Name: idx3, IndexID: 6}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   to:   [Column:{DescID: 104, ColumnID: 5}, ABSENT]
   kind: Precedence
   rule: indexes containing column reach absent before column
-- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   to:   [IndexData:{DescID: 104, IndexID: 6}, DROPPED]
   kind: Precedence
   rule: index removed before garbage collection
-- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, DELETE_ONLY]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 6}, ABSENT]
   kind: Precedence
   rule: index drop mutation visible before cleaning up index columns
-- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, DELETE_ONLY]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 6}, ABSENT]
   kind: Precedence
   rule: index drop mutation visible before cleaning up index columns
-- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, DELETE_ONLY]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 5, IndexID: 6}, ABSENT]
   kind: Precedence
   rule: index drop mutation visible before cleaning up index columns
-- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, DELETE_ONLY]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, DELETE_ONLY]
   to:   [IndexName:{DescID: 104, Name: idx3, IndexID: 6}, ABSENT]
   kind: Precedence
   rule: index no longer public before index name
-- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, DELETE_ONLY]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, DELETE_ONLY]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   kind: PreviousTransactionPrecedence
   rule: SecondaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT
-- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, PUBLIC]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, VALIDATED]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, VALIDATED]
   kind: PreviousTransactionPrecedence
   rule: SecondaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED
-- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, VALIDATED]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, VALIDATED]
   to:   [Column:{DescID: 104, ColumnID: 5}, WRITE_ONLY]
   kind: Precedence
   rule: secondary indexes containing column as key reach write-only before column
-- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, VALIDATED]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, VALIDATED]
   to:   [IndexName:{DescID: 104, Name: idx3, IndexID: 6}, ABSENT]
   kind: Precedence
   rule: index no longer public before dependents, excluding columns
-- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, VALIDATED]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, WRITE_ONLY]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, VALIDATED]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, WRITE_ONLY]
   kind: PreviousTransactionPrecedence
   rule: SecondaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY
 
@@ -667,7 +667,7 @@ DROP INDEX idx4 CASCADE
 ----
 StatementPhase stage 1 of 1 with 20 MutationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, ABSENT], PUBLIC] -> VALIDATED
+    [[SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5, RecreateSourceIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[Namespace:{DescID: 105, Name: v, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -752,7 +752,7 @@ StatementPhase stage 1 of 1 with 20 MutationType ops
       TableID: 105
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, ABSENT], VALIDATED] -> PUBLIC
+    [[SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5, RecreateSourceIndexID: 0}, ABSENT], VALIDATED] -> PUBLIC
     [[Namespace:{DescID: 105, Name: v, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 105}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], ABSENT] -> PUBLIC
@@ -773,7 +773,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
       {}
 PreCommitPhase stage 2 of 2 with 23 MutationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, ABSENT], PUBLIC] -> VALIDATED
+    [[SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5, RecreateSourceIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[Namespace:{DescID: 105, Name: v, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -880,7 +880,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
   transitions:
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
-    [[SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, ABSENT], VALIDATED] -> DELETE_ONLY
+    [[SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5, RecreateSourceIndexID: 0}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[IndexName:{DescID: 104, Name: idx4, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
   ops:
@@ -911,7 +911,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
       JobID: 1
 PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5, RecreateSourceIndexID: 0}, ABSENT], DELETE_ONLY] -> ABSENT
     [[IndexData:{DescID: 104, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MakeIndexAbsent
@@ -1019,15 +1019,15 @@ DROP INDEX idx4 CASCADE
   kind: Precedence
   rule: non-data dependents removed before descriptor
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 8}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5, RecreateSourceIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 8}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5, RecreateSourceIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexName:{DescID: 104, Name: idx4, IndexID: 8}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5, RecreateSourceIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [Namespace:{DescID: 105, Name: v, ReferencedDescID: 100}, ABSENT]
@@ -1042,39 +1042,39 @@ DROP INDEX idx4 CASCADE
   to:   [View:{DescID: 105}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, ABSENT]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5, RecreateSourceIndexID: 0}, ABSENT]
   to:   [IndexData:{DescID: 104, IndexID: 8}, DROPPED]
   kind: Precedence
   rule: index removed before garbage collection
-- from: [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, DELETE_ONLY]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5, RecreateSourceIndexID: 0}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 8}, ABSENT]
   kind: Precedence
   rule: index drop mutation visible before cleaning up index columns
-- from: [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, DELETE_ONLY]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5, RecreateSourceIndexID: 0}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 8}, ABSENT]
   kind: Precedence
   rule: index drop mutation visible before cleaning up index columns
-- from: [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, DELETE_ONLY]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5, RecreateSourceIndexID: 0}, DELETE_ONLY]
   to:   [IndexName:{DescID: 104, Name: idx4, IndexID: 8}, ABSENT]
   kind: Precedence
   rule: index no longer public before index name
-- from: [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, DELETE_ONLY]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, ABSENT]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5, RecreateSourceIndexID: 0}, DELETE_ONLY]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5, RecreateSourceIndexID: 0}, ABSENT]
   kind: PreviousTransactionPrecedence
   rule: SecondaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT
-- from: [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, PUBLIC]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, VALIDATED]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5, RecreateSourceIndexID: 0}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5, RecreateSourceIndexID: 0}, VALIDATED]
   kind: PreviousTransactionPrecedence
   rule: SecondaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED
-- from: [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, VALIDATED]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5, RecreateSourceIndexID: 0}, VALIDATED]
   to:   [IndexName:{DescID: 104, Name: idx4, IndexID: 8}, ABSENT]
   kind: Precedence
   rule: index no longer public before dependents, excluding columns
-- from: [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, VALIDATED]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, WRITE_ONLY]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5, RecreateSourceIndexID: 0}, VALIDATED]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5, RecreateSourceIndexID: 0}, WRITE_ONLY]
   kind: PreviousTransactionPrecedence
   rule: SecondaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY
-- from: [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, VALIDATED]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5, RecreateSourceIndexID: 0}, VALIDATED]
   to:   [View:{DescID: 105}, ABSENT]
   kind: Precedence
   rule: secondary index should be validated before dependent view can be absent
@@ -1087,7 +1087,7 @@ DROP INDEX idx4 CASCADE
   kind: Precedence
   rule: non-data dependents removed before descriptor
 - from: [View:{DescID: 105}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5, RecreateSourceIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependent view absent before secondary index
 - from: [View:{DescID: 105}, DROPPED]
@@ -1139,7 +1139,7 @@ DROP INDEX idx4 CASCADE
   kind: SameStagePrecedence
   rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
 - from: [View:{DescID: 105}, DROPPED]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, VALIDATED]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5, RecreateSourceIndexID: 0}, VALIDATED]
   kind: Precedence
   rule: dependent view no longer public before secondary index
 - from: [View:{DescID: 105}, DROPPED]
@@ -1160,7 +1160,7 @@ DROP INDEX v2@idx CASCADE;
 ----
 StatementPhase stage 1 of 1 with 34 MutationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC] -> VALIDATED
+    [[SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[Namespace:{DescID: 107, Name: v3, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -1301,7 +1301,7 @@ StatementPhase stage 1 of 1 with 34 MutationType ops
       TableID: 107
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0}, ABSENT], VALIDATED] -> PUBLIC
+    [[SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], VALIDATED] -> PUBLIC
     [[Namespace:{DescID: 107, Name: v3, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 107}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], ABSENT] -> PUBLIC
@@ -1332,7 +1332,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
       {}
 PreCommitPhase stage 2 of 2 with 37 MutationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC] -> VALIDATED
+    [[SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[Namespace:{DescID: 107, Name: v3, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -1495,7 +1495,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 8 MutationType ops
   transitions:
     [[IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0}, ABSENT], VALIDATED] -> DELETE_ONLY
+    [[SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[IndexName:{DescID: 106, Name: idx, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 107}, ABSENT], DROPPED] -> ABSENT
     [[IndexData:{DescID: 107, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -1536,7 +1536,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 8 MutationType ops
       JobID: 1
 PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], DELETE_ONLY] -> ABSENT
     [[IndexData:{DescID: 106, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MakeIndexAbsent
