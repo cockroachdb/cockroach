@@ -47,7 +47,7 @@ type overridesStore struct {
 // tenantOverrides stores the current overrides for a tenant (or the current
 // all-tenant overrides). It is an immutable data structure.
 type tenantOverrides struct {
-	// overrides, ordered by Name.
+	// overrides, ordered by InternalKey.
 	overrides []kvpb.TenantSetting
 
 	// changeCh is a channel that is closed when the tenant overrides change (in
