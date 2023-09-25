@@ -14,7 +14,7 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› D
       │    │    ├── ABSENT        → PUBLIC      ColumnName:{DescID: 104 (t), Name: "k", ColumnID: 3 (k+)}
       │    │    ├── WRITE_ONLY    → PUBLIC      Column:{DescID: 104 (t), ColumnID: 2 (j+)}
       │    │    ├── WRITE_ONLY    → PUBLIC      Column:{DescID: 104 (t), ColumnID: 4 (crdb_internal_idx_expr+)}
-      │    │    ├── VALIDATED     → PUBLIC      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_k_idx+)}
+      │    │    ├── VALIDATED     → PUBLIC      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_k_idx+), RecreateSourceIndexID: 0}
       │    │    ├── ABSENT        → PUBLIC      IndexColumn:{DescID: 104 (t), ColumnID: 3 (k+), IndexID: 3 (t_pkey-)}
       │    │    ├── ABSENT        → PUBLIC      IndexColumn:{DescID: 104 (t), ColumnID: 3 (k+), IndexID: 4 (crdb_internal_index_4_name_placeholder)}
       │    │    ├── ABSENT        → PUBLIC      ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j+)}
