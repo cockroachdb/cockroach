@@ -573,7 +573,7 @@ func (c *SyncedCluster) ExecSQL(
 			ssh.Escape(args)
 
 		return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("run-sql"))
-	}, WithDisplay(display), WithWaitOnFail())
+	}, WithDisplay(display), WithFailSlow(true))
 
 	return results, err
 }

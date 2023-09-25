@@ -404,7 +404,7 @@ func RunWithDetails(
 	}
 
 	cmd := strings.TrimSpace(strings.Join(cmdArray, " "))
-	return c.RunWithDetails(ctx, l, c.Nodes, TruncateString(cmd, 30), cmd)
+	return c.RunWithDetails(ctx, l, c.Nodes, TruncateString(cmd, 30), cmd, opts...)
 }
 
 // SQL runs `cockroach sql` on a remote cluster. If a single node is passed,
