@@ -97,58 +97,58 @@ func TestRunWithMaybeRetry(t *testing.T) {
 
 	attempt := 0
 	cases := []struct {
-		f                func(ctx context.Context) (*RunResultDetails, error)
-		shouldRetryFn    func(*RunResultDetails) bool
+		f                func(ctx context.Context) (*install.RunResultDetails, error)
+		shouldRetryFn    func(*install.RunResultDetails) bool
 		nilRetryOpts     bool
 		expectedAttempts int
 		shouldError      bool
 	}{
 		{ // 1. Happy path: no error, no retry required
-			f: func(ctx context.Context) (*RunResultDetails, error) {
+			f: func(ctx context.Context) (*install.RunResultDetails, error) {
 				return newResult(0), nil
 			},
 			expectedAttempts: 1,
 			shouldError:      false,
 		},
 		{ // 2. Error, but with no retries
-			f: func(ctx context.Context) (*RunResultDetails, error) {
+			f: func(ctx context.Context) (*install.RunResultDetails, error) {
 				return newResult(1), nil
 			},
-			shouldRetryFn: func(*RunResultDetails) bool {
+			shouldRetryFn: func(*install.RunResultDetails) bool {
 				return false
 			},
 			expectedAttempts: 1,
 			shouldError:      true,
 		},
 		{ // 3. Error, but no retry function specified
-			f: func(ctx context.Context) (*RunResultDetails, error) {
+			f: func(ctx context.Context) (*install.RunResultDetails, error) {
 				return newResult(1), nil
 			},
 			expectedAttempts: 3,
 			shouldError:      true,
 		},
 		{ // 4. Error, with retries exhausted
-			f: func(ctx context.Context) (*RunResultDetails, error) {
+			f: func(ctx context.Context) (*install.RunResultDetails, error) {
 				return newResult(255), nil
 			},
-			shouldRetryFn:    func(d *RunResultDetails) bool { return d.RemoteExitStatus == 255 },
+			shouldRetryFn:    func(d *install.RunResultDetails) bool { return d.RemoteExitStatus == 255 },
 			expectedAttempts: 3,
 			shouldError:      true,
 		},
 		{ // 5. Eventual success after retries
-			f: func(ctx context.Context) (*RunResultDetails, error) {
+			f: func(ctx context.Context) (*install.RunResultDetails, error) {
 				attempt++
 				if attempt == 3 {
 					return newResult(0), nil
 				}
 				return newResult(255), nil
 			},
-			shouldRetryFn:    func(d *RunResultDetails) bool { return d.RemoteExitStatus == 255 },
+			shouldRetryFn:    func(d *install.RunResultDetails) bool { return d.RemoteExitStatus == 255 },
 			expectedAttempts: 3,
 			shouldError:      false,
 		},
 		{ // 6. Error, runs once because nil retryOpts
-			f: func(ctx context.Context) (*RunResultDetails, error) {
+			f: func(ctx context.Context) (*install.RunResultDetails, error) {
 				return newResult(255), nil
 			},
 			nilRetryOpts:     true,
@@ -160,9 +160,9 @@ func TestRunWithMaybeRetry(t *testing.T) {
 	for idx, tc := range cases {
 		attempt = 0
 		t.Run(fmt.Sprintf("%d", idx+1), func(t *testing.T) {
-			var retryOpts *RunRetryOpts
+			var retryOpts *RetryOpts
 			if !tc.nilRetryOpts {
-				retryOpts = newRunRetryOpts(testRetryOpts, tc.shouldRetryFn)
+				retryOpts = NewRetryOpts(testRetryOpts, tc.shouldRetryFn)
 			}
 			res, _ := runWithMaybeRetry(context.Background(), l, retryOpts, tc.f)
 
@@ -176,12 +176,12 @@ func TestRunWithMaybeRetry(t *testing.T) {
 	}
 }
 
-func newResult(exitCode int) *RunResultDetails {
+func newResult(exitCode int) *install.RunResultDetails {
 	var err error
 	if exitCode != 0 {
 		err = errors.Newf("Error with exit code %v", exitCode)
 	}
-	return &RunResultDetails{RemoteExitStatus: exitCode, Err: err}
+	return &install.RunResultDetails{RemoteExitStatus: exitCode, Err: err}
 }
 
 func nilLogger() *logger.Logger {

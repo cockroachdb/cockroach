@@ -360,7 +360,7 @@ func Run(
 	secure bool,
 	stdout, stderr io.Writer,
 	cmdArray []string,
-	opts ...install.ParallelOption,
+	opts ...install.RunOption,
 ) error {
 	if err := LoadClusters(); err != nil {
 		return err
@@ -387,6 +387,7 @@ func RunWithDetails(
 	clusterName, SSHOptions, processTag string,
 	secure bool,
 	cmdArray []string,
+	opts ...install.RunOption,
 ) ([]install.RunResultDetails, error) {
 	if err := LoadClusters(); err != nil {
 		return nil, err

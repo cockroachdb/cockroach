@@ -2183,8 +2183,10 @@ func (c *clusterImpl) Run(ctx context.Context, node option.NodeListOption, args 
 }
 
 // Run a command on the specified nodes and call test.Fatal if there is an error.
-func (c *clusterImpl) RunExt(ctx context.Context, node option.NodeListOption, args []string) {
-	err := c.RunEExt(ctx, node, args)
+func (c *clusterImpl) RunExt(
+	ctx context.Context, node option.NodeListOption, args []string, opts ...install.RunOption,
+) {
+	err := c.RunEExt(ctx, node, args, opts...)
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -2198,7 +2200,9 @@ func (c *clusterImpl) RunE(ctx context.Context, node option.NodeListOption, args
 // will be redirected to a file which is logged via the cluster-wide logger in
 // case of an error. Logs will sort chronologically. Failing invocations will
 // have an additional marker file with a `.failed` extension instead of `.log`.
-func (c *clusterImpl) RunEExt(ctx context.Context, nodes option.NodeListOption, args []string) error {
+func (c *clusterImpl) RunEExt(
+	ctx context.Context, nodes option.NodeListOption, args []string, opts ...install.RunOption,
+) error {
 	if len(args) == 0 {
 		return errors.New("No command passed")
 	}
@@ -2240,7 +2244,11 @@ func (c *clusterImpl) RunWithDetailsSingleNode(
 // you treat an error from the command. This makes error checking easier / friendlier
 // and helps us avoid code replication.
 func (c *clusterImpl) RunWithDetailsSingleNodeExt(
-	ctx context.Context, testLogger *logger.Logger, nodes option.NodeListOption, args []string,
+	ctx context.Context,
+	testLogger *logger.Logger,
+	nodes option.NodeListOption,
+	args []string,
+	opts ...install.RunOption,
 ) (install.RunResultDetails, error) {
 	if len(nodes) != 1 {
 		return install.RunResultDetails{}, errors.Newf("RunWithDetailsSingleNode received %d nodes. Use RunWithDetails if you need to run on multiple nodes.", len(nodes))
@@ -2260,7 +2268,11 @@ func (c *clusterImpl) RunWithDetails(
 // via the cluster-wide logger in case of an error. Failing invocations will have
 // an additional marker file with a `.failed` extension instead of `.log`.
 func (c *clusterImpl) RunWithDetailsExt(
-	ctx context.Context, testLogger *logger.Logger, nodes option.NodeListOption, args []string,
+	ctx context.Context,
+	testLogger *logger.Logger,
+	nodes option.NodeListOption,
+	args []string,
+	opts ...install.RunOption,
 ) ([]install.RunResultDetails, error) {
 	if len(args) == 0 {
 		return nil, errors.New("No command passed")
@@ -2279,7 +2291,7 @@ func (c *clusterImpl) RunWithDetailsExt(
 	}
 
 	l.Printf("> %s", cmd)
-	results, err := roachprod.RunWithDetails(ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "" /* processTag */, c.IsSecure(), args)
+	results, err := roachprod.RunWithDetails(ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "" /* processTag */, c.IsSecure(), args, opts...)
 
 	var logFileFull string
 	if l.File != nil {
