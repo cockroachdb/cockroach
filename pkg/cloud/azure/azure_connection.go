@@ -40,8 +40,10 @@ func parseAndValidateAzureConnectionURI(
 }
 
 func init() {
-	externalconn.RegisterConnectionDetailsFromURIFactory(
-		externalConnectionScheme,
-		parseAndValidateAzureConnectionURI,
-	)
+	for _, s := range []string{scheme, deprecatedScheme, deprecatedExternalConnectionScheme} {
+		externalconn.RegisterConnectionDetailsFromURIFactory(
+			s,
+			parseAndValidateAzureConnectionURI,
+		)
+	}
 }
