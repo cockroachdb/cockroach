@@ -265,3 +265,17 @@ func (w *Watcher) GetAllTenantOverrides(
 ) (overrides []kvpb.TenantSetting, changeCh <-chan struct{}) {
 	return w.GetTenantOverrides(ctx, allTenantOverridesID)
 }
+
+// SetAternateDefault configures a custom default value
+// for a setting when there is no stored value picked up
+// from system.tenant_settings.
+//
+// The second argument must be sorted by setting key already.
+//
+// At the time of this writing, this is used for TenantReadOnly
+// settings, so that the values from the system tenant's
+// system.settings table are used when there is no override
+// in .tenant_settings.
+func (w *Watcher) SetAlternateDefaults(ctx context.Context, payloads []kvpb.TenantSetting) {
+	w.store.setAlternateDefaults(ctx, payloads)
+}

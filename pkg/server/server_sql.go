@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangestats"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -257,6 +258,13 @@ type sqlServerOptionalKVArgs struct {
 	// inspectzServer is used to power various crdb_internal vtables, exposing
 	// the equivalent of /inspectz but through SQL.
 	inspectzServer inspectzpb.InspectzServer
+
+	// notifyChangeToTenantReadOnlySettings is called by the settings
+	// watcher when one or more TenandReadOnly setting is updated via
+	// SET CLUSTER SETTING (i.e. updated in system.settings).
+	//
+	// The second argument must be sorted by setting key already.
+	notifyChangeToTenantReadOnlySettings func(context.Context, []kvpb.TenantSetting)
 }
 
 // sqlServerOptionalTenantArgs are the arguments supplied to newSQLServer which
@@ -568,8 +576,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	var settingsWatcher *settingswatcher.SettingsWatcher
 	if codec.ForSystemTenant() {
-		settingsWatcher = settingswatcher.New(
-			cfg.clock, codec, cfg.Settings, cfg.rangeFeedFactory, cfg.stopper, cfg.settingsStorage,
+		settingsWatcher = settingswatcher.NewWithNotifier(ctx,
+			cfg.clock, codec, cfg.Settings, cfg.rangeFeedFactory, cfg.stopper, cfg.notifyChangeToTenantReadOnlySettings, cfg.settingsStorage,
 		)
 	} else {
 		// Create the tenant settings watcher, using the tenant connector as the
