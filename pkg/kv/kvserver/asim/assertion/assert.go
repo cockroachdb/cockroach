@@ -405,8 +405,11 @@ func PrintSpanConfigConformanceList(tag string, ranges []roachpb.ConformanceRepo
 		if i == 0 {
 			buf.WriteString(fmt.Sprintf("%s:\n", tag))
 		}
-		buf.WriteString(fmt.Sprintf("  %s applying %s\n", printRangeDesc(r.RangeDescriptor),
+		buf.WriteString(fmt.Sprintf("  %s applying %s", printRangeDesc(r.RangeDescriptor),
 			spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(r.Config)))
+		if i != len(ranges)-1 {
+			buf.WriteString("\n")
+		}
 	}
 	return buf.String()
 }

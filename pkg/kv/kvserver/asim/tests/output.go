@@ -169,7 +169,7 @@ func (tr testResultsReport) String() string {
 			buf.WriteString(output.eventExecutor.PrintEventsExecuted())
 		}
 		if failed {
-			buf.WriteString(fmt.Sprintf("sample%d: failed assertion\n%s", nthSample, output.reason))
+			buf.WriteString(fmt.Sprintf("sample%d: failed assertion\n%s\n", nthSample, output.reason))
 		} else {
 			buf.WriteString(fmt.Sprintf("sample%d: pass\n", nthSample))
 		}
