@@ -44,7 +44,7 @@ const defaultParallelism = 10
 
 func mkReg(t *testing.T) testRegistryImpl {
 	t.Helper()
-	return makeTestRegistry(spec.GCE, "", "", false /* preferSSD */, false /* benchOnly */)
+	return makeTestRegistry(spec.GCE, "", "", false /* preferSSD */)
 }
 
 func TestMatchOrSkip(t *testing.T) {
@@ -78,7 +78,7 @@ func TestMatchOrSkip(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			f := registry.NewTestFilter(c.filter)
 			spec := &registry.TestSpec{Name: c.name, Owner: OwnerUnitTest, Tags: c.tags}
-			if value := spec.Match(f); c.expected != value {
+			if value := f.Matches(spec); c.expected != value {
 				t.Fatalf("expected %v, but found %v", c.expected, value)
 			}
 		})
@@ -259,7 +259,7 @@ type runnerTest struct {
 func setupRunnerTest(t *testing.T, r testRegistryImpl, testFilters []string) *runnerTest {
 	ctx := context.Background()
 
-	tests := testsToRun(r, registry.NewTestFilter(testFilters), false, 1.0, true)
+	tests, _ := testsToRun(r, registry.NewTestFilter(testFilters), false, 1.0, true)
 	cr := newClusterRegistry()
 
 	stopper := stop.NewStopper()
@@ -422,7 +422,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			r := makeTestRegistry(spec.GCE, "", "", false /* preferSSD */, false /* benchOnly */)
+			r := makeTestRegistry(spec.GCE, "", "", false /* preferSSD */)
 			err := r.prepareSpec(&c.spec)
 			if !testutils.IsError(err, c.expectedErr) {
 				t.Fatalf("expected %q, but found %q", c.expectedErr, err.Error())
@@ -458,7 +458,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 			}
 		},
 	})
-	tests := testsToRun(r, registry.NewTestFilter(nil), false, 1.0, true)
+	tests, _ := testsToRun(r, registry.NewTestFilter(nil), false, 1.0, true)
 	lopt := loggingOpt{
 		l:            nilLogger(),
 		tee:          logger.NoTee,

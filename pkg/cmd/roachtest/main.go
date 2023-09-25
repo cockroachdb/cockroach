@@ -94,8 +94,6 @@ func main() {
 		}},
 	)
 
-	var listBench bool
-
 	var listCmd = &cobra.Command{
 		Use:   "list [tests]",
 		Short: "list tests matching the patterns",
@@ -126,16 +124,22 @@ Examples:
    # match weekly kv owner tests or aws tests
    roachtest list tag:owner-kv,weekly tag:aws
 `,
-		RunE: func(_ *cobra.Command, args []string) error {
-			r := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg, listBench)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg)
 			tests.RegisterTests(&r)
 
-			filter := registry.NewTestFilter(args)
-			specs := testsToRun(r, filter, runSkipped, selectProbability, false)
+			filter := makeTestFilter(args)
+			fmt.Printf("Listing %s.\n\n", strings.Join(filter.Describe(), "\n"))
+			cmd.SilenceUsage = true
+
+			specs, err := r.GetTests(filter)
+			if err != nil {
+				return err
+			}
 
 			for _, s := range specs {
 				var skip string
-				if s.Skip != "" && !runSkipped {
+				if s.Skip != "" {
 					skip = " (skipped: " + s.Skip + ")"
 				}
 				fmt.Printf("%s [%s]%s\n", s.Name, s.Owner, skip)
@@ -143,10 +147,7 @@ Examples:
 			return nil
 		},
 	}
-	listCmd.Flags().BoolVar(
-		&listBench, "bench", false, "list benchmarks instead of tests")
-	listCmd.Flags().StringVar(
-		&cloud, "cloud", cloud, "cloud provider to use (aws, azure, or gce)")
+	addTestFilterFlags(listCmd, true /* includeCloud */)
 
 	var runCmd = &cobra.Command{
 		// Don't display usage when tests fail.
@@ -170,7 +171,10 @@ the cluster nodes on start.
 			if err := initRunFlagsBinariesAndLibraries(cmd); err != nil {
 				return err
 			}
-			return runTests(tests.RegisterTests, args, false /* benchOnly */)
+			filter := makeTestFilter(args)
+			fmt.Printf("\nRunning %s.\n\n", strings.Join(filter.Describe(), "\n"))
+			cmd.SilenceUsage = true
+			return runTests(tests.RegisterTests, filter)
 		},
 	}
 
@@ -184,13 +188,20 @@ the cluster nodes on start.
 			if err := initRunFlagsBinariesAndLibraries(cmd); err != nil {
 				return err
 			}
-			return runTests(tests.RegisterTests, args, true /* benchOnly */)
+			onlyBenchmarks = true
+			filter := makeTestFilter(args)
+			fmt.Printf("\nRunning %s.\n\n", strings.Join(filter.Describe(), "\n"))
+			cmd.SilenceUsage = true
+			return runTests(tests.RegisterTests, filter)
 		},
 	}
 
 	// Register flags shared between `run` and `bench`.
 	addRunFlags(runCmd)
 	addBenchFlags(benchCmd)
+
+	addTestFilterFlags(runCmd, false /* includeCloud */)
+	addTestFilterFlags(benchCmd, false /* includeCloud */)
 
 	parseCreateOpts(runCmd.Flags(), &overrideOpts)
 	overrideFlagset = runCmd.Flags()
@@ -232,8 +243,21 @@ func testsToRun(
 	runSkipped bool,
 	selectProbability float64,
 	print bool,
-) []registry.TestSpec {
-	specs := r.GetTests(filter)
+) ([]registry.TestSpec, error) {
+	specs, err := r.GetTests(filter)
+	if err != nil {
+		if !forceCloudCompat {
+			filterNoCloud := *filter
+			filterNoCloud.Cloud = ""
+			if _, err2 := r.GetTests(&filterNoCloud); err2 == nil {
+				// We found some tests matching criteria, but for other clouds. Mention
+				// the --force-cloud-compat flag.
+				// nolint:errwrap
+				err = errors.Errorf("%s\nTo include tests that are not compatible with this cloud, use --force-cloud-compat.", err.Error())
+			}
+		}
+		return nil, err
+	}
 
 	var notSkipped []registry.TestSpec
 	for _, s := range specs {
@@ -250,7 +274,7 @@ func testsToRun(
 		}
 	}
 
-	return selectSpecs(notSkipped, selectProbability, true, print)
+	return selectSpecs(notSkipped, selectProbability, true, print), nil
 }
 
 // selectSpecs returns a random sample of the given test specs.
