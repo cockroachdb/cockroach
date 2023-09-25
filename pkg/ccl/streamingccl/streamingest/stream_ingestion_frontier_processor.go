@@ -36,16 +36,6 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// JobCheckpointFrequency controls the frequency of frontier checkpoints into
-// the jobs table.
-var JobCheckpointFrequency = settings.RegisterDurationSetting(
-	settings.TenantWritable,
-	"stream_replication.job_checkpoint_frequency",
-	"controls the frequency with which partitions update their progress; if 0, disabled",
-	10*time.Second,
-	settings.NonNegativeDuration,
-)
-
 const streamIngestionFrontierProcName = `ingestfntr`
 
 type streamIngestionFrontier struct {
@@ -392,7 +382,7 @@ func (sf *streamIngestionFrontier) noteResolvedTimestamps(
 // the status of each partition.
 func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 	ctx := sf.Ctx()
-	updateFreq := JobCheckpointFrequency.Get(&sf.flowCtx.Cfg.Settings.SV)
+	updateFreq := streamingccl.JobCheckpointFrequency.Get(&sf.flowCtx.Cfg.Settings.SV)
 	if updateFreq == 0 || timeutil.Since(sf.lastPartitionUpdate) < updateFreq {
 		sf.updateLagMetric()
 		return nil
