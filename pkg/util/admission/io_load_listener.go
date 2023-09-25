@@ -940,18 +940,18 @@ func (io *ioLoadListener) adjustTokensInner(
 
 	totalNumElasticByteTokens := int64(unlimitedTokens)
 	// NB: score == (num-sublevels / 20) * 2 = num-sublevels/10 (we are ignoring
-	// the rare case where score is determined by file count). So score >= 0.1
-	// means that we start shaping when there is 1 sublevel. sublevel / 10 >=
-	if score >= 0.1 {
+	// the rare case where score is determined by file count). So score >= 0.2
+	// means that we start shaping when there are 2 sublevels.
+	if score >= 0.2 {
 		doLogFlush = true
 		// Use a linear function with slope of -1.25 and compaction tokens of
-		// 1.25*compaction-bandwidth at score of 0.1. At a score of 0.5 (5
+		// 1.25*compaction-bandwidth at score of 0.2. At a score of 0.6 (6
 		// sublevels) the tokens will be 0.75*compaction-bandwidth. Experimental
-		// results show the sublevels hovering around 3, as expected.
+		// results show the sublevels hovering around 4, as expected.
 		//
-		// NB: at score >= 1.1 (11 sublevels), there are 0 elastic tokens.
+		// NB: at score >= 1.2 (12 sublevels), there are 0 elastic tokens.
 		totalNumElasticByteTokens = int64(float64(smoothedIntL0CompactedBytes) *
-			(1.25 - 1.25*(score-0.1)))
+			(1.25 - 1.25*(score-0.2)))
 
 		totalNumElasticByteTokens = max(totalNumElasticByteTokens, 1)
 	}

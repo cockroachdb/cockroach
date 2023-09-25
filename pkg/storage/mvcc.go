@@ -128,16 +128,209 @@ var rocksdbConcurrency = envutil.EnvOrDefaultInt(
 		return max
 	}())
 
-// The sub-level threshold at which to allow an increase in compaction
-// concurrency. The maximum is still controlled by
-// pebble.Options.MaxConcurrentCompactions. The default of 2 will allow an
-// additional compaction (so total 1 + 1 = 2 compactions) when the sub-level
-// count is 2, and increment concurrency by 1 whenever sub-level count
-// increases by 2 (so 1 + 3 = 4 compactions) when sub-level count is 6.
-// Admission control starts shaping regular traffic at a sub-level count of 5,
-// and elastic traffic at a sub-level count of 1, hence this default of 2. See
-// https://github.com/cockroachdb/pebble/issues/2832#issuecomment-1699743392
-// for some discussion on the bad behavior caused by not setting this option.
+// l0SubLevelCompactionConcurrency is the sub-level threshold at which to
+// allow an increase in compaction concurrency. The maximum is still
+// controlled by pebble.Options.MaxConcurrentCompactions. The default of 2
+// allows an additional compaction (so total 1 + 1 = 2 compactions) when the
+// sub-level count is 2, and increments concurrency by 1 whenever sub-level
+// count increases by 2 (so 1 + 2 = 3 compactions) when sub-level count is 4,
+// and so on, i.e., floor(1 + l/2), where l is the number of sub-levels. See
+// the logic in
+// https://github.com/cockroachdb/pebble/blob/86593692e09f904f4ea739e065074f44f40ec9ba/compaction_picker.go#L1204-L1220.
+//
+// We abbreviate l0SubLevelCompactionConcurrency to lslcc below. And all the
+// discussion below is in units of compaction concurrency. Let l represent the
+// current sub-level count. MaxConcurrentCompactions is a constant and not a
+// function of l. The upper bound on concurrent compactions, that we computed
+// above, is represented as upper-bound-cc(lslcc, l), since it is a function
+// of both lslcc and l. The formula is:
+//
+// upper-bound-cc(lslcc, l) = floor(1 + l/lslcc)
+//
+// where in the example above lslcc=2.
+//
+// A visual representation (where lslcc is fixed) is shown below, where the x
+// axis is the current number of sub-levels and the y axis is in units of
+// compaction concurrency (cc).
+//
+//	   ^               +  upper-bound-cc
+//	   |            +
+//	cc |---------+------------- MaxConcurrentCompactions
+//	   |      +
+//	   |   +
+//	   |+
+//	   |
+//	   ------------------------->
+//	      l
+//
+// Where the permitted concurrent compactions is the minimum across the two
+// curves shown above.
+//
+//	   ^
+//	   |
+//	cc |         **********     permitted concurrent compactions
+//	   |      *
+//	   |   *
+//	   |*
+//	   |
+//	   ------------------------->
+//	        l
+//
+// Next we discuss the interaction with admission control, which is where care
+// is needed. Admission control (see admission.ioLoadListener) gives out
+// tokens that shape the incoming traffic. The tokens are a function of l and
+// the measured compaction bandwidth out of L0. But the measured compaction
+// bandwidth is itself a function of the tokens and upper-bound-cc(lslcc,l)
+// and MaxConcurrentCompactions. To tease apart this interaction, we note that
+// when l increases and AC starts shaping incoming traffic, it initially gives
+// out tokens that are higher than the measured compaction bandwidth. That is,
+// it over-admits. So if Pebble has the ability to increase compaction
+// bandwidth to handle this over-admission, it has the opportunity to do so,
+// and the increased compaction bandwidth will feed back into even more
+// tokens, and this will repeat until Pebble has no ability to further
+// increase the compaction bandwidth. This simple analysis suffices when
+// upper-bound-cc(lslcc,l) is always infinity since Pebble can increase up to
+// MaxConcurrentCompactions as soon as it starts falling behind. This is
+// represented in the following diagram.
+//
+//	   ^----
+//	   |    --                  - AC tokens
+//	   |      --                + actual concurrent compactions
+//	cc |****+*+*+*+****         * permitted concurrent compactions
+//	   |  +       --
+//	   | +          --------
+//	   |+
+//	   |
+//	   ------------------------->
+//	        l
+//
+// Observe that in this diagram, the permitted concurrent compactions is
+// always equal to MaxConcurrentCompactions, and the actual concurrent
+// compactions ramps up very quickly to that permitted level as l increases.
+// The AC tokens start of at close to infinity and start declining as l
+// increases, but are still higher than the permitted concurrent compactions.
+// And the AC tokens fall below the permitted concurrent compactions *after*
+// the actual concurrent compactions have reached that permitted level. This
+// "fall below" happens to try to reduce the number of sub-levels (since AC
+// has an objective of what sub-level count it wants to be stable at).
+//
+// For the remainder of this discussion we will ignore the actual concurrent
+// compactions and just use permitted concurrent compactions to serve both the
+// roles of actual and permitted. In this simplified world, the objective we
+// have is that AC tokens exceed the permitted concurrent compactions until
+// permitted concurrent compactions have reached their max value. When this
+// objective is not satisfied, we will unnecessarily throttle traffic even
+// though there is the possibility to allow higher traffic since we have not
+// yet used up to the permitted concurrent compactions.
+//
+// Note, we are depicting AC tokens in terms of overall compaction concurrency
+// in this analysis, while real AC tokens are based on compactions out of L0,
+// and some of the compactions are happening between other levels. This is
+// fine if we reinterpret what we discuss here as AC tokens as not the real AC
+// tokens but the effect of the real AC tokens on the overall compaction
+// bandwidth needed in the LSM. To illustrate this idea, say 25% of the
+// compaction concurrency is spent on L0=>Lbase compactions and 75% on other
+// compactions. Say current permitted compaction concurrency is 4 (so
+// L0=>Lbase compaction concurrency is 1) and MaxConcurrentCompactions is 8.
+// And say that real AC tokens throttles traffic to this current level that
+// can be compacted out of L0. Then in the analysis here, we consider AC
+// tokens as shaping to a compaction concurrency of 4.
+//
+// As a reminder,
+//
+// permitted-concurrent-compactions = min(upper-bound-cc(lslcc,l), MaxConcurrentCompactions)
+//
+// We analyze AC tokens also expressed in units of compaction concurrency,
+// where ac-tokens are a function of l and the current
+// permitted-concurrent-compactions (since permitted==actual, in our
+// simplification), which we can write as
+// ac-tokens(l,permitted-concurrent-compactions). We consider two parts of
+// ac-tokens: the first part when upper-bound-cc(lslcc,l) <=
+// MaxConcurrentCompactions, and the second part when upper-bound-cc(lslcc,l)
+// > MaxConcurrentCompactions. There is a transition from the first part to
+// the second part at some point as l increases. In the first part,
+// permitted-concurrent-compactions=upper-bound-cc(lslcc,l), and so ac-tokens
+// is a function of l and upper-bound-cc. We translate our original objective
+// into the following simplified objective for the first part:
+//
+// ac-tokens should be greater than upper-bound-cc as l increases, and it
+// should be equal to or greater than upper-bound-cc when upper-bound-cc
+// becomes equal to MaxConcurrentCompactions.
+//
+// The following diagram shows an example that achieves this objective:
+//
+//	   ^
+//	   |-------
+//	   |       --      +              - ac-tokens
+//	   |         --  +                + upper-bound-cc
+//	cc |*********+*--***********      * MaxConcurrentCompactions
+//	   |      +       --
+//	   |   +            -----
+//	   |+
+//	   |
+//	   ------------------------->
+//	        l
+//
+// Note that the objective does not say anything about ac-tokens after
+// upper-bound-cc exceeds MaxConcurrentCompactions since what happens at
+// higher l values did not prevent us from achieving the maximum compaction
+// concurrency.
+//
+// ac-tokens for regular traffic with lslcc=2:
+//
+// Admission control (see admission.ioLoadListener) starts shaping regular
+// traffic at a sub-level count of 5, with twice the tokens as compaction
+// bandwidth (out of L0) at sub-level count 5, and tokens equal to the
+// compaction bandwidth at sub-level count of 10. AC wants to operate at a
+// stable point of 10 sub-levels under regular traffic overload. Let
+// MaxConcurrentCompactions be represented as mcc. At sub-level count 5, the
+// upper-bound-cc is floor(1+5/2)=3, so ac-tokens are representative of a
+// concurrency of min(3,mcc)*2. At sub-level count of 10, the upper-bound-cc
+// is floor(1+10/2)=6, so tokens are also representative of a compaction
+// concurrency of min(6,mcc)*1. This regular traffic token shaping behavior is
+// hard-wired in ioLoadListener (with code constants), and we don't currently
+// have a reason to change it. If MaxConcurrentCompactions is <= 6, the
+// objective stated earlier is achieved, since min(3,mcc)*2 and min(6,mcc) are
+// >= mcc. But if MaxConcurrentCompactions > 6, AC will throttle to compaction
+// concurrency of 6, which fails the objective since we have ignored the
+// ability to increase compaction concurrency. Note that this analysis is
+// somewhat pessimistic since if we are consistently operating at 5 or more
+// sub-levels, other levels in the LSM are also building up compaction debt,
+// and there is another mechanism in Pebble that increases compaction
+// concurrency in response to compaction debt. Nevertheless, this pessimistic
+// analysis shows that we are ok with MaxConcurrentCompactions <= 6. We will
+// consider the possibility of reducing lslcc below.
+//
+// ac-tokens for elastic traffic with lslcc=2:
+//
+// For elastic traffic, admission control starts shaping traffic at sub-level
+// count of 2, with tokens equal to 1.25x the compaction bandwidth, so
+// ac-tokens is 1.25*min(mcc,floor(1+2/2))=1.25*min(mcc,2) compaction
+// concurrency. And at sub-level count of 4, the tokens are equal to 1x the
+// compaction bandwidth, so ac-tokens is 1*min(mcc,floor(1+4/2))=min(mcc,3)
+// compaction concurrency. AC wants to operate at a stable point of 4
+// sub-levels under elastic traffic overload. For mcc=3 (the default value),
+// the above values at l=2 and l=4 are 2.5 and 3 respectively. Even though 2.5
+// < 3, we deem the value of ac-tokens as acceptable with mcc=3. But
+// deployments which use machines with a large number of CPUs are sometimes
+// configured with a larger value of MaxConcurrentCompactions. In those cases
+// elastic traffic will be throttled even though there is an opportunity to
+// increase compaction concurrency to allow more elastic traffic.
+//
+// If a deployment administrator knows that the system is provisioned such
+// that aggressively increasing up to MaxConcurrentCompactions is harmless to
+// foreground traffic, they can set l0SubLevelCompactionConcurrency=1. The
+// ac-tokens will be:
+//
+//   - Elastic: sub-level=2, 1.25*min(mcc,3); sub-level=4, 1*min(mcc,5);
+//     sub-level=6, 0.75*min(mcc,7). With mcc=4, at sub-level=2, we get
+//     ac-tokens=3.75, which is deemed acceptable. Also, compaction debt will
+//     increase and allow for utilizing even higher concurrency, eventually,
+//     and since this is elastic traffic that eventual behavior is acceptable.
+//
+//   - Regular: sub-level=5, 2*min(mcc,6); sub-level=10, 1*min(mcc,11). With
+//     mcc=12, at sub-level=5, we get ac-tokens=12. So we are satisfying the
+//     objective even if mcc were as high as 12.
 var l0SubLevelCompactionConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_L0_SUB_LEVEL_CONCURRENCY", 2)
 
