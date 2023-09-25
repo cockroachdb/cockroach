@@ -10,7 +10,7 @@ Schema change plan for rolling back CREATE INDEX ‹idx1› ON ‹defaultdb›.p
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 8 elements transitioning toward ABSENT
-           │    ├── BACKFILL_ONLY → ABSENT SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+           │    ├── BACKFILL_ONLY → ABSENT SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1, RecreateSourceIndexID: 0}
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
            │    ├── PUBLIC        → ABSENT IndexData:{DescID: 106, IndexID: 2}

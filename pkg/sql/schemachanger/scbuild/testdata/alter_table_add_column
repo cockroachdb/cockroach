@@ -201,7 +201,7 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j)
   {columnId: 1, indexId: 3, kind: STORED, tableId: 106}
 - [[IndexData:{DescID: 106, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 3, tableId: 106}
-- [[SecondaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], ABSENT]
+- [[SecondaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1, RecreateSourceIndexID: 0}, PUBLIC], ABSENT]
   {constraintId: 4, indexId: 4, isUnique: true, sourceIndexId: 1, tableId: 106, temporaryIndexId: 5}
 - [[IndexData:{DescID: 106, IndexID: 4}, PUBLIC], ABSENT]
   {indexId: 4, tableId: 106}
