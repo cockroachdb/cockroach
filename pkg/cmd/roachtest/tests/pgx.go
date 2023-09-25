@@ -56,10 +56,9 @@ func registerPgx(r registry.Registry) {
 		installGolang(ctx, t, c, node)
 
 		t.Status("getting pgx")
-		if err := repeatGitCloneE(
+		if err := c.GitClone(
 			ctx,
-			t,
-			c,
+			t.L(),
 			"https://github.com/jackc/pgx.git",
 			"/mnt/data1/pgx",
 			supportedPGXTag,
@@ -76,8 +75,8 @@ func registerPgx(r registry.Registry) {
 		t.L().Printf("Supported release is %s.", supportedPGXTag)
 
 		t.Status("installing go-junit-report")
-		if err := repeatRunE(
-			ctx, t, c, node, "install go-junit-report", "go install github.com/jstemmer/go-junit-report@latest",
+		if err := c.RunE(
+			ctx, node, "go install github.com/jstemmer/go-junit-report@latest",
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -106,9 +105,8 @@ func registerPgx(r registry.Registry) {
 
 		t.Status("running pgx test suite")
 		// Running the test suite is expected to error out, so swallow the error.
-		result, err := repeatRunWithDetailsSingleNode(
-			ctx, c, t, node,
-			"run pgx test suite",
+		result, err := c.RunWithDetailsSingleNode(
+			ctx, t.L(), node,
 			"cd /mnt/data1/pgx && "+
 				"PGX_TEST_DATABASE='postgresql://root:@localhost:26257/pgx_test' go test -v 2>&1 | "+
 				"`go env GOPATH`/bin/go-junit-report",

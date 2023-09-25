@@ -47,50 +47,41 @@ func registerKnex(r registry.Registry) {
 		err = alterZoneConfigAndClusterSettings(ctx, t, version, c, node[0])
 		require.NoError(t, err)
 
-		err = repeatRunE(
+		// Create sql database
+		err = c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"create sql database",
 			`./cockroach sql --insecure -e "CREATE DATABASE test"`,
 		)
 		require.NoError(t, err)
 
-		err = repeatRunE(
+		// Add nodesource repository
+		err = c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"add nodesource repository",
 			`sudo apt install ca-certificates && curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -`,
 		)
 		require.NoError(t, err)
 
-		err = repeatRunE(
-			ctx, t, c, node, "install nodejs and npm", `sudo apt-get -qq install nodejs`,
-		)
+		// Install nodejs and npm
+		err = c.RunE(ctx, node, `sudo apt-get -qq install nodejs`)
 		require.NoError(t, err)
 
-		err = repeatRunE(
-			ctx, t, c, node, "update npm", `sudo npm i -g npm`,
-		)
+		// Update npm
+		err = c.RunE(ctx, node, `sudo npm i -g npm`)
 		require.NoError(t, err)
 
-		err = repeatRunE(
-			ctx, t, c, node, "install mocha", `sudo npm i -g mocha`,
-		)
+		// Install mocha
+		err = c.RunE(ctx, node, `sudo npm i -g mocha`)
 		require.NoError(t, err)
 
-		err = repeatRunE(
-			ctx, t, c, node, "remove old knex", `sudo rm -rf /mnt/data1/knex`,
-		)
+		// Remove old knex
+		err = c.RunE(ctx, node, `sudo rm -rf /mnt/data1/knex`)
 		require.NoError(t, err)
 
-		err = repeatGitCloneE(
+		err = c.GitClone(
 			ctx,
-			t,
-			c,
+			t.L(),
 			"https://github.com/knex/knex.git",
 			"/mnt/data1/knex",
 			supportedKnexTag,
@@ -98,8 +89,9 @@ func registerKnex(r registry.Registry) {
 		)
 		require.NoError(t, err)
 
-		err = repeatRunE(
-			ctx, t, c, node, "install knex npm dependencies", `cd /mnt/data1/knex/ && npm i`,
+		// Install knex npm dependencies
+		err = c.RunE(
+			ctx, node, `cd /mnt/data1/knex/ && npm i`,
 		)
 		require.NoError(t, err)
 

@@ -57,8 +57,9 @@ func registerDjango(r registry.Registry) {
 
 		t.Status("cloning django and installing prerequisites")
 
-		if err := repeatRunE(
-			ctx, t, c, node, "update apt-get",
+		// Update apt-get
+		if err := c.RunE(
+			ctx, node,
 			`
 				sudo add-apt-repository ppa:deadsnakes/ppa &&
 				sudo apt-get -qq update`,
@@ -66,19 +67,18 @@ func registerDjango(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		// Install dependencies
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"install dependencies",
 			`sudo apt-get -qq install make python3.8 libpq-dev python3.8-dev gcc python3-virtualenv python3-setuptools python-setuptools build-essential python3.8-distutils python3-apt libmemcached-dev`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "set python3.8 as default", `
+		// Set python3.8 as default
+		if err := c.RunE(
+			ctx, node, `
     		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.5 1
     		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 2
     		sudo update-alternatives --config python3`,
@@ -86,25 +86,22 @@ func registerDjango(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "install pip",
-			`curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.8`,
+		// Install pip
+		if err := c.RunE(
+			ctx, node, `curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.8`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "create virtualenv", `virtualenv --clear venv`,
-		); err != nil {
+		// Create virtualenv
+		if err := c.RunE(ctx, node, `virtualenv --clear venv`); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		// Install pytest
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"install pytest",
 			`source venv/bin/activate && pip3 install pytest pytest-xdist psycopg2`,
 		); err != nil {
 			t.Fatal(err)
@@ -119,12 +116,10 @@ func registerDjango(r registry.Registry) {
 		t.L().Printf("Latest django-cockroachdb release is %s.", djangoCockroachDBLatestTag)
 		t.L().Printf("Supported django-cockroachdb release is %s.", djangoCockroachDBSupportedTag)
 
-		if err := repeatRunE(
+		// Install django-cockroachdb
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"install django-cockroachdb",
 			fmt.Sprintf(
 				`source venv/bin/activate && pip3 install django-cockroachdb==%s`,
 				djangoCockroachDBSupportedTag,
@@ -142,10 +137,9 @@ func registerDjango(r registry.Registry) {
 		t.L().Printf("Latest Django release is %s.", djangoLatestTag)
 		t.L().Printf("Supported Django release is %s.", djangoSupportedTag)
 
-		if err := repeatGitCloneE(
+		if err := c.GitClone(
 			ctx,
-			t,
-			c,
+			t.L(),
 			"https://github.com/timgraham/django/",
 			"/mnt/data1/django",
 			djangoSupportedTag,
@@ -154,8 +148,9 @@ func registerDjango(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "install django's dependencies", `
+		// Install django dependencies
+		if err := c.RunE(
+			ctx, node, `
 				source venv/bin/activate &&
 				cd /mnt/data1/django/tests &&
 				pip3 install -e .. &&
@@ -166,8 +161,9 @@ func registerDjango(r registry.Registry) {
 		}
 
 		// Write the cockroach config into the test suite to use.
-		if err := repeatRunE(
-			ctx, t, c, node, "configuring tests to use cockroach",
+		// Configuring tests to use cockroach
+		if err := c.RunE(
+			ctx, node,
 			fmt.Sprintf(
 				"echo \"%s\" > /mnt/data1/django/tests/cockroach_settings.py",
 				cockroachDjangoSettings,

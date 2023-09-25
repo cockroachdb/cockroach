@@ -64,20 +64,20 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	t.L().Printf("Latest sqlalchemy release is %s.", latestTag)
 	t.L().Printf("Supported sqlalchemy release is %s.", supportedSQLAlchemyTag)
 
-	if err := repeatRunE(ctx, t, c, node, "update apt-get", `
+	if err := c.RunE(ctx, node, `
 		sudo add-apt-repository ppa:deadsnakes/ppa &&
 		sudo apt-get -qq update
 	`); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := repeatRunE(ctx, t, c, node, "install dependencies", `
+	if err := c.RunE(ctx, node, `
 		sudo apt-get -qq install make python3.7 libpq-dev python3.7-dev gcc python3-setuptools python-setuptools build-essential python3.7-distutils python3-virtualenv
 	`); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := repeatRunE(ctx, t, c, node, "set python3.7 as default", `
+	if err := c.RunE(ctx, node, `
 		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.5 1
 		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 2
 		sudo update-alternatives --config python3
@@ -85,39 +85,33 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatal(err)
 	}
 
-	if err := repeatRunE(ctx, t, c, node, "install pip", `
-		curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.7
-	`); err != nil {
+	if err := c.RunE(ctx, node, `curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.7`); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := repeatRunE(
-		ctx, t, c, node, "create virtualenv", `virtualenv --clear venv`,
-	); err != nil {
+	if err := c.RunE(ctx, node, `virtualenv --clear venv`); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := repeatRunE(ctx, t, c, node, "install pytest", fmt.Sprintf(`
+	if err := c.RunE(ctx, node, fmt.Sprintf(`
 		source venv/bin/activate &&
 			pip3 install --upgrade --force-reinstall setuptools pytest==7.2.1 pytest-xdist psycopg2 alembic sqlalchemy==%s`,
 		supportedSQLAlchemyTag)); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := repeatRunE(ctx, t, c, node, "remove old sqlalchemy-cockroachdb", `
-		sudo rm -rf /mnt/data1/sqlalchemy-cockroachdb
-	`); err != nil {
+	if err := c.RunE(ctx, node, `sudo rm -rf /mnt/data1/sqlalchemy-cockroachdb`); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := repeatGitCloneE(ctx, t, c,
+	if err := c.GitClone(ctx, t.L(),
 		"https://github.com/cockroachdb/sqlalchemy-cockroachdb.git", "/mnt/data1/sqlalchemy-cockroachdb",
 		"master", node); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Status("installing sqlalchemy-cockroachdb")
-	if err := repeatRunE(ctx, t, c, node, "installing sqlalchemy=cockroachdb", `
+	if err := c.RunE(ctx, node, `
 		source venv/bin/activate && cd /mnt/data1/sqlalchemy-cockroachdb && pip3 install .
 	`); err != nil {
 		t.Fatal(err)

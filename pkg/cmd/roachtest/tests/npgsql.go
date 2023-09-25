@@ -70,12 +70,9 @@ func registerNpgsql(r registry.Registry) {
 		// Install dotnet as per these docs:
 		// https://learn.microsoft.com/en-us/dotnet/core/install/linux-ubuntu
 		t.Status("setting up dotnet")
-		if err := repeatRunE(
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"install dependencies",
 			`sudo snap install dotnet-sdk --classic && \
 sudo snap alias dotnet-sdk.dotnet dotnet && \
 sudo ln -s /snap/dotnet-sdk/current/dotnet /usr/local/bin/dotnet`,
@@ -84,10 +81,9 @@ sudo ln -s /snap/dotnet-sdk/current/dotnet /usr/local/bin/dotnet`,
 		}
 
 		t.Status("getting npgsql")
-		if err := repeatGitCloneE(
+		if err := c.GitClone(
 			ctx,
-			t,
-			c,
+			t.L(),
 			"https://github.com/npgsql/npgsql.git",
 			"/mnt/data1/npgsql",
 			npgsqlSupportedTag,
@@ -107,12 +103,9 @@ sudo ln -s /snap/dotnet-sdk/current/dotnet /usr/local/bin/dotnet`,
 		// haven't installed it on this system. (The tests will only run on .NET 7.)
 		// The git patch changes the connection string and test setup.
 		t.Status("modifying connection settings")
-		if err := repeatRunE(
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"modify connection settings",
 			fmt.Sprintf(`cd /mnt/data1/npgsql && \
 sed -e 's/netcoreapp3.1//g' -i test/Directory.Build.props && \
 echo '%s' | git apply --ignore-whitespace -`, npgsqlPatch),
@@ -143,12 +136,10 @@ echo '%s' | git apply --ignore-whitespace -`, npgsqlPatch),
 		// Load the list of all test results files and parse them individually.
 		// Files are here: /mnt/data1/npgsql/test/Npgsql.Tests/TestResults/
 		t.Status("collating test results")
-		result, err = repeatRunWithDetailsSingleNode(
+		result, err = c.RunWithDetailsSingleNode(
 			ctx,
-			c,
-			t,
+			t.L(),
 			node,
-			"get list of test files",
 			`ls /mnt/data1/npgsql/test/Npgsql.Tests/TestResults/*.trx`,
 		)
 		if err != nil {

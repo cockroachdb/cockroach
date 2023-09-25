@@ -89,29 +89,21 @@ func registerActiveRecord(r registry.Registry) {
 		t.L().Printf("Supported rails release is %s.", supportedRailsVersion)
 		t.L().Printf("Supported adapter version is %s.", activerecordAdapterVersion)
 
-		if err := repeatRunE(
-			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
-		); err != nil {
+		// Update apt-get
+		if err := c.RunE(ctx, node, `sudo apt-get -qq update`); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx,
-			t,
-			c,
-			node,
-			"install dependencies",
-			`sudo apt-get -qq install ruby-full ruby-dev rubygems build-essential zlib1g-dev libpq-dev libsqlite3-dev`,
-		); err != nil {
+		// Install dependencies
+		if err := c.RunE(ctx, node,
+			`sudo apt-get -qq install ruby-full ruby-dev rubygems build-essential zlib1g-dev libpq-dev libsqlite3-dev`); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		// Install ruby 2.7
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"install ruby 2.7",
 			`mkdir -p ruby-install && \
         curl -fsSL https://github.com/postmodern/ruby-install/archive/v0.6.1.tar.gz | tar --strip-components=1 -C ruby-install -xz && \
         sudo make -C ruby-install install && \
@@ -121,16 +113,16 @@ func registerActiveRecord(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "remove old activerecord adapter", `rm -rf /mnt/data1/activerecord-cockroachdb-adapter`,
+		// Remove old activerecord adapter
+		if err := c.RunE(
+			ctx, node, `rm -rf /mnt/data1/activerecord-cockroachdb-adapter`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatGitCloneE(
+		if err := c.GitClone(
 			ctx,
-			t,
-			c,
+			t.L(),
 			"https://github.com/cockroachdb/activerecord-cockroachdb-adapter.git",
 			"/mnt/data1/activerecord-cockroachdb-adapter",
 			activerecordAdapterVersion,
@@ -140,24 +132,18 @@ func registerActiveRecord(r registry.Registry) {
 		}
 
 		t.Status("installing bundler")
-		if err := repeatRunE(
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"installing bundler",
 			`cd /mnt/data1/activerecord-cockroachdb-adapter/ && sudo gem install bundler:2.1.4`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		t.Status("installing gems")
-		if err := repeatRunE(
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"installing gems",
 			fmt.Sprintf(
 				`cd /mnt/data1/activerecord-cockroachdb-adapter/ && `+
 					`sudo RAILS_VERSION=%s bundle install`, supportedRailsVersion),

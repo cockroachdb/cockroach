@@ -79,29 +79,26 @@ func registerAsyncpg(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		// Install python and pip
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"install python and pip",
 			`sudo apt-get -qq install python3.7 python3-pip libpq-dev python-dev python3-virtualenv`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "create virtualenv", `virtualenv --clear venv`,
+		// Create virtualenv
+		if err := c.RunE(
+			ctx, node, "create virtualenv", `virtualenv --clear venv`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		// Install asyncpg's dependencies
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"install asyncpg's dependencies",
 			"source venv/bin/activate && cd /mnt/data1/asyncpg && pip3 install -e ."); err != nil {
 			t.Fatal(err)
 		}

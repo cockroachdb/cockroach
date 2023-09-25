@@ -62,29 +62,23 @@ func registerRubyPG(r registry.Registry) {
 
 		t.L().Printf("Supported ruby-pg version is %s.", rubyPGVersion)
 
-		if err := repeatRunE(
-			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
+		if err := c.RunE(
+			ctx, node, `sudo apt-get -qq update`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"install dependencies",
 			`sudo apt-get -qq install ruby-full ruby-dev rubygems build-essential zlib1g-dev libpq-dev libsqlite3-dev`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"install ruby 3.1.2",
 			`mkdir -p ruby-install && \
         curl -fsSL https://github.com/postmodern/ruby-install/archive/v0.8.3.tar.gz | tar --strip-components=1 -C ruby-install -xz && \
         sudo rm -rf /usr/local/bin/* && \
@@ -95,16 +89,15 @@ func registerRubyPG(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "remove old ruby-pg", `sudo rm -rf /mnt/data1/ruby-pg`,
+		if err := c.RunE(
+			ctx, node, `sudo rm -rf /mnt/data1/ruby-pg`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatGitCloneE(
+		if err := c.GitClone(
 			ctx,
-			t,
-			c,
+			t.L(),
 			"https://github.com/ged/ruby-pg.git",
 			"/mnt/data1/ruby-pg",
 			rubyPGVersion,
@@ -114,31 +107,25 @@ func registerRubyPG(r registry.Registry) {
 		}
 
 		t.Status("installing bundler")
-		if err := repeatRunE(
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"installing bundler",
 			`cd /mnt/data1/ruby-pg/ && sudo gem install bundler:2.1.4`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		t.Status("installing gems")
-		if err := repeatRunE(
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"installing gems",
 			`cd /mnt/data1/ruby-pg/ && sudo bundle install`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "remove old ruby-pg helpers.rb", `sudo rm /mnt/data1/ruby-pg/spec/helpers.rb`,
+		if err := c.RunE(
+			ctx, node, `sudo rm /mnt/data1/ruby-pg/spec/helpers.rb`,
 		); err != nil {
 			t.Fatal(err)
 		}

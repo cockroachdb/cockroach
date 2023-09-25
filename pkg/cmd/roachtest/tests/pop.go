@@ -59,16 +59,15 @@ func registerPop(r registry.Registry) {
 		)
 
 		// Remove any old pop installations
-		if err := repeatRunE(
-			ctx, t, c, node, "remove old pop", fmt.Sprintf("rm -rf %s", popPath),
+		if err := c.RunE(
+			ctx, node, fmt.Sprintf("rm -rf %s", popPath),
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatGitCloneE(
+		if err := c.GitClone(
 			ctx,
-			t,
-			c,
+			t.L(),
 			"https://github.com/gobuffalo/pop.git",
 			popPath,
 			popSupportedTag,

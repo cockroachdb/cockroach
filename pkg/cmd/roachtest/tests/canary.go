@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -91,97 +90,6 @@ var canaryRetryOptions = retry.Options{
 	Multiplier:     2,
 	MaxBackoff:     5 * time.Minute,
 	MaxRetries:     10,
-}
-
-// repeatRunE is the same function as c.RunE but with an automatic retry loop.
-func repeatRunE(
-	ctx context.Context,
-	t test.Test,
-	c cluster.Cluster,
-	node option.NodeListOption,
-	operation string,
-	args ...string,
-) error {
-	var lastError error
-	for attempt, r := 0, retry.StartWithCtx(ctx, canaryRetryOptions); r.Next(); {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if t.Failed() {
-			return fmt.Errorf("test has failed")
-		}
-		attempt++
-		t.L().Printf("attempt %d - %s", attempt, operation)
-		lastError = c.RunE(ctx, node, args...)
-		if lastError != nil {
-			t.L().Printf("error - retrying: %s", lastError)
-			continue
-		}
-		return nil
-	}
-	return errors.Wrapf(lastError, "all attempts failed for %s", operation)
-}
-
-// repeatRunWithDetailsSingleNode is the same function as c.RunWithDetailsSingleNode but with an
-// automatic retry loop.
-func repeatRunWithDetailsSingleNode(
-	ctx context.Context,
-	c cluster.Cluster,
-	t test.Test,
-	node option.NodeListOption,
-	operation string,
-	args ...string,
-) (install.RunResultDetails, error) {
-	var (
-		lastResult install.RunResultDetails
-		lastError  error
-	)
-	for attempt, r := 0, retry.StartWithCtx(ctx, canaryRetryOptions); r.Next(); {
-		if ctx.Err() != nil {
-			return lastResult, ctx.Err()
-		}
-		if t.Failed() {
-			return lastResult, fmt.Errorf("test has failed")
-		}
-		attempt++
-		t.L().Printf("attempt %d - %s", attempt, operation)
-		lastResult, lastError = c.RunWithDetailsSingleNode(ctx, t.L(), node, args...)
-		if lastError != nil {
-			t.L().Printf("error - retrying: %s", lastError)
-			continue
-		}
-		return lastResult, nil
-	}
-	return lastResult, errors.Wrapf(lastError, "all attempts failed for %s", operation)
-}
-
-// repeatGitCloneE is the same function as c.GitCloneE but with an automatic
-// retry loop.
-func repeatGitCloneE(
-	ctx context.Context,
-	t test.Test,
-	c cluster.Cluster,
-	src, dest, branch string,
-	node option.NodeListOption,
-) error {
-	var lastError error
-	for attempt, r := 0, retry.StartWithCtx(ctx, canaryRetryOptions); r.Next(); {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if t.Failed() {
-			return fmt.Errorf("test has failed")
-		}
-		attempt++
-		t.L().Printf("attempt %d - clone %s", attempt, src)
-		lastError = c.GitClone(ctx, t.L(), src, dest, branch, node)
-		if lastError != nil {
-			t.L().Printf("error - retrying: %s", lastError)
-			continue
-		}
-		return nil
-	}
-	return errors.Wrapf(lastError, "could not clone %s", src)
 }
 
 // repeatGetLatestTag fetches the latest (sorted) tag from a github repo.

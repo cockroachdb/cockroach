@@ -49,21 +49,17 @@ func registerRustPostgres(r registry.Registry) {
 		}
 
 		t.Status("cloning rust-postgres and installing prerequisites")
-		if err := repeatRunE(
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"remove old rust-postgres",
 			`rm -rf /mnt/data1/rustpostgres`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatGitCloneE(
+		if err := c.GitClone(
 			ctx,
-			t,
-			c,
+			t.L(),
 			"https://github.com/sfackler/rust-postgres.git",
 			"/mnt/data1/rust-postgres",
 			rustPostgresSupportedTag,
@@ -72,35 +68,26 @@ func registerRustPostgres(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"install rust and cargo",
 			`curl https://sh.rustup.rs -sSf | sh -s -- -y
 `,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"install C linker",
 			"sudo apt-get install build-essential -y",
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			" Installing more build essentials",
 			"sudo apt-get install -y pkg-config libssl-dev",
 		); err != nil {
 			t.Fatal(err)

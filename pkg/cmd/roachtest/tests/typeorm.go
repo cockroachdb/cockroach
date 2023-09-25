@@ -59,64 +59,52 @@ func registerTypeORM(r registry.Registry) {
 		t.L().Printf("Latest TypeORM release is %s.", latestTag)
 		t.L().Printf("Supported TypeORM release is %s.", supportedTypeORMRelease)
 
-		if err := repeatRunE(
-			ctx, t, c, node, "purge apt-get",
-			`sudo apt-get purge -y command-not-found`,
-		); err != nil {
+		if err := c.RunE(ctx, node, `sudo apt-get purge -y command-not-found`); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "update apt-get", `sudo apt-get update`,
-		); err != nil {
+		if err := c.RunE(ctx, node, `sudo apt-get update`); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"install dependencies",
 			`sudo apt-get install -y make python3 libpq-dev python-dev gcc g++ `+
 				`software-properties-common build-essential`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"add nodesource repository",
 			`sudo apt install ca-certificates && curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "install nodejs and npm", `sudo apt-get install -y nodejs`,
+		if err := c.RunE(
+			ctx, node, `sudo apt-get install -y nodejs`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "update npm", `sudo npm i -g npm`,
+		if err := c.RunE(
+			ctx, node, `sudo npm i -g npm`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "remove old TypeORM", `sudo rm -rf /mnt/data1/typeorm`,
+		if err := c.RunE(
+			ctx, node, `sudo rm -rf /mnt/data1/typeorm`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatGitCloneE(
+		if err := c.GitClone(
 			ctx,
-			t,
-			c,
+			t.L(),
 			"https://github.com/typeorm/typeorm.git",
 			"/mnt/data1/typeorm",
 			supportedTypeORMRelease,
@@ -127,34 +115,25 @@ func registerTypeORM(r registry.Registry) {
 
 		// TypeORM is super picky about this file format and if it cannot be parsed
 		// it will return a file not found error.
-		if err := repeatRunE(
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"configuring tests for cockroach only",
 			fmt.Sprintf("echo '%s' > /mnt/data1/typeorm/ormconfig.json", typeORMConfigJSON),
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"patch TypeORM test script to run all tests even on failure",
 			`sed -i 's/--bail //' /mnt/data1/typeorm/package.json`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"building TypeORM",
 			`cd /mnt/data1/typeorm/ && npm install`,
 		); err != nil {
 			t.Fatal(err)

@@ -175,12 +175,11 @@ func parseAndSummarizeDotNetTestsResults(
 ) {
 	results := newORMTestsResults()
 	t.L().Printf("Parsing %s\n", testResultFileName)
-	result, err := repeatRunWithDetailsSingleNode(
+	// Fetching results file
+	result, err := c.RunWithDetailsSingleNode(
 		ctx,
-		c,
-		t,
+		t.L(),
 		node,
-		fmt.Sprintf("fetching results file %s", testResultFileName),
 		fmt.Sprintf("cat %s", testResultFileName),
 	)
 	if err != nil {

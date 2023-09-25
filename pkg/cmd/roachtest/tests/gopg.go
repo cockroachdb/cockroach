@@ -71,17 +71,17 @@ func registerGopg(r registry.Registry) {
 
 		installGolang(ctx, t, c, node)
 
-		if err := repeatRunE(
-			ctx, t, c, node, "remove old gopg",
+		// Remove old goph
+		if err := c.RunE(
+			ctx, node,
 			fmt.Sprintf(`sudo rm -rf %s`, destPath),
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatGitCloneE(
+		if err := c.GitClone(
 			ctx,
-			t,
-			c,
+			t.L(),
 			"https://github.com/go-pg/pg.git",
 			destPath,
 			gopgSupportedTag,

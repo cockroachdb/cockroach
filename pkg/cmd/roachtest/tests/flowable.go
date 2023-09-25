@@ -48,33 +48,30 @@ func registerFlowable(r registry.Registry) {
 		}
 		t.L().Printf("Latest Flowable release is %s.", latestTag)
 
-		if err := repeatRunE(
-			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
-		); err != nil {
+		// Update apt-get
+		if err := c.RunE(ctx, node, `sudo apt-get -qq update`); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		// Install dependencies
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"install dependencies",
 			`sudo apt-get -qq install default-jre openjdk-8-jdk-headless gradle maven`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "remove old Flowable", `rm -rf /mnt/data1/flowable-engine`,
+		// Remove old Flowable
+		if err := c.RunE(
+			ctx, node, `rm -rf /mnt/data1/flowable-engine`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatGitCloneE(
+		if err := c.GitClone(
 			ctx,
-			t,
-			c,
+			t.L(),
 			"https://github.com/flowable/flowable-engine.git",
 			"/mnt/data1/flowable-engine",
 			latestTag,
@@ -84,12 +81,9 @@ func registerFlowable(r registry.Registry) {
 		}
 
 		t.Status("building Flowable")
-		if err := repeatRunE(
+		if err := c.RunE(
 			ctx,
-			t,
-			c,
 			node,
-			"building Flowable",
 			`cd /mnt/data1/flowable-engine/ && mvn clean install -DskipTests`,
 		); err != nil {
 			t.Fatal(err)

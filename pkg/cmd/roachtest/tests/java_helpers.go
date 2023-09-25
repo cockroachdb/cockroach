@@ -191,12 +191,10 @@ func parseAndSummarizeJavaORMTestsResults(
 	}
 	for i, file := range files {
 		t.L().Printf("Parsing %d of %d: %s\n", i+1, len(files), file)
-		result, err := repeatRunWithDetailsSingleNode(
+		result, err := c.RunWithDetailsSingleNode(
 			ctx,
-			c,
-			t,
+			t.L(),
 			node,
-			fmt.Sprintf("fetching results file %s", file),
 			fmt.Sprintf("cat %s", file),
 		)
 		if err != nil {

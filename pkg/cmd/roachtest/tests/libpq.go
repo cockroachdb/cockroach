@@ -62,22 +62,19 @@ func registerLibPQ(r registry.Registry) {
 		)
 
 		// Remove any old lib/pq installations
-		err = repeatRunE(
-			ctx, t, c, node, "remove old lib/pq", fmt.Sprintf("rm -rf %s", libPQPath),
-		)
+		err = c.RunE(ctx, node, fmt.Sprintf("rm -rf %s", libPQPath))
 		require.NoError(t, err)
 
 		// Install go-junit-report to convert test results to .xml format we know
 		// how to work with.
-		err = repeatRunE(ctx, t, c, node, "install go-junit-report",
+		err = c.RunE(ctx, node,
 			fmt.Sprintf("GOPATH=%s go install github.com/jstemmer/go-junit-report@latest", goPath),
 		)
 		require.NoError(t, err)
 
-		err = repeatGitCloneE(
+		err = c.GitClone(
 			ctx,
-			t,
-			c,
+			t.L(),
 			fmt.Sprintf("https://%s.git", libPQRepo),
 			libPQPath,
 			libPQSupportedTag,
