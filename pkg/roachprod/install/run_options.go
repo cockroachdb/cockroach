@@ -13,12 +13,20 @@ package install
 import "github.com/cockroachdb/cockroach/pkg/util/retry"
 
 type RunOptions struct {
-	*RetryOpts
-	// WaitOnFail will cause the Parallel function to wait for all nodes to
+	// RetryOptions are the retry options
+	RetryOptions *retry.Options
+	// ShouldRetryFn is only applciable when RetryOptions is not nil
+	// and specifies a function to be called in the case that a retry
+	// is about to be performed. A user can provide a function which, for
+	// example, inspects the previous result's output, and decides not to
+	// retry any further, by returning false.
+	ShouldRetryFn func(*RunResultDetails) bool
+	// FailSlow will cause the Parallel function to wait for all nodes to
 	// finish when encountering a command error on any node. The default
 	// behaviour is to exit immediately on the first error, in which case the
 	// slice of ParallelResults will only contain the one error result.
-	WaitOnFail bool
+	// Named as such to make clear that this is not eneabled by default.
+	FailSlow bool
 	// These are private to roachprod
 	Concurrency int
 	Display     string
@@ -26,15 +34,31 @@ type RunOptions struct {
 
 type RunOption func(runOpts *RunOptions)
 
-func WithRetryOpts(retryOpts *RetryOpts) RunOption {
+// WithRetryOpts specifies retry behaviour
+func WithRetryOpts(retryOpts retry.Options) RunOption {
 	return func(runOpts *RunOptions) {
-		runOpts.RetryOpts = retryOpts
+		runOpts.RetryOptions = &retryOpts
 	}
 }
 
-func WithWaitOnFail() RunOption {
+// WithRetryDisabled disables retries for a command,
+// and is a friendly equivalent to `WithRetryOpts(nil)`
+func WithRetryDisabled() RunOption {
 	return func(runOpts *RunOptions) {
-		runOpts.WaitOnFail = true
+		runOpts.RetryOptions = nil
+	}
+}
+
+// WithRetryFn is only applicable when retryOpts is not nil
+func WithRetryFn(fn func(*RunResultDetails) bool) RunOption {
+	return func(runOpts *RunOptions) {
+		runOpts.ShouldRetryFn = fn
+	}
+}
+
+func WithFailSlow(failSlow bool) RunOption {
+	return func(runOpts *RunOptions) {
+		runOpts.FailSlow = failSlow
 	}
 }
 
@@ -47,17 +71,5 @@ func WithConcurrency(concurrency int) RunOption {
 func WithDisplay(display string) RunOption {
 	return func(runOpts *RunOptions) {
 		runOpts.Display = display
-	}
-}
-
-type RetryOpts struct {
-	retry.Options
-	ShouldRetryFn func(*RunResultDetails) bool
-}
-
-func NewRetryOpts(retryOpts retry.Options, shouldRetryFn func(*RunResultDetails) bool) *RetryOpts {
-	return &RetryOpts{
-		Options:       retryOpts,
-		ShouldRetryFn: shouldRetryFn,
 	}
 }

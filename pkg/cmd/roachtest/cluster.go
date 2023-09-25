@@ -2182,7 +2182,7 @@ func (c *clusterImpl) RunEExt(
 	cmd := strings.Join(args, " ")
 	c.t.L().Printf("running cmd `%s` on nodes [%v]; details in %s.log", roachprod.TruncateString(cmd, 30), nodes, logFile)
 	l.Printf("> %s", cmd)
-	if err := roachprod.Run(ctx, l, c.MakeNodes(nodes), "", "", c.IsSecure(), l.Stdout, l.Stderr, args); err != nil {
+	if err := roachprod.Run(ctx, l, c.MakeNodes(nodes), "", "", c.IsSecure(), l.Stdout, l.Stderr, args, opts...); err != nil {
 		if err := ctx.Err(); err != nil {
 			l.Printf("(note: incoming context was canceled: %s)", err)
 			return err
@@ -2216,7 +2216,7 @@ func (c *clusterImpl) RunWithDetailsSingleNodeExt(
 	if len(nodes) != 1 {
 		return install.RunResultDetails{}, errors.Newf("RunWithDetailsSingleNode received %d nodes. Use RunWithDetails if you need to run on multiple nodes.", len(nodes))
 	}
-	results, err := c.RunWithDetails(ctx, testLogger, nodes, args...)
+	results, err := c.RunWithDetailsExt(ctx, testLogger, nodes, args, opts...)
 	return results[0], errors.CombineErrors(err, results[0].Err)
 }
 
