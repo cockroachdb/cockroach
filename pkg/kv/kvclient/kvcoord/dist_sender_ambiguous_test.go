@@ -274,6 +274,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 	// several seconds, and requires maintaining expected leases.
 	skip.UnderShort(t)
 	skip.UnderStressRace(t)
+	skip.WithIssue(t, 110187, "flaky test")
 
 	succeedsSoonDuration := testutils.DefaultSucceedsSoonDuration
 	if util.RaceEnabled {
