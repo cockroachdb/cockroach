@@ -332,6 +332,11 @@ func (*DummyEvalPlanner) Optimizer() interface{} {
 	return nil
 }
 
+// PLpgSQLFetchCursor is part of the Planner interface.
+func (*DummyEvalPlanner) PLpgSQLFetchCursor(context.Context, *tree.CursorStmt) (tree.Datums, error) {
+	return nil, nil
+}
+
 var _ eval.Planner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,

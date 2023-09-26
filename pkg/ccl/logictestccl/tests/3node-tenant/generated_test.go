@@ -1374,6 +1374,13 @@ func TestTenantLogic_pgoidtype(
 	runLogicTest(t, "pgoidtype")
 }
 
+func TestTenantLogic_plpgsql_builtins(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "plpgsql_builtins")
+}
+
 func TestTenantLogic_plpgsql_cursor(
 	t *testing.T,
 ) {
@@ -1442,13 +1449,6 @@ func TestTenantLogic_propagate_input_ordering(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "propagate_input_ordering")
-}
-
-func TestTenantLogic_raise(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "raise")
 }
 
 func TestTenantLogic_read_committed(

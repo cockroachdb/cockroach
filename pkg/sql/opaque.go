@@ -213,13 +213,13 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 	case *tree.DropView:
 		return p.DropView(ctx, n)
 	case *tree.FetchCursor:
-		return p.FetchCursor(ctx, &n.CursorStmt, false /* isMove */)
+		return p.FetchCursor(ctx, &n.CursorStmt)
 	case *tree.Grant:
 		return p.Grant(ctx, n)
 	case *tree.GrantRole:
 		return p.GrantRole(ctx, n)
 	case *tree.MoveCursor:
-		return p.FetchCursor(ctx, &n.CursorStmt, true /* isMove */)
+		return p.FetchCursor(ctx, &n.CursorStmt)
 	case *tree.ReassignOwnedBy:
 		return p.ReassignOwnedBy(ctx, n)
 	case *tree.RefreshMaterializedView:

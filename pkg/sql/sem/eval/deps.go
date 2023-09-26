@@ -404,6 +404,11 @@ type Planner interface {
 
 	// Optimizer returns the optimizer associated with this Planner, if any.
 	Optimizer() interface{}
+
+	// PLpgSQLFetchCursor returns the next row from the cursor with the given
+	// name, if any. It returns nil if no such row exists. Used to implement the
+	// PLpgSQL FETCH statement.
+	PLpgSQLFetchCursor(ctx context.Context, cursor *tree.CursorStmt) (res tree.Datums, err error)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

@@ -427,11 +427,12 @@ type plpgsqlCursorHelper struct {
 func (h *plpgsqlCursorHelper) createCursor(p *planner) error {
 	h.iter = newRowContainerIterator(h.ctx, h.container)
 	cursor := &sqlCursor{
-		Rows:       h,
-		readSeqNum: p.txn.GetReadSeqNum(),
-		txn:        p.txn,
-		statement:  h.cursorSql,
-		created:    timeutil.Now(),
+		Rows:        h,
+		readSeqNum:  p.txn.GetReadSeqNum(),
+		txn:         p.txn,
+		statement:   h.cursorSql,
+		created:     timeutil.Now(),
+		isContainer: true,
 	}
 	if err := p.checkIfCursorExists(h.cursorName); err != nil {
 		return err
