@@ -100,6 +100,7 @@ func TestOIDCEnabled(t *testing.T) {
 	s := srv.ApplicationLayer()
 
 	usernameUnderTest := "test"
+	basePath := "/some/random/path"
 
 	realNewManager := NewOIDCManager
 	NewOIDCManager = func(ctx context.Context, conf oidcAuthenticationConf, redirectURL string, scopes []string) (IOIDCManager, error) {
@@ -129,6 +130,7 @@ func TestOIDCEnabled(t *testing.T) {
 	sqlDB.Exec(t, `set cluster setting server.oidc_authentication.claim_json_key = "email"`)
 	sqlDB.Exec(t, `set cluster setting server.oidc_authentication.principal_regex = '^([^@]+)@[^@]+$'`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.enabled = "true"`)
+	sqlDB.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING server.http.base_path = "%s"`, basePath))
 
 	testCertsContext := s.NewClientRPCContext(ctx, username.TestUserName())
 	client, err := testCertsContext.GetHTTPClient()
@@ -200,7 +202,7 @@ func TestOIDCEnabled(t *testing.T) {
 	if resp.StatusCode != 307 {
 		t.Fatalf("expected 307 status code but got: %d", resp.StatusCode)
 	}
-	if resp.Header.Get("Location") != "/" {
+	if resp.Header.Get("Location") != basePath {
 		t.Fatalf("expected to be redirected to root")
 	}
 	foundCookie := false
