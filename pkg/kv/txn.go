@@ -473,30 +473,35 @@ func (txn *Txn) Get(ctx context.Context, key interface{}) (KeyValue, error) {
 }
 
 // GetForUpdate retrieves the value for a key, returning the retrieved key/value
-// or an error. An unreplicated, exclusive lock is acquired on the key, if it
-// exists. It is not considered an error for the key to not exist.
+// or an error. An Exclusive lock with the supplied durability is acquired on
+// the key, if it exists. It is not considered an error for the key not to
+// exist.
 //
 //	r, err := txn.GetForUpdate("a")
 //	// string(r.Key) == "a"
 //
 // key can be either a byte slice or a string.
-func (txn *Txn) GetForUpdate(ctx context.Context, key interface{}) (KeyValue, error) {
+func (txn *Txn) GetForUpdate(
+	ctx context.Context, key interface{}, dur kvpb.KeyLockingDurabilityType,
+) (KeyValue, error) {
 	b := txn.NewBatch()
-	b.GetForUpdate(key)
+	b.GetForUpdate(key, dur)
 	return getOneRow(txn.Run(ctx, b), b)
 }
 
-// GetForShare retrieves the value for a key, returning the retrieved key/value
-// or an error. An unreplicated, shared lock is acquired on the key, if it
-// exists. It is not considered an error for the key to not exist.
+// GetForShare retrieves the value for a key. A shared lock with the supplied
+// durability is acquired on the key, if it exists. A new result will be
+// appended to the batch which will contain a single row.
 //
 //	r, err := txn.GetForShare("a")
 //	// string(r.Key) == "a"
 //
 // key can be either a byte slice or a string.
-func (txn *Txn) GetForShare(ctx context.Context, key interface{}) (KeyValue, error) {
+func (txn *Txn) GetForShare(
+	ctx context.Context, key interface{}, dur kvpb.KeyLockingDurabilityType,
+) (KeyValue, error) {
 	b := txn.NewBatch()
-	b.GetForShare(key)
+	b.GetForShare(key, dur)
 	return getOneRow(txn.Run(ctx, b), b)
 }
 
@@ -595,12 +600,13 @@ func (txn *Txn) scan(
 	maxRows int64,
 	isReverse bool,
 	str kvpb.KeyLockingStrengthType,
+	dur kvpb.KeyLockingDurabilityType,
 ) ([]KeyValue, error) {
 	b := txn.NewBatch()
 	if maxRows > 0 {
 		b.Header.MaxSpanRequestKeys = maxRows
 	}
-	b.scan(begin, end, isReverse, str)
+	b.scan(begin, end, isReverse, str, dur)
 	r, err := getOneResult(txn.Run(ctx, b), b)
 	return r.Rows, err
 }
@@ -615,35 +621,35 @@ func (txn *Txn) scan(
 func (txn *Txn) Scan(
 	ctx context.Context, begin, end interface{}, maxRows int64,
 ) ([]KeyValue, error) {
-	return txn.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.NonLocking)
+	return txn.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.NonLocking, kvpb.Invalid)
 }
 
 // ScanForUpdate retrieves the rows between begin (inclusive) and end
-// (exclusive) in ascending order. Unreplicated, exclusive locks are acquired on
-// each of the returned keys.
+// (exclusive) in ascending order. Exclusive locks with the supplied durability
+// are acquired on each of the returned keys.
 //
 // The returned []KeyValue will contain up to maxRows elements (or all results
 // when zero is supplied).
 //
 // key can be either a byte slice or a string.
 func (txn *Txn) ScanForUpdate(
-	ctx context.Context, begin, end interface{}, maxRows int64,
+	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType,
 ) ([]KeyValue, error) {
-	return txn.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.ForUpdate)
+	return txn.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.ForUpdate, dur)
 }
 
-// ScanForShare retrieves the rows between begin (inclusive) and end
-// (exclusive) in ascending order. Unreplicated, shared locks are acquired on
-// each of the returned keys.
+// ScanForShare retrieves the rows between begin (inclusive) and end (exclusive)
+// in ascending order. Shared locks[1] are acquired on each of the returned
+// keys.
 //
 // The returned []KeyValue will contain up to maxRows elements (or all results
 // when zero is supplied).
 //
 // key can be either a byte slice or a string.
 func (txn *Txn) ScanForShare(
-	ctx context.Context, begin, end interface{}, maxRows int64,
+	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType,
 ) ([]KeyValue, error) {
-	return txn.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.ForShare)
+	return txn.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.ForShare, dur)
 }
 
 // ReverseScan retrieves the rows between begin (inclusive) and end (exclusive)
@@ -656,35 +662,35 @@ func (txn *Txn) ScanForShare(
 func (txn *Txn) ReverseScan(
 	ctx context.Context, begin, end interface{}, maxRows int64,
 ) ([]KeyValue, error) {
-	return txn.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.NonLocking)
+	return txn.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.NonLocking, kvpb.Invalid)
 }
 
 // ReverseScanForUpdate retrieves the rows between begin (inclusive) and end
-// (exclusive) in descending order. Unreplicated, exclusive locks are acquired
-// on each of the returned keys.
+// (exclusive) in descending order. Exclusive locks with the supplied durability
+// are acquired on each of the returned keys.
 //
 // The returned []KeyValue will contain up to maxRows elements (or all results
 // when zero is supplied).
 //
 // key can be either a byte slice or a string.
 func (txn *Txn) ReverseScanForUpdate(
-	ctx context.Context, begin, end interface{}, maxRows int64,
+	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType,
 ) ([]KeyValue, error) {
-	return txn.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.ForUpdate)
+	return txn.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.ForUpdate, dur)
 }
 
 // ReverseScanForShare retrieves the rows between begin (inclusive) and end
-// (exclusive) in descending order. Unreplicated, shared locks are acquired
-// on each of the returned keys.
+// (exclusive) in descending order. Shared locks with the supplied durability
+// are acquired on each of the returned keys.
 //
 // The returned []KeyValue will contain up to maxRows elements (or all results
 // when zero is supplied).
 //
 // key can be either a byte slice or a string.
 func (txn *Txn) ReverseScanForShare(
-	ctx context.Context, begin, end interface{}, maxRows int64,
+	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType,
 ) ([]KeyValue, error) {
-	return txn.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.ForShare)
+	return txn.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.ForShare, dur)
 }
 
 // Iterate performs a paginated scan and applying the function f to every page.

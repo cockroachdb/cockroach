@@ -489,7 +489,7 @@ func TestSendRPCOrder(t *testing.T) {
 				RangeID:       rangeID, // Not used in this test, but why not.
 				RoutingPolicy: tc.routingPolicy,
 			}
-			req := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("b"), kvpb.NonLocking)
+			req := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("b"))
 			_, pErr := kv.SendWrappedWith(ctx, ds, header, req)
 			require.Nil(t, pErr)
 		})
@@ -950,7 +950,7 @@ func TestNoBackoffOnNotLeaseHolderErrorFromFollowerRead(t *testing.T) {
 		Lease: lease,
 	})
 
-	get := kvpb.NewGet(roachpb.Key("a"), kvpb.NonLocking)
+	get := kvpb.NewGet(roachpb.Key("a"))
 	_, pErr := kv.SendWrapped(ctx, ds, get)
 	require.Nil(t, pErr)
 	require.Equal(t, []roachpb.NodeID{1, 2}, sentTo)
@@ -1022,7 +1022,7 @@ func TestNoBackoffOnNotLeaseHolderErrorWithoutLease(t *testing.T) {
 
 	// Send a request. It should try all three replicas once: the first two fail
 	// with NLHE, the third one succeeds. None of them should trigger backoffs.
-	_, pErr := kv.SendWrapped(ctx, ds, kvpb.NewGet(roachpb.Key("a"), kvpb.NonLocking))
+	_, pErr := kv.SendWrapped(ctx, ds, kvpb.NewGet(roachpb.Key("a")))
 	require.NoError(t, pErr.GoError())
 	require.Equal(t, []roachpb.NodeID{1, 2, 3}, sentTo)
 	require.Equal(t, int64(0), ds.Metrics().InLeaseTransferBackoffs.Count())
@@ -1118,7 +1118,7 @@ func TestDistSenderMovesOnFromReplicaWithStaleLease(t *testing.T) {
 		Lease: cachedLease,
 	})
 
-	get := kvpb.NewGet(roachpb.Key("a"), kvpb.NonLocking)
+	get := kvpb.NewGet(roachpb.Key("a"))
 	_, pErr := kv.SendWrapped(ctx, ds, get)
 	require.Nil(t, pErr)
 
@@ -1240,7 +1240,7 @@ func TestDistSenderIgnoresNLHEBasedOnOldRangeGeneration(t *testing.T) {
 				Lease: cachedLease,
 			})
 
-			get := kvpb.NewGet(roachpb.Key("a"), kvpb.NonLocking)
+			get := kvpb.NewGet(roachpb.Key("a"))
 			_, pErr := kv.SendWrapped(ctx, ds, get)
 			require.Nil(t, pErr)
 
@@ -1349,7 +1349,7 @@ func TestDistSenderRetryOnTransportErrors(t *testing.T) {
 				Lease: cachedLease,
 			})
 
-			get := kvpb.NewGet(roachpb.Key("a"), kvpb.NonLocking)
+			get := kvpb.NewGet(roachpb.Key("a"))
 			_, pErr := kv.SendWrapped(ctx, ds, get)
 			if spec.shouldRetry {
 				require.True(t, secondReplicaTried, "Second replica was not retried")
@@ -1903,7 +1903,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 		Settings:           cluster.MakeTestingClusterSettings(),
 	}
 	ds := NewDistSender(cfg)
-	scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), kvpb.NonLocking)
+	scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
 	if _, err := kv.SendWrapped(context.Background(), ds, scan); err != nil {
 		t.Errorf("scan encountered error: %s", err)
 	}
@@ -2007,7 +2007,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 		RPCRetryOptions: &retry.Options{MaxRetries: 1},
 	}
 	ds := NewDistSender(cfg)
-	scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), kvpb.NonLocking)
+	scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
 	if _, err := kv.SendWrapped(context.Background(), ds, scan); err != nil {
 		t.Errorf("scan encountered error: %s", err)
 	}
@@ -2127,7 +2127,7 @@ func TestSendRPCRetry(t *testing.T) {
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
 	ds := NewDistSender(cfg)
-	scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), kvpb.NonLocking)
+	scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
 	sr, err := kv.SendWrappedWith(ctx, ds, kvpb.Header{MaxSpanRequestKeys: 1}, scan)
 	if err != nil {
 		t.Fatal(err)
@@ -2253,7 +2253,7 @@ func TestDistSenderDescriptorUpdatesOnSuccessfulRPCs(t *testing.T) {
 
 			// Send a request that's going to receive a response with a RangeInfo.
 			k := roachpb.Key("a")
-			get := kvpb.NewGet(k, kvpb.NonLocking)
+			get := kvpb.NewGet(k)
 			ba := &kvpb.BatchRequest{}
 			ba.Add(get)
 			_, pErr := ds.Send(ctx, ba)
@@ -2366,7 +2366,7 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
 	ds = NewDistSender(cfg)
-	get := kvpb.NewGet(roachpb.Key("b"), kvpb.NonLocking)
+	get := kvpb.NewGet(roachpb.Key("b"))
 	_, err := kv.SendWrapped(ctx, ds, get)
 	if err != nil {
 		t.Fatal(err)
@@ -2462,8 +2462,8 @@ func TestMultiRangeGapReverse(t *testing.T) {
 
 	ba := &kvpb.BatchRequest{}
 	ba.Txn = &txn
-	ba.Add(kvpb.NewReverseScan(splits[0], splits[1], kvpb.NonLocking))
-	ba.Add(kvpb.NewReverseScan(splits[2], splits[3], kvpb.NonLocking))
+	ba.Add(kvpb.NewReverseScan(splits[0], splits[1]))
+	ba.Add(kvpb.NewReverseScan(splits[2], splits[3]))
 
 	// Before fixing https://github.com/cockroachdb/cockroach/issues/18174, this
 	// would error with:
@@ -2564,7 +2564,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		Settings: cluster.MakeTestingClusterSettings(),
 	}
 	ds := NewDistSender(cfg)
-	scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), kvpb.NonLocking)
+	scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
 	// Set the Txn info to avoid an OpRequiresTxnError.
 	reply, err := kv.SendWrappedWith(ctx, ds, kvpb.Header{
 		MaxSpanRequestKeys: 10,
@@ -2918,7 +2918,6 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 	ba.Add(kvpb.NewScan(
 		keys.RangeDescriptorKey(roachpb.RKey("a")),
 		keys.RangeDescriptorKey(roachpb.RKey("c")),
-		kvpb.NonLocking,
 	))
 
 	if _, pErr := ds.Send(ctx, ba); pErr != nil {
@@ -4038,19 +4037,19 @@ func TestCanSendToFollower(t *testing.T) {
 			kvpb.Header{
 				Txn: &roachpb.Transaction{},
 			},
-			kvpb.NewGet(roachpb.Key("a"), kvpb.NonLocking),
+			kvpb.NewGet(roachpb.Key("a")),
 			1,
 		},
 		{
 			true,
 			kvpb.Header{},
-			kvpb.NewGet(roachpb.Key("a"), kvpb.NonLocking),
+			kvpb.NewGet(roachpb.Key("a")),
 			1,
 		},
 		{
 			false,
 			kvpb.Header{},
-			kvpb.NewGet(roachpb.Key("a"), kvpb.NonLocking),
+			kvpb.NewGet(roachpb.Key("a")),
 			2,
 		},
 	} {
@@ -4241,7 +4240,7 @@ func TestEvictMetaRange(t *testing.T) {
 		}
 		ds := NewDistSender(cfg)
 
-		scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("b"), kvpb.NonLocking)
+		scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("b"))
 		if _, pErr := kv.SendWrapped(ctx, ds, scan); pErr != nil {
 			t.Fatalf("scan encountered error: %s", pErr)
 		}
@@ -4256,7 +4255,7 @@ func TestEvictMetaRange(t *testing.T) {
 		// Simulate a split on the meta2 range and mark it as stale.
 		isStale = true
 
-		scan = kvpb.NewScan(roachpb.Key("b"), roachpb.Key("c"), kvpb.NonLocking)
+		scan = kvpb.NewScan(roachpb.Key("b"), roachpb.Key("c"))
 		if _, pErr := kv.SendWrapped(ctx, ds, scan); pErr != nil {
 			t.Fatalf("scan encountered error: %s", pErr)
 		}
@@ -4570,13 +4569,13 @@ func TestRequestSubdivisionAfterDescriptorChange(t *testing.T) {
 	splitKey := keys.MustAddr(keyB)
 
 	get := func(k roachpb.Key) kvpb.Request {
-		return kvpb.NewGet(k, kvpb.NonLocking)
+		return kvpb.NewGet(k)
 	}
 	scan := func(k roachpb.Key) kvpb.Request {
-		return kvpb.NewScan(k, k.Next(), kvpb.NonLocking)
+		return kvpb.NewScan(k, k.Next())
 	}
 	revScan := func(k roachpb.Key) kvpb.Request {
-		return kvpb.NewReverseScan(k, k.Next(), kvpb.NonLocking)
+		return kvpb.NewReverseScan(k, k.Next())
 	}
 
 	for _, tc := range []struct {
@@ -4709,7 +4708,7 @@ func TestRequestSubdivisionAfterDescriptorChangeWithUnavailableReplicasTerminate
 	splitKey := keys.MustAddr(keyB)
 
 	get := func(k roachpb.Key) kvpb.Request {
-		return kvpb.NewGet(k, kvpb.NonLocking)
+		return kvpb.NewGet(k)
 	}
 
 	ctx := context.Background()
@@ -4802,13 +4801,13 @@ func TestDescriptorChangeAfterRequestSubdivision(t *testing.T) {
 	laterSplitKey2 := keys.MustAddr(keyD)
 
 	get := func(k roachpb.Key) kvpb.Request {
-		return kvpb.NewGet(k, kvpb.NonLocking)
+		return kvpb.NewGet(k)
 	}
 	scan := func(k roachpb.Key) kvpb.Request {
-		return kvpb.NewScan(k, k.Next(), kvpb.NonLocking)
+		return kvpb.NewScan(k, k.Next())
 	}
 	revScan := func(k roachpb.Key) kvpb.Request {
-		return kvpb.NewReverseScan(k, k.Next(), kvpb.NonLocking)
+		return kvpb.NewReverseScan(k, k.Next())
 	}
 
 	for _, tc := range []struct {

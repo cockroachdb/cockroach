@@ -448,12 +448,12 @@ func TestQueryLocksAcrossRanges(t *testing.T) {
 	txn1 := kv.NewTxn(ctx, db, s.NodeID())
 	err = txn1.Put(ctx, roachpb.Key("c"), []byte("baz"))
 	require.NoError(t, err)
-	_, err = txn1.GetForUpdate(ctx, roachpb.Key("x"))
+	_, err = txn1.GetForUpdate(ctx, roachpb.Key("x"), kvpb.BestEffort)
 	require.NoError(t, err)
 
 	// Use txn2 to get an unreplicated lock on "p".
 	txn2 := kv.NewTxn(ctx, db, s.NodeID())
-	_, err = txn2.GetForUpdate(ctx, roachpb.Key("p"))
+	_, err = txn2.GetForUpdate(ctx, roachpb.Key("p"), kvpb.BestEffort)
 	require.NoError(t, err)
 
 	now := s.Clock().NowAsClockTimestamp()

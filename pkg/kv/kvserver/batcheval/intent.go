@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -104,44 +103,108 @@ func readProvisionalVal(
 
 }
 
-// acquireUnreplicatedLocksOnKeys adds an unreplicated lock acquisition by the
-// transaction to the provided result.Result for each key in the scan result.
-func acquireUnreplicatedLocksOnKeys(
-	res *result.Result,
+// acquireLocksOnKeys acquires locks on each of the keys in the result of a
+// {,Reverse}ScanRequest. The locks are held by the specified transaction with
+// the supplied locks strength and durability. The list of LockAcquisitions is
+// returned to the caller, which the caller must accumulate in its result set.
+//
+// It is possible to run into a lock conflict error when trying to acquire a
+// lock on one of the keys. In such cases, a LockConflictError is returned to
+// the caller.
+func acquireLocksOnKeys(
+	ctx context.Context,
+	readWriter storage.ReadWriter,
 	txn *roachpb.Transaction,
 	str lock.Strength,
+	dur lock.Durability,
 	scanFmt kvpb.ScanFormat,
 	scanRes *storage.MVCCScanResult,
-) error {
-	res.Local.AcquiredLocks = make([]roachpb.LockAcquisition, scanRes.NumKeys)
+) ([]roachpb.LockAcquisition, error) {
+	acquiredLocks := make([]roachpb.LockAcquisition, scanRes.NumKeys)
 	switch scanFmt {
 	case kvpb.BATCH_RESPONSE:
 		var i int
-		return storage.MVCCScanDecodeKeyValues(scanRes.KVData, func(key storage.MVCCKey, _ []byte) error {
-			res.Local.AcquiredLocks[i] = roachpb.MakeLockAcquisition(txn, copyKey(key.Key), lock.Unreplicated, str)
+		err := storage.MVCCScanDecodeKeyValues(scanRes.KVData, func(key storage.MVCCKey, _ []byte) error {
+			k := copyKey(key.Key)
+			acq, err := acquireLockOnKey(ctx, readWriter, txn, str, dur, k)
+			if err != nil {
+				return err
+			}
+			acquiredLocks[i] = acq
 			i++
 			return nil
 		})
+		if err != nil {
+			return nil, err
+		}
+		return acquiredLocks, nil
 	case kvpb.KEY_VALUES:
 		for i, row := range scanRes.KVs {
-			res.Local.AcquiredLocks[i] = roachpb.MakeLockAcquisition(txn, copyKey(row.Key), lock.Unreplicated, str)
+			k := copyKey(row.Key)
+			acq, err := acquireLockOnKey(ctx, readWriter, txn, str, dur, k)
+			if err != nil {
+				return nil, err
+			}
+			acquiredLocks[i] = acq
 		}
-		return nil
+		return acquiredLocks, nil
 	case kvpb.COL_BATCH_RESPONSE:
-		return errors.AssertionFailedf("unexpectedly acquiring unreplicated locks with COL_BATCH_RESPONSE scan format")
+		return nil, errors.AssertionFailedf("unexpectedly acquiring unreplicated locks with COL_BATCH_RESPONSE scan format")
 	default:
 		panic("unexpected scanFormat")
 	}
 }
 
+// acquireLockOnKey acquires a lock on the specified key. The lock is acquired
+// by the specified transaction with the supplied lock strength and durability.
+// The resultant lock acquisition struct is returned, which the caller must
+// accumulate in its result set.
+//
+// It is possible for lock acquisition to run into a lock conflict error, in
+// which case a LockConflictError is returned to the caller.
+func acquireLockOnKey(
+	ctx context.Context,
+	readWriter storage.ReadWriter,
+	txn *roachpb.Transaction,
+	str lock.Strength,
+	dur lock.Durability,
+	key roachpb.Key,
+) (roachpb.LockAcquisition, error) {
+	// TODO(arul,nvanbenschoten): For now, we're only checking whether we have
+	// access to a legit pebble.Writer for replicated lock acquisition. We're not
+	// actually acquiring a replicated lock -- we can only do so once they're
+	// fully supported in the storage package. Until then, we grab an unreplicated
+	// lock regardless of what the caller asked us to do.
+	if dur == lock.Replicated {
+		// ShouldWriteLocalTimestamp is only implemented by a pebble.Writer; it'll
+		// panic if we were on the read-only evaluation path, and only had access to
+		// a pebble.ReadOnly.
+		readWriter.ShouldWriteLocalTimestamps(ctx)
+		// Regardless of what the caller asked for, we'll give it an unreplicated
+		// lock.
+		dur = lock.Unreplicated
+	}
+	switch dur {
+	case lock.Unreplicated:
+		// TODO(arul,nvanbenschoten): Call into MVCCCheckForAcquireLockHere.
+	case lock.Replicated:
+		// TODO(arul,nvanbenschoten): Call into MVCCAcquireLock here.
+	default:
+		panic("unexpected lock durability")
+	}
+	acq := roachpb.MakeLockAcquisition(txn, key, dur, str)
+	return acq, nil
+}
+
 // copyKey copies the provided roachpb.Key into a new byte slice, returning the
-// copy. It is used in acquireUnreplicatedLocksOnKeys for two reasons:
+// copy. It is used in acquireLocksOnKeys for two reasons:
 //  1. the keys in an MVCCScanResult, regardless of the scan format used, point
 //     to a small number of large, contiguous byte slices. These "MVCCScan
 //     batches" contain keys and their associated values in the same backing
 //     array. To avoid holding these entire backing arrays in memory and
-//     preventing them from being garbage collected indefinitely, we copy the key
-//     slices before coupling their lifetimes to those of unreplicated locks.
+//     preventing them from being garbage collected indefinitely, we copy the
+//     key slices before coupling their lifetimes to those of the constructed
+//     lock acquisitions.
 //  2. the KV API has a contract that byte slices returned from KV will not be
 //     mutated by higher levels. However, we have seen cases (e.g.#64228) where
 //     this contract is broken due to bugs. To defensively guard against this
