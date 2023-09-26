@@ -1413,18 +1413,26 @@ func Create(
 	return SetupSSH(ctx, l, clusterName)
 }
 
-// GC garbage-collects expired clusters and unused SSH keypairs in AWS.
+// GC garbage-collects expired clusters, unused SSH keypairs in AWS, and unused
+// DNS records.
 func GC(l *logger.Logger, dryrun bool) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
 	cld, err := cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true})
+
+	var combinedErrors error
 	if err == nil {
-		// GCClusters depends on ListCloud so only call it if ListCloud runs without errors
-		err = cloud.GCClusters(l, cld, dryrun)
+		// GCClusters depends on ListCloud so only call it if ListCloud runs without errors.
+		clusterErr := cloud.GCClusters(l, cld, dryrun)
+		combinedErrors = errors.CombineErrors(combinedErrors, clusterErr)
+		// GCDNS depends on ListCloud so only call it if ListCloud runs without errors.
+		dnsErr := cloud.GCDNS(l, cld, dryrun)
+		combinedErrors = errors.CombineErrors(combinedErrors, dnsErr)
 	}
-	otherErr := cloud.GCAWSKeyPairs(l, dryrun)
-	return errors.CombineErrors(err, otherErr)
+	keyPairsErr := cloud.GCAWSKeyPairs(l, dryrun)
+	combinedErrors = errors.CombineErrors(combinedErrors, keyPairsErr)
+	return combinedErrors
 }
 
 // LogsOpts TODO
