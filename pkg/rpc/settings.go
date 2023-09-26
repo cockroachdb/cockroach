@@ -52,11 +52,10 @@ var useDialback = settings.RegisterBoolSetting(
 var enableRPCCompression = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_RPC_COMPRESSION", true)
 
 func getWindowSize(ctx context.Context, name string, c ConnectionClass, defaultSize int) int32 {
-	const maxWindowSize = defaultWindowSize * 32
 	s := envutil.EnvOrDefaultInt(name, defaultSize)
-	if s > maxWindowSize {
-		log.Warningf(ctx, "%s value too large; trimmed to %d", name, maxWindowSize)
-		s = maxWindowSize
+	if s > maximumWindowSize {
+		log.Warningf(ctx, "%s value too large; trimmed to %d", name, maximumWindowSize)
+		s = maximumWindowSize
 	}
 	if s <= defaultWindowSize {
 		log.Warningf(ctx,
@@ -66,7 +65,9 @@ func getWindowSize(ctx context.Context, name string, c ConnectionClass, defaultS
 }
 
 const (
-	defaultWindowSize = 65535
+	defaultWindowSize        = 65535                         // from gRPC
+	defaultInitialWindowSize = defaultWindowSize * 32        // 2MB
+	maximumWindowSize        = defaultInitialWindowSize * 32 // 64MB
 	// The coefficient by which the tolerated offset is multiplied to determine
 	// the maximum acceptable measurement latency.
 	maximumPingDurationMult = 2
@@ -76,7 +77,7 @@ const (
 type windowSizeSettings struct {
 	values struct {
 		init sync.Once
-		// initialWindowSize is the initial window size for a connection.
+		// initialWindowSize is the initial window size for a gRPC stream.
 		initialWindowSize int32
 		// initialConnWindowSize is the initial window size for a connection.
 		initialConnWindowSize int32
@@ -88,10 +89,13 @@ type windowSizeSettings struct {
 func (s *windowSizeSettings) maybeInit(ctx context.Context) {
 	s.values.init.Do(func() {
 		s.values.initialWindowSize = getWindowSize(ctx,
-			"COCKROACH_RPC_INITIAL_WINDOW_SIZE", DefaultClass, defaultWindowSize*32)
+			"COCKROACH_RPC_INITIAL_WINDOW_SIZE", DefaultClass, defaultInitialWindowSize)
 		s.values.initialConnWindowSize = s.values.initialWindowSize * 16
+		if s.values.initialConnWindowSize > maximumWindowSize {
+			s.values.initialConnWindowSize = maximumWindowSize
+		}
 		s.values.rangefeedInitialWindowSize = getWindowSize(ctx,
-			"COCKROACH_RANGEFEED_RPC_INITIAL_WINDOW_SIZE", RangefeedClass, 2*defaultWindowSize /* 128K */)
+			"COCKROACH_RANGEFEED_RPC_INITIAL_WINDOW_SIZE", RangefeedClass, 2*defaultWindowSize /* 128KB */)
 	})
 }
 
