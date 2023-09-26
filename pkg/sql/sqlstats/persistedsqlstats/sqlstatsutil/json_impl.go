@@ -104,6 +104,17 @@ func (s *stmtStatsMetadata) jsonFields() jsonFields {
 	}
 }
 
+func (s *stmtStatsMetadata) jsonFlagsOnlyFields() jsonFields {
+	return jsonFields{
+		{"db", (*jsonString)(&s.Key.Database)},
+		{"distsql", (*jsonBool)(&s.Key.DistSQL)},
+		{"failed", (*jsonBool)(&s.Key.Failed)},
+		{"implicitTxn", (*jsonBool)(&s.Key.ImplicitTxn)},
+		{"vec", (*jsonBool)(&s.Key.Vec)},
+		{"fullScan", (*jsonBool)(&s.Key.FullScan)},
+	}
+}
+
 type aggregatedMetadata appstatspb.AggregatedStatementMetadata
 
 func (s *aggregatedMetadata) jsonFields() jsonFields {
