@@ -2463,6 +2463,9 @@ var builtinOidsArray = []string{
 	2492: `make_timestamptz(year: int, month: int, day: int, hour: int, min: int, sec: float, timezone: string) -> timestamptz`,
 	2493: `date_trunc(element: string, input: timestamptz, timezone: string) -> timestamptz`,
 	2494: `make_date(year: int, month: int, day: int) -> date`,
+	2495: `merge_stats_metadata(arg1: jsonb) -> jsonb`,
+	2496: `merge_statement_stats(arg1: jsonb) -> jsonb`,
+	2497: `merge_transaction_stats(arg1: jsonb) -> jsonb`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
