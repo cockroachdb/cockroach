@@ -74,8 +74,8 @@ type Updater interface {
 	// SetToDefault resets the setting to its default value.
 	SetToDefault(ctx context.Context, key InternalKey) error
 
-	// ResetRemaining loads the default values for all settings that
-	// were not updated by Set().
+	// ResetRemaining loads the values from build-time defaults for all
+	// settings that were not updated by Set() and SetFromStorage().
 	ResetRemaining(ctx context.Context)
 
 	// SetFromStorage is called by the settings watcher to update the
@@ -113,8 +113,8 @@ func NewUpdater(sv *Values) Updater {
 	}
 }
 
-// getSetting determines whether the target setting can
-// be set or overridden.
+// getSetting determines whether the target setting can be set or
+// overridden.
 func (u updater) getSetting(key InternalKey, value EncodedValue) (internalSetting, error) {
 	d, ok := registry[key]
 	if !ok {
@@ -130,7 +130,7 @@ func (u updater) getSetting(key InternalKey, value EncodedValue) (internalSettin
 	return d, nil
 }
 
-// Set attempts to parse and update a setting and notes that it was updated.
+// Set attempts update a setting and notes that it was updated.
 func (u updater) Set(ctx context.Context, key InternalKey, value EncodedValue) error {
 	d, err := u.getSetting(key, value)
 	if err != nil || d == nil {
@@ -140,6 +140,9 @@ func (u updater) Set(ctx context.Context, key InternalKey, value EncodedValue) e
 	return u.setInternal(ctx, key, value, d, OriginExplicitlySet)
 }
 
+// setInternal is the shared code between Set() and SetFromStorage().
+// It propagates the given value to the in-RAM store and keeps track
+// of the origin of the value.
 func (u updater) setInternal(
 	ctx context.Context, key InternalKey, value EncodedValue, d internalSetting, origin ValueOrigin,
 ) error {

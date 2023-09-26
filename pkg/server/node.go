@@ -2227,7 +2227,7 @@ func (n *Node) TenantSettings(
 
 	// Send the setting overrides for one precedence level.
 	const firstPrecedenceLevel = kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES
-	allOverrides, allCh := settingsWatcher.GetAllTenantOverrides()
+	allOverrides, allCh := settingsWatcher.GetAllTenantOverrides(ctx)
 
 	// Inject the current storage logical version as an override; as the
 	// tenant server needs this to start up.
@@ -2246,7 +2246,7 @@ func (n *Node) TenantSettings(
 	// Then send the initial setting overrides for the other precedence
 	// level. This is the payload that will let the tenant client
 	// connector signal readiness.
-	tenantOverrides, tenantCh := settingsWatcher.GetTenantOverrides(args.TenantID)
+	tenantOverrides, tenantCh := settingsWatcher.GetTenantOverrides(ctx, args.TenantID)
 	if err := sendSettings(kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES, tenantOverrides, false /* incremental */); err != nil {
 		return err
 	}
@@ -2274,7 +2274,7 @@ func (n *Node) TenantSettings(
 			// All-tenant overrides have changed, send them again.
 			// TODO(multitenant): We can optimize this by only sending the delta since the last
 			// update, with Incremental set to true.
-			allOverrides, allCh = settingsWatcher.GetAllTenantOverrides()
+			allOverrides, allCh = settingsWatcher.GetAllTenantOverrides(ctx)
 			if err := sendSettings(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, allOverrides, false /* incremental */); err != nil {
 				return err
 			}
@@ -2283,7 +2283,7 @@ func (n *Node) TenantSettings(
 			// Tenant-specific overrides have changed, send them again.
 			// TODO(multitenant): We can optimize this by only sending the delta since the last
 			// update, with Incremental set to true.
-			tenantOverrides, tenantCh = settingsWatcher.GetTenantOverrides(args.TenantID)
+			tenantOverrides, tenantCh = settingsWatcher.GetTenantOverrides(ctx, args.TenantID)
 			if err := sendSettings(kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES, tenantOverrides, false /* incremental */); err != nil {
 				return err
 			}

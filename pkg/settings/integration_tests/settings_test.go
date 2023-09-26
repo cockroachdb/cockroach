@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package server_test
+package integration_tests
 
 import (
 	"context"
@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -67,12 +66,10 @@ func TestSettingsRefresh(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Set up some additional cluster settings to play around with. Note that we
-	// need to do this before starting the server, or there will be data races.
-	st := cluster.MakeTestingClusterSettings()
-	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
+	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
+	st := s.ApplicationLayer().ClusterSettings()
 	db := sqlutils.MakeSQLRunner(rawDB)
 
 	insertQ := `UPSERT INTO system.settings (name, value, "lastUpdated", "valueType")
@@ -192,12 +189,9 @@ func TestSettingsRefresh(t *testing.T) {
 func TestSettingsSetAndShow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// Set up some additional cluster settings to play around with. Note that we
-	// need to do this before starting the server, or there will be data races.
-	st := cluster.MakeTestingClusterSettings()
-	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
+	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
-
+	st := s.ApplicationLayer().ClusterSettings()
 	db := sqlutils.MakeSQLRunner(rawDB)
 
 	// TODO(dt): add placeholder support to SET and SHOW.
@@ -265,11 +259,7 @@ func TestSettingsShowAll(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Set up some additional cluster settings to play around with. Note that we
-	// need to do this before starting the server, or there will be data races.
-	st := cluster.MakeTestingClusterSettings()
-
-	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
+	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	db := sqlutils.MakeSQLRunner(rawDB)
