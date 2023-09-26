@@ -1033,7 +1033,7 @@ func (b *Builder) buildSelect(
 	with := stmt.With
 	orderBy := stmt.OrderBy
 	limit := stmt.Limit
-	locking.apply(stmt.Locking)
+	lockingClause := stmt.Locking
 
 	for s, ok := wrapped.(*tree.ParenSelect); ok; s, ok = wrapped.(*tree.ParenSelect) {
 		stmt = s.Select
@@ -1051,7 +1051,7 @@ func (b *Builder) buildSelect(
 		}
 		if stmt.OrderBy != nil {
 			if orderBy != nil {
-				panic(pgerror.Newf(
+				panic(pgerror.New(
 					pgcode.Syntax, "multiple ORDER BY clauses not allowed",
 				))
 			}
@@ -1059,20 +1059,25 @@ func (b *Builder) buildSelect(
 		}
 		if stmt.Limit != nil {
 			if limit != nil {
-				panic(pgerror.Newf(
+				panic(pgerror.New(
 					pgcode.Syntax, "multiple LIMIT clauses not allowed",
 				))
 			}
 			limit = stmt.Limit
 		}
 		if stmt.Locking != nil {
-			locking.apply(stmt.Locking)
+			if lockingClause != nil {
+				panic(pgerror.New(
+					pgcode.Syntax, "multiple FOR UPDATE clauses not allowed",
+				))
+			}
+			lockingClause = stmt.Locking
 		}
 	}
 
 	return b.processWiths(with, inScope, func(inScope *scope) *scope {
 		return b.buildSelectStmtWithoutParens(
-			wrapped, orderBy, limit, locking, desiredTypes, inScope,
+			wrapped, orderBy, limit, lockingClause, locking, desiredTypes, inScope,
 		)
 	})
 }
@@ -1087,14 +1092,17 @@ func (b *Builder) buildSelectStmtWithoutParens(
 	wrapped tree.SelectStatement,
 	orderBy tree.OrderBy,
 	limit *tree.Limit,
+	lockingClause tree.LockingClause,
 	locking lockingSpec,
 	desiredTypes []*types.T,
 	inScope *scope,
 ) (outScope *scope) {
+	locking.apply(lockingClause)
+
 	// NB: The case statements are sorted lexicographically.
 	switch t := wrapped.(type) {
 	case *tree.LiteralValuesClause:
-		b.rejectIfLocking(locking, "VALUES")
+		b.rejectIfLocking(lockingSpec(lockingClause), "VALUES")
 		outScope = b.buildLiteralValuesClause(t, desiredTypes, inScope)
 
 	case *tree.ParenSelect:
@@ -1109,7 +1117,7 @@ func (b *Builder) buildSelectStmtWithoutParens(
 		outScope = b.buildUnionClause(t, desiredTypes, inScope)
 
 	case *tree.ValuesClause:
-		b.rejectIfLocking(locking, "VALUES")
+		b.rejectIfLocking(lockingSpec(lockingClause), "VALUES")
 		outScope = b.buildValuesClause(t, desiredTypes, inScope)
 
 	default:
