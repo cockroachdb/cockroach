@@ -891,6 +891,12 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 		return b.factory.ConstructJsonObjectAgg(args[0], args[1])
 	case "jsonb_object_agg":
 		return b.factory.ConstructJsonbObjectAgg(args[0], args[1])
+	case "merge_stats_metadata":
+		return b.factory.ConstructMergeStatsMetadata(args[0])
+	case "merge_statement_stats":
+		return b.factory.ConstructMergeStatementStats(args[0])
+	case "merge_transaction_stats":
+		return b.factory.ConstructMergeTransactionStats(args[0])
 	}
 
 	panic(errors.AssertionFailedf("unhandled aggregate: %s", name))

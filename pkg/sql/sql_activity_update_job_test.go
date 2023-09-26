@@ -23,12 +23,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
+	jsonUtil "github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -158,11 +163,125 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 	require.Zero(t, count, "crdb_internal.statement_activity after transfer: expect:0, actual:%d", count)
 }
 
+// TestMergeFunctionLogic verifies the merge functions used in the
+// SQL statements to verify the data.
+func TestMergeFunctionLogic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	stubTime := timeutil.Now().Truncate(time.Hour)
+	sqlStatsKnobs := sqlstats.CreateTestingKnobs()
+	sqlStatsKnobs.StubTimeNow = func() time.Time { return stubTime }
+
+	// Start the cluster.
+	// Disable the job since it is called manually from a new instance to avoid
+	// any race conditions.
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Insecure: true,
+		Knobs: base.TestingKnobs{
+			SQLStatsKnobs: sqlStatsKnobs,
+			UpgradeManager: &upgradebase.TestingKnobs{
+				DontUseJobs:                       true,
+				SkipUpdateSQLActivityJobBootstrap: true,
+			}}})
+	defer srv.Stopper().Stop(context.Background())
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	appName := "TestMergeFunctionLogic"
+	db.Exec(t, "SET SESSION application_name=$1", appName)
+	db.Exec(t, "SELECT * FROM system.statement_statistics")
+	db.Exec(t, "SELECT * FROM system.statement_statistics")
+	db.Exec(t, "SELECT count_rows() FROM system.transaction_statistics")
+
+	srv.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+
+	db.Exec(t, "SET SESSION application_name=$1", "randomIgnore")
+
+	var localAggTxnStats appstatspb.TransactionStatistics
+	rows := db.Query(t, "SELECT statistics FROM system.public.transaction_statistics WHERE app_name = $1", appName)
+	require.NoError(t, rows.Err())
+	defer rows.Close()
+	for rows.Next() {
+		var tempStats appstatspb.TransactionStatistics
+		var jsonString string
+		require.NoError(t, rows.Scan(&jsonString))
+		j, err := jsonUtil.ParseJSON(jsonString)
+		require.NoError(t, err)
+		require.NoError(t, sqlstatsutil.DecodeTxnStatsStatisticsJSON(j, &tempStats))
+		require.Greater(t, tempStats.Count, int64(0), "empty object: json:%s\n obj:%v\n", jsonString, tempStats)
+		localAggTxnStats.Add(&tempStats)
+	}
+
+	require.Equal(t, int64(3), localAggTxnStats.Count)
+
+	row := db.QueryRow(t, `SELECT merge_transaction_stats(statistics) AS statistics FROM system.public.transaction_statistics WHERE app_name = $1 GROUP BY app_name`, appName)
+	var aggSqlTxnStats appstatspb.TransactionStatistics
+	var jsonString string
+	row.Scan(&jsonString)
+	j, err := jsonUtil.ParseJSON(jsonString)
+	require.NoError(t, err)
+	require.NoError(t, sqlstatsutil.DecodeTxnStatsStatisticsJSON(j, &aggSqlTxnStats))
+	require.Equal(t, localAggTxnStats, aggSqlTxnStats)
+
+	var localAggStmtStats appstatspb.StatementStatistics
+	rows = db.Query(t, "SELECT statistics FROM system.public.statement_statistics WHERE app_name = $1", appName)
+	require.NoError(t, rows.Err())
+	defer rows.Close()
+	for rows.Next() {
+		var tempStats appstatspb.StatementStatistics
+		require.NoError(t, rows.Scan(&jsonString))
+		j, err = jsonUtil.ParseJSON(jsonString)
+		require.NoError(t, err)
+		require.NoError(t, sqlstatsutil.DecodeStmtStatsStatisticsJSON(j, &tempStats))
+		require.Greater(t, tempStats.Count, int64(0), "empty object: json:%s\n obj:%v\n", jsonString, tempStats)
+		localAggStmtStats.Add(&tempStats)
+	}
+	require.Equal(t, int64(3), localAggTxnStats.Count)
+
+	row = db.QueryRow(t, `SELECT merge_statement_stats(statistics) AS statistics FROM system.public.statement_statistics WHERE app_name = $1 GROUP BY app_name`, appName)
+	var aggStmtStat appstatspb.StatementStatistics
+	row.Scan(&jsonString)
+	j, err = jsonUtil.ParseJSON(jsonString)
+	require.NoError(t, err)
+	require.NoError(t, sqlstatsutil.DecodeStmtStatsStatisticsJSON(j, &aggStmtStat))
+	require.Equal(t, localAggStmtStats, aggStmtStat)
+
+	// Verify metadata logic
+	var localAggStmtMeta appstatspb.AggregatedStatementMetadata
+	rows = db.Query(t, "SELECT metadata FROM system.public.statement_statistics WHERE app_name = $1", appName)
+	require.NoError(t, rows.Err())
+	defer rows.Close()
+	for rows.Next() {
+		var tempStats appstatspb.CollectedStatementStatistics
+		require.NoError(t, rows.Scan(&jsonString))
+		j, err = jsonUtil.ParseJSON(jsonString)
+		require.NoError(t, err)
+		require.NoError(t, sqlstatsutil.DecodeStmtStatsMetadataJSON(j, &tempStats))
+		require.NotNil(t, tempStats.Key.Query, "empty object: json:%s\n obj:%v\n", jsonString, tempStats)
+		localAggStmtMeta.Add(&tempStats)
+	}
+
+	require.Equal(t, int64(2), localAggStmtMeta.TotalCount)
+
+	row = db.QueryRow(t, `SELECT merge_stats_metadata(metadata) AS metadata FROM system.public.statement_statistics WHERE app_name = $1 GROUP BY app_name`, appName)
+	var aggSqlStmtMeta appstatspb.AggregatedStatementMetadata
+	row.Scan(&jsonString)
+	j, err = jsonUtil.ParseJSON(jsonString)
+	require.NoError(t, err)
+	require.NoError(t, sqlstatsutil.DecodeAggregatedMetadataJSON(j, &aggSqlStmtMeta))
+	require.Equal(t, localAggStmtMeta, aggSqlStmtMeta)
+}
+
 // TestSqlActivityUpdateTopLimitJob verifies that the
 // job is created.
 func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderStressRace(t, "test is too slow to run under race")
 
 	stubTime := timeutil.Now().Truncate(time.Hour)
 	sqlStatsKnobs := sqlstats.CreateTestingKnobs()
@@ -179,6 +298,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 	})
 	defer srv.Stopper().Stop(context.Background())
 	defer sqlDB.Close()
+	ts := srv.ApplicationLayer()
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
 
@@ -192,7 +312,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 	db.Exec(t, "DELETE FROM system.public.transaction_statistics")
 	db.Exec(t, "DELETE FROM system.public.statement_statistics")
 
-	execCfg := srv.ExecutorConfig().(ExecutorConfig)
+	internalDb := ts.InternalDB().(isql.DB)
 	st := cluster.MakeTestingClusterSettings()
 	su := st.MakeUpdater()
 	const topLimit = 3
@@ -202,7 +322,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	updater := newSqlActivityUpdater(st, execCfg.InternalDB, sqlStatsKnobs)
+	updater := newSqlActivityUpdater(st, internalDb, sqlStatsKnobs)
 
 	db.Exec(t, "SET tracing = true;")
 
@@ -236,7 +356,9 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 
 		db.Exec(t, "SET SESSION application_name=$1", "randomIgnore")
 
-		srv.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+		db.Exec(t, "set cluster setting sql.stats.flush.enabled  = true;")
+		ts.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+		db.Exec(t, "set cluster setting sql.stats.flush.enabled  = false;")
 
 		// The max number of queries is number of top columns * max number of
 		// queries per a column (6*3=18 for this test, 6*500=3000 default). Most of
