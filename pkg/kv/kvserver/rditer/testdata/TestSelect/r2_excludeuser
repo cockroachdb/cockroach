@@ -2,21 +2,21 @@ echo
 ----
 Select({ReplicatedBySpan:{a-c} ReplicatedSpansFilter:1 ReplicatedByRangeID:false UnreplicatedByRangeID:false}):
   /Local/Range"{a"-c"}
-  /Local/Lock/Intent/Local/Range"{a"-c"}
-  /Local/Lock/Intent"{a"-c"}
+  /Local/Lock/Local/Range"{a"-c"}
+  /Local/Lock"{a"-c"}
 Select({ReplicatedBySpan:{a-c} ReplicatedSpansFilter:1 ReplicatedByRangeID:false UnreplicatedByRangeID:true}):
   /Local/RangeID/123/{u""-v""}
   /Local/Range"{a"-c"}
-  /Local/Lock/Intent/Local/Range"{a"-c"}
-  /Local/Lock/Intent"{a"-c"}
+  /Local/Lock/Local/Range"{a"-c"}
+  /Local/Lock"{a"-c"}
 Select({ReplicatedBySpan:{a-c} ReplicatedSpansFilter:1 ReplicatedByRangeID:true UnreplicatedByRangeID:false}):
   /Local/RangeID/123/{r""-s""}
   /Local/Range"{a"-c"}
-  /Local/Lock/Intent/Local/Range"{a"-c"}
-  /Local/Lock/Intent"{a"-c"}
+  /Local/Lock/Local/Range"{a"-c"}
+  /Local/Lock"{a"-c"}
 Select({ReplicatedBySpan:{a-c} ReplicatedSpansFilter:1 ReplicatedByRangeID:true UnreplicatedByRangeID:true}):
   /Local/RangeID/123/{r""-s""}
   /Local/RangeID/123/{u""-v""}
   /Local/Range"{a"-c"}
-  /Local/Lock/Intent/Local/Range"{a"-c"}
-  /Local/Lock/Intent"{a"-c"}
+  /Local/Lock/Local/Range"{a"-c"}
+  /Local/Lock"{a"-c"}

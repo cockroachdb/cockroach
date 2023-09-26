@@ -16,7 +16,7 @@ data: "a"/11.000000000,0 -> /BYTES/abc
 >> get k=a t=A
 get: "a" -> /BYTES/abc @11.000000000,0
 >> resolve_intent k=a t=A
-called SingleClearEngineKey(/Local/Lock/Intent"a"/0300000001000000000000000000000000)
+called SingleClearEngineKey(/Local/Lock"a"/0300000001000000000000000000000000)
 resolve_intent: "a" -> resolved key = true
 data: "a"/11.000000000,0 -> /BYTES/abc
 

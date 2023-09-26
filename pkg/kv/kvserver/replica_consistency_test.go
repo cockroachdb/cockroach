@@ -128,8 +128,8 @@ func TestStoreCheckpointSpans(t *testing.T) {
 		"/Local/RangeID/{1\"\"-3\"\"}",
 		"/Local/RangeID/{4\"\"-5\"\"}",
 		"/Local/Range\"{a\"-c\"}",
-		"/Local/Lock/Intent/Local/Range\"{a\"-c\"}",
-		"/Local/Lock/Intent\"{a\"-c\"}",
+		"/Local/Lock/Local/Range\"{a\"-c\"}",
+		"/Local/Lock\"{a\"-c\"}",
 		"{a-c}",
 	}, {
 		// r4 with keys [b, c). The checkpoint includes range-ID replicated and
@@ -140,8 +140,8 @@ func TestStoreCheckpointSpans(t *testing.T) {
 		"/Local/RangeID/{1\"\"-2\"\"}",
 		"/Local/RangeID/{2\"\"-3\"\"}",
 		"/Local/Range\"{a\"-f\"}",
-		"/Local/Lock/Intent/Local/Range\"{a\"-f\"}",
-		"/Local/Lock/Intent\"{a\"-f\"}",
+		"/Local/Lock/Local/Range\"{a\"-f\"}",
+		"/Local/Lock\"{a\"-f\"}",
 		"{a-f}",
 	}, {
 		// r2 with keys [e, f). The checkpoint includes range-ID replicated and
@@ -151,8 +151,8 @@ func TestStoreCheckpointSpans(t *testing.T) {
 		"/Local/RangeID/{1\"\"-4\"\"}",
 		"/Local/RangeID/{4\"\"-5\"\"}",
 		"/Local/Range\"{b\"-f\"}",
-		"/Local/Lock/Intent/Local/Range\"{b\"-f\"}",
-		"/Local/Lock/Intent\"{b\"-f\"}",
+		"/Local/Lock/Local/Range\"{b\"-f\"}",
+		"/Local/Lock\"{b\"-f\"}",
 		"{b-f}",
 	}}
 
