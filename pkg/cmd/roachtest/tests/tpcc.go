@@ -408,12 +408,12 @@ func (s *backgroundStepper) wait(ctx context.Context, t test.Test, u *versionUpg
 // TPCC workload is running. The number of database upgrades is
 // controlled by the `versionsToUpgrade` parameter.
 func runTPCCMixedHeadroom(
-	ctx context.Context, t test.Test, c cluster.Cluster, cloud string, versionsToUpgrade int,
+	ctx context.Context, t test.Test, c cluster.Cluster, versionsToUpgrade int,
 ) {
 	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
 	workloadNode := c.Node(c.Spec().NodeCount)
 
-	maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), cloud, c.Spec())
+	maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), c.Cloud(), c.Spec())
 	headroomWarehouses := int(float64(maxWarehouses) * 0.7)
 	if c.IsLocal() {
 		headroomWarehouses = 10
@@ -535,7 +535,6 @@ func runTPCCMixedHeadroom(
 }
 
 func registerTPCC(r registry.Registry) {
-	cloud := r.MakeClusterSpec(1).Cloud
 	headroomSpec := r.MakeClusterSpec(4, spec.CPU(16), spec.RandomlyUseZfs())
 	r.Add(registry.TestSpec{
 		// w=headroom runs tpcc for a semi-extended period with some amount of
@@ -550,7 +549,7 @@ func registerTPCC(r registry.Registry) {
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), cloud, t.Spec().(*registry.TestSpec).Cluster)
+			maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), c.Cloud(), c.Spec())
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
 			t.L().Printf("computed headroom warehouses of %d\n", headroomWarehouses)
 			runTPCC(ctx, t, c, tpccOptions{
@@ -578,7 +577,7 @@ func registerTPCC(r registry.Registry) {
 		Cluster:           mixedHeadroomSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runTPCCMixedHeadroom(ctx, t, c, cloud, 1)
+			runTPCCMixedHeadroom(ctx, t, c, 1)
 		},
 	})
 
@@ -596,7 +595,7 @@ func registerTPCC(r registry.Registry) {
 		Cluster:           mixedHeadroomMultiUpgradesSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runTPCCMixedHeadroom(ctx, t, c, cloud, 2)
+			runTPCCMixedHeadroom(ctx, t, c, 2)
 		},
 	})
 	r.Add(registry.TestSpec{
@@ -872,8 +871,10 @@ func registerTPCC(r registry.Registry) {
 		Nodes: 3,
 		CPUs:  4,
 
-		LoadWarehouses: 1000,
-		EstimatedMax:   gceOrAws(cloud, 750, 900),
+		LoadWarehousesGCE: 1000,
+		LoadWarehousesAWS: 1000,
+		EstimatedMaxGCE:   750,
+		EstimatedMaxAWS:   900,
 
 		Clouds: registry.AllExceptAWS,
 		Suites: registry.Suites(registry.Nightly),
@@ -882,9 +883,11 @@ func registerTPCC(r registry.Registry) {
 		Nodes: 3,
 		CPUs:  4,
 
-		LoadWarehouses:  1000,
-		EstimatedMax:    gceOrAws(cloud, 750, 900),
-		SharedProcessMT: true,
+		LoadWarehousesGCE: 1000,
+		LoadWarehousesAWS: 1000,
+		EstimatedMaxGCE:   750,
+		EstimatedMaxAWS:   900,
+		SharedProcessMT:   true,
 
 		Clouds: registry.AllExceptAWS,
 		Suites: registry.Suites(registry.Nightly),
@@ -894,8 +897,10 @@ func registerTPCC(r registry.Registry) {
 		CPUs:  4,
 
 		EnableDefaultScheduledBackup: true,
-		LoadWarehouses:               1000,
-		EstimatedMax:                 gceOrAws(cloud, 750, 900),
+		LoadWarehousesGCE:            1000,
+		LoadWarehousesAWS:            1000,
+		EstimatedMaxGCE:              750,
+		EstimatedMaxAWS:              900,
 
 		Clouds: registry.AllExceptAWS,
 		Suites: registry.Suites(registry.Nightly),
@@ -904,29 +909,35 @@ func registerTPCC(r registry.Registry) {
 		Nodes: 3,
 		CPUs:  16,
 
-		LoadWarehouses: gceOrAws(cloud, 3500, 3900),
-		EstimatedMax:   gceOrAws(cloud, 2900, 3500),
-		Clouds:         registry.AllClouds,
-		Suites:         registry.Suites(registry.Nightly),
-		Tags:           registry.Tags(`aws`),
+		LoadWarehousesGCE: 3500,
+		LoadWarehousesAWS: 3900,
+		EstimatedMaxGCE:   2900,
+		EstimatedMaxAWS:   3500,
+		Clouds:            registry.AllClouds,
+		Suites:            registry.Suites(registry.Nightly),
+		Tags:              registry.Tags(`aws`),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 3,
 		CPUs:  16,
 
-		LoadWarehouses:  gceOrAws(cloud, 3500, 3900),
-		EstimatedMax:    gceOrAws(cloud, 2900, 3500),
-		Clouds:          registry.AllClouds,
-		Suites:          registry.Suites(registry.Nightly),
-		Tags:            registry.Tags(`aws`),
-		SharedProcessMT: true,
+		LoadWarehousesGCE: 3500,
+		LoadWarehousesAWS: 3900,
+		EstimatedMaxGCE:   2900,
+		EstimatedMaxAWS:   3500,
+		Clouds:            registry.AllClouds,
+		Suites:            registry.Suites(registry.Nightly),
+		Tags:              registry.Tags(`aws`),
+		SharedProcessMT:   true,
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 12,
 		CPUs:  16,
 
-		LoadWarehouses: gceOrAws(cloud, 11500, 11500),
-		EstimatedMax:   gceOrAws(cloud, 10000, 10000),
+		LoadWarehousesGCE: 11500,
+		LoadWarehousesAWS: 11500,
+		EstimatedMaxGCE:   10000,
+		EstimatedMaxAWS:   10000,
 
 		Clouds: registry.AllExceptAWS,
 		Suites: registry.Suites(registry.Weekly),
@@ -937,8 +948,10 @@ func registerTPCC(r registry.Registry) {
 		CPUs:         16,
 		Distribution: multiZone,
 
-		LoadWarehouses: 6500,
-		EstimatedMax:   5000,
+		LoadWarehousesGCE: 6500,
+		LoadWarehousesAWS: 6500,
+		EstimatedMaxGCE:   5000,
+		EstimatedMaxAWS:   5000,
 
 		Clouds: registry.AllExceptAWS,
 		Suites: registry.Suites(registry.Nightly),
@@ -950,8 +963,10 @@ func registerTPCC(r registry.Registry) {
 		Distribution: multiRegion,
 		LoadConfig:   multiLoadgen,
 
-		LoadWarehouses: 3000,
-		EstimatedMax:   2000,
+		LoadWarehousesGCE: 3000,
+		LoadWarehousesAWS: 3000,
+		EstimatedMaxGCE:   2000,
+		EstimatedMaxAWS:   2000,
 
 		Clouds: registry.AllExceptAWS,
 		Suites: registry.Suites(registry.Nightly),
@@ -962,8 +977,10 @@ func registerTPCC(r registry.Registry) {
 		Chaos:      true,
 		LoadConfig: singlePartitionedLoadgen,
 
-		LoadWarehouses: 2000,
-		EstimatedMax:   900,
+		LoadWarehousesGCE: 2000,
+		LoadWarehousesAWS: 2000,
+		EstimatedMaxGCE:   900,
+		EstimatedMaxAWS:   900,
 
 		Clouds: registry.AllExceptAWS,
 		Suites: registry.Suites(registry.Nightly),
@@ -975,8 +992,10 @@ func registerTPCC(r registry.Registry) {
 		Nodes: 3,
 		CPUs:  4,
 
-		LoadWarehouses:    1000,
-		EstimatedMax:      gceOrAws(cloud, 750, 900),
+		LoadWarehousesGCE: 1000,
+		LoadWarehousesAWS: 1000,
+		EstimatedMaxGCE:   750,
+		EstimatedMaxAWS:   900,
 		EncryptionEnabled: true,
 
 		Clouds: registry.AllExceptAWS,
@@ -986,8 +1005,10 @@ func registerTPCC(r registry.Registry) {
 		Nodes: 3,
 		CPUs:  16,
 
-		LoadWarehouses:    gceOrAws(cloud, 3500, 3900),
-		EstimatedMax:      gceOrAws(cloud, 2900, 3500),
+		LoadWarehousesGCE: 3500,
+		LoadWarehousesAWS: 3900,
+		EstimatedMaxGCE:   2900,
+		EstimatedMaxAWS:   3500,
 		EncryptionEnabled: true,
 		Clouds:            registry.AllClouds,
 		Suites:            registry.Suites(registry.Nightly),
@@ -997,8 +1018,10 @@ func registerTPCC(r registry.Registry) {
 		Nodes: 12,
 		CPUs:  16,
 
-		LoadWarehouses:    gceOrAws(cloud, 11500, 11500),
-		EstimatedMax:      gceOrAws(cloud, 10000, 10000),
+		LoadWarehousesGCE: 11500,
+		LoadWarehousesAWS: 11500,
+		EstimatedMaxGCE:   10000,
+		EstimatedMaxAWS:   10000,
 		EncryptionEnabled: true,
 
 		Clouds: registry.AllExceptAWS,
@@ -1011,9 +1034,11 @@ func registerTPCC(r registry.Registry) {
 		Nodes: 3,
 		CPUs:  4,
 
-		LoadWarehouses:   1000,
-		EstimatedMax:     gceOrAws(cloud, 750, 900),
-		ExpirationLeases: true,
+		LoadWarehousesGCE: 1000,
+		LoadWarehousesAWS: 1000,
+		EstimatedMaxGCE:   750,
+		EstimatedMaxAWS:   900,
+		ExpirationLeases:  true,
 
 		Clouds: registry.AllExceptAWS,
 		Suites: registry.Suites(registry.Nightly),
@@ -1022,20 +1047,24 @@ func registerTPCC(r registry.Registry) {
 		Nodes: 3,
 		CPUs:  16,
 
-		LoadWarehouses:   gceOrAws(cloud, 3500, 3900),
-		EstimatedMax:     gceOrAws(cloud, 2900, 3500),
-		ExpirationLeases: true,
-		Clouds:           registry.AllClouds,
-		Suites:           registry.Suites(registry.Nightly),
-		Tags:             registry.Tags(`aws`),
+		LoadWarehousesGCE: 3500,
+		LoadWarehousesAWS: 3900,
+		EstimatedMaxGCE:   2900,
+		EstimatedMaxAWS:   3500,
+		ExpirationLeases:  true,
+		Clouds:            registry.AllClouds,
+		Suites:            registry.Suites(registry.Nightly),
+		Tags:              registry.Tags(`aws`),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 12,
 		CPUs:  16,
 
-		LoadWarehouses:   gceOrAws(cloud, 11500, 11500),
-		EstimatedMax:     gceOrAws(cloud, 10000, 10000),
-		ExpirationLeases: true,
+		LoadWarehousesGCE: 11500,
+		LoadWarehousesAWS: 11500,
+		EstimatedMaxGCE:   10000,
+		EstimatedMaxAWS:   10000,
+		ExpirationLeases:  true,
 
 		Clouds: registry.AllExceptAWS,
 		Suites: registry.Suites(registry.Weekly),
@@ -1044,10 +1073,14 @@ func registerTPCC(r registry.Registry) {
 }
 
 func gceOrAws(cloud string, gce, aws int) int {
-	if cloud == "aws" {
+	switch cloud {
+	case spec.AWS:
 		return aws
+	case spec.GCE:
+		return gce
+	default:
+		panic(fmt.Sprintf("unknown cloud %s", cloud))
 	}
-	return gce
 }
 
 // tpccBenchDistribution represents a distribution of nodes in a tpccbench
@@ -1118,13 +1151,15 @@ type tpccBenchSpec struct {
 	// The number of warehouses to load into the cluster before beginning
 	// benchmarking. Should be larger than EstimatedMax and should be a
 	// value that is unlikely to be achievable.
-	LoadWarehouses int
+	LoadWarehousesGCE int
+	LoadWarehousesAWS int
 	// An estimate of the maximum number of warehouses achievable in the
 	// cluster config. The closer this is to the actual max achievable
 	// warehouse count, the faster the benchmark will be in producing a
 	// result. This can be adjusted over time as performance characteristics
 	// change (i.e. CockroachDB gets faster!).
-	EstimatedMax int
+	EstimatedMaxGCE int
+	EstimatedMaxAWS int
 
 	Clouds registry.CloudSet
 	Suites registry.SuiteSet
@@ -1139,6 +1174,14 @@ type tpccBenchSpec struct {
 	// SharedProcessMT, if true, indicates that the cluster should run in
 	// shared-process mode of multi-tenancy.
 	SharedProcessMT bool
+}
+
+func (s tpccBenchSpec) EstimatedMax(cloud string) int {
+	return gceOrAws(cloud, s.EstimatedMaxGCE, s.EstimatedMaxAWS)
+}
+
+func (s tpccBenchSpec) LoadWarehouses(cloud string) int {
+	return gceOrAws(cloud, s.LoadWarehousesGCE, s.LoadWarehousesAWS)
 }
 
 // partitions returns the number of partitions specified to the load generator.
@@ -1274,7 +1317,7 @@ func loadTPCCBench(
 		).Scan(&curWarehouses); err != nil {
 			return err
 		}
-		if curWarehouses >= b.LoadWarehouses {
+		if curWarehouses >= b.LoadWarehouses(c.Cloud()) {
 			// The cluster has enough warehouses. Nothing to do.
 			return nil
 		}
@@ -1291,17 +1334,18 @@ func loadTPCCBench(
 
 	var loadArgs string
 	var rebalanceWait time.Duration
+	loadWarehouses := b.LoadWarehouses(c.Cloud())
 	switch b.LoadConfig {
 	case singleLoadgen:
 		loadArgs = `--checks=false`
-		rebalanceWait = time.Duration(b.LoadWarehouses/250) * time.Minute
+		rebalanceWait = time.Duration(loadWarehouses/250) * time.Minute
 	case singlePartitionedLoadgen:
 		loadArgs = fmt.Sprintf(`--checks=false --partitions=%d`, b.partitions())
-		rebalanceWait = time.Duration(b.LoadWarehouses/125) * time.Minute
+		rebalanceWait = time.Duration(loadWarehouses/125) * time.Minute
 	case multiLoadgen:
 		loadArgs = fmt.Sprintf(`--checks=false --partitions=%d --zones="%s"`,
 			b.partitions(), strings.Join(b.Distribution.zones(), ","))
-		rebalanceWait = time.Duration(b.LoadWarehouses/50) * time.Minute
+		rebalanceWait = time.Duration(loadWarehouses/50) * time.Minute
 	default:
 		panic("unexpected")
 	}
@@ -1314,7 +1358,7 @@ func loadTPCCBench(
 	if b.SharedProcessMT {
 		pgurl = fmt.Sprintf("{pgurl%s:%s}", roachNodes[:1], appTenantName)
 	}
-	cmd := tpccImportCmd(b.LoadWarehouses, loadArgs, pgurl)
+	cmd := tpccImportCmd(loadWarehouses, loadArgs, pgurl)
 	if err = c.RunE(ctx, roachNodes[:1], cmd); err != nil {
 		return err
 	}
@@ -1332,7 +1376,7 @@ func loadTPCCBench(
 	// the desired distribution. This should allow for load-based rebalancing to
 	// help distribute load. Optionally pass some load configuration-specific
 	// flags.
-	maxRate := tpccMaxRate(b.EstimatedMax)
+	maxRate := tpccMaxRate(b.EstimatedMax(c.Cloud()))
 	rampTime := (1 * rebalanceWait) / 4
 	loadTime := (3 * rebalanceWait) / 4
 	var tenantSuffix string
@@ -1341,7 +1385,7 @@ func loadTPCCBench(
 	}
 	cmd = fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --workers=%d --max-rate=%d "+
 		"--wait=false --ramp=%s --duration=%s --scatter --tolerate-errors {pgurl%s%s}",
-		b.LoadWarehouses, b.LoadWarehouses, maxRate, rampTime, loadTime, roachNodes, tenantSuffix)
+		b.LoadWarehouses(c.Cloud()), b.LoadWarehouses(c.Cloud()), maxRate, rampTime, loadTime, roachNodes, tenantSuffix)
 	if _, err := c.RunWithDetailsSingleNode(ctx, t.L(), loadNode, cmd); err != nil {
 		return err
 	}
@@ -1412,7 +1456,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 			// 10k warehouses requires at least 20,000 connections, so add a
 			// bit of breathing room and check the warehouse count.
 			c.Run(ctx, loadNodes, "sed -i 's/maxconn [0-9]\\+/maxconn 21000/' haproxy.cfg")
-			if b.LoadWarehouses > 1e4 {
+			if b.LoadWarehouses(c.Cloud()) > 1e4 {
 				t.Fatal("HAProxy config supports up to 10k warehouses")
 			}
 			c.Run(ctx, loadNodes, "haproxy -f haproxy.cfg -D")
@@ -1429,7 +1473,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 	// Search between 1 and b.LoadWarehouses for the largest number of
 	// warehouses that can be operated on while sustaining a throughput
 	// threshold, set to a fraction of max tpmC.
-	precision := int(math.Max(1.0, float64(b.LoadWarehouses/200)))
+	precision := int(math.Max(1.0, float64(b.LoadWarehouses(c.Cloud())/200)))
 	initStepSize := precision
 
 	// Create a temp directory to store the local copy of results from the
@@ -1446,7 +1490,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 		c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 	}
 
-	s := search.NewLineSearcher(1, b.LoadWarehouses, b.EstimatedMax, initStepSize, precision)
+	s := search.NewLineSearcher(1, b.LoadWarehouses(c.Cloud()), b.EstimatedMax(c.Cloud()), initStepSize, precision)
 	iteration := 0
 	if res, err := s.Search(func(warehouses int) (bool, error) {
 		iteration++
@@ -1523,7 +1567,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 				}
 				cmd := fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --active-warehouses=%d "+
 					"--tolerate-errors --ramp=%s --duration=%s%s --histograms=%s {pgurl%s%s}",
-					b.LoadWarehouses, warehouses, rampDur,
+					b.LoadWarehouses(c.Cloud()), warehouses, rampDur,
 					loadDur, extraFlags, histogramsPath, sqlGateways, tenantSuffix)
 				err := c.RunE(ctx, group.loadNodes, cmd)
 				loadDone <- timeutil.Now()
