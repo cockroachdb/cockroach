@@ -1543,6 +1543,28 @@ func TestCancelQuery(t *testing.T) {
 		StateTimestamp: timeSource.Now(),
 	})
 
+	snapshotMetrics := func() map[string]int64 {
+		return map[string]int64{
+			"QueryCancelSuccessful":     proxy.metrics.QueryCancelSuccessful.Count(),
+			"QueryCancelIgnored":        proxy.metrics.QueryCancelIgnored.Count(),
+			"QueryCancelForwarded":      proxy.metrics.QueryCancelForwarded.Count(),
+			"QueryCancelReceivedPGWire": proxy.metrics.QueryCancelReceivedPGWire.Count(),
+			"QueryCancelReceivedHTTP":   proxy.metrics.QueryCancelReceivedHTTP.Count(),
+		}
+	}
+
+	requireIncrease := func(t *testing.T, start map[string]int64, metrics ...string) {
+		testutils.SucceedsSoon(t, func() error {
+			now := snapshotMetrics()
+			for _, metric := range metrics {
+				if now[metric] <= start[metric] {
+					return errors.Newf("expected metric %s to increase (was %d is now %d)", metric, start[metric], now[metric])
+				}
+			}
+			return nil
+		})
+	}
+
 	// Wait until the update gets propagated to the directory cache.
 	testutils.SucceedsSoon(t, func() error {
 		pods, err := proxy.handler.directoryCache.TryLookupTenantPods(ctx, tenantID)
@@ -1555,33 +1577,9 @@ func TestCancelQuery(t *testing.T) {
 		return nil
 	})
 
-	clearMetrics := func(t *testing.T, metrics *metrics) {
-		metrics.QueryCancelSuccessful.Clear()
-		metrics.QueryCancelIgnored.Clear()
-		metrics.QueryCancelForwarded.Clear()
-		metrics.QueryCancelReceivedPGWire.Clear()
-		metrics.QueryCancelReceivedHTTP.Clear()
-
-		testutils.SucceedsSoon(t, func() error {
-			if metrics.QueryCancelSuccessful.Count() != 0 ||
-				metrics.QueryCancelIgnored.Count() != 0 ||
-				metrics.QueryCancelForwarded.Count() != 0 ||
-				metrics.QueryCancelReceivedPGWire.Count() != 0 ||
-				metrics.QueryCancelReceivedHTTP.Count() != 0 {
-				return errors.Newf("expected metrics to update, got: "+
-					"QueryCancelSuccessful=%d, QueryCancelIgnored=%d "+
-					"QueryCancelForwarded=%d QueryCancelReceivedPGWire=%d QueryCancelReceivedHTTP=%d",
-					metrics.QueryCancelSuccessful.Count(), metrics.QueryCancelIgnored.Count(),
-					metrics.QueryCancelForwarded.Count(), metrics.QueryCancelReceivedPGWire.Count(),
-					metrics.QueryCancelReceivedHTTP.Count(),
-				)
-			}
-			return nil
-		})
-	}
-
 	t.Run("cancel over sql", func(t *testing.T) {
-		clearMetrics(t, proxy.metrics)
+		metrics := snapshotMetrics()
+
 		cancelFn = func() {
 			_ = conn.PgConn().CancelRequest(ctx)
 		}
@@ -1589,23 +1587,11 @@ func TestCancelQuery(t *testing.T) {
 		err = conn.QueryRow(ctx, "SELECT pg_sleep(5) AS cancel_me").Scan(&b)
 		require.Error(t, err)
 		require.Regexp(t, "query execution canceled", err.Error())
-		testutils.SucceedsSoon(t, func() error {
-			if proxy.metrics.QueryCancelSuccessful.Count() != 1 ||
-				proxy.metrics.QueryCancelReceivedPGWire.Count() != 1 {
-				return errors.Newf("expected metrics to update, got: "+
-					"QueryCancelSuccessful=%d, QueryCancelIgnored=%d "+
-					"QueryCancelForwarded=%d QueryCancelReceivedPGWire=%d QueryCancelReceivedHTTP=%d",
-					proxy.metrics.QueryCancelSuccessful.Count(), proxy.metrics.QueryCancelIgnored.Count(),
-					proxy.metrics.QueryCancelForwarded.Count(), proxy.metrics.QueryCancelReceivedPGWire.Count(),
-					proxy.metrics.QueryCancelReceivedHTTP.Count(),
-				)
-			}
-			return nil
-		})
+		requireIncrease(t, metrics, "QueryCancelSuccessful", "QueryCancelReceivedPGWire")
 	})
 
 	t.Run("cancel over http", func(t *testing.T) {
-		clearMetrics(t, proxy.metrics)
+		metrics := snapshotMetrics()
 		cancelFn = func() {
 			cancelRequest := proxyCancelRequest{
 				ProxyIP:   net.IP{},
@@ -1631,19 +1617,7 @@ func TestCancelQuery(t *testing.T) {
 		err = conn.QueryRow(ctx, "SELECT pg_sleep(5) AS cancel_me").Scan(&b)
 		require.Error(t, err)
 		require.Regexp(t, "query execution canceled", err.Error())
-		testutils.SucceedsSoon(t, func() error {
-			if proxy.metrics.QueryCancelSuccessful.Count() != 1 ||
-				proxy.metrics.QueryCancelReceivedHTTP.Count() != 1 {
-				return errors.Newf("expected metrics to update, got: "+
-					"QueryCancelSuccessful=%d, QueryCancelIgnored=%d "+
-					"QueryCancelForwarded=%d QueryCancelReceivedPGWire=%d QueryCancelReceivedHTTP=%d",
-					proxy.metrics.QueryCancelSuccessful.Count(), proxy.metrics.QueryCancelIgnored.Count(),
-					proxy.metrics.QueryCancelForwarded.Count(), proxy.metrics.QueryCancelReceivedPGWire.Count(),
-					proxy.metrics.QueryCancelReceivedHTTP.Count(),
-				)
-			}
-			return nil
-		})
+		requireIncrease(t, metrics, "QueryCancelSuccessful", "QueryCancelReceivedHTTP")
 	})
 
 	t.Run("cancel after migrating a session", func(t *testing.T) {
@@ -1693,7 +1667,7 @@ func TestCancelQuery(t *testing.T) {
 	})
 
 	t.Run("reject cancel from wrong client IP", func(t *testing.T) {
-		clearMetrics(t, proxy.metrics)
+		snapshot := snapshotMetrics()
 		cancelRequest := proxyCancelRequest{
 			ProxyIP:   net.IP{},
 			SecretKey: conn.PgConn().SecretKey(),
@@ -1711,23 +1685,12 @@ func TestCancelQuery(t *testing.T) {
 		assert.Equal(t, "OK", string(respBytes))
 		require.Error(t, httpCancelErr)
 		require.Regexp(t, "mismatched client IP for cancel request", httpCancelErr.Error())
-		testutils.SucceedsSoon(t, func() error {
-			if proxy.metrics.QueryCancelIgnored.Count() != 1 ||
-				proxy.metrics.QueryCancelReceivedHTTP.Count() != 1 {
-				return errors.Newf("expected metrics to update, got: "+
-					"QueryCancelSuccessful=%d, QueryCancelIgnored=%d "+
-					"QueryCancelForwarded=%d QueryCancelReceivedPGWire=%d QueryCancelReceivedHTTP=%d",
-					proxy.metrics.QueryCancelSuccessful.Count(), proxy.metrics.QueryCancelIgnored.Count(),
-					proxy.metrics.QueryCancelForwarded.Count(), proxy.metrics.QueryCancelReceivedPGWire.Count(),
-					proxy.metrics.QueryCancelReceivedHTTP.Count(),
-				)
-			}
-			return nil
-		})
+
+		requireIncrease(t, snapshot, "QueryCancelIgnored", "QueryCancelReceivedHTTP")
 	})
 
 	t.Run("forward over http", func(t *testing.T) {
-		clearMetrics(t, proxy.metrics)
+		snapshot := snapshotMetrics()
 		var forwardedTo string
 		var forwardedReq proxyCancelRequest
 		var wg sync.WaitGroup
@@ -1764,23 +1727,11 @@ func TestCancelQuery(t *testing.T) {
 			ClientIP:  net.IP{127, 0, 0, 1},
 		}
 		require.Equal(t, expectedReq, forwardedReq)
-		testutils.SucceedsSoon(t, func() error {
-			if proxy.metrics.QueryCancelForwarded.Count() != 1 ||
-				proxy.metrics.QueryCancelReceivedPGWire.Count() != 1 {
-				return errors.Newf("expected metrics to update, got: "+
-					"QueryCancelSuccessful=%d, QueryCancelIgnored=%d "+
-					"QueryCancelForwarded=%d QueryCancelReceivedPGWire=%d QueryCancelReceivedHTTP=%d",
-					proxy.metrics.QueryCancelSuccessful.Count(), proxy.metrics.QueryCancelIgnored.Count(),
-					proxy.metrics.QueryCancelForwarded.Count(), proxy.metrics.QueryCancelReceivedPGWire.Count(),
-					proxy.metrics.QueryCancelReceivedHTTP.Count(),
-				)
-			}
-			return nil
-		})
+		requireIncrease(t, snapshot, "QueryCancelForwarded", "QueryCancelReceivedPGWire")
 	})
 
 	t.Run("ignore unknown secret key", func(t *testing.T) {
-		clearMetrics(t, proxy.metrics)
+		snapshot := snapshotMetrics()
 		cancelRequest := proxyCancelRequest{
 			ProxyIP:   net.IP{},
 			SecretKey: conn.PgConn().SecretKey() + 1,
@@ -1798,19 +1749,7 @@ func TestCancelQuery(t *testing.T) {
 		assert.Equal(t, "OK", string(respBytes))
 		require.Error(t, httpCancelErr)
 		require.Regexp(t, "ignoring cancel request with unfamiliar key", httpCancelErr.Error())
-		testutils.SucceedsSoon(t, func() error {
-			if proxy.metrics.QueryCancelIgnored.Count() != 1 ||
-				proxy.metrics.QueryCancelReceivedHTTP.Count() != 1 {
-				return errors.Newf("expected metrics to update, got: "+
-					"QueryCancelSuccessful=%d, QueryCancelIgnored=%d "+
-					"QueryCancelForwarded=%d QueryCancelReceivedPGWire=%d QueryCancelReceivedHTTP=%d",
-					proxy.metrics.QueryCancelSuccessful.Count(), proxy.metrics.QueryCancelIgnored.Count(),
-					proxy.metrics.QueryCancelForwarded.Count(), proxy.metrics.QueryCancelReceivedPGWire.Count(),
-					proxy.metrics.QueryCancelReceivedHTTP.Count(),
-				)
-			}
-			return nil
-		})
+		requireIncrease(t, snapshot, "QueryCancelIgnored", "QueryCancelReceivedHTTP")
 	})
 }
 
