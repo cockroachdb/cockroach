@@ -509,6 +509,7 @@ func (r *Replica) propose(
 	if err != nil {
 		return kvpb.NewError(err)
 	}
+	r.store.metrics.RaftCommandsProposed.Inc(1)
 	return nil
 }
 
@@ -1454,6 +1455,7 @@ func (r *Replica) refreshProposalsLocked(
 				Err: kvpb.NewError(kvpb.NewAmbiguousResultError(err)),
 			})
 		}
+		r.store.metrics.RaftCommandsReproposed.Inc(1)
 	}
 }
 
