@@ -105,6 +105,9 @@ var aggregateFuncToNumArguments = map[execinfrapb.AggregatorSpec_Func]int{
 	execinfrapb.FinalCorr:               1,
 	execinfrapb.FinalSqrdiff:            3,
 	execinfrapb.ArrayCatAgg:             1,
+	execinfrapb.MergeStatsMetadata:      1,
+	execinfrapb.MergeStatementStats:     1,
+	execinfrapb.MergeTransactionStats:   1,
 }
 
 // TestAggregateFuncToNumArguments ensures that all aggregate functions are
@@ -183,6 +186,11 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 				execinfrapb.PercentileContImpl:
 				// We skip percentile functions because those can only be
 				// planned as window functions.
+			case execinfrapb.MergeStatsMetadata,
+				execinfrapb.MergeStatementStats,
+				execinfrapb.MergeTransactionStats:
+				// We skip merge statistics functions because they
+				// require custom JSON objects.
 			default:
 				found = true
 			}
