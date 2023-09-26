@@ -162,7 +162,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			rows = append(rows, fmt.Sprintf("   SQL command%s: %s", plural, recs[i].SQL))
 		}
 	}
-	v := params.p.newContainerValuesNode(colinfo.ExplainPlanColumns, 0)
+	v := params.p.newContainerValuesNode(colinfo.ExplainPlanColumns, len(rows))
 	datums := make([]tree.DString, len(rows))
 	for i, row := range rows {
 		datums[i] = tree.DString(row)

@@ -284,7 +284,7 @@ func planShowClusterSetting(
 				}
 			}
 
-			v := p.newContainerValuesNode(columns, 0)
+			v := p.newContainerValuesNode(columns, 1)
 			if _, err := v.rows.AddRow(ctx, tree.Datums{d}); err != nil {
 				v.rows.Close(ctx)
 				return nil, err
