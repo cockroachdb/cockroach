@@ -20,6 +20,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -285,4 +286,82 @@ func TestAWSKMSDisallowImplicitCredentials(t *testing.T) {
 		Settings:         awsKMSTestSettings,
 		ExternalIOConfig: &base.ExternalIODirConfig{DisableImplicitCredentials: true}})
 	require.True(t, testutils.IsError(err, "implicit credentials disallowed"))
+}
+
+func TestAWSKMSInaccessibleError(t *testing.T) {
+	q := make(url.Values)
+	expect := map[string]string{
+		"AWS_ACCESS_KEY_ID":     AWSAccessKeyParam,
+		"AWS_SECRET_ACCESS_KEY": AWSSecretParam,
+		"AWS_KMS_REGION":        KMSRegionParam,
+	}
+
+	for env, param := range expect {
+		v := os.Getenv(env)
+		if v == "" {
+			skip.IgnoreLintf(t, "%s env var must be set", env)
+		}
+		q.Add(param, v)
+	}
+
+	q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+
+	// Get AWS Key identifier from env variable.
+	keyID := os.Getenv("AWS_KMS_KEY_ARN")
+	if keyID == "" {
+		skip.IgnoreLint(t, "AWS_KMS_KEY_ARN env var must be set")
+	}
+
+	ctx := context.Background()
+	roleChainStr := os.Getenv("AWS_ROLE_ARN_CHAIN")
+	if roleChainStr == "" {
+		skip.IgnoreLint(t, "AWS_ROLE_ARN_CHAIN env var must be set")
+	}
+
+	roleChain := strings.Split(roleChainStr, ",")
+
+	t.Run("success-sanity-check", func(t *testing.T) {
+		uri := fmt.Sprintf("%s:///%s?%s", awsKMSScheme, keyID, q.Encode())
+		cloudtestutils.RequireSuccessfulKMS(ctx, t, uri)
+	})
+
+	t.Run("incorrect-credentials", func(t *testing.T) {
+		q2 := make(url.Values)
+		for k, v := range q {
+			q2[k] = v
+		}
+		q2.Set(AWSSecretParam, q.Get(AWSSecretParam)+"garbage")
+		uri := fmt.Sprintf("%s:///%s?%s", awsKMSScheme, keyID, q2.Encode())
+
+		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "status code: 400")
+	})
+
+	t.Run("incorrect-kms", func(t *testing.T) {
+		incorrectKey := keyID + "-non-existent"
+		uri := fmt.Sprintf("%s:///%s?%s", awsKMSScheme, incorrectKey, q.Encode())
+		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "(NotFound|InvalidCiphertext)")
+	})
+
+	t.Run("no-kms-permission", func(t *testing.T) {
+		q2 := make(url.Values)
+		for k, v := range q {
+			q2[k] = v
+		}
+		q2.Set(AssumeRoleParam, roleChain[0])
+
+		uri := fmt.Sprintf("%s:///%s?%s", awsKMSScheme, keyID, q2.Encode())
+		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "(not authorized to perform: kms:Encrypt|InvalidCiphertext)")
+	})
+
+	t.Run("cannot-assume-role", func(t *testing.T) {
+		q2 := make(url.Values)
+		for k, v := range q {
+			q2[k] = v
+		}
+		q2.Set(AssumeRoleParam, roleChain[len(roleChain)-1])
+
+		uri := fmt.Sprintf("%s:///%s?%s", awsKMSScheme, keyID, q2.Encode())
+		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "(not authorized to perform: sts:AssumeRole|InvalidCiphertext)")
+	})
+
 }

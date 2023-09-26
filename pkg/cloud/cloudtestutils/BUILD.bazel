@@ -13,6 +13,7 @@ go_library(
         "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/sql/isql",
+        "//pkg/testutils",
         "//pkg/util/ioctx",
         "//pkg/util/randutil",
         "//pkg/util/sysutil",

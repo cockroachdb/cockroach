@@ -125,6 +125,7 @@ func TestDataDriven(t *testing.T) {
 
 			case "create-replication-clusters":
 				args := replicationtestutils.DefaultTenantStreamingClustersArgs
+				args.NoMetamorphicExternalConnection = d.HasArg("no-external-conn")
 				var cleanup func()
 				ds.replicationClusters, cleanup = replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 				ds.cleanupFns = append(ds.cleanupFns, func() error {

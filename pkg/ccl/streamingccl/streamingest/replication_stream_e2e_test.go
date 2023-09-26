@@ -954,6 +954,7 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.NoMetamorphicExternalConnection = true
 
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 	defer cleanup()

@@ -1204,9 +1204,7 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 		}
 
 		scheduleID := int64(tree.MustBeDInt(datums[0]))
-		if err := jobs.NotifyJobTermination(
-			ctx, txn, env, b.job.ID(), jobStatus, b.job.Details(), scheduleID,
-		); err != nil {
+		if err := jobs.NotifyJobTermination(ctx, txn, env, b.job.ID(), jobStatus, b.job.Details(), scheduleID); err != nil {
 			return errors.Wrapf(err,
 				"failed to notify schedule %d of completion of job %d", scheduleID, b.job.ID())
 		}
@@ -1226,13 +1224,24 @@ func (b *backupResumer) OnFailOrCancel(
 
 	p := execCtx.(sql.JobExecContext)
 	cfg := p.ExecCfg()
+	details := b.job.Details().(jobspb.BackupDetails)
+
 	b.deleteCheckpoint(ctx, cfg, p.User())
 	if err := cfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		details := b.job.Details().(jobspb.BackupDetails)
 		pts := cfg.ProtectedTimestampProvider.WithTxn(txn)
 		return releaseProtectedTimestamp(ctx, pts, details.ProtectedTimestampRecord)
 	}); err != nil {
 		return err
+	}
+
+	// If this backup should update cluster monitoring metrics, update the
+	// metrics.
+	if details.UpdatesClusterMonitoringMetrics {
+		metrics := p.ExecCfg().JobRegistry.MetricsStruct().Backup.(*BackupMetrics)
+		if cloud.IsKMSInaccessible(jobErr) {
+			now := timeutil.Now()
+			metrics.LastKMSInaccessibleErrorTime.Update(now.Unix())
+		}
 	}
 
 	// This should never return an error unless resolving the schedule that the
