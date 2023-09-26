@@ -41,6 +41,7 @@ func registerPointTombstone(r registry.Registry) {
 		Timeout:           120 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			startOpts := option.DefaultStartOpts()
+			startOpts.RoachprodOpts.ScheduleBackups = false
 			startSettings := install.MakeClusterSettings()
 			startSettings.Env = append(startSettings.Env, "COCKROACH_AUTO_BALLAST=false")
 
