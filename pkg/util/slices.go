@@ -10,7 +10,10 @@
 
 package util
 
-import "golang.org/x/exp/constraints"
+import (
+	"golang.org/x/exp/constraints"
+	"golang.org/x/exp/slices"
+)
 
 // CombineUnique merges two ordered slices. If both slices have unique elements
 // then so does the resulting slice. More generally, each element is present
@@ -47,4 +50,58 @@ func CombineUnique[T constraints.Ordered](a, b []T) []T {
 		a = append(a, b[bIter:]...)
 	}
 	return a
+}
+
+// Filter removes all elements from collection that do not satisfy predicate.
+// NOTE: Collection is modified in place. To create a new slice, utilize
+// slices.Clone. Usage:
+//
+//	// Filter in place
+//	numbers = Filter(numbers, isEven)
+//	// Filter into a new slice
+//	odds := Filter(slices.Clone(numbers), isEven)
+func Filter[T any](collection []T, predicate func(T) bool) []T {
+	i := 0
+	for j := range collection {
+		if predicate(collection[j]) {
+			collection[i] = collection[j]
+			i++
+		}
+	}
+	return slices.Clip(collection[:i])
+}
+
+// Map returns a new slice containing the results of fn for each element within
+// collection. Usage:
+//
+//	Map([]int{1, 2, 3}, func(i int) int {
+//		return i
+//	})
+func Map[T, K any](collection []T, fn func(T) K) []K {
+	out := make([]K, len(collection))
+	for i, el := range collection {
+		out[i] = fn(el)
+	}
+	return out
+}
+
+// MapBy returns a map populated with keys and values returned by fn.
+// Usage:
+//
+//	// Construct a set.
+//	MapBy(numbers, func(i int) (int, struct{}) {
+//		return i, struct{}{}
+//	})
+//
+//	// Construct a map of numbers to their square.
+//	MapBy(numbers, func(i int) (int, int) {
+//		return i, i * i
+//	})
+func MapBy[T any, K comparable, V any](collection []T, fn func(T) (K, V)) map[K]V {
+	out := make(map[K]V, len(collection))
+	for _, el := range collection {
+		key, value := fn(el)
+		out[key] = value
+	}
+	return out
 }

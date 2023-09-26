@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 )
 
 func TestCombinesUniqueInt64(t *testing.T) {
@@ -78,4 +79,70 @@ func TestCombinesUniqueStrings(t *testing.T) {
 		output := CombineUnique(tc.inputA, tc.inputB)
 		require.Equal(t, tc.expected, output)
 	}
+}
+
+func TestFilter(t *testing.T) {
+	numbers := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
+	evens := Filter(numbers, func(i int) bool {
+		return i%2 == 0
+	})
+	// Assert filtering works.
+	require.Equal(t, []int{0, 2, 4, 6, 8}, evens)
+
+	// Assert/demonstrate that filtering is performed in place.
+	require.Equal(t, []int{0, 2, 4, 6, 8, 5, 6, 7, 8, 9}, numbers)
+
+	// The filtered slice's capacity is correctly set and the original slice's
+	// capacity is unmodified.
+	require.Equal(t, len(evens), cap(evens))
+	require.Equal(t, len(numbers), cap(numbers))
+
+	// reset numbers and demonstrate filtering with slices.Clone.
+	numbers = []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
+
+	evens = Filter(slices.Clone(numbers), func(i int) bool {
+		return i%2 == 0
+	})
+
+	odds := Filter(slices.Clone(numbers), func(i int) bool {
+		return i%2 == 1
+	})
+
+	require.Equal(t, []int{1, 3, 5, 7, 9}, odds)
+	require.Equal(t, []int{0, 2, 4, 6, 8}, evens)
+	require.Equal(t, []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, numbers)
+
+	require.Equal(t, len(odds), cap(odds))
+	require.Equal(t, len(evens), cap(evens))
+	require.Equal(t, len(numbers), cap(numbers))
+}
+
+func TestMap(t *testing.T) {
+	require.Equal(t, []bool{}, Map(nil, func(i int) bool {
+		return true
+	}))
+	require.Equal(t, []bool{}, Map([]int{}, func(i int) bool {
+		return true
+	}))
+	require.Equal(t, []bool{false, true, false, true, false}, Map([]int{1, 2, 3, 4, 5}, func(i int) bool {
+		return i%2 == 0
+	}))
+}
+
+func TestMapBy(t *testing.T) {
+	require.Equal(t, map[int]bool{}, MapBy(nil, func(i int) (int, bool) {
+		return 0, false
+	}))
+	require.Equal(t, map[int]bool{}, MapBy([]int{}, func(i int) (int, bool) {
+		return 0, false
+	}))
+	require.Equal(t, map[int]struct{}{
+		1: {},
+		2: {},
+		3: {},
+		4: {},
+		5: {},
+	}, MapBy([]int{1, 1, 2, 3, 4, 5, 5}, func(i int) (int, struct{}) {
+		return i, struct{}{}
+	}))
 }
