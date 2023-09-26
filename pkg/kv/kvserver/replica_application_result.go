@@ -286,6 +286,7 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 	if pErr != nil {
 		return pErr
 	}
+	r.store.metrics.RaftCommandsReproposedLAI.Inc(1)
 	log.VEventf(ctx, 2, "reproposed command %x", cmd.ID)
 	return nil
 }

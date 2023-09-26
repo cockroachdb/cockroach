@@ -1994,6 +1994,23 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{ReplicationLayer, "Raft", "Proposals"}},
+		Charts: []chartDescription{
+			{
+				Title:   "Commands Proposed",
+				Metrics: []string{"raft.commands.proposed"},
+			},
+			{
+				Title:   "Commands Reproposed (unchanged)",
+				Metrics: []string{"raft.commands.reproposed.unchanged"},
+			},
+			{
+				Title:   "Commands Reproposed (new LAI)",
+				Metrics: []string{"raft.commands.reproposed.new-lai"},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{ReplicationLayer, "Raft", "Queues"}},
 		Charts: []chartDescription{
 			{
