@@ -22,6 +22,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_slack_go_slack//:slack",
+        "@org_golang_x_exp//maps",
         "@org_golang_x_sync//errgroup",
     ],
 )
