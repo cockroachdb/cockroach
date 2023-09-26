@@ -30,7 +30,7 @@ import (
 const (
 	dnsManagedZone = "roachprod-managed"
 	dnsDomain      = "roachprod-managed.crdb.io"
-	dnsServer      = "ns-cloud-a1.googledomains.com"
+	dnsServer      = "216.239.32.106"
 	dnsMaxResults  = 1000
 )
 
