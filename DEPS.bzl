@@ -1599,10 +1599,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "f85cd2d80b88bc9a43f02879b855205de580417e3d2250b0e3db86b130d630d1",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20230922144958-86593692e09f",
+        sha256 = "ae597247d1467f844be951b446bb125919418c4efeb581534968f82ae5f2df17",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20230926003129-660450027a8c",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20230922144958-86593692e09f.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20230926003129-660450027a8c.zip",
         ],
     )
     go_repository(
