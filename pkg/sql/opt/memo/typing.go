@@ -209,6 +209,10 @@ func init() {
 	typingFuncMap[opt.LeadOp] = typeAsFirstArg
 	typingFuncMap[opt.NthValueOp] = typeAsFirstArg
 
+	typingFuncMap[opt.MergeStatsMetadataOp] = typeAsFirstArg
+	typingFuncMap[opt.MergeStatementStatsOp] = typeAsFirstArg
+	typingFuncMap[opt.MergeTransactionStatsOp] = typeAsFirstArg
+
 	// Modifiers for aggregations pass through their argument.
 	typingFuncMap[opt.AggDistinctOp] = typeAsFirstArg
 	typingFuncMap[opt.AggFilterOp] = typeAsFirstArg

@@ -262,7 +262,7 @@ func (u *sqlActivityUpdater) transferAllStats(
                   fingerprint_id,
                   agg_interval,
                   max(metadata) as metadata,
-                  crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics
+                  merge_transaction_stats(statistics) AS statistics
            FROM system.public.transaction_statistics
            WHERE aggregated_ts = $2
              and app_name not like '$ internal%'
@@ -315,8 +315,8 @@ INTO system.public.statement_activity (aggregated_ts, fingerprint_id, transactio
                   plan_hash,
                   app_name,
                   agg_interval,
-                  crdb_internal.merge_stats_metadata(array_agg(metadata))    AS metadata,
-                  crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
+                  merge_stats_metadata(metadata)    AS metadata,
+                  merge_statement_stats(statistics) AS statistics,
                   plan,
                   index_recommendations
            FROM system.public.statement_statistics
@@ -406,7 +406,7 @@ INTO system.public.transaction_activity
                   ts.fingerprint_id,
                   ts.agg_interval,
                   max(ts.metadata) AS metadata,
-                  crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics
+                  merge_transaction_stats(statistics) AS statistics
            FROM system.public.transaction_statistics ts
                     inner join (SELECT fingerprint_id, app_name, agg_interval
                                 FROM (SELECT fingerprint_id, app_name, agg_interval,
@@ -427,7 +427,7 @@ INTO system.public.transaction_activity
                                                      (statistics -> 'statistics' -> 'latencyInfo' ->> 'p99')::float,
                                                      0) desc)                                                                  AS lPos
                                       FROM (SELECT fingerprint_id, app_name, agg_interval,
-                                                   crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics
+                                                   merge_transaction_stats(statistics) AS statistics
                                             FROM system.public.transaction_statistics
                                             WHERE aggregated_ts = $2 and
                                                   app_name not like '$ internal%'
@@ -519,8 +519,8 @@ INTO system.public.statement_activity
                   ss.plan_hash,
                   ss.app_name,
                   ss.agg_interval,
-                  crdb_internal.merge_stats_metadata(array_agg(ss.metadata))    AS metadata,
-                  crdb_internal.merge_statement_stats(array_agg(ss.statistics)) AS statistics,
+                  merge_stats_metadata(ss.metadata)    AS metadata,
+                  merge_statement_stats(ss.statistics) AS statistics,
                   ss.plan,
                   ss.index_recommendations
            FROM system.public.statement_statistics ss
@@ -544,7 +544,7 @@ INTO system.public.statement_activity
                                                          0) desc)                                                                AS lPos
                                           FROM (SELECT fingerprint_id,
                                                        app_name,
-                                                       crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
+                                                       merge_statement_stats(statistics) AS statistics
                                                 FROM system.public.statement_statistics
                                                 WHERE aggregated_ts = $2 and
                                                       app_name not like '$ internal%'
@@ -637,8 +637,8 @@ FROM (SELECT max(ss.aggregated_ts) AS aggregated_ts,
     ss.plan_hash,
     ss.app_name,
     ss.agg_interval,
-    crdb_internal.merge_stats_metadata(array_agg(ss.metadata)) AS metadata,
-    crdb_internal.merge_statement_stats(array_agg(ss.statistics)) AS statistics,
+    merge_stats_metadata(ss.metadata) AS metadata,
+    merge_statement_stats(ss.statistics) AS statistics,
     ss.plan,
     ss.index_recommendations
     FROM system.public.statement_statistics ss
