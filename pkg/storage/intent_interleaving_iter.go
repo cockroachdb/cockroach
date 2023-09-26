@@ -69,7 +69,7 @@ var intentInterleavingReaderPool = sync.Pool{
 func (imr *intentInterleavingReader) NewMVCCIterator(
 	iterKind MVCCIterKind, opts IterOptions,
 ) (MVCCIterator, error) {
-	if (!opts.MinTimestampHint.IsEmpty() || !opts.MaxTimestampHint.IsEmpty()) &&
+	if (!opts.MinTimestamp.IsEmpty() || !opts.MaxTimestamp.IsEmpty()) &&
 		iterKind == MVCCKeyAndIntentsIterKind {
 		panic("cannot ask for interleaved intents when specifying timestamp hints")
 	}
@@ -233,7 +233,7 @@ func isLocal(k roachpb.Key) bool {
 }
 
 func newIntentInterleavingIterator(reader Reader, opts IterOptions) (MVCCIterator, error) {
-	if !opts.MinTimestampHint.IsEmpty() || !opts.MaxTimestampHint.IsEmpty() {
+	if !opts.MinTimestamp.IsEmpty() || !opts.MaxTimestamp.IsEmpty() {
 		panic("intentInterleavingIter must not be used with timestamp hints")
 	}
 	var lowerIsLocal, upperIsLocal bool
