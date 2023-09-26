@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/sasha-s/go-deadlock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -257,6 +258,9 @@ func channelWaitWithTimeout(t *testing.T, ch chan struct{}) {
 	timeOut := 30 * time.Second
 	if util.RaceEnabled {
 		timeOut *= 10
+	}
+	if syncutil.DeadlockEnabled {
+		timeOut = 2 * deadlock.Opts.DeadlockTimeout
 	}
 	select {
 	case <-ch:
@@ -1051,4 +1055,64 @@ func TestMuxRangeFeedCanCloseStream(t *testing.T) {
 		// When we close the stream(s), the rangefeed server responds with a retryable error.
 		// Mux rangefeed should retry, and thus we expect frontier to keep advancing.
 	}
+}
+
+// TestMuxRangeFeedDoesNotDeadlockWithLocalStreams verifies mux rangefeed does not
+// deadlock when running against many local ranges.  Local ranges use local RPC
+// bypass (rpc/context.go) which utilize buffered channels for client/server streaming
+// RPC communication.
+func TestMuxRangeFeedDoesNotDeadlockWithLocalStreams(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	if !syncutil.DeadlockEnabled {
+		t.Log("skipping test: it requires deadlock detection enabled.")
+		return
+	}
+
+	// Lower syncutil deadlock timeout.
+	deadlock.Opts.DeadlockTimeout = 2 * time.Minute
+
+	// Make deadlock more likely: use unbuffered channel.
+	defer rpc.TestingSetLocalStreamChannelBufferSize(0)()
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	ts := tc.Server(0).ApplicationLayer()
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+	// Insert 1000 rows, and split them into many ranges.
+	sqlDB.ExecMultiple(t,
+		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
+		`SET CLUSTER SETTING kv.closed_timestamp.target_duration='100ms'`,
+		`ALTER DATABASE defaultdb  CONFIGURE ZONE USING num_replicas = 1`,
+		`CREATE TABLE foo (key INT PRIMARY KEY)`,
+	)
+
+	startFrom := ts.Clock().Now()
+
+	sqlDB.ExecMultiple(t,
+		`INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000)`,
+		`ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(100, 900, 20))`,
+	)
+
+	fooDesc := desctestutils.TestingGetPublicTableDescriptor(
+		ts.DB(), keys.SystemSQLCodec, "defaultdb", "foo")
+	fooSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+
+	allSeen, onValue := observeNValues(1000)
+	closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startFrom, onValue, true,
+		kvcoord.WithMuxRangeFeed(),
+		kvcoord.TestingWithBeforeSendRequest(func() {
+			// Prior to sending rangefeed request, block for just a bit
+			// to make deadlock more likely.
+			time.Sleep(100 * time.Millisecond)
+		}),
+	)
+	defer closeFeed()
+	channelWaitWithTimeout(t, allSeen)
 }
