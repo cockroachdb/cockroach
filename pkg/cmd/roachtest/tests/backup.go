@@ -531,9 +531,10 @@ func registerBackup(r registry.Registry) {
 	for _, item := range []struct {
 		kmsProvider string
 		machine     string
+		tags        map[string]struct{}
 	}{
 		{kmsProvider: "GCS", machine: spec.GCE},
-		{kmsProvider: "AWS", machine: spec.AWS},
+		{kmsProvider: "AWS", machine: spec.AWS, tags: registry.Tags("aws")},
 	} {
 		item := item
 		r.Add(registry.TestSpec{
@@ -542,6 +543,7 @@ func registerBackup(r registry.Registry) {
 			Cluster:           KMSSpec,
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			Leases:            registry.MetamorphicLeases,
+			Tags:              item.tags,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.Spec().Cloud != item.machine {
 					t.Skip("backupKMS roachtest is only configured to run on "+item.machine, "")

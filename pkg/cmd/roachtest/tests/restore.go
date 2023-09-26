@@ -123,6 +123,7 @@ func registerRestore(r registry.Registry) {
 		Benchmark: true,
 		Cluster:   withPauseSpecs.hardware.makeClusterSpecs(r, withPauseSpecs.backup.cloud),
 		Timeout:   withPauseSpecs.timeout,
+		Tags:      registry.Tags("aws"),
 
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
@@ -267,6 +268,7 @@ func registerRestore(r registry.Registry) {
 			hardware: makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */}),
 			backup:   makeBackupSpecs(backupSpecs{}),
 			timeout:  1 * time.Hour,
+			tags:     registry.Tags("aws"),
 		},
 		{
 			// Note that the default specs in makeHardwareSpecs() spin up restore tests in aws,
@@ -288,6 +290,7 @@ func registerRestore(r registry.Registry) {
 			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 8, ebsThroughput: 250 /* MB/s */}),
 			backup:   makeBackupSpecs(backupSpecs{}),
 			timeout:  1 * time.Hour,
+			tags:     registry.Tags("aws"),
 		},
 		{
 			// Benchmarks if per node throughput remains constant if the cluster
@@ -304,6 +307,7 @@ func registerRestore(r registry.Registry) {
 			hardware: makeHardwareSpecs(hardwareSpecs{cpus: 16, ebsThroughput: 250 /* MB/s */}),
 			backup:   makeBackupSpecs(backupSpecs{}),
 			timeout:  1 * time.Hour,
+			tags:     registry.Tags("aws"),
 		},
 		{
 			// Ensures we can restore a 48 length incremental chain.
@@ -311,6 +315,7 @@ func registerRestore(r registry.Registry) {
 			hardware: makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */}),
 			backup:   makeBackupSpecs(backupSpecs{backupsIncluded: 48}),
 			timeout:  1 * time.Hour,
+			tags:     registry.Tags("aws"),
 		},
 		{
 			// The nightly 8TB Restore test.
@@ -322,6 +327,7 @@ func registerRestore(r registry.Registry) {
 				version:  "v22.2.1",
 				workload: tpceRestore{customers: 500000}}),
 			timeout: 5 * time.Hour,
+			tags:    registry.Tags("aws"),
 		},
 		{
 			// The weekly 32TB Restore test.
@@ -331,7 +337,7 @@ func registerRestore(r registry.Registry) {
 				version:  "v22.2.1",
 				workload: tpceRestore{customers: 2000000}}),
 			timeout: 24 * time.Hour,
-			tags:    []string{"weekly", "aws-weekly"},
+			tags:    registry.Tags("weekly", "aws-weekly"),
 		},
 		{
 			// A teeny weeny 15GB restore that could be used to bisect scale agnostic perf regressions.
@@ -641,7 +647,7 @@ type restoreSpecs struct {
 	hardware hardwareSpecs
 	backup   backupSpecs
 	timeout  time.Duration
-	tags     []string
+	tags     map[string]struct{}
 
 	// namePrefix appears in the name of the roachtest, i.e. `restore/{prefix}/{config}`.
 	namePrefix string

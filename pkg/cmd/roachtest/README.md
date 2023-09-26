@@ -27,6 +27,15 @@ acceptance/cli/node-status [server]
 [...]
 ```
 
+The list can be filtered by passing a regular expression to the `list` command which will match against the test name.
+Multiple `tag:` prefixed args can be specified to further narrow by which tags are present for a test. The following 
+will list all tests with name containing `admission` where test tags match `(weekly && aws) || my-tag`
+
+```
+roachtest list admission tag:weekly,aws tag:my-tag
+```
+
+
 ## Getting the binaries
 
 To run a test, the `roachtest run` command is used. Since a test typically
