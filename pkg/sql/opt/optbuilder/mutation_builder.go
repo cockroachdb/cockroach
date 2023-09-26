@@ -328,13 +328,19 @@ func (mb *mutationBuilder) buildInputForUpdate(
 
 		left := mb.fetchScope.expr
 		right := fromScope.expr
-		mb.outScope.expr = mb.b.factory.ConstructInnerJoin(left, right, memo.TrueFilter, memo.EmptyJoinPrivate)
+		mb.outScope.expr = right
+		mb.b.buildWhere(where, mb.outScope)
+		mb.b.buildLimit(&tree.Limit{Count: tree.NewDInt(1)}, inScope, mb.outScope)
+		right = mb.outScope.expr
+		mb.outScope.expr = mb.b.factory.ConstructInnerJoinApply(left, right, memo.TrueFilter, memo.EmptyJoinPrivate)
+		// mb.outScope.expr = mb.b.factory.ConstructInnerJoin(left, right, memo.TrueFilter, memo.EmptyJoinPrivate)  // msirek-temp
 	} else {
 		mb.outScope = mb.fetchScope
+		mb.b.buildWhere(where, mb.outScope) // msirek-temp
 	}
 
 	// WHERE
-	mb.b.buildWhere(where, mb.outScope)
+	//mb.b.buildWhere(where, mb.outScope)
 
 	// SELECT + ORDER BY (which may add projected expressions)
 	projectionsScope := mb.outScope.replace()
