@@ -13,25 +13,110 @@ package ttlbase
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/errors"
 )
 
-// DefaultAOSTDuration is the default duration to use in the AS OF SYSTEM TIME
-// clause used in the SELECT query.
-const DefaultAOSTDuration = -time.Second * 30
+const (
+	// DefaultAOSTDuration is the default duration to use in the AS OF SYSTEM TIME
+	// clause used in the SELECT query.
+	DefaultAOSTDuration         = -time.Second * 30
+	DefaultSelectBatchSizeValue = 500
+)
 
-var startKeyCompareOps = map[catenumpb.IndexColumn_Direction]string{
-	catenumpb.IndexColumn_ASC:  ">",
-	catenumpb.IndexColumn_DESC: "<",
+var (
+	defaultSelectBatchSize = settings.RegisterIntSetting(
+		settings.TenantWritable,
+		"sql.ttl.default_select_batch_size",
+		"default amount of rows to select in a single query during a TTL job",
+		DefaultSelectBatchSizeValue,
+		settings.PositiveInt,
+		settings.WithPublic,
+	)
+	defaultDeleteBatchSize = settings.RegisterIntSetting(
+		settings.TenantWritable,
+		"sql.ttl.default_delete_batch_size",
+		"default amount of rows to delete in a single query during a TTL job",
+		100,
+		settings.PositiveInt,
+		settings.WithPublic,
+	)
+	defaultDeleteRateLimit = settings.RegisterIntSetting(
+		settings.TenantWritable,
+		"sql.ttl.default_delete_rate_limit",
+		"default delete rate limit (rows per second) per node for each TTL job. Use 0 to signify no rate limit.",
+		0,
+		settings.NonNegativeInt,
+		settings.WithPublic,
+	)
+	jobEnabled = settings.RegisterBoolSetting(
+		settings.TenantWritable,
+		"sql.ttl.job.enabled",
+		"whether the TTL job is enabled",
+		true,
+		settings.WithPublic,
+	)
+	startKeyCompareOps = map[catenumpb.IndexColumn_Direction]string{
+		catenumpb.IndexColumn_ASC:  ">",
+		catenumpb.IndexColumn_DESC: "<",
+	}
+	endKeyCompareOps = map[catenumpb.IndexColumn_Direction]string{
+		catenumpb.IndexColumn_ASC:  "<",
+		catenumpb.IndexColumn_DESC: ">",
+	}
+)
+
+// GetSelectBatchSize returns the table storage param value if specified or
+// falls back to the cluster setting.
+func GetSelectBatchSize(sv *settings.Values, ttl *catpb.RowLevelTTL) int64 {
+	bs := ttl.SelectBatchSize
+	if bs == 0 {
+		bs = defaultSelectBatchSize.Get(sv)
+	}
+	return bs
 }
-var endKeyCompareOps = map[catenumpb.IndexColumn_Direction]string{
-	catenumpb.IndexColumn_ASC:  "<",
-	catenumpb.IndexColumn_DESC: ">",
+
+// GetDeleteBatchSize returns the table storage param value if specified or
+// falls back to the cluster setting.
+func GetDeleteBatchSize(sv *settings.Values, ttl *catpb.RowLevelTTL) int64 {
+	bs := ttl.DeleteBatchSize
+	if bs == 0 {
+		bs = defaultDeleteBatchSize.Get(sv)
+	}
+	return bs
+}
+
+// GetDeleteRateLimit returns the table storage param value if specified or
+// falls back to the cluster setting.
+func GetDeleteRateLimit(sv *settings.Values, ttl *catpb.RowLevelTTL) int64 {
+	rl := ttl.DeleteRateLimit
+	if rl == 0 {
+		rl = defaultDeleteRateLimit.Get(sv)
+	}
+	// Put the maximum tokens possible if there is no rate limit.
+	if rl == 0 {
+		rl = math.MaxInt64
+	}
+	return rl
+}
+
+// CheckJobEnabled returns nil if the job is enabled or an error if the job is
+// disabled.
+func CheckJobEnabled(settingsValues *settings.Values) error {
+	if enabled := jobEnabled.Get(settingsValues); !enabled {
+		return errors.Newf(
+			"ttl jobs are currently disabled by CLUSTER SETTING %s",
+			jobEnabled.Name(),
+		)
+	}
+	return nil
 }
 
 // BuildScheduleLabel returns a string value intended for use as the

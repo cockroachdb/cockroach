@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -147,6 +148,7 @@ func (s rowLevelTTLExecutor) ExecuteJob(
 	)
 	defer cleanup()
 
+	execCfg := p.(sql.PlanHookState).ExecCfg()
 	if _, err := createRowLevelTTLJob(
 		ctx,
 		&jobs.CreatedByInfo{
@@ -154,8 +156,9 @@ func (s rowLevelTTLExecutor) ExecuteJob(
 			Name: jobs.CreatedByScheduledJobs,
 		},
 		txn,
-		p.(sql.PlanHookState).ExecCfg().JobRegistry,
+		execCfg.JobRegistry,
 		*args,
+		execCfg.SV(),
 	); err != nil {
 		s.metrics.NumFailed.Inc(1)
 		return err
@@ -217,7 +220,9 @@ func (s rowLevelTTLExecutor) GetCreateScheduleStatement(
 	return fmt.Sprintf(`ALTER TABLE %s WITH (ttl = 'on', ...)`, tn.FQString()), nil
 }
 
-func makeTTLJobDescription(tableDesc catalog.TableDescriptor, tn tree.ObjectName) string {
+func makeTTLJobDescription(
+	tableDesc catalog.TableDescriptor, tn tree.ObjectName, sv *settings.Values,
+) string {
 	relationName := tn.FQString()
 	pkIndex := tableDesc.GetPrimaryIndex().IndexDesc()
 	pkColNames := pkIndex.KeyColumnNames
@@ -225,6 +230,7 @@ func makeTTLJobDescription(tableDesc catalog.TableDescriptor, tn tree.ObjectName
 	rowLevelTTL := tableDesc.GetRowLevelTTL()
 	ttlExpirationExpr := rowLevelTTL.GetTTLExpr()
 	numPkCols := len(pkColNames)
+	selectBatchSize := ttlbase.GetSelectBatchSize(sv, rowLevelTTL)
 	selectQuery := ttlbase.BuildSelectQuery(
 		relationName,
 		pkColNames,
@@ -233,7 +239,7 @@ func makeTTLJobDescription(tableDesc catalog.TableDescriptor, tn tree.ObjectName
 		ttlExpirationExpr,
 		numPkCols,
 		numPkCols,
-		rowLevelTTL.SelectBatchSize,
+		selectBatchSize,
 		true, /*startIncl*/
 	)
 	deleteQuery := ttlbase.BuildDeleteQuery(
@@ -255,6 +261,7 @@ func createRowLevelTTLJob(
 	txn isql.Txn,
 	jobRegistry *jobs.Registry,
 	ttlArgs catpb.ScheduledRowLevelTTLArgs,
+	sv *settings.Values,
 ) (jobspb.JobID, error) {
 	descsCol := descs.FromTxn(txn)
 	tableID := ttlArgs.TableID
@@ -267,7 +274,7 @@ func createRowLevelTTLJob(
 		return 0, err
 	}
 	record := jobs.Record{
-		Description: makeTTLJobDescription(tableDesc, tn),
+		Description: makeTTLJobDescription(tableDesc, tn, sv),
 		Username:    username.NodeUserName(),
 		Details: jobspb.RowLevelTTLDetails{
 			TableID:      tableID,
