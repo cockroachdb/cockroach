@@ -4822,3 +4822,168 @@ project
                      │                                                                └── projections
                      │                                                                     └── const: 0 [as=stmt_return_4:16]
                      └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := 'foo';
+    x INT;
+  BEGIN
+    OPEN curs FOR SELECT * FROM xy ORDER BY x;
+    FETCH curs INTO x;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:20
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:20]
+           └── body
+                └── limit
+                     ├── columns: "_stmt_open_1":19
+                     ├── project
+                     │    ├── columns: "_stmt_open_1":19
+                     │    ├── project
+                     │    │    ├── columns: x:2 curs:1!null
+                     │    │    ├── project
+                     │    │    │    ├── columns: curs:1!null
+                     │    │    │    ├── values
+                     │    │    │    │    └── tuple
+                     │    │    │    └── projections
+                     │    │    │         └── const: 'foo' [as=curs:1]
+                     │    │    └── projections
+                     │    │         └── cast: INT8 [as=x:2]
+                     │    │              └── null
+                     │    └── projections
+                     │         └── udf: _stmt_open_1 [as="_stmt_open_1":19]
+                     │              ├── args
+                     │              │    ├── variable: curs:1
+                     │              │    └── variable: x:2
+                     │              ├── params: curs:3 x:4
+                     │              └── body
+                     │                   ├── open-cursor
+                     │                   │    └── project
+                     │                   │         ├── columns: xy.x:5 y:6
+                     │                   │         └── scan xy
+                     │                   │              └── columns: xy.x:5 y:6 rowid:7!null crdb_internal_mvcc_timestamp:8 tableoid:9
+                     │                   └── project
+                     │                        ├── columns: "_stmt_fetch_2":18
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── udf: _stmt_fetch_2 [as="_stmt_fetch_2":18]
+                     │                                  ├── args
+                     │                                  │    ├── variable: curs:3
+                     │                                  │    └── variable: x:4
+                     │                                  ├── params: curs:10 x:11
+                     │                                  └── body
+                     │                                       └── project
+                     │                                            ├── columns: "_stmt_exec_ret_4":17
+                     │                                            ├── project
+                     │                                            │    ├── columns: x:13
+                     │                                            │    ├── project
+                     │                                            │    │    ├── columns: stmt_fetch_3:12
+                     │                                            │    │    ├── values
+                     │                                            │    │    │    └── tuple
+                     │                                            │    │    └── projections
+                     │                                            │    │         └── function: crdb_internal.plpgsql_fetch [as=stmt_fetch_3:12]
+                     │                                            │    │              ├── variable: curs:10
+                     │                                            │    │              ├── const: 0
+                     │                                            │    │              ├── const: 1
+                     │                                            │    │              └── tuple
+                     │                                            │    │                   └── null
+                     │                                            │    └── projections
+                     │                                            │         └── column-access: 0 [as=x:13]
+                     │                                            │              └── variable: stmt_fetch_3:12
+                     │                                            └── projections
+                     │                                                 └── udf: _stmt_exec_ret_4 [as="_stmt_exec_ret_4":17]
+                     │                                                      ├── args
+                     │                                                      │    ├── variable: curs:10
+                     │                                                      │    └── variable: x:13
+                     │                                                      ├── params: curs:14 x:15
+                     │                                                      └── body
+                     │                                                           └── project
+                     │                                                                ├── columns: stmt_return_5:16
+                     │                                                                ├── values
+                     │                                                                │    └── tuple
+                     │                                                                └── projections
+                     │                                                                     └── variable: x:15 [as=stmt_return_5:16]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT * FROM xy ORDER BY x;
+    MOVE curs;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:13
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:13]
+           └── body
+                └── limit
+                     ├── columns: "_stmt_open_1":12
+                     ├── project
+                     │    ├── columns: "_stmt_open_1":12
+                     │    ├── project
+                     │    │    ├── columns: curs:1!null
+                     │    │    ├── values
+                     │    │    │    └── tuple
+                     │    │    └── projections
+                     │    │         └── const: 'foo' [as=curs:1]
+                     │    └── projections
+                     │         └── udf: _stmt_open_1 [as="_stmt_open_1":12]
+                     │              ├── args
+                     │              │    └── variable: curs:1
+                     │              ├── params: curs:2
+                     │              └── body
+                     │                   ├── open-cursor
+                     │                   │    └── project
+                     │                   │         ├── columns: x:3 y:4
+                     │                   │         └── scan xy
+                     │                   │              └── columns: x:3 y:4 rowid:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+                     │                   └── project
+                     │                        ├── columns: "_stmt_fetch_2":11
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── udf: _stmt_fetch_2 [as="_stmt_fetch_2":11]
+                     │                                  ├── args
+                     │                                  │    └── variable: curs:2
+                     │                                  ├── params: curs:8
+                     │                                  └── body
+                     │                                       ├── project
+                     │                                       │    ├── columns: stmt_fetch_3:9
+                     │                                       │    ├── values
+                     │                                       │    │    └── tuple
+                     │                                       │    └── projections
+                     │                                       │         └── function: crdb_internal.plpgsql_fetch [as=stmt_fetch_3:9]
+                     │                                       │              ├── variable: curs:8
+                     │                                       │              ├── const: 0
+                     │                                       │              ├── const: 1
+                     │                                       │              └── tuple
+                     │                                       └── project
+                     │                                            ├── columns: stmt_return_4:10!null
+                     │                                            ├── values
+                     │                                            │    └── tuple
+                     │                                            └── projections
+                     │                                                 └── const: 0 [as=stmt_return_4:10]
+                     └── const: 1
