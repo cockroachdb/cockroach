@@ -60,9 +60,9 @@ update abc
       │    └── filters
       │         └── abc.a:6 = other.a:11
       └── aggregations
-           ├── first-agg [as=abc.b:7]
+           ├── const-agg [as=abc.b:7]
            │    └── abc.b:7
-           ├── first-agg [as=abc.c:8]
+           ├── const-agg [as=abc.c:8]
            │    └── abc.c:8
            ├── first-agg [as=other.a:11]
            │    └── other.a:11
@@ -192,9 +192,9 @@ update abc
       │    │    └── (2, 3, 4)
       │    └── filters (true)
       └── aggregations
-           ├── first-agg [as=b:7]
+           ├── const-agg [as=b:7]
            │    └── b:7
-           ├── first-agg [as=c:8]
+           ├── const-agg [as=c:8]
            │    └── c:8
            ├── first-agg [as=column1:11]
            │    └── column1:11
@@ -240,9 +240,9 @@ update abc
       │    └── filters
       │         └── ab.a:11 = ac.a:16
       └── aggregations
-           ├── first-agg [as=abc.b:7]
+           ├── const-agg [as=abc.b:7]
            │    └── abc.b:7
-           ├── first-agg [as=abc.c:8]
+           ├── const-agg [as=abc.c:8]
            │    └── abc.c:8
            ├── first-agg [as=ab.a:11]
            │    └── ab.a:11
@@ -307,9 +307,9 @@ update abc
       │    └── filters
       │         └── ab.a:11 = ac.a:16
       └── aggregations
-           ├── first-agg [as=abc.b:7]
+           ├── const-agg [as=abc.b:7]
            │    └── abc.b:7
-           ├── first-agg [as=abc.c:8]
+           ├── const-agg [as=abc.c:8]
            │    └── abc.c:8
            ├── first-agg [as=ab.a:11]
            │    └── ab.a:11
@@ -361,9 +361,9 @@ update abc
       │    └── filters
       │         └── ab.a:11 = ac.a:16
       └── aggregations
-           ├── first-agg [as=abc.b:7]
+           ├── const-agg [as=abc.b:7]
            │    └── abc.b:7
-           ├── first-agg [as=abc.c:8]
+           ├── const-agg [as=abc.c:8]
            │    └── abc.c:8
            ├── first-agg [as=ab.a:11]
            │    └── ab.a:11

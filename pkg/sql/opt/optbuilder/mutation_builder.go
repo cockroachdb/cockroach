@@ -325,13 +325,28 @@ func (mb *mutationBuilder) buildInputForUpdate(
 
 		left := mb.fetchScope.expr
 		right := fromScope.expr
-		mb.outScope.expr = mb.b.factory.ConstructInnerJoin(left, right, memo.TrueFilter, memo.EmptyJoinPrivate)
+		mb.outScope.expr = right
+		mb.b.buildWhere(where, mb.outScope)
+		mb.b.buildLimit(&tree.Limit{Count: tree.NewDInt(1)}, inScope, mb.outScope)
+		right = mb.outScope.expr
+		// Use a lateral join as the input relation to the update.
+		mb.outScope.expr = mb.b.factory.ConstructInnerJoinApply(left, right, memo.TrueFilter, memo.EmptyJoinPrivate)
+
+		// If normalization could not decorrelate the join, fall back to the old
+		// method of using inner join, since apply join is executed one
+		// row-at-a-time, and may be too slow when the target table is large.
+		if _, isApplyJoin := mb.outScope.expr.(*memo.InnerJoinApplyExpr); isApplyJoin {
+			mb.outScope = mb.fetchScope.replace()
+			mb.outScope.appendColumnsFromScope(mb.fetchScope)
+			mb.outScope.appendColumnsFromScope(fromScope)
+			right = fromScope.expr
+			mb.outScope.expr = mb.b.factory.ConstructInnerJoin(left, right, memo.TrueFilter, memo.EmptyJoinPrivate)
+			mb.b.buildWhere(where, mb.outScope)
+		}
 	} else {
 		mb.outScope = mb.fetchScope
+		mb.b.buildWhere(where, mb.outScope)
 	}
-
-	// WHERE
-	mb.b.buildWhere(where, mb.outScope)
 
 	// SELECT + ORDER BY (which may add projected expressions)
 	projectionsScope := mb.outScope.replace()
