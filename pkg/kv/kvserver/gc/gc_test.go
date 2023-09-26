@@ -112,10 +112,11 @@ func TestBatchingInlineGCer(t *testing.T) {
 	require.Zero(t, m.size)
 }
 
-// TestIntentAgeThresholdSetting verifies that the GC intent resolution threshold can be
-// adjusted. It uses short and long threshold to verify that intents inserted between two
-// thresholds are not considered for resolution when threshold is high (1st attempt) and
-// considered when threshold is low (2nd attempt).
+// TestIntentAgeThresholdSetting verifies that the GC intent resolution
+// threshold can be adjusted. It uses short and long threshold to verify that
+// intents inserted between two thresholds are not considered for resolution
+// when threshold is high (1st attempt) and considered when threshold is low
+// (2nd attempt).
 func TestIntentAgeThresholdSetting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -131,12 +132,15 @@ func TestIntentAgeThresholdSetting(t *testing.T) {
 
 	// Prepare test intents in MVCC.
 	key := []byte("a")
+	localKey := keys.MakeRangeKeyPrefix(key)
 	value := roachpb.Value{RawBytes: []byte("0123456789")}
 	intentHlc := hlc.Timestamp{
 		WallTime: intentTs.Nanoseconds(),
 	}
 	txn := roachpb.MakeTransaction("txn", key, isolation.Serializable, roachpb.NormalUserPriority, intentHlc, 1000, 0, 0)
+	// Write two intents -- one for a global key, and another for a local key.
 	require.NoError(t, storage.MVCCPut(ctx, eng, key, intentHlc, value, storage.MVCCWriteOptions{Txn: &txn}))
+	require.NoError(t, storage.MVCCPut(ctx, eng, localKey, intentHlc, value, storage.MVCCWriteOptions{Txn: &txn}))
 	require.NoError(t, eng.Flush())
 
 	// Prepare test fixtures for GC run.
@@ -162,6 +166,7 @@ func TestIntentAgeThresholdSetting(t *testing.T) {
 	require.NoError(t, err, "GC Run shouldn't fail")
 	assert.Zero(t, info.IntentsConsidered,
 		"Expected no intents considered by GC with default threshold")
+	require.Zero(t, len(gcer.intents))
 
 	info, err = Run(ctx, &desc, snap, nowTs, nowTs,
 		RunOptions{
@@ -170,8 +175,9 @@ func TestIntentAgeThresholdSetting(t *testing.T) {
 		}, gcTTL, &gcer, gcer.resolveIntents,
 		gcer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
-	assert.Equal(t, 1, info.IntentsConsidered,
-		"Expected 1 intents considered by GC with short threshold")
+	assert.Equal(t, 2, info.IntentsConsidered,
+		"Expected 2 intents considered by GC with short threshold")
+	require.Equal(t, 2, len(gcer.intents))
 }
 
 func TestIntentCleanupBatching(t *testing.T) {
