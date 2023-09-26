@@ -45,6 +45,16 @@ func DecodeStmtStatsMetadataJSON(
 	return (*stmtStatsMetadata)(result).jsonFields().decodeJSON(metadata)
 }
 
+// DecodeStmtStatsMetadataFlagsOnlyJSON decodes the 'metadata' flags only fields
+// of the JSON representation of the statement statistics into
+// appstatspb.CollectedStatementStatistics. This avoids the overhead of query
+// string and query summary decoding.
+func DecodeStmtStatsMetadataFlagsOnlyJSON(
+	metadata json.JSON, result *appstatspb.CollectedStatementStatistics,
+) error {
+	return (*stmtStatsMetadata)(result).jsonFlagsOnlyFields().decodeJSON(metadata)
+}
+
 // DecodeAggregatedMetadataJSON decodes the 'aggregated metadata' represented by appstatspb.AggregatedStatementMetadata.
 func DecodeAggregatedMetadataJSON(
 	metadata json.JSON, result *appstatspb.AggregatedStatementMetadata,

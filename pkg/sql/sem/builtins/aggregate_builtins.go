@@ -14,6 +14,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"math"
 	"strconv"
 	"unsafe"
@@ -243,6 +245,32 @@ var aggregates = map[string]builtinDefinition{
 			"Calculates the sum of squared differences from the mean of the selected values in final stage.",
 		),
 	)),
+
+	// The input signature is:
+	"merge_stats_metadata": makeBuiltin(tree.FunctionProperties{
+		Undocumented: true,
+	},
+		makeAggOverload([]*types.T{types.Jsonb}, types.Jsonb, newAggStatementMetadata,
+			"Merges the meta data of the statistics.", volatility.Stable, true, /* calledOnNullInput */
+		),
+	),
+
+	// The input signature is:
+	"merge_statement_stats": makeBuiltin(tree.FunctionProperties{
+		Undocumented: true,
+	},
+		makeAggOverload([]*types.T{types.Jsonb}, types.Jsonb, newAggStatementStatistics,
+			"Merges the statistics data of the statement_statistics table.", volatility.Stable, true, /* calledOnNullInput */
+		),
+	),
+	// The input signature is:
+	"merge_transaction_stats": makeBuiltin(tree.FunctionProperties{
+		Undocumented: true,
+	},
+		makeAggOverload([]*types.T{types.Jsonb}, types.Jsonb, newAggTransactionStatistics,
+			"Merges the statistics data of the transaction_statistics table.", volatility.Stable, true, /* calledOnNullInput */
+		),
+	),
 
 	"transition_regression_aggregate": makePrivate(makeTransitionRegressionAggregateBuiltin()),
 
@@ -1578,6 +1606,168 @@ func (a *arrayAggregate) Close(ctx context.Context) {
 // Size is part of the eval.AggregateFunc interface.
 func (a *arrayAggregate) Size() int64 {
 	return sizeOfArrayAggregate
+}
+
+type aggStatementStatistics struct {
+	stats appstatspb.StatementStatistics
+
+	acc mon.BoundAccount
+}
+
+func newAggStatementStatistics(
+	params []*types.T, evalCtx *eval.Context, _ tree.Datums,
+) eval.AggregateFunc {
+	return &aggStatementStatistics{
+		stats: appstatspb.StatementStatistics{},
+		acc:   evalCtx.Planner.Mon().MakeBoundAccount(),
+	}
+}
+
+// Add unnests the passed datum into elements which are then accumulated into
+// the singleton.
+func (a *aggStatementStatistics) Add(ctx context.Context, datum tree.Datum, _ ...tree.Datum) error {
+	err := mergeStatementStatsHelper(&a.stats, datum)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Result returns a copy of the array of all datums passed to Add.
+func (a *aggStatementStatistics) Result() (tree.Datum, error) {
+	aggregatedJSON, err := sqlstatsutil.BuildStmtStatisticsJSON(&a.stats)
+	if err != nil {
+		return nil, err
+	}
+
+	return tree.NewDJSON(aggregatedJSON), nil
+}
+
+// Reset implements eval.AggregateFunc interface.
+func (a *aggStatementStatistics) Reset(ctx context.Context) {
+	a.stats.Reset()
+	a.acc.Empty(ctx)
+}
+
+// Close allows the aggregate to release the memory it requested during
+// operation.
+func (a *aggStatementStatistics) Close(ctx context.Context) {
+	a.acc.Close(ctx)
+}
+
+// Size is part of the eval.AggregateFunc interface.
+func (a *aggStatementStatistics) Size() int64 {
+	return int64(a.stats.Size())
+}
+
+type aggStatementMetadata struct {
+	stats appstatspb.AggregatedStatementMetadata
+
+	acc mon.BoundAccount
+}
+
+func newAggStatementMetadata(
+	params []*types.T, evalCtx *eval.Context, _ tree.Datums,
+) eval.AggregateFunc {
+	return &aggStatementMetadata{
+		stats: appstatspb.AggregatedStatementMetadata{},
+		acc:   evalCtx.Planner.Mon().MakeBoundAccount(),
+	}
+}
+
+// Add unnests the passed datum into elements which are then accumulated into
+// the array.
+func (a *aggStatementMetadata) Add(ctx context.Context, datum tree.Datum, _ ...tree.Datum) error {
+	err := mergeStatsMetadataHelper(&a.stats, datum)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Result returns a copy of the array of all datums passed to Add.
+func (a *aggStatementMetadata) Result() (tree.Datum, error) {
+	aggregatedJSON, err := sqlstatsutil.BuildStmtDetailsMetadataJSON(&a.stats)
+	if err != nil {
+		return nil, err
+	}
+
+	return tree.NewDJSON(aggregatedJSON), nil
+}
+
+// Reset implements eval.AggregateFunc interface.
+func (a *aggStatementMetadata) Reset(ctx context.Context) {
+	a.stats.Reset()
+	a.acc.Empty(ctx)
+}
+
+// Close allows the aggregate to release the memory it requested during
+// operation.
+func (a *aggStatementMetadata) Close(ctx context.Context) {
+	a.acc.Close(ctx)
+}
+
+// Size is part of the eval.AggregateFunc interface.
+func (a *aggStatementMetadata) Size() int64 {
+	return int64(a.stats.Size())
+}
+
+type aggTransactionStatistics struct {
+	stats appstatspb.TransactionStatistics
+
+	acc mon.BoundAccount
+}
+
+func newAggTransactionStatistics(
+	params []*types.T, evalCtx *eval.Context, _ tree.Datums,
+) eval.AggregateFunc {
+	return &aggTransactionStatistics{
+		stats: appstatspb.TransactionStatistics{},
+		acc:   evalCtx.Planner.Mon().MakeBoundAccount(),
+	}
+}
+
+// Add unnests the passed datum into elements which are then accumulated into
+// the array.
+func (a *aggTransactionStatistics) Add(ctx context.Context, datum tree.Datum, _ ...tree.Datum) error {
+	err := mergeTransactionStatsHelper(&a.stats, datum)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Result returns a copy of the array of all datums passed to Add.
+func (a *aggTransactionStatistics) Result() (tree.Datum, error) {
+	aggregatedJSON, err := sqlstatsutil.BuildTxnStatisticsJSON(
+		&appstatspb.CollectedTransactionStatistics{
+			Stats: a.stats,
+		})
+	if err != nil {
+		return nil, err
+	}
+
+	return tree.NewDJSON(aggregatedJSON), nil
+}
+
+// Reset implements eval.AggregateFunc interface.
+func (a *aggTransactionStatistics) Reset(ctx context.Context) {
+	a.stats.Reset()
+	a.acc.Empty(ctx)
+}
+
+// Close allows the aggregate to release the memory it requested during
+// operation.
+func (a *aggTransactionStatistics) Close(ctx context.Context) {
+	a.acc.Close(ctx)
+}
+
+// Size is part of the eval.AggregateFunc interface.
+func (a *aggTransactionStatistics) Size() int64 {
+	return int64(a.stats.Size())
 }
 
 type arrayCatAggregate struct {

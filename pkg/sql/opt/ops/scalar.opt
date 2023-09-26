@@ -1016,6 +1016,21 @@ define JsonbObjectAgg {
 }
 
 [Scalar, Aggregate]
+define MergeStatsMetadata {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
+define MergeStatementStats {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
+define MergeTransactionStats {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
 define StringAgg {
     Input ScalarExpr
 
