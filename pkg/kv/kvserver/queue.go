@@ -651,9 +651,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 		var err error
 		confReader, err = bq.store.GetConfReader(ctx)
 		if err != nil {
-			if errors.Is(err, errSpanConfigsUnavailable) && log.V(1) {
-				log.Warningf(ctx, "unable to retrieve span configs, skipping: %v", err)
-			}
+			log.Warningf(ctx, "unable to retrieve span configs, skipping: %v", err)
 			return
 		}
 	}
