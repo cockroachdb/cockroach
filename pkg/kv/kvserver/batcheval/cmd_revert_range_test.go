@@ -55,7 +55,7 @@ func TestCmdRevertRange(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Run this test on both RocksDB and Pebble. Regression test for:
+	// Regression test for:
 	// https://github.com/cockroachdb/cockroach/pull/42386
 	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
@@ -118,10 +118,11 @@ func TestCmdRevertRange(t *testing.T) {
 		ts       hlc.Timestamp
 		expected []byte
 		resumes  int
+		empty    bool
 	}{
-		{"revert revert to time A", tsA, sumA, 4},
-		{"revert revert to time B", tsB, sumB, 4},
-		{"revert revert to time C (nothing)", tsC, sumC, 0},
+		{"revert revert to time A", tsA, sumA, 4, false},
+		{"revert revert to time B", tsB, sumB, 4, false},
+		{"revert revert to time C (nothing)", tsC, sumC, 0, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			batch := &wrappedBatch{Batch: eng.NewBatch()}
@@ -140,9 +141,13 @@ func TestCmdRevertRange(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				require.NotNil(t, result.Replicated.MVCCHistoryMutation)
-				require.Equal(t, result.Replicated.MVCCHistoryMutation.Spans,
-					[]roachpb.Span{{Key: req.RequestHeader.Key, EndKey: req.RequestHeader.EndKey}})
+				// If there's nothing to revert and the fast-path is hit,
+				// MVCCHistoryMutation will be empty.
+				if !tc.empty {
+					require.NotNil(t, result.Replicated.MVCCHistoryMutation)
+					require.Equal(t, result.Replicated.MVCCHistoryMutation.Spans,
+						[]roachpb.Span{{Key: req.RequestHeader.Key, EndKey: req.RequestHeader.EndKey}})
+				}
 				if reply.ResumeSpan == nil {
 					break
 				}

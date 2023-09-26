@@ -580,9 +580,9 @@ func TestEngineTimeBound(t *testing.T) {
 		"right not touching": {
 			iter: func() (MVCCIterator, error) {
 				return batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-					MinTimestampHint: maxTimestamp.WallNext(),
-					MaxTimestampHint: maxTimestamp.WallNext().WallNext(),
-					UpperBound:       roachpb.KeyMax,
+					MinTimestamp: maxTimestamp.WallNext(),
+					MaxTimestamp: maxTimestamp.WallNext().WallNext(),
+					UpperBound:   roachpb.KeyMax,
 				})
 			},
 			keys: 0,
@@ -590,9 +590,9 @@ func TestEngineTimeBound(t *testing.T) {
 		"left not touching": {
 			iter: func() (MVCCIterator, error) {
 				return batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-					MinTimestampHint: minTimestamp.WallPrev().WallPrev(),
-					MaxTimestampHint: minTimestamp.WallPrev(),
-					UpperBound:       roachpb.KeyMax,
+					MinTimestamp: minTimestamp.WallPrev().WallPrev(),
+					MaxTimestamp: minTimestamp.WallPrev(),
+					UpperBound:   roachpb.KeyMax,
 				})
 			},
 			keys: 0,
@@ -600,52 +600,57 @@ func TestEngineTimeBound(t *testing.T) {
 		"right touching": {
 			iter: func() (MVCCIterator, error) {
 				return batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-					MinTimestampHint: maxTimestamp,
-					MaxTimestampHint: maxTimestamp,
-					UpperBound:       roachpb.KeyMax,
+					MinTimestamp: maxTimestamp,
+					MaxTimestamp: maxTimestamp,
+					UpperBound:   roachpb.KeyMax,
 				})
 			},
-			keys: len(times),
+			keys: 1, // only one key exists at the max timestamp @7
 		},
-		"right touching ignores logical": {
+		// Although the block-property and table filters have historically
+		// ignored logical timestamps (and synthetic bits), the
+		// MVCCIncrementalIterator does not. It performs a strict hlc.Timestamp
+		// comparison. Both @7,1 and @7,2 are greater than @7, so no keys are
+		// visible.
+		"right touching enfoces logical": {
 			iter: func() (MVCCIterator, error) {
 				return batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-					MinTimestampHint: maxTimestamp.Next(),
-					MaxTimestampHint: maxTimestamp.Next().Next(),
-					UpperBound:       roachpb.KeyMax,
+					MinTimestamp: maxTimestamp.Next(),        // @7,1
+					MaxTimestamp: maxTimestamp.Next().Next(), // @7,2
+					UpperBound:   roachpb.KeyMax,
 				})
 			},
-			keys: len(times),
+			keys: 0,
 		},
 		"left touching": {
 			iter: func() (MVCCIterator, error) {
 				return batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-					MinTimestampHint: minTimestamp,
-					MaxTimestampHint: minTimestamp,
-					UpperBound:       roachpb.KeyMax,
+					MinTimestamp: minTimestamp,
+					MaxTimestamp: minTimestamp,
+					UpperBound:   roachpb.KeyMax,
 				})
 			},
-			keys: len(times),
+			keys: 1,
 		},
 		"left touching upperbound": {
 			iter: func() (MVCCIterator, error) {
 				return batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-					MinTimestampHint: minTimestamp,
-					MaxTimestampHint: minTimestamp,
-					UpperBound:       []byte("02"),
+					MinTimestamp: minTimestamp,
+					MaxTimestamp: minTimestamp,
+					UpperBound:   []byte("02"),
 				})
 			},
-			keys: 2,
+			keys: 1,
 		},
 		"between": {
 			iter: func() (MVCCIterator, error) {
 				return batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-					MinTimestampHint: minTimestamp.Next(),
-					MaxTimestampHint: minTimestamp.Next(),
-					UpperBound:       roachpb.KeyMax,
+					MinTimestamp: minTimestamp.Next(),
+					MaxTimestamp: minTimestamp.Next(),
+					UpperBound:   roachpb.KeyMax,
 				})
 			},
-			keys: len(times),
+			keys: 0,
 		},
 	}
 
