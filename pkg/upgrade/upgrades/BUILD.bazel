@@ -51,6 +51,7 @@ go_library(
         "//pkg/keys",
         "//pkg/keyvisualizer/keyvisjob",
         "//pkg/kv",
+        "//pkg/kv/kvpb",
         "//pkg/multitenant/mtinfopb",
         "//pkg/roachpb",
         "//pkg/security/username",

@@ -85,25 +85,29 @@ func (s *txnSeqNumAllocator) SendLocked(
 ) (*kvpb.BatchResponse, *kvpb.Error) {
 	for _, ru := range ba.Requests {
 		req := ru.GetInner()
+		oldHeader := req.Header()
 		// Only increment the sequence number generator for requests that
 		// will leave intents or requests that will commit the transaction.
 		// This enables ba.IsCompleteTransaction to work properly.
+		//
+		// Note: requests that perform writes using write intents and the EndTxn
+		// request cannot operate at a past sequence number. This also applies to
+		// combined read/intent-write requests (e.g. CPuts) -- these always read at
+		// the latest write sequence number as well.
+		//
+		// Requests that do not perform intent writes use the read sequence number.
+		// Notably, this includes Get/Scan/ReverseScan requests that acquire
+		// replicated locks, even though they go through raft.
 		if kvpb.IsIntentWrite(req) || req.Method() == kvpb.EndTxn {
 			s.writeSeq++
 			if err := s.maybeAutoStepReadSeqLocked(ctx); err != nil {
 				return nil, kvpb.NewError(err)
 			}
+			oldHeader.Sequence = s.writeSeq
+		} else {
+			oldHeader.Sequence = s.readSeq
 		}
 
-		// Note: only read-only requests can operate at a past seqnum.
-		// Combined read/write requests (e.g. CPut) always read at the
-		// latest write seqnum.
-		oldHeader := req.Header()
-		if kvpb.IsReadOnly(req) {
-			oldHeader.Sequence = s.readSeq
-		} else {
-			oldHeader.Sequence = s.writeSeq
-		}
 		req.SetHeader(oldHeader)
 	}
 

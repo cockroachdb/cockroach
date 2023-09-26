@@ -402,7 +402,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 	getInBatch := func(t *testing.T, ctx context.Context, txn *kv.Txn, keys ...roachpb.Key) []int64 {
 		batch := txn.NewBatch()
 		for _, key := range keys {
-			batch.GetForUpdate(key)
+			batch.GetForUpdate(key, kvpb.BestEffort)
 		}
 		assert.NoError(t, txn.Run(ctx, batch))
 		assert.Len(t, batch.Results, len(keys))

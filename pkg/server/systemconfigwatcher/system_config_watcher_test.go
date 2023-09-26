@@ -131,7 +131,6 @@ func getSystemDescriptorAndZonesSpans(
 			kvpb.NewScan(
 				append(codec.TenantPrefix(), startKey...),
 				append(codec.TenantPrefix(), endKey...),
-				kvpb.NonLocking,
 			),
 		)
 		br, pErr := kvDB.NonTransactionalSender().Send(ctx, ba)
