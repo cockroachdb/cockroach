@@ -62,9 +62,13 @@ func (m MemPerCPU) String() string {
 // ClusterSpec represents a test's description of what its cluster needs to
 // look like. It becomes part of a clusterConfig when the cluster is created.
 type ClusterSpec struct {
-	Cloud        string
-	Arch         vm.CPUArch // CPU architecture; auto-chosen if left empty
-	InstanceType string     // auto-chosen if left empty
+	// TODO(#104029): We should remove the Cloud field; the tests now specify
+	// their compatible clouds.
+	Cloud string
+	Arch  vm.CPUArch // CPU architecture; auto-chosen if left empty
+	// TODO(radu): An InstanceType can only make sense in the context of a
+	// specific cloud. We should replace this with cloud-specific arguments.
+	InstanceType string // auto-chosen if left empty
 	NodeCount    int
 	// CPUs is the number of CPUs per node.
 	CPUs                 int
