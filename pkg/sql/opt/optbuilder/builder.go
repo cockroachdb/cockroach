@@ -332,10 +332,10 @@ func (b *Builder) buildStmt(
 
 	switch stmt := stmt.(type) {
 	case *tree.Select:
-		return b.buildSelect(stmt, noRowLocking, desiredTypes, inScope)
+		return b.buildSelect(stmt, noLocking, desiredTypes, inScope)
 
 	case *tree.ParenSelect:
-		return b.buildSelect(stmt.Select, noRowLocking, desiredTypes, inScope)
+		return b.buildSelect(stmt.Select, noLocking, desiredTypes, inScope)
 
 	case *tree.Delete:
 		return b.processWiths(stmt.With, inScope, func(inScope *scope) *scope {
