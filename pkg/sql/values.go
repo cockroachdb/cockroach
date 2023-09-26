@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 type valuesNode struct {
@@ -61,6 +62,10 @@ type valuesRun struct {
 }
 
 func (n *valuesNode) startExec(params runParams) error {
+	if n.coldataBatch != nil {
+		return errors.AssertionFailedf("planning error: valuesNode started with coldata.Batch")
+	}
+
 	if n.rows != nil {
 		// n.rows was already created in newContainerValuesNode.
 		// Nothing to do here.
