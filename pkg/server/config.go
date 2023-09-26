@@ -248,6 +248,11 @@ type BaseConfig struct {
 	// route requests instead.
 	DisableHTTPListener bool
 
+	//DisableSQLServer disables starting the SQL service for the given test. This
+	//also disables all upgrades as they rely on SQL and typically cuts ~1s off
+	//test start time.
+	DisableSQLServer bool
+
 	// DisableSQLListener prevents this server from starting a TCP
 	// listener for the SQL service. Instead, it is expected that some
 	// other service (typically, the serverController) will accept and
