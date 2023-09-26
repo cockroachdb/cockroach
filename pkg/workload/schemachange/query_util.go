@@ -18,6 +18,18 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+var (
+	regionsFromClusterQuery = `SELECT * FROM [SHOW REGIONS FROM CLUSTER]`
+)
+
+func regionsFromDatabaseQuery(database string) string {
+	return fmt.Sprintf(`SELECT * FROM [SHOW REGIONS FROM DATABASE %q]`, database)
+}
+
+func superRegionsFromDatabaseQuery(database string) string {
+	return fmt.Sprintf(`SELECT * FROM [SHOW SUPER REGIONS FROM DATABASE %q]`, database)
+}
+
 type CTE struct {
 	As    string
 	Query string
