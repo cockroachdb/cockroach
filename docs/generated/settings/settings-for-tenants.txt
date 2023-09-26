@@ -302,7 +302,7 @@ sql.trace.session_eventlog.enabled	boolean	false	set to true to enable session t
 sql.trace.stmt.enable_threshold	duration	0s	enables tracing on all statements; statements executing for longer than this duration will have their trace logged (set to 0 to disable); note that enabling this may have a negative performance impact; this setting applies to individual statements within a transaction and is therefore finer-grained than sql.trace.txn.enable_threshold	tenant-rw
 sql.trace.txn.enable_threshold	duration	0s	enables tracing on all transactions; transactions open for longer than this duration will have their trace logged (set to 0 to disable); note that enabling this may have a negative performance impact; this setting is coarser-grained than sql.trace.stmt.enable_threshold because it applies to all statements within a transaction as well as client communication (e.g. retries)	tenant-rw
 sql.ttl.default_delete_batch_size	integer	100	default amount of rows to delete in a single query during a TTL job	tenant-rw
-sql.ttl.default_delete_rate_limit	integer	0	default delete rate limit for all TTL jobs. Use 0 to signify no rate limit.	tenant-rw
+sql.ttl.default_delete_rate_limit	integer	0	default delete rate limit (rows per second) per node for each TTL job. Use 0 to signify no rate limit.	tenant-rw
 sql.ttl.default_select_batch_size	integer	500	default amount of rows to select in a single query during a TTL job	tenant-rw
 sql.ttl.job.enabled	boolean	true	whether the TTL job is enabled	tenant-rw
 sql.txn.read_committed_syntax.enabled	boolean	false	set to true to allow transactions to use the READ COMMITTED isolation level if specified by BEGIN/SET commands	tenant-rw

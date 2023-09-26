@@ -9,9 +9,11 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/settings",
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/tabledesc",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
