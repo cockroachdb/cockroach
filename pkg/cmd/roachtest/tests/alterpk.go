@@ -54,9 +54,7 @@ func registerAlterPK(r registry.Registry) {
 
 			// Init the workload.
 			cmd := fmt.Sprintf("./workload init bank --drop --rows %d {pgurl%s}", numRows, roachNodes)
-			if err := c.RunE(ctx, loadNode, cmd); err != nil {
-				t.Fatal(err)
-			}
+			c.Run(ctx, loadNode, cmd)
 			initDone <- struct{}{}
 
 			// Run the workload while the primary key change is happening.
@@ -110,9 +108,7 @@ func registerAlterPK(r registry.Registry) {
 			"./cockroach workload fixtures import tpcc --warehouses=%d --db=tpcc",
 			warehouses,
 		)
-		if err := c.RunE(ctx, c.Node(roachNodes[0]), cmd); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, c.Node(roachNodes[0]), cmd)
 
 		m := c.NewMonitor(ctx, roachNodes)
 		m.Go(func(ctx context.Context) error {

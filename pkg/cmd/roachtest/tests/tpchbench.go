@@ -62,9 +62,7 @@ func runTPCHBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpchBen
 
 	filename := b.benchType
 	t.Status(fmt.Sprintf("downloading %s query file from %s", filename, b.url))
-	if err := c.RunE(ctx, loadNode, fmt.Sprintf("curl %s > %s", b.url, filename)); err != nil {
-		t.Fatal(err)
-	}
+	c.Run(ctx, loadNode, fmt.Sprintf("curl %s > %s", b.url, filename))
 
 	t.Status("starting nodes")
 	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), roachNodes)
@@ -103,9 +101,7 @@ func runTPCHBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpchBen
 			roachNodes,
 			b.maxLatency.String(),
 		)
-		if err := c.RunE(ctx, loadNode, cmd); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, loadNode, cmd)
 		return nil
 	})
 	m.Wait()

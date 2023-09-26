@@ -52,11 +52,7 @@ func registerAllocator(r registry.Registry) {
 		m := c.NewMonitor(ctx, c.Range(1, start))
 		m.Go(func(ctx context.Context) error {
 			t.Status("loading fixture")
-			if err := c.RunE(
-				ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "tpch", "--scale-factor", "10",
-			); err != nil {
-				t.Fatal(err)
-			}
+			c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "tpch", "--scale-factor", "10")
 			return nil
 		})
 		m.Wait()

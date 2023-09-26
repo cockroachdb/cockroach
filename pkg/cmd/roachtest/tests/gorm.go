@@ -63,15 +63,11 @@ func registerGORM(r registry.Registry) {
 		)
 
 		// Remove any old gorm installations
-		if err := c.RunE(ctx, node, fmt.Sprintf("rm -rf %s", gormPath)); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, fmt.Sprintf("rm -rf %s", gormPath))
 
 		// Install go-junit-report to convert test results to .xml format we know
 		// how to work with.
-		if err := c.RunE(ctx, node, fmt.Sprintf("GOPATH=%s go install github.com/jstemmer/go-junit-report@latest", goPath)); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, fmt.Sprintf("GOPATH=%s go install github.com/jstemmer/go-junit-report@latest", goPath))
 
 		if err := c.GitClone(
 			ctx,
@@ -84,9 +80,7 @@ func registerGORM(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := c.RunE(ctx, node, fmt.Sprintf("mkdir -p %s", resultsDir)); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, fmt.Sprintf("mkdir -p %s", resultsDir))
 
 		blocklistName, expectedFailures := "gormBlocklist", gormBlocklist
 		ignorelistName, ignoredFailures := "gormIgnorelist", gormIgnorelist

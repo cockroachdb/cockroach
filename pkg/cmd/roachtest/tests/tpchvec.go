@@ -572,13 +572,8 @@ func smithcmpTestRun(
 		configURL  = `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/cmd/roachtest/tests/` + configFile
 	)
 	firstNode := c.Node(1)
-	if err := c.RunE(ctx, firstNode, fmt.Sprintf("curl %s > %s", configURL, configFile)); err != nil {
-		t.Fatal(err)
-	}
-	cmd := fmt.Sprintf("./%s %s", tpchVecSmithcmp, configFile)
-	if err := c.RunE(ctx, firstNode, cmd); err != nil {
-		t.Fatal(err)
-	}
+	c.Run(ctx, firstNode, fmt.Sprintf("curl %s > %s", configURL, configFile))
+	c.Run(ctx, firstNode, fmt.Sprintf("./%s %s", tpchVecSmithcmp, configFile))
 }
 
 func runTPCHVec(

@@ -75,11 +75,7 @@ func registerPgx(r registry.Registry) {
 		t.L().Printf("Supported release is %s.", supportedPGXTag)
 
 		t.Status("installing go-junit-report")
-		if err := c.RunE(
-			ctx, node, "go install github.com/jstemmer/go-junit-report@latest",
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, "go install github.com/jstemmer/go-junit-report@latest")
 
 		RunningStatus := fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
 			version, "pgxBlocklist", "pgxIgnorelist")

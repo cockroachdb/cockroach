@@ -49,25 +49,13 @@ func registerFlowable(r registry.Registry) {
 		t.L().Printf("Latest Flowable release is %s.", latestTag)
 
 		// Update apt-get
-		if err := c.RunE(ctx, node, `sudo apt-get -qq update`); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `sudo apt-get -qq update`)
 
 		// Install dependencies
-		if err := c.RunE(
-			ctx,
-			node,
-			`sudo apt-get -qq install default-jre openjdk-8-jdk-headless gradle maven`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `sudo apt-get -qq install default-jre openjdk-8-jdk-headless gradle maven`)
 
 		// Remove old Flowable
-		if err := c.RunE(
-			ctx, node, `rm -rf /mnt/data1/flowable-engine`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `rm -rf /mnt/data1/flowable-engine`)
 
 		if err := c.GitClone(
 			ctx,
@@ -81,19 +69,11 @@ func registerFlowable(r registry.Registry) {
 		}
 
 		t.Status("building Flowable")
-		if err := c.RunE(
-			ctx,
-			node,
-			`cd /mnt/data1/flowable-engine/ && mvn clean install -DskipTests`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `cd /mnt/data1/flowable-engine/ && mvn clean install -DskipTests`)
 
-		if err := c.RunE(ctx, node,
+		c.Run(ctx, node,
 			`cd /mnt/data1/flowable-engine/ && mvn clean test -Dtest=Flowable6Test#testLongServiceTaskLoop -Ddb=crdb`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		)
 	}
 
 	r.Add(registry.TestSpec{

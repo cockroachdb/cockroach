@@ -115,29 +115,12 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 		t.L().Printf("Latest Hibernate release is %s.", latestTag)
 		t.L().Printf("Supported Hibernate release is %s.", supportedHibernateTag)
 
-		// Update apt-get
-		if err := c.RunE(
-			ctx, node, `sudo apt-get -qq update`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `sudo apt-get -qq update`)
 
 		// TODO(rafi): use openjdk-11-jdk-headless once we are off of Ubuntu 16.
-		// Install dependencies
-		if err := c.RunE(
-			ctx,
-			node,
-			`sudo apt-get -qq install default-jre openjdk-8-jdk-headless gradle`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `sudo apt-get -qq install default-jre openjdk-8-jdk-headless gradle`)
 
-		// Remove old Hibernate
-		if err := c.RunE(
-			ctx, node, `rm -rf /mnt/data1/hibernate`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `rm -rf /mnt/data1/hibernate`)
 
 		if err := c.GitClone(
 			ctx,
@@ -155,22 +138,14 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 		// downloading, so it needs a retry loop as well. Just building was not
 		// enough as the test libraries are not downloaded unless at least a
 		// single test is invoked.
-		if err := c.RunE(
-			ctx,
-			node,
-			opt.buildCmd,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, opt.buildCmd)
 
 		// Delete the test result; the test will be executed again later.
-		if err := c.RunE(
+		c.Run(
 			ctx,
 			node,
 			fmt.Sprintf(`rm -rf /mnt/data1/hibernate/%s/target/test-results/test`, opt.testDir),
-		); err != nil {
-			t.Fatal(err)
-		}
+		)
 
 		blocklistName := opt.listWithName.blocklistName
 		expectedFailures := opt.listWithName.blocklist
@@ -188,22 +163,18 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 		// copied to the artifacts.
 
 		// Copy the html report for the test.
-		if err := c.RunE(
+		c.Run(
 			ctx,
 			node,
 			fmt.Sprintf(`cp /mnt/data1/hibernate/%s/target/reports/tests/test ~/logs/report -a`, opt.testDir),
-		); err != nil {
-			t.Fatal(err)
-		}
+		)
 
 		// Copy the individual test result files.
-		if err := c.RunE(
+		c.Run(
 			ctx,
 			node,
 			fmt.Sprintf(`cp /mnt/data1/hibernate/%s/target/test-results/test ~/logs/report/results -a`, opt.testDir),
-		); err != nil {
-			t.Fatal(err)
-		}
+		)
 
 		// Load the list of all test results files and parse them individually.
 		// Files are here: /mnt/data1/hibernate/hibernate-core/target/test-results/test

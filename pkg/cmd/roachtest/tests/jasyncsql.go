@@ -45,37 +45,16 @@ func registerJasyncSQL(r registry.Registry) {
 		t.Status("cloning jasync-sql and installing prerequisites")
 
 		// Remove old jasync folder
-		if err := c.RunE(
-			ctx,
-			node,
-			`rm -rf /mnt/data1/jasyncsql`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `rm -rf /mnt/data1/jasyncsql`)
 
-		if err := c.RunE(
-			ctx,
-			node,
-			"cd /mnt/data1 && git clone https://github.com/jasync-sql/jasync-sql.git",
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, "cd /mnt/data1 && git clone https://github.com/jasync-sql/jasync-sql.git")
 
 		// TODO: Currently we are pointing to a JasyncSQL branch, we will change
 		// this once the official release is available
-		if err := c.RunE(ctx, node, fmt.Sprintf("cd /mnt/data1/jasync-sql && git checkout %s",
-			supportedJasyncCommit)); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, fmt.Sprintf("cd /mnt/data1/jasync-sql && git checkout %s", supportedJasyncCommit))
 
 		// Install java and gradle
-		if err := c.RunE(
-			ctx,
-			node,
-			`sudo apt-get -qq install default-jre openjdk-11-jdk-headless gradle`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `sudo apt-get -qq install default-jre openjdk-11-jdk-headless gradle`)
 		t.Status("building jasyncsql (without tests)")
 
 		status := fmt.Sprintf(
@@ -104,13 +83,11 @@ func registerJasyncSQL(r registry.Registry) {
 		t.Status("collecting the test results")
 
 		// Copy test result files
-		if err := c.RunE(
+		c.Run(
 			ctx,
 			node,
 			`cp /mnt/data1/jasync-sql/postgresql-async/build/test-results/test/*.xml ~/logs/report/jasyncsql-results -a`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		)
 
 		// Load all test results
 		result, err := c.RunWithDetailsSingleNode(

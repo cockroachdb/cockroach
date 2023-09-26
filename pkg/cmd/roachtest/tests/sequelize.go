@@ -72,46 +72,26 @@ func registerSequelize(r registry.Registry) {
 		t.L().Printf("Latest sequelize-cockroachdb release is %s.", latestTag)
 		t.L().Printf("Supported sequelize-cockroachdb release is %s.", supportedSequelizeCockroachDBRelease)
 
-		if err := c.RunE(
-			ctx, node, `sudo apt-get -qq update`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `sudo apt-get -qq update`)
 
-		if err := c.RunE(
+		c.Run(
 			ctx,
 			node,
 			`sudo apt-get -qq install make python3 libpq-dev python-dev gcc g++ `+
 				`software-properties-common build-essential`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		)
 
-		if err := c.RunE(
+		c.Run(
 			ctx,
 			node,
 			`sudo apt install ca-certificates && curl -sL https://deb.nodesource.com/setup_18.x | sudo -E bash -`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		)
 
-		if err := c.RunE(
-			ctx, node, `sudo apt-get -qq install nodejs`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `sudo apt-get -qq install nodejs`)
 
-		if err := c.RunE(
-			ctx, node, `sudo npm i -g npm`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `sudo npm i -g npm`)
 
-		if err := c.RunE(
-			ctx, node, `sudo rm -rf /mnt/data1/sequelize`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `sudo rm -rf /mnt/data1/sequelize`)
 
 		if err := c.GitClone(
 			ctx,
@@ -124,11 +104,7 @@ func registerSequelize(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := c.RunE(
-			ctx, node, `cd /mnt/data1/sequelize && sudo npm i`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `cd /mnt/data1/sequelize && sudo npm i`)
 
 		// Version telemetry is already disabled in the sequelize-cockroachdb test suite.
 		t.Status("running Sequelize test suite")

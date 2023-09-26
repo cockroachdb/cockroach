@@ -37,9 +37,7 @@ func registerEncryption(r registry.Registry) {
 			t.Fatal(err)
 		}
 		for _, addr := range adminAddrs {
-			if err := c.RunE(ctx, c.Node(nodes), fmt.Sprintf(`curl http://%s/_status/stores/local | (! grep '"encryptionStatus": null')`, addr)); err != nil {
-				t.Fatalf("encryption status from /_status/stores/local endpoint is null")
-			}
+			c.Run(ctx, c.Node(nodes), fmt.Sprintf(`curl http://%s/_status/stores/local | (! grep '"encryptionStatus": null')`, addr))
 		}
 
 		for i := 1; i <= nodes; i++ {

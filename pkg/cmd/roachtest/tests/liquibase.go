@@ -47,11 +47,7 @@ func registerLiquibase(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := c.RunE(
-			ctx, node, `sudo apt-get -qq update`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `sudo apt-get -qq update`)
 
 		// TODO(rafi): use openjdk-11-jdk-headless once we are off of Ubuntu 16.
 		if err := c.RunE(

@@ -46,9 +46,7 @@ func registerRoachmart(r registry.Registry) {
 				"--orders=100",
 				fmt.Sprintf("--partition=%v", partition))
 
-			if err := c.RunE(ctx, c.Node(nodes[i].i), args...); err != nil {
-				t.Fatal(err)
-			}
+			c.Run(ctx, c.Node(nodes[i].i), args...)
 		}
 		t.Status("initializing workload")
 		// See https://github.com/cockroachdb/cockroach/issues/94062 for the --data-loader.

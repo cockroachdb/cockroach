@@ -59,9 +59,7 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 	const queriesFilename = "tpch"
 	const queriesURL = "https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/workload/querybench/tpch-queries"
 	t.Status(fmt.Sprintf("downloading %s query file from %s", queriesFilename, queriesURL))
-	if err := c.RunE(ctx, c.Node(1), fmt.Sprintf("curl %s > %s", queriesURL, queriesFilename)); err != nil {
-		t.Fatal(err)
-	}
+	c.Run(ctx, c.Node(1), fmt.Sprintf("curl %s > %s", queriesURL, queriesFilename))
 	numQueries, err := getNumQueriesInFile(queriesFilename, queriesURL)
 	if err != nil {
 		t.Fatal(err)
@@ -164,9 +162,7 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 				"--num-runs=%d --max-ops=%d {pgurl%s} "+
 				"--histograms="+t.PerfArtifactsDir()+"/stats.json --histograms-max-latency=%s",
 			queriesFilename, numRunsPerQuery, maxOps, c.All(), maxLatency.String())
-		if err := c.RunE(ctx, c.Node(1), cmd); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, c.Node(1), cmd)
 		return nil
 	})
 	m.Wait()

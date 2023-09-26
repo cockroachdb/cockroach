@@ -62,21 +62,15 @@ func registerRubyPG(r registry.Registry) {
 
 		t.L().Printf("Supported ruby-pg version is %s.", rubyPGVersion)
 
-		if err := c.RunE(
-			ctx, node, `sudo apt-get -qq update`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `sudo apt-get -qq update`)
 
-		if err := c.RunE(
+		c.Run(
 			ctx,
 			node,
 			`sudo apt-get -qq install ruby-full ruby-dev rubygems build-essential zlib1g-dev libpq-dev libsqlite3-dev`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		)
 
-		if err := c.RunE(
+		c.Run(
 			ctx,
 			node,
 			`mkdir -p ruby-install && \
@@ -85,15 +79,9 @@ func registerRubyPG(r registry.Registry) {
         sudo make -C ruby-install install && \
         sudo ruby-install --system ruby 3.1.2 && \
         sudo gem update --system`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		)
 
-		if err := c.RunE(
-			ctx, node, `sudo rm -rf /mnt/data1/ruby-pg`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `sudo rm -rf /mnt/data1/ruby-pg`)
 
 		if err := c.GitClone(
 			ctx,
@@ -107,28 +95,16 @@ func registerRubyPG(r registry.Registry) {
 		}
 
 		t.Status("installing bundler")
-		if err := c.RunE(
+		c.Run(
 			ctx,
 			node,
 			`cd /mnt/data1/ruby-pg/ && sudo gem install bundler:2.1.4`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		)
 
 		t.Status("installing gems")
-		if err := c.RunE(
-			ctx,
-			node,
-			`cd /mnt/data1/ruby-pg/ && sudo bundle install`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `cd /mnt/data1/ruby-pg/ && sudo bundle install`)
 
-		if err := c.RunE(
-			ctx, node, `sudo rm /mnt/data1/ruby-pg/spec/helpers.rb`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `sudo rm /mnt/data1/ruby-pg/spec/helpers.rb`)
 
 		// Write the cockroach config into the test suite to use.
 		rubyPGHelpersFile := "./pkg/cmd/roachtest/tests/ruby_pg_helpers.rb"

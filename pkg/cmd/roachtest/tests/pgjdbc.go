@@ -81,26 +81,12 @@ func registerPgjdbc(r registry.Registry) {
 		t.L().Printf("Latest pgjdbc release is %s.", latestTag)
 		t.L().Printf("Supported pgjdbc release is %s.", supportedPGJDBCTag)
 
-		if err := c.RunE(
-			ctx, node, `sudo apt-get -qq update`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `sudo apt-get -qq update`)
 
 		// TODO(rafi): use openjdk-11-jdk-headless once we are off of Ubuntu 16.
-		if err := c.RunE(
-			ctx,
-			node,
-			`sudo apt-get -qq install default-jre openjdk-8-jdk-headless gradle`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `sudo apt-get -qq install default-jre openjdk-8-jdk-headless gradle`)
 
-		if err := c.RunE(
-			ctx, node, `rm -rf /mnt/data1/pgjdbc`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `rm -rf /mnt/data1/pgjdbc`)
 
 		if err := c.GitClone(
 			ctx,
@@ -115,28 +101,22 @@ func registerPgjdbc(r registry.Registry) {
 
 		// In order to get pgjdbc's test suite to connect to cockroach, we have
 		// to override settings in build.local.properties
-		if err := c.RunE(
+		c.Run(
 			ctx,
 			node,
-			fmt.Sprintf(
-				"echo \"%s\" > /mnt/data1/pgjdbc/build.local.properties", pgjdbcDatabaseParams,
-			),
-		); err != nil {
-			t.Fatal(err)
-		}
+			fmt.Sprintf("echo \"%s\" > /mnt/data1/pgjdbc/build.local.properties", pgjdbcDatabaseParams),
+		)
 
 		t.Status("building pgjdbc (without tests)")
 		// Build pgjdbc and run a single test, this step involves some
 		// downloading, so it needs a retry loop as well. Just building was not
 		// enough as the test libraries are not downloaded unless at least a
 		// single test is invoked.
-		if err := c.RunE(
+		c.Run(
 			ctx,
 			node,
 			`cd /mnt/data1/pgjdbc/pgjdbc/ && ../gradlew test --tests OidToStringTest`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		)
 
 		const blocklistName = "pgjdbcBlocklist"
 		const ignorelistName = "pgjdbcIgnorelist"
@@ -164,13 +144,11 @@ func registerPgjdbc(r registry.Registry) {
 		// copied to the artifacts.
 
 		// Copy the individual test result files.
-		if err := c.RunE(
+		c.Run(
 			ctx,
 			node,
 			`cp /mnt/data1/pgjdbc/pgjdbc/build/test-results/test/ ~/logs/report/pgjdbc-results -a`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		)
 
 		// Load the list of all test results files and parse them individually.
 		// Files are here: /mnt/data1/pgjdbc/pgjdbc-core/target/test-results/test

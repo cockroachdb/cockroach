@@ -81,9 +81,7 @@ func registerLibPQ(r registry.Registry) {
 			node,
 		)
 		require.NoError(t, err)
-		if err := c.RunE(ctx, node, fmt.Sprintf("mkdir -p %s", resultsDir)); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, fmt.Sprintf("mkdir -p %s", resultsDir))
 
 		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s", version, "libPQBlocklist", "libPQIgnorelist")
 

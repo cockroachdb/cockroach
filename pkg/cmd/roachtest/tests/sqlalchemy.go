@@ -85,13 +85,9 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatal(err)
 	}
 
-	if err := c.RunE(ctx, node, `curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.7`); err != nil {
-		t.Fatal(err)
-	}
+	c.Run(ctx, node, `curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.7`)
 
-	if err := c.RunE(ctx, node, `virtualenv --clear venv`); err != nil {
-		t.Fatal(err)
-	}
+	c.Run(ctx, node, `virtualenv --clear venv`)
 
 	if err := c.RunE(ctx, node, fmt.Sprintf(`
 		source venv/bin/activate &&
@@ -100,9 +96,7 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatal(err)
 	}
 
-	if err := c.RunE(ctx, node, `sudo rm -rf /mnt/data1/sqlalchemy-cockroachdb`); err != nil {
-		t.Fatal(err)
-	}
+	c.Run(ctx, node, `sudo rm -rf /mnt/data1/sqlalchemy-cockroachdb`)
 
 	if err := c.GitClone(ctx, t.L(),
 		"https://github.com/cockroachdb/sqlalchemy-cockroachdb.git", "/mnt/data1/sqlalchemy-cockroachdb",

@@ -59,24 +59,14 @@ func registerPsycopg(r registry.Registry) {
 		t.L().Printf("Latest Psycopg release is %s.", latestTag)
 		t.L().Printf("Supported Psycopg release is %s.", supportedPsycopgTag)
 
-		if err := c.RunE(
-			ctx, node, `sudo apt-get -qq update`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `sudo apt-get -qq update`)
 
-		if err := c.RunE(
+		c.Run(
 			ctx, node,
 			`sudo apt-get -qq install make python3 libpq-dev python3-dev gcc python3-setuptools python-setuptools`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		)
 
-		if err := c.RunE(
-			ctx, node, `sudo rm -rf /mnt/data1/psycopg`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `sudo rm -rf /mnt/data1/psycopg`)
 
 		// TODO(rafi): When psycopg 2.9.4 is released and tagged,
 		//    use the tag version instead of the commit.
@@ -89,19 +79,11 @@ func registerPsycopg(r registry.Registry) {
 		// ); err != nil {
 		//	t.Fatal(err)
 		// }
-		if err = c.RunE(ctx, node, "git clone https://github.com/psycopg/psycopg2.git /mnt/data1/psycopg"); err != nil {
-			t.Fatal(err)
-		}
-		if err = c.RunE(ctx, node, fmt.Sprintf("cd /mnt/data1/psycopg/ && git checkout %s", supportedPsycopgTag)); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, "git clone https://github.com/psycopg/psycopg2.git /mnt/data1/psycopg")
+		c.Run(ctx, node, fmt.Sprintf("cd /mnt/data1/psycopg/ && git checkout %s", supportedPsycopgTag))
 
 		t.Status("building Psycopg")
-		if err := c.RunE(
-			ctx, node, `cd /mnt/data1/psycopg/ && make PYTHON_VERSION=3`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `cd /mnt/data1/psycopg/ && make PYTHON_VERSION=3`)
 
 		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignoredlist %s",
 			version, "psycopgBlockList", "psycopgIgnoreList")

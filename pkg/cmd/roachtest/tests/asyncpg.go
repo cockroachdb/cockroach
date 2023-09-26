@@ -80,28 +80,17 @@ func registerAsyncpg(r registry.Registry) {
 		}
 
 		// Install python and pip
-		if err := c.RunE(
+		c.Run(
 			ctx,
 			node,
 			`sudo apt-get -qq install python3.7 python3-pip libpq-dev python-dev python3-virtualenv`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		)
 
 		// Create virtualenv
-		if err := c.RunE(
-			ctx, node, "create virtualenv", `virtualenv --clear venv`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, "create virtualenv", `virtualenv --clear venv`)
 
 		// Install asyncpg's dependencies
-		if err := c.RunE(
-			ctx,
-			node,
-			"source venv/bin/activate && cd /mnt/data1/asyncpg && pip3 install -e ."); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, "source venv/bin/activate && cd /mnt/data1/asyncpg && pip3 install -e .")
 
 		blocklistName, expectedFailureList := "asyncpgBlocklist", asyncpgBlocklist
 		ignoredlistName, ignoredlist := "asyncpgIgnoreList", asyncpgIgnoreList
@@ -119,11 +108,7 @@ func registerAsyncpg(r registry.Registry) {
 		}
 		t.L().Printf("Test results for asyncpg: %s", result.Stdout+result.Stderr)
 		t.L().Printf("Test stdout for asyncpg")
-		if err := c.RunE(
-			ctx, node, "cd /mnt/data1/asyncpg && cat asyncpg.stdout",
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, "cd /mnt/data1/asyncpg && cat asyncpg.stdout")
 
 		t.Status("collating test results")
 

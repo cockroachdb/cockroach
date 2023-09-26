@@ -72,12 +72,7 @@ func registerGopg(r registry.Registry) {
 		installGolang(ctx, t, c, node)
 
 		// Remove old goph
-		if err := c.RunE(
-			ctx, node,
-			fmt.Sprintf(`sudo rm -rf %s`, destPath),
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, fmt.Sprintf(`sudo rm -rf %s`, destPath))
 
 		if err := c.GitClone(
 			ctx,
@@ -92,9 +87,7 @@ func registerGopg(r registry.Registry) {
 		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
 			version, "gopgBlockList", "gopgIgnoreList")
 
-		if err := c.RunE(ctx, node, fmt.Sprintf("mkdir -p %s", resultsDirPath)); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, fmt.Sprintf("mkdir -p %s", resultsDirPath))
 		t.Status("running gopg test suite")
 
 		// go test provides colorful output which - when redirected - interferes

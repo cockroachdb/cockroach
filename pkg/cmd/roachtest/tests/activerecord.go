@@ -90,18 +90,14 @@ func registerActiveRecord(r registry.Registry) {
 		t.L().Printf("Supported adapter version is %s.", activerecordAdapterVersion)
 
 		// Update apt-get
-		if err := c.RunE(ctx, node, `sudo apt-get -qq update`); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `sudo apt-get -qq update`)
 
 		// Install dependencies
-		if err := c.RunE(ctx, node,
-			`sudo apt-get -qq install ruby-full ruby-dev rubygems build-essential zlib1g-dev libpq-dev libsqlite3-dev`); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node,
+			`sudo apt-get -qq install ruby-full ruby-dev rubygems build-essential zlib1g-dev libpq-dev libsqlite3-dev`)
 
 		// Install ruby 2.7
-		if err := c.RunE(
+		c.Run(
 			ctx,
 			node,
 			`mkdir -p ruby-install && \
@@ -109,16 +105,10 @@ func registerActiveRecord(r registry.Registry) {
         sudo make -C ruby-install install && \
         sudo ruby-install --system ruby 2.7.1 && \
         sudo gem update --system`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		)
 
 		// Remove old activerecord adapter
-		if err := c.RunE(
-			ctx, node, `rm -rf /mnt/data1/activerecord-cockroachdb-adapter`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		c.Run(ctx, node, `rm -rf /mnt/data1/activerecord-cockroachdb-adapter`)
 
 		if err := c.GitClone(
 			ctx,
@@ -132,24 +122,20 @@ func registerActiveRecord(r registry.Registry) {
 		}
 
 		t.Status("installing bundler")
-		if err := c.RunE(
+		c.Run(
 			ctx,
 			node,
 			`cd /mnt/data1/activerecord-cockroachdb-adapter/ && sudo gem install bundler:2.1.4`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		)
 
 		t.Status("installing gems")
-		if err := c.RunE(
+		c.Run(
 			ctx,
 			node,
 			fmt.Sprintf(
 				`cd /mnt/data1/activerecord-cockroachdb-adapter/ && `+
 					`sudo RAILS_VERSION=%s bundle install`, supportedRailsVersion),
-		); err != nil {
-			t.Fatal(err)
-		}
+		)
 
 		blocklistName, ignorelistName := "activeRecordBlocklist", "activeRecordIgnoreList"
 		status := fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
