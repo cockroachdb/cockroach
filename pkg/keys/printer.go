@@ -518,7 +518,6 @@ func localRangeLockTablePrint(
 		buf.Printf("/\"%x\"", key)
 		return
 	}
-	buf.Print(redact.Safe("/Intent"))
 	key = key[len(LockTableSingleKeyInfix):]
 	b, lockedKey, err := encoding.DecodeBytesAscending(key, nil)
 	if err != nil || len(b) != 0 {
