@@ -175,6 +175,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.RetryOptions = params.RetryOptions
 	cfg.Locality = params.Locality
 	cfg.StartDiagnosticsReporting = params.StartDiagnosticsReporting
+	cfg.DisableSQLServer = params.DisableSQLServer
 	if params.TraceDir != "" {
 		if err := initTraceDir(params.TraceDir); err == nil {
 			cfg.InflightTraceDirName = params.TraceDir
@@ -585,6 +586,10 @@ func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 	// it here.
 	if ts.params.DefaultTestTenant.TestTenantAlwaysDisabled() {
 		return nil
+	}
+
+	if ts.params.DisableSQLServer {
+		return errors.AssertionFailedf("programming error: attempt to set DisableSQLServer on a system with a tenant")
 	}
 
 	tenantSettings := cluster.MakeTestingClusterSettings()
