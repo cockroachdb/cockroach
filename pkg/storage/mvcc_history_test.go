@@ -103,7 +103,7 @@ var (
 // scan           [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [skipLocked] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [wholeRows[=<int>]] [allowEmpty]
 // export         [k=<key>] [end=<key>] [ts=<int>[,<int>]] [kTs=<int>[,<int>]] [startTs=<int>[,<int>]] [maxLockConflicts=<int>] [allRevisions] [targetSize=<int>] [maxSize=<int>] [stopMidKey] [fingerprint]
 //
-// iter_new       [k=<key>] [end=<key>] [prefix] [kind=key|keyAndIntents] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [maskBelow=<int>[,<int>]]
+// iter_new       [k=<key>] [end=<key>] [prefix] [kind=key|keyAndIntents] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [maskBelow=<int>[,<int>]] [minTimestamp=<int>[,<int>]] [maxTimestamp=<int>[,<int>]]
 // iter_new_incremental [k=<key>] [end=<key>] [startTs=<int>[,<int>]] [endTs=<int>[,<int>]] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [maskBelow=<int>[,<int>]] [intents=error|aggregate|emit]
 // iter_seek_ge   k=<key> [ts=<int>[,<int>]]
 // iter_seek_lt   k=<key> [ts=<int>[,<int>]]
@@ -448,6 +448,15 @@ func TestMVCCHistories(t *testing.T) {
 			// and testdata structs.
 			e.t = t
 			e.td = d
+
+			defer func() {
+				if e.iter != nil {
+					if r := recover(); r != nil {
+						e.iter.Close()
+						panic(r)
+					}
+				}
+			}()
 
 			switch d.Cmd {
 			case "skip":
@@ -1856,6 +1865,12 @@ func cmdIterNew(e *evalCtx) error {
 	}
 	if e.hasArg("maskBelow") {
 		opts.RangeKeyMaskingBelow = e.getTsWithName("maskBelow")
+	}
+	if e.hasArg("minTimestamp") {
+		opts.MinTimestamp = e.getTsWithName("minTimestamp")
+	}
+	if e.hasArg("maxTimestamp") {
+		opts.MaxTimestamp = e.getTsWithName("maxTimestamp")
 	}
 
 	if e.iter != nil {

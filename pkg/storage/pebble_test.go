@@ -757,10 +757,10 @@ func TestPebbleMVCCTimeIntervalCollectorAndFilter(t *testing.T) {
 						expect = append(expect, kv)
 					}
 					iter, err := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-						KeyTypes:         keyType,
-						UpperBound:       keys.MaxKey,
-						MinTimestampHint: tc.minTimestamp,
-						MaxTimestampHint: tc.maxTimestamp,
+						KeyTypes:     keyType,
+						UpperBound:   keys.MaxKey,
+						MinTimestamp: tc.minTimestamp,
+						MaxTimestamp: tc.maxTimestamp,
 					})
 					require.NoError(t, err)
 					defer iter.Close()
@@ -830,26 +830,18 @@ func TestPebbleMVCCTimeIntervalWithClears(t *testing.T) {
 			rangeKV("d", "e", 9, MVCCValue{}),
 		}},
 		"at cleared point": {wallTS(5), wallTS(5), []interface{}{
-			pointKV("a", 7, "a7"),
-			pointKV("a", 3, "a3"),
+			// a@7 and a@3's timestamps fall outside [5,5].
 			rangeKV("b", "c", 5, MVCCValue{}),
 			rangeKV("d", "e", 9, MVCCValue{}),
 		}},
-		// NB: This reveals a@5 which has been deleted, because the SST block
-		// containing the point clear does not satisfy the [7-7] filter.
 		"at cleared range": {wallTS(7), wallTS(7), []interface{}{
+			// a@5 and a@3's timestamps fall outside [7,7].
 			pointKV("a", 7, "a7"),
-			pointKV("a", 5, "a5"),
-			pointKV("a", 3, "a3"),
 			rangeKV("b", "c", 5, MVCCValue{}),
 			rangeKV("d", "e", 9, MVCCValue{}),
 		}},
-		// NB: This reveals a@5 which has been deleted, because the SST block
-		// containing the point clear does not satisfy the [1-3] filter. Range keys
-		// are not filtered.
 		"touches lower": {wallTS(1), wallTS(3), []interface{}{
-			pointKV("a", 7, "a7"),
-			pointKV("a", 5, "a5"),
+			// a@7 and a@5's timestamps fall outside [1,3].
 			pointKV("a", 3, "a3"),
 			rangeKV("b", "c", 5, MVCCValue{}),
 			rangeKV("d", "e", 9, MVCCValue{}),
@@ -878,10 +870,10 @@ func TestPebbleMVCCTimeIntervalWithClears(t *testing.T) {
 						expect = append(expect, kv)
 					}
 					iter, err := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-						KeyTypes:         keyType,
-						UpperBound:       keys.MaxKey,
-						MinTimestampHint: tc.minTimestamp,
-						MaxTimestampHint: tc.maxTimestamp,
+						KeyTypes:     keyType,
+						UpperBound:   keys.MaxKey,
+						MinTimestamp: tc.minTimestamp,
+						MaxTimestamp: tc.maxTimestamp,
 					})
 					if err != nil {
 						t.Fatal(err)
@@ -960,10 +952,10 @@ func TestPebbleMVCCTimeIntervalWithRangeClears(t *testing.T) {
 						expect = append(expect, kv)
 					}
 					iter, err := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-						KeyTypes:         keyType,
-						UpperBound:       keys.MaxKey,
-						MinTimestampHint: tc.minTimestamp,
-						MaxTimestampHint: tc.maxTimestamp,
+						KeyTypes:     keyType,
+						UpperBound:   keys.MaxKey,
+						MinTimestamp: tc.minTimestamp,
+						MaxTimestamp: tc.maxTimestamp,
 					})
 					if err != nil {
 						t.Fatal(err)
@@ -983,14 +975,15 @@ func TestPebbleTablePropertyFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Set up a static property collector which always writes the same table
-	// properties [5-7] regardless of the SSTable contents. We keep the default
-	// block property collects too, which will use the actual SSTable timestamps.
+	// properties [1-7] regardless of the SSTable contents. We keep the default
+	// block property collects too, which will use the actual SSTable
+	// timestamps.
 	overrideOptions := func(cfg *engineConfig) error {
 		cfg.Opts.TablePropertyCollectors = []func() pebble.TablePropertyCollector{
 			func() pebble.TablePropertyCollector {
 				return &staticTablePropertyCollector{
 					props: map[string]string{
-						"crdb.ts.min": "\x00\x00\x00\x00\x00\x00\x00\x05", // WallTime: 5
+						"crdb.ts.min": "\x00\x00\x00\x00\x00\x00\x00\x01", // WallTime: 1
 						"crdb.ts.max": "\x00\x00\x00\x00\x00\x00\x00\x07", // WallTime: 7
 					},
 				}
@@ -1010,29 +1003,29 @@ func TestPebbleTablePropertyFilter(t *testing.T) {
 	// Table and block properties now think the SST covers these spans:
 	//
 	// Block properties: [1-7]
-	// Table properties: [5-7]
+	// Table properties: [1-7]
 	//
 	// Both must be satisfied in order for the (only) SST to be included.
 	testcases := map[string]struct {
 		minTimestamp int64
 		maxTimestamp int64
-		expectResult bool
+		expectResult []interface{}
 	}{
-		"tableprop lower inclusive": {4, 5, true},
-		"tableprop upper inclusive": {7, 8, true},
-		"tableprop exact":           {5, 7, true},
-		"tableprop within":          {6, 6, true},
-		"tableprop covering":        {4, 8, true},
-		"tableprop below":           {3, 4, false},
-		"both above":                {8, 9, false},
-		"blockprop only":            {1, 3, false}, // needs both block and table props
+		"tableprop lower inclusive": {4, 5, []interface{}(nil)},
+		"tableprop upper inclusive": {7, 8, []interface{}{pointKV("b", 7, "b7")}},
+		"tableprop exact":           {5, 7, []interface{}{pointKV("b", 7, "b7")}},
+		"tableprop within":          {6, 6, []interface{}(nil)},
+		"tableprop covering":        {4, 8, []interface{}{pointKV("b", 7, "b7")}},
+		"tableprop below":           {3, 4, []interface{}(nil)},
+		"both above":                {8, 9, []interface{}(nil)},
+		"blockprop only":            {1, 3, []interface{}{pointKV("a", 1, "a1")}}, // needs both block and table props
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
 			iter, err := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-				UpperBound:       keys.MaxKey,
-				MinTimestampHint: hlc.Timestamp{WallTime: tc.minTimestamp},
-				MaxTimestampHint: hlc.Timestamp{WallTime: tc.maxTimestamp},
+				UpperBound:   keys.MaxKey,
+				MinTimestamp: hlc.Timestamp{WallTime: tc.minTimestamp},
+				MaxTimestamp: hlc.Timestamp{WallTime: tc.maxTimestamp},
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -1040,14 +1033,7 @@ func TestPebbleTablePropertyFilter(t *testing.T) {
 			defer iter.Close()
 
 			kvs := scanIter(t, iter)
-			if tc.expectResult {
-				require.Equal(t, []interface{}{
-					pointKV("a", 1, "a1"),
-					pointKV("b", 7, "b7"),
-				}, kvs)
-			} else {
-				require.Empty(t, kvs)
-			}
+			require.Equal(t, tc.expectResult, kvs)
 		})
 	}
 }

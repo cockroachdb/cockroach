@@ -83,11 +83,11 @@ func isEmptyKeyTimeRange(
 	// that there is *a* key in the SST that is in the time range. Thus we should
 	// proceed to iteration that actually checks timestamps on each key.
 	iter, err := readWriter.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
-		KeyTypes:         storage.IterKeyTypePointsAndRanges,
-		LowerBound:       from,
-		UpperBound:       to,
-		MinTimestampHint: since.Next(), // make exclusive
-		MaxTimestampHint: until,
+		KeyTypes:     storage.IterKeyTypePointsAndRanges,
+		LowerBound:   from,
+		UpperBound:   to,
+		MinTimestamp: since.Next(), // make exclusive
+		MaxTimestamp: until,
 	})
 	if err != nil {
 		return false, err

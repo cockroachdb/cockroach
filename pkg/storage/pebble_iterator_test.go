@@ -13,6 +13,8 @@ package storage
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
+	"fmt"
 	"io/fs"
 	"math/rand"
 	"os"
@@ -23,8 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/sstable"
@@ -143,4 +148,56 @@ func TestPebbleIterator_ExternalCorruption(t *testing.T) {
 		require.True(t, errors.Is(err, pebble.ErrCorruption))
 	}
 	it.Close()
+}
+
+func TestPebbleIterator_SkipPointIfOutsideTimeBounds(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var iter pebbleIterator
+	var sb strings.Builder
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "skip_point_if_outside_time_bounds"), func(t *testing.T, d *datadriven.TestData) string {
+		sb.Reset()
+		var minStr, maxStr string
+		d.ScanArgs(t, "min", &minStr)
+		d.ScanArgs(t, "max", &maxStr)
+		min, err := hlc.ParseTimestamp(minStr)
+		require.NoError(t, err)
+		max, err := hlc.ParseTimestamp(maxStr)
+		require.NoError(t, err)
+
+		iter.setOptions(IterOptions{
+			LowerBound:   []byte{0x00}, // so setOptions doesn't complain
+			MinTimestamp: min,
+			MaxTimestamp: max,
+		}, StandardDurability)
+		fmt.Fprintf(&sb, "min: 0x%x\nmax: 0x%x\n", iter.minTimestamp, iter.maxTimestamp)
+		for _, line := range strings.Split(strings.TrimSpace(d.Input), "\n") {
+			if i := strings.IndexByte(line, '#'); i >= 0 {
+				line = line[:i]
+			}
+			if line == "" {
+				continue
+			}
+			var key []byte
+			switch {
+			case strings.HasPrefix(line, "0x:"):
+				line = line[len("0x:"):]
+				line = strings.Replace(line, " ", "", -1)
+				var err error
+				key, err = hex.DecodeString(line)
+				if err != nil {
+					return err.Error()
+				}
+			default:
+				return fmt.Sprintf("unrecognized key format %q", line)
+			}
+			fmt.Fprintf(&sb, "%s : ", line)
+			if iter.skipPointIfOutsideTimeBounds(key) {
+				fmt.Fprintln(&sb, "skip")
+			} else {
+				fmt.Fprintln(&sb, "don't skip")
+			}
+		}
+		return sb.String()
+	})
 }
