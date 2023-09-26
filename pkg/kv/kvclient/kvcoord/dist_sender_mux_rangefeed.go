@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -48,7 +49,7 @@ type rangefeedMuxer struct {
 	metrics    *DistSenderRangeFeedMetrics
 	cfg        rangeFeedConfig
 	registry   *rangeFeedRegistry
-	catchupSem *catchupScanRateLimiter
+	catchupSem *limit.ConcurrentRequestLimiter
 	eventCh    chan<- RangeFeedMessage
 
 	// Each call to start new range feed gets a unique ID which is echoed back
@@ -70,7 +71,7 @@ func muxRangeFeed(
 	spans []SpanTimePair,
 	ds *DistSender,
 	rr *rangeFeedRegistry,
-	catchupRateLimiter *catchupScanRateLimiter,
+	catchupSem *limit.ConcurrentRequestLimiter,
 	eventCh chan<- RangeFeedMessage,
 ) (retErr error) {
 	if log.V(1) {
@@ -87,7 +88,7 @@ func muxRangeFeed(
 		ds:         ds,
 		cfg:        cfg,
 		metrics:    &ds.metrics.DistSenderRangeFeedMetrics,
-		catchupSem: catchupRateLimiter,
+		catchupSem: catchupSem,
 		eventCh:    eventCh,
 	}
 	if cfg.knobs.metrics != nil {
@@ -243,7 +244,7 @@ func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error
 	streamID := atomic.AddInt64(&m.seqID, 1)
 
 	// Before starting single rangefeed, acquire catchup scan quota.
-	if err := s.acquireCatchupScanQuota(ctx, m.catchupSem, m.metrics); err != nil {
+	if err := s.acquireCatchupScanQuota(ctx, &m.ds.st.SV, m.catchupSem, m.metrics); err != nil {
 		return err
 	}
 
