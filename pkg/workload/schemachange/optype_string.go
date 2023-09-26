@@ -29,21 +29,22 @@ func _() {
 	_ = x[dropIndex-18]
 	_ = x[dropSequence-19]
 	_ = x[dropTable-20]
-	_ = x[dropView-21]
-	_ = x[dropSchema-22]
-	_ = x[primaryRegion-23]
-	_ = x[renameColumn-24]
-	_ = x[renameIndex-25]
-	_ = x[renameSequence-26]
-	_ = x[renameTable-27]
-	_ = x[renameView-28]
-	_ = x[setColumnDefault-29]
-	_ = x[setColumnNotNull-30]
-	_ = x[setColumnType-31]
-	_ = x[survive-32]
-	_ = x[insertRow-33]
-	_ = x[selectStmt-34]
-	_ = x[validate-35]
+	_ = x[dropEnumValue-21]
+	_ = x[dropView-22]
+	_ = x[dropSchema-23]
+	_ = x[primaryRegion-24]
+	_ = x[renameColumn-25]
+	_ = x[renameIndex-26]
+	_ = x[renameSequence-27]
+	_ = x[renameTable-28]
+	_ = x[renameView-29]
+	_ = x[setColumnDefault-30]
+	_ = x[setColumnNotNull-31]
+	_ = x[setColumnType-32]
+	_ = x[survive-33]
+	_ = x[insertRow-34]
+	_ = x[selectStmt-35]
+	_ = x[validate-36]
 }
 
 func (i opType) String() string {
@@ -90,6 +91,8 @@ func (i opType) String() string {
 		return "dropSequence"
 	case dropTable:
 		return "dropTable"
+	case dropEnumValue:
+		return "dropEnumValue"
 	case dropView:
 		return "dropView"
 	case dropSchema:
