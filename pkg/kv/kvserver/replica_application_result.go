@@ -422,6 +422,7 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *re
 	if pErr := r.propose(ctx, newProposal, tok.Move(ctx)); pErr != nil {
 		return pErr.GoError()
 	}
+	r.store.metrics.RaftCommandsReproposedLAI.Inc(1)
 	log.VEventf(ctx, 2, "reproposed command %x", newProposal.idKey)
 
 	onSuccess()
