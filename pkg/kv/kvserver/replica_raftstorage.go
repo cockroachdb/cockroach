@@ -232,7 +232,7 @@ func (r *Replica) raftSnapshotLocked() (raftpb.Snapshot, error) {
 // replica. If this method returns without error, callers must eventually call
 // OutgoingSnapshot.Close.
 func (r *Replica) GetSnapshot(
-	ctx context.Context, snapType kvserverpb.SnapshotRequest_Type, snapUUID uuid.UUID,
+	ctx context.Context, snapUUID uuid.UUID,
 ) (_ *OutgoingSnapshot, err error) {
 	// Get a snapshot while holding raftMu to make sure we're not seeing "half
 	// an AddSSTable" (i.e. a state in which an SSTable has been linked in, but
@@ -286,7 +286,7 @@ func (r *Replica) GetSnapshot(
 	// NB: We have Replica.mu read-locked, but we need it write-locked in order
 	// to use Replica.mu.stateLoader. This call is not performance sensitive, so
 	// create a new state loader.
-	snapData, err := snapshot(ctx, snapUUID, stateloader.Make(rangeID), snapType, snap, startKey)
+	snapData, err := snapshot(ctx, snapUUID, stateloader.Make(rangeID), snap, startKey)
 	if err != nil {
 		log.Errorf(ctx, "error generating snapshot: %+v", err)
 		return nil, err
@@ -305,7 +305,6 @@ type OutgoingSnapshot struct {
 	EngineSnap storage.Reader
 	// The replica state within the snapshot.
 	State          kvserverpb.ReplicaState
-	snapType       kvserverpb.SnapshotRequest_Type
 	sharedBackings []objstorage.RemoteObjectBackingHandle
 	onClose        func()
 }
@@ -316,8 +315,8 @@ func (s OutgoingSnapshot) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (s OutgoingSnapshot) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("%s snapshot %s at applied index %d",
-		s.snapType, redact.Safe(s.SnapUUID.Short()), s.State.RaftAppliedIndex)
+	w.Printf("snapshot %s at applied index %d",
+		redact.Safe(s.SnapUUID.Short()), s.State.RaftAppliedIndex)
 }
 
 // Close releases the resources associated with the snapshot.
@@ -341,7 +340,6 @@ type IncomingSnapshot struct {
 	Desc             *roachpb.RangeDescriptor
 	DataSize         int64
 	SharedSize       int64
-	snapType         kvserverpb.SnapshotRequest_Type
 	placeholder      *ReplicaPlaceholder
 	raftAppliedIndex kvpb.RaftIndex      // logging only
 	msgAppRespCh     chan raftpb.Message // receives MsgAppResp if/when snap is applied
@@ -355,8 +353,8 @@ func (s IncomingSnapshot) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (s IncomingSnapshot) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("%s snapshot %s from %s at applied index %d",
-		s.snapType, redact.Safe(s.SnapUUID.Short()), s.FromReplica, s.raftAppliedIndex)
+	w.Printf("snapshot %s from %s at applied index %d",
+		redact.Safe(s.SnapUUID.Short()), s.FromReplica, s.raftAppliedIndex)
 }
 
 // snapshot creates an OutgoingSnapshot containing a pebble snapshot for the
@@ -365,7 +363,6 @@ func snapshot(
 	ctx context.Context,
 	snapUUID uuid.UUID,
 	rsl stateloader.StateLoader,
-	snapType kvserverpb.SnapshotRequest_Type,
 	snap storage.Reader,
 	startKey roachpb.RKey,
 ) (OutgoingSnapshot, error) {
@@ -400,7 +397,6 @@ func snapshot(
 				ConfState: desc.Replicas().ConfState(),
 			},
 		},
-		snapType: snapType,
 	}, nil
 }
 
@@ -611,7 +607,7 @@ func (r *Replica) applySnapshot(
 
 	// Ingest all SSTs atomically.
 	if fn := r.store.cfg.TestingKnobs.BeforeSnapshotSSTIngestion; fn != nil {
-		if err := fn(inSnap, inSnap.snapType, inSnap.SSTStorageScratch.SSTs()); err != nil {
+		if err := fn(inSnap, inSnap.SSTStorageScratch.SSTs()); err != nil {
 			return err
 		}
 	}
