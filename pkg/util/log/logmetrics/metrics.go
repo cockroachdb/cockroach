@@ -59,13 +59,13 @@ type logMetricsStruct struct {
 //
 // LogMetricsRegistry is thread-safe.
 type LogMetricsRegistry struct {
-	mu struct {
+	// metricsStruct holds the same metrics as the below structures, but
+	// provides an easy way to inject them into metric.Registry's on demand
+	// in NewRegistry().
+	metricsStruct logMetricsStruct
+	mu            struct {
 		syncutil.Mutex
-		// metricsStruct holds the same metrics as the below structures, but
-		// provides an easy way to inject them into metric.Registry's on demand
-		// in NewRegistry().
-		metricsStruct logMetricsStruct
-		counters      map[log.MetricName]*metric.Counter
+		counters map[log.MetricName]*metric.Counter
 	}
 }
 
@@ -78,17 +78,17 @@ func newLogMetricsRegistry() *LogMetricsRegistry {
 }
 
 func (l *LogMetricsRegistry) registerCounters() {
-	l.mu.Lock()
-	defer l.mu.Unlock()
 	l.mu.counters = make(map[log.MetricName]*metric.Counter)
 	// Create the metrics struct for us to add to registries as they're
 	// requested.
-	l.mu.metricsStruct = logMetricsStruct{
+	l.metricsStruct = logMetricsStruct{
 		FluentSinkConnErrors: metric.NewCounter(FluentSinkConnErrors),
 	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	// Be sure to also add the metrics to our internal store, for
 	// recall in functions such as IncrementCounter.
-	l.mu.counters[log.MetricName(FluentSinkConnErrors.Name)] = l.mu.metricsStruct.FluentSinkConnErrors
+	l.mu.counters[log.MetricName(FluentSinkConnErrors.Name)] = l.metricsStruct.FluentSinkConnErrors
 }
 
 // NewRegistry initializes and returns a new metric.Registry, populated with metrics
@@ -102,9 +102,7 @@ func NewRegistry() *metric.Registry {
 		panic(errors.AssertionFailedf("LogMetricsRegistry was not initialized"))
 	}
 	reg := metric.NewRegistry()
-	logMetricsReg.mu.Lock()
-	defer logMetricsReg.mu.Unlock()
-	reg.AddMetricStruct(logMetricsReg.mu.metricsStruct)
+	reg.AddMetricStruct(logMetricsReg.metricsStruct)
 	return reg
 }
 
