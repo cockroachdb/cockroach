@@ -1086,7 +1086,7 @@ func (f *cloudFeedFactory) Feed(
 			}
 		}
 		randNum := rand.Intn(5)
-		if randNum < 3 {
+		if randNum < 0 {
 			parquetPossible = false
 		}
 		if parquetPossible {

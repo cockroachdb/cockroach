@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -114,9 +115,8 @@ func TestRandomDatums(t *testing.T) {
 	rng := rand.New(seed)
 	t.Logf("random seed %d", seed.Int63())
 
-	numRows := 64
+	numRows := 256
 	numCols := 128
-	maxRowGroupSize := int64(8)
 
 	sch := makeRandSchema(numCols, randTestingType, rng)
 	datums := makeRandDatums(numRows, sch, rng, true)
@@ -128,18 +128,25 @@ func TestRandomDatums(t *testing.T) {
 	schemaDef, err := NewSchema(sch.columnNames, sch.columnTypes)
 	require.NoError(t, err)
 
-	writer, err := NewWriter(schemaDef, f, WithMaxRowGroupLength(maxRowGroupSize))
+	writer, err := NewWriter(schemaDef, f, WithMaxRowGroupLength(20))
 	require.NoError(t, err)
 
+	var numExplicitFlushes int
 	for _, row := range datums {
 		err = writer.AddRow(row)
 		require.NoError(t, err)
+		// Flush every 10 datums on average.
+		if rng.Float32() < 0.1 {
+			err = writer.Flush()
+			require.NoError(t, err)
+			numExplicitFlushes += 1
+		}
 	}
 
 	err = writer.Close()
 	require.NoError(t, err)
 
-	ReadFileAndVerifyDatums(t, f.Name(), numRows, numCols, writer, datums)
+	ReadFileAndVerifyDatums(t, f.Name(), numRows, numCols, datums)
 }
 
 // TestBasicDatums tests roundtripability for all supported scalar data types
@@ -512,7 +519,9 @@ func TestBasicDatums(t *testing.T) {
 			err = writer.Close()
 			require.NoError(t, err)
 
-			ReadFileAndVerifyDatums(t, f.Name(), numRows, numCols, writer, datums)
+			meta := ReadFileAndVerifyDatums(t, f.Name(), numRows, numCols, datums)
+			expectedNumRowGroups := int(math.Ceil(float64(numRows) / float64(maxRowGroupSize)))
+			require.EqualValues(t, expectedNumRowGroups, meta.NumRowGroups)
 		})
 	}
 }
@@ -660,5 +669,154 @@ func TestSquashTuples(t *testing.T) {
 	} {
 		squashedDatums := squashTuples(datums, tc.tupleIntervals, labels)
 		require.Equal(t, tc.tupleOutput, fmt.Sprint(squashedDatums))
+	}
+}
+
+// TestBufferedBytes asserts that the `BufferedBytesEstimate` method
+// on the Writer is somewhat accurate (it increases every time a few rows are
+// added, it resets after flushing, it is updated for each physical column etc.)
+func TestBufferedBytes(t *testing.T) {
+	// Common schema for all subtests below.
+	tupleTyp := types.MakeTuple([]*types.T{types.Int, types.Int, types.String})
+	sch, err := NewSchema([]string{"a", "b", "c", "d"}, []*types.T{types.Int, types.String, tupleTyp, types.IntArray})
+	require.NoError(t, err)
+	makeArray := func(vals ...tree.Datum) *tree.DArray {
+		da := tree.NewDArray(types.Int)
+		da.Array = vals
+		return da
+	}
+
+	for _, tc := range []struct {
+		name              string
+		datums            [][]tree.Datum
+		numInsertsPerStep int
+		checkEstimate     func(lastEst int64, newEst int64, idx int)
+	}{
+		{
+			name: "null datums",
+			datums: [][]tree.Datum{
+				{
+					tree.DNull,
+					tree.DNull,
+					tree.DNull,
+					tree.DNull,
+				},
+			},
+			numInsertsPerStep: 10,
+			checkEstimate: func(lastEst int64, newEst int64, idx int) {
+				if idx > 0 {
+					require.Equal(t, newEst, lastEst)
+				} else {
+					require.Greater(t, newEst, lastEst)
+				}
+			},
+		},
+		{
+			name: "non null mixed",
+			datums: [][]tree.Datum{
+				{
+					tree.NewDInt(1),
+					tree.NewDString("string"),
+					tree.NewDTuple(tupleTyp, tree.NewDInt(1), tree.NewDInt(2), tree.NewDString("test")),
+					makeArray(tree.NewDInt(1)),
+				}, {
+					tree.NewDInt(2),
+					tree.NewDString("asdf"),
+					tree.NewDTuple(tupleTyp, tree.NewDInt(5), tree.NewDInt(6), tree.NewDString("lkjh")),
+					makeArray(tree.NewDInt(2)),
+				}, {
+					tree.NewDInt(3),
+					tree.NewDString("qwer"),
+					tree.NewDTuple(tupleTyp, tree.NewDInt(8), tree.NewDInt(9), tree.NewDString("uiop")),
+					makeArray(tree.NewDInt(3)),
+				},
+				{
+					tree.NewDInt(4),
+					tree.NewDString("lmno"),
+					tree.NewDTuple(tupleTyp, tree.NewDInt(10), tree.NewDInt(11), tree.NewDString("pqrs")),
+					makeArray(tree.NewDInt(4)),
+				},
+			},
+			numInsertsPerStep: 2,
+		},
+		{
+			name: "non null same",
+			datums: [][]tree.Datum{
+				{
+					tree.NewDInt(1),
+					tree.NewDString("string"),
+					tree.NewDTuple(tupleTyp, tree.NewDInt(1), tree.NewDInt(2), tree.NewDString("test")),
+					makeArray(tree.NewDInt(1)),
+				},
+			},
+			numInsertsPerStep: 10,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create the writer.
+			var b bytes.Buffer
+			writer, err := NewWriter(sch, &b)
+			require.NoError(t, err)
+			require.Equal(t, int64(0), writer.BufferedBytesEstimate())
+
+			// Add a testing knob which we can use to assert that we consider every column when computing estimates.
+			var callbackCount int
+			columnsSeen := make(map[string]struct{})
+			testingCountEstimatedBytesCallback = func(writer file.ColumnChunkWriter, i int64) error {
+				if i <= int64(0) {
+					return errors.AssertionFailedf("expected byte estimate to by positive")
+				}
+				callbackCount += 1
+				columnsSeen[writer.Descr().Name()] = struct{}{}
+				return nil
+			}
+			verifyEstimates := func() {
+				// There are 4 columns but 6 physical columns because the tuple has 3 fields.
+				// Assert that every time we add a row each one of these physical columns
+				// contributes to the byte estimate.
+				require.Equal(t, 6, callbackCount)
+				require.Equal(t, 6, len(columnsSeen))
+
+				columnsSeen = make(map[string]struct{})
+				callbackCount = 0
+			}
+
+			addDatums := func(writer *Writer) {
+				// The number of times to insert all the datums into the writer before checking
+				// the byte estimate. Sometimes the estimate does not change by just inserting one
+				// row because the writer may amortize allocation and/or bit pack efficiently.
+				for i := 0; i < tc.numInsertsPerStep; i++ {
+					for _, d := range tc.datums {
+						err := writer.AddRow(d)
+						require.NoError(t, err)
+						verifyEstimates()
+					}
+				}
+			}
+
+			var lastEst int64
+			for i := 0; i < 10; i++ {
+				addDatums(writer)
+				newEst := writer.BufferedBytesEstimate()
+
+				if tc.checkEstimate != nil {
+					tc.checkEstimate(lastEst, newEst, i)
+				} else {
+					require.Greater(t, newEst, lastEst)
+				}
+				lastEst = newEst
+			}
+
+			// Flush the writer and assert the estimate goes back to 0
+			require.NoError(t, writer.Flush())
+			require.Equal(t, int64(0), writer.BufferedBytesEstimate())
+
+			// Add datums again and assert the estimate goes up.
+			addDatums(writer)
+			require.Greater(t, writer.BufferedBytesEstimate(), int64(0))
+
+			require.NoError(t, writer.Close())
+			require.Equal(t, writer.BufferedBytesEstimate(), int64(0))
+		})
 	}
 }
