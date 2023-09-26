@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/benignerror"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -38,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -350,15 +350,23 @@ func Run(
 		Threshold: newThreshold,
 	}
 
-	fastPath, err := processReplicatedKeyRange(ctx, desc, snap, now, newThreshold, options.IntentAgeThreshold,
-		populateBatcherOptions(options),
-		gcer,
+	// Process all replicated locks first and resolve any that have been around
+	// for longer than the IntentAgeThreshold.
+	err := processReplicatedLocks(ctx, desc, snap, now, options.IntentAgeThreshold,
 		intentBatcherOptions{
 			maxIntentsPerIntentCleanupBatch:        options.MaxIntentsPerIntentCleanupBatch,
 			maxIntentKeyBytesPerIntentCleanupBatch: options.MaxIntentKeyBytesPerIntentCleanupBatch,
 			maxTxnsPerIntentCleanupBatch:           options.MaxTxnsPerIntentCleanupBatch,
 			intentCleanupBatchTimeout:              options.IntentCleanupBatchTimeout,
 		}, cleanupIntentsFn, &info)
+	if err != nil {
+		if errors.Is(err, pebble.ErrSnapshotExcised) {
+			err = benignerror.NewStoreBenign(err)
+		}
+		return Info{}, err
+	}
+	fastPath, err := processReplicatedKeyRange(ctx, desc, snap, newThreshold,
+		populateBatcherOptions(options), gcer, &info)
 	if err != nil {
 		if errors.Is(err, pebble.ErrSnapshotExcised) {
 			err = benignerror.NewStoreBenign(err)
@@ -420,19 +428,15 @@ func populateBatcherOptions(options RunOptions) gcKeyBatcherThresholds {
 // remove it.
 //
 // The logic iterates all versions of all keys in the range from oldest to
-// newest. Expired intents are written into the txnMap and intentKeyMap.
-// Returns true if clear range was used to remove all user data.
+// newest. Intents are not handled by this function; they're simply skipped
+// over. Returns true if clear range was used to remove user data.
 func processReplicatedKeyRange(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	snap storage.Reader,
-	now hlc.Timestamp,
 	threshold hlc.Timestamp,
-	intentAgeThreshold time.Duration,
 	batcherThresholds gcKeyBatcherThresholds,
 	gcer PureGCer,
-	options intentBatcherOptions,
-	cleanupIntentsFn CleanupIntentsFunc,
 	info *Info,
 ) (bool, error) {
 	// Perform fast path check prior to performing GC. Fast path only collects
@@ -458,40 +462,11 @@ func processReplicatedKeyRange(
 		}
 	}
 
-	// Compute intent expiration (intent age at which we attempt to resolve).
-	intentExp := now.Add(-intentAgeThreshold.Nanoseconds(), 0)
-
 	return excludeUserKeySpan, rditer.IterateMVCCReplicaKeySpans(desc, snap, rditer.IterateOptions{
 		CombineRangesAndPoints: true,
 		Reverse:                true,
 		ExcludeUserKeySpan:     excludeUserKeySpan,
 	}, func(iterator storage.MVCCIterator, span roachpb.Span, keyType storage.IterKeyType) error {
-		intentBatcher := newIntentBatcher(cleanupIntentsFn, options, info)
-
-		// handleIntent will deserialize transaction info and if intent is older than
-		// threshold enqueue it to batcher, otherwise ignore it.
-		handleIntent := func(keyValue *mvccKeyValue) error {
-			meta := &enginepb.MVCCMetadata{}
-			if err := protoutil.Unmarshal(keyValue.metaValue, meta); err != nil {
-				log.Errorf(ctx, "unable to unmarshal MVCC metadata for key %q: %+v", keyValue.key, err)
-				return nil
-			}
-			if meta.Txn != nil {
-				// Keep track of intent to resolve if older than the intent
-				// expiration threshold.
-				if meta.Timestamp.ToTimestamp().Less(intentExp) {
-					info.IntentsConsidered++
-					if err := intentBatcher.addAndMaybeFlushIntents(ctx, keyValue.key.Key, meta); err != nil {
-						if errors.Is(err, ctx.Err()) {
-							return err
-						}
-						log.Warningf(ctx, "failed to cleanup intents batch: %v", err)
-					}
-				}
-			}
-			return nil
-		}
-
 		// Iterate all versions of all keys from oldest to newest. If a version is an
 		// intent it will have the highest timestamp of any versions and will be
 		// followed by a metadata entry.
@@ -527,18 +502,17 @@ func processReplicatedKeyRange(
 
 			switch {
 			case s.curIsNotValue():
-				// Skip over non mvcc data and intents.
+				// Skip over non mvcc data.
 				err = b.foundNonGCableData(ctx, s.cur, true /* isNewestPoint */)
 			case s.curIsIntent():
+				// Skip over intents; they cannot be GC-ed. We simply ignore them --
+				// processReplicatedLocks will resolve them, if necessary.
 				err = b.foundNonGCableData(ctx, s.cur, true /* isNewestPoint */)
 				if err != nil {
 					return err
 				}
-				if err = handleIntent(s.next); err != nil {
-					return err
-				}
-				// For intents, we force step over the intent metadata after provisional
-				// value is found.
+				// Force step over the intent metadata as well to move on to the next
+				// key.
 				it.step()
 			default:
 				if isGarbage(threshold, s.cur, s.next, s.curIsNewest(), s.firstRangeTombstoneTsAtOrBelowGC) {
@@ -552,20 +526,98 @@ func processReplicatedKeyRange(
 			}
 		}
 
-		err := b.flushLastBatch(ctx)
+		return b.flushLastBatch(ctx)
+	})
+}
+
+// processReplicatedLocks identifies extant replicated locks which have been
+// around longer than the supplied intentAgeThreshold and resolves them.
+func processReplicatedLocks(
+	ctx context.Context,
+	desc *roachpb.RangeDescriptor,
+	reader storage.Reader,
+	now hlc.Timestamp,
+	// TODO(arul): rename to lockAgeThreshold
+	intentAgeThreshold time.Duration,
+	options intentBatcherOptions,
+	cleanupIntentsFn CleanupIntentsFunc,
+	info *Info,
+) error {
+	// Compute intent expiration (intent age at which we attempt to resolve).
+	intentExp := now.Add(-intentAgeThreshold.Nanoseconds(), 0)
+	intentBatcher := newIntentBatcher(cleanupIntentsFn, options, info)
+
+	process := func(ltStartKey, ltEndKey roachpb.Key) error {
+		opts := storage.LockTableIteratorOptions{
+			LowerBound:  ltStartKey,
+			UpperBound:  ltEndKey,
+			MatchMinStr: lock.Intent,
+		}
+		iter, err := storage.NewLockTableIterator(reader, opts)
 		if err != nil {
 			return err
 		}
+		defer iter.Close()
 
-		// We need to send out last intent cleanup batch.
-		if err := intentBatcher.maybeFlushPendingIntents(ctx); err != nil {
-			if errors.Is(err, ctx.Err()) {
+		var ok bool
+		for ok, err = iter.SeekEngineKeyGE(storage.EngineKey{Key: ltStartKey}); ok; ok, err = iter.NextEngineKey() {
+			if err != nil {
 				return err
 			}
-			log.Warningf(ctx, "failed to cleanup intents batch: %v", err)
+			var meta enginepb.MVCCMetadata
+			err = iter.ValueProto(&meta)
+			if err != nil {
+				return err
+			}
+			if meta.Txn == nil {
+				return errors.AssertionFailedf("intent without transaction")
+			}
+			// Keep track of intent to resolve if older than the intent
+			// expiration threshold.
+			if meta.Timestamp.ToTimestamp().Less(intentExp) {
+				info.IntentsConsidered++
+				key, err := iter.EngineKey()
+				if err != nil {
+					return err
+				}
+				ltKey, err := key.ToLockTableKey()
+				if err != nil {
+					return err
+				}
+				if ltKey.Strength != lock.Intent {
+					return errors.AssertionFailedf("unexpected strength for LockTableKey %s", ltKey.Strength)
+				}
+				if err := intentBatcher.addAndMaybeFlushIntents(ctx, ltKey.Key, &meta); err != nil {
+					if errors.Is(err, ctx.Err()) {
+						return err
+					}
+					log.Warningf(ctx, "failed to cleanup intents batch: %v", err)
+				}
+			}
 		}
 		return nil
+	}
+
+	// We want to find/resolve replicated locks over both local and global
+	// keys. That's what the call to Select below will give us.
+	ltSpans := rditer.Select(desc.RangeID, rditer.SelectOpts{
+		ReplicatedBySpan:      desc.RSpan(),
+		ReplicatedSpansFilter: rditer.ReplicatedSpansLocksOnly,
 	})
+	for _, sp := range ltSpans {
+		if err := process(sp.Key, sp.EndKey); err != nil {
+			return err
+		}
+	}
+
+	// We need to send out last intent cleanup batch, if present.
+	if err := intentBatcher.maybeFlushPendingIntents(ctx); err != nil {
+		if errors.Is(err, ctx.Err()) {
+			return err
+		}
+		log.Warningf(ctx, "failed to cleanup intents batch: %v", err)
+	}
+	return nil
 }
 
 // gcBatchCounters contain statistics about garbage that is collected for the
