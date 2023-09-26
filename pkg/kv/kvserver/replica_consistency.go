@@ -516,7 +516,9 @@ func CalcReplicaDigest(
 		return limiter.WaitN(ctx, tokens)
 	}
 
-	pointKeyVisitor := func(unsafeKey storage.MVCCKey, unsafeValue []byte) error {
+	var visitors storage.ComputeStatsVisitors
+
+	visitors.PointKey = func(unsafeKey storage.MVCCKey, unsafeValue []byte) error {
 		// Rate limit the scan through the range.
 		if err := wait(int64(len(unsafeKey.Key) + len(unsafeValue))); err != nil {
 			return err
@@ -549,7 +551,7 @@ func CalcReplicaDigest(
 		return err
 	}
 
-	rangeKeyVisitor := func(rangeKV storage.MVCCRangeKeyValue) error {
+	visitors.RangeKey = func(rangeKV storage.MVCCRangeKeyValue) error {
 		// Rate limit the scan through the range.
 		err := wait(
 			int64(len(rangeKV.RangeKey.StartKey) + len(rangeKV.RangeKey.EndKey) + len(rangeKV.Value)))
@@ -591,12 +593,17 @@ func CalcReplicaDigest(
 		return err
 	}
 
+	visitors.LockTableKey = func(unsafeKey storage.LockTableKey, unsafeValue []byte) error {
+		// TODO(nvanbenschoten): rate limit scan through lock table and add to
+		// checksum to be included in consistency checks.
+		return nil
+	}
+
 	// In statsOnly mode, we hash only the RangeAppliedState. In regular mode, hash
 	// all of the replicated key space.
 	var result ReplicaDigest
 	if !statsOnly {
-		ms, err := rditer.ComputeStatsForRangeWithVisitors(&desc, snap, 0, /* nowNanos */
-			pointKeyVisitor, rangeKeyVisitor)
+		ms, err := rditer.ComputeStatsForRangeWithVisitors(&desc, snap, 0 /* nowNanos */, visitors)
 		// Consume the remaining quota borrowed in the visitors. Do it even on
 		// iteration error, but prioritize returning the latter if it occurs.
 		if wErr := limiter.WaitN(ctx, batchSize); wErr != nil && err == nil {

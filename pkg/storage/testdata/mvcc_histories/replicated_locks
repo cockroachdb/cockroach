@@ -1,21 +1,28 @@
-run ok
+run stats ok
 put k=k1 v=v1 ts=5,0
 put k=k2 v=v2 ts=5,0
 put k=k3 v=v3 ts=5,0
 ----
+>> put k=k1 v=v1 ts=5,0
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+22
+>> put k=k2 v=v2 ts=5,0
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+22
+>> put k=k3 v=v3 ts=5,0
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+22
 >> at end:
 data: "k1"/5.000000000,0 -> /BYTES/v1
 data: "k2"/5.000000000,0 -> /BYTES/v2
 data: "k3"/5.000000000,0 -> /BYTES/v3
+stats: key_count=3 key_bytes=45 val_count=3 val_bytes=21 live_count=3 live_bytes=66
 
-run ok
+run stats ok
 txn_begin t=A ts=10,0
 txn_begin t=B ts=11,0
 ----
 >> at end:
 txn: "B" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
 
-run ok
+run stats ok
 with t=A
   check_for_acquire_lock k=k1 str=shared
   check_for_acquire_lock k=k2 str=shared
@@ -24,32 +31,48 @@ with t=A
   acquire_lock k=k2 str=shared
   acquire_lock k=k3 str=exclusive
 ----
+>> acquire_lock k=k1 str=shared t=A
+stats: lock_count=+1 lock_bytes=+67 lock_age=+90
+>> acquire_lock k=k2 str=shared t=A
+stats: lock_count=+1 lock_bytes=+67 lock_age=+90
+>> acquire_lock k=k3 str=exclusive t=A
+stats: lock_count=+1 lock_bytes=+67 lock_age=+90
 >> at end:
 lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+stats: key_count=3 key_bytes=45 val_count=3 val_bytes=21 live_count=3 live_bytes=66 lock_count=3 lock_bytes=201 lock_age=270
 
 # Reacquire with weaker, equal, and stronger strengths. All should succeed, but
 # only the stronger strength should actually write a new lock key.
 
-run ok
+run stats ok
 with t=A
   acquire_lock k=k2 str=shared
   acquire_lock k=k2 str=exclusive
   acquire_lock k=k3 str=shared
   acquire_lock k=k3 str=exclusive
 ----
+>> acquire_lock k=k2 str=shared t=A
+stats: no change
+>> acquire_lock k=k2 str=exclusive t=A
+stats: lock_count=+1 lock_bytes=+67 lock_age=+90
+>> acquire_lock k=k3 str=shared t=A
+stats: no change
+>> acquire_lock k=k3 str=exclusive t=A
+stats: no change
 >> at end:
 lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+stats: key_count=3 key_bytes=45 val_count=3 val_bytes=21 live_count=3 live_bytes=66 lock_count=4 lock_bytes=268 lock_age=360
 
 # Reacquire with weaker, equal, and stronger strengths in new epoch. All should
 # succeed, but only the stronger strength acquisitions (in the new epoch) should
 # actually (re)write lock keys.
 
-run ok
+run stats ok
 with t=A
   txn_restart
   acquire_lock k=k1 str=shared
@@ -58,17 +81,28 @@ with t=A
   acquire_lock k=k3 str=exclusive
   acquire_lock k=k3 str=shared
 ----
+>> acquire_lock k=k1 str=shared t=A
+stats: no change
+>> acquire_lock k=k2 str=shared t=A
+stats: no change
+>> acquire_lock k=k2 str=exclusive t=A
+stats: no change
+>> acquire_lock k=k3 str=exclusive t=A
+stats: no change
+>> acquire_lock k=k3 str=shared t=A
+stats: no change
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
 lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+stats: key_count=3 key_bytes=45 val_count=3 val_bytes=21 live_count=3 live_bytes=66 lock_count=4 lock_bytes=268 lock_age=360
 
 # Reacquisition of the same locks in the same epoch with later sequences should
 # be no-ops.
 
-run ok
+run stats ok
 with t=A
   txn_step
   acquire_lock k=k1 str=shared
@@ -77,18 +111,29 @@ with t=A
   acquire_lock k=k3 str=exclusive
   acquire_lock k=k3 str=shared
 ----
+>> acquire_lock k=k1 str=shared t=A
+stats: no change
+>> acquire_lock k=k2 str=shared t=A
+stats: no change
+>> acquire_lock k=k2 str=exclusive t=A
+stats: no change
+>> acquire_lock k=k3 str=exclusive t=A
+stats: no change
+>> acquire_lock k=k3 str=shared t=A
+stats: no change
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
 lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+stats: key_count=3 key_bytes=45 val_count=3 val_bytes=21 live_count=3 live_bytes=66 lock_count=4 lock_bytes=268 lock_age=360
 
 # Reacquisition of the same locks in the same epoch with later sequences after
 # the earlier sequence has been rolled back should rewrite the locks with the
 # newer sequence.
 
-run ok
+run stats ok
 with t=A
   txn_ignore_seqs seqs=0-0
   acquire_lock k=k1 str=shared
@@ -97,26 +142,40 @@ with t=A
   acquire_lock k=k3 str=exclusive
   acquire_lock k=k3 str=shared
 ----
+>> acquire_lock k=k1 str=shared t=A
+stats: lock_bytes=+2
+>> acquire_lock k=k2 str=shared t=A
+stats: lock_bytes=+2
+>> acquire_lock k=k2 str=exclusive t=A
+stats: lock_bytes=+2
+>> acquire_lock k=k3 str=exclusive t=A
+stats: lock_bytes=+2
+>> acquire_lock k=k3 str=shared t=A
+stats: no change
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
 lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+stats: key_count=3 key_bytes=45 val_count=3 val_bytes=21 live_count=3 live_bytes=66 lock_count=4 lock_bytes=276 lock_age=360
 
 # Txn B can only acquire a shared lock on k1.
 
-run ok
+run stats ok
 with t=B
   check_for_acquire_lock k=k1 str=shared
   acquire_lock k=k1 str=shared
 ----
+>> acquire_lock k=k1 str=shared t=B
+stats: lock_count=+1 lock_bytes=+67 lock_age=+89
 >> at end:
 lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+stats: key_count=3 key_bytes=45 val_count=3 val_bytes=21 live_count=3 live_bytes=66 lock_count=5 lock_bytes=343 lock_age=449
 
 run error
 check_for_acquire_lock t=B k=k1 str=exclusive
@@ -218,29 +277,37 @@ error: (*kvpb.LockConflictError:) conflicting locks on "k1"
 
 # Intents are treated similarly to Exclusive locks.
 
-run ok
+run stats ok
 put t=A k=k4 v=v4
 ----
+>> put t=A k=k4 v=v4
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+59 live_count=+1 live_bytes=+74 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+90
 >> at end:
 data: "k1"/5.000000000,0 -> /BYTES/v1
 data: "k2"/5.000000000,0 -> /BYTES/v2
 data: "k3"/5.000000000,0 -> /BYTES/v3
 meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k4"/10.000000000,0 -> /BYTES/v4
+stats: key_count=4 key_bytes=60 val_count=4 val_bytes=80 live_count=4 live_bytes=140 intent_count=1 intent_bytes=19 lock_count=6 lock_bytes=343 lock_age=539
 
-run ok
+run stats ok
 with t=A
   check_for_acquire_lock k=k4 str=shared
   check_for_acquire_lock k=k4 str=exclusive
   acquire_lock k=k4 str=shared
   acquire_lock k=k4 str=exclusive
 ----
+>> acquire_lock k=k4 str=shared t=A
+stats: no change
+>> acquire_lock k=k4 str=exclusive t=A
+stats: no change
 >> at end:
 lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+stats: key_count=4 key_bytes=60 val_count=4 val_bytes=80 live_count=4 live_bytes=140 intent_count=1 intent_bytes=19 lock_count=6 lock_bytes=343 lock_age=539
 
 run error
 check_for_acquire_lock t=B k=k4 str=shared
@@ -261,11 +328,13 @@ error: (*kvpb.LockConflictError:) conflicting locks on "k4"
 # The intent history is considered when determining whether a reacquisition is
 # needed on the same key as a previous intent write.
 
-run ok
+run stats ok
 with t=A
   txn_step
   put k=k4 v=v4_prime
 ----
+>> put k=k4 v=v4_prime t=A
+stats: val_bytes=+17 live_bytes=+17 intent_bytes=+6
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
 data: "k1"/5.000000000,0 -> /BYTES/v1
@@ -273,12 +342,15 @@ data: "k2"/5.000000000,0 -> /BYTES/v2
 data: "k3"/5.000000000,0 -> /BYTES/v3
 meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} ts=10.000000000,0 del=false klen=12 vlen=13 ih={{1 /BYTES/v4}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k4"/10.000000000,0 -> /BYTES/v4_prime
+stats: key_count=4 key_bytes=60 val_count=4 val_bytes=97 live_count=4 live_bytes=157 intent_count=1 intent_bytes=25 lock_count=6 lock_bytes=343 lock_age=539
 
-run ok
+run stats ok
 with t=A
   txn_step
   acquire_lock k=k4 str=shared
 ----
+>> acquire_lock k=k4 str=shared t=A
+stats: no change
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=3} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
 lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -286,6 +358,7 @@ lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri
 lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+stats: key_count=4 key_bytes=60 val_count=4 val_bytes=97 live_count=4 live_bytes=157 intent_count=1 intent_bytes=25 lock_count=6 lock_bytes=343 lock_age=539
 
 run
 with t=A
@@ -318,7 +391,7 @@ lock (Replicated): "k4"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri
 # that we terminate scans at key "k4" to ignore the intent that we just wrote,
 # which is not ignored by non-locking scans.
 
-run ok
+run stats ok
 with k=k1 end=k4
   scan t=A
   scan t=B
@@ -472,11 +545,15 @@ error: (*kvpb.LockConflictError:) conflicting locks on "k3"
 # Writes to keys locked by only the writer should succeed, regardless of the
 # strength of the writer's lock.
 
-run ok
+run stats ok
 with t=A
   put k=k2 v=v2
   put k=k3 v=v3
 ----
+>> put k=k2 v=v2 t=A
+stats: key_bytes=+12 val_count=+1 val_bytes=+59 live_bytes=+52 gc_bytes_age=+1710 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+90
+>> put k=k3 v=v3 t=A
+stats: key_bytes=+12 val_count=+1 val_bytes=+59 live_bytes=+52 gc_bytes_age=+1710 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+90
 >> at end:
 data: "k1"/5.000000000,0 -> /BYTES/v1
 meta: "k2"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=3} ts=10.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -487,15 +564,20 @@ data: "k3"/10.000000000,0 -> /BYTES/v3
 data: "k3"/5.000000000,0 -> /BYTES/v3
 meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} ts=10.000000000,0 del=false klen=12 vlen=13 ih={{1 /BYTES/v4}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k4"/10.000000000,0 -> /BYTES/v4_prime
+stats: key_count=4 key_bytes=84 val_count=6 val_bytes=215 live_count=4 live_bytes=261 gc_bytes_age=3420 intent_count=3 intent_bytes=63 lock_count=9 lock_bytes=414 lock_age=809
 
-run ok
+run stats ok
 with t=A
   txn_step
   del k=k2
   del k=k3
 ----
+>> del k=k2 t=A
 del: "k2": found key true
+stats: val_bytes=+4 live_count=-1 live_bytes=-74 gc_bytes_age=+7020 intent_bytes=-7
+>> del k=k3 t=A
 del: "k3": found key true
+stats: val_bytes=+4 live_count=-1 live_bytes=-74 gc_bytes_age=+7020 intent_bytes=-7
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=4} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
 data: "k1"/5.000000000,0 -> /BYTES/v1
@@ -507,21 +589,24 @@ data: "k3"/10.000000000,0 -> /<empty>
 data: "k3"/5.000000000,0 -> /BYTES/v3
 meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} ts=10.000000000,0 del=false klen=12 vlen=13 ih={{1 /BYTES/v4}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k4"/10.000000000,0 -> /BYTES/v4_prime
+stats: key_count=4 key_bytes=84 val_count=6 val_bytes=223 live_count=2 live_bytes=113 gc_bytes_age=17460 intent_count=3 intent_bytes=49 lock_count=9 lock_bytes=414 lock_age=809
 
 # Release locks.
 
 # Reset ignored sequence numbers for now.
-run ok
+run stats ok
 txn_ignore_seqs t=A seqs
 ----
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=4} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
 
 # Pending resolution without epoch bump or savepoint rollback is a no-op.
-run ok
+run stats ok
 resolve_intent t=A k=k1 status=PENDING
 ----
+>> resolve_intent t=A k=k1 status=PENDING
 resolve_intent: "k1" -> resolved key = false
+stats: no change
 >> at end:
 data: "k1"/5.000000000,0 -> /BYTES/v1
 meta: "k2"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=4} ts=10.000000000,0 del=true klen=12 vlen=0 ih={{3 /BYTES/v2}} mergeTs=<nil> txnDidNotUpdateMeta=false
@@ -538,12 +623,15 @@ lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable 
 lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k4"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=3} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+stats: key_count=4 key_bytes=84 val_count=6 val_bytes=223 live_count=2 live_bytes=113 gc_bytes_age=17460 intent_count=3 intent_bytes=49 lock_count=9 lock_bytes=414 lock_age=809
 
 # Committed resolution releases the lock.
-run ok
+run stats ok
 resolve_intent t=A k=k1 status=COMMITTED
 ----
+>> resolve_intent t=A k=k1 status=COMMITTED
 resolve_intent: "k1" -> resolved key = true
+stats: lock_count=-1 lock_bytes=-69 lock_age=-90
 >> at end:
 data: "k1"/5.000000000,0 -> /BYTES/v1
 meta: "k2"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=4} ts=10.000000000,0 del=true klen=12 vlen=0 ih={{3 /BYTES/v2}} mergeTs=<nil> txnDidNotUpdateMeta=false
@@ -559,11 +647,14 @@ lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable 
 lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k4"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=3} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+stats: key_count=4 key_bytes=84 val_count=6 val_bytes=223 live_count=2 live_bytes=113 gc_bytes_age=17460 intent_count=3 intent_bytes=49 lock_count=8 lock_bytes=345 lock_age=719
 
 # Re-acquire the lock.
-run ok
+run stats ok
 acquire_lock t=A k=k1 str=shared
 ----
+>> acquire_lock t=A k=k1 str=shared
+stats: lock_count=+1 lock_bytes=+71 lock_age=+90
 >> at end:
 lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=4} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -571,12 +662,15 @@ lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable 
 lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k4"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=3} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+stats: key_count=4 key_bytes=84 val_count=6 val_bytes=223 live_count=2 live_bytes=113 gc_bytes_age=17460 intent_count=3 intent_bytes=49 lock_count=9 lock_bytes=416 lock_age=809
 
 # Aborted resolution releases the lock.
-run ok
+run stats ok
 resolve_intent t=A k=k1 status=ABORTED
 ----
+>> resolve_intent t=A k=k1 status=ABORTED
 resolve_intent: "k1" -> resolved key = true
+stats: lock_count=-1 lock_bytes=-71 lock_age=-90
 >> at end:
 data: "k1"/5.000000000,0 -> /BYTES/v1
 meta: "k2"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=4} ts=10.000000000,0 del=true klen=12 vlen=0 ih={{3 /BYTES/v2}} mergeTs=<nil> txnDidNotUpdateMeta=false
@@ -592,11 +686,14 @@ lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable 
 lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k4"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=3} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+stats: key_count=4 key_bytes=84 val_count=6 val_bytes=223 live_count=2 live_bytes=113 gc_bytes_age=17460 intent_count=3 intent_bytes=49 lock_count=8 lock_bytes=345 lock_age=719
 
 # Re-acquire the lock.
-run ok
+run stats ok
 acquire_lock t=A k=k1 str=shared
 ----
+>> acquire_lock t=A k=k1 str=shared
+stats: lock_count=+1 lock_bytes=+71 lock_age=+90
 >> at end:
 lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=4} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -604,14 +701,17 @@ lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable 
 lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k4"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=3} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+stats: key_count=4 key_bytes=84 val_count=6 val_bytes=223 live_count=2 live_bytes=113 gc_bytes_age=17460 intent_count=3 intent_bytes=49 lock_count=9 lock_bytes=416 lock_age=809
 
 # Pending resolution with newer epoch releases the lock.
-run ok
+run stats ok
 with t=A
   txn_restart
   resolve_intent k=k1 status=PENDING
 ----
+>> resolve_intent k=k1 status=PENDING t=A
 resolve_intent: "k1" -> resolved key = true
+stats: lock_count=-1 lock_bytes=-71 lock_age=-90
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
 data: "k1"/5.000000000,0 -> /BYTES/v1
@@ -628,11 +728,14 @@ lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable 
 lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k4"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=3} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+stats: key_count=4 key_bytes=84 val_count=6 val_bytes=223 live_count=2 live_bytes=113 gc_bytes_age=17460 intent_count=3 intent_bytes=49 lock_count=8 lock_bytes=345 lock_age=719
 
 # Re-acquire the lock at the new epoch.
-run ok
+run stats ok
 acquire_lock t=A k=k1 str=shared
 ----
+>> acquire_lock t=A k=k1 str=shared
+stats: lock_count=+1 lock_bytes=+69 lock_age=+90
 >> at end:
 lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -640,15 +743,18 @@ lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable 
 lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k4"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=3} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+stats: key_count=4 key_bytes=84 val_count=6 val_bytes=223 live_count=2 live_bytes=113 gc_bytes_age=17460 intent_count=3 intent_bytes=49 lock_count=9 lock_bytes=414 lock_age=809
 
 # Pending resolution with older epoch is a no-op, regardless of savepoint
 # rollback.
-run ok
+run stats ok
 with t=A
   txn_restart epoch=1
   resolve_intent k=k1 status=PENDING
 ----
+>> resolve_intent k=k1 status=PENDING t=A
 resolve_intent: "k1" -> resolved key = false
+stats: no change
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
 data: "k1"/5.000000000,0 -> /BYTES/v1
@@ -666,13 +772,16 @@ lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable 
 lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k4"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=3} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+stats: key_count=4 key_bytes=84 val_count=6 val_bytes=223 live_count=2 live_bytes=113 gc_bytes_age=17460 intent_count=3 intent_bytes=49 lock_count=9 lock_bytes=414 lock_age=809
 
-run ok
+run stats ok
 with t=A
   txn_ignore_seqs seqs=0-0
   resolve_intent k=k1 status=PENDING
 ----
+>> resolve_intent k=k1 status=PENDING t=A
 resolve_intent: "k1" -> resolved key = false
+stats: no change
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
 data: "k1"/5.000000000,0 -> /BYTES/v1
@@ -690,15 +799,18 @@ lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable 
 lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k4"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=3} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+stats: key_count=4 key_bytes=84 val_count=6 val_bytes=223 live_count=2 live_bytes=113 gc_bytes_age=17460 intent_count=3 intent_bytes=49 lock_count=9 lock_bytes=414 lock_age=809
 
 # Pending resolution of the lock in the same epoch without a savepoint rollback
 # is a no-op.
-run ok
+run stats ok
 with t=A
   txn_restart epoch=2
   resolve_intent k=k1 status=PENDING
 ----
+>> resolve_intent k=k1 status=PENDING t=A
 resolve_intent: "k1" -> resolved key = false
+stats: no change
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
 data: "k1"/5.000000000,0 -> /BYTES/v1
@@ -716,15 +828,18 @@ lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable 
 lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k4"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=3} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+stats: key_count=4 key_bytes=84 val_count=6 val_bytes=223 live_count=2 live_bytes=113 gc_bytes_age=17460 intent_count=3 intent_bytes=49 lock_count=9 lock_bytes=414 lock_age=809
 
 # Pending resolution of the lock in the same epoch with savepoint rollback
 # releases the lock.
-run ok
+run stats ok
 with t=A
   txn_ignore_seqs seqs=0-0
   resolve_intent k=k1 status=PENDING
 ----
+>> resolve_intent k=k1 status=PENDING t=A
 resolve_intent: "k1" -> resolved key = true
+stats: lock_count=-1 lock_bytes=-69 lock_age=-90
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
 data: "k1"/5.000000000,0 -> /BYTES/v1
@@ -741,25 +856,32 @@ lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable 
 lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 lock (Replicated): "k4"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=3} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+stats: key_count=4 key_bytes=84 val_count=6 val_bytes=223 live_count=2 live_bytes=113 gc_bytes_age=17460 intent_count=3 intent_bytes=49 lock_count=8 lock_bytes=345 lock_age=719
 
 # Ranged resolution behaves like single-key resolution.
 # As always, it also resolves intents in the range.
-run ok
+run stats ok
 resolve_intent_range t=A k=k2 end=k5 status=COMMITTED
 ----
+>> resolve_intent_range t=A k=k2 end=k5 status=COMMITTED
 resolve_intent_range: "k2"-"k5" -> resolved 3 key(s)
+stats: key_count=-1 key_bytes=-39 val_count=-3 val_bytes=-202 live_count=+1 live_bytes=-47 gc_bytes_age=-17460 intent_count=-3 intent_bytes=-49 lock_count=-7 lock_bytes=-278 lock_age=-630
 >> at end:
 data: "k1"/5.000000000,0 -> /BYTES/v1
 data: "k2"/5.000000000,0 -> /BYTES/v2
 data: "k3"/5.000000000,0 -> /BYTES/v3
 lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+stats: key_count=3 key_bytes=45 val_count=3 val_bytes=21 live_count=3 live_bytes=66 lock_count=1 lock_bytes=67 lock_age=89
 
 # Aborted resolution for other transaction releases the lock.
-run ok
+run stats ok
 resolve_intent t=B k=k1 status=ABORTED
 ----
+>> resolve_intent t=B k=k1 status=ABORTED
 resolve_intent: "k1" -> resolved key = true
+stats: lock_count=-1 lock_bytes=-67 lock_age=-89
 >> at end:
 data: "k1"/5.000000000,0 -> /BYTES/v1
 data: "k2"/5.000000000,0 -> /BYTES/v2
 data: "k3"/5.000000000,0 -> /BYTES/v3
+stats: key_count=3 key_bytes=45 val_count=3 val_bytes=21 live_count=3 live_bytes=66

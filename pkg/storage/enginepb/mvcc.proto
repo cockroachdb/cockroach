@@ -202,6 +202,19 @@ message MVCCStats {
   // It is equal to the number of meta keys in the system with
   // a non-empty Transaction proto.
   optional sfixed64 intent_count = 11 [(gogoproto.nullable) = false];
+  // lock_bytes is the encoded size of replicated locks with shared or
+  // exclusive strengths, which are stored in the lock table keyspace.
+  // The field includes the size of the locks' keys and their values.
+  //
+  // For historical reasons, the field excludes the size of intent
+  // metadata key-values, even though they are also stored in the lock
+  // table keyspace. Intent metadata keys are tracked under key_bytes
+  // and their values are tracked under val_bytes. This is not to be
+  // confused with the provisional versioned values protected by the
+  // intents, which are tracked by the intent_bytes field (and also by
+  // key_bytes and val_bytes). Hence the vague "without their meta keys"
+  // comment above.
+  optional sfixed64 lock_bytes = 21 [(gogoproto.nullable) = false];
   // lock_count is the number of replicated locks (shared, exclusive, or
   // intent strength) that are in the lock table. It is >= intent_count.
   optional sfixed64 lock_count = 16 [(gogoproto.nullable) = false];
