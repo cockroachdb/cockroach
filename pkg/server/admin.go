@@ -1582,7 +1582,7 @@ func (s *adminServer) Events(
 ) (_ *serverpb.EventsResponse, retErr error) {
 	ctx = s.AnnotateCtx(ctx)
 
-	userName, err := s.requireAdminUser(ctx)
+	err := s.requireViewClusterMetadataPermission(ctx)
 	if err != nil {
 		// NB: not using serverError() here since the priv checker
 		// already returns a proper gRPC error status.
@@ -1595,6 +1595,10 @@ func (s *adminServer) Events(
 		limit = defaultAPIEventLimit
 	}
 
+	userName, err := userFromIncomingRPCContext(ctx)
+	if err != nil {
+		return nil, serverError(ctx, err)
+	}
 	r, err := s.eventsHelper(ctx, req, userName, int(limit), 0, redactEvents)
 	if err != nil {
 		return nil, serverError(ctx, err)
@@ -3241,7 +3245,7 @@ func (s *systemAdminServer) EnqueueRange(
 	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.requireAdminUser(ctx); err != nil {
+	if err := s.requireRepairClusterMetadataPermission(ctx); err != nil {
 		// NB: not using serverError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -3389,7 +3393,7 @@ func (s *systemAdminServer) SendKVBatch(
 	ctx = s.AnnotateCtx(ctx)
 	// Note: the root user will bypass SQL auth checks, which is useful in case of
 	// a cluster outage.
-	user, err := s.requireAdminUser(ctx)
+	err := s.requireRepairClusterMetadataPermission(ctx)
 	if err != nil {
 		// NB: not using serverError() here since the priv checker
 		// already returns a proper gRPC error status.
@@ -3397,6 +3401,11 @@ func (s *systemAdminServer) SendKVBatch(
 	}
 	if ba == nil {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "BatchRequest cannot be nil")
+	}
+
+	user, err := userFromIncomingRPCContext(ctx)
+	if err != nil {
+		return nil, serverError(ctx, err)
 	}
 
 	// Emit a structured log event for the call.
@@ -3447,7 +3456,7 @@ func (s *systemAdminServer) RecoveryCollectReplicaInfo(
 ) error {
 	ctx := stream.Context()
 	ctx = s.server.AnnotateCtx(ctx)
-	_, err := s.requireAdminUser(ctx)
+	err := s.requireViewClusterMetadataPermission(ctx)
 	if err != nil {
 		return err
 	}
@@ -3462,7 +3471,7 @@ func (s *systemAdminServer) RecoveryCollectLocalReplicaInfo(
 ) error {
 	ctx := stream.Context()
 	ctx = s.server.AnnotateCtx(ctx)
-	_, err := s.requireAdminUser(ctx)
+	err := s.requireViewClusterMetadataPermission(ctx)
 	if err != nil {
 		return err
 	}
@@ -3475,7 +3484,7 @@ func (s *systemAdminServer) RecoveryStagePlan(
 	ctx context.Context, request *serverpb.RecoveryStagePlanRequest,
 ) (*serverpb.RecoveryStagePlanResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	_, err := s.requireAdminUser(ctx)
+	err := s.requireRepairClusterMetadataPermission(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -3488,7 +3497,7 @@ func (s *systemAdminServer) RecoveryNodeStatus(
 	ctx context.Context, request *serverpb.RecoveryNodeStatusRequest,
 ) (*serverpb.RecoveryNodeStatusResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	_, err := s.requireAdminUser(ctx)
+	err := s.requireViewClusterMetadataPermission(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -3500,7 +3509,7 @@ func (s *systemAdminServer) RecoveryVerify(
 	ctx context.Context, request *serverpb.RecoveryVerifyRequest,
 ) (*serverpb.RecoveryVerifyResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	_, err := s.requireAdminUser(ctx)
+	err := s.requireViewClusterMetadataPermission(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -3918,20 +3927,6 @@ type adminPrivilegeChecker struct {
 	makePlanner func(opName string) (interface{}, func())
 }
 
-// requireAdminUser's error return is a gRPC error.
-func (c *adminPrivilegeChecker) requireAdminUser(
-	ctx context.Context,
-) (userName username.SQLUsername, err error) {
-	userName, isAdmin, err := c.getUserAndRole(ctx)
-	if err != nil {
-		return userName, serverError(ctx, err)
-	}
-	if !isAdmin {
-		return userName, errRequiresAdmin
-	}
-	return userName, nil
-}
-
 // requireViewActivityPermission's error return is a gRPC error.
 func (c *adminPrivilegeChecker) requireViewActivityPermission(ctx context.Context) (err error) {
 	userName, isAdmin, err := c.getUserAndRole(ctx)
@@ -4069,6 +4064,29 @@ func (c *adminPrivilegeChecker) requireViewClusterMetadataPermission(
 	return grpcstatus.Errorf(
 		codes.PermissionDenied, "this operation requires the %s system privilege",
 		privilege.VIEWCLUSTERMETADATA)
+}
+
+// requireRepairClusterMetadataPermission requires the user have admin
+// or the REPAIRCLUSTERMETADATA system privilege and returns an error if
+// the user does not have it.
+func (c *adminPrivilegeChecker) requireRepairClusterMetadataPermission(
+	ctx context.Context,
+) (err error) {
+	userName, isAdmin, err := c.getUserAndRole(ctx)
+	if err != nil {
+		return serverError(ctx, err)
+	}
+	if isAdmin {
+		return nil
+	}
+	if hasRepairClusterMetadata, err := c.hasGlobalPrivilege(ctx, userName, privilege.REPAIRCLUSTERMETADATA); err != nil {
+		return serverError(ctx, err)
+	} else if hasRepairClusterMetadata {
+		return nil
+	}
+	return grpcstatus.Errorf(
+		codes.PermissionDenied, "this operation requires the %s system privilege",
+		privilege.REPAIRCLUSTERMETADATA)
 }
 
 // requireViewDebugPermission requires the user have admin or the VIEWDEBUG system privilege
