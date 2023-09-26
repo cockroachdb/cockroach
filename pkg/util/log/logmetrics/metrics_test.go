@@ -38,14 +38,14 @@ func TestIncrementCounter(t *testing.T) {
 		func() {
 			l.mu.Lock()
 			defer l.mu.Unlock()
-			require.Zero(t, l.mu.metricsStruct.FluentSinkConnErrors.Count())
+			require.Zero(t, l.metricsStruct.FluentSinkConnErrors.Count())
 		}()
 		l.IncrementCounter(log.FluentSinkConnectionError, 1)
 		l.IncrementCounter(log.FluentSinkConnectionError, 2)
 		func() {
 			l.mu.Lock()
 			defer l.mu.Unlock()
-			require.Equal(t, int64(3), l.mu.metricsStruct.FluentSinkConnErrors.Count())
+			require.Equal(t, int64(3), l.metricsStruct.FluentSinkConnErrors.Count())
 		}()
 	})
 }
