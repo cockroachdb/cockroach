@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 // SettingsWatcher is used to watch for cluster settings changes with a
@@ -388,24 +387,16 @@ func (s *SettingsWatcher) setLocked(
 		return
 	}
 
-	if err := s.mu.updater.Set(ctx, key, val); err != nil {
-		log.Warningf(ctx, "failed to set setting %s to %s: %v", redact.Safe(key), val.Value, err)
+	if err := s.mu.updater.SetFromStorage(ctx, key, val, origin); err != nil {
+		log.Warningf(ctx, "failed to set setting %s to %s: %v", key, val.Value, err)
 	}
-	s.mu.updater.SetValueOrigin(ctx, key, origin)
 }
 
 // setDefaultLocked sets a setting to its default value.
 func (s *SettingsWatcher) setDefaultLocked(ctx context.Context, key settings.InternalKey) {
-	setting, ok := settings.LookupForLocalAccessByKey(key, s.codec.ForSystemTenant())
-	if !ok {
-		log.Warningf(ctx, "failed to find setting %s, skipping update", redact.Safe(key))
-		return
+	if err := s.mu.updater.SetToDefault(ctx, key); err != nil {
+		log.Warningf(ctx, "failed to set setting %s to default: %v", key, err)
 	}
-	val := settings.EncodedValue{
-		Value: setting.EncodedDefault(),
-		Type:  setting.Typ(),
-	}
-	s.setLocked(ctx, key, val, settings.OriginDefault)
 }
 
 // updateOverrides updates the overrides map and updates any settings
