@@ -25,13 +25,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/maps"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
-	dnsManagedZone = "roachprod-managed"
-	dnsDomain      = "roachprod-managed.crdb.io"
-	dnsServer      = "ns-cloud-a1.googledomains.com"
-	dnsMaxResults  = 1000
+	dnsManagedZone           = "roachprod-managed"
+	dnsDomain                = "roachprod-managed.crdb.io"
+	dnsServer                = "ns-cloud-a1.googledomains.com"
+	dnsMaxResults            = 1000
+	dnsMaxConcurrentRequests = 4
 )
 
 var ErrDNSOperation = fmt.Errorf("error during Google Cloud DNS operation")
@@ -57,7 +59,7 @@ func NewDNSProvider() vm.DNSProvider {
 }
 
 // CreateRecords implements the vm.DNSProvider interface.
-func (n dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord) error {
+func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord) error {
 	recordsByName := make(map[string][]vm.DNSRecord)
 	for _, record := range records {
 		recordsByName[record.Name] = append(recordsByName[record.Name], record)
@@ -96,7 +98,7 @@ func (n dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord)
 			"--zone", dnsManagedZone,
 			"--rrdatas", strings.Join(data, ","),
 		}
-		cmd := exec.Command("gcloud", args...)
+		cmd := exec.CommandContext(ctx, "gcloud", args...)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			return markDNSOperationError(errors.Wrapf(err, "output: %s", out))
@@ -110,17 +112,45 @@ func (n dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord)
 }
 
 // LookupSRVRecords implements the vm.DNSProvider interface.
-func (n dnsProvider) LookupSRVRecords(
+func (n *dnsProvider) LookupSRVRecords(
 	ctx context.Context, service, proto, subdomain string,
 ) ([]vm.DNSRecord, error) {
 	name := fmt.Sprintf(`%s.%s`, subdomain, n.Domain())
 	return n.lookupSRVRecords(ctx, service, proto, name)
 }
 
+// ListRecords implements the vm.DNSProvider interface.
+func (n *dnsProvider) ListRecords(ctx context.Context) ([]vm.DNSRecord, error) {
+	return n.listSRVRecords(ctx, "", dnsMaxResults)
+}
+
+// DeleteRecordsByName implements the vm.DNSProvider interface.
+func (n *dnsProvider) DeleteRecordsByName(ctx context.Context, names ...string) error {
+	var g errgroup.Group
+	g.SetLimit(dnsMaxConcurrentRequests)
+	for _, name := range names {
+		// capture loop variable
+		name := name
+		g.Go(func() error {
+			args := []string{"--project", dnsProject, "dns", "record-sets", "delete", name,
+				"--type", string(vm.SRV),
+				"--zone", dnsManagedZone,
+			}
+			cmd := exec.CommandContext(ctx, "gcloud", args...)
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				return markDNSOperationError(errors.Wrapf(err, "output: %s", out))
+			}
+			return nil
+		})
+	}
+	return g.Wait()
+}
+
 // DeleteRecordsBySubdomain implements the vm.DNSProvider interface.
-func (n dnsProvider) DeleteRecordsBySubdomain(subdomain string) error {
+func (n *dnsProvider) DeleteRecordsBySubdomain(ctx context.Context, subdomain string) error {
 	suffix := fmt.Sprintf("%s.%s.", subdomain, n.Domain())
-	records, err := n.listSRVRecords(suffix, dnsMaxResults)
+	records, err := n.listSRVRecords(ctx, suffix, dnsMaxResults)
 	if err != nil {
 		return err
 	}
@@ -132,25 +162,17 @@ func (n dnsProvider) DeleteRecordsBySubdomain(subdomain string) error {
 	for name := range names {
 		// Only delete records that match the subdomain. The initial filter by
 		// gcloud does not specifically match suffixes, hence we check here to
-		// make sure it's only the suffix and not a partial match.
+		// make sure it's only the suffix and not a partial match. If not, we
+		// delete the record from the map of names to delete.
 		if !strings.HasSuffix(name, suffix) {
-			continue
-		}
-		args := []string{"--project", dnsProject, "dns", "record-sets", "delete", name,
-			"--type", string(vm.SRV),
-			"--zone", dnsManagedZone,
-		}
-		cmd := exec.Command("gcloud", args...)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			return markDNSOperationError(errors.Wrapf(err, "output: %s", out))
+			delete(names, name)
 		}
 	}
-	return nil
+	return n.DeleteRecordsByName(ctx, maps.Keys(names)...)
 }
 
 // Domain implements the vm.DNSProvider interface.
-func (n dnsProvider) Domain() string {
+func (n *dnsProvider) Domain() string {
 	return dnsDomain
 }
 
@@ -159,7 +181,7 @@ func (n dnsProvider) Domain() string {
 // network problems. For lookups, we prefer this to using the gcloud command as
 // it is faster, and preferable when service information is being queried
 // regularly.
-func (n dnsProvider) lookupSRVRecords(
+func (n *dnsProvider) lookupSRVRecords(
 	ctx context.Context, service, proto, name string,
 ) ([]vm.DNSRecord, error) {
 	var err error
@@ -192,15 +214,19 @@ func (n dnsProvider) lookupSRVRecords(
 // listSRVRecords returns all SRV records that match the given filter from Google Cloud DNS.
 // The data field of the records could be a comma-separated list of values if multiple
 // records are returned for the same name.
-func (n dnsProvider) listSRVRecords(filter string, limit int) ([]vm.DNSRecord, error) {
+func (n *dnsProvider) listSRVRecords(
+	ctx context.Context, filter string, limit int,
+) ([]vm.DNSRecord, error) {
 	args := []string{"--project", dnsProject, "dns", "record-sets", "list",
-		"--filter", filter,
 		"--limit", strconv.Itoa(limit),
 		"--page-size", strconv.Itoa(limit),
 		"--zone", dnsManagedZone,
 		"--format", "json",
 	}
-	cmd := exec.Command("gcloud", args...)
+	if filter != "" {
+		args = append(args, "--filter", filter)
+	}
+	cmd := exec.CommandContext(ctx, "gcloud", args...)
 	res, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, markDNSOperationError(errors.Wrapf(err, "output: %s", res))
@@ -235,7 +261,7 @@ func (n dnsProvider) listSRVRecords(filter string, limit int) ([]vm.DNSRecord, e
 
 // waitForRecordsAvailable waits for the DNS records to become available on the
 // DNS server through a standard net tools lookup.
-func (n dnsProvider) waitForRecordsAvailable(ctx context.Context, records ...vm.DNSRecord) error {
+func (n *dnsProvider) waitForRecordsAvailable(ctx context.Context, records ...vm.DNSRecord) error {
 	type recordKey struct {
 		name string
 		data string
