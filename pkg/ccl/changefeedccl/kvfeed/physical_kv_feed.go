@@ -27,11 +27,12 @@ type physicalFeedFactory interface {
 }
 
 type rangeFeedConfig struct {
-	Frontier hlc.Timestamp
-	Spans    []kvcoord.SpanTimePair
-	WithDiff bool
-	Knobs    TestingKnobs
-	UseMux   bool
+	Frontier      hlc.Timestamp
+	Spans         []kvcoord.SpanTimePair
+	WithDiff      bool
+	RangeObserver func(fn kvcoord.ForEachRangeFn)
+	Knobs         TestingKnobs
+	UseMux        bool
 }
 
 type rangefeedFactory func(
@@ -78,6 +79,12 @@ func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg rang
 	var rfOpts []kvcoord.RangeFeedOption
 	if cfg.UseMux {
 		rfOpts = append(rfOpts, kvcoord.WithMuxRangeFeed())
+	}
+	if cfg.RangeObserver != nil {
+		rfOpts = append(rfOpts, kvcoord.WithRangeObserver(cfg.RangeObserver))
+	}
+	if len(cfg.Knobs.RangefeedOptions) != 0 {
+		rfOpts = append(rfOpts, cfg.Knobs.RangefeedOptions...)
 	}
 
 	g.GoCtx(func(ctx context.Context) error {
