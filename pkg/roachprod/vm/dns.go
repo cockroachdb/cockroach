@@ -50,7 +50,9 @@ type DNSRecord struct {
 type DNSProvider interface {
 	CreateRecords(ctx context.Context, records ...DNSRecord) error
 	LookupSRVRecords(ctx context.Context, service, proto, subdomain string) ([]DNSRecord, error)
-	DeleteRecordsBySubdomain(subdomain string) error
+	ListRecords(ctx context.Context) ([]DNSRecord, error)
+	DeleteRecordsBySubdomain(ctx context.Context, subdomain string) error
+	DeleteRecordsByName(ctx context.Context, names ...string) error
 	Domain() string
 }
 
