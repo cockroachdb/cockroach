@@ -58,6 +58,16 @@ func newHTTPServer(
 	return server
 }
 
+// ServerHTTPBasePath is a cluster setting that contains the path to
+// route the user to after successful login. It is intended to be
+// overridden in cases where DB Console is being proxied.
+var ServerHTTPBasePath = settings.RegisterStringSetting(
+	settings.TenantWritable,
+	"server.http.base_path",
+	"path to redirect the user to upon succcessful login",
+	"/",
+).WithPublic()
+
 // HSTSEnabled is a boolean that enables HSTS headers on the HTTP
 // server. These instruct a valid user agent to use HTTPS *only*
 // for all future connections to this host.
