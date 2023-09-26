@@ -442,10 +442,11 @@ func applyBatchOp(
 	for i := range o.Ops {
 		switch subO := o.Ops[i].GetValue().(type) {
 		case *GetOperation:
-			// TODO(arul): Looks like I forgot to add shared locks here.
 			dur := kvpb.BestEffort
 			if subO.ForUpdate {
 				b.GetForUpdate(subO.Key, dur)
+			} else if subO.ForShare {
+				b.GetForShare(subO.Key, dur)
 			} else {
 				b.Get(subO.Key)
 			}
@@ -456,10 +457,14 @@ func applyBatchOp(
 			dur := kvpb.BestEffort
 			if subO.Reverse && subO.ForUpdate {
 				b.ReverseScanForUpdate(subO.Key, subO.EndKey, dur)
+			} else if subO.Reverse && subO.ForShare {
+				b.ReverseScanForShare(subO.Key, subO.EndKey, dur)
 			} else if subO.Reverse {
 				b.ReverseScan(subO.Key, subO.EndKey)
 			} else if subO.ForUpdate {
 				b.ScanForUpdate(subO.Key, subO.EndKey, dur)
+			} else if subO.ForShare {
+				b.ScanForShare(subO.Key, subO.EndKey, dur)
 			} else {
 				b.Scan(subO.Key, subO.EndKey)
 			}
