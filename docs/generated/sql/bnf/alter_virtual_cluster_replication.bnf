@@ -1,0 +1,11 @@
+alter_virtual_cluster_replication_stmt ::=
+	'ALTER' 'VIRTUAL' 'CLUSTER' d_expr 'PAUSE' 'REPLICATION'
+	| 'ALTER' 'VIRTUAL' 'CLUSTER' '[' a_expr ']' 'PAUSE' 'REPLICATION'
+	| 'ALTER' 'VIRTUAL' 'CLUSTER' d_expr 'RESUME' 'REPLICATION'
+	| 'ALTER' 'VIRTUAL' 'CLUSTER' '[' a_expr ']' 'RESUME' 'REPLICATION'
+	| 'ALTER' 'VIRTUAL' 'CLUSTER' d_expr 'COMPLETE' 'REPLICATION' 'TO' 'SYSTEM' 'TIME' a_expr
+	| 'ALTER' 'VIRTUAL' 'CLUSTER' '[' a_expr ']' 'COMPLETE' 'REPLICATION' 'TO' 'SYSTEM' 'TIME' a_expr
+	| 'ALTER' 'VIRTUAL' 'CLUSTER' d_expr 'COMPLETE' 'REPLICATION' 'TO' 'LATEST'
+	| 'ALTER' 'VIRTUAL' 'CLUSTER' '[' a_expr ']' 'COMPLETE' 'REPLICATION' 'TO' 'LATEST'
+	| 'ALTER' 'VIRTUAL' 'CLUSTER' d_expr 'SET' 'REPLICATION' 'RETENTION' '=' d_expr ( ( ',' ( 'RETENTION' '=' d_expr ) ) )*
+	| 'ALTER' 'VIRTUAL' 'CLUSTER' '[' a_expr ']' 'SET' 'REPLICATION' 'RETENTION' '=' d_expr ( ( ',' ( 'RETENTION' '=' d_expr ) ) )*
