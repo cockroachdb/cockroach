@@ -72,15 +72,16 @@ const (
 )
 
 const (
-	defaultWindowSize = 65535
+	defaultWindowSize        = 65535                         // from gRPC
+	defaultInitialWindowSize = defaultWindowSize * 32        // 2MB
+	maximumWindowSize        = defaultInitialWindowSize * 32 // 64MB
 )
 
 func getWindowSize(name string, c ConnectionClass, defaultSize int) int32 {
-	const maxWindowSize = defaultWindowSize * 32
 	s := envutil.EnvOrDefaultInt(name, defaultSize)
-	if s > maxWindowSize {
-		log.Warningf(context.Background(), "%s value too large; trimmed to %d", name, maxWindowSize)
-		s = maxWindowSize
+	if s > maximumWindowSize {
+		log.Warningf(context.Background(), "%s value too large; trimmed to %d", name, maximumWindowSize)
+		s = maximumWindowSize
 	}
 	if s <= defaultWindowSize {
 		log.Warningf(context.Background(),
@@ -92,8 +93,15 @@ func getWindowSize(name string, c ConnectionClass, defaultSize int) int32 {
 var (
 	// for an RPC
 	initialWindowSize = getWindowSize(
-		"COCKROACH_RPC_INITIAL_WINDOW_SIZE", DefaultClass, defaultWindowSize*32)
-	initialConnWindowSize = initialWindowSize * 16 // for a connection
+		"COCKROACH_RPC_INITIAL_WINDOW_SIZE", DefaultClass, defaultInitialWindowSize)
+	// for a connection
+	initialConnWindowSize = func() int32 {
+		s := initialWindowSize * 16
+		if s > maximumWindowSize {
+			s = maximumWindowSize
+		}
+		return s
+	}()
 
 	// for RangeFeed RPC
 	rangefeedInitialWindowSize = getWindowSize(
