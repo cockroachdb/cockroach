@@ -244,12 +244,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	// across servers (e.g. misuse of TestServer API).
 	st.SV.SpecializeForSystemInterface()
 
-	// Load the global (build-time) setting defaults into the in-RAM
-	// cache, for use by the init code below until the call to
-	// initializeCachedSettings() during PreStart().
-	settingUpdater := st.MakeUpdater()
-	settingUpdater.ResetRemaining(ctx)
-
 	if cfg.AmbientCtx.Tracer == nil {
 		panic(errors.New("no tracer set in AmbientCtx"))
 	}
