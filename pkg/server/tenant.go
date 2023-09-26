@@ -904,6 +904,10 @@ func (s *SQLServerWrapper) serveConn(
 // This mirrors the implementation of (*Server).AcceptClients.
 // TODO(knz): Find a way to implement this method only once for both.
 func (s *SQLServerWrapper) AcceptClients(ctx context.Context) error {
+	if s.sqlServer.cfg.DisableSQLServer {
+		return errors.AssertionFailedf("programming error: attempt to set DisableSQLServer on a system with a tenant")
+	}
+
 	if !s.sqlServer.cfg.DisableSQLListener {
 		if err := startServeSQL(
 			s.AnnotateCtx(context.Background()),
@@ -936,6 +940,10 @@ func (s *SQLServerWrapper) AcceptClients(ctx context.Context) error {
 // AcceptInternalClients starts listening for incoming SQL connections on the
 // internal loopback interface.
 func (s *SQLServerWrapper) AcceptInternalClients(ctx context.Context) error {
+	if s.sqlServer.cfg.DisableSQLServer {
+		return errors.AssertionFailedf("programming error: attempt to set DisableSQLServer on a system with a tenant")
+	}
+
 	connManager := netutil.MakeTCPServer(ctx, s.stopper)
 
 	return s.stopper.RunAsyncTaskEx(ctx,
