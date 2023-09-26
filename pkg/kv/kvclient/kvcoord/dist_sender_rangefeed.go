@@ -88,10 +88,14 @@ func maxConcurrentCatchupScans(sv *settings.Values) int {
 	return int(l)
 }
 
+// ForEachRangeFn is used to execute `fn` over each range in a rangefeed.
+type ForEachRangeFn func(fn ActiveRangeFeedIterFn) error
+
 type rangeFeedConfig struct {
 	useMuxRangeFeed bool
 	overSystemTable bool
 	withDiff        bool
+	rangeObserver   func(ForEachRangeFn)
 
 	knobs struct {
 		// onRangefeedEvent invoked on each rangefeed event.
@@ -131,6 +135,14 @@ func WithSystemTablePriority() RangeFeedOption {
 func WithDiff() RangeFeedOption {
 	return optionFunc(func(c *rangeFeedConfig) {
 		c.withDiff = true
+	})
+}
+
+// WithRangeObserver is called when the rangefeed starts with a function that
+// can be used to iterate over all the ranges.
+func WithRangeObserver(observer func(ForEachRangeFn)) RangeFeedOption {
+	return optionFunc(func(c *rangeFeedConfig) {
+		c.rangeObserver = observer
 	})
 }
 
@@ -206,6 +218,9 @@ func (ds *DistSender) RangeFeedSpans(
 	rr := newRangeFeedRegistry(ctx, cfg.withDiff)
 	ds.activeRangeFeeds.Store(rr, nil)
 	defer ds.activeRangeFeeds.Delete(rr)
+	if cfg.rangeObserver != nil {
+		cfg.rangeObserver(rr.ForEachPartialRangefeed)
+	}
 
 	catchupSem := limit.MakeConcurrentRequestLimiter(
 		"distSenderCatchupLimit", maxConcurrentCatchupScans(&ds.st.SV))
@@ -284,34 +299,42 @@ type PartialRangeFeed struct {
 
 // ActiveRangeFeedIterFn is an iterator function which is passed PartialRangeFeed structure.
 // Iterator function may return an iterutil.StopIteration sentinel error to stop iteration
-// early; any other error is propagated.
+// early.
 type ActiveRangeFeedIterFn func(rfCtx RangeFeedContext, feed PartialRangeFeed) error
 
-// ForEachActiveRangeFeed invokes provided function for each active range feed.
-func (ds *DistSender) ForEachActiveRangeFeed(fn ActiveRangeFeedIterFn) (iterErr error) {
-	const continueIter = true
-	const stopIter = false
+const continueIter = true
+const stopIter = false
 
+// ForEachActiveRangeFeed invokes provided function for each active rangefeed.
+// iterutil.StopIteration can be returned by `fn` to stop iteration, and doing
+// so will not return this error.
+func (ds *DistSender) ForEachActiveRangeFeed(fn ActiveRangeFeedIterFn) (iterErr error) {
+	ds.activeRangeFeeds.Range(func(k, v interface{}) bool {
+		r := k.(*rangeFeedRegistry)
+		iterErr = r.ForEachPartialRangefeed(fn)
+		return iterErr == nil
+	})
+
+	return iterutil.Map(iterErr)
+}
+
+// ForEachPartialRangefeed invokes provided function for each partial rangefeed. Use manageIterationErrs
+// if the fn uses iterutil.StopIteration to stop iteration.
+func (r *rangeFeedRegistry) ForEachPartialRangefeed(fn ActiveRangeFeedIterFn) (iterErr error) {
 	partialRangeFeed := func(active *activeRangeFeed) PartialRangeFeed {
 		active.Lock()
 		defer active.Unlock()
 		return active.PartialRangeFeed
 	}
-
-	ds.activeRangeFeeds.Range(func(k, v interface{}) bool {
-		r := k.(*rangeFeedRegistry)
-		r.ranges.Range(func(k, v interface{}) bool {
-			active := k.(*activeRangeFeed)
-			if err := fn(r.RangeFeedContext, partialRangeFeed(active)); err != nil {
-				iterErr = err
-				return stopIter
-			}
-			return continueIter
-		})
-		return iterErr == nil
+	r.ranges.Range(func(k, v interface{}) bool {
+		active := k.(*activeRangeFeed)
+		if err := fn(r.RangeFeedContext, partialRangeFeed(active)); err != nil {
+			iterErr = err
+			return stopIter
+		}
+		return continueIter
 	})
-
-	return iterutil.Map(iterErr)
+	return iterErr
 }
 
 // activeRangeFeed is a thread safe PartialRangeFeed.
@@ -426,10 +449,10 @@ func newActiveRangeFeed(
 			StartAfter:  startAfter,
 			CreatedTime: timeutil.Now(),
 		},
-		release: func() {
-			rr.ranges.Delete(active)
-			c.Dec(1)
-		},
+	}
+	active.release = func() {
+		rr.ranges.Delete(active)
+		c.Dec(1)
 	}
 	rr.ranges.Store(active, nil)
 	c.Inc(1)

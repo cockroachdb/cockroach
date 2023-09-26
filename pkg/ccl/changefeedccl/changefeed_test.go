@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
@@ -1356,6 +1357,123 @@ func TestChangefeedInitialScan(t *testing.T) {
 	cdcTest(t, testFn)
 }
 
+// TestChangefeedLaggingRangesMetrics tests the behavior of the
+// changefeed.lagging_ranges metric.
+func TestChangefeedLaggingRangesMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		// Ensure a fast closed timestamp interval so ranges can catch up fast.
+		kvserver.RangeFeedRefreshInterval.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 20*time.Millisecond)
+		closedts.SideTransportCloseInterval.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 20*time.Millisecond)
+		closedts.TargetDuration.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 20*time.Millisecond)
+
+		changefeedbase.LaggingRangesPollingInterval.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 25*time.Millisecond)
+		changefeedbase.LaggingRangesThreshold.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 250*time.Millisecond)
+
+		skipMu := syncutil.Mutex{}
+		skippedRanges := map[string]struct{}{}
+		numRanges := 10
+		numRangesToSkip := int64(4)
+		var stopSkip atomic.Bool
+		// `shouldSkip` continuously skips checkpoints for the first `numRangesToSkip` ranges it sees.
+		// skipping is disabled by setting `stopSkip` to true.
+		shouldSkip := func(event *kvpb.RangeFeedEvent) bool {
+			if stopSkip.Load() {
+				return false
+			}
+			switch event.GetValue().(type) {
+			case *kvpb.RangeFeedCheckpoint:
+				sp := event.Checkpoint.Span
+				skipMu.Lock()
+				defer skipMu.Unlock()
+				if _, ok := skippedRanges[sp.String()]; ok || int64(len(skippedRanges)) < numRangesToSkip {
+					skippedRanges[sp.String()] = struct{}{}
+					return true
+				}
+			}
+			return false
+		}
+
+		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+
+		knobs.FeedKnobs.RangefeedOptions = append(knobs.FeedKnobs.RangefeedOptions, kvcoord.TestingWithOnRangefeedEvent(
+			func(ctx context.Context, s roachpb.Span, event *kvpb.RangeFeedEvent) (skip bool, _ error) {
+				return shouldSkip(event), nil
+			}),
+		)
+
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		sli1, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics("t1")
+		require.NoError(t, err)
+		laggingRangesTier1 := sli1.LaggingRanges
+		sli2, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics("t2")
+		require.NoError(t, err)
+		laggingRangesTier2 := sli2.LaggingRanges
+
+		assertLaggingRanges := func(tier string, expected int64) {
+			testutils.SucceedsWithin(t, func() error {
+				var laggingRangesObserved int64
+				if tier == "t1" {
+					laggingRangesObserved = laggingRangesTier1.Value()
+				} else {
+					laggingRangesObserved = laggingRangesTier2.Value()
+				}
+				if laggingRangesObserved != expected {
+					return fmt.Errorf("expected %d lagging ranges, but found %d", expected, laggingRangesObserved)
+				}
+				return nil
+			}, 10*time.Second)
+		}
+
+		sqlDB.Exec(t, fmt.Sprintf(`
+		  CREATE TABLE foo (key INT PRIMARY KEY);
+		  INSERT INTO foo (key) SELECT * FROM generate_series(1, %d);
+		  ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(1, %d, 1));
+  		`, numRanges, numRanges-1))
+		sqlDB.CheckQueryResults(t, `SELECT count(*) FROM [SHOW RANGES FROM TABLE foo]`,
+			[][]string{{fmt.Sprint(numRanges)}},
+		)
+
+		feed1Tier1 := feed(t, f, `CREATE CHANGEFEED FOR foo WITH initial_scan='no', metrics_label="t1"`)
+		feed2Tier1 := feed(t, f, `CREATE CHANGEFEED FOR foo WITH initial_scan='no', metrics_label="t1"`)
+		feed3Tier2 := feed(t, f, `CREATE CHANGEFEED FOR foo WITH initial_scan='no', metrics_label="t2"`)
+
+		assertLaggingRanges("t1", numRangesToSkip*2)
+		assertLaggingRanges("t2", numRangesToSkip)
+
+		stopSkip.Store(true)
+		assertLaggingRanges("t1", 0)
+		assertLaggingRanges("t2", 0)
+
+		stopSkip.Store(false)
+		assertLaggingRanges("t1", numRangesToSkip*2)
+		assertLaggingRanges("t2", numRangesToSkip)
+
+		require.NoError(t, feed1Tier1.Close())
+		assertLaggingRanges("t1", numRangesToSkip)
+		assertLaggingRanges("t2", numRangesToSkip)
+
+		require.NoError(t, feed2Tier1.Close())
+		assertLaggingRanges("t1", 0)
+		assertLaggingRanges("t2", numRangesToSkip)
+
+		require.NoError(t, feed3Tier2.Close())
+		assertLaggingRanges("t1", 0)
+		assertLaggingRanges("t2", 0)
+	}
+	// Can't run on tenants due to lack of SPLIT AT support (#54254)
+	cdcTest(t, testFn, feedTestNoTenants, feedTestEnterpriseSinks)
+}
+
 func TestChangefeedBackfillObservability(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1618,6 +1736,8 @@ func TestNoBackfillAfterNonTargetColumnDrop(t *testing.T) {
 
 func TestChangefeedColumnDropsWithFamilyAndNonFamilyTargets(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
