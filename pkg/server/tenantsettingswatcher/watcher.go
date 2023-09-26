@@ -40,13 +40,13 @@ import (
 //	if err := w.Start(ctx); err != nil { ... }
 //
 //	// Get overrides and keep them up to date.
-//	all, allCh := w.AllTenantOverrides()
-//	tenant, tenantCh := w.TenantOverrides(tenantID)
+//	all, allCh := w.GetAllTenantOverrides()
+//	tenant, tenantCh := w.GetTenantOverrides(ctx,tenantID)
 //	select {
 //	case <-allCh:
-//	  all, allCh = w.AllTenantOverrides()
+//	  all, allCh = w.GetAllTenantOverrides()
 //	case <-tenantCh:
-//	  tenant, tenantCh = w.TenantOverrides(tenantID)
+//	  tenant, tenantCh = w.GetTenantOverrides(ctx,tenantID)
 //	case <-ctx.Done():
 //	  ...
 //	}
@@ -152,7 +152,7 @@ func (w *Watcher) startRangeFeed(
 			allOverrides[tenantID] = append(allOverrides[tenantID], setting)
 		} else {
 			// We are processing incremental changes.
-			w.store.SetTenantOverride(tenantID, setting)
+			w.store.setTenantOverride(ctx, tenantID, setting)
 		}
 		return nil
 	}
@@ -162,7 +162,7 @@ func (w *Watcher) startRangeFeed(
 			// The CompleteUpdate indicates that the table scan is complete.
 			// Henceforth, all calls to translateEvent will be incremental changes,
 			// until we hit an error and have to restart the rangefeed.
-			w.store.SetAll(allOverrides)
+			w.store.setAll(ctx, allOverrides)
 			allOverrides = nil
 
 			if !initialScan.done {
@@ -249,9 +249,9 @@ func (w *Watcher) TestingRestart() {
 //
 // The caller must not modify the returned overrides slice.
 func (w *Watcher) GetTenantOverrides(
-	tenantID roachpb.TenantID,
+	ctx context.Context, tenantID roachpb.TenantID,
 ) (overrides []kvpb.TenantSetting, changeCh <-chan struct{}) {
-	o := w.store.GetTenantOverrides(tenantID)
+	o := w.store.getTenantOverrides(ctx, tenantID)
 	return o.overrides, o.changeCh
 }
 
@@ -260,9 +260,8 @@ func (w *Watcher) GetTenantOverrides(
 // have an override for the same setting.
 //
 // The caller must not modify the returned overrides slice.
-func (w *Watcher) GetAllTenantOverrides() (
-	overrides []kvpb.TenantSetting,
-	changeCh <-chan struct{},
-) {
-	return w.GetTenantOverrides(allTenantOverridesID)
+func (w *Watcher) GetAllTenantOverrides(
+	ctx context.Context,
+) (overrides []kvpb.TenantSetting, changeCh <-chan struct{}) {
+	return w.GetTenantOverrides(ctx, allTenantOverridesID)
 }

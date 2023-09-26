@@ -11,12 +11,17 @@
 package tenantsettingswatcher
 
 import (
+	"context"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // overridesStore is the data structure that maintains all the tenant overrides
@@ -46,7 +51,7 @@ type overridesStore struct {
 // tenantOverrides stores the current overrides for a tenant (or the current
 // all-tenant overrides). It is an immutable data structure.
 type tenantOverrides struct {
-	// overrides, ordered by Name.
+	// overrides, ordered by InternalKey.
 	overrides []kvpb.TenantSetting
 
 	// changeCh is a channel that is closed when the tenant overrides change (in
@@ -54,7 +59,18 @@ type tenantOverrides struct {
 	changeCh chan struct{}
 }
 
-func newTenantOverrides(overrides []kvpb.TenantSetting) *tenantOverrides {
+func newTenantOverrides(
+	ctx context.Context, tenID roachpb.TenantID, overrides []kvpb.TenantSetting,
+) *tenantOverrides {
+	if log.V(1) {
+		var buf redact.StringBuilder
+		buf.Printf("loaded overrides for tenant %d (%s)\n", tenID.InternalValue, util.GetSmallTrace(2))
+		for _, v := range overrides {
+			buf.Printf("%v = %+v", v.InternalKey, v.Value)
+			buf.SafeRune('\n')
+		}
+		log.VEventf(ctx, 1, "%v", buf)
+	}
 	return &tenantOverrides{
 		overrides: overrides,
 		changeCh:  make(chan struct{}),
@@ -65,7 +81,7 @@ func (s *overridesStore) Init() {
 	s.mu.tenants = make(map[roachpb.TenantID]*tenantOverrides)
 }
 
-// SetAll initializes the overrides for all tenants. Any existing overrides are
+// setAll initializes the overrides for all tenants. Any existing overrides are
 // replaced.
 //
 // The store takes ownership of the overrides slices in the map (the caller can
@@ -73,7 +89,9 @@ func (s *overridesStore) Init() {
 //
 // This method is called once we complete a full initial scan of the
 // tenant_setting table.
-func (s *overridesStore) SetAll(allOverrides map[roachpb.TenantID][]kvpb.TenantSetting) {
+func (s *overridesStore) setAll(
+	ctx context.Context, allOverrides map[roachpb.TenantID][]kvpb.TenantSetting,
+) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -91,18 +109,20 @@ func (s *overridesStore) SetAll(allOverrides map[roachpb.TenantID][]kvpb.TenantS
 		// Sanity check.
 		for i := 1; i < len(overrides); i++ {
 			if overrides[i].InternalKey == overrides[i-1].InternalKey {
-				panic("duplicate setting")
+				panic(errors.AssertionFailedf("duplicate setting: %s", overrides[i].InternalKey))
 			}
 		}
-		s.mu.tenants[tenantID] = newTenantOverrides(overrides)
+		s.mu.tenants[tenantID] = newTenantOverrides(ctx, tenantID, overrides)
 	}
 }
 
-// GetTenantOverrides retrieves the overrides for a given tenant.
+// getTenantOverrides retrieves the overrides for a given tenant.
 //
 // The caller can listen for closing of changeCh, which is guaranteed to happen
 // if the tenant's overrides change.
-func (s *overridesStore) GetTenantOverrides(tenantID roachpb.TenantID) *tenantOverrides {
+func (s *overridesStore) getTenantOverrides(
+	ctx context.Context, tenantID roachpb.TenantID,
+) *tenantOverrides {
 	s.mu.RLock()
 	res, ok := s.mu.tenants[tenantID]
 	s.mu.RUnlock()
@@ -120,15 +140,17 @@ func (s *overridesStore) GetTenantOverrides(tenantID roachpb.TenantID) *tenantOv
 	if res, ok = s.mu.tenants[tenantID]; ok {
 		return res
 	}
-	res = newTenantOverrides(nil /* overrides */)
+	res = newTenantOverrides(ctx, tenantID, nil /* overrides */)
 	s.mu.tenants[tenantID] = res
 	return res
 }
 
-// SetTenantOverride changes an override for the given tenant. If the setting
+// setTenantOverride changes an override for the given tenant. If the setting
 // has an empty value, the existing override is removed; otherwise a new
 // override is added.
-func (s *overridesStore) SetTenantOverride(tenantID roachpb.TenantID, setting kvpb.TenantSetting) {
+func (s *overridesStore) setTenantOverride(
+	ctx context.Context, tenantID roachpb.TenantID, setting kvpb.TenantSetting,
+) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var before []kvpb.TenantSetting
@@ -152,5 +174,5 @@ func (s *overridesStore) SetTenantOverride(tenantID roachpb.TenantID, setting kv
 	}
 	// 3. Append all settings after setting.InternalKey.
 	after = append(after, before...)
-	s.mu.tenants[tenantID] = newTenantOverrides(after)
+	s.mu.tenants[tenantID] = newTenantOverrides(ctx, tenantID, after)
 }

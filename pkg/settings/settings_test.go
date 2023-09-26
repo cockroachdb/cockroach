@@ -800,13 +800,23 @@ func TestOverride(t *testing.T) {
 	sv := &settings.Values{}
 	sv.Init(ctx, settings.TestOpaque)
 
+	// Check the origin before an override.
+	require.Equal(t, settings.OriginDefault, overrideBool.ValueOrigin(ctx, sv))
+
 	// Test override for bool setting.
 	require.Equal(t, true, overrideBool.Get(sv))
 	overrideBool.Override(ctx, sv, false)
 	require.Equal(t, false, overrideBool.Get(sv))
+
+	// Override changes the origin.
+	require.Equal(t, settings.OriginExplicitlySet, overrideBool.ValueOrigin(ctx, sv))
+
 	u := settings.NewUpdater(sv)
 	u.ResetRemaining(ctx)
 	require.Equal(t, false, overrideBool.Get(sv))
+
+	// ResetRemaining does not change the origin for overridden settings.
+	require.Equal(t, settings.OriginExplicitlySet, overrideBool.ValueOrigin(ctx, sv))
 
 	// Test override for int setting.
 	require.Equal(t, int64(0), overrideInt.Get(sv))

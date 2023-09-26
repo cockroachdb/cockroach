@@ -11,6 +11,7 @@
 package tenantsettingswatcher
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -25,6 +26,7 @@ import (
 func TestOverridesStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	var s overridesStore
 	s.Init()
 	t1 := roachpb.MustMakeTenantID(1)
@@ -55,36 +57,36 @@ func TestOverridesStore(t *testing.T) {
 			t.Fatalf("channel did not close")
 		}
 	}
-	o1 := s.GetTenantOverrides(t1)
+	o1 := s.getTenantOverrides(ctx, t1)
 	expect(o1, "")
-	s.SetAll(map[roachpb.TenantID][]kvpb.TenantSetting{
+	s.setAll(ctx, map[roachpb.TenantID][]kvpb.TenantSetting{
 		t1: {st("a", "aa"), st("b", "bb"), st("d", "dd")},
 		t2: {st("x", "xx")},
 	})
 	expectChange(o1)
-	o1 = s.GetTenantOverrides(t1)
+	o1 = s.getTenantOverrides(ctx, t1)
 	expect(o1, "a=aa b=bb d=dd")
-	o2 := s.GetTenantOverrides(t2)
+	o2 := s.getTenantOverrides(ctx, t2)
 	expect(o2, "x=xx")
 
-	s.SetTenantOverride(t1, st("b", "changed"))
+	s.setTenantOverride(ctx, t1, st("b", "changed"))
 	expectChange(o1)
-	o1 = s.GetTenantOverrides(t1)
+	o1 = s.getTenantOverrides(ctx, t1)
 	expect(o1, "a=aa b=changed d=dd")
 
-	s.SetTenantOverride(t1, st("b", ""))
+	s.setTenantOverride(ctx, t1, st("b", ""))
 	expectChange(o1)
-	o1 = s.GetTenantOverrides(t1)
+	o1 = s.getTenantOverrides(ctx, t1)
 	expect(o1, "a=aa d=dd")
 
-	s.SetTenantOverride(t1, st("c", "cc"))
+	s.setTenantOverride(ctx, t1, st("c", "cc"))
 	expectChange(o1)
-	o1 = s.GetTenantOverrides(t1)
+	o1 = s.getTenantOverrides(ctx, t1)
 	expect(o1, "a=aa c=cc d=dd")
 
 	// Set an override for a tenant that has no existing data.
 	t3 := roachpb.MustMakeTenantID(3)
-	s.SetTenantOverride(t3, st("x", "xx"))
-	o3 := s.GetTenantOverrides(t3)
+	s.setTenantOverride(ctx, t3, st("x", "xx"))
+	o3 := s.getTenantOverrides(ctx, t3)
 	expect(o3, "x=xx")
 }
