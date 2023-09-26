@@ -69,6 +69,15 @@ func PerformCast(
 	return performCast(ctx, evalCtx, d, t, true /* truncateWidth */)
 }
 
+// PerformCastNoTruncate performs an explicit cast, but returns an error if the
+// value doesn't fit in the required type. It is used for coercing types in a
+// PLpgSQL INTO clause.
+func PerformCastNoTruncate(
+	ctx context.Context, evalCtx *Context, d tree.Datum, t *types.T,
+) (tree.Datum, error) {
+	return performCast(ctx, evalCtx, d, t, false /* truncateWidth */)
+}
+
 // PerformAssignmentCast performs an assignment cast from the provided Datum to
 // the specified type. The original datum is returned if its type is identical
 // to the specified type.

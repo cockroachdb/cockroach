@@ -2465,6 +2465,7 @@ var builtinOidsArray = []string{
 	2494: `make_date(year: int, month: int, day: int) -> date`,
 	2495: `crdb_internal.plpgsql_gen_cursor_name(name: string) -> string`,
 	2496: `crdb_internal.plpgsql_close(name: string) -> int`,
+	2497: `crdb_internal.plpgsql_fetch(name: string, direction: int, count: int, resultTypes: anyelement) -> anyelement`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
