@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
@@ -157,6 +158,227 @@ func (h adjustment) String() string {
 		printTrimmedTokens(h.post.elastic),
 		comment,
 	)
+}
+
+func TestBucket(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	clock := timeutil.NewManualTime(timeutil.Unix(10, 0))
+	limit := tokensPerWorkClass{
+		regular: 10,
+		elastic: 5,
+	}
+	b := newBucket(limit, clock.Now())
+	stopWaitCh := make(chan struct{}, 1)
+	// No waiting for regular work.
+	state, waited := b.wait(ctx, admissionpb.RegularWorkClass, stopWaitCh)
+	require.Equal(t, waitSuccess, state)
+	require.False(t, waited)
+	// No waiting for elastic work.
+	state, waited = b.wait(ctx, admissionpb.ElasticWorkClass, stopWaitCh)
+	require.Equal(t, waitSuccess, state)
+	require.False(t, waited)
+
+	clock.Advance(10 * time.Second)
+	// regular: 4 tokens, elastic -1 tokens.
+	adj, unaccounted := b.adjust(
+		ctx, admissionpb.RegularWorkClass, -6, limit, false, clock.Now())
+	require.Equal(t, tokensPerWorkClass{
+		regular: -6,
+		elastic: -6,
+	}, adj)
+	require.Equal(t, tokensPerWorkClass{}, unaccounted)
+	// stopWaitCh has entry.
+	stopWaitCh <- struct{}{}
+	// No waiting for regular work.
+	state, waited = b.wait(ctx, admissionpb.RegularWorkClass, stopWaitCh)
+	require.Equal(t, waitSuccess, state)
+	require.False(t, waited)
+	// Elastic work returns since stopWaitCh has entry.
+	state, waited = b.wait(ctx, admissionpb.ElasticWorkClass, stopWaitCh)
+	require.Equal(t, stopWaitSignaled, state)
+	require.True(t, waited)
+
+	canceledCtx, cancelFunc := context.WithCancel(ctx)
+	cancelFunc()
+	// No waiting for regular work.
+	state, waited = b.wait(canceledCtx, admissionpb.RegularWorkClass, stopWaitCh)
+	require.Equal(t, waitSuccess, state)
+	require.False(t, waited)
+	// Elastic work returns since context is canceled.
+	state, waited = b.wait(canceledCtx, admissionpb.ElasticWorkClass, stopWaitCh)
+	require.Equal(t, contextCanceled, state)
+	require.True(t, waited)
+
+	clock.Advance(10 * time.Second)
+	// regular: 0 tokens, elastic -5 tokens.
+	adj, unaccounted = b.adjust(
+		ctx, admissionpb.RegularWorkClass, -4, limit, false, clock.Now())
+	require.Equal(t, tokensPerWorkClass{
+		regular: -4,
+		elastic: -4,
+	}, adj)
+	require.Equal(t, tokensPerWorkClass{}, unaccounted)
+	require.Equal(t, kvflowcontrol.Tokens(0), b.tokens(admissionpb.RegularWorkClass))
+	require.Equal(t, kvflowcontrol.Tokens(-5), b.tokens(admissionpb.ElasticWorkClass))
+
+	// Regular work waits. Have two waiting work requests to test the signal
+	// chaining.
+	workAdmitted := make(chan struct{}, 2)
+	go func() {
+		state, waited := b.wait(ctx, admissionpb.RegularWorkClass, stopWaitCh)
+		require.Equal(t, waitSuccess, state)
+		require.True(t, waited)
+		workAdmitted <- struct{}{}
+	}()
+	go func() {
+		state, waited := b.wait(ctx, admissionpb.RegularWorkClass, stopWaitCh)
+		require.Equal(t, waitSuccess, state)
+		require.True(t, waited)
+		workAdmitted <- struct{}{}
+	}()
+	// Sleep until they have started waiting.
+	time.Sleep(time.Second)
+	select {
+	case <-workAdmitted:
+		log.Fatalf(ctx, "should not be admitted")
+	default:
+	}
+	clock.Advance(10 * time.Second)
+	adj, unaccounted = b.adjust(
+		ctx, admissionpb.RegularWorkClass, +10, limit, false, clock.Now())
+	require.Equal(t, tokensPerWorkClass{
+		regular: 10,
+		elastic: 10,
+	}, adj)
+	require.Equal(t, tokensPerWorkClass{}, unaccounted)
+	// Sleep until they have stopped waiting.
+	time.Sleep(time.Second)
+	select {
+	case <-workAdmitted:
+	default:
+		log.Fatalf(ctx, "should be admitted")
+	}
+	select {
+	case <-workAdmitted:
+	default:
+		log.Fatalf(ctx, "should be admitted")
+	}
+
+	// Deduct 2 from elastic tokens
+	adj, unaccounted = b.adjust(
+		ctx, admissionpb.ElasticWorkClass, -2, limit, false, clock.Now())
+	require.Equal(t, tokensPerWorkClass{
+		regular: 0,
+		elastic: -2,
+	}, adj)
+	require.Equal(t, tokensPerWorkClass{}, unaccounted)
+
+	regularStats, elasticStats := b.getAndResetStats(clock.Now())
+	require.Equal(t, deltaStats{
+		noTokenDuration: 10 * time.Second,
+		tokensDeducted:  10,
+	}, regularStats)
+	require.Equal(t, deltaStats{
+		noTokenDuration: 20 * time.Second,
+		tokensDeducted:  12,
+	}, elasticStats)
+}
+
+// TestBucketSignalingBug triggers a bug in the code prior to
+// https://github.com/cockroachdb/cockroach/pull/111088. The bug was due to
+// using a shared `signalCh chan struct{}` inside the bucket struct for both
+// the work classes. This could result in a situation where an elastic request
+// consumed the entry in the channel that was added when the regular tokens
+// became greater than zero. This would prevent a waiting regular request from
+// getting unblocked.
+func TestBucketSignalingBug(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	regularTokensPerStream.Override(ctx, &st.SV, 10)
+	elasticTokensPerStream.Override(ctx, &st.SV, 5)
+	kvflowcontrol.Mode.Override(ctx, &st.SV, int64(kvflowcontrol.ApplyToAll))
+	controller := New(
+		metric.NewRegistry(),
+		st,
+		hlc.NewClockForTesting(nil),
+	)
+	stream := kvflowcontrol.Stream{
+		TenantID: roachpb.MustMakeTenantID(1),
+		StoreID:  1,
+	}
+	controller.DeductTokens(ctx, admissionpb.NormalPri, 10, stream)
+	controller.DeductTokens(ctx, admissionpb.BulkNormalPri, 10, stream)
+	streamState := controller.InspectStream(ctx, stream)
+	require.Equal(t, int64(0), streamState.AvailableRegularTokens)
+	require.Equal(t, int64(-15), streamState.AvailableElasticTokens)
+
+	connectedStream := &mockConnectedStream{
+		stream: stream,
+	}
+
+	// Elastic work waits first.
+	lowPriAdmitted := make(chan struct{})
+	go func() {
+		admitted, err := controller.Admit(ctx, admissionpb.BulkNormalPri, time.Time{}, connectedStream)
+		require.Equal(t, true, admitted)
+		require.NoError(t, err)
+		lowPriAdmitted <- struct{}{}
+	}()
+	// Sleep until it has started waiting.
+	time.Sleep(time.Second)
+	select {
+	case <-lowPriAdmitted:
+		log.Fatalf(ctx, "low-pri should not be admitted")
+	default:
+	}
+	// Regular work waits second.
+	normalPriAdmitted := make(chan struct{})
+	go func() {
+		admitted, err := controller.Admit(ctx, admissionpb.NormalPri, time.Time{}, connectedStream)
+		require.Equal(t, true, admitted)
+		require.NoError(t, err)
+		normalPriAdmitted <- struct{}{}
+	}()
+	// Sleep until it has started waiting.
+	time.Sleep(time.Second)
+	select {
+	case <-normalPriAdmitted:
+		log.Fatalf(ctx, "normal-pri should not be admitted")
+	default:
+	}
+
+	controller.ReturnTokens(ctx, admissionpb.NormalPri, 1, stream)
+	streamState = controller.InspectStream(ctx, stream)
+	require.Equal(t, int64(1), streamState.AvailableRegularTokens)
+	require.Equal(t, int64(-14), streamState.AvailableElasticTokens)
+
+	// Sleep to give enough time for regular work to get admitted.
+	time.Sleep(2 * time.Second)
+
+	select {
+	case <-normalPriAdmitted:
+	default:
+		// Bug: fails here since the entry in bucket.signalCh has been taken by
+		// the elastic work.
+		log.Fatalf(ctx, "normal-pri should be admitted")
+	}
+	// Return enough tokens that the elastic work gets admitted.
+	controller.ReturnTokens(ctx, admissionpb.NormalPri, 9, stream)
+	streamState = controller.InspectStream(ctx, stream)
+	require.Equal(t, int64(10), streamState.AvailableRegularTokens)
+	require.Equal(t, int64(-5), streamState.AvailableElasticTokens)
+
+	controller.ReturnTokens(ctx, admissionpb.BulkNormalPri, 7, stream)
+	streamState = controller.InspectStream(ctx, stream)
+	require.Equal(t, int64(10), streamState.AvailableRegularTokens)
+	require.Equal(t, int64(2), streamState.AvailableElasticTokens)
+	<-lowPriAdmitted
 }
 
 // TestInspectController tests the Inspect() API.

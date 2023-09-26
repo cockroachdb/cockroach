@@ -68,7 +68,7 @@ func (p *planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (p
 		name:    n.String(),
 		columns: showZoneConfigColumns,
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			v := p.newContainerValuesNode(showZoneConfigColumns, 0)
+			v := p.newContainerValuesNode(showZoneConfigColumns, 1)
 
 			// This signifies SHOW ALL.
 			// However, SHOW ALL should be handled by the delegate.

@@ -32,8 +32,6 @@ go_test(
     deps = [
         ":bulk",
         "//pkg/ccl/backupccl/backuppb",
-        "//pkg/kv/bulk/bulkpb",
-        "//pkg/roachpb",
         "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
         "@com_github_gogo_protobuf//proto",

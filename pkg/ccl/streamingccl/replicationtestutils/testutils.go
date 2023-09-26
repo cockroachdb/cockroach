@@ -12,6 +12,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"sort"
 	"testing"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -72,6 +74,8 @@ type TenantStreamingClustersArgs struct {
 
 	MultitenantSingleClusterNumNodes    int
 	MultiTenantSingleClusterTestRegions []string
+
+	NoMetamorphicExternalConnection bool
 }
 
 var DefaultTenantStreamingClustersArgs = TenantStreamingClustersArgs{
@@ -112,6 +116,8 @@ type TenantStreamingClusters struct {
 	DestSysSQL     *sqlutils.SQLRunner
 	DestTenantConn *gosql.DB
 	DestTenantSQL  *sqlutils.SQLRunner
+
+	Rng *rand.Rand
 }
 
 func (c *TenantStreamingClusters) setupSrcTenant() {
@@ -242,16 +248,29 @@ func (c *TenantStreamingClusters) Cutover(
 
 // StartStreamReplication producer job ID and ingestion job ID.
 func (c *TenantStreamingClusters) StartStreamReplication(ctx context.Context) (int, int) {
-	c.DestSysSQL.Exec(c.T, c.BuildCreateTenantQuery())
+
+	// 50% of time, start replication stream via an external connection.
+	var externalConnection string
+	if c.Rng.Intn(2) == 0 && !c.Args.NoMetamorphicExternalConnection {
+		externalConnection = "replication-source-addr"
+		c.DestSysSQL.Exec(c.T, fmt.Sprintf(`CREATE EXTERNAL CONNECTION "%s" AS "%s"`,
+			externalConnection, c.SrcURL.String()))
+	}
+
+	c.DestSysSQL.Exec(c.T, c.BuildCreateTenantQuery(externalConnection))
 	streamProducerJobID, ingestionJobID := GetStreamJobIds(c.T, ctx, c.DestSysSQL, c.Args.DestTenantName)
 	return streamProducerJobID, ingestionJobID
 }
 
-func (c *TenantStreamingClusters) BuildCreateTenantQuery() string {
+func (c *TenantStreamingClusters) BuildCreateTenantQuery(externalConnection string) string {
+	sourceURI := c.SrcURL.String()
+	if externalConnection != "" {
+		sourceURI = fmt.Sprintf("external://%s", externalConnection)
+	}
 	streamReplStmt := fmt.Sprintf("CREATE TENANT %s FROM REPLICATION OF %s ON '%s'",
 		c.Args.DestTenantName,
 		c.Args.SrcTenantName,
-		c.SrcURL.String())
+		sourceURI)
 	if c.Args.RetentionTTLSeconds > 0 {
 		streamReplStmt = fmt.Sprintf("%s WITH RETENTION = '%ds'", streamReplStmt, c.Args.RetentionTTLSeconds)
 	}
@@ -328,6 +347,8 @@ func CreateMultiTenantStreamingCluster(
 	cluster, url, cleanup := startC2CTestCluster(ctx, t, serverArgs,
 		args.MultitenantSingleClusterNumNodes, args.MultiTenantSingleClusterTestRegions)
 
+	rng, _ := randutil.NewPseudoRand()
+
 	destNodeIdx := args.MultitenantSingleClusterNumNodes - 1
 	tsc := &TenantStreamingClusters{
 		T:             t,
@@ -340,6 +361,7 @@ func CreateMultiTenantStreamingCluster(
 		DestCluster:   cluster,
 		DestSysSQL:    sqlutils.MakeSQLRunner(cluster.ServerConn(destNodeIdx)),
 		DestSysServer: cluster.Server(destNodeIdx),
+		Rng:           rng,
 	}
 	tsc.setupSrcTenant()
 	tsc.init()
@@ -374,6 +396,7 @@ func CreateTenantStreamingClusters(
 	})
 
 	require.NoError(t, g.Wait())
+	rng, _ := randutil.NewPseudoRand()
 
 	tsc := &TenantStreamingClusters{
 		T:             t,
@@ -386,6 +409,7 @@ func CreateTenantStreamingClusters(
 		DestCluster:   destCluster,
 		DestSysSQL:    sqlutils.MakeSQLRunner(destCluster.ServerConn(0)),
 		DestSysServer: destCluster.Server(0),
+		Rng:           rng,
 	}
 	tsc.setupSrcTenant()
 	tsc.init()

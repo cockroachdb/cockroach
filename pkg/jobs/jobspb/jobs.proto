@@ -326,7 +326,12 @@ message BackupDetails {
   // tenants.
   bool include_all_secondary_tenants = 25;
 
-  // NEXT ID: 26;
+  // UpdatesClusterMonitoring indicates whether the backup job should update
+  // cluster-wide metrics, such as the last successful backup time, or the last
+  // time of a backup failure due to a KMS error.
+  bool updates_cluster_monitoring_metrics = 26;
+
+  // NEXT ID: 27;
 }
 
 message BackupProgress {

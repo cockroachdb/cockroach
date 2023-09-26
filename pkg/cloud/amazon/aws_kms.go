@@ -192,7 +192,7 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 
 	sess, err := session.NewSessionWithOptions(opts)
 	if err != nil {
-		return nil, errors.Wrap(err, "new aws session")
+		return nil, cloud.KMSInaccessible(errors.Wrap(err, "new aws session"))
 	}
 
 	if kmsURIParams.roleProvider != (roleProvider{}) {
@@ -209,7 +209,7 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 
 			sess, err = session.NewSessionWithOptions(opts)
 			if err != nil {
-				return nil, errors.Wrap(err, "session with intermediate credentials")
+				return nil, cloud.KMSInaccessible(errors.Wrap(err, "session with intermediate credentials"))
 			}
 		}
 
@@ -217,7 +217,7 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 		opts.Config.Credentials = creds
 		sess, err = session.NewSessionWithOptions(opts)
 		if err != nil {
-			return nil, errors.Wrap(err, "session with assume role credentials")
+			return nil, cloud.KMSInaccessible(errors.Wrap(err, "session with assume role credentials"))
 		}
 	}
 
@@ -252,8 +252,8 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 }
 
 // MasterKeyID implements the KMS interface.
-func (k *awsKMS) MasterKeyID() (string, error) {
-	return k.customerMasterKeyID, nil
+func (k *awsKMS) MasterKeyID() string {
+	return k.customerMasterKeyID
 }
 
 // Encrypt implements the KMS interface.
@@ -265,7 +265,7 @@ func (k *awsKMS) Encrypt(ctx context.Context, data []byte) ([]byte, error) {
 
 	encryptOutput, err := k.kms.Encrypt(encryptInput)
 	if err != nil {
-		return nil, err
+		return nil, cloud.KMSInaccessible(err)
 	}
 
 	return encryptOutput.CiphertextBlob, nil
@@ -280,7 +280,7 @@ func (k *awsKMS) Decrypt(ctx context.Context, data []byte) ([]byte, error) {
 
 	decryptOutput, err := k.kms.Decrypt(decryptInput)
 	if err != nil {
-		return nil, err
+		return nil, cloud.KMSInaccessible(err)
 	}
 
 	return decryptOutput.Plaintext, nil

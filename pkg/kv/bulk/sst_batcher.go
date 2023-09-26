@@ -810,6 +810,7 @@ func (b *SSTBatcher) addSSTable(
 				if b.settings != nil && int64(len(item.sstBytes)) < tooSmallSSTSize.Get(&b.settings.SV) {
 					log.VEventf(ctx, 3, "ingest data is too small (%d keys/%d bytes) for SSTable, adding via regular batch", item.stats.KeyCount, len(item.sstBytes))
 					ingestAsWriteBatch = true
+					ingestionPerformanceStats.AsWrites++
 				}
 
 				req := &kvpb.AddSSTableRequest{

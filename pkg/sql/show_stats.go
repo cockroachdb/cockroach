@@ -258,7 +258,11 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				}
 			}
 
-			v := p.newContainerValuesNode(columns, 0)
+			rowContainerCap := len(rows)
+			if n.UsingJSON {
+				rowContainerCap = 1
+			}
+			v := p.newContainerValuesNode(columns, rowContainerCap)
 			if n.UsingJSON {
 				result := make([]stats.JSONStatistic, 0, len(rows))
 				for _, r := range rows {

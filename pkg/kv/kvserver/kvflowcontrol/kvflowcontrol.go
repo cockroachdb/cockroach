@@ -115,7 +115,10 @@ type Controller interface {
 	// the given priority, create-time, and over the given stream. This blocks
 	// until there are flow tokens available or the stream disconnects, subject to
 	// context cancellation. This returns true if the request was admitted through
-	// flow control. Ignore the first return type if err != nil
+	// flow control. Ignore the first return type if err != nil. admitted ==
+	// false && err == nil is a valid return, when something (e.g.
+	// configuration) caused the callee to not care whether flow tokens were
+	// available.
 	Admit(context.Context, admissionpb.WorkPriority, time.Time, ConnectedStream) (admitted bool, _ error)
 	// DeductTokens deducts (without blocking) flow tokens for replicating work
 	// with given priority over the given stream. Requests are expected to
@@ -157,6 +160,9 @@ type Handle interface {
 	// the given priority and create-time. This blocks until there are flow tokens
 	// available for all connected streams. This returns true if the request was
 	// admitted through flow control. Ignore the first return type if err != nil.
+	// admitted == false && err == nil is a valid return, when something (e.g.
+	// configuration) caused the callee to not care whether flow tokens were
+	// available.
 	Admit(context.Context, admissionpb.WorkPriority, time.Time) (admitted bool, _ error)
 	// DeductTokensFor deducts (without blocking) flow tokens for replicating
 	// work with given priority along connected streams. The deduction is

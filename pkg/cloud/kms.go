@@ -25,7 +25,7 @@ import (
 type KMS interface {
 	// MasterKeyID will return the identifier used to reference the master key
 	// associated with the KMS object.
-	MasterKeyID() (string, error)
+	MasterKeyID() string
 	// Encrypt returns the ciphertext version of data after encrypting it using
 	// the KMS.
 	Encrypt(ctx context.Context, data []byte) ([]byte, error)
@@ -50,6 +50,16 @@ type KMSFromURIFactory func(ctx context.Context, uri string, env KMSEnv) (KMS, e
 
 // Mapping from KMS scheme to its registered factory method.
 var kmsFactoryMap = make(map[string]KMSFromURIFactory)
+
+var errKMSInaccessible = errors.New("kms inaccessible")
+
+func KMSInaccessible(err error) error {
+	return errors.Mark(err, errKMSInaccessible)
+}
+
+func IsKMSInaccessible(err error) bool {
+	return errors.Is(err, errKMSInaccessible)
+}
 
 // RegisterKMSFromURIFactory is used by every concrete KMS implementation to
 // register its factory method.

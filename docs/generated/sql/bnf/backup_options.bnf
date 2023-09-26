@@ -9,3 +9,5 @@ backup_options ::=
 	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
 	| 'EXECUTION' 'LOCALITY' '=' string_or_placeholder
 	| 'INCLUDE_ALL_VIRTUAL_CLUSTERS' '=' a_expr
+	| 'UPDATES_CLUSTER_MONITORING_METRICS'
+	| 'UPDATES_CLUSTER_MONITORING_METRICS' '=' a_expr
