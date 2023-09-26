@@ -74,8 +74,8 @@ type Updater interface {
 	// SetToDefault resets the setting to its default value.
 	SetToDefault(ctx context.Context, key InternalKey) error
 
-	// ResetRemaining loads the default values for all settings that
-	// were not updated by Set().
+	// ResetRemaining loads the values from build-time defaults for all
+	// settings that were not updated by Set() and SetFromStorage().
 	ResetRemaining(ctx context.Context)
 
 	// SetFromStorage is called by the settings watcher to update the
