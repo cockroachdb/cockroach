@@ -1028,6 +1028,12 @@ func makeTenantSQLServerArgs(
 	// the instance ID (once known) as a tag.
 	startupCtx = baseCfg.AmbientCtx.AnnotateCtx(startupCtx)
 
+	// Load the global (build-time) setting defaults into the in-RAM
+	// cache, for use by the init code below until the settings watcher
+	// is started during PreStart().
+	settingUpdater := st.MakeUpdater()
+	settingUpdater.ResetRemaining(startupCtx)
+
 	clock, err := newClockFromConfig(startupCtx, baseCfg)
 	if err != nil {
 		return sqlServerArgs{}, err
