@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/structlogging"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -39,9 +38,6 @@ func TestHotRangesStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
-	// This test is currently being investigated for failing under stress
-	// with the deadlock flag.
-	skip.UnderStressWithIssue(t, 111104)
 
 	ctx := context.Background()
 	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
