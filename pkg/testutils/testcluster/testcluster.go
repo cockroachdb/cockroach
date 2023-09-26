@@ -431,22 +431,6 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 		tc.WaitForNStores(t, tc.NumServers(), tc.Servers[0].StorageLayer().GossipI().(*gossip.Gossip))
 	}
 
-	if tc.clusterArgs.ReplicationMode == base.ReplicationManual {
-		// We've already disabled the merge queue via testing knobs above, but ALTER
-		// TABLE ... SPLIT AT will throw an error unless we also disable merges via
-		// the cluster setting.
-		//
-		// TODO(benesch): this won't be necessary once we have sticky bits for
-		// splits.
-		if _, err := tc.Servers[0].SystemLayer().
-			InternalExecutor().(isql.Executor).
-			Exec(ctx, "enable-merge-queue", nil, /* txn */
-				`SET CLUSTER SETTING kv.range_merge.queue.enabled = false`); err != nil {
-			tc.Stopper().Stop(ctx)
-			t.Fatal(err)
-		}
-	}
-
 	if disableLBS {
 		if _, err := tc.Servers[0].SystemLayer().
 			InternalExecutor().(isql.Executor).

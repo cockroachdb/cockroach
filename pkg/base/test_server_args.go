@@ -129,6 +129,9 @@ type TestServerArgs struct {
 	// If set, the recording of events to the event log tables is disabled.
 	DisableEventLog bool
 
+	// If set, don't start the SQL service for this test.
+	DisableSQLServer bool
+
 	// If set, web session authentication will be disabled, even if the server
 	// is running in secure mode.
 	InsecureWebAccess bool
