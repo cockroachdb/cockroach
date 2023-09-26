@@ -81,8 +81,35 @@ func (n *dnsProvider) LookupSRVRecords(
 	return matchingRecords, nil
 }
 
+// ListRecords is part of the vm.DNSProvider interface.
+func (n *dnsProvider) ListRecords(_ context.Context) ([]vm.DNSRecord, error) {
+	records, err := n.loadRecords()
+	if err != nil {
+		return nil, err
+	}
+	return maps.Values(records), nil
+}
+
+// DeleteRecordsByName is part of the vm.DNSProvider interface.
+func (n *dnsProvider) DeleteRecordsByName(_ context.Context, names ...string) error {
+	unlock, err := lock.AcquireFilesystemLock(n.lockFilePath)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	entries, err := n.loadRecords()
+	if err != nil {
+		return err
+	}
+	for _, name := range names {
+		delete(entries, name)
+	}
+	return n.saveRecords(entries)
+}
+
 // DeleteRecordsBySubdomain is part of the vm.DNSProvider interface.
-func (n *dnsProvider) DeleteRecordsBySubdomain(subdomain string) error {
+func (n *dnsProvider) DeleteRecordsBySubdomain(_ context.Context, subdomain string) error {
 	unlock, err := lock.AcquireFilesystemLock(n.lockFilePath)
 	if err != nil {
 		return err
