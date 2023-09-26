@@ -92,7 +92,13 @@ func TestApplier(t *testing.T) {
 			"get-for-update", step(getForUpdate(k1)),
 		},
 		{
+			"get-for-update-guaranteed-durability", step(getForUpdateGuaranteedDurability(k1)),
+		},
+		{
 			"get-for-share", step(getForShare(k1)),
+		},
+		{
+			"get-for-share-guaranteed-durability", step(getForShareGuaranteedDurability(k1)),
 		},
 		{
 			"get-skip-locked", step(getSkipLocked(k1)),
@@ -101,13 +107,27 @@ func TestApplier(t *testing.T) {
 			"get-for-update-skip-locked", step(getForUpdateSkipLocked(k1)),
 		},
 		{
+			"get-for-update-skip-locked-guaranteed-durability",
+			step(getForUpdateSkipLockedGuaranteedDurability(k1)),
+		},
+		{
 			"get-for-share-skip-locked", step(getForShareSkipLocked(k1)),
+		},
+		{
+			"get-for-share-skip-locked-guaranteed-durability",
+			step(getForShareSkipLockedGuaranteedDurability(k1)),
 		},
 		{
 			"scan-for-update", step(scanForUpdate(k1, k3)),
 		},
 		{
+			"scan-for-update-guaranteed-durability", step(scanForUpdateGuaranteedDurability(k1, k3)),
+		},
+		{
 			"scan-for-share", step(scanForShare(k1, k3)),
+		},
+		{
+			"scan-for-share-guaranteed-durability", step(scanForShareGuaranteedDurability(k1, k3)),
 		},
 		{
 			"scan-skip-locked", step(scanSkipLocked(k1, k3)),
@@ -116,7 +136,15 @@ func TestApplier(t *testing.T) {
 			"scan-for-update-skip-locked", step(scanForUpdateSkipLocked(k1, k3)),
 		},
 		{
+			"scan-for-update-skip-locked-guaranteed-durability",
+			step(scanForUpdateSkipLockedGuaranteedDurability(k1, k3)),
+		},
+		{
 			"scan-for-share-skip-locked", step(scanForShareSkipLocked(k1, k3)),
+		},
+		{
+			"scan-for-share-skip-locked-guaranteed-durability",
+			step(scanForShareSkipLockedGuaranteedDurability(k1, k3)),
 		},
 		{
 			"batch", step(batch(put(k1, 21), delRange(k2, k3, 22))),
@@ -128,7 +156,15 @@ func TestApplier(t *testing.T) {
 			"rscan-for-update", step(reverseScanForUpdate(k1, k2)),
 		},
 		{
+			"rscan-for-update-guaranteed-durability",
+			step(reverseScanForUpdateGuaranteedDurability(k1, k2)),
+		},
+		{
 			"rscan-for-share", step(reverseScanForShare(k1, k2)),
+		},
+		{
+			"rscan-for-share-guaranteed-durability",
+			step(reverseScanForShareGuaranteedDurability(k1, k2)),
 		},
 		{
 			"rscan-skip-locked", step(reverseScanSkipLocked(k1, k2)),
@@ -137,7 +173,15 @@ func TestApplier(t *testing.T) {
 			"rscan-for-update-skip-locked", step(reverseScanForUpdateSkipLocked(k1, k2)),
 		},
 		{
+			"rscan-for-update-skip-locked-guaranteed-durability",
+			step(reverseScanForUpdateSkipLockedGuaranteedDurability(k1, k2)),
+		},
+		{
 			"rscan-for-share-skip-locked", step(reverseScanForShareSkipLocked(k1, k2)),
+		},
+		{
+			"rscan-for-share-skip-locked-guaranteed-durability",
+			step(reverseScanForShareSkipLockedGuaranteedDurability(k1, k2)),
 		},
 		{
 			"del", step(del(k2, 1)),
@@ -170,7 +214,13 @@ func TestApplier(t *testing.T) {
 			"scan-for-update-err", step(scanForUpdate(k1, k3)),
 		},
 		{
+			"scan-for-update-guaranteed-durability-err", step(scanForUpdateGuaranteedDurability(k1, k3)),
+		},
+		{
 			"scan-for-share-err", step(scanForShare(k1, k3)),
+		},
+		{
+			"scan-for-share-guaranteed-durability-err", step(scanForShareGuaranteedDurability(k1, k3)),
 		},
 		{
 			"scan-skip-locked-err", step(scanSkipLocked(k1, k3)),
@@ -182,7 +232,15 @@ func TestApplier(t *testing.T) {
 			"rscan-for-update-err", step(reverseScanForUpdate(k1, k3)),
 		},
 		{
+			"rscan-for-update-guaranteed-durability-err",
+			step(reverseScanForUpdateGuaranteedDurability(k1, k3)),
+		},
+		{
 			"rscan-for-share-err", step(reverseScanForShare(k1, k3)),
+		},
+		{
+			"rscan-for-share-guaranteed-durability-err",
+			step(reverseScanForShareGuaranteedDurability(k1, k3)),
 		},
 		{
 			"rscan-skip-locked-err", step(reverseScanSkipLocked(k1, k3)),

@@ -44,8 +44,9 @@ message GetOperation {
   bytes key = 1;
   bool for_update = 2;
   bool for_share = 3;
-  bool skip_locked = 4;
-  Result result = 5 [(gogoproto.nullable) = false];
+  bool guaranteed_durability = 4;
+  bool skip_locked = 5;
+  Result result = 6 [(gogoproto.nullable) = false];
 }
 
 message ScanOperation {
@@ -53,9 +54,10 @@ message ScanOperation {
   bytes end_key = 2;
   bool for_update = 3;
   bool for_share = 4;
-  bool skip_locked = 5;
-  bool reverse = 6;
-  Result result = 7 [(gogoproto.nullable) = false];
+  bool guaranteed_durability = 5;
+  bool skip_locked = 6;
+  bool reverse = 7;
+  Result result = 8 [(gogoproto.nullable) = false];
 }
 
 message PutOperation {
