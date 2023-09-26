@@ -13,14 +13,15 @@ package install
 import "github.com/cockroachdb/cockroach/pkg/util/retry"
 
 type RunOptions struct {
-	RetryOptions  *retry.Options
+	// RetryOptions controls the retry behaviour when encountering an error.
+	RetryOptions *retry.Options
+	// ShouldRetryFn can be specified by a caller if they would like to be notified of an error that may
+	// be retried. A retry will only be performed if it returns true.
 	ShouldRetryFn func(*RunResultDetails) bool
-	// FailFast will cause the Parallel function to wait for all nodes to
-	// finish when encountering a command error on any node. The default
-	// behaviour is to exit immediately on the first error, in which case the
-	// slice of ParallelResults will only contain the one error result.
+	// FailFast will cause the Parallel function to return immediately when encountering
+	// an error on any node, otherwise it will wait to collect all results.
 	FailFast bool
-	// These are private to roachprod
+	// Concurrency controls across how many nodes a given command runs at any time
 	Concurrency int
 	Display     string
 }
