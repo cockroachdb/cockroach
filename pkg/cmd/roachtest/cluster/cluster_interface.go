@@ -108,6 +108,7 @@ type Cluster interface {
 
 	Spec() spec.ClusterSpec
 	Name() string
+	Cloud() string
 	IsLocal() bool
 	// IsSecure returns true iff the cluster uses TLS.
 	IsSecure() bool

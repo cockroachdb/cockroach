@@ -2525,6 +2525,10 @@ func (c *clusterImpl) MakeNodes(opts ...option.Option) string {
 	return c.name + r.String()
 }
 
+func (c *clusterImpl) Cloud() string {
+	return c.spec.Cloud
+}
+
 func (c *clusterImpl) IsLocal() bool {
 	return config.IsLocalClusterName(c.name)
 }
