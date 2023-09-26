@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -41,6 +42,17 @@ const (
 
 	// JSONContentType is the JSON content type.
 	JSONContentType = "application/json"
+)
+
+// ServerHTTPBasePath is a cluster setting that contains the path to
+// route the user to after successful login. It is intended to be
+// overridden in cases where DB Console is being proxied.
+var ServerHTTPBasePath = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	"server.http.base_path",
+	"path to redirect the user to upon succcessful login",
+	"/",
+	settings.WithPublic,
 )
 
 // httpMux redirects incoming HTTP requests to the server selected by

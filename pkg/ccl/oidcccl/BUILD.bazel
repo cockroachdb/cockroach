@@ -15,6 +15,7 @@ go_library(
         "//pkg/ccl/utilccl",
         "//pkg/roachpb",
         "//pkg/security/username",
+        "//pkg/server",
         "//pkg/server/authserver",
         "//pkg/server/serverpb",
         "//pkg/server/telemetry",
