@@ -13,7 +13,10 @@
 
 package serverutils
 
-import "net/url"
+import (
+	"github.com/cockroachdb/errors"
+	"net/url"
+)
 
 type SessionType int
 
@@ -22,6 +25,12 @@ const (
 	SingleTenantSession
 	MultiTenantSession
 )
+
+// PreventDisableSQLForTenantError is thrown by tests that attempt to set
+// DisableSQLServer but still run in multi-tenant mode. These modes are
+// incompatible since tenant tests require SQL during initialization.
+var PreventDisableSQLForTenantError = errors.New("programming error: DisableSQLServer is incompatible with cluster virtualization\n" +
+	"Consider using TestServerArgs{DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant}")
 
 type TestURL struct {
 	*url.URL

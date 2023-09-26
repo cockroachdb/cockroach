@@ -148,7 +148,10 @@ func TestBasicManualReplication(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	tc := StartTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs:      base.TestServerArgs{DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant},
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			DisableSQLServer:  true,
+		},
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(context.Background())
@@ -184,7 +187,10 @@ func TestBasicAutoReplication(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	tc := StartTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs:      base.TestServerArgs{DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant},
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			DisableSQLServer:  true,
+		},
 		ReplicationMode: base.ReplicationAuto,
 	})
 	defer tc.Stopper().Stop(context.Background())
@@ -202,7 +208,8 @@ func TestStopServer(t *testing.T) {
 			// We use Insecure: true because the .GetAdminHTTPClient() API
 			// does not currently work when called from two different servers
 			// in the same TestCluster.
-			Insecure: true,
+			Insecure:         true,
+			DisableSQLServer: true,
 		},
 		ReplicationMode: base.ReplicationAuto,
 	})
@@ -299,7 +306,10 @@ func TestRestart(t *testing.T) {
 	ctx := context.Background()
 	tc := StartTestCluster(t, numServers,
 		base.TestClusterArgs{
-			ServerArgs:          base.TestServerArgs{DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant},
+			ServerArgs: base.TestServerArgs{
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+				DisableSQLServer:  true,
+			},
 			ReplicationMode:     base.ReplicationAuto,
 			ReusableListenerReg: lisReg,
 			ServerArgsPerNode:   stickyServerArgs,
@@ -348,7 +358,10 @@ func TestExpirationBasedLeases(t *testing.T) {
 	ctx := context.Background()
 	tc := StartTestCluster(t, 1,
 		base.TestClusterArgs{
-			ServerArgs:      base.TestServerArgs{DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant},
+			ServerArgs: base.TestServerArgs{
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+				DisableSQLServer:  true,
+			},
 			ReplicationMode: base.ReplicationManual,
 		})
 	defer tc.Stopper().Stop(ctx)
