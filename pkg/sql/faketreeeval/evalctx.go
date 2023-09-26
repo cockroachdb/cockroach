@@ -338,6 +338,13 @@ func (*DummyEvalPlanner) GenUniqueCursorName() tree.Name {
 	return ""
 }
 
+// PLpgSQLFetchCursor is part of the Planner interface.
+func (*DummyEvalPlanner) PLpgSQLFetchCursor(
+	context.Context, *tree.CursorStmt,
+) (tree.Datums, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
 var _ eval.Planner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,
