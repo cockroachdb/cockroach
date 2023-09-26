@@ -1221,6 +1221,37 @@ histogram.
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaRaftCommandsProposed = metric.Metadata{
+		Name: "raft.commands.proposed",
+		Help: `Count of Raft commands proposed.
+
+This measurement is taken on the leaseholders, and includes both the original
+proposals and re-proposals. This approximates the number of commands submitted
+through Raft.`,
+		Measurement: "Commands",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRaftCommandsReproposed = metric.Metadata{
+		Name: "raft.commands.reproposed.same",
+		Help: `Count of Raft commands re-proposed without modification.
+
+This measurement is taken on the leaseholders, and counts retries of proposals
+that fail to be committed/applied within a certain amount of time, and are
+likely dropped. Such re-proposals make sure that all proposals are eventually
+committed to Raft and applied.`,
+		Measurement: "Commands",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRaftCommandsReproposedLAI = metric.Metadata{
+		Name: "raft.commands.reproposed.lai",
+		Help: `Count of Raft commands re-proposed with a later LAI.
+
+This measurement is taken on the leaseholders, and counts retries of proposals
+that are not applied because they fail the LAI check. Such re-proposals obtain a
+new LAI, to make sure that the proposal can be eventually applied.`,
+		Measurement: "Commands",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRaftCommandsApplied = metric.Metadata{
 		Name: "raft.commandsapplied",
 		Help: `Count of Raft commands applied.
@@ -2451,6 +2482,9 @@ type StoreMetrics struct {
 	RaftQuotaPoolPercentUsed   metric.IHistogram
 	RaftWorkingDurationNanos   *metric.Counter
 	RaftTickingDurationNanos   *metric.Counter
+	RaftCommandsProposed       *metric.Counter
+	RaftCommandsReproposed     *metric.Counter
+	RaftCommandsReproposedLAI  *metric.Counter
 	RaftCommandsApplied        *metric.Counter
 	RaftLogCommitLatency       metric.IHistogram
 	RaftCommandCommitLatency   metric.IHistogram
@@ -3108,9 +3142,12 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			SigFigs:      1,
 			BucketConfig: metric.Percent100Buckets,
 		}),
-		RaftWorkingDurationNanos: metric.NewCounter(metaRaftWorkingDurationNanos),
-		RaftTickingDurationNanos: metric.NewCounter(metaRaftTickingDurationNanos),
-		RaftCommandsApplied:      metric.NewCounter(metaRaftCommandsApplied),
+		RaftWorkingDurationNanos:  metric.NewCounter(metaRaftWorkingDurationNanos),
+		RaftTickingDurationNanos:  metric.NewCounter(metaRaftTickingDurationNanos),
+		RaftCommandsProposed:      metric.NewCounter(metaRaftCommandsProposed),
+		RaftCommandsReproposed:    metric.NewCounter(metaRaftCommandsReproposed),
+		RaftCommandsReproposedLAI: metric.NewCounter(metaRaftCommandsReproposedLAI),
+		RaftCommandsApplied:       metric.NewCounter(metaRaftCommandsApplied),
 		RaftLogCommitLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaRaftLogCommitLatency,
