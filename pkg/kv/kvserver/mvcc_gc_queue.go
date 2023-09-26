@@ -231,6 +231,7 @@ type mvccGCQueueScore struct {
 	GCBytes                  int64
 	GCByteAge                int64
 	ExpMinGCByteAgeReduction int64
+	Hint                     roachpb.GCHint
 }
 
 func (r mvccGCQueueScore) String() string {
@@ -244,11 +245,15 @@ func (r mvccGCQueueScore) String() string {
 	if r.LastGC != 0 {
 		lastGC = fmt.Sprintf("%s ago", r.LastGC)
 	}
-	return fmt.Sprintf("queue=%t with %.2f/fuzz(%.2f)=%.2f=valScaleScore(%.2f)*deadFrac(%.2f)+intentScore(%.2f)\n"+
+	s := fmt.Sprintf("queue=%t with %.2f/fuzz(%.2f)=%.2f=valScaleScore(%.2f)*deadFrac(%.2f)+intentScore(%.2f)\n"+
 		"likely last GC: %s, %s non-live, curr. age %s*s, min exp. reduction: %s*s",
 		r.ShouldQueue, r.FinalScore, r.FuzzFactor, r.FinalScore/r.FuzzFactor, r.ValuesScalableScore,
 		r.DeadFraction, r.IntentScore, lastGC, humanizeutil.IBytes(r.GCBytes),
 		humanizeutil.IBytes(r.GCByteAge), humanizeutil.IBytes(r.ExpMinGCByteAgeReduction))
+	if !r.Hint.IsEmpty() {
+		s += fmt.Sprintf("\nhint: %s", r.Hint)
+	}
+	return s
 }
 
 // shouldQueue determines whether a replica should be queued for garbage
@@ -267,6 +272,9 @@ func (mgcq *mvccGCQueue) shouldQueue(
 		return false, 0
 	}
 	if !canGC {
+		log.VEventf(ctx, 2,
+			"shouldQueue=false: canGC=false gcTimestamp=%s oldThreshold=%s newThreshold=%s gcTTL=%s",
+			gcTimestamp, oldThreshold, newThreshold, conf.TTL())
 		return false, 0
 	}
 	canAdvanceGCThreshold := !newThreshold.Equal(oldThreshold)
@@ -277,6 +285,7 @@ func (mgcq *mvccGCQueue) shouldQueue(
 	}
 
 	r := makeMVCCGCQueueScore(ctx, repl, gcTimestamp, lastGC, conf.TTL(), canAdvanceGCThreshold)
+	log.VEventf(ctx, 2, "shouldQueue=%t: %s", r.ShouldQueue, r)
 	return r.ShouldQueue, r.FinalScore
 }
 
@@ -417,6 +426,7 @@ func makeMVCCGCQueueScoreImpl(
 	}
 
 	r.TTL = gcTTL
+	r.Hint = hint
 
 	// Treat a zero TTL as a one-second TTL, which avoids a priority of infinity
 	// and otherwise behaves indistinguishable given that we can't possibly hope

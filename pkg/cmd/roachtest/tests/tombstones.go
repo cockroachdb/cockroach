@@ -41,6 +41,8 @@ func registerPointTombstone(r registry.Registry) {
 		Timeout:           120 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			startOpts := option.DefaultStartOpts()
+			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
+				"--vmodule=mvcc_gc_queue=2,replica_protected_timestamp=2") // queue=2 is too verbose
 			startSettings := install.MakeClusterSettings()
 			startSettings.Env = append(startSettings.Env, "COCKROACH_AUTO_BALLAST=false")
 
