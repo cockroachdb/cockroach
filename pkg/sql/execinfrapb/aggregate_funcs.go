@@ -74,4 +74,7 @@ const (
 	FinalCorr               = AggregatorSpec_FINAL_CORR
 	FinalSqrdiff            = AggregatorSpec_FINAL_SQRDIFF
 	ArrayCatAgg             = AggregatorSpec_ARRAY_CAT_AGG
+	MergeStatsMetadata      = AggregatorSpec_MERGE_STATS_METADATA
+	MergeStatementStats     = AggregatorSpec_MERGE_STATEMENT_STATS
+	MergeTransactionStats   = AggregatorSpec_MERGE_TRANSACTION_STATS
 )
