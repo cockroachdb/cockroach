@@ -101,6 +101,8 @@ type rangeFeedConfig struct {
 		// captureMuxRangeFeedRequestSender is a callback invoked when mux
 		// rangefeed establishes connection to the node.
 		captureMuxRangeFeedRequestSender func(nodeID roachpb.NodeID, sender func(req *kvpb.RangeFeedRequest) error)
+		// beforeSendRequest is a mux rangefeed callback invoked prior to sending rangefeed request.
+		beforeSendRequest func()
 	}
 }
 
@@ -973,6 +975,14 @@ func TestingWithMuxRangeFeedRequestSenderCapture(
 	})
 }
 
+// TestingWithBeforeSendRequest returns a test only option that invokes
+// function before sending rangefeed request.
+func TestingWithBeforeSendRequest(fn func()) RangeFeedOption {
+	return optionFunc(func(c *rangeFeedConfig) {
+		c.knobs.beforeSendRequest = fn
+	})
+}
+
 // TestingMakeRangeFeedMetrics exposes makeDistSenderRangeFeedMetrics for test use.
 var TestingMakeRangeFeedMetrics = makeDistSenderRangeFeedMetrics
 
@@ -983,10 +993,15 @@ type catchupScanRateLimiter struct {
 }
 
 func newCatchupScanRateLimiter(sv *settings.Values) *catchupScanRateLimiter {
-	rl := &catchupScanRateLimiter{sv: sv}
-	rl.limit = getCatchupRateLimit(rl.sv)
-	rl.pacer = quotapool.NewRateLimiter("distSenderCatchupLimit", rl.limit, 0 /* smooth rate */)
-	return rl
+	const slowAcquisitionThreshold = 5 * time.Second
+	lim := getCatchupRateLimit(sv)
+	return &catchupScanRateLimiter{
+		sv:    sv,
+		limit: lim,
+		pacer: quotapool.NewRateLimiter(
+			"distSenderCatchupLimit", lim, 0, /* smooth rate limit without burst */
+			quotapool.OnSlowAcquisition(slowAcquisitionThreshold, logSlowCatchupScanAcquisition(slowAcquisitionThreshold))),
+	}
 }
 
 func getCatchupRateLimit(sv *settings.Values) quotapool.Limit {
@@ -1001,8 +1016,28 @@ func (rl *catchupScanRateLimiter) Pace(ctx context.Context) error {
 	// Take opportunity to update limits if they have changed.
 	if lim := getCatchupRateLimit(rl.sv); lim != rl.limit {
 		rl.limit = lim
-		rl.pacer.UpdateLimit(lim, 0)
+		rl.pacer.UpdateLimit(lim, 0 /* smooth rate limit without burst */)
 	}
-
 	return rl.pacer.WaitN(ctx, 1)
+}
+
+// logSlowCatchupScanAcquisition is a function returning a quotapool.SlowAcquisitionFunction.
+// It differs from the quotapool.LogSlowAcquisition in that only some of slow acquisition
+// events are logged to reduce log spam.
+func logSlowCatchupScanAcquisition(loggingMinInterval time.Duration) quotapool.SlowAcquisitionFunc {
+	logSlowAcquire := log.Every(loggingMinInterval)
+
+	return func(ctx context.Context, poolName string, r quotapool.Request, start time.Time) func() {
+		shouldLog := logSlowAcquire.ShouldLog()
+		if shouldLog {
+			log.Warningf(ctx, "have been waiting %s attempting to acquire catchup scan quota",
+				timeutil.Since(start))
+		}
+
+		return func() {
+			if shouldLog {
+				log.Infof(ctx, "acquired catchup quota after %s", timeutil.Since(start))
+			}
+		}
+	}
 }
