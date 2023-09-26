@@ -1,0 +1,213 @@
+check min=0,0 max=6000.000000000,0
+# Test a series of 8-byte MVCC keys that all fall within bounds.
+#
+#      user key
+#    /     sentinel byte
+#    |   /         encoded 8-byte WallTime timestamp
+#    |   |          /         timestamp length
+#    |   |          |         |
+0x: FFFF 00 0000000000000000 09    # WallTime=0
+0x: FFFF 00 0000000000000001 09    # WallTime=1
+0x: FFFF 00 00000574fbde5fff 09    # WallTime=<max>-1
+0x: FFFF 00 00000574fbde6000 09    # WallTime=<max>
+#
+# Test a series of 8-byte MVCC keys that all contain TS > max.
+#
+0x: FFFF 00 00000574fbde6001 09    # WallTime=<max>+1
+0x: FFFF 00 ffffffffffffffff 09    # WallTime=MaxUint64
+#
+# Test a series of 12-byte MVCC keys that all fall within bounds.
+#
+#       user key
+#     /    sentinel byte
+#    |   /             8-byte WallTime timestamp
+#    |   |           /             4-byte Logical timestamp
+#    |   |          |            /     timestamp length
+#    |   |          |           |     |
+0x: FFFF 00 0000000000000000 00000000 0d    # 0,0
+0x: FFFF 00 0000000000000001 00000001 0d    # 1,1
+0x: FFFF 00 00000574fbde5fff 00000001 0d    # <max>-1,1
+0x: FFFF 00 00000574fbde5fff ffffffff 0d    # <max>-1,MaxUint32
+#
+# Test a series of 12-byte MVCC keys that all contain TS > max.
+#
+0x: FFFF 00 00000574fbde6000 00000001 0d    # <max>,1
+0x: FFFF 00 00000574fbde6000 00000005 0d    # <max>,5
+0x: FFFF 00 00000574fbde6000 ffffffff 0d    # <max>,MaxUint32
+0x: FFFF 00 00000574fbde6001 00000001 0d    # <max>+1,1
+0x: FFFF 00 ffffffffffffffff ffffffff 0d    # MaxUint64,MaxUint32
+#
+# Test the same keys as above but with 13-byte MVCC keys (including the
+# synthetic bit).
+#
+#       user key
+#     /    sentinel byte
+#    |   /             8-byte WallTime timestamp
+#    |   |           /             4-byte Logical timestamp
+#    |   |          |            /     synthetic bit
+#    |   |          |           |     /  timestamp length
+#    |   |          |           |    |  |
+0x: FFFF 00 0000000000000000 00000000 01 0e    # 0,0?
+0x: FFFF 00 0000000000000001 00000001 01 0e    # 1,1?
+0x: FFFF 00 00000574fbde5fff 00000001 01 0e    # <max>-1,1?
+0x: FFFF 00 00000574fbde5fff ffffffff 01 0e    # <max>-1,MaxUint32?
+#
+# Test a series of 13-byte MVCC keys that all contain TS > max.
+#
+0x: FFFF 00 00000574fbde6000 00000001 01 0e    # <max>,1?
+0x: FFFF 00 00000574fbde6000 00000005 01 0e    # <max>,5?
+0x: FFFF 00 00000574fbde6000 ffffffff 01 0e    # <max>,MaxUint32?
+0x: FFFF 00 00000574fbde6001 00000001 01 0e    # <max>+1,1?
+0x: FFFF 00 ffffffffffffffff ffffffff 01 0e    # MaxUint64,MaxUint32?
+----
+min: 0x
+max: 0x00000574fbde600001
+FFFF00000000000000000009 : don't skip
+FFFF00000000000000000109 : don't skip
+FFFF0000000574fbde5fff09 : don't skip
+FFFF0000000574fbde600009 : don't skip
+FFFF0000000574fbde600109 : skip
+FFFF00ffffffffffffffff09 : skip
+FFFF000000000000000000000000000d : don't skip
+FFFF000000000000000001000000010d : don't skip
+FFFF0000000574fbde5fff000000010d : don't skip
+FFFF0000000574fbde5fffffffffff0d : don't skip
+FFFF0000000574fbde6000000000010d : don't skip
+FFFF0000000574fbde6000000000050d : don't skip
+FFFF0000000574fbde6000ffffffff0d : skip
+FFFF0000000574fbde6001000000010d : skip
+FFFF00ffffffffffffffffffffffff0d : skip
+FFFF00000000000000000000000000010e : don't skip
+FFFF00000000000000000100000001010e : don't skip
+FFFF0000000574fbde5fff00000001010e : don't skip
+FFFF0000000574fbde5fffffffffff010e : don't skip
+FFFF0000000574fbde600000000001010e : don't skip
+FFFF0000000574fbde600000000005010e : don't skip
+FFFF0000000574fbde6000ffffffff010e : skip
+FFFF0000000574fbde600100000001010e : skip
+FFFF00ffffffffffffffffffffffff010e : skip
+
+#
+# The next test case is adjusted from the above test case, but this time the max
+# has a non-zero logical bit, and so the max itself should be 12 or 13 bit
+# timestamp.
+#
+
+check min=0,0 max=6000.000000000,1
+# Test a series of 8-byte MVCC keys that all fall within bounds.
+#
+#      user key
+#    /     sentinel byte
+#    |   /         encoded 8-byte WallTime timestamp
+#    |   |          /         timestamp length
+#    |   |          |         |
+0x: FFFF 00 0000000000000000 09    # WallTime=0
+0x: FFFF 00 0000000000000001 09    # WallTime=1
+0x: FFFF 00 00000574fbde5fff 09    # WallTime=<max.WallTime>-1
+0x: FFFF 00 00000574fbde6000 09    # WallTime=<max.WallTime>
+#
+# Test a series of 8-byte MVCC keys that all contain TS > max.
+#
+0x: FFFF 00 00000574fbde6001 09    # WallTime=<max.WallTime>+1
+0x: FFFF 00 ffffffffffffffff 09    # WallTime=MaxUint64
+#
+# Test a series of 12-byte MVCC keys that all fall within bounds.
+#
+#       user key
+#     /    sentinel byte
+#    |   /             8-byte WallTime timestamp
+#    |   |           /             4-byte Logical timestamp
+#    |   |          |            /     timestamp length
+#    |   |          |           |     |
+0x: FFFF 00 0000000000000000 00000000 0d    # 0,0
+0x: FFFF 00 0000000000000001 00000001 0d    # 1,1
+0x: FFFF 00 00000574fbde5fff 00000001 0d    # <max.WallTime>-1,1
+0x: FFFF 00 00000574fbde5fff ffffffff 0d    # <max.WallTime>-1,MaxUint32
+0x: FFFF 00 00000574fbde6000 00000001 0d    # <max>
+#
+# Test a series of 12-byte MVCC keys that all contain TS > max.
+#
+0x: FFFF 00 00000574fbde6000 00000002 0d    # <max.WallTime>,<max.LogicalTime>+1
+0x: FFFF 00 00000574fbde6000 00000005 0d    # <max.WallTime>,5
+0x: FFFF 00 00000574fbde6000 ffffffff 0d    # <max.WallTime>,MaxUint32
+0x: FFFF 00 00000574fbde6001 00000001 0d    # <max.WallTime>+1,1
+0x: FFFF 00 ffffffffffffffff ffffffff 0d    # MaxUint64,MaxUint32
+#
+# Test the same keys as above but with 13-byte MVCC keys (including the
+# synthetic bit).
+#
+#       user key
+#     /    sentinel byte
+#    |   /             8-byte WallTime timestamp
+#    |   |           /             4-byte Logical timestamp
+#    |   |          |            /     synthetic bit
+#    |   |          |           |     /  timestamp length
+#    |   |          |           |    |  |
+0x: FFFF 00 0000000000000000 00000000 01 0e    # 0,0?
+0x: FFFF 00 0000000000000001 00000001 01 0e    # 1,1?
+0x: FFFF 00 00000574fbde5fff 00000001 01 0e    # <max.WallTime>-1,1?
+0x: FFFF 00 00000574fbde5fff ffffffff 01 0e    # <max.WallTime>-1,MaxUint32?
+0x: FFFF 00 00000574fbde6000 00000001 01 0e    # <max>?
+#
+# Test a series of 13-byte MVCC keys that all contain TS > max.
+#
+0x: FFFF 00 00000574fbde6000 00000002 01 0e    # <max.WallTime>,<max.LogicalTime>+1
+0x: FFFF 00 00000574fbde6000 00000005 01 0e    # <max.WallTime>,5?
+0x: FFFF 00 00000574fbde6000 ffffffff 01 0e    # <max.WallTime>,MaxUint32?
+0x: FFFF 00 00000574fbde6001 00000001 01 0e    # <max.WallTime>+1,1?
+0x: FFFF 00 ffffffffffffffff ffffffff 01 0e    # MaxUint64,MaxUint32?
+----
+min: 0x
+max: 0x00000574fbde60000000000101
+FFFF00000000000000000009 : don't skip
+FFFF00000000000000000109 : don't skip
+FFFF0000000574fbde5fff09 : don't skip
+FFFF0000000574fbde600009 : don't skip
+FFFF0000000574fbde600109 : skip
+FFFF00ffffffffffffffff09 : skip
+FFFF000000000000000000000000000d : don't skip
+FFFF000000000000000001000000010d : don't skip
+FFFF0000000574fbde5fff000000010d : don't skip
+FFFF0000000574fbde5fffffffffff0d : don't skip
+FFFF0000000574fbde6000000000010d : don't skip
+FFFF0000000574fbde6000000000020d : skip
+FFFF0000000574fbde6000000000050d : skip
+FFFF0000000574fbde6000ffffffff0d : skip
+FFFF0000000574fbde6001000000010d : skip
+FFFF00ffffffffffffffffffffffff0d : skip
+FFFF00000000000000000000000000010e : don't skip
+FFFF00000000000000000100000001010e : don't skip
+FFFF0000000574fbde5fff00000001010e : don't skip
+FFFF0000000574fbde5fffffffffff010e : don't skip
+FFFF0000000574fbde600000000001010e : don't skip
+FFFF0000000574fbde600000000002010e : skip
+FFFF0000000574fbde600000000005010e : skip
+FFFF0000000574fbde6000ffffffff010e : skip
+FFFF0000000574fbde600100000001010e : skip
+FFFF00ffffffffffffffffffffffff010e : skip
+
+# Test invalid keys, like keys with lock table suffixes
+
+check min=10.000000000,0 max=25.000000000,0
+# Test lock table keys. They just shouldn't be skipped, even if a lexiccographic
+# comparison alone would've skipped them.
+#
+#       key "prefix"
+#     /     sentinel byte
+#    |    /   lock strength    transaction UUID       timestamp length (17+1)
+#    |   |  /                 /                      /
+0x: FFFF 00 03 000000000000000000000000000000000000 12
+0x: FFFF 00 02 000000000000000000000000000000000000 12
+0x: FFFF 00 01 000000000000000000000000000000000000 12
+0x: FFFF 00 03 ffffffffffffffffffffffffffffffffffff 12
+0x: FFFF 00 02 ffffffffffffffffffffffffffffffffffff 12
+0x: FFFF 00 01 ffffffffffffffffffffffffffffffffffff 12
+----
+min: 0x00000002540be400
+max: 0x00000005d21dba0001
+FFFF000300000000000000000000000000000000000012 : don't skip
+FFFF000200000000000000000000000000000000000012 : don't skip
+FFFF000100000000000000000000000000000000000012 : don't skip
+FFFF0003ffffffffffffffffffffffffffffffffffff12 : don't skip
+FFFF0002ffffffffffffffffffffffffffffffffffff12 : don't skip
+FFFF0001ffffffffffffffffffffffffffffffffffff12 : don't skip

@@ -1,0 +1,45 @@
+run ok
+with k=k1
+  put v=k1v1 ts=10,0
+  put v=k1v2 ts=20,0
+put k=k2 v=k2v1 ts=5,0
+put k=k3 v=k3v1 ts=5,0
+----
+>> at end:
+data: "k1"/20.000000000,0 -> /BYTES/k1v2
+data: "k1"/10.000000000,0 -> /BYTES/k1v1
+data: "k2"/5.000000000,0 -> /BYTES/k2v1
+data: "k3"/5.000000000,0 -> /BYTES/k3v1
+
+# With wide bounds, all the keys should be visible.
+
+run ok
+iter_new kind=keys minTimestamp=1,0 maxTimestamp=30,0
+iter_seek_ge k=k1
+iter_next
+iter_next
+iter_next
+----
+iter_seek_ge: "k1"/20.000000000,0=/BYTES/k1v2
+iter_next: "k1"/10.000000000,0=/BYTES/k1v1
+iter_next: "k2"/5.000000000,0=/BYTES/k2v1
+iter_next: "k3"/5.000000000,0=/BYTES/k3v1
+
+# With narrow bounds [@10,@10], only 1 key should be visible. Note min and max
+# timestamp are both inclusive.
+
+run ok
+iter_new kind=keys minTimestamp=10,0 maxTimestamp=10,0
+iter_seek_ge k=k1
+iter_next
+----
+iter_seek_ge: "k1"/10.000000000,0=/BYTES/k1v1
+iter_next: .
+
+# Nothing visible within [@8,@9].
+
+run ok
+iter_new kind=keys minTimestamp=8,0 maxTimestamp=9,0
+iter_seek_ge k=k1
+----
+iter_seek_ge: .
