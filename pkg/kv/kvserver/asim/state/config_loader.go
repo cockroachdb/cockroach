@@ -101,7 +101,7 @@ var ComplexConfig = ClusterInfo{
 				{Name: "US_East_1", NodeCount: 1},
 				{Name: "US_East_2", NodeCount: 2},
 				{Name: "US_East_3", NodeCount: 3},
-				{Name: "US_East_3", NodeCount: 10},
+				{Name: "US_East_4", NodeCount: 10},
 			},
 		},
 		{
