@@ -195,6 +195,7 @@ func TestOIDCEnabled(t *testing.T) {
 		if !hmac.Equal(mac.Sum(nil), state.TokenMAC) {
 			t.Fatal("HMAC hash doesn't match TokenMAC")
 		}
+
 	})
 }
 
