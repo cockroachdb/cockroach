@@ -2064,14 +2064,16 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// executes a SQL query, this must be done after the SQL layer is ready.
 	s.node.recordJoinEvent(ctx)
 
-	// Start the SQL subsystem.
-	if err := s.sqlServer.preStart(
-		workersCtx,
-		s.stopper,
-		s.cfg.TestingKnobs,
-		orphanedLeasesTimeThresholdNanos,
-	); err != nil {
-		return err
+	if !s.cfg.DisableSQLServer {
+		// Start the SQL subsystem.
+		if err := s.sqlServer.preStart(
+			workersCtx,
+			s.stopper,
+			s.cfg.TestingKnobs,
+			orphanedLeasesTimeThresholdNanos,
+		); err != nil {
+			return err
+		}
 	}
 
 	// Initialize the external storage builders configuration params now that the
