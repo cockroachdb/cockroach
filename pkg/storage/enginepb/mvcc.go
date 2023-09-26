@@ -159,6 +159,7 @@ func (ms *MVCCStats) Add(oms MVCCStats) {
 	ms.KeyCount += oms.KeyCount
 	ms.ValCount += oms.ValCount
 	ms.IntentCount += oms.IntentCount
+	ms.LockBytes += oms.LockBytes
 	ms.LockCount += oms.LockCount
 	ms.RangeKeyCount += oms.RangeKeyCount
 	ms.RangeKeyBytes += oms.RangeKeyBytes
@@ -190,6 +191,7 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 	ms.KeyCount -= oms.KeyCount
 	ms.ValCount -= oms.ValCount
 	ms.IntentCount -= oms.IntentCount
+	ms.LockBytes -= oms.LockBytes
 	ms.LockCount -= oms.LockCount
 	ms.RangeKeyCount -= oms.RangeKeyCount
 	ms.RangeKeyBytes -= oms.RangeKeyBytes
