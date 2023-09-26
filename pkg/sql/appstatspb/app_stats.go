@@ -138,6 +138,36 @@ func (t *TransactionStatistics) Add(other *TransactionStatistics) {
 	t.Count += other.Count
 }
 
+// Add combines CollectedStatementStatistics into a single AggregatedStatementMetadata.
+func (s *AggregatedStatementMetadata) Add(other *CollectedStatementStatistics) {
+	// Only set the value if it hasn't already been set.
+	if s.Query == "" || s.QuerySummary == "" {
+		s.ImplicitTxn = other.Key.ImplicitTxn
+		s.Query = other.Key.Query
+		s.QuerySummary = other.Key.QuerySummary
+		s.StmtType = other.Stats.SQLType
+	}
+
+	// Avoid creating the array if the db names match.
+	if len(s.Databases) != 1 || s.Databases[0] != other.Key.Database {
+		s.Databases = util.CombineUnique(s.Databases, []string{other.Key.Database})
+	}
+
+	if other.Key.DistSQL {
+		s.DistSQLCount++
+	}
+	if other.Key.Failed {
+		s.FailedCount++
+	}
+	if other.Key.FullScan {
+		s.FullScanCount++
+	}
+	if other.Key.Vec {
+		s.VecCount++
+	}
+	s.TotalCount++
+}
+
 // Add combines other into this StatementStatistics.
 func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.FirstAttemptCount += other.FirstAttemptCount
