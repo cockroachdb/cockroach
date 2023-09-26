@@ -1003,6 +1003,8 @@ GO_TARGETS = [
     "//pkg/cmd/allocsim:allocsim_lib",
     "//pkg/cmd/bazci/githubpost:githubpost",
     "//pkg/cmd/bazci/githubpost:githubpost_test",
+    "//pkg/cmd/bazci/process-bep-file:process-bep-file",
+    "//pkg/cmd/bazci/process-bep-file:process-bep-file_lib",
     "//pkg/cmd/bazci/testfilter:testfilter",
     "//pkg/cmd/bazci/testfilter:testfilter_test",
     "//pkg/cmd/bazci:bazci",
