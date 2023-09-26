@@ -75,7 +75,7 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 				return nil, err
 			}
 
-			v := p.newContainerValuesNode(showHistogramColumns, 0)
+			v := p.newContainerValuesNode(showHistogramColumns, len(histogram.Buckets))
 			resolver := descs.NewDistSQLTypeResolver(p.descCollection, p.InternalSQLTxn().KV())
 			if err := typedesc.EnsureTypeIsHydrated(ctx, histogram.ColumnType, &resolver); err != nil {
 				return nil, err
