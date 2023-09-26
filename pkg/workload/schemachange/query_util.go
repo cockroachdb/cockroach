@@ -11,10 +11,60 @@ package schemachange
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
 )
+
+var (
+	descJSON       = `SELECT id, crdb_internal.pb_to_json('desc', descriptor) as descriptor FROM system.descriptor`
+	tableDescsJSON = fmt.Sprintf(`SELECT id, descriptor->'table' FROM (%s) WHERE descriptor ? 'table'`, descJSON)
+	regionsFromCluster = `SELECT * FROM [SHOW REGIONS FROM CLUSTER]`
+)
+
+//   database |  region  | primary | secondary | zones
+// -----------+----------+---------+-----------+--------
+//   text     |  text    |    bool    |     bool     | array[text]
+func regionsFromDatabase(database string) string {
+	return fmt.Sprintf(`SELECT * FROM [SHOW REGIONS FROM DATABASE %q]`, database)
+}
+
+func superRegionsFromDatabase(database string) string {
+	return fmt.Sprintf(`SELECT * FROM [SHOW SUPER REGIONS FROM DATABASE %q]`, database)
+}
+
+type CTE struct {
+	As    string
+	Query string
+}
+
+// With is a helper for building queries utilizing Common Table Expressions
+// (CTEs). Managing reusable and composable SQL queries in Golang is quite
+// difficult without building out a full expression engine. The denormalized
+// nature of the descriptor table, however, necessitates some degree of
+// reusability. Our solution is to provide many CTE expression as constants and
+// allow them to be composed with With.
+// Usage:
+//
+//	With([]CTE{
+//		{"descriptors", jsonifiedDescriptors},
+//		{"table_descs", jsonifiedTableDescriptors},
+//	}, `SELECT * FROM descriptors WHERE EXISTS(table_descs)`)
+func With(ctes []CTE, query string) string {
+	var b strings.Builder
+	_, _ = b.WriteString("WITH ")
+	for i, cte := range ctes {
+		if i > 0 {
+			_, _ = b.WriteString(",\n")
+		}
+		_, _ = fmt.Fprintf(&b, "%q AS (%s)", cte.As, cte.Query)
+	}
+	_, _ = b.WriteRune('\n')
+	_, _ = b.WriteString(query)
+	return b.String()
+}
 
 // Scan is a convenience wrapper around [CollectOne] that uses [pgx.RowTo] as
 // fn.

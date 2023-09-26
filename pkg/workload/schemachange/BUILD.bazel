@@ -8,9 +8,11 @@ go_library(
         "error_code_set.go",
         "error_screening.go",
         "operation_generator.go",
+        "optype.go",
+        "query_util.go",
         "schemachange.go",
         "type_resolver.go",
-        "optype.go",
+        "util.go",
         "watch_dog.go",
         ":gen-optype-stringer",  # keep
     ],
@@ -42,6 +44,7 @@ go_library(
         "@com_github_jackc_pgx_v5//pgxpool",
         "@com_github_lib_pq//oid",
         "@com_github_spf13_pflag//:pflag",
+        "@org_golang_x_exp//slices",
     ],
 )
 

@@ -80,9 +80,11 @@ const (
 
 	// ALTER DATABASE ...
 
-	alterDatabaseAddRegion     // ALTER DATABASE <db> ADD REGION <region>
-	alterDatabasePrimaryRegion //  ALTER DATABASE <db> PRIMARY REGION <region>
-	alterDatabaseSurvivalGoal  // ALTER DATABASE <db> SURVIVE <failure_mode>
+	alterDatabaseAddRegion       // ALTER DATABASE <db> ADD REGION <region>
+	alterDatabasePrimaryRegion   // ALTER DATABASE <db> PRIMARY REGION <region>
+	alterDatabaseSurvivalGoal    // ALTER DATABASE <db> SURVIVE <failure_mode>
+	alterDatabaseAddSuperRegion  // ALTER DATABASE <db> ADD SUPER REGION <region> VALUES ...
+	alterDatabaseDropSuperRegion // ALTER DATABASE <db> DROP SUPER REGION <region>
 
 	// ALTER TABLE <table> ...
 
@@ -124,14 +126,8 @@ const (
 	dropView     // DROP VIEW <view>
 
 	// Unimplemented operations. TODO(sql-foundations): Audit and/or implement these operations.
-	// alterDatabaseAddSuperRegion
-	// alterDatabaseAlterSuperRegion
-	// alterDatabaseDropRegion
-	// alterDatabaseDropSecondaryRegion
-	// alterDatabaseDropSuperRegion
 	// alterDatabaseOwner
 	// alterDatabasePlacement
-	// alterDatabaseSecondaryRegion
 	// alterDatabaseSetZoneConfigExtension
 	// alterDefaultPrivileges
 	// alterFunctionDepExtension
@@ -208,6 +204,8 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	alterDatabaseAddRegion:            (*operationGenerator).addRegion,
 	alterDatabasePrimaryRegion:        (*operationGenerator).primaryRegion,
 	alterDatabaseSurvivalGoal:         (*operationGenerator).survive,
+	alterDatabaseAddSuperRegion:       (*operationGenerator).alterDatabaseAddSuperRegion,
+	alterDatabaseDropSuperRegion:      (*operationGenerator).alterDatabaseDropSuperRegion,
 	alterTableAddColumn:               (*operationGenerator).addColumn,
 	alterTableAddConstraint:           (*operationGenerator).addConstraint,
 	alterTableAddConstraintForeignKey: (*operationGenerator).addForeignKeyConstraint,
@@ -271,7 +269,9 @@ var opWeights = []int{
 	dropView:                          1,
 	alterTypeDropValue:                1,
 	dropSchema:                        1,
-	alterDatabasePrimaryRegion:        0, // Disabled and tracked with #83831
+	alterDatabasePrimaryRegion:        1, // Disabled and tracked with #83831
+	alterDatabaseAddSuperRegion:       1,
+	alterDatabaseDropSuperRegion:      1,
 	alterTableRenameColumn:            1,
 	renameIndex:                       1,
 	renameSequence:                    1,

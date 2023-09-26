@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"golang.org/x/exp/slices"
 )
 
 // seqNum may be shared across multiple instances of this, so it should only
@@ -149,7 +150,6 @@ func (og *operationGenerator) resetTxnState() {
 	og.opsInTxn = nil
 	og.stmtsInTxt = nil
 }
-
 
 // getSupportedDeclarativeOp generates declarative operations until,
 // a fully supported one is found. This is required for mixed version testing
@@ -482,109 +482,84 @@ func (og *operationGenerator) alterTableLocality(ctx context.Context, tx pgx.Tx)
 func (og *operationGenerator) getClusterRegionNames(
 	ctx context.Context, tx pgx.Tx,
 ) (catpb.RegionNames, error) {
-	return og.scanRegionNames(ctx, tx, "SELECT region FROM [SHOW REGIONS FROM CLUSTER]")
+	return Collect(ctx, og, tx, pgx.RowTo[catpb.RegionName], "SELECT region FROM [SHOW REGIONS FROM CLUSTER]")
 }
 
 func (og *operationGenerator) getDatabaseRegionNames(
 	ctx context.Context, tx pgx.Tx,
 ) (catpb.RegionNames, error) {
-	return og.scanRegionNames(ctx, tx, "SELECT region FROM [SHOW REGIONS FROM DATABASE]")
+	return Collect(ctx, og, tx, pgx.RowTo[catpb.RegionName], "SELECT region FROM [SHOW REGIONS FROM DATABASE]")
 }
 
 func (og *operationGenerator) getDatabase(ctx context.Context, tx pgx.Tx) (string, error) {
 	return Scan[string](ctx, og, tx, `SHOW DATABASE`)
 }
 
-type getRegionsResult struct {
-	regionNamesInDatabase catpb.RegionNames
-	regionNamesInCluster  catpb.RegionNames
-
-	regionNamesNotInDatabase catpb.RegionNames
+type regionInfo struct {
+	Name        tree.Name
+	InUse       bool
+	IsPrimary   bool
+	IsSecondary bool
+	SuperRegion *tree.Name
 }
 
-func (og *operationGenerator) getRegions(ctx context.Context, tx pgx.Tx) (getRegionsResult, error) {
-	regionNamesInCluster, err := og.getClusterRegionNames(ctx, tx)
-	if err != nil {
-		return getRegionsResult{}, err
-	}
-	regionNamesNotInDatabaseSet := make(map[catpb.RegionName]struct{}, len(regionNamesInCluster))
-	for _, clusterRegionName := range regionNamesInCluster {
-		regionNamesNotInDatabaseSet[clusterRegionName] = struct{}{}
-	}
-	regionNamesInDatabase, err := og.getDatabaseRegionNames(ctx, tx)
-	if err != nil {
-		return getRegionsResult{}, err
-	}
-	for _, databaseRegionName := range regionNamesInDatabase {
-		delete(regionNamesNotInDatabaseSet, databaseRegionName)
-	}
-
-	regionNamesNotInDatabase := make(catpb.RegionNames, 0, len(regionNamesNotInDatabaseSet))
-	for regionName := range regionNamesNotInDatabaseSet {
-		regionNamesNotInDatabase = append(regionNamesNotInDatabase, regionName)
-	}
-	return getRegionsResult{
-		regionNamesInDatabase:    regionNamesInDatabase,
-		regionNamesInCluster:     regionNamesInCluster,
-		regionNamesNotInDatabase: regionNamesNotInDatabase,
-	}, nil
-}
-
-func (og *operationGenerator) scanRegionNames(
-	ctx context.Context, tx pgx.Tx, query string,
-) (catpb.RegionNames, error) {
-	var regionNames catpb.RegionNames
-	var regionNamesForLog []string
-	rows, err := tx.Query(ctx, query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var regionName catpb.RegionName
-		if err := rows.Scan(&regionName); err != nil {
-			return nil, err
-		}
-		regionNames = append(regionNames, regionName)
-		regionNamesForLog = append(regionNamesForLog, regionName.String())
-	}
-	if rows.Err() != nil {
-		return nil, errors.Wrapf(rows.Err(), "failed to get regions: %s", query)
-	}
-	og.LogQueryResults(query, regionNamesForLog)
-	return regionNames, nil
+func (og *operationGenerator) getRegionInfo(ctx context.Context, tx pgx.Tx, database string) ([]regionInfo, error) {
+	return Collect(ctx, og, tx, pgx.RowToStructByPos[regionInfo], With([]CTE{
+		{"cluster_regions", regionsFromCluster},
+		{"database_regions", regionsFromDatabase(database)},
+		{"super_regions", superRegionsFromDatabase(database)},
+	}, `
+		SELECT
+			cr.region,
+			dr IS NOT NULL,
+			COALESCE(dr.primary, false),
+			COALESCE(dr.secondary, false),
+			sr.super_region_name
+		FROM cluster_regions cr
+		LEFT JOIN database_regions dr ON cr.region = dr.region
+		LEFT JOIN (SELECT super_region_name, unnest(regions) as region FROM super_regions) sr ON sr.region = dr.region
+	`))
 }
 
 func (og *operationGenerator) addRegion(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
-	regionResult, err := og.getRegions(ctx, tx)
-	if err != nil {
-		return nil, err
-	}
 	database, err := og.getDatabase(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
+
+	regions, err := og.getRegionInfo(ctx, tx, database)
+	if err != nil {
+		return nil, err
+	}
+
+	clusterHasRegions := len(regions) > 0
+	regionsInDatabase := Filter(regions, func(r regionInfo) bool {
+		return r.InUse
+	})
+	regionsNotInDatabase := Filter(regions, func(r regionInfo) bool {
+		return !r.InUse
+	})
+
 	// No regions in cluster, try add an invalid region and expect an error.
-	if len(regionResult.regionNamesInCluster) == 0 {
+	if !clusterHasRegions {
 		return makeOpStmtForSingleError(OpStmtDDL,
 			fmt.Sprintf(`ALTER DATABASE %s ADD REGION "invalid-region"`, database),
-			pgcode.InvalidDatabaseDefinition), nil
+			pgcode.InvalidName, pgcode.InvalidDatabaseDefinition), nil
 	}
 	// No regions in database, add a random region from the cluster and expect an error.
-	if len(regionResult.regionNamesInDatabase) == 0 {
-		idx := og.params.rng.Intn(len(regionResult.regionNamesInCluster))
+	if len(regionsInDatabase) == 0 {
+		idx := og.params.rng.Intn(len(regionsNotInDatabase))
 		return makeOpStmtForSingleError(OpStmtDDL,
 			fmt.Sprintf(
 				`ALTER DATABASE %s ADD REGION "%s"`,
 				database,
-				regionResult.regionNamesInCluster[idx],
+				regionsNotInDatabase[idx].Name,
 			),
 			pgcode.InvalidDatabaseDefinition), nil
 	}
 	// If the database is undergoing a regional by row related change on the
 	// database, error out.
-	if len(regionResult.regionNamesInDatabase) > 0 {
+	if len(regionsInDatabase) > 0 {
 		databaseHasRegionalByRowChange, err := og.databaseHasRegionalByRowChange(ctx, tx)
 		if err != nil {
 			return nil, err
@@ -602,22 +577,22 @@ func (og *operationGenerator) addRegion(ctx context.Context, tx pgx.Tx) (*opStmt
 		}
 	}
 	// All regions are already in the database, expect an error with adding an existing one.
-	if len(regionResult.regionNamesNotInDatabase) == 0 {
-		idx := og.params.rng.Intn(len(regionResult.regionNamesInDatabase))
+	if len(regionsNotInDatabase) == 0 {
+		idx := og.params.rng.Intn(len(regionsInDatabase))
 		return makeOpStmtForSingleError(OpStmtDDL,
 			fmt.Sprintf(
 				`ALTER DATABASE %s ADD REGION "%s"`,
 				database,
-				regionResult.regionNamesInDatabase[idx],
+				regionsInDatabase[idx].Name,
 			),
 			pgcode.DuplicateObject), nil
 	}
 	// Here we have a region that is not yet marked as public on the enum.
 	// Double check this first.
 	stmt := makeOpStmt(OpStmtDDL)
-	idx := og.params.rng.Intn(len(regionResult.regionNamesNotInDatabase))
-	region := regionResult.regionNamesNotInDatabase[idx]
-	valuePresent, err := og.enumMemberPresent(ctx, tx, tree.RegionEnum, string(region))
+	idx := og.params.rng.Intn(len(regionsNotInDatabase))
+	region := regionsNotInDatabase[idx]
+	valuePresent, err := og.enumMemberPresent(ctx, tx, tree.RegionEnum, string(region.Name))
 	if err != nil {
 		return nil, err
 	}
@@ -627,26 +602,170 @@ func (og *operationGenerator) addRegion(ctx context.Context, tx pgx.Tx) (*opStmt
 	stmt.sql = fmt.Sprintf(
 		`ALTER DATABASE %s ADD REGION "%s"`,
 		database,
-		region,
+		region.Name,
 	)
 	return stmt, nil
 }
 
-func (og *operationGenerator) primaryRegion(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
-	regionResult, err := og.getRegions(ctx, tx)
-	if err != nil {
+func (og *operationGenerator) alterDatabaseAddSuperRegion(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	// TODO(chrisseto): Why do cluster settings not work here?
+	if _, err := tx.Exec(ctx, `SET enable_super_regions = 'on'`); err != nil {
 		return nil, err
 	}
+
 	database, err := og.getDatabase(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
 
+	isMultiRegion, err := og.databaseIsMultiRegion(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	regionInfos, err := og.getRegionInfo(ctx, tx, database)
+	if err != nil {
+		return nil, err
+	}
+
+	hasPrimaryRegion := false
+	var superRegions []tree.Name
+	var superRegionRegions []tree.Name
+	var nonSuperRegionRegions []tree.Name
+
+	for _, region := range regionInfos {
+		hasPrimaryRegion = hasPrimaryRegion || region.IsPrimary
+
+		// Skip regions that aren't part of this database.
+		if !region.InUse {
+			continue
+		}
+
+		if region.SuperRegion == nil {
+			nonSuperRegionRegions = append(nonSuperRegionRegions, region.Name)
+		} else {
+			superRegionRegions = append(superRegionRegions, region.Name)
+
+			if !slices.Contains(superRegions, *region.SuperRegion) {
+				superRegions = append(superRegions, *region.SuperRegion)
+			}
+		}
+	}
+
+	const (
+		Success = iota
+		DuplicateSuperRegionName
+		RegionAlreadyInUse
+		RegionNotPartOfDB
+	)
+
+	c := og.produceCase([]opCase{
+		{Success, hasPrimaryRegion && len(nonSuperRegionRegions) > 1},
+	}, []opCase{
+		{DuplicateSuperRegionName, len(superRegions) > 0},
+		{RegionAlreadyInUse, len(superRegionRegions) > 0},
+		{RegionNotPartOfDB, true},
+	})
+
+	var regionValues []tree.Name
+	var superRegionName tree.Name
+
+	switch c {
+	case Success:
+		superRegionName = tree.Name(fmt.Sprintf("super_region_%d", og.newUniqueSeqNum()))
+		regionValues = randUniqSelection(og, nonSuperRegionRegions, 1, len(nonSuperRegionRegions))
+
+	case DuplicateSuperRegionName:
+		superRegionName = superRegions[0]
+		regionValues = randUniqSelection(og, nonSuperRegionRegions, 1, len(nonSuperRegionRegions))
+
+	case RegionAlreadyInUse:
+		superRegionName = tree.Name(fmt.Sprintf("super_region_%d", og.newUniqueSeqNum()))
+		regionValues = randUniqSelection(og, superRegionRegions, 1, len(superRegionRegions))
+
+	case RegionNotPartOfDB:
+		superRegionName = tree.Name(fmt.Sprintf("super_region_%d", og.newUniqueSeqNum()))
+		regionValues = []tree.Name{"NonExistentRegion"}
+	}
+
+	stmt := makeOpStmt(OpStmtDDL)
+	stmt.sql = tree.Serialize(&tree.AlterDatabaseAddSuperRegion{
+		DatabaseName:    tree.Name(database),
+		SuperRegionName: superRegionName,
+		Regions:         regionValues,
+	})
+	stmt.expectedExecErrors.addAll(codesWithConditions{
+		{pgcode.InvalidName, !isMultiRegion},
+		{pgcode.Uncategorized, c != Success}, // super regions currently return non-pgcode errors.
+	})
+	return stmt, nil
+}
+
+func (og *operationGenerator) alterDatabaseDropSuperRegion(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	// TODO(chrisseto): Why do cluster settings not work here?
+	if _, err := tx.Exec(ctx, `SET enable_super_regions = 'on'`); err != nil {
+		return nil, err
+	}
+
+	database, err := og.getDatabase(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	isMultiRegion, err := og.databaseIsMultiRegion(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	superRegions, err := Collect(ctx, og, tx, pgx.RowTo[tree.Name], fmt.Sprintf(`
+		SELECT super_region_name FROM [SHOW SUPER REGIONS FROM DATABASE %q]
+	`, database))
+	if err != nil {
+		return nil, err
+	}
+
+	superRegion := tree.Name("IrrelevantSuperRegion")
+	if !og.produceError() && len(superRegions) > 0 {
+		superRegion = superRegions[og.randIntn(len(superRegions))]
+	}
+
+	stmt := makeOpStmt(OpStmtDDL)
+	stmt.sql = tree.Serialize(&tree.AlterDatabaseDropSuperRegion{
+		DatabaseName:    tree.Name(database),
+		SuperRegionName: superRegion,
+	})
+	stmt.expectedExecErrors.addAll(codesWithConditions{
+		{pgcode.InvalidName, !isMultiRegion},
+		{pgcode.Uncategorized, superRegion == "IrrelevantSuperRegion"},
+	})
+	return stmt, nil
+}
+
+func (og *operationGenerator) primaryRegion(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	// Allow changing the primary region even if it's part of a super region.
+	if _, err := tx.Exec(ctx, `SET alter_primary_region_super_region_override = 'on'`); err != nil {
+		return nil, err
+	}
+
+	database, err := og.getDatabase(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	regionInfos, err := og.getRegionInfo(ctx, tx, database)
+	if err != nil {
+		return nil, err
+	}
+
+	regionsInDB := Filter(regionInfos, func(r regionInfo) bool {
+		return r.InUse
+	})
+
 	// No regions in cluster, try PRIMARY REGION an invalid region and expect an error.
-	if len(regionResult.regionNamesInCluster) == 0 {
+	if len(regionInfos) == 0 {
 		return makeOpStmtForSingleError(OpStmtDDL,
 			fmt.Sprintf(`ALTER DATABASE %s PRIMARY REGION "invalid-region"`, database),
-			pgcode.InvalidDatabaseDefinition), nil
+			pgcode.InvalidName, pgcode.InvalidDatabaseDefinition), nil
 	}
 
 	// Conversion to multi-region is only allowed if the data is not already
@@ -661,22 +780,22 @@ func (og *operationGenerator) primaryRegion(ctx context.Context, tx pgx.Tx) (*op
 	}
 
 	// No regions in database, set a random region to be the PRIMARY REGION.
-	if len(regionResult.regionNamesInDatabase) == 0 {
-		idx := og.params.rng.Intn(len(regionResult.regionNamesInCluster))
+	if len(regionsInDB) == 0 {
+		idx := og.params.rng.Intn(len(regionInfos))
 		stmt.sql = fmt.Sprintf(
 			`ALTER DATABASE %s PRIMARY REGION "%s"`,
 			database,
-			regionResult.regionNamesInCluster[idx],
+			regionInfos[idx].Name,
 		)
 		return stmt, nil
 	}
 
 	// Regions exist in database, so set a random region to be the primary region.
-	idx := og.params.rng.Intn(len(regionResult.regionNamesInDatabase))
+	idx := og.params.rng.Intn(len(regionsInDB))
 	stmt.sql = fmt.Sprintf(
 		`ALTER DATABASE %s PRIMARY REGION "%s"`,
 		database,
-		regionResult.regionNamesInDatabase[idx],
+		regionsInDB[idx].Name,
 	)
 	return stmt, nil
 }
@@ -3248,7 +3367,7 @@ func (og *operationGenerator) randEnumValue(
 		// It's pretty unlikely that we'll generate conflicting values but better
 		// safe than sorry.
 		for {
-			nonExistentValue := og.randString(5, 5)
+			nonExistentValue := og.randString(5, 6)
 			if !valueSet[nonExistentValue] {
 				return nonExistentValue, false, nil
 			}
@@ -3688,15 +3807,47 @@ func (og *operationGenerator) produceError() bool {
 	return og.randIntn(100) < og.params.errorRate
 }
 
+type opCase struct {
+	Value    int
+	Possible bool
+}
+
+// produceCase is a helper for generating a dice roll fair distribution across
+// a set of cases that have prerequisites that may not be satisfied. If
+// produceError returns false, an error case will be selected. If no cases are
+// possible, produceCase will panic. Usage:
+//
+//	produceCase([]opCase{
+//		{allPrereqsMet, Success}
+//	}, []opCase{
+//		{canDoThing, OccationallyPossibleError},
+//		{true, AlwaysPossibleError}
+//	})
+func (og *operationGenerator) produceCase(successCases, errorCases []opCase) int {
+	successCases = Filter(successCases, func(c opCase) bool {
+		return c.Possible
+	})
+
+	errorCases = Filter(errorCases, func(c opCase) bool {
+		return c.Possible
+	})
+
+	if !og.produceError() && len(successCases) > 0 {
+		return successCases[og.randIntn(len(successCases))].Value
+	}
+
+	return errorCases[og.randIntn(len(errorCases))].Value
+}
+
 // randIntn returns an int in the range [0,topBound). It panics if topBound <= 0.
 func (og *operationGenerator) randIntn(topBound int) int {
 	return og.params.rng.Intn(topBound)
 }
 
-// randString return a random string that matches the regex `[a-z_]{min,max}`.
-// It panics if min < 0 or min > max.
+// randString return a random string that matches the regex `[a-z_]{min,max-1}`.
+// It panics if min < 0 or min >= max.
 func (og *operationGenerator) randString(min, max int) string {
-	if min < 0 || min > max {
+	if min < 0 || min >= max {
 		panic("invalid arguments to randString")
 	}
 
@@ -3704,8 +3855,31 @@ func (og *operationGenerator) randString(min, max int) string {
 	// for values or identifiers.
 	const alphabet = "abcdefghijklmnopqrstuvwxyz_"
 
-	length := og.randIntn(max) + min
+	length := og.randIntn(max-min) + min
 	return randutil.RandString(og.params.rng, length, alphabet)
+}
+
+// randUniqSelection returns a random non-repeating subslice of collection
+// containing [min, max] elements.
+// NOTE: unlike the other random generatorsr within this package, max is
+// inclusive to allow the usage of len(collection). Usage:
+//
+//	// A random subset of mySlice with at least 1 element and at most all of
+//	// mySlice
+//	randUniqSelection(og, mySlice, 1, len(mySlice))
+func randUniqSelection[T any](og *operationGenerator, collection []T, min, max int) []T {
+	if min < 0 || max > len(collection) {
+		panic("invalid arguments to randUniqSelection")
+	}
+
+	clone := slices.Clone(collection)
+
+	og.params.rng.Shuffle(len(clone), func(i, j int) {
+		clone[i], clone[j] = clone[j], clone[i]
+	})
+
+	length := og.randIntn(1+max-min) + min
+	return slices.Clip(clone[:length])
 }
 
 func (og *operationGenerator) newUniqueSeqNum() int64 {
