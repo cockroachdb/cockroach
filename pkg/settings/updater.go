@@ -60,7 +60,6 @@ func EncodeProtobuf(p protoutil.Message) string {
 
 type updater struct {
 	sv *Values
-	m  map[InternalKey]struct{}
 }
 
 // Updater is a helper for updating the in-memory settings.
@@ -70,9 +69,19 @@ type updater struct {
 // wrapped atomic settings values as we go and note which settings were updated,
 // then set the rest to default in ResetRemaining().
 type Updater interface {
+	// Set is used by tests to configure overrides in a generic fashion.
 	Set(ctx context.Context, key InternalKey, value EncodedValue) error
+	// SetToDefault resets the setting to its default value.
+	SetToDefault(ctx context.Context, key InternalKey) error
+
+	// ResetRemaining loads the default values for all settings that
+	// were not updated by Set().
 	ResetRemaining(ctx context.Context)
-	SetValueOrigin(ctx context.Context, key InternalKey, origin ValueOrigin)
+
+	// SetFromStorage is called by the settings watcher to update the
+	// settings from either the rangefeed over system.settings, or
+	// overrides coming in over the network from the system tenant.
+	SetFromStorage(ctx context.Context, key InternalKey, value EncodedValue, origin ValueOrigin) error
 }
 
 // A NoopUpdater ignores all updates.
@@ -84,7 +93,15 @@ func (u NoopUpdater) Set(ctx context.Context, key InternalKey, value EncodedValu
 // ResetRemaining implements Updater. It is a no-op.
 func (u NoopUpdater) ResetRemaining(context.Context) {}
 
-func (u NoopUpdater) SetValueOrigin(ctx context.Context, key InternalKey, origin ValueOrigin) {}
+// SetToDefault implements Updater. It is a no-op.
+func (u NoopUpdater) SetToDefault(ctx context.Context, key InternalKey) error { return nil }
+
+// SetFromStorage implements Updater. It is a no-op.
+func (u NoopUpdater) SetFromStorage(
+	ctx context.Context, key InternalKey, value EncodedValue, origin ValueOrigin,
+) error {
+	return nil
+}
 
 // NewUpdater makes an Updater.
 func NewUpdater(sv *Values) Updater {
@@ -92,13 +109,105 @@ func NewUpdater(sv *Values) Updater {
 		return NoopUpdater{}
 	}
 	return updater{
-		m:  make(map[InternalKey]struct{}, len(registry)),
 		sv: sv,
 	}
 }
 
+// getSetting determines whether the target setting can
+// be set or overridden.
+func (u updater) getSetting(key InternalKey, value EncodedValue) (internalSetting, error) {
+	d, ok := registry[key]
+	if !ok {
+		if _, ok := retiredSettings[key]; ok {
+			return nil, nil
+		}
+		// Likely a new setting this old node doesn't know about.
+		return nil, errors.Errorf("unknown setting '%s'", key)
+	}
+	if expected := d.Typ(); value.Type != expected {
+		return nil, errors.Errorf("setting '%s' defined as type %s, not %s", d.Name(), expected, value.Type)
+	}
+	return d, nil
+}
+
 // Set attempts to parse and update a setting and notes that it was updated.
 func (u updater) Set(ctx context.Context, key InternalKey, value EncodedValue) error {
+	d, err := u.getSetting(key, value)
+	if err != nil || d == nil {
+		return err
+	}
+
+	return u.setInternal(ctx, key, value, d, OriginExplicitlySet)
+}
+
+func (u updater) setInternal(
+	ctx context.Context, key InternalKey, value EncodedValue, d internalSetting, origin ValueOrigin,
+) error {
+	// Mark the setting as modified, such that
+	// (updater).ResetRemaining() does not touch it.
+	u.sv.setValueOrigin(ctx, d.getSlot(), origin)
+
+	switch setting := d.(type) {
+	case *StringSetting:
+		return setting.set(ctx, u.sv, value.Value)
+
+	case *ProtobufSetting:
+		p, err := setting.DecodeValue(value.Value)
+		if err != nil {
+			return err
+		}
+		return setting.set(ctx, u.sv, p)
+
+	case *BoolSetting:
+		b, err := setting.DecodeValue(value.Value)
+		if err != nil {
+			return err
+		}
+		setting.set(ctx, u.sv, b)
+		return nil
+
+	case numericSetting:
+		i, err := setting.DecodeValue(value.Value)
+		if err != nil {
+			return err
+		}
+		return setting.set(ctx, u.sv, i)
+
+	case *FloatSetting:
+		f, err := setting.DecodeValue(value.Value)
+		if err != nil {
+			return err
+		}
+		return setting.set(ctx, u.sv, f)
+
+	case *DurationSetting:
+		d, err := setting.DecodeValue(value.Value)
+		if err != nil {
+			return err
+		}
+		return setting.set(ctx, u.sv, d)
+
+	case *DurationSettingWithExplicitUnit:
+		d, err := setting.DecodeValue(value.Value)
+		if err != nil {
+			return err
+		}
+		return setting.set(ctx, u.sv, d)
+
+	case *VersionSetting:
+		// We intentionally avoid updating the setting through this code path.
+		// The specific setting backed by VersionSetting is the cluster version
+		// setting, changes to which are propagated through direct RPCs to each
+		// node in the cluster instead of gossip. This is done using the
+		// BumpClusterVersion RPC.
+		return nil
+
+	default:
+		return errors.AssertionFailedf("unhandled type: %T", d)
+	}
+}
+
+func (u updater) SetToDefault(ctx context.Context, key InternalKey) error {
 	d, ok := registry[key]
 	if !ok {
 		if _, ok := retiredSettings[key]; ok {
@@ -108,87 +217,32 @@ func (u updater) Set(ctx context.Context, key InternalKey, value EncodedValue) e
 		return errors.Errorf("unknown setting '%s'", key)
 	}
 
-	u.m[key] = struct{}{}
-
-	if expected := d.Typ(); value.Type != expected {
-		return errors.Errorf("setting '%s' defined as type %s, not %s", d.Name(), expected, value.Type)
-	}
-
-	switch setting := d.(type) {
-	case *StringSetting:
-		return setting.set(ctx, u.sv, value.Value)
-	case *ProtobufSetting:
-		p, err := setting.DecodeValue(value.Value)
-		if err != nil {
-			return err
-		}
-		return setting.set(ctx, u.sv, p)
-	case *BoolSetting:
-		b, err := setting.DecodeValue(value.Value)
-		if err != nil {
-			return err
-		}
-		setting.set(ctx, u.sv, b)
-		return nil
-	case numericSetting:
-		i, err := setting.DecodeValue(value.Value)
-		if err != nil {
-			return err
-		}
-		return setting.set(ctx, u.sv, i)
-	case *FloatSetting:
-		f, err := setting.DecodeValue(value.Value)
-		if err != nil {
-			return err
-		}
-		return setting.set(ctx, u.sv, f)
-	case *DurationSetting:
-		d, err := setting.DecodeValue(value.Value)
-		if err != nil {
-			return err
-		}
-		return setting.set(ctx, u.sv, d)
-	case *DurationSettingWithExplicitUnit:
-		d, err := setting.DecodeValue(value.Value)
-		if err != nil {
-			return err
-		}
-		return setting.set(ctx, u.sv, d)
-	case *VersionSetting:
-		// We intentionally avoid updating the setting through this code path.
-		// The specific setting backed by VersionSetting is the cluster version
-		// setting, changes to which are propagated through direct RPCs to each
-		// node in the cluster instead of gossip. This is done using the
-		// BumpClusterVersion RPC.
-		return nil
-	}
+	u.sv.setValueOrigin(ctx, d.getSlot(), OriginDefault)
+	d.setToDefault(ctx, u.sv)
 	return nil
 }
 
 // ResetRemaining sets all settings not updated by the updater to their default values.
 func (u updater) ResetRemaining(ctx context.Context) {
-	for k, v := range registry {
-
-		if _, hasOverride := u.m[k]; hasOverride {
-			u.sv.setValueOrigin(ctx, v.getSlot(), OriginExplicitlySet)
-		} else {
-			u.sv.setValueOrigin(ctx, v.getSlot(), OriginDefault)
-		}
-
+	for _, v := range registry {
 		if u.sv.SpecializedToVirtualCluster() && v.Class() == SystemOnly {
 			// Don't try to reset system settings on a non-system tenant.
 			continue
 		}
-		if _, ok := u.m[k]; !ok {
+		if u.sv.getValueOrigin(ctx, v.getSlot()) == OriginDefault {
 			v.setToDefault(ctx, u.sv)
 		}
 	}
 }
 
-// SetValueOrigin sets the origin of the value of a given setting.
-func (u updater) SetValueOrigin(ctx context.Context, key InternalKey, origin ValueOrigin) {
-	d, ok := registry[key]
-	if ok {
-		u.sv.setValueOrigin(ctx, d.getSlot(), origin)
+// SetFromStorage loads the stored value into the setting.
+func (u updater) SetFromStorage(
+	ctx context.Context, key InternalKey, value EncodedValue, origin ValueOrigin,
+) error {
+	d, err := u.getSetting(key, value)
+	if err != nil || d == nil {
+		return err
 	}
+
+	return u.setInternal(ctx, key, value, d, origin)
 }

@@ -86,6 +86,7 @@ type valuesContainer struct {
 	// tenant). Reading or writing such a setting causes panics in test builds.
 	forbidden [numSlots]bool
 
+	// hasValue contains the origin of the current value of the setting.
 	hasValue [numSlots]uint32
 }
 

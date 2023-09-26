@@ -80,6 +80,7 @@ var _ = (*FloatSetting).Default
 //
 // For testing usage only.
 func (f *FloatSetting) Override(ctx context.Context, sv *Values, v float64) {
+	sv.setValueOrigin(ctx, f.slot, OriginExplicitlySet)
 	if err := f.set(ctx, sv, v); err != nil {
 		panic(err)
 	}
