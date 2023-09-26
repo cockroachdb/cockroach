@@ -173,6 +173,13 @@ func TestMVCCHistories(t *testing.T) {
 		{Key: keys.MinKey, EndKey: roachpb.LocalMax},
 		{Key: keys.LocalMax, EndKey: roachpb.KeyMax},
 	}
+	// lockTableSpan returns the span of the lock table that corresponds to the
+	// given span.
+	lockTableSpan := func(s roachpb.Span) roachpb.Span {
+		k, _ := keys.LockTableSingleKey(s.Key, nil)
+		ek, _ := keys.LockTableSingleKey(s.EndKey, nil)
+		return roachpb.Span{Key: k, EndKey: ek}
+	}
 
 	// Timestamp for MVCC stats calculations, in nanoseconds.
 	const statsTS = 100e9
@@ -605,11 +612,15 @@ func TestMVCCHistories(t *testing.T) {
 					}
 
 					cmd := e.getCmd()
-					txnChange = txnChange || cmd.typ&typTxnUpdate != 0
-					dataChange = dataChange || cmd.typ&typDataUpdate != 0
-					locksChange = locksChange || cmd.typ&typLocksUpdate != 0
+					txnChangeForCmd := cmd.typ&typTxnUpdate != 0
+					dataChangeForCmd := cmd.typ&typDataUpdate != 0
+					locksChangeForCmd := cmd.typ&typLocksUpdate != 0
+					txnChange = txnChange || txnChangeForCmd
+					dataChange = dataChange || dataChangeForCmd
+					locksChange = locksChange || locksChangeForCmd
+					statsForCmd := stats && (dataChangeForCmd || locksChangeForCmd)
 
-					if trace || (stats && cmd.typ&typDataUpdate != 0) {
+					if trace || statsForCmd {
 						// If tracing is also requested by the datadriven input,
 						// we'll trace the statement in the actual results too.
 						buf.Printf(">> %s", d.Cmd)
@@ -627,6 +638,11 @@ func TestMVCCHistories(t *testing.T) {
 							ms, err := storage.ComputeStats(e.engine, span.Key, span.EndKey, statsTS)
 							require.NoError(t, err)
 							msEngineBefore.Add(ms)
+
+							lockSpan := lockTableSpan(span)
+							lockMs, err := storage.ComputeStats(e.engine, lockSpan.Key, lockSpan.EndKey, statsTS)
+							require.NoError(t, err)
+							msEngineBefore.Add(lockMs)
 						}
 					}
 					msEvalBefore := *e.ms
@@ -642,10 +658,10 @@ func TestMVCCHistories(t *testing.T) {
 						// If tracing is enabled, we report the intermediate results
 						// after each individual step in the script.
 						// This may modify foundErr too.
-						reportResults(cmd.typ&typTxnUpdate != 0, cmd.typ&typDataUpdate != 0, cmd.typ&typLocksUpdate != 0)
+						reportResults(txnChangeForCmd, dataChangeForCmd, dataChangeForCmd)
 					}
 
-					if stats && cmd.typ&typDataUpdate != 0 {
+					if statsForCmd {
 						// If stats are enabled, emit evaluated stats returned by the
 						// command, and compare them with the real computed stats diff.
 						var msEngineDiff enginepb.MVCCStats
@@ -653,6 +669,11 @@ func TestMVCCHistories(t *testing.T) {
 							ms, err := storage.ComputeStats(e.engine, span.Key, span.EndKey, statsTS)
 							require.NoError(t, err)
 							msEngineDiff.Add(ms)
+
+							lockSpan := lockTableSpan(span)
+							lockMs, err := storage.ComputeStats(e.engine, lockSpan.Key, lockSpan.EndKey, statsTS)
+							require.NoError(t, err)
+							msEngineDiff.Add(lockMs)
 						}
 						msEngineDiff.Subtract(msEngineBefore)
 
@@ -695,12 +716,17 @@ func TestMVCCHistories(t *testing.T) {
 				}
 
 				// Calculate and output final stats if requested and the data changed.
-				if stats && dataChange {
+				if stats && (dataChange || locksChange) {
 					var msFinal enginepb.MVCCStats
 					for _, span := range spans {
 						ms, err := storage.ComputeStats(e.engine, span.Key, span.EndKey, statsTS)
 						require.NoError(t, err)
 						msFinal.Add(ms)
+
+						lockSpan := lockTableSpan(span)
+						lockMs, err := storage.ComputeStats(e.engine, lockSpan.Key, lockSpan.EndKey, statsTS)
+						require.NoError(t, err)
+						msFinal.Add(lockMs)
 					}
 					buf.Printf("stats: %s\n", formatStats(msFinal, false))
 				}
@@ -2237,7 +2263,7 @@ func formatStats(ms enginepb.MVCCStats, delta bool) string {
 	order := []string{"key_count", "key_bytes", "val_count", "val_bytes",
 		"range_key_count", "range_key_bytes", "range_val_count", "range_val_bytes",
 		"live_count", "live_bytes", "gc_bytes_age",
-		"intent_count", "intent_bytes", "lock_count", "lock_age"}
+		"intent_count", "intent_bytes", "lock_count", "lock_bytes", "lock_age"}
 	sort.SliceStable(fields, func(i, j int) bool {
 		for _, name := range order {
 			if fields[i][1] == name {

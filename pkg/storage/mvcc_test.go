@@ -125,6 +125,7 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 		RangeKeyBytes:     1,
 		RangeValCount:     1,
 		RangeValBytes:     1,
+		LockBytes:         1,
 		LockCount:         1,
 		LockAge:           1,
 		GCBytesAge:        1,
