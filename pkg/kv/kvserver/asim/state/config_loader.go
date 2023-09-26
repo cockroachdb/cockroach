@@ -36,9 +36,9 @@ var SingleRegionConfig = ClusterInfo{
 		{
 			Name: "US",
 			Zones: []Zone{
-				{Name: "US_1", NodeCount: 5},
-				{Name: "US_2", NodeCount: 5},
-				{Name: "US_3", NodeCount: 5},
+				NewZoneWithSingleStore("US_1", 5),
+				NewZoneWithSingleStore("US_2", 5),
+				NewZoneWithSingleStore("US_3", 5),
 			},
 		},
 	},
@@ -52,9 +52,9 @@ var SingleRegionMultiStoreConfig = ClusterInfo{
 		{
 			Name: "US",
 			Zones: []Zone{
-				{Name: "US_1", NodeCount: 1, StoresPerNode: 5},
-				{Name: "US_2", NodeCount: 1, StoresPerNode: 5},
-				{Name: "US_3", NodeCount: 1, StoresPerNode: 5},
+				NewZone("US_1", 1, 5),
+				NewZone("US_2", 1, 5),
+				NewZone("US_3", 1, 5),
 			},
 		},
 	},
@@ -67,25 +67,25 @@ var MultiRegionConfig = ClusterInfo{
 		{
 			Name: "US_East",
 			Zones: []Zone{
-				{Name: "US_East_1", NodeCount: 4},
-				{Name: "US_East_2", NodeCount: 4},
-				{Name: "US_East_3", NodeCount: 4},
+				NewZoneWithSingleStore("US_East_1", 4),
+				NewZoneWithSingleStore("US_East_2", 4),
+				NewZoneWithSingleStore("US_East_3", 4),
 			},
 		},
 		{
 			Name: "US_West",
 			Zones: []Zone{
-				{Name: "US_West_1", NodeCount: 4},
-				{Name: "US_West_2", NodeCount: 4},
-				{Name: "US_West_3", NodeCount: 4},
+				NewZoneWithSingleStore("US_West_1", 4),
+				NewZoneWithSingleStore("US_West_2", 4),
+				NewZoneWithSingleStore("US_West_3", 4),
 			},
 		},
 		{
 			Name: "EU",
 			Zones: []Zone{
-				{Name: "EU_1", NodeCount: 4},
-				{Name: "EU_2", NodeCount: 4},
-				{Name: "EU_3", NodeCount: 4},
+				NewZoneWithSingleStore("EU_1", 4),
+				NewZoneWithSingleStore("EU_2", 4),
+				NewZoneWithSingleStore("EU_3", 4),
 			},
 		},
 	},
@@ -98,24 +98,24 @@ var ComplexConfig = ClusterInfo{
 		{
 			Name: "US_East",
 			Zones: []Zone{
-				{Name: "US_East_1", NodeCount: 1},
-				{Name: "US_East_2", NodeCount: 2},
-				{Name: "US_East_3", NodeCount: 3},
-				{Name: "US_East_3", NodeCount: 10},
+				NewZoneWithSingleStore("US_East_1", 1),
+				NewZoneWithSingleStore("US_East_2", 2),
+				NewZoneWithSingleStore("US_East_3", 3),
+				NewZoneWithSingleStore("US_East_3", 10),
 			},
 		},
 		{
 			Name: "US_West",
 			Zones: []Zone{
-				{Name: "US_West_1", NodeCount: 2},
+				NewZoneWithSingleStore("US_West_1", 2),
 			},
 		},
 		{
 			Name: "EU",
 			Zones: []Zone{
-				{Name: "EU_1", NodeCount: 3},
-				{Name: "EU_2", NodeCount: 3},
-				{Name: "EU_3", NodeCount: 4},
+				NewZoneWithSingleStore("EU_1", 3),
+				NewZoneWithSingleStore("EU_2", 3),
+				NewZoneWithSingleStore("EU_3", 4),
 			},
 		},
 	},
@@ -253,6 +253,25 @@ type Zone struct {
 	StoresPerNode int
 }
 
+// NewZoneWithSingleStore is a constructor for a simulated availability zone,
+// taking zone name, node count, and a default of one store per node.
+func NewZoneWithSingleStore(name string, nodeCount int) Zone {
+	return NewZone(name, nodeCount, 1)
+}
+
+// NewZone is a constructor for a simulated availability zone, taking zone name,
+// node count, and custom stores per node.
+func NewZone(name string, nodeCount int, storesPerNode int) Zone {
+	if storesPerNode < 1 {
+		panic(fmt.Sprintf("storesPerNode cannot be less than one but found %v", storesPerNode))
+	}
+	return Zone{
+		Name:          name,
+		NodeCount:     nodeCount,
+		StoresPerNode: storesPerNode,
+	}
+}
+
 // Region is a simulated region which contains one or more zones.
 type Region struct {
 	Name  string
@@ -328,7 +347,7 @@ func LoadClusterInfo(c ClusterInfo, settings *config.SimulationSettings) State {
 				s.SetNodeLocality(node.NodeID(), locality)
 				storesRequired := z.StoresPerNode
 				if storesRequired < 1 {
-					storesRequired = 1
+					panic(fmt.Sprintf("storesPerNode cannot be less than one but found %v", storesRequired))
 				}
 				for store := 0; store < storesRequired; store++ {
 					if newStore, ok := s.AddStore(node.NodeID()); !ok {

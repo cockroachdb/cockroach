@@ -244,7 +244,7 @@ func ClusterInfoWithDistribution(
 		availableNodes -= allocatedNodes
 		ret.Regions[i] = Region{
 			Name:  name,
-			Zones: []Zone{{Name: name + "_1", NodeCount: allocatedNodes, StoresPerNode: storesPerNode}},
+			Zones: []Zone{NewZone(name+"_1", allocatedNodes, storesPerNode)},
 		}
 	}
 
