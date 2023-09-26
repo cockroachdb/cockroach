@@ -22,11 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -243,6 +245,30 @@ var aggregates = map[string]builtinDefinition{
 			"Calculates the sum of squared differences from the mean of the selected values in final stage.",
 		),
 	)),
+
+	"merge_stats_metadata": makeBuiltin(tree.FunctionProperties{
+		Undocumented: true,
+	},
+		makeAggOverload([]*types.T{types.Jsonb}, types.Jsonb, newAggStatementMetadata,
+			"Merges the meta data of the statistics.", volatility.Stable, true, /* calledOnNullInput */
+		),
+	),
+
+	"merge_statement_stats": makeBuiltin(tree.FunctionProperties{
+		Undocumented: true,
+	},
+		makeAggOverload([]*types.T{types.Jsonb}, types.Jsonb, newAggStatementStatistics,
+			"Merges the statistics data of the statement_statistics table.", volatility.Stable, true, /* calledOnNullInput */
+		),
+	),
+
+	"merge_transaction_stats": makeBuiltin(tree.FunctionProperties{
+		Undocumented: true,
+	},
+		makeAggOverload([]*types.T{types.Jsonb}, types.Jsonb, newAggTransactionStatistics,
+			"Merges the statistics data of the transaction_statistics table.", volatility.Stable, true, /* calledOnNullInput */
+		),
+	),
 
 	"transition_regression_aggregate": makePrivate(makeTransitionRegressionAggregateBuiltin()),
 
@@ -1340,6 +1366,9 @@ const sizeOfSTMakeLineAggregate = int64(unsafe.Sizeof(stMakeLineAgg{}))
 const sizeOfSTUnionAggregate = int64(unsafe.Sizeof(stUnionAgg{}))
 const sizeOfSTCollectAggregate = int64(unsafe.Sizeof(stCollectAgg{}))
 const sizeOfSTExtentAggregate = int64(unsafe.Sizeof(stExtentAgg{}))
+const sizeOfStatementStatistics = int64(unsafe.Sizeof(appstatspb.StatementStatistics{}))
+const sizeOfAggregatedStatementMetadata = int64(unsafe.Sizeof(appstatspb.AggregatedStatementMetadata{}))
+const sizeOfTransactionStatistics = int64(unsafe.Sizeof(appstatspb.TransactionStatistics{}))
 
 // aggregateWithIntermediateResult is a common interface for aggregate functions
 // which can return a result without loss of precision. This is useful when an
@@ -1578,6 +1607,174 @@ func (a *arrayAggregate) Close(ctx context.Context) {
 // Size is part of the eval.AggregateFunc interface.
 func (a *arrayAggregate) Size() int64 {
 	return sizeOfArrayAggregate
+}
+
+type aggStatementStatistics struct {
+	singleDatumAggregateBase
+
+	stats              appstatspb.StatementStatistics
+	firstJsonDatumSize int64
+}
+
+func newAggStatementStatistics(
+	params []*types.T, evalCtx *eval.Context, _ tree.Datums,
+) eval.AggregateFunc {
+	return &aggStatementStatistics{
+		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+	}
+}
+
+// Add the statistics information into a single object.
+func (a *aggStatementStatistics) Add(ctx context.Context, datum tree.Datum, _ ...tree.Datum) error {
+	if datum != nil && a.firstJsonDatumSize == 0 {
+		a.firstJsonDatumSize = int64(datum.Size())
+		err := a.updateMemoryUsage(ctx, a.firstJsonDatumSize)
+		if err != nil {
+			return err
+		}
+	}
+
+	return mergeStatementStatsHelper(&a.stats, datum)
+}
+
+// Result returns a copy of aggregated JSON object.
+func (a *aggStatementStatistics) Result() (tree.Datum, error) {
+	aggregatedJSON, err := sqlstatsutil.BuildStmtStatisticsJSON(&a.stats)
+	if err != nil {
+		return nil, err
+	}
+
+	return tree.NewDJSON(aggregatedJSON), nil
+}
+
+// Reset implements eval.AggregateFunc interface.
+func (a *aggStatementStatistics) Reset(ctx context.Context) {
+	a.reset(ctx)
+	a.stats.Reset()
+}
+
+// Close allows the aggregate to release the memory it requested during
+// operation.
+func (a *aggStatementStatistics) Close(ctx context.Context) {
+	a.close(ctx)
+}
+
+// Size is part of the eval.AggregateFunc interface.
+func (a *aggStatementStatistics) Size() int64 {
+	return sizeOfStatementStatistics
+}
+
+type aggStatementMetadata struct {
+	singleDatumAggregateBase
+
+	stats              appstatspb.AggregatedStatementMetadata
+	firstJsonDatumSize int64
+}
+
+func newAggStatementMetadata(
+	params []*types.T, evalCtx *eval.Context, _ tree.Datums,
+) eval.AggregateFunc {
+	return &aggStatementMetadata{
+		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		stats:                    appstatspb.AggregatedStatementMetadata{},
+	}
+}
+
+// Add the statistics and metadata to a single object.
+func (a *aggStatementMetadata) Add(ctx context.Context, datum tree.Datum, _ ...tree.Datum) error {
+	if datum != nil && a.firstJsonDatumSize == 0 {
+		a.firstJsonDatumSize = int64(datum.Size())
+		err := a.updateMemoryUsage(ctx, a.firstJsonDatumSize)
+		if err != nil {
+			return err
+		}
+	}
+	return mergeStatsMetadataHelper(&a.stats, datum)
+}
+
+// Result returns a copy of the aggregated json object.
+func (a *aggStatementMetadata) Result() (tree.Datum, error) {
+	aggregatedJSON, err := sqlstatsutil.BuildStmtDetailsMetadataJSON(&a.stats)
+	if err != nil {
+		return nil, err
+	}
+
+	return tree.NewDJSON(aggregatedJSON), nil
+}
+
+// Reset implements eval.AggregateFunc interface.
+func (a *aggStatementMetadata) Reset(ctx context.Context) {
+	a.stats.Reset()
+	a.reset(ctx)
+}
+
+// Close allows the aggregate to release the memory it requested during
+// operation.
+func (a *aggStatementMetadata) Close(ctx context.Context) {
+	a.close(ctx)
+}
+
+// Size is part of the eval.AggregateFunc interface.
+func (a *aggStatementMetadata) Size() int64 {
+	return sizeOfAggregatedStatementMetadata
+}
+
+type aggTransactionStatistics struct {
+	singleDatumAggregateBase
+	stats              appstatspb.TransactionStatistics
+	firstJsonDatumSize int64
+}
+
+func newAggTransactionStatistics(
+	params []*types.T, evalCtx *eval.Context, _ tree.Datums,
+) eval.AggregateFunc {
+	return &aggTransactionStatistics{
+		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+	}
+}
+
+// Add the statistics to a single aggregated object.
+func (a *aggTransactionStatistics) Add(
+	ctx context.Context, datum tree.Datum, _ ...tree.Datum,
+) error {
+	if datum != nil && a.firstJsonDatumSize == 0 {
+		a.firstJsonDatumSize = int64(datum.Size())
+		err := a.updateMemoryUsage(ctx, a.firstJsonDatumSize)
+		if err != nil {
+			return err
+		}
+	}
+	return mergeTransactionStatsHelper(&a.stats, datum)
+}
+
+// Result returns a copy of aggregated JSON object.
+func (a *aggTransactionStatistics) Result() (tree.Datum, error) {
+	aggregatedJSON, err := sqlstatsutil.BuildTxnStatisticsJSON(
+		&appstatspb.CollectedTransactionStatistics{
+			Stats: a.stats,
+		})
+	if err != nil {
+		return nil, err
+	}
+
+	return tree.NewDJSON(aggregatedJSON), nil
+}
+
+// Reset implements eval.AggregateFunc interface.
+func (a *aggTransactionStatistics) Reset(ctx context.Context) {
+	a.stats.Reset()
+	a.reset(ctx)
+}
+
+// Close allows the aggregate to release the memory it requested during
+// operation.
+func (a *aggTransactionStatistics) Close(ctx context.Context) {
+	a.close(ctx)
+}
+
+// Size is part of the eval.AggregateFunc interface.
+func (a *aggTransactionStatistics) Size() int64 {
+	return sizeOfTransactionStatistics
 }
 
 type arrayCatAggregate struct {

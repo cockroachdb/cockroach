@@ -4310,16 +4310,10 @@ value if you rely on the HLC for accuracy.`,
 				arr := tree.MustBeDArray(args[0])
 				var aggregatedStats appstatspb.StatementStatistics
 				for _, statsDatum := range arr.Array {
-					if statsDatum == tree.DNull {
-						continue
-					}
-					var stats appstatspb.StatementStatistics
-					statsJSON := tree.MustBeDJSON(statsDatum).JSON
-					if err := sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &stats); err != nil {
+					err := mergeStatementStatsHelper(&aggregatedStats, statsDatum)
+					if err != nil {
 						return nil, err
 					}
-
-					aggregatedStats.Add(&stats)
 				}
 
 				aggregatedJSON, err := sqlstatsutil.BuildStmtStatisticsJSON(&aggregatedStats)
@@ -4344,13 +4338,10 @@ value if you rely on the HLC for accuracy.`,
 					if statsDatum == tree.DNull {
 						continue
 					}
-					var stats appstatspb.TransactionStatistics
-					statsJSON := tree.MustBeDJSON(statsDatum).JSON
-					if err := sqlstatsutil.DecodeTxnStatsStatisticsJSON(statsJSON, &stats); err != nil {
+					err := mergeTransactionStatsHelper(&aggregatedStats, statsDatum)
+					if err != nil {
 						return nil, err
 					}
-
-					aggregatedStats.Add(&stats)
 				}
 
 				aggregatedJSON, err := sqlstatsutil.BuildTxnStatisticsJSON(
@@ -4380,31 +4371,10 @@ value if you rely on the HLC for accuracy.`,
 						continue
 					}
 
-					var statistics appstatspb.CollectedStatementStatistics
-					metadataJSON := tree.MustBeDJSON(metadataDatum).JSON
-					err := sqlstatsutil.DecodeStmtStatsMetadataJSON(metadataJSON, &statistics)
+					err := mergeStatsMetadataHelper(metadata, metadataDatum)
 					if err != nil {
 						return nil, err
 					}
-					metadata.ImplicitTxn = statistics.Key.ImplicitTxn
-					metadata.Query = statistics.Key.Query
-					metadata.QuerySummary = statistics.Key.QuerySummary
-					metadata.StmtType = statistics.Stats.SQLType
-					metadata.Databases = util.CombineUnique(metadata.Databases, []string{statistics.Key.Database})
-
-					if statistics.Key.DistSQL {
-						metadata.DistSQLCount++
-					}
-					if statistics.Key.Failed {
-						metadata.FailedCount++
-					}
-					if statistics.Key.FullScan {
-						metadata.FullScanCount++
-					}
-					if statistics.Key.Vec {
-						metadata.VecCount++
-					}
-					metadata.TotalCount++
 				}
 				aggregatedJSON, err := sqlstatsutil.BuildStmtDetailsMetadataJSON(metadata)
 				if err != nil {
@@ -8850,6 +8820,89 @@ func strftimeImpl() builtinDefinition {
 			Volatility: volatility.Immutable,
 		},
 	)
+}
+
+func mergeStatsMetadataHelper(
+	metadata *appstatspb.AggregatedStatementMetadata, metadataDatum tree.Datum,
+) error {
+	if metadataDatum == tree.DNull {
+		return nil
+	}
+
+	var statistics appstatspb.CollectedStatementStatistics
+	metadataJSON := tree.MustBeDJSON(metadataDatum).JSON
+
+	// Only decode and set the query info if it was not previously set. Avoid the
+	// overhead of parsing the query string which can be large.
+	if metadata.Query == "" || metadata.QuerySummary == "" {
+		err := sqlstatsutil.DecodeStmtStatsMetadataJSON(metadataJSON, &statistics)
+		if err != nil {
+			return err
+		}
+		metadata.ImplicitTxn = statistics.Key.ImplicitTxn
+		metadata.Query = statistics.Key.Query
+		metadata.QuerySummary = statistics.Key.QuerySummary
+		metadata.StmtType = statistics.Stats.SQLType
+	} else {
+		err := sqlstatsutil.DecodeStmtStatsMetadataFlagsOnlyJSON(metadataJSON, &statistics)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Avoid creating the array if the db names match.
+	if len(metadata.Databases) != 1 || metadata.Databases[0] != statistics.Key.Database {
+		metadata.Databases = util.CombineUnique(metadata.Databases, []string{statistics.Key.Database})
+	}
+
+	if statistics.Key.DistSQL {
+		metadata.DistSQLCount++
+	}
+	if statistics.Key.Failed {
+		metadata.FailedCount++
+	}
+	if statistics.Key.FullScan {
+		metadata.FullScanCount++
+	}
+	if statistics.Key.Vec {
+		metadata.VecCount++
+	}
+	metadata.TotalCount++
+	return nil
+}
+
+func mergeStatementStatsHelper(
+	aggregatedStats *appstatspb.StatementStatistics, statsDatum tree.Datum,
+) error {
+	if statsDatum == tree.DNull {
+		return nil
+	}
+
+	var stats appstatspb.StatementStatistics
+	statsJSON := tree.MustBeDJSON(statsDatum).JSON
+	if err := sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &stats); err != nil {
+		return err
+	}
+
+	aggregatedStats.Add(&stats)
+	return nil
+}
+
+func mergeTransactionStatsHelper(
+	aggregatedStats *appstatspb.TransactionStatistics, statsDatum tree.Datum,
+) error {
+	if statsDatum == tree.DNull {
+		return nil
+	}
+
+	var stats appstatspb.TransactionStatistics
+	statsJSON := tree.MustBeDJSON(statsDatum).JSON
+	if err := sqlstatsutil.DecodeTxnStatsStatisticsJSON(statsJSON, &stats); err != nil {
+		return err
+	}
+
+	aggregatedStats.Add(&stats)
+	return nil
 }
 
 func strptimeImpl() builtinDefinition {
