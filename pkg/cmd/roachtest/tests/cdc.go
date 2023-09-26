@@ -598,6 +598,7 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster) cdcTester
 	// behind, which is well above the 60s targetSteadyLatency we have in some tests.
 	settings.ClusterSettings["changefeed.slow_span_log_threshold"] = "30s"
 	settings.ClusterSettings["server.child_metrics.enabled"] = "true"
+	settings.ClusterSettings["changefeed.balance_range_distribution.enable"] = "true"
 
 	settings.Env = append(settings.Env, envVars...)
 
@@ -1052,6 +1053,31 @@ func registerCDC(r registry.Registry) {
 				steadyLatency:      10 * time.Minute,
 			})
 			ct.waitForWorkload()
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/initial-scan-only/parquet",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		RequiresLicense:  true,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 200})
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: cloudStorageSink,
+				targets:  allTpccTargets,
+				opts:     map[string]string{"initial_scan": "'only'", "format": "'parquet'"},
+			})
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 30 * time.Minute,
+			})
+			feed.waitForCompletion()
 		},
 	})
 	r.Add(registry.TestSpec{

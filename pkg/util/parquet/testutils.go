@@ -13,7 +13,6 @@ package parquet
 import (
 	"bytes"
 	"fmt"
-	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -32,28 +31,29 @@ import (
 
 // ReadFileAndVerifyDatums asserts that a parquet file's metadata matches the
 // metadata from the writer and its data matches writtenDatums.
+//
+// It returns a ReadDatumsMetadata struct with metadata about the file.
+// This function will assert the number of rows and columns in the metadata
+// match, but the remaining fields are left for the caller to assert.
 func ReadFileAndVerifyDatums(
 	t *testing.T,
 	parquetFile string,
 	expectedNumRows int,
 	expectedNumCols int,
-	writer *Writer,
 	writtenDatums [][]tree.Datum,
-) {
+) ReadDatumsMetadata {
 	meta, readDatums, err := ReadFile(parquetFile)
 
 	require.NoError(t, err)
 	require.Equal(t, expectedNumRows, meta.NumRows)
 	require.Equal(t, expectedNumCols, meta.NumCols)
 
-	expectedNumRowGroups := int(math.Ceil(float64(expectedNumRows) / float64(writer.cfg.maxRowGroupLength)))
-	require.EqualValues(t, expectedNumRowGroups, meta.NumRowGroups)
-
 	for i := 0; i < expectedNumRows; i++ {
 		for j := 0; j < expectedNumCols; j++ {
 			ValidateDatum(t, writtenDatums[i][j], readDatums[i][j])
 		}
 	}
+	return meta
 }
 
 // ReadFile reads a parquet file and returns the contained metadata and datums.

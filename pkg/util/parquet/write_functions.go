@@ -141,41 +141,45 @@ var tupleFieldNonNilDefLevel = []int16{2}
 
 // For arrays and scalar types, a colWriter is responsible for encoding a datum
 // and writing it to a file.ColumnChunkWriter. For tuples, there is a
-// file.ColumnChunkWriter per tuple field.
+// file.ColumnChunkWriter per tuple field. It returns the number of bytes
+// currently buffered by the column chunk writer.
 type colWriter interface {
-	Write(d tree.Datum, w []file.ColumnChunkWriter, a *batchAlloc) error
+	Write(d tree.Datum, w []file.ColumnChunkWriter, a *batchAlloc) (int64, error)
 }
 
 type scalarWriter writeFn
 
-func (w scalarWriter) Write(d tree.Datum, cw []file.ColumnChunkWriter, a *batchAlloc) error {
+func (w scalarWriter) Write(
+	d tree.Datum, cw []file.ColumnChunkWriter, a *batchAlloc,
+) (int64, error) {
 	if len(cw) != 1 {
-		return errors.AssertionFailedf("invalid number of column chunk writers in scalar writer: %d", len(cw))
+		return 0, errors.AssertionFailedf("invalid number of column chunk writers in scalar writer: %d", len(cw))
 	}
-	return writeScalar(d, cw[0], a, writeFn(w))
+	if err := writeScalar(d, cw[0], a, writeFn(w)); err != nil {
+		return 0, err
+	}
+	return estimatedBufferedBytesForChunkWriter(cw[0])
 }
 
 func writeScalar(d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, wFn writeFn) error {
 	if d == tree.DNull {
-		if err := wFn(tree.DNull, w, a, nilDefLevel, newEntryRepLevel); err != nil {
-			return err
-		}
-		return nil
+		return wFn(tree.DNull, w, a, nilDefLevel, newEntryRepLevel)
 	}
-
-	if err := wFn(d, w, a, nonNilDefLevel, newEntryRepLevel); err != nil {
-		return err
-	}
-	return nil
+	return wFn(d, w, a, nonNilDefLevel, newEntryRepLevel)
 }
 
 type arrayWriter writeFn
 
-func (w arrayWriter) Write(d tree.Datum, cw []file.ColumnChunkWriter, a *batchAlloc) error {
+func (w arrayWriter) Write(
+	d tree.Datum, cw []file.ColumnChunkWriter, a *batchAlloc,
+) (int64, error) {
 	if len(cw) != 1 {
-		return errors.AssertionFailedf("invalid number of column chunk writers in array writer: %d", len(cw))
+		return 0, errors.AssertionFailedf("invalid number of column chunk writers in array writer: %d", len(cw))
 	}
-	return writeArray(d, cw[0], a, writeFn(w))
+	if err := writeArray(d, cw[0], a, writeFn(w)); err != nil {
+		return 0, err
+	}
+	return estimatedBufferedBytesForChunkWriter(cw[0])
 }
 
 func writeArray(d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, wFn writeFn) error {
@@ -210,39 +214,51 @@ func writeArray(d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, wFn write
 
 type tupleWriter []writeFn
 
-func (tw tupleWriter) Write(d tree.Datum, cw []file.ColumnChunkWriter, a *batchAlloc) error {
+func (tw tupleWriter) Write(
+	d tree.Datum, cw []file.ColumnChunkWriter, a *batchAlloc,
+) (int64, error) {
 	if len(cw) != len(tw) {
-		return errors.AssertionFailedf(
+		return 0, errors.AssertionFailedf(
 			"invalid number of column chunk writers (%d) for tuple writer (%d)",
 			len(cw), len(tw))
 	}
 	return writeTuple(d, cw, a, tw)
 }
 
-func writeTuple(d tree.Datum, w []file.ColumnChunkWriter, a *batchAlloc, wFns []writeFn) error {
-	if d == tree.DNull {
-		for i, wFn := range wFns {
-			if err := wFn(tree.DNull, w[i], a, nilTupleDefLevel, newEntryRepLevel); err != nil {
-				return err
-			}
+func writeTuple(
+	d tree.Datum, w []file.ColumnChunkWriter, a *batchAlloc, wFns []writeFn,
+) (int64, error) {
+	var dt *tree.DTuple
+	if d != tree.DNull {
+		if tup, ok := tree.AsDTuple(d); ok {
+			dt = tup
+		} else {
+			return 0, pgerror.Newf(pgcode.DatatypeMismatch, "expected DTuple, found %T", d)
 		}
-		return nil
 	}
-	dt, ok := tree.AsDTuple(d)
-	if !ok {
-		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DTuple, found %T", d)
-	}
-	for i, wFn := range wFns {
-		defLevel := tupleFieldNonNilDefLevel
+	tupleDatumAndDefLevel := func(i int) (tree.Datum, []int16) {
+		if dt == nil {
+			return tree.DNull, nilTupleDefLevel
+		}
 		if dt.D[i] == tree.DNull {
-			defLevel = tupleFieldNilDefLevel
+			return tree.DNull, tupleFieldNilDefLevel
 		}
-		if err := wFn(dt.D[i], w[i], a, defLevel, newEntryRepLevel); err != nil {
-			return err
-		}
+		return dt.D[i], tupleFieldNonNilDefLevel
 	}
 
-	return nil
+	var bytesEst int64
+	for i, wFn := range wFns {
+		tupleDatum, defLevel := tupleDatumAndDefLevel(i)
+		if err := wFn(tupleDatum, w[i], a, defLevel, newEntryRepLevel); err != nil {
+			return 0, err
+		}
+		n, err := estimatedBufferedBytesForChunkWriter(w[i])
+		if err != nil {
+			return 0, err
+		}
+		bytesEst += n
+	}
+	return bytesEst, nil
 }
 
 // A writeFn encodes a datum and writes it using the provided column chunk
@@ -718,4 +734,28 @@ func writeBatch[T parquetDatatypes](
 	}
 	_, err = bw.WriteBatch(batchAlloc, defLevels, repLevels)
 	return err
+}
+
+// A testing knob which can be used to verify estimates.
+var testingCountEstimatedBytesCallback func(file.ColumnChunkWriter, int64) error
+
+func estimatedBufferedBytesForChunkWriter(cw file.ColumnChunkWriter) (int64, error) {
+	internalCw, ok := cw.(internalColumnWriter)
+	if !ok {
+		return 0, errors.AssertionFailedf(
+			"column writer for type %d does not implement internal column writer", cw.Type())
+	}
+	if testingCountEstimatedBytesCallback != nil {
+		b := internalCw.EstimatedBufferedValueBytes()
+		return b, testingCountEstimatedBytesCallback(cw, b)
+	}
+	return internalCw.EstimatedBufferedValueBytes(), nil
+}
+
+// internalColumnWriter is an interface used to expose methods on the column
+// chunk writers below which are not a part of the file.ColumnChunkWriter
+// interface. All the implementations of file.ColumnChunkWriter implement
+// this (file.BooleanColumnChunkWriter etc).
+type internalColumnWriter interface {
+	EstimatedBufferedValueBytes() int64
 }
