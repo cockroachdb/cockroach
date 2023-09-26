@@ -292,20 +292,23 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 		h := &mb.uniqueCheckHelper
 		if h.init(mb, uniqueOrd) {
 			locking = lockingSpec{
-				&tree.LockingItem{
-					// TODO(michae2): Change this to ForKeyShare when it is supported.
-					// Actually, for INSERT ON CONFLICT DO NOTHING, I think this could be
-					// ForNone if we supported predicate locking at that strength. I'm
-					// pretty sure we don't need to lock existing rows at *any* locking
-					// strength, only need to prevent insertion of new non-existing rows.
-					Strength:   tree.ForShare,
-					Targets:    []tree.TableName{tree.MakeUnqualifiedTableName(mb.tab.Name())},
-					WaitPolicy: tree.LockWaitBlock,
-					// Unique arbiters must ensure the non-existence of certain rows, so
-					// we use predicate locks instead of record locks to prevent insertion
-					// of new rows into the locked span(s) by other concurrent
-					// transactions.
-					Form: tree.LockPredicate,
+				&lockingItem{
+					item: &tree.LockingItem{
+						// TODO(michae2): Change this to ForKeyShare when it is supported.
+						// Actually, for INSERT ON CONFLICT DO NOTHING, I think this could
+						// be ForNone if we supported predicate locking at that
+						// strength. I'm pretty sure we don't need to lock existing rows at
+						// *any* locking strength, only need to prevent insertion of new
+						// non-existing rows.
+						Strength:   tree.ForShare,
+						Targets:    []tree.TableName{tree.MakeUnqualifiedTableName(mb.tab.Name())},
+						WaitPolicy: tree.LockWaitBlock,
+						// Unique arbiters must ensure the non-existence of certain rows, so
+						// we use predicate locks instead of record locks to prevent
+						// insertion of new rows into the locked span(s) by other concurrent
+						// transactions.
+						Form: tree.LockPredicate,
+					},
 				},
 			}
 		}
@@ -416,17 +419,19 @@ func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
 		h := &mb.uniqueCheckHelper
 		if h.init(mb, uniqueOrd) {
 			locking = lockingSpec{
-				&tree.LockingItem{
-					// If the row exists, we're about to update it, so take an exclusive
-					// lock to prevent a lock promotion.
-					Strength:   tree.ForUpdate,
-					Targets:    []tree.TableName{tree.MakeUnqualifiedTableName(mb.tab.Name())},
-					WaitPolicy: tree.LockWaitBlock,
-					// Unique arbiters must ensure the non-existence of certain rows, so
-					// we use predicate locks instead of record locks to prevent insertion
-					// of new rows into the locked span(s) by other concurrent
-					// transactions.
-					Form: tree.LockPredicate,
+				&lockingItem{
+					item: &tree.LockingItem{
+						// If the row exists, we're about to update it, so take an exclusive
+						// lock to prevent a lock promotion.
+						Strength:   tree.ForUpdate,
+						Targets:    []tree.TableName{tree.MakeUnqualifiedTableName(mb.tab.Name())},
+						WaitPolicy: tree.LockWaitBlock,
+						// Unique arbiters must ensure the non-existence of certain rows, so
+						// we use predicate locks instead of record locks to prevent
+						// insertion of new rows into the locked span(s) by other concurrent
+						// transactions.
+						Form: tree.LockPredicate,
+					},
 				},
 			}
 		}
