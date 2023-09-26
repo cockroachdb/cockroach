@@ -50,11 +50,20 @@ type Test interface {
 	Fatal(args ...interface{})
 	Fatalf(format string, args ...interface{})
 	Failed() bool
+
 	ArtifactsDir() string
+
 	// PerfArtifactsDir is the directory on cluster nodes in which perf artifacts
 	// reside. Upon success this directory is copied into test's ArtifactsDir from
 	// each node in the cluster.
 	PerfArtifactsDir() string
+
+	// GoCoverArtifactsDir is the directory on cluster nodes in which coverage
+	// profiles are dumped (or "" if go coverage is not enabled). At the end of
+	// this test, this directory is copied into the test's ArtifactsDir from each
+	// node in the cluster.
+	GoCoverArtifactsDir() string
+
 	L() *logger.Logger
 	Progress(float64)
 	Status(args ...interface{})
