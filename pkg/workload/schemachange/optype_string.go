@@ -18,34 +18,36 @@ func _() {
 	_ = x[alterDatabaseAddRegion-7]
 	_ = x[alterDatabasePrimaryRegion-8]
 	_ = x[alterDatabaseSurvivalGoal-9]
-	_ = x[alterTableAddColumn-10]
-	_ = x[alterTableAddConstraint-11]
-	_ = x[alterTableAddConstraintForeignKey-12]
-	_ = x[alterTableAddConstraintUnique-13]
-	_ = x[alterTableAlterColumnType-14]
-	_ = x[alterTableAlterPrimaryKey-15]
-	_ = x[alterTableDropColumn-16]
-	_ = x[alterTableDropColumnDefault-17]
-	_ = x[alterTableDropConstraint-18]
-	_ = x[alterTableDropNotNull-19]
-	_ = x[alterTableDropStored-20]
-	_ = x[alterTableLocality-21]
-	_ = x[alterTableRenameColumn-22]
-	_ = x[alterTableSetColumnDefault-23]
-	_ = x[alterTableSetColumnNotNull-24]
-	_ = x[alterTypeDropValue-25]
-	_ = x[createTypeEnum-26]
-	_ = x[createIndex-27]
-	_ = x[createSchema-28]
-	_ = x[createSequence-29]
-	_ = x[createTable-30]
-	_ = x[createTableAs-31]
-	_ = x[createView-32]
-	_ = x[dropIndex-33]
-	_ = x[dropSchema-34]
-	_ = x[dropSequence-35]
-	_ = x[dropTable-36]
-	_ = x[dropView-37]
+	_ = x[alterDatabaseAddSuperRegion-10]
+	_ = x[alterDatabaseDropSuperRegion-11]
+	_ = x[alterTableAddColumn-12]
+	_ = x[alterTableAddConstraint-13]
+	_ = x[alterTableAddConstraintForeignKey-14]
+	_ = x[alterTableAddConstraintUnique-15]
+	_ = x[alterTableAlterColumnType-16]
+	_ = x[alterTableAlterPrimaryKey-17]
+	_ = x[alterTableDropColumn-18]
+	_ = x[alterTableDropColumnDefault-19]
+	_ = x[alterTableDropConstraint-20]
+	_ = x[alterTableDropNotNull-21]
+	_ = x[alterTableDropStored-22]
+	_ = x[alterTableLocality-23]
+	_ = x[alterTableRenameColumn-24]
+	_ = x[alterTableSetColumnDefault-25]
+	_ = x[alterTableSetColumnNotNull-26]
+	_ = x[alterTypeDropValue-27]
+	_ = x[createTypeEnum-28]
+	_ = x[createIndex-29]
+	_ = x[createSchema-30]
+	_ = x[createSequence-31]
+	_ = x[createTable-32]
+	_ = x[createTableAs-33]
+	_ = x[createView-34]
+	_ = x[dropIndex-35]
+	_ = x[dropSchema-36]
+	_ = x[dropSequence-37]
+	_ = x[dropTable-38]
+	_ = x[dropView-39]
 }
 
 func (i opType) String() string {
@@ -70,6 +72,10 @@ func (i opType) String() string {
 		return "alterDatabasePrimaryRegion"
 	case alterDatabaseSurvivalGoal:
 		return "alterDatabaseSurvivalGoal"
+	case alterDatabaseAddSuperRegion:
+		return "alterDatabaseAddSuperRegion"
+	case alterDatabaseDropSuperRegion:
+		return "alterDatabaseDropSuperRegion"
 	case alterTableAddColumn:
 		return "alterTableAddColumn"
 	case alterTableAddConstraint:
