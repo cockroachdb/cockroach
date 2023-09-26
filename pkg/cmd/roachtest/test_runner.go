@@ -211,6 +211,7 @@ func (c clustersOpt) validate() error {
 type testOpts struct {
 	versionsBinaryOverride map[string]string
 	skipInit               bool
+	goCoverEnabled         bool
 }
 
 // Run runs tests.
@@ -607,8 +608,8 @@ func (r *testRunner) runWorker(
 				if err := c.WipeE(ctx, l, false /* preserveCerts */); err != nil {
 					return err
 				}
-				if err := c.RunE(ctx, c.All(), "rm -rf "+perfArtifactsDir); err != nil {
-					return errors.Wrapf(err, "failed to remove perf artifacts dir")
+				if err := c.RunE(ctx, c.All(), fmt.Sprintf("rm -rf %s %s", perfArtifactsDir, goCoverArtifactsDir)); err != nil {
+					return errors.Wrapf(err, "failed to remove perf/gocover artifacts dirs")
 				}
 				if c.localCertsDir != "" {
 					if err := os.RemoveAll(c.localCertsDir); err != nil {
@@ -710,8 +711,8 @@ func (r *testRunner) runWorker(
 		escapedTestName := teamCityNameEscape(testToRun.spec.Name)
 		runSuffix := "run_" + strconv.Itoa(testToRun.runNum)
 
-		artifactsDir := filepath.Join(filepath.Join(artifactsRootDir, escapedTestName), runSuffix)
-		logPath := filepath.Join(artifactsDir, "test.log")
+		testArtifactsDir := filepath.Join(filepath.Join(artifactsRootDir, escapedTestName), runSuffix)
+		logPath := filepath.Join(testArtifactsDir, "test.log")
 
 		// Map artifacts/TestFoo/run_?/** => TestFoo/run_?/**, i.e. collect the artifacts
 		// for this test exactly as they are laid out on disk (when the time
@@ -732,12 +733,13 @@ func (r *testRunner) runWorker(
 			cockroachShort:         cockroachEA[arch],
 			deprecatedWorkload:     workload[arch],
 			buildVersion:           binaryVersion,
-			artifactsDir:           artifactsDir,
+			artifactsDir:           testArtifactsDir,
 			artifactsSpec:          artifactsSpec,
 			l:                      testL,
 			versionsBinaryOverride: topt.versionsBinaryOverride,
 			skipInit:               topt.skipInit,
 			debug:                  debugMode.IsDebug(),
+			goCoverEnabled:         topt.goCoverEnabled,
 		}
 		github := newGithubIssues(r.config.disableIssue, c, vmCreateOpts)
 
@@ -817,6 +819,8 @@ func (r *testRunner) runWorker(
 					t.Fatalf("unknown lease type %s", testSpec.Leases)
 				}
 
+				c.goCoverDir = t.GoCoverArtifactsDir()
+
 				wStatus.SetCluster(c)
 				wStatus.SetTest(t, testToRun)
 				wStatus.SetStatus("running test")
@@ -870,7 +874,7 @@ func (r *testRunner) runWorker(
 		} else {
 			// Upon success fetch the perf artifacts from the remote hosts.
 			if t.spec.Benchmark {
-				getPerfArtifacts(ctx, l, c, t)
+				getPerfArtifacts(ctx, c, t)
 			}
 			if debugMode == DebugKeepAlways {
 				c.Save(ctx, "cluster saved since --debug-always set", l)
@@ -880,45 +884,68 @@ func (r *testRunner) runWorker(
 	}
 }
 
-// getPerfArtifacts retrieves the perf artifacts for the test.
-// If there's an error, oh well, don't do anything rash like fail a test
-// which already passed.
-func getPerfArtifacts(ctx context.Context, l *logger.Logger, c *clusterImpl, t test.Test) {
-	g := ctxgroup.WithContext(ctx)
-	fetchNode := func(node int) func(context.Context) error {
-		return func(ctx context.Context) error {
-			testCmd := `'PERF_ARTIFACTS="` + perfArtifactsDir + `"
-if [[ -d "${PERF_ARTIFACTS}" ]]; then
+// getArtifacts retrieves artifacts (like perf or go cover) produced by a
+// successful test.
+//
+// Any errors are logged but otherwise don't cause a test failure.
+func getArtifacts(
+	ctx context.Context,
+	c *clusterImpl,
+	t test.Test,
+	srcDirOnNode string,
+	dstDirFn func(nodeIdx int) string,
+) {
+	fetchNode := func(ctx context.Context, node int) error {
+		testCmd := `'ARTIFACTS_DIR="` + srcDirOnNode + `"
+if [[ -d "${ARTIFACTS_DIR}" ]]; then
     echo true
-elif [[ -e "${PERF_ARTIFACTS}" ]]; then
-    ls -la "${PERF_ARTIFACTS}"
+elif [[ -e "${ARTIFACTS_DIR}" ]]; then
+    ls -la "${ARTIFACTS_DIR}"
     exit 1
 else
     echo false
 fi'`
-			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(node), "bash", "-c", testCmd)
-			if err != nil {
-				return errors.Wrapf(err, "failed to check for perf artifacts")
-			}
-			out := strings.TrimSpace(result.Stdout)
-			switch out {
-			case "true":
-				dst := fmt.Sprintf("%s/%d.%s", t.ArtifactsDir(), node, perfArtifactsDir)
-				return c.Get(ctx, l, perfArtifactsDir, dst, c.Node(node))
-			case "false":
-				l.PrintfCtx(ctx, "no perf artifacts exist on node %v", c.Node(node))
-				return nil
-			default:
-				return errors.Errorf("unexpected output when checking for perf artifacts: %s", out)
-			}
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(node), "bash", "-c", testCmd)
+		if err != nil {
+			return errors.Wrapf(err, "failed to check for artifacts in %q", srcDirOnNode)
+		}
+		out := strings.TrimSpace(result.Stdout)
+		switch out {
+		case "true":
+			return c.Get(ctx, t.L(), srcDirOnNode, dstDirFn(node), c.Node(node))
+		case "false":
+			t.L().PrintfCtx(ctx, "no artifacts exist in %q on node %v", srcDirOnNode, c.Node(node))
+			return nil
+		default:
+			return errors.Errorf("unexpected output when checking for artifacts in %q: %s", srcDirOnNode, out)
 		}
 	}
+	g := ctxgroup.WithContext(ctx)
 	for _, i := range c.All() {
-		g.GoCtx(fetchNode(i))
+		node := i
+		g.GoCtx(func(ctx context.Context) error {
+			return fetchNode(ctx, node)
+		})
 	}
 	if err := g.Wait(); err != nil {
-		l.PrintfCtx(ctx, "failed to get perf artifacts: %v", err)
+		t.L().PrintfCtx(ctx, "failed to get artifacts from %q: %v", srcDirOnNode, err)
 	}
+}
+
+// getPerfArtifacts retrieves the perf artifacts for the test.
+func getPerfArtifacts(ctx context.Context, c *clusterImpl, t test.Test) {
+	dstDirFn := func(nodeIdx int) string {
+		return fmt.Sprintf("%s/%d.%s", t.ArtifactsDir(), nodeIdx, perfArtifactsDir)
+	}
+	getArtifacts(ctx, c, t, t.PerfArtifactsDir(), dstDirFn)
+}
+
+// getGoCoverArtifacts retrieves the go coverage artifacts for the test.
+func getGoCoverArtifacts(ctx context.Context, c *clusterImpl, t test.Test) {
+	dstDirFn := func(nodeIdx int) string {
+		return fmt.Sprintf("%s/%d.%s", t.ArtifactsDir(), nodeIdx, goCoverArtifactsDir)
+	}
+	getArtifacts(ctx, c, t, t.GoCoverArtifactsDir(), dstDirFn)
 }
 
 // An error is returned if the test is still running (on another goroutine) when
@@ -1024,12 +1051,11 @@ func (r *testRunner) runTest(
 		}
 
 		if teamCity {
-
 			// Zip the artifacts. This improves the TeamCity UX where we can navigate
 			// through zip files just fine, but we can't download subtrees of the
 			// artifacts storage. By zipping we get this capability as we can just
 			// download the zip file for the failing test instead.
-			if err := zipArtifacts(t.ArtifactsDir()); err != nil {
+			if err := zipArtifacts(t); err != nil {
 				l.Printf("unable to zip artifacts: %s", err)
 			}
 
@@ -1280,28 +1306,49 @@ func (r *testRunner) postTestAssertions(
 func (r *testRunner) teardownTest(
 	ctx context.Context, t *testImpl, c *clusterImpl, timedOut bool,
 ) error {
-	var err error
 	if timedOut || t.Failed() {
-		err = r.collectArtifacts(ctx, t, c, timedOut, time.Hour)
+		err := r.collectArtifacts(ctx, t, c, timedOut, time.Hour)
 		if err != nil {
 			t.L().Printf("error collecting artifacts: %v", err)
 		}
-	}
 
-	if timedOut {
-		// Shut down the cluster. We only do this on timeout to help the test terminate;
-		// for regular failures, if the --debug flag is used, we want the cluster to stay
-		// around so someone can poke at it.
-		_ = c.StopE(ctx, t.L(), option.DefaultStopOpts(), c.All())
+		if timedOut {
+			// Shut down the cluster. We only do this on timeout to help the test terminate;
+			// for regular failures, if the --debug flag is used, we want the cluster to stay
+			// around so someone can poke at it.
+			_ = c.StopE(ctx, t.L(), option.DefaultStopOpts(), c.All())
 
-		// We previously added a timeout failure without cancellation, so we cancel here.
-		if t.mu.cancel != nil {
-			t.mu.cancel()
+			// We previously added a timeout failure without cancellation, so we cancel here.
+			if t.mu.cancel != nil {
+				t.mu.cancel()
+			}
+			t.L().Printf("test timed out; check __stacks.log and CRDB logs for goroutine dumps")
 		}
-		t.L().Printf("test timed out; check __stacks.log and CRDB logs for goroutine dumps")
+		return err
 	}
 
-	return err
+	// Test was successful. If we are collecting code coverage, copy the files now.
+	if t.goCoverEnabled {
+		// Go cover data is dumped when the cockroach process exits; send SIGUSR1 to
+		// make it exit immediately.
+		//
+		// TODO(radu): many tests stop the nodes with the default options (SIGKILL)
+		// during the test, which means some coverage data will be lost. Consider
+		// updating the default options.
+		t.L().Printf("Stopping all nodes to obtain go cover artifacts")
+		stopOpts := option.DefaultStopOpts()
+		stopOpts.RoachprodOpts.Sig = 10 // SIGUSR1
+		stopOpts.RoachprodOpts.Wait = true
+		stopOpts.RoachprodOpts.MaxWait = 10
+		if err := c.StopE(ctx, t.L(), stopOpts, c.All()); err != nil {
+			t.L().PrintfCtx(ctx, "error stopping cluster: %v", err)
+		}
+
+		t.L().Printf("Retrieving go cover artifacts")
+		getGoCoverArtifacts(ctx, c, t)
+	}
+
+	return nil
 }
 
 func (r *testRunner) collectArtifacts(
@@ -1679,8 +1726,26 @@ func (we *workerErrors) Err() error {
 
 // zipArtifacts moves everything inside the artifacts dir except any zip files
 // (like debug.zip) into an artifacts.zip file.
-func zipArtifacts(artifactsDir string) error {
-	list, err := filterDirEntries(artifactsDir, func(entry os.DirEntry) bool {
+//
+// If Go coverage artifacts are present, they are moved inside a separate
+// gocover.zip file.
+func zipArtifacts(t *testImpl) error {
+	if t.goCoverEnabled {
+		// First, look for any go coverage artifacts.
+		if goCoverList, err := filterDirEntries(t.ArtifactsDir(), func(entry os.DirEntry) bool {
+			return entry.IsDir() && strings.HasSuffix(entry.Name(), "."+goCoverArtifactsDir)
+		}); err != nil {
+			return err
+		} else if len(goCoverList) > 0 {
+			// Found artifacts; move them to an archive. Note that this archive will be
+			// filtered out below.
+			if err := moveToZipArchive("gocover.zip", t.ArtifactsDir(), goCoverList...); err != nil {
+				return err
+			}
+		}
+	}
+
+	list, err := filterDirEntries(t.ArtifactsDir(), func(entry os.DirEntry) bool {
 		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".zip") {
 			// Skip any zip files.
 			return false
@@ -1690,5 +1755,5 @@ func zipArtifacts(artifactsDir string) error {
 	if err != nil {
 		return err
 	}
-	return moveToZipArchive("artifacts.zip", artifactsDir, list...)
+	return moveToZipArchive("artifacts.zip", t.ArtifactsDir(), list...)
 }

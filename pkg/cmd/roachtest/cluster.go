@@ -683,6 +683,9 @@ type clusterImpl struct {
 
 	// clusterSettings are additional cluster settings set on cluster startup.
 	clusterSettings map[string]string
+	// goCoverDir is the directory for Go coverage data (if coverage is enabled).
+	// BAZEL_COVER_DIR will be set to this value when starting a node.
+	goCoverDir string
 
 	os   string     // OS of the cluster
 	arch vm.CPUArch // CPU architecture of the cluster
@@ -1975,6 +1978,10 @@ func (c *clusterImpl) StartE(
 		// This makes all roachtest use the new SHOW RANGES behavior,
 		// regardless of cluster settings.
 		settings.Env = append(settings.Env, "COCKROACH_FORCE_DEPRECATED_SHOW_RANGE_BEHAVIOR=false")
+	}
+
+	if c.goCoverDir != "" {
+		settings.Env = append(settings.Env, fmt.Sprintf("BAZEL_COVER_DIR=%s", c.goCoverDir))
 	}
 
 	clusterSettingsOpts := []install.ClusterSettingOption{

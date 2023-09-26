@@ -29,9 +29,14 @@ import (
 )
 
 // perfArtifactsDir is the directory on cluster nodes in which perf artifacts
-// reside. Upon success this directory is copied into test artifactsDir from
+// reside. Upon success this directory is copied into the test's ArtifactsDir() from
 // each node in the cluster.
 const perfArtifactsDir = "perf"
+
+// goCoverArtifactsDir the directory on cluster nodes in which go coverage
+// profiles are dumped. At the end of a test this directory is copied into the
+// test's ArtifactsDir() from each node in the cluster.
+const goCoverArtifactsDir = "gocover"
 
 type testStatus struct {
 	msg      string
@@ -111,6 +116,9 @@ type testImpl struct {
 	// Version strings look like "20.1.4".
 	versionsBinaryOverride map[string]string
 	skipInit               bool
+	// If true, go coverage is enabled and the BAZEL_COVER_DIR env var will be set
+	// when starting nodes.
+	goCoverEnabled bool
 }
 
 func newFailure(squashedErr error, errs []error) failure {
@@ -432,6 +440,13 @@ func (t *testImpl) ArtifactsDir() string {
 
 func (t *testImpl) PerfArtifactsDir() string {
 	return perfArtifactsDir
+}
+
+func (t *testImpl) GoCoverArtifactsDir() string {
+	if t.goCoverEnabled {
+		return goCoverArtifactsDir
+	}
+	return ""
 }
 
 // IsBuildVersion returns true if the build version is greater than or equal to
