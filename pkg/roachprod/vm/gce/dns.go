@@ -19,6 +19,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -32,6 +34,7 @@ const (
 	dnsManagedZone           = "roachprod-managed"
 	dnsDomain                = "roachprod-managed.crdb.io"
 	dnsServer                = "ns-cloud-a1.googledomains.com"
+	dnsServerFallbackIP      = "216.239.32.106"
 	dnsMaxResults            = 1000
 	dnsMaxConcurrentRequests = 4
 )
@@ -47,15 +50,68 @@ type dnsProvider struct {
 
 func NewDNSProvider() vm.DNSProvider {
 	resolver := new(net.Resolver)
-	resolver.StrictErrors = true
+	// Provide a custom dialer to ensure that we always use the same DNS server.
+	var once atomic.Pointer[sync.Once]
+	once.Store(new(sync.Once))
+	dnsServerIP := ""
 	resolver.Dial = func(ctx context.Context, network, address string) (net.Conn, error) {
-		dialer := net.Dialer{}
+		// Resolve the IP address of the DNS server if it is not already known.
+		once.Load().Do(func() {
+			var ips []net.IP
+			err := retry.WithMaxAttempts(ctx, retry.Options{}, 3, func() error {
+				var resolveErr error
+				ips, resolveErr = lookupIP(ctx, dnsServer)
+				return resolveErr
+			})
+			if err == nil && len(ips) > 0 {
+				dnsServerIP = ips[0].String()
+			} else {
+				// In the worst case we use a fallback IP address which should be the IP
+				// for `dnsServer`. This address is not guaranteed to be up-to-date, but
+				// it should work in most cases.
+				// See also: https://github.com/cockroachdb/cockroach/issues/111269
+				dnsServerIP = dnsServerFallbackIP
+				// Reset the sync.Once so that we try to resolve the IP address again
+				once.Store(new(sync.Once))
+			}
+		})
 		// Prefer TCP over UDP. This is necessary because the DNS server
 		// will return a truncated response if the response is too large
 		// for a UDP packet, resulting in a "server misbehaving" error.
-		return dialer.DialContext(ctx, "tcp", dnsServer+":53")
+		dialer := net.Dialer{}
+		return dialer.DialContext(ctx, "tcp", dnsServerIP+":53")
 	}
 	return &dnsProvider{resolver: resolver}
+}
+
+// lookupIP is a helper function that performs a DNS lookup for the given host with
+// a set of fallback resolvers. This is necessary because the default resolver
+// appears to not always work in all environments.
+// See also: https://github.com/cockroachdb/cockroach/issues/111269
+func lookupIP(ctx context.Context, host string) ([]net.IP, error) {
+	resolverAddresses := []string{
+		"8.8.8.8:53",         // Google
+		"169.254.169.254:53", // VM Metadata server
+	}
+	resolvers := make([]*net.Resolver, 0)
+	resolvers = append(resolvers, net.DefaultResolver)
+	for _, address := range resolverAddresses {
+		resolver := new(net.Resolver)
+		resolver.Dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
+			dialer := net.Dialer{}
+			return dialer.DialContext(ctx, network, address)
+		}
+		resolvers = append(resolvers, resolver)
+	}
+	var combinedErrors error
+	for _, resolver := range resolvers {
+		ips, err := resolver.LookupIP(ctx, "ip", host)
+		if err == nil {
+			return ips, nil
+		}
+		combinedErrors = errors.CombineErrors(combinedErrors, err)
+	}
+	return nil, errors.Wrapf(combinedErrors, "failed to resolve host IP: %s", host)
 }
 
 // CreateRecords implements the vm.DNSProvider interface.
