@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
@@ -35,5 +36,7 @@ func IsPermanentBulkJobError(err error) bool {
 		!kvcoord.IsSendError(err) &&
 		!errors.Is(err, circuit.ErrBreakerOpen) &&
 		!sysutil.IsErrConnectionReset(err) &&
-		!sysutil.IsErrConnectionRefused(err)
+		!sysutil.IsErrConnectionRefused(err) &&
+		!errors.Is(err, sqlinstance.NonExistentInstanceError)
+
 }
