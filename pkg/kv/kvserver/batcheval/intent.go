@@ -16,7 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -119,6 +121,8 @@ func acquireLocksOnKeys(
 	dur lock.Durability,
 	scanFmt kvpb.ScanFormat,
 	scanRes *storage.MVCCScanResult,
+	ms *enginepb.MVCCStats,
+	settings *cluster.Settings,
 ) ([]roachpb.LockAcquisition, error) {
 	acquiredLocks := make([]roachpb.LockAcquisition, scanRes.NumKeys)
 	switch scanFmt {
@@ -126,7 +130,7 @@ func acquireLocksOnKeys(
 		var i int
 		err := storage.MVCCScanDecodeKeyValues(scanRes.KVData, func(key storage.MVCCKey, _ []byte) error {
 			k := copyKey(key.Key)
-			acq, err := acquireLockOnKey(ctx, readWriter, txn, str, dur, k)
+			acq, err := acquireLockOnKey(ctx, readWriter, txn, str, dur, k, ms, settings)
 			if err != nil {
 				return err
 			}
@@ -141,7 +145,7 @@ func acquireLocksOnKeys(
 	case kvpb.KEY_VALUES:
 		for i, row := range scanRes.KVs {
 			k := copyKey(row.Key)
-			acq, err := acquireLockOnKey(ctx, readWriter, txn, str, dur, k)
+			acq, err := acquireLockOnKey(ctx, readWriter, txn, str, dur, k, ms, settings)
 			if err != nil {
 				return nil, err
 			}
@@ -169,26 +173,31 @@ func acquireLockOnKey(
 	str lock.Strength,
 	dur lock.Durability,
 	key roachpb.Key,
+	ms *enginepb.MVCCStats,
+	settings *cluster.Settings,
 ) (roachpb.LockAcquisition, error) {
-	// TODO(arul,nvanbenschoten): For now, we're only checking whether we have
-	// access to a legit pebble.Writer for replicated lock acquisition. We're not
-	// actually acquiring a replicated lock -- we can only do so once they're
-	// fully supported in the storage package. Until then, we grab an unreplicated
-	// lock regardless of what the caller asked us to do.
-	if dur == lock.Replicated {
-		// ShouldWriteLocalTimestamp is only implemented by a pebble.Writer; it'll
-		// panic if we were on the read-only evaluation path, and only had access to
-		// a pebble.ReadOnly.
-		readWriter.ShouldWriteLocalTimestamps(ctx)
-		// Regardless of what the caller asked for, we'll give it an unreplicated
-		// lock.
-		dur = lock.Unreplicated
-	}
+	maxLockConflicts := storage.MaxConflictsPerLockConflictError.Get(&settings.SV)
 	switch dur {
 	case lock.Unreplicated:
-		// TODO(arul,nvanbenschoten): Call into MVCCCheckForAcquireLockHere.
+		// Evaluation up until this point has only scanned for (and not found any)
+		// conflicts with locks in the in-memory lock table. This includes all
+		// unreplicated locks and contended replicated locks. We haven't considered
+		// conflicts with un-contended replicated locks -- we need to do so before
+		// we can acquire our own unreplicated lock; do so now.
+		err := storage.MVCCCheckForAcquireLock(ctx, readWriter, txn, str, key, maxLockConflicts)
+		if err != nil {
+			return roachpb.LockAcquisition{}, err
+		}
 	case lock.Replicated:
-		// TODO(arul,nvanbenschoten): Call into MVCCAcquireLock here.
+		// Evaluation up until this point has only scanned for (and not found any)
+		// conflicts with locks in the in-memory lock table. This includes all
+		// unreplicated locks and contended replicated locks. We haven't considered
+		// conflicts with un-contended replicated locks -- we need to do so before
+		// we can acquire our own replicated lock; do that now, and also acquire
+		// the replicated lock if no conflicts are found.
+		if err := storage.MVCCAcquireLock(ctx, readWriter, txn, str, key, ms, maxLockConflicts); err != nil {
+			return roachpb.LockAcquisition{}, err
+		}
 	default:
 		panic("unexpected lock durability")
 	}
