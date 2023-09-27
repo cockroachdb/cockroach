@@ -330,6 +330,12 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		grantExecuteToPublicOnAllFunctions,
 	),
+	upgrade.NewPermanentTenantUpgrade(
+		"create system.mvcc_statistics_cache table and job",
+		toCV(clusterversion.V23_2_MVCCStatisticsCacheTable),
+		createMVCCStatisticsCacheTableAndJobMigration,
+		"create system.mvcc_statistics_cache table and job",
+	),
 }
 
 var (

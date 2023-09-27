@@ -98,6 +98,7 @@ const (
 	SpanStatsSamples                       SystemTableName = "span_stats_samples"
 	SpanStatsTenantBoundaries              SystemTableName = "span_stats_tenant_boundaries"
 	RegionalLiveness                       SystemTableName = "region_liveness"
+	MVCCStatisticsCache                    SystemTableName = "mvcc_statistics_cache"
 )
 
 // Oid for virtual database and table.

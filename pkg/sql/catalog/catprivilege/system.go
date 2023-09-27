@@ -75,6 +75,7 @@ var (
 		catconstants.SpanStatsSamples,
 		catconstants.SpanStatsTenantBoundaries,
 		catconstants.RegionalLiveness,
+		catconstants.MVCCStatisticsCache,
 	}
 
 	readWriteSystemSequences = []catconstants.SystemTableName{

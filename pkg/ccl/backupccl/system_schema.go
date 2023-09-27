@@ -818,6 +818,9 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.RegionLivenessTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
+	systemschema.SystemMVCCStatisticsCacheTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
 }
 
 func rekeySystemTable(
