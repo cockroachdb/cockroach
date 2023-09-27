@@ -5,7 +5,7 @@ set -euo pipefail
 if [ "$#" -eq 0 ]; then
   echo "Builds all bits needed for roachtests and stages them in bin/ and lib/."
   echo ""
-  echo "Usage: $0 arch [arch...]"
+  echo "Usage: $0 [--with-code-coverage] arch [arch...]"
   echo "  where arch is one of: amd64, arm64, amd64-fips"
   exit 1
 fi
@@ -29,12 +29,29 @@ function arch_to_config() {
   esac
 }
 
+arches=()
+crdb_extra_flags=""
+
+for arg in "$@"; do
+  case "$arg" in
+    --with-code-coverage)
+      crdb_extra_flags="--collect_code_coverage --bazel_code_coverage"
+      ;;
+    *)
+      # Fail now if the argument is not a valid arch.
+      arch_to_config $arg >/dev/null || exit 1
+      arches+=($arg)
+      ;;
+  esac
+done
+
 # Determine host cpu architecture, which we'll need for libgeos, below.
 if [[ "$(uname -m)" =~ (arm64|aarch64)$ ]]; then
   host_arch=arm64
 else
   host_arch=amd64
 fi
+
 echo "Host architecture: $host_arch"
 
 # Prepare the bin/ and lib/ directories.
@@ -43,17 +60,18 @@ chmod o+rwx bin
 mkdir -p lib
 chmod o+rwx lib
 
-for arch in "$@"; do
+for arch in "${arches[@]}"; do
   config=$(arch_to_config $arch)
   echo "Building $config, os=$os, arch=$arch..."
   # Build cockroach, workload and geos libs.
   bazel build --config $config --config ci -c opt --config force_build_cdeps \
-        //pkg/cmd/cockroach //pkg/cmd/workload \
-        //c-deps:libgeos
+        //pkg/cmd/cockroach $crdb_extra_flags
+  bazel build --config $config --config ci -c opt --config force_build_cdeps \
+        //pkg/cmd/workload //c-deps:libgeos
   BAZEL_BIN=$(bazel info bazel-bin --config $config --config ci -c opt)
 
-  # Build cockroach-short with assertions enabled.
-  bazel build --config $config --config ci -c opt //pkg/cmd/cockroach-short --crdb_test
+  bazel build --config $config --config ci -c opt //pkg/cmd/cockroach-short \
+        --crdb_test $crdb_extra_flags
   # Copy the binaries.
   cp $BAZEL_BIN/pkg/cmd/cockroach/cockroach_/cockroach bin/cockroach.$os-$arch
   cp $BAZEL_BIN/pkg/cmd/workload/workload_/workload    bin/workload.$os-$arch
