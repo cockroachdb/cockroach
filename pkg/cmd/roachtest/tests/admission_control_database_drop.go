@@ -31,12 +31,12 @@ func registerDatabaseDrop(r registry.Registry) {
 	clusterSpec := r.MakeClusterSpec(
 		10, /* nodeCount */
 		spec.CPU(8),
-		spec.Zones("us-east1-b"),
 		spec.VolumeSize(500),
 		spec.Cloud(spec.GCE),
 		spec.GCEMinCPUPlatform("Intel Ice Lake"),
 		spec.GCEVolumeType("pd-ssd"),
 		spec.GCEMachineType("n2-standard-8"),
+		spec.GCEZones("us-east1-b"),
 	)
 
 	r.Add(registry.TestSpec{
