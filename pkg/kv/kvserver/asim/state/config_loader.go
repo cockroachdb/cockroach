@@ -396,7 +396,7 @@ func LoadRangeInfo(s State, rangeInfos ...RangeInfo) {
 			))
 		}
 
-		if !s.SetSpanConfigForRange(rng.RangeID(), *r.Config) {
+		if !s.SetSpanConfigForRange(rng.RangeID(), r.Config) {
 			panic(fmt.Sprintf(
 				"Unable to load config: cannot set span config for range %s",
 				rng,

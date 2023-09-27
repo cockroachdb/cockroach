@@ -127,7 +127,7 @@ func (rm *rmap) initFirstRange() {
 		startKey:    MinKey,
 		endKey:      MaxKey,
 		desc:        desc,
-		config:      defaultSpanConfig,
+		config:      &defaultSpanConfig,
 		replicas:    make(map[StoreID]*replica),
 		leaseholder: -1,
 	}
@@ -658,7 +658,7 @@ func (s *state) removeReplica(rangeID RangeID, storeID StoreID) bool {
 }
 
 // SetSpanConfigForRange set the span config for the Range with ID RangeID.
-func (s *state) SetSpanConfigForRange(rangeID RangeID, spanConfig roachpb.SpanConfig) bool {
+func (s *state) SetSpanConfigForRange(rangeID RangeID, spanConfig *roachpb.SpanConfig) bool {
 	if rng, ok := s.ranges.rangeMap[rangeID]; ok {
 		rng.config = spanConfig
 		return true
@@ -668,7 +668,7 @@ func (s *state) SetSpanConfigForRange(rangeID RangeID, spanConfig roachpb.SpanCo
 
 // SetSpanConfig sets the span config for all ranges represented by the span,
 // splitting if necessary.
-func (s *state) SetSpanConfig(span roachpb.Span, config roachpb.SpanConfig) {
+func (s *state) SetSpanConfig(span roachpb.Span, config *roachpb.SpanConfig) {
 	startKey := ToKey(span.Key)
 	endKey := ToKey(span.EndKey)
 
@@ -787,7 +787,7 @@ func (s *state) SplitRange(splitKey Key) (Range, Range, bool) {
 		rangeID:     rangeID,
 		startKey:    splitKey,
 		desc:        roachpb.RangeDescriptor{RangeID: roachpb.RangeID(rangeID), NextReplicaID: 1},
-		config:      defaultSpanConfig,
+		config:      &defaultSpanConfig,
 		replicas:    make(map[StoreID]*replica),
 		leaseholder: -1,
 	}
@@ -1242,7 +1242,7 @@ func (s *state) GetSpanConfigForKey(
 	if rng == nil {
 		panic(fmt.Sprintf("programming error: range for key %s doesn't exist", key))
 	}
-	return rng.config, nil
+	return *rng.config, nil
 }
 
 // Scan is added for the rangedesc.Scanner interface, required for
@@ -1404,7 +1404,7 @@ type rng struct {
 	rangeID          RangeID
 	startKey, endKey Key
 	desc             roachpb.RangeDescriptor
-	config           roachpb.SpanConfig
+	config           *roachpb.SpanConfig
 	replicas         map[StoreID]*replica
 	leaseholder      ReplicaID
 	size             int64
@@ -1450,7 +1450,7 @@ func (r *rng) String() string {
 }
 
 // SpanConfig returns the span config for this range.
-func (r *rng) SpanConfig() roachpb.SpanConfig {
+func (r *rng) SpanConfig() *roachpb.SpanConfig {
 	return r.config
 }
 

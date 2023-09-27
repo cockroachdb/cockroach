@@ -1061,17 +1061,23 @@ func (r *Replica) IsQuiescent() bool {
 
 // DescAndSpanConfig returns the authoritative range descriptor as well
 // as the span config for the replica.
-func (r *Replica) DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig) {
+func (r *Replica) DescAndSpanConfig() (*roachpb.RangeDescriptor, *roachpb.SpanConfig) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.state.Desc, r.mu.conf
+	// This method is being removed shortly. We can't pass out a pointer to the
+	// underlying replica's SpanConfig.
+	conf := r.mu.conf
+	return r.mu.state.Desc, &conf
 }
 
 // SpanConfig returns the authoritative span config for the replica.
-func (r *Replica) SpanConfig() roachpb.SpanConfig {
+func (r *Replica) SpanConfig() *roachpb.SpanConfig {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.conf
+	// This method is being removed shortly. We can't pass out a pointer to the
+	// underlying replica's SpanConfig.
+	conf := r.mu.conf
+	return &conf
 }
 
 // Desc returns the authoritative range descriptor, acquiring a replica lock in

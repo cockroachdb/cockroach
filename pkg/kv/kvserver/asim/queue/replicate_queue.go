@@ -60,7 +60,7 @@ func NewReplicateQueue(
 }
 
 func simCanTransferleaseFrom(
-	ctx context.Context, repl plan.LeaseCheckReplica, conf roachpb.SpanConfig,
+	ctx context.Context, repl plan.LeaseCheckReplica, conf *roachpb.SpanConfig,
 ) bool {
 	return true
 }
@@ -78,7 +78,7 @@ func (rq *replicateQueue) MaybeAdd(ctx context.Context, replica state.Replica, s
 	if err != nil {
 		log.Fatalf(ctx, "conf not found err=%v", err)
 	}
-	log.VEventf(ctx, 1, "maybe add replica=%s, config=%s", desc, &conf)
+	log.VEventf(ctx, 1, "maybe add replica=%s, config=%s", desc, conf)
 
 	shouldPlanChange, priority := rq.planner.ShouldPlanChange(
 		ctx,
