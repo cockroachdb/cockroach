@@ -410,6 +410,11 @@ type Planner interface {
 
 	// Optimizer returns the optimizer associated with this Planner, if any.
 	Optimizer() interface{}
+
+	// GenUniqueCursorName returns a name that is guaranteed to be unique among
+	// the current list of cursors and portals. It is used to implement PLpgSQL
+	// OPEN statements when used with an unnamed cursor.
+	GenUniqueCursorName() tree.Name
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
