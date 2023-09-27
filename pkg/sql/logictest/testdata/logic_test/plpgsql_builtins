@@ -93,3 +93,26 @@ query T
 SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
 ----
 <unnamed portal 10>
+
+# Testing crdb_internal.plpgsql_close.
+statement ok
+BEGIN;
+DECLARE foo CURSOR FOR SELECT generate_series(1, 5);
+
+query T
+SELECT name FROM pg_cursors;
+----
+foo
+
+statement ok
+SELECT crdb_internal.plpgsql_close('foo');
+
+query T
+SELECT name FROM pg_cursors;
+----
+
+statement ok
+ABORT;
+
+statement error pgcode 34000 pq: cursor \"foo\" does not exist
+SELECT crdb_internal.plpgsql_close('foo');
