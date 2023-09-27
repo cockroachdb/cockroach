@@ -1311,9 +1311,6 @@ func BenchmarkExternalIOAccounting(b *testing.B) {
 	setRUAccountingMode := func(b *testing.B, mode string) {
 		_, err := hostSQL.Exec(fmt.Sprintf("SET CLUSTER SETTING tenant_cost_control.external_io.ru_accounting_mode = '%s'", mode))
 		require.NoError(b, err)
-
-		_, err = hostSQL.Exec(fmt.Sprintf("ALTER TENANT ALL SET CLUSTER SETTING tenant_cost_control.external_io.ru_accounting_mode = '%s'", mode))
-		require.NoError(b, err)
 	}
 
 	concurrently := func(b *testing.B, ctx context.Context, concurrency int, op func(context.Context) error) {

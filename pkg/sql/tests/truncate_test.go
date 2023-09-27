@@ -408,7 +408,6 @@ func TestTruncatePreservesSplitPoints(t *testing.T) {
 				// target duration.
 				sysDB := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t, ""))
 				sysDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
-				sysDB.Exec(t, `ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 			}
 
 			var err error
