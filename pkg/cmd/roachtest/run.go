@@ -58,6 +58,7 @@ var (
 	debugAlways            bool
 	runSkipped             bool
 	skipInit               bool
+	goCoverEnabled         bool
 	clusterID              string
 	count                  int
 	versionsBinaryOverride map[string]string
@@ -119,6 +120,8 @@ func addRunBenchCommonFlags(cmd *cobra.Command) {
 		&runSkipped, "run-skipped", runSkipped, "run skipped tests")
 	cmd.Flags().BoolVar(
 		&skipInit, "skip-init", false, "skip initialization step (imports, table creation, etc.) for tests that support it, useful when re-using clusters with --wipe=false")
+	cmd.Flags().BoolVar(
+		&goCoverEnabled, "go-cover", false, "enable collection of go coverage profiles (requires instrumented cockroach binary)")
 	cmd.Flags().IntVarP(
 		&parallelism, "parallelism", "p", 10, "number of tests to run in parallel")
 	cmd.Flags().StringVar(
@@ -274,6 +277,7 @@ func runTests(register func(registry.Registry), args []string, benchOnly bool) e
 		testOpts{
 			versionsBinaryOverride: versionsBinaryOverride,
 			skipInit:               skipInit,
+			goCoverEnabled:         goCoverEnabled,
 		},
 		lopt, nil /* clusterAllocator */)
 

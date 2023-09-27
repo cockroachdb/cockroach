@@ -3494,14 +3494,12 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 
 	case *rowCountNode:
 		if in, ok := n.source.(*insertNode); ok {
-			var valNode planNode
-			// We support two cases, a render around a values and a straight values.
-			if r, ok := in.source.(*renderNode); ok {
-				valNode = r.source.plan
-			} else {
-				valNode = in.source
+			// Skip over any renderNodes.
+			nod := in.source
+			for r, ok := nod.(*renderNode); ok; r, ok = r.source.plan.(*renderNode) {
+				nod = r.source.plan
 			}
-			if v, ok := valNode.(*valuesNode); ok {
+			if v, ok := nod.(*valuesNode); ok {
 				if v.coldataBatch != nil {
 					planCtx.isVectorInsert = true
 				}
