@@ -17,7 +17,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -479,24 +478,20 @@ func (e *stageExecStmt) Exec(
 				}
 			}
 		case stageExecuteQuery:
-			var expectedQueryResult [][]string
-			for _, expectedRow := range strings.Split(strings.TrimSuffix(e.expectedOutput, "\n"), "\n") {
-				expectRowArray := strings.Split(expectedRow, ",")
-				expectedQueryResult = append(expectedQueryResult, expectRowArray)
-			}
 			results := runner.QueryStr(t, boundSQL)
-			if !reflect.DeepEqual(results, expectedQueryResult) {
+			actualOutput := sqlutils.MatrixToStr(results)
+			if e.expectedOutput != actualOutput {
 				if !rewrite {
 					t.Fatalf(
 						"query '%s' ($stageKey=%d,$successfulStageCount=%d): expected:\n%v\ngot:\n%v\n",
 						stmt,
 						stageVariables.stage.AsInt()*1000,
 						stageVariables.successfulStageCount,
-						sqlutils.MatrixToStr(expectedQueryResult),
-						sqlutils.MatrixToStr(results),
+						e.expectedOutput,
+						actualOutput,
 					)
 				}
-				e.expectedOutput = sqlutils.MatrixToStr(results)
+				e.expectedOutput = actualOutput
 			}
 		default:
 			t.Fatal("unknown execType")
@@ -880,9 +875,9 @@ func executeSchemaChangeTxn(
 					err = tx.Commit()
 				}
 			}()
-			for _, stmt := range spec.Stmts {
+			for i, stmt := range spec.Stmts {
 				if _, err := tx.Exec(stmt.SQL); err != nil {
-					return err
+					return errors.Wrapf(err, "error processing statement %d: %s", i, stmt.SQL)
 				}
 			}
 			return nil
