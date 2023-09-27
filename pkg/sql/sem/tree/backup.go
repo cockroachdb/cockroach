@@ -148,7 +148,7 @@ type RestoreOptions struct {
 	VerifyData                       bool
 	UnsafeRestoreIncompatibleVersion bool
 	ExecutionLocality                Expr
-	StripLocalities                  bool
+	RemoveRegions                    bool
 }
 
 var _ NodeFormatter = &RestoreOptions{}
@@ -518,9 +518,9 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		ctx.FormatNode(o.ExecutionLocality)
 	}
 
-	if o.StripLocalities {
+	if o.RemoveRegions {
 		maybeAddSep()
-		ctx.WriteString("strip_localities")
+		ctx.WriteString("remove_regions")
 	}
 }
 
@@ -594,8 +594,8 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 	}
 
 	if o.SkipLocalitiesCheck {
-		// If StripLocalities is true, SkipLocalitiesCheck should also be true
-		if other.SkipLocalitiesCheck && !other.StripLocalities {
+		// If RemoveRegions is true, SkipLocalitiesCheck should also be true
+		if other.SkipLocalitiesCheck && !other.RemoveRegions {
 			return errors.New("skip_localities_check specified multiple times")
 		}
 	} else {
@@ -669,12 +669,12 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		return errors.New("execution locality option specified multiple times")
 	}
 
-	if o.StripLocalities {
-		if other.StripLocalities {
-			return errors.New("strip_localities specified multiple times")
+	if o.RemoveRegions {
+		if other.RemoveRegions {
+			return errors.New("remove_regions specified multiple times")
 		}
 	} else {
-		o.StripLocalities = other.StripLocalities
+		o.RemoveRegions = other.RemoveRegions
 	}
 
 	return nil
@@ -703,7 +703,7 @@ func (o RestoreOptions) IsDefault() bool {
 		o.IncludeAllSecondaryTenants == options.IncludeAllSecondaryTenants &&
 		o.UnsafeRestoreIncompatibleVersion == options.UnsafeRestoreIncompatibleVersion &&
 		o.ExecutionLocality == options.ExecutionLocality &&
-		o.StripLocalities == options.StripLocalities
+		o.RemoveRegions == options.RemoveRegions
 }
 
 // BackupTargetList represents a list of targets.
