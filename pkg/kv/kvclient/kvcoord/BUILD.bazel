@@ -227,6 +227,7 @@ go_test(
         "@com_github_cockroachdb_errors//errutil",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_golang_mock//gomock",
+        "@com_github_sasha_s_go_deadlock//:go-deadlock",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@org_golang_google_grpc//:go_default_library",

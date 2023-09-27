@@ -117,12 +117,13 @@ func muxRangeFeed(
 type muxStream struct {
 	nodeID roachpb.NodeID
 
+	streams syncutil.IntMap // streamID -> *activeMuxRangeFeed
+
 	// mu must be held when starting rangefeed.
 	mu struct {
 		syncutil.Mutex
-		sender  rangeFeedRequestSender
-		streams map[int64]*activeMuxRangeFeed
-		closed  bool
+		sender rangeFeedRequestSender
+		closed bool
 	}
 }
 
@@ -290,7 +291,7 @@ func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error
 
 			conn, err := m.establishMuxConnection(ctx, rpcClient, args.Replica.NodeID)
 			if err == nil {
-				err = conn.startRangeFeed(streamID, s, &args)
+				err = conn.startRangeFeed(streamID, s, &args, m.cfg.knobs.beforeSendRequest)
 			}
 
 			if err != nil {
@@ -380,7 +381,6 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 
 	ms := muxStream{nodeID: nodeID}
 	ms.mu.sender = mux
-	ms.mu.streams = make(map[int64]*activeMuxRangeFeed)
 	if err := future.MustSet(stream, muxStreamOrError{stream: &ms}); err != nil {
 		return err
 	}
@@ -474,7 +474,7 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 			if active.catchupRes != nil {
 				m.metrics.Errors.RangefeedErrorCatchup.Inc(1)
 			}
-			ms.deleteStream(event.StreamID)
+			ms.streams.Delete(event.StreamID)
 			// Restart rangefeed on another goroutine. Restart might be a bit
 			// expensive, particularly if we have to resolve span.  We do not want
 			// to block receiveEventsFromNode for too long.
@@ -555,53 +555,66 @@ func (m *rangefeedMuxer) restartActiveRangeFeed(
 // on this node connection.  If no error returned, registers stream
 // with this connection.  Otherwise, stream is not registered.
 func (c *muxStream) startRangeFeed(
-	streamID int64, stream *activeMuxRangeFeed, req *kvpb.RangeFeedRequest,
-) error {
+	streamID int64, stream *activeMuxRangeFeed, req *kvpb.RangeFeedRequest, beforeSend func(),
+) (retErr error) {
 	// NB: lock must be held for the duration of this method.
+	// The reasons for this are twofold:
+	//  1. Send calls must be protected against concurrent calls.
+	//  2. The muxStream may be in the process of restart -- that is receiveEventsFromNode just
+	//     returned an error.  When that happens, muxStream is closed, and all rangefeeds
+	//     belonging to this muxStream are restarted.  The lock here synchronizes with the close()
+	//     call so that we either observe the fact that muxStream is closed when this method runs,
+	//     or that the close waits until this call completes.
+	//     Note also, the Send method may block.  That's alright.  If the call is blocked because
+	//     the server side just returned an error, then, the send call should abort and cause an
+	//     error to be returned, releasing the lock, and letting close proceed.
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// As soon as we issue Send below, the stream may return an event or an error that
+	// may be seen by the event consumer (receiveEventsFromNode).
+	// Therefore, we update streams map immediately, but undo this insert in case of an error,
+	// which is returned to the caller for retry.
+	c.streams.Store(streamID, unsafe.Pointer(stream))
+
+	defer func() {
+		if retErr != nil {
+			// undo stream registration.
+			c.streams.Delete(streamID)
+		}
+	}()
 
 	if c.mu.closed {
 		return net.ErrClosed
 	}
 
-	// Concurrent Send calls are not thread safe; thus Send calls must be
-	// synchronized.
-	if err := c.mu.sender.Send(req); err != nil {
-		return err
+	if beforeSend != nil {
+		beforeSend()
 	}
 
-	// As soon as we issue Send above, the stream may return an error that
-	// may be seen by the event consumer (receiveEventsFromNode).
-	// Therefore, we update streams map under the lock to ensure that the
-	// receiver will be able to observe this stream.
-	c.mu.streams[streamID] = stream
+	return c.mu.sender.Send(req)
+}
+
+func (c *muxStream) lookupStream(streamID int64) *activeMuxRangeFeed {
+	v, ok := c.streams.Load(streamID)
+	if ok {
+		return (*activeMuxRangeFeed)(v)
+	}
 	return nil
 }
 
-func (c *muxStream) lookupStream(streamID int64) (a *activeMuxRangeFeed) {
-	c.mu.Lock()
-	a = c.mu.streams[streamID]
-	c.mu.Unlock()
-	return a
-}
-
-func (c *muxStream) deleteStream(streamID int64) {
-	c.mu.Lock()
-	delete(c.mu.streams, streamID)
-	c.mu.Unlock()
-}
-
 // close closes mux stream returning the list of active range feeds.
-func (c *muxStream) close() []*activeMuxRangeFeed {
+func (c *muxStream) close() (toRestart []*activeMuxRangeFeed) {
+	// NB: lock must be held for the duration of this method to synchronize with startRangeFeed.
 	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.mu.closed = true
-	toRestart := make([]*activeMuxRangeFeed, 0, len(c.mu.streams))
-	for _, a := range c.mu.streams {
-		toRestart = append(toRestart, a)
-	}
-	c.mu.streams = nil
-	c.mu.Unlock()
+
+	c.streams.Range(func(_ int64, v unsafe.Pointer) bool {
+		toRestart = append(toRestart, (*activeMuxRangeFeed)(v))
+		return true
+	})
 
 	return toRestart
 }
