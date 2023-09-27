@@ -148,9 +148,8 @@ message ResolvedTxnID {
 
 
 enum ContentionType {
-  // (xinhaoz) Right now we only have lock contention.
-  // Serialization conflict events will be added in a future commit.
   LOCK_WAIT = 0;
+  SERIALIZATION_CONFLICT = 1;
 }
 
 

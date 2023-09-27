@@ -3019,6 +3019,7 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent, txnErr err
 				ex.sessionData(),
 				ev.txnID,
 				transactionFingerprintID,
+				txnErr,
 			)
 		}
 
@@ -3181,6 +3182,24 @@ func (ex *connExecutor) recordTransactionFinish(
 
 	if ex.server.cfg.TestingKnobs.OnRecordTxnFinish != nil {
 		ex.server.cfg.TestingKnobs.OnRecordTxnFinish(ex.executorType == executorTypeInternal, ex.phaseTimes, ex.planner.stmt.SQL)
+	}
+
+	// If we have a known conflicting txn meta for serialization conflict, we
+	// should add it to our contention registry so we can resolve the event.
+	var retryErr *kvpb.TransactionRetryWithProtoRefreshError
+	if txnErr != nil && errors.As(txnErr, &retryErr) && retryErr.ConflictingTxn != nil {
+		contentionEvent := contentionpb.ExtendedContentionEvent{
+			ContentionType: contentionpb.ContentionType_SERIALIZATION_CONFLICT,
+			BlockingEvent: kvpb.ContentionEvent{
+				Key:     retryErr.ConflictingTxn.Key,
+				TxnMeta: *retryErr.ConflictingTxn,
+				// Duration is not relevant for SERIALIZATION conflicts.
+			},
+			WaitingTxnID:            ev.txnID,
+			WaitingTxnFingerprintID: transactionFingerprintID,
+			// Waiting statement fields are not relevant at this stage.
+		}
+		ex.server.cfg.ContentionRegistry.AddContentionEvent(contentionEvent)
 	}
 
 	return ex.statsCollector.RecordTransaction(

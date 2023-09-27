@@ -320,6 +320,7 @@ func (s *runtimeHookInjector) hook(
 	sessionData *sessiondata.SessionData,
 	txnID uuid.UUID,
 	txnFingerprintID appstatspb.TransactionFingerprintID,
+	_ error,
 ) {
 	s.RLock()
 	defer s.RUnlock()

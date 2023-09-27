@@ -7450,8 +7450,8 @@ CREATE TABLE crdb_internal.transaction_contention_events (
     database_name       				 STRING NOT NULL,
     schema_name         				 STRING NOT NULL,
     table_name          				 STRING NOT NULL,
-    index_name          				 STRING
-    contention_type              STRING              
+    index_name          				 STRING,
+    contention_type              STRING NOT NULL              
 );`,
 	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		// Check permission first before making RPC fanout.
