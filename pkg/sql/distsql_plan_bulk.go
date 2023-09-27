@@ -64,7 +64,7 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
 	planCtx := dsp.NewPlanningCtxWithOracle(ctx, evalCtx, nil /* planner */, nil, /* txn */
 		DistributionTypeAlways, oracle, localityFilter)
 
-	ss, err := execCfg.NodesStatusServer.OptionalNodesStatusServer(47900)
+	ss, err := execCfg.NodesStatusServer.OptionalNodesStatusServer()
 	if err != nil {
 		return planCtx, []base.SQLInstanceID{dsp.gatewaySQLInstanceID}, nil //nolint:returnerrcheck
 	}
