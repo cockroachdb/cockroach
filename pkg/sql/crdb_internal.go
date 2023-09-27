@@ -91,7 +91,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -5426,8 +5425,7 @@ CREATE TABLE crdb_internal.kv_node_status (
 		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 			return err
 		}
-		ss, err := p.extendedEvalCtx.NodesStatusServer.OptionalNodesStatusServer(
-			errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
+		ss, err := p.extendedEvalCtx.NodesStatusServer.OptionalNodesStatusServer()
 		if err != nil {
 			return err
 		}
@@ -5540,8 +5538,7 @@ CREATE TABLE crdb_internal.kv_store_status (
 		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 			return err
 		}
-		ss, err := p.ExecCfg().NodesStatusServer.OptionalNodesStatusServer(
-			errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
+		ss, err := p.ExecCfg().NodesStatusServer.OptionalNodesStatusServer()
 		if err != nil {
 			return err
 		}

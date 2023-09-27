@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -262,10 +261,7 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 	}
 
 	if err := execCfg.RequireSystemTenantOrClusterSetting(SecondaryTenantZoneConfigsEnabled); err != nil {
-		// Return an unimplemented error here instead of referencing the cluster
-		// setting here as zone configurations for secondary tenants are intended to
-		// be hidden.
-		return nil, errorutil.UnsupportedUnderClusterVirtualization(MultitenancyZoneCfgIssueNo)
+		return nil, err
 	}
 
 	if err := checkPrivilegeForSetZoneConfig(ctx, p, n.ZoneSpecifier); err != nil {
@@ -1013,7 +1009,7 @@ func validateZoneAttrsAndLocalities(
 		return nil
 	}
 	if execCfg.Codec.ForSystemTenant() {
-		ss, err := execCfg.NodesStatusServer.OptionalNodesStatusServer(MultitenancyZoneCfgIssueNo)
+		ss, err := execCfg.NodesStatusServer.OptionalNodesStatusServer()
 		if err != nil {
 			return err
 		}
@@ -1133,9 +1129,6 @@ func validateZoneLocalitiesForSecondaryTenants(
 	}
 	return nil
 }
-
-// MultitenancyZoneCfgIssueNo points to the multitenancy zone config issue number.
-const MultitenancyZoneCfgIssueNo = 49854
 
 type zoneConfigUpdate struct {
 	id         descpb.ID

@@ -3793,5 +3793,8 @@ func (cfg *ExecutorConfig) RequireSystemTenantOrClusterSetting(
 	if cfg.Codec.ForSystemTenant() || setting.Get(&cfg.Settings.SV) {
 		return nil
 	}
-	return errors.Newf("tenant cluster setting %s disabled", setting.Name())
+	return errors.WithDetailf(errors.WithHint(
+		errors.New("operation is disabled within a virtual cluster"),
+		"Feature was disabled by the system operator."),
+		"Feature flag: %s", setting.Name())
 }
