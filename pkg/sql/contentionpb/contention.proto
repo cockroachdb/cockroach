@@ -147,6 +147,13 @@ message ResolvedTxnID {
 }
 
 
+enum ContentionType {
+  // (xinhaoz) Right now we only have lock contention.
+  // Serialization conflict events will be added in a future commit.
+  LOCK_WAIT = 0;
+}
+
+
 message ExtendedContentionEvent {
   cockroach.roachpb.ContentionEvent blocking_event = 1 [
     (gogoproto.nullable) = false
@@ -179,4 +186,6 @@ message ExtendedContentionEvent {
   bytes waiting_stmt_id = 7 [(gogoproto.customname) = "WaitingStmtID",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID",
     (gogoproto.nullable) = false];
+
+  ContentionType contention_type = 8;
 }

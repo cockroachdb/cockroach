@@ -236,6 +236,7 @@ func (ex *connExecutor) recordStatementSummary(
 				WaitingTxnID:             planner.txn.ID(),
 				WaitingStmtFingerprintID: stmtFingerprintID,
 				WaitingStmtID:            stmt.QueryID,
+				ContentionType:           contentionpb.ContentionType_LOCK_WAIT,
 			}
 
 			ex.server.cfg.ContentionRegistry.AddContentionEvent(contentionEvent)
