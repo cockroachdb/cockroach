@@ -29,31 +29,26 @@ type LogMetrics interface {
 	// The LogMetrics implementation must have metadata defined
 	// for the given MetricName within its own scope. See
 	// pkg/util/log/logmetrics for details.
-	IncrementCounter(metric MetricName, amount int64)
+	IncrementCounter(metric Metric, amount int64)
 }
 
-// MetricName represents the name of a metric registered &
-// used within the log package, available to use in the LogMetrics
-// interface.
-type MetricName string
+// Metric is the enum representation of each metric supported within the log package.
+// NB: When adding a metric here, be sure to add to log.Metrics below.
+// NB: The metric also needs to be added to pkg/util/log/logmetrics, where we
+// need to register the metric and define its metadata.
+//
+// We use an enum representation as an optimization within LogMetrics implementations
+// when doing lookups for underlying metric counters.
+type Metric int
 
-// FluentSinkConnectionError is the MetricName for the metric
-// used to count fluent-server log sink connection errors. Please
-// refer to its metric metadata for more details (hint: see usages).
-const FluentSinkConnectionError MetricName = "log.fluent.sink.conn.errors"
+const (
+	FluentSinkConnectionError Metric = iota
+	BufferedSinkMessagesDropped
+	LogMessageCount
+)
 
-// BufferedSinkMessagesDropped is the MetricName for the metric used to
-// count log messages that are dropped by buffered log sinks. When
-// CRDB attempts to buffer a log message in a buffered log sink whose
-// buffer is already full, it drops the oldest buffered messages to make
-// space for the new message.
-const BufferedSinkMessagesDropped MetricName = "log.buffered.messages.dropped"
-
-// LogMessageCount is the MetricName for the metric used to count log
-// messages that are output to log sinks. This is effectively a count
-// of log volume on the node. Note that this does *not* measure the
-// fan-out of individual log messages to various underlying log sinks.
-// For example, a single log.Info call would increment this metric by
-// a value of 1, even if that single log message would be routed to
-// more than 1 logging sink.
-const LogMessageCount MetricName = "log.messages.count"
+var Metrics = []Metric{
+	FluentSinkConnectionError,
+	BufferedSinkMessagesDropped,
+	LogMessageCount,
+}

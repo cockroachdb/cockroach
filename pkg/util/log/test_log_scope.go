@@ -511,6 +511,6 @@ func isDirEmpty(dirname string) (bool, error) {
 // NB: All operations performed against *TestLogMetricsImpl are no-ops.
 type TestLogMetricsImpl struct{}
 
-func (t *TestLogMetricsImpl) IncrementCounter(_ MetricName, _ int64) {}
+func (t *TestLogMetricsImpl) IncrementCounter(_ Metric, _ int64) {}
 
 var _ LogMetrics = (*TestLogMetricsImpl)(nil)

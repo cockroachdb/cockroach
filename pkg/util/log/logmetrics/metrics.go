@@ -22,21 +22,21 @@ var (
 	// logMetricsReg is a singleton instance of the LogMetricsRegistry.
 	logMetricsReg        = newLogMetricsRegistry()
 	FluentSinkConnErrors = metric.Metadata{
-		Name:        string(log.FluentSinkConnectionError),
+		Name:        "log.fluent.sink.conn.errors",
 		Help:        "Number of connection errors experienced by fluent-server logging sinks",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
 	}
 	BufferedSinkMessagesDropped = metric.Metadata{
-		Name:        string(log.BufferedSinkMessagesDropped),
+		Name:        "log.buffered.messages.dropped",
 		Help:        "Count of log messages that are dropped by buffered log sinks. When CRDB attempts to buffer a log message in a buffered log sink whose buffer is already full, it drops the oldest buffered messages to make space for the new message",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
 	}
 	LogMessageCount = metric.Metadata{
-		Name:        string(log.LogMessageCount),
+		Name:        "log.messages.count",
 		Help:        "Count of messages logged on the node since startup. Note that this does not measure the fan-out of single log messages to the various configured logging sinks.",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
@@ -84,7 +84,7 @@ type LogMetricsRegistry struct {
 	metricsStruct logMetricsStruct
 	mu            struct {
 		syncutil.Mutex
-		counters map[log.MetricName]*metric.Counter
+		counters []*metric.Counter
 	}
 }
 
@@ -97,7 +97,7 @@ func newLogMetricsRegistry() *LogMetricsRegistry {
 }
 
 func (l *LogMetricsRegistry) registerCounters() {
-	l.mu.counters = make(map[log.MetricName]*metric.Counter)
+	l.mu.counters = make([]*metric.Counter, len(log.Metrics))
 	// Create the metrics struct for us to add to registries as they're
 	// requested.
 	l.metricsStruct = logMetricsStruct{
@@ -109,9 +109,14 @@ func (l *LogMetricsRegistry) registerCounters() {
 	defer l.mu.Unlock()
 	// Be sure to also add the metrics to our internal store, for
 	// recall in functions such as IncrementCounter.
-	l.mu.counters[log.MetricName(FluentSinkConnErrors.Name)] = l.metricsStruct.FluentSinkConnErrors
-	l.mu.counters[log.MetricName(BufferedSinkMessagesDropped.Name)] = l.metricsStruct.BufferedSinkMessagesDropped
-	l.mu.counters[log.MetricName(LogMessageCount.Name)] = l.metricsStruct.LogMessageCount
+	l.mu.counters[log.FluentSinkConnectionError] = l.metricsStruct.FluentSinkConnErrors
+	l.mu.counters[log.BufferedSinkMessagesDropped] = l.metricsStruct.BufferedSinkMessagesDropped
+	l.mu.counters[log.LogMessageCount] = l.metricsStruct.LogMessageCount
+	for _, c := range l.mu.counters {
+		if c == nil {
+			panic(errors.AssertionFailedf("Failed to register log metric in LogMetricsRegistry"))
+		}
+	}
 }
 
 // NewRegistry initializes and returns a new metric.Registry, populated with metrics
@@ -132,12 +137,8 @@ func NewRegistry() *metric.Registry {
 // IncrementCounter increments thegi Counter held by the given alias. If a log.MetricName
 // is provided as an argument, but is not registered with the LogMetricsRegistry, this function
 // panics.
-func (l *LogMetricsRegistry) IncrementCounter(metric log.MetricName, amount int64) {
+func (l *LogMetricsRegistry) IncrementCounter(metric log.Metric, amount int64) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	counter, ok := l.mu.counters[metric]
-	if !ok {
-		panic(errors.AssertionFailedf("MetricName not registered in LogMetricsRegistry: %q", string(metric)))
-	}
-	counter.Inc(amount)
+	l.mu.counters[metric].Inc(amount)
 }
