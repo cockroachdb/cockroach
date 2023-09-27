@@ -36,7 +36,7 @@ type scatterNode struct {
 // Privileges: INSERT on table.
 func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error) {
 
-	if err := p.ExecCfg().RequireSystemTenantOrClusterSetting(SecondaryTenantScatterEnabled); err != nil {
+	if err := requireSystemTenantOrClusterSetting(p.ExecCfg().Codec, p.ExecCfg().Settings, SecondaryTenantScatterEnabled); err != nil {
 		return nil, err
 	}
 
