@@ -1242,6 +1242,14 @@ message AutoUpdateSQLActivityDetails {
 message AutoUpdateSQLActivityProgress {
 }
 
+message MVCCStatisticsJobDetails {
+
+}
+
+message MVCCStatisticsJobProgress {
+
+}
+
 message Payload {
   string description = 1;
   // If empty, the description is assumed to be the statement.
@@ -1304,6 +1312,7 @@ message Payload {
     AutoConfigEnvRunnerDetails auto_config_env_runner = 42;
     AutoConfigTaskDetails auto_config_task = 43;
     AutoUpdateSQLActivityDetails auto_update_sql_activities = 44;
+    MVCCStatisticsJobDetails mvcc_statistics_details = 45;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -1377,6 +1386,7 @@ message Progress {
     AutoConfigEnvRunnerProgress auto_config_env_runner = 30;
     AutoConfigTaskProgress auto_config_task = 31;
     AutoUpdateSQLActivityProgress update_sql_activity = 32;
+    MVCCStatisticsJobProgress mvcc_statistics_progress = 33;
   }
 
   uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
@@ -1412,6 +1422,7 @@ enum Type {
   AUTO_CONFIG_ENV_RUNNER = 21 [(gogoproto.enumvalue_customname) = "TypeAutoConfigEnvRunner"];
   AUTO_CONFIG_TASK = 22 [(gogoproto.enumvalue_customname) = "TypeAutoConfigTask"];
   AUTO_UPDATE_SQL_ACTIVITY = 23 [(gogoproto.enumvalue_customname) = "TypeAutoUpdateSQLActivity"];
+  MVCC_STATISTICS_UPDATE = 24 [(gogoproto.enumvalue_customname) = "TypeMVCCStatisticsUpdate"];
 }
 
 message Job {

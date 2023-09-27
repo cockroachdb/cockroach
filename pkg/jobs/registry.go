@@ -322,6 +322,8 @@ const (
 
 	// SqlActivityUpdaterJobID A static job ID is used for the SQL activity tables.
 	SqlActivityUpdaterJobID = jobspb.JobID(103)
+
+	MVCCStatisticsJobID = jobspb.JobID(104)
 )
 
 // MakeJobID generates a new job ID.

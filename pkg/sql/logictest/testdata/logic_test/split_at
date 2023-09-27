@@ -10,7 +10,7 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t
 ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/62>  <after:/Max>  {1}       1
+<before:/Table/65>  <after:/Max>  {1}       1
 
 query TTT colnames,nosort
 ALTER TABLE t SPLIT AT VALUES (1), (10)
@@ -24,7 +24,7 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t
 ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/62>  …/1/1         {1}       1
+<before:/Table/65>  …/1/1         {1}       1
 …/1/1               …/1/10        {1}       1
 …/1/10              <after:/Max>  {1}       1
 

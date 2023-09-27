@@ -152,6 +152,7 @@ go_library(
         "max_one_row.go",
         "mem_metrics.go",
         "mvcc_backfiller.go",
+        "mvcc_statistics_update_job.go",
         "name_util.go",
         "notice.go",
         "opaque.go",

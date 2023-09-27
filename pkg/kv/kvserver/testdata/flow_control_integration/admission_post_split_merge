@@ -50,8 +50,8 @@ ORDER BY streams DESC;
 
   range_id | stream_count  
 -----------+---------------
-  65       | 3             
-  66       | 3             
+  68       | 3             
+  69       | 3             
 
 
 -- (Merging ranges.)
@@ -81,7 +81,7 @@ ORDER BY streams DESC;
 
   range_id | stream_count  
 -----------+---------------
-  65       | 3             
+  68       | 3             
 
 
 -- (Allow below-raft admission to proceed.)
