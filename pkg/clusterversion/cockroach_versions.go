@@ -574,6 +574,11 @@ const (
 	// role for all existing functions.
 	V23_2_GrantExecuteToPublic
 
+	// V23_2_MVCCStatisticsTable adds the system.mvcc_statistics
+	// table and update job. The table is used to serve fast reads of historical
+	// mvcc data from observability surfaces.
+	V23_2_MVCCStatisticsTable
+
 	// *************************************************
 	// Step (1) Add new versions here.
 	// Do not add new versions to a patch release.
@@ -1003,7 +1008,10 @@ var rawVersionsSingleton = keyedVersions{
 		Key:     V23_2_GrantExecuteToPublic,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 26},
 	},
-
+	{
+		Key:     V23_2_MVCCStatisticsTable,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 28},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
