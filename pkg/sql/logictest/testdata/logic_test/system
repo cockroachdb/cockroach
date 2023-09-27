@@ -25,6 +25,7 @@ public  join_tokens                      table     node  NULL
 public  lease                            table     node  NULL
 public  locations                        table     node  NULL
 public  migrations                       table     node  NULL
+public  mvcc_statistics                  table     node  NULL
 public  namespace                        table     node  NULL
 public  privileges                       table     node  NULL
 public  protected_ts_meta                table     node  NULL
@@ -51,6 +52,7 @@ public  statement_activity               table     node  NULL
 public  statement_bundle_chunks          table     node  NULL
 public  statement_diagnostics            table     node  NULL
 public  statement_diagnostics_requests   table     node  NULL
+public  statement_execution_insights     table     node  NULL
 public  statement_statistics             table     node  NULL
 public  table_statistics                 table     node  NULL
 public  task_payloads                    table     node  NULL
@@ -60,6 +62,7 @@ public  tenant_tasks                     table     node  NULL
 public  tenant_usage                     table     node  NULL
 public  tenants                          table     node  NULL
 public  transaction_activity             table     node  NULL
+public  transaction_execution_insights   table     node  NULL
 public  transaction_statistics           table     node  NULL
 public  ui                               table     node  NULL
 public  users                            table     node  NULL
@@ -82,6 +85,7 @@ public  join_tokens                      table     node  NULL
 public  lease                            table     node  NULL
 public  locations                        table     node  NULL
 public  migrations                       table     node  NULL
+public  mvcc_statistics                  table     node  NULL
 public  namespace                        table     node  NULL
 public  privileges                       table     node  NULL
 public  protected_ts_meta                table     node  NULL
@@ -108,9 +112,11 @@ public  statement_activity               table     node  NULL
 public  statement_bundle_chunks          table     node  NULL
 public  statement_diagnostics            table     node  NULL
 public  statement_diagnostics_requests   table     node  NULL
+public  statement_execution_insights     table     node  NULL
 public  statement_statistics             table     node  NULL
 public  table_statistics                 table     node  NULL
 public  transaction_activity             table     node  NULL
+public  transaction_execution_insights   table     node  NULL
 public  transaction_statistics           table     node  NULL
 public  ui                               table     node  NULL
 public  users                            table     node  NULL
@@ -178,6 +184,9 @@ SELECT id FROM system.descriptor ORDER BY 1
 60
 61
 62
+63
+64
+65
 100
 101
 102
@@ -236,6 +245,9 @@ SELECT id FROM system.descriptor ORDER BY 1
 57
 58
 59
+60
+61
+62
 100
 101
 102
@@ -486,6 +498,14 @@ system  public  migrations                       root    DELETE  true
 system  public  migrations                       root    INSERT  true
 system  public  migrations                       root    SELECT  true
 system  public  migrations                       root    UPDATE  true
+system  public  mvcc_statistics                  admin   DELETE  true
+system  public  mvcc_statistics                  admin   INSERT  true
+system  public  mvcc_statistics                  admin   SELECT  true
+system  public  mvcc_statistics                  admin   UPDATE  true
+system  public  mvcc_statistics                  root    DELETE  true
+system  public  mvcc_statistics                  root    INSERT  true
+system  public  mvcc_statistics                  root    SELECT  true
+system  public  mvcc_statistics                  root    UPDATE  true
 system  public  namespace                        admin   SELECT  true
 system  public  namespace                        root    SELECT  true
 system  public  privileges                       admin   DELETE  true
@@ -668,6 +688,14 @@ system  public  statement_diagnostics_requests   root    DELETE  true
 system  public  statement_diagnostics_requests   root    INSERT  true
 system  public  statement_diagnostics_requests   root    SELECT  true
 system  public  statement_diagnostics_requests   root    UPDATE  true
+system  public  statement_execution_insights     admin   DELETE  true
+system  public  statement_execution_insights     admin   INSERT  true
+system  public  statement_execution_insights     admin   SELECT  true
+system  public  statement_execution_insights     admin   UPDATE  true
+system  public  statement_execution_insights     root    DELETE  true
+system  public  statement_execution_insights     root    INSERT  true
+system  public  statement_execution_insights     root    SELECT  true
+system  public  statement_execution_insights     root    UPDATE  true
 system  public  statement_statistics             admin   SELECT  true
 system  public  statement_statistics             root    SELECT  true
 system  public  table_statistics                 admin   DELETE  true
@@ -716,6 +744,14 @@ system  public  tenants                          admin   SELECT  true
 system  public  tenants                          root    SELECT  true
 system  public  transaction_activity             admin   SELECT  true
 system  public  transaction_activity             root    SELECT  true
+system  public  transaction_execution_insights   admin   DELETE  true
+system  public  transaction_execution_insights   admin   INSERT  true
+system  public  transaction_execution_insights   admin   SELECT  true
+system  public  transaction_execution_insights   admin   UPDATE  true
+system  public  transaction_execution_insights   root    DELETE  true
+system  public  transaction_execution_insights   root    INSERT  true
+system  public  transaction_execution_insights   root    SELECT  true
+system  public  transaction_execution_insights   root    UPDATE  true
 system  public  transaction_statistics           admin   SELECT  true
 system  public  transaction_statistics           root    SELECT  true
 system  public  ui                               admin   DELETE  true
@@ -840,6 +876,14 @@ system  public  migrations                       root    DELETE  true
 system  public  migrations                       root    INSERT  true
 system  public  migrations                       root    SELECT  true
 system  public  migrations                       root    UPDATE  true
+system  public  mvcc_statistics                  admin   DELETE  true
+system  public  mvcc_statistics                  admin   INSERT  true
+system  public  mvcc_statistics                  admin   SELECT  true
+system  public  mvcc_statistics                  admin   UPDATE  true
+system  public  mvcc_statistics                  root    DELETE  true
+system  public  mvcc_statistics                  root    INSERT  true
+system  public  mvcc_statistics                  root    SELECT  true
+system  public  mvcc_statistics                  root    UPDATE  true
 system  public  namespace                        admin   SELECT  true
 system  public  namespace                        root    SELECT  true
 system  public  privileges                       admin   DELETE  true
@@ -1022,6 +1066,14 @@ system  public  statement_diagnostics_requests   root    DELETE  true
 system  public  statement_diagnostics_requests   root    INSERT  true
 system  public  statement_diagnostics_requests   root    SELECT  true
 system  public  statement_diagnostics_requests   root    UPDATE  true
+system  public  statement_execution_insights     admin   DELETE  true
+system  public  statement_execution_insights     admin   INSERT  true
+system  public  statement_execution_insights     admin   SELECT  true
+system  public  statement_execution_insights     admin   UPDATE  true
+system  public  statement_execution_insights     root    DELETE  true
+system  public  statement_execution_insights     root    INSERT  true
+system  public  statement_execution_insights     root    SELECT  true
+system  public  statement_execution_insights     root    UPDATE  true
 system  public  statement_statistics             admin   SELECT  true
 system  public  statement_statistics             root    SELECT  true
 system  public  table_statistics                 admin   DELETE  true
@@ -1034,6 +1086,14 @@ system  public  table_statistics                 root    SELECT  true
 system  public  table_statistics                 root    UPDATE  true
 system  public  transaction_activity             admin   SELECT  true
 system  public  transaction_activity             root    SELECT  true
+system  public  transaction_execution_insights   admin   DELETE  true
+system  public  transaction_execution_insights   admin   INSERT  true
+system  public  transaction_execution_insights   admin   SELECT  true
+system  public  transaction_execution_insights   admin   UPDATE  true
+system  public  transaction_execution_insights   root    DELETE  true
+system  public  transaction_execution_insights   root    INSERT  true
+system  public  transaction_execution_insights   root    SELECT  true
+system  public  transaction_execution_insights   root    UPDATE  true
 system  public  transaction_statistics           admin   SELECT  true
 system  public  transaction_statistics           root    SELECT  true
 system  public  ui                               admin   DELETE  true

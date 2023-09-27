@@ -21,6 +21,9 @@ state offset=59
 /Table/6{0-1}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{1-2}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{2-3}                              database system (host)
+/Table/6{3-4}                              database system (host)
+/Table/6{4-5}                              database system (host)
+/Table/6{5-6}                              database system (host)
 /Tenant/11{-\x00}                          database system (tenant)
 /Tenant/12{-\x00}                          database system (tenant)
 
@@ -49,12 +52,18 @@ state offset=60 limit=3
 state offset=103
 ----
 ...
+/Tenant/11/Table/5{1-2}                    database system (tenant)
+/Tenant/11/Table/5{2-3}                    database system (tenant)
+/Tenant/11/Table/5{3-4}                    database system (tenant)
 /Tenant/11/Table/5{4-5}                    database system (tenant)
 /Tenant/11/Table/5{5-6}                    database system (tenant)
 /Tenant/11/Table/5{6-7}                    database system (tenant)
 /Tenant/11/Table/5{7-8}                    database system (tenant)
 /Tenant/11/Table/5{8-9}                    database system (tenant)
 /Tenant/11/Table/{59-60}                   database system (tenant)
+/Tenant/11/Table/6{0-1}                    database system (tenant)
+/Tenant/11/Table/6{1-2}                    database system (tenant)
+/Tenant/11/Table/6{2-3}                    database system (tenant)
 /Tenant/12{-\x00}                          database system (tenant)
 
 # Just another view of what the tenant's reconciler actually did. It got rid of
@@ -110,6 +119,9 @@ upsert /Tenant/11/Table/5{6-7}             database system (tenant)
 upsert /Tenant/11/Table/5{7-8}             database system (tenant)
 upsert /Tenant/11/Table/5{8-9}             database system (tenant)
 upsert /Tenant/11/Table/{59-60}            database system (tenant)
+upsert /Tenant/11/Table/6{0-1}             database system (tenant)
+upsert /Tenant/11/Table/6{1-2}             database system (tenant)
+upsert /Tenant/11/Table/6{2-3}             database system (tenant)
 
 # Initialize a new tenant, tenant=10, that DOES have a pre-existing tenant,
 # tenant=11, next to it.
@@ -125,5 +137,5 @@ state offset=59 limit=5
 /Table/6{0-1}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{1-2}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{2-3}                              database system (host)
-/Tenant/10{-\x00}                          database system (tenant)
+/Table/6{3-4}                              database system (host)
 ...
