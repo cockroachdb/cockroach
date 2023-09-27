@@ -1007,6 +1007,21 @@ CREATE TABLE system.span_stats_tenant_boundaries (
 	  FAMILY "primary" (crdb_region, unavailable_at)
 ) ;
 `
+
+	SystemMVCCStatisticsSchema = `
+CREATE TABLE system.mvcc_statistics (
+	id INT8 NOT NULL DEFAULT unique_rowid(),
+	database_id INT8 NOT NULL,
+	table_id INT8 NOT NULL,
+	index_id INT8 NOT NULL,
+	created_at TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMP,
+	statistics JSONB NOT NULL,
+	CONSTRAINT mvcc_statistics_pkey PRIMARY KEY (id ASC),
+	INDEX mvcc_statistics_idx_db_table_idx_created_at (database_id ASC, table_id ASC, index_id ASC, created_at ASC),
+	INDEX mvcc_statistics_idx_database_id_created_at (database_id ASC, created_at ASC),
+	INDEX mvcc_statistics_idx_table_id_created_at (table_id ASC, created_at ASC),
+	INDEX mvcc_statistics_idx_index_id_id_created_at (index_id ASC, created_at ASC)
+);`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1237,6 +1252,7 @@ func MakeSystemTables() []SystemTable {
 		StatementActivityTable,
 		TransactionActivityTable,
 		RegionLivenessTable,
+		SystemMVCCStatisticsTable,
 	}
 }
 
@@ -4100,6 +4116,89 @@ var (
 					catenumpb.IndexColumn_ASC,
 				},
 				KeyColumnIDs: []descpb.ColumnID{1},
+			},
+		),
+	)
+
+	SystemMVCCStatisticsTable = makeSystemTable(
+		SystemMVCCStatisticsSchema,
+		systemTable(
+			catconstants.MVCCStatistics,
+			descpb.InvalidID, // dynamically assigned table ID
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.Int,
+					DefaultExpr: &uniqueRowIDString},
+				{Name: "database_id", ID: 2, Type: types.Int},
+				{Name: "table_id", ID: 3, Type: types.Int},
+				{Name: "index_id", ID: 4, Type: types.Int},
+				{Name: "created_at", ID: 5, Type: types.TimestampTZ,
+					DefaultExpr: &nowTZString},
+				{Name: "statistics", ID: 6, Type: types.Jsonb},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name: "primary",
+					ID:   0,
+					ColumnNames: []string{"id", "database_id", "table_id",
+						"index_id", "created_at", "statistics"},
+					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:           "mvcc_statistics_pkey",
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1},
+			},
+			descpb.IndexDescriptor{
+				Name:           "mvcc_statistics_idx_db_table_idx_created_at",
+				ID:             2,
+				Unique:         false,
+				KeyColumnNames: []string{"database_id", "table_id", "index_id", "created_at"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{2, 3, 4, 5},
+			},
+			descpb.IndexDescriptor{
+				Name:           "mvcc_statistics_idx_database_id_created_at",
+				ID:             3,
+				Unique:         false,
+				KeyColumnNames: []string{"database_id", "created_at"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{2, 5},
+			},
+			descpb.IndexDescriptor{
+				Name:           "mvcc_statistics_idx_table_id_created_at",
+				ID:             4,
+				Unique:         false,
+				KeyColumnNames: []string{"table_id", "created_at"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{3, 5},
+			},
+			descpb.IndexDescriptor{
+				Name:           "mvcc_statistics_idx_index_id_id_created_at",
+				ID:             5,
+				Unique:         false,
+				KeyColumnNames: []string{"index_id", "created_at"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{4, 5},
 			},
 		),
 	)
