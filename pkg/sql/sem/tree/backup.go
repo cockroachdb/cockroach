@@ -149,7 +149,7 @@ type RestoreOptions struct {
 	UnsafeRestoreIncompatibleVersion bool
 	ExecutionLocality                Expr
 	ExperimentalOnline               bool
-	StripLocalities                  bool
+	RemoveRegions                    bool
 }
 
 var _ NodeFormatter = &RestoreOptions{}
@@ -536,9 +536,9 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("experimental deferred copy")
 	}
 
-	if o.StripLocalities {
+	if o.RemoveRegions {
 		maybeAddSep()
-		ctx.WriteString("strip_localities")
+		ctx.WriteString("remove_regions")
 	}
 }
 
@@ -612,8 +612,8 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 	}
 
 	if o.SkipLocalitiesCheck {
-		// If StripLocalities is true, SkipLocalitiesCheck should also be true
-		if other.SkipLocalitiesCheck && !other.StripLocalities {
+		// If RemoveRegions is true, SkipLocalitiesCheck should also be true
+		if other.SkipLocalitiesCheck && !other.RemoveRegions {
 			return errors.New("skip_localities_check specified multiple times")
 		}
 	} else {
@@ -695,12 +695,12 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		o.ExperimentalOnline = other.ExperimentalOnline
 	}
 
-	if o.StripLocalities {
-		if other.StripLocalities {
-			return errors.New("strip_localities specified multiple times")
+	if o.RemoveRegions {
+		if other.RemoveRegions {
+			return errors.New("remove_regions specified multiple times")
 		}
 	} else {
-		o.StripLocalities = other.StripLocalities
+		o.RemoveRegions = other.RemoveRegions
 	}
 
 	return nil
@@ -730,7 +730,7 @@ func (o RestoreOptions) IsDefault() bool {
 		o.UnsafeRestoreIncompatibleVersion == options.UnsafeRestoreIncompatibleVersion &&
 		o.ExecutionLocality == options.ExecutionLocality &&
 		o.ExperimentalOnline == options.ExperimentalOnline &&
-		o.StripLocalities == options.StripLocalities
+		o.RemoveRegions == options.RemoveRegions
 }
 
 // BackupTargetList represents a list of targets.
