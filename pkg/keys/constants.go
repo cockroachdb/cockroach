@@ -72,6 +72,11 @@ var (
 	// AbortSpan protects a transaction from re-reading its own intents
 	// after it's been aborted.
 	LocalAbortSpanSuffix = []byte("abc-")
+	// LocalReplicatedSharedLocksTransactionLatchingKeySuffix specifies the key
+	// suffix ("rsl" = replicated shared locks) for all replicated shared lock
+	// attempts, per transaction. The detail about the transaction is the
+	// transaction id.
+	LocalReplicatedSharedLocksTransactionLatchingKeySuffix = roachpb.RKey("rsl-")
 	// localRangeFrozenStatusSuffix is DEPRECATED and remains to prevent reuse.
 	localRangeFrozenStatusSuffix = []byte("fzn-")
 	// LocalRangeGCThresholdSuffix is the suffix for the GC threshold. It keeps
