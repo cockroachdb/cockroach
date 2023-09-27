@@ -93,7 +93,8 @@ func runMultiTenantTPCH(
 
 	// Now we create a tenant and run all TPCH queries within it.
 	if sharedProcess {
-		db := createInMemoryTenant(ctx, t, c, appTenantName, c.All(), true /* secure */)
+		db := createInMemoryTenantWithConn(ctx, t, c, appTenantName, c.All(), true /* secure */)
+		defer db.Close()
 		url := fmt.Sprintf("{pgurl:1:%s}", appTenantName)
 		runTPCH(db, url, 1 /* setupIdx */)
 	} else {
