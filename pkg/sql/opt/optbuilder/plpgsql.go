@@ -581,6 +581,48 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			b.appendBodyStmt(&nameCon, b.callContinuation(&openCon, nameScope))
 			return b.callContinuation(&nameCon, s)
 
+		case *ast.Close:
+			// CLOSE statements close the cursor with the name supplied by a PLpgSQL
+			// variable. The crdb_internal.plpgsql_close builtin function handles
+			// closing the cursor. Build a volatile (non-inlinable) continuation
+			// that calls the builtin function.
+			closeCon := b.makeContinuation("_stmt_close")
+			closeCon.def.Volatility = volatility.Volatile
+			const closeFnName = "crdb_internal.plpgsql_close"
+			props, overloads := builtinsregistry.GetBuiltinProperties(closeFnName)
+			if len(overloads) != 1 {
+				panic(errors.AssertionFailedf("expected one overload for %s", closeFnName))
+			}
+			_, source, _, err := closeCon.s.FindSourceProvidingColumn(b.ob.ctx, t.CurVar)
+			if err != nil {
+				if pgerror.GetPGCode(err) == pgcode.UndefinedColumn {
+					panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", t.CurVar))
+				}
+				panic(err)
+			}
+			if !source.(*scopeColumn).typ.Equivalent(types.String) {
+				panic(pgerror.Newf(pgcode.DatatypeMismatch,
+					"variable \"%s\" must be of type cursor or refcursor", t.CurVar,
+				))
+			}
+			closeCall := b.ob.factory.ConstructFunction(
+				memo.ScalarListExpr{b.ob.factory.ConstructVariable(source.(*scopeColumn).id)},
+				&memo.FunctionPrivate{
+					Name:       closeFnName,
+					Typ:        types.Int,
+					Properties: props,
+					Overload:   &overloads[0],
+				},
+			)
+			closeColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_close"))
+			closeScope := closeCon.s.push()
+			b.ensureScopeHasExpr(closeScope)
+			b.ob.synthesizeColumn(closeScope, closeColName, types.Int, nil /* expr */, closeCall)
+			b.ob.constructProjectForScope(closeCon.s, closeScope)
+			b.appendBodyStmt(&closeCon, closeScope)
+			b.appendPlpgSQLStmts(&closeCon, stmts[i+1:])
+			return b.callContinuation(&closeCon, s)
+
 		default:
 			panic(unimplemented.New(
 				"unimplemented PL/pgSQL statement",
