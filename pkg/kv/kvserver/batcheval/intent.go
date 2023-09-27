@@ -170,25 +170,19 @@ func acquireLockOnKey(
 	dur lock.Durability,
 	key roachpb.Key,
 ) (roachpb.LockAcquisition, error) {
-	// TODO(arul,nvanbenschoten): For now, we're only checking whether we have
-	// access to a legit pebble.Writer for replicated lock acquisition. We're not
-	// actually acquiring a replicated lock -- we can only do so once they're
-	// fully supported in the storage package. Until then, we grab an unreplicated
-	// lock regardless of what the caller asked us to do.
-	if dur == lock.Replicated {
-		// ShouldWriteLocalTimestamp is only implemented by a pebble.Writer; it'll
-		// panic if we were on the read-only evaluation path, and only had access to
-		// a pebble.ReadOnly.
-		readWriter.ShouldWriteLocalTimestamps(ctx)
-		// Regardless of what the caller asked for, we'll give it an unreplicated
-		// lock.
-		dur = lock.Unreplicated
-	}
 	switch dur {
 	case lock.Unreplicated:
-		// TODO(arul,nvanbenschoten): Call into MVCCCheckForAcquireLockHere.
+		// TODO(arul,nvanbenschoten): plumb in something reasonable for
+		// maxLockConflicts over here.
+		if err := storage.MVCCCheckForAcquireLock(ctx, readWriter, txn, str, key, 0); err != nil {
+			return roachpb.LockAcquisition{}, err
+		}
 	case lock.Replicated:
-		// TODO(arul,nvanbenschoten): Call into MVCCAcquireLock here.
+		// TODO(arul,nvanbenschoten): plumb in the correct MVCCStats and
+		// maxConflicts here.
+		if err := storage.MVCCAcquireLock(ctx, readWriter, txn, str, key, nil, 0); err != nil {
+			return roachpb.LockAcquisition{}, err
+		}
 	default:
 		panic("unexpected lock durability")
 	}
