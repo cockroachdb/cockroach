@@ -16,7 +16,6 @@ go_library(
         "go.go",
         "lint.go",
         "main.go",
-        "merge_test_xmls.go",
         "roachprod_stress.go",
         "test.go",
         "test_binaries.go",
