@@ -267,6 +267,11 @@ func (p *planner) CloseCursor(ctx context.Context, n *tree.CloseCursor) (planNod
 	}, nil
 }
 
+// PLpgSQLCloseCursor implements the eval.Planner interface.
+func (p *planner) PLpgSQLCloseCursor(cursorName tree.Name) error {
+	return p.sqlCursors.closeCursor(cursorName)
+}
+
 type sqlCursor struct {
 	isql.Rows
 	// txn is the transaction object that the internal executor for this cursor

@@ -332,6 +332,11 @@ func (*DummyEvalPlanner) Optimizer() interface{} {
 	return nil
 }
 
+// PLpgSQLCloseCursor is part of the eval.Planner interface.
+func (*DummyEvalPlanner) PLpgSQLCloseCursor(_ tree.Name) error {
+	return nil
+}
+
 var _ eval.Planner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,

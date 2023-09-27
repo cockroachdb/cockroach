@@ -404,6 +404,11 @@ type Planner interface {
 
 	// Optimizer returns the optimizer associated with this Planner, if any.
 	Optimizer() interface{}
+  
+  // PLpgSQLCloseCursor closes the cursor with the given name, returning an
+  // error if the cursor doesn't exist. It is used to implement the PLpgSQL
+  // CLOSE statement.
+  PLpgSQLCloseCursor(cursorName tree.Name) error
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
