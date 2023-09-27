@@ -1015,8 +1015,11 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 	ib := humanizeutil.IBytes
 	// NB: "≈" indicates smoothed quantities.
 	p.Printf("compaction score %v (%d ssts, %d sub-levels), ", res.ioThreshold, res.ioThreshold.L0NumFiles, res.ioThreshold.L0NumSubLevels)
-	p.Printf("L0 growth %s (write %s ingest %s ignored %s): ", ib(res.aux.intL0AddedBytes),
-		ib(res.aux.perWorkTokensAux.intL0WriteBytes), ib(res.aux.perWorkTokensAux.intL0IngestedBytes),
+	p.Printf("L0 growth %s (write %s (ignored %s) ingest %s (ignored %s)): ",
+		ib(res.aux.intL0AddedBytes),
+		ib(res.aux.perWorkTokensAux.intL0WriteBytes),
+		ib(res.aux.perWorkTokensAux.intL0IgnoredWriteBytes),
+		ib(res.aux.perWorkTokensAux.intL0IngestedBytes),
 		ib(res.aux.perWorkTokensAux.intL0IgnoredIngestedBytes))
 	// Writes to L0 that we expected because requests told admission control.
 	// This is the "easy path", from an estimation perspective, if all regular
