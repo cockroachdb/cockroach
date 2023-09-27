@@ -85,7 +85,11 @@ func Build(
 		TreeAnnotator:        an,
 		SchemaFeatureChecker: dependencies.FeatureChecker(),
 	}
-	scbuildstmt.Process(b, an.GetStatement())
+	scbuildstmt.Process(
+		an.GetStatement(),
+		b.EvalCtx().Settings.Version.ActiveVersion(b),
+		scbuildstmt.GetDeclarativeSchemaChangerModeForStmt(b, n),
+	)(b)
 
 	// Generate redacted statement.
 	{
@@ -180,7 +184,7 @@ func makeState(
 func IsFullySupportedWithFalsePositive(
 	statement tree.Statement, version clusterversion.ClusterVersion,
 ) bool {
-	return scbuildstmt.IsFullySupportedWithFalsePositive(statement, version, sessiondatapb.UseNewSchemaChangerOn)
+	return scbuildstmt.Process(statement, version, sessiondatapb.UseNewSchemaChangerOn).IsSupported()
 }
 
 type elementState struct {

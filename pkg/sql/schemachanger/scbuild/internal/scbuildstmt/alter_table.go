@@ -11,7 +11,6 @@
 package scbuildstmt
 
 import (
-	"fmt"
 	"math"
 	"strings"
 
@@ -32,109 +31,113 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// alterTableChecks determines if the entire set of alter table commands
-// are supported.
-// One side-effect is that this function will modify `n` when it hoists
-// add column constraints.
-func alterTableChecks(n *tree.AlterTable, activeVersion clusterversion.ClusterVersion) bool {
+type commandFunc func(BuildCtx, *tree.TableName, *scpb.Table)
+
+func (cf commandFunc) isSupported() bool {
+	return cf != nil
+}
+
+// AlterTable implements ALTER TABLE.
+func AlterTable(n *tree.AlterTable, activeVersion clusterversion.ClusterVersion) ProcessFunc {
 	// For ALTER TABLE stmt, we will need to further check whether each
 	// individual command is fully supported.
 	n.HoistAddColumnConstraints(func() {
 		telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "add_column.references"))
 	})
+	var cfs []commandFunc
 	for _, cmd := range n.Cmds {
+		var cf commandFunc
 		switch typedCmd := cmd.(type) {
 		case *tree.AlterTableAddColumn:
+			cf = func(b BuildCtx, tn *tree.TableName, tbl *scpb.Table) {
+				alterTableAddColumn(b, tn, tbl, typedCmd)
+			}
 		case *tree.AlterTableDropColumn:
+			cf = func(b BuildCtx, tn *tree.TableName, tbl *scpb.Table) {
+				alterTableDropColumn(b, tn, tbl, typedCmd)
+			}
 		case *tree.AlterTableAlterPrimaryKey:
-			if typedCmd.Sharded != nil && !activeVersion.IsActive(clusterversion.V23_1) {
-				return false
+			if typedCmd.Sharded == nil || activeVersion.IsActive(clusterversion.V23_1) {
+				cf = func(b BuildCtx, tn *tree.TableName, tbl *scpb.Table) {
+					alterTableAlterPrimaryKey(b, tn, tbl, typedCmd)
+				}
 			}
 		case *tree.AlterTableSetNotNull:
-			if !activeVersion.IsActive(clusterversion.V23_1) {
-				return false
+			if activeVersion.IsActive(clusterversion.V23_1) {
+				cf = func(b BuildCtx, tn *tree.TableName, tbl *scpb.Table) {
+					alterTableSetNotNull(b, tn, tbl, typedCmd)
+				}
 			}
 		case *tree.AlterTableAddConstraint:
-			if d, ok := typedCmd.ConstraintDef.(*tree.UniqueConstraintTableDef); !ok || !d.PrimaryKey || typedCmd.ValidationBehavior != tree.ValidationDefault {
+			if d, ok := typedCmd.ConstraintDef.(*tree.UniqueConstraintTableDef); ok && d.PrimaryKey && typedCmd.ValidationBehavior == tree.ValidationDefault {
 				// Start supporting all other ADD CONSTRAINTs from V23_1, including
 				// - ADD PRIMARY KEY NOT VALID
 				// - ADD UNIQUE [NOT VALID]
 				// - ADD CHECK [NOT VALID]
 				// - ADD FOREIGN KEY [NOT VALID]
 				// - ADD UNIQUE WITHOUT INDEX [NOT VALID]
-				if !activeVersion.IsActive(clusterversion.V23_1) {
-					return false
+				if activeVersion.IsActive(clusterversion.V23_1) {
+					cf = func(b BuildCtx, tn *tree.TableName, tbl *scpb.Table) {
+						alterTableAddConstraint(b, tn, tbl, typedCmd)
+					}
 				}
 			}
 		case *tree.AlterTableDropConstraint:
-			if !activeVersion.IsActive(clusterversion.V23_1) {
-				return false
+			if activeVersion.IsActive(clusterversion.V23_1) {
+				cf = func(b BuildCtx, tn *tree.TableName, tbl *scpb.Table) {
+					alterTableDropConstraint(b, tn, tbl, typedCmd)
+				}
 			}
 		case *tree.AlterTableValidateConstraint:
-			if !activeVersion.IsActive(clusterversion.V23_1) {
-				return false
+			if activeVersion.IsActive(clusterversion.V23_1) {
+				cf = func(b BuildCtx, tn *tree.TableName, tbl *scpb.Table) {
+					alterTableValidateConstraint(b, tn, tbl, typedCmd)
+				}
 			}
-		default:
-			return false
 		}
-	}
-	return true
-}
-
-// AlterTable implements ALTER TABLE.
-func AlterTable(b BuildCtx, n *tree.AlterTable) {
-	tn := n.Table.ToTableName()
-	elts := b.ResolveTable(n.Table, ResolveParams{
-		IsExistenceOptional: n.IfExists,
-		RequiredPrivilege:   privilege.CREATE,
-	})
-	_, target, tbl := scpb.FindTable(elts)
-	if tbl == nil {
-		// Mark all table names (`tn` and others) in this ALTER TABLE stmt as non-existent.
-		tree.NewFmtCtx(tree.FmtSimple, tree.FmtReformatTableNames(func(
-			ctx *tree.FmtCtx, name *tree.TableName,
-		) {
-			b.MarkNameAsNonExistent(name)
-		})).FormatNode(n)
-		return
-	}
-	if target != scpb.ToPublic {
-		panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			"table %q is being dropped, try again later", n.Table.Object()))
-	}
-	panicIfSchemaIsLocked(elts)
-	tn.ObjectNamePrefix = b.NamePrefix(tbl)
-	b.SetUnresolvedNameAnnotation(n.Table, &tn)
-	b.IncrementSchemaChangeAlterCounter("table")
-	for _, cmd := range n.Cmds {
-		// Invoke the callback function for each command.
-		b.IncrementSchemaChangeAlterCounter("table", cmd.TelemetryName())
-		switch typedCmd := cmd.(type) {
-		case *tree.AlterTableAddColumn:
-			alterTableAddColumn(b, &tn, tbl, typedCmd)
-		case *tree.AlterTableDropColumn:
-			alterTableDropColumn(b, &tn, tbl, typedCmd)
-		case *tree.AlterTableAlterPrimaryKey:
-			alterTableAlterPrimaryKey(b, &tn, tbl, typedCmd)
-		case *tree.AlterTableSetNotNull:
-			alterTableSetNotNull(b, &tn, tbl, typedCmd)
-		case *tree.AlterTableAddConstraint:
-			alterTableAddConstraint(b, &tn, tbl, typedCmd)
-		case *tree.AlterTableDropConstraint:
-			alterTableDropConstraint(b, &tn, tbl, typedCmd)
-		case *tree.AlterTableValidateConstraint:
-			alterTableValidateConstraint(b, &tn, tbl, typedCmd)
-		default:
-			panic(fmt.Sprintf("invalid cmd %T", typedCmd))
+		if !cf.isSupported() {
+			return nil
 		}
-		b.IncrementSubWorkID()
+		cfs = append(cfs, func(b BuildCtx, tn *tree.TableName, tbl *scpb.Table) {
+			b.IncrementSchemaChangeAlterCounter("table", cmd.TelemetryName())
+			cf(b, tn, tbl)
+			b.IncrementSubWorkID()
+		})
 	}
-	maybeDropRedundantPrimaryIndexes(b, tbl.TableID)
-	maybeRewriteTempIDsInPrimaryIndexes(b, tbl.TableID)
-	disallowDroppingPrimaryIndexReferencedInUDFOrView(b, tbl.TableID, n.String())
-	// TODO (xiang): Remove the following line for the next major release after v23.2,
-	// be it v24.1 or v23.3.
-	disableAlterTableMultipleCommandsOnV232(b, n, tbl.TableID)
+	return func(b BuildCtx) {
+		tn := n.Table.ToTableName()
+		elts := b.ResolveTable(n.Table, ResolveParams{
+			IsExistenceOptional: n.IfExists,
+			RequiredPrivilege:   privilege.CREATE,
+		})
+		_, target, tbl := scpb.FindTable(elts)
+		if tbl == nil {
+			// Mark all table names (`tn` and others) in this ALTER TABLE stmt as non-existent.
+			tree.NewFmtCtx(tree.FmtSimple, tree.FmtReformatTableNames(func(
+				ctx *tree.FmtCtx, name *tree.TableName,
+			) {
+				b.MarkNameAsNonExistent(name)
+			})).FormatNode(n)
+			return
+		}
+		if target != scpb.ToPublic {
+			panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"table %q is being dropped, try again later", n.Table.Object()))
+		}
+		panicIfSchemaIsLocked(elts)
+		tn.ObjectNamePrefix = b.NamePrefix(tbl)
+		b.SetUnresolvedNameAnnotation(n.Table, &tn)
+		b.IncrementSchemaChangeAlterCounter("table")
+		for _, cf := range cfs {
+			cf(b, &tn, tbl)
+		}
+		maybeDropRedundantPrimaryIndexes(b, tbl.TableID)
+		maybeRewriteTempIDsInPrimaryIndexes(b, tbl.TableID)
+		disallowDroppingPrimaryIndexReferencedInUDFOrView(b, tbl.TableID, n.String())
+		// TODO (xiang): Remove the following line for the next major release after v23.2,
+		// be it v24.1 or v23.3.
+		disableAlterTableMultipleCommandsOnV232(b, n, tbl.TableID)
+	}
 }
 
 // disableAlterTableMultipleCommandsOnV232 disables declarative schema changer
@@ -172,7 +175,7 @@ func disableAlterTableMultipleCommandsOnV232(b BuildCtx, n *tree.AlterTable, tab
 			// supported in v23.1.
 			return
 		}
-		newSchemaChangerMode := getDeclarativeSchemaChangerModeForStmt(b, n)
+		newSchemaChangerMode := GetDeclarativeSchemaChangerModeForStmt(b, n)
 		if newSchemaChangerMode != sessiondatapb.UseNewSchemaChangerUnsafe &&
 			newSchemaChangerMode != sessiondatapb.UseNewSchemaChangerUnsafeAlways {
 			panic(scerrors.NotImplementedErrorf(n, "statement has been disabled on v23.2"))
