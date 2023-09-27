@@ -688,7 +688,7 @@ func TestPrecondition(t *testing.T) {
 		version.Internal += 1
 		return version
 	}
-	v0 := clusterversion.ByKey(clusterversion.TODODelete_V22_1)
+	v0 := clusterversion.TestingBinaryMinSupportedVersion
 	v0_fence := fence(v0)
 	v1 := next(v0)
 	v1_fence := fence(v1)

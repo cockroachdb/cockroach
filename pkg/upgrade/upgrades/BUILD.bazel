@@ -29,7 +29,6 @@ go_library(
         "schemachanger_elements.go",
         "sql_stats_ttl.go",
         "system_activity_update_job.go",
-        "system_external_connections.go",
         "system_job_info.go",
         "system_privileges_index_migration.go",
         "system_privileges_user_id_migration.go",

@@ -20,7 +20,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -223,8 +222,7 @@ func (ds *DistSender) RangeFeedSpans(
 
 	rl := newCatchupScanRateLimiter(&ds.st.SV)
 
-	if ds.st.Version.IsActive(ctx, clusterversion.TODODelete_V22_2RangefeedUseOneStreamPerNode) &&
-		enableMuxRangeFeed && cfg.useMuxRangeFeed {
+	if enableMuxRangeFeed && cfg.useMuxRangeFeed {
 		return muxRangeFeed(ctx, cfg, spans, ds, rr, rl, eventCh)
 	}
 
