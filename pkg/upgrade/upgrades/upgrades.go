@@ -85,19 +85,11 @@ var upgrades = []upgradebase.Upgrade{
 		updateSystemLocationData,
 		"update system.locations with default location data", // v22_2StartupMigrationName
 	),
-	// Introduced in v2.1.
-	// TODO(knz): bake this migration into v19.1.
 	upgrade.NewPermanentTenantUpgrade(
 		"create default databases",
 		toCV(clusterversion.VPrimordial6),
 		createDefaultDbs,
 		"create default databases", // v22_2StartupMigrationName
-	),
-	upgrade.NewTenantUpgrade(
-		"add the system.external_connections table",
-		toCV(clusterversion.TODODelete_V22_2SystemExternalConnectionsTable),
-		upgrade.NoPrecondition,
-		systemExternalConnectionsTableMigration,
 	),
 	upgrade.NewPermanentTenantUpgrade(
 		"add default SQL schema telemetry schedule",
