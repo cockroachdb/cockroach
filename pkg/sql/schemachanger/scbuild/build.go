@@ -125,7 +125,7 @@ func makeState(
 	}
 	loggedTargets = make([]scpb.Target, 0, len(bs.output))
 	isElementAllowedInVersion := func(e scpb.Element) bool {
-		if !version.IsActive(screl.MinElementVersion(e)) {
+		if !screl.VersionSupportsElementUse(e, version) {
 			// Exclude targets which are not yet usable in the currently active
 			// cluster version.
 			return false
