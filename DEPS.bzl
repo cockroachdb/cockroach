@@ -10898,16 +10898,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "io_opentelemetry_go_otel_exporters_jaeger",
-        build_file_proto_mode = "disable_global",
-        importpath = "go.opentelemetry.io/otel/exporters/jaeger",
-        sha256 = "89e57276d1f4c79e2353bda09fdeb6eb5c47af0cd974a490637ce1f71744830c",
-        strip_prefix = "go.opentelemetry.io/otel/exporters/jaeger@v1.0.0-RC3",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/go.opentelemetry.io/otel/exporters/jaeger/io_opentelemetry_go_otel_exporters_jaeger-v1.0.0-RC3.zip",
-        ],
-    )
-    go_repository(
         name = "io_opentelemetry_go_otel_exporters_otlp_internal_retry",
         build_file_proto_mode = "disable_global",
         importpath = "go.opentelemetry.io/otel/exporters/otlp/internal/retry",
