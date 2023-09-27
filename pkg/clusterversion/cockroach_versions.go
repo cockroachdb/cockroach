@@ -524,11 +524,24 @@ const (
 	// V23_2_UDFMutations is the version where UDFs with mutations are enabled.
 	V23_2_UDFMutations
 
+	// **********************************************************
+	// Step 1a: WHERE TO ADD VERSION GATES DURING 23.2 STABILITY?
+	// ----------------------------------------------------------
+	// If version gate is for 23.2 (to be backported to release-23.2):
+	//    Then add new gate above this comment (immediately above Step 1a).
+	// If version gate is for 24.1 (upcoming 24.1 development):
+	//    Then add new gate immediately above Step 1b.
+	// *************************************************
+
 	// V23_2 is CockroachDB v23.2. It's used for all v23.2.x patch releases.
 	V23_2
 
+	// V24_1Start demarcates the start of cluster versions stepped through during
+	// the process of upgrading from previous supported releases to 24.1.
+	V24_1Start
+
 	// *************************************************
-	// Step (1) Add new versions here.
+	// Step 1b: Add new versions for 24.1 development above this comment.
 	// Do not add new versions to a patch release.
 	// *************************************************
 )
@@ -889,13 +902,27 @@ var rawVersionsSingleton = keyedVersions{
 		Key:     V23_2_UDFMutations,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 38},
 	},
+
+	// **********************************************************
+	// Step 2a: WHERE TO ADD VERSION GATES DURING 23.2 STABILITY?
+	// ----------------------------------------------------------
+	// If version gate is for 23.2 (to be backported to release-23.2):
+	//    Then add new gate above this comment (immediately above Step 2a).
+	// If version gate is for 24.1 (upcoming 24.1 development):
+	//    Then add new gate immediately above Step 2b.
+	// *************************************************
+
 	{
 		Key:     V23_2,
 		Version: roachpb.Version{Major: 23, Minor: 2, Internal: 0},
 	},
+	{
+		Key:     V24_1Start,
+		Version: roachpb.Version{Major: 23, Minor: 2, Internal: 2},
+	},
 
 	// *************************************************
-	// Step (2): Add new versions here.
+	// Step 2b: Add new versions for 24.1 development above this comment.
 	// Do not add new versions to a patch release.
 	// *************************************************
 }
@@ -908,14 +935,14 @@ var rawVersionsSingleton = keyedVersions{
 // upgrade testing purposes and should never be done in real clusters;
 // 2. forced to `false` on release branches: this allows running a
 // release binary in a dev cluster.
-var developmentBranch = false ||
+var developmentBranch = !envutil.EnvOrDefaultBool("COCKROACH_TESTING_FORCE_RELEASE_BRANCH", false) ||
 	envutil.EnvOrDefaultBool("COCKROACH_FORCE_DEV_VERSION", false)
 
 const (
 	// finalVersion should be set on a release branch to the minted final cluster
 	// version key, e.g. to V22_2 on the release-22.2 branch once it is minted.
 	// Setting it has the effect of ensuring no versions are subsequently added.
-	finalVersion = V23_2
+	finalVersion = invalidVersionKey
 )
 
 var allowUpgradeToDev = envutil.EnvOrDefaultBool("COCKROACH_UPGRADE_TO_DEV_VERSION", false)
@@ -961,6 +988,14 @@ var versionsSingleton = func() keyedVersions {
 	}
 	return rawVersionsSingleton
 }()
+
+// V24_1 is a placeholder that will eventually be replaced by the actual 24.1
+// version Key, but in the meantime it points to the latest Key. The placeholder
+// is defined so that it can be referenced in code that simply wants to check if
+// a cluster is running 24.1 and has completed all associated migrations; most
+// version gates can use this instead of defining their own version key if all
+// simply need to check is that the cluster has upgraded to 24.1.
+var V24_1 = versionsSingleton[len(versionsSingleton)-1].Key
 
 const (
 	BinaryMinSupportedVersionKey = V23_1
