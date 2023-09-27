@@ -3915,10 +3915,30 @@ value if you rely on the HLC for accuracy.`,
 			Info: "Calculates the Levenshtein distance between two strings. The cost parameters specify how much to " +
 				"charge for each edit operation. Maximum input length is 255 characters.",
 			Volatility: volatility.Immutable,
-		}),
+		},
+	),
 	"levenshtein_less_equal": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
-	"metaphone":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
-	"dmetaphone_alt":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
+	"metaphone":              makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryFuzzyStringMatching},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "source", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				const maxLen = 255
+				s := string(tree.MustBeDString(args[0]))
+				if (len(s) > maxLen) {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"metaphone argument exceeds maximum length of %d characters", maxLen)
+				}
+				m := fuzzystrmatch.Metaphone(s)
+				return tree.NewDString(m), nil
+			},
+			Info: 		"Compute 'sound-like' string from the input string.",
+			Volatility: volatility.Immutable,
+		},
+	),
+	"dmetaphone":			makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
+	"dmetaphone_alt":		makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
 
 	// JSON functions.
 	// The behavior of both the JSON and JSONB data types in CockroachDB is

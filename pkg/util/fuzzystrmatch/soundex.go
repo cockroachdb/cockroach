@@ -21,7 +21,7 @@ const soundexLen = 4
 // ABCDEFGHIJKLMNOPQRSTUVWXYZ
 const soundexTable = "01230120022455012623010202"
 
-func isAlpha(r rune) bool {
+func IsAlpha(r rune) bool {
 	return (r >= 'a' && r <= 'z') ||
 		(r >= 'A' && r <= 'Z')
 }
@@ -37,7 +37,7 @@ func soundexCode(r rune) byte {
 func soundex(source string) string {
 	// Skip leading non-alphabetic characters
 	source = strings.TrimLeftFunc(source, func(r rune) bool {
-		return !isAlpha(r)
+		return !IsAlpha(r)
 	})
 	code := make([]byte, soundexLen)
 	// No string left
@@ -51,7 +51,7 @@ func soundex(source string) string {
 	}
 	j := 1
 	for i := 1; i < len(runes) && j < soundexLen; i++ {
-		if !isAlpha(runes[i]) {
+		if !IsAlpha(runes[i]) {
 			continue
 		}
 		if soundexCode(runes[i]) != soundexCode(runes[i-1]) {
