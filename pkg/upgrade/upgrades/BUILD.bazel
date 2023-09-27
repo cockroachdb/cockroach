@@ -87,6 +87,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/retry",
+        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_kr_pretty//:pretty",

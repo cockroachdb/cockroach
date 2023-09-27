@@ -57,8 +57,10 @@ func CreateSQLStatsCompactionScheduleIfNotYetExist(
 	}
 
 	compactionSchedule.SetScheduleDetails(jobspb.ScheduleDetails{
-		Wait:    jobspb.ScheduleDetails_SKIP,
-		OnError: jobspb.ScheduleDetails_RETRY_SCHED,
+		Wait:                   jobspb.ScheduleDetails_SKIP,
+		OnError:                jobspb.ScheduleDetails_RETRY_SCHED,
+		ClusterID:              clusterID,
+		CreationClusterVersion: st.Version.ActiveVersion(ctx),
 	})
 
 	compactionSchedule.SetScheduleLabel(compactionScheduleName)

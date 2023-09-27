@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
 	cron "github.com/robfig/cron/v3"
@@ -64,7 +66,7 @@ func TestJobSchedulerReschedulesRunning(t *testing.T) {
 		t.Run(wait.String(), func(t *testing.T) {
 			// Create job with the target wait behavior.
 			j := h.newScheduledJob(t, "j", "j sql")
-			j.SetScheduleDetails(jobspb.ScheduleDetails{Wait: wait})
+			j.SetScheduleDetails(jobstest.AddDummyScheduleDetails(jobspb.ScheduleDetails{Wait: wait}))
 			require.NoError(t, j.SetSchedule("@hourly"))
 
 			require.NoError(t,
@@ -121,7 +123,7 @@ func TestJobSchedulerExecutesAfterTerminal(t *testing.T) {
 		t.Run(wait.String(), func(t *testing.T) {
 			// Create job that waits for the previous runs to finish.
 			j := h.newScheduledJob(t, "j", "SELECT 42 AS meaning_of_life;")
-			j.SetScheduleDetails(jobspb.ScheduleDetails{Wait: wait})
+			j.SetScheduleDetails(jobstest.AddDummyScheduleDetails(jobspb.ScheduleDetails{Wait: wait}))
 			require.NoError(t, j.SetSchedule("@hourly"))
 
 			require.NoError(t,
@@ -559,7 +561,7 @@ func TestJobSchedulerRetriesFailed(t *testing.T) {
 	} {
 		t.Run(tc.onError.String(), func(t *testing.T) {
 			h.env.SetTime(startTime)
-			schedule.SetScheduleDetails(jobspb.ScheduleDetails{OnError: tc.onError})
+			schedule.SetScheduleDetails(jobstest.AddDummyScheduleDetails(jobspb.ScheduleDetails{OnError: tc.onError}))
 			require.NoError(t, schedule.SetSchedule("@hourly"))
 			require.NoError(t, schedules.Update(ctx, schedule))
 
@@ -570,6 +572,43 @@ func TestJobSchedulerRetriesFailed(t *testing.T) {
 			require.EqualValues(t, tc.nextRun, loaded.NextRun())
 		})
 	}
+}
+
+// TestScheduleMustHaveClusterVersionAndID tests that the ClusterID and version
+// in the cluster details can be accessed. Further it tests that a schedule
+// cannot be created without these fields.
+func TestScheduleMustHaveClusterVersionAndID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	h, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	const executorName = "return_error"
+	ex := &returnErrorExecutor{}
+	defer registerScopedScheduledJobExecutor(executorName, ex)()
+
+	schedule := h.newScheduledJobForExecutor("schedule", executorName, nil)
+	schedules := ScheduledJobDB(h.cfg.DB)
+
+	// Fail without a Cluster version
+	schedule.SetScheduleDetails(jobspb.ScheduleDetails{ClusterID: jobstest.DummyClusterID})
+	require.ErrorContains(t, schedules.Create(ctx, schedule), "scheduled job created without a cluster version")
+
+	// Fail without a Cluster ID
+	schedule.SetScheduleDetails(jobspb.ScheduleDetails{
+		CreationClusterVersion: jobstest.DummyClusterVersion,
+		ClusterID:              uuid.UUID{},
+	})
+	require.ErrorContains(t, schedules.Create(ctx, schedule), "scheduled job created without a cluster ID")
+
+	// Succeed with both.
+	schedule.SetScheduleDetails(jobstest.AddDummyScheduleDetails(jobspb.ScheduleDetails{}))
+	require.NoError(t, schedules.Create(ctx, schedule))
+	loaded := h.loadSchedule(t, schedule.ScheduleID())
+	require.EqualValues(t, jobstest.DummyClusterID, loaded.ScheduleDetails().ClusterID)
+	require.EqualValues(t, jobstest.DummyClusterVersion, loaded.ScheduleDetails().CreationClusterVersion)
 }
 
 func TestJobSchedulerDaemonUsesSystemTables(t *testing.T) {
