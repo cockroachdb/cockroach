@@ -61,7 +61,7 @@ type ReplicationPlanner interface {
 		now hlc.ClockTimestamp,
 		repl AllocatorReplica,
 		desc *roachpb.RangeDescriptor,
-		conf roachpb.SpanConfig,
+		conf *roachpb.SpanConfig,
 		canTransferLeaseFrom CanTransferLeaseFrom,
 	) (bool, float64)
 	// PlanOneChange calls the allocator to determine an action to be taken upon a
@@ -71,7 +71,7 @@ type ReplicationPlanner interface {
 		ctx context.Context,
 		repl AllocatorReplica,
 		desc *roachpb.RangeDescriptor,
-		conf roachpb.SpanConfig,
+		conf *roachpb.SpanConfig,
 		canTransferLeaseFrom CanTransferLeaseFrom,
 		scatter bool,
 	) (ReplicateChange, error)
@@ -82,7 +82,7 @@ type ReplicationPlanner interface {
 type CanTransferLeaseFrom func(
 	ctx context.Context,
 	repl LeaseCheckReplica,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 ) bool
 
 // LeaseCheckReplica contains methods that may be used to check a replica's
@@ -90,7 +90,7 @@ type CanTransferLeaseFrom func(
 type LeaseCheckReplica interface {
 	HasCorrectLeaseType(lease roachpb.Lease) bool
 	LeaseStatusAt(ctx context.Context, now hlc.ClockTimestamp) kvserverpb.LeaseStatus
-	LeaseViolatesPreferences(context.Context, roachpb.SpanConfig) bool
+	LeaseViolatesPreferences(context.Context, *roachpb.SpanConfig) bool
 	OwnsValidLease(context.Context, hlc.ClockTimestamp) bool
 }
 
@@ -145,7 +145,7 @@ func (rp ReplicaPlanner) ShouldPlanChange(
 	now hlc.ClockTimestamp,
 	repl AllocatorReplica,
 	desc *roachpb.RangeDescriptor,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	canTransferLeaseFrom CanTransferLeaseFrom,
 ) (shouldPlanChange bool, priority float64) {
 
@@ -241,7 +241,7 @@ func (rp ReplicaPlanner) PlanOneChange(
 	ctx context.Context,
 	repl AllocatorReplica,
 	desc *roachpb.RangeDescriptor,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	canTransferLeaseFrom CanTransferLeaseFrom,
 	scatter bool,
 ) (change ReplicateChange, _ error) {
@@ -387,7 +387,7 @@ func (rp ReplicaPlanner) addOrReplaceVoters(
 	ctx context.Context,
 	repl AllocatorReplica,
 	desc *roachpb.RangeDescriptor,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	existingVoters []roachpb.ReplicaDescriptor,
 	remainingLiveVoters, remainingLiveNonVoters []roachpb.ReplicaDescriptor,
 	removeIdx int,
@@ -484,7 +484,7 @@ func (rp ReplicaPlanner) addOrReplaceNonVoters(
 	ctx context.Context,
 	repl AllocatorReplica,
 	_ *roachpb.RangeDescriptor,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	existingNonVoters []roachpb.ReplicaDescriptor,
 	liveVoterReplicas, liveNonVoterReplicas []roachpb.ReplicaDescriptor,
 	removeIdx int,
@@ -544,7 +544,7 @@ func (rp ReplicaPlanner) findRemoveVoter(
 		LastReplicaAdded() (roachpb.ReplicaID, time.Time)
 		RaftStatus() *raft.Status
 	},
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 ) (roachpb.ReplicationTarget, string, error) {
 	// This retry loop involves quick operations on local state, so a
@@ -626,7 +626,7 @@ func (rp ReplicaPlanner) removeVoter(
 	ctx context.Context,
 	repl AllocatorReplica,
 	desc *roachpb.RangeDescriptor,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 ) (op AllocationOp, stats ReplicateStats, _ error) {
 	removeVoter, details, err := rp.findRemoveVoter(ctx, repl, conf, existingVoters, existingNonVoters)
@@ -669,7 +669,7 @@ func (rp ReplicaPlanner) removeNonVoter(
 	ctx context.Context,
 	repl AllocatorReplica,
 	_ *roachpb.RangeDescriptor,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 ) (op AllocationOp, stats ReplicateStats, _ error) {
 	removeNonVoter, details, err := rp.allocator.RemoveNonVoter(
@@ -709,7 +709,7 @@ func (rp ReplicaPlanner) removeDecommissioning(
 	ctx context.Context,
 	repl AllocatorReplica,
 	desc *roachpb.RangeDescriptor,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	targetType allocatorimpl.TargetReplicaType,
 ) (op AllocationOp, stats ReplicateStats, _ error) {
 	var decommissioningReplicas []roachpb.ReplicaDescriptor
@@ -805,7 +805,7 @@ func (rp ReplicaPlanner) considerRebalance(
 	ctx context.Context,
 	repl AllocatorReplica,
 	desc *roachpb.RangeDescriptor,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	allocatorPrio float64,
 	canTransferLeaseFrom CanTransferLeaseFrom,
@@ -944,7 +944,7 @@ func (rp ReplicaPlanner) shedLeaseTarget(
 	ctx context.Context,
 	repl AllocatorReplica,
 	desc *roachpb.RangeDescriptor,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	opts allocator.TransferLeaseOptions,
 ) (op AllocationOp, _ error) {
 	usage := repl.RangeUsageInfo()
@@ -1002,7 +1002,7 @@ func (rp ReplicaPlanner) maybeTransferLeaseAwayTarget(
 	ctx context.Context,
 	repl AllocatorReplica,
 	desc *roachpb.RangeDescriptor,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	removeStoreID roachpb.StoreID,
 	canTransferLeaseFrom CanTransferLeaseFrom,
 ) (op AllocationOp, _ error) {

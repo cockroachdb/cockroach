@@ -863,7 +863,7 @@ func FilterReplicasForAction(
 func (a *Allocator) ComputeAction(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	desc *roachpb.RangeDescriptor,
 ) (action AllocatorAction, priority float64) {
 	if storePool == nil {
@@ -931,7 +931,7 @@ func (a *Allocator) ComputeAction(
 func (a *Allocator) computeAction(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	voterReplicas []roachpb.ReplicaDescriptor,
 	nonVoterReplicas []roachpb.ReplicaDescriptor,
 ) (action AllocatorAction, adjustedPriority float64) {
@@ -1197,7 +1197,7 @@ func (s *GoodCandidateSelector) selectOne(cl candidateList) *candidate {
 func (a *Allocator) AllocateTarget(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	replacing *roachpb.ReplicaDescriptor,
 	replicaStatus ReplicaStatus,
@@ -1277,7 +1277,7 @@ func (a *Allocator) AllocateTarget(
 func (a *Allocator) CheckAvoidsFragileQuorum(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	existingVoters, remainingLiveNonVoters []roachpb.ReplicaDescriptor,
 	replicaStatus ReplicaStatus,
 	replicaType TargetReplicaType,
@@ -1317,7 +1317,7 @@ func (a *Allocator) CheckAvoidsFragileQuorum(
 func (a *Allocator) AllocateVoter(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	replacing *roachpb.ReplicaDescriptor,
 	replicaStatus ReplicaStatus,
@@ -1331,7 +1331,7 @@ func (a *Allocator) AllocateVoter(
 func (a *Allocator) AllocateNonVoter(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	replacing *roachpb.ReplicaDescriptor,
 	replicaStatus ReplicaStatus,
@@ -1346,7 +1346,7 @@ func (a *Allocator) AllocateTargetFromList(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
 	candidateStores storepool.StoreList,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	options ScorerOptions,
 	selector CandidateSelector,
@@ -1361,7 +1361,7 @@ func (a *Allocator) allocateTargetFromList(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
 	candidateStores storepool.StoreList,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	replacing *roachpb.ReplicaDescriptor,
 	options ScorerOptions,
@@ -1464,7 +1464,7 @@ func (a Allocator) simulateRemoveTarget(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
 	targetStore roachpb.StoreID,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	candidates []roachpb.ReplicaDescriptor,
 	existingVoters []roachpb.ReplicaDescriptor,
 	existingNonVoters []roachpb.ReplicaDescriptor,
@@ -1521,7 +1521,7 @@ func (a Allocator) simulateRemoveTarget(
 func (a Allocator) RemoveTarget(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	candidateStoreList storepool.StoreList,
 	existingVoters []roachpb.ReplicaDescriptor,
 	existingNonVoters []roachpb.ReplicaDescriptor,
@@ -1601,7 +1601,7 @@ func (a Allocator) RemoveTarget(
 func (a Allocator) RemoveVoter(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	voterCandidates []roachpb.ReplicaDescriptor,
 	existingVoters []roachpb.ReplicaDescriptor,
 	existingNonVoters []roachpb.ReplicaDescriptor,
@@ -1634,7 +1634,7 @@ func (a Allocator) RemoveVoter(
 func (a Allocator) RemoveNonVoter(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	nonVoterCandidates []roachpb.ReplicaDescriptor,
 	existingVoters []roachpb.ReplicaDescriptor,
 	existingNonVoters []roachpb.ReplicaDescriptor,
@@ -1664,7 +1664,7 @@ func (a Allocator) RemoveNonVoter(
 func (a Allocator) RebalanceTarget(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	raftStatus *raft.Status,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	rangeUsageInfo allocator.RangeUsageInfo,
@@ -1860,7 +1860,7 @@ func (a Allocator) RebalanceTarget(
 func (a Allocator) RebalanceVoter(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	raftStatus *raft.Status,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	rangeUsageInfo allocator.RangeUsageInfo,
@@ -1896,7 +1896,7 @@ func (a Allocator) RebalanceVoter(
 func (a Allocator) RebalanceNonVoter(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	raftStatus *raft.Status,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	rangeUsageInfo allocator.RangeUsageInfo,
@@ -1962,7 +1962,7 @@ func (a *Allocator) ValidLeaseTargets(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
 	desc *roachpb.RangeDescriptor,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
@@ -2136,7 +2136,7 @@ func (a *Allocator) leaseholderShouldMoveDueToIOOverload(
 func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
@@ -2220,7 +2220,7 @@ func (a *Allocator) TransferLeaseTarget(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
 	desc *roachpb.RangeDescriptor,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
@@ -2494,7 +2494,7 @@ func (a *Allocator) ShouldTransferLease(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
 	desc *roachpb.RangeDescriptor,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
@@ -2816,7 +2816,7 @@ func (a Allocator) shouldTransferLeaseForLeaseCountConvergence(
 // replicas that meet lease preferences (among the `existing` replicas).
 func (a Allocator) PreferredLeaseholders(
 	storePool storepool.AllocatorStorePool,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	existing []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
 	// Go one preference at a time. As soon as we've found replicas that match a

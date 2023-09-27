@@ -135,10 +135,10 @@ type State interface {
 	// if it exists, otherwise it returns false.
 	RangeSpan(RangeID) (Key, Key, bool)
 	// SetSpanConfigForRange set the span config for the Range with ID RangeID.
-	SetSpanConfigForRange(RangeID, roachpb.SpanConfig) bool
+	SetSpanConfigForRange(RangeID, *roachpb.SpanConfig) bool
 	// SetSpanConfig sets the span config for all ranges represented by the span,
 	// splitting if necessary.
-	SetSpanConfig(roachpb.Span, roachpb.SpanConfig)
+	SetSpanConfig(roachpb.Span, *roachpb.SpanConfig)
 	// SetRangeBytes sets the size of the range with ID RangeID to be equal to
 	// the bytes given.
 	SetRangeBytes(RangeID, int64)
@@ -249,7 +249,7 @@ type Range interface {
 	// String returns a string representing the state of the range.
 	String() string
 	// SpanConfig returns the span config for this range.
-	SpanConfig() roachpb.SpanConfig
+	SpanConfig() *roachpb.SpanConfig
 	// Replicas returns all replicas which exist for this range.
 	Replicas() []Replica
 	// Replica returns the replica that is on the store with ID StoreID if it

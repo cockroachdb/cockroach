@@ -821,7 +821,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 type rangeRebalanceContext struct {
 	candidateReplica CandidateReplica
 	rangeDesc        *roachpb.RangeDescriptor
-	conf             roachpb.SpanConfig
+	conf             *roachpb.SpanConfig
 }
 
 func (sr *StoreRebalancer) chooseRangeToRebalance(

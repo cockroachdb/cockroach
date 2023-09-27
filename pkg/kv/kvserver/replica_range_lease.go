@@ -1571,7 +1571,7 @@ const (
 // LeaseViolatesPreferences checks if this replica owns the lease and if it
 // violates the lease preferences defined in the span config. If no preferences
 // are defined then it will return false and consider it to be in conformance.
-func (r *Replica) LeaseViolatesPreferences(ctx context.Context, conf roachpb.SpanConfig) bool {
+func (r *Replica) LeaseViolatesPreferences(ctx context.Context, conf *roachpb.SpanConfig) bool {
 	storeID := r.store.StoreID()
 	preferences := conf.LeasePreferences
 	leaseStatus := r.CurrentLeaseStatus(ctx)
