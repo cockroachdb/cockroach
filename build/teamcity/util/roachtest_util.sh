@@ -57,16 +57,22 @@ trap upload_stats EXIT
 PARALLELISM=16
 CPUQUOTA=1024
 TESTS="${TESTS-}"
+FILTER="${FILTER-}"
 case "${CLOUD}" in
   gce)
+      # Confusing due to how we've handled tags in the past where it has been assumed that all tests should
+      # be run on GCE. Now with refactoring of how tags are handled, we need:
+      # - "default" to ensure we select tests that don't have any user specified tags (preserve old behavior)
+      # - "aws" to ensure we select tests that now no longer have "default" because they have the "aws" tag
+      # Ideally, refactor the tags themselves to be explicit about what cloud they are for and when they can run.
+      # https://github.com/cockroachdb/cockroach/issues/100605
+      FILTER="tag:aws tag:default"
     ;;
   aws)
     PARALLELISM=3
     CPUQUOTA=384
-    if [ -z "${TESTS}" ]; then
-      # NB: anchor ycsb to beginning of line to avoid matching `zfs/ycsb/*` which
-      # isn't supported on AWS at time of writing.
-      TESTS="awsdms|kv(0|95)|^ycsb|tpcc/(headroom/n4cpu16)|tpccbench/(nodes=3/cpu=16)|scbench/randomload/(nodes=3/ops=2000/conc=1)|backup/(KMS/AWS/n3cpu4)"
+    if [ -z "${FILTER}" ]; then
+      FILTER="tag:aws"
     fi
     ;;
   *)

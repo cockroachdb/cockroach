@@ -151,7 +151,7 @@ func registerKnex(r registry.Registry) {
 		Owner:      registry.OwnerSQLFoundations,
 		Cluster:    r.MakeClusterSpec(1),
 		NativeLibs: registry.LibGEOS,
-		Tags:       []string{`default`, `orm`},
+		Tags:       registry.Tags(`default`, `orm`),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runKnex(ctx, t, c)
 		},

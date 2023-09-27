@@ -29,6 +29,7 @@ type randomLoadBenchSpec struct {
 	Nodes       int
 	Ops         int
 	Concurrency int
+	Tags        map[string]struct{}
 }
 
 func registerSchemaChangeRandomLoad(r registry.Registry) {
@@ -63,6 +64,7 @@ func registerSchemaChangeRandomLoad(r registry.Registry) {
 		Nodes:       3,
 		Ops:         2000,
 		Concurrency: 1,
+		Tags:        registry.Tags("aws"),
 	})
 
 	registerRandomLoadBenchSpec(r, randomLoadBenchSpec{
@@ -95,6 +97,7 @@ func registerRandomLoadBenchSpec(r registry.Registry, b randomLoadBenchSpec) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSchemaChangeRandomLoad(ctx, t, c, b.Ops, b.Concurrency)
 		},
+		Tags: b.Tags,
 	})
 }
 

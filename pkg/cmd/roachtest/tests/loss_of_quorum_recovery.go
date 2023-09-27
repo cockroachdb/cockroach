@@ -64,7 +64,7 @@ func registerLOQRecovery(r registry.Registry) {
 			Name:              s.String(),
 			Owner:             registry.OwnerReplication,
 			Benchmark:         true,
-			Tags:              []string{`default`},
+			Tags:              registry.Tags(`default`),
 			Cluster:           spec,
 			NonReleaseBlocker: true,
 

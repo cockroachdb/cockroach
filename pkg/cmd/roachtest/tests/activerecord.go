@@ -250,7 +250,7 @@ func registerActiveRecord(r registry.Registry) {
 		Owner:      registry.OwnerSQLFoundations,
 		Cluster:    r.MakeClusterSpec(1),
 		NativeLibs: registry.LibGEOS,
-		Tags:       []string{`default`, `orm`},
+		Tags:       registry.Tags(`default`, `orm`),
 		Run:        runActiveRecord,
 	})
 }
