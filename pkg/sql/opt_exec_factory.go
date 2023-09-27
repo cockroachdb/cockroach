@@ -1974,7 +1974,7 @@ func (ef *execFactory) ConstructAlterTableSplit(
 		return nil, err
 	}
 
-	if err := execCfg.RequireSystemTenantOrClusterSetting(SecondaryTenantSplitAtEnabled); err != nil {
+	if err := requireSystemTenantOrClusterSetting(execCfg.Codec, execCfg.Settings, SecondaryTenantSplitAtEnabled); err != nil {
 		return nil, err
 	}
 
