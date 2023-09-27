@@ -641,3 +641,78 @@ finish req=req33
 finish req=req34
 ----
 [-] finish req34: finishing request
+
+# ------------------------------------------------------------------------------
+# Ensure concurrent replicated shared locking requests by the same transaction
+# conflict on latches. Also ensure concurrent replicated shared lock attempts
+# by different transactions do not.
+# ------------------------------------------------------------------------------
+
+new-request name=req35 txn=txn2 ts=11,1
+  get key=c str=shared dur=r
+----
+
+sequence req=req35
+----
+[35] sequence req35: sequencing request
+[35] sequence req35: acquiring latches
+[35] sequence req35: scanning lock table for conflicting locks
+[35] sequence req35: sequencing complete, returned guard
+
+new-request name=req36 txn=txn2 ts=11,1
+  scan key=a endkey=f str=shared dur=r
+----
+
+sequence req=req36
+----
+[36] sequence req36: sequencing request
+[36] sequence req36: acquiring latches
+[36] sequence req36: waiting to acquire write latch ‹/Local/RangeID/1/r/ReplicatedSharedLocksTransactionLatch/"00000002-0000-0000-0000-000000000000"›@0,0, held by write latch ‹/Local/RangeID/1/r/ReplicatedSharedLocksTransactionLatch/"00000002-0000-0000-0000-000000000000"›@0,0
+[36] sequence req36: blocked on select in spanlatch.(*Manager).waitForSignal
+
+new-request name=req37 txn=txn1 ts=11,1
+  get key=c str=shared dur=r
+----
+
+sequence req=req37
+----
+[37] sequence req37: sequencing request
+[37] sequence req37: acquiring latches
+[37] sequence req37: scanning lock table for conflicting locks
+[37] sequence req37: sequencing complete, returned guard
+
+
+# Unreplicated shared locking request from txn2. Shouldn't conflict on latches.
+new-request name=req38 txn=txn2 ts=11,1
+  get key=c str=shared dur=u
+----
+
+sequence req=req38
+----
+[38] sequence req38: sequencing request
+[38] sequence req38: acquiring latches
+[38] sequence req38: scanning lock table for conflicting locks
+[38] sequence req38: sequencing complete, returned guard
+
+debug-latch-manager
+----
+write count: 3
+ read count: 4
+
+finish req=req35
+----
+[-] finish req35: finishing request
+[36] sequence req36: scanning lock table for conflicting locks
+[36] sequence req36: sequencing complete, returned guard
+
+finish req=req36
+----
+[-] finish req36: finishing request
+
+finish req=req37
+----
+[-] finish req37: finishing request
+
+finish req=req38
+----
+[-] finish req38: finishing request
