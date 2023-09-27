@@ -217,6 +217,10 @@ const (
 	SinkParamSASLScopes             = `sasl_scopes`
 	SinkParamSASLGrantType          = `sasl_grant_type`
 
+	SinkSchemeConfluentKafka    = `confluent-cloud`
+	SinkParamConfluentAPIKey    = `api_key`
+	SinkParamConfluentAPISecret = `api_secret`
+
 	RegistryParamCACert     = `ca_cert`
 	RegistryParamClientCert = `client_cert`
 	RegistryParamClientKey  = `client_key`
