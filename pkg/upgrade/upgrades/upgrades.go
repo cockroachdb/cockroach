@@ -342,12 +342,19 @@ var (
 		FirstUpgradeFromReleasePrecondition,
 		FirstUpgradeFromRelease,
 	)
+	firstUpgradeTowardsV24_1 = upgrade.NewTenantUpgrade(
+		"prepare upgrade to v23.2 release",
+		toCV(clusterversion.V24_1Start),
+		FirstUpgradeFromReleasePrecondition,
+		FirstUpgradeFromRelease,
+	)
 
 	// This slice must contain all upgrades bound to V??_?Start cluster
 	// version keys. These should have FirstUpgradeFromReleasePrecondition as a
 	// precondition and FirstUpgradeFromRelease as the upgrade function.
 	firstUpgradesAfterPreExistingReleases = []upgradebase.Upgrade{
 		firstUpgradeTowardsV23_2,
+		firstUpgradeTowardsV24_1,
 	}
 )
 
