@@ -199,6 +199,7 @@ var retiredSettings = map[InternalKey]struct{}{
 	"kv.rangefeed.catchup_scan_concurrency":                    {},
 	"changefeed.lagging_ranges_threshold":                      {},
 	"changefeed.lagging_ranges_polling_rate":                   {},
+	"trace.jaeger.agent":                                       {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults
