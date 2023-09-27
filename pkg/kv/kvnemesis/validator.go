@@ -1208,12 +1208,6 @@ func (v *validator) checkError(
 		exceptAmbiguous, exceptOmitted, exceptRetry,
 		exceptDelRangeUsingTombstoneStraddlesRangeBoundary,
 		exceptSharedLockPromotionError,
-		// TODO(arul): Once https://github.com/cockroachdb/cockroach/issues/110650
-		// is addressed, we would no longer expect unhandled retryable errors to
-		// bubble back up to the client for batches that acquire shared locks;
-		// they'll be server-side refreshed instead. We should be able to get rid of
-		// this at that point.
-		exceptUnhandledRetry,
 	}
 	sl = append(sl, extraExceptions...)
 	return v.failIfError(op, r, sl...)
