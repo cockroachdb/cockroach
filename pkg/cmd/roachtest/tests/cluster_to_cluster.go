@@ -484,7 +484,9 @@ func makeReplicationDriver(t test.Test, c cluster.Cluster, rs replicationSpec) *
 	}
 }
 
-func (rd *replicationDriver) setupC2C(ctx context.Context, t test.Test, c cluster.Cluster) {
+func (rd *replicationDriver) setupC2C(
+	ctx context.Context, t test.Test, c cluster.Cluster,
+) (cleanup func()) {
 	if len(rd.rs.multiregion.srcLocalities) != 0 {
 		nodeCount := rd.rs.srcNodes + rd.rs.dstNodes
 		localityCount := len(rd.rs.multiregion.srcLocalities) + len(rd.rs.multiregion.destLocalities)
@@ -584,6 +586,10 @@ func (rd *replicationDriver) setupC2C(ctx context.Context, t test.Test, c cluste
 		}
 		require.NoError(rd.t, rd.c.StartGrafana(ctx, promLog, rd.setup.promCfg))
 		rd.t.L().Printf("Prom has started")
+	}
+	return func() {
+		srcDB.Close()
+		destDB.Close()
 	}
 }
 
@@ -776,7 +782,9 @@ func (rd *replicationDriver) onFingerprintMismatch(
 ) {
 	rd.t.L().Printf("conducting table level fingerprints")
 	srcTenantConn := rd.c.Conn(ctx, rd.t.L(), 1, option.TenantName(rd.setup.src.name))
+	defer srcTenantConn.Close()
 	dstTenantConn := rd.c.Conn(ctx, rd.t.L(), rd.rs.srcNodes+1, option.TenantName(rd.setup.dst.name))
+	defer dstTenantConn.Close()
 	fingerprintBisectErr := replicationutils.InvestigateFingerprints(ctx, srcTenantConn, dstTenantConn,
 		startTime,
 		endTime)
@@ -957,7 +965,8 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	rd.metrics.cutoverEnd = newMetricSnapshot(metricSnapper, timeutil.Now())
 
 	rd.t.L().Printf("starting the destination tenant")
-	startInMemoryTenant(ctx, rd.t, rd.c, rd.setup.dst.name, rd.setup.dst.gatewayNodes)
+	conn := startInMemoryTenant(ctx, rd.t, rd.c, rd.setup.dst.name, rd.setup.dst.gatewayNodes)
+	conn.Close()
 
 	rd.metrics.export(rd.t, len(rd.setup.src.nodes))
 
@@ -1030,7 +1039,8 @@ func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster
 		suites:                    registry.Suites("nightly"),
 	}
 	rd := makeReplicationDriver(t, c, sp)
-	rd.setupC2C(ctx, t, c)
+	cleanup := rd.setupC2C(ctx, t, c)
+	defer cleanup()
 
 	// Spin up a monitor to capture any node deaths.
 	m := rd.newMonitor(ctx)
@@ -1227,7 +1237,8 @@ func registerClusterToCluster(r registry.Registry) {
 		c2cRegisterWrapper(r, sp,
 			func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				rd := makeReplicationDriver(t, c, sp)
-				rd.setupC2C(ctx, t, c)
+				cleanup := rd.setupC2C(ctx, t, c)
+				defer cleanup()
 				// Spin up a monitor to capture any node deaths.
 				m := rd.newMonitor(ctx)
 				m.Go(func(ctx context.Context) error {
@@ -1499,7 +1510,8 @@ func registerClusterReplicationResilience(r registry.Registry) {
 
 				rrd := makeReplShutdownDriver(t, c, rsp)
 				rrd.t.L().Printf("Planning to shut down node during %s phase", rrd.phase)
-				rrd.setupC2C(ctx, t, c)
+				cleanup := rrd.setupC2C(ctx, t, c)
+				defer cleanup()
 
 				shutdownSetupDone := make(chan struct{})
 
@@ -1609,7 +1621,8 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 	}
 	c2cRegisterWrapper(r, sp, func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		rd := makeReplicationDriver(t, c, sp)
-		rd.setupC2C(ctx, t, c)
+		cleanup := rd.setupC2C(ctx, t, c)
+		defer cleanup()
 
 		shutdownSetupDone := make(chan struct{})
 

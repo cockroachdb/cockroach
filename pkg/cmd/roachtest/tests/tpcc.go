@@ -1431,7 +1431,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 
 	var db *gosql.DB
 	if b.SharedProcessMT {
-		db = createInMemoryTenant(ctx, t, c, appTenantName, roachNodes, false /* secure */)
+		db = createInMemoryTenantWithConn(ctx, t, c, appTenantName, roachNodes, false /* secure */)
 	} else {
 		db = c.Conn(ctx, t.L(), 1)
 	}
