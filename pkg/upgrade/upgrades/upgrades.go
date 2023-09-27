@@ -93,12 +93,6 @@ var upgrades = []upgradebase.Upgrade{
 		createDefaultDbs,
 		"create default databases", // v22_2StartupMigrationName
 	),
-	upgrade.NewTenantUpgrade(
-		"add the system.external_connections table",
-		toCV(clusterversion.TODODelete_V22_2SystemExternalConnectionsTable),
-		upgrade.NoPrecondition,
-		systemExternalConnectionsTableMigration,
-	),
 	upgrade.NewPermanentTenantUpgrade(
 		"add default SQL schema telemetry schedule",
 		toCV(clusterversion.Permanent_V22_2SQLSchemaTelemetryScheduledJobs),

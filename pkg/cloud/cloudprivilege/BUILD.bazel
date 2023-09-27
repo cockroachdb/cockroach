@@ -25,7 +25,6 @@ go_library(
     deps = [
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",
-        "//pkg/clusterversion",
         "//pkg/sql",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
