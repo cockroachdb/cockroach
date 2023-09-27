@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-var rwS = settings.RegisterStringSetting(settings.TenantWritable, "tenant.writable", "desc", "initial")
+var rwS = settings.RegisterStringSetting(settings.ApplicationLevel, "tenant.writable", "desc", "initial")
 
 // TestSettingDefaultPropagationReadWrite1 runs one of 4 invocations of
 // `RunSettingDefaultPropagationTest`. The test is split 4-ways across

@@ -106,14 +106,14 @@ const (
 // resolved via #58610, this setting can be removed so that all traces
 // have redactability enabled.
 var enableTraceRedactable = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"trace.redactable.enabled",
 	"set to true to enable finer-grainer redactability for unstructured events in traces",
 	true,
 )
 
 var enableNetTrace = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"trace.debug.enable",
 	"if set, traces for recent requests can be seen at https://<ui>/debug/requests",
 	false,
@@ -121,7 +121,7 @@ var enableNetTrace = settings.RegisterBoolSetting(
 	settings.WithPublic)
 
 var openTelemetryCollector = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"trace.opentelemetry.collector",
 	"address of an OpenTelemetry trace collector to receive "+
 		"traces using the otel gRPC protocol, as <host>:<port>. "+
@@ -138,7 +138,7 @@ var openTelemetryCollector = settings.RegisterStringSetting(
 )
 
 var jaegerAgent = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"trace.jaeger.agent",
 	"the address of a Jaeger agent to receive traces using the "+
 		"Jaeger UDP Thrift protocol, as <host>:<port>. "+
@@ -157,7 +157,7 @@ var jaegerAgent = settings.RegisterStringSetting(
 // ZipkinCollector is the cluster setting that specifies the Zipkin instance
 // to send traces to, if any.
 var ZipkinCollector = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"trace.zipkin.collector",
 	"the address of a Zipkin instance to receive traces, as <host>:<port>. "+
 		"If no port is specified, 9411 will be used.",
@@ -178,14 +178,14 @@ var ZipkinCollector = settings.RegisterStringSetting(
 // finished. When disabled, span creation is short-circuited for a small
 // performance improvement.
 var EnableActiveSpansRegistry = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"trace.span_registry.enabled",
 	"if set, ongoing traces can be seen at https://<ui>/#/debug/tracez",
 	envutil.EnvOrDefaultBool("COCKROACH_REAL_SPANS", true),
 	settings.WithPublic)
 
 var periodicSnapshotInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"trace.snapshot.rate",
 	"if non-zero, interval at which background trace snapshots are captured",
 	0,

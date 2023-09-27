@@ -48,7 +48,7 @@ import (
 // ReclaimLoopInterval is the interval at which expired instance IDs are
 // reclaimed and new ones will be preallocated.
 var ReclaimLoopInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.instance_id.reclaim_interval",
 	"interval at which instance IDs are reclaimed and preallocated",
 	10*time.Minute,
@@ -58,7 +58,7 @@ var ReclaimLoopInterval = settings.RegisterDurationSetting(
 // PreallocatedCount refers to the number of preallocated instance IDs within
 // the system.sql_instances table.
 var PreallocatedCount = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.instance_id.preallocated_count",
 	"number of preallocated instance IDs within the system.sql_instances table",
 	10,

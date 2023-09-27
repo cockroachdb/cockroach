@@ -21,7 +21,7 @@ import (
 // SQLStatsFlushInterval is the cluster setting that controls how often the SQL
 // stats are flushed to system table.
 var SQLStatsFlushInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.flush.interval",
 	"the interval at which SQL execution statistics are flushed to disk, "+
 		"this value must be less than or equal to 1 hour",
@@ -35,7 +35,7 @@ var SQLStatsFlushInterval = settings.RegisterDurationSetting(
 // generated in a short span of time, which in turn cause memory pressure), the
 // flush operation will be aborted.
 var MinimumInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.flush.minimum_interval",
 	"the minimum interval that SQL stats can be flushes to disk. If a "+
 		"flush operation starts within less than the minimum interval, the flush "+
@@ -48,7 +48,7 @@ var MinimumInterval = settings.RegisterDurationSetting(
 // older in-memory SQL stats to be discarded when flushing to persisted tables
 // is disabled.
 var DiscardInMemoryStatsWhenFlushDisabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.flush.force_cleanup.enabled",
 	"if set, older SQL stats are discarded periodically when flushing to "+
 		"persisted tables is disabled",
@@ -58,7 +58,7 @@ var DiscardInMemoryStatsWhenFlushDisabled = settings.RegisterBoolSetting(
 // SQLStatsFlushEnabled is the cluster setting that controls if the sqlstats
 // subsystem persists the statistics into system table.
 var SQLStatsFlushEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.flush.enabled",
 	"if set, SQL execution statistics are periodically flushed to disk",
 	true, /* defaultValue */
@@ -71,7 +71,7 @@ var SQLStatsFlushEnabled = settings.RegisterBoolSetting(
 //
 //	(1 + SQLStatsFlushJitter) * SQLStatsFlushInterval)]
 var SQLStatsFlushJitter = settings.RegisterFloatSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.flush.jitter",
 	"jitter fraction on the duration between sql stats flushes",
 	0.15,
@@ -81,7 +81,7 @@ var SQLStatsFlushJitter = settings.RegisterFloatSetting(
 // SQLStatsMaxPersistedRows specifies maximum number of rows that will be
 // retained in system.statement_statistics and system.transaction_statistics.
 var SQLStatsMaxPersistedRows = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.persisted_rows.max",
 	"maximum number of rows of statement and transaction statistics that "+
 		"will be persisted in the system tables before compaction begins",
@@ -91,7 +91,7 @@ var SQLStatsMaxPersistedRows = settings.RegisterIntSetting(
 // SQLStatsCleanupRecurrence is the cron-tab string specifying the recurrence
 // for SQL Stats cleanup job.
 var SQLStatsCleanupRecurrence = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.cleanup.recurrence",
 	"cron-tab recurrence for SQL Stats cleanup job",
 	"@hourly", /* defaultValue */
@@ -107,7 +107,7 @@ var SQLStatsCleanupRecurrence = settings.RegisterStringSetting(
 // SQLStatsAggregationInterval is the cluster setting that controls the aggregation
 // interval for stats when we flush to disk.
 var SQLStatsAggregationInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.aggregation.interval",
 	"the interval at which we aggregate SQL execution statistics upon flush, "+
 		"this value must be greater than or equal to sql.stats.flush.interval",
@@ -119,7 +119,7 @@ var SQLStatsAggregationInterval = settings.RegisterDurationSetting(
 // how many rows in the statement/transaction_statistics tables gets deleted
 // per transaction in the Automatic SQL Stats Compaction Job.
 var CompactionJobRowsToDeletePerTxn = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.cleanup.rows_to_delete_per_txn",
 	"number of rows the compaction job deletes from system table per iteration",
 	10000,
@@ -130,7 +130,7 @@ var CompactionJobRowsToDeletePerTxn = settings.RegisterIntSetting(
 // sql stats system tables to grow past the number of rows set by
 // sql.stats.persisted_row.max.
 var sqlStatsLimitTableSizeEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.limit_table_size.enabled",
 	"controls whether we allow statement and transaction statistics tables "+
 		"to grow past sql.stats.persisted_rows.max",
@@ -141,7 +141,7 @@ var sqlStatsLimitTableSizeEnabled = settings.RegisterBoolSetting(
 // interval the check is done if the statement and transaction statistics
 // tables have grown past the sql.stats.persisted_rows.max.
 var sqlStatsLimitTableCheckInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.limit_table_size_check.interval",
 	"controls what interval the check is done if the statement and "+
 		"transaction statistics tables have grown past sql.stats.persisted_rows.max",

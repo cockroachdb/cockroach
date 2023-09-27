@@ -153,14 +153,14 @@ type s3Client struct {
 }
 
 var reuseSession = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.s3.session_reuse.enabled",
 	"persist the last opened s3 session and re-use it when opening a new session with the same arguments",
 	true,
 )
 
 var usePutObject = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.s3.buffer_and_put_uploads.enabled",
 	"construct files in memory before uploading via PutObject (may cause crashes due to memory usage)",
 	false,

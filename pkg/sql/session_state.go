@@ -31,7 +31,7 @@ import (
 )
 
 var maxSerializedSessionSize = settings.RegisterByteSizeSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"sql.session_transfer.max_session_size",
 	"if set to non-zero, then serializing a session will fail if it requires more"+
 		"than the specified size",

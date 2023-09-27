@@ -43,7 +43,7 @@ const defaultUnusedIndexDuration = 7 * 24 * time.Hour
 // DropUnusedIndexDuration registers the index unuse duration at which we
 // begin to recommend dropping the index.
 var DropUnusedIndexDuration = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.index_recommendation.drop_unused_duration",
 	"the index unuse duration at which we begin to recommend dropping the index",
 	defaultUnusedIndexDuration,

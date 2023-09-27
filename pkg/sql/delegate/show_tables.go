@@ -21,7 +21,7 @@ import (
 )
 
 var showEstimatedRowCountClusterSetting = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.show_tables.estimated_row_count.enabled",
 	"whether the estimated_row_count is shown on SHOW TABLES. Turning this off "+
 		"will improve SHOW TABLES performance.",

@@ -70,15 +70,15 @@ type SettingsWatcher struct {
 		updateWait chan struct{}
 	}
 
-	// notifyTenantReadOnlyChange is called when one or more
-	// TenantReadOnly setting changes. It is only set when the
+	// notifySystemVisibleChange is called when one or more
+	// SystemVisible setting changes. It is only set when the
 	// SettingsWatcher is created with NewWithNotifier. It is used by
 	// the tenant setting override watcher to pick up defaults set via
 	// system.settings in the system tenant.
 	//
 	// The callee function can assume that the slice in the second
 	// argument is sorted by InternalKey.
-	notifyTenantReadOnlyChange func(context.Context, []kvpb.TenantSetting)
+	notifySystemVisibleChange func(context.Context, []kvpb.TenantSetting)
 
 	// testingWatcherKnobs allows the client to inject testing knobs into
 	// the underlying rangefeedcache.Watcher.
@@ -117,7 +117,7 @@ func New(
 }
 
 // NewWithNotifier constructs a new SettingsWatcher which notifies
-// an observer about changes to TenantReadOnly settings.
+// an observer about changes to SystemVisible settings.
 func NewWithNotifier(
 	ctx context.Context,
 	clock *hlc.Clock,
@@ -129,7 +129,7 @@ func NewWithNotifier(
 	storage Storage, // optional
 ) *SettingsWatcher {
 	w := New(clock, codec, settingsToUpdate, f, stopper, storage)
-	w.notifyTenantReadOnlyChange = notify
+	w.notifySystemVisibleChange = notify
 	return w
 }
 
@@ -155,7 +155,7 @@ func NewWithOverrides(
 // the stopper is stopped prior to the initial data being retrieved.
 func (s *SettingsWatcher) Start(ctx context.Context) error {
 	// Ensure we inform the read-only default notify callback function
-	// of the build-time defaults for TenantReadOnly settings.
+	// of the build-time defaults for SystemVisible settings.
 	//
 	// Note: we cannot call this in the New() function above because
 	// this can only be called after the in-RAM values have been loaded
@@ -279,11 +279,11 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 }
 
 func (s *SettingsWatcher) loadInitialReadOnlyDefaults(ctx context.Context) {
-	if s.notifyTenantReadOnlyChange == nil {
+	if s.notifySystemVisibleChange == nil {
 		return
 	}
 
-	// When there is no explicit value in system.settings for a TenantReadOnly
+	// When there is no explicit value in system.settings for a SystemVisible
 	// setting, we still want to propagate the system tenant's idea
 	// of the default value as an override to secondary tenants.
 	//
@@ -292,7 +292,7 @@ func (s *SettingsWatcher) loadInitialReadOnlyDefaults(ctx context.Context) {
 	// setting. We want to make sure that the secondary tenant's idea of
 	// the default value is the same as the system tenant's.
 
-	tenantReadOnlyKeys := settings.TenantReadOnlyKeys()
+	tenantReadOnlyKeys := settings.SystemVisibleKeys()
 	payloads := make([]kvpb.TenantSetting, 0, len(tenantReadOnlyKeys))
 	for _, key := range tenantReadOnlyKeys {
 		knownSetting, payload := s.getSettingAndValue(key)
@@ -304,7 +304,7 @@ func (s *SettingsWatcher) loadInitialReadOnlyDefaults(ctx context.Context) {
 	// Make sure the payloads are sorted, as this is required by the
 	// notify API.
 	sort.Slice(payloads, func(i, j int) bool { return payloads[i].InternalKey < payloads[j].InternalKey })
-	s.notifyTenantReadOnlyChange(ctx, payloads)
+	s.notifySystemVisibleChange(ctx, payloads)
 }
 
 // TestingRestart restarts the rangefeeds and waits for the initial
@@ -343,7 +343,7 @@ func (s *SettingsWatcher) handleKV(
 		return nil
 	}
 	if !s.codec.ForSystemTenant() {
-		if setting.Class() != settings.TenantWritable {
+		if setting.Class() != settings.ApplicationLevel {
 			log.Warningf(ctx, "ignoring read-only setting %s", settingKey)
 			return nil
 		}
@@ -404,10 +404,10 @@ func (s *SettingsWatcher) maybeSet(
 		}
 	}
 
-	if class == settings.TenantReadOnly {
+	if class == settings.SystemVisible {
 		// Notify the tenant settings watcher there is a new fallback
 		// default for this setting.
-		s.setTenantReadOnlyDefault(ctx, key)
+		s.setSystemVisibleDefault(ctx, key)
 	}
 }
 
@@ -602,11 +602,11 @@ func (s *SettingsWatcher) GetTenantClusterVersion() clusterversion.Handle {
 	return s.settings.Version
 }
 
-// setTenantReadOnlyDefault is called by the watcher above for any
+// setSystemVisibleDefault is called by the watcher above for any
 // changes to system.settings made on a setting with class
-// TenantReadOnly.
-func (s *SettingsWatcher) setTenantReadOnlyDefault(ctx context.Context, key settings.InternalKey) {
-	if s.notifyTenantReadOnlyChange == nil {
+// SystemVisible.
+func (s *SettingsWatcher) setSystemVisibleDefault(ctx context.Context, key settings.InternalKey) {
+	if s.notifySystemVisibleChange == nil {
 		return
 	}
 
@@ -621,7 +621,7 @@ func (s *SettingsWatcher) setTenantReadOnlyDefault(ctx context.Context, key sett
 
 	log.VEventf(ctx, 1, "propagating read-only default %+v", payload)
 
-	s.notifyTenantReadOnlyChange(ctx, []kvpb.TenantSetting{payload})
+	s.notifySystemVisibleChange(ctx, []kvpb.TenantSetting{payload})
 }
 
 func (s *SettingsWatcher) getSettingAndValue(key settings.InternalKey) (bool, kvpb.TenantSetting) {

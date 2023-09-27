@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-var roS = settings.RegisterStringSetting(settings.TenantReadOnly, "tenant.read.only", "desc", "initial")
+var roS = settings.RegisterStringSetting(settings.SystemVisible, "tenant.read.only", "desc", "initial")
 
 // TestSettingDefaultPropagationReadOnly2 runs one of 4 invocations of
 // `RunSettingDefaultPropagationTest`. The test is split 4-ways across
