@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry/schematelemetrycontroller"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -24,8 +25,12 @@ func ensureSQLSchemaTelemetrySchedule(
 	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	return d.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		// Since this Schedule Creation job is expected to fail before the schedule
+		// is persisted to the schedules table, it is fine to instantiate this
+		// schedule with an empty cluster ID, which would also cause schedule
+		// creation to fail.
 		_, err := schematelemetrycontroller.CreateSchemaTelemetrySchedule(
-			ctx, txn, d.Settings,
+			ctx, txn, d.Settings, uuid.UUID{},
 		)
 		// If the schedule already exists, we have nothing more to do. This
 		// logic makes the upgrade idempotent.
