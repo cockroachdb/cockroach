@@ -35,9 +35,9 @@ type RunOptions struct {
 type RunOption func(runOpts *RunOptions)
 
 // WithRetryOpts specifies retry behaviour
-func WithRetryOpts(retryOpts *retry.Options) RunOption {
+func WithRetryOpts(retryOpts retry.Options) RunOption {
 	return func(runOpts *RunOptions) {
-		runOpts.RetryOptions = retryOpts
+		runOpts.RetryOptions = &retryOpts
 	}
 }
 

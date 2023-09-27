@@ -526,7 +526,7 @@ fi`,
 		)
 
 		return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("kill"))
-	}, WithDisplay(display), WithRetryOpts(nil)) // Disable SSH Retries
+	}, WithDisplay(display), WithRetryDisabled()) // Disable SSH Retries
 }
 
 // Wipe TODO(peter): document
@@ -1187,7 +1187,7 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 		res.Err = errors.New("timed out after 5m")
 		l.Printf("  %2d: %v", node, res.Err)
 		return res, nil
-	}, WithDisplay(display), WithRetryOpts(nil))
+	}, WithDisplay(display), WithRetryDisabled())
 
 	if err != nil {
 		return err
