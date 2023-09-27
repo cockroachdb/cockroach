@@ -1222,12 +1222,13 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 	)
 
+	var payloadErr error
 	if closeType == normalClose {
 		// We'll cleanup the SQL txn by creating a non-retriable (commit:true) event.
 		// This event is guaranteed to be accepted in every state.
 		ev := eventNonRetriableErr{IsCommit: fsm.True}
-		payload := eventNonRetriableErrPayload{err: pgerror.Newf(pgcode.AdminShutdown,
-			"connExecutor closing")}
+		payloadErr = pgerror.Newf(pgcode.AdminShutdown, "connExecutor closing")
+		payload := eventNonRetriableErrPayload{err: payloadErr}
 		if err := ex.machine.ApplyWithPayload(ctx, ev, payload); err != nil {
 			log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
 		}
@@ -1251,7 +1252,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		ex.state.finishExternalTxn()
 	}
 
-	ex.resetExtraTxnState(ctx, txnEvent{eventType: txnEvType})
+	ex.resetExtraTxnState(ctx, txnEvent{eventType: txnEvType}, payloadErr)
 	if ex.hasCreatedTemporarySchema && !ex.server.cfg.TestingKnobs.DisableTempObjectsCleanupOnSessionExit {
 		err := cleanupSessionTempObjects(
 			ctx,
@@ -1964,9 +1965,10 @@ func (ns *prepStmtNamespace) resetTo(
 
 // resetExtraTxnState resets the fields of ex.extraTxnState when a transaction
 // finishes execution (either commits, rollbacks or restarts). Based on the
-// transaction event, resetExtraTxnState invokes corresponding callbacks
+// transaction event, resetExtraTxnState invokes corresponding callbacks.
+// The payload error is included for statistics recording.
 // (e.g. onTxnFinish() and onTxnRestart()).
-func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
+func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, payloadErr error) {
 	ex.extraTxnState.numDDL = 0
 	ex.extraTxnState.firstStmtExecuted = false
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
@@ -2003,7 +2005,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 			ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 		)
 		ex.extraTxnState.savepoints.clear()
-		ex.onTxnFinish(ctx, ev)
+		ex.onTxnFinish(ctx, ev, payloadErr)
 	case txnRestart:
 		ex.onTxnRestart(ctx)
 		ex.state.mu.Lock()
@@ -3730,18 +3732,20 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 
 	advInfo := ex.state.consumeAdvanceInfo()
 
+	var payloadErr error
 	// If we had an error from DDL statement execution due to the presence of
 	// other concurrent schema changes when attempting a schema change, wait for
 	// the completion of those schema changes first.
 	if p, ok := payload.(payloadWithError); ok {
-		if descID := scerrors.ConcurrentSchemaChangeDescID(p.errorCause()); descID != descpb.InvalidID {
+		payloadErr = p.errorCause()
+		if descID := scerrors.ConcurrentSchemaChangeDescID(payloadErr); descID != descpb.InvalidID {
 			if err := ex.handleWaitingForConcurrentSchemaChanges(ex.Ctx(), descID); err != nil {
 				return advanceInfo{}, err
 			}
 		}
 		// Similarly, if the descriptor ID generator is not available because of
 		// an ongoing migration, wait for the migration to complete first.
-		if errors.Is(p.errorCause(), descidgen.ErrDescIDSequenceMigrationInProgress) {
+		if errors.Is(payloadErr, descidgen.ErrDescIDSequenceMigrationInProgress) {
 			if err := ex.handleWaitingForDescriptorIDGeneratorMigration(ex.Ctx()); err != nil {
 				return advanceInfo{}, err
 			}
@@ -3859,7 +3863,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 
 		fallthrough
 	case txnRollback:
-		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent)
+		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent, payloadErr)
 		// Since we're doing a complete rollback, there's no need to keep the
 		// prepared stmts for a txn rewind.
 		ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.closeAllPortals(
@@ -3869,7 +3873,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	case txnRestart:
 		// In addition to resetting the extraTxnState, the restart event may
 		// also need to reset the sqlliveness.Session.
-		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent)
+		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent, payloadErr)
 		if err := ex.maybeSetSQLLivenessSession(); err != nil {
 			return advanceInfo{}, err
 		}
