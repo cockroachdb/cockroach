@@ -333,6 +333,11 @@ func (*DummyEvalPlanner) Optimizer() interface{} {
 	return nil
 }
 
+// GenUniqueCursorName is part of the eval.Planner interface.
+func (*DummyEvalPlanner) GenUniqueCursorName() tree.Name {
+	return ""
+}
+
 var _ eval.Planner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,

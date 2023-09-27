@@ -2463,6 +2463,7 @@ var builtinOidsArray = []string{
 	2492: `make_timestamptz(year: int, month: int, day: int, hour: int, min: int, sec: float, timezone: string) -> timestamptz`,
 	2493: `date_trunc(element: string, input: timestamptz, timezone: string) -> timestamptz`,
 	2494: `make_date(year: int, month: int, day: int) -> date`,
+	2495: `crdb_internal.plpgsql_gen_cursor_name(name: string) -> string`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

@@ -8442,6 +8442,27 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			Volatility: volatility.Immutable,
 		},
 	),
+	"crdb_internal.plpgsql_gen_cursor_name": makeBuiltin(tree.FunctionProperties{
+		Category:     builtinconstants.CategoryIDGeneration,
+		Undocumented: true,
+	},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "name", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					name := evalCtx.Planner.GenUniqueCursorName()
+					return tree.NewDString(string(name)), nil
+				}
+				return args[0], nil
+			},
+			Info:              "This function is used internally to generate unique names for PLpgSQL cursors.",
+			Volatility:        volatility.Volatile,
+			CalledOnNullInput: true,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
