@@ -1394,6 +1394,7 @@ unreserved_keyword ::=
 	| 'SKIP_MISSING_SEQUENCE_OWNERS'
 	| 'SKIP_MISSING_VIEWS'
 	| 'SKIP_MISSING_UDFS'
+	| 'STRIP_LOCALITIES'
 	| 'SNAPSHOT'
 	| 'SPLIT'
 	| 'SQL'
@@ -2674,6 +2675,7 @@ restore_options ::=
 	| 'UNSAFE_RESTORE_INCOMPATIBLE_VERSION'
 	| 'EXECUTION' 'LOCALITY' '=' string_or_placeholder
 	| 'EXPERIMENTAL' 'DEFERRED' 'COPY'
+	| 'STRIP_LOCALITIES'
 
 scrub_option_list ::=
 	( scrub_option ) ( ( ',' scrub_option ) )*
@@ -3982,6 +3984,7 @@ bare_label_keywords ::=
 	| 'SKIP_MISSING_SEQUENCE_OWNERS'
 	| 'SKIP_MISSING_UDFS'
 	| 'SKIP_MISSING_VIEWS'
+	| 'STRIP_LOCALITIES'
 	| 'SMALLINT'
 	| 'SNAPSHOT'
 	| 'SOME'
