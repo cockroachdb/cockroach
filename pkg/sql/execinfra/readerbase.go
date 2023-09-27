@@ -230,7 +230,7 @@ func (flowCtx *FlowCtx) UseStreamer() (bool, *kv.Txn, error) {
 // session variable.
 // TODO(yuzefovich): consider removing this at some point.
 var UseStreamerEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.distsql.use_streamer.enabled",
 	"determines whether the usage of the Streamer API is allowed. "+
 		"Enabling this will increase the speed of lookup/index joins "+
@@ -248,7 +248,7 @@ const joinReaderIndexJoinStrategyBatchSizeDefault = 4 << 20 /* 4 MiB */
 // used to construct a single lookup KV batch by
 // rowexec.joinReaderIndexJoinStrategy as well as colfetcher.ColIndexJoin.
 var JoinReaderIndexJoinStrategyBatchSize = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.distsql.join_reader_index_join_strategy.batch_size",
 	"size limit on the input rows to construct a single lookup KV batch "+
 		"(by the joinReader processor and the ColIndexJoin operator (when the "+

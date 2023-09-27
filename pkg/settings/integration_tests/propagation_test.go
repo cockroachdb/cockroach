@@ -63,8 +63,8 @@ func TestSettingDefaultPropagationReadWrite2(t *testing.T) {
 	runSettingDefaultPropagationTest(t, rwS, false)
 }
 
-var roS = settings.RegisterStringSetting(settings.TenantReadOnly, "tenant.read.only", "desc", "initial")
-var rwS = settings.RegisterStringSetting(settings.TenantWritable, "tenant.writable", "desc", "initial")
+var roS = settings.RegisterStringSetting(settings.SystemVisible, "system.visible", "desc", "initial")
+var rwS = settings.RegisterStringSetting(settings.ApplicationLevel, "application.level", "desc", "initial")
 
 // runSettingDefaultPropagationTest is a test helper.
 func runSettingDefaultPropagationTest(
@@ -104,9 +104,9 @@ func runSettingDefaultPropagationTest(
 			return tenantAllOverride
 		}
 		// No tenant override. What is the default?
-		// For TenantReadOnly, if there is a custom value in the
+		// For SystemVisible, if there is a custom value in the
 		// system interface, that becomes the default.
-		if setting.Class() == settings.TenantReadOnly && sysOverride != "" {
+		if setting.Class() == settings.SystemVisible && sysOverride != "" {
 			return sysOverride
 		}
 		// Otherwise, fall back to the default.

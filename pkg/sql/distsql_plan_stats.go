@@ -48,7 +48,7 @@ type requestedStat struct {
 // construction. For larger tables, it may be beneficial to increase this number
 // to get a more accurate distribution.
 var histogramSamples = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.histogram_samples.count",
 	"number of rows sampled for histogram construction during table statistics collection",
 	10000,
@@ -62,7 +62,7 @@ var histogramSamples = settings.RegisterIntSetting(
 // The lowest TTL we recommend is 10 minutes. This value must be lower than
 // that.
 var maxTimestampAge = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.max_timestamp_age",
 	"maximum age of timestamp during table statistics collection",
 	5*time.Minute,

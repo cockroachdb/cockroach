@@ -40,7 +40,7 @@ func IsNoInboundStreamConnectionError(err error) bool {
 // SettingFlowStreamTimeout is a cluster setting that sets the default flow
 // stream timeout.
 var SettingFlowStreamTimeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.distsql.flow_stream_timeout",
 	"amount of time incoming streams wait for a flow to be set up before erroring out",
 	10*time.Second,

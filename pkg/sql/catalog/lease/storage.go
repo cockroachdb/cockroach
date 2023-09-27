@@ -81,7 +81,7 @@ type writer interface {
 // LeaseRenewalDuration controls the default time before a lease expires when
 // acquisition to renew the lease begins.
 var LeaseRenewalDuration = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.catalog.descriptor_lease_renewal_fraction",
 	"controls the default time before a lease expires when acquisition to renew the lease begins",
 	base.DefaultDescriptorLeaseRenewalTimeout)
@@ -89,7 +89,7 @@ var LeaseRenewalDuration = settings.RegisterDurationSetting(
 // LeaseRenewalCrossValidate controls if cross validation should be done during
 // lease renewal.
 var LeaseRenewalCrossValidate = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.catalog.descriptor_lease_renewal_cross_validation.enabled",
 	"controls if cross validation should be done during lease renewal",
 	base.DefaultLeaseRenewalCrossValidate)

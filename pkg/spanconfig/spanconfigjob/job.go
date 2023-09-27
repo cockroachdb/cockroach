@@ -37,7 +37,7 @@ type resumer struct {
 var _ jobs.Resumer = (*resumer)(nil)
 
 var reconciliationJobCheckpointInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"spanconfig.reconciliation_job.checkpoint_interval",
 	"the frequency at which the span config reconciliation job checkpoints itself",
 	5*time.Second,
