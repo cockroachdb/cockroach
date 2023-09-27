@@ -26,70 +26,68 @@ type Key int
 //
 // You'll want to add a new one in the following cases:
 //
-// (a) When introducing a backwards incompatible feature. Broadly, by this we
+//	(a) When introducing a backwards incompatible feature. Broadly, by this we
+//	mean code that's structured as follows:
 //
-//	 mean code that's structured as follows:
+//		if (specific-version is active) {
+//			// Implies that all nodes in the cluster are running binaries that
+//			// have this code. We can "enable" the new feature knowing that
+//			// outbound RPCs, requests, etc. will be handled by nodes that know
+//			// how to do so.
+//		} else {
+//			// There may be some nodes running older binaries without this code.
+//			// To be safe, we'll want to behave as we did before introducing
+//			// this feature.
+//		}
 //
-//	  if (specific-version is active) {
-//	      // Implies that all nodes in the cluster are running binaries that
-//	      // have this code. We can "enable" the new feature knowing that
-//	      // outbound RPCs, requests, etc. will be handled by nodes that know
-//	      // how to do so.
-//	  } else {
-//	      // There may be some nodes running older binaries without this code.
-//	      // To be safe, we'll want to behave as we did before introducing
-//	      // this feature.
-//	  }
+//	Authors of migrations need to be careful in ensuring that end-users
+//	aren't able to enable feature gates before they're active. This is fine:
 //
-//	 Authors of migrations need to be careful in ensuring that end-users
-//	 aren't able to enable feature gates before they're active. This is fine:
+//		func handleSomeNewStatement() error {
+//			if !(specific-version is active) {
+//				return errors.New("cluster version needs to be bumped")
+//	 		}
+//			// ...
+//		}
 //
-//	  func handleSomeNewStatement() error {
-//	      if !(specific-version is active) {
-//	          return errors.New("cluster version needs to be bumped")
-//	      }
-//	      // ...
-//	  }
+//	At the same time, with requests/RPCs originating at other crdb nodes, the
+//	initiator of the request gets to decide what's supported. A node should
+//	not refuse functionality on the grounds that its view of the version gate
+//	is as yet inactive. Consider the sender:
 //
-//	 At the same time, with requests/RPCs originating at other crdb nodes, the
-//	 initiator of the request gets to decide what's supported. A node should
-//	 not refuse functionality on the grounds that its view of the version gate
-//	 is as yet inactive. Consider the sender:
-//
-//	  func invokeSomeRPC(req) {
-//	      if (specific-version is active) {
-//	          // Like mentioned above, this implies that all nodes in the
-//	          // cluster are running binaries that can handle this new
-//	          // feature. We may have learned about this fact before the
-//	          // node on the other end. This is due to the fact that migration
-//	          // manager informs each node about the specific-version being
-//	          // activated active concurrently. See BumpClusterVersion for
-//	          // where that happens. Still, it's safe for us to enable the new
-//	          // feature flags as we trust the recipient to know how to deal
-//	          // with it.
-//	        req.NewFeatureFlag = true
-//	      }
-//	      send(req)
-//	  }
+//		func invokeSomeRPC(req) {
+//			if (specific-version is active) {
+//				// Like mentioned above, this implies that all nodes in the
+//				// cluster are running binaries that can handle this new
+//				// feature. We may have learned about this fact before the
+//				// node on the other end. This is due to the fact that migration
+//				// manager informs each node about the specific-version being
+//				// activated active concurrently. See BumpClusterVersion for
+//				// where that happens. Still, it's safe for us to enable the new
+//				// feature flags as we trust the recipient to know how to deal
+//				// with it.
+//				req.NewFeatureFlag = true
+//			}
+//			send(req)
+//		}
 //
 //	And consider the recipient:
 //
-//	 func someRPC(req) {
-//	     if !req.NewFeatureFlag {
-//	         // Legacy behavior...
-//	     }
-//	     // There's no need to even check if the specific-version is active.
-//	     // If the flag is enabled, the specific-version must have been
-//	     // activated, even if we haven't yet heard about it (we will pretty
-//	     // soon).
-//	 }
+//		func someRPC(req) {
+//			if !req.NewFeatureFlag {
+//				// Legacy behavior...
+//			}
+//			// There's no need to even check if the specific-version is active.
+//			// If the flag is enabled, the specific-version must have been
+//			// activated, even if we haven't yet heard about it (we will pretty
+//			// soon).
+//		}
 //
-//	 See clusterversion.Handle.IsActive and usage of some existing versions
-//	 below for more clues on the matter.
+//	See clusterversion.Handle.IsActive and usage of some existing versions
+//	below for more clues on the matter.
 //
-// (b) When cutting a major release branch. When cutting release-20.2 for
-//
-//	 example, you'll want to introduce the following to `master`.
+//	(b) When cutting a major release branch. When cutting release-20.2 for
+//	example, you'll want to introduce the following to `master`.
 //
 //	   (i)  V20_2 (keyed to v20.2.0-0})
 //	   (ii) V21_1Start (keyed to v20.2.0-1})
