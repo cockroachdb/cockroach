@@ -213,6 +213,42 @@ func TestChangefeedExternalConnections(t *testing.T) {
 			uri:           "kafka://nope/?sasl_enabled=true&sasl_mechanism=unsuppported",
 			expectedError: "param sasl_mechanism must be one of SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, or PLAIN",
 		},
+		// confluent-cloud scheme tests
+		{
+			name:          "requires parameter api_key",
+			uri:           "confluent-cloud://nope/",
+			expectedError: "requires parameter api_key",
+		},
+		{
+			name:          "requires parameter api_secret",
+			uri:           "confluent-cloud://nope?api_key=fee",
+			expectedError: "requires parameter api_secret",
+		},
+		{
+			name:          "requires sasl_enabled=true",
+			uri:           "confluent-cloud://nope?api_key=fee&api_secret=bar&sasl_enabled=false",
+			expectedError: "unsupported value false for parameter sasl_enabled, please use true",
+		},
+		{
+			name:          "requires parameter sasl_mechanism=PLAIN",
+			uri:           "confluent-cloud://nope?api_key=fee&api_secret=bar&sasl_mechanism=OAUTHBEARER",
+			expectedError: "unsupported value OAUTHBEARER for parameter sasl_mechanism, please use PLAIN",
+		},
+		{
+			name:          "requires parameter sasl_handshake=true",
+			uri:           "confluent-cloud://nope?api_key=fee&api_secret=bar&sasl_handshake=false",
+			expectedError: "unsupported value false for parameter sasl_handshake, please use true",
+		},
+		{
+			name:          "requires parameter tls_enabled=true",
+			uri:           "confluent-cloud://nope?api_key=fee&api_secret=bar&tls_enabled=false",
+			expectedError: "unsupported value false for parameter tls_enabled, please use true",
+		},
+		{
+			name:          "invalid query parameters",
+			uri:           "confluent-cloud://nope?api_key=fee&api_secret=bar&ca_cert=abcd",
+			expectedError: "invalid query parameters",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sqlDB.ExpectErr(
@@ -225,19 +261,29 @@ func TestChangefeedExternalConnections(t *testing.T) {
 	// We wrap the changefeed Sink with `externalConnectionKafkaSink` that asserts
 	// the underlying Sink is a kafka sink.
 	t.Run("changefeed-with-well-formed-uri", func(t *testing.T) {
+		// kafka scheme external connections
 		sqlDB.Exec(t, `CREATE EXTERNAL CONNECTION nope AS 'kafka://nope'`)
-		sqlDB.Exec(t, `CREATE CHANGEFEED FOR foo INTO 'external://nope'`)
-
 		sqlDB.Exec(t, `CREATE EXTERNAL CONNECTION "nope-with-params" AS 'kafka://nope/?tls_enabled=true&insecure_tls_skip_verify=true&topic_name=foo'`)
-		sqlDB.Exec(t, `CREATE CHANGEFEED FOR foo INTO 'external://nope-with-params'`)
+		// confluent-cloud external connections
+		sqlDB.Exec(t, `CREATE EXTERNAL CONNECTION confluent1 AS 'confluent-cloud://nope?api_key=fee&api_secret=bar'`)
+		sqlDB.Exec(t, `CREATE EXTERNAL CONNECTION confluent2 AS 'confluent-cloud://nope?api_key=fee&api_secret=bar&`+
+			`sasl_mechanism=PLAIN&tls_enabled=true&topic_prefix=foo&sasl_enabled=true&sasl_handshake=true&`+
+			`insecure_tls_skip_verify=true'`)
 
+		sqlDB.Exec(t, `CREATE CHANGEFEED FOR foo INTO 'external://nope'`)
+		sqlDB.Exec(t, `CREATE CHANGEFEED FOR foo INTO 'external://nope-with-params'`)
 		sqlDB.Exec(
 			t, `CREATE CHANGEFEED FOR foo INTO 'external://nope/' WITH kafka_sink_config='{"Flush": {"Messages": 100, "Frequency": "1s"}}'`,
 		)
-
 		sqlDB.ExpectErr(
 			t, `this sink is incompatible with option webhook_client_timeout`,
 			`CREATE CHANGEFEED FOR foo INTO 'external://nope/' WITH webhook_client_timeout='1s'`,
+		)
+		sqlDB.Exec(
+			t, `CREATE CHANGEFEED FOR foo INTO 'external://confluent1/' WITH kafka_sink_config='{"Flush": {"Messages": 100, "Frequency": "1s"}}'`,
+		)
+		sqlDB.Exec(
+			t, `CREATE CHANGEFEED FOR foo INTO 'external://confluent2/' WITH kafka_sink_config='{"Flush": {"Messages": 100, "Frequency": "1s"}}'`,
 		)
 	})
 }
