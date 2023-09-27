@@ -465,7 +465,7 @@ func (e *stageExecStmt) Exec(
 			if err != nil {
 				if idx != len(e.stmts)-1 {
 					// We require that only the last statement in a stage-exec block can cause an error.
-					t.Fatalf("unexpected error (only the last statement may expect an error): %v", err)
+					t.Fatalf("statement[%d] %q exec unexpected error (only the last statement may expect an error): %v", idx, boundSQL, err)
 				} else {
 					// Fail the test unless the error is expected (from e.expectedOutput), or
 					// "rewrite" is set, in which case we record the error and proceed.
@@ -831,7 +831,7 @@ func setupSchemaChange(
 	// Execute the setup statements with the legacy schema changer so that the
 	// declarative schema changer testing knobs don't get used.
 	tdb.Exec(t, "SET use_declarative_schema_changer = 'off'")
-	for _, stmt := range spec.Setup {
+	for i, stmt := range spec.Setup {
 		if _, err := tdb.DB.ExecContext(ctx, stmt.SQL); err != nil {
 			// nolint:errcmp
 			switch errT := err.(type) {
@@ -840,7 +840,7 @@ func setupSchemaChange(
 					skip.IgnoreLint(t, "skipping due to unimplemented feature in old cluster version.")
 				}
 			}
-			return err
+			return errors.Wrapf(err, "statement[%d] %q", i, stmt.SQL)
 		}
 	}
 	waitForSchemaChangesToFinish(t, tdb)
