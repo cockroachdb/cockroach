@@ -169,9 +169,11 @@ type Controller interface {
 	// periodically polled for weights. The stopper should be used to terminate
 	// the periodic polling.
 	SetTenantWeightProvider(TenantWeightProvider, *stop.Stopper)
-	// SnapshotIngested informs admission control about a range snapshot
-	// ingestion.
-	SnapshotIngested(roachpb.StoreID, pebble.IngestOperationStats)
+	// SnapshotIngestedOrWritten informs admission control about a range
+	// snapshot ingestion or a range snapshot written as a normal write.
+	// writeBytes should roughly correspond to the size of the write when
+	// flushed to a sstable.
+	SnapshotIngestedOrWritten(_ roachpb.StoreID, _ pebble.IngestOperationStats, writeBytes uint64)
 	// FollowerStoreWriteBytes informs admission control about writes
 	// replicated to a raft follower, that have not been subject to admission
 	// control.
@@ -532,15 +534,15 @@ func (n *controllerImpl) SetTenantWeightProvider(
 	}()
 }
 
-// SnapshotIngested implements the Controller interface.
-func (n *controllerImpl) SnapshotIngested(
-	storeID roachpb.StoreID, ingestStats pebble.IngestOperationStats,
+// SnapshotIngestedOrWritten implements the Controller interface.
+func (n *controllerImpl) SnapshotIngestedOrWritten(
+	storeID roachpb.StoreID, ingestStats pebble.IngestOperationStats, writeBytes uint64,
 ) {
 	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(storeID))
 	if storeAdmissionQ == nil {
 		return
 	}
-	storeAdmissionQ.StatsToIgnore(ingestStats)
+	storeAdmissionQ.StatsToIgnore(ingestStats, writeBytes)
 }
 
 // FollowerStoreWriteBytes implements the Controller interface.
