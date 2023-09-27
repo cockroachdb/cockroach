@@ -58,7 +58,7 @@ var scheduledBackupOptionExpectValues = map[string]exprutil.KVStringOptValidate{
 // scheduledBackupGCProtectionEnabled is used to enable and disable the chaining
 // of protected timestamps amongst scheduled backups.
 var scheduledBackupGCProtectionEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"schedules.backup.gc_protection.enabled",
 	"enable chaining of GC protection across backups run as part of a schedule",
 	true, /* defaultValue */

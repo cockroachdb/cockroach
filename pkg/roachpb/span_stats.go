@@ -23,7 +23,7 @@ const DefaultSpanStatsSpanLimit = 1000
 // SpanStatsBatchLimit registers the maximum number of spans allowed in a
 // span stats request payload.
 var SpanStatsBatchLimit = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.span_stats.span_batch_limit",
 	"the maximum number of spans allowed in a request payload for span statistics",
 	DefaultSpanStatsSpanLimit,
@@ -31,7 +31,7 @@ var SpanStatsBatchLimit = settings.RegisterIntSetting(
 )
 
 var SpanStatsNodeTimeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.span_stats.node.timeout",
 	"the duration allowed for a single node to return span stats data before"+
 		" the request is cancelled; if set to 0, there is no timeout",
@@ -44,7 +44,7 @@ const defaultRangeStatsBatchLimit = 100
 // RangeStatsBatchLimit registers the maximum number of ranges to be batched
 // when fetching range stats for a span.
 var RangeStatsBatchLimit = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.span_stats.range_batch_limit",
 	"the maximum batch size when fetching ranges statistics for a span",
 	defaultRangeStatsBatchLimit,
@@ -54,7 +54,7 @@ var RangeStatsBatchLimit = settings.RegisterIntSetting(
 // RangeDescPageSize controls the page size when iterating through range
 // descriptors.
 var RangeDescPageSize = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.span_stats.range_desc_page_size",
 	"the page size when iterating through range descriptors",
 	100,

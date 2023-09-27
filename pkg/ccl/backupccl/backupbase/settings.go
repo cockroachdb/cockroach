@@ -24,7 +24,7 @@ var (
 	// SmallFileBuffer is the size limit used when buffering backup files before
 	// merging them.
 	SmallFileBuffer = settings.RegisterByteSizeSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"bulkio.backup.merge_file_buffer_size",
 		"size limit used when buffering backup files before merging them",
 		int64(defaultSmallFileBuffer),

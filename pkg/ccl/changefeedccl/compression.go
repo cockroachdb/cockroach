@@ -21,7 +21,7 @@ import (
 )
 
 var useFastGzip = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.fast_gzip.enabled",
 	"use fast gzip implementation",
 	util.ConstantWithMetamorphicTestBool(

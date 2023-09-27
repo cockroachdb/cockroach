@@ -390,7 +390,7 @@ func thresholdFromTrace(t *testing.T, traceString string) hlc.Timestamp {
 	return thresh
 }
 
-func setAndWaitForTenantReadOnlyClusterSetting(
+func setAndWaitForSystemVisibleClusterSetting(
 	t *testing.T,
 	settingName settings.SettingName,
 	systemTenantRunner *sqlutils.SQLRunner,

@@ -59,7 +59,7 @@ type kmsURIParams struct {
 }
 
 var reuseKMSSession = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.aws.reuse_kms_session.enabled",
 	"persist the last opened AWS KMS session and reuse it when opening a new session with the same arguments",
 	util.ConstantWithMetamorphicTestBool("aws-reuse-kms", true),

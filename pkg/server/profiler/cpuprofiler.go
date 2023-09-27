@@ -27,14 +27,14 @@ import (
 )
 
 var maxCombinedCPUProfFileSize = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.cpu_profile.total_dump_size_limit",
 	"maximum combined disk size of preserved CPU profiles",
 	128<<20, // 128MiB
 )
 
 var cpuUsageCombined = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.cpu_profile.cpu_usage_combined_threshold",
 	"a threshold beyond which if the combined cpu usage is above, "+
 		"then a cpu profile can be triggered. If a value over 100 is set, "+
@@ -45,7 +45,7 @@ var cpuUsageCombined = settings.RegisterIntSetting(
 )
 
 var cpuProfileInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.cpu_profile.interval",
 	// NB: this is not the entire explanation - it's when we stop taking into
 	// account the high water mark seen. Without this, if CPU ever reaches 100%,
@@ -55,7 +55,7 @@ var cpuProfileInterval = settings.RegisterDurationSetting(
 )
 
 var cpuProfileDuration = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.cpu_profile.duration",
 	"the duration for how long a cpu profile is taken",
 	10*time.Second, settings.PositiveDuration,

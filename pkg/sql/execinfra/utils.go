@@ -59,7 +59,7 @@ func HydrateTypesInDatumInfo(
 // This setting is defined here instead of in package 'sql' to avoid
 // a dependency cycle.
 var IncludeRUEstimateInExplainAnalyze = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.tenant_ru_estimation.enabled",
 	"determines whether EXPLAIN ANALYZE should return an estimate for the query's RU consumption",
 	true,
