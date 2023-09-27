@@ -1008,6 +1008,17 @@ CREATE TABLE system.span_stats_tenant_boundaries (
 	  FAMILY "primary" (crdb_region, unavailable_at)
 ) ;
 `
+
+	SystemMVCCStatisticsSchema = `
+CREATE TABLE system.mvcc_statistics (
+	created_at TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
+	database_id INT8 NOT NULL,
+	table_id INT8 NOT NULL,
+	index_id INT8 NOT NULL,
+	statistics JSONB NOT NULL,
+	created_at_hash INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(created_at)), 8:::INT8)) STORED,
+	CONSTRAINT mvcc_statistics_pkey PRIMARY KEY (created_at ASC, database_id ASC, table_id ASC, index_id ASC) USING HASH WITH (bucket_count=16),
+);`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1030,8 +1041,9 @@ var (
 	// TABLE statements for both statement and transaction tables in a SQL shell.
 	// If we are to change how we compute hash values in the future, we need to
 	// modify these two expressions as well.
-	sqlStmtHashComputeExpr = `mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8:::INT8)`
-	sqlTxnHashComputeExpr  = `mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id)), 8:::INT8)`
+	sqlStmtHashComputeExpr   = `mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8:::INT8)`
+	sqlTxnHashComputeExpr    = `mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id)), 8:::INT8)`
+	timestampHashComputeExpr = `mod(fnv32(crdb_internal.datums_to_bytes(created_at)), 8:::INT8)`
 )
 
 const (
@@ -1244,6 +1256,7 @@ func MakeSystemTables() []SystemTable {
 		StatementActivityTable,
 		TransactionActivityTable,
 		RegionLivenessTable,
+		SystemMVCCStatisticsTable,
 	}
 }
 
@@ -4107,6 +4120,71 @@ var (
 					catenumpb.IndexColumn_ASC,
 				},
 				KeyColumnIDs: []descpb.ColumnID{1},
+			},
+		),
+	)
+
+	SystemMVCCStatisticsTable = makeSystemTable(
+		SystemMVCCStatisticsSchema,
+		systemTable(
+			catconstants.MVCCStatistics,
+			descpb.InvalidID, // dynamically assigned table ID
+			[]descpb.ColumnDescriptor{
+				{Name: "created_at", ID: 1, Type: types.TimestampTZ,
+					DefaultExpr: &nowTZString},
+				{Name: "database_id", ID: 2, Type: types.Int},
+				{Name: "table_id", ID: 3, Type: types.Int},
+				{Name: "index_id", ID: 4, Type: types.Int},
+				{Name: "statistics", ID: 5, Type: types.Jsonb},
+				{
+					Name:        "created_at_hash",
+					ID:          6,
+					Type:        types.Int4,
+					Nullable:    false,
+					ComputeExpr: &timestampHashComputeExpr,
+					Hidden:      true,
+				},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name: "primary",
+					ID:   0,
+					ColumnNames: []string{
+						"created_at",
+						"database_id",
+						"table_id",
+						"index_id",
+						"statistics",
+						"created_at_hash",
+					},
+					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:   "mvcc_statistics_pkey",
+				ID:     1,
+				Unique: true,
+				KeyColumnNames: []string{
+					"created_at_hash",
+					"created_at",
+					"database_id",
+					"table_id",
+					"index_id",
+				},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{6, 1, 2, 3, 4},
+				Sharded: catpb.ShardedDescriptor{
+					IsSharded:    true,
+					Name:         "created_at_hash",
+					ShardBuckets: 16, // Cluster setting default.
+					ColumnNames:  []string{"created_at"},
+				},
 			},
 		),
 	)
