@@ -11,8 +11,6 @@
 package scbuildstmt
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -24,136 +22,96 @@ func offByDefaultCheck(mode sessiondatapb.NewSchemaChangerMode) bool {
 		mode == sessiondatapb.UseNewSchemaChangerUnsafe
 }
 
-// IsFullySupportedWithFalsePositive returns if this statement is
-// "fully supported" in the declarative schema changer under mode and active
-// cluster version.
-// It can return false positive but never false negative, because we only run
-// a few "simple" checks that we cannot totally eliminate unsupported stmts;
-// we will discover those in the builder (when we resolve descriptors and its
-// elements) and panic with an unimplemented error.
-func IsFullySupportedWithFalsePositive(
-	n tree.Statement,
-	activeVersion clusterversion.ClusterVersion,
-	mode sessiondatapb.NewSchemaChangerMode,
-) bool {
-	if mode == sessiondatapb.UseNewSchemaChangerOff {
-		return false
-	}
+type ProcessFunc func(BuildCtx)
 
-	switch typedN := n.(type) {
-	case *tree.AlterTable:
-		return alterTableChecks(typedN, activeVersion)
-	case *tree.CreateIndex:
-		return activeVersion.IsActive(clusterversion.V23_1)
-	case *tree.DropDatabase:
-		return true
-	case *tree.DropOwnedBy:
-		return true
-	case *tree.DropSchema:
-		return true
-	case *tree.DropSequence:
-		return true
-	case *tree.DropTable:
-		return true
-	case *tree.DropType:
-		return true
-	case *tree.DropView:
-		return true
-	case *tree.CommentOnConstraint:
-		return true
-	case *tree.CommentOnDatabase:
-		return true
-	case *tree.CommentOnSchema:
-		return true
-	case *tree.CommentOnTable:
-		return true
-	case *tree.CommentOnColumn:
-		return true
-	case *tree.CommentOnIndex:
-		return true
-	case *tree.DropIndex:
-		return activeVersion.IsActive(clusterversion.V23_1)
-	case *tree.DropFunction:
-		return activeVersion.IsActive(clusterversion.V23_1)
-	case *tree.CreateRoutine:
-		return activeVersion.IsActive(clusterversion.V23_1)
-	case *tree.CreateSchema:
-		return offByDefaultCheck(mode) && activeVersion.IsActive(clusterversion.V23_2)
-	case *tree.CreateSequence:
-		return offByDefaultCheck(mode) && activeVersion.IsActive(clusterversion.V23_2)
-	default:
-		return false
+func wrapPF[T any](f func(b BuildCtx, t T), t T) ProcessFunc {
+	return func(b BuildCtx) {
+		f(b, t)
 	}
 }
 
 // Process dispatches on the statement type to populate the BuilderState
 // embedded in the BuildCtx. Any error will be panicked.
-func Process(b BuildCtx, n tree.Statement) {
-	newSchemaChangerMode := getDeclarativeSchemaChangerModeForStmt(b, n)
-	// Run a few "quick checks" to see if the statement is not supported.
-	if !IsFullySupportedWithFalsePositive(n, b.EvalCtx().Settings.Version.ActiveVersion(b),
-		newSchemaChangerMode) {
-		panic(scerrors.NotImplementedError(n))
-	}
-
-	// Check if the feature flag for it is enabled.
-	err := b.CheckFeature(b, tree.GetSchemaFeatureNameFromStmt(n))
-	if err != nil {
-		panic(err)
-	}
-
+func Process(
+	n tree.Statement,
+	activeVersion clusterversion.ClusterVersion,
+	mode sessiondatapb.NewSchemaChangerMode,
+) (isSupported bool, _ ProcessFunc) {
+	var pf ProcessFunc
 	switch typedN := n.(type) {
 	case *tree.AlterTable:
-		AlterTable(b, typedN)
+		pf = AlterTable(typedN, activeVersion)
 	case *tree.CreateIndex:
-		CreateIndex(b, typedN)
+		if activeVersion.IsActive(clusterversion.V23_1) {
+			pf = wrapPF(CreateIndex, typedN)
+		}
 	case *tree.DropDatabase:
-		DropDatabase(b, typedN)
+		pf = wrapPF(DropDatabase, typedN)
 	case *tree.DropOwnedBy:
-		DropOwnedBy(b, typedN)
+		pf = wrapPF(DropOwnedBy, typedN)
 	case *tree.DropSchema:
-		DropSchema(b, typedN)
+		pf = wrapPF(DropSchema, typedN)
 	case *tree.DropSequence:
-		DropSequence(b, typedN)
+		pf = wrapPF(DropSequence, typedN)
 	case *tree.DropTable:
-		DropTable(b, typedN)
+		pf = wrapPF(DropTable, typedN)
 	case *tree.DropType:
-		DropType(b, typedN)
+		pf = wrapPF(DropType, typedN)
 	case *tree.DropView:
-		DropView(b, typedN)
+		pf = wrapPF(DropView, typedN)
 	case *tree.CommentOnConstraint:
-		CommentOnConstraint(b, typedN)
+		pf = wrapPF(CommentOnConstraint, typedN)
 	case *tree.CommentOnDatabase:
-		CommentOnDatabase(b, typedN)
+		pf = wrapPF(CommentOnDatabase, typedN)
 	case *tree.CommentOnSchema:
-		CommentOnSchema(b, typedN)
+		pf = wrapPF(CommentOnSchema, typedN)
 	case *tree.CommentOnTable:
-		CommentOnTable(b, typedN)
+		pf = wrapPF(CommentOnTable, typedN)
 	case *tree.CommentOnColumn:
-		CommentOnColumn(b, typedN)
+		pf = wrapPF(CommentOnColumn, typedN)
 	case *tree.CommentOnIndex:
-		CommentOnIndex(b, typedN)
+		pf = wrapPF(CommentOnIndex, typedN)
 	case *tree.DropIndex:
-		DropIndex(b, typedN)
+		if activeVersion.IsActive(clusterversion.V23_1) {
+			pf = wrapPF(DropIndex, typedN)
+		}
 	case *tree.DropFunction:
-		DropFunction(b, typedN)
+		if activeVersion.IsActive(clusterversion.V23_1) {
+			pf = wrapPF(DropFunction, typedN)
+		}
 	case *tree.CreateRoutine:
-		CreateFunction(b, typedN)
+		if activeVersion.IsActive(clusterversion.V23_1) {
+			pf = wrapPF(CreateFunction, typedN)
+		}
 	case *tree.CreateSchema:
-		CreateSchema(b, typedN)
+		if offByDefaultCheck(mode) && activeVersion.IsActive(clusterversion.V23_2) {
+			pf = wrapPF(CreateSchema, typedN)
+		}
 	case *tree.CreateSequence:
-		CreateSequence(b, typedN)
-	default:
-		panic(fmt.Sprintf("invalid statement %T", typedN))
+		if offByDefaultCheck(mode) && activeVersion.IsActive(clusterversion.V23_2) {
+			pf = wrapPF(CreateSequence, typedN)
+		}
+	}
+	isSupported = pf != nil
+	return isSupported, func(b BuildCtx) {
+		if !isSupported {
+			panic(scerrors.NotImplementedError(n))
+		}
+		// Check if the feature flag for it is enabled.
+		err := b.CheckFeature(b, tree.GetSchemaFeatureNameFromStmt(n))
+		if err != nil {
+			panic(err)
+		}
+		pf(b)
 	}
 }
 
-// getDeclarativeSchemaChangerModeForStmt returns the mode specific for `n`.
+// GetDeclarativeSchemaChangerModeForStmt returns the mode specific for `n`.
 // It almost always returns value of session variable
 // `use_declarative_schema_changer`, unless `n` is forcefully enabled (or
 // disabled) via cluster setting `sql.schema.force_declarative_statements`, in
 // which case it returns `unsafe` (or `off`).
-func getDeclarativeSchemaChangerModeForStmt(
+func GetDeclarativeSchemaChangerModeForStmt(
 	b BuildCtx, n tree.Statement,
 ) sessiondatapb.NewSchemaChangerMode {
 	ret := b.EvalCtx().SessionData().NewSchemaChangerMode
