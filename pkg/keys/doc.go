@@ -207,6 +207,7 @@ var _ = [...]interface{}{
 	QueueLastProcessedKey, // "qlpt"
 	RangeDescriptorKey,    // "rdsc"
 	TransactionKey,        // "txn-"
+	ReplicatedSharedLocksTransactionLatchingKey, // "repl-shared-locks-"
 
 	//   4. Store local keys: These contain metadata about an individual store.
 	//   They are unreplicated and unaddressable. The typical example is the

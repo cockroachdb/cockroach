@@ -448,6 +448,15 @@ func TransactionKey(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
 	return MakeRangeKey(MustAddr(key), LocalTransactionSuffix, txnID.GetBytes())
 }
 
+// ReplicatedSharedLocksTransactionLatchingKey returns a key, based on the
+// provided key and transaction ID, that all replicated shared locking requests
+// from the specified transaction should use to serialize on latches.
+//
+// The supplied key is expected to the start key of the range.
+func ReplicatedSharedLocksTransactionLatchingKey(key roachpb.RKey, txnID uuid.UUID) roachpb.Key {
+	return MakeRangeKey(key, LocalReplicatedSharedLocksTransactionLatchingKeySuffix, txnID.GetBytes())
+}
+
 // QueueLastProcessedKey returns a range-local key for last processed
 // timestamps for the named queue. These keys represent per-range last
 // processed times.

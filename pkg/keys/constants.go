@@ -156,6 +156,11 @@ var (
 	// LocalTransactionSuffix specifies the key suffix for
 	// transaction records. The additional detail is the transaction id.
 	LocalTransactionSuffix = roachpb.RKey("txn-")
+	// LocalReplicatedSharedLocksTransactionLatchingKeySuffix specifies the key
+	// suffix ("rsl" = replicated shared locks) for all replicated shared lock
+	// attempts per transaction. The details about the transaction is the
+	// transaction id.
+	LocalReplicatedSharedLocksTransactionLatchingKeySuffix = roachpb.RKey("rsl-")
 
 	// 4. Store local keys
 	//

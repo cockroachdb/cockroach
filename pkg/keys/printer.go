@@ -131,6 +131,7 @@ var (
 	}{
 		{name: "RangeDescriptor", suffix: LocalRangeDescriptorSuffix, atEnd: true},
 		{name: "Transaction", suffix: LocalTransactionSuffix, atEnd: false},
+		{name: "ReplicatedSharedLocksTransactionLatch", suffix: LocalReplicatedSharedLocksTransactionLatchingKeySuffix, atEnd: false},
 		{name: "QueueLastProcessed", suffix: LocalQueueLastProcessedSuffix, atEnd: false},
 		{name: "RangeProbe", suffix: LocalRangeProbeSuffix, atEnd: true},
 	}
@@ -482,6 +483,13 @@ func localRangeKeyPrint(buf *redact.StringBuilder, valDirs []encoding.Direction,
 					buf.Printf("%s/%s", roachpb.Key(decodedAddrKey), s.name)
 				}
 				if bytes.Equal(s.suffix, LocalTransactionSuffix) {
+					txnID, err := uuid.FromBytes(key[(begin + len(s.suffix)):])
+					if err != nil {
+						buf.Printf("/%q/err:%v", key, err)
+						return
+					}
+					buf.Printf("/%q", txnID)
+				} else if bytes.Equal(s.suffix, LocalReplicatedSharedLocksTransactionLatchingKeySuffix) {
 					txnID, err := uuid.FromBytes(key[(begin + len(s.suffix)):])
 					if err != nil {
 						buf.Printf("/%q/err:%v", key, err)
