@@ -16,9 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
 
-// AWSMachineType selects a machine type given the desired number of CPUs and
-// memory per CPU ratio. Also returns the architecture of the selected machine type.
-func AWSMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
+// SelectAWSMachineType selects a machine type given the desired number of CPUs
+// and memory per CPU ratio. Also returns the architecture of the selected
+// machine type.
+func SelectAWSMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
 	// TODO(erikgrinaker): These have significantly less RAM than
 	// their GCE counterparts. Consider harmonizing them.
 	family := "c6id" // 2 GB RAM per CPU
@@ -75,9 +76,10 @@ func AWSMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArc
 	return fmt.Sprintf("%s.%s", family, size), selectedArch
 }
 
-// GCEMachineType selects a machine type given the desired number of CPUs and
-// memory per CPU ratio. Also returns the architecture of the selected machine type.
-func GCEMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
+// SelectGCEMachineType selects a machine type given the desired number of CPUs
+// and memory per CPU ratio. Also returns the architecture of the selected
+// machine type.
+func SelectGCEMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
 	// TODO(peter): This is awkward: at or below 16 cpus, use n2-standard so that
 	// the machines have a decent amount of RAM. We could use custom machine
 	// configurations, but the rules for the amount of RAM per CPU need to be
