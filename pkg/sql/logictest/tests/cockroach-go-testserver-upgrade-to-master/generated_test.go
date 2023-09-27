@@ -134,6 +134,13 @@ func TestLogic_mixed_version_role_members_user_ids(
 	runLogicTest(t, "mixed_version_role_members_user_ids")
 }
 
+func TestLogic_mixed_version_schedule_details(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_schedule_details")
+}
+
 func TestLogic_mixed_version_system_privileges_user_id(
 	t *testing.T,
 ) {
