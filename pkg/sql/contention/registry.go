@@ -259,12 +259,12 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) {
 
 // AddContentionEvent adds a new ContentionEvent to the Registry.
 func (r *Registry) AddContentionEvent(event contentionpb.ExtendedContentionEvent) {
+	r.globalLock.Lock()
+	defer r.globalLock.Unlock()
 	if event.ContentionType == contentionpb.ContentionType_LOCK_WAIT {
 		// (xinhaoz) We will need to change the indexMap structs if we want to surface
 		// non lock wait related contention to index contention surfaces.
 		c := event.BlockingEvent
-		r.globalLock.Lock()
-		defer r.globalLock.Unlock()
 		// Remove the tenant ID prefix if there is any.
 		c.Key, _, _ = keys.DecodeTenantPrefix(c.Key)
 		_, rawTableID, rawIndexID, err := keys.DecodeTableIDIndexID(c.Key)
