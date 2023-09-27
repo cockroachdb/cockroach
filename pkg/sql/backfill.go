@@ -79,7 +79,7 @@ const (
 // entries for before we attempt to fill in a single index batch before queueing
 // it up for ingestion and progress reporting in the index backfiller processor.
 var indexBackfillBatchSize = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.index_backfill.batch_size",
 	"the number of rows for which we construct index entries in a single batch",
 	50000,
@@ -89,7 +89,7 @@ var indexBackfillBatchSize = settings.RegisterIntSetting(
 // columnBackfillBatchSize is the maximum number of rows we update at once when
 // adding or removing columns.
 var columnBackfillBatchSize = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.column_backfill.batch_size",
 	"the number of rows updated at a time to add/remove columns",
 	200,
@@ -99,7 +99,7 @@ var columnBackfillBatchSize = settings.RegisterIntSetting(
 // columnBackfillUpdateChunkSizeThresholdBytes is the byte size threshold beyond which
 // an update batch is run at once when adding or removing columns.
 var columnBackfillUpdateChunkSizeThresholdBytes = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.column_backfill.update_chunk_size_threshold_bytes",
 	"the batch size in bytes above which an update is immediately run when adding/removing columns",
 	10<<20,                  /* 10 MiB */

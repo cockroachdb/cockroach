@@ -71,7 +71,7 @@ import (
 // BackupCheckpointInterval is the interval at which backup progress is saved
 // to durable storage.
 var BackupCheckpointInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.backup.checkpoint_interval",
 	"the minimum time between writing progress checkpoints during a backup",
 	time.Minute)

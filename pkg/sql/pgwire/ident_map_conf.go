@@ -26,7 +26,7 @@ const serverIdentityMapSetting = "server.identity_map.configuration"
 
 // ConnIdentityMapConf maps system-identities to database-usernames using the pg_ident.conf format.
 var ConnIdentityMapConf = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	serverIdentityMapSetting,
 	"system-identity to database-username mappings",
 	"",

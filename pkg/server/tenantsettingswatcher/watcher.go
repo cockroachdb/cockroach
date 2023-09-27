@@ -272,7 +272,7 @@ func (w *Watcher) GetAllTenantOverrides(
 //
 // The second argument must be sorted by setting key already.
 //
-// At the time of this writing, this is used for TenantReadOnly
+// At the time of this writing, this is used for SystemVisible
 // settings, so that the values from the system tenant's
 // system.settings table are used when there is no override
 // in .tenant_settings.

@@ -27,7 +27,7 @@ import (
 var registry = make(map[InternalKey]internalSetting)
 
 // tenantReadOnlyKeys contains the keys of settings that have the
-// class TenantReadOnly. This is used to initialize defaults in the
+// class SystemVisible. This is used to initialize defaults in the
 // tenant settings watcher.
 var tenantReadOnlyKeys []InternalKey
 
@@ -57,12 +57,12 @@ func TestingSaveRegistry() func() {
 	for k, v := range aliasRegistry {
 		origAliases[k] = v
 	}
-	var origTenantReadOnlyKeys = make([]InternalKey, len(tenantReadOnlyKeys))
-	copy(origTenantReadOnlyKeys, tenantReadOnlyKeys)
+	var origSystemVisibleKeys = make([]InternalKey, len(tenantReadOnlyKeys))
+	copy(origSystemVisibleKeys, tenantReadOnlyKeys)
 	return func() {
 		registry = origRegistry
 		aliasRegistry = origAliases
-		tenantReadOnlyKeys = origTenantReadOnlyKeys
+		tenantReadOnlyKeys = origSystemVisibleKeys
 	}
 }
 
@@ -285,7 +285,7 @@ func register(class Class, key InternalKey, desc string, s internalSetting) {
 	s.init(class, key, desc, slot)
 	registry[key] = s
 	slotTable[slot] = s
-	if class == TenantReadOnly {
+	if class == SystemVisible {
 		tenantReadOnlyKeys = append(tenantReadOnlyKeys, key)
 	}
 }
@@ -314,10 +314,10 @@ func Keys(forSystemTenant bool) (res []InternalKey) {
 	return res
 }
 
-// TenantReadOnlyKeys returns a array with all the known keys that
-// have the class TenantReadOnly. It might not be sorted.
+// SystemVisibleKeys returns a array with all the known keys that
+// have the class SystemVisible. It might not be sorted.
 // The caller must refrain from modifying the return value.
-func TenantReadOnlyKeys() []InternalKey {
+func SystemVisibleKeys() []InternalKey {
 	return tenantReadOnlyKeys
 }
 

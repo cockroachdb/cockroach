@@ -102,7 +102,7 @@ const genEnabledSettingName = "sql.schema.test_object_generator.enabled"
 // force disable the functionality from an unprivileged secondary
 // tenant.
 var genEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	genEnabledSettingName,
 	"enable the generate_test_objects function",
 	true,
@@ -111,7 +111,7 @@ var genEnabled = settings.RegisterBoolSetting(
 const genEnabledForNonAdminsSettingName = "sql.schema.test_object_generator.non_admin.enabled"
 
 var genEnabledForNonAdmins = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	genEnabledForNonAdminsSettingName,
 	"allow non-admin users to use the generate_test_objects function",
 	false,

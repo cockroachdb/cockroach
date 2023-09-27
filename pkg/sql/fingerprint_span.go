@@ -34,7 +34,7 @@ import (
 )
 
 var maxFingerprintNumWorkers = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.fingerprint.max_span_parallelism",
 	"the maximum number of workers used to issue fingerprint ExportRequests",
 	8,

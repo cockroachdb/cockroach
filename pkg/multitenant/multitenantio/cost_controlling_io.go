@@ -25,7 +25,7 @@ import (
 // the common case, but without allowing an unbounded number of bytes to be
 // read/written before accounting for them.
 var DefaultBytesAllowedBeforeAccounting = settings.RegisterIntSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"tenant_external_io_default_bytes_allowed_before_accounting",
 	"controls how many bytes will be read/written before blocking for RUs when writing to external storage",
 	16<<20, // 16 MB

@@ -34,19 +34,19 @@ import (
 
 // TODO (msbutler): tune these
 var rollbackBatchSize = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.import.predicate_delete_range_batch_size",
 	"the number of ranges to include in a single Predicate Based DeleteRange request",
 	10)
 
 var predicateDeleteRangeNumWorkers = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.import.predicate_delete_range_parallelism",
 	"the number of workers used to issue Predicate Based DeleteRange request",
 	4)
 
 var maxRevertSpanNumWorkers = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.revert.max_span_parallelism",
 	"the maximum number of workers used to issue RevertRange request",
 	8,

@@ -86,7 +86,7 @@ import (
 const restoreStatsInsertBatchSize = 10
 
 var useSimpleImportSpans = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.restore.use_simple_import_spans",
 	"if set to true, restore will generate its import spans using the makeSimpleImportSpans algorithm",
 	false,
@@ -94,7 +94,7 @@ var useSimpleImportSpans = settings.RegisterBoolSetting(
 )
 
 var restoreStatsInsertionConcurrency = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.restore.insert_stats_workers",
 	"number of concurrent workers that will restore backed up table statistics",
 	5,

@@ -59,7 +59,7 @@ var backupPathRE = regexp.MustCompile("^/?[^\\/]+/[^\\/]+/[^\\/]+/" + backupbase
 // specified subdirectory if no backup already exists at that subdirectory. As
 // of 22.1, this feature is default disabled, and will be totally disabled by 22.2.
 var featureFullBackupUserSubdir = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.backup.deprecated_full_backup_with_subdir.enabled",
 	"when true, a backup command with a user specified subdirectory will create a full backup at"+
 		" the subdirectory if no backup already exists at that subdirectory",

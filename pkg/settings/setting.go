@@ -117,45 +117,106 @@ type NonMaskedSetting interface {
 	ValueOrigin(ctx context.Context, sv *Values) ValueOrigin
 }
 
-// Class describes the scope of a setting in multi-tenant scenarios. While all
-// settings can be used on the system tenant, the classes restrict use on
-// non-system tenants.
-//
-// Settings can only be registered via the Class, e.g.
-// SystemOnly.RegisterIntSetting().
+// Class describes the scope of a setting under cluster
+// virtualization.
 //
 // Guidelines for choosing a class:
 //
-//   - Make sure to read the descriptions below carefully to understand the
-//     differences in semantics.
+//   - Make sure to read the descriptions below carefully to
+//     understand the differences in semantics.
 //
-//   - If the setting controls a user-visible aspect of SQL, it should be a
-//     TenantWritable setting.
+//   - Rules of thumb:
 //
-//   - Control settings relevant to tenant-specific internal implementation
-//     should be TenantReadOnly.
+//     1. if an end-user should be able to modify the setting in
+//     CockroachCloud Serverless, AND different end-users should be
+//     able to use different values, the setting should have class
+//     ApplicationLevel.
 //
-//   - When in doubt, the first choice to consider should be TenantReadOnly.
+//     2. if a setting should only be controlled by SREs in
+//     CockroachCloud Serverless, OR a single value must apply to
+//     multiple tenants (virtual clusters) simultaneously, the setting
+//     must *not* use class ApplicationLevel.
 //
-//   - SystemOnly should be used with caution: even internal tenant code is
-//     disallowed from using these settings at all.
+//     3. if and only if a setting relevant to the KV/storage layer
+//     and whose value is shared across all virtual cluster is ever
+//     accessed by code in the application layer (SQL execution or
+//     HTTP handlers), use SystemVisible.
+//
+//     4. in other cases, use SystemOnly.
 type Class int8
 
 const (
-	// SystemOnly settings are associated with single-tenant clusters and host
-	// clusters. Settings with this class do not exist on non-system tenants and
-	// can only be used by the system tenant.
+	// SystemOnly settings are specific to the KV/storage layer and
+	// cannot be accessed from application layer code (in particular not
+	// from SQL layer nor HTTP handlers).
+	//
+	// As a rule of thumb, use this class if:
+	//
+	//   - the setting may be accessed from the shared KV/storage layer;
+	//
+	//   - AND, the setting should only be controllable by SREs (not
+	//     end-users) in CockroachCloud Serverless, AND a single value
+	//     must apply to all virtual clusters simultaneously;
+	//
+	//     (If this part of the condition does not hold, consider
+	//     ApplicationLevel instead.)
+	//
+	//   - AND, its value is never needed in the application layer (i.e.
+	//     it is not read from SQL code, HTTP handlers or other code
+	//     that would run in SQL pods in CC Serverless).
+	//
+	//     (If this part of the condition does not hold, consider
+	//     SystemVisible instead.)
 	SystemOnly Class = iota
 
-	// TenantReadOnly settings are visible to non-system tenants but cannot be
-	// modified by the tenant. Values for these settings are set from the system
-	// tenant and propagated from the host cluster.
-	TenantReadOnly
+	// SystemVisible settings are specific to the KV/storage layer and
+	// are also visible to virtual clusters.
+	//
+	// As a rule of thumb, use this class if:
+	//
+	//   - the setting may be accessed from the shared KV/storage layer;
+	//
+	//   - AND the setting should only be controllable by SREs (not
+	//     end-users) in CockroachCloud Serverless, AND a single value
+	//     must apply to all virtual clusters simultaneously;
+	//
+	//     (If this part of the condition does not hold, consider
+	//     ApplicationLevel instead.)
+	//
+	//   - AND, its value is sometimes needed in the application layer
+	//     (i.e. it may be read from SQL code, HTTP handlers or other
+	//     code that could run in SQL pods in CC Serverless).
+	//
+	//     (If this part of the condition does not hold, consider
+	//     SystemOnly instead.)
+	SystemVisible
 
-	// TenantWritable settings are visible to and can be modified by non-system
-	// tenants. The system can still override these settings; the overrides are
-	// propagated from the host cluster.
-	TenantWritable
+	// ApplicationLevel settings are readable and can optionally be
+	// modified by virtual clusters.
+	//
+	// As a rule of thumb, use this class if:
+	//
+	//   - the setting is never accessed by the shared KV/storage layer;
+	//
+	//   - AND, any of the following holds:
+	//
+	//     - end-users should legitimately be able to modify
+	//       the setting in CockroachCloud Serverless;
+	//
+	//       (If this part of the condition does not hold, but the other
+	//       part of the condition below does hold, consider still using
+	//       ApplicationLevel and force an override using ALTER VIRTUAL
+	//       CLUSTER SET CLUSTER SETTING. This makes the
+	//       ApplicationLevel setting effectively read-only from the
+	//       virtual cluster's perspective, because system overrides
+	//       cannot be modified by the virtual cluster.)
+	//
+	//     - OR, different virtual clusters should be able to
+	//       use different values for the setting.
+	//
+	//       (If this part of the condition does not hold, consider
+	//       SystemOnly or SystemVisible instead.)
+	ApplicationLevel
 )
 
 // Visibility describes how a user should feel confident that they can customize

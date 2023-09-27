@@ -39,7 +39,7 @@ import (
 // AutomaticStatisticsClusterMode controls the cluster setting for enabling
 // automatic table statistics collection.
 var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	catpb.AutoStatsEnabledSettingName,
 	"automatic statistics collection mode",
 	true,
@@ -49,7 +49,7 @@ var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
 // statistics usage by the optimizer for planning queries involving system
 // tables.
 var UseStatisticsOnSystemTables = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	catpb.UseStatsOnSystemTables,
 	"when true, enables use of statistics on system tables by the query optimizer",
 	true,
@@ -60,7 +60,7 @@ var UseStatisticsOnSystemTables = settings.RegisterBoolSetting(
 // via a true setting of sql.stats.automatic_collection.enabled for this flag to
 // have any effect.
 var AutomaticStatisticsOnSystemTables = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	catpb.AutoStatsOnSystemTables,
 	"when true, enables automatic collection of statistics on system tables",
 	true,
@@ -69,7 +69,7 @@ var AutomaticStatisticsOnSystemTables = settings.RegisterBoolSetting(
 // MultiColumnStatisticsClusterMode controls the cluster setting for enabling
 // automatic collection of multi-column statistics.
 var MultiColumnStatisticsClusterMode = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.multi_column_collection.enabled",
 	"multi-column statistics collection mode",
 	true,
@@ -80,7 +80,7 @@ var MultiColumnStatisticsClusterMode = settings.RegisterBoolSetting(
 // statistics (in high load scenarios). This value can be tuned to trade off
 // the runtime vs performance impact of automatic stats.
 var AutomaticStatisticsMaxIdleTime = settings.RegisterFloatSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.automatic_collection.max_fraction_idle",
 	"maximum fraction of time that automatic statistics sampler processors are idle",
 	0.9,
@@ -92,7 +92,7 @@ var AutomaticStatisticsMaxIdleTime = settings.RegisterFloatSetting(
 // statistics on that table are refreshed, in addition to the constant value
 // AutomaticStatisticsMinStaleRows.
 var AutomaticStatisticsFractionStaleRows = settings.RegisterFloatSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	catpb.AutoStatsFractionStaleSettingName,
 	"target fraction of stale rows per table that will trigger a statistics refresh",
 	0.2,
@@ -104,7 +104,7 @@ var AutomaticStatisticsFractionStaleRows = settings.RegisterFloatSetting(
 // number of rows that should be updated before a table is refreshed, in
 // addition to the fraction AutomaticStatisticsFractionStaleRows.
 var AutomaticStatisticsMinStaleRows = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	catpb.AutoStatsMinStaleSettingName,
 	"target minimum number of stale rows per table that will trigger a statistics refresh",
 	500,
@@ -115,7 +115,7 @@ var AutomaticStatisticsMinStaleRows = settings.RegisterIntSetting(
 // statsGarbageCollectionInterval controls the interval between running an
 // internal query to delete stats for dropped tables.
 var statsGarbageCollectionInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.garbage_collection_interval",
 	"interval between deleting stats for dropped tables, set to 0 to disable",
 	time.Hour,
@@ -127,7 +127,7 @@ var statsGarbageCollectionInterval = settings.RegisterDurationSetting(
 // beyond the limit will need to wait out statsGarbageCollectionInterval until
 // the next "sweep").
 var statsGarbageCollectionLimit = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.garbage_collection_limit",
 	"limit on the number of dropped tables that stats are deleted for as part of a single statement",
 	1000,

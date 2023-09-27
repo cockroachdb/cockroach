@@ -32,7 +32,7 @@ import (
 )
 
 var enterpriseLicense = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"enterprise.license",
 	"the encoded cluster license",
 	"",

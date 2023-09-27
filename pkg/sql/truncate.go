@@ -147,7 +147,7 @@ func (t *truncateNode) Close(context.Context)        {}
 // split points that we re-create on a table after a truncate. It's scaled by
 // the number of nodes in the cluster.
 var PreservedSplitCountMultiple = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.truncate.preserved_split_count_multiple",
 	"set to non-zero to cause TRUNCATE to preserve range splits from the "+
 		"table's indexes. The multiple given will be multiplied with the number of "+

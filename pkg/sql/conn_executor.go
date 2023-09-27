@@ -92,7 +92,7 @@ import (
 )
 
 var maxNumNonAdminConnections = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.max_connections_per_gateway",
 	"the maximum number of SQL connections per gateway allowed at a given time "+
 		"(note: this will only limit future connection attempts and will not affect already established connections). "+
@@ -105,7 +105,7 @@ var maxNumNonAdminConnections = settings.RegisterIntSetting(
 // This setting may be extended one day to include an arbitrary list of users to exclude from connection limiting.
 // This setting may be removed one day.
 var maxNumNonRootConnections = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.cockroach_cloud.max_client_connections_per_gateway",
 	"this setting is intended to be used by Cockroach Cloud for limiting connections to serverless clusters. "+
 		"The maximum number of SQL connections per gateway allowed at a given time "+
@@ -121,7 +121,7 @@ var maxNumNonRootConnections = settings.RegisterIntSetting(
 // connections to serverless clusters.
 // This setting may be removed one day.
 var maxNumNonRootConnectionsReason = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.cockroach_cloud.max_client_connections_per_gateway_reason",
 	"a reason to provide in the error message for connections that are denied due to "+
 		"server.cockroach_cloud.max_client_connections_per_gateway",
@@ -3413,7 +3413,7 @@ func (ex *connExecutor) setTransactionModes(
 }
 
 var allowSnapshotIsolation = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.txn.snapshot_isolation_syntax.enabled",
 	"set to true to allow transactions to use the SNAPSHOT isolation level. At "+
 		"the time of writing, this setting is intended only for usage by "+
@@ -3422,7 +3422,7 @@ var allowSnapshotIsolation = settings.RegisterBoolSetting(
 )
 
 var allowReadCommittedIsolation = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.txn.read_committed_syntax.enabled",
 	"set to true to allow transactions to use the READ COMMITTED isolation "+
 		"level if specified by BEGIN/SET commands",

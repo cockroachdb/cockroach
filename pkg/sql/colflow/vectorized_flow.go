@@ -95,7 +95,7 @@ var errAcquireTimeout = pgerror.New(
 )
 
 var fdCountingSemaphoreMaxRetries = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.distsql.acquire_vec_fds.max_retries",
 	"determines the number of retries performed during the acquisition of "+
 		"file descriptors needed for disk-spilling operations, set to 0 for "+

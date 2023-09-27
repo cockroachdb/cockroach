@@ -89,7 +89,7 @@ type storeMetrics interface {
 
 // ChildMetricsEnabled enables exporting of additional prometheus time series with extra labels
 var ChildMetricsEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable, "server.child_metrics.enabled",
+	settings.ApplicationLevel, "server.child_metrics.enabled",
 	"enables the exporting of child metrics, additional prometheus time series with extra labels",
 	false,
 	settings.WithPublic)

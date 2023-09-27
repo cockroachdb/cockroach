@@ -55,7 +55,7 @@ func SetSmallMaxGCIntervalForTest() func() {
 }
 
 var idleWaitDuration = settings.RegisterDurationSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"sql.gc_job.idle_wait_duration",
 	"after this duration of waiting for an update, the gc job will mark itself idle",
 	time.Second,
@@ -360,7 +360,7 @@ func waitForGC(
 // EmptySpanPollInterval is the interval at which the GC job will poll the
 // spans to determine whether the data have been garbage collected.
 var EmptySpanPollInterval = settings.RegisterDurationSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"sql.gc_job.wait_for_gc.interval",
 	"interval at which the GC job should poll to see if the deleted data has been GC'd",
 	5*time.Minute,

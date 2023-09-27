@@ -29,7 +29,7 @@ func TestClusterVersionOnChange(t *testing.T) {
 	cvs := &clusterVersionSetting{}
 	cvs.VersionSetting = settings.MakeVersionSetting(cvs)
 	settings.RegisterVersionSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"dummy version key",
 		"test description",
 		&cvs.VersionSetting)

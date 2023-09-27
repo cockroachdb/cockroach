@@ -259,12 +259,12 @@ type sqlServerOptionalKVArgs struct {
 	// the equivalent of /inspectz but through SQL.
 	inspectzServer inspectzpb.InspectzServer
 
-	// notifyChangeToTenantReadOnlySettings is called by the settings
+	// notifyChangeToSystemVisibleSettings is called by the settings
 	// watcher when one or more TenandReadOnly setting is updated via
 	// SET CLUSTER SETTING (i.e. updated in system.settings).
 	//
 	// The second argument must be sorted by setting key already.
-	notifyChangeToTenantReadOnlySettings func(context.Context, []kvpb.TenantSetting)
+	notifyChangeToSystemVisibleSettings func(context.Context, []kvpb.TenantSetting)
 }
 
 // sqlServerOptionalTenantArgs are the arguments supplied to newSQLServer which
@@ -434,7 +434,7 @@ type monitorAndMetricsOptions struct {
 }
 
 var vmoduleSetting = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.debug.default_vmodule",
 	"vmodule string (ignored by any server with an explicit one provided at start)",
 	"",
@@ -577,7 +577,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	var settingsWatcher *settingswatcher.SettingsWatcher
 	if codec.ForSystemTenant() {
 		settingsWatcher = settingswatcher.NewWithNotifier(ctx,
-			cfg.clock, codec, cfg.Settings, cfg.rangeFeedFactory, cfg.stopper, cfg.notifyChangeToTenantReadOnlySettings, cfg.settingsStorage,
+			cfg.clock, codec, cfg.Settings, cfg.rangeFeedFactory, cfg.stopper, cfg.notifyChangeToSystemVisibleSettings, cfg.settingsStorage,
 		)
 	} else {
 		// Create the tenant settings watcher, using the tenant connector as the

@@ -20,7 +20,7 @@ import (
 // export file is written out. Since it's difficult to calculate the number of
 // bytes that will be created, we use this multiplier for estimation.
 var eventMemoryMultipier = settings.RegisterFloatSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"export.event_memory_multiplier",
 	"the amount of memory required to export a datum is multiplied by this factor",
 	3,

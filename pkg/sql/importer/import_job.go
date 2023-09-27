@@ -99,7 +99,7 @@ func (r *importResumer) DumpTraceAfterRun() bool {
 var _ jobs.Resumer = &importResumer{}
 
 var processorsPerNode = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.import.processors_per_node",
 	"number of input processors to run on each sql instance", 1,
 	settings.PositiveInt,

@@ -56,7 +56,7 @@ const minTimeUntilNodeDead = gossip.StoresInterval + 15*time.Second
 
 // TimeUntilNodeDead wraps "server.time_until_store_dead".
 var TimeUntilNodeDead = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	timeUntilNodeDeadSettingName,
 	"the time after which if there is no new gossiped information about a store, it is considered dead",
 	5*time.Minute,

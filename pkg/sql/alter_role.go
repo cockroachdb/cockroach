@@ -71,7 +71,7 @@ const (
 )
 
 var changeOwnPasswordEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.auth.change_own_password.enabled",
 	"controls whether a user is allowed to change their own password, even if they have no other privileges",
 	false,
