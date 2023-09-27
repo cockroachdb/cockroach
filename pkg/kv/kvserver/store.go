@@ -1214,12 +1214,6 @@ type StoreConfig struct {
 	KVMemoryMonitor        *mon.BytesMonitor
 	RangefeedBudgetFactory *rangefeed.BudgetFactory
 
-	// SpanConfigsDisabled determines whether we're able to use the span configs
-	// infrastructure or not.
-	//
-	// TODO(baptist): Don't add any future uses of this. Will be removed soon.
-	SpanConfigsDisabled bool
-
 	// Used to subscribe to span configuration changes, keeping up-to-date a
 	// data structure useful for retrieving span configs.
 	SpanConfigSubscriber spanconfig.KVSubscriber
@@ -2222,7 +2216,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	// Some tests don't set the SpanConfigSubscriber.
 	// TODO(baptist): Fix all the tests that set a null SpanConfigSubscriber.
-	if !s.cfg.SpanConfigsDisabled {
+	if s.cfg.SpanConfigSubscriber != nil {
 		s.cfg.SpanConfigSubscriber.Subscribe(func(ctx context.Context, update roachpb.Span) {
 			s.onSpanConfigUpdate(ctx, update)
 		})
@@ -3731,8 +3725,8 @@ func (s *Store) PurgeOutdatedReplicas(ctx context.Context, version roachpb.Versi
 // WaitForSpanConfigSubscription waits until the store is wholly subscribed to
 // the global span configurations state.
 func (s *Store) WaitForSpanConfigSubscription(ctx context.Context) error {
-	if s.cfg.SpanConfigsDisabled {
-		return nil // nothing to do here
+	if s.cfg.SpanConfigSubscriber == nil {
+		return nil
 	}
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		if !s.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty() {
