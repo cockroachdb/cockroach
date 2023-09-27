@@ -327,9 +327,7 @@ func createTenantAdminRole(t test.Test, tenantName string, tenantSQL *sqlutils.S
 const appTenantName = "app"
 
 // createInMemoryTenant runs through the necessary steps to create an in-memory
-// tenant without resource limits and full dbconsole viewing privileges. As a
-// convenience, it also returns a connection to the tenant (on a random node in
-// the cluster).
+// tenant without resource limits and full dbconsole viewing privileges.
 func createInMemoryTenant(
 	ctx context.Context,
 	t test.Test,
@@ -337,8 +335,26 @@ func createInMemoryTenant(
 	tenantName string,
 	nodes option.NodeListOption,
 	secure bool,
+) {
+	db := createInMemoryTenantWithConn(ctx, t, c, tenantName, nodes, secure)
+	db.Close()
+}
+
+// createInMemoryTenantWithConn runs through the necessary steps to create an
+// in-memory tenant without resource limits and full dbconsole viewing
+// privileges. As a convenience, it also returns a connection to the tenant (on
+// a random node in the cluster).
+func createInMemoryTenantWithConn(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	tenantName string,
+	nodes option.NodeListOption,
+	secure bool,
 ) *gosql.DB {
-	sysSQL := sqlutils.MakeSQLRunner(c.Conn(ctx, t.L(), nodes.RandNode()[0]))
+	sysDB := c.Conn(ctx, t.L(), nodes.RandNode()[0])
+	defer sysDB.Close()
+	sysSQL := sqlutils.MakeSQLRunner(sysDB)
 	sysSQL.Exec(t, "CREATE TENANT $1", tenantName)
 
 	tenantConn := startInMemoryTenant(ctx, t, c, tenantName, nodes)
@@ -360,7 +376,9 @@ func startInMemoryTenant(
 	tenantName string,
 	nodes option.NodeListOption,
 ) *gosql.DB {
-	sysSQL := sqlutils.MakeSQLRunner(c.Conn(ctx, t.L(), nodes.RandNode()[0]))
+	sysDB := c.Conn(ctx, t.L(), nodes.RandNode()[0])
+	defer sysDB.Close()
+	sysSQL := sqlutils.MakeSQLRunner(sysDB)
 	sysSQL.Exec(t, "ALTER TENANT $1 START SERVICE SHARED", tenantName)
 	sysSQL.Exec(t, `ALTER TENANT $1 GRANT CAPABILITY can_view_node_info=true, can_admin_split=true,can_view_tsdb_metrics=true`, tenantName)
 	sysSQL.Exec(t, `ALTER TENANT $1 SET CLUSTER SETTING sql.split_at.allow_for_secondary_tenant.enabled=true`, tenantName)
@@ -384,6 +402,7 @@ func startInMemoryTenant(
 			return err
 		}
 		if err = tenantConn.Ping(); err != nil {
+			tenantConn.Close()
 			return err
 		}
 		return nil

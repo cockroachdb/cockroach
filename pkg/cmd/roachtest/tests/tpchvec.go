@@ -601,7 +601,7 @@ func runTPCHVec(
 		if _, err := singleTenantConn.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
 			t.Fatal(err)
 		}
-		conn = createInMemoryTenant(ctx, t, c, appTenantName, c.All(), false /* secure */)
+		conn = createInMemoryTenantWithConn(ctx, t, c, appTenantName, c.All(), false /* secure */)
 	} else {
 		conn = c.Conn(ctx, t.L(), 1)
 		disableMergeQueue = true
