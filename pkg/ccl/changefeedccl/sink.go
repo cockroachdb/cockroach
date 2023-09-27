@@ -232,7 +232,7 @@ func getSink(
 				nullIsAccounted = knobs.NullSinkIsExternalIOAccounted
 			}
 			return makeNullSink(sinkURL{URL: u}, metricsBuilder(nullIsAccounted))
-		case u.Scheme == changefeedbase.SinkSchemeKafka:
+		case isKafkaSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.KafkaValidOptions, func() (Sink, error) {
 				return makeKafkaSink(ctx, sinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(), serverCfg.Settings, metricsBuilder)
 			})
