@@ -545,6 +545,12 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				}
 				panic(err)
 			}
+			// TODO(drewk): this should check REFCURSOR.
+			if !source.(*scopeColumn).typ.Equivalent(types.String) {
+				panic(pgerror.Newf(pgcode.DatatypeMismatch,
+					"variable \"%s\" must be of type cursor or refcursor", t.CurVar,
+				))
+			}
 			// Initialize the routine with the information needed to pipe the first
 			// body statement into a cursor.
 			query := b.resolveOpenQuery(t)
@@ -564,7 +570,16 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			}
 			b.appendBodyStmt(&openCon, openScope)
 			b.appendPlpgSQLStmts(&openCon, stmts[i+1:])
-			return b.callContinuation(&openCon, s)
+
+			// Build a statement to generate a unique name for the cursor if one
+			// was not supplied. Add this to its own volatile routine to ensure that
+			// the name generation isn't reordered with other operations. Use the
+			// resulting projected column as input to the OPEN continuation.
+			nameCon := b.makeContinuation("_gen_cursor_name")
+			nameCon.def.Volatility = volatility.Volatile
+			nameScope := b.buildCursorNameGen(&nameCon, t.CurVar)
+			b.appendBodyStmt(&nameCon, b.callContinuation(&openCon, nameScope))
+			return b.callContinuation(&nameCon, s)
 
 		default:
 			panic(unimplemented.New(
@@ -613,6 +628,44 @@ func (b *plpgsqlBuilder) resolveOpenQuery(open *ast.Open) tree.Statement {
 		))
 	}
 	return stmt
+}
+
+// buildCursorNameGen builds a statement that generates a unique name for the
+// cursor if the variable containing the name is unset. The unique name
+// generation is implemented by the crdb_internal.plpgsql_gen_cursor_name
+// builtin function.
+func (b *plpgsqlBuilder) buildCursorNameGen(nameCon *continuation, nameVar ast.Variable) *scope {
+	_, source, _, _ := nameCon.s.FindSourceProvidingColumn(b.ob.ctx, nameVar)
+	const nameFnName = "crdb_internal.plpgsql_gen_cursor_name"
+	props, overloads := builtinsregistry.GetBuiltinProperties(nameFnName)
+	if len(overloads) != 1 {
+		panic(errors.AssertionFailedf("expected one overload for %s", nameFnName))
+	}
+	nameCall := b.ob.factory.ConstructFunction(
+		memo.ScalarListExpr{b.ob.factory.ConstructVariable(source.(*scopeColumn).id)},
+		&memo.FunctionPrivate{
+			Name:       nameFnName,
+			Typ:        types.String,
+			Properties: props,
+			Overload:   &overloads[0],
+		},
+	)
+	// Build an expression that calls the builtin function if the name is unset.
+	scalar := b.ob.factory.ConstructCase(memo.TrueSingleton,
+		memo.ScalarListExpr{
+			b.ob.factory.ConstructWhen(
+				b.ob.factory.ConstructIs(
+					b.ob.factory.ConstructVariable(source.(*scopeColumn).id), memo.NullSingleton,
+				),
+				nameCall,
+			),
+		},
+		b.ob.factory.ConstructVariable(source.(*scopeColumn).id),
+	)
+	nameScope := nameCon.s.push()
+	b.ob.synthesizeColumn(nameScope, scopeColName(nameVar), types.String, nil /* expr */, scalar)
+	b.ob.constructProjectForScope(nameCon.s, nameScope)
+	return nameScope
 }
 
 // addPLpgSQLAssign adds a PL/pgSQL assignment to the current scope as a

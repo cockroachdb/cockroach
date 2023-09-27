@@ -138,25 +138,6 @@ FETCH FORWARD 3 FROM foo;
 ----
 1
 
-# Cursor with empty-string name.
-statement ok
-ABORT;
-CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
-  DECLARE
-    curs STRING := '';
-  BEGIN
-    OPEN curs FOR SELECT 1;
-    RETURN 0;
-  END
-$$ LANGUAGE PLpgSQL;
-BEGIN;
-SELECT f();
-
-query I
-FETCH FORWARD 3 FROM "";
-----
-1
-
 # Multiple cursors.
 statement ok
 ABORT;
@@ -232,14 +213,28 @@ SELECT * FROM xy;
 1  2
 3  4
 
+# The empty string conflicts with the unnamed portal, which always exists.
 statement ok
 ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := '';
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+statement error pgcode 42P03 pq: cursor \"\" already in use
+SELECT f();
 
 # It is possible to use the OPEN statement in an implicit transaction, but the
 # cursor is closed at the end of the transaction when the statement execution
 # finishes. So, until FETCH is implemented, we can't actually read from the
 # cursor.
 statement ok
+ABORT;
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
     curs STRING := 'foo';
@@ -306,23 +301,6 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
     RETURN 0;
   END
 $$ LANGUAGE PLpgSQL;
-
-statement ok
-CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
-  DECLARE
-    curs STRING;
-  BEGIN
-    OPEN curs FOR SELECT 1;
-    RETURN 0;
-  END
-$$ LANGUAGE PLpgSQL;
-BEGIN;
-
-statement error pgcode 0A000 pq: unimplemented: opening an unnamed cursor is not yet supported
-SELECT f();
-
-statement ok
-ABORT;
 
 statement error pgcode 0A000 pq: unimplemented: opening a cursor in a routine with an exception block is not yet supported
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
@@ -636,23 +614,6 @@ SELECT count(*) FROM pg_cursors;
 ----
 0
 
-# It is currently necessary to assign the cursor a name, since one is not
-# automatically generated.
-statement ok
-ABORT;
-CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
-  DECLARE
-    curs CURSOR FOR SELECT 1;
-  BEGIN
-    OPEN curs;
-    RETURN 0;
-  END
-$$ LANGUAGE PLpgSQL;
-BEGIN;
-
-statement error pgcode 0A000 pq: unimplemented: opening an unnamed cursor is not yet supported
-SELECT f();
-
 statement ok
 ABORT;
 
@@ -691,3 +652,210 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
     RETURN 0;
   END
 $$ LANGUAGE PLpgSQL;
+
+statement ok
+DELETE FROM xy WHERE x <> 1 AND x <> 3;
+
+# Testing unnamed cursors.
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS STRING AS $$
+  DECLARE
+    curs STRING;
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    RETURN curs;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+BEGIN;
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+
+query T
+SELECT f();
+----
+<unnamed portal 1>
+
+query I
+FETCH FORWARD 3 FROM "<unnamed portal 1>";
+----
+1
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+<unnamed portal 1>
+
+query T
+SELECT f();
+----
+<unnamed portal 2>
+
+query I
+FETCH FORWARD 3 FROM "<unnamed portal 2>";
+----
+1
+
+query T
+SELECT f();
+----
+<unnamed portal 3>
+
+query I
+FETCH FORWARD 3 FROM "<unnamed portal 3>";
+----
+1
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+<unnamed portal 1>
+<unnamed portal 2>
+<unnamed portal 3>
+
+# The generated name does not "fill in gaps".
+statement ok
+CLOSE "<unnamed portal 2>";
+CLOSE "<unnamed portal 1>";
+
+query T
+SELECT f();
+----
+<unnamed portal 4>
+
+query T
+SELECT f();
+----
+<unnamed portal 5>
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+<unnamed portal 4>
+<unnamed portal 5>
+<unnamed portal 3>
+
+statement ok
+ABORT;
+BEGIN;
+
+query T
+SELECT f();
+----
+<unnamed portal 6>
+
+# The counter for the generated name keeps incrementing as long as the session
+# is open.
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+<unnamed portal 6>
+
+# The generated name will not conflict with manually created cursors.
+statement ok
+DECLARE "<unnamed portal 7>" CURSOR FOR SELECT 1;
+DECLARE "<unnamed portal 8>" CURSOR FOR SELECT 1;
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+<unnamed portal 7>
+<unnamed portal 8>
+<unnamed portal 6>
+
+query T
+SELECT f();
+----
+<unnamed portal 9>
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+<unnamed portal 6>
+<unnamed portal 7>
+<unnamed portal 8>
+<unnamed portal 9>
+
+# Do not generate a new name if one was supplied.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS STRING AS $$
+  DECLARE
+    curs STRING := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    RETURN curs;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+
+query T
+SELECT f();
+----
+foo
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+foo
+
+# The unnamed portal counter shouldn't have incremented for the named cursor,
+# since no name was generated.
+statement ok
+CREATE OR REPLACE FUNCTION f_unnamed() RETURNS STRING AS $$
+  DECLARE
+    curs STRING;
+  BEGIN
+    OPEN curs FOR SELECT 2;
+    RETURN curs;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f_unnamed();
+----
+<unnamed portal 10>
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+<unnamed portal 10>
+foo
+
+query I
+FETCH FORWARD 3 FROM "<unnamed portal 10>";
+----
+2
+
+# A bound, unnamed cursor.
+statement ok
+ABORT;
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs CURSOR FOR SELECT 100;
+  BEGIN
+    OPEN curs;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+statement ok
+SELECT f();
+
+query I
+FETCH FORWARD 3 FROM "<unnamed portal 11>";
+----
+100
+
+statement ok
+ABORT;
