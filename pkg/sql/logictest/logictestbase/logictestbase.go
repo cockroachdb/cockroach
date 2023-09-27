@@ -324,7 +324,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		// Have to disable the default test tenant here as there are test run in
 		// this mode which try to modify zone configurations and we're more
 		// restrictive in the way we allow zone configs to be modified by
-		// secondary tenants. See #75569 for more info.
+		// secondary tenants. See #100787 for more info.
 		//
 		// TODO(#76378): We should review this choice. Zone configs have
 		// been supported for secondary tenants since v22.2.
