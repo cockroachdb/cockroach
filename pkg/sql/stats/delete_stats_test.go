@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -671,6 +672,8 @@ func TestStatsAreDeletedForDroppedTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t) // slow test
+
 	var params base.TestServerArgs
 	params.ScanMaxIdleTime = time.Millisecond // speed up MVCC GC queue scans
 	params.DefaultTestTenant = base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109380)
@@ -688,7 +691,7 @@ func TestStatsAreDeletedForDroppedTables(t *testing.T) {
 	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '1s';")
 
 	if s.StartedDefaultTestTenant() {
-		systemDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true")
+		systemDB.Exec(t, "SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true")
 		// Block until we see that zone configs are enabled.
 		testutils.SucceedsSoon(t, func() error {
 			var enabled bool
