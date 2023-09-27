@@ -34,7 +34,7 @@ import (
 // requests in work queues as part of this tick). Might be worth checking for
 // grantees more frequently independent of this sample period.
 var samplePeriod = settings.RegisterDurationSetting(
-	settings.TenantWritable, // used in virtual clusters
+	settings.ApplicationLevel, // used in virtual clusters
 	"scheduler_latency.sample_period",
 	"controls the duration between consecutive scheduler latency samples",
 	100*time.Millisecond,
@@ -47,7 +47,7 @@ var samplePeriod = settings.RegisterDurationSetting(
 )
 
 var sampleDuration = settings.RegisterDurationSetting(
-	settings.TenantWritable, // used in virtual clusters
+	settings.ApplicationLevel, // used in virtual clusters
 	"scheduler_latency.sample_duration",
 	"controls the duration over which each scheduler latency sample is a measurement over",
 	2500*time.Millisecond,

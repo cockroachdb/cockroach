@@ -53,7 +53,7 @@ type overridesStore struct {
 		//
 		// The slice is sorted by InternalKey.
 		//
-		// At the time of this writing, this is used for TenantReadOnly
+		// At the time of this writing, this is used for SystemVisible
 		// settings.
 		alternateDefaults []kvpb.TenantSetting
 	}
@@ -141,7 +141,7 @@ func (s *overridesStore) setAll(
 			providedKeys[v.InternalKey] = struct{}{}
 		}
 		// If we are setting the all-tenant overrides, ensure there is a
-		// pseudo-override for every TenantReadOnly setting with an
+		// pseudo-override for every SystemVisible setting with an
 		// alternate default.
 		if tenantID == allTenantOverridesID && len(s.mu.alternateDefaults) > 0 {
 			// We can set copyOverrides==false because we took ownership
@@ -256,7 +256,7 @@ func (s *overridesStore) setTenantOverride(
 // when there is no stored default in .tenant_settings.
 //
 // At the time of this writing, this is called when a change is made
-// to a TenantReadOnly setting in the system tenant's system.settings
+// to a SystemVisible setting in the system tenant's system.settings
 // table. Values set this way serve as default value if there is no
 // override in system.tenant_settings.
 //

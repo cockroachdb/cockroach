@@ -248,13 +248,13 @@ func (u updater) SetFromStorage(
 	}
 
 	if !u.sv.SpecializedToVirtualCluster() /* system tenant */ ||
-		d.Class() == TenantWritable {
+		d.Class() == ApplicationLevel {
 		// The value is being loaded from the current virtual cluster's
 		// system.settings. Load it as an active value.
 		return u.setInternal(ctx, key, value, d, origin)
 	}
 
-	// Here we are looking at a TenantReadOnly or SystemOnly setting
+	// Here we are looking at a SystemVisible or SystemOnly setting
 	// from within a virtual cluster.
 
 	if d.Class() == SystemOnly {
@@ -267,7 +267,7 @@ func (u updater) SetFromStorage(
 		return errors.AssertionFailedf("programming error: cannot set SystemOnly %q", key)
 	}
 
-	if d.Class() != TenantReadOnly {
+	if d.Class() != SystemVisible {
 		return errors.AssertionFailedf("unhandled class %v", d.Class())
 	}
 
@@ -280,7 +280,7 @@ func (u updater) SetFromStorage(
 		}
 	}()
 
-	// We are receiving an alternate default for a TenantReadOnly
+	// We are receiving an alternate default for a SystemVisible
 	// setting. Here we do not configure the main setting value (via
 	// setInternal or .set on the setting itself): many tests use
 	// .Override earlier and we do not want to change the override.

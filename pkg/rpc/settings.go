@@ -32,7 +32,7 @@ func init() {
 }
 
 var enableRPCCircuitBreakers = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"rpc.circuit_breaker.enabled",
 	"enables stateful management of failed connections, including circuit breaking "+
 		"when in unhealthy state; only use in case of issues - logging may be suboptimal, "+
@@ -43,7 +43,7 @@ var enableRPCCircuitBreakers = settings.RegisterBoolSetting(
 
 // TODO(baptist): Remove in 23.2 (or 24.1) once validating dialback works for all scenarios.
 var useDialback = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"rpc.dialback.enabled",
 	"if true, require bidirectional RPC connections between nodes to prevent one-way network unavailability",
 	true,

@@ -149,7 +149,7 @@ func (p *planner) SetClusterSetting(
 			// The Lookup call above should never return SystemOnly settings if this
 			// is a tenant.
 			return nil, errors.AssertionFailedf("looked up system-only setting")
-		case settings.TenantReadOnly:
+		case settings.SystemVisible:
 			return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "setting %s is only settable by the operator", name)
 		}
 	}

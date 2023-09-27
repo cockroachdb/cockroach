@@ -69,7 +69,7 @@ const (
 )
 
 var minWALSyncInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"rocksdb.min_wal_sync_interval",
 	"minimum duration between syncs of the RocksDB WAL",
 	0*time.Millisecond,
@@ -91,7 +91,7 @@ var minWALSyncInterval = settings.RegisterDurationSetting(
 // V23_1_MVCCRangeTombstonesUnconditionallyEnabled, the feature is
 // unconditionally enabled.
 var MVCCRangeTombstonesEnabledInMixedClusters = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"storage.mvcc.range_tombstones.enabled",
 	"controls the use of MVCC range tombstones in mixed version clusters; range tombstones are always on in finalized 23.1 clusters",
 	false)
@@ -110,7 +110,7 @@ func CanUseMVCCRangeTombstones(ctx context.Context, st *cluster.Settings) bool {
 // MaxConflictsPerLockConflictError sets maximum number of locks returned in
 // LockConflictError in operations that return multiple locks per error.
 var MaxConflictsPerLockConflictError = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"storage.mvcc.max_intents_per_error",
 	"maximum number of locks returned in errors during evaluation",
 	MaxConflictsPerLockConflictErrorDefault,

@@ -72,7 +72,7 @@ var DiskBandwidthTokensForElasticEnabled = settings.RegisterBoolSetting(
 // L0FileCountOverloadThreshold sets a file count threshold that signals an
 // overloaded store.
 var L0FileCountOverloadThreshold = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"admission.l0_file_count_overload_threshold",
 	"when the L0 file count exceeds this theshold, the store is considered overloaded",
 	l0FileCountOverloadThreshold, settings.PositiveInt)
@@ -80,7 +80,7 @@ var L0FileCountOverloadThreshold = settings.RegisterIntSetting(
 // L0SubLevelCountOverloadThreshold sets a sub-level count threshold that
 // signals an overloaded store.
 var L0SubLevelCountOverloadThreshold = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"admission.l0_sub_level_count_overload_threshold",
 	"when the L0 sub-level count exceeds this threshold, the store is considered overloaded",
 	l0SubLevelCountOverloadThreshold, settings.PositiveInt)

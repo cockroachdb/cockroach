@@ -61,7 +61,7 @@ import (
 )
 
 var settingDistSQLNumRunners = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.distsql.num_runners",
 	"determines the number of DistSQL runner goroutines used for issuing SetupFlow RPCs",
 	// We use GOMAXPROCS instead of NumCPU because the former could be adjusted
@@ -1911,7 +1911,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 }
 
 var distributedQueryRerunAsLocalEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.distsql.distributed_query_rerun_locally.enabled",
 	"determines whether the distributed plans can be rerun locally for some errors",
 	true,
@@ -2202,7 +2202,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 }
 
 var parallelizeChecks = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.distsql.parallelize_checks.enabled",
 	"determines whether FOREIGN KEY and UNIQUE constraint checks are performed in parallel",
 	true,
@@ -2211,7 +2211,7 @@ var parallelizeChecks = settings.RegisterBoolSetting(
 // parallelChecksConcurrencyLimit controls the maximum number of additional
 // goroutines that can be used to run checks in parallel.
 var parallelChecksConcurrencyLimit = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.distsql.parallelize_checks.concurrency_limit",
 	"maximum number of additional goroutines to run checks in parallel",
 	// The default here is picked somewhat arbitrarily - the thinking is that we

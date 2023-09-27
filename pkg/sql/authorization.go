@@ -656,7 +656,7 @@ var defaultSingleQueryForRoleMembershipCache = util.ConstantWithMetamorphicTestB
 )
 
 var useSingleQueryForRoleMembershipCache = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.auth.resolve_membership_single_scan.enabled",
 	"determines whether to populate the role membership cache with a single scan",
 	defaultSingleQueryForRoleMembershipCache,

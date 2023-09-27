@@ -51,7 +51,7 @@ func (ie intervalSpan) Range() interval.Range {
 // tracked within restore spans, this could become dynamic and much larger (e.g.
 // totalSize/numNodes*someConstant).
 var targetRestoreSpanSize = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"backup.restore_span.target_size",
 	"target size to which base spans of a restore are merged to produce a restore span (0 disables)",
 	384<<20,

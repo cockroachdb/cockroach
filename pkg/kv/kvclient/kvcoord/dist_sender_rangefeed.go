@@ -56,7 +56,7 @@ type singleRangeInfo struct {
 }
 
 var useDedicatedRangefeedConnectionClass = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"kv.rangefeed.use_dedicated_connection_class.enabled",
 	"uses dedicated connection when running rangefeeds",
 	util.ConstantWithMetamorphicTestBool(
@@ -64,7 +64,7 @@ var useDedicatedRangefeedConnectionClass = settings.RegisterBoolSetting(
 )
 
 var catchupStartupRate = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.rangefeed.client.stream_startup_rate",
 	"controls the rate per second the client will initiate new rangefeed stream for a single range; 0 implies unlimited",
 	100, // e.g.: 200 seconds for 20k ranges.
@@ -73,7 +73,7 @@ var catchupStartupRate = settings.RegisterIntSetting(
 )
 
 var rangefeedRangeStuckThreshold = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.rangefeed.range_stuck_threshold",
 	"restart rangefeeds if they don't emit anything for the specified threshold; 0 disables (kv.rangefeed.closed_timestamp_refresh_interval takes precedence)",
 	time.Minute,

@@ -33,7 +33,7 @@ import (
 
 // sqlStatsActivityFlushEnabled the stats activity flush job.
 var sqlStatsActivityFlushEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.activity.flush.enabled",
 	"enable the flush to the system statement and transaction activity tables",
 	true)
@@ -41,7 +41,7 @@ var sqlStatsActivityFlushEnabled = settings.RegisterBoolSetting(
 // sqlStatsActivityTopCount is the cluster setting that controls the number of
 // rows selected to be inserted into the activity tables
 var sqlStatsActivityTopCount = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.activity.top.max",
 	"the limit per column for the top number of statistics to be flushed "+
 		"to the activity tables",
@@ -57,7 +57,7 @@ var sqlStatsActivityTopCount = settings.RegisterIntSetting(
 // are likely the same for several columns, so it should still give 3 days
 // of history for the default settings
 var sqlStatsActivityMaxPersistedRows = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.activity.persisted_rows.max",
 	"maximum number of rows of statement and transaction"+
 		" activity that will be persisted in the system tables",

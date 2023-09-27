@@ -39,7 +39,7 @@ const SchemaTelemetryScheduleName = "sql-schema-telemetry"
 // SchemaTelemetryRecurrence is the cron-tab string specifying the recurrence
 // for schema telemetry job.
 var SchemaTelemetryRecurrence = settings.RegisterStringSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"sql.schema.telemetry.recurrence",
 	"cron-tab recurrence for SQL schema telemetry job",
 	"@weekly", /* defaultValue */

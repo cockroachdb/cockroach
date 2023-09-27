@@ -26,7 +26,7 @@ import (
 // ExecutionInsightsCapacity limits the number of execution insights retained in memory.
 // As further insights are had, the oldest ones are evicted.
 var ExecutionInsightsCapacity = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.insights.execution_insights_capacity",
 	"the size of the per-node store of execution insights",
 	1000,
@@ -37,7 +37,7 @@ var ExecutionInsightsCapacity = settings.RegisterIntSetting(
 // considered slow. A LatencyThreshold of 0 (the default) disables this
 // detection.
 var LatencyThreshold = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.insights.latency_threshold",
 	"amount of time after which an executing statement is considered slow. Use 0 to disable.",
 	100*time.Millisecond,
@@ -48,7 +48,7 @@ var LatencyThreshold = settings.RegisterDurationSetting(
 // p99 latency while generally excluding uninteresting executions less than
 // 100ms.
 var AnomalyDetectionEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.insights.anomaly_detection.enabled",
 	"enable per-fingerprint latency recording and anomaly detection",
 	true,
@@ -61,7 +61,7 @@ var AnomalyDetectionEnabled = settings.RegisterBoolSetting(
 // and any potential slow execution must also cross this threshold to be
 // reported (this is a UX optimization, removing noise).
 var AnomalyDetectionLatencyThreshold = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.insights.anomaly_detection.latency_threshold",
 	"statements must surpass this threshold to trigger anomaly detection and identification",
 	50*time.Millisecond,
@@ -73,7 +73,7 @@ var AnomalyDetectionLatencyThreshold = settings.RegisterDurationSetting(
 // an eye on the metrics for memory usage and evictions to avoid introducing
 // churn.
 var AnomalyDetectionMemoryLimit = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.insights.anomaly_detection.memory_limit",
 	"the maximum amount of memory allowed for tracking statement latencies",
 	1024*1024,
@@ -82,7 +82,7 @@ var AnomalyDetectionMemoryLimit = settings.RegisterByteSizeSetting(
 // HighRetryCountThreshold sets the number of times a slow statement must have
 // been retried to be marked as having a high retry count.
 var HighRetryCountThreshold = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.insights.high_retry_count.threshold",
 	"the number of retries a slow statement must have undergone for its high retry count to be highlighted as a potential problem",
 	10,

@@ -38,7 +38,7 @@ import (
 
 var (
 	queryWait = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"server.shutdown.query_wait",
 		"the timeout for waiting for active queries to finish during a drain "+
 			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
@@ -48,7 +48,7 @@ var (
 		settings.WithPublic)
 
 	drainWait = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"server.shutdown.drain_wait",
 		"the amount of time a server waits in an unready state before proceeding with a drain "+
 			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
@@ -60,7 +60,7 @@ var (
 		settings.WithPublic)
 
 	connectionWait = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"server.shutdown.connection_wait",
 		"the maximum amount of time a server waits for all SQL connections to "+
 			"be closed before proceeding with a drain. "+
@@ -71,7 +71,7 @@ var (
 		settings.WithPublic)
 
 	jobRegistryWait = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"server.shutdown.jobs_wait",
 		"the maximum amount of time a server waits for all currently executing jobs "+
 			"to notice drain request and to perform orderly shutdown",

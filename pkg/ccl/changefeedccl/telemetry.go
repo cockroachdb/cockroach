@@ -201,7 +201,7 @@ func (r *telemetryMetricsRecorder) recordSinkIOInflightChange(delta int64) {
 // ContinuousTelemetryInterval determines the interval at which each node emits telemetry events
 // during the lifespan of each enterprise changefeed.
 var ContinuousTelemetryInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.telemetry.continuous_logging.interval",
 	"determines the interval at which each node emits continuous telemetry events"+
 		" during the lifespan of every enterprise changefeed; setting a zero value disables",

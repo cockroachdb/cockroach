@@ -33,7 +33,7 @@ const (
 
 var (
 	defaultSelectBatchSize = settings.RegisterIntSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"sql.ttl.default_select_batch_size",
 		"default amount of rows to select in a single query during a TTL job",
 		DefaultSelectBatchSizeValue,
@@ -41,7 +41,7 @@ var (
 		settings.WithPublic,
 	)
 	defaultDeleteBatchSize = settings.RegisterIntSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"sql.ttl.default_delete_batch_size",
 		"default amount of rows to delete in a single query during a TTL job",
 		100,
@@ -49,7 +49,7 @@ var (
 		settings.WithPublic,
 	)
 	defaultDeleteRateLimit = settings.RegisterIntSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"sql.ttl.default_delete_rate_limit",
 		"default delete rate limit (rows per second) per node for each TTL job. Use 0 to signify no rate limit.",
 		0,
@@ -57,7 +57,7 @@ var (
 		settings.WithPublic,
 	)
 	jobEnabled = settings.RegisterBoolSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"sql.ttl.job.enabled",
 		"whether the TTL job is enabled",
 		true,

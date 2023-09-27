@@ -91,7 +91,7 @@ const (
 // WriteMetadataSST controls if we write the experimental new format BACKUP
 // metadata file.
 var WriteMetadataSST = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.bulkio.write_metadata_sst.enabled",
 	"write experimental new format BACKUP metadata file",
 	util.ConstantWithMetamorphicTestBool("write-metadata-sst", false),
@@ -102,7 +102,7 @@ var WriteMetadataSST = settings.RegisterBoolSetting(
 // descriptors. This new format of metadata is written in addition to the
 // `BACKUP_MANIFEST` file, and is expected to be its replacement in the future.
 var WriteMetadataWithExternalSSTsEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"backup.write_metadata_with_external_ssts.enabled",
 	"write BACKUP metadata along with supporting SST files",
 	util.ConstantWithMetamorphicTestBool("backup.write_metadata_with_external_ssts.enabled", true),

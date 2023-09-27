@@ -60,7 +60,7 @@ const (
 // gcsChunkingEnabled is used to enable and disable chunking of file upload to
 // Google Cloud Storage.
 var gcsChunkingEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.gs.chunking.enabled",
 	"enable chunking of file upload to Google Cloud Storage",
 	true, /* default */
@@ -69,7 +69,7 @@ var gcsChunkingEnabled = settings.RegisterBoolSetting(
 // gcsChunkRetryTimeout is used to configure the per-chunk retry deadline when
 // uploading chunks to Google Cloud Storage.
 var gcsChunkRetryTimeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.gs.chunking.retry_timeout",
 	"per-chunk retry deadline when chunking of file upload to Google Cloud Storage",
 	60*time.Second,

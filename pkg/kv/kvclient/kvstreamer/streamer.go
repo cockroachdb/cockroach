@@ -326,7 +326,7 @@ type streamerStatistics struct {
 // this setting is chosen arbitrarily as 1/8th of the default value for the
 // senderConcurrencyLimit.
 var streamerConcurrencyLimit = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.streamer.concurrency_limit",
 	"maximum number of asynchronous requests by a single streamer",
 	max(128, int64(8*runtime.GOMAXPROCS(0))),

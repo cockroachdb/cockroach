@@ -41,7 +41,7 @@ var (
 
 // TimeseriesStorageEnabled controls whether to store timeseries data to disk.
 var TimeseriesStorageEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"timeseries.storage.enabled",
 	"if set, periodic timeseries data is stored within the cluster; disabling is not recommended "+
 		"unless you are storing the data elsewhere",
@@ -52,7 +52,7 @@ var TimeseriesStorageEnabled = settings.RegisterBoolSetting(
 // at he 10 second resolution. Data older than this is subject to being "rolled
 // up" into the 30 minute resolution and then deleted.
 var Resolution10sStorageTTL = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"timeseries.storage.resolution_10s.ttl",
 	"the maximum age of time series data stored at the 10 second resolution. Data older than this "+
 		"is subject to rollup and deletion.",
@@ -63,7 +63,7 @@ var Resolution10sStorageTTL = settings.RegisterDurationSetting(
 // retained at he 30 minute resolution. Data older than this is subject to
 // deletion.
 var Resolution30mStorageTTL = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"timeseries.storage.resolution_30m.ttl",
 	"the maximum age of time series data stored at the 30 minute resolution. Data older than this "+
 		"is subject to deletion.",

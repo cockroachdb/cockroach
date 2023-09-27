@@ -42,7 +42,7 @@ import (
 // KVAdmissionControlEnabled). Only the system tenant can modify these
 // settings in the storage servers, while a regular tenant can modify these
 // settings for their SQL-only servers. Which is why these are typically
-// TenantWritable.
+// ApplicationLevel.
 
 // KVAdmissionControlEnabled controls whether KV server-side admission control
 // is enabled.
@@ -70,7 +70,7 @@ var KVBulkOnlyAdmissionControlEnabled = settings.RegisterBoolSetting(
 // SQLKVResponseAdmissionControlEnabled controls whether response processing
 // in SQL, for KV requests, is enabled.
 var SQLKVResponseAdmissionControlEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"admission.sql_kv_response.enabled",
 	"when true, work performed by the SQL layer when receiving a KV response is subject to "+
 		"admission control",
@@ -80,7 +80,7 @@ var SQLKVResponseAdmissionControlEnabled = settings.RegisterBoolSetting(
 // SQLSQLResponseAdmissionControlEnabled controls whether response processing
 // in SQL, for DistSQL requests, is enabled.
 var SQLSQLResponseAdmissionControlEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"admission.sql_sql_response.enabled",
 	"when true, work performed by the SQL layer when receiving a DistSQL response is subject "+
 		"to admission control",
@@ -121,14 +121,14 @@ var KVStoresTenantWeightsEnabled = settings.RegisterBoolSetting(
 // enabled, and we don't want to carry forward unnecessarily granular
 // settings.
 var EpochLIFOEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"admission.epoch_lifo.enabled",
 	"when true, epoch-LIFO behavior is enabled when there is significant delay in admission",
 	false,
 	settings.WithPublic)
 
 var epochLIFOEpochDuration = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"admission.epoch_lifo.epoch_duration",
 	"the duration of an epoch, for epoch-LIFO admission control ordering",
 	epochLength,
@@ -140,7 +140,7 @@ var epochLIFOEpochDuration = settings.RegisterDurationSetting(
 	}), settings.WithPublic)
 
 var epochLIFOEpochClosingDeltaDuration = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"admission.epoch_lifo.epoch_closing_delta_duration",
 	"the delta duration before closing an epoch, for epoch-LIFO admission control ordering",
 	epochClosingDelta,
@@ -152,7 +152,7 @@ var epochLIFOEpochClosingDeltaDuration = settings.RegisterDurationSetting(
 	}), settings.WithPublic)
 
 var epochLIFOQueueDelayThresholdToSwitchToLIFO = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"admission.epoch_lifo.queue_delay_threshold_to_switch_to_lifo",
 	"the queue delay encountered by a (tenant,priority) for switching to epoch-LIFO ordering",
 	maxQueueDelayToSwitchToLifo,
@@ -164,7 +164,7 @@ var epochLIFOQueueDelayThresholdToSwitchToLIFO = settings.RegisterDurationSettin
 	}), settings.WithPublic)
 
 var rangeSequencerGCThreshold = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"admission.replication_control.range_sequencer_gc_threshold",
 	"the inactive duration for a range sequencer after it's garbage collected",
 	5*time.Minute,

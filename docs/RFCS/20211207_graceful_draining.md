@@ -157,7 +157,7 @@ declared as a `*settings.DurationSetting` as follows:
 
 ```go
 connectionWait = settings.RegisterDurationSetting(
-    settings.TenantReadOnly,
+    settings.SystemVisible,
     "server.shutdown.connection_wait",
     "the amount of time a server waits for clients to close existing SQL
     connections. After the start of connection_wait, no new SQL connections are

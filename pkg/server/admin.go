@@ -141,7 +141,7 @@ type systemAdminServer struct {
 var noteworthyAdminMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_ADMIN_MEMORY_USAGE", 100*1024)
 
 var tableStatsMaxFetcherConcurrency = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.admin.table_stats.max_fetcher_concurrency",
 	"maximum number of concurrent table stats fetches to run",
 	64, // arbitrary

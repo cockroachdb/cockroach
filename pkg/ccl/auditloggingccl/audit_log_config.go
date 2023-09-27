@@ -24,7 +24,7 @@ const auditConfigDefaultValue = ""
 
 // UserAuditLogConfig is a cluster setting that takes a user/role-based audit configuration.
 var UserAuditLogConfig = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.log.user_audit",
 	"user/role-based audit logging configuration. An enterprise license is required for this cluster setting to take effect.",
 	auditConfigDefaultValue,
@@ -39,7 +39,7 @@ var UserAuditLogConfig = settings.RegisterStringSetting(
 // reflected within session. Users will need to start a new session to see these changes in their
 // auditing behaviour.
 var UserAuditEnableReducedConfig = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.log.user_audit.reduced_config.enabled",
 	"enables logic to compute a reduced audit configuration, computing the audit "+
 		"configuration only once at session start instead of at each SQL event. The tradeoff "+
