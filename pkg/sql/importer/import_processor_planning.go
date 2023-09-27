@@ -39,14 +39,14 @@ import (
 )
 
 var replanThreshold = settings.RegisterFloatSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.import.replan_flow_threshold",
 	"fraction of initial flow instances that would be added or updated above which an IMPORT is restarted from its last checkpoint (0=disabled)",
 	0.0,
 )
 
 var replanFrequency = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.import.replan_flow_frequency",
 	"frequency at which IMPORT checks to see if restarting would update its physical execution plan",
 	time.Minute*2,

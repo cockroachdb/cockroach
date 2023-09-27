@@ -286,9 +286,9 @@ This session variable default should now be configured using %s`,
 				switch setting.Class() {
 				case settings.SystemOnly:
 					class = classLabels[0]
-				case settings.TenantReadOnly:
+				case settings.SystemVisible:
 					class = classLabels[1]
-				case settings.TenantWritable:
+				case settings.ApplicationLevel:
 					class = classLabels[2]
 				}
 				row = append(row, class)
@@ -461,7 +461,7 @@ func init() {
 	f.StringVar(&classHeaderLabel, "class-header-label", "Class",
 		"label to use in the output for the class column")
 	f.StringSliceVar(&classLabels, "class-labels",
-		[]string{"system-only", "tenant-ro", "tenant-rw"},
+		[]string{"system-only", "system-visible", "application"},
 		"label to use in the output for the various setting classes")
 
 	genCmd.AddCommand(genCmds...)

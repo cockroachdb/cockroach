@@ -63,7 +63,7 @@ var (
 // whether the CREATE privilege is given to the `public` role on the `public`
 // schema at the time the schema is created.
 var PublicSchemaCreatePrivilegeEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.auth.public_schema_create_privilege.enabled",
 	"determines whether to grant all users the CREATE privileges on the public "+
 		"schema when it is created",
@@ -347,7 +347,7 @@ const DefaultPrimaryRegionClusterSettingName = "sql.defaults.primary_region"
 
 // DefaultPrimaryRegion is a cluster setting that contains the default primary region.
 var DefaultPrimaryRegion = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	DefaultPrimaryRegionClusterSettingName,
 	`if not empty, all databases created without a PRIMARY REGION will `+
 		`implicitly have the given PRIMARY REGION`,
@@ -367,7 +367,7 @@ const SecondaryTenantsMultiRegionAbstractionsEnabledSettingName = "sql.virtual_c
 // already been configured. It only affects regions being added to new
 // databases.
 var SecondaryTenantsMultiRegionAbstractionsEnabled = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"sql.multi_region.allow_abstractions_for_secondary_tenants.enabled", // internal key, name defined above
 	"allow the use of multi-region abstractions and syntax in virtual clusters",
 	false,

@@ -35,14 +35,14 @@ import (
 
 // Timeout is a cluster setting used for cloud storage interactions.
 var Timeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.timeout",
 	"the timeout for import/export storage operations",
 	10*time.Minute,
 	settings.WithPublic)
 
 var httpCustomCA = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.http.custom_ca",
 	"custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage",
 	"",
@@ -51,14 +51,14 @@ var httpCustomCA = settings.RegisterStringSetting(
 // WriteChunkSize is used to control the size of each chunk that is buffered and
 // uploaded by the cloud storage client.
 var WriteChunkSize = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.write_chunk.size",
 	"controls the size of each file chunk uploaded by the cloud storage client",
 	8<<20,
 )
 
 var retryConnectionTimedOut = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.connection_timed_out_retries.enabled",
 	"retry generic connection timed out errors; use with extreme caution",
 	false,

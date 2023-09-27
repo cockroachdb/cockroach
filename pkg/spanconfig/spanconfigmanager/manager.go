@@ -33,7 +33,7 @@ import (
 // spanconfig.reconciliation_job.enabled is configured. For host
 // tenants, COCKROACH_DISABLE_SPAN_CONFIGS must not be set.
 var checkReconciliationJobInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"spanconfig.reconciliation_job.check_interval",
 	"the frequency at which to check if the span config reconciliation job exists (and to start it if not)",
 	10*time.Minute,
@@ -47,7 +47,7 @@ var checkReconciliationJobInterval = settings.RegisterDurationSetting(
 // TODO(irfansharif): This should be a tenant read-only setting once the work
 // for #73349 is completed.
 var jobEnabledSetting = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"spanconfig.reconciliation_job.enabled",
 	"enable the use of the kv accessor", true)
 

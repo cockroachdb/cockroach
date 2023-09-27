@@ -14,6 +14,6 @@ import "github.com/cockroachdb/cockroach/pkg/settings"
 
 // Enable determines whether to collect per-index usage statistics.
 var Enable = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.metrics.index_usage_stats.enabled", "collect per index usage statistics", true, /* defaultValue */
 	settings.WithPublic)

@@ -64,7 +64,7 @@ type SQLStatsAtomicCounters struct {
 // DiscardedStatsLogInterval specifies the interval between log emissions for discarded
 // statement and transaction statistics due to reaching the SQL statistics memory limit.
 var DiscardedStatsLogInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.metrics.discarded_stats_log.interval",
 	"interval between log emissions for discarded statistics due to SQL statistics memory limit",
 	1*time.Minute,

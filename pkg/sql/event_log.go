@@ -433,7 +433,7 @@ func LogEventForJobs(
 }
 
 var eventLogSystemTableEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.eventlog.enabled",
 	"if set, logged notable events are also stored in the table system.eventlog",
 	true,

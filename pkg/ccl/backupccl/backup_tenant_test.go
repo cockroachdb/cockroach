@@ -160,7 +160,7 @@ func TestTenantBackupMultiRegionDatabases(t *testing.T) {
 	{
 		// Flip the tenant-read only cluster setting; ensure database can be restored
 		// on the system tenant but not on the secondary tenant.
-		setAndWaitForTenantReadOnlyClusterSetting(
+		setAndWaitForSystemVisibleClusterSetting(
 			t,
 			sql.SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
 			sqlDB,
@@ -184,7 +184,7 @@ func TestTenantBackupMultiRegionDatabases(t *testing.T) {
 	{
 		// Flip the tenant-read only cluster setting back to true and ensure the
 		// restore succeeds.
-		setAndWaitForTenantReadOnlyClusterSetting(
+		setAndWaitForSystemVisibleClusterSetting(
 			t,
 			sql.SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
 			sqlDB,
@@ -205,7 +205,7 @@ func TestTenantBackupMultiRegionDatabases(t *testing.T) {
 				"SET CLUSTER SETTING %s = 'us-east1'", sql.DefaultPrimaryRegionClusterSettingName,
 			),
 		)
-		setAndWaitForTenantReadOnlyClusterSetting(
+		setAndWaitForSystemVisibleClusterSetting(
 			t,
 			sql.SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
 			sqlDB,

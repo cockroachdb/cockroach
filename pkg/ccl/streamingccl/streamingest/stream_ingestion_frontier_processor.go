@@ -39,7 +39,7 @@ import (
 // JobCheckpointFrequency controls the frequency of frontier checkpoints into
 // the jobs table.
 var JobCheckpointFrequency = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"stream_replication.job_checkpoint_frequency",
 	"controls the frequency with which partitions update their progress; if 0, disabled",
 	10*time.Second,

@@ -38,7 +38,7 @@ const SSTTargetSizeSetting = "kv.bulk_sst.target_size"
 // ExportRequestTargetFileSize controls the target file size for SSTs created
 // during backups.
 var ExportRequestTargetFileSize = settings.RegisterByteSizeSetting(
-	settings.TenantReadOnly, // used by BACKUP
+	settings.SystemVisible, // used by BACKUP
 	SSTTargetSizeSetting,
 	fmt.Sprintf("target size for SSTs emitted from export requests; "+
 		"export requests (i.e. BACKUP) may buffer up to the sum of %s and %s in memory",

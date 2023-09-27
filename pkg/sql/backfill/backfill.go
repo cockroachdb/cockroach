@@ -50,7 +50,7 @@ import (
 // not actually perform any checkpointing. The reason it has been moved here from
 // sql is to avoid any dependency cycles inside the declarative schema changer.
 var IndexBackfillCheckpointInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.index_backfill.checkpoint_interval",
 	"the amount of time between index backfill checkpoint updates",
 	30*time.Second,

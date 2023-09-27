@@ -154,18 +154,18 @@ var changes = struct {
 }{}
 
 var boolTA = settings.RegisterBoolSetting(settings.SystemOnly, "bool.t", "desc", true)
-var boolFA = settings.RegisterBoolSetting(settings.TenantReadOnly, "bool.f", "desc", false)
-var strFooA = settings.RegisterStringSetting(settings.TenantWritable, "str.foo", "desc", "")
+var boolFA = settings.RegisterBoolSetting(settings.SystemVisible, "bool.f", "desc", false)
+var strFooA = settings.RegisterStringSetting(settings.ApplicationLevel, "str.foo", "desc", "")
 var strBarA = settings.RegisterStringSetting(settings.SystemOnly, "str.bar", "desc", "bar")
-var i1A = settings.RegisterIntSetting(settings.TenantWritable, "i.1", "desc", 0)
-var i2A = settings.RegisterIntSetting(settings.TenantWritable, "i.2", "desc", 5)
-var fA = settings.RegisterFloatSetting(settings.TenantReadOnly, "f", "desc", 5.4)
-var dA = settings.RegisterDurationSetting(settings.TenantWritable, "d", "desc", time.Second)
-var duA = settings.RegisterDurationSettingWithExplicitUnit(settings.TenantWritable, "d_with_explicit_unit", "desc", time.Second, settings.NonNegativeDuration, settings.WithPublic)
-var pA = settings.RegisterProtobufSetting(settings.TenantWritable, "p", "desc", &dummyVersion{msg1: "foo"})
-var _ = settings.RegisterDurationSetting(settings.TenantWritable, "d_with_maximum", "desc", time.Second, settings.NonNegativeDurationWithMaximum(time.Hour))
+var i1A = settings.RegisterIntSetting(settings.ApplicationLevel, "i.1", "desc", 0)
+var i2A = settings.RegisterIntSetting(settings.ApplicationLevel, "i.2", "desc", 5)
+var fA = settings.RegisterFloatSetting(settings.SystemVisible, "f", "desc", 5.4)
+var dA = settings.RegisterDurationSetting(settings.ApplicationLevel, "d", "desc", time.Second)
+var duA = settings.RegisterDurationSettingWithExplicitUnit(settings.ApplicationLevel, "d_with_explicit_unit", "desc", time.Second, settings.NonNegativeDuration, settings.WithPublic)
+var pA = settings.RegisterProtobufSetting(settings.ApplicationLevel, "p", "desc", &dummyVersion{msg1: "foo"})
+var _ = settings.RegisterDurationSetting(settings.ApplicationLevel, "d_with_maximum", "desc", time.Second, settings.NonNegativeDurationWithMaximum(time.Hour))
 var eA = settings.RegisterEnumSetting(settings.SystemOnly, "e", "desc", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"})
-var byteSize = settings.RegisterByteSizeSetting(settings.TenantWritable, "zzz", "desc", mb)
+var byteSize = settings.RegisterByteSizeSetting(settings.ApplicationLevel, "zzz", "desc", mb)
 var mA = func() *settings.VersionSetting {
 	s := settings.MakeVersionSetting(&dummyVersionSettingImpl{})
 	settings.RegisterVersionSetting(settings.SystemOnly, "v.1", "desc", &s)
@@ -789,11 +789,11 @@ func batchRegisterSettings(
 }
 
 var overrideBool = settings.RegisterBoolSetting(settings.SystemOnly, "override.bool", "desc", true)
-var overrideInt = settings.RegisterIntSetting(settings.TenantReadOnly, "override.int", "desc", 0)
-var overrideDuration = settings.RegisterDurationSetting(settings.TenantWritable, "override.duration", "desc", time.Second)
-var overrideFloat = settings.RegisterFloatSetting(settings.TenantWritable, "override.float", "desc", 1.0)
-var overrideString = settings.RegisterStringSetting(settings.TenantWritable, "override.string", "desc", "foo")
-var overrideProto = settings.RegisterProtobufSetting(settings.TenantWritable, "override.proto", "desc", &dummyVersion{msg1: "foo"})
+var overrideInt = settings.RegisterIntSetting(settings.SystemVisible, "override.int", "desc", 0)
+var overrideDuration = settings.RegisterDurationSetting(settings.ApplicationLevel, "override.duration", "desc", time.Second)
+var overrideFloat = settings.RegisterFloatSetting(settings.ApplicationLevel, "override.float", "desc", 1.0)
+var overrideString = settings.RegisterStringSetting(settings.ApplicationLevel, "override.string", "desc", "foo")
+var overrideProto = settings.RegisterProtobufSetting(settings.ApplicationLevel, "override.proto", "desc", &dummyVersion{msg1: "foo"})
 
 func TestOverride(t *testing.T) {
 	ctx := context.Background()
