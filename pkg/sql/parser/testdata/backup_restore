@@ -824,12 +824,12 @@ RESTORE TABLE foo FROM '_' WITH OPTIONS (skip_missing_foreign_keys, skip_missing
 RESTORE TABLE _ FROM 'bar' WITH OPTIONS (skip_missing_foreign_keys, skip_missing_sequences, detached) -- identifiers removed
 
 parse
-RESTORE TABLE foo FROM 'bar' WITH strip_localities
+RESTORE TABLE foo FROM 'bar' WITH remove_regions
 ----
-RESTORE TABLE foo FROM 'bar' WITH OPTIONS (skip_localities_check, strip_localities) -- normalized!
-RESTORE TABLE (foo) FROM ('bar') WITH OPTIONS (skip_localities_check, strip_localities) -- fully parenthesized
-RESTORE TABLE foo FROM '_' WITH OPTIONS (skip_localities_check, strip_localities) -- literals removed
-RESTORE TABLE _ FROM 'bar' WITH OPTIONS (skip_localities_check, strip_localities) -- identifiers removed
+RESTORE TABLE foo FROM 'bar' WITH OPTIONS (skip_localities_check, remove_regions) -- normalized!
+RESTORE TABLE (foo) FROM ('bar') WITH OPTIONS (skip_localities_check, remove_regions) -- fully parenthesized
+RESTORE TABLE foo FROM '_' WITH OPTIONS (skip_localities_check, remove_regions) -- literals removed
+RESTORE TABLE _ FROM 'bar' WITH OPTIONS (skip_localities_check, remove_regions) -- identifiers removed
 
 parse
 BACKUP INTO 'bar' WITH include_all_virtual_clusters = $1, detached
