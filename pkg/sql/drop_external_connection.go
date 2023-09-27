@@ -13,9 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -41,12 +38,6 @@ func (c *dropExternalConnectionNode) startExec(params runParams) error {
 }
 
 func (p *planner) dropExternalConnection(params runParams, n *tree.DropExternalConnection) error {
-	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.TODODelete_V22_2SystemExternalConnectionsTable) {
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"External Connections are not supported until upgrade to version %v is finalized",
-			clusterversion.ByKey(clusterversion.TODODelete_V22_2SystemExternalConnectionsTable))
-	}
-
 	// TODO(adityamaru): Add some metrics to track DROP EXTERNAL CONNECTION
 	// usage.
 

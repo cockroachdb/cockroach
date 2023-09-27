@@ -44,6 +44,7 @@ go_test(
     args = ["-test.timeout=55s"],
     embed = [":screl"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/rel",

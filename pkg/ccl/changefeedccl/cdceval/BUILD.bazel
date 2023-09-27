@@ -18,7 +18,6 @@ go_library(
     deps = [
         "//pkg/ccl/changefeedccl/cdcevent",
         "//pkg/ccl/changefeedccl/changefeedbase",
-        "//pkg/clusterversion",
         "//pkg/jobs/jobspb",
         "//pkg/roachpb",
         "//pkg/security/username",

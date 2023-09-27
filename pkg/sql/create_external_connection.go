@@ -70,12 +70,6 @@ func (p *planner) createExternalConnection(
 ) error {
 	txn := p.InternalSQLTxn()
 
-	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.TODODelete_V22_2SystemExternalConnectionsTable) {
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"version %v must be finalized to create an External Connection",
-			clusterversion.ByKey(clusterversion.TODODelete_V22_2SystemExternalConnectionsTable))
-	}
-
 	if err := params.p.CheckPrivilege(params.ctx, syntheticprivilege.GlobalPrivilegeObject,
 		privilege.EXTERNALCONNECTION); err != nil {
 		return pgerror.New(
