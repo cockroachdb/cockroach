@@ -688,7 +688,7 @@ func TestStatsAreDeletedForDroppedTables(t *testing.T) {
 	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '1s';")
 
 	if s.StartedDefaultTestTenant() {
-		systemDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true")
+		systemDB.Exec(t, "SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true")
 		// Block until we see that zone configs are enabled.
 		testutils.SucceedsSoon(t, func() error {
 			var enabled bool

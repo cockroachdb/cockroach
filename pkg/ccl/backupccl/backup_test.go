@@ -5890,7 +5890,6 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 		// Speeds up the test.
 		systemTenantRunner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms';")
 		systemTenantRunner.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
-		systemTenantRunner.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
 
 		// Run a full backup.
 		baseBackupURI := "userfile:///foo"
