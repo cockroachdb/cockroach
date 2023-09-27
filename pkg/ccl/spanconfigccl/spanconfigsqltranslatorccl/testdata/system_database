@@ -62,6 +62,9 @@ translate database=system
 /Table/6{0-1}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{1-2}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{2-3}                              database system (host)
+/Table/6{3-4}                              database system (host)
+/Table/6{4-5}                              database system (host)
+/Table/6{5-6}                              database system (host)
 
 # Alter zone config fields on the database to ensure the effects cascade.
 exec-sql
@@ -128,6 +131,9 @@ translate database=system
 /Table/6{0-1}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/6{1-2}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/6{2-3}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/6{3-4}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/6{4-5}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/6{5-6}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 
 # Alter a named range that maps to a pseudo table ID, ensuring that its effects
 # are independent.
@@ -200,3 +206,6 @@ full-translate
 /Table/6{0-1}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/6{1-2}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/6{2-3}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/6{3-4}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/6{4-5}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/6{5-6}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true

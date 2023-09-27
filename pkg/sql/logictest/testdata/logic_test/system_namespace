@@ -20,6 +20,7 @@ SELECT * FROM system.namespace
 1    29  lease                            11
 1    29  locations                        21
 1    29  migrations                       40
+1    29  mvcc_statistics                  63
 1    29  namespace                        30
 1    29  privileges                       51
 1    29  protected_ts_meta                31
@@ -46,6 +47,7 @@ SELECT * FROM system.namespace
 1    29  statement_bundle_chunks          34
 1    29  statement_diagnostics            36
 1    29  statement_diagnostics_requests   35
+1    29  statement_execution_insights     65
 1    29  statement_statistics             42
 1    29  table_statistics                 20
 1    29  task_payloads                    58
@@ -55,6 +57,7 @@ SELECT * FROM system.namespace
 1    29  tenant_usage                     45
 1    29  tenants                          8
 1    29  transaction_activity             61
+1    29  transaction_execution_insights   64
 1    29  transaction_statistics           43
 1    29  ui                               14
 1    29  users                            4
@@ -88,6 +91,7 @@ SELECT * FROM system.namespace
 1    29  lease                            11
 1    29  locations                        21
 1    29  migrations                       40
+1    29  mvcc_statistics                  60
 1    29  namespace                        30
 1    29  privileges                       51
 1    29  protected_ts_meta                31
@@ -114,9 +118,11 @@ SELECT * FROM system.namespace
 1    29  statement_bundle_chunks          34
 1    29  statement_diagnostics            36
 1    29  statement_diagnostics_requests   35
+1    29  statement_execution_insights     62
 1    29  statement_statistics             42
 1    29  table_statistics                 20
 1    29  transaction_activity             59
+1    29  transaction_execution_insights   61
 1    29  transaction_statistics           43
 1    29  ui                               14
 1    29  users                            4
