@@ -1925,7 +1925,7 @@ func doRestorePlan(
 	// If we are stripping localities, wipe tables of their LocalityConfig before we allocate
 	// descriptor rewrites - as validation in remapTables compares these tables with the non-mr
 	// database and fails otherwise
-	if restoreStmt.Options.StripLocalities {
+	if restoreStmt.Options.RemoveRegions {
 		for _, t := range filteredTablesByID {
 			t.TableDesc().LocalityConfig = nil
 		}

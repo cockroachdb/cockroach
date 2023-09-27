@@ -518,9 +518,9 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		ctx.FormatNode(o.ExecutionLocality)
 	}
 
-	if o.StripLocalities {
+	if o.RemoveRegions {
 		maybeAddSep()
-		ctx.WriteString("strip_localities")
+		ctx.WriteString("remove_regions")
 	}
 }
 

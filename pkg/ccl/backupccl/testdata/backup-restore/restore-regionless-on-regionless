@@ -44,7 +44,7 @@ subtest end
 new-cluster name=s2 share-io-dir=s1 allow-implicit-access
 ----
 
-# test cluster restore with strip_localities
+# test cluster restore with remove_regions
 subtest restore_regionless_on_regionless_cluster
 
 query-sql
@@ -55,7 +55,7 @@ postgres root <nil> <nil> {} <nil>
 system node <nil> <nil> {} <nil>
 
 exec-sql
-RESTORE FROM LATEST IN 'nodelocal://1/cluster_backup/' WITH strip_localities;
+RESTORE FROM LATEST IN 'nodelocal://1/cluster_backup/' WITH remove_regions;
 ----
 
 # check cluster's regions
@@ -100,7 +100,7 @@ SELECT * FROM d.t;
 
 subtest end
 
-# test db restore with strip_localities
+# test db restore with remove_regions
 subtest restore_regionless_on_regionless_db
 
 exec-sql
@@ -108,7 +108,7 @@ DROP DATABASE d;
 ----
 
 exec-sql
-RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/database_backup/' WITH strip_localities;
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/database_backup/' WITH remove_regions;
 ----
 
 # check to see if restored database, d, shows up
@@ -148,7 +148,7 @@ SELECT * FROM d.t;
 
 subtest end
 
-# test table restore with strip_localities
+# test table restore with remove_regions
 subtest restore_regionless_on_regionless_table
 
 exec-sql
@@ -156,7 +156,7 @@ DROP TABLE d.t;
 ----
 
 exec-sql
-RESTORE TABLE d.t FROM LATEST IN 'nodelocal://1/table_backup/' WITH strip_localities;
+RESTORE TABLE d.t FROM LATEST IN 'nodelocal://1/table_backup/' WITH remove_regions;
 ----
 
 query-sql
