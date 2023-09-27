@@ -89,134 +89,144 @@ func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
+	doTest := func(t *testing.T, d *datadriven.TestData, conn clisqlclient.Conn) string {
+		switch d.Cmd {
+		case "exec-ddl":
+			err := conn.Exec(ctx, d.Input)
+			if err != nil {
+				require.NoError(t, err, "%s: %s", d.Pos, d.Cmd)
+			}
+			return ""
+		case "copy-from", "copy-from-error", "copy-from-kvtrace":
+			kvtrace := d.Cmd == "copy-from-kvtrace"
+			lines := strings.Split(d.Input, "\n")
+			expectedRows := len(lines) - 1
+			stmt := lines[0]
+			data := strings.Join(lines[1:], "\n")
+			st, err := parser.ParseOne(stmt)
+			require.NoError(t, err)
+			if copy, ok := st.AST.(*tree.CopyFrom); ok {
+				if copy.Options.HasHeader {
+					expectedRows--
+				}
+			}
+
+			if kvtrace {
+				err := conn.Exec(ctx, "SET TRACING=on,kv")
+				require.NoError(t, err)
+			}
+			rows, err := conn.GetDriverConn().CopyFrom(ctx, strings.NewReader(data), stmt)
+			if kvtrace {
+				err := conn.Exec(ctx, "SET TRACING=off")
+				require.NoError(t, err)
+			}
+			switch d.Cmd {
+			case "copy-from":
+				require.NoError(t, err, "%s\n%s\n", d.Cmd, d.Input)
+				require.Equal(t, int(rows), expectedRows, "Not all rows were inserted")
+				return fmt.Sprintf("%d", rows)
+			case "copy-from-error":
+				require.Error(t, err, "copy-from-error didn't return and error!")
+				return err.Error()
+			case "copy-from-kvtrace":
+				require.NoError(t, err, "%s\n%s\n", d.Cmd, d.Input)
+				rows, err := conn.Query(ctx,
+					`SELECT
+	regexp_replace(message, '(/Tenant/[0-9]*)?/Table/[0-9]*/', '/Table/<>/')
+	FROM [SHOW KV TRACE FOR SESSION]
+	WHERE message LIKE '%Put % -> %'`)
+				defer func() {
+					_ = rows.Close()
+				}()
+				require.NoError(t, err)
+				vals := make([]driver.Value, 1)
+				var results []string
+				for err = nil; err == nil; {
+					err = rows.Next(vals)
+					if err == io.EOF {
+						break
+					}
+					require.NoError(t, err)
+					results = append(results, fmt.Sprintf("%v", vals[0]))
+				}
+				sort.Strings(results)
+				return strings.Join(results, "\n")
+			}
+		case "copy-to", "copy-to-error":
+			var buf bytes.Buffer
+			err := conn.GetDriverConn().CopyTo(ctx, &buf, d.Input)
+			if d.Cmd == "copy-to" {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				return expandErrorString(err)
+			}
+			return buf.String()
+		case "query":
+			rows, err := conn.Query(ctx, d.Input)
+			require.NoError(t, err)
+			vals := make([]driver.Value, len(rows.Columns()))
+			var results string
+			for {
+				if err := rows.Next(vals); err == io.EOF {
+					break
+				} else if err != nil {
+					require.NoError(t, err)
+				}
+				for i, v := range vals {
+					if i > 0 {
+						results += "|"
+					}
+					results += fmt.Sprintf("%v", v)
+				}
+				results += "\n"
+			}
+			err = rows.Close()
+			require.NoError(t, err)
+			return results
+		default:
+			return fmt.Sprintf("unknown command: %s\n", d.Cmd)
+		}
+		return ""
+	}
+
 	for _, vectorize := range []string{"on", "off"} {
-		for _, atomic := range []string{"on", "off"} {
-			for _, fastPath := range []string{"on", "off"} {
-				datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
-					defer log.Scope(t).Close(t)
+		t.Run(fmt.Sprintf("vectorize=%s", vectorize), func(t *testing.T) {
+			for _, atomic := range []string{"on", "off"} {
+				t.Run(fmt.Sprintf("atomic=%s", atomic), func(t *testing.T) {
+					for _, fastPath := range []string{"on", "off"} {
+						t.Run(fmt.Sprintf("fastPath=%s", fastPath), func(t *testing.T) {
+							datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
+								defer log.Scope(t).Close(t)
 
-					srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
-					defer srv.Stopper().Stop(ctx)
+								srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+								defer srv.Stopper().Stop(ctx)
 
-					s := srv.ApplicationLayer()
+								s := srv.ApplicationLayer()
 
-					url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
-					defer cleanup()
-					var sqlConnCtx clisqlclient.Context
-					conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
+								url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+								defer cleanup()
+								var sqlConnCtx clisqlclient.Context
+								conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
 
-					err := conn.Exec(ctx, fmt.Sprintf(`SET VECTORIZE='%s'`, vectorize))
-					require.NoError(t, err)
-
-					err = conn.Exec(ctx, fmt.Sprintf(`SET COPY_FAST_PATH_ENABLED='%s'`, fastPath))
-					require.NoError(t, err)
-
-					err = conn.Exec(ctx, fmt.Sprintf(`SET COPY_FROM_ATOMIC_ENABLED='%s'`, atomic))
-					require.NoError(t, err)
-
-					datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-						switch d.Cmd {
-						case "exec-ddl":
-							err := conn.Exec(ctx, d.Input)
-							if err != nil {
-								require.NoError(t, err, "%s: %s", d.Pos, d.Cmd)
-							}
-							return ""
-						case "copy-from", "copy-from-error", "copy-from-kvtrace":
-							kvtrace := d.Cmd == "copy-from-kvtrace"
-							lines := strings.Split(d.Input, "\n")
-							expectedRows := len(lines) - 1
-							stmt := lines[0]
-							data := strings.Join(lines[1:], "\n")
-							st, err := parser.ParseOne(stmt)
-							require.NoError(t, err)
-							if copy, ok := st.AST.(*tree.CopyFrom); ok {
-								if copy.Options.HasHeader {
-									expectedRows--
-								}
-							}
-
-							if kvtrace {
-								err := conn.Exec(ctx, "SET TRACING=on,kv")
+								err := conn.Exec(ctx, fmt.Sprintf(`SET VECTORIZE='%s'`, vectorize))
 								require.NoError(t, err)
-							}
-							rows, err := conn.GetDriverConn().CopyFrom(ctx, strings.NewReader(data), stmt)
-							if kvtrace {
-								err := conn.Exec(ctx, "SET TRACING=off")
+
+								err = conn.Exec(ctx, fmt.Sprintf(`SET COPY_FAST_PATH_ENABLED='%s'`, fastPath))
 								require.NoError(t, err)
-							}
-							switch d.Cmd {
-							case "copy-from":
-								require.NoError(t, err, "%s\n%s\n", d.Cmd, d.Input)
-								require.Equal(t, int(rows), expectedRows, "Not all rows were inserted")
-								return fmt.Sprintf("%d", rows)
-							case "copy-from-error":
-								require.Error(t, err, "copy-from-error didn't return and error!")
-								return err.Error()
-							case "copy-from-kvtrace":
-								require.NoError(t, err, "%s\n%s\n", d.Cmd, d.Input)
-								rows, err := conn.Query(ctx,
-									`SELECT
-						  regexp_replace(message, '(/Tenant/[0-9]*)?/Table/[0-9]*/', '/Table/<>/')
-						FROM [SHOW KV TRACE FOR SESSION]
-						WHERE message LIKE '%Put % -> %'`)
-								defer func() {
-									_ = rows.Close()
-								}()
+
+								err = conn.Exec(ctx, fmt.Sprintf(`SET COPY_FROM_ATOMIC_ENABLED='%s'`, atomic))
 								require.NoError(t, err)
-								vals := make([]driver.Value, 1)
-								var results []string
-								for err = nil; err == nil; {
-									err = rows.Next(vals)
-									if err == io.EOF {
-										break
-									}
-									require.NoError(t, err)
-									results = append(results, fmt.Sprintf("%v", vals[0]))
-								}
-								sort.Strings(results)
-								return strings.Join(results, "\n")
-							}
-						case "copy-to", "copy-to-error":
-							var buf bytes.Buffer
-							err := conn.GetDriverConn().CopyTo(ctx, &buf, d.Input)
-							if d.Cmd == "copy-to" {
-								require.NoError(t, err)
-							} else {
-								require.Error(t, err)
-								return expandErrorString(err)
-							}
-							return buf.String()
-						case "query":
-							rows, err := conn.Query(ctx, d.Input)
-							require.NoError(t, err)
-							vals := make([]driver.Value, len(rows.Columns()))
-							var results string
-							for {
-								if err := rows.Next(vals); err == io.EOF {
-									break
-								} else if err != nil {
-									require.NoError(t, err)
-								}
-								for i, v := range vals {
-									if i > 0 {
-										results += "|"
-									}
-									results += fmt.Sprintf("%v", v)
-								}
-								results += "\n"
-							}
-							err = rows.Close()
-							require.NoError(t, err)
-							return results
-						default:
-							return fmt.Sprintf("unknown command: %s\n", d.Cmd)
-						}
-						return ""
-					})
+
+								datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+									return doTest(t, d, conn)
+								})
+							})
+						})
+					}
 				})
 			}
-		}
+		})
 	}
 }
 
