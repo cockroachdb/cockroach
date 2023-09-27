@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -36,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -58,7 +58,6 @@ type ttlServer interface {
 type rowLevelTTLTestJobTestHelper struct {
 	server           ttlServer
 	env              *jobstest.JobSchedulerTestEnv
-	cfg              *scheduledjobs.JobExecutionConfig
 	testCluster      serverutils.TestClusterInterface
 	sqlDB            *sqlutils.SQLRunner
 	kvDB             *kv.DB
@@ -81,12 +80,10 @@ func newRowLevelTTLTestJobTestHelper(
 			JobSchedulerEnv: th.env,
 			TakeOverJobsScheduling: func(fn func(ctx context.Context, maxSchedules int64) error) {
 				th.executeSchedules = func() error {
+					th.env.SetTime(timeutil.Now().Add(time.Hour * 24))
 					defer th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 					return fn(context.Background(), 0 /* allSchedules */)
 				}
-			},
-			CaptureJobExecutionConfig: func(config *scheduledjobs.JobExecutionConfig) {
-				th.cfg = config
 			},
 		},
 		TTL: testingKnobs,
@@ -127,7 +124,6 @@ func newRowLevelTTLTestJobTestHelper(
 		th.sqlDB = sqlutils.MakeSQLRunner(db)
 		th.server = ts
 	}
-	require.NotNil(t, th.cfg)
 
 	th.kvDB = ts.DB()
 
@@ -139,7 +135,6 @@ func newRowLevelTTLTestJobTestHelper(
 func (h *rowLevelTTLTestJobTestHelper) waitForScheduledJob(
 	t *testing.T, expectedStatus jobs.Status, expectedErrorRe string,
 ) {
-	h.env.SetTime(timeutil.Now().Add(time.Hour * 24))
 	require.NoError(t, h.executeSchedules())
 
 	query := fmt.Sprintf(
@@ -1010,4 +1005,63 @@ func TestInboundForeignKeyOnDeleteRestrictNull(t *testing.T) {
 
 	results = sqlDB.QueryStr(t, "SELECT * FROM child")
 	require.Len(t, results, 1)
+}
+
+func TestMakeTTLJobDescription(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		desc                 string
+		tableSelectBatchSize int
+		jobSelectBatchSize   int
+	}{
+		{
+			desc:                 "default ttl_select_batch_size",
+			tableSelectBatchSize: 0,
+			jobSelectBatchSize:   ttlbase.DefaultSelectBatchSizeValue,
+		},
+		{
+			desc:                 "override ttl_select_batch_size",
+			tableSelectBatchSize: 1,
+			jobSelectBatchSize:   1,
+		},
+	}
+
+	getCreateTable := func(selectBatchSize int) string {
+		const createTable = `CREATE TABLE t (
+    id INT PRIMARY KEY,
+    expire_at TIMESTAMPTZ
+) WITH (
+    %s
+    ttl_expiration_expression = 'expire_at',
+    ttl_job_cron = '* * * * *'
+)`
+		selectBatchSizeClause := ""
+		if selectBatchSize > 0 {
+			selectBatchSizeClause = fmt.Sprintf("ttl_select_batch_size = %d,", selectBatchSize)
+		}
+		return fmt.Sprintf(createTable, selectBatchSizeClause)
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.desc, func(t *testing.T) {
+			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
+				t,
+				&sql.TTLTestingKnobs{
+					AOSTDuration: &zeroDuration,
+				},
+				false, /* testMultiTenant */
+				1,     /* numNodes */
+			)
+			defer cleanupFunc()
+			createTable := getCreateTable(testCase.tableSelectBatchSize)
+			th.sqlDB.Exec(t, createTable)
+			th.waitForScheduledJob(t, jobs.StatusSucceeded, "")
+			rows := th.sqlDB.QueryStr(t, "SELECT description FROM [SHOW JOBS] WHERE job_type = 'ROW LEVEL TTL'")
+			require.Len(t, rows, 1)
+			row := rows[0]
+			require.Contains(t, row[0], fmt.Sprintf("LIMIT %d", testCase.jobSelectBatchSize))
+		})
+	}
 }
