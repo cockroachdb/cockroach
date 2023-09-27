@@ -367,6 +367,7 @@ func (f *replicaFlowControlIntegrationImpl) disconnectStreams(
 	ctx context.Context, toDisconnect []roachpb.ReplicaDescriptor, reason string,
 ) {
 	ourReplicaID := f.replicaForFlowControl.getReplicaID()
+	log.Infof(ctx, "disconnectStreamLocked: reason: %s", reason)
 	for _, repl := range toDisconnect {
 		if repl.ReplicaID == ourReplicaID {
 			log.Fatal(ctx, "replica attempting to disconnect from itself")

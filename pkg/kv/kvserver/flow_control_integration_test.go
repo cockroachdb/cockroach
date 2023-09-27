@@ -2277,6 +2277,8 @@ func TestFlowControlGranterAdmitOneByOne(t *testing.T) {
 	}
 	h.log("sent put requests")
 
+	time.Sleep(time.Second)
+
 	h.comment(`
 -- Flow token metrics from n1 after issuing 1024KiB, i.e. 1MiB 3x replicated writes
 -- that are yet to get admitted. We see 3*1MiB=3MiB deductions of

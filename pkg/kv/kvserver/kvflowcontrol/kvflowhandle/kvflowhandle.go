@@ -309,6 +309,7 @@ func (h *Handle) ResetStreams(ctx context.Context) {
 		streams = append(streams, stream)
 		lowerBounds = append(lowerBounds, tracker.LowerBound())
 	}
+	log.Info(ctx, "disconnectStreamLocked: ResetStreams")
 	for i := range streams {
 		h.disconnectStreamLocked(ctx, streams[i])
 	}
@@ -343,6 +344,8 @@ func (h *Handle) disconnectStreamLocked(ctx context.Context, stream kvflowcontro
 	if _, ok := h.mu.perStreamTokenTracker[stream]; !ok {
 		return
 	}
+
+	log.Info(ctx, "disconnectStreamLocked: disconnect stream and returning tokens")
 
 	h.mu.perStreamTokenTracker[stream].Iter(ctx,
 		func(pri admissionpb.WorkPriority, tokens kvflowcontrol.Tokens) {
@@ -387,6 +390,7 @@ func (h *Handle) Close(ctx context.Context) {
 	for stream := range h.mu.perStreamTokenTracker {
 		streams = append(streams, stream)
 	}
+	log.Info(ctx, "disconnectStreamLocked: Close")
 	for _, stream := range streams {
 		h.disconnectStreamLocked(ctx, stream)
 	}
