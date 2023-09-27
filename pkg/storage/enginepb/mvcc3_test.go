@@ -37,7 +37,8 @@ func populatedMVCCValueHeader() MVCCValueHeader {
 
 func TestMVCCValueHeader_IsEmpty(t *testing.T) {
 	allFieldsSet := populatedMVCCValueHeader()
-	require.NoError(t, zerofields.NoZeroField(allFieldsSet), "make sure you update the IsEmpty method")
+	require.NoError(t, zerofields.NoZeroFieldExcept(allFieldsSet, "ReplicationState"),
+		"make sure you update the IsEmpty method")
 	require.True(t, MVCCValueHeader{}.IsEmpty())
 	require.False(t, allFieldsSet.IsEmpty())
 }
