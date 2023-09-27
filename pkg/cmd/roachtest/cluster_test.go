@@ -122,6 +122,11 @@ func (t testWrapper) PerfArtifactsDir() string {
 	return ""
 }
 
+// GoCoverArtifactsDir is part of the test.Test interface.
+func (t testWrapper) GoCoverArtifactsDir() string {
+	return ""
+}
+
 // logger is part of the testI interface.
 func (t testWrapper) L() *logger.Logger {
 	return t.l
