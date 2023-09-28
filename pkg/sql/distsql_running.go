@@ -1438,6 +1438,9 @@ func (r *DistSQLReceiver) handleCommErr(commErr error) {
 func (r *DistSQLReceiver) Push(
 	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) execinfra.ConsumerStatus {
+	if t, ok := logtags.FromContext(r.ctx).GetTag("intExec"); ok && t.ValueStr() == "system-jobs-scan" {
+		log.Infof(r.ctx, "pushing row=%v meta=%v\n", row, meta)
+	}
 	r.checkConcurrentError()
 	var injectedMeta bool
 	if r.testingKnobs.pushCallback != nil {
@@ -1959,14 +1962,22 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	physPlan, physPlanCleanup, err := dsp.createPhysPlan(ctx, planCtx, plan)
 	defer physPlanCleanup()
 	if err != nil {
+		if t, ok := logtags.FromContext(ctx).GetTag("intExec"); ok && t.ValueStr() == "system-jobs-scan" {
+			log.Infof(ctx, "error in planning: %+v\n", err)
+		}
 		recv.SetError(err)
 	} else {
 		finalizePlanWithRowCount(ctx, planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
 		recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
 		if t, ok := logtags.FromContext(ctx).GetTag("intExec"); ok && t.ValueStr() == "system-jobs-scan" {
-			fmt.Printf("distribution: %s\n", physPlan.Distribution)
+			log.Infof(ctx, "distribution: %s\n", physPlan.Distribution)
 		}
 		dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, finishedSetupFn)
+		if err = recv.getError(); err != nil {
+			if t, ok := logtags.FromContext(ctx).GetTag("intExec"); ok && t.ValueStr() == "system-jobs-scan" {
+				log.Infof(ctx, "error in execution: %+v\n", err)
+			}
+		}
 	}
 	if planCtx.isLocal {
 		// If the plan was local, then we're done regardless of whether an error
@@ -2013,7 +2024,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 			// successful local execution.
 			return
 		}
-		log.Infof(ctx, "encountered an error when running the distributed plan, re-running it as local: %v\nrecv=%+v\ntxn=%+v", distributedErr, recv, txn)
+		log.Infof(ctx, "encountered an error when running the distributed plan, re-running it as local: %+v\nrecv=%+v\ntxn=%+v", distributedErr, recv, txn)
 		recv.resetForLocalRerun(subqueriesStats)
 		telemetry.Inc(sqltelemetry.DistributedErrorLocalRetryAttempt)
 		dsp.distSQLSrv.ServerConfig.Metrics.DistErrorLocalRetryAttempts.Inc(1)
