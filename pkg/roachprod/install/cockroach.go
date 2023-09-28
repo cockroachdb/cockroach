@@ -299,6 +299,10 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 			return err
 		}
 	case StartServiceForVirtualCluster:
+		if err := c.createTenantMetadata(ctx, l, startOpts.VirtualClusterName, startOpts.KVCluster); err != nil {
+			return err
+		}
+
 		if err := c.distributeTenantCerts(ctx, l, startOpts.KVCluster, startOpts.VirtualClusterID); err != nil {
 			return err
 		}
@@ -1012,12 +1016,54 @@ func (c *SyncedCluster) distributeCerts(ctx context.Context, l *logger.Logger) e
 	return nil
 }
 
+// createTenantMetadata creates the virtual cluster, if necessary. We
+// only need to run the statements in this function against a single
+// connection to the storage cluster.
+func (c *SyncedCluster) createTenantMetadata(
+	ctx context.Context, l *logger.Logger, virtualClusterName string, storageCluster *SyncedCluster,
+) error {
+	runSQL := func(stmt string) (string, error) {
+		results, err := storageCluster.ExecSQL(ctx, l, storageCluster.Nodes[:1], "", 0, []string{
+			"--format", "raw", "-e", stmt,
+		})
+		if err != nil {
+			return "", err
+		}
+
+		return results[0].CombinedOut, nil
+	}
+
+	tenantExistsQuery := fmt.Sprintf(
+		"SELECT 1 FROM system.tenants WHERE name = '%s'", virtualClusterName,
+	)
+
+	existsOut, err := runSQL(tenantExistsQuery)
+	if err != nil {
+		return err
+	}
+
+	// Check if virtual cluster already exists, in which case there is
+	// nothing to do.
+	if !strings.Contains(existsOut, "0 rows") {
+		return nil
+	}
+
+	l.Printf("Creating tenant metadata")
+	createTenantStmts := []string{
+		fmt.Sprintf("CREATE TENANT '%s'", virtualClusterName),
+		fmt.Sprintf("ALTER TENANT '%s' START SERVICE EXTERNAL", virtualClusterName),
+	}
+
+	_, err = runSQL(strings.Join(createTenantStmts, "; "))
+	return err
+}
+
 // distributeCerts distributes certs if it's a secure cluster.
 func (c *SyncedCluster) distributeTenantCerts(
-	ctx context.Context, l *logger.Logger, hostCluster *SyncedCluster, tenantID int,
+	ctx context.Context, l *logger.Logger, storageCluster *SyncedCluster, tenantID int,
 ) error {
 	if c.Secure {
-		return c.DistributeTenantCerts(ctx, l, hostCluster, tenantID)
+		return c.DistributeTenantCerts(ctx, l, storageCluster, tenantID)
 	}
 	return nil
 }
