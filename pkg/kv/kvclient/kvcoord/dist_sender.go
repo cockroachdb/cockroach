@@ -2653,10 +2653,10 @@ func (ds *DistSender) getLocalityComparison(
 
 	comparisonResult, regionErr, zoneErr := gatewayNodeDesc.Locality.CompareWithLocality(destinationNodeDesc.Locality)
 	if regionErr != nil {
-		log.VEventf(ctx, 5, "unable to determine if the given nodes are cross region %v", regionErr)
+		log.VInfof(ctx, 5, "unable to determine if the given nodes are cross region %v", regionErr)
 	}
 	if zoneErr != nil {
-		log.VEventf(ctx, 5, "unable to determine if the given nodes are cross zone %v", zoneErr)
+		log.VInfof(ctx, 5, "unable to determine if the given nodes are cross zone %v", zoneErr)
 	}
 	return comparisonResult
 }
