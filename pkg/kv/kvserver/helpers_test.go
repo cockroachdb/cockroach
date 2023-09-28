@@ -425,7 +425,11 @@ func (r *Replica) GetTSCacheHighWater() hlc.Timestamp {
 // ShouldBackpressureWrites returns whether writes to the range should be
 // subject to backpressure.
 func (r *Replica) ShouldBackpressureWrites(ctx context.Context) bool {
-	return r.shouldBackpressureWrites()
+	conf, err := r.LoadSpanConfig(ctx)
+	if err != nil {
+		return false
+	}
+	return r.shouldBackpressureWrites(conf)
 }
 
 // GetRaftLogSize returns the approximate raft log size and whether it is

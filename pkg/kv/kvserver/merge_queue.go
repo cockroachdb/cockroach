@@ -295,7 +295,7 @@ func (mq *mergeQueue) process(
 	}
 
 	shouldSplit, _ := shouldSplitRange(ctx, mergedDesc, mergedStats,
-		conf.RangeMaxBytes, lhsRepl.shouldBackpressureWrites(), confReader)
+		conf.RangeMaxBytes, lhsRepl.shouldBackpressureWrites(conf), confReader)
 	if shouldSplit {
 		log.VEventf(ctx, 2,
 			"skipping merge to avoid thrashing: merged range %s may split "+

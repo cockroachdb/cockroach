@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -143,6 +142,12 @@ type StoreTestingKnobs struct {
 	// in order for unit tests to modify the request, error returned to the client
 	// or data.
 	TestingRangefeedFilter kvserverbase.ReplicaRangefeedFilter
+
+	// TestingRangefeedEnabledInterceptor is used to override the span config
+	// value for a range. The first returned value is whether the interceptor is
+	// enabled at all for the range, and the second is whether rangefeeds are
+	// enabled for the range.
+	TestingRangefeedEnabledInterceptor func(*roachpb.RangeDescriptor) (bool, bool)
 
 	// MaxOffset, if set, overrides the server clock's MaxOffset at server
 	// creation time.
@@ -413,12 +418,6 @@ type StoreTestingKnobs struct {
 	// PurgeOutdatedReplicasInterceptor intercepts attempts to purge outdated
 	// replicas in the store.
 	PurgeOutdatedReplicasInterceptor func()
-	// SpanConfigUpdateInterceptor is called after the store hears about a span
-	// config update.
-	SpanConfigUpdateInterceptor func(spanconfig.Update)
-	// SetSpanConfigInterceptor is called before updating a replica's embedded
-	// SpanConfig. The returned SpanConfig is used instead.
-	SetSpanConfigInterceptor func(*roachpb.RangeDescriptor, roachpb.SpanConfig) roachpb.SpanConfig
 	// If set, use the given version as the initial replica version when
 	// bootstrapping ranges. This is used for testing the migration
 	// infrastructure.
@@ -441,15 +440,8 @@ type StoreTestingKnobs struct {
 	// MakeSystemConfigSpanUnavailableToQueues makes the system config span
 	// unavailable to queues that ask for it.
 	MakeSystemConfigSpanUnavailableToQueues bool
-	// UseSystemConfigSpanForQueues uses the system config span infrastructure
-	// for internal queues (as opposed to the span configs infrastructure). This
-	// is used only for (old) tests written with the system config span in mind.
-	//
-	// TODO(irfansharif): Get rid of this knob, maybe by first moving
-	// DisableSpanConfigs into a testing knob instead of a server arg.
-	UseSystemConfigSpanForQueues bool
 	// ConfReaderInterceptor intercepts calls to get a span config reader.
-	ConfReaderInterceptor func() spanconfig.StoreReader
+	ConfReaderInterceptor func() error
 	// IgnoreStrictGCEnforcement is used by tests to op out of strict GC
 	// enforcement.
 	IgnoreStrictGCEnforcement bool

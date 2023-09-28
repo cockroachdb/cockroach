@@ -430,6 +430,12 @@ func (s *KVSubscriber) handleCompleteUpdate(
 	}
 }
 
+func (s *KVSubscriber) SetLastUpdatedTest() {
+	s.mu.Lock()
+	s.setLastUpdatedLocked(s.clock.Now())
+	defer s.mu.Unlock()
+}
+
 func (s *KVSubscriber) setLastUpdatedLocked(ts hlc.Timestamp) {
 	s.mu.lastUpdated = ts
 	nanos := timeutil.Since(s.mu.lastUpdated.GoTime()).Nanoseconds()

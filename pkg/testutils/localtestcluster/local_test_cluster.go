@@ -240,17 +240,21 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.SpanConfigSubscriber = spanconfigkvsubscriber.New(
-		clock,
-		rangeFeedFactory,
-		keys.SpanConfigurationsTableID,
-		1<<20, /* 1 MB */
-		cfg.DefaultSpanConfig,
-		cfg.Settings,
-		spanconfigstore.NewEmptyBoundsReader(),
-		nil, /* knobs */
-		nil, /* registry */
-	)
+
+	spanConfigSubscriber :=
+		spanconfigkvsubscriber.New(
+			clock,
+			rangeFeedFactory,
+			keys.SpanConfigurationsTableID,
+			1<<20, /* 1 MB */
+			cfg.DefaultSpanConfig,
+			cfg.Settings,
+			spanconfigstore.NewEmptyBoundsReader(),
+			nil, /* knobs */
+			nil, /* registry */
+		)
+	spanConfigSubscriber.SetLastUpdatedTest()
+	cfg.SpanConfigSubscriber = spanConfigSubscriber
 	cfg.SystemConfigProvider = systemconfigwatcher.New(
 		keys.SystemSQLCodec,
 		cfg.Clock,

@@ -717,7 +717,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 	ui uncertainty.Interval,
 	omitInRangefeeds bool,
 ) (storage.Batch, *kvpb.BatchResponse, result.Result, *kvpb.Error) {
-	batch, opLogger := r.newBatchedEngine(ba, g)
+	batch, opLogger := r.newBatchedEngine(ctx, g)
 	now := timeutil.Now()
 	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, g, st, ui, readWrite, omitInRangefeeds)
 	r.store.metrics.ReplicaWriteBatchEvaluationLatency.RecordValue(timeutil.Since(now).Nanoseconds())
@@ -736,7 +736,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 // OpLogger is attached to the returned engine.Batch, recording all operations.
 // Its recording should be attached to the Result of request evaluation.
 func (r *Replica) newBatchedEngine(
-	ba *kvpb.BatchRequest, g *concurrency.Guard,
+	ctx context.Context, g *concurrency.Guard,
 ) (storage.Batch, *storage.OpLoggerBatch) {
 	batch := r.store.TODOEngine().NewBatch()
 	if !batch.ConsistentIterators() {
@@ -745,7 +745,7 @@ func (r *Replica) newBatchedEngine(
 		panic("expected consistent iterators")
 	}
 	var opLogger *storage.OpLoggerBatch
-	if r.isRangefeedEnabled() || RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
+	if r.isRangefeedEnabled(ctx) || RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		// TODO(nvanbenschoten): once we get rid of the RangefeedEnabled
 		// cluster setting we'll need a way to turn this on when any
 		// replica (not just the leaseholder) wants it and off when no

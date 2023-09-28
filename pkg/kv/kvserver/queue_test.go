@@ -62,7 +62,7 @@ func (tq *testQueueImpl) shouldQueue(
 }
 
 func (tq *testQueueImpl) process(
-	_ context.Context, _ *Replica, _ *roachpb.SpanConfig,
+	ctx context.Context, r *Replica, _ *roachpb.SpanConfig,
 ) (bool, error) {
 	defer atomic.AddInt32(&tq.processed, 1)
 	if tq.err != nil {
@@ -723,7 +723,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		},
 	}
 
-	bq := makeTestBaseQueue("test", testQueue, s, queueConfig{maxSize: 2})
+	bq := makeTestBaseQueue("test", testQueue, s, queueConfig{maxSize: 2, acceptsUnsplitRanges: false, needsSpanConfigs: true})
 	bq.Start(stopper)
 
 	// Check our config.

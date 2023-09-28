@@ -287,55 +287,58 @@ func (s *Watcher) Run(ctx context.Context) error {
 		log.Fatalf(ctx, "%s: initial scan timestamp (%s) regressed from last recorded frontier (%s)", s.name, initialScanTS, s.lastFrontierTS)
 	}
 
-	rangeFeed := s.rangefeedFactory.New(string(s.name), initialScanTS,
-		onValue,
-		rangefeed.WithInitialScan(func(ctx context.Context) {
-			select {
-			case <-ctx.Done():
-				// The context is canceled when the rangefeed is closed by the
-				// main handler goroutine. It's closed after we stop listening
-				// to initialScanDoneCh.
-			case initialScanDoneCh <- struct{}{}:
-			}
-		}),
-		rangefeed.WithOnFrontierAdvance(func(ctx context.Context, frontierTS hlc.Timestamp) {
-			mu.Lock()
-			mu.frontierTS = frontierTS
-			mu.Unlock()
-
-			select {
-			case <-ctx.Done():
-			case frontierBumpedCh <- struct{}{}:
-			}
-		}),
-		// TODO(irfansharif): Consider making this configurable on the Watcher
-		// type. As of 2022-11 all uses of this type are system-internal ones
-		// where a higher admission-pri makes sense.
-		rangefeed.WithSystemTablePriority(),
-		rangefeed.WithDiff(s.withPrevValue),
-		rangefeed.WithRowTimestampInInitialScan(s.withRowTSInInitialScan),
-		rangefeed.WithOnInitialScanError(func(ctx context.Context, err error) (shouldFail bool) {
-			// TODO(irfansharif): Consider if there are other errors which we
-			// want to treat as permanent. This was cargo culted from the
-			// settings watcher.
-			if grpcutil.IsAuthError(err) ||
-				strings.Contains(err.Error(), "rpc error: code = Unauthenticated") {
+	// Tests can use a nil rangefeedFactory.
+	if s.rangefeedFactory != nil {
+		rangeFeed := s.rangefeedFactory.New(string(s.name), initialScanTS,
+			onValue,
+			rangefeed.WithInitialScan(func(ctx context.Context) {
 				select {
 				case <-ctx.Done():
 					// The context is canceled when the rangefeed is closed by the
 					// main handler goroutine. It's closed after we stop listening
-					// to errCh.
-				case errCh <- err:
+					// to initialScanDoneCh.
+				case initialScanDoneCh <- struct{}{}:
 				}
-				return true
-			}
-			return false
-		}),
-	)
-	if err := rangeFeed.Start(ctx, s.spans); err != nil {
-		return err
+			}),
+			rangefeed.WithOnFrontierAdvance(func(ctx context.Context, frontierTS hlc.Timestamp) {
+				mu.Lock()
+				mu.frontierTS = frontierTS
+				mu.Unlock()
+
+				select {
+				case <-ctx.Done():
+				case frontierBumpedCh <- struct{}{}:
+				}
+			}),
+			// TODO(irfansharif): Consider making this configurable on the Watcher
+			// type. As of 2022-11 all uses of this type are system-internal ones
+			// where a higher admission-pri makes sense.
+			rangefeed.WithSystemTablePriority(),
+			rangefeed.WithDiff(s.withPrevValue),
+			rangefeed.WithRowTimestampInInitialScan(s.withRowTSInInitialScan),
+			rangefeed.WithOnInitialScanError(func(ctx context.Context, err error) (shouldFail bool) {
+				// TODO(irfansharif): Consider if there are other errors which we
+				// want to treat as permanent. This was cargo culted from the
+				// settings watcher.
+				if grpcutil.IsAuthError(err) ||
+					strings.Contains(err.Error(), "rpc error: code = Unauthenticated") {
+					select {
+					case <-ctx.Done():
+						// The context is canceled when the rangefeed is closed by the
+						// main handler goroutine. It's closed after we stop listening
+						// to errCh.
+					case errCh <- err:
+					}
+					return true
+				}
+				return false
+			}),
+		)
+		if err := rangeFeed.Start(ctx, s.spans); err != nil {
+			return err
+		}
+		defer rangeFeed.Close()
 	}
-	defer rangeFeed.Close()
 	if fn := s.knobs.PostRangeFeedStart; fn != nil {
 		fn()
 	}

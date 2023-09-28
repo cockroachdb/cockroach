@@ -1010,12 +1010,11 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 				// applying a config over the replicas, we fallback to one that
 				// enables rangefeeds by default. The sub-test doesn't want that, so
 				// we add an intercept and disable it for the test range.
-				SetSpanConfigInterceptor: func(desc *roachpb.RangeDescriptor, conf roachpb.SpanConfig) roachpb.SpanConfig {
-					if !desc.ContainsKey(roachpb.RKey(startKey)) {
-						return conf
+				TestingRangefeedEnabledInterceptor: func(desc *roachpb.RangeDescriptor) (bool, bool) {
+					if startKey.Equal(desc.StartKey.AsRawKey()) {
+						return true, false
 					}
-					conf.RangefeedEnabled = false
-					return conf
+					return false, false
 				},
 			},
 		}
@@ -1073,18 +1072,16 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 	t.Run("range key mismatch", func(t *testing.T) {
 		knobs := base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				// Use a span config override to check that we get a key mismatch error
-				// despite the span config's setting whenever the key is outside the
+				// Use a Rangefeed interceptor to check that we get a key mismatch error
+				// despite the rangefeed setting whenever the key is outside the
 				// bounds of the range.
-				SetSpanConfigInterceptor: func(desc *roachpb.RangeDescriptor, conf roachpb.SpanConfig) roachpb.SpanConfig {
-					if desc.ContainsKey(roachpb.RKey(keys.ScratchRangeMin)) {
-						conf.RangefeedEnabled = false
-						return conf
-					} else if desc.ContainsKey(startRKey) {
-						conf.RangefeedEnabled = true
-						return conf
+				TestingRangefeedEnabledInterceptor: func(desc *roachpb.RangeDescriptor) (bool, bool) {
+					if keys.ScratchRangeMin.Equal(desc.StartKey.AsRawKey()) {
+						return true, false
+					} else if startKey.Equal(desc.StartKey.AsRawKey()) {
+						return true, true
 					}
-					return conf
+					return false, false
 				},
 			},
 		}
