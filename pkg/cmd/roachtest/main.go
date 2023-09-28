@@ -233,7 +233,7 @@ func testsToRun(
 	selectProbability float64,
 	print bool,
 ) []registry.TestSpec {
-	specs, tagMismatch := r.GetTests(filter)
+	specs := r.GetTests(filter)
 
 	var notSkipped []registry.TestSpec
 	for _, s := range specs {
@@ -247,15 +247,6 @@ func testsToRun(
 			if print {
 				fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, "0.00s", s.Skip)
 			}
-		}
-	}
-	for _, s := range tagMismatch {
-		if print && teamCity {
-			fmt.Fprintf(os.Stdout, "##teamcity[testIgnored name='%s' message='tag mismatch']\n",
-				s.Name)
-		}
-		if print {
-			fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\ttag mismatch\n", s.Name, "0.00s")
 		}
 	}
 
