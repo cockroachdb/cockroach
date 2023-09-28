@@ -176,22 +176,45 @@ func (c *SyncedCluster) DiscoverService(
 	serviceType ServiceType,
 	sqlInstance int,
 ) (ServiceDesc, error) {
+	// We first try to discover an external service for the virtual
+	// cluster name provided on the requested node. Note that we filter
+	// by `ServiceModeExternal` for explicitness: shared-process virtual
+	// clusters have a fixed, sentinel node	(`sharedProcessVirtualClusterNode`).
+	// They are handled in the logic below, when this call to
+	// `DiscoverServices` returns an empty collection.
+	//
+	// This call should return service descriptors for the storage
+	// service and for external-process virtual clusters.
 	services, err := c.DiscoverServices(
-		ctx, virtualClusterName, serviceType, ServiceNodePredicate(node), ServiceInstancePredicate(sqlInstance),
+		ctx, virtualClusterName, serviceType,
+		ServiceNodePredicate(node), ServiceModePredicate(ServiceModeExternal), ServiceInstancePredicate(sqlInstance),
 	)
 	if err != nil {
 		return ServiceDesc{}, err
 	}
-	// If no services are found matching the criteria, attempt to discover a
-	// service for the system interface, and assume the service is shared.
-	if len(services) == 0 {
+
+	isSystemInterface := virtualClusterName == "" || virtualClusterName == SystemInterfaceName
+	// If no external services are found matching the criteria, attempt
+	// to discover a a shared service.
+	if len(services) == 0 && !isSystemInterface {
+		// At this point, we know that we are searching for a
+		// shared-process virtual cluster. Find the corresponding system
+		// service, if any.
 		services, err = c.DiscoverServices(
 			ctx, SystemInterfaceName, serviceType, ServiceNodePredicate(node),
 		)
 		if err != nil {
 			return ServiceDesc{}, err
 		}
+
+		// Update the system service to point to the virtual cluster
+		// requested.
+		for j := range services {
+			services[j].VirtualClusterName = virtualClusterName
+			services[j].ServiceMode = ServiceModeShared
+		}
 	}
+
 	// Finally, fall back to the default ports if no services are found. This is
 	// useful for backwards compatibility with clusters that were created before
 	// the introduction of service discovery, or without a DNS provider.
@@ -311,11 +334,19 @@ func ServiceNodePredicate(nodes ...Node) ServicePredicate {
 	}
 }
 
-// ServiceInstancePredicate returns a ServicePredicate that match on the provided
-// instance.
+// ServiceInstancePredicate returns a ServicePredicate that matches on
+// the provided instance.
 func ServiceInstancePredicate(instance int) ServicePredicate {
 	return func(descriptor ServiceDesc) bool {
 		return descriptor.Instance == instance
+	}
+}
+
+// ServiceModePredicate returns a ServicePredicate that matches on the
+// provided service mode.
+func ServiceModePredicate(serviceMode ServiceMode) ServicePredicate {
+	return func(descriptor ServiceDesc) bool {
+		return descriptor.ServiceMode == serviceMode
 	}
 }
 
