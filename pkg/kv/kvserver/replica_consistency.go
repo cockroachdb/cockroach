@@ -485,6 +485,7 @@ func CalcReplicaDigest(
 	var intBuf [8]byte
 	var legacyTimestamp hlc.LegacyTimestamp
 	var timestampBuf []byte
+	var uuidBuf [uuid.Size]byte
 	hasher := sha512.New()
 
 	if efos, ok := snap.(storage.EventuallyFileOnlyReader); ok {
@@ -532,6 +533,7 @@ func CalcReplicaDigest(
 		if _, err := hasher.Write(intBuf[:]); err != nil {
 			return err
 		}
+		// Encode the key.
 		if _, err := hasher.Write(unsafeKey.Key); err != nil {
 			return err
 		}
@@ -547,6 +549,7 @@ func CalcReplicaDigest(
 		if _, err := hasher.Write(timestampBuf); err != nil {
 			return err
 		}
+		// Encode the value.
 		_, err := hasher.Write(unsafeValue)
 		return err
 	}
@@ -571,6 +574,7 @@ func CalcReplicaDigest(
 		if _, err := hasher.Write(intBuf[:]); err != nil {
 			return err
 		}
+		// Encode the key.
 		if _, err := hasher.Write(rangeKV.RangeKey.StartKey); err != nil {
 			return err
 		}
@@ -589,14 +593,43 @@ func CalcReplicaDigest(
 		if _, err := hasher.Write(timestampBuf); err != nil {
 			return err
 		}
+		// Encode the value.
 		_, err = hasher.Write(rangeKV.Value)
 		return err
 	}
 
 	visitors.LockTableKey = func(unsafeKey storage.LockTableKey, unsafeValue []byte) error {
-		// TODO(nvanbenschoten): rate limit scan through lock table and add to
-		// checksum to be included in consistency checks.
-		return nil
+		// Rate limit the scan through the lock table.
+		if err := wait(int64(len(unsafeKey.Key) + len(unsafeValue))); err != nil {
+			return err
+		}
+		// Encode the length of the key and value.
+		binary.LittleEndian.PutUint64(intBuf[:], uint64(len(unsafeKey.Key)))
+		if _, err := hasher.Write(intBuf[:]); err != nil {
+			return err
+		}
+		binary.LittleEndian.PutUint64(intBuf[:], uint64(len(unsafeValue)))
+		if _, err := hasher.Write(intBuf[:]); err != nil {
+			return err
+		}
+		// Encode the key.
+		if _, err := hasher.Write(unsafeKey.Key); err != nil {
+			return err
+		}
+		// NOTE: this is not the same strength encoding that the actual lock
+		// table version uses. For that, see getByteForReplicatedLockStrength.
+		strengthBuf := intBuf[:1]
+		strengthBuf[0] = byte(unsafeKey.Strength)
+		if _, err := hasher.Write(strengthBuf); err != nil {
+			return err
+		}
+		copy(uuidBuf[:], unsafeKey.TxnUUID.GetBytes())
+		if _, err := hasher.Write(uuidBuf[:]); err != nil {
+			return err
+		}
+		// Encode the value.
+		_, err := hasher.Write(unsafeValue)
+		return err
 	}
 
 	// In statsOnly mode, we hash only the RangeAppliedState. In regular mode, hash
