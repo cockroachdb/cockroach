@@ -35,7 +35,7 @@ func TestCreateAutoConfigRunnerJob(t *testing.T) {
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
-						clusterversion.V23_1_CreateAutoConfigRunnerJob - 1),
+						clusterversion.Permanent_V23_1_CreateAutoConfigRunnerJob - 1),
 				},
 			},
 		},
@@ -57,7 +57,7 @@ func TestCreateAutoConfigRunnerJob(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		sqlDB,
-		clusterversion.V23_1_CreateAutoConfigRunnerJob,
+		clusterversion.Permanent_V23_1_CreateAutoConfigRunnerJob,
 		nil,   /* done */
 		false, /* expectError */
 	)
