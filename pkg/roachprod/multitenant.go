@@ -44,7 +44,7 @@ func StartServiceForVirtualCluster(
 	}
 
 	// TODO(radu): do we need separate clusterSettingsOpts for the storage cluster?
-	hc, err := newCluster(l, storageCluster, clusterSettingsOpts...)
+	sc, err := newCluster(l, storageCluster, clusterSettingsOpts...)
 	if err != nil {
 		return err
 	}
@@ -55,27 +55,17 @@ func StartServiceForVirtualCluster(
 	}
 	startOpts.VirtualClusterName = defaultVirtualClusterName(startOpts.VirtualClusterID)
 
-	// Create virtual cluster, if necessary. We only need to run this
-	// SQL against a single connection to the storage cluster.
-	l.Printf("Creating tenant metadata")
-	if _, err := hc.ExecSQL(ctx, l, hc.Nodes[:1], "", 0, []string{
-		`-e`,
-		fmt.Sprintf(createVirtualClusterIfNotExistsQuery, startOpts.VirtualClusterID),
-	}); err != nil {
-		return err
-	}
-
 	l.Printf("Starting SQL/HTTP instances for the virtual cluster")
 	var kvAddrs []string
-	for _, node := range hc.Nodes {
-		port, err := hc.NodePort(ctx, node)
+	for _, node := range sc.Nodes {
+		port, err := sc.NodePort(ctx, node)
 		if err != nil {
 			return err
 		}
-		kvAddrs = append(kvAddrs, fmt.Sprintf("%s:%d", hc.Host(node), port))
+		kvAddrs = append(kvAddrs, fmt.Sprintf("%s:%d", sc.Host(node), port))
 	}
 	startOpts.KVAddrs = strings.Join(kvAddrs, ",")
-	startOpts.KVCluster = hc
+	startOpts.KVCluster = sc
 	return tc.Start(ctx, l, startOpts)
 }
 
@@ -100,18 +90,3 @@ func StopServiceForVirtualCluster(
 func defaultVirtualClusterName(virtualClusterID int) string {
 	return fmt.Sprintf("virtual-cluster-%d", virtualClusterID)
 }
-
-// createVirtualClusterIfNotExistsQuery is used to initialize the
-// metadata for the virtual cluster, if it's not initialized already.
-// We set up the tvirtual cluster with a lot of initial RUs so that we
-// don't encounter throttling by default.
-const createVirtualClusterIfNotExistsQuery = `
-SELECT
-  CASE (SELECT 1 FROM system.tenants WHERE id = %[1]d) IS NULL
-  WHEN true
-  THEN (
-    crdb_internal.create_tenant(%[1]d),
-    crdb_internal.update_tenant_resource_limits(%[1]d, 1000000000, 10000, 0, now(), 0)
-  )::STRING
-  ELSE 'already exists'
-  END;`
