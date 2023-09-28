@@ -58,7 +58,7 @@ func StartServiceForVirtualCluster(
 	// Create virtual cluster, if necessary. We only need to run this
 	// SQL against a single connection to the storage cluster.
 	l.Printf("Creating tenant metadata")
-	if err := hc.ExecSQL(ctx, l, hc.Nodes[:1], "", 0, []string{
+	if _, err := hc.ExecSQL(ctx, l, hc.Nodes[:1], "", 0, []string{
 		`-e`,
 		fmt.Sprintf(createVirtualClusterIfNotExistsQuery, startOpts.VirtualClusterID),
 	}); err != nil {
