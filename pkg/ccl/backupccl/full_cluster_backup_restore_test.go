@@ -130,22 +130,23 @@ CREATE TABLE data2.foo (a int);
 
 	// Setup the system systemTablesToVerify to ensure that they are copied to the new cluster.
 	// Populate system.users.
-	numUsers := 1000
+	numBatches := 100
 	if util.RaceEnabled {
-		numUsers = 10
+		numBatches = 1
 	}
-
-	sqlDB.RunWithRetriableTxn(t, func(txn *gosql.Tx) error {
-		for i := 0; i < numUsers; i++ {
-			if _, err := txn.Exec(fmt.Sprintf("CREATE USER maxroach%d", i)); err != nil {
-				return err
+	usersPerBatch := 10
+	userID := 0
+	for b := 0; b < numBatches; b++ {
+		sqlDB.RunWithRetriableTxn(t, func(txn *gosql.Tx) error {
+			for u := 0; u < usersPerBatch; u++ {
+				if _, err := txn.Exec(fmt.Sprintf("CREATE USER maxroach%d WITH CREATEDB", userID)); err != nil {
+					return err
+				}
+				userID++
 			}
-			if _, err := txn.Exec(fmt.Sprintf("ALTER USER maxroach%d CREATEDB", i)); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+			return nil
+		})
+	}
 
 	// Populate system.zones.
 	sqlDB.Exec(t, `ALTER TABLE data.bank CONFIGURE ZONE USING gc.ttlseconds = 3600`)
@@ -606,7 +607,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "takes >1 min under race")
+	skip.UnderStressRace(t, "too slow under stress race")
 	params := base.TestServerArgs{}
 	// Disable GC job so that the final check of crdb_internal.tables is
 	// guaranteed to not be cleaned up. Although this was never observed by a
@@ -629,14 +630,23 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 
 	// Setup the system systemTablesToVerify to ensure that they are copied to the new cluster.
 	// Populate system.users.
-	sqlDB.RunWithRetriableTxn(t, func(txn *gosql.Tx) error {
-		for i := 0; i < 1000; i++ {
-			if _, err := txn.Exec(fmt.Sprintf("CREATE USER maxroach%d", i)); err != nil {
-				return err
+	numBatches := 100
+	if util.RaceEnabled {
+		numBatches = 1
+	}
+	usersPerBatch := 10
+	userID := 0
+	for b := 0; b < numBatches; b++ {
+		sqlDB.RunWithRetriableTxn(t, func(txn *gosql.Tx) error {
+			for u := 0; u < usersPerBatch; u++ {
+				if _, err := txn.Exec(fmt.Sprintf("CREATE USER maxroach%d", userID)); err != nil {
+					return err
+				}
+				userID++
 			}
-		}
-		return nil
-	})
+			return nil
+		})
+	}
 	sqlDB.Exec(t, `BACKUP TO 'nodelocal://1/missing-ssts'`)
 
 	// Bugger the backup by removing the SST files. (Note this messes up all of
