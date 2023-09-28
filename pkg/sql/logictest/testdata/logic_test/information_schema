@@ -20,7 +20,7 @@ SHOW TABLES FROM information_schema
 ----
 information_schema  administrable_role_authorizations      table  node  NULL  NULL
 information_schema  applicable_roles                       table  node  NULL  NULL
-information_schema  attributes                             table  node  NULL  NULL
+information_schema  attributes                             view   node  NULL  NULL
 information_schema  character_sets                         table  node  NULL  NULL
 information_schema  check_constraint_routine_usage         table  node  NULL  NULL
 information_schema  check_constraints                      table  node  NULL  NULL
@@ -96,7 +96,7 @@ information_schema  type_privileges                        table  node  NULL  NU
 information_schema  udt_privileges                         table  node  NULL  NULL
 information_schema  usage_privileges                       table  node  NULL  NULL
 information_schema  user_attributes                        table  node  NULL  NULL
-information_schema  user_defined_types                     table  node  NULL  NULL
+information_schema  user_defined_types                     view   node  NULL  NULL
 information_schema  user_mapping_options                   table  node  NULL  NULL
 information_schema  user_mappings                          table  node  NULL  NULL
 information_schema  user_privileges                        table  node  NULL  NULL
@@ -235,7 +235,7 @@ SHOW TABLES FROM test.information_schema
 ----
 information_schema  administrable_role_authorizations      table  node  NULL  NULL
 information_schema  applicable_roles                       table  node  NULL  NULL
-information_schema  attributes                             table  node  NULL  NULL
+information_schema  attributes                             view   node  NULL  NULL
 information_schema  character_sets                         table  node  NULL  NULL
 information_schema  check_constraint_routine_usage         table  node  NULL  NULL
 information_schema  check_constraints                      table  node  NULL  NULL
@@ -311,7 +311,7 @@ information_schema  type_privileges                        table  node  NULL  NU
 information_schema  udt_privileges                         table  node  NULL  NULL
 information_schema  usage_privileges                       table  node  NULL  NULL
 information_schema  user_attributes                        table  node  NULL  NULL
-information_schema  user_defined_types                     table  node  NULL  NULL
+information_schema  user_defined_types                     view   node  NULL  NULL
 information_schema  user_mapping_options                   table  node  NULL  NULL
 information_schema  user_mappings                          table  node  NULL  NULL
 information_schema  user_privileges                        table  node  NULL  NULL
@@ -6119,5 +6119,104 @@ NULL     root     test              pg_catalog       covar_pop_48   test        
 NULL     admin    test              pg_catalog       covar_pop_49   test             pg_catalog      covar_pop     EXECUTE         NO
 NULL     public   test              pg_catalog       covar_pop_49   test             pg_catalog      covar_pop     EXECUTE         NO
 NULL     root     test              pg_catalog       covar_pop_49   test             pg_catalog      covar_pop     EXECUTE         NO
+
+subtest end
+
+subtest user_defined_types
+
+statement ok
+CREATE TYPE u AS (ufoo int, ubar int);
+
+query TTBTTTB colnames,rowsort
+SHOW COLUMNS FROM information_schema.user_defined_types
+----
+column_name                 data_type  is_nullable  column_default  generation_expression  indices  is_hidden
+user_defined_type_catalog   STRING     true         NULL            ·                      {}       false
+user_defined_type_schema    STRING     true         NULL            ·                      {}       false
+user_defined_type_name      STRING     true         NULL            ·                      {}       false
+user_defined_type_category  STRING     true         NULL            ·                      {}       false
+is_instantiable             STRING     true         NULL            ·                      {}       false
+is_final                    STRING     true         NULL            ·                      {}       false
+ordering_form               STRING     true         NULL            ·                      {}       false
+ordering_category           STRING     true         NULL            ·                      {}       false
+ordering_routine_catalog    STRING     true         NULL            ·                      {}       false
+ordering_routine_schema     STRING     true         NULL            ·                      {}       false
+ordering_routine_name       STRING     true         NULL            ·                      {}       false
+reference_type              STRING     true         NULL            ·                      {}       false
+data_type                   STRING     true         NULL            ·                      {}       false
+character_maximum_length    INT8       true         NULL            ·                      {}       false
+character_octet_length      INT8       true         NULL            ·                      {}       false
+character_set_catalog       STRING     true         NULL            ·                      {}       false
+character_set_schema        STRING     true         NULL            ·                      {}       false
+character_set_name          STRING     true         NULL            ·                      {}       false
+collation_catalog           STRING     true         NULL            ·                      {}       false
+collation_schema            STRING     true         NULL            ·                      {}       false
+collation_name              STRING     true         NULL            ·                      {}       false
+numeric_precision           INT8       true         NULL            ·                      {}       false
+numeric_precision_radix     INT8       true         NULL            ·                      {}       false
+numeric_scale               INT8       true         NULL            ·                      {}       false
+datetime_precision          INT8       true         NULL            ·                      {}       false
+interval_type               STRING     true         NULL            ·                      {}       false
+interval_precision          INT8       true         NULL            ·                      {}       false
+source_dtd_identifier       STRING     true         NULL            ·                      {}       false
+ref_dtd_identifier          STRING     true         NULL            ·                      {}       false
+
+query TTTTTTTTTTTTTIITTTTTTIIIITITT colnames,rowsort
+SELECT * FROM information_schema.user_defined_types WHERE user_defined_type_name = 'u'
+----
+user_defined_type_catalog  user_defined_type_schema  user_defined_type_name  user_defined_type_category  is_instantiable  is_final  ordering_form  ordering_category  ordering_routine_catalog  ordering_routine_schema  ordering_routine_name  reference_type  data_type  character_maximum_length  character_octet_length  character_set_catalog  character_set_schema  character_set_name  collation_catalog  collation_schema  collation_name  numeric_precision  numeric_precision_radix  numeric_scale  datetime_precision  interval_type  interval_precision  source_dtd_identifier  ref_dtd_identifier
+test                       public                    u                       STRUCTURED                  YES              NULL      NULL           NULL               NULL                      NULL                     NULL                   NULL            NULL       NULL                      NULL                    NULL                   NULL                  NULL                NULL               NULL              NULL            NULL               NULL                     NULL           NULL                NULL           NULL                NULL                   NULL
+
+query TTTTTTTTTTTTTIITTTTTTIIIITITT colnames,rowsort
+SELECT * FROM information_schema.user_defined_types WHERE user_defined_type_name = 'dne'
+----
+user_defined_type_catalog  user_defined_type_schema  user_defined_type_name  user_defined_type_category  is_instantiable  is_final  ordering_form  ordering_category  ordering_routine_catalog  ordering_routine_schema  ordering_routine_name  reference_type  data_type  character_maximum_length  character_octet_length  character_set_catalog  character_set_schema  character_set_name  collation_catalog  collation_schema  collation_name  numeric_precision  numeric_precision_radix  numeric_scale  datetime_precision  interval_type  interval_precision  source_dtd_identifier  ref_dtd_identifier
+
+subtest end
+
+subtest attributes
+
+query TTBTTTB colnames,rowsort
+SHOW COLUMNS FROM information_schema.attributes
+----
+column_name                     data_type  is_nullable  column_default  generation_expression  indices  is_hidden
+udt_catalog                     STRING     true         NULL            ·                      {}       false
+udt_schema                      STRING     true         NULL            ·                      {}       false
+udt_name                        STRING     true         NULL            ·                      {}       false
+attribute_name                  STRING     true         NULL            ·                      {}       false
+ordinal_position                INT8       true         NULL            ·                      {}       false
+attribute_default               STRING     true         NULL            ·                      {}       false
+is_nullable                     STRING     true         NULL            ·                      {}       false
+data_type                       STRING     true         NULL            ·                      {}       false
+character_maximum_length        INT8       true         NULL            ·                      {}       false
+character_octet_length          INT8       true         NULL            ·                      {}       false
+character_set_catalog           STRING     true         NULL            ·                      {}       false
+character_set_schema            STRING     true         NULL            ·                      {}       false
+character_set_name              STRING     true         NULL            ·                      {}       false
+collation_catalog               STRING     true         NULL            ·                      {}       false
+collation_schema                STRING     true         NULL            ·                      {}       false
+collation_name                  STRING     true         NULL            ·                      {}       false
+numeric_precision               INT8       true         NULL            ·                      {}       false
+numeric_precision_radix         INT8       true         NULL            ·                      {}       false
+numeric_scale                   INT8       true         NULL            ·                      {}       false
+datetime_precision              INT8       true         NULL            ·                      {}       false
+interval_type                   STRING     true         NULL            ·                      {}       false
+interval_precision              INT8       true         NULL            ·                      {}       false
+attribute_udt_catalog           STRING     true         NULL            ·                      {}       false
+attribute_udt_schema            STRING     true         NULL            ·                      {}       false
+attribute_udt_name              STRING     true         NULL            ·                      {}       false
+scope_catalog                   STRING     true         NULL            ·                      {}       false
+scope_schema                    STRING     true         NULL            ·                      {}       false
+scope_name                      STRING     true         NULL            ·                      {}       false
+maximum_cardinality             INT8       true         NULL            ·                      {}       false
+dtd_identifier                  STRING     true         NULL            ·                      {}       false
+is_derived_reference_attribute  STRING     true         NULL            ·                      {}       false
+
+query TTTTITTTIITTTTTTIIIITITTTTTTITT colnames,rowsort
+SELECT * FROM information_schema.attributes WHERE udt_name = 'u'
+----
+udt_catalog  udt_schema  udt_name  attribute_name  ordinal_position  attribute_default  is_nullable  data_type  character_maximum_length  character_octet_length  character_set_catalog  character_set_schema  character_set_name  collation_catalog  collation_schema  collation_name  numeric_precision  numeric_precision_radix  numeric_scale  datetime_precision  interval_type  interval_precision  attribute_udt_catalog  attribute_udt_schema  attribute_udt_name  scope_catalog  scope_schema  scope_name  maximum_cardinality  dtd_identifier  is_derived_reference_attribute
+test         public      u         ufoo            1                 NULL               YES          integer    NULL                      NULL                    NULL                   NULL                  NULL                NULL               NULL              NULL            32                 2                        0              NULL                NULL           NULL                test                   pg_catalog            int4                NULL           NULL          NULL        NULL                 1               NO
+test         public      u         ubar            2                 NULL               YES          integer    NULL                      NULL                    NULL                   NULL                  NULL                NULL               NULL              NULL            32                 2                        0              NULL                NULL           NULL                test                   pg_catalog            int4                NULL           NULL          NULL        NULL                 2               NO
 
 subtest end
