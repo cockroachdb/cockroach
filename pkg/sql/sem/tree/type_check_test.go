@@ -171,7 +171,10 @@ func TestTypeCheck(t *testing.T) {
 			`CASE WHEN true THEN ('a', 2) ELSE NULL:::RECORD END`,
 			`CASE WHEN true THEN ('a':::STRING, 2:::INT8) ELSE NULL END`,
 		},
-
+		{
+			`CASE WHEN true THEN NULL:::RECORD ELSE ('a', 2) END`,
+			`CASE WHEN true THEN NULL ELSE ('a':::STRING, 2:::INT8) END`,
+		},
 		{`((ROW (1) AS a)).a`, `1:::INT8`},
 		{`((('1', 2) AS a, b)).a`, `'1':::STRING`},
 		{`((('1', 2) AS a, b)).b`, `2:::INT8`},
