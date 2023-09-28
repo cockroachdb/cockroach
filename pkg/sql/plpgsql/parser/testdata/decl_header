@@ -58,3 +58,20 @@ BEGIN
 END
 ----
 at or near "(": syntax error: unimplemented: this syntax
+
+# Correctly handle parsing errors for variable types.
+parse
+DECLARE
+  var1 one.two.three.four;
+BEGIN
+END
+----
+at or near "four": at or near ".": syntax error
+
+parse
+DECLARE
+  var1 one.two.three.four := 0;
+BEGIN
+END
+----
+at or near "four": at or near ".": syntax error

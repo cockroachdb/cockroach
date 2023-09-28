@@ -548,10 +548,9 @@ decl_datatype:
     sqlStr, _ := plpgsqllex.(*lexer).ReadSqlConstruct(
       ';', COLLATE, NOT, '=', COLON_EQUALS, DECLARE,
     )
-    // TODO(drewk): need to ensure the syntax for the type is correct.
     typ, err := plpgsqllex.(*lexer).GetTypeFromValidSQLSyntax(sqlStr)
     if err != nil {
-      setErr(plpgsqllex, err)
+      return setErr(plpgsqllex, err)
     }
     $$.val = typ
   }
@@ -819,7 +818,7 @@ getdiag_item: unreserved_keyword {
       $$.val = plpgsqltree.GetDiagnosticsReturnedSQLState;
     default:
       // TODO(jane): Should this use an unimplemented error instead?
-      setErr(plpgsqllex, errors.Newf("unrecognized GET DIAGNOSTICS item: %s", redact.Safe($1)))
+      return setErr(plpgsqllex, errors.Newf("unrecognized GET DIAGNOSTICS item: %s", redact.Safe($1)))
   }
 }
 ;
