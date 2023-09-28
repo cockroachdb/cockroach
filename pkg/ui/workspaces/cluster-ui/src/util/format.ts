@@ -168,7 +168,7 @@ export function PercentageCustom(
   let found = false;
   for (let index = 2; index < pctString.length && !found; index++) {
     finalPct = `${finalPct}${pctString[index]}`;
-    if (pctString[index] != "0") {
+    if (pctString[index] !== "0") {
       found = true;
     }
   }
@@ -184,7 +184,7 @@ export function PercentageCustom(
  */
 export function ComputeDurationScale(ns: number): UnitValue {
   return durationUnitsDescending.find(
-    ({ value }) => ns / value >= 1 || value == 1,
+    ({ value }) => ns / value >= 1 || value === 1,
   );
 }
 
@@ -206,7 +206,7 @@ export function Duration(nanoseconds: number): string {
  * If the value is 0, return "no samples".
  */
 export function DurationCheckSample(nanoseconds: number): string {
-  if (nanoseconds == 0) {
+  if (nanoseconds === 0) {
     return "no samples";
   }
   return Duration(nanoseconds);
@@ -233,10 +233,10 @@ export function FormatWithTimezone(
 }
 
 export function RenderCount(yesCount: Long, totalCount: Long): string {
-  if (longToInt(yesCount) == 0) {
+  if (longToInt(yesCount) === 0) {
     return "No";
   }
-  if (longToInt(yesCount) == longToInt(totalCount)) {
+  if (longToInt(yesCount) === longToInt(totalCount)) {
     return "Yes";
   }
   const noCount = longToInt(totalCount) - longToInt(yesCount);
@@ -275,17 +275,17 @@ export const limitText = (text: string, limit: number): string => {
 
 // limitStringArray returns a shortened form of text that surpasses a given limit
 export const limitStringArray = (arr: string[], limit: number): string => {
-  if (!arr || arr.length == 0) {
+  if (!arr || arr.length === 0) {
     return "";
   }
 
   // Remove null and undefined entries in the array.
   arr = arr.filter(n => n);
-  if (arr.length == 0) {
+  if (arr.length === 0) {
     return "";
   }
 
-  if (arr.length == 1 || arr[0]?.length > limit) {
+  if (arr.length === 1 || arr[0]?.length > limit) {
     return limitText(arr[0], limit);
   }
 
@@ -408,7 +408,7 @@ const breakLinesKeywords: BreakLineReplacement = {
 const LINE_BREAK_LIMIT = 100;
 
 export function FormatQuery(query: string): string {
-  if (query == null) {
+  if (query === null) {
     return "";
   }
   Object.keys(breakLinesKeywords).forEach(key => {
@@ -429,7 +429,7 @@ function breakLongLine(line: string, limit: number): string {
     return line;
   }
   const idxComma = line.indexOf(",", limit);
-  if (idxComma == -1) {
+  if (idxComma === -1) {
     return line;
   }
 

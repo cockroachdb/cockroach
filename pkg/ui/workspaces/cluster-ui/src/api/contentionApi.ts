@@ -134,21 +134,21 @@ function getContentionWhereClause(filters?: ContentionFilters): string {
   }
 
   if (filters?.waitingTxnID) {
-    if (whereClause != defaultWhereClause) {
+    if (whereClause !== defaultWhereClause) {
       whereClause += " and ";
     }
     whereClause = whereClause + ` waiting_txn_id >= '${filters.waitingTxnID}' `;
   }
 
   if (filters?.start) {
-    if (whereClause != defaultWhereClause) {
+    if (whereClause !== defaultWhereClause) {
       whereClause += " and ";
     }
     whereClause =
       whereClause + ` collection_ts >= '${filters.start.toISOString()}' `;
   }
   if (filters?.end) {
-    if (whereClause != defaultWhereClause) {
+    if (whereClause !== defaultWhereClause) {
       whereClause += " and ";
     }
 
