@@ -13516,11 +13516,13 @@ func TestReplicateQueueProcessOne(t *testing.T) {
 	tc.repl.mu.destroyStatus.Set(errBoom, destroyReasonMergePending)
 	tc.repl.mu.Unlock()
 
+	conf, err := tc.repl.LoadSpanConfig(ctx)
+	require.NoError(t, err)
 	requeue, err := tc.store.replicateQueue.processOneChange(
 		ctx,
 		tc.repl,
 		tc.repl.Desc(),
-		tc.repl.SpanConfig(),
+		conf,
 		func(ctx context.Context, repl plan.LeaseCheckReplica, conf *roachpb.SpanConfig) bool { return false },
 		false, /* scatter */
 		true,  /* dryRun */

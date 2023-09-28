@@ -3479,8 +3479,12 @@ func (s *Store) ReplicateQueueDryRun(
 		return true
 	}
 	desc := repl.Desc()
-	conf := repl.SpanConfig()
-	_, err := s.replicateQueue.processOneChange(
+	conf, err := repl.LoadSpanConfig(ctx)
+	if err != nil {
+		log.Eventf(ctx, "error simulating allocator unable to load span config %s: %s", repl, err)
+		return collectAndFinish(), nil
+	}
+	_, err = s.replicateQueue.processOneChange(
 		ctx, repl, desc, conf, canTransferLease, false /* scatter */, true, /* dryRun */
 	)
 	if err != nil {

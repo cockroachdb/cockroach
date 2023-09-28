@@ -140,7 +140,7 @@ ORDER BY raw_start_key ASC LIMIT 1`)
 	waitForRangeMaxBytes := func(maxBytes int64) {
 		testutils.SucceedsSoon(t, func() error {
 			_, r := getStoreAndReplica()
-			if r.GetMaxBytes() != maxBytes {
+			if r.GetMaxBytes(ctx) != maxBytes {
 				return errors.New("waiting for range_max_bytes to be applied")
 			}
 			return nil
