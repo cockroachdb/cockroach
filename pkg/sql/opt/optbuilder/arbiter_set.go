@@ -107,9 +107,15 @@ func (a *arbiterSet) ContainsUniqueConstraint(uniq cat.UniqueOrdinal) bool {
 //     constraint's table.
 //   - uniqueWithoutIndex is true if this is a unique constraint enforced
 //     without an index.
+//   - uniqueOrd is the ordinal of the unique constraint (-1 for index arbiters).
 func (a *arbiterSet) ForEach(
 	f func(
-		name string, conflictOrds intsets.Fast, pred tree.Expr, canaryOrd int, uniqueWithoutIndex bool,
+		name string,
+		conflictOrds intsets.Fast,
+		pred tree.Expr,
+		canaryOrd int,
+		uniqueWithoutIndex bool,
+		uniqueOrd int,
 	),
 ) {
 	// Call the callback for each index arbiter.
@@ -124,7 +130,7 @@ func (a *arbiterSet) ForEach(
 			pred = a.mb.parsePartialIndexPredicateExpr(i)
 		}
 
-		f(string(index.Name()), conflictOrds, pred, canaryOrd, false)
+		f(string(index.Name()), conflictOrds, pred, canaryOrd, false, -1)
 	})
 
 	// Call the callback for each unique constraint arbiter.
@@ -139,7 +145,7 @@ func (a *arbiterSet) ForEach(
 			pred = a.mb.parseUniqueConstraintPredicateExpr(i)
 		}
 
-		f(uniqueConstraint.Name(), conflictOrds, pred, canaryOrd, uniqueConstraint.WithoutIndex())
+		f(uniqueConstraint.Name(), conflictOrds, pred, canaryOrd, uniqueConstraint.WithoutIndex(), i)
 	})
 }
 
