@@ -45,9 +45,9 @@ type CandidateReplica interface {
 	// GetFirstIndex returns the index of the first entry in the replica's Raft
 	// log.
 	GetFirstIndex() kvpb.RaftIndex
-	// DescAndSpanConfig returns the authoritative range descriptor as well
-	// as the span config for the replica.
-	DescAndSpanConfig() (*roachpb.RangeDescriptor, *roachpb.SpanConfig)
+	// LoadSpanConfig returns the span config for the replica or an error if it can't
+	// be determined.
+	LoadSpanConfig(context.Context) (*roachpb.SpanConfig, error)
 	// Desc returns the authoritative range descriptor.
 	Desc() *roachpb.RangeDescriptor
 	// RangeUsageInfo returns usage information (sizes and traffic) needed by
@@ -77,7 +77,7 @@ func (cr candidateReplica) RangeUsageInfo() allocator.RangeUsageInfo {
 	return cr.usage
 }
 
-// Replica returns the underlying replica for this CandidateReplica. It is
+// Repl returns the underlying replica for this CandidateReplica. It is
 // only used for determining timeouts in production code and not the
 // simulator.
 func (cr candidateReplica) Repl() *Replica {
