@@ -16,10 +16,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -29,7 +27,9 @@ import (
 )
 
 // TestBlockedKVSubscriberDisablesQueues ensures that the queue that need span
-// configs are disabled until the KVSubscriber has some snapshot.
+// configs are disabled until the KVSubscriber has some snapshot. It
+// additionally verifies that the queues don't attempt to load span configs more
+// than once per run.
 func TestBlockedKVSubscriberDisablesQueues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -42,7 +42,11 @@ func TestBlockedKVSubscriberDisablesQueues(t *testing.T) {
 		"split",
 	} {
 		t.Run(fmt.Sprintf("queue=%s", queueName), func(t *testing.T) {
-			blockSubscriberCh := make(chan struct{})
+			// Once this is closed, allow subscriber updates.
+			allowSubscriberCh := make(chan struct{})
+			// Once this is closed, startup is complete, so error any future span lookups.
+			startupCompleteCh := make(chan struct{})
+
 			nodes, replicationMode := 1, base.ReplicationAuto
 			if queueName == "replicate" {
 				// To enqueue replicas into the replicate queue without erroring
@@ -58,23 +62,30 @@ func TestBlockedKVSubscriberDisablesQueues(t *testing.T) {
 				// harness which calls into the replicate queue.
 				replicationMode = base.ReplicationManual
 			}
+			expectedErr := errors.New("span configs blocked")
 			tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{
 				ReplicationMode: replicationMode,
 				ServerArgs: base.TestServerArgs{
 					Knobs: base.TestingKnobs{
-						SpanConfig: &spanconfig.TestingKnobs{
-							KVSubscriberRangeFeedKnobs: &rangefeedcache.TestingKnobs{
-								PostRangeFeedStart: func() { <-blockSubscriberCh },
-							},
+						Store: &kvserver.StoreTestingKnobs{ConfReaderInterceptor: func() error {
+							select {
+							case <-allowSubscriberCh:
+								return nil
+							default:
+							}
+							select {
+							case <-startupCompleteCh:
+								return expectedErr
+							default:
+							}
+							return nil
+						},
 						},
 					},
 				},
 			})
 
 			defer tc.Stopper().Stop(ctx)
-			ts := tc.Server(0)
-			scKVSubscriber := ts.SpanConfigKVSubscriber().(spanconfig.KVSubscriber)
-			require.True(t, scKVSubscriber.LastUpdated().IsEmpty())
 
 			store := tc.GetFirstStoreFromServer(t, 0)
 			scratchKey := tc.ScratchRange(t)
@@ -89,23 +100,17 @@ func TestBlockedKVSubscriberDisablesQueues(t *testing.T) {
 				return nil
 			})
 
+			close(startupCompleteCh)
 			{
 				_, processErr, err := store.Enqueue(
 					ctx, queueName, repl, true /* skipShouldQueue */, false, /* async */
 				)
 				require.NoError(t, processErr)
 				require.Error(t, err)
-				require.True(t, testutils.IsError(err, `unable to retrieve conf reader`))
+				require.True(t, errors.Is(err, expectedErr))
 			}
 
-			close(blockSubscriberCh)
-			testutils.SucceedsSoon(t, func() error {
-				if scKVSubscriber.LastUpdated().IsEmpty() {
-					return errors.New("expected non-empty update ts")
-				}
-				return nil
-			})
-
+			close(allowSubscriberCh)
 			{
 				trace, processErr, err := store.Enqueue(
 					ctx, queueName, repl, true /* skipShouldQueue */, false, /* async */

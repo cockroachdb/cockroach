@@ -1278,12 +1278,6 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			)
 
 			hottestRanges := sr.replicaRankings.TopLoad(lbRebalanceDimension)
-			// TODO(baptist): Remove this once the cached span conf is removed
-			// from the replica. The DefaultSpanConfig can be removed also once
-			// this change is made.
-			for _, replica := range hottestRanges {
-				replica.Repl().SetSpanConfig(s.cfg.DefaultSpanConfig)
-			}
 			options := sr.scorerOptions(ctx, lbRebalanceDimension)
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, LBRebalancingLeasesAndReplicas)
 			rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{
@@ -1540,12 +1534,6 @@ func TestChooseRangeToRebalanceOffHotNodes(t *testing.T) {
 			)
 
 			hottestRanges := sr.replicaRankings.TopLoad(lbRebalanceDimension)
-			// TODO(baptist): Remove this once the cached span conf is removed
-			// from the replica. The DefaultSpanConfig can be removed also once
-			// this change is made.
-			for _, replica := range hottestRanges {
-				replica.Repl().SetSpanConfig(s.cfg.DefaultSpanConfig)
-			}
 			options := sr.scorerOptions(ctx, lbRebalanceDimension)
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
 			rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{
@@ -1813,12 +1801,6 @@ func TestStoreRebalancerIOOverloadCheck(t *testing.T) {
 			loadRanges(rr, s, []testRange{{voters: []roachpb.StoreID{1, 3, 5}, qps: 100, reqCPU: 100 * float64(time.Millisecond)}})
 
 			hottestRanges := sr.replicaRankings.TopLoad(lbRebalanceDimension)
-			// TODO(baptist): Remove this once the cached span conf is removed
-			// from the replica. The DefaultSpanConfig can be removed also once
-			// this change is made.
-			for _, replica := range hottestRanges {
-				replica.Repl().SetSpanConfig(s.cfg.DefaultSpanConfig)
-			}
 			options := sr.scorerOptions(ctx, lbRebalanceDimension)
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
 			require.Greater(t, len(rctx.hottestRanges), 0)

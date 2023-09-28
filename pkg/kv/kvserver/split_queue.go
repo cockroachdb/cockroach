@@ -190,7 +190,7 @@ func (sq *splitQueue) shouldQueue(
 		return false, 0
 	}
 	shouldQ, priority = shouldSplitRange(ctx, repl.Desc(), repl.GetMVCCStats(),
-		conf.RangeMaxBytes, repl.shouldBackpressureWrites(), confReader)
+		conf.RangeMaxBytes, repl.shouldBackpressureWrites(conf), confReader)
 
 	if !shouldQ && repl.SplitByLoadEnabled() {
 		if splitKey := repl.loadSplitKey(ctx, repl.Clock().PhysicalTime()); splitKey != nil {

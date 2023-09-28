@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -63,8 +62,9 @@ func (tq *testQueueImpl) shouldQueue(
 }
 
 func (tq *testQueueImpl) process(
-	_ context.Context, _ *Replica, _ *roachpb.SpanConfig,
+	ctx context.Context, r *Replica, _ *roachpb.SpanConfig,
 ) (bool, error) {
+	log.Infof(ctx, "Processing %v", r)
 	atomic.AddInt32(&tq.processed, 1)
 	if tq.err != nil {
 		return false, tq.err
@@ -695,36 +695,23 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		stopper)
 
 	maxWontSplitAddr, err := keys.Addr(keys.SystemPrefix)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	minWillSplitAddr, err := keys.Addr(keys.TableDataMin)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Remove replica for range 1 since it encompasses the entire keyspace.
 	repl1, err := s.GetReplica(1)
-	if err != nil {
-		t.Error(err)
-	}
-	if err := s.RemoveReplica(context.Background(), repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, s.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{DestroyData: true}))
 
 	// This range can never be split due to zone configs boundaries.
 	neverSplits := createReplica(s, 2, roachpb.RKeyMin, maxWontSplitAddr)
-	if err := s.AddReplica(neverSplits); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, s.AddReplica(neverSplits))
 
 	// This range will need to be split after user db/table entries are created.
 	willSplit := createReplica(s, 3, minWillSplitAddr, roachpb.RKeyMax)
-	if err := s.AddReplica(willSplit); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, s.AddReplica(willSplit))
 
 	testQueue := &testQueueImpl{
 		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
@@ -733,31 +720,22 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		},
 	}
 
-	bq := makeTestBaseQueue("test", testQueue, s, queueConfig{maxSize: 2})
+	bq := makeTestBaseQueue("test", testQueue, s, queueConfig{maxSize: 2, acceptsUnsplitRanges: false, needsSpanConfigs: true})
 	bq.Start(stopper)
 
 	// Check our config.
-	var cfg spanconfig.StoreReader
-	testutils.SucceedsSoon(t, func() error {
-		cfg, err = bq.store.GetConfReader(ctx)
-		require.NoError(t, err)
-		if cfg == nil {
-			return errors.New("system config not yet present")
-		}
-		return nil
-	})
+	cfg, err := bq.store.GetConfReader(ctx)
+	require.NoError(t, err)
+
 	neverSplitsDesc := neverSplits.Desc()
 	needsSplit, err := cfg.NeedsSplit(ctx, neverSplitsDesc.StartKey, neverSplitsDesc.EndKey)
 	require.NoError(t, err)
-	if needsSplit {
-		t.Fatal("System config says range needs to be split")
-	}
+	require.False(t, needsSplit)
+
 	willSplitDesc := willSplit.Desc()
 	needsSplit, err = cfg.NeedsSplit(ctx, willSplitDesc.StartKey, willSplitDesc.EndKey)
 	require.NoError(t, err)
-	if needsSplit {
-		t.Fatal("System config says range needs to be split")
-	}
+	require.False(t, needsSplit)
 
 	// There are no user db/table entries, everything should be added and
 	// processed as usual.
@@ -789,15 +767,12 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	neverSplitsDesc = neverSplits.Desc()
 	needsSplit, err = cfg.NeedsSplit(ctx, neverSplitsDesc.StartKey, neverSplitsDesc.EndKey)
 	require.NoError(t, err)
-	if needsSplit {
-		t.Fatal("System config says range needs to be split")
-	}
+	require.False(t, needsSplit)
+
 	willSplitDesc = willSplit.Desc()
 	needsSplit, err = cfg.NeedsSplit(ctx, willSplitDesc.StartKey, willSplitDesc.EndKey)
 	require.NoError(t, err)
-	if !needsSplit {
-		t.Fatal("System config says range does not need to be split")
-	}
+	require.True(t, needsSplit)
 
 	bq.maybeAdd(ctx, neverSplits, hlc.ClockTimestamp{})
 	bq.maybeAdd(ctx, willSplit, hlc.ClockTimestamp{})

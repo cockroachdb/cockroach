@@ -89,7 +89,9 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		repl := store.LookupReplica(keys.MustAddr(key))
 		gotConfig, err := repl.LoadSpanConfig(ctx)
-		require.NoError(t, err)
+		if err != nil {
+			return err
+		}
 		if !gotConfig.Equal(conf) {
 			return errors.Newf("expected config=%s, got config=%s", conf.String(), gotConfig.String())
 		}
