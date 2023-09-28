@@ -186,7 +186,7 @@ func (sq *splitQueue) shouldQueue(
 	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, confReader spanconfig.StoreReader,
 ) (shouldQ bool, priority float64) {
 	shouldQ, priority = shouldSplitRange(ctx, repl.Desc(), repl.GetMVCCStats(),
-		repl.GetMaxBytes(), repl.shouldBackpressureWrites(), confReader)
+		repl.GetMaxBytes(ctx), repl.shouldBackpressureWrites(), confReader)
 
 	if !shouldQ && repl.SplitByLoadEnabled() {
 		if splitKey := repl.loadSplitKey(ctx, repl.Clock().PhysicalTime()); splitKey != nil {
@@ -258,7 +258,7 @@ func (sq *splitQueue) processAttempt(
 	// size-based splitting if maxBytes is 0 (happens in certain test
 	// situations).
 	size := r.GetMVCCStats().Total()
-	maxBytes := r.GetMaxBytes()
+	maxBytes := r.GetMaxBytes(ctx)
 	if maxBytes > 0 && size > maxBytes {
 		if _, err := r.adminSplitWithDescriptor(
 			ctx,

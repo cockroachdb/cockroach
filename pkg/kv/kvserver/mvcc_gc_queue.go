@@ -265,7 +265,11 @@ func (mgcq *mvccGCQueue) shouldQueue(
 ) (bool, float64) {
 	// Consult the protected timestamp state to determine whether we can GC and
 	// the timestamp which can be used to calculate the score.
-	conf := repl.SpanConfig()
+	conf, err := repl.LoadSpanConfig(ctx)
+	if err != nil {
+		log.VErrEventf(ctx, 2, "failed to load span config: %v", err)
+		return false, 0
+	}
 	canGC, _, gcTimestamp, oldThreshold, newThreshold, err := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
 	if err != nil {
 		log.VErrEventf(ctx, 2, "failed to check protected timestamp for gc: %v", err)

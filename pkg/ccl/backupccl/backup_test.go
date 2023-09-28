@@ -9364,13 +9364,13 @@ func TestExcludeDataFromBackupAndRestore(t *testing.T) {
 	// should be a noop and backup no data.
 	sqlDB.Exec(t, `ALTER TABLE data.foo SET (exclude_data_from_backup = true)`)
 	waitForReplicaFieldToBeSet(t, tc, conn, "foo", "data", func(r *kvserver.Replica) (bool, error) {
-		if !r.ExcludeDataFromBackup() {
+		if !r.ExcludeDataFromBackup(context.Background()) {
 			return false, errors.New("waiting for the range containing table data.foo to split")
 		}
 		return true, nil
 	})
 	waitForReplicaFieldToBeSet(t, tc, conn, "bar", "data", func(r *kvserver.Replica) (bool, error) {
-		if r.ExcludeDataFromBackup() {
+		if r.ExcludeDataFromBackup(context.Background()) {
 			return false, errors.New("waiting for the range containing table data.bar to split")
 		}
 		return true, nil
@@ -9382,7 +9382,7 @@ func TestExcludeDataFromBackupAndRestore(t *testing.T) {
 	sqlDB.Exec(t, `INSERT INTO data.baz select * from generate_series(1,10)`)
 
 	waitForReplicaFieldToBeSet(t, tc, conn, "baz", "data", func(r *kvserver.Replica) (bool, error) {
-		if !r.ExcludeDataFromBackup() {
+		if !r.ExcludeDataFromBackup(context.Background()) {
 			return false, errors.New("waiting for the range containing table data.foo to split")
 		}
 		return true, nil
@@ -9460,7 +9460,7 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 	rRand, _ := randutil.NewTestRand()
 	waitForTableSplit(t, conn, "foo", "defaultdb")
 	waitForReplicaFieldToBeSet(t, tc, conn, "foo", "defaultdb", func(r *kvserver.Replica) (bool, error) {
-		if r.GetMaxBytes() != tableRangeMaxBytes {
+		if r.GetMaxBytes(ctx) != tableRangeMaxBytes {
 			return false, errors.New("waiting for range_max_bytes to be applied")
 		}
 		return true, nil
@@ -9485,7 +9485,7 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 	_, err = conn.Exec(`ALTER TABLE foo SET (exclude_data_from_backup = true)`)
 	require.NoError(t, err)
 	waitForReplicaFieldToBeSet(t, tc, conn, "foo", "defaultdb", func(r *kvserver.Replica) (bool, error) {
-		if !r.ExcludeDataFromBackup() {
+		if !r.ExcludeDataFromBackup(ctx) {
 			return false, errors.New("waiting for exclude_data_from_backup to be applied")
 		}
 		return true, nil
@@ -9543,14 +9543,19 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 	// Wait for the span config fields to apply.
 	waitForTableSplit(t, conn, "foo", "test")
 	waitForReplicaFieldToBeSet(t, tc, conn, "foo", "test", func(r *kvserver.Replica) (bool, error) {
-		if !r.ExcludeDataFromBackup() {
+		conf, err := r.LoadSpanConfig(ctx)
+		if err != nil {
+			return false, err
+		}
+		if !conf.ExcludeDataFromBackup {
 			return false, errors.New("waiting for exclude_data_from_backup to be applied")
 		}
-		conf := r.SpanConfig()
+		require.NoError(t, err)
+
 		if conf.TTL() != 1*time.Second {
 			return false, errors.New("waiting for gc.ttlseconds to be applied")
 		}
-		if r.GetMaxBytes() != tableRangeMaxBytes {
+		if conf.RangeMaxBytes != tableRangeMaxBytes {
 			return false, errors.New("waiting for range_max_bytes to be applied")
 		}
 		return true, nil
@@ -9571,7 +9576,8 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 
 	// Ensure that the replica sees the ProtectionPolicies.
 	waitForReplicaFieldToBeSet(t, tc, conn, "foo", "test", func(r *kvserver.Replica) (bool, error) {
-		if len(r.SpanConfig().GCPolicy.ProtectionPolicies) == 0 {
+		conf, err := r.LoadSpanConfig(ctx)
+		if err != nil || len(conf.GCPolicy.ProtectionPolicies) == 0 {
 			return false, errors.New("no protection policy applied to replica")
 		}
 		return true, nil

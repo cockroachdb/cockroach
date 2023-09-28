@@ -3480,7 +3480,7 @@ func (s *Store) ReplicateQueueDryRun(
 		return true
 	}
 	desc := repl.Desc()
-	conf := repl.SpanConfig()
+	conf, _ := repl.LoadSpanConfig(ctx)
 	_, err := s.replicateQueue.processOneChange(
 		ctx, repl, desc, conf, canTransferLease, false /* scatter */, true, /* dryRun */
 	)
