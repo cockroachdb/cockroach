@@ -91,12 +91,12 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 		var aggregateStats enginepb.MVCCStats
 		var seen int
 		store.VisitReplicas(func(replica *kvserver.Replica) (wantMore bool) {
-			ri := replica.State(ctx)
-			if ri.TenantID != tenantID.ToUint64() {
+			id, _ := replica.TenantID() // now initialized
+			if id != tenantID {
 				return true
 			}
 			seen++
-			aggregateStats.Add(*ri.Stats)
+			aggregateStats.Add(replica.GetMVCCStats())
 			return true
 		})
 		ex := metric.MakePrometheusExporter()

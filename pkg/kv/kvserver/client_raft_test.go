@@ -5652,7 +5652,7 @@ func TestElectionAfterRestart(t *testing.T) {
 								return
 							}
 
-							cur := replica.State(ctx).LastIndex
+							cur := replica.GetLastIndex()
 							if lastIndex == 0 {
 								lastIndex = cur
 							}
