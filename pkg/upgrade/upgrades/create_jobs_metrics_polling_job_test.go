@@ -35,7 +35,7 @@ func TestCreateJobsMetricsPollingJob(t *testing.T) {
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
-						clusterversion.V23_1_CreateJobsMetricsPollingJob - 1),
+						clusterversion.Permanent_V23_1_CreateJobsMetricsPollingJob - 1),
 				},
 			},
 		},
@@ -57,7 +57,7 @@ func TestCreateJobsMetricsPollingJob(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		sqlDB,
-		clusterversion.V23_1_CreateJobsMetricsPollingJob,
+		clusterversion.Permanent_V23_1_CreateJobsMetricsPollingJob,
 		nil,   /* done */
 		false, /* expectError */
 	)

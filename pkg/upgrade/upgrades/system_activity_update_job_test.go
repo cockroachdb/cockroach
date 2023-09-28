@@ -58,7 +58,7 @@ func TestCreateActivityUpdateJobMigration(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		db,
-		clusterversion.V23_1CreateSystemActivityUpdateJob,
+		clusterversion.Permanent_V23_1CreateSystemActivityUpdateJob,
 		nil,
 		false,
 	)
