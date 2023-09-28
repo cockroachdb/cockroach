@@ -49,12 +49,12 @@ export default function (props: GraphDashboardProps) {
       <Axis label="ranges">
         <Metric name="cr.store.ranges" title="Ranges" />
         <Metric name="cr.store.replicas.leaders" title="Leaders" />
+        <Metric name="cr.store.ranges.unavailable" title="Unavailable" />
         <Metric name="cr.store.replicas.leaseholders" title="Lease Holders" />
         <Metric
           name="cr.store.replicas.leaders_not_leaseholders"
           title="Leaders w/o Lease"
         />
-        <Metric name="cr.store.ranges.unavailable" title="Unavailable" />
         <Metric
           name="cr.store.ranges.underreplicated"
           title="Under-replicated"
