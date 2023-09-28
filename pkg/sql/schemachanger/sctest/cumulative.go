@@ -147,7 +147,7 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, factory TestServerFac
 		for _, injectPreCommit := range injectPreCommits {
 			for _, injection := range injectionRanges {
 				if !t.Run(
-					fmt.Sprintf("injection stage %v", injection),
+					fmt.Sprintf("injection stage %+v", injection),
 					func(t *testing.T) { testDMLInjectionCase(t, ts, injection, injectPreCommit) },
 				) {
 					return
@@ -216,9 +216,9 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, factory TestServerFac
 							}
 						}
 						usedStages[key.AsInt()] = struct{}{}
-						t.Logf("Completed stage: %v", key)
+						t.Logf("Completed stage: %+v", key)
 					} else {
-						t.Logf("Retrying stage: %v", key)
+						t.Logf("Retrying stage: %+v", key)
 					}
 				}
 				return nil

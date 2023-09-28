@@ -48,12 +48,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//go:generate stringer -type=stageExecType
 type stageExecType int
 
 const (
-	_                 stageExecType = iota
-	stageExecuteQuery stageExecType = 1
-	stageExecuteStmt  stageExecType = 2
+	_ stageExecType = iota
+	stageExecuteQuery
+	stageExecuteStmt
 )
 
 // stageExecStmt represents statements that will be executed during a given
@@ -175,7 +176,7 @@ func (m *stageExecStmtMap) AssertMapIsUsed(t *testing.T) {
 	if len(m.entries) != len(m.usedMap) {
 		for _, entry := range m.entries {
 			if _, ok := m.usedMap[entry.stmt]; !ok {
-				t.Logf("Missing stage: %v of type %d", entry.stageKey, entry.stmt.execType)
+				t.Logf("Missing stage of type %q: %+v", entry.stmt.execType, entry.stageKey)
 			}
 		}
 	}
@@ -365,7 +366,7 @@ func (m *stageExecStmtMap) parseStageCommon(
 					break
 				}
 			}
-			require.Truef(t, found, "invalid phase name %s", cmdArg.Key)
+			require.Truef(t, found, "invalid phase name %q", cmdArg.Key)
 			if !found {
 				panic("phase not mapped")
 			}
@@ -406,7 +407,7 @@ func (m *stageExecStmtMap) parseStageCommon(
 			require.NoError(t, err)
 			key.rollback = rollback
 		default:
-			require.Failf(t, "unknown key encountered", "key was %s", cmdArg.Key)
+			require.Failf(t, "unknown key encountered", "key was %q", cmdArg.Key)
 		}
 	}
 	entry := stageKeyEntry{
@@ -464,7 +465,7 @@ func (e *stageExecStmt) Exec(
 			if err != nil {
 				if idx != len(e.stmts)-1 {
 					// We require that only the last statement in a stage-exec block can cause an error.
-					t.Fatalf("statement[%d] %q exec unexpected error (only the last statement may expect an error): %v", idx, boundSQL, err)
+					t.Fatalf("statement[%d] %q execution encountered unexpected error (only the last statement may expect an error): %v", idx, boundSQL, err)
 				} else {
 					// Fail the test unless the error is expected (from e.expectedOutput), or
 					// "rewrite" is set, in which case we record the error and proceed.
@@ -877,7 +878,7 @@ func executeSchemaChangeTxn(
 			}()
 			for i, stmt := range spec.Stmts {
 				if _, err := tx.Exec(stmt.SQL); err != nil {
-					return errors.Wrapf(err, "error processing statement %d: %s", i, stmt.SQL)
+					return errors.Wrapf(err, "error processing statement[%d]: %q", i, stmt.SQL)
 				}
 			}
 			return nil
