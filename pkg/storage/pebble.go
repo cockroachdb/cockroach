@@ -101,7 +101,10 @@ var ValueBlocksEnabled = settings.RegisterBoolSetting(
 
 // UseEFOS controls whether uses of pebble Snapshots should use
 // EventuallyFileOnlySnapshots instead. This reduces write-amp with the main
-// tradeoff being higher space-amp.
+// tradeoff being higher space-amp. Note that UseExciseForSnapshot, if true,
+// effectively causes EventuallyFileOnlySnapshots to be used as well.
+//
+// Note: Do NOT read this setting directly. Use ShouldUseEFOS() instead.
 var UseEFOS = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"storage.experimental.eventually_file_only_snapshots.enabled",
@@ -109,6 +112,21 @@ var UseEFOS = settings.RegisterBoolSetting(
 	util.ConstantWithMetamorphicTestBool(
 		"storage.experimental.eventually_file_only_snapshots.enabled", false), /* defaultValue */
 	settings.WithPublic)
+
+// UseExciseForSnapshots controls whether virtual-sstable-based excises should
+// be used instead of range deletions for clearing out replica contents as part
+// of a rebalance/recovery snapshot application. Applied on the receiver side.
+// Note that setting this setting to true also effectively causes UseEFOS above
+// to become true. This interaction is why this setting is defined in the
+// storage package even though it mostly affects KV.
+var UseExciseForSnapshots = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.snapshot_receiver.excise.enabled",
+	"set to true to use excises instead of range deletions for KV snapshots",
+	util.ConstantWithMetamorphicTestBool(
+		"kv.snapshot_receiver.excise.enabled", false), /* defaultValue */
+	settings.WithPublic,
+)
 
 // IngestAsFlushable controls whether ingested sstables that overlap the
 // memtable may be lazily ingested: written to the WAL and enqueued in the list
@@ -128,6 +146,13 @@ var IngestAsFlushable = settings.RegisterBoolSetting(
 	"set to true to enable lazy ingestion of sstables",
 	util.ConstantWithMetamorphicTestBool(
 		"storage.ingest_as_flushable.enabled", true))
+
+// ShouldUseEFOS returns true if either of the UseEFOS or UseExciseForSnapshots
+// cluster settings are enabled, and EventuallyFileOnlySnapshots must be used
+// to guarantee snapshot-like semantics.
+func ShouldUseEFOS(settings *settings.Values) bool {
+	return UseEFOS.Get(settings) || UseExciseForSnapshots.Get(settings)
+}
 
 // EngineKeyCompare compares cockroach keys, including the version (which
 // could be MVCC timestamps).
