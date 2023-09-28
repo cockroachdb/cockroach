@@ -474,8 +474,9 @@ func (c *SyncedCluster) ExecOrInteractiveSQL(
 	return c.SSH(ctx, l, []string{"-t"}, allArgs)
 }
 
-// ExecSQL runs a `cockroach sql` .
-// It is assumed that the args include the -e flag.
+// ExecSQL runs a `cockroach sql` and returns the output.  If the call
+// is intended to run a SQL statement, the caller must pass the "-e"
+// (or "--execute") flag explicitly.
 func (c *SyncedCluster) ExecSQL(
 	ctx context.Context,
 	l *logger.Logger,
@@ -483,7 +484,7 @@ func (c *SyncedCluster) ExecSQL(
 	virtualClusterName string,
 	sqlInstance int,
 	args []string,
-) error {
+) ([]*RunResultDetails, error) {
 	display := fmt.Sprintf("%s: executing sql", c.Name)
 	results, _, err := c.ParallelE(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
 		desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
@@ -505,15 +506,7 @@ func (c *SyncedCluster) ExecSQL(
 		return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("run-sql"))
 	}, WithDisplay(display), WithWaitOnFail())
 
-	if err != nil {
-		return err
-	}
-
-	for _, r := range results {
-		l.Printf("node %d:\n%s", r.Node, r.CombinedOut)
-	}
-
-	return nil
+	return results, err
 }
 
 func (c *SyncedCluster) startNode(

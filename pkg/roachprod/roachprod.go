@@ -430,7 +430,15 @@ func SQL(
 	if len(c.Nodes) == 1 {
 		return c.ExecOrInteractiveSQL(ctx, l, tenantName, tenantInstance, cmdArray)
 	}
-	return c.ExecSQL(ctx, l, c.Nodes, tenantName, tenantInstance, cmdArray)
+	results, err := c.ExecSQL(ctx, l, c.Nodes, tenantName, tenantInstance, cmdArray)
+	if err != nil {
+		return err
+	}
+
+	for _, r := range results {
+		l.Printf("node %d:\n%s", r.Node, r.CombinedOut)
+	}
+	return nil
 }
 
 // IP gets the ip addresses of the nodes in a cluster.
