@@ -1,0 +1,18 @@
+echo
+----
+Select({ReplicatedBySpan:{a-c} ReplicatedSpansFilter:4 ReplicatedByRangeID:false UnreplicatedByRangeID:false}):
+  /Local/Lock/Local/Range"{a"-c"}
+  /Local/Lock"{a"-c"}
+Select({ReplicatedBySpan:{a-c} ReplicatedSpansFilter:4 ReplicatedByRangeID:false UnreplicatedByRangeID:true}):
+  /Local/RangeID/123/{u""-v""}
+  /Local/Lock/Local/Range"{a"-c"}
+  /Local/Lock"{a"-c"}
+Select({ReplicatedBySpan:{a-c} ReplicatedSpansFilter:4 ReplicatedByRangeID:true UnreplicatedByRangeID:false}):
+  /Local/RangeID/123/{r""-s""}
+  /Local/Lock/Local/Range"{a"-c"}
+  /Local/Lock"{a"-c"}
+Select({ReplicatedBySpan:{a-c} ReplicatedSpansFilter:4 ReplicatedByRangeID:true UnreplicatedByRangeID:true}):
+  /Local/RangeID/123/{r""-s""}
+  /Local/RangeID/123/{u""-v""}
+  /Local/Lock/Local/Range"{a"-c"}
+  /Local/Lock"{a"-c"}
