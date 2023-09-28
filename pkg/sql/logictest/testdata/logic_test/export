@@ -8,3 +8,8 @@ WITH cte AS (EXPORT INTO CSV 'nodelocal://1/export1/' FROM SELECT * FROM t) SELE
 
 statement ok
 WITH cte AS (EXPORT INTO PARQUET 'nodelocal://1/export1/' FROM SELECT * FROM t) SELECT filename FROM cte;
+
+query T noticetrace
+WITH cte AS (EXPORT INTO CSV 'nodelocal://1/export1/' FROM SELECT * FROM t) SELECT filename FROM cte;
+----
+NOTICE: EXPORT is not the recommended way to move data out of CockroachDB and may be deprecated in the future. Please consider exporting data with changefeeds instead: https://www.cockroachlabs.com/docs/stable/export-data-with-changefeeds
