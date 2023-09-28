@@ -12,6 +12,7 @@ package flowinfra
 
 import (
 	"context"
+	"runtime/debug"
 	"sync"
 	"unsafe"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 type flowStatus int
@@ -276,10 +278,17 @@ func (f *FlowBase) setStatus(status flowStatus) {
 func (f *FlowBase) Setup(
 	ctx context.Context, spec *execinfrapb.FlowSpec, _ FuseOpt,
 ) (context.Context, execopnode.OpChains, error) {
-	ctx, f.mu.ctxCancel = ctxlog.WithCancel(ctx)
-	f.ctxDone = ctx.Done()
+	ctx2, ctxCancel := ctxlog.WithCancel(ctx)
+	f.mu.ctxCancel = func() {
+		if t, ok := logtags.FromContext(ctx2).GetTag("intExec"); ok && t.ValueStr() == "system-jobs-scan" {
+			log.Info(ctx2, "canceling the flow context")
+			debug.PrintStack()
+		}
+		ctxCancel()
+	}
+	f.ctxDone = ctx2.Done()
 	f.spec = spec
-	return ctx, nil, nil
+	return ctx2, nil, nil
 }
 
 // SetTxn is part of the Flow interface.
