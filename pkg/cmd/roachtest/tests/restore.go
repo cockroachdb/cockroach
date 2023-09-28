@@ -452,7 +452,14 @@ func registerRestore(r registry.Registry) {
 					if err != nil {
 						return errors.Wrapf(err, "failure to run setup statements")
 					}
-					for _, stmt := range sp.setUpStmts {
+					// Run set-up SQL statements. In particular, enable collecting CPU
+					// profiles automatically if CPU usage is high. Historically, we
+					// observed CPU going as high as 100%, e.g. see issue #111160.
+					// TODO(pavelkalinnikov): enable CPU profiling in all roachtests.
+					for _, stmt := range append(sp.setUpStmts,
+						"SET CLUSTER SETTING server.cpu_profile.duration = '2s'",
+						"SET CLUSTER SETTING server.cpu_profile.cpu_usage_combined_threshold = 80",
+					) {
 						_, err := db.Exec(stmt)
 						if err != nil {
 							return errors.Wrapf(err, "error executing setup stmt [%s]", stmt)

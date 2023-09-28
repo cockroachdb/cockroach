@@ -1516,3 +1516,33 @@ FROM t89576 AS t1
 LEFT LOOKUP JOIN t89576 AS t2
 ON (t2.v) = (t1.v)
 AND (t2.s) = (t1.s)
+
+# A handful of tests that have a lookup join for which we have "lookup columns
+# are key". These are "regression tests" if #108489 were to be implemented.
+statement ok
+CREATE TABLE t108489_1 (k1 INT PRIMARY KEY, FAMILY (k1));
+CREATE TABLE t108489_2 (k2 INT PRIMARY KEY, i2 INT, u2 INT, INDEX (i2, u2), UNIQUE INDEX (u2), FAMILY (k2, i2, u2));
+CREATE TABLE t108489_3 (k3 INT PRIMARY KEY, i3 INT, u3 INT, v3 INT, w3 INT, INDEX (i3, u3) STORING (v3, w3), UNIQUE INDEX (u3), FAMILY (k3, i3, u3), FAMILY (v3), FAMILY (w3));
+INSERT INTO t108489_1 VALUES (1);
+INSERT INTO t108489_2 VALUES (1, 1, 1);
+INSERT INTO t108489_3 VALUES (1, 1, 1, 1, 1);
+
+query I
+SELECT k2 FROM t108489_1 INNER LOOKUP JOIN t108489_2 ON i2 = k1 AND u2 = 1 WHERE k1 = 1;
+----
+1
+
+query I
+SELECT k3 FROM t108489_1 INNER LOOKUP JOIN t108489_3 ON i3 = k1 AND u3 = 1 WHERE k1 = 1;
+----
+1
+
+query II
+SELECT k3, w3 FROM t108489_1 INNER LOOKUP JOIN t108489_3 ON i3 = k1 AND u3 = 1 WHERE k1 = 1;
+----
+1 1
+
+query III
+SELECT k3, v3, w3 FROM t108489_1 INNER LOOKUP JOIN t108489_3 ON i3 = k1 AND u3 = 1 WHERE k1 = 1;
+----
+1 1 1

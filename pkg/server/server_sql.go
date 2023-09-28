@@ -1655,6 +1655,16 @@ func (s *SQLServer) preStart(
 			"use a tenant binary whose version is at least %v", tenantActiveVersion.Version)
 	}
 
+	// Prevent the server from starting if its minimum supported binary version is too high
+	// for the tenant cluster version.
+	if tenantActiveVersion.Version.Less(s.execCfg.Settings.Version.BinaryMinSupportedVersion()) {
+		return errors.WithHintf(errors.Newf("preventing SQL server from starting because its executable "+
+			"version is too new to run the current active logical version of the virtual cluster"),
+			"finalize the virtual cluster version to at least %v or downgrade the"+
+				"executable version to at most %v", s.execCfg.Settings.Version.BinaryMinSupportedVersion(), tenantActiveVersion.Version,
+		)
+	}
+
 	// Delete all orphaned table leases created by a prior instance of this
 	// node. This also uses SQL.
 	s.leaseMgr.DeleteOrphanedLeases(ctx, orphanedLeasesTimeThresholdNanos)
