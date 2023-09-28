@@ -4,7 +4,6 @@
 
 statement error pgcode 42P01 relation "t" does not exist
 EXPERIMENTAL SCRUB TABLE t
------
 
 # TODO(mjibson): remove FAMILY definition after #41002 is fixed.
 statement ok
@@ -24,29 +23,28 @@ INSERT INTO t VALUES (1, 'hello'), (2, 'help'), (0, 'heeee')
 
 query TTTTTTTT
 EXPERIMENTAL SCRUB TABLE t
------
+----
 
 statement error not implemented
 EXPERIMENTAL SCRUB TABLE t WITH OPTIONS PHYSICAL
 
 query TTTTTTTT
 EXPERIMENTAL SCRUB TABLE t WITH OPTIONS INDEX ALL
-------
+----
 
 statement error not implemented
 EXPERIMENTAL SCRUB TABLE t WITH OPTIONS PHYSICAL, INDEX (name_idx)
------
 
 statement error specified indexes to check that do not exist on table "t": not_an_index, also_not
 EXPERIMENTAL SCRUB TABLE t WITH OPTIONS INDEX (not_an_index, also_not, name_idx)
 
 query TTTTTTTT
 EXPERIMENTAL SCRUB TABLE t WITH OPTIONS CONSTRAINT ALL
------
+----
 
 query TTTTTTTT
 EXPERIMENTAL SCRUB TABLE t WITH OPTIONS CONSTRAINT (abc)
------
+----
 
 statement error pq: constraint "xyz" of relation "t" does not exist
 EXPERIMENTAL SCRUB TABLE t WITH OPTIONS CONSTRAINT (xyz)
@@ -63,7 +61,7 @@ EXPERIMENTAL SCRUB TABLE v1
 
 query TTTTTTTT
 EXPERIMENTAL SCRUB DATABASE test
------
+----
 
 # make sure there are no errors when values in the index are NULL
 
@@ -80,7 +78,7 @@ INSERT INTO test.xyz (x, y) VALUES (8, 2), (9, 2);
 
 query TTTTTTBT
 EXPERIMENTAL SCRUB TABLE xyz WITH OPTIONS INDEX ALL
------
+----
 
 # Test that scrub checks work when a table has an implicit rowid primary key.
 
@@ -110,7 +108,7 @@ INSERT INTO test.fk_parent VALUES (1,1), (2,1), (3,NULL)
 
 query TTTTTTTT
 EXPERIMENTAL SCRUB TABLE test.fk_parent WITH OPTIONS CONSTRAINT (fkey)
------
+----
 
 # Test AS OF SYSTEM TIME
 
