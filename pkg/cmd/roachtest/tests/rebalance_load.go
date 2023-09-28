@@ -268,17 +268,12 @@ func registerRebalanceLoad(r registry.Registry) {
 		},
 	)
 	cSpec := r.MakeClusterSpec(7, spec.SSD(2)) // the last node is just used to generate load
-	var skip string
-	if cSpec.Cloud != spec.GCE {
-		skip = fmt.Sprintf("multi-store tests are not supported on cloud %s", cSpec.Cloud)
-	}
 	r.Add(
 		registry.TestSpec{
-			Skip:             skip,
 			Name:             `rebalance/by-load/replicas/ssds=2`,
 			Owner:            registry.OwnerKV,
 			Cluster:          cSpec,
-			CompatibleClouds: registry.AllExceptAWS,
+			CompatibleClouds: registry.OnlyGCE,
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

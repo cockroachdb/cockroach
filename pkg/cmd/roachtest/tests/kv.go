@@ -328,25 +328,26 @@ func registerKV(r registry.Registry) {
 		}
 		cSpec := r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.SSD(opts.ssds), spec.RAID0(opts.raid0))
 
-		clouds := registry.AllExceptAWS
-		var tags map[string]struct{}
-		// All the kv0|95 tests should run on AWS by default
-		if !opts.weekly && opts.ssds == 0 && (opts.readPercent == 95 || opts.readPercent == 0) {
+		var clouds registry.CloudSet
+		tags := make(map[string]struct{})
+		if opts.ssds != 0 {
+			// Multi-store tests are only supported on GCE.
+			clouds = registry.OnlyGCE
+		} else if !opts.weekly && (opts.readPercent == 95 || opts.readPercent == 0) {
+			// All the kv0|95 tests should run on AWS.
 			clouds = registry.AllClouds
 			tags = registry.Tags("aws")
+		} else {
+			clouds = registry.AllExceptAWS
 		}
+
 		suites := registry.Suites(registry.Nightly)
 		if opts.weekly {
 			suites = registry.Suites(registry.Weekly)
-			tags = registry.Tags("weekly")
+			tags["weekly"] = struct{}{}
 		}
 
-		var skip string
-		if opts.ssds != 0 && cSpec.Cloud != spec.GCE {
-			skip = fmt.Sprintf("multi-store tests are not supported on cloud %s", cSpec.Cloud)
-		}
 		r.Add(registry.TestSpec{
-			Skip:      skip,
 			Name:      strings.Join(nameParts, "/"),
 			Owner:     owner,
 			Benchmark: true,

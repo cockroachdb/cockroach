@@ -454,7 +454,7 @@ func registerBackup(r registry.Registry) {
 			CompatibleClouds:  registry.AllExceptAWS,
 			Suites:            registry.Suites(registry.Nightly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Spec().Cloud != item.machine {
+				if c.Cloud() != item.machine {
 					t.Skip("backup assumeRole is only configured to run on "+item.machine, "")
 				}
 
@@ -565,7 +565,7 @@ func registerBackup(r registry.Registry) {
 			Suites:            registry.Suites(registry.Nightly),
 			Tags:              item.tags,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Spec().Cloud != item.machine {
+				if c.Cloud() != item.machine {
 					t.Skip("backupKMS roachtest is only configured to run on "+item.machine, "")
 				}
 
@@ -910,7 +910,7 @@ func registerBackup(r registry.Registry) {
 		CompatibleClouds:  registry.AllExceptAWS,
 		Suites:            registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.Spec().Cloud != spec.GCE && !c.IsLocal() {
+			if c.Cloud() != spec.GCE && !c.IsLocal() {
 				t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")
 			}
 			runBackupMVCCRangeTombstones(ctx, t, c, mvccRangeTombstoneConfig{})
