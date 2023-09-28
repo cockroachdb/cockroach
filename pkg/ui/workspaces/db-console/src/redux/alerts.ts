@@ -731,7 +731,7 @@ export function alertDataSync(store: Store<AdminUIState>) {
       if (
         !state.login ||
         !state.login.loggedInUser ||
-        state.login.loggedInUser == ``
+        state.login.loggedInUser === ``
       ) {
         return;
       }
