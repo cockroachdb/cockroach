@@ -267,6 +267,7 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sessioninit",
+        "//pkg/sql/sessionprotectedts",
         "//pkg/sql/sqlinstance",
         "//pkg/sql/sqlinstance/instancestorage",
         "//pkg/sql/sqlliveness",
