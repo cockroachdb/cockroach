@@ -52,7 +52,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -3505,34 +3504,6 @@ func TestSnapshotRateLimit(t *testing.T) {
 	require.Equal(t, int64(32<<20), limit)
 }
 
-type mockSpanConfigReader struct {
-	real      spanconfig.StoreReader
-	overrides map[string]roachpb.SpanConfig
-}
-
-func (m *mockSpanConfigReader) NeedsSplit(
-	ctx context.Context, start, end roachpb.RKey,
-) (bool, error) {
-	panic("unimplemented")
-}
-
-func (m *mockSpanConfigReader) ComputeSplitKey(
-	ctx context.Context, start, end roachpb.RKey,
-) (roachpb.RKey, error) {
-	panic("unimplemented")
-}
-
-func (m *mockSpanConfigReader) GetSpanConfigForKey(
-	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, error) {
-	if conf, ok := m.overrides[string(key)]; ok {
-		return conf, nil
-	}
-	return m.GetSpanConfigForKey(ctx, key)
-}
-
-var _ spanconfig.StoreReader = &mockSpanConfigReader{}
-
 // TestAllocatorCheckRangeUnconfigured tests evaluating the allocation decisions
 // for a range with a single replica using the default system configuration and
 // no other available allocation targets.
@@ -3979,16 +3950,7 @@ func TestAllocatorCheckRange(t *testing.T) {
 			cfg.Gossip = g
 			cfg.StorePool = sp
 			if tc.spanConfig != nil {
-				mockSr := &mockSpanConfigReader{
-					real: cfg.SystemConfigProvider.GetSystemConfig(),
-					overrides: map[string]roachpb.SpanConfig{
-						"a": *tc.spanConfig,
-					},
-				}
-
-				cfg.TestingKnobs.ConfReaderInterceptor = func() spanconfig.StoreReader {
-					return mockSr
-				}
+				cfg.DefaultSpanConfig = *tc.spanConfig
 			}
 
 			s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)

@@ -2467,6 +2467,32 @@ func (s *Store) removeReplicaWithRangefeed(rangeID roachpb.RangeID) {
 	s.rangefeedReplicas.Unlock()
 }
 
+// GetSpanConfigForKey loads the span config starting at the given key. This
+// allows inserting test configurations through knobs.
+func (s *Store) GetSpanConfigForKey(
+	ctx context.Context, key roachpb.RKey,
+) (*roachpb.SpanConfig, error) {
+	if s.cfg.TestingKnobs.MakeSystemConfigSpanUnavailableToQueues {
+		return nil, errSpanConfigsUnavailable
+	}
+
+	// TODO(baptist): Tests should correctly set the span configs.
+	if s.cfg.SpanConfigSubscriber == nil {
+		return &s.cfg.DefaultSpanConfig, nil
+	}
+	confReader, err := s.GetConfReader(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if s.cfg.TestingKnobs.ConfReaderInterceptor != nil {
+		if reader := s.cfg.TestingKnobs.ConfReaderInterceptor(); reader != nil {
+			confReader = reader
+		}
+	}
+	conf, err := confReader.GetSpanConfigForKey(ctx, key)
+	return &conf, err
+}
+
 // onSpanConfigUpdate is the callback invoked whenever this store learns of a
 // span config update.
 func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
@@ -3618,7 +3644,7 @@ func (s *Store) Enqueue(
 		return nil, nil, errors.Errorf("unknown queue type %q", queueName)
 	}
 
-	confReader, err := s.GetConfReader(ctx)
+	conf, err := repl.LoadSpanConfig(ctx)
 	if err != nil {
 		return nil, nil, errors.Wrap(err,
 			"unable to retrieve conf reader, cannot run queue; make sure "+
@@ -3657,7 +3683,7 @@ func (s *Store) Enqueue(
 
 	if !skipShouldQueue {
 		log.Eventf(ctx, "running %s.shouldQueue", queueName)
-		shouldQueue, priority := qImpl.shouldQueue(ctx, s.cfg.Clock.NowAsClockTimestamp(), repl, confReader)
+		shouldQueue, priority := qImpl.shouldQueue(ctx, s.cfg.Clock.NowAsClockTimestamp(), repl, conf)
 		log.Eventf(ctx, "shouldQueue=%v, priority=%f", shouldQueue, priority)
 		if !shouldQueue {
 			return collectAndFinish(), nil, nil
@@ -3665,7 +3691,7 @@ func (s *Store) Enqueue(
 	}
 
 	log.Eventf(ctx, "running %s.process", queueName)
-	processed, processErr := qImpl.process(ctx, repl, confReader)
+	processed, processErr := qImpl.process(ctx, repl, conf)
 	log.Eventf(ctx, "processed: %t (err: %v)", processed, processErr)
 	return collectAndFinish(), processErr, nil
 }

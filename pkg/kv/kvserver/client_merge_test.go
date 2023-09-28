@@ -4251,17 +4251,14 @@ func TestMergeQueue(t *testing.T) {
 						DisableScanner: true,
 					},
 				},
+				DisableSQLServer: true,
 			},
 		})
 	defer tc.Stopper().Stop(ctx)
 
 	conf := zoneConfig.AsSpanConfig()
 	store := tc.GetFirstStoreFromServer(t, 0)
-	// The cluster with manual replication disables the merge queue,
-	// so we need to re-enable.
-	_, err := tc.ServerConn(0).Exec(`SET CLUSTER SETTING kv.range_merge.queue.enabled = true`)
-	require.NoError(t, err)
-	store.SetMergeQueueActive(true)
+	kvserverbase.MergeQueueEnabled.Override(ctx, sv, true)
 
 	split := func(t *testing.T, key roachpb.Key, expirationTime hlc.Timestamp) {
 		t.Helper()
@@ -4294,6 +4291,7 @@ func TestMergeQueue(t *testing.T) {
 
 	// setThresholds simulates a zone config update that updates the ranges'
 	// minimum and maximum sizes.
+	// FIXME: These need to be in the store conf
 	setSpanConfigs := func(t *testing.T, conf roachpb.SpanConfig) {
 		t.Helper()
 		if l := lhs(); l == nil {
@@ -4316,7 +4314,7 @@ func TestMergeQueue(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		setSpanConfigs(t, conf)
+		store.GetStoreConfig().DefaultSpanConfig = conf
 		// Disable load-based splitting, so that the absence of sufficient QPS
 		// measurements do not prevent ranges from merging. Certain subtests
 		// re-enable the functionality.
@@ -4343,7 +4341,8 @@ func TestMergeQueue(t *testing.T) {
 		reset(t)
 		conf := conf
 		conf.RangeMinBytes *= 2
-		lhs().SetSpanConfig(conf)
+		// FIXME: This doesn't do anything.
+		setSpanConfigs(t, conf)
 		verifyMergedSoon(t, store, lhsStartKey, rhsStartKey)
 	})
 
@@ -4355,11 +4354,13 @@ func TestMergeQueue(t *testing.T) {
 		conf := conf
 		conf.RangeMinBytes = rhs().GetMVCCStats().Total() + 1
 		conf.RangeMaxBytes = lhs().GetMVCCStats().Total() + rhs().GetMVCCStats().Total() - 1
+		// FIXME: This doesn't do anything.
 		setSpanConfigs(t, conf)
 		verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
 
 		// Once the maximum size threshold is increased, the merge can occur.
 		conf.RangeMaxBytes += 1
+		// FIXME: This doesn't do anything.
 		setSpanConfigs(t, conf)
 		verifyMergedSoon(t, store, lhsStartKey, rhsStartKey)
 	})
