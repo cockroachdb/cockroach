@@ -49,9 +49,9 @@ export class TimeScaleState {
   scale: TimeScale;
   constructor() {
     this.scale = {
-      ...defaultTimeScaleOptions["Past 10 Minutes"],
+      ...defaultTimeScaleOptions["Past Hour"],
       fixedWindowEnd: false,
-      key: "Past 10 Minutes",
+      key: "Past Hour",
     };
   }
 }
