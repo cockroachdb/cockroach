@@ -67,6 +67,7 @@ export interface OwnProps extends MetricsDataComponentProps {
   hoverState?: HoverState;
   preCalcGraphSize?: boolean;
   legendAsTooltip?: boolean;
+  colorPalette?: string[];
 }
 
 export type LineGraphProps = OwnProps & WithTimezoneProps;
@@ -356,6 +357,7 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
         () => this.xAxisDomain,
         () => this.yAxisDomain,
         this.props.legendAsTooltip,
+        this.props.colorPalette,
       );
 
       if (this.u) {

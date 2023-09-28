@@ -89,13 +89,14 @@ export function configureUPlotLineChart(
   getLatestXAxisDomain: () => AxisDomain,
   getLatestYAxisDomain: () => AxisDomain,
   legendAsTooltip: boolean,
+  colorPalette?: string[],
 ): uPlot.Options {
   const formattedRaw = formatMetricData(metrics, data);
   // Copy palette over since we mutate it in the `series` function
   // below to cycle through the colors. This ensures that we always
   // start from the same color for each graph so a single-series
   // graph will always have the first color, etc.
-  const strokeColors = [...seriesPalette];
+  const strokeColors = colorPalette ? [...colorPalette] : [...seriesPalette];
 
   const tooltipPlugin = () => {
     return {

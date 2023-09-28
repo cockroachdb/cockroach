@@ -37,6 +37,20 @@ export default function (props: GraphDashboardProps) {
     tenantSource,
   } = props;
 
+  const rangesColorPalette = [
+    "#475872",
+    "#FFCD02",
+    "#4E9FD1",
+    "#49D990",
+    "#F16969",
+    "#D77FBF",
+    "#87326D",
+    "#A3415B",
+    "#B59153",
+    "#C9DB6D",
+    "#203D9B",
+  ];
+
   return [
     <LineGraph
       title="Ranges"
@@ -45,6 +59,7 @@ export default function (props: GraphDashboardProps) {
       tooltip={`Various details about the status of ranges. In the node view,
         shows details about ranges the node is responsible for. In the cluster
         view, shows details about ranges all across the cluster.`}
+      colorPalette={rangesColorPalette}
     >
       <Axis label="ranges">
         <Metric name="cr.store.ranges" title="Ranges" />
