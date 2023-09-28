@@ -104,6 +104,10 @@ to trust the certificate presented by CockroachDB.`)
 // different login UI when OIDC is present.
 type noOIDCConfigured struct{}
 
+func (c *noOIDCConfigured) GetBasePathForTest() string {
+	return ""
+}
+
 var _ ui.OIDCUI = &noOIDCConfigured{}
 
 // GetOIDCConf implements the `ui.OIDCUI` interface with a configuration

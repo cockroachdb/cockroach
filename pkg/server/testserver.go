@@ -1466,6 +1466,11 @@ func (ts *TestServer) SQLServer() interface{} {
 	return ts.sqlServer.pgServer.SQLServer
 }
 
+// HttpServer is part of TestServerInterface.
+func (ts *TestServer) HttpServer() interface{} {
+	return ts.http
+}
+
 // DistSQLServer is part of TestServerInterface.
 func (ts *TestServer) DistSQLServer() interface{} {
 	return ts.sqlServer.distSQLServer

@@ -167,6 +167,10 @@ func (s *oidcAuthenticationServer) GetOIDCConf() ui.OIDCUIConf {
 	}
 }
 
+func (s *oidcAuthenticationServer) GetBasePathForTest() string {
+	return s.conf.successPath
+}
+
 func reloadConfig(
 	ctx context.Context,
 	server *oidcAuthenticationServer,

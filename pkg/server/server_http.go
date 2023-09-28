@@ -37,7 +37,20 @@ type httpServer struct {
 	// gzMux is an HTTP handler that gzip-compresses mux.
 	gzMux http.Handler
 	proxy *nodeProxy
+
+	// OidcVisibleForTestDoNotUse is here to allow for test inspection of settings.
+	oidcVisibleForTestDoNotUse OIDC
 }
+
+func (s *httpServer) GetOidcVisibleForTest() OIDC {
+	return s.oidcVisibleForTestDoNotUse
+}
+
+type OidcVisibleForTest interface {
+	GetOidcVisibleForTest() OIDC
+}
+
+var _ OidcVisibleForTest = &httpServer{}
 
 func newHTTPServer(
 	cfg BaseConfig,
@@ -116,6 +129,9 @@ func (s *httpServer) setupRoutes(
 	if err != nil {
 		return err
 	}
+
+	// This is here for tests to inspect. Not for usage.
+	s.oidcVisibleForTestDoNotUse = oidc
 
 	// Define the http.Handler for UI assets.
 	assetHandler := ui.Handler(ui.Config{

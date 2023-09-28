@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -183,6 +184,7 @@ func TestOIDCEnabled(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.client_secret = "fake_client_secret"`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.redirect_url = "https://cockroachlabs.com/oidc/v1/callback"`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.enabled = "true"`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING server.http.base_path = "some/random/path"`)
 
 	plainHTTPCfg := testutils.NewTestBaseContext(username.TestUserName())
 	testCertsContext := newRPCContext(plainHTTPCfg)
@@ -232,6 +234,12 @@ func TestOIDCEnabled(t *testing.T) {
 		if !hmac.Equal(mac.Sum(nil), state.TokenMAC) {
 			t.Fatal("HMAC hash doesn't match TokenMAC")
 		}
+
+		require.Equal(
+			t,
+			"some/random/path",
+			s.HttpServer().(server.OidcVisibleForTest).GetOidcVisibleForTest().GetBasePathForTest(),
+		)
 	})
 }
 
