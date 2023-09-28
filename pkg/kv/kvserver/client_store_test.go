@@ -61,7 +61,7 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	testKey := tc.ScratchRange(t)
 	testutils.SucceedsSoon(t, func() error {
 		repl := store.LookupReplica(roachpb.RKey(testKey))
-		if got := repl.GetMaxBytes(); got != defaultMaxBytes {
+		if got := repl.GetMaxBytes(ctx); got != defaultMaxBytes {
 			return errors.Errorf("range max bytes values did not start at %d; got %d", defaultMaxBytes, got)
 		}
 		return nil
@@ -71,7 +71,7 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		repl := store.LookupReplica(roachpb.RKey(testKey))
-		if got := repl.GetMaxBytes(); got != expMaxBytes {
+		if got := repl.GetMaxBytes(ctx); got != expMaxBytes {
 			return errors.Errorf("range max bytes values did not change to %d; got %d", expMaxBytes, got)
 		}
 		return nil
