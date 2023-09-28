@@ -99,6 +99,11 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 
 		// Create the table, split it off, and load it up with data.
 		tdb = sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+		// speeds up the test
+		//		tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+		//		tdb.Exec(t, `SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'`)
+
 		tdb.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES NOT NULL)")
 
 		var tableID int
@@ -138,7 +143,10 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 			for i := 0; i < tc.NumServers(); i++ {
 				s := tc.Server(i)
 				_, r := getFirstStoreReplica(t, s, tablePrefix)
-				conf := r.SpanConfig()
+				conf, err := r.LoadSpanConfig(ctx)
+				if err != nil {
+					return err
+				}
 				if conf.RangeMaxBytes != exp {
 					return fmt.Errorf("expected %d, got %d", exp, conf.RangeMaxBytes)
 				}
@@ -277,7 +285,10 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		// Ensure that the new replica has applied the same config.
 		testutils.SucceedsSoon(t, func() error {
 			_, r := getFirstStoreReplica(t, tc.Server(1), tablePrefix)
-			conf := r.SpanConfig()
+			conf, err := r.LoadSpanConfig(ctx)
+			if err != nil {
+				return err
+			}
 			if conf.RangeMaxBytes != newMax {
 				return fmt.Errorf("expected %d, got %d", newMax, conf.RangeMaxBytes)
 			}

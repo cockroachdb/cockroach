@@ -419,7 +419,7 @@ func (r *Replica) GetTSCacheHighWater() hlc.Timestamp {
 
 // ShouldBackpressureWrites returns whether writes to the range should be
 // subject to backpressure.
-func (r *Replica) ShouldBackpressureWrites() bool {
+func (r *Replica) ShouldBackpressureWrites(_ context.Context) bool {
 	return r.shouldBackpressureWrites()
 }
 

@@ -1023,7 +1023,7 @@ func TestUnrecoverableErrors(t *testing.T) {
 
 		testutils.SucceedsSoon(t, func() error {
 			repl := store.LookupReplica(roachpb.RKey(scratchKey))
-			if repl.SpanConfig().GCPolicy.IgnoreStrictEnforcement {
+			if conf, err := repl.LoadSpanConfig(ctx); err != nil || conf.GCPolicy.IgnoreStrictEnforcement {
 				return errors.New("waiting for span config to apply")
 			}
 			require.NoError(t, repl.ReadProtectedTimestampsForTesting(ctx))
