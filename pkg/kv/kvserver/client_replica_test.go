@@ -4715,15 +4715,17 @@ func TestTenantID(t *testing.T) {
 		// Ensure that a normal range has the system tenant.
 		{
 			_, repl := getFirstStoreReplica(t, tc.Server(0), bootstrap.TestingUserTableDataMin(keys.SystemSQLCodec))
-			ri := repl.State(ctx)
-			require.Equal(t, roachpb.SystemTenantID.ToUint64(), ri.TenantID, "%v", repl)
+			tenantId, valid := repl.TenantID()
+			require.True(t, valid)
+			require.Equal(t, roachpb.SystemTenantID, tenantId, "%v", repl)
 		}
 		// Ensure that a range with a tenant prefix has the proper tenant ID.
 		tc.SplitRangeOrFatal(t, tenant2Prefix)
 		{
 			_, repl := getFirstStoreReplica(t, tc.Server(0), tenant2Prefix)
-			ri := repl.State(ctx)
-			require.Equal(t, tenant2.ToUint64(), ri.TenantID, "%v", repl)
+			tenantId, valid := repl.TenantID()
+			require.True(t, valid)
+			require.Equal(t, tenant2, tenantId, "%v", repl)
 		}
 	})
 	t.Run("(2) not set before snapshot", func(t *testing.T) {
@@ -4774,19 +4776,20 @@ func TestTenantID(t *testing.T) {
 
 		uninitializedRepl, _, err := tc.Server(1).GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, repl.RangeID)
 		require.NoError(t, err)
-		ri := uninitializedRepl.State(ctx)
-		require.Equal(t, uint64(0), ri.TenantID)
+		_, valid := uninitializedRepl.TenantID()
+		require.False(t, valid)
 		close(blockSnapshot)
 		require.NoError(t, <-addReplicaErr)
-		ri = uninitializedRepl.State(ctx) // now initialized
-		require.Equal(t, tenant2.ToUint64(), ri.TenantID)
+		tenantID, valid := uninitializedRepl.TenantID() // now initialized
+		require.True(t, valid)
+		require.Equal(t, tenant2, tenantID)
 	})
 	t.Run("(3) upon restart", func(t *testing.T) {
 		tc.StopServer(0)
 		tc.AddAndStartServer(t, stickySpecTestServerArgs)
 		_, repl := getFirstStoreReplica(t, tc.Server(2), tenant2Prefix)
-		ri := repl.State(ctx)
-		require.Equal(t, tenant2.ToUint64(), ri.TenantID, "%v", repl)
+		tenantID, _ := repl.TenantID() // now initialized
+		require.Equal(t, tenant2, tenantID, "%v", repl)
 	})
 
 }
