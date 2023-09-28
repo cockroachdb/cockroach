@@ -14,7 +14,11 @@ import _ from "lodash";
 
 import { withBackground, withRouterProvider } from "src/storybook/decorators";
 import { randomName } from "src/storybook/fixtures";
-import { DatabasesPage, DatabasesPageProps } from "./databasesPage";
+import {
+  DatabasesPage,
+  DatabasesPageDataDatabase,
+  DatabasesPageProps,
+} from "./databasesPage";
 
 import * as H from "history";
 import { defaultFilters } from "src/queryFilter";
@@ -24,8 +28,8 @@ const history = H.createHashHistory();
 const withLoadingIndicator: DatabasesPageProps = {
   loading: true,
   loaded: false,
-  lastError: undefined,
-  automaticStatsCollectionEnabled: true,
+  requestError: undefined,
+  queryError: null,
   indexRecommendationsEnabled: false,
   csIndexUnusedDuration: indexUnusedDuration,
   databases: [],
@@ -36,7 +40,6 @@ const withLoadingIndicator: DatabasesPageProps = {
   search: "",
   filters: defaultFilters,
   nodeRegions: {},
-  onSortingChange: () => {},
   refreshDatabases: () => {},
   refreshSettings: () => {},
   refreshDatabaseDetails: () => {},
@@ -53,7 +56,8 @@ const withLoadingIndicator: DatabasesPageProps = {
 const withoutData: DatabasesPageProps = {
   loading: false,
   loaded: true,
-  lastError: null,
+  requestError: null,
+  queryError: null,
   automaticStatsCollectionEnabled: true,
   indexRecommendationsEnabled: false,
   csIndexUnusedDuration: indexUnusedDuration,
@@ -82,7 +86,8 @@ const withoutData: DatabasesPageProps = {
 const withData: DatabasesPageProps = {
   loading: false,
   loaded: true,
-  lastError: null,
+  requestError: null,
+  queryError: null,
   showNodeRegionsColumn: true,
   automaticStatsCollectionEnabled: true,
   indexRecommendationsEnabled: true,
@@ -102,7 +107,8 @@ const withData: DatabasesPageProps = {
     return {
       loading: false,
       loaded: true,
-      lastError: null,
+      requestError: undefined,
+      queryError: null,
       name: randomName(),
       sizeInBytes: _.random(1000.0) * 1024 ** _.random(1, 2),
       tableCount: _.random(5, 100),
