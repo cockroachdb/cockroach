@@ -1880,6 +1880,14 @@ func doRestorePlan(
 		}
 	}
 
+	if restoreStmt.Options.RemoveRegions {
+		for _, t := range tablesByID {
+			if t.LocalityConfig.GetRegionalByRow() != nil {
+				return errors.Newf("cannot perform a remove_regions RESTORE with region by row enabled table %s in BACKUP target", t.Name)
+			}
+		}
+	}
+
 	if !restoreStmt.Options.SkipLocalitiesCheck {
 		if err := checkClusterRegions(ctx, p, typesByID); err != nil {
 			return err
