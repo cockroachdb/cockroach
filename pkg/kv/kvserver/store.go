@@ -2266,11 +2266,7 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 	if s.cfg.TestingKnobs.MakeSystemConfigSpanUnavailableToQueues {
 		return nil, errSpanConfigsUnavailable
 	}
-	if s.cfg.TestingKnobs.ConfReaderInterceptor != nil {
-		return s.cfg.TestingKnobs.ConfReaderInterceptor(), nil
-	}
-
-	if s.cfg.SpanConfigsDisabled || s.TestingKnobs().UseSystemConfigSpanForQueues {
+	if s.cfg.SpanConfigsDisabled {
 		sysCfg := s.cfg.SystemConfigProvider.GetSystemConfig()
 		if sysCfg == nil {
 			return nil, errSpanConfigsUnavailable

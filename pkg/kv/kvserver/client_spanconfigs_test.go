@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -58,6 +59,7 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 				StoreKVSubscriberOverride: mockSubscriber,
 			},
 		},
+		DisableSQLServer: true,
 	}
 	s := serverutils.StartServerOnly(t, args)
 	defer s.Stopper().Stop(context.Background())
@@ -88,7 +90,9 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		repl := store.LookupReplica(keys.MustAddr(key))
 		gotConfig, err := repl.LoadSpanConfig(ctx)
-		require.NoError(t, err)
+		if err != nil {
+			return err
+		}
 		if !gotConfig.Equal(conf) {
 			return errors.Newf("expected config=%s, got config=%s", conf.String(), gotConfig.String())
 		}
@@ -102,27 +106,28 @@ func TestFallbackSpanConfigOverride(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	st := cluster.MakeTestingClusterSettings()
-	spanConfigStore := spanconfigstore.New(
-		roachpb.TestingDefaultSpanConfig(),
+
+	subscriber := spanconfigkvsubscriber.New(
+		hlc.NewClockForTesting(nil),
+		nil,
+		keys.SpanConfigurationsTableID,
+		1<<20, /* 1 MB */
+		roachpb.SpanConfig{NumReplicas: 1, NumVoters: 1},
 		st,
 		spanconfigstore.NewEmptyBoundsReader(),
+		&spanconfig.TestingKnobs{},
 		nil,
 	)
-	var t0 = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
-	mockSubscriber := newMockSpanConfigSubscriber(t0, spanConfigStore)
+	subscriber.SetLastUpdatedTest()
 
 	ctx := context.Background()
 	args := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &kvserver.StoreTestingKnobs{
-				DisableMergeQueue: true,
-				DisableSplitQueue: true,
-				DisableGCQueue:    true,
-			},
 			SpanConfig: &spanconfig.TestingKnobs{
-				StoreKVSubscriberOverride: mockSubscriber,
+				StoreKVSubscriberOverride: subscriber,
 			},
 		},
+		DisableSQLServer: true,
 	}
 	s := serverutils.StartServerOnly(t, args)
 	defer s.Stopper().Stop(context.Background())
@@ -131,18 +136,18 @@ func TestFallbackSpanConfigOverride(t *testing.T) {
 	require.NoError(t, err)
 	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
-	repl := store.LookupReplica(keys.MustAddr(key))
-	span := repl.Desc().RSpan().AsRawSpanWithNoLocals()
 
 	conf := roachpb.SpanConfig{NumReplicas: 5, NumVoters: 3}
 	spanconfigstore.FallbackConfigOverride.Override(ctx, &st.SV, &conf)
 
-	require.NotNil(t, mockSubscriber.callback)
-	mockSubscriber.callback(ctx, span) // invoke the callback
+	//	require.NotNil(t, subscriber.callback)
+	//	subscriber.callback(ctx, span) // invoke the callback
 	testutils.SucceedsSoon(t, func() error {
 		repl := store.LookupReplica(keys.MustAddr(key))
 		gotConfig, err := repl.LoadSpanConfig(ctx)
-		require.NoError(t, err)
+		if err != nil {
+			return err
+		}
 		if !gotConfig.Equal(conf) {
 			return errors.Newf("expected config=%s, got config=%s", conf.String(), gotConfig.String())
 		}
