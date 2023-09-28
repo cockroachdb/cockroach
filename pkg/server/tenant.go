@@ -1125,11 +1125,24 @@ func makeTenantSQLServerArgs(
 		return sqlServerArgs{}, err
 	}
 
+	// The kvcoord.DistSender uses the node ID to preferentially route requests
+	// to a local replica (if one exists). In shared-process mode we can easily
+	// provide that without accessing the gossip.
+	//
+	// In separate-process mode, not knowing the node ID, and thus not being
+	// able to take advantage of this optimization is okay, given tenants not
+	// running in-process with KV instances have no such optimization to take
+	// advantage of to begin with.
+	var nodeIDGetter func() roachpb.NodeID
+	if serviceMode == mtinfopb.ServiceModeShared {
+		nodeIDGetter = baseCfg.IDContainer.Get
+	}
 	dsCfg := kvcoord.DistSenderConfig{
 		AmbientCtx:        baseCfg.AmbientCtx,
 		Settings:          st,
 		Clock:             clock,
 		NodeDescs:         tenantConnect,
+		NodeIDGetter:      nodeIDGetter,
 		RPCRetryOptions:   &rpcRetryOptions,
 		RPCContext:        rpcContext,
 		NodeDialer:        kvNodeDialer,
