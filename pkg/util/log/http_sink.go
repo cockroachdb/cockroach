@@ -66,17 +66,16 @@ func newHTTPSink(c logconfig.HTTPSinkConfig) (*httpSink, error) {
 
 	staticHeaders := make(map[string]string, len(c.Headers))
 	dhFilepaths := make(map[string]string, len(c.Headers))
-	for key, hVal := range c.Headers {
-		if hVal.Value != nil {
-			staticHeaders[key] = *hVal.Value
-		} else if hVal.Filepath != nil {
-			dhFilepaths[key] = *hVal.Filepath
-		}
+	for key, val := range c.Headers {
+		staticHeaders[key] = val
+	}
+	for key, val := range c.FileBasedHeaders {
+		dhFilepaths[key] = val
 	}
 	hs.staticHeaders = staticHeaders
 	if len(dhFilepaths) > 0 {
 		hs.dynamicHeaders = &dynamicHeaders{
-			filepath: dhFilepaths,
+			headerToFilepath: dhFilepaths,
 		}
 		err := hs.RefreshDynamicHeaders()
 		if err != nil {
@@ -100,10 +99,10 @@ type httpSink struct {
 }
 
 type dynamicHeaders struct {
-	filepath map[string]string
-	mu       struct {
+	headerToFilepath map[string]string
+	mu               struct {
 		syncutil.Mutex
-		value map[string]string
+		headerToValue map[string]string
 	}
 }
 
@@ -166,7 +165,7 @@ func doPost(hs *httpSink, b []byte) (*http.Response, error) {
 		func() {
 			hs.dynamicHeaders.mu.Lock()
 			defer hs.dynamicHeaders.mu.Unlock()
-			for k, v := range hs.dynamicHeaders.mu.value {
+			for k, v := range hs.dynamicHeaders.mu.headerToValue {
 				req.Header.Add(k, v)
 			}
 		}()
@@ -222,11 +221,11 @@ func (e HTTPLogError) Error() string {
 // It iterates over dynamicHeaders.filepath reading each file for contents and then
 // updating dynamicHeaders.mu.value.
 func (hs *httpSink) RefreshDynamicHeaders() error {
-	if hs.dynamicHeaders.filepath == nil {
+	if hs.dynamicHeaders == nil {
 		return nil
 	}
-	dhVals := make(map[string]string, len(hs.dynamicHeaders.filepath))
-	for key, filepath := range hs.dynamicHeaders.filepath {
+	dhVals := make(map[string]string, len(hs.dynamicHeaders.headerToFilepath))
+	for key, filepath := range hs.dynamicHeaders.headerToFilepath {
 		data, err := os.ReadFile(filepath)
 		if err != nil {
 			return err
@@ -235,6 +234,6 @@ func (hs *httpSink) RefreshDynamicHeaders() error {
 	}
 	hs.dynamicHeaders.mu.Lock()
 	defer hs.dynamicHeaders.mu.Unlock()
-	hs.dynamicHeaders.mu.value = dhVals
+	hs.dynamicHeaders.mu.headerToValue = dhVals
 	return nil
 }
