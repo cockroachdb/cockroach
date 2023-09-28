@@ -100,7 +100,7 @@ func (r *testRegistryImpl) MakeClusterSpec(nodeCount int, opts ...spec.Option) s
 		finalOpts = append(finalOpts, spec.PreferLocalSSD(true))
 	}
 	if r.zones != "" {
-		finalOpts = append(finalOpts, spec.Zones(r.zones))
+		finalOpts = append(finalOpts, spec.DefaultZones(r.zones))
 	}
 	finalOpts = append(finalOpts, opts...)
 	return spec.MakeClusterSpec(r.cloud, r.instanceType, nodeCount, finalOpts...)
