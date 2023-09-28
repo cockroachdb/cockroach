@@ -39,6 +39,7 @@ STRINGER_SRCS = [
     "//pkg/sql/schemachanger/scop:type_string.go",
     "//pkg/sql/schemachanger/scplan/internal/scgraph:depedgekind_string.go",
     "//pkg/sql/schemachanger/screl:attr_string.go",
+    "//pkg/sql/schemachanger/sctest:stageexectype_string.go",
     "//pkg/sql/sem/tree:createtypevariety_string.go",
     "//pkg/sql/sem/tree:statementreturntype_string.go",
     "//pkg/sql/sem/tree:statementtype_string.go",

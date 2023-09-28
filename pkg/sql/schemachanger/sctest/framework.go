@@ -48,12 +48,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//go:generate stringer -type=stageExecType
 type stageExecType int
 
 const (
-	_                 stageExecType = iota
-	stageExecuteQuery stageExecType = 1
-	stageExecuteStmt  stageExecType = 2
+	_ stageExecType = iota
+	stageExecuteQuery
+	stageExecuteStmt
 )
 
 // stageExecStmt represents statements that will be executed during a given
@@ -175,7 +176,7 @@ func (m *stageExecStmtMap) AssertMapIsUsed(t *testing.T) {
 	if len(m.entries) != len(m.usedMap) {
 		for _, entry := range m.entries {
 			if _, ok := m.usedMap[entry.stmt]; !ok {
-				t.Logf("Missing stage: %v of type %d", entry.stageKey, entry.stmt.execType)
+				t.Logf("Missing stage of type %q: %+v", entry.stmt.execType, entry.stageKey)
 			}
 		}
 	}
@@ -365,7 +366,7 @@ func (m *stageExecStmtMap) parseStageCommon(
 					break
 				}
 			}
-			require.Truef(t, found, "invalid phase name %s", cmdArg.Key)
+			require.Truef(t, found, "invalid phase name %q", cmdArg.Key)
 			if !found {
 				panic("phase not mapped")
 			}
@@ -406,7 +407,7 @@ func (m *stageExecStmtMap) parseStageCommon(
 			require.NoError(t, err)
 			key.rollback = rollback
 		default:
-			require.Failf(t, "unknown key encountered", "key was %s", cmdArg.Key)
+			require.Failf(t, "unknown key encountered", "key was %q", cmdArg.Key)
 		}
 	}
 	entry := stageKeyEntry{
@@ -453,6 +454,8 @@ func (e *stageExecStmt) Exec(
 				return strconv.Itoa(stageVariables.successfulStageCount)
 			case "stageKey":
 				return strconv.Itoa(stageVariables.stage.AsInt() * 1000)
+			case "phase":
+				return stageVariables.stage.phase.String()
 			default:
 				t.Fatalf("unknown variable name %s", s)
 			}

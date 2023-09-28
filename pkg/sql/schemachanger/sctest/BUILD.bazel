@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "sctest",
@@ -10,6 +11,7 @@ go_library(
         "end_to_end.go",
         "framework.go",
         "test_server_factory.go",
+        ":gen-stageExecType-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/sctest",
     visibility = ["//visibility:public"],
@@ -58,4 +60,10 @@ go_library(
         "@com_github_lib_pq//:pq",
         "@com_github_stretchr_testify//require",
     ],
+)
+
+stringer(
+    name = "gen-stageExecType-stringer",
+    src = "framework.go",
+    typ = "stageExecType",
 )
