@@ -304,7 +304,7 @@ func uploadAndStart(nodes option.NodeListOption, v string) versionStep {
 func binaryUpgradeStep(nodes option.NodeListOption, newVersion string) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		if err := clusterupgrade.RestartNodesWithNewBinary(
-			ctx, t, t.L(), u.c, nodes, option.DefaultStartOpts(), newVersion,
+			ctx, t, t.L(), u.c, nodes, option.DefaultStartOptsNoBackups(), newVersion,
 		); err != nil {
 			t.Fatal(err)
 		}
