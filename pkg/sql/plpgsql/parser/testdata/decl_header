@@ -42,8 +42,19 @@ at or near ";": syntax error: unimplemented: this syntax
 
 parse
 DECLARE
+  var1 CURSOR FOR SELECT * FROM t1 WHERE id = arg1;
+BEGIN
+END
+----
+DECLARE
+var1 CURSOR FOR SELECT * FROM t1 WHERE id = arg1;
+BEGIN
+END
+
+parse
+DECLARE
   var1 NO SCROLL CURSOR (arg1 INTEGER) FOR SELECT * FROM t1 WHERE id = arg1;
 BEGIN
 END
 ----
-at or near "scroll": syntax error: unimplemented: this syntax
+at or near "(": syntax error: unimplemented: this syntax

@@ -86,6 +86,10 @@ func scanUserPriority(t *testing.T, d *datadriven.TestData) roachpb.UserPriority
 func scanLockDurability(t *testing.T, d *datadriven.TestData) lock.Durability {
 	var durS string
 	d.ScanArgs(t, "dur", &durS)
+	return getLockDurability(t, d, durS)
+}
+
+func getLockDurability(t *testing.T, d *datadriven.TestData, durS string) lock.Durability {
 	switch durS {
 	case "r":
 		return lock.Replicated
@@ -177,6 +181,13 @@ func scanSingleRequest(
 		}
 		return concurrency.GetStrength(t, d, s)
 	}
+	maybeGetDur := func() lock.Durability {
+		s, ok := fields["dur"]
+		if !ok {
+			return lock.Unreplicated
+		}
+		return getLockDurability(t, d, s)
+	}
 
 	switch cmd {
 	case "get":
@@ -184,6 +195,7 @@ func scanSingleRequest(
 		r.Sequence = maybeGetSeq()
 		r.Key = roachpb.Key(mustGetField("key"))
 		r.KeyLockingStrength = maybeGetStr()
+		r.KeyLockingDurability = maybeGetDur()
 		return &r
 
 	case "scan":
@@ -194,6 +206,7 @@ func scanSingleRequest(
 			r.EndKey = roachpb.Key(v)
 		}
 		r.KeyLockingStrength = maybeGetStr()
+		r.KeyLockingDurability = maybeGetDur()
 		return &r
 
 	case "put":

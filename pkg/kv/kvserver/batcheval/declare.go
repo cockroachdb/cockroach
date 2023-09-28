@@ -50,7 +50,7 @@ func DefaultDeclareKeys(
 // ensures that the commands are fully isolated from conflicting transactions
 // when it evaluated.
 func DefaultDeclareIsolatedKeys(
-	_ ImmutableRangeState,
+	rs ImmutableRangeState,
 	header *kvpb.Header,
 	req kvpb.Request,
 	latchSpans *spanset.SpanSet,
@@ -92,7 +92,8 @@ func DefaultDeclareIsolatedKeys(
 		// Get the correct lock strength to use for {lock,latch} spans if we're
 		// dealing with locking read requests.
 		if readOnlyReq, ok := req.(kvpb.LockingReadRequest); ok {
-			str, _ = readOnlyReq.KeyLocking()
+			var dur lock.Durability
+			str, dur = readOnlyReq.KeyLocking()
 			switch str {
 			case lock.None:
 				panic(errors.AssertionFailedf("unexpected non-locking read handling"))
@@ -109,6 +110,15 @@ func DefaultDeclareIsolatedKeys(
 				// from concurrent writers operating at lower timestamps, a shared-locking
 				// read extends this protection to all timestamps.
 				timestamp = hlc.MaxTimestamp
+				if dur == lock.Replicated && header.Txn != nil {
+					// Concurrent replicated shared lock attempts by the same transaction
+					// need to be isolated from one another. We acquire a write latch on
+					// a per-transaction local key to achieve this. See
+					// https://github.com/cockroachdb/cockroach/issues/109668.
+					latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
+						Key: keys.ReplicatedSharedLocksTransactionLatchingKey(rs.GetRangeID(), header.Txn.ID),
+					})
+				}
 			case lock.Exclusive:
 				// Reads that acquire exclusive locks acquire write latches at the
 				// request's timestamp. This isolates them from all concurrent writes,

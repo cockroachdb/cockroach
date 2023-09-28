@@ -725,6 +725,13 @@ type UDFDefinition struct {
 	// ExceptionBlock contains information needed for exception-handling when the
 	// body of this routine returns an error. It can be unset.
 	ExceptionBlock *ExceptionBlock
+
+	// CursorDeclaration contains the information needed to open a SQL cursor with
+	// the result of the *first* body statement. If it is set, there will be at
+	// least two body statements - one to open the cursor, and one to evaluate the
+	// result of the routine. This invariant is enforced when the PLpgSQL routine
+	// is built. CursorDeclaration may be unset.
+	CursorDeclaration *tree.RoutineOpenCursor
 }
 
 // ExceptionBlock contains the information needed to match and handle errors in
