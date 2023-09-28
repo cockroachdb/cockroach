@@ -100,6 +100,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob" // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionprotectedts"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"      // register jobs declared outside of pkg/sql
 	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlschedule" // register schedules declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -665,6 +666,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			jobsprotectedts.GetMetaType(jobsprotectedts.Schedules): jobsprotectedts.MakeStatusFunc(
 				jobRegistry, jobsprotectedts.Schedules,
 			),
+			sessionprotectedts.SessionMetaType: sessionprotectedts.MakeStatusFunc(),
 		},
 	})
 	if err != nil {
