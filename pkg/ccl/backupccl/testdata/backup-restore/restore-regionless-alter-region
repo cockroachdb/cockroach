@@ -274,7 +274,11 @@ subtest end
 subtest restore_regionless_on_single_region_table
 
 exec-sql
-DROP TABLE d.t;
+DROP DATABASE d;
+----
+
+exec-sql
+CREATE DATABASE d;
 ----
 
 exec-sql
@@ -284,7 +288,7 @@ RESTORE TABLE d.t FROM LATEST IN 'nodelocal://1/table_backup/' WITH remove_regio
 query-sql
 SELECT table_name, locality FROM [SHOW TABLES FROM d] ORDER BY 1;
 ----
-t REGIONAL BY TABLE IN PRIMARY REGION
+t <nil>
 
 # ensure that tables belonging to d can be modified & have the correct values
 exec-sql
@@ -307,7 +311,8 @@ subtest restore_regionless_on_single_region_table/alter-region
 exec-sql
 ALTER DATABASE d ADD REGION "us-east-1";
 ----
-pq: region "us-east-1" already added to database
+pq: cannot add region "us-east-1" to database d
+HINT: you must add a PRIMARY REGION first using ALTER DATABASE d PRIMARY REGION "us-east-1"
 
 exec-sql
 ALTER DATABASE d PRIMARY REGION "us-east-1";
