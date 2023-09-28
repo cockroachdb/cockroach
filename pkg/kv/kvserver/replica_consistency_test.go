@@ -19,9 +19,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
@@ -31,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -309,6 +312,27 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 		} else {
 			require.NoError(t, storage.MVCCPut(ctx, eng, key, ts, value, storage.MVCCWriteOptions{LocalTimestamp: localTS}))
 		}
+
+		rd, err = CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim)
+		require.NoError(t, err)
+		fmt.Fprintf(sb, "checksum%d: %x\n", i+1, rd.SHA512)
+	}
+
+	// We then do the same for replicated locks.
+	locks := []struct {
+		key   string
+		str   lock.Strength
+		txnID int64
+	}{
+		{"a", lock.Exclusive, 1},
+		{"b", lock.Shared, 1},
+		{"b", lock.Shared, 2},
+	}
+
+	for i, l := range locks {
+		txnID := uuid.FromUint128(uint128.FromInts(0, uint64(l.txnID)))
+		txn := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: txnID}}
+		require.NoError(t, storage.MVCCAcquireLock(ctx, eng, txn, l.str, roachpb.Key(l.key), nil, 0))
 
 		rd, err = CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim)
 		require.NoError(t, err)
