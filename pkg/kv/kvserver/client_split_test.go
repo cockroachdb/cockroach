@@ -1131,7 +1131,8 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 		rngDesc := repl.Desc()
 		rngStart, rngEnd := rngDesc.StartKey, rngDesc.EndKey
 		if rngStart.Equal(tableBoundary) || !rngEnd.Equal(roachpb.RKeyMax) {
-			return errors.Errorf("range %s has not yet split", repl)
+			_, _, _ = store.Enqueue(ctx, "split", repl, false, false)
+			return errors.Errorf("range %s has not yet split expected %s-Max", repl, tableBoundary)
 		}
 		return nil
 	})
@@ -3634,8 +3635,11 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.GlobalReads = proto.Bool(true)
 
+	st := cluster.MakeTestingClusterSettings()
+
 	ctx := context.Background()
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: st,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DefaultZoneConfigOverride: &zoneConfig,
@@ -3658,7 +3662,6 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	clock.Store(s.Clock())
 	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
-	config.TestingSetupZoneConfigHook(s.Stopper())
 
 	// Split off the range for the test.
 	descID := bootstrap.TestingUserDescID(0)

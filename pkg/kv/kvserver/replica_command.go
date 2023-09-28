@@ -4011,12 +4011,7 @@ func (r *Replica) adminScatter(
 			allowLeaseTransfer = true
 		}
 		desc := r.Desc()
-		conf, err := r.LoadSpanConfig(ctx)
-		if err != nil {
-			// The conf can not be loaded, skip this replica.
-			break
-		}
-		_, err = rq.replicaCanBeProcessed(ctx, r, false /* acquireLeaseIfNeeded */)
+		conf, err = rq.replicaCanBeProcessed(ctx, r, false /* acquireLeaseIfNeeded */)
 		if err != nil {
 			// The replica can not be processed, so skip it.
 			break

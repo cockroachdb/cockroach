@@ -58,6 +58,7 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 				StoreKVSubscriberOverride: mockSubscriber,
 			},
 		},
+		DisableSQLServer: true,
 	}
 	s := serverutils.StartServerOnly(t, args)
 	defer s.Stopper().Stop(context.Background())
