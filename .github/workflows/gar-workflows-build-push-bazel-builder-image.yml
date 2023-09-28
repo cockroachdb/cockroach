@@ -1,0 +1,26 @@
+name: Build and Push bazel-builder image
+
+on:
+  pull_request
+
+jobs:
+  tags:
+    runs-on: ubuntu-latest
+    outputs:
+      time_tag: ${{ steps.vars.outputs.TIME_TAG }}
+    steps:
+      -
+        name: Set TAG value
+        id: vars
+        run: echo "TIME_TAG=$(date +%Y%m%d-%H%M%S)" >> $GITHUB_OUTPUT
+  docker:
+    needs: tags
+    uses: ./.github/workflows/gar-workflows-reusable-build-push-multiplatform-images.yml
+    with:
+      tags: |
+        us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel-builder:latest-do-not-use
+        us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel-builder:${{ needs.tags.outputs.time_tag }}
+      context: "{{defaultContext}}:build/bazelbuilder"
+    secrets:
+      gcp_wif_provider: ${{ secrets.GCP_CRL_CI_IMAGES_WIF_PROVIDER }}
+      gcp_wif_service_account: ${{ secrets.GCP_CRL_CI_IMAGES_SERVICE_ACCOUNT }}
