@@ -2091,11 +2091,12 @@ func (q *StoreWorkQueue) BypassedWorkDone(workCount int64, doneInfo StoreWorkDon
 
 // StatsToIgnore is called for range snapshot ingestion -- see the comment in
 // storeAdmissionStats.
-func (q *StoreWorkQueue) StatsToIgnore(ingestStats pebble.IngestOperationStats) {
+func (q *StoreWorkQueue) StatsToIgnore(ingestStats pebble.IngestOperationStats, writeBytes uint64) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	q.mu.stats.statsToIgnore.Bytes += ingestStats.Bytes
-	q.mu.stats.statsToIgnore.ApproxIngestedIntoL0Bytes += ingestStats.ApproxIngestedIntoL0Bytes
+	q.mu.stats.statsToIgnore.ingestStats.Bytes += ingestStats.Bytes
+	q.mu.stats.statsToIgnore.ingestStats.ApproxIngestedIntoL0Bytes += ingestStats.ApproxIngestedIntoL0Bytes
+	q.mu.stats.statsToIgnore.writeBytes += writeBytes
 }
 
 func (q *StoreWorkQueue) updateStoreStatsAfterWorkDone(

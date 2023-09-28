@@ -628,7 +628,7 @@ func (r *Replica) applySnapshot(
 		}
 	}
 	if r.store.cfg.KVAdmissionController != nil {
-		r.store.cfg.KVAdmissionController.SnapshotIngested(r.store.StoreID(), ingestStats)
+		r.store.cfg.KVAdmissionController.SnapshotIngestedOrWritten(r.store.StoreID(), ingestStats, 0)
 	}
 	stats.ingestion = timeutil.Now()
 
