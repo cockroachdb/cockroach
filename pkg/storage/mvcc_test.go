@@ -125,6 +125,7 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 		RangeKeyBytes:     1,
 		RangeValCount:     1,
 		RangeValBytes:     1,
+		LockBytes:         1,
 		LockCount:         1,
 		LockAge:           1,
 		GCBytesAge:        1,
@@ -160,7 +161,7 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 	// Run some checks for Forward.
 	goldDelta := enginepb.MVCCStats{
 		KeyBytes:        42,
-		IntentCount:     11,
+		LockCount:       11,
 		LastUpdateNanos: 1e9 - 1000,
 	}
 	delta := goldDelta

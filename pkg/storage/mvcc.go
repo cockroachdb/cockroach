@@ -559,6 +559,48 @@ func updateStatsOnResolve(
 	return ms
 }
 
+// updateStatsOnAcquireLock updates MVCCStats for acquiring a replicated shared
+// or exclusive lock on a key. If orig is not nil, the lock acquisition is
+// replacing an existing lock with a new lock that has the exact same txn ID and
+// strength.
+func updateStatsOnAcquireLock(
+	origKeySize, origValSize, keySize, valSize int64, orig, meta *enginepb.MVCCMetadata,
+) enginepb.MVCCStats {
+	var ms enginepb.MVCCStats
+
+	// Remove current lock counts.
+	if orig != nil {
+		// Move the (so far empty) stats to the timestamp at which the previous
+		// lock was acquired, which is where we wish to reclassify its initial
+		// contributions.
+		ms.AgeTo(orig.Timestamp.WallTime)
+
+		// Subtract counts attributable to the lock we're replacing.
+		ms.LockBytes -= origKeySize + origValSize
+		ms.LockCount--
+	}
+
+	// Now add in the contributions from the new lock at the new acquisition
+	// timestamp.
+	ms.AgeTo(meta.Timestamp.WallTime)
+	ms.LockBytes += keySize + valSize
+	ms.LockCount++
+	return ms
+}
+
+// updateStatsOnReleaseLock updates MVCCStats for releasing a replicated shared
+// or exclusive lock on a key. orig is the lock being released, and must not be
+// nil.
+func updateStatsOnReleaseLock(
+	origKeySize, origValSize int64, orig *enginepb.MVCCMetadata,
+) enginepb.MVCCStats {
+	var ms enginepb.MVCCStats
+	ms.AgeTo(orig.Timestamp.WallTime)
+	ms.LockBytes -= origKeySize + origValSize
+	ms.LockCount--
+	return ms
+}
+
 // updateStatsOnRangeKeyClear updates MVCCStats for clearing an entire
 // range key stack.
 func updateStatsOnRangeKeyClear(rangeKeys MVCCRangeKeyStack) enginepb.MVCCStats {
@@ -1439,14 +1481,17 @@ func (b *putBuffer) release() {
 	putBufferPool.Put(b)
 }
 
-func (b *putBuffer) lockTableKey(key roachpb.Key, str lock.Strength, txnID uuid.UUID) EngineKey {
-	var lockTableKey EngineKey
-	lockTableKey, b.ltKeyBuf = LockTableKey{
+func (b *putBuffer) lockTableKey(
+	key roachpb.Key, str lock.Strength, txnID uuid.UUID,
+) (ltEngKey EngineKey, keyBytes int64) {
+	ltKey := LockTableKey{
 		Key:      key,
 		Strength: str,
 		TxnUUID:  txnID,
-	}.ToEngineKey(b.ltKeyBuf)
-	return lockTableKey
+	}
+	ltEngKey, b.ltKeyBuf = ltKey.ToEngineKey(b.ltKeyBuf)
+	keyBytes = ltKey.EncodedSize()
+	return ltEngKey, keyBytes
 }
 
 func (b *putBuffer) marshalMeta(meta *enginepb.MVCCMetadata) (_ []byte, err error) {
@@ -1483,7 +1528,11 @@ var trueValue = true
 // putLockMeta puts a lock at the given key with the provided strength and
 // value.
 func (b *putBuffer) putLockMeta(
-	writer Writer, key MVCCKey, str lock.Strength, meta *enginepb.MVCCMetadata, alreadyExists bool,
+	writer Writer,
+	key roachpb.Key,
+	str lock.Strength,
+	meta *enginepb.MVCCMetadata,
+	alreadyExists bool,
 ) (keyBytes, valBytes int64, err error) {
 	if meta.Timestamp.ToTimestamp() != meta.Txn.WriteTimestamp {
 		// The timestamps are supposed to be in sync. If they weren't, it wouldn't
@@ -1491,7 +1540,7 @@ func (b *putBuffer) putLockMeta(
 		return 0, 0, errors.AssertionFailedf(
 			"meta.Timestamp != meta.Txn.WriteTimestamp: %s != %s", meta.Timestamp, meta.Txn.WriteTimestamp)
 	}
-	lockTableKey := b.lockTableKey(key.Key, str, meta.Txn.ID)
+	lockTableKey, lockTableKeyBytes := b.lockTableKey(key, str, meta.Txn.ID)
 	if alreadyExists {
 		// Absence represents false.
 		meta.TxnDidNotUpdateMeta = nil
@@ -1505,7 +1554,17 @@ func (b *putBuffer) putLockMeta(
 	if err = writer.PutEngineKey(lockTableKey, bytes); err != nil {
 		return 0, 0, err
 	}
-	return int64(key.EncodedSize()), int64(len(bytes)), nil
+	if str == lock.Intent {
+		// For historical reasons, intent metadata key-values use the encoded
+		// size of the unversioned MVCCKey that they are virtualized at (e.g. by
+		// the intentInterleavingIter) as their contribution to stats, instead
+		// of their real size in the lock table keyspace.
+		keyBytes = int64(MakeMVCCMetadataKey(key).EncodedSize())
+	} else {
+		keyBytes = lockTableKeyBytes
+	}
+	valBytes = int64(len(bytes))
+	return keyBytes, valBytes, nil
 }
 
 // clearLockMeta clears a lock at the given key and strength.
@@ -1521,19 +1580,26 @@ func (b *putBuffer) putLockMeta(
 // doing single-clear.
 func (b *putBuffer) clearLockMeta(
 	writer Writer,
-	key MVCCKey,
+	key roachpb.Key,
 	str lock.Strength,
 	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
 	opts ClearOptions,
 ) (keyBytes, valBytes int64, err error) {
-	lockTableKey := b.lockTableKey(key.Key, str, txnUUID)
+	lockTableKey, lockTableKeyBytes := b.lockTableKey(key, str, txnUUID)
 	if txnDidNotUpdateMeta {
 		err = writer.SingleClearEngineKey(lockTableKey)
 	} else {
 		err = writer.ClearEngineKey(lockTableKey, opts)
 	}
-	return int64(key.EncodedSize()), 0, err
+	if str == lock.Intent {
+		// See comment in putLockMeta.
+		keyBytes = int64(MakeMVCCMetadataKey(key).EncodedSize())
+	} else {
+		keyBytes = lockTableKeyBytes
+	}
+	valBytes = 0 // cleared
+	return keyBytes, valBytes, err
 }
 
 // MVCCPut sets the value for a specified key. It will save the value
@@ -2316,7 +2382,7 @@ func mvccPutInternal(
 		alreadyExists := ok && meta.Txn != nil
 		// Write the intent metadata key.
 		metaKeySize, metaValSize, err = buf.putLockMeta(
-			writer, metaKey, lock.Intent, newMeta, alreadyExists)
+			writer, metaKey.Key, lock.Intent, newMeta, alreadyExists)
 		if err != nil {
 			return false, err
 		}
@@ -4958,10 +5024,10 @@ func mvccResolveWriteIntent(
 			// to do anything to update the intent but to move the timestamp forward,
 			// even if it can.
 			metaKeySize, metaValSize, err = buf.putLockMeta(
-				writer, metaKey, lock.Intent, newMeta, true /* alreadyExists */)
+				writer, metaKey.Key, lock.Intent, newMeta, true /* alreadyExists */)
 		} else {
 			metaKeySize, metaValSize, err = buf.clearLockMeta(
-				writer, metaKey, lock.Intent, canSingleDelHelper.onCommitLock(), meta.Txn.ID, ClearOptions{
+				writer, metaKey.Key, lock.Intent, canSingleDelHelper.onCommitLock(), meta.Txn.ID, ClearOptions{
 					ValueSizeKnown: true,
 					ValueSize:      uint32(origMetaValSize),
 				})
@@ -5073,7 +5139,7 @@ func mvccResolveWriteIntent(
 	if !ok {
 		// If there is no other version, we should just clean up the key entirely.
 		_, _, err := buf.clearLockMeta(
-			writer, metaKey, lock.Intent, canSingleDelHelper.onAbortLock(), meta.Txn.ID, ClearOptions{
+			writer, metaKey.Key, lock.Intent, canSingleDelHelper.onAbortLock(), meta.Txn.ID, ClearOptions{
 				ValueSizeKnown: true,
 				ValueSize:      uint32(origMetaValSize),
 			})
@@ -5095,7 +5161,7 @@ func mvccResolveWriteIntent(
 		ValBytes: int64(nextValueLen),
 	}
 	metaKeySize, metaValSize, err := buf.clearLockMeta(
-		writer, metaKey, lock.Intent, canSingleDelHelper.onAbortLock(), meta.Txn.ID, ClearOptions{
+		writer, metaKey.Key, lock.Intent, canSingleDelHelper.onAbortLock(), meta.Txn.ID, ClearOptions{
 			ValueSizeKnown: true,
 			ValueSize:      uint32(origMetaValSize),
 		})
@@ -5445,17 +5511,24 @@ func MVCCAcquireLock(
 	buf := newPutBuffer()
 	defer buf.release()
 
-	metaKey := MakeMVCCMetadataKey(key)
 	newMeta := &buf.newMeta
 	newMeta.Txn = &txn.TxnMeta
 	newMeta.Timestamp = txn.WriteTimestamp.ToLegacyTimestamp()
-	keyBytes, valBytes, err := buf.putLockMeta(rw, metaKey, str, newMeta, rolledBack)
+	keyBytes, valBytes, err := buf.putLockMeta(rw, key, str, newMeta, rolledBack)
 	if err != nil {
 		return err
 	}
 
-	// TODO(nvanbenschoten): handle MVCCStats update after addressing #109645.
-	_, _, _ = ms, keyBytes, valBytes
+	// Update MVCC stats.
+	if ms != nil {
+		origMeta := ltScanner.foundOwn(str)
+		var origKeySize, origValSize int64
+		if origMeta != nil {
+			origKeySize = keyBytes // same key
+			origValSize = int64(origMeta.Size())
+		}
+		ms.Add(updateStatsOnAcquireLock(origKeySize, origValSize, keyBytes, valBytes, origMeta, newMeta))
+	}
 
 	return nil
 }
@@ -5503,10 +5576,7 @@ func mvccReleaseLockInternal(
 		txnDidNotUpdateMeta = canSingleDelHelper.onAbortLock()
 	}
 
-	metaKey := MakeMVCCMetadataKey(update.Key)
-	origMetaKeySize := int64(metaKey.EncodedSize())
-	origMetaValSize := int64(meta.Size())
-	keyBytes, valBytes, err := buf.clearLockMeta(writer, metaKey, str, txnDidNotUpdateMeta, meta.Txn.ID, ClearOptions{
+	keyBytes, _, err := buf.clearLockMeta(writer, update.Key, str, txnDidNotUpdateMeta, meta.Txn.ID, ClearOptions{
 		ValueSizeKnown: true,
 		ValueSize:      uint32(meta.Size()),
 	})
@@ -5514,8 +5584,12 @@ func mvccReleaseLockInternal(
 		return false, err
 	}
 
-	// TODO(nvanbenschoten): handle MVCCStats update after addressing #109645.
-	_, _, _, _, _ = ms, origMetaKeySize, origMetaValSize, keyBytes, valBytes
+	// Update MVCC stats.
+	if ms != nil {
+		origKeySize := keyBytes // same key
+		origValSize := int64(meta.Size())
+		ms.Add(updateStatsOnReleaseLock(origKeySize, origValSize, meta))
+	}
 
 	return true, nil
 
@@ -6430,18 +6504,26 @@ func willOverflow(a, b int64) bool {
 // specifies the wall time in nanoseconds since the epoch and is used to compute
 // age-related stats quantities.
 func ComputeStats(r Reader, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
-	return ComputeStatsWithVisitors(r, start, end, nowNanos, nil, nil)
+	return ComputeStatsWithVisitors(r, start, end, nowNanos, ComputeStatsVisitors{})
 }
 
-// ComputeStatsWithVisitors is like ComputeStats, but also takes a point and/or
-// range key callback that is invoked for each key.
+// ComputeStatsVisitors holds a set of callbacks that are invoked on each key
+// during stats computation.
+type ComputeStatsVisitors struct {
+	PointKey     func(MVCCKey, []byte) error
+	RangeKey     func(MVCCRangeKeyValue) error
+	LockTableKey func(LockTableKey, []byte) error
+}
+
+// ComputeStatsWithVisitors is like ComputeStats, but also takes callbacks that
+// are invoked on each key.
 func ComputeStatsWithVisitors(
-	r Reader,
-	start, end roachpb.Key,
-	nowNanos int64,
-	pointKeyVisitor func(MVCCKey, []byte) error,
-	rangeKeyVisitor func(MVCCRangeKeyValue) error,
+	r Reader, start, end roachpb.Key, nowNanos int64, visitors ComputeStatsVisitors,
 ) (enginepb.MVCCStats, error) {
+	if isLockTableKey(start) {
+		return computeLockTableStatsWithVisitors(r, start, end, nowNanos, visitors.LockTableKey)
+	}
+
 	iter, err := r.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 		KeyTypes:   IterKeyTypePointsAndRanges,
 		LowerBound: start,
@@ -6452,7 +6534,7 @@ func ComputeStatsWithVisitors(
 	}
 	defer iter.Close()
 	iter.SeekGE(MVCCKey{Key: start})
-	return computeStatsForIterWithVisitors(iter, nowNanos, pointKeyVisitor, rangeKeyVisitor)
+	return computeStatsForIterWithVisitors(iter, nowNanos, visitors.PointKey, visitors.RangeKey)
 }
 
 // ComputeStatsForIter is like ComputeStats, but scans across the given iterator
@@ -6563,24 +6645,34 @@ func computeStatsForIterWithVisitors(
 			}
 		}
 
-		// Check for ignored keys.
-		if bytes.HasPrefix(unsafeKey.Key, keys.LocalRangeIDPrefix) {
-			// RangeID-local key.
-			_ /* rangeID */, infix, suffix, _ /* detail */, err := keys.DecodeRangeIDKey(unsafeKey.Key)
-			if err != nil {
-				return enginepb.MVCCStats{}, errors.Wrap(err, "unable to decode rangeID key")
+		isSys := isSysLocal(unsafeKey.Key)
+		if isSys {
+			// Check for ignored keys.
+			if bytes.HasPrefix(unsafeKey.Key, keys.LocalRangeIDPrefix) {
+				// RangeID-local key.
+				_ /* rangeID */, infix, suffix, _ /* detail */, err := keys.DecodeRangeIDKey(unsafeKey.Key)
+				if err != nil {
+					return enginepb.MVCCStats{}, errors.Wrap(err, "unable to decode rangeID key")
+				}
+
+				if infix.Equal(keys.LocalRangeIDReplicatedInfix) {
+					// Replicated RangeID-local key.
+					if suffix.Equal(keys.LocalRangeAppliedStateSuffix) {
+						// RangeAppliedState key. Ignore.
+						continue
+					}
+				}
 			}
 
-			if infix.Equal(keys.LocalRangeIDReplicatedInfix) {
-				// Replicated RangeID-local key.
-				if suffix.Equal(keys.LocalRangeAppliedStateSuffix) {
-					// RangeAppliedState key. Ignore.
-					continue
-				}
+			// Check for lock table keys, which are not handled by this
+			// function. They are handled by computeLockTableStatsWithVisitors
+			// instead.
+			if bytes.HasPrefix(unsafeKey.Key, keys.LocalRangeLockTablePrefix) {
+				return enginepb.MVCCStats{}, errors.AssertionFailedf(
+					"lock table key encountered by ComputeStats: %s", unsafeKey.Key)
 			}
 		}
 
-		isSys := isSysLocal(unsafeKey.Key)
 		isValue := unsafeKey.IsValue()
 		implicitMeta := isValue && !bytes.Equal(unsafeKey.Key, prevKey)
 		prevKey = append(prevKey[:0], unsafeKey.Key...)
@@ -6725,6 +6817,78 @@ func computeStatsForIterWithVisitors(
 			ms.ValBytes += int64(valueLen)
 			ms.ValCount++
 		}
+	}
+
+	ms.LastUpdateNanos = nowNanos
+	return ms, nil
+}
+
+// computeLockTableStatsWithVisitors performs stats computation for the lock
+// table keys in the given span. It is split off from the main ComputeStats
+// logic because lock table iteration requires an EngineIterator (which is
+// wrapped in a LockTableIterator), while the main ComputeStats logic uses an
+// (intent interleaving) MVCCIterator.
+//
+// Unlike computeStatsForIterWithVisitors, this function accepts a Reader and
+// a start and end key. The start and end key must both be lock table keys.
+func computeLockTableStatsWithVisitors(
+	r Reader,
+	start, end roachpb.Key,
+	nowNanos int64,
+	lockTableKeyVisitor func(LockTableKey, []byte) error,
+) (enginepb.MVCCStats, error) {
+	iter, err := NewLockTableIterator(r, LockTableIteratorOptions{
+		LowerBound:  start,
+		UpperBound:  end,
+		MatchMinStr: lock.Shared, // all locks
+	})
+	if err != nil {
+		return enginepb.MVCCStats{}, err
+	}
+	defer iter.Close()
+
+	var ms enginepb.MVCCStats
+	var meta enginepb.MVCCMetadata
+	var ok bool
+	for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: start}); ok; ok, err = iter.NextEngineKey() {
+		key, err := iter.UnsafeLockTableKey()
+		if err != nil {
+			return enginepb.MVCCStats{}, err
+		}
+		if key.Strength == lock.Intent {
+			// The contributions of intents to the MVCCStats are handled by
+			// computeStatsForIterWithVisitors, which uses an intent
+			// interleaving iterator to interpret the mvcc keyspace. That
+			// function draws a distinction between provisional versioned values
+			// that are associated with intents and committed versioned values
+			// that are not.
+			//
+			// For simplicity, we ignore intents in this function.
+			continue
+		}
+		val, err := iter.UnsafeValue()
+		if err != nil {
+			return enginepb.MVCCStats{}, err
+		}
+		if err := protoutil.Unmarshal(val, &meta); err != nil {
+			return ms, errors.Wrap(err, "unable to decode MVCCMetadata")
+		}
+
+		if lockTableKeyVisitor != nil {
+			if err := lockTableKeyVisitor(key, val); err != nil {
+				return enginepb.MVCCStats{}, err
+			}
+		}
+
+		keyBytes := key.EncodedSize()
+		valBytes := int64(len(val))
+
+		ms.LockBytes += keyBytes + valBytes
+		ms.LockCount++
+		ms.LockAge += nowNanos/1e9 - meta.Timestamp.WallTime/1e9
+	}
+	if err != nil {
+		return enginepb.MVCCStats{}, err
 	}
 
 	ms.LastUpdateNanos = nowNanos

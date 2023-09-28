@@ -128,6 +128,8 @@ func (k MVCCKey) IsValue() bool {
 //
 // TODO(itsbilal): Reconcile this with Len(). Would require updating MVCC stats
 // tests to reflect the more accurate lengths provided by Len().
+// TODO(nvanbenschoten): Change the return value to an int64. That's what every
+// caller wants.
 func (k MVCCKey) EncodedSize() int {
 	n := len(k.Key) + 1
 	if k.IsValue() {
