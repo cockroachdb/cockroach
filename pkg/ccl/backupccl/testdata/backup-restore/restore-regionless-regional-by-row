@@ -62,7 +62,7 @@ new-cluster name=s2 share-io-dir=s1 allow-implicit-access localities=us-east-1
 subtest restore_regionless_cluster_rbr
 
 exec-sql
-RESTORE FROM LATEST IN 'nodelocal://1/rbr_cluster_backup/' WITH strip_localities;
+RESTORE FROM LATEST IN 'nodelocal://1/rbr_cluster_backup/' WITH remove_regions;
 ----
 
 # check cluster's regions
@@ -129,7 +129,7 @@ DROP DATABASE d;
 ----
 
 exec-sql
-RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/rbr_database_backup/' WITH strip_localities;
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/rbr_database_backup/' WITH remove_regions;
 ----
 
 # check to see if restored database, d, shows up
@@ -191,7 +191,7 @@ DROP TABLE d.t;
 ----
 
 exec-sql
-RESTORE TABLE d.t FROM LATEST IN 'nodelocal://1/rbr_table_backup/' WITH strip_localities;
+RESTORE TABLE d.t FROM LATEST IN 'nodelocal://1/rbr_table_backup/' WITH remove_regions;
 ----
 pq: "crdb_internal_region" is not compatible with type "crdb_internal_region" existing in cluster: "crdb_internal_region" of type "ENUM" is not compatible with type "MULTIREGION_ENUM"
 
@@ -201,7 +201,7 @@ DROP TYPE d.public.crdb_internal_region;
 ----
 
 exec-sql
-RESTORE TABLE d.t FROM LATEST IN 'nodelocal://1/rbr_table_backup/' WITH strip_localities;
+RESTORE TABLE d.t FROM LATEST IN 'nodelocal://1/rbr_table_backup/' WITH remove_regions;
 ----
 
 query-sql

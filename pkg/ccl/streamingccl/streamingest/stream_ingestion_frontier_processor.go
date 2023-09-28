@@ -46,7 +46,24 @@ var JobCheckpointFrequency = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
+// DumpFrontierEntries controls the frequency at which we persist the entries in
+// the frontier to the `system.job_info` table.
+//
+// TODO(adityamaru): This timer should be removed once each job is aware of whether
+// it is profiling or not.
+var DumpFrontierEntries = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"stream_replication.dump_frontier_entries_frequency",
+	"controls the frequency with which the frontier entries are persisted; if 0, disabled",
+	10*time.Minute,
+	settings.NonNegativeDuration,
+)
+
 const streamIngestionFrontierProcName = `ingestfntr`
+
+// frontierEntriesFilename is the name of the file at which the stream ingestion
+// frontier periodically dumps its state.
+const frontierEntriesFilename = "~replication-frontier-entries.binpb"
 
 type streamIngestionFrontier struct {
 	execinfra.ProcessorBase
@@ -78,6 +95,7 @@ type streamIngestionFrontier struct {
 	persistedReplicatedTime hlc.Timestamp
 
 	lastPartitionUpdate time.Time
+	lastFrontierDump    time.Time
 	partitionProgress   map[string]jobspb.StreamIngestionProgress_PartitionProgress
 }
 
@@ -305,6 +323,11 @@ func (sf *streamIngestionFrontier) Next() (
 			break
 		}
 
+		if err := sf.maybePersistFrontierEntries(); err != nil {
+			log.Errorf(sf.Ctx(), "failed to persist frontier entries: %+v", err)
+		}
+
+		// Send back a row to the job so that it can update the progress.
 		select {
 		case <-sf.Ctx().Done():
 			sf.MoveToDraining(sf.Ctx().Err())
@@ -488,4 +511,39 @@ func (sf *streamIngestionFrontier) updateLagMetric() {
 		// implying the initial scan has completed.
 		sf.metrics.FrontierLagNanos.Update(timeutil.Since(sf.persistedReplicatedTime.GoTime()).Nanoseconds())
 	}
+}
+
+// maybePersistFrontierEntries periodically persists the current state of the
+// frontier to the `system.job_info` table. This information is used to hydrate
+// the execution details that can be requested for the C2C ingestion job. Note,
+// we always persist the entries to the same info key and so we never have more
+// than one row describing the state of the frontier at a given point in time.
+func (sf *streamIngestionFrontier) maybePersistFrontierEntries() error {
+	dumpFreq := DumpFrontierEntries.Get(&sf.FlowCtx.Cfg.Settings.SV)
+	if dumpFreq == 0 || timeutil.Since(sf.lastFrontierDump) < dumpFreq {
+		return nil
+	}
+	ctx := sf.Ctx()
+	f := sf.frontier
+	jobID := jobspb.JobID(sf.spec.JobID)
+
+	frontierEntries := &execinfrapb.FrontierEntries{ResolvedSpans: make([]jobspb.ResolvedSpan, 0)}
+	f.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+		frontierEntries.ResolvedSpans = append(frontierEntries.ResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
+		return span.ContinueMatch
+	})
+
+	frontierBytes, err := protoutil.Marshal(frontierEntries)
+	if err != nil {
+		return err
+	}
+
+	if err = sf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return jobs.WriteChunkedFileToJobInfo(ctx, frontierEntriesFilename, frontierBytes, txn, jobID)
+	}); err != nil {
+		return err
+	}
+
+	sf.lastFrontierDump = timeutil.Now()
+	return nil
 }
