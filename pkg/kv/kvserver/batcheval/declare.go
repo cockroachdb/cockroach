@@ -36,12 +36,13 @@ func DefaultDeclareKeys(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
+) error {
 	access := spanset.SpanReadWrite
 	if kvpb.IsReadOnly(req) && !kvpb.IsLocking(req) {
 		access = spanset.SpanReadOnly
 	}
 	latchSpans.AddMVCC(access, req.Header().Span(), header.Timestamp)
+	return nil
 }
 
 // DefaultDeclareIsolatedKeys is similar to DefaultDeclareKeys, but it declares
@@ -56,7 +57,7 @@ func DefaultDeclareIsolatedKeys(
 	latchSpans *spanset.SpanSet,
 	lockSpans *lockspanset.LockSpanSet,
 	maxOffset time.Duration,
-) {
+) error {
 	var access spanset.SpanAccess
 	var str lock.Strength
 	timestamp := header.Timestamp
@@ -96,7 +97,16 @@ func DefaultDeclareIsolatedKeys(
 			str, dur = readOnlyReq.KeyLocking()
 			switch str {
 			case lock.None:
-				panic(errors.AssertionFailedf("unexpected non-locking read handling"))
+				// One reason we can be in this branch is if someone has asked for a
+				// replicated non-locking read. Detect this nonsensical case to better
+				// word the error message.
+				if dur == lock.Replicated {
+					return errors.AssertionFailedf(
+						"incompatible key locking strength %s and durability %s", str.String(), dur.String(),
+					)
+				} else {
+					return errors.AssertionFailedf("unexpected non-locking read handling")
+				}
 			case lock.Shared:
 				access = spanset.SpanReadOnly
 				// Unlike non-locking reads, shared-locking reads are isolated from
@@ -130,12 +140,13 @@ func DefaultDeclareIsolatedKeys(
 				// write latches at hlc.MaxTimestamp.
 				access = spanset.SpanReadWrite
 			default:
-				panic(errors.AssertionFailedf("unexpected lock strength %s", str))
+				return errors.AssertionFailedf("unexpected lock strength %s", str)
 			}
 		}
 	}
 	latchSpans.AddMVCC(access, req.Header().Span(), timestamp)
 	lockSpans.Add(str, req.Header().Span())
+	return nil
 }
 
 // DeclareKeysForRefresh determines whether a Refresh request should declare
@@ -151,24 +162,27 @@ func DeclareKeysForRefresh(
 	latchSpans *spanset.SpanSet,
 	lss *lockspanset.LockSpanSet,
 	dur time.Duration,
-) {
+) error {
 	if header.WaitPolicy == lock.WaitPolicy_Error {
-		DefaultDeclareIsolatedKeys(irs, header, req, latchSpans, lss, dur)
+		return DefaultDeclareIsolatedKeys(irs, header, req, latchSpans, lss, dur)
 	} else {
-		DefaultDeclareKeys(irs, header, req, latchSpans, lss, dur)
+		return DefaultDeclareKeys(irs, header, req, latchSpans, lss, dur)
 	}
 }
 
 // DeclareKeysForBatch adds all keys that the batch with the provided header
 // touches to the given SpanSet. This does not include keys touched during the
 // processing of the batch's individual commands.
-func DeclareKeysForBatch(rs ImmutableRangeState, header *kvpb.Header, latchSpans *spanset.SpanSet) {
+func DeclareKeysForBatch(
+	rs ImmutableRangeState, header *kvpb.Header, latchSpans *spanset.SpanSet,
+) error {
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
 		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 			Key: keys.AbortSpanKey(rs.GetRangeID(), header.Txn.ID),
 		})
 	}
+	return nil
 }
 
 // declareAllKeys declares a non-MVCC write over every addressable key. This

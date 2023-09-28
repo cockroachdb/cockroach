@@ -254,7 +254,9 @@ func TestDeleteRangeTombstone(t *testing.T) {
 					// bounds.
 					var latchSpans spanset.SpanSet
 					var lockSpans lockspanset.LockSpanSet
-					declareKeysDeleteRange(evalCtx.Desc, &h, req, &latchSpans, &lockSpans, 0)
+					require.NoError(t,
+						declareKeysDeleteRange(evalCtx.Desc, &h, req, &latchSpans, &lockSpans, 0),
+					)
 					batch := spanset.NewBatchAt(engine.NewBatch(), &latchSpans, h.Timestamp)
 					defer batch.Close()
 

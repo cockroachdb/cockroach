@@ -82,7 +82,10 @@ func TestRequestsSerializeWithAllKeys(t *testing.T) {
 				Sequence: 0,
 			})
 
-			command.DeclareKeys(desc, &header, otherRequest, &otherLatchSpans, &otherLockSpans, 0)
+			err := command.DeclareKeys(desc, &header, otherRequest, &otherLatchSpans, &otherLockSpans, 0)
+			if err != nil {
+				t.Error(err)
+			}
 			if !allLatchSpans.Intersects(&otherLatchSpans) {
 				t.Errorf("%s does not serialize with declareAllKeys", method)
 			}

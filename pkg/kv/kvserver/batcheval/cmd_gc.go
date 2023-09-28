@@ -38,7 +38,7 @@ func declareKeysGC(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
+) error {
 	gcr := req.(*kvpb.GCRequest)
 	if gcr.RangeKeys != nil {
 		// When GC-ing MVCC range key tombstones, we need to serialize with
@@ -112,6 +112,7 @@ func declareKeysGC(
 	// Needed for updating optional GC hint.
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeGCHintKey(rs.GetRangeID())})
 	latchSpans.DisableUndeclaredAccessAssertions()
+	return nil
 }
 
 // Create latches and merge adjacent.
