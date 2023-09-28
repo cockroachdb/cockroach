@@ -30,6 +30,10 @@ import (
 
 type noOIDCConfigured struct{}
 
+func (c *noOIDCConfigured) GetBasePathForTest() string {
+	return ""
+}
+
 func (c *noOIDCConfigured) GetOIDCConf() OIDCUIConf {
 	return OIDCUIConf{
 		Enabled: false,

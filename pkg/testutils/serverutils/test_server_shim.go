@@ -290,6 +290,9 @@ type TestServerInterface interface {
 	// SpanConfigKVSubscriber returns the embedded spanconfig.KVSubscriber for
 	// the server.
 	SpanConfigKVSubscriber() interface{}
+
+	// HttpServer returns the embedded httpServer instance.
+	HttpServer() interface{}
 }
 
 // TestServerFactory encompasses the actual implementation of the shim

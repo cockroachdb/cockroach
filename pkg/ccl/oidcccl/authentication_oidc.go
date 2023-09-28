@@ -17,8 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/ui"
@@ -147,6 +147,10 @@ func (s *oidcAuthenticationServer) GetOIDCConf() ui.OIDCUIConf {
 		Enabled:    s.enabled,
 		AutoLogin:  s.conf.autoLogin,
 	}
+}
+
+func (s *oidcAuthenticationServer) GetBasePathForTest() string {
+	return s.conf.successPath
 }
 
 func reloadConfig(
