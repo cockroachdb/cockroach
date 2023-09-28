@@ -489,8 +489,8 @@ message RestoreDetails {
   // online restore.
   repeated roachpb.Span download_spans = 32 [(gogoproto.nullable) = false];
 
-  // Strips localities
-  bool StripLocalities = 33;
+  // Removes regions.
+  bool RemoveRegions = 33;
 
   // NEXT ID: 34.
 }

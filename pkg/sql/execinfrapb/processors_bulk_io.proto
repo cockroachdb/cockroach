@@ -190,9 +190,33 @@ message IngestStoppedSpec {
 // to connect to it.
 message StreamIngestionPartitionSpec {
   optional string partition_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "PartitionID"];
+
   optional string subscription_token = 2 [(gogoproto.nullable) = false];
+
   optional string address = 3 [(gogoproto.nullable) = false];
+
   repeated roachpb.Span spans = 4 [(gogoproto.nullable) = false];
+
+  optional int32 src_instance_id = 5 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "SrcInstanceID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID"];
+
+  optional int32 dest_instance_id = 6 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "DestInstanceID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID"];
+}
+
+// StreamIngestionPartitionSpecs contains all the partition specs that are part
+// of the DistSQL plan.
+message StreamIngestionPartitionSpecs {
+  repeated StreamIngestionPartitionSpec specs = 3;
+}
+
+// FrontierEntries is a snapshot of a span frontier.
+message FrontierEntries {
+  repeated jobs.jobspb.ResolvedSpan resolved_spans = 1 [(gogoproto.nullable) = false];
 }
 
 message StreamIngestionDataSpec {

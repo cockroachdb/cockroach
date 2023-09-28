@@ -30,7 +30,7 @@ import (
 // The goal of this test is to ensure that if a user ever performed a
 // regionless restore where the backed-up target has a regional by row table,
 // they would be able to get themselves out of a stuck state without needing
-// an enterprise license (in addition to testing the ability to use strip_localities
+// an enterprise license (in addition to testing the ability to use remove_regions
 // without said license).
 func TestMultiRegionRegionlessRestoreNoLicense(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -81,7 +81,7 @@ func TestMultiRegionRegionlessRestoreNoLicense(t *testing.T) {
 	defer sqlTC.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(sqlTC.Conns[0])
 
-	if err := backuptestutils.VerifyBackupRestoreStatementResult(t, sqlDB, `RESTORE DATABASE d FROM LATEST IN $1 WITH strip_localities`, localFoo); err != nil {
+	if err := backuptestutils.VerifyBackupRestoreStatementResult(t, sqlDB, `RESTORE DATABASE d FROM LATEST IN $1 WITH remove_regions`, localFoo); err != nil {
 		t.Fatal(err)
 	}
 

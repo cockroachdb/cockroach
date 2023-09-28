@@ -55,6 +55,10 @@ var replanFrequency = settings.RegisterDurationSetting(
 	settings.PositiveDuration,
 )
 
+// replicationPartitionInfoFilename is the filename at which the replication job
+// resumer writes its partition specs.
+const replicationPartitionInfoFilename = "~replication-partition-specs.binpb"
+
 func startDistIngestion(
 	ctx context.Context, execCtx sql.JobExecContext, resumer *streamIngestionResumer,
 ) error {
@@ -172,7 +176,6 @@ func startDistIngestion(
 		}
 		return ingestor.ingestSpanConfigs(ctx, details.SourceTenantName)
 	}
-
 	execInitialPlan := func(ctx context.Context) error {
 		defer func() {
 			stopReplanner()
@@ -315,6 +318,9 @@ func (p *replicationFlowPlanner) constructPlanGenerator(
 		}
 		if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.AfterReplicationFlowPlan != nil {
 			knobs.AfterReplicationFlowPlan(streamIngestionSpecs, streamIngestionFrontierSpec)
+		}
+		if err := persistStreamIngestionPartitionSpecs(ctx, execCtx.ExecCfg(), ingestionJobID, streamIngestionSpecs); err != nil {
+			return nil, nil, err
 		}
 
 		// Setup a one-stage plan with one proc per input spec.
@@ -565,6 +571,8 @@ func constructStreamIngestionPlanSpecs(
 			SubscriptionToken: string(partition.SubscriptionToken),
 			Address:           string(partition.SrcAddr),
 			Spans:             partition.Spans,
+			SrcInstanceID:     base.SQLInstanceID(partition.SrcInstanceID),
+			DestInstanceID:    destID,
 		}
 		streamIngestionSpecs[destID].PartitionSpecs[partition.ID] = partSpec
 		trackedSpans = append(trackedSpans, partition.Spans...)
