@@ -140,7 +140,10 @@ func signalFlusher() {
 	ch := sysutil.RefreshSignaledChan()
 	for sig := range ch {
 		Ops.Infof(context.Background(), "%s received, flushing logs", sig)
-		RefreshHttpSinkHeaders()
+		err := RefreshHttpSinkHeaders()
+		if err != nil {
+			Ops.Infof(context.Background(), "error while refreshing http sink headers: %s", err)
+		}
 		FlushFiles()
 	}
 }
@@ -158,9 +161,8 @@ func StartAlwaysFlush() {
 
 // RefreshHttpSinkHeaders will iterate over all http sinks and replace the sink's
 // dynamicHeaders with newly generated dynamicHeaders.
-func RefreshHttpSinkHeaders() {
-	_ = logging.allSinkInfos.iterHttpSinks(func(hs *httpSink) error {
-		err := hs.RefreshDynamicHeaders()
-		return err
+func RefreshHttpSinkHeaders() error {
+	return logging.allSinkInfos.iterHttpSinks(func(hs *httpSink) error {
+		return hs.RefreshDynamicHeaders()
 	})
 }
