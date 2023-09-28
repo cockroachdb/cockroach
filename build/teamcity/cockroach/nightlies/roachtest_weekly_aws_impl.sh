@@ -20,7 +20,7 @@ artifacts=/artifacts
 source $root/build/teamcity/util/roachtest_util.sh
 
 build/teamcity-roachtest-invoke.sh \
-  tag:aws-weekly \
+  --suite weekly \
   --cloud="${CLOUD}" \
   --cluster-id "${TC_BUILD_ID}" \
   --artifacts=/artifacts \

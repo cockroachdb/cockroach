@@ -55,7 +55,7 @@ EOF
 # by default. This reserves us-east1-b (the roachprod default zone) for use
 # by manually created clusters.
 timeout -s INT $((7800*60)) bin/roachtest run \
-  tag:release_qualification \
+  --suite release_qualification \
   --cluster-id "${TC_BUILD_ID}" \
   --zones "us-central1-b,us-west1-b,europe-west2-b" \
   --cockroach "$PWD/cockroach" \
