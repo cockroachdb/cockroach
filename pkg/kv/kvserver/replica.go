@@ -988,9 +988,6 @@ func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig) bool {
 			r.mu.largestPreviousMaxRangeSizeBytes = 0
 		}
 	}
-	if knobs := r.store.TestingKnobs(); knobs != nil && knobs.SetSpanConfigInterceptor != nil {
-		conf = knobs.SetSpanConfigInterceptor(r.descRLocked(), conf)
-	}
 	r.mu.conf, r.mu.spanConfigExplicitlySet = conf, true
 	return oldConf.HasConfigurationChange(conf)
 }
