@@ -439,7 +439,7 @@ SIGHUP), unless you also configure --max-wait.
 // TODO(herko/renato): maybe also support adding SQL instances to a
 // shared-process node.
 var startInstanceAsSeparateProcessCmd = &cobra.Command{
-	Use:   "start-sql <virtual-cluster> --storage-cluster <storage-cluster>",
+	Use:   "start-sql <virtual-cluster-nodes> --storage-cluster <storage-cluster>",
 	Short: "start the SQL/HTTP service for a virtual cluster as a separate process",
 	Long: `Start SQL/HTTP instances for a virtual cluster as separate processes.
 
@@ -449,7 +449,7 @@ will create the virtual cluster on the storage cluster if it does not
 exist already.  If creating multiple virtual clusters on the same
 node, the --sql-instance flag must be passed to differentiate them.
 
-The --tenant-id flag can be used to specify the tenant ID; it defaults to 2.
+The --cluster-id flag can be used to specify the tenant ID; it defaults to 2.
 
 The --secure flag can be used to start nodes in secure mode (i.e. using
 certs). When specified, there is a one time initialization for the cluster to
