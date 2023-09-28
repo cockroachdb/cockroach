@@ -87,8 +87,8 @@ export class TimeScaleState {
       );
     }
     this.scale = timeScale || {
-      ...defaultTimeScaleOptions["Past 10 Minutes"],
-      key: "Past 10 Minutes",
+      ...defaultTimeScaleOptions["Past Hour"],
+      key: "Past Hour",
       fixedWindowEnd: false,
     };
     this.metricsTime = {
