@@ -28,6 +28,7 @@ export default function (props: GraphDashboardProps) {
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis label="rows per second" units={AxisUnits.Count}>
         <Metric
@@ -47,6 +48,7 @@ export default function (props: GraphDashboardProps) {
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis label="row count" units={AxisUnits.Count}>
         <Metric
@@ -67,6 +69,7 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
       tenantSource={tenantSource}
       tooltip={`Latency of scanning and deleting within the job.`}
+      showMetricsInTooltip={true}
     >
       <Axis label="latency" units={AxisUnits.Duration}>
         {_.map(percentiles, p => (
@@ -91,6 +94,7 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
       tenantSource={tenantSource}
       tooltip={`Number of active spans being processed by TTL.`}
+      showMetricsInTooltip={true}
     >
       <Axis label="span count" units={AxisUnits.Count}>
         <Metric
