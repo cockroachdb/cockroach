@@ -46,7 +46,7 @@ export class Duration extends React.PureComponent<{
         );
       }
       return null;
-    } else if (job.status == JOB_STATUS_SUCCEEDED) {
+    } else if (job.status === JOB_STATUS_SUCCEEDED) {
       return (
         <span className={className}>
           {"Duration: " +

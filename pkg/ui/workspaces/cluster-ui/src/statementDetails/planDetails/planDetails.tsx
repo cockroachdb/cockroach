@@ -301,7 +301,8 @@ export function Insights({
   onChangeSortSetting,
   hasAdminRole,
 }: InsightsProps): React.ReactElement {
-  const hideAction = useContext(CockroachCloudContext) || database?.length == 0;
+  const hideAction =
+    useContext(CockroachCloudContext) || database?.length === 0;
   const insightsColumns = makeInsightsColumns(hideAction, hasAdminRole, true);
   const data = formatIdxRecommendations(
     idxRecommendations,

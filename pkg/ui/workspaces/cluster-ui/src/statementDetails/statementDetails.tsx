@@ -359,7 +359,9 @@ export class StatementDetails extends React.Component<
     // This is necessary for when the new statementFingerprintID does not have data for the given time frame.
     // The new query text and the formatted query text would be an empty string, and we need to invalidate the old
     // query text and formatted query text.
-    if (this.props.statementFingerprintID != prevProps.statementFingerprintID) {
+    if (
+      this.props.statementFingerprintID !== prevProps.statementFingerprintID
+    ) {
       this.setState({ query: null, formattedQuery: null });
     }
   }
