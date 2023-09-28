@@ -613,6 +613,34 @@ func TestActivityStatusCombineAPI(t *testing.T) {
 	require.Equal(t, stmtAppNameCnt, uiDisabledStmtAppNameCnt)
 	uiDisabledTxnAppNameCnt := getTxnAppNameCnt(resp, appName)
 	require.Equal(t, txnAppNameCnt, uiDisabledTxnAppNameCnt)
+
+	// Enable the activity ui cluster setting
+	db.Exec(t, "set cluster setting sql.stats.activity.ui.enabled = true;")
+
+	// Validate same results after the setting is enabled again.
+	if err := getStatusJSONProto(s, "combinedstmts", &resp, start, end); err != nil {
+		t.Fatal(err)
+	}
+	require.NotEmpty(t, resp.Transactions)
+	require.NotEmpty(t, resp.Statements)
+	require.Equal(t, 0, appNameChangedStmtCnt)
+	require.Equal(t, 0, appNameChangedTxnCnt)
+
+	// Update all the activity table aggregated_ts to an old time. This allows
+	// the check to see if the activity table has data to pass, and causes the
+	// current time frame to have no data.
+	db.Exec(t, "UPDATE system.public.statement_activity SET aggregated_ts = '2021-09-12 13:00:00.000000 +00:00' where 1=1;")
+	db.Exec(t, "UPDATE system.public.transaction_activity SET aggregated_ts = '2021-09-12 13:00:00.000000 +00:00' where 1=1;")
+
+	if err := getStatusJSONProto(s, "combinedstmts", &resp, start, end); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, "crdb_internal.transaction_statistics_persisted", resp.TxnsSourceTable)
+	require.Equal(t, "crdb_internal.statement_statistics_persisted", resp.StmtsSourceTable)
+	require.NotEmpty(t, resp.Transactions)
+	require.NotEmpty(t, resp.Statements)
+	require.Greater(t, resp.StmtsTotalRuntimeSecs, float32(0))
+	require.Greater(t, resp.TxnsTotalRuntimeSecs, float32(0))
 }
 
 func getTxnAppNameCnt(resp serverpb.StatementsResponse, appName string) int {
