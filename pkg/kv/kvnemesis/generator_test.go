@@ -109,29 +109,62 @@ func TestRandStep(t *testing.T) {
 			case *GetOperation:
 				if _, ok := keys[string(o.Key)]; ok {
 					if o.SkipLocked && o.ForUpdate {
-						client.GetExistingForUpdateSkipLocked++
+						if o.GuaranteedDurability {
+							client.GetExistingForUpdateSkipLockedGuaranteedDurability++
+						} else {
+							client.GetExistingForUpdateSkipLocked++
+						}
 					} else if o.SkipLocked && o.ForShare {
-						client.GetExistingForShareSkipLocked++
+						if o.GuaranteedDurability {
+							client.GetExistingForShareSkipLockedGuaranteedDurability++
+
+						} else {
+							client.GetExistingForShareSkipLocked++
+						}
 					} else if o.SkipLocked {
 						client.GetExistingSkipLocked++
 					} else if o.ForUpdate {
-						client.GetExistingForUpdate++
+						if o.GuaranteedDurability {
+							client.GetExistingForUpdateGuaranteedDurability++
+						} else {
+							client.GetExistingForUpdate++
+						}
 					} else if o.ForShare {
-						client.GetExistingForShare++
+						if o.GuaranteedDurability {
+							client.GetExistingForShareGuaranteedDurability++
+						} else {
+							client.GetExistingForShare++
+						}
 					} else {
 						client.GetExisting++
 					}
 				} else {
 					if o.SkipLocked && o.ForUpdate {
-						client.GetMissingForUpdateSkipLocked++
+						if o.GuaranteedDurability {
+							client.GetMissingForUpdateSkipLockedGuaranteedDurability++
+						} else {
+							client.GetMissingForUpdateSkipLocked++
+						}
 					} else if o.SkipLocked && o.ForShare {
-						client.GetMissingForShareSkipLocked++
+						if o.GuaranteedDurability {
+							client.GetMissingForShareSkipLockedGuaranteedDurability++
+						} else {
+							client.GetMissingForShareSkipLocked++
+						}
 					} else if o.SkipLocked {
 						client.GetMissingSkipLocked++
 					} else if o.ForUpdate {
-						client.GetMissingForUpdate++
+						if o.GuaranteedDurability {
+							client.GetMissingForUpdateGuaranteedDurability++
+						} else {
+							client.GetMissingForUpdate++
+						}
 					} else if o.ForShare {
-						client.GetMissingForShare++
+						if o.GuaranteedDurability {
+							client.GetMissingForShareGuaranteedDurability++
+						} else {
+							client.GetMissingForShare++
+						}
 					} else {
 						client.GetMissing++
 					}
@@ -145,29 +178,62 @@ func TestRandStep(t *testing.T) {
 			case *ScanOperation:
 				if o.Reverse {
 					if o.SkipLocked && o.ForUpdate {
-						client.ReverseScanForUpdateSkipLocked++
+						if o.GuaranteedDurability {
+							client.ReverseScanForUpdateSkipLockedGuaranteedDurability++
+						} else {
+							client.ReverseScanForUpdateSkipLocked++
+						}
 					} else if o.SkipLocked && o.ForShare {
-						client.ReverseScanForShareSkipLocked++
+						if o.GuaranteedDurability {
+							client.ReverseScanForShareSkipLockedGuaranteedDurability++
+						} else {
+							client.ReverseScanForShareSkipLocked++
+						}
 					} else if o.SkipLocked {
 						client.ReverseScanSkipLocked++
 					} else if o.ForUpdate {
-						client.ReverseScanForUpdate++
+						if o.GuaranteedDurability {
+							client.ReverseScanForUpdateGuaranteedDurability++
+						} else {
+							client.ReverseScanForUpdate++
+						}
 					} else if o.ForShare {
-						client.ReverseScanForShare++
+						if o.GuaranteedDurability {
+							client.ReverseScanForShareGuaranteedDurability++
+						} else {
+							client.ReverseScanForShare++
+						}
 					} else {
 						client.ReverseScan++
 					}
 				} else {
 					if o.SkipLocked && o.ForUpdate {
-						client.ScanForUpdateSkipLocked++
+						if o.GuaranteedDurability {
+							client.ScanForUpdateSkipLockedGuaranteedDurability++
+						} else {
+							client.ScanForUpdateSkipLocked++
+						}
 					} else if o.SkipLocked && o.ForShare {
-						client.ScanForShareSkipLocked++
+						if o.GuaranteedDurability {
+							client.ScanForShareSkipLockedGuaranteedDurability++
+						} else {
+							client.ScanForShareSkipLocked++
+						}
 					} else if o.SkipLocked {
+
 						client.ScanSkipLocked++
 					} else if o.ForUpdate {
-						client.ScanForUpdate++
+						if o.GuaranteedDurability {
+							client.ScanForUpdateGuaranteedDurability++
+						} else {
+							client.ScanForUpdate++
+						}
 					} else if o.ForShare {
-						client.ScanForShare++
+						if o.GuaranteedDurability {
+							client.ScanForShareGuaranteedDurability++
+						} else {
+							client.ScanForShare++
+						}
 					} else {
 						client.Scan++
 					}

@@ -1,0 +1,3 @@
+echo
+----
+db0.GetForUpdateGuaranteedDurability(ctx, tk(1)) // @<ts> (v1, <nil>)
