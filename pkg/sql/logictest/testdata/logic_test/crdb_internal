@@ -66,6 +66,7 @@ crdb_internal  kv_node_liveness                        table  node  NULL  NULL
 crdb_internal  kv_node_status                          table  node  NULL  NULL
 crdb_internal  kv_protected_ts_records                 table  node  NULL  NULL
 crdb_internal  kv_repairable_catalog_corruptions       view   node  NULL  NULL
+crdb_internal  kv_session_based_leases                 table  node  NULL  NULL
 crdb_internal  kv_store_status                         table  node  NULL  NULL
 crdb_internal  kv_system_privileges                    view   node  NULL  NULL
 crdb_internal  leases                                  table  node  NULL  NULL

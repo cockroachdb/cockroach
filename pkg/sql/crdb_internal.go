@@ -219,6 +219,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalKVFlowTokenDeductions:              crdbInternalKVFlowTokenDeductions,
 		catconstants.CrdbInternalRepairableCatalogCorruptionsViewID: crdbInternalRepairableCatalogCorruptions,
 		catconstants.CrdbInternalKVProtectedTS:                      crdbInternalKVProtectedTSTable,
+		catconstants.CrdbInternalKVSessionBasedLeases:               crdbInternalSessionBasedLeases,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -1549,6 +1550,34 @@ CREATE TABLE crdb_internal.kv_protected_ts_records (
 			}
 
 		}
+	},
+}
+
+var crdbInternalSessionBasedLeases = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.kv_session_based_leases (
+  "descID"     INT8,
+  version      INT8,
+  "nodeID"     INT8,
+  "sessionID"   BYTES NOT NULL,
+  crdb_region  BYTES NOT NULL
+);
+`,
+	comment: `reads from the internal session based leases table (before the table format is converted)`,
+	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
+		return p.InternalSQLTxn().WithSyntheticDescriptors(catalog.Descriptors{systemschema.LeaseTable_V24_1()},
+			func() error {
+				rows, err := p.InternalSQLTxn().QueryBuffered(ctx, "query-leases", p.Txn(), "SELECT * FROM system.lease")
+				if err != nil {
+					return err
+				}
+				for _, d := range rows {
+					if err := addRow(d...); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
 	},
 }
 
