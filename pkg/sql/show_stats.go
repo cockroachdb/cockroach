@@ -15,6 +15,7 @@ import (
 	encjson "encoding/json"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -34,7 +35,7 @@ import (
 var showTableStatsColumns = colinfo.ResultColumns{
 	{Name: "statistics_name", Typ: types.String},
 	{Name: "column_names", Typ: types.StringArray},
-	{Name: "created", Typ: types.Timestamp},
+	{Name: "created", Typ: types.TimestampTZ},
 	{Name: "row_count", Typ: types.Int},
 	{Name: "distinct_count", Typ: types.Int},
 	{Name: "null_count", Typ: types.Int},
@@ -45,7 +46,7 @@ var showTableStatsColumns = colinfo.ResultColumns{
 var showTableStatsColumnsPartialStatisticsVer = colinfo.ResultColumns{
 	{Name: "statistics_name", Typ: types.String},
 	{Name: "column_names", Typ: types.StringArray},
-	{Name: "created", Typ: types.Timestamp},
+	{Name: "created", Typ: types.TimestampTZ},
 	{Name: "row_count", Typ: types.Int},
 	{Name: "distinct_count", Typ: types.Int},
 	{Name: "null_count", Typ: types.Int},
@@ -339,6 +340,12 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					continue
 				}
 
+				createdAt := r[createdAtIdx].(*tree.DTimestamp)
+				createdAtTZ, err := createdAt.AddTimeZone(time.UTC, time.Microsecond)
+				if err != nil {
+					return nil, err
+				}
+
 				histogramID := tree.DNull
 				if r[histIdx] != tree.DNull {
 					histogramID = r[statIDIdx]
@@ -349,7 +356,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					res = tree.Datums{
 						r[nameIdx],
 						colNames,
-						r[createdAtIdx],
+						createdAtTZ,
 						r[rowCountIdx],
 						r[distinctCountIdx],
 						r[nullCountIdx],
@@ -362,7 +369,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					res = tree.Datums{
 						r[nameIdx],
 						colNames,
-						r[createdAtIdx],
+						createdAtTZ,
 						r[rowCountIdx],
 						r[distinctCountIdx],
 						r[nullCountIdx],
