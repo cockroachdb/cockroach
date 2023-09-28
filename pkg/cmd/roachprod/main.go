@@ -525,10 +525,8 @@ SIGHUP), unless you also configure --max-wait.
 	}),
 }
 
-// TODO(herko/renato): maybe also support adding SQL instances to a
-// shared-process node.
-var startInstanceAsSeparateProcessCmd = &cobra.Command{
-	Use:   "start-sql <virtual-cluster-nodes> --storage-cluster <storage-cluster>",
+var startInstanceCmd = &cobra.Command{
+	Use:   "start-sql --storage-cluster <storage-cluster> [--external-cluster <virtual-cluster-nodes]",
 	Short: "start the SQL/HTTP service for a virtual cluster as a separate process",
 	Long: `Start SQL/HTTP instances for a virtual cluster as separate processes.
 
@@ -540,25 +538,30 @@ node, the --sql-instance flag must be passed to differentiate them.
 
 The --cluster-id flag can be used to specify the tenant ID; it defaults to 2.
 
+The instance is started in shared process (in memory) mode by
+default. To start an external process instance, pass the
+--external-cluster flag indicating where the SQL server processes
+should be started.
+
 The --secure flag can be used to start nodes in secure mode (i.e. using
 certs). When specified, there is a one time initialization for the cluster to
 create and distribute the certs. Note that running some modes in secure mode
 and others in insecure mode is not a supported Cockroach configuration.
 
-As a debugging aid, the --sequential flag starts the nodes sequentially so node
-IDs match hostnames. Otherwise nodes are started in parallel.
+As a debugging aid, the --sequential flag starts the services
+sequentially; otherwise services are started in parallel.
 
-The --binary flag specifies the remote binary to run. It is up to the roachprod
-user to ensure this binary exists, usually via "roachprod put". Note that no
-cockroach software is installed by default on a newly created cluster.
+The --binary flag specifies the remote binary to run, if starting
+external services. It is up to the roachprod user to ensure this
+binary exists, usually via "roachprod put". Note that no cockroach
+software is installed by default on a newly created cluster.
 
 The --args and --env flags can be used to pass arbitrary command line flags and
 environment variables to the cockroach process.
 ` + tagHelp + `
 `,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.NoArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		targetRoachprodCluster := args[0]
 		clusterSettingsOpts := []install.ClusterSettingOption{
 			install.TagOption(tag),
 			install.PGUrlCertsDirOption(pgurlCertsDir),
@@ -570,14 +573,21 @@ environment variables to the cockroach process.
 
 		// Always pick a random available port when starting virtual
 		// clusters. We do not expose the functionality of choosing a
-		// specific port, so this is fine.
+		// specific port for separate-process deployments; for
+		// shared-process, the port will always be based on the system
+		// tenant service.
 		//
 		// TODO(renato): remove this once #111052 is addressed.
 		startOpts.SQLPort = 0
 		startOpts.AdminUIPort = 0
 
+		startOpts.Target = install.StartSharedProcessForVirtualCluster
+		if externalProcessNodes != "" {
+			startOpts.Target = install.StartServiceForVirtualCluster
+		}
+
 		return roachprod.StartServiceForVirtualCluster(context.Background(),
-			config.Logger, targetRoachprodCluster, storageCluster, startOpts, clusterSettingsOpts...)
+			config.Logger, externalProcessNodes, storageCluster, startOpts, clusterSettingsOpts...)
 	}),
 }
 
@@ -1407,7 +1417,7 @@ func main() {
 		monitorCmd,
 		startCmd,
 		stopCmd,
-		startInstanceAsSeparateProcessCmd,
+		startInstanceCmd,
 		stopInstanceAsSeparateProcessCmd,
 		initCmd,
 		runCmd,
