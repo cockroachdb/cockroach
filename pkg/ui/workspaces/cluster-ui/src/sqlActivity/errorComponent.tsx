@@ -78,7 +78,7 @@ const LoadingError: React.FC<SQLActivityErrorProps> = props => {
     : "an unexpected error";
 
   const tablesInfo =
-    props.sourceTables?.length == 1
+    props.sourceTables?.length === 1
       ? `Source Table: ${props.sourceTables[0]}`
       : props.sourceTables?.length > 1
       ? `Source Tables: ${props.sourceTables.join(", ")}`

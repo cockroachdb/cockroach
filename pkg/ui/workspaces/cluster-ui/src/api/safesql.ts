@@ -178,7 +178,7 @@ export function Format(format: string, args?: any[]): string {
 
     if (i > 0) {
       const lastChar = format.substring(0, i).slice(-1);
-      if (!(lastChar == "=" || isPunct(lastChar) || isSpace(lastChar))) {
+      if (!(lastChar === "=" || isPunct(lastChar) || isSpace(lastChar))) {
         throw new Error(
           `invalid separator: '${lastChar}' is not punctuation or whitespace`,
         );
