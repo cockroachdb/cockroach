@@ -1,0 +1,3 @@
+echo
+----
+db0.ScanForUpdateSkipLockedGuaranteedDurability(ctx, tk(1), tk(3), 0) // @<ts> (/Table/100/"0000000000000001":v1, <nil>)

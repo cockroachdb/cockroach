@@ -106,9 +106,17 @@ type ClientOperationConfig struct {
 	// GetMissingForUpdate is an operation that Gets a key that definitely doesn't
 	// exist using a locking read with strength lock.Exclusive.
 	GetMissingForUpdate int
+	// GetMissingForUpdateGuaranteedDurability is an operation that Gets a key
+	// that definitely doesn't exist using a locking read with strength
+	// lock.Exclusive and durability lock.Replicated.
+	GetMissingForUpdateGuaranteedDurability int
 	// GetMissingForShare is an operation that Gets a key that definitely doesn't
 	// exist using a locking read with strength lock.Shared.
 	GetMissingForShare int
+	// GetMissingForShareGuaranteedDurability is an operation that Gets a key
+	// that definitely doesn't exist using a locking read with strength
+	// lock.Shared and durability lock.Replicated.
+	GetMissingForShareGuaranteedDurability int
 	// GetMissingSkipLocked is an operation that Gets a key that definitely
 	// doesn't exist while skipping locked keys.
 	GetMissingSkipLocked int
@@ -116,18 +124,34 @@ type ClientOperationConfig struct {
 	// definitely doesn't exist using a locking read, with strength
 	// lock.Exclusive, while skipping locked keys.
 	GetMissingForUpdateSkipLocked int
+	// GetMissingForUpdateSkipLocked is an operation that Gets a key that
+	// definitely doesn't exist using a locking read, with strength
+	// lock.Exclusive and durability lock.Replicated, while skipping locked keys.
+	GetMissingForUpdateSkipLockedGuaranteedDurability int
 	// GetMissingForShareSkipLocked is an operation that Gets a key that
 	// definitely doesn't exist using a locking read, with strength lock.Shared,
 	// while skipping locked keys.
 	GetMissingForShareSkipLocked int
+	// GetMissingForShareSkipLockedGuaranteedDurability is an operation that Gets
+	// a key that definitely doesn't exist using a locking read, with strength
+	// lock.Shared and durability lock.Replicated, while skipping locked keys.
+	GetMissingForShareSkipLockedGuaranteedDurability int
 	// GetExisting is an operation that Gets a key that likely exists.
 	GetExisting int
 	// GetExistingForUpdate is an operation that Gets a key that likely exists
 	// using a locking read with strength lock.Exclusive.
 	GetExistingForUpdate int
+	// GetExistingForUpdateGuaranteedDurability is an operation that Gets a key
+	// that likely exists using a locking read with strength lock.Exclusive and
+	// durability lock.Replicated.
+	GetExistingForUpdateGuaranteedDurability int
 	// GetExistingForShare is an operation that Gets a key that likely exists
 	// using a locking read with strength lock.Shared.
 	GetExistingForShare int
+	// GetExistingForShareGuaranteedDurability is an operation that Gets a key
+	// that likely exists using a locking read with strength lock.Shared and
+	// durability lock.Replicated.
+	GetExistingForShareGuaranteedDurability int
 	// GetExistingSkipLocked is an operation that Gets a key that likely exists
 	// while skipping locked keys.
 	GetExistingSkipLocked int
@@ -135,10 +159,18 @@ type ClientOperationConfig struct {
 	// exists using a locking read, with strength lock.Exclusive, while skipping
 	// locked keys.
 	GetExistingForUpdateSkipLocked int
+	// GetExistingForUpdateSkipLockedGuaranteedDurability is an operation that
+	// Gets a key that likely exists using a locking read, with strength
+	// lock.Exclusive and durability lock.Replicated, while skipping locked keys.
+	GetExistingForUpdateSkipLockedGuaranteedDurability int
 	// GetExistingForShareSkipLocked is an operation that Gets a key that likely
 	// exists using a locking read, with strength lock.Shared, while skipping
 	// locked keys.
 	GetExistingForShareSkipLocked int
+	// GetExistingForShareSkipLockedGuaranteedDurability is an operation that Gets
+	// a key that likely exists using a locking read, with strength lock.Shared
+	// and durability lock.Replicated, while skipping locked keys.
+	GetExistingForShareSkipLockedGuaranteedDurability int
 	// PutMissing is an operation that Puts a key that definitely doesn't exist.
 	PutMissing int
 	// PutExisting is an operation that Puts a key that likely exists.
@@ -148,9 +180,17 @@ type ClientOperationConfig struct {
 	// ScanForUpdate is an operation that Scans a key range that may contain
 	// values using a per-key locking scan with strength lock.Exclusive.
 	ScanForUpdate int
+	// ScanForUpdateGuaranteedDurability is an operation that Scans a key range
+	// that may contain values using a per-key locking scan with strength
+	// lock.Exclusive and durability lock.Replicated.
+	ScanForUpdateGuaranteedDurability int
 	// ScanForShare is an operation that Scans a key range that may contain values
 	// using a per-key locking scan with strength lock.Shared.
 	ScanForShare int
+	// ScanForShareGuaranteedDurability is an operation that Scans a key range
+	// that may contain values using a per-key locking scan with strength
+	// lock.Shared and durability lock.Replicated.
+	ScanForShareGuaranteedDurability int
 	// ScanSkipLocked is an operation that Scans a key range that may contain
 	// values while skipping locked keys.
 	ScanSkipLocked int
@@ -158,10 +198,19 @@ type ClientOperationConfig struct {
 	// contain values using a per-key locking scan, with strength lock.Exclusive,
 	// while skipping locked keys.
 	ScanForUpdateSkipLocked int
+	// ScanForUpdateSkipLockedGuaranteedDurability is an operation that Scans a
+	// key range that may contain values using a per-key locking scan, with
+	// strength lock.Exclusive and durability lock.Replicated, while skipping
+	// locked keys.
+	ScanForUpdateSkipLockedGuaranteedDurability int
 	// ScanForShareSkipLocked is an operation that Scans a key range that may
 	// contain values using a per-key locking scan, with strength lock.Shared,
 	// while skipping locked keys.
 	ScanForShareSkipLocked int
+	// ScanForShareSkipLockedGuaranteedDurability is an operation that Scans a key
+	// range that may contain values using a per-key locking scan, with strength
+	// lock.Shared and durability lock.Replicated, while skipping locked keys.
+	ScanForShareSkipLockedGuaranteedDurability int
 	// ReverseScan is an operation that Scans a key range that may contain
 	// values in reverse key order.
 	ReverseScan int
@@ -169,10 +218,18 @@ type ClientOperationConfig struct {
 	// contain values using a per-key locking scan with strength lock.Exclusive in
 	// reverse key order.
 	ReverseScanForUpdate int
+	// ReverseScanForUpdateGuaranteedDurability is an operation that Scans a key
+	// range that may contain values using a per-key locking scan with strength
+	// lock.Exclusive and durability lock.Replicated in reverse key order.
+	ReverseScanForUpdateGuaranteedDurability int
 	// ReverseScanForUpdate is an operation that Scans a key range that may
 	// contain values using a per-key locking scan with strength lock.Shared in
 	// reverse key order.
 	ReverseScanForShare int
+	// ReverseScanForUpdateGuaranteedDurability is an operation that Scans a key
+	// range that may contain values using a per-key locking scan with strength
+	// lock.Shared and durability lock.Replicated in reverse key order.
+	ReverseScanForShareGuaranteedDurability int
 	// ReverseScanSkipLocked is an operation that Scans a key range that may
 	// contain values in reverse key order while skipping locked keys.
 	ReverseScanSkipLocked int
@@ -180,10 +237,20 @@ type ClientOperationConfig struct {
 	// may contain values using a per-key locking scan, with strength
 	// lock.Exclusive, in reverse key order while skipping locked keys.
 	ReverseScanForUpdateSkipLocked int
+	// ReverseScanForUpdateSkipLockedGuaranteedDurability is an operation that
+	// Scans a key range that may contain values using a per-key locking scan,
+	// with strength lock.Exclusive and durability lock.Replicated, in reverse key
+	// order while skipping locked keys.
+	ReverseScanForUpdateSkipLockedGuaranteedDurability int
 	// ReverseScanForShareSkipLocked is an operation that Scans a key range that
 	// may contain values using a per-key locking scan, with strength lock.Share,
 	// in reverse key order while skipping locked keys.
 	ReverseScanForShareSkipLocked int
+	// ReverseScanForShareSkipLockedGuaranteedDurability is an operation that
+	// Scans a key range that may contain values using a per-key locking scan,
+	// with strength lock.Share and durability lock.Replicated, in reverse key
+	// order while skipping locked keys.
+	ReverseScanForShareSkipLockedGuaranteedDurability int
 	// DeleteMissing is an operation that Deletes a key that definitely doesn't exist.
 	DeleteMissing int
 	// DeleteExisting is an operation that Deletes a key that likely exists.
@@ -260,36 +327,52 @@ type ChangeZoneConfig struct {
 // yet pass (for example, if the new operation finds a kv bug or edge case).
 func newAllOperationsConfig() GeneratorConfig {
 	clientOpConfig := ClientOperationConfig{
-		GetMissing:                     1,
-		GetMissingForUpdate:            1,
-		GetMissingForUpdateSkipLocked:  1,
-		GetMissingForShare:             1,
-		GetMissingForShareSkipLocked:   1,
-		GetExisting:                    1,
-		GetExistingForUpdate:           1,
-		GetExistingForShare:            1,
-		GetExistingSkipLocked:          1,
-		GetExistingForUpdateSkipLocked: 1,
-		GetExistingForShareSkipLocked:  1,
-		PutMissing:                     1,
-		PutExisting:                    1,
-		Scan:                           1,
-		ScanForUpdate:                  1,
-		ScanForShare:                   1,
-		ScanSkipLocked:                 1,
-		ScanForUpdateSkipLocked:        1,
-		ScanForShareSkipLocked:         1,
-		ReverseScan:                    1,
-		ReverseScanForUpdate:           1,
-		ReverseScanForShare:            1,
-		ReverseScanSkipLocked:          1,
-		ReverseScanForUpdateSkipLocked: 1,
-		ReverseScanForShareSkipLocked:  1,
-		DeleteMissing:                  1,
-		DeleteExisting:                 1,
-		DeleteRange:                    1,
-		DeleteRangeUsingTombstone:      1,
-		AddSSTable:                     1,
+		GetMissing:                                        1,
+		GetMissingForUpdate:                               1,
+		GetMissingForUpdateGuaranteedDurability:           1,
+		GetMissingForUpdateSkipLocked:                     1,
+		GetMissingForUpdateSkipLockedGuaranteedDurability: 1,
+		GetMissingForShare:                                1,
+		GetMissingForShareGuaranteedDurability:            1,
+		GetMissingForShareSkipLocked:                      1,
+		GetMissingForShareSkipLockedGuaranteedDurability:  1,
+		GetExisting:                                        1,
+		GetExistingForUpdate:                               1,
+		GetExistingForUpdateGuaranteedDurability:           1,
+		GetExistingForShare:                                1,
+		GetExistingForShareGuaranteedDurability:            1,
+		GetExistingSkipLocked:                              1,
+		GetExistingForUpdateSkipLocked:                     1,
+		GetExistingForUpdateSkipLockedGuaranteedDurability: 1,
+		GetExistingForShareSkipLocked:                      1,
+		GetExistingForShareSkipLockedGuaranteedDurability:  1,
+		PutMissing:                        1,
+		PutExisting:                       1,
+		Scan:                              1,
+		ScanForUpdate:                     1,
+		ScanForUpdateGuaranteedDurability: 1,
+		ScanForShare:                      1,
+		ScanForShareGuaranteedDurability:  1,
+		ScanSkipLocked:                    1,
+		ScanForUpdateSkipLocked:           1,
+		ScanForUpdateSkipLockedGuaranteedDurability: 1,
+		ScanForShareSkipLocked:                      1,
+		ScanForShareSkipLockedGuaranteedDurability:  1,
+		ReverseScan:                                        1,
+		ReverseScanForUpdate:                               1,
+		ReverseScanForUpdateGuaranteedDurability:           1,
+		ReverseScanForShare:                                1,
+		ReverseScanForShareGuaranteedDurability:            1,
+		ReverseScanSkipLocked:                              1,
+		ReverseScanForUpdateSkipLocked:                     1,
+		ReverseScanForUpdateSkipLockedGuaranteedDurability: 1,
+		ReverseScanForShareSkipLocked:                      1,
+		ReverseScanForShareSkipLockedGuaranteedDurability:  1,
+		DeleteMissing:                                      1,
+		DeleteExisting:                                     1,
+		DeleteRange:                                        1,
+		DeleteRangeUsingTombstone:                          1,
+		AddSSTable:                                         1,
 	}
 	batchOpConfig := BatchOperationConfig{
 		Batch: 4,
@@ -572,34 +655,100 @@ func (g *generator) selectOp(rng *rand.Rand, contextuallyValid []opGen) Operatio
 func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig) {
 	addOpGen(allowed, randGetMissing, c.GetMissing)
 	addOpGen(allowed, randGetMissingForUpdate, c.GetMissingForUpdate)
+	addOpGen(
+		allowed, randGetMissingForUpdateGuaranteedDurability, c.GetMissingForUpdateGuaranteedDurability,
+	)
 	addOpGen(allowed, randGetMissingForShare, c.GetMissingForShare)
+	addOpGen(
+		allowed, randGetMissingForShareGuaranteedDurability, c.GetMissingForShareGuaranteedDurability,
+	)
 	addOpGen(allowed, randGetMissingSkipLocked, c.GetMissingSkipLocked)
 	addOpGen(allowed, randGetMissingForUpdateSkipLocked, c.GetMissingForUpdateSkipLocked)
+	addOpGen(
+		allowed,
+		randGetMissingForUpdateSkipLockedGuaranteedDurability,
+		c.GetMissingForUpdateSkipLockedGuaranteedDurability,
+	)
 	addOpGen(allowed, randGetMissingForShareSkipLocked, c.GetMissingForShareSkipLocked)
+	addOpGen(
+		allowed,
+		randGetMissingForShareSkipLockedGuaranteedDurability,
+		c.GetMissingForShareSkipLockedGuaranteedDurability,
+	)
 	addOpGen(allowed, randPutMissing, c.PutMissing)
 	addOpGen(allowed, randDelMissing, c.DeleteMissing)
 	if len(g.keys) > 0 {
 		addOpGen(allowed, randGetExisting, c.GetExisting)
 		addOpGen(allowed, randGetExistingForUpdate, c.GetExistingForUpdate)
+		addOpGen(
+			allowed,
+			randGetExistingForUpdateGuaranteedDurability,
+			c.GetExistingForUpdateGuaranteedDurability,
+		)
 		addOpGen(allowed, randGetExistingForShare, c.GetExistingForShare)
+		addOpGen(
+			allowed,
+			randGetExistingForShareGuaranteedDurability,
+			c.GetExistingForShareGuaranteedDurability,
+		)
 		addOpGen(allowed, randGetExistingSkipLocked, c.GetExistingSkipLocked)
 		addOpGen(allowed, randGetExistingForUpdateSkipLocked, c.GetExistingForUpdateSkipLocked)
+		addOpGen(
+			allowed,
+			randGetExistingForUpdateSkipLockedGuaranteedDurability,
+			c.GetExistingForUpdateSkipLockedGuaranteedDurability,
+		)
 		addOpGen(allowed, randGetExistingForShareSkipLocked, c.GetExistingForShareSkipLocked)
+		addOpGen(
+			allowed,
+			randGetExistingForShareSkipLockedGuaranteedDurability,
+			c.GetExistingForShareSkipLockedGuaranteedDurability,
+		)
 		addOpGen(allowed, randPutExisting, c.PutExisting)
 		addOpGen(allowed, randDelExisting, c.DeleteExisting)
 	}
 	addOpGen(allowed, randScan, c.Scan)
 	addOpGen(allowed, randScanForUpdate, c.ScanForUpdate)
+	addOpGen(allowed, randScanForUpdateGuaranteedDurability, c.ScanForUpdateGuaranteedDurability)
 	addOpGen(allowed, randScanForShare, c.ScanForShare)
+	addOpGen(allowed, randScanForShareGuaranteedDurability, c.ScanForShareGuaranteedDurability)
 	addOpGen(allowed, randScanSkipLocked, c.ScanSkipLocked)
 	addOpGen(allowed, randScanForUpdateSkipLocked, c.ScanForUpdateSkipLocked)
+	addOpGen(
+		allowed,
+		randScanForUpdateSkipLockedGuaranteedDurability,
+		c.ScanForUpdateSkipLockedGuaranteedDurability,
+	)
 	addOpGen(allowed, randScanForShareSkipLocked, c.ScanForShareSkipLocked)
+	addOpGen(
+		allowed,
+		randScanForShareSkipLockedGuaranteedDurability,
+		c.ScanForShareSkipLockedGuaranteedDurability,
+	)
 	addOpGen(allowed, randReverseScan, c.ReverseScan)
 	addOpGen(allowed, randReverseScanForUpdate, c.ReverseScanForUpdate)
+	addOpGen(
+		allowed,
+		randReverseScanForUpdateGuaranteedDurability,
+		c.ReverseScanForUpdateGuaranteedDurability,
+	)
 	addOpGen(allowed, randReverseScanForShare, c.ReverseScanForShare)
+	addOpGen(
+		allowed, randReverseScanForShareGuaranteedDurability, c.ReverseScanForShareGuaranteedDurability,
+	)
 	addOpGen(allowed, randReverseScanSkipLocked, c.ReverseScanSkipLocked)
 	addOpGen(allowed, randReverseScanForUpdateSkipLocked, c.ReverseScanForUpdateSkipLocked)
+	addOpGen(
+		allowed,
+		randReverseScanForUpdateSkipLockedGuaranteedDurability,
+		c.ReverseScanForUpdateSkipLockedGuaranteedDurability,
+	)
 	addOpGen(allowed, randReverseScanForShareSkipLocked, c.ReverseScanForShareSkipLocked)
+	addOpGen(
+		allowed,
+		randReverseScanForShareSkipLockedGuaranteedDurability,
+		c.ReverseScanForShareSkipLockedGuaranteedDurability,
+	)
 	addOpGen(allowed, randDelRange, c.DeleteRange)
 	addOpGen(allowed, randDelRangeUsingTombstone, c.DeleteRangeUsingTombstone)
 	addOpGen(allowed, randAddSSTable, c.AddSSTable)
@@ -619,9 +768,23 @@ func randGetMissingForUpdate(g *generator, rng *rand.Rand) Operation {
 	return op
 }
 
+func randGetMissingForUpdateGuaranteedDurability(g *generator, rng *rand.Rand) Operation {
+	op := randGetMissing(g, rng)
+	op.Get.ForUpdate = true
+	op.Get.GuaranteedDurability = true
+	return op
+}
+
 func randGetMissingForShare(g *generator, rng *rand.Rand) Operation {
 	op := randGetMissing(g, rng)
 	op.Get.ForShare = true
+	return op
+}
+
+func randGetMissingForShareGuaranteedDurability(g *generator, rng *rand.Rand) Operation {
+	op := randGetMissing(g, rng)
+	op.Get.ForShare = true
+	op.Get.GuaranteedDurability = true
 	return op
 }
 
@@ -637,9 +800,23 @@ func randGetMissingForUpdateSkipLocked(g *generator, rng *rand.Rand) Operation {
 	return op
 }
 
+func randGetMissingForUpdateSkipLockedGuaranteedDurability(g *generator, rng *rand.Rand) Operation {
+	op := randGetMissingForUpdate(g, rng)
+	op.Get.SkipLocked = true
+	op.Get.GuaranteedDurability = true
+	return op
+}
+
 func randGetMissingForShareSkipLocked(g *generator, rng *rand.Rand) Operation {
 	op := randGetMissingForShare(g, rng)
 	op.Get.SkipLocked = true
+	return op
+}
+
+func randGetMissingForShareSkipLockedGuaranteedDurability(g *generator, rng *rand.Rand) Operation {
+	op := randGetMissingForShare(g, rng)
+	op.Get.SkipLocked = true
+	op.Get.GuaranteedDurability = true
 	return op
 }
 
@@ -654,9 +831,23 @@ func randGetExistingForUpdate(g *generator, rng *rand.Rand) Operation {
 	return op
 }
 
+func randGetExistingForUpdateGuaranteedDurability(g *generator, rng *rand.Rand) Operation {
+	op := randGetExisting(g, rng)
+	op.Get.ForUpdate = true
+	op.Get.GuaranteedDurability = true
+	return op
+}
+
 func randGetExistingForShare(g *generator, rng *rand.Rand) Operation {
 	op := randGetExisting(g, rng)
 	op.Get.ForShare = true
+	return op
+}
+
+func randGetExistingForShareGuaranteedDurability(g *generator, rng *rand.Rand) Operation {
+	op := randGetExisting(g, rng)
+	op.Get.ForShare = true
+	op.Get.GuaranteedDurability = true
 	return op
 }
 
@@ -672,9 +863,25 @@ func randGetExistingForUpdateSkipLocked(g *generator, rng *rand.Rand) Operation 
 	return op
 }
 
+func randGetExistingForUpdateSkipLockedGuaranteedDurability(
+	g *generator, rng *rand.Rand,
+) Operation {
+	op := randGetExistingForUpdate(g, rng)
+	op.Get.SkipLocked = true
+	op.Get.GuaranteedDurability = true
+	return op
+}
+
 func randGetExistingForShareSkipLocked(g *generator, rng *rand.Rand) Operation {
 	op := randGetExistingForShare(g, rng)
 	op.Get.SkipLocked = true
+	return op
+}
+
+func randGetExistingForShareSkipLockedGuaranteedDurability(g *generator, rng *rand.Rand) Operation {
+	op := randGetExistingForShare(g, rng)
+	op.Get.SkipLocked = true
+	op.Get.GuaranteedDurability = true
 	return op
 }
 
@@ -846,9 +1053,23 @@ func randScanForUpdate(g *generator, rng *rand.Rand) Operation {
 	return op
 }
 
+func randScanForUpdateGuaranteedDurability(g *generator, rng *rand.Rand) Operation {
+	op := randScan(g, rng)
+	op.Scan.ForUpdate = true
+	op.Scan.GuaranteedDurability = true
+	return op
+}
+
 func randScanForShare(g *generator, rng *rand.Rand) Operation {
 	op := randScan(g, rng)
 	op.Scan.ForShare = true
+	return op
+}
+
+func randScanForShareGuaranteedDurability(g *generator, rng *rand.Rand) Operation {
+	op := randScan(g, rng)
+	op.Scan.ForShare = true
+	op.Scan.GuaranteedDurability = true
 	return op
 }
 
@@ -864,9 +1085,23 @@ func randScanForUpdateSkipLocked(g *generator, rng *rand.Rand) Operation {
 	return op
 }
 
+func randScanForUpdateSkipLockedGuaranteedDurability(g *generator, rng *rand.Rand) Operation {
+	op := randScanForUpdate(g, rng)
+	op.Scan.SkipLocked = true
+	op.Scan.GuaranteedDurability = true
+	return op
+}
+
 func randScanForShareSkipLocked(g *generator, rng *rand.Rand) Operation {
 	op := randScanForShare(g, rng)
 	op.Scan.SkipLocked = true
+	return op
+}
+
+func randScanForShareSkipLockedGuaranteedDurability(g *generator, rng *rand.Rand) Operation {
+	op := randScanForShare(g, rng)
+	op.Scan.SkipLocked = true
+	op.Scan.GuaranteedDurability = true
 	return op
 }
 
@@ -882,9 +1117,23 @@ func randReverseScanForUpdate(g *generator, rng *rand.Rand) Operation {
 	return op
 }
 
+func randReverseScanForUpdateGuaranteedDurability(g *generator, rng *rand.Rand) Operation {
+	op := randReverseScan(g, rng)
+	op.Scan.ForUpdate = true
+	op.Scan.GuaranteedDurability = true
+	return op
+}
+
 func randReverseScanForShare(g *generator, rng *rand.Rand) Operation {
 	op := randReverseScan(g, rng)
 	op.Scan.ForShare = true
+	return op
+}
+
+func randReverseScanForShareGuaranteedDurability(g *generator, rng *rand.Rand) Operation {
+	op := randReverseScan(g, rng)
+	op.Scan.ForShare = true
+	op.Scan.GuaranteedDurability = true
 	return op
 }
 
@@ -900,9 +1149,25 @@ func randReverseScanForUpdateSkipLocked(g *generator, rng *rand.Rand) Operation 
 	return op
 }
 
+func randReverseScanForUpdateSkipLockedGuaranteedDurability(
+	g *generator, rng *rand.Rand,
+) Operation {
+	op := randReverseScanForUpdate(g, rng)
+	op.Scan.SkipLocked = true
+	op.Scan.GuaranteedDurability = true
+	return op
+}
+
 func randReverseScanForShareSkipLocked(g *generator, rng *rand.Rand) Operation {
 	op := randReverseScanForShare(g, rng)
 	op.Scan.SkipLocked = true
+	return op
+}
+
+func randReverseScanForShareSkipLockedGuaranteedDurability(g *generator, rng *rand.Rand) Operation {
+	op := randReverseScanForShare(g, rng)
+	op.Scan.SkipLocked = true
+	op.Scan.GuaranteedDurability = true
 	return op
 }
 
@@ -1293,8 +1558,16 @@ func getForUpdate(key string) Operation {
 	return Operation{Get: &GetOperation{Key: []byte(key), ForUpdate: true}}
 }
 
+func getForUpdateGuaranteedDurability(key string) Operation {
+	return Operation{Get: &GetOperation{Key: []byte(key), ForUpdate: true, GuaranteedDurability: true}}
+}
+
 func getForShare(key string) Operation {
 	return Operation{Get: &GetOperation{Key: []byte(key), ForShare: true}}
+}
+
+func getForShareGuaranteedDurability(key string) Operation {
+	return Operation{Get: &GetOperation{Key: []byte(key), ForShare: true, GuaranteedDurability: true}}
 }
 
 func getSkipLocked(key string) Operation {
@@ -1305,8 +1578,16 @@ func getForUpdateSkipLocked(key string) Operation {
 	return Operation{Get: &GetOperation{Key: []byte(key), ForUpdate: true, SkipLocked: true}}
 }
 
+func getForUpdateSkipLockedGuaranteedDurability(key string) Operation {
+	return Operation{Get: &GetOperation{Key: []byte(key), ForUpdate: true, SkipLocked: true, GuaranteedDurability: true}}
+}
+
 func getForShareSkipLocked(key string) Operation {
 	return Operation{Get: &GetOperation{Key: []byte(key), ForShare: true, SkipLocked: true}}
+}
+
+func getForShareSkipLockedGuaranteedDurability(key string) Operation {
+	return Operation{Get: &GetOperation{Key: []byte(key), ForShare: true, SkipLocked: true, GuaranteedDurability: true}}
 }
 
 func put(key string, seq kvnemesisutil.Seq) Operation {
@@ -1321,8 +1602,16 @@ func scanForUpdate(key, endKey string) Operation {
 	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), ForUpdate: true}}
 }
 
+func scanForUpdateGuaranteedDurability(key, endKey string) Operation {
+	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), ForUpdate: true, GuaranteedDurability: true}}
+}
+
 func scanForShare(key, endKey string) Operation {
 	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), ForShare: true}}
+}
+
+func scanForShareGuaranteedDurability(key, endKey string) Operation {
+	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), ForShare: true, GuaranteedDurability: true}}
 }
 
 func scanSkipLocked(key, endKey string) Operation {
@@ -1333,8 +1622,16 @@ func scanForUpdateSkipLocked(key, endKey string) Operation {
 	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), ForUpdate: true, SkipLocked: true}}
 }
 
+func scanForUpdateSkipLockedGuaranteedDurability(key, endKey string) Operation {
+	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), ForUpdate: true, SkipLocked: true, GuaranteedDurability: true}}
+}
+
 func scanForShareSkipLocked(key, endKey string) Operation {
 	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), ForShare: true, SkipLocked: true}}
+}
+
+func scanForShareSkipLockedGuaranteedDurability(key, endKey string) Operation {
+	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), ForShare: true, SkipLocked: true, GuaranteedDurability: true}}
 }
 
 func reverseScan(key, endKey string) Operation {
@@ -1345,8 +1642,16 @@ func reverseScanForUpdate(key, endKey string) Operation {
 	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), Reverse: true, ForUpdate: true}}
 }
 
+func reverseScanForUpdateGuaranteedDurability(key, endKey string) Operation {
+	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), Reverse: true, ForUpdate: true, GuaranteedDurability: true}}
+}
+
 func reverseScanForShare(key, endKey string) Operation {
 	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), Reverse: true, ForShare: true}}
+}
+
+func reverseScanForShareGuaranteedDurability(key, endKey string) Operation {
+	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), Reverse: true, ForShare: true, GuaranteedDurability: true}}
 }
 
 func reverseScanSkipLocked(key, endKey string) Operation {
@@ -1357,8 +1662,16 @@ func reverseScanForUpdateSkipLocked(key, endKey string) Operation {
 	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), Reverse: true, ForUpdate: true, SkipLocked: true}}
 }
 
+func reverseScanForUpdateSkipLockedGuaranteedDurability(key, endKey string) Operation {
+	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), Reverse: true, ForUpdate: true, SkipLocked: true, GuaranteedDurability: true}}
+}
+
 func reverseScanForShareSkipLocked(key, endKey string) Operation {
 	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), Reverse: true, ForShare: true, SkipLocked: true}}
+}
+
+func reverseScanForShareSkipLockedGuaranteedDurability(key, endKey string) Operation {
+	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), Reverse: true, ForShare: true, SkipLocked: true, GuaranteedDurability: true}}
 }
 
 func del(key string, seq kvnemesisutil.Seq) Operation {

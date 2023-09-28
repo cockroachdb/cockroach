@@ -285,6 +285,9 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 				b.Header.WaitPolicy = lock.WaitPolicy_SkipLocked
 			}
 			dur := kvpb.BestEffort
+			if o.GuaranteedDurability {
+				dur = kvpb.GuaranteedDurability
+			}
 			if o.ForUpdate {
 				b.GetForUpdate(o.Key, dur)
 			} else if o.ForShare {
@@ -321,6 +324,9 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 				b.Header.WaitPolicy = lock.WaitPolicy_SkipLocked
 			}
 			dur := kvpb.BestEffort
+			if o.GuaranteedDurability {
+				dur = kvpb.GuaranteedDurability
+			}
 			if o.Reverse {
 				if o.ForUpdate {
 					b.ReverseScanForUpdate(o.Key, o.EndKey, dur)
@@ -443,6 +449,9 @@ func applyBatchOp(
 		switch subO := o.Ops[i].GetValue().(type) {
 		case *GetOperation:
 			dur := kvpb.BestEffort
+			if subO.GuaranteedDurability {
+				dur = kvpb.GuaranteedDurability
+			}
 			if subO.ForUpdate {
 				b.GetForUpdate(subO.Key, dur)
 			} else if subO.ForShare {
@@ -455,18 +464,25 @@ func applyBatchOp(
 			setLastReqSeq(b, subO.Seq)
 		case *ScanOperation:
 			dur := kvpb.BestEffort
-			if subO.Reverse && subO.ForUpdate {
-				b.ReverseScanForUpdate(subO.Key, subO.EndKey, dur)
-			} else if subO.Reverse && subO.ForShare {
-				b.ReverseScanForShare(subO.Key, subO.EndKey, dur)
-			} else if subO.Reverse {
-				b.ReverseScan(subO.Key, subO.EndKey)
-			} else if subO.ForUpdate {
-				b.ScanForUpdate(subO.Key, subO.EndKey, dur)
-			} else if subO.ForShare {
-				b.ScanForShare(subO.Key, subO.EndKey, dur)
+			if subO.GuaranteedDurability {
+				dur = kvpb.GuaranteedDurability
+			}
+			if subO.Reverse {
+				if subO.ForUpdate {
+					b.ReverseScanForUpdate(subO.Key, subO.EndKey, dur)
+				} else if subO.ForShare {
+					b.ReverseScanForShare(subO.Key, subO.EndKey, dur)
+				} else {
+					b.ReverseScan(subO.Key, subO.EndKey)
+				}
 			} else {
-				b.Scan(subO.Key, subO.EndKey)
+				if subO.ForUpdate {
+					b.ScanForUpdate(subO.Key, subO.EndKey, dur)
+				} else if subO.ForShare {
+					b.ScanForShare(subO.Key, subO.EndKey, dur)
+				} else {
+					b.Scan(subO.Key, subO.EndKey)
+				}
 			}
 		case *DeleteOperation:
 			b.Del(subO.Key)
