@@ -67,10 +67,11 @@ func newHTTPSink(c logconfig.HTTPSinkConfig) (*httpSink, error) {
 	staticHeaders := make(map[string]string, len(c.Headers))
 	dhFilepaths := make(map[string]string, len(c.Headers))
 	for key, hVal := range c.Headers {
-		if hVal.Value != nil {
-			staticHeaders[key] = *hVal.Value
-		} else if hVal.Filepath != nil {
-			dhFilepaths[key] = *hVal.Filepath
+		val := hVal.(*logconfig.HeaderValue)
+		if val.Value != nil {
+			staticHeaders[key] = *val.Value
+		} else if val.Filepath != nil {
+			dhFilepaths[key] = *val.Filepath
 		}
 	}
 	hs.staticHeaders = staticHeaders

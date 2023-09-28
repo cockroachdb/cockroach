@@ -511,7 +511,7 @@ type HTTPDefaults struct {
 	DisableKeepAlives *bool `yaml:"disable-keep-alives,omitempty"`
 
 	// Headers is a list of headers to attach to each HTTP request
-	Headers map[string]*HeaderValue `yaml:",omitempty,flow"`
+	Headers map[string]interface{} `yaml:",omitempty,flow"`
 
 	// Compression can be "none" or "gzip" to enable gzip compression.
 	// Set to "gzip" by default.

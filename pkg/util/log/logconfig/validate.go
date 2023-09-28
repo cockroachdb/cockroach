@@ -461,12 +461,39 @@ func (c *Config) validateHTTPSinkConfig(hsc *HTTPSinkConfig) error {
 	if *hsc.Compression != GzipCompression && *hsc.Compression != NoneCompression {
 		return errors.New("compression must be 'gzip' or 'none'")
 	}
-	// verify no headers have both a filepath and value.
+	// We have to reconstruct the headers into the new HeaderValue format.
+	// Also verify no headers have both a filepath and value or neither.
+	newHeaders := make(map[string]interface{}, len(hsc.Headers))
 	for key, hVal := range hsc.Headers {
-		if hVal.Filepath != nil && hVal.Value != nil {
-			return errors.Newf("header has both filepath and value for key %s, only one can be specified", key)
+		switch v := hVal.(type) {
+		// Old format.
+		case string:
+			newHeaders[key] = &HeaderValue{Value: &v}
+		case map[interface{}]interface{}:
+			filepath := v["filepath"]
+			rawVal := v["value"]
+			if filepath != nil && rawVal != nil {
+				return errors.Newf("header has both filepath and value for key %s, only one can be specified", key)
+			} else if filepath == nil && rawVal == nil {
+				return errors.Newf("header has neither filepath or value for key %s, one must be specified", key)
+			} else if filepath != nil {
+				parseFilepath, ok := filepath.(string)
+				if !ok {
+					return errors.Newf("header has value of unexpected type for key %s", key)
+				}
+				newHeaders[key] = &HeaderValue{Filepath: &parseFilepath}
+			} else {
+				parsedVal, ok := rawVal.(string)
+				if !ok {
+					return errors.Newf("header has value of unexpected type for key %s", key)
+				}
+				newHeaders[key] = &HeaderValue{Value: &parsedVal}
+			}
+		default:
+			return errors.Newf("header has unrecognized format for key %s", key)
 		}
 	}
+	hsc.Headers = newHeaders
 	return c.ValidateCommonSinkConfig(hsc.CommonSinkConfig)
 }
 

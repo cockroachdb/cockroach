@@ -319,12 +319,11 @@ func TestHTTPSinkHeadersAndCompression(t *testing.T) {
 	val := "secret-value"
 	filepathVal := "another-secret-value"
 	filepathReplaceVal := "third-secret-value"
-	headerValue := &logconfig.HeaderValue{Value: &val}
 	// Test filepath method of providing header values.
 	tempDir := t.TempDir()
 	filename := filepath.Join(tempDir, "filepath_test.txt")
 	require.NoError(t, os.WriteFile(filename, []byte(filepathVal), 0777))
-	anotherHeaderValue := &logconfig.HeaderValue{Filepath: &filename}
+	anotherHeaderValue := map[interface{}]interface{}{"filepath": filename}
 	defaults := logconfig.HTTPDefaults{
 		Address: &address,
 		Timeout: &timeout,
@@ -338,7 +337,8 @@ func TestHTTPSinkHeadersAndCompression(t *testing.T) {
 		},
 
 		Compression: &logconfig.GzipCompression,
-		Headers:     map[string]*logconfig.HeaderValue{"X-CRDB-TEST": headerValue, "X-CRDB-TEST-2": anotherHeaderValue},
+		// Provide both the old format and new format in order to test backwards compatability.
+		Headers: map[string]interface{}{"X-CRDB-TEST": val, "X-CRDB-TEST-2": anotherHeaderValue},
 	}
 
 	var callCt int
