@@ -327,7 +327,7 @@ export default class KeyVisualizer extends React.PureComponent<
   componentDidUpdate(prevProps: KeyVisualizerProps) {
     // only render if the sample window changes.
     // prevent render if there's a tooltip state change.
-    if (prevProps != this.props) {
+    if (prevProps !== this.props) {
       this.renderKeyVisualizer();
     }
   }
