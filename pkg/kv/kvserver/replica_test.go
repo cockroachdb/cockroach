@@ -10363,13 +10363,11 @@ func TestConsistenctQueueErrorFromCheckConsistency(t *testing.T) {
 	tc := testContext{}
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
-	confReader, err := tc.store.GetConfReader(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	conf, err := tc.repl.LoadSpanConfig(ctx)
+	require.NoError(t, err)
 	for i := 0; i < 2; i++ {
 		// Do this twice because it used to deadlock. See #25456.
-		processed, err := tc.store.consistencyQueue.process(ctx, tc.repl, confReader)
+		processed, err := tc.store.consistencyQueue.process(ctx, tc.repl, conf)
 		if !testutils.IsError(err, "boom") {
 			t.Fatal(err)
 		}

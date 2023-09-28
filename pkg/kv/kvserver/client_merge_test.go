@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -4224,6 +4225,60 @@ func verifyUnmergedSoon(
 	})
 }
 
+// Utility to allow manually setting a span config that is used for all ranges.
+type spanConfigInterceptor struct {
+	syncutil.Mutex
+	spanConfig roachpb.SpanConfig
+	clock      *hlc.Clock
+}
+
+func (s *spanConfigInterceptor) NeedsSplit(
+	ctx context.Context, start, end roachpb.RKey,
+) (bool, error) {
+	// Never require a span config based split. Splits and merges can still
+	// happen for size based reasons.
+	return false, nil
+}
+
+func (s *spanConfigInterceptor) ComputeSplitKey(
+	ctx context.Context, start, end roachpb.RKey,
+) (roachpb.RKey, error) {
+	panic("test should not be computing a split key")
+}
+
+func (s *spanConfigInterceptor) GetSpanConfigForKey(
+	ctx context.Context, key roachpb.RKey,
+) (roachpb.SpanConfig, error) {
+	s.Lock()
+	defer s.Unlock()
+	return s.spanConfig, nil
+}
+
+func (s *spanConfigInterceptor) GetProtectionTimestamps(
+	ctx context.Context, sp roachpb.Span,
+) (protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp, _ error) {
+	return []hlc.Timestamp{}, s.clock.Now(), nil
+}
+
+func (s *spanConfigInterceptor) LastUpdated() hlc.Timestamp {
+	// Return a non-zero timestamp. This is typically used in the context of "has at least one update".
+	return hlc.Timestamp{
+		WallTime:  1,
+		Logical:   1,
+		Synthetic: false,
+	}
+}
+
+func (s *spanConfigInterceptor) Subscribe(f func(ctx context.Context, updated roachpb.Span)) {
+	// ignore
+}
+
+func (s *spanConfigInterceptor) set(config roachpb.SpanConfig) {
+	s.Lock()
+	defer s.Unlock()
+	s.spanConfig = config
+}
+
 func TestMergeQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -4235,6 +4290,9 @@ func TestMergeQueue(t *testing.T) {
 
 	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.RangeMinBytes = proto.Int64(1 << 10) // 1KB
+	conf := zoneConfig.AsSpanConfig()
+	interceptor := spanConfigInterceptor{spanConfig: conf, clock: hlc.NewClockForTesting(manualClock)}
+
 	tc := testcluster.StartTestCluster(t, 2,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
@@ -4242,24 +4300,22 @@ func TestMergeQueue(t *testing.T) {
 				Settings: settings,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						WallClock:                 manualClock,
-						DefaultZoneConfigOverride: &zoneConfig,
+						WallClock: manualClock,
 					},
-					Store: &kvserver.StoreTestingKnobs{
-						DisableScanner: true,
+					SpanConfig: &spanconfig.TestingKnobs{
+						StoreKVSubscriberOverride: &interceptor,
 					},
 				},
+				DisableSQLServer: true,
 			},
 		})
 	defer tc.Stopper().Stop(ctx)
 
-	conf := zoneConfig.AsSpanConfig()
+	// The cluster is started with manual replication which disables all the
+	// queues. Enable the merge queue only.
 	store := tc.GetFirstStoreFromServer(t, 0)
-	// The cluster with manual replication disables the merge queue,
-	// so we need to re-enable.
-	_, err := tc.ServerConn(0).Exec(`SET CLUSTER SETTING kv.range_merge.queue.enabled = true`)
-	require.NoError(t, err)
 	store.SetMergeQueueActive(true)
+	kvserverbase.MergeQueueEnabled.Override(ctx, &settings.SV, true)
 
 	split := func(t *testing.T, key roachpb.Key, expirationTime hlc.Timestamp) {
 		t.Helper()
@@ -4271,11 +4327,9 @@ func TestMergeQueue(t *testing.T) {
 	}
 
 	clearRange := func(t *testing.T, start, end roachpb.RKey) {
-		if _, pErr := kv.SendWrapped(ctx, store.DB().NonTransactionalSender(), &kvpb.ClearRangeRequest{
-			RequestHeader: kvpb.RequestHeader{Key: start.AsRawKey(), EndKey: end.AsRawKey()},
-		}); pErr != nil {
-			t.Fatal(pErr)
-		}
+		_, pErr := kv.SendWrapped(ctx, store.DB().NonTransactionalSender(), &kvpb.ClearRangeRequest{
+			RequestHeader: kvpb.RequestHeader{Key: start.AsRawKey(), EndKey: end.AsRawKey()}})
+		require.Nil(t, pErr)
 	}
 	rng, _ := randutil.NewTestRand()
 	randBytes := randutil.RandBytes(rng, int(conf.RangeMinBytes))
@@ -4290,31 +4344,13 @@ func TestMergeQueue(t *testing.T) {
 	lhs := func() *kvserver.Replica { return store.LookupReplica(lhsStartKey) }
 	rhs := func() *kvserver.Replica { return store.LookupReplica(rhsStartKey) }
 
-	// setThresholds simulates a zone config update that updates the ranges'
-	// minimum and maximum sizes.
-	setSpanConfigs := func(t *testing.T, conf roachpb.SpanConfig) {
-		t.Helper()
-		if l := lhs(); l == nil {
-			t.Fatal("left-hand side range not found")
-		} else {
-			l.SetSpanConfig(conf)
-		}
-		if r := rhs(); r == nil {
-			t.Fatal("right-hand side range not found")
-		} else {
-			r.SetSpanConfig(conf)
-		}
-	}
-
 	reset := func(t *testing.T) {
 		t.Helper()
 		clearRange(t, lhsStartKey, rhsEndKey)
 		for _, k := range []roachpb.RKey{lhsStartKey, rhsStartKey} {
-			if err := store.DB().Put(ctx, k, randBytes); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, store.DB().Put(ctx, k, randBytes))
 		}
-		setSpanConfigs(t, conf)
+		interceptor.set(conf)
 		for _, s := range tc.Servers {
 			// Disable load-based splitting, so that the absence of sufficient QPS
 			// measurements do not prevent ranges from merging. Certain subtests
@@ -4342,9 +4378,9 @@ func TestMergeQueue(t *testing.T) {
 
 	t.Run("lhs-undersize", func(t *testing.T) {
 		reset(t)
-		conf := conf
-		conf.RangeMinBytes *= 2
-		lhs().SetSpanConfig(conf)
+		testConf := conf
+		testConf.RangeMinBytes *= 2
+		interceptor.set(testConf)
 		verifyMergedSoon(t, store, lhsStartKey, rhsStartKey)
 	})
 
@@ -4353,15 +4389,15 @@ func TestMergeQueue(t *testing.T) {
 
 		// The ranges are individually beneath the minimum size threshold, but
 		// together they'll exceed the maximum size threshold.
-		conf := conf
-		conf.RangeMinBytes = rhs().GetMVCCStats().Total() + 1
-		conf.RangeMaxBytes = lhs().GetMVCCStats().Total() + rhs().GetMVCCStats().Total() - 1
-		setSpanConfigs(t, conf)
+		testConf := conf
+		testConf.RangeMinBytes = rhs().GetMVCCStats().Total() + 1
+		testConf.RangeMaxBytes = lhs().GetMVCCStats().Total() + rhs().GetMVCCStats().Total() - 1
+		interceptor.set(testConf)
 		verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
 
 		// Once the maximum size threshold is increased, the merge can occur.
-		conf.RangeMaxBytes += 1
-		setSpanConfigs(t, conf)
+		testConf.RangeMaxBytes += 1
+		interceptor.set(testConf)
 		verifyMergedSoon(t, store, lhsStartKey, rhsStartKey)
 	})
 

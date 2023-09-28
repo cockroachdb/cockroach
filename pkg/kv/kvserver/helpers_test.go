@@ -17,7 +17,6 @@ package kvserver
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -194,12 +193,12 @@ func (s *Store) EnqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 }
 
 func manualQueue(s *Store, q queueImpl, repl *Replica) error {
-	cfg := s.cfg.SystemConfigProvider.GetSystemConfig()
-	if cfg == nil {
-		return fmt.Errorf("%s: system config not yet available", s)
-	}
 	ctx := repl.AnnotateCtx(context.Background())
-	_, err := q.process(ctx, repl, cfg)
+	conf, err := repl.LoadSpanConfig(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = q.process(ctx, repl, conf)
 	return err
 }
 
@@ -425,7 +424,7 @@ func (r *Replica) GetTSCacheHighWater() hlc.Timestamp {
 
 // ShouldBackpressureWrites returns whether writes to the range should be
 // subject to backpressure.
-func (r *Replica) ShouldBackpressureWrites(_ context.Context) bool {
+func (r *Replica) ShouldBackpressureWrites(ctx context.Context) bool {
 	return r.shouldBackpressureWrites()
 }
 

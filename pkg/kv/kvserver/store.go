@@ -3631,7 +3631,16 @@ func (s *Store) Enqueue(
 		return nil, nil, errors.Errorf("unknown queue type %q", queueName)
 	}
 
-	confReader, err := s.GetConfReader(ctx)
+	// TODO(baptist): Remove this check. We read the conf reader just to see if
+	// we can without error. Once we load the SpanConfig from the Reader instead
+	// of the cached version, these two checks are the same.
+	_, err := s.GetConfReader(ctx)
+	if err != nil {
+		return nil, nil, errors.Wrap(err,
+			"unable to retrieve conf reader, cannot run queue; make sure "+
+				"the cluster has been initialized and all nodes connected to it")
+	}
+	conf, err := repl.LoadSpanConfig(ctx)
 	if err != nil {
 		return nil, nil, errors.Wrap(err,
 			"unable to retrieve conf reader, cannot run queue; make sure "+
@@ -3670,7 +3679,7 @@ func (s *Store) Enqueue(
 
 	if !skipShouldQueue {
 		log.Eventf(ctx, "running %s.shouldQueue", queueName)
-		shouldQueue, priority := qImpl.shouldQueue(ctx, s.cfg.Clock.NowAsClockTimestamp(), repl, confReader)
+		shouldQueue, priority := qImpl.shouldQueue(ctx, s.cfg.Clock.NowAsClockTimestamp(), repl, conf)
 		log.Eventf(ctx, "shouldQueue=%v, priority=%f", shouldQueue, priority)
 		if !shouldQueue {
 			return collectAndFinish(), nil, nil
@@ -3678,7 +3687,7 @@ func (s *Store) Enqueue(
 	}
 
 	log.Eventf(ctx, "running %s.process", queueName)
-	processed, processErr := qImpl.process(ctx, repl, confReader)
+	processed, processErr := qImpl.process(ctx, repl, conf)
 	log.Eventf(ctx, "processed: %t (err: %v)", processed, processErr)
 	return collectAndFinish(), processErr, nil
 }

@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -131,12 +130,17 @@ func newMergeQueue(store *Store, db *kv.DB) *mergeQueue {
 }
 
 func (mq *mergeQueue) shouldQueue(
-	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, conf *roachpb.SpanConfig,
 ) (shouldQueue bool, priority float64) {
 	desc := repl.Desc()
 
 	if desc.EndKey.Equal(roachpb.RKeyMax) {
 		// The last range has no right-hand neighbor to merge with.
+		return false, 0
+	}
+	confReader, err := repl.store.GetConfReader(ctx)
+	if err != nil {
+		log.Infof(ctx, "unable to load the span config (err=%v) for range %d", err, desc.RangeID)
 		return false, 0
 	}
 
@@ -157,7 +161,7 @@ func (mq *mergeQueue) shouldQueue(
 		return false, 0
 	}
 
-	sizeRatio := float64(repl.GetMVCCStats().Total()) / float64(repl.GetMinBytes(ctx))
+	sizeRatio := float64(repl.GetMVCCStats().Total()) / float64(conf.RangeMinBytes)
 	if math.IsNaN(sizeRatio) || sizeRatio >= 1 {
 		// This range is above the minimum size threshold. It does not need to be
 		// merged.
@@ -234,12 +238,17 @@ func (mq *mergeQueue) requestRangeStats(
 }
 
 func (mq *mergeQueue) process(
-	ctx context.Context, lhsRepl *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, lhsRepl *Replica, conf *roachpb.SpanConfig,
 ) (processed bool, err error) {
+
+	confReader, err := lhsRepl.store.GetConfReader(ctx)
+	if err != nil {
+		return false, errors.Wrapf(err, "unable to load conf reader")
+	}
 
 	lhsDesc := lhsRepl.Desc()
 	lhsStats := lhsRepl.GetMVCCStats()
-	minBytes := lhsRepl.GetMinBytes(ctx)
+	minBytes := conf.RangeMinBytes
 	if lhsStats.Total() >= minBytes {
 		log.VEventf(ctx, 2, "skipping merge: LHS meets minimum size threshold %d with %d bytes",
 			minBytes, lhsStats.Total())
@@ -286,7 +295,7 @@ func (mq *mergeQueue) process(
 	}
 
 	shouldSplit, _ := shouldSplitRange(ctx, mergedDesc, mergedStats,
-		lhsRepl.GetMaxBytes(ctx), lhsRepl.shouldBackpressureWrites(), confReader)
+		conf.RangeMaxBytes, lhsRepl.shouldBackpressureWrites(), confReader)
 	if shouldSplit {
 		log.VEventf(ctx, 2,
 			"skipping merge to avoid thrashing: merged range %s may split "+
@@ -415,7 +424,7 @@ func (mq *mergeQueue) process(
 		return false, rangeMergePurgatoryError{err}
 	}
 	if testingAggressiveConsistencyChecks {
-		if _, err := mq.store.consistencyQueue.process(ctx, lhsRepl, confReader); err != nil {
+		if _, err := mq.store.consistencyQueue.process(ctx, lhsRepl, conf); err != nil {
 			log.Warningf(ctx, "%v", err)
 		}
 	}
@@ -430,7 +439,7 @@ func (mq *mergeQueue) process(
 }
 
 func (*mergeQueue) postProcessScheduled(
-	ctx context.Context, replica replicaInQueue, priority float64,
+	ctx context.Context, replica replicaInQueue, conf *roachpb.SpanConfig, priority float64,
 ) {
 }
 
