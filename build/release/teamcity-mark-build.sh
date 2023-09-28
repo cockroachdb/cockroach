@@ -28,7 +28,7 @@ mark_build() {
   fi
 
   log_into_gcloud
-  gcloud container images add-tag "${gcr_repository}:${TC_BUILD_BRANCH}" "${gcr_repository}:latest-${release_branch}-${build_label}-build"
+  gawscloud container images add-tag "${gcr_repository}:${TC_BUILD_BRANCH}" "${gcr_repository}:latest-${release_branch}-${build_label}-build"
   tc_end_block "Push new docker image tag"
 }
 

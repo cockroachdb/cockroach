@@ -28,7 +28,7 @@ import (
 //
 // At the time of writing, the intel machines are all third-generation Xeon, "Ice Lake" which are isomorphic to
 // GCE's n2-(standard|highmem|custom) _with_ --minimum-cpu-platform="Intel Ice Lake" (roachprod's default).
-func AWSMachineType(
+func SelectAWSMachineType(
 	cpus int, mem MemPerCPU, shouldSupportLocalSSD bool, arch vm.CPUArch,
 ) (string, vm.CPUArch) {
 	family := "m6i" // 4 GB RAM per CPU
@@ -118,7 +118,7 @@ func AWSMachineType(
 // At the time of writing, the intel machines are all third-generation xeon, "Ice Lake" assuming
 // --minimum-cpu-platform="Intel Ice Lake" (roachprod's default). This is isomorphic to AWS's m6i or c6i.
 // The only exception is low memory machines (n2-highcpu-xxx), which aren't available in AWS.
-func GCEMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
+func SelectGCEMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
 	series := "n2"
 	selectedArch := vm.ArchAMD64
 
