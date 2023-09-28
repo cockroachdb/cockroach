@@ -119,7 +119,7 @@ var mvccGCQueueHighPriInterval = settings.RegisterDurationSetting(
 )
 
 // EnqueueInMvccGCQueueOnSpanConfigUpdateEnabled controls whether replicas
-// are enqueued into the mvcc queue, following a span config update which
+// are enqueued into the mvcc gc queue, following a span config update which
 // affects the replica.
 // TODO(baptist): Enable this once we have better AC control and have verified
 // this doesn't cause any overload problems.

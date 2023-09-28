@@ -1260,44 +1260,40 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.UpgradeTestingKnobs = knobs
 	}
 
-	if !codec.ForSystemTenant() || !cfg.SpanConfigsDisabled {
-		// Instantiate a span config manager. If we're the host tenant we'll
-		// only do it unless COCKROACH_DISABLE_SPAN_CONFIGS is set.
-		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
-		spanConfig.sqlTranslatorFactory = spanconfigsqltranslator.NewFactory(
-			execCfg.ProtectedTimestampProvider, codec, spanConfigKnobs,
-		)
-		spanConfig.sqlWatcher = spanconfigsqlwatcher.New(
-			codec,
-			cfg.Settings,
-			cfg.rangeFeedFactory,
-			1<<20, /* 1 MB bufferMemLimit */
-			cfg.stopper,
-			// TODO(irfansharif): What should this no-op cadence be?
-			30*time.Second, /* checkpointNoopsEvery */
-			spanConfigKnobs,
-		)
-		spanConfigReconciler := spanconfigreconciler.New(
-			spanConfig.sqlWatcher,
-			spanConfig.sqlTranslatorFactory,
-			cfg.spanConfigAccessor,
-			execCfg,
-			codec,
-			cfg.TenantID,
-			cfg.Settings,
-			spanConfigKnobs,
-		)
-		spanConfig.manager = spanconfigmanager.New(
-			cfg.internalDB,
-			jobRegistry,
-			cfg.stopper,
-			cfg.Settings,
-			spanConfigReconciler,
-			spanConfigKnobs,
-		)
+	// Instantiate a span config manager.
+	spanConfig.sqlTranslatorFactory = spanconfigsqltranslator.NewFactory(
+		execCfg.ProtectedTimestampProvider, codec, spanConfigKnobs,
+	)
+	spanConfig.sqlWatcher = spanconfigsqlwatcher.New(
+		codec,
+		cfg.Settings,
+		cfg.rangeFeedFactory,
+		1<<20, /* 1 MB bufferMemLimit */
+		cfg.stopper,
+		// TODO(irfansharif): What should this no-op cadence be?
+		30*time.Second, /* checkpointNoopsEvery */
+		spanConfigKnobs,
+	)
+	spanConfigReconciler := spanconfigreconciler.New(
+		spanConfig.sqlWatcher,
+		spanConfig.sqlTranslatorFactory,
+		cfg.spanConfigAccessor,
+		execCfg,
+		codec,
+		cfg.TenantID,
+		cfg.Settings,
+		spanConfigKnobs,
+	)
+	spanConfig.manager = spanconfigmanager.New(
+		cfg.internalDB,
+		jobRegistry,
+		cfg.stopper,
+		cfg.Settings,
+		spanConfigReconciler,
+		spanConfigKnobs,
+	)
 
-		execCfg.SpanConfigReconciler = spanConfigReconciler
-	}
+	execCfg.SpanConfigReconciler = spanConfigReconciler
 	execCfg.SpanConfigKVAccessor = cfg.spanConfigAccessor
 	execCfg.SpanConfigLimiter = spanConfig.limiter
 	execCfg.SpanConfigSplitter = spanConfig.splitter
