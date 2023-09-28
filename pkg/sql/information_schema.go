@@ -277,6 +277,46 @@ func populateRoleHierarchy(
 	)
 }
 
+var informationSchemaAttributesTable = virtualSchemaView{
+	comment: `attributes of composite data types in the current database` +
+		docs.URL("information-schema.html#attributes") + `
+    https://www.postgresql.org/docs/16/infoschema-attributes.html`,
+	schema: vtable.InformationSchemaAttributes,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "udt_catalog", Typ: types.String},
+		{Name: "udt_schema", Typ: types.String},
+		{Name: "udt_name", Typ: types.String},
+		{Name: "attribute_name", Typ: types.String},
+		{Name: "ordinal_position", Typ: types.Int},
+		{Name: "attribute_default", Typ: types.String},
+		{Name: "is_nullable", Typ: types.String},
+		{Name: "data_type", Typ: types.String},
+		{Name: "character_maximum_length", Typ: types.Int},
+		{Name: "character_octet_length", Typ: types.Int},
+		{Name: "character_set_catalog", Typ: types.String},
+		{Name: "character_set_schema", Typ: types.String},
+		{Name: "character_set_name", Typ: types.String},
+		{Name: "collation_catalog", Typ: types.String},
+		{Name: "collation_schema", Typ: types.String},
+		{Name: "collation_name", Typ: types.String},
+		{Name: "numeric_precision", Typ: types.Int},
+		{Name: "numeric_precision_radix", Typ: types.Int},
+		{Name: "numeric_scale", Typ: types.Int},
+		{Name: "datetime_precision", Typ: types.Int},
+		{Name: "interval_type", Typ: types.String},
+		{Name: "interval_precision", Typ: types.Int},
+		{Name: "attribute_udt_catalog", Typ: types.String},
+		{Name: "attribute_udt_schema", Typ: types.String},
+		{Name: "attribute_udt_name", Typ: types.String},
+		{Name: "scope_catalog", Typ: types.String},
+		{Name: "scope_schema", Typ: types.String},
+		{Name: "scope_name", Typ: types.String},
+		{Name: "maximum_cardinality", Typ: types.Int},
+		{Name: "dtd_identifier", Typ: types.String},
+		{Name: "is_derived_reference_attribute", Typ: types.String},
+	},
+}
+
 var informationSchemaCharacterSets = virtualSchemaTable{
 	comment: `character sets available in the current database
 ` + docs.URL("information-schema.html#character_sets") + `
@@ -1478,6 +1518,44 @@ https://www.postgresql.org/docs/9.5/infoschema-table-constraints.html`,
 	},
 }
 
+var informationSchemaUserDefinedTypesTable = virtualSchemaView{
+	comment: `user-defined types` +
+		docs.URL("information-schema.html#user-defined-types") + `
+    https://www.postgresql.org/docs/16/infoschema-user-defined-types.html`,
+	schema: vtable.InformationSchemaUserDefinedTypes,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "user_defined_type_catalog", Typ: types.String},
+		{Name: "user_defined_type_schema", Typ: types.String},
+		{Name: "user_defined_type_name", Typ: types.String},
+		{Name: "user_defined_type_category", Typ: types.String},
+		{Name: "is_instantiable", Typ: types.String},
+		{Name: "is_final", Typ: types.String},
+		{Name: "ordering_form", Typ: types.String},
+		{Name: "ordering_category", Typ: types.String},
+		{Name: "ordering_routine_catalog", Typ: types.String},
+		{Name: "ordering_routine_schema", Typ: types.String},
+		{Name: "ordering_routine_name", Typ: types.String},
+		{Name: "reference_type", Typ: types.String},
+		{Name: "data_type", Typ: types.String},
+		{Name: "character_maximum_length", Typ: types.Int},
+		{Name: "character_octet_length", Typ: types.Int},
+		{Name: "character_set_catalog", Typ: types.String},
+		{Name: "character_set_schema", Typ: types.String},
+		{Name: "character_set_name", Typ: types.String},
+		{Name: "collation_catalog", Typ: types.String},
+		{Name: "collation_schema", Typ: types.String},
+		{Name: "collation_name", Typ: types.String},
+		{Name: "numeric_precision", Typ: types.Int},
+		{Name: "numeric_precision_radix", Typ: types.Int},
+		{Name: "numeric_scale", Typ: types.Int},
+		{Name: "datetime_precision", Typ: types.Int},
+		{Name: "interval_type", Typ: types.String},
+		{Name: "interval_precision", Typ: types.Int},
+		{Name: "source_dtd_identifier", Typ: types.String},
+		{Name: "ref_dtd_identifier", Typ: types.String},
+	},
+}
+
 // Postgres: not provided
 // MySQL:    https://dev.mysql.com/doc/refman/5.7/en/user-privileges-table.html
 // TODO(knz): this introspection facility is of dubious utility.
@@ -1970,15 +2048,6 @@ var informationSchemaRoleColumnGrantsTable = virtualSchemaTable{
 	unimplemented: true,
 }
 
-var informationSchemaAttributesTable = virtualSchemaTable{
-	comment: "attributes was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaAttributes,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
 var informationSchemaDomainConstraintsTable = virtualSchemaTable{
 	comment: "domain_constraints was created for compatibility and is currently unimplemented",
 	schema:  vtable.InformationSchemaDomainConstraints,
@@ -2261,15 +2330,6 @@ var informationSchemaTableConstraintsExtensionsTable = virtualSchemaTable{
 var informationSchemaColumnsExtensionsTable = virtualSchemaTable{
 	comment: "columns_extensions was created for compatibility and is currently unimplemented",
 	schema:  vtable.InformationSchemaColumnsExtensions,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
-var informationSchemaUserDefinedTypesTable = virtualSchemaTable{
-	comment: "user_defined_types was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaUserDefinedTypes,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
