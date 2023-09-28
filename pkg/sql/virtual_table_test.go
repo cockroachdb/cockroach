@@ -103,7 +103,7 @@ func TestVirtualTableGenerators(t *testing.T) {
 		// a query canceled here. So, only check the error if
 		// it is non-nil.
 		if err != nil {
-			require.Equal(t, cancelchecker.QueryCanceledError, err)
+			require.Equal(t, cancelchecker.QueryCanceledError(""), err)
 		}
 		cleanup(ctx)
 
@@ -116,7 +116,7 @@ func TestVirtualTableGenerators(t *testing.T) {
 		require.Equal(t, tree.Datums{tree.NewDInt(1)}, row)
 		cancel()
 		_, err = next()
-		require.Equal(t, cancelchecker.QueryCanceledError, err)
+		require.Equal(t, cancelchecker.QueryCanceledError(""), err)
 		cleanup(ctx)
 
 		// Test cancellation after asking for all the rows.

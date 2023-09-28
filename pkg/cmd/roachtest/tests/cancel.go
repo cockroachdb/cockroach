@@ -146,7 +146,7 @@ func registerCancel(r registry.Registry) {
 					select {
 					case err := <-errCh:
 						t.Status(err)
-						if !strings.Contains(err.Error(), cancelchecker.QueryCanceledError.Error()) {
+						if !strings.Contains(err.Error(), cancelchecker.QueryCanceledError("").Error()) {
 							// Note that errors.Is() doesn't work here because
 							// lib/pq wraps the query canceled error.
 							t.Fatal(errors.Wrap(err, "unexpected error"))

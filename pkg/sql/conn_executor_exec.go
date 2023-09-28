@@ -484,7 +484,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				retEv = eventNonRetriableErr{
 					IsCommit: fsm.FromBool(isCommit(ast)),
 				}
-				errToPush := cancelchecker.QueryCanceledError
+				errToPush := cancelchecker.QueryCanceledError("connExecutor")
 				// For pausable portal, we can arrive here after encountering a timeout
 				// error and then perform a query-cleanup step. In this case, we don't
 				// want to override the original timeout error with the query-cancelled

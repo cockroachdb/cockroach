@@ -168,7 +168,7 @@ func processInboundStreamHelper(
 	// goroutine.
 	select {
 	case <-f.GetCtxDone():
-		return cancelchecker.QueryCanceledError
+		return cancelchecker.QueryCanceledError("inbound")
 	case err := <-errChan:
 		return err
 	}

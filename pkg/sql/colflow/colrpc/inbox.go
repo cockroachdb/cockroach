@@ -192,7 +192,7 @@ func (i *Inbox) close() {
 func (i *Inbox) checkFlowCtxCancellation() error {
 	select {
 	case <-i.flowCtxDone:
-		return cancelchecker.QueryCanceledError
+		return cancelchecker.QueryCanceledError("Inbox.checkFlowCtxCancellation")
 	default:
 		return nil
 	}
@@ -222,7 +222,7 @@ func (i *Inbox) RunWithStream(streamCtx context.Context, stream flowStreamServer
 		// The flow context of the inbox host has been canceled. This can occur
 		// e.g. when the query is canceled, or when another stream encountered
 		// an unrecoverable error forcing it to shutdown the flow.
-		return cancelchecker.QueryCanceledError
+		return cancelchecker.QueryCanceledError("Inbox.flowCtxDone 225")
 	}
 
 	// Now wait for one of the events described in the method comment. If a
@@ -236,7 +236,7 @@ func (i *Inbox) RunWithStream(streamCtx context.Context, stream flowStreamServer
 		// The flow context of the inbox host has been canceled. This can occur
 		// e.g. when the query is canceled, or when another stream encountered
 		// an unrecoverable error forcing it to shutdown the flow.
-		return cancelchecker.QueryCanceledError
+		return cancelchecker.QueryCanceledError("Inbox.flowCtxDone 239")
 	case <-readerCtx.Done():
 		// readerCtx is canceled, but we don't know whether it was because the
 		// flow context was canceled or for other reason. In the former case we
@@ -273,8 +273,8 @@ func (i *Inbox) Init(ctx context.Context) {
 			i.errCh <- errors.Wrap(err, "remote stream arrived too late")
 			return err
 		case <-i.flowCtxDone:
-			i.errCh <- cancelchecker.QueryCanceledError
-			return cancelchecker.QueryCanceledError
+			i.errCh <- cancelchecker.QueryCanceledError("Inbox.flowCtxDone 276")
+			return cancelchecker.QueryCanceledError("Inbox.flowCtxDone 277")
 		case <-i.Ctx.Done():
 			// errToThrow is propagated to the reader of the Inbox.
 			errToThrow := i.Ctx.Err()

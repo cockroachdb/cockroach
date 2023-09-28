@@ -1597,7 +1597,7 @@ func TestVirtualTableDoesntHangOnQueryCanceledError(t *testing.T) {
 	// addCallback determines whether the push callback should be added.
 	var addCallback atomic.Bool
 	var numCallbacksAdded atomic.Int32
-	err := cancelchecker.QueryCanceledError
+	err := cancelchecker.QueryCanceledError("")
 	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{

@@ -50,7 +50,7 @@ func (c *CancelChecker) Check() error {
 			// Once the context is canceled, we no longer increment
 			// callsSinceLastCheck and will fall into this path on subsequent calls
 			// to Check().
-			return QueryCanceledError
+			return QueryCanceledError("util/CancelChecker")
 		default:
 		}
 	}
@@ -77,5 +77,10 @@ func (c *CancelChecker) Reset(ctx context.Context, checkInterval ...uint32) {
 }
 
 // QueryCanceledError is an error representing query cancellation.
-var QueryCanceledError = pgerror.New(
-	pgcode.QueryCanceled, "query execution canceled")
+func QueryCanceledError(callsite string) error {
+	msg := "query execution canceled"
+	if callsite != "" {
+		msg += " (" + callsite + ")"
+	}
+	return pgerror.New(pgcode.QueryCanceled, msg)
+}

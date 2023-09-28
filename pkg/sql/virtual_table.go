@@ -87,7 +87,7 @@ func setupGenerator(
 	addRow := func(datums ...tree.Datum) error {
 		select {
 		case <-ctx.Done():
-			return cancelchecker.QueryCanceledError
+			return cancelchecker.QueryCanceledError("")
 		case comm <- virtualTableGeneratorResponse{datums: datums}:
 		}
 		// Block until the next call to cleanup() or next(). This allows us to
@@ -100,7 +100,7 @@ func setupGenerator(
 		// worker, and then back to the next() caller after it is done.
 		select {
 		case <-ctx.Done():
-			return cancelchecker.QueryCanceledError
+			return cancelchecker.QueryCanceledError("")
 		case <-comm:
 		}
 		return nil
@@ -144,12 +144,12 @@ func setupGenerator(
 		select {
 		case comm <- virtualTableGeneratorResponse{}:
 		case <-ctx.Done():
-			return nil, cancelchecker.QueryCanceledError
+			return nil, cancelchecker.QueryCanceledError("")
 		}
 		// Wait for the row to be sent.
 		select {
 		case <-ctx.Done():
-			return nil, cancelchecker.QueryCanceledError
+			return nil, cancelchecker.QueryCanceledError("")
 		case resp := <-comm:
 			return resp.datums, resp.err
 		}

@@ -567,7 +567,7 @@ func (d *diskQueue) writeFooterAndFlush(ctx context.Context) (err error) {
 func checkCancellation(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
-		return cancelchecker.QueryCanceledError
+		return cancelchecker.QueryCanceledError("")
 	default:
 		return nil
 	}

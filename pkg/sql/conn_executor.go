@@ -2850,7 +2850,7 @@ func (ex *connExecutor) execCopyOut(
 			retEv = eventNonRetriableErr{
 				IsCommit: fsm.FromBool(false),
 			}
-			retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
+			retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError("")}
 		}
 
 		// If the query timed out, we intercept the error, payload, and event here
@@ -3116,7 +3116,7 @@ func (ex *connExecutor) execCopyIn(
 			retEv = eventNonRetriableErr{
 				IsCommit: fsm.FromBool(false),
 			}
-			retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
+			retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError("")}
 		}
 
 		cm.Close(ctx)

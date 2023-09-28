@@ -120,7 +120,7 @@ func (i *ieResultChannel) firstResult(
 		if ctx.Err() == nil {
 			return nil
 		}
-		return cancelchecker.QueryCanceledError
+		return cancelchecker.QueryCanceledError("ieResultChannel.firstResult")
 	}
 	var doLog bool
 	if t, ok := logtags.FromContext(ctx).GetTag("intExec"); ok && t.ValueStr() == "system-jobs-scan" {
