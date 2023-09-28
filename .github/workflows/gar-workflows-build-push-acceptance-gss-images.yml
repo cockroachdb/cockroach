@@ -1,0 +1,51 @@
+name: Build and Push acceptance gss compose images
+
+on:
+  pull_request
+
+jobs:
+  tags:
+    runs-on: ubuntu-latest
+    outputs:
+      time_tag: ${{ steps.vars.outputs.TIME_TAG }}
+    steps:
+      -
+        name: Set TAG value
+        id: vars
+        run: echo "TIME_TAG=$(date +%Y%m%d-%H%M%S)" >> $GITHUB_OUTPUT
+
+  acceptance-kdc-docker:
+    needs: tags
+    uses: ./.github/workflows/gar-workflows-reusable-build-push-multiplatform-images.yml
+    with:
+      tags: |
+        us-east1-docker.pkg.dev/crl-ci-images/cockroach/acceptance-gss-kdc:${{ needs.tags.outputs.time_tag }}
+      dockerFilePath: pkg/acceptance/compose/gss/kdc/Dockerfile
+      workingDirectory: {{defaultContext}}:pkg/acceptance/compose/gss/kdc
+    secrets:
+      gcp_wif_provider: ${{ secrets.GCP_CRL_CI_IMAGES_WIF_PROVIDER }}
+      gcp_wif_service_account: ${{ secrets.GCP_CRL_CI_IMAGES_SERVICE_ACCOUNT }}
+
+  acceptance-psql-docker:
+    needs: tags
+    uses: ./.github/workflows/gar-workflows-reusable-build-push-multiplatform-images.yml
+    with:
+      tags: |
+        us-east1-docker.pkg.dev/crl-ci-images/cockroach/acceptance-gss-psql:${{ needs.tags.outputs.time_tag }}
+      dockerFilePath: pkg/acceptance/compose/gss/psql/Dockerfile
+      workingDirectory: {{defaultContext}}:pkg/acceptance/compose/gss/psql
+    secrets:
+      gcp_wif_provider: ${{ secrets.GCP_CRL_CI_IMAGES_WIF_PROVIDER }}
+      gcp_wif_service_account: ${{ secrets.GCP_CRL_CI_IMAGES_SERVICE_ACCOUNT }}
+
+  acceptance-python-docker:
+    needs: tags
+    uses: ./.github/workflows/gar-workflows-reusable-build-push-multiplatform-images.yml
+    with:
+      tags: |
+        us-east1-docker.pkg.dev/crl-ci-images/cockroach/acceptance-gss-python:${{ needs.tags.outputs.time_tag }}
+      dockerFilePath: pkg/acceptance/compose/gss/python/Dockerfile
+      workingDirectory: {{defaultContext}}:pkg/acceptance/compose/gss/python
+    secrets:
+      gcp_wif_provider: ${{ secrets.GCP_CRL_CI_IMAGES_WIF_PROVIDER }}
+      gcp_wif_service_account: ${{ secrets.GCP_CRL_CI_IMAGES_SERVICE_ACCOUNT }}
