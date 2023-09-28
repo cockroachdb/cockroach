@@ -2599,6 +2599,20 @@ func TestTenantLogicCCL_zone_config_secondary_tenants_disallowed(
 	runCCLLogicTest(t, "zone_config_secondary_tenants_disallowed")
 }
 
+func TestTenantLogicCCL_zone_configs_secondary_tenants_restricted(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "zone_configs_secondary_tenants_restricted")
+}
+
+func TestTenantLogicCCL_zone_configs_secondary_tenants_unrestricted(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "zone_configs_secondary_tenants_unrestricted")
+}
+
 func TestTenantExecBuild_distsql_tenant(
 	t *testing.T,
 ) {
