@@ -37,7 +37,7 @@ func TestSQLStatsTTLChange(t *testing.T) {
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
-						clusterversion.V23_1ChangeSQLStatsTTL - 1),
+						clusterversion.Permanent_V23_1ChangeSQLStatsTTL - 1),
 				},
 			},
 		},
@@ -52,7 +52,7 @@ func TestSQLStatsTTLChange(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		db,
-		clusterversion.V23_1ChangeSQLStatsTTL,
+		clusterversion.Permanent_V23_1ChangeSQLStatsTTL,
 		nil,
 		false,
 	)

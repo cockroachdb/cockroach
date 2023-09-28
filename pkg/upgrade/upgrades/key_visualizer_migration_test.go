@@ -35,7 +35,7 @@ func TestKeyVisualizerTablesMigration(t *testing.T) {
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
-						clusterversion.V23_1KeyVisualizerTablesAndJobs - 1),
+						clusterversion.Permanent_V23_1KeyVisualizerTablesAndJobs - 1),
 				},
 			},
 		},
@@ -50,7 +50,7 @@ func TestKeyVisualizerTablesMigration(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		db,
-		clusterversion.V23_1KeyVisualizerTablesAndJobs,
+		clusterversion.Permanent_V23_1KeyVisualizerTablesAndJobs,
 		nil,
 		false,
 	)
