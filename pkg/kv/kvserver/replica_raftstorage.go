@@ -240,7 +240,7 @@ func (r *Replica) GetSnapshot(
 	var snap storage.Reader
 	var startKey roachpb.RKey
 	r.raftMu.Lock()
-	if r.store.cfg.SharedStorageEnabled || storage.UseEFOS.Get(&r.ClusterSettings().SV) {
+	if r.store.cfg.SharedStorageEnabled || storage.ShouldUseEFOS(&r.ClusterSettings().SV) {
 		var ss *spanset.SpanSet
 		r.mu.RLock()
 		spans := rditer.MakeAllKeySpans(r.mu.state.Desc) // needs unreplicated to access Raft state
