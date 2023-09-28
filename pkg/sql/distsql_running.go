@@ -69,7 +69,7 @@ var settingDistSQLNumRunners = settings.RegisterIntSetting(
 	//
 	// The choice of the default multiple of 4 was made in order to get the
 	// original value of 16 on machines with 4 CPUs.
-	4*int64(runtime.GOMAXPROCS(0)), /* defaultValue */
+	0, /* defaultValue */
 	settings.IntInRange(0, distSQLNumRunnersMax),
 )
 
