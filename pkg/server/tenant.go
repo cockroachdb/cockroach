@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -1198,6 +1199,7 @@ func makeTenantSQLServerArgs(
 			jobsprotectedts.GetMetaType(jobsprotectedts.Schedules): jobsprotectedts.MakeStatusFunc(
 				circularJobRegistry, jobsprotectedts.Schedules,
 			),
+			sessionprotectedts.SessionMetaType: sessionprotectedts.MakeStatusFunc(),
 		},
 	})
 	if err != nil {
