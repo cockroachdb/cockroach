@@ -61,6 +61,7 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 
 	var params base.TestServerArgs
 	params.Knobs.SpanConfig = &spanconfig.TestingKnobs{ManagerDisableJobCreation: true} // TODO(irfansharif): #74919.
+	params.Knobs.SQLStatsKnobs = sqlstats.CreateTestingKnobs()
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: params,
 	})
@@ -72,6 +73,14 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 		t, thirdServer.AdvSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
 	defer cleanupGoDB()
 	firstServerProto := testCluster.Server(0)
+
+	// Hit query endpoint.
+	var emptyResp serverpb.StatementsResponse
+	if err := srvtestutils.GetStatusJSONProtoWithAdminAndTimeoutOption(firstServerProto, "combinedstmts", &emptyResp, true, additionalTimeout); err != nil {
+		t.Fatal(err)
+	}
+	require.Empty(t, emptyResp.Transactions)
+	require.Empty(t, emptyResp.Statements)
 
 	type testCase struct {
 		query         string
