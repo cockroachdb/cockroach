@@ -280,7 +280,8 @@ func checkRangesConsistentAndHaveNoData(totals enginepb.MVCCStats, details range
 		return errors.Errorf("table ranges contain garbage %s", totals.String())
 	}
 	if totals.LiveBytes > 0 || totals.LiveCount > 0 ||
-		totals.IntentBytes > 0 || totals.IntentCount > 0 || totals.LockCount > 0 {
+		totals.IntentBytes > 0 || totals.IntentCount > 0 ||
+		totals.LockBytes > 0 || totals.LockCount > 0 {
 		return errors.Errorf("table ranges contain live data %s", totals.String())
 	}
 	if details.status != kvpb.CheckConsistencyResponse_RANGE_CONSISTENT.String() {

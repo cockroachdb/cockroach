@@ -1255,6 +1255,8 @@ func UpdateSSTTimestamps(
 		// Calculate this delta by subtracting all the relevant stats at the
 		// old timestamp, and then aging the stats to the new timestamp before
 		// zeroing the stats again.
+		// TODO(nvanbenschoten): should this just be using MVCCStats.Add and
+		// MVCCStats.Subtract?
 		statsDelta.AgeTo(from.WallTime)
 		statsDelta.KeyBytes -= stats.KeyBytes
 		statsDelta.ValBytes -= stats.ValBytes
@@ -1263,6 +1265,8 @@ func UpdateSSTTimestamps(
 		statsDelta.LiveBytes -= stats.LiveBytes
 		statsDelta.IntentBytes -= stats.IntentBytes
 		statsDelta.IntentCount -= stats.IntentCount
+		statsDelta.LockBytes -= stats.LockBytes
+		statsDelta.LockCount -= stats.LockCount
 		statsDelta.AgeTo(to.WallTime)
 		statsDelta.KeyBytes += stats.KeyBytes
 		statsDelta.ValBytes += stats.ValBytes
@@ -1271,6 +1275,8 @@ func UpdateSSTTimestamps(
 		statsDelta.LiveBytes += stats.LiveBytes
 		statsDelta.IntentBytes += stats.IntentBytes
 		statsDelta.IntentCount += stats.IntentCount
+		statsDelta.LockBytes += stats.LockBytes
+		statsDelta.LockCount += stats.LockCount
 	}
 
 	// Fancy optimized Pebble SST rewriter.

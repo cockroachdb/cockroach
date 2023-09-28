@@ -327,6 +327,16 @@ func (i *LockTableIterator) UnsafeRawEngineKey() []byte {
 	return i.iter.UnsafeRawEngineKey()
 }
 
+// UnsafeLockTableKey returns the current key as an unsafe LockTableKey.
+// TODO(nvanbenschoten): use this more widely.
+func (i *LockTableIterator) UnsafeLockTableKey() (LockTableKey, error) {
+	k, err := i.iter.UnsafeEngineKey()
+	if err != nil {
+		return LockTableKey{}, errors.Wrap(err, "retrieving lock table key")
+	}
+	return k.ToLockTableKey()
+}
+
 // LockTableKeyVersion returns the strength and txn ID from the version of the
 // current key.
 func (i *LockTableIterator) LockTableKeyVersion() (lock.Strength, uuid.UUID, error) {

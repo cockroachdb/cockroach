@@ -21,7 +21,7 @@ import (
 func ComputeStatsForRange(
 	d *roachpb.RangeDescriptor, reader storage.Reader, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
-	return ComputeStatsForRangeWithVisitors(d, reader, nowNanos, nil, nil)
+	return ComputeStatsForRangeWithVisitors(d, reader, nowNanos, storage.ComputeStatsVisitors{})
 }
 
 // ComputeStatsForRangeWithVisitors is like ComputeStatsForRange but also
@@ -30,13 +30,11 @@ func ComputeStatsForRangeWithVisitors(
 	d *roachpb.RangeDescriptor,
 	reader storage.Reader,
 	nowNanos int64,
-	pointKeyVisitor func(storage.MVCCKey, []byte) error,
-	rangeKeyVisitor func(storage.MVCCRangeKeyValue) error,
+	visitors storage.ComputeStatsVisitors,
 ) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
-	for _, keySpan := range makeReplicatedKeySpansExceptLockTable(d) {
-		msDelta, err := storage.ComputeStatsWithVisitors(reader, keySpan.Key, keySpan.EndKey, nowNanos,
-			pointKeyVisitor, rangeKeyVisitor)
+	for _, keySpan := range MakeReplicatedKeySpans(d) {
+		msDelta, err := storage.ComputeStatsWithVisitors(reader, keySpan.Key, keySpan.EndKey, nowNanos, visitors)
 		if err != nil {
 			return enginepb.MVCCStats{}, err
 		}
