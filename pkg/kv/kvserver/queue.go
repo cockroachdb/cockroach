@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -260,19 +259,19 @@ type queueImpl interface {
 	// shouldQueue accepts current time, a replica, and the system config
 	// and returns whether it should be queued and if so, at what priority.
 	// The Replica is guaranteed to be initialized.
-	shouldQueue(context.Context, hlc.ClockTimestamp, *Replica, spanconfig.StoreReader) (shouldQueue bool, priority float64)
+	shouldQueue(context.Context, hlc.ClockTimestamp, *Replica, *roachpb.SpanConfig) (shouldQueue bool, priority float64)
 
 	// process accepts a replica, and the system config and executes
 	// queue-specific work on it. The Replica is guaranteed to be initialized.
 	// We return a boolean to indicate if the Replica was processed successfully
 	// (vs. it being a no-op or an error).
-	process(context.Context, *Replica, spanconfig.StoreReader) (processed bool, err error)
+	process(context.Context, *Replica, *roachpb.SpanConfig) (processed bool, err error)
 
 	// processScheduled is called after async task was created to run process.
 	// This function is called by the process loop synchronously. This method is
 	// called regardless of process being called or not since replica validity
 	// checks are done asynchronously.
-	postProcessScheduled(ctx context.Context, replica replicaInQueue, priority float64)
+	postProcessScheduled(ctx context.Context, replica replicaInQueue, span *roachpb.SpanConfig, priority float64)
 
 	// timer returns a duration to wait between processing the next item
 	// from the queue. The duration of the last processing of a replica
@@ -858,7 +857,7 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 					repl, priority := bq.pop()
 					if repl != nil {
 						annotatedCtx := repl.AnnotateCtx(ctx)
-						_, err := bq.replicaCanBeProcessed(annotatedCtx, repl, false /*acquireLeaseIfNeeded */)
+						conf, err := bq.replicaCanBeProcessed(annotatedCtx, repl, false /*acquireLeaseIfNeeded */)
 						if err != nil {
 							bq.finishProcessingReplica(annotatedCtx, stopper, repl, err)
 							log.Infof(ctx, "skipping since replica can't be processed %v", err)
@@ -874,7 +873,7 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 								defer func() { <-bq.processSem }()
 
 								start := timeutil.Now()
-								err := bq.processReplica(ctx, repl)
+								err := bq.processReplica(ctx, repl, conf)
 
 								duration := timeutil.Since(start)
 								bq.recordProcessDuration(ctx, duration)
@@ -885,7 +884,7 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 							<-bq.processSem
 							return
 						}
-						bq.impl.postProcessScheduled(ctx, repl, priority)
+						bq.impl.postProcessScheduled(ctx, repl, conf, priority)
 					} else {
 						// Release semaphore if no replicas were available.
 						<-bq.processSem
@@ -930,7 +929,9 @@ func (bq *baseQueue) recordProcessDuration(ctx context.Context, dur time.Duratio
 //
 // ctx should already be annotated by both bq.AnnotateCtx() and
 // repl.AnnotateCtx().
-func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) error {
+func (bq *baseQueue) processReplica(
+	ctx context.Context, repl replicaInQueue, conf *roachpb.SpanConfig,
+) error {
 
 	ctx, span := tracing.EnsureChildSpan(ctx, bq.Tracer, bq.processOpName())
 	defer span.Finish()
@@ -979,7 +980,7 @@ var errMarkNotAcquirableLease = errors.New("lease can't be acquired")
 // only return a nil SpanConfig if the queue does not require span configs.
 func (bq *baseQueue) replicaCanBeProcessed(
 	ctx context.Context, repl replicaInQueue, acquireLeaseIfNeeded bool,
-) (spanconfig.StoreReader, error) {
+) (*roachpb.SpanConfig, error) {
 	if !repl.IsInitialized() {
 		// We checked this when adding the replica, but we need to check it again
 		// in case this is a different replica with the same range ID (see #14193).
@@ -1000,16 +1001,26 @@ func (bq *baseQueue) replicaCanBeProcessed(
 
 	// The conf is only populated if the queue requires a span config. Otherwise
 	// nil is always returned.
-	var confReader spanconfig.StoreReader
+	var conf *roachpb.SpanConfig
 	if bq.needsSpanConfigs {
 		var err error
-		confReader, err = bq.store.GetConfReader(ctx)
+		confReader, err := bq.store.GetConfReader(ctx)
 		if err != nil {
 			if log.V(1) || !errors.Is(err, errSpanConfigsUnavailable) {
 				log.Warningf(ctx, "unable to retrieve conf reader, skipping: %v", err)
 			}
 			return nil, err
 		}
+		conf, err = bq.store.GetSpanConfigForKey(ctx, repl.Desc().GetStartKey())
+		if err != nil {
+			log.Infof(ctx, "unable to retrieve conf reader, skipping: %v", err)
+			return nil, err
+		}
+
+		// TODO(baptist): Remove setting the span config once the cached span
+		// config is removed from the replica.
+		realRepl, _ := repl.(*Replica)
+		realRepl.SetSpanConfig(*conf)
 
 		if !bq.acceptsUnsplitRanges {
 			// Queue does not accept unsplit ranges. Check to see if the range needs to
@@ -1057,7 +1068,7 @@ func (bq *baseQueue) replicaCanBeProcessed(
 			}
 		}
 	}
-	return confReader, nil
+	return conf, nil
 }
 
 // IsPurgatoryError returns true iff the given error is a purgatory error.
@@ -1295,10 +1306,10 @@ func (bq *baseQueue) processReplicasInPurgatory(
 			annotatedCtx := repl.AnnotateCtx(ctx)
 			if stopper.RunTask(
 				annotatedCtx, bq.processOpName(), func(ctx context.Context) {
-					if _, err := bq.replicaCanBeProcessed(ctx, repl, false); err != nil {
+					if conf, err := bq.replicaCanBeProcessed(ctx, repl, false); err != nil {
 						bq.finishProcessingReplica(ctx, stopper, repl, err)
 					} else {
-						err = bq.processReplica(ctx, repl)
+						err = bq.processReplica(ctx, repl, conf)
 						bq.finishProcessingReplica(ctx, stopper, repl, err)
 					}
 				},
@@ -1422,10 +1433,10 @@ func (bq *baseQueue) DrainQueue(ctx context.Context, stopper *stop.Stopper) {
 	ctx = bq.AnnotateCtx(ctx)
 	for repl, _ := bq.pop(); repl != nil; repl, _ = bq.pop() {
 		annotatedCtx := repl.AnnotateCtx(ctx)
-		if _, err := bq.replicaCanBeProcessed(annotatedCtx, repl, false); err != nil {
+		if conf, err := bq.replicaCanBeProcessed(annotatedCtx, repl, false); err != nil {
 			bq.finishProcessingReplica(annotatedCtx, stopper, repl, err)
 		} else {
-			err = bq.processReplica(annotatedCtx, repl)
+			err = bq.processReplica(annotatedCtx, repl, conf)
 			bq.finishProcessingReplica(annotatedCtx, stopper, repl, err)
 		}
 	}

@@ -183,10 +183,19 @@ func shouldSplitRange(
 // prefix or if the range's size in bytes exceeds the limit for the zone,
 // or if the range has too much load on it.
 func (sq *splitQueue) shouldQueue(
-	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, conf *roachpb.SpanConfig,
 ) (shouldQ bool, priority float64) {
+	// TODO(baptist): This is a little ugly to read the conf reader here. The
+	// better interface is to have the StoreReader only have one method -
+	// GetSpanConfigForRange and all the other logic would be here. Consider
+	// refactoring in the future. Short term we reload the confReader for this
+	// range.
+	confReader, err := repl.store.GetConfReader(ctx)
+	if err != nil {
+		return false, 0
+	}
 	shouldQ, priority = shouldSplitRange(ctx, repl.Desc(), repl.GetMVCCStats(),
-		repl.GetMaxBytes(ctx), repl.shouldBackpressureWrites(), confReader)
+		conf.RangeMaxBytes, repl.shouldBackpressureWrites(), confReader)
 
 	if !shouldQ && repl.SplitByLoadEnabled() {
 		if splitKey := repl.loadSplitKey(ctx, repl.Clock().PhysicalTime()); splitKey != nil {
@@ -208,9 +217,9 @@ var _ PurgatoryError = unsplittableRangeError{}
 
 // process synchronously invokes admin split for each proposed split key.
 func (sq *splitQueue) process(
-	ctx context.Context, r *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, r *Replica, conf *roachpb.SpanConfig,
 ) (processed bool, err error) {
-	processed, err = sq.processAttempt(ctx, r, confReader)
+	processed, err = sq.processAttempt(ctx, r, conf)
 	if errors.HasType(err, (*kvpb.ConditionFailedError)(nil)) {
 		// ConditionFailedErrors are an expected outcome for range split
 		// attempts because splits can race with other descriptor modifications.
@@ -225,9 +234,13 @@ func (sq *splitQueue) process(
 }
 
 func (sq *splitQueue) processAttempt(
-	ctx context.Context, r *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, r *Replica, conf *roachpb.SpanConfig,
 ) (processed bool, err error) {
 	desc := r.Desc()
+	confReader, err := r.store.GetConfReader(ctx)
+	if err != nil {
+		return false, errors.Wrapf(err, "unable to load conf reader")
+	}
 	// First handle the case of splitting due to span config maps.
 	splitKey, err := confReader.ComputeSplitKey(ctx, desc.StartKey, desc.EndKey)
 	if err != nil {
@@ -244,6 +257,7 @@ func (sq *splitQueue) processAttempt(
 				ExpirationTime: hlc.Timestamp{},
 			},
 			desc,
+			conf,
 			false, /* delayable */
 			"span config",
 			false, /* findFirstSafeSplitKey */
@@ -258,7 +272,7 @@ func (sq *splitQueue) processAttempt(
 	// size-based splitting if maxBytes is 0 (happens in certain test
 	// situations).
 	size := r.GetMVCCStats().Total()
-	maxBytes := r.GetMaxBytes(ctx)
+	maxBytes := conf.RangeMaxBytes
 	if maxBytes > 0 && size > maxBytes {
 		reason := redact.Sprintf(
 			"%s above threshold size %s",
@@ -269,6 +283,7 @@ func (sq *splitQueue) processAttempt(
 			ctx,
 			kvpb.AdminSplitRequest{},
 			desc,
+			conf,
 			false, /* delayable */
 			reason,
 			false, /* findFirstSafeSplitKey */
@@ -321,6 +336,7 @@ func (sq *splitQueue) processAttempt(
 				ExpirationTime: expTime,
 			},
 			desc,
+			conf,
 			false, /* delayable */
 			reason,
 			true, /* findFirstSafeSplitKey */
@@ -340,7 +356,7 @@ func (sq *splitQueue) processAttempt(
 }
 
 func (*splitQueue) postProcessScheduled(
-	ctx context.Context, replica replicaInQueue, priority float64,
+	ctx context.Context, replica replicaInQueue, config *roachpb.SpanConfig, priority float64,
 ) {
 }
 
