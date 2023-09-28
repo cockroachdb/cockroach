@@ -49,9 +49,11 @@ func declareKeysAddSSTable(
 	latchSpans *spanset.SpanSet,
 	lockSpans *lockspanset.LockSpanSet,
 	maxOffset time.Duration,
-) {
+) error {
 	args := req.(*kvpb.AddSSTableRequest)
-	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+	if err := DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset); err != nil {
+		return err
+	}
 	// We look up the range descriptor key to return its span.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
 
@@ -72,6 +74,7 @@ func declareKeysAddSSTable(
 			Key: keys.MVCCRangeKeyGCKey(rs.GetRangeID()),
 		})
 	}
+	return nil
 }
 
 // AddSSTableRewriteConcurrency sets the concurrency of a single SST rewrite.

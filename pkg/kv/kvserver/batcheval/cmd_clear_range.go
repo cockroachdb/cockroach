@@ -46,8 +46,11 @@ func declareKeysClearRange(
 	latchSpans *spanset.SpanSet,
 	lockSpans *lockspanset.LockSpanSet,
 	maxOffset time.Duration,
-) {
-	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+) error {
+	err := DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+	if err != nil {
+		return err
+	}
 	// We look up the range descriptor key to check whether the span
 	// is equal to the entire range for fast stats updating.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
@@ -71,6 +74,7 @@ func declareKeysClearRange(
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 		Key: keys.MVCCRangeKeyGCKey(rs.GetRangeID()),
 	})
+	return nil
 }
 
 // ClearRange wipes all MVCC versions of keys covered by the specified

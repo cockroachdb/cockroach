@@ -37,9 +37,10 @@ func declareKeysTruncateLog(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
+) error {
 	prefix := keys.RaftLogPrefix(rs.GetRangeID())
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
+	return nil
 }
 
 // TruncateLog discards a prefix of the raft log. Truncating part of a log that

@@ -36,8 +36,8 @@ func declareKeysHeartbeatTransaction(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
-	declareKeysWriteTransaction(rs, header, req, latchSpans)
+) error {
+	return declareKeysWriteTransaction(rs, header, req, latchSpans)
 }
 
 // HeartbeatTxn updates the transaction status and heartbeat

@@ -33,12 +33,12 @@ func declareKeysPut(
 	latchSpans *spanset.SpanSet,
 	lockSpans *lockspanset.LockSpanSet,
 	maxOffset time.Duration,
-) {
+) error {
 	args := req.(*kvpb.PutRequest)
 	if args.Inline {
-		DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+		return DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
 	} else {
-		DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+		return DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
 	}
 }
 
