@@ -42,13 +42,13 @@ type testRegistryImpl struct {
 	snapshotPrefixes map[string]struct{}
 
 	promRegistry *prometheus.Registry
-	// benchOnly is true iff the registry is being used to run benchmarks only.
-	benchOnly bool
 }
+
+var _ registry.Registry = (*testRegistryImpl)(nil)
 
 // makeTestRegistry constructs a testRegistryImpl and configures it with opts.
 func makeTestRegistry(
-	cloud string, instanceType string, zones string, preferSSD bool, benchOnly bool,
+	cloud string, instanceType string, zones string, preferSSD bool,
 ) testRegistryImpl {
 	return testRegistryImpl{
 		cloud:            cloud,
@@ -58,7 +58,6 @@ func makeTestRegistry(
 		m:                make(map[string]*registry.TestSpec),
 		snapshotPrefixes: make(map[string]struct{}),
 		promRegistry:     prometheus.NewRegistry(),
-		benchOnly:        benchOnly,
 	}
 }
 
@@ -67,10 +66,6 @@ func (r *testRegistryImpl) Add(spec registry.TestSpec) {
 	if _, ok := r.m[spec.Name]; ok {
 		fmt.Fprintf(os.Stderr, "test %s already registered\n", spec.Name)
 		os.Exit(1)
-	}
-	if r.benchOnly && !spec.Benchmark {
-		// Skip non-benchmarks.
-		return
 	}
 	if spec.SnapshotPrefix != "" {
 		for existingPrefix := range r.snapshotPrefixes {
@@ -167,23 +162,16 @@ func (r *testRegistryImpl) PromFactory() promauto.Factory {
 }
 
 // GetTests returns all the tests that match the given filter, sorted by name.
-func (r testRegistryImpl) GetTests(filter *registry.TestFilter) []registry.TestSpec {
+// If no tests match, returns a potentially useful error.
+func (r testRegistryImpl) GetTests(filter *registry.TestFilter) ([]registry.TestSpec, error) {
 	var tests []registry.TestSpec
 	for _, t := range r.m {
-		if t.Match(filter) {
-			tests = append(tests, *t)
-		}
+		tests = append(tests, *t)
 	}
 	sort.Slice(tests, func(i, j int) bool {
 		return tests[i].Name < tests[j].Name
 	})
-	return tests
-}
-
-// List lists tests that match one of the filters.
-func (r testRegistryImpl) List(filters []string) []registry.TestSpec {
-	filter := registry.NewTestFilter(filters)
-	return r.GetTests(filter)
+	return filter.FilterWithErr(tests)
 }
 
 func (r testRegistryImpl) Cloud() string {

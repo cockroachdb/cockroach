@@ -149,26 +149,6 @@ const (
 	PostValidationNoDeadNodes
 )
 
-// Match returns true if the filter matches the test.
-func (t *TestSpec) Match(filter *TestFilter) bool {
-	if !filter.Name.MatchString(t.Name) {
-		return false
-	}
-
-	if len(filter.Tags) == 0 {
-		return true
-	}
-
-	for tag := range filter.Tags {
-		// If the tag is a single CSV e.g. "foo,bar,baz", we match all the tags
-		if matchesAll(t.Tags, strings.Split(tag, ",")) {
-			return true
-		}
-	}
-
-	return false
-}
-
 // PromSub replaces all non prometheus friendly chars with "_". Note,
 // before creating a metric, read up on prom metric naming conventions:
 // https://prometheus.io/docs/practices/naming/

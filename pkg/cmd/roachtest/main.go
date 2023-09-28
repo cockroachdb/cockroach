@@ -94,48 +94,46 @@ func main() {
 		}},
 	)
 
-	var listBench bool
-
 	var listCmd = &cobra.Command{
-		Use:   "list [tests]",
-		Short: "list tests matching the patterns",
-		Long: `List tests that match the given name patterns.
+		Use:   "list [regex...]",
+		Short: "list tests",
+		Long: `List tests that match the flags and given name patterns.
 
-If no pattern is passed, all tests are matched.
-Use --bench to list benchmarks instead of tests.
+Tests are by restricted by the specified --cloud (gce by default). Use
+--cloud=all to show tests for all clouds.
 
-Each test has a set of tags. The tags are used to skip tests which don't match
-the tag filter. The tag filter is specified by specifying a pattern with the
-"tag:" prefix.
+Use --bench to restrict to benchmarks.
+Use --suite to restrict to tests that are part of the given suite.
+Use --owner to restrict to tests that have the given owner.
 
-If multiple "tag:" patterns are specified, the test must match at
-least one of them.
-
-Within a single "tag:" pattern, multiple tags can be specified by separating them
-with a comma. In this case, the test must match all of the tags.
+If patterns are specified, only tests that match either of the given patterns
+are listed.
 
 Examples:
 
    roachtest list acceptance copy/bank/.*false
-   roachtest list tag:owner-kv
-   roachtest list tag:weekly
+   roachtest list --owner kv
+   roachtest list --suite weekly
 
    # match weekly kv owned tests
-   roachtest list tag:owner-kv,weekly
-
-   # match weekly kv owner tests or aws tests
-   roachtest list tag:owner-kv,weekly tag:aws
+   roachtest list --suite weekly --owner kv
 `,
-		RunE: func(_ *cobra.Command, args []string) error {
-			r := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg, listBench)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg)
 			tests.RegisterTests(&r)
 
-			filter := registry.NewTestFilter(args)
-			specs := testsToRun(r, filter, runSkipped, selectProbability, false)
+			filter := makeTestFilter(args)
+			fmt.Printf("Listing %s.\n\n", strings.Join(filter.Describe(), "\n"))
+			cmd.SilenceUsage = true
+
+			specs, err := r.GetTests(filter)
+			if err != nil {
+				return err
+			}
 
 			for _, s := range specs {
 				var skip string
-				if s.Skip != "" && !runSkipped {
+				if s.Skip != "" {
 					skip = " (skipped: " + s.Skip + ")"
 				}
 				fmt.Printf("%s [%s]%s\n", s.Name, s.Owner, skip)
@@ -143,21 +141,18 @@ Examples:
 			return nil
 		},
 	}
-	listCmd.Flags().BoolVar(
-		&listBench, "bench", false, "list benchmarks instead of tests")
-	listCmd.Flags().StringVar(
-		&cloud, "cloud", cloud, "cloud provider to use (aws, azure, or gce)")
+	addTestFilterFlags(listCmd, true /* includeCloud */)
 
 	var runCmd = &cobra.Command{
 		// Don't display usage when tests fail.
 		SilenceUsage: true,
-		Use:          "run [tests]",
+		Use:          "run [regex..]",
 		Short:        "run automated tests on cockroach cluster",
 		Long: `Run automated tests on existing or ephemeral cockroach clusters.
 
-roachtest run takes a list of regex patterns and runs all the matching tests.
-If no pattern is given, all tests are run. See "help list" for more details on
-the test tags.
+roachtest run takes a list of regex patterns and runs tests matching the tests
+as well as the --cloud, --suite, --owner flags. See "help list" for more details
+on specifying tests.
 
 If all invoked tests passed, the exit status is zero. If at least one test
 failed, it is 10. Any other exit status reports a problem with the test
@@ -170,27 +165,37 @@ the cluster nodes on start.
 			if err := initRunFlagsBinariesAndLibraries(cmd); err != nil {
 				return err
 			}
-			return runTests(tests.RegisterTests, args, false /* benchOnly */)
+			filter := makeTestFilter(args)
+			fmt.Printf("\nRunning %s.\n\n", strings.Join(filter.Describe(), "\n"))
+			cmd.SilenceUsage = true
+			return runTests(tests.RegisterTests, filter)
 		},
 	}
 
 	var benchCmd = &cobra.Command{
 		// Don't display usage when tests fail.
 		SilenceUsage: true,
-		Use:          "bench [benchmarks]",
+		Use:          "bench [regex...]",
 		Short:        "run automated benchmarks on cockroach cluster",
 		Long:         `Run automated benchmarks on existing or ephemeral cockroach clusters.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := initRunFlagsBinariesAndLibraries(cmd); err != nil {
 				return err
 			}
-			return runTests(tests.RegisterTests, args, true /* benchOnly */)
+			onlyBenchmarks = true
+			filter := makeTestFilter(args)
+			fmt.Printf("\nRunning %s.\n\n", strings.Join(filter.Describe(), "\n"))
+			cmd.SilenceUsage = true
+			return runTests(tests.RegisterTests, filter)
 		},
 	}
 
 	// Register flags shared between `run` and `bench`.
 	addRunFlags(runCmd)
 	addBenchFlags(benchCmd)
+
+	addTestFilterFlags(runCmd, false /* includeCloud */)
+	addTestFilterFlags(benchCmd, false /* includeCloud */)
 
 	parseCreateOpts(runCmd.Flags(), &overrideOpts)
 	overrideFlagset = runCmd.Flags()
@@ -232,8 +237,21 @@ func testsToRun(
 	runSkipped bool,
 	selectProbability float64,
 	print bool,
-) []registry.TestSpec {
-	specs := r.GetTests(filter)
+) ([]registry.TestSpec, error) {
+	specs, err := r.GetTests(filter)
+	if err != nil {
+		if !forceCloudCompat {
+			filterNoCloud := *filter
+			filterNoCloud.Cloud = ""
+			if _, err2 := r.GetTests(&filterNoCloud); err2 == nil {
+				// We found some tests matching criteria, but for other clouds. Mention
+				// the --force-cloud-compat flag.
+				// nolint:errwrap
+				err = errors.Errorf("%s\nTo include tests that are not compatible with this cloud, use --force-cloud-compat.", err.Error())
+			}
+		}
+		return nil, err
+	}
 
 	var notSkipped []registry.TestSpec
 	for _, s := range specs {
@@ -250,7 +268,7 @@ func testsToRun(
 		}
 	}
 
-	return selectSpecs(notSkipped, selectProbability, true, print)
+	return selectSpecs(notSkipped, selectProbability, true, print), nil
 }
 
 // selectSpecs returns a random sample of the given test specs.

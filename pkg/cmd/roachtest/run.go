@@ -107,7 +107,7 @@ func addRunBenchCommonFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(
 		&literalArtifactsDir, "artifacts-literal", "", "literal path to on-agent artifacts directory. Used for messages to ##teamcity[publishArtifacts] in --teamcity mode. May be different from --artifacts; defaults to the value of --artifacts if not provided")
 	cmd.Flags().StringVar(
-		&cloud, "cloud", cloud, "cloud provider to use (aws, azure, or gce)")
+		&cloud, "cloud", cloud, "cloud provider to use (local, aws, azure, or gce)")
 	cmd.Flags().StringVar(
 		&clusterID, "cluster-id", "", "an identifier to use in the name of the test cluster(s)")
 	cmd.Flags().IntVar(
@@ -175,8 +175,8 @@ func addBenchFlags(benchCmd *cobra.Command) {
 
 // runTests is the main function for the run and bench commands.
 // Assumes initRunFlagsBinariesAndLibraries was called.
-func runTests(register func(registry.Registry), args []string, benchOnly bool) error {
-	r := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg, benchOnly)
+func runTests(register func(registry.Registry), filter *registry.TestFilter) error {
+	r := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg)
 
 	// actual registering of tests
 	// TODO: don't register if we can't run on the specified registry cloud
@@ -186,7 +186,6 @@ func runTests(register func(registry.Registry), args []string, benchOnly bool) e
 	defer stopper.Stop(context.Background())
 	runner := newTestRunner(cr, stopper)
 
-	filter := registry.NewTestFilter(args)
 	clusterType := roachprodCluster
 	bindTo := ""
 	if cloud == spec.Local {
@@ -224,7 +223,10 @@ func runTests(register func(registry.Registry), args []string, benchOnly bool) e
 		return err
 	}
 
-	specs := testsToRun(r, filter, runSkipped, selectProbability, true)
+	specs, err := testsToRun(r, filter, runSkipped, selectProbability, true)
+	if err != nil {
+		return err
+	}
 
 	n := len(specs)
 	if n*count < parallelism {
@@ -272,7 +274,7 @@ func runTests(register func(registry.Registry), args []string, benchOnly bool) e
 	// may still be running long after the test has completed.
 	defer leaktest.AfterTest(l)()
 
-	err := runner.Run(
+	err = runner.Run(
 		ctx, specs, count, parallelism, opt,
 		testOpts{
 			versionsBinaryOverride: versionsBinaryOverride,
