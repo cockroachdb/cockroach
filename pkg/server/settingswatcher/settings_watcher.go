@@ -211,7 +211,6 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 		},
 		func(ctx context.Context, update rangefeedcache.Update) {
 			noteUpdate(update)
-			s.maybeUpdateSnapshot(ctx, update)
 		},
 		s.testingWatcherKnobs,
 	)
@@ -243,24 +242,6 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 	}
 }
 
-func (s *SettingsWatcher) maybeUpdateSnapshot(ctx context.Context, update rangefeedcache.Update) {
-	// Only record the update to the buffer if we're writing to storage.
-	if s.storage == nil ||
-		// and the update has some new information to write.
-		(update.Type == rangefeedcache.IncrementalUpdate && len(update.Events) == 0) {
-		return
-	}
-	eventKVs := rangefeedbuffer.EventsToKVs(update.Events,
-		rangefeedbuffer.RangeFeedValueEventToKV)
-	switch update.Type {
-	case rangefeedcache.CompleteUpdate:
-		s.snapshot = eventKVs
-	case rangefeedcache.IncrementalUpdate:
-		s.snapshot = rangefeedbuffer.MergeKVs(s.snapshot, eventKVs)
-	}
-	s.storage.SnapshotKVs(ctx, s.snapshot)
-}
-
 // TestingRestart restarts the rangefeeds and waits for the initial
 // update after the rangefeed update to be processed.
 func (s *SettingsWatcher) TestingRestart() {
@@ -276,11 +257,13 @@ func (s *SettingsWatcher) TestingRestart() {
 func (s *SettingsWatcher) handleKV(
 	ctx context.Context, kv *kvpb.RangeFeedValue,
 ) rangefeedbuffer.Event {
-	var alloc tree.DatumAlloc
-	settingKeyS, val, tombstone, err := s.dec.DecodeRow(roachpb.KeyValue{
+	rkv := roachpb.KeyValue{
 		Key:   kv.Key,
 		Value: kv.Value,
-	}, &alloc)
+	}
+
+	var alloc tree.DatumAlloc
+	settingKeyS, val, tombstone, err := s.dec.DecodeRow(rkv, &alloc)
 	if err != nil {
 		// This should never happen: the rangefeed should only ever deliver valid SQL rows.
 		err = errors.NewAssertionErrorWithWrappedErrf(err, "failed to decode settings row %v", kv.Key)
@@ -299,6 +282,19 @@ func (s *SettingsWatcher) handleKV(
 			log.Warningf(ctx, "ignoring read-only setting %s", settingKey)
 			return nil
 		}
+	}
+
+	// Ensure that the update is persisted to the local cache before we
+	// propagate the value to the in-RAM store. This ensures the latest
+	// value will be reloaded from the cache if the service is
+	// interrupted abruptly after the new value is seen by a client.
+	//
+	// Note: it is because we really want the cache to be updated before
+	// the in-RAM store that we do this here instead of batching the
+	// updates in the onUpdate rangefeed function.
+	if s.storage != nil {
+		s.snapshot = rangefeedbuffer.MergeKVs(s.snapshot, []roachpb.KeyValue{rkv})
+		s.storage.SnapshotKVs(ctx, s.snapshot)
 	}
 
 	s.maybeSet(ctx, settingKey, settingsValue{
