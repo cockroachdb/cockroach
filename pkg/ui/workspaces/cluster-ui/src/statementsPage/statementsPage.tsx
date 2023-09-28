@@ -221,7 +221,7 @@ export class StatementsPage extends React.Component<
 
     // Search query.
     const searchQuery = searchParams.get("q") || undefined;
-    if (onSearchComplete && searchQuery && search != searchQuery) {
+    if (onSearchComplete && searchQuery && search !== searchQuery) {
       onSearchComplete(searchQuery);
     }
 
@@ -261,7 +261,7 @@ export class StatementsPage extends React.Component<
 
   isSortSettingSameAsReqSort = (): boolean => {
     return (
-      getSortColumn(this.props.reqSortSetting) ==
+      getSortColumn(this.props.reqSortSetting) ===
       this.props.sortSetting.columnTitle
     );
   };
@@ -369,7 +369,7 @@ export class StatementsPage extends React.Component<
     const searchParams = new URLSearchParams(history.location.search);
     const currentTab = searchParams.get("tab") || "";
     const searchQueryString = searchParams.get("q") || "";
-    if (currentTab === tab && search && search != searchQueryString) {
+    if (currentTab === tab && search && search !== searchQueryString) {
       syncHistory(
         {
           q: search,
@@ -506,7 +506,7 @@ export class StatementsPage extends React.Component<
   hasReqSortOption = (): boolean => {
     let found = false;
     Object.values(SqlStatsSortOptions).forEach((option: SqlStatsSortType) => {
-      if (getSortColumn(option) == this.props.sortSetting.columnTitle) {
+      if (getSortColumn(option) === this.props.sortSetting.columnTitle) {
         found = true;
       }
     });
@@ -594,7 +594,7 @@ export class StatementsPage extends React.Component<
     const showSortWarning =
       !this.isSortSettingSameAsReqSort() &&
       this.hasReqSortOption() &&
-      data.length == this.props.limit;
+      data.length === this.props.limit;
 
     return (
       <>
@@ -771,7 +771,7 @@ export class StatementsPage extends React.Component<
             }
           />
           {this.props.statementsResponse.inFlight &&
-            getValidErrorsList(this.props.statementsResponse.error) == null &&
+            getValidErrorsList(this.props.statementsResponse.error) === null &&
             longLoadingMessage}
           <ActivateStatementDiagnosticsModal
             ref={this.activateDiagnosticsRef}

@@ -144,7 +144,7 @@ export function makeStatementsColumns(
     {
       classes: defaultBarChartOptions.classes,
       displayNoSamples: (d: ICollectedStatementStatistics) => {
-        return longToInt(d.stats.exec_stats?.count) == 0;
+        return longToInt(d.stats.exec_stats?.count) === 0;
       },
     };
 

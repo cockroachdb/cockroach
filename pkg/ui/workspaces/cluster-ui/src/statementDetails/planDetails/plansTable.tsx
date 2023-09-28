@@ -249,17 +249,17 @@ export const planDetailsTableTitles: PlanDetailsTableTitleType = {
 };
 
 function formatInsights(recommendations: string[]): string {
-  if (!recommendations || recommendations.length == 0) {
+  if (!recommendations || recommendations.length === 0) {
     return "None";
   }
-  if (recommendations.length == 1) {
+  if (recommendations.length === 1) {
     return "1 Insight";
   }
   return `${recommendations.length} Insights`;
 }
 
 export function formatIndexes(indexes: string[], database: string): ReactNode {
-  if (indexes.length == 0) {
+  if (indexes.length === 0) {
     return <></>;
   }
   const indexMap: Map<string, Array<string>> = new Map<string, Array<string>>();

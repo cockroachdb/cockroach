@@ -65,7 +65,7 @@ export const WorkloadInsightsRootControl = ({
     />
   );
 
-  if (selectedInsightView == InsightExecEnum.TRANSACTION) {
+  if (selectedInsightView === InsightExecEnum.TRANSACTION) {
     return (
       <div>
         <TransactionInsightsView

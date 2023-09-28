@@ -96,7 +96,7 @@ the maximum number of statements was reached in the console.`;
   const blockingExecutions: ContentionEvent[] = contentionDetails?.map(
     event => {
       const stmtInsight = statements.find(
-        stmt => stmt.statementExecutionID == event.waitingStmtID,
+        stmt => stmt.statementExecutionID === event.waitingStmtID,
       );
       return {
         executionID: event.blockingExecutionID,
