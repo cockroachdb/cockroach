@@ -162,7 +162,7 @@ func maybeUpdateSchedulePTSRecord(
 				return errors.AssertionFailedf("full backup has unexpected chaining action %d on"+
 					" backup job details", backupDetails.SchedulePTSChainingRecord.Action)
 			}
-			if err := manageFullBackupPTSChaining(ctx, pts, schedules, env, backupDetails, args); err != nil {
+			if err := manageFullBackupPTSChaining(ctx, pts, schedules, env, backupDetails, args, scheduleID); err != nil {
 				return errors.Wrap(err, "failed to manage chaining of pts record during a full backup")
 			}
 		}
@@ -179,6 +179,7 @@ func manageFullBackupPTSChaining(
 	env scheduledjobs.JobSchedulerEnv,
 	backupDetails jobspb.BackupDetails,
 	fullScheduleArgs *backuppb.ScheduledBackupExecutionArgs,
+	scheduleID int64,
 ) error {
 	// Let's resolve the dependent incremental schedule as the first step. If the
 	// schedule has been dropped then we can avoid doing unnecessary work.
@@ -218,6 +219,8 @@ func manageFullBackupPTSChaining(
 	// inc schedule ID as the records' Meta. This ensures that even if the full
 	// schedule is dropped, the reconciliation job will not release the pts
 	// record stored on the inc schedule, and the chaining will continue.
+	log.Infof(ctx, "schedule %d is writing a protected timestamp record at %s",
+		scheduleID, backupDetails.EndTime.String())
 	ptsRecord, err := protectTimestampRecordForSchedule(
 		ctx, pts, targetToProtect, deprecatedSpansToProtect,
 		backupDetails.EndTime, incSj.ScheduleID(),
@@ -240,6 +243,7 @@ func manageFullBackupPTSChaining(
 	// about to release. Already running incremental backup jobs would have
 	// written their own pts record during planning, and should complete
 	// successfully.
+	log.Infof(ctx, "schedule %d is releasing a protected timestamp record held by the previous chain", scheduleID)
 	if err := releaseProtectedTimestamp(
 		ctx, pts,
 		backupDetails.SchedulePTSChainingRecord.ProtectedTimestampRecord,
@@ -270,6 +274,7 @@ func manageIncrementalBackupPTSChaining(
 	if ptsRecordID == nil {
 		return errors.AssertionFailedf("unexpected nil pts record id on incremental schedule %d", scheduleID)
 	}
+	log.Infof(ctx, "schedule %d is updating a protected timestamp record to %s", scheduleID, tsToProtect.String())
 	err := pts.UpdateTimestamp(ctx, *ptsRecordID, tsToProtect)
 	// If we cannot find the pts record to update it is possible that a concurrent
 	// full backup has released the record, and written a new record on the
