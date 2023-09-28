@@ -16,11 +16,13 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1436,57 +1438,137 @@ func TestTxnSpanRefresherEpochIncrement(t *testing.T) {
 func TestTxnSpanRefresherSavepoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	tsr, mockSender := makeMockTxnSpanRefresher()
 
-	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
-	txn := makeTxnProto()
+	testutils.RunTrueAndFalse(t, "keep-refresh-spans", func(t *testing.T, keepRefreshSpans bool) {
+		ctx := context.Background()
+		tsr, mockSender := makeMockTxnSpanRefresher()
 
-	read := func(key roachpb.Key) {
-		ba := &kvpb.BatchRequest{}
-		ba.Header = kvpb.Header{Txn: &txn}
-		getArgs := kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: key}}
-		ba.Add(&getArgs)
-		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-			require.Len(t, ba.Requests, 1)
-			require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
+		if keepRefreshSpans {
+			keepRefreshSpansOnSavepointRollback.Override(ctx, &tsr.st.SV, true)
+		} else {
+			keepRefreshSpansOnSavepointRollback.Override(ctx, &tsr.st.SV, false)
+		}
 
-			br := ba.CreateReply()
-			br.Txn = ba.Txn
-			return br, nil
-		})
-		br, pErr := tsr.SendLocked(ctx, ba)
-		require.Nil(t, pErr)
-		require.NotNil(t, br)
-	}
-	read(keyA)
-	require.Equal(t, []roachpb.Span{{Key: keyA}}, tsr.refreshFootprint.asSlice())
+		keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+		txn := makeTxnProto()
 
-	s := savepoint{}
-	tsr.createSavepointLocked(ctx, &s)
+		read := func(key roachpb.Key) {
+			ba := &kvpb.BatchRequest{}
+			ba.Header = kvpb.Header{Txn: &txn}
+			getArgs := kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: key}}
+			ba.Add(&getArgs)
+			mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+				require.Len(t, ba.Requests, 1)
+				require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
 
-	// Another read after the savepoint was created.
-	read(keyB)
-	require.Equal(t, []roachpb.Span{{Key: keyA}, {Key: keyB}}, tsr.refreshFootprint.asSlice())
+				br := ba.CreateReply()
+				br.Txn = ba.Txn
+				return br, nil
+			})
+			br, pErr := tsr.SendLocked(ctx, ba)
+			require.Nil(t, pErr)
+			require.NotNil(t, br)
+		}
+		read(keyA)
+		require.Equal(t, []roachpb.Span{{Key: keyA}}, tsr.refreshFootprint.asSlice())
 
-	require.Equal(t, []roachpb.Span{{Key: keyA}}, s.refreshSpans)
-	require.False(t, s.refreshInvalid)
+		s := savepoint{}
+		tsr.createSavepointLocked(ctx, &s)
 
-	// Rollback the savepoint and check that refresh spans were overwritten.
-	tsr.rollbackToSavepointLocked(ctx, s)
-	require.Equal(t, []roachpb.Span{{Key: keyA}}, tsr.refreshFootprint.asSlice())
+		// Another read after the savepoint was created.
+		read(keyB)
+		require.Equal(t, []roachpb.Span{{Key: keyA}, {Key: keyB}}, tsr.refreshFootprint.asSlice())
 
-	// Check that rolling back to the savepoint resets refreshInvalid.
-	tsr.refreshInvalid = true
-	tsr.rollbackToSavepointLocked(ctx, s)
-	require.False(t, tsr.refreshInvalid)
+		require.Equal(t, []roachpb.Span{{Key: keyA}}, s.refreshSpans)
+		require.False(t, s.refreshInvalid)
 
-	// Set refreshInvalid and then create a savepoint.
-	tsr.refreshInvalid = true
-	s = savepoint{}
-	tsr.createSavepointLocked(ctx, &s)
-	require.True(t, s.refreshInvalid)
-	// Rollback to the savepoint check that refreshes are still invalid.
-	tsr.rollbackToSavepointLocked(ctx, s)
-	require.True(t, tsr.refreshInvalid)
+		// Rollback the savepoint.
+		tsr.rollbackToSavepointLocked(ctx, s)
+		if keepRefreshSpans {
+			// Check that refresh spans were kept as such.
+			require.Equal(t, []roachpb.Span{{Key: keyA}, {Key: keyB}}, tsr.refreshFootprint.asSlice())
+		} else {
+			// Check that refresh spans were overwritten.
+			require.Equal(t, []roachpb.Span{{Key: keyA}}, tsr.refreshFootprint.asSlice())
+		}
+
+		tsr.refreshInvalid = true
+		tsr.rollbackToSavepointLocked(ctx, s)
+		if keepRefreshSpans {
+			// Check that rolling back to the savepoint keeps refreshInvalid as such.
+			require.True(t, tsr.refreshInvalid)
+		} else {
+			// Check that rolling back to the savepoint resets refreshInvalid.
+			require.False(t, tsr.refreshInvalid)
+		}
+
+		// Set refreshInvalid and then create a savepoint.
+		tsr.refreshInvalid = true
+		s = savepoint{}
+		tsr.createSavepointLocked(ctx, &s)
+		require.True(t, s.refreshInvalid)
+		// Rollback to the savepoint check that refreshes are still invalid.
+		tsr.rollbackToSavepointLocked(ctx, s)
+		require.True(t, tsr.refreshInvalid)
+	})
+}
+
+// TestRefreshWithSavepoint is an integration test that ensures the correct
+// behavior of refreshes under savepoint rollback. The test sets up a write-skew
+// example where txn1 reads keyA and writes to keyB, while concurrently txn2
+// reads keyB and writes to keyA. The two txns can't be serialized so one is
+// expected to get a serialization error upon commit.
+//
+// However, with the old behavior of discarding refresh spans upon savepoint
+// rollback, the read corresponding to the discarded refresh span is not
+// refreshed, so the conflict goes unnoticed and both txns commit successfully.
+// See #111228 for more details.
+func TestRefreshWithSavepoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "keep-refresh-spans", func(t *testing.T, keepRefreshSpans bool) {
+		s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+		ctx := context.Background()
+		defer s.Stopper().Stop(context.Background())
+
+		if keepRefreshSpans {
+			keepRefreshSpansOnSavepointRollback.Override(ctx, &s.ClusterSettings().SV, true)
+		} else {
+			keepRefreshSpansOnSavepointRollback.Override(ctx, &s.ClusterSettings().SV, false)
+		}
+
+		keyA := roachpb.Key("a")
+		keyB := roachpb.Key("b")
+		txn1 := kvDB.NewTxn(ctx, "txn1")
+		txn2 := kvDB.NewTxn(ctx, "txn2")
+
+		spt1, err := txn1.CreateSavepoint(ctx)
+		require.NoError(t, err)
+
+		_, err = txn1.Get(ctx, keyA)
+		require.NoError(t, err)
+
+		err = txn1.RollbackToSavepoint(ctx, spt1)
+		require.NoError(t, err)
+
+		_, err = txn2.Get(ctx, keyB)
+		require.NoError(t, err)
+
+		err = txn1.Put(ctx, keyB, "bb")
+		require.NoError(t, err)
+
+		err = txn2.Put(ctx, keyA, "aa")
+		require.NoError(t, err)
+
+		err = txn1.Commit(ctx)
+		if keepRefreshSpans {
+			require.Regexp(t, ".*RETRY_SERIALIZABLE - failed preemptive refresh due to conflicting locks on \"a\"*", err)
+		} else {
+			require.NoError(t, err)
+		}
+
+		err = txn2.Commit(ctx)
+		require.NoError(t, err)
+	})
 }
