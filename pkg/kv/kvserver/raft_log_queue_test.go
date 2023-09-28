@@ -204,7 +204,7 @@ func TestComputeTruncateDecision(t *testing.T) {
 			// we'll just see the decision play out as before.
 			// The real tests for this are in TestRaftLogQueueShouldQueue, but this is
 			// some nice extra coverage.
-			should, recompute, prio := (*raftLogQueue)(nil).shouldQueueImpl(ctx, decision)
+			should, recompute, prio := (*raftLogQueue)(nil).shouldQueueImpl(ctx, decision, nil)
 			assert.Equal(t, decision.ShouldTruncate(), should)
 			assert.False(t, recompute)
 			assert.Equal(t, decision.ShouldTruncate(), prio != 0)
@@ -214,7 +214,7 @@ func TestComputeTruncateDecision(t *testing.T) {
 				input.LastIndex = input.FirstIndex + 1
 			}
 			decision = computeTruncateDecision(input)
-			should, recompute, prio = (*raftLogQueue)(nil).shouldQueueImpl(ctx, decision)
+			should, recompute, prio = (*raftLogQueue)(nil).shouldQueueImpl(ctx, decision, nil)
 			assert.True(t, should)
 			assert.True(t, prio > 0)
 			assert.True(t, recompute)
@@ -433,7 +433,7 @@ func TestNewTruncateDecisionMaxSize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	td, err := newTruncateDecision(ctx, repl)
+	td, err := newTruncateDecision(ctx, repl, &cfg.DefaultSpanConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -469,7 +469,7 @@ func TestNewTruncateDecision(t *testing.T) {
 	}
 
 	getIndexes := func() (kvpb.RaftIndex, int, kvpb.RaftIndex, error) {
-		d, err := newTruncateDecision(ctx, r)
+		d, err := newTruncateDecision(ctx, r, &cfg.DefaultSpanConfig)
 		if err != nil {
 			return 0, 0, 0, err
 		}
@@ -820,7 +820,7 @@ func TestRaftLogQueueShouldQueueRecompute(t *testing.T) {
 
 	verify := func(shouldQ bool, recompute bool, prio float64) {
 		t.Helper()
-		isQ, isR, isP := rlq.shouldQueueImpl(ctx, decision)
+		isQ, isR, isP := rlq.shouldQueueImpl(ctx, decision, nil)
 		assert.Equal(t, shouldQ, isQ)
 		assert.Equal(t, recompute, isR)
 		assert.Equal(t, prio, isP)
@@ -883,7 +883,7 @@ func TestTruncateLogRecompute(t *testing.T) {
 
 	put()
 
-	decision, err := newTruncateDecision(ctx, repl)
+	decision, err := newTruncateDecision(ctx, repl, &cfg.DefaultSpanConfig)
 	assert.NoError(t, err)
 	assert.True(t, decision.ShouldTruncate())
 	// Should never trust initially, until recomputed at least once.

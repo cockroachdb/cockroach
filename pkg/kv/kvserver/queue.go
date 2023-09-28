@@ -253,26 +253,26 @@ type replicaInQueue interface {
 	IsDestroyed() (DestroyReason, error)
 	Desc() *roachpb.RangeDescriptor
 	redirectOnOrAcquireLease(context.Context) (kvserverpb.LeaseStatus, *kvpb.Error)
-	LeaseStatusAt(context.Context, hlc.ClockTimestamp) kvserverpb.LeaseStatus
+	CurrentLeaseStatus(context.Context) kvserverpb.LeaseStatus
 }
 
 type queueImpl interface {
 	// shouldQueue accepts current time, a replica, and the system config
 	// and returns whether it should be queued and if so, at what priority.
 	// The Replica is guaranteed to be initialized.
-	shouldQueue(context.Context, hlc.ClockTimestamp, *Replica, spanconfig.StoreReader) (shouldQueue bool, priority float64)
+	shouldQueue(context.Context, hlc.ClockTimestamp, *Replica, *roachpb.SpanConfig) (shouldQueue bool, priority float64)
 
 	// process accepts a replica, and the system config and executes
 	// queue-specific work on it. The Replica is guaranteed to be initialized.
 	// We return a boolean to indicate if the Replica was processed successfully
 	// (vs. it being a no-op or an error).
-	process(context.Context, *Replica, spanconfig.StoreReader) (processed bool, err error)
+	process(context.Context, *Replica, *roachpb.SpanConfig) (processed bool, err error)
 
 	// processScheduled is called after async task was created to run process.
 	// This function is called by the process loop synchronously. This method is
 	// called regardless of process being called or not since replica validity
 	// checks are done asynchronously.
-	postProcessScheduled(ctx context.Context, replica replicaInQueue, priority float64)
+	postProcessScheduled(ctx context.Context, replica replicaInQueue, span *roachpb.SpanConfig, priority float64)
 
 	// timer returns a duration to wait between processing the next item
 	// from the queue. The duration of the last processing of a replica
@@ -467,11 +467,6 @@ func newBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfig) *b
 	ambient := store.cfg.AmbientCtx
 	ambient.AddLogTag(name, nil)
 
-	if !cfg.acceptsUnsplitRanges && !cfg.needsSpanConfigs {
-		log.Fatalf(ambient.AnnotateCtx(context.Background()),
-			"misconfigured queue: acceptsUnsplitRanges=false requires needsSpanConfigs=true; got %+v", cfg)
-	}
-
 	bq := baseQueue{
 		AmbientContext:   ambient,
 		name:             name,
@@ -645,19 +640,6 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 		fn(ctx, bq)
 	}
 
-	// Load the system config if it's needed.
-	var confReader spanconfig.StoreReader
-	if bq.needsSpanConfigs {
-		var err error
-		confReader, err = bq.store.GetConfReader(ctx)
-		if err != nil {
-			if errors.Is(err, errSpanConfigsUnavailable) && log.V(1) {
-				log.Warningf(ctx, "unable to retrieve span configs, skipping: %v", err)
-			}
-			return
-		}
-	}
-
 	bq.mu.Lock()
 	stopped := bq.mu.stopped
 	disabled := bq.mu.disabled
@@ -681,42 +663,21 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 		return
 	}
 
-	if !bq.acceptsUnsplitRanges {
-		// Queue does not accept unsplit ranges. Check to see if the range needs to
-		// be split because of spanconfigs.
-		needsSplit, err := confReader.NeedsSplit(ctx, repl.Desc().StartKey, repl.Desc().EndKey)
-		if err != nil {
-			log.Warningf(ctx, "unable to compute whether split is needed; not adding")
-			return
-		}
-		if needsSplit {
-			if log.V(1) {
-				log.Infof(ctx, "split needed; not adding")
-			}
-			return
-		}
+	// Load the system config if it's needed.
+	err, _ := bq.checkCanProcess(ctx, repl, false)
+	if err != nil {
+		return
 	}
 
-	if bq.needsLease {
-		// Check to see if either we own the lease or do not know who the lease
-		// holder is.
-		st := repl.LeaseStatusAt(ctx, now)
-		if st.IsValid() && !st.OwnedBy(repl.StoreID()) {
-			if log.V(1) {
-				log.Infof(ctx, "needs lease; not adding: %v", st.Lease)
-			}
-			return
-		}
-	}
 	// NB: in production code, this type assertion is always true. In tests,
 	// it may not be and shouldQueue will be passed a nil realRepl. These tests
 	// know what they're getting into so that's fine.
 	realRepl, _ := repl.(*Replica)
-	should, priority := bq.impl.shouldQueue(ctx, now, realRepl, confReader)
+	should, priority := bq.impl.shouldQueue(ctx, now, realRepl, bq.loadSpanConfig(ctx, repl))
 	if !should {
 		return
 	}
-	_, err := bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), priority)
+	_, err = bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), priority)
 	if !isExpectedQueueError(err) {
 		log.Errorf(ctx, "unable to add: %+v", err)
 	}
@@ -895,6 +856,7 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 					repl, priority := bq.pop()
 					if repl != nil {
 						annotatedCtx := repl.AnnotateCtx(ctx)
+						conf := bq.loadSpanConfig(ctx, repl)
 						if stopper.RunAsyncTaskEx(annotatedCtx, stop.TaskOpts{
 							TaskName: bq.processOpName() + " [outer]",
 						},
@@ -903,7 +865,7 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 								defer func() { <-bq.processSem }()
 
 								start := timeutil.Now()
-								err := bq.processReplica(ctx, repl)
+								err := bq.processReplica(ctx, repl, conf)
 
 								duration := timeutil.Since(start)
 								bq.recordProcessDuration(ctx, duration)
@@ -914,7 +876,7 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 							<-bq.processSem
 							return
 						}
-						bq.impl.postProcessScheduled(ctx, repl, priority)
+						bq.impl.postProcessScheduled(ctx, repl, conf, priority)
 					} else {
 						// Release semaphore if no replicas were available.
 						<-bq.processSem
@@ -959,36 +921,9 @@ func (bq *baseQueue) recordProcessDuration(ctx context.Context, dur time.Duratio
 //
 // ctx should already be annotated by both bq.AnnotateCtx() and
 // repl.AnnotateCtx().
-func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) error {
-	// Load the system config if it's needed.
-	var confReader spanconfig.StoreReader
-	if bq.needsSpanConfigs {
-		var err error
-		confReader, err = bq.store.GetConfReader(ctx)
-		if errors.Is(err, errSpanConfigsUnavailable) {
-			if log.V(1) {
-				log.Warningf(ctx, "unable to retrieve conf reader, skipping: %v", err)
-			}
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-	}
-
-	if !bq.acceptsUnsplitRanges {
-		// Queue does not accept unsplit ranges. Check to see if the range needs to
-		// be spilt because of a span config.
-		needsSplit, err := confReader.NeedsSplit(ctx, repl.Desc().StartKey, repl.Desc().EndKey)
-		if err != nil {
-			log.Warningf(ctx, "unable to compute NeedsSplit, skipping: %v", err)
-			return nil
-		}
-		if needsSplit {
-			log.VEventf(ctx, 3, "split needed; skipping")
-			return nil
-		}
-	}
+func (bq *baseQueue) processReplica(
+	ctx context.Context, repl replicaInQueue, conf *roachpb.SpanConfig,
+) error {
 
 	ctx, span := tracing.EnsureChildSpan(ctx, bq.Tracer, bq.processOpName())
 	defer span.Finish()
@@ -1012,20 +947,14 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 				}
 			}
 
-			// If the queue requires a replica to have the range lease in
-			// order to be processed, check whether this replica has range lease
-			// and renew or acquire if necessary.
-			if bq.needsLease {
-				if _, pErr := repl.redirectOnOrAcquireLease(ctx); pErr != nil {
-					switch v := pErr.GetDetail().(type) {
-					case *kvpb.NotLeaseHolderError, *kvpb.RangeNotFoundError:
-						log.VEventf(ctx, 3, "%s; skipping", v)
-						return nil
-					default:
-						log.VErrEventf(ctx, 2, "could not obtain lease: %s", pErr)
-						return errors.Wrapf(pErr.GoError(), "%s: could not obtain lease", repl)
-					}
+			// Load the system config if it's needed.
+			err, retry := bq.checkCanProcess(ctx, repl, true)
+			if err != nil {
+				if retry {
+					// This is a retryable error, return nil so that the loop is rerun.
+					return nil
 				}
+				return err
 			}
 
 			log.VEventf(ctx, 3, "processing...")
@@ -1033,7 +962,7 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 			// it may not be and shouldQueue will be passed a nil realRepl. These tests
 			// know what they're getting into so that's fine.
 			realRepl, _ := repl.(*Replica)
-			processed, err := bq.impl.process(ctx, realRepl, confReader)
+			processed, err := bq.impl.process(ctx, realRepl, conf)
 			if err != nil {
 				return err
 			}
@@ -1043,6 +972,81 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 			}
 			return nil
 		})
+}
+
+func (bq *baseQueue) loadSpanConfig(ctx context.Context, repl replicaInQueue) *roachpb.SpanConfig {
+	if !bq.needsSpanConfigs {
+		return nil
+	}
+	realRepl, _ := repl.(*Replica)
+	conf, err := bq.store.GetSpanConfigForKey(ctx, repl.Desc().GetStartKey())
+	if err != nil {
+		return nil
+	} else {
+		// TODO(baptist): Remove once span config is removed from the replica.
+		realRepl.SetSpanConfig(*conf)
+		return conf
+	}
+}
+
+func (bq *baseQueue) checkCanProcess(
+	ctx context.Context, repl replicaInQueue, acquireLease bool,
+) (error, bool) {
+	var confReader spanconfig.StoreReader
+	if bq.needsSpanConfigs {
+		var err error
+		confReader, err = bq.store.GetConfReader(ctx)
+		if errors.Is(err, errSpanConfigsUnavailable) {
+			if log.V(1) {
+				log.Warningf(ctx, "unable to retrieve conf reader, skipping: %v", err)
+			}
+			return err, false
+		}
+		if err != nil {
+			return err, false
+		}
+		if !bq.acceptsUnsplitRanges {
+			// Queue does not accept unsplit ranges. Check to see if the range needs to
+			// be spilt because of a span config.
+			needsSplit, err := confReader.NeedsSplit(ctx, repl.Desc().StartKey, repl.Desc().EndKey)
+			if err != nil {
+				log.Warningf(ctx, "unable to compute NeedsSplit, skipping: %v", err)
+				return err, false
+			}
+			if needsSplit {
+				log.VEventf(ctx, 3, "split needed; skipping")
+				return errors.New("split needed; skipping"), false
+			}
+		}
+	}
+	// If the queue requires a replica to have the range lease in
+	// order to be processed, check whether this replica has range lease
+	// and renew or acquire if necessary.
+	if bq.needsLease {
+		if acquireLease {
+			if _, pErr := repl.redirectOnOrAcquireLease(ctx); pErr != nil {
+				switch v := pErr.GetDetail().(type) {
+				case *kvpb.NotLeaseHolderError, *kvpb.RangeNotFoundError:
+					log.VEventf(ctx, 3, "%s; skipping", v)
+					return errors.Newf("%s; skipping", v), true
+				default:
+					log.VErrEventf(ctx, 2, "could not obtain lease: %s", pErr)
+					return errors.Wrapf(pErr.GoError(), "%s: could not obtain lease", repl), false
+				}
+			}
+		} else {
+			// Check to see if either we own the lease or do not know who the lease
+			// holder is.
+			st := repl.CurrentLeaseStatus(ctx)
+			if st.IsValid() && !st.OwnedBy(repl.StoreID()) {
+				if log.V(1) {
+					log.Infof(ctx, "needs lease; not adding: %v", st.Lease)
+				}
+				return errors.Newf("needs lease, not adding: %v", st.Lease), false
+			}
+		}
+	}
+	return nil, false
 }
 
 // IsPurgatoryError returns true iff the given error is a purgatory error.
@@ -1277,7 +1281,7 @@ func (bq *baseQueue) processReplicasInPurgatory(
 			annotatedCtx := repl.AnnotateCtx(ctx)
 			if stopper.RunTask(
 				annotatedCtx, bq.processOpName(), func(ctx context.Context) {
-					err := bq.processReplica(ctx, repl)
+					err := bq.processReplica(ctx, repl, bq.loadSpanConfig(ctx, repl))
 					bq.finishProcessingReplica(ctx, stopper, repl, err)
 				},
 			) != nil {
@@ -1395,9 +1399,11 @@ func (bq *baseQueue) DrainQueue(stopper *stop.Stopper) {
 
 	ctx := bq.AnnotateCtx(context.Background())
 	for repl, _ := bq.pop(); repl != nil; repl, _ = bq.pop() {
-		annotatedCtx := repl.AnnotateCtx(ctx)
-		err := bq.processReplica(annotatedCtx, repl)
-		bq.finishProcessingReplica(annotatedCtx, stopper, repl, err)
+		if err, _ := bq.checkCanProcess(ctx, repl, false); err == nil {
+			annotatedCtx := repl.AnnotateCtx(ctx)
+			err := bq.processReplica(annotatedCtx, repl, bq.loadSpanConfig(ctx, repl))
+			bq.finishProcessingReplica(annotatedCtx, stopper, repl, err)
+		}
 	}
 }
 
