@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -57,13 +56,13 @@ type testQueueImpl struct {
 var _ queueImpl = &testQueueImpl{}
 
 func (tq *testQueueImpl) shouldQueue(
-	_ context.Context, now hlc.ClockTimestamp, r *Replica, _ spanconfig.StoreReader,
+	_ context.Context, now hlc.ClockTimestamp, r *Replica, _ *roachpb.SpanConfig,
 ) (bool, float64) {
 	return tq.shouldQueueFn(now, r)
 }
 
 func (tq *testQueueImpl) process(
-	_ context.Context, _ *Replica, _ spanconfig.StoreReader,
+	_ context.Context, _ *Replica, _ *roachpb.SpanConfig,
 ) (bool, error) {
 	defer atomic.AddInt32(&tq.processed, 1)
 	if tq.err != nil {
@@ -77,7 +76,7 @@ func (tq *testQueueImpl) getProcessed() int {
 }
 
 func (*testQueueImpl) postProcessScheduled(
-	ctx context.Context, replica replicaInQueue, priority float64,
+	ctx context.Context, replica replicaInQueue, _ *roachpb.SpanConfig, priority float64,
 ) {
 }
 
@@ -996,7 +995,7 @@ type processTimeoutQueueImpl struct {
 var _ queueImpl = &processTimeoutQueueImpl{}
 
 func (pq *processTimeoutQueueImpl) process(
-	ctx context.Context, r *Replica, _ spanconfig.StoreReader,
+	ctx context.Context, r *Replica, conf *roachpb.SpanConfig,
 ) (processed bool, err error) {
 	<-ctx.Done()
 	atomic.AddInt32(&pq.processed, 1)
@@ -1126,7 +1125,7 @@ type processTimeQueueImpl struct {
 var _ queueImpl = &processTimeQueueImpl{}
 
 func (pq *processTimeQueueImpl) process(
-	_ context.Context, _ *Replica, _ spanconfig.StoreReader,
+	context.Context, *Replica, *roachpb.SpanConfig,
 ) (processed bool, err error) {
 	time.Sleep(5 * time.Millisecond)
 	return true, nil
@@ -1350,13 +1349,13 @@ type parallelQueueImpl struct {
 var _ queueImpl = &parallelQueueImpl{}
 
 func (pq *parallelQueueImpl) process(
-	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, repl *Replica, spanConfig *roachpb.SpanConfig,
 ) (processed bool, err error) {
 	atomic.AddInt32(&pq.processing, 1)
 	if pq.processBlocker != nil {
 		<-pq.processBlocker
 	}
-	processed, err = pq.testQueueImpl.process(ctx, repl, confReader)
+	processed, err = pq.testQueueImpl.process(ctx, repl, spanConfig)
 	atomic.AddInt32(&pq.processing, -1)
 	return processed, err
 }

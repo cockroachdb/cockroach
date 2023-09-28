@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -106,33 +105,25 @@ func newLeaseQueue(store *Store, allocator allocatorimpl.Allocator) *leaseQueue 
 }
 
 func (lq *leaseQueue) shouldQueue(
-	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, conf *roachpb.SpanConfig,
 ) (shouldQueue bool, priority float64) {
-	conf, _, err := confReader.GetSpanConfigForKey(ctx, repl.startKey)
-	if err != nil {
-		return false, 0
-	}
 	desc := repl.Desc()
-	return lq.planner.ShouldPlanChange(ctx, now, repl, desc, &conf, plan.PlannerOptions{
-		CanTransferLease: lq.canTransferLeaseFrom(ctx, repl, &conf),
+	return lq.planner.ShouldPlanChange(ctx, now, repl, desc, conf, plan.PlannerOptions{
+		CanTransferLease: lq.canTransferLeaseFrom(ctx, repl, conf),
 	})
 }
 
 func (lq *leaseQueue) process(
-	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, repl *Replica, conf *roachpb.SpanConfig,
 ) (processed bool, err error) {
 	if tokenErr := repl.allocatorToken.TryAcquire(ctx, lq.name); tokenErr != nil {
 		return false, tokenErr
 	}
 	defer repl.allocatorToken.Release(ctx)
 
-	conf, _, err := confReader.GetSpanConfigForKey(ctx, repl.startKey)
-	if err != nil {
-		return false, err
-	}
 	desc := repl.Desc()
-	change, err := lq.planner.PlanOneChange(ctx, repl, desc, &conf, plan.PlannerOptions{
-		CanTransferLease: lq.canTransferLeaseFrom(ctx, repl, &conf),
+	change, err := lq.planner.PlanOneChange(ctx, repl, desc, conf, plan.PlannerOptions{
+		CanTransferLease: lq.canTransferLeaseFrom(ctx, repl, conf),
 	})
 	if err != nil {
 		log.KvDistribution.Infof(ctx, "err=%v", err)
@@ -152,7 +143,7 @@ func (lq *leaseQueue) process(
 }
 
 func (lq *leaseQueue) postProcessScheduled(
-	ctx context.Context, replica replicaInQueue, priority float64,
+	ctx context.Context, replica replicaInQueue, span *roachpb.SpanConfig, priority float64,
 ) {
 }
 

@@ -1545,7 +1545,8 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 		rngDesc := repl.Desc()
 		rngStart, rngEnd := rngDesc.StartKey, rngDesc.EndKey
 		if rngStart.Equal(tableBoundary) || !rngEnd.Equal(roachpb.RKeyMax) {
-			return errors.Errorf("range %s has not yet split", repl)
+			_, _, _ = store.Enqueue(ctx, "split", repl, false, false)
+			return errors.Errorf("range %s has not yet split expected %s-Max", repl, tableBoundary)
 		}
 		return nil
 	})
