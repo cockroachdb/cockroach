@@ -197,3 +197,25 @@ func RandomlyUseZfs() Option {
 		spec.RandomlyUseZfs = true
 	}
 }
+
+// GCEMinCPUPlatform sets the minimum CPU platform when the cluster is on GCE.
+func GCEMinCPUPlatform(platform string) Option {
+	return func(spec *ClusterSpec) {
+		spec.GCE.MinCPUPlatform = platform
+	}
+}
+
+// GCEVolumeType sets the volume type when the cluster is on GCE.
+func GCEVolumeType(volumeType string) Option {
+	return func(spec *ClusterSpec) {
+		spec.GCE.VolumeType = volumeType
+	}
+}
+
+// AWSVolumeThroughput sets the minimum provisioned EBS volume throughput when
+// the cluster is on AWS.
+func AWSVolumeThroughput(throughput int) Option {
+	return func(spec *ClusterSpec) {
+		spec.AWS.VolumeThroughput = throughput
+	}
+}
