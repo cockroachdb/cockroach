@@ -569,7 +569,11 @@ type storeAdmissionStats struct {
 	// that PR is closer to the final solution, and this is a step in that
 	// direction).
 	statsToIgnore struct {
-		pebble.IngestOperationStats
+		// Stats for ingests.
+		ingestStats pebble.IngestOperationStats
+		// Stats for regular writes. These roughly correspond to what the writes
+		// will turn into when written to a flushed sstable.
+		writeBytes uint64
 	}
 	// aux represents additional information carried for informational purposes
 	// (e.g. for logging).
