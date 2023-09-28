@@ -94,6 +94,7 @@ var virtClusterInitTasks = []autoconfigpb.Task{
 			"SET CLUSTER SETTING spanconfig.range_coalescing.application.enabled = false",
 			// Make the operator double-check virtual cluster deletions.
 			"SET CLUSTER SETTING sql.drop_virtual_cluster.enabled = false",
+			"SET CLUSTER SETTING server.controller.reserved_port_cluster='application'",
 		},
 		nil, /* txnSQL */
 	),

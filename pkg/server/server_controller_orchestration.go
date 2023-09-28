@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -222,6 +223,18 @@ func (c *serverController) startAndWaitForRunningServer(
 	}
 }
 
+func (c *serverController) nextServerIndexForTenant(tenantName roachpb.TenantName) int {
+	reservedPortName := multitenant.DefaultPortClusterName.Get(&c.st.SV)
+	if reservedPortName != "" && reservedPortName == string(tenantName) {
+		return 0
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mu.nextServerIdx++
+	return c.mu.nextServerIdx
+}
+
 // newServerForOrchestrator implements the
 // serverFactoryForOrchestration interface.
 func (c *serverController) newServerForOrchestrator(
@@ -236,12 +249,7 @@ func (c *serverController) newServerForOrchestrator(
 	}()
 
 	// Server does not exist yet: instantiate and start it.
-	idx := func() int {
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		c.mu.nextServerIdx++
-		return c.mu.nextServerIdx
-	}()
+	idx := c.nextServerIndexForTenant(tenantName)
 	return c.tenantServerCreator.newTenantServer(ctx, nameContainer, tenantStopper, idx, testArgs)
 }
 

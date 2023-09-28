@@ -30,6 +30,13 @@ var DefaultTenantSelect = settings.RegisterStringSetting(
 	settings.WithName(DefaultClusterSelectSettingName),
 )
 
+var DefaultPortClusterName = settings.RegisterStringSetting(
+	settings.SystemOnly,
+	"server.controller.reserved_port_cluster",
+	"when a port offset has been given, name of the virtual cluster to assign the port exactly at the port offset",
+	"",
+)
+
 // VerifyTenantService determines whether there should be an advisory
 // interlock between changes to the tenant service and changes to the
 // above cluster setting.
