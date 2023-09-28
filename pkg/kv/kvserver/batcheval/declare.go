@@ -92,10 +92,18 @@ func DefaultDeclareIsolatedKeys(
 		// Get the correct lock strength to use for {lock,latch} spans if we're
 		// dealing with locking read requests.
 		if readOnlyReq, ok := req.(kvpb.LockingReadRequest); ok {
-			str, _ = readOnlyReq.KeyLocking()
+			var dur lock.Durability
+			str, dur = readOnlyReq.KeyLocking()
 			switch str {
 			case lock.None:
-				panic(errors.AssertionFailedf("unexpected non-locking read handling"))
+				// One reason we can be in this branch is if someone has asked for a
+				// replicated non-locking read. Detect this nonsensical case to better
+				// word the error message.
+				if dur == lock.Replicated {
+					panic(errors.AssertionFailedf("incompatible key locking strength %s and durability %s", str, dur))
+				} else {
+					panic(errors.AssertionFailedf("unexpected non-locking read handling"))
+				}
 			case lock.Shared:
 				access = spanset.SpanReadOnly
 				// Unlike non-locking reads, shared-locking reads are isolated from
