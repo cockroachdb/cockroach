@@ -2899,7 +2899,8 @@ func (s *systemStatusServer) localHotRanges(
 		for i, r := range ranges {
 			replica, err := store.GetReplica(r.Desc.GetRangeID())
 			if err == nil {
-				storeResp.HotRanges[i].LeaseholderNodeID = replica.State(ctx).Lease.Replica.NodeID
+				lease, _ := replica.GetLease()
+				storeResp.HotRanges[i].LeaseholderNodeID = lease.Replica.NodeID
 			}
 			storeResp.HotRanges[i].Desc = *r.Desc
 			storeResp.HotRanges[i].QueriesPerSecond = r.QPS
