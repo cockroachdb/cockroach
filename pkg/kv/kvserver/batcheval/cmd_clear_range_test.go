@@ -189,7 +189,9 @@ func TestCmdClearRange(t *testing.T) {
 				// should not cross the range bounds.
 				var latchSpans spanset.SpanSet
 				var lockSpans lockspanset.LockSpanSet
-				declareKeysClearRange(&desc, &cArgs.Header, cArgs.Args, &latchSpans, &lockSpans, 0)
+				require.NoError(t,
+					declareKeysClearRange(&desc, &cArgs.Header, cArgs.Args, &latchSpans, &lockSpans, 0),
+				)
 				batch := &wrappedBatch{Batch: spanset.NewBatchAt(eng.NewBatch(), &latchSpans, cArgs.Header.Timestamp)}
 				defer batch.Close()
 

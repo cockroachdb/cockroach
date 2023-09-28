@@ -1048,7 +1048,10 @@ func (c *cluster) collectSpans(
 	h := kvpb.Header{Txn: txn, Timestamp: ts, WaitPolicy: wp}
 	for _, req := range reqs {
 		if cmd, ok := batcheval.LookupCommand(req.Method()); ok {
-			cmd.DeclareKeys(c.rangeDesc, &h, req, latchSpans, lockSpans, 0)
+			err := cmd.DeclareKeys(c.rangeDesc, &h, req, latchSpans, lockSpans, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
 		} else {
 			t.Fatalf("unrecognized command %s", req.Method())
 		}

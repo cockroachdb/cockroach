@@ -38,12 +38,17 @@ func declareKeysDeleteRange(
 	latchSpans *spanset.SpanSet,
 	lockSpans *lockspanset.LockSpanSet,
 	maxOffset time.Duration,
-) {
+) error {
 	args := req.(*kvpb.DeleteRangeRequest)
 	if args.Inline {
-		DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+		if err := DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans, maxOffset); err != nil {
+			return err
+		}
 	} else {
-		DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+		err := DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+		if err != nil {
+			return err
+		}
 	}
 
 	// When writing range tombstones, we must look for adjacent range tombstones
@@ -77,6 +82,7 @@ func declareKeysDeleteRange(
 			})
 		}
 	}
+	return nil
 }
 
 const maxDeleteRangeBatchBytes = 32 << 20

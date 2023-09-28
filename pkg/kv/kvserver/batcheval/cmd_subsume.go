@@ -37,13 +37,14 @@ func declareKeysSubsume(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
+) error {
 	// Subsume must not run concurrently with any other command. It declares a
 	// non-MVCC write over every addressable key in the range; this guarantees
 	// that it conflicts with any other command because every command must
 	// declare at least one addressable key. It does not, in fact, write any
 	// keys.
 	declareAllKeys(latchSpans)
+	return nil
 }
 
 // Subsume freezes a range for merging with its left-hand neighbor. When called

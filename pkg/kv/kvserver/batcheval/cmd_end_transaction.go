@@ -48,13 +48,14 @@ func init() {
 // declareKeys{End,Heartbeat}Transaction.
 func declareKeysWriteTransaction(
 	_ ImmutableRangeState, header *kvpb.Header, req kvpb.Request, latchSpans *spanset.SpanSet,
-) {
+) error {
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
 		latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 			Key: keys.TransactionKey(req.Header().Key, header.Txn.ID),
 		})
 	}
+	return nil
 }
 
 func declareKeysEndTxn(
@@ -64,9 +65,11 @@ func declareKeysEndTxn(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
+) error {
 	et := req.(*kvpb.EndTxnRequest)
-	declareKeysWriteTransaction(rs, header, req, latchSpans)
+	if err := declareKeysWriteTransaction(rs, header, req, latchSpans); err != nil {
+		return err
+	}
 	var minTxnTS hlc.Timestamp
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
@@ -208,6 +211,7 @@ func declareKeysEndTxn(
 			}
 		}
 	}
+	return nil
 }
 
 // EndTxn either commits or aborts (rolls back) an extant transaction according

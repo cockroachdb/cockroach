@@ -36,7 +36,7 @@ func declareKeysMigrate(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
+) error {
 	// TODO(irfansharif): This will eventually grow to capture the super set of
 	// all keys accessed by all migrations defined here. That could get
 	// cumbersome. We could spruce up the migration type and allow authors to
@@ -45,6 +45,7 @@ func declareKeysMigrate(
 
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeVersionKey(rs.GetRangeID())})
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
+	return nil
 }
 
 // migrationRegistry is a global registry of all KV-level migrations. See
