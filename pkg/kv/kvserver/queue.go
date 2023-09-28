@@ -968,6 +968,7 @@ func (bq *baseQueue) processReplica(
 // Special case lease acquisition errors for cases where it can't be acquired.
 var errMarkNotAcquirableLease = errors.New("lease can't be acquired")
 
+
 // replicaCanBeProcessed validates that all the conditions for running this
 // queue are satisfied according to the queue configuration and the status of
 // the replica and its span config. This normalizes the logic for deciding
@@ -1012,11 +1013,6 @@ func (bq *baseQueue) replicaCanBeProcessed(
 			log.Infof(ctx, "unable to retrieve conf reader, skipping: %v", err)
 			return nil, err
 		}
-
-		// TODO(baptist): Remove setting the span config once the cached span
-		// config is removed from the replica.
-		realRepl, _ := repl.(*Replica)
-		realRepl.SetSpanConfig(*conf)
 
 		if !bq.acceptsUnsplitRanges {
 			// Queue does not accept unsplit ranges. Check to see if the range needs to

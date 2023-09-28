@@ -125,7 +125,6 @@ func newUninitializedReplicaWithoutRaftGroup(
 	r.mu.pendingLeaseRequest = makePendingLeaseRequest(r)
 	r.mu.stateLoader = stateloader.Make(rangeID)
 	r.mu.quiescent = true
-	r.mu.conf = store.cfg.DefaultSpanConfig
 
 	r.mu.proposals = map[kvserverbase.CmdIDKey]*ProposalData{}
 	r.mu.checksums = map[uuid.UUID]*replicaChecksum{}
@@ -169,7 +168,6 @@ func newUninitializedReplicaWithoutRaftGroup(
 	)
 
 	r.splitQueueThrottle = util.Every(splitQueueThrottleDuration)
-	r.mergeQueueThrottle = util.Every(mergeQueueThrottleDuration)
 
 	onTrip := func() {
 		telemetry.Inc(telemetryTripAsync)

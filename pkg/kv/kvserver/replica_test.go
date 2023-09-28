@@ -9138,7 +9138,7 @@ func TestReplicaMetrics(t *testing.T) {
 			c.expected.Ticking = !c.expected.Quiescent
 			metrics := calcReplicaMetrics(calcReplicaMetricsInput{
 				raftCfg:            &cfg.RaftConfig,
-				conf:               spanConfig,
+				conf:               &spanConfig,
 				vitalityMap:        c.liveness.ScanNodeVitalityFromCache(),
 				desc:               &c.desc,
 				raftStatus:         c.raftStatus,

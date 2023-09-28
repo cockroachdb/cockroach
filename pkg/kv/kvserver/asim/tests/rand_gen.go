@@ -342,7 +342,7 @@ func constructSetZoneConfigEventWithConformanceAssertion(
 // The first mutation event starts at the beginning, followed by an assertion
 // event after some time (durationToAssert). Right after that, the second
 // MutationWithAssertionEvent happens. Both of these mutation events are
-// SetSpanConfig events which use two hardcoded zone configurations.
+// onSpanConfigChange events which use two hardcoded zone configurations.
 func generateHardcodedSurvivalGoalsEvents(
 	regions []state.Region, startTime time.Time, durationToAssert time.Duration,
 ) gen.StaticEvents {
@@ -400,7 +400,7 @@ func randomlySelectDataPlacement(randSource *rand.Rand) descpb.DataPlacement {
 	}
 }
 
-// generateRandomSurvivalGoalsEvents generates SetSpanConfig events spaced at
+// generateRandomSurvivalGoalsEvents generates onSpanConfigChange events spaced at
 // intervals defined by durationToAssert from the start time. These events apply
 // a randomly generated zone configuration followed by an assertion event. Note
 // that these random configurations might be unsatisfiable under the cluster

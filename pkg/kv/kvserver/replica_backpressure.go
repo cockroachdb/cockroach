@@ -124,7 +124,7 @@ func (r *Replica) signallerForBatch(ba *kvpb.BatchRequest) signaller {
 // than backpressureRangeSizeMultiplier times larger than the split size but not
 // larger than that by more than backpressureByteTolerance (see that comment for
 // further explanation).
-func (r *Replica) shouldBackpressureWrites() bool {
+func (r *Replica) shouldBackpressureWrites(conf *roachpb.SpanConfig) bool {
 	mult := backpressureRangeSizeMultiplier.Get(&r.store.cfg.Settings.SV)
 	if mult == 0 {
 		// Disabled.
@@ -133,7 +133,7 @@ func (r *Replica) shouldBackpressureWrites() bool {
 
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	exceeded, bytesOver := r.exceedsMultipleOfSplitSizeRLocked(mult)
+	exceeded, bytesOver := r.exceedsMultipleOfSplitSizeRLocked(conf, mult)
 	if !exceeded {
 		return false
 	}
@@ -149,12 +149,17 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *kvpb.BatchRequ
 	if !canBackpressureBatch(ba) {
 		return nil
 	}
+	conf, err := r.LoadSpanConfig(ctx)
+	// If we can't read the span config, don't backpressure this batch.
+	if err != nil {
+		return nil //nolint:returnerrcheck
+	}
 
 	// If we need to apply backpressure, wait for an ongoing split to finish
 	// if one exists. This does not place a hard upper bound on the size of
 	// a range because we don't track all in-flight requests (like we do for
 	// the quota pool), but it does create an effective soft upper bound.
-	for first := true; r.shouldBackpressureWrites(); first = false {
+	for first := true; r.shouldBackpressureWrites(conf); first = false {
 		if first {
 			r.store.metrics.BackpressuredOnSplitRequests.Inc(1)
 			defer r.store.metrics.BackpressuredOnSplitRequests.Dec(1)
