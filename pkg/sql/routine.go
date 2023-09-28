@@ -15,6 +15,8 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql"
@@ -22,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -226,23 +230,30 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 	stmtIdx := 0
 	ef := newExecFactory(ctx, g.p)
 	rrw := NewRowResultWriter(&g.rch)
+	var cursorHelper *plpgsqlCursorHelper
 	err = g.expr.ForEachPlan(ctx, ef, g.args, func(plan tree.RoutinePlan, isFinalPlan bool) error {
 		stmtIdx++
 		opName := "udf-stmt-" + g.expr.Name + "-" + strconv.Itoa(stmtIdx)
 		ctx, sp := tracing.ChildSpan(ctx, opName)
 		defer sp.Finish()
 
-		// If this is the last statement and it is not a procedure, use the
-		// rowResultWriter created above. Otherwise, use a rowResultWriter that
-		// drops all rows added to it.
-		//
-		// We can use a droppingResultWriter for all statements in a procedure
-		// because we do not yet allow OUT or INOUT parameters, so a procedure
-		// never returns values.
 		var w rowResultWriter
+		openCursor := stmtIdx == 1 && g.expr.CursorDeclaration != nil
 		if isFinalPlan && !g.expr.Procedure {
+			// The result of this statement is the routine's output. This is never the
+			// case for a procedure, which does not output any rows (since we do not
+			// yet support OUT or INOUT parameters).
 			w = rrw
+		} else if openCursor {
+			// The result of the first statement will be used to open a SQL cursor.
+			cursorHelper, err = g.newCursorHelper(ctx, plan.(*planComponents))
+			if err != nil {
+				return err
+			}
+			w = NewRowResultWriter(&cursorHelper.container)
 		} else {
+			// The result of this statement is not needed. Use a rowResultWriter that
+			// drops all rows added to it.
 			w = &droppingResultWriter{}
 		}
 
@@ -259,9 +270,15 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 		if err != nil {
 			return err
 		}
+		if openCursor {
+			return cursorHelper.createCursor(g.p)
+		}
 		return nil
 	})
 	if err != nil {
+		if cursorHelper != nil {
+			err = errors.CombineErrors(err, cursorHelper.Close())
+		}
 		return g.handleException(ctx, err)
 	}
 
@@ -358,4 +375,110 @@ func (d *droppingResultWriter) SetError(err error) {
 // Err is part of the rowResultWriter interface.
 func (d *droppingResultWriter) Err() error {
 	return d.err
+}
+
+func (g *routineGenerator) newCursorHelper(
+	ctx context.Context, plan *planComponents,
+) (*plpgsqlCursorHelper, error) {
+	open := g.expr.CursorDeclaration
+	if open.NameArgIdx < 0 || open.NameArgIdx >= len(g.args) {
+		panic(errors.AssertionFailedf("unexpected name argument index: %d", open.NameArgIdx))
+	}
+	if g.args[open.NameArgIdx] == tree.DNull {
+		return nil, unimplemented.New("unnamed cursor",
+			"opening an unnamed cursor is not yet supported",
+		)
+	}
+	planCols := plan.main.planColumns()
+	cursorHelper := &plpgsqlCursorHelper{
+		ctx:        ctx,
+		cursorName: tree.Name(tree.MustBeDString(g.args[open.NameArgIdx])),
+		resultCols: make(colinfo.ResultColumns, len(planCols)),
+	}
+	copy(cursorHelper.resultCols, planCols)
+	cursorHelper.container.Init(
+		ctx,
+		getTypesFromResultColumns(planCols),
+		g.p.ExtendedEvalContextCopy(),
+		"routine_open_cursor", /* opName */
+	)
+	return cursorHelper, nil
+}
+
+// plpgsqlCursorHelper wraps a row container in order to feed the results of
+// executing a SQL statement to a SQL cursor. Note that the SQL statement is not
+// lazily executed; its entire result is written to the container.
+// TODO(drewk): while the row container can spill to disk, we should default to
+// lazy execution for cursors for performance reasons.
+type plpgsqlCursorHelper struct {
+	ctx        context.Context
+	cursorName tree.Name
+	cursorSql  string
+
+	// Fields related to implementing the isql.Rows interface.
+	container    rowContainerHelper
+	iter         *rowContainerIterator
+	resultCols   colinfo.ResultColumns
+	lastRow      tree.Datums
+	lastErr      error
+	rowsAffected int
+}
+
+func (h *plpgsqlCursorHelper) createCursor(p *planner) error {
+	h.iter = newRowContainerIterator(h.ctx, h.container)
+	cursor := &sqlCursor{
+		Rows:       h,
+		readSeqNum: p.txn.GetReadSeqNum(),
+		txn:        p.txn,
+		statement:  h.cursorSql,
+		created:    timeutil.Now(),
+	}
+	if err := p.checkIfCursorExists(h.cursorName); err != nil {
+		return err
+	}
+	return p.sqlCursors.addCursor(h.cursorName, cursor)
+}
+
+var _ isql.Rows = &plpgsqlCursorHelper{}
+
+// Next implements the isql.Rows interface.
+func (h *plpgsqlCursorHelper) Next(_ context.Context) (bool, error) {
+	h.lastRow, h.lastErr = h.iter.Next()
+	if h.lastErr != nil {
+		return false, h.lastErr
+	}
+	if h.lastRow != nil {
+		h.rowsAffected++
+	}
+	return h.lastRow != nil, nil
+}
+
+// Cur implements the isql.Rows interface.
+func (h *plpgsqlCursorHelper) Cur() tree.Datums {
+	return h.lastRow
+}
+
+// RowsAffected implements the isql.Rows interface.
+func (h *plpgsqlCursorHelper) RowsAffected() int {
+	return h.rowsAffected
+}
+
+// Close implements the isql.Rows interface.
+func (h *plpgsqlCursorHelper) Close() error {
+	if h.iter != nil {
+		h.iter.Close()
+		h.iter = nil
+	}
+	h.container.Close(h.ctx)
+	return h.lastErr
+}
+
+// Types implements the isql.Rows interface.
+func (h *plpgsqlCursorHelper) Types() colinfo.ResultColumns {
+	return h.resultCols
+}
+
+// HasResults implements the isql.Rows interface.
+func (h *plpgsqlCursorHelper) HasResults() bool {
+	return h.lastRow != nil
 }

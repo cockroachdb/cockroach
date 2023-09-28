@@ -246,56 +246,6 @@ func (l *lexer) MakeDynamicExecuteStmt() *plpgsqltree.DynamicExecute {
 	return ret
 }
 
-func (l *lexer) ProcessForOpenCursor(nullCursorExplicitExpr bool) *plpgsqltree.Open {
-	openStmt := &plpgsqltree.Open{}
-	openStmt.CursorOptions = plpgsqltree.CursorOptionFastPlan.Mask()
-
-	if nullCursorExplicitExpr {
-		if l.Peek().id == NO {
-			l.lastPos++
-			if l.Peek().id == SCROLL {
-				openStmt.CursorOptions |= plpgsqltree.CursorOptionNoScroll.Mask()
-				l.lastPos++
-			}
-		} else if l.Peek().id == SCROLL {
-			openStmt.CursorOptions |= plpgsqltree.CursorOptionScroll.Mask()
-			l.lastPos++
-		}
-
-		if l.Peek().id != FOR {
-			l.setErr(pgerror.New(pgcode.Syntax, "syntax error, expected \"FOR\""))
-			return nil
-		}
-
-		l.lastPos++
-		if l.Peek().id == EXECUTE {
-			l.lastPos++
-			dynamicQuery, endToken := l.ReadSqlExpressionStr2(USING, ';')
-			openStmt.DynamicQuery = dynamicQuery
-			l.lastPos++
-			if endToken == USING {
-				// Continue reading for params for the sql expression till the ending
-				// token is not a comma.
-				openStmt.Params = make([]string, 0)
-				for {
-					param, endToken := l.ReadSqlExpressionStr2(',', ';')
-					openStmt.Params = append(openStmt.Params, param)
-					if endToken != ',' {
-						break
-					}
-					l.lastPos++
-				}
-			}
-		} else {
-			openStmt.Query = l.ReadSqlExpressionStr(';')
-		}
-	} else {
-		// read_cursor_args()
-		openStmt.ArgQuery = "hello"
-	}
-	return openStmt
-}
-
 // ReadSqlExpressionStr returns the string from the l.lastPos till it sees
 // the terminator for the first time. The returned string is made by tokens
 // between the starting index (included) to the terminator (not included).
@@ -360,6 +310,62 @@ func (l *lexer) readSQLConstruct(
 	return startPos, endPos, terminatorMet
 }
 
+func (l *lexer) MakeFetchOrMoveStmt(isMove bool) (plpgsqltree.Statement, error) {
+	if l.parser.Lookahead() != -1 {
+		// Push back the lookahead token so that it can be included.
+		l.PushBack(1)
+	}
+	prefix := "FETCH "
+	if isMove {
+		prefix = "MOVE "
+	}
+	sqlStr, terminator := l.ReadSqlConstruct(INTO, ';')
+	sqlStr = prefix + sqlStr
+	sqlStmt, err := parser.ParseOne(sqlStr)
+	if err != nil {
+		return nil, err
+	}
+	var cursor tree.CursorStmt
+	switch t := sqlStmt.AST.(type) {
+	case *tree.FetchCursor:
+		cursor = t.CursorStmt
+	case *tree.MoveCursor:
+		cursor = t.CursorStmt
+	default:
+		return nil, errors.Newf("invalid FETCH or MOVE syntax")
+	}
+	var target []plpgsqltree.Variable
+	if !isMove {
+		if terminator != INTO {
+			return nil, errors.Newf("invalid syntax for FETCH")
+		}
+		// Read past the INTO.
+		l.lastPos++
+		startPos, endPos, _ := l.readSQLConstruct(';')
+		for pos := startPos; pos < endPos; pos += 2 {
+			tok := l.tokens[pos]
+			if tok.id != IDENT {
+				return nil, errors.Newf("\"%s\" is not a scalar variable", tok.str)
+			}
+			if pos+1 != endPos && l.tokens[pos+1].id != ',' {
+				return nil, errors.Newf("expected INTO target to be a comma-separated list")
+			}
+			variable := plpgsqltree.Variable(strings.TrimSpace(l.getStr(pos, pos+1)))
+			target = append(target, variable)
+		}
+		if len(target) == 0 {
+			return nil, errors.Newf("expected INTO target")
+		}
+	}
+	// Move past the semicolon.
+	l.lastPos++
+	return &plpgsqltree.Fetch{
+		Cursor: cursor,
+		Target: target,
+		IsMove: isMove,
+	}, nil
+}
+
 func (l *lexer) ReadSqlConstruct(
 	terminator1 int, terminators ...int,
 ) (sqlStr string, terminatorMet int) {
@@ -378,26 +384,6 @@ func (l *lexer) getStr(startPos, endPos int) string {
 	}
 	start := int(l.tokens[startPos].Pos())
 	return l.in[start:end]
-}
-
-func (l *lexer) ProcessQueryForCursorWithoutExplicitExpr(openStmt *plpgsqltree.Open) {
-	l.lastPos++
-	if int(l.Peek().id) == EXECUTE {
-		dynamicQuery, endToken := l.ReadSqlExpressionStr2(USING, ';')
-		openStmt.DynamicQuery = dynamicQuery
-		if endToken == USING {
-			var expr string
-			for {
-				expr, endToken = l.ReadSqlExpressionStr2(',', ';')
-				openStmt.Params = append(openStmt.Params, expr)
-				if endToken != ',' {
-					break
-				}
-			}
-		}
-	} else {
-		openStmt.Query = l.ReadSqlExpressionStr(';')
-	}
 }
 
 // Peek peeks

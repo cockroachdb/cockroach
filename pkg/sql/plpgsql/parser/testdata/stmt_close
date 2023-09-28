@@ -6,5 +6,5 @@ END
 ----
 DECLARE
 BEGIN
-CLOSE a cursor
+CLOSE some_cursor;
 END

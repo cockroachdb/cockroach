@@ -251,6 +251,16 @@ func AbortSpanKey(rangeID roachpb.RangeID, txnID uuid.UUID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).AbortSpanKey(txnID)
 }
 
+// ReplicatedSharedLocksTransactionLatchingKey returns a range-local key, based
+// on the provided range ID and transaction ID, that all replicated shared
+// locking requests from the specified transaction should use to serialize on
+// latches.
+func ReplicatedSharedLocksTransactionLatchingKey(
+	rangeID roachpb.RangeID, txnID uuid.UUID,
+) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).ReplicatedSharedLocksTransactionLatchingKey(txnID)
+}
+
 // DecodeAbortSpanKey decodes the provided AbortSpan entry,
 // returning the transaction ID.
 func DecodeAbortSpanKey(key roachpb.Key, dest []byte) (uuid.UUID, error) {
@@ -1063,6 +1073,15 @@ func (b RangeIDPrefixBuf) unreplicatedPrefix() roachpb.Key {
 // entry, with detail specified by encoding the supplied transaction ID.
 func (b RangeIDPrefixBuf) AbortSpanKey(txnID uuid.UUID) roachpb.Key {
 	key := append(b.replicatedPrefix(), LocalAbortSpanSuffix...)
+	return encoding.EncodeBytesAscending(key, txnID.GetBytes())
+}
+
+// ReplicatedSharedLocksTransactionLatchingKey returns a range-local key, by
+// range ID, for a key on which all replicated shared locking requests from a
+// specific transaction should serialize on latches. The per-transaction bit is
+// achieved by encoding the supplied transaction ID into the key.
+func (b RangeIDPrefixBuf) ReplicatedSharedLocksTransactionLatchingKey(txnID uuid.UUID) roachpb.Key {
+	key := append(b.replicatedPrefix(), LocalReplicatedSharedLocksTransactionLatchingKeySuffix...)
 	return encoding.EncodeBytesAscending(key, txnID.GetBytes())
 }
 
