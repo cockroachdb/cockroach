@@ -35,6 +35,7 @@ export default function (props: GraphDashboardProps) {
       title="CPU Percent"
       sources={nodeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Percentage} label="CPU">
         {nodeIDs.map(nid => (
@@ -52,6 +53,7 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
       tenantSource={tenantSource}
       tooltip={`P99 scheduling latency for goroutines`}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {nodeIDs.map(nid => (
@@ -73,6 +75,7 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
       tenantSource={tenantSource}
       tooltip={`The number of Goroutines waiting per CPU.`}
+      showMetricsInTooltip={true}
     >
       <Axis label="goroutines">
         {nodeIDs.map(nid => (
@@ -89,7 +92,9 @@ export default function (props: GraphDashboardProps) {
       title="IO Overload"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={`The number of sublevels/files in L0 normalized by admission thresholds.`}
+      tooltip={`The number of sublevels/files in L0 normalized by admission
+          thresholds.`}
+      showMetricsInTooltip={true}
     >
       <Axis label="IO Overload">
         {nodeIDs.map(nid => (
@@ -109,6 +114,7 @@ export default function (props: GraphDashboardProps) {
       title="KV Admission Slots"
       sources={nodeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis label="slots">
         {nodeIDs.map(nid => (
@@ -134,6 +140,7 @@ export default function (props: GraphDashboardProps) {
       title="KV Admission IO Tokens Exhausted Duration Per Second"
       sources={nodeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis label="duration (micros/sec)">
         {nodeIDs.map(nid => (
@@ -152,6 +159,7 @@ export default function (props: GraphDashboardProps) {
       title="Flow Tokens Wait Time: 75th percentile"
       sources={nodeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="p75 flow token wait duration">
         {nodeIDs.map(nid => (
@@ -185,6 +193,7 @@ export default function (props: GraphDashboardProps) {
       title="Requests Waiting For Flow Tokens"
       sources={nodeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis label="Count">
         {nodeIDs.map(nid => (
@@ -216,6 +225,7 @@ export default function (props: GraphDashboardProps) {
       title="Blocked Replication Streams"
       sources={nodeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis label="Count">
         {nodeIDs.map(nid => (
@@ -247,6 +257,7 @@ export default function (props: GraphDashboardProps) {
       title="Admission Work Rate"
       sources={nodeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis label="work rate">
         {nodeIDs.map(nid => (
@@ -299,6 +310,7 @@ export default function (props: GraphDashboardProps) {
       title="Admission Delay Rate"
       sources={nodeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis label="delay rate (micros/sec)">
         {nodeIDs.map(nid => (
@@ -344,6 +356,7 @@ export default function (props: GraphDashboardProps) {
       title="Admission Delay: 75th percentile"
       sources={nodeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="delay for requests that waited">
         {nodeIDs.map(nid => (

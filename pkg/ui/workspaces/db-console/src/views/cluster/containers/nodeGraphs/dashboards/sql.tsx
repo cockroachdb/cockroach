@@ -39,6 +39,7 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
       tenantSource={tenantSource}
       tooltip={`The total number of open SQL Sessions ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
     >
       <Axis label="connections">
         {_.map(nodeIDs, node => (
@@ -58,6 +59,7 @@ export default function (props: GraphDashboardProps) {
       isKvGraph={false}
       sources={nodeSources}
       tooltip={`Rate of SQL connection attempts ${tooltipSelection}`}
+      showMetricsInTooltip={true}
     >
       <Axis label="connections per second">
         {_.map(nodeIDs, node => (
@@ -78,7 +80,8 @@ export default function (props: GraphDashboardProps) {
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`The total number of open SQL transactions  ${tooltipSelection}.`}
+      tooltip={`The total number of open SQL transactions ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
     >
       <Axis label="transactions">
         <Metric
@@ -94,7 +97,8 @@ export default function (props: GraphDashboardProps) {
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`The total number of running SQL statements ${tooltipSelection}.`}
+      tooltip={`The total number of running SQL statements {tooltipSelection}.`}
+      showMetricsInTooltip={true}
     >
       <Axis label="queries">
         <Metric
@@ -110,7 +114,9 @@ export default function (props: GraphDashboardProps) {
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`The total amount of SQL client network traffic in bytes per second ${tooltipSelection}.`}
+      tooltip={`The total amount of SQL client network traffic in bytes per second{" "}
+          ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="byte traffic">
         <Metric name="cr.node.sql.bytesin" title="Bytes In" nonNegativeRate />
@@ -123,8 +129,9 @@ export default function (props: GraphDashboardProps) {
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`A ten-second moving average of the # of SELECT, INSERT, UPDATE, and DELETE statements
-        successfully executed per second ${tooltipSelection}.`}
+      tooltip={`A ten-second moving average of the # of SELECT, INSERT, UPDATE, and
+          DELETE statements successfully executed per second ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
     >
       <Axis label="queries">
         <Metric
@@ -155,9 +162,9 @@ export default function (props: GraphDashboardProps) {
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={
-        "The number of statements which returned a planning, runtime, or client-side retry error."
-      }
+      tooltip={`The number of statements which returned a planning, runtime, or
+          client-side retry error.`}
+      showMetricsInTooltip={true}
     >
       <Axis label="errors">
         <Metric
@@ -174,6 +181,7 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
       tenantSource={tenantSource}
       tooltip={`The total number of SQL statements that experienced contention ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
     >
       <Axis label="queries">
         <Metric
@@ -190,6 +198,7 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
       tenantSource={tenantSource}
       tooltip={`The total number of full table/index scans ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
     >
       <Axis label="full scans">
         {_.map(nodeIDs, node => (
@@ -208,7 +217,9 @@ export default function (props: GraphDashboardProps) {
       title="Active Flows for Distributed SQL Statements"
       isKvGraph={false}
       tenantSource={tenantSource}
-      tooltip="The number of flows on each node contributing to currently running distributed SQL statements."
+      tooltip={`The number of flows on each node contributing to currently running
+          distributed SQL statements.`}
+      showMetricsInTooltip={true}
     >
       <Axis label="flows">
         {_.map(nodeIDs, node => (
@@ -226,7 +237,9 @@ export default function (props: GraphDashboardProps) {
       title="Connection Latency: 99th percentile"
       isKvGraph={false}
       tenantSource={tenantSource}
-      tooltip={`Over the last minute, this node established and authenticated 99% of connections within this time.`}
+      tooltip={`Over the last minute, this node established and authenticated 99% of
+          connections within this time.`}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {_.map(nodeIDs, node => (
@@ -245,7 +258,9 @@ export default function (props: GraphDashboardProps) {
       title="Connection Latency: 90th percentile"
       isKvGraph={false}
       tenantSource={tenantSource}
-      tooltip={`Over the last minute, this node established and authenticated 90% of connections within this time.`}
+      tooltip={`Over the last minute, this node established and authenticated 90% of
+          connections within this time.`}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {_.map(nodeIDs, node => (
@@ -274,6 +289,7 @@ export default function (props: GraphDashboardProps) {
           </em>
         </div>
       }
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {_.map(nodeIDs, node => (
@@ -302,6 +318,7 @@ export default function (props: GraphDashboardProps) {
           </em>
         </div>
       }
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {_.map(nodeIDs, node => (
@@ -330,6 +347,7 @@ export default function (props: GraphDashboardProps) {
           </em>
         </div>
       }
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {_.map(nodeIDs, node => (
@@ -358,6 +376,7 @@ export default function (props: GraphDashboardProps) {
           </em>
         </div>
       }
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {_.map(nodeIDs, node => (
@@ -376,8 +395,10 @@ export default function (props: GraphDashboardProps) {
       title="KV Execution Latency: 99th percentile"
       isKvGraph={true}
       tenantSource={tenantSource}
-      tooltip={`The 99th percentile of latency between query requests and responses over a
-          1 minute period. Values are displayed individually for each node.`}
+      tooltip={`The 99th percentile of latency between query requests and responses
+          over a 1 minute period. Values are displayed individually for each
+          node.`}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {_.map(nodeIDs, node => (
@@ -396,8 +417,10 @@ export default function (props: GraphDashboardProps) {
       title="KV Execution Latency: 90th percentile"
       isKvGraph={true}
       tenantSource={tenantSource}
-      tooltip={`The 90th percentile of latency between query requests and responses over a
-           1 minute period. Values are displayed individually for each node.`}
+      tooltip={`The 90th percentile of latency between query requests and responses
+          over a 1 minute period. Values are displayed individually for each
+          node.`}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {_.map(nodeIDs, node => (
@@ -417,8 +440,9 @@ export default function (props: GraphDashboardProps) {
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`The total number of transactions initiated, committed, rolled back,
-           or aborted per second ${tooltipSelection}.`}
+      tooltip={`The total number of transactions initiated, committed, rolled back, or
+          aborted per second ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
     >
       <Axis label="transactions">
         <Metric
@@ -452,6 +476,7 @@ export default function (props: GraphDashboardProps) {
       tooltip={
         <TransactionRestartsToolTip tooltipSelection={tooltipSelection} />
       }
+      showMetricsInTooltip={true}
     >
       <Axis label="restarts">
         <Metric
@@ -511,6 +536,7 @@ export default function (props: GraphDashboardProps) {
           </em>
         </div>
       }
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {_.map(nodeIDs, node => (
@@ -539,6 +565,7 @@ export default function (props: GraphDashboardProps) {
           </em>
         </div>
       }
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {_.map(nodeIDs, node => (
@@ -557,8 +584,9 @@ export default function (props: GraphDashboardProps) {
       title="SQL Memory"
       isKvGraph={false}
       tenantSource={tenantSource}
-      tooltip={`The current amount of allocated SQL memory. This amount is
-         compared against the node's --max-sql-memory flag.`}
+      tooltip={`The current amount of allocated SQL memory. This amount is compared
+          against the node's --max-sql-memory flag.`}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="allocated bytes">
         {_.map(nodeIDs, node => (
@@ -579,6 +607,7 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
       tenantSource={tenantSource}
       tooltip={`The total number of DDL statements per second ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
     >
       <Axis label="statements">
         <Metric
@@ -599,6 +628,7 @@ export default function (props: GraphDashboardProps) {
           tooltipSelection={tooltipSelection}
         />
       }
+      showMetricsInTooltip={true}
     >
       <Axis label="statements">
         <Metric
@@ -614,7 +644,9 @@ export default function (props: GraphDashboardProps) {
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`The total number of times the distributed query errors were rerun as local ${tooltipSelection}.`}
+      tooltip={`The total number of times the distributed query errors were rerun as
+          local ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
     >
       <Axis label="queries">
         <Metric
