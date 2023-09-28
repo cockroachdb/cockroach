@@ -1078,9 +1078,12 @@ var versionsSingleton = func() keyedVersions {
 // simply need to check is that the cluster has upgraded to 23.2.
 var V23_2 = versionsSingleton[len(versionsSingleton)-1].Key
 
-const (
-	BinaryMinSupportedVersionKey = V22_2
-)
+// BinaryMinSupportedVersionKey specifies the minimum binary version from which the current version can be upgraded from.
+var BinaryMinSupportedVersionKey = V23_1
+
+// minBinaryVersionForVersionSkippingTesting sets the version that can be used in testing to allow tests with version skipping enabled.
+// Set the `COCKROACH_TESTING_ALLOW_VERSION_SKIPPING` environment variable to true to override BinaryMinSupportedVersionKey with this value.
+const minBinaryVersionForVersionSkippingTesting = V22_2
 
 // TODO(irfansharif): clusterversion.binary{,MinimumSupported}Version
 // feels out of place. A "cluster version" and a "binary version" are two
@@ -1101,6 +1104,9 @@ var (
 )
 
 func init() {
+	if envutil.EnvOrDefaultBool("COCKROACH_TESTING_ALLOW_VERSION_SKIPPING", false) {
+		BinaryMinSupportedVersionKey = minBinaryVersionForVersionSkippingTesting
+	}
 	if finalVersion > invalidVersionKey {
 		if binaryVersion != ByKey(finalVersion) {
 			panic("binary version does not match final version")

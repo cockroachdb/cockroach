@@ -105,7 +105,7 @@ func (f SingleNodeTestClusterFactory) Run(
 
 // OldVersionKey is the version key used by the WithMixedVersion method
 // in the TestServerFactory interface.
-const OldVersionKey = clusterversion.BinaryMinSupportedVersionKey
+var OldVersionKey = clusterversion.BinaryMinSupportedVersionKey
 
 // newJobsKnobs constructs jobs.TestingKnobs for the end-to-end tests.
 func newJobsKnobs() *jobs.TestingKnobs {
