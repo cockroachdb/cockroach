@@ -861,7 +861,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
           cockroach.roachpb.RangeClosedTimestampPolicy[
             info.state.closed_timestamp_policy
           ],
-          info.state.closed_timestamp_policy ==
+          info.state.closed_timestamp_policy ===
             cockroach.roachpb.RangeClosedTimestampPolicy.LEAD_FOR_GLOBAL_READS
             ? "range-table__cell--global-range"
             : "",
