@@ -444,6 +444,7 @@ crdb_internal       kv_node_liveness
 crdb_internal       kv_node_status
 crdb_internal       kv_protected_ts_records
 crdb_internal       kv_repairable_catalog_corruptions
+crdb_internal       kv_session_based_leases
 crdb_internal       kv_store_status
 crdb_internal       kv_system_privileges
 crdb_internal       leases
@@ -796,6 +797,7 @@ kv_node_liveness
 kv_node_status
 kv_protected_ts_records
 kv_repairable_catalog_corruptions
+kv_session_based_leases
 kv_store_status
 kv_system_privileges
 leases
@@ -1239,6 +1241,7 @@ system         crdb_internal       kv_node_liveness                        SYSTE
 system         crdb_internal       kv_node_status                          SYSTEM VIEW  NO
 system         crdb_internal       kv_protected_ts_records                 SYSTEM VIEW  NO
 system         crdb_internal       kv_repairable_catalog_corruptions       SYSTEM VIEW  NO
+system         crdb_internal       kv_session_based_leases                 SYSTEM VIEW  NO
 system         crdb_internal       kv_store_status                         SYSTEM VIEW  NO
 system         crdb_internal       kv_system_privileges                    SYSTEM VIEW  NO
 system         public              lease                                   BASE TABLE   YES
@@ -3313,6 +3316,7 @@ NULL     public   system         crdb_internal       kv_node_liveness           
 NULL     public   system         crdb_internal       kv_node_status                          SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_protected_ts_records                 SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_repairable_catalog_corruptions       SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_session_based_leases                 SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_store_status                         SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_system_privileges                    SELECT          NO            YES
 NULL     public   system         crdb_internal       leases                                  SELECT          NO            YES
@@ -4008,6 +4012,7 @@ NULL     public   system         crdb_internal       kv_node_liveness           
 NULL     public   system         crdb_internal       kv_node_status                          SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_protected_ts_records                 SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_repairable_catalog_corruptions       SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_session_based_leases                 SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_store_status                         SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_system_privileges                    SELECT          NO            YES
 NULL     public   system         crdb_internal       leases                                  SELECT          NO            YES

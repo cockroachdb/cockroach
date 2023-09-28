@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -3476,4 +3477,29 @@ func TestDescriptorRemovedFromCacheWhenLeaseRenewalForThisDescriptorFails(t *tes
 		return errors.Errorf("descriptor %v(#%v) is still there. Expected: descriptor removed from cache.",
 			typeDesc.GetName(), typeDesc.GetID())
 	})
+}
+
+// TestSessionLeasingTable validates that we can use an internal table
+// to read new system.leases table format (which will use synthetic
+// descriptors).
+func TestSessionLeasingTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+
+	executor := srv.InternalExecutor().(isql.Executor)
+	// Insert using a synthetic descriptor.
+	err := executor.WithSyntheticDescriptors(catalog.Descriptors{systemschema.LeaseTable_V24_1()}, func() error {
+		_, err := executor.Exec(ctx, "add-rows-for-test", nil,
+			"INSERT INTO system.lease VALUES (1, -1, 1, 'some session id', 'region')")
+		return err
+	})
+	require.NoError(t, err)
+	// Validate the new crdb_internal function can read the contents back.
+	res := runner.QueryStr(t, "SELECT * FROM crdb_internal.kv_session_based_leases;")
+	require.Equal(t, [][]string{{"1", "-1", "1", "some session id", "region"}}, res)
 }

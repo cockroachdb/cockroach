@@ -90,6 +90,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null
 [node 1] retrieving SQL data for crdb_internal.gossip_alerts... writing output: debug/nodes/1/crdb_internal.gossip_alerts.txt... done
 [node 1] retrieving SQL data for crdb_internal.gossip_liveness... writing output: debug/nodes/1/crdb_internal.gossip_liveness.txt... done
 [node 1] retrieving SQL data for crdb_internal.gossip_nodes... writing output: debug/nodes/1/crdb_internal.gossip_nodes.txt... done
+[node 1] retrieving SQL data for crdb_internal.kv_session_based_leases... writing output: debug/nodes/1/crdb_internal.kv_session_based_leases.txt... done
 [node 1] retrieving SQL data for crdb_internal.leases... writing output: debug/nodes/1/crdb_internal.leases.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_build_info... writing output: debug/nodes/1/crdb_internal.node_build_info.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_contention_events... writing output: debug/nodes/1/crdb_internal.node_contention_events.txt... done
@@ -130,6 +131,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null
 [node 3] retrieving SQL data for crdb_internal.gossip_alerts... writing output: debug/nodes/3/crdb_internal.gossip_alerts.txt... done
 [node 3] retrieving SQL data for crdb_internal.gossip_liveness... writing output: debug/nodes/3/crdb_internal.gossip_liveness.txt... done
 [node 3] retrieving SQL data for crdb_internal.gossip_nodes... writing output: debug/nodes/3/crdb_internal.gossip_nodes.txt... done
+[node 3] retrieving SQL data for crdb_internal.kv_session_based_leases... writing output: debug/nodes/3/crdb_internal.kv_session_based_leases.txt... done
 [node 3] retrieving SQL data for crdb_internal.leases... writing output: debug/nodes/3/crdb_internal.leases.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_build_info... writing output: debug/nodes/3/crdb_internal.node_build_info.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_contention_events... writing output: debug/nodes/3/crdb_internal.node_contention_events.txt... done
