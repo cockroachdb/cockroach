@@ -7,6 +7,9 @@ checksum3: 05186bceae59a178713407959a26110715a1e299e6a9f1b37fc3e0f8d5a0c66bedbff
 checksum4: 4f5cc8176d559bfab8e52b74851b103fd73b9e713ce12aa380a16fe177ca6e21db75e3e85a58341ab437a5a766a071a2fe6e1f03841d334da7be2295794eb813
 checksum5: 3c5d5856a626aa29913e9790033b9c23b6dc5e42bdf2e665f7b60f58bec495adc246bf4e5f5bf1acbfc78c713f2ec7820b4ba7202897bb9f824a0b7b9e9cc98d
 checksum6: ebe7fd3f41a68c2608a8b10dcc9db3b39bdb6c097d3fd99411e89d75419bb58dd80faf9846aa5e47d8cabc9dcfc894c6ea58f7e035eaaa3ee55c31faed2c8000
+checksum1: 83ae68fc9e2b083f5991c0a74bdaa712f3e794dc78b0bcf3467d8a7f7bba41c933f9834a05a98136a92dbabf1ea5662fa618fdadd9f8478357d28be0a53714e8
+checksum2: 066a27ad115e2db378ef62071b0f1d1ebc01b43acdf7a52a596cc94ee243b2077fe83ffb9645bfb76c0bd34d3cfe884387ffe4aa9642d22e27c4cace4cce2ce9
+checksum3: 49bb7da05ce4ae4a4f46037be263f99b2b2c25237c9f0d7af65f992f50c3adba7fe2dd8493bfab107d709b69119671357aeecfb065782ef3a84ea227d3f05cb6
 stats: {
   "liveBytes": "53",
   "liveCount": "2",
@@ -14,6 +17,8 @@ stats: {
   "keyCount": "3",
   "valBytes": "44",
   "valCount": "4",
+  "lockBytes": "168",
+  "lockCount": "3",
   "rangeKeyCount": "2",
   "rangeKeyBytes": "26",
   "rangeValCount": "2",
