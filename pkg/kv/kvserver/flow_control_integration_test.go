@@ -2331,12 +2331,21 @@ func newFlowControlTestHelper(t *testing.T, tc *testcluster.TestCluster) *flowCo
 }
 
 func (h *flowControlTestHelper) init() {
-	if _, err := h.tc.Conns[0].Exec(`SET CLUSTER SETTING kvadmission.flow_control.enabled = true`); err != nil {
-		h.t.Fatal(err)
+	for _, s := range h.tc.Servers {
+		kvflowcontrol.Enabled.Override(context.Background(), &s.ClusterSettings().SV, true)
+		kvflowcontrol.Mode.Override(context.Background(), &s.ClusterSettings().SV, int64(kvflowcontrol.ApplyToAll))
 	}
-	if _, err := h.tc.Conns[0].Exec(`SET CLUSTER SETTING kvadmission.flow_control.mode = 'apply_to_all'`); err != nil {
-		h.t.Fatal(err)
-	}
+	testutils.SucceedsSoon(h.t, func() error {
+		for _, s := range h.tc.Servers {
+			if !kvflowcontrol.Enabled.Get(&s.ClusterSettings().SV) {
+				return fmt.Errorf("expected flow control to be enabled")
+			}
+			if kvflowcontrol.Mode.Get(&s.ClusterSettings().SV) != int64(kvflowcontrol.ApplyToAll) {
+				return fmt.Errorf("expected flow control mode to be set to `ApplyToAll`")
+			}
+		}
+		return nil
+	})
 }
 
 func (h *flowControlTestHelper) waitForAllTokensReturned(ctx context.Context, expStreamCount int) {
