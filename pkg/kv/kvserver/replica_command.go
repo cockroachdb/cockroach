@@ -322,7 +322,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		if len(args.SplitKey) == 0 {
 			// Find a key to split by size.
 			var err error
-			targetSize := r.GetMaxBytes() / 2
+			targetSize := r.GetMaxBytes(ctx) / 2
 			foundSplitKey, err = storage.MVCCFindSplitKey(
 				ctx, r.store.TODOEngine(), desc.StartKey, desc.EndKey, targetSize)
 			if err != nil {

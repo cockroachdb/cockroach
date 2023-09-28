@@ -397,7 +397,7 @@ func EvalAddSSTable(
 
 	reply := resp.(*kvpb.AddSSTableResponse)
 	reply.RangeSpan = cArgs.EvalCtx.Desc().KeySpan().AsRawSpanWithNoLocals()
-	reply.AvailableBytes = cArgs.EvalCtx.GetMaxBytes() - cArgs.EvalCtx.GetMVCCStats().Total() - stats.Total()
+	reply.AvailableBytes = cArgs.EvalCtx.GetMaxBytes(ctx) - cArgs.EvalCtx.GetMVCCStats().Total() - stats.Total()
 
 	// If requested, locate and return the start of the span following the file
 	// span which may be non-empty, that is, the first key after the file's end
