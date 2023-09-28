@@ -35,6 +35,7 @@ export default function (props: GraphDashboardProps) {
       title="CPU Percent"
       sources={nodeSources}
       tenantSource={tenantSource}
+      tooltip={`Metric: cr.node.sys.cpu.combined.percent-normalized`}
     >
       <Axis units={AxisUnits.Percentage} label="CPU">
         {nodeIDs.map(nid => (
@@ -51,7 +52,14 @@ export default function (props: GraphDashboardProps) {
       title="Goroutine Scheduling Latency: 99th percentile"
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`P99 scheduling latency for goroutines`}
+      tooltip={
+        <>
+          P99 scheduling latency for goroutines
+          <br />
+          <br />
+          Metric: cr.node.go.scheduler_latency-p99
+        </>
+      }
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {nodeIDs.map(nid => (
@@ -72,7 +80,14 @@ export default function (props: GraphDashboardProps) {
       title="Runnable Goroutines per CPU"
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`The number of Goroutines waiting per CPU.`}
+      tooltip={
+        <>
+          The number of Goroutines waiting per CPU.
+          <br />
+          <br />
+          Metric: cr.node.sys.runnable.goroutines.per.cpu
+        </>
+      }
     >
       <Axis label="goroutines">
         {nodeIDs.map(nid => (
@@ -89,7 +104,15 @@ export default function (props: GraphDashboardProps) {
       title="IO Overload"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={`The number of sublevels/files in L0 normalized by admission thresholds.`}
+      tooltip={
+        <>
+          The number of sublevels/files in L0 normalized by admission
+          thresholds.
+          <br />
+          <br />
+          Metric: cr.store.admission.io.overload
+        </>
+      }
     >
       <Axis label="IO Overload">
         {nodeIDs.map(nid => (
@@ -109,6 +132,15 @@ export default function (props: GraphDashboardProps) {
       title="KV Admission Slots"
       sources={nodeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>cr.node.admission.granter.total_slots.kv</li>
+            <li>cr.node.admission.granter.used_slots.kv</li>
+          </ul>
+        </>
+      }
     >
       <Axis label="slots">
         {nodeIDs.map(nid => (
@@ -134,6 +166,7 @@ export default function (props: GraphDashboardProps) {
       title="KV Admission IO Tokens Exhausted Duration Per Second"
       sources={nodeSources}
       tenantSource={tenantSource}
+      tooltip={`Metric: cr.node.admission.granter.io_tokens_exhausted_duration.kv`}
     >
       <Axis label="duration (micros/sec)">
         {nodeIDs.map(nid => (
@@ -152,6 +185,19 @@ export default function (props: GraphDashboardProps) {
       title="Flow Tokens Wait Time: 75th percentile"
       sources={nodeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>
+              cr.node.kvadmission.flow_controller.regular_wait_duration-p75
+            </li>
+            <li>
+              cr.node.kvadmission.flow_controller.elastic_wait_duration-p75
+            </li>
+          </ul>
+        </>
+      }
     >
       <Axis units={AxisUnits.Duration} label="p75 flow token wait duration">
         {nodeIDs.map(nid => (
@@ -185,6 +231,19 @@ export default function (props: GraphDashboardProps) {
       title="Requests Waiting For Flow Tokens"
       sources={nodeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>
+              cr.node.kvadmission.flow_controller.regular_requests_waiting
+            </li>
+            <li>
+              cr.node.kvadmission.flow_controller.elastic_requests_waiting
+            </li>
+          </ul>
+        </>
+      }
     >
       <Axis label="Count">
         {nodeIDs.map(nid => (
@@ -216,6 +275,19 @@ export default function (props: GraphDashboardProps) {
       title="Blocked Replication Streams"
       sources={nodeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>
+              cr.node.kvadmission.flow_controller.regular_blocked_stream_count
+            </li>
+            <li>
+              cr.node.kvadmission.flow_controller.elastic_blocked_stream_count
+            </li>
+          </ul>
+        </>
+      }
     >
       <Axis label="Count">
         {nodeIDs.map(nid => (
@@ -247,6 +319,17 @@ export default function (props: GraphDashboardProps) {
       title="Admission Work Rate"
       sources={nodeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>cr.node.admission.admitted.kv</li>
+            <li>cr.node.admission.admitted.kv-stores</li>
+            <li>cr.node.admission.admitted.sql-kv-response</li>
+            <li>cr.node.admission.admitted.sql-sql-response</li>
+          </ul>
+        </>
+      }
     >
       <Axis label="work rate">
         {nodeIDs.map(nid => (
@@ -299,6 +382,17 @@ export default function (props: GraphDashboardProps) {
       title="Admission Delay Rate"
       sources={nodeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>cr.node.admission.wait_sum.kv</li>
+            <li>cr.node.admission.wait_sum.kv-stores</li>
+            <li>cr.node.admission.wait_sum.sql-kv-response</li>
+            <li>cr.node.admission.wait_sum.sql-sql-response</li>
+          </ul>
+        </>
+      }
     >
       <Axis label="delay rate (micros/sec)">
         {nodeIDs.map(nid => (
@@ -344,6 +438,17 @@ export default function (props: GraphDashboardProps) {
       title="Admission Delay: 75th percentile"
       sources={nodeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>cr.node.admission.wait_durations.kv-p75</li>
+            <li>cr.node.admission.wait_durations.kv-stores-p75</li>
+            <li>cr.node.admission.wait_durations.sql-kv-response-p75</li>
+            <li>cr.node.admission.wait_durations.sql-sql-response-p75</li>
+          </ul>
+        </>
+      }
     >
       <Axis units={AxisUnits.Duration} label="delay for requests that waited">
         {nodeIDs.map(nid => (

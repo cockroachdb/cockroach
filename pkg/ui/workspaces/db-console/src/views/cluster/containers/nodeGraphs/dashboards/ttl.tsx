@@ -28,6 +28,15 @@ export default function (props: GraphDashboardProps) {
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>cr.node.jobs.row_level_ttl.rows_selected</li>
+            <li>cr.node.jobs.row_level_ttl.rows_deleted</li>
+          </ul>
+        </>
+      }
     >
       <Axis label="rows per second" units={AxisUnits.Count}>
         <Metric
@@ -47,6 +56,15 @@ export default function (props: GraphDashboardProps) {
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>cr.node.jobs.row_level_ttl.total_rows</li>
+            <li>cr.node.jobs.row_level_ttl.total_expired_rows</li>
+          </ul>
+        </>
+      }
     >
       <Axis label="row count" units={AxisUnits.Count}>
         <Metric
@@ -66,7 +84,18 @@ export default function (props: GraphDashboardProps) {
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`Latency of scanning and deleting within the job.`}
+      tooltip={
+        <>
+          Latency of scanning and deleting within the job.
+          <br />
+          <br />
+          Metric:
+          <ul>
+            <li>{`cr.node.jobs.row_level_ttl.select_duration-p{50|75|90|95|99}`}</li>
+            <li>{`cr.node.jobs.row_level_ttl.delete_duration-p{50|75|90|95|99}`}</li>
+          </ul>
+        </>
+      }
     >
       <Axis label="latency" units={AxisUnits.Duration}>
         {_.map(percentiles, p => (
@@ -90,7 +119,14 @@ export default function (props: GraphDashboardProps) {
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`Number of active spans being processed by TTL.`}
+      tooltip={
+        <>
+          Number of active spans being processed by TTL.
+          <br />
+          <br />
+          Metric: cr.node.jobs.row_level_ttl.num_active_spans
+        </>
+      }
     >
       <Axis label="span count" units={AxisUnits.Count}>
         <Metric

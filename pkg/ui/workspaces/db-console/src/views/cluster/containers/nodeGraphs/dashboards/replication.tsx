@@ -42,9 +42,25 @@ export default function (props: GraphDashboardProps) {
       title="Ranges"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={`Various details about the status of ranges. In the node view,
-        shows details about ranges the node is responsible for. In the cluster
-        view, shows details about ranges all across the cluster.`}
+      tooltip={
+        <>
+          Various details about the status of ranges. In the node view, shows
+          details about ranges the node is responsible for. In the cluster view,
+          shows details about ranges all across the cluster.
+          <br />
+          <br />
+          Metrics:
+          <ul>
+            <li>cr.store.ranges</li>
+            <li>cr.store.replicas.leaders</li>
+            <li>cr.store.replicas.leaseholders</li>
+            <li>cr.store.replicas.leaders_not_leaseholders</li>
+            <li>cr.store.ranges.unavailable</li>
+            <li>cr.store.ranges.underreplicated</li>
+            <li>cr.store.ranges.overreplicated</li>
+          </ul>
+        </>
+      }
     >
       <Axis label="ranges">
         <Metric name="cr.store.ranges" title="Ranges" />
@@ -66,7 +82,14 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Replicas per Node"
       tenantSource={tenantSource}
-      tooltip={`The number of replicas on each node.`}
+      tooltip={
+        <>
+          The number of replicas on each node.
+          <br />
+          <br />
+          Metric: cr.store.replicas
+        </>
+      }
     >
       <Axis label="replicas">
         {nodeIDs.map(nid => (
@@ -83,8 +106,16 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Leaseholders per Node"
       tenantSource={tenantSource}
-      tooltip={`The number of leaseholder replicas on each node. A leaseholder replica is the one that
-          receives and coordinates all read and write requests for its range.`}
+      tooltip={
+        <>
+          The number of leaseholder replicas on each node. A leaseholder replica
+          is the one that receives and coordinates all read and write requests
+          for its range.
+          <br />
+          <br />
+          Metric: cr.store.replicas.leaseholders
+        </>
+      }
     >
       <Axis label="leaseholders">
         {nodeIDs.map(nid => (
@@ -101,9 +132,16 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Average Replica Queries per Node"
       tenantSource={tenantSource}
-      tooltip={`Moving average of the number of KV batch requests processed by
-         leaseholder replicas on each node per second. Tracks roughly the last
-         30 minutes of requests. Used for load-based rebalancing decisions.`}
+      tooltip={
+        <>
+          Moving average of the number of KV batch requests processed by
+          leaseholder replicas on each node per second. Tracks roughly the last
+          30 minutes of requests. Used for load-based rebalancing decisions.
+          <br />
+          <br />
+          Metric: cr.store.rebalancing.queriespersecond
+        </>
+      }
     >
       <Axis label="queries">
         {nodeIDs.map(nid => (
@@ -120,9 +158,16 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Average Replica CPU per Node"
       tenantSource={tenantSource}
-      tooltip={`Moving average of all replica CPU usage on each node per second.
-         Tracks roughly the last 30 minutes of usage. Used for load-based
-         rebalancing decisions.`}
+      tooltip={
+        <>
+          Moving average of all replica CPU usage on each node per second.
+          Tracks roughly the last 30 minutes of usage. Used for load-based
+          rebalancing decisions.
+          <br />
+          <br />
+          Metric: cr.store.rebalancing.cpunanospersecond
+        </>
+      }
     >
       <Axis units={AxisUnits.Duration} label="CPU time">
         {nodeIDs.map(nid => (
@@ -139,7 +184,12 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Logical Bytes per Node"
       tenantSource={tenantSource}
-      tooltip={<LogicalBytesGraphTooltip />}
+      tooltip={
+        <>
+          <LogicalBytesGraphTooltip />
+          Metric: cr.store.totalbytes
+        </>
+      }
     >
       <Axis units={AxisUnits.Bytes} label="logical store size">
         {nodeIDs.map(nid => (
@@ -157,6 +207,15 @@ export default function (props: GraphDashboardProps) {
       title="Replica Quiescence"
       sources={storeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>cr.store.replicas</li>
+            <li>cr.store.replicas.quiescent</li>
+          </ul>
+        </>
+      }
     >
       <Axis label="replicas">
         <Metric name="cr.store.replicas" title="Replicas" />
@@ -168,6 +227,20 @@ export default function (props: GraphDashboardProps) {
       title="Range Operations"
       sources={storeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>cr.store.range.splits</li>
+            <li>cr.store.range.merges</li>
+            <li>cr.store.range.adds</li>
+            <li>cr.store.range.removes</li>
+            <li>cr.store.leases.transfers.success</li>
+            <li>cr.store.rebalancing.lease.transfers</li>
+            <li>cr.store.rebalancing.range.rebalances</li>
+          </ul>
+        </>
+      }
     >
       <Axis label="ranges">
         <Metric name="cr.store.range.splits" title="Splits" nonNegativeRate />
@@ -196,6 +269,18 @@ export default function (props: GraphDashboardProps) {
       title="Snapshots"
       sources={storeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>cr.store.range.snapshots.generated</li>
+            <li>cr.store.range.snapshots.applied-voter</li>
+            <li>cr.store.range.snapshots.applied-initial</li>
+            <li>cr.store.range.snapshots.applied-non-voter</li>
+            <li>cr.store.replicas.reserved</li>
+          </ul>
+        </>
+      }
     >
       <Axis label="snapshots">
         <Metric
@@ -230,6 +315,15 @@ export default function (props: GraphDashboardProps) {
       title="Snapshot Data Received"
       sources={storeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>cr.store.range.snapshots.rebalancing.rcvd-bytes</li>
+            <li>cr.store.range.snapshots.recovery.rcvd-bytes</li>
+          </ul>
+        </>
+      }
     >
       <Axis label="bytes" units={AxisUnits.Bytes}>
         {nodeIDs.map(nid => (
@@ -256,7 +350,13 @@ export default function (props: GraphDashboardProps) {
       title="Receiver Snapshots Queued"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={ReceiverSnapshotsQueuedTooltip}
+      tooltip={
+        <>
+          {ReceiverSnapshotsQueuedTooltip}
+          <br />
+          Metric: cr.store.range.snapshots.recv-queue
+        </>
+      }
     >
       <Axis label="snapshots" units={AxisUnits.Count}>
         {nodeIDs.map(nid => (
@@ -273,7 +373,13 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Circuit Breaker Tripped Replicas"
       tenantSource={tenantSource}
-      tooltip={CircuitBreakerTrippedReplicasTooltip}
+      tooltip={
+        <>
+          {CircuitBreakerTrippedReplicasTooltip}
+          <br />
+          Metric: cr.store.kv.replica_circuit_breaker.num_tripped_replicas
+        </>
+      }
     >
       <Axis label="replicas">
         {nodeIDs.map(nid => (
@@ -291,7 +397,13 @@ export default function (props: GraphDashboardProps) {
       title="Paused Followers"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={PausedFollowersTooltip}
+      tooltip={
+        <>
+          {PausedFollowersTooltip}
+          <br />
+          Metric: cr.store.admission.raft.paused_replicas
+        </>
+      }
     >
       <Axis label="replicas">
         {nodeIDs.map(nid => (
@@ -309,6 +421,23 @@ export default function (props: GraphDashboardProps) {
       title="Replicate Queue Actions: Successes"
       sources={storeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>cr.store.queue.replicate.addreplica.success</li>
+            <li>cr.store.queue.replicate.removereplica.success</li>
+            <li>cr.store.queue.replicate.replacedeadreplica.success</li>
+            <li>cr.store.queue.replicate.removedeadreplica.success</li>
+            <li>
+              cr.store.queue.replicate.replacedecommissioningreplica.success
+            </li>
+            <li>
+              cr.store.queue.replicate.removedecommissioningreplica.success
+            </li>
+          </ul>
+        </>
+      }
     >
       <Axis label="replicas" units={AxisUnits.Count}>
         <Metric
@@ -347,6 +476,21 @@ export default function (props: GraphDashboardProps) {
       title="Replicate Queue Actions: Failures"
       sources={storeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>cr.store.queue.replicate.addreplica.error</li>
+            <li>cr.store.queue.replicate.removereplica.error</li>
+            <li>cr.store.queue.replicate.replacedeadreplica.error</li>
+            <li>cr.store.queue.replicate.removedeadreplica.error</li>
+            <li>
+              cr.store.queue.replicate.replacedecommissioningreplica.error
+            </li>
+            <li>cr.store.queue.replicate.removedecommissioningreplica.error</li>
+          </ul>
+        </>
+      }
     >
       <Axis label="replicas" units={AxisUnits.Count}>
         <Metric
@@ -385,6 +529,11 @@ export default function (props: GraphDashboardProps) {
       title="Decommissioning Errors"
       sources={storeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metric: cr.store.queue.replicate.replacedecommissioningreplica.error
+        </>
+      }
     >
       <Axis label="replicas" units={AxisUnits.Count}>
         {nodeIDs.map(nid => (

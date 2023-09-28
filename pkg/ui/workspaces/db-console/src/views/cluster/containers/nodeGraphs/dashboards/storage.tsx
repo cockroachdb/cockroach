@@ -44,7 +44,17 @@ export default function (props: GraphDashboardProps) {
       title="Capacity"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={<CapacityGraphTooltip tooltipSelection={tooltipSelection} />}
+      tooltip={
+        <>
+          <CapacityGraphTooltip tooltipSelection={tooltipSelection} />
+          Metric:
+          <ul>
+            <li>cr.store.capacity</li>
+            <li>cr.store.capacity.available</li>
+            <li>cr.store.capacity.used</li>
+          </ul>
+        </>
+      }
     >
       <Axis units={AxisUnits.Bytes} label="capacity">
         <Metric name="cr.store.capacity" title="Max" />
@@ -58,7 +68,16 @@ export default function (props: GraphDashboardProps) {
       isKvGraph={false}
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={<LiveBytesGraphTooltip tooltipSelection={tooltipSelection} />}
+      tooltip={
+        <>
+          <LiveBytesGraphTooltip tooltipSelection={tooltipSelection} />
+          Metric:
+          <ul>
+            <li>cr.store.livebytes</li>
+            <li>cr.store.sysbytes</li>
+          </ul>
+        </>
+      }
     >
       <Axis units={AxisUnits.Bytes} label="live bytes">
         <Metric name="cr.store.livebytes" title="Live" />
@@ -70,8 +89,15 @@ export default function (props: GraphDashboardProps) {
       title="Log Commit Latency: 99th Percentile"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={`The 99th %ile latency for commits to the Raft Log.
-        This measures essentially an fdatasync to the storage engine's write-ahead log.`}
+      tooltip={
+        <>
+          The 99th %ile latency for commits to the Raft Log. This measures
+          essentially an fdatasync to the storage engine's write-ahead log.
+          <br />
+          <br />
+          Metric: cr.store.raft.process.logcommit.latency-p99
+        </>
+      }
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {_.map(nodeIDs, nid => (
@@ -89,8 +115,15 @@ export default function (props: GraphDashboardProps) {
       title="Log Commit Latency: 50th Percentile"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={`The 50th %ile latency for commits to the Raft Log.
-        This measures essentially an fdatasync to the storage engine's write-ahead log.`}
+      tooltip={
+        <>
+          The 50th %ile latency for commits to the Raft Log. This measures
+          essentially an fdatasync to the storage engine's write-ahead log.
+          <br />
+          <br />
+          Metric: cr.store.raft.process.logcommit.latency-p50
+        </>
+      }
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {_.map(nodeIDs, nid => (
@@ -108,9 +141,16 @@ export default function (props: GraphDashboardProps) {
       title="Command Commit Latency: 99th Percentile"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={`The 99th %ile latency for commits of Raft commands.
-        This measures applying a batch to the storage engine
-        (including writes to the write-ahead log), but no fsync.`}
+      tooltip={
+        <>
+          The 99th %ile latency for commits of Raft commands. This measures
+          applying a batch to the storage engine (including writes to the
+          write-ahead log), but no fsync.
+          <br />
+          <br />
+          Metric: cr.store.raft.process.commandcommit.latency-p99
+        </>
+      }
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {_.map(nodeIDs, nid => (
@@ -128,9 +168,16 @@ export default function (props: GraphDashboardProps) {
       title="Command Commit Latency: 50th Percentile"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={`The 50th %ile latency for commits of Raft commands.
-        This measures applying a batch to the storage engine
-        (including writes to the write-ahead log), but no fsync.`}
+      tooltip={
+        <>
+          The 50th %ile latency for commits of Raft commands. This measures
+          applying a batch to the storage engine (including writes to the
+          write-ahead log), but no fsync.
+          <br />
+          <br />
+          Metric: cr.store.raft.process.commandcommit.latency-p50
+        </>
+      }
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {_.map(nodeIDs, nid => (
@@ -148,7 +195,14 @@ export default function (props: GraphDashboardProps) {
       title="Read Amplification"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={`The average number of real read operations executed per logical read operation ${tooltipSelection}.`}
+      tooltip={
+        <>
+          The average number of real read operations executed per logical read
+          operation {tooltipSelection}.<br />
+          <br />
+          Metric: cr.store.rocksdb.read-amplification
+        </>
+      }
     >
       <Axis label="factor">
         {_.map(nodeIDs, nid => (
@@ -166,7 +220,13 @@ export default function (props: GraphDashboardProps) {
       title="SSTables"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={`The number of SSTables in use ${tooltipSelection}.`}
+      tooltip={
+        <>
+          The number of SSTables in use {tooltipSelection}.<br />
+          <br />
+          Metric: cr.store.rocksdb.num-sstables
+        </>
+      }
     >
       <Axis label="sstables">
         {_.map(nodeIDs, nid => (
@@ -184,8 +244,19 @@ export default function (props: GraphDashboardProps) {
       title="File Descriptors"
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`The number of open file descriptors ${tooltipSelection}, compared with the
-          file descriptor limit.`}
+      tooltip={
+        <>
+          The number of open file descriptors {tooltipSelection}, compared with
+          the file descriptor limit.
+          <br />
+          <br />
+          Metrics:
+          <ul>
+            <li>cr.node.sys.fd.open</li>
+            <li>cr.node.sys.fd.softlimit</li>
+          </ul>
+        </>
+      }
     >
       <Axis label="descriptors">
         <Metric name="cr.node.sys.fd.open" title="Open" />
@@ -197,7 +268,13 @@ export default function (props: GraphDashboardProps) {
       title="Flushes"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={`Bytes written by memtable flushes ${tooltipSelection}.`}
+      tooltip={
+        <>
+          Bytes written by memtable flushes {tooltipSelection}.<br />
+          <br />
+          Metric: cr.store.rocksdb.flushed-bytes
+        </>
+      }
     >
       <Axis units={AxisUnits.Bytes} label="written bytes">
         {_.map(nodeIDs, nid => (
@@ -216,7 +293,13 @@ export default function (props: GraphDashboardProps) {
       title="WAL Bytes Written"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={`Bytes written to WAL files ${tooltipSelection}.`}
+      tooltip={
+        <>
+          Bytes written to WAL files {tooltipSelection}.<br />
+          <br />
+          Metric: cr.store.storage.wal.bytes_written
+        </>
+      }
     >
       <Axis units={AxisUnits.Bytes} label="written bytes">
         {_.map(nodeIDs, nid => (
@@ -235,7 +318,13 @@ export default function (props: GraphDashboardProps) {
       title="Compactions"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={`Bytes written by compactions ${tooltipSelection}.`}
+      tooltip={
+        <>
+          Bytes written by compactions {tooltipSelection}.<br />
+          <br />
+          Metric: cr.store.rocksdb.compacted-bytes-written
+        </>
+      }
     >
       <Axis units={AxisUnits.Bytes} label="written bytes">
         {_.map(nodeIDs, nid => (
@@ -254,7 +343,13 @@ export default function (props: GraphDashboardProps) {
       title="Ingestions"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={`Bytes written by sstable ingestions ${tooltipSelection}.`}
+      tooltip={
+        <>
+          Bytes written by sstable ingestions {tooltipSelection}.<br />
+          <br />
+          Metric: cr.store.rocksdb.ingested-bytes
+        </>
+      }
     >
       <Axis units={AxisUnits.Bytes} label="written bytes">
         {_.map(nodeIDs, nid => (
@@ -273,8 +368,16 @@ export default function (props: GraphDashboardProps) {
       title="Write Stalls"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={`The number of intentional write stalls per second ${tooltipSelection}. Write stalls
-        are used to backpressure incoming writes during periods of heavy write traffic.`}
+      tooltip={
+        <>
+          The number of intentional write stalls per second {tooltipSelection}.
+          Write stalls are used to backpressure incoming writes during periods
+          of heavy write traffic.
+          <br />
+          <br />
+          Metric: cr.store.storage.write-stalls
+        </>
+      }
     >
       <Axis label="count">
         <Metric
@@ -289,8 +392,19 @@ export default function (props: GraphDashboardProps) {
       title="Time Series Writes"
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`The number of successfully written time series samples, and number of errors attempting
-        to write time series, per second ${tooltipSelection}.`}
+      tooltip={
+        <>
+          The number of successfully written time series samples, and number of
+          errors attempting to write time series, per second {tooltipSelection}.
+          <br />
+          <br />
+          Metric:
+          <ul>
+            <li>cr.node.timeseries.write.samples</li>
+            <li>cr.node.timeseries.write.errors</li>
+          </ul>
+        </>
+      }
     >
       <Axis label="count">
         <Metric
@@ -322,6 +436,9 @@ export default function (props: GraphDashboardProps) {
           <br />
           See the "databases" tab to find the current disk usage for time series
           data.
+          <br />
+          <br />
+          Metric: cr.node.timeseries.write.bytes
         </div>
       }
     >

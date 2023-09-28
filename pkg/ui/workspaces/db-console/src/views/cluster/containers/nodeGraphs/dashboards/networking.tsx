@@ -25,7 +25,10 @@ export default function (props: GraphDashboardProps) {
     props;
 
   return [
-    <LineGraph title="Network Bytes Received">
+    <LineGraph
+      title="Network Bytes Received"
+      tooltip={`Metric: cr.node.sys.host.net.recv.bytes`}
+    >
       <Axis units={AxisUnits.Bytes} label="bytes">
         {nodeIDs.map(nid => (
           <Metric
@@ -39,7 +42,10 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Network Bytes Sent">
+    <LineGraph
+      title="Network Bytes Sent"
+      tooltip={`Metric: cr.node.sys.host.net.send.bytes`}
+    >
       <Axis units={AxisUnits.Bytes} label="bytes">
         {nodeIDs.map(nid => (
           <Metric
@@ -56,7 +62,14 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="RPC Heartbeat Latency: 50th percentile"
       isKvGraph={false}
-      tooltip={`Round-trip latency for recent successful outgoing heartbeats.`}
+      tooltip={
+        <>
+          Round-trip latency for recent successful outgoing heartbeats.
+          <br />
+          <br />
+          Metric: cr.node.round-trip-latency-p50
+        </>
+      }
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {nodeIDs.map(nid => (
@@ -74,7 +87,14 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="RPC Heartbeat Latency: 99th percentile"
       isKvGraph={false}
-      tooltip={`Round-trip latency for recent successful outgoing heartbeats.`}
+      tooltip={
+        <>
+          Round-trip latency for recent successful outgoing heartbeats.
+          <br />
+          <br />
+          Metric: cr.node.round-trip-latency-p99
+        </>
+      }
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {nodeIDs.map(nid => (
@@ -91,7 +111,15 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="Unhealthy RPC Connections"
-      tooltip={`The number of outgoing connections on each node that are in an unhealthy state.`}
+      tooltip={
+        <>
+          The number of outgoing connections on each node that are in an
+          unhealthy state.
+          <br />
+          <br />
+          Metric: cr.node.rpc.connection.unhealthy
+        </>
+      }
     >
       <Axis label="connections">
         {nodeIDs.map(nid => (

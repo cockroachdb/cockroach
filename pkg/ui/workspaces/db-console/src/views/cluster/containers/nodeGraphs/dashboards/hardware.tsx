@@ -39,7 +39,14 @@ export default function (props: GraphDashboardProps) {
       title="CPU Percent"
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={<div>CPU usage for the CRDB nodes {tooltipSelection}</div>}
+      tooltip={
+        <div>
+          CPU usage for the CRDB nodes {tooltipSelection}
+          <br />
+          <br />
+          Metric: cr.node.sys.cpu.combined.percent-normalized
+        </div>
+      }
     >
       <Axis units={AxisUnits.Percentage} label="CPU">
         {nodeIDs.map(nid => (
@@ -56,7 +63,14 @@ export default function (props: GraphDashboardProps) {
       title="Host CPU Percent"
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={<div>Machine-wide CPU usage {tooltipSelection}</div>}
+      tooltip={
+        <div>
+          Machine-wide CPU usage {tooltipSelection}
+          <br />
+          <br />
+          Metric: cr.node.sys.cpu.host.combined.percent-normalized
+        </div>
+      }
     >
       <Axis units={AxisUnits.Percentage} label="CPU">
         {nodeIDs.map(nid => (
@@ -73,7 +87,14 @@ export default function (props: GraphDashboardProps) {
       title="Memory Usage"
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={<div>Memory in use {tooltipSelection}</div>}
+      tooltip={
+        <div>
+          Memory in use {tooltipSelection}
+          <br />
+          <br />
+          Metric: cr.node.sys.rss
+        </div>
+      }
     >
       <Axis units={AxisUnits.Bytes} label="memory usage">
         {nodeIDs.map(nid => (
@@ -90,6 +111,7 @@ export default function (props: GraphDashboardProps) {
       title="Disk Read MiB/s"
       sources={nodeSources}
       tenantSource={tenantSource}
+      tooltip={`Metric: cr.node.sys.host.disk.read.bytes`}
     >
       <Axis units={AxisUnits.Bytes} label="bytes">
         {nodeIDs.map(nid => (
@@ -107,6 +129,7 @@ export default function (props: GraphDashboardProps) {
       title="Disk Write MiB/s"
       sources={nodeSources}
       tenantSource={tenantSource}
+      tooltip={`Metric: cr.node.sys.host.disk.write.bytes`}
     >
       <Axis units={AxisUnits.Bytes} label="bytes">
         {nodeIDs.map(nid => (
@@ -124,6 +147,7 @@ export default function (props: GraphDashboardProps) {
       title="Disk Read IOPS"
       sources={nodeSources}
       tenantSource={tenantSource}
+      tooltip={`Metric: cr.node.sys.host.disk.read.count`}
     >
       <Axis units={AxisUnits.Count} label="IOPS">
         {nodeIDs.map(nid => (
@@ -141,6 +165,7 @@ export default function (props: GraphDashboardProps) {
       title="Disk Write IOPS"
       sources={nodeSources}
       tenantSource={tenantSource}
+      tooltip={`Metric: cr.node.sys.host.disk.write.count`}
     >
       <Axis units={AxisUnits.Count} label="IOPS">
         {nodeIDs.map(nid => (
@@ -158,6 +183,7 @@ export default function (props: GraphDashboardProps) {
       title="Disk Ops In Progress"
       sources={nodeSources}
       tenantSource={tenantSource}
+      tooltip={`Metric: cr.node.sys.host.disk.iopsinprogress`}
     >
       <Axis units={AxisUnits.Count} label="Ops">
         {nodeIDs.map(nid => (
@@ -174,7 +200,12 @@ export default function (props: GraphDashboardProps) {
       title="Available Disk Capacity"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={<AvailableDiscCapacityGraphTooltip />}
+      tooltip={
+        <>
+          <AvailableDiscCapacityGraphTooltip />
+          Metric: cr.store.capacity.available
+        </>
+      }
     >
       <Axis units={AxisUnits.Bytes} label="capacity">
         {nodeIDs.map(nid => (

@@ -30,6 +30,22 @@ export default function (props: GraphDashboardProps) {
       title="Queue Processing Failures"
       sources={storeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>cr.store.queue.gc.process.failure</li>
+            <li>cr.store.queue.replicagc.process.failure</li>
+            <li>cr.store.queue.replicate.process.failure</li>
+            <li>cr.store.queue.split.process.failure</li>
+            <li>cr.store.queue.merge.process.failure</li>
+            <li>cr.store.queue.consistency.process.failure</li>
+            <li>cr.store.queue.raftlog.process.failure</li>
+            <li>cr.store.queue.raftsnapshot.process.failure</li>
+            <li>cr.store.queue.tsmaintenance.process.failure</li>
+          </ul>
+        </>
+      }
     >
       <Axis units={AxisUnits.Count} label="failures">
         <Metric
@@ -84,6 +100,22 @@ export default function (props: GraphDashboardProps) {
       title="Queue Processing Times"
       sources={storeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>cr.store.queue.gc.processingnanos</li>
+            <li>cr.store.queue.replicagc.processingnanos</li>
+            <li>cr.store.queue.replicate.processingnanos</li>
+            <li>cr.store.queue.split.processingnanos</li>
+            <li>cr.store.queue.merge.processingnanos</li>
+            <li>cr.store.queue.consistency.processingnanos</li>
+            <li>cr.store.queue.raftlog.processingnanos</li>
+            <li>cr.store.queue.raftsnapshot.processingnanos</li>
+            <li>cr.store.queue.tsmaintenance.processingnanos</li>
+          </ul>
+        </>
+      }
     >
       <Axis units={AxisUnits.Duration} label="processing time">
         <Metric
@@ -141,6 +173,16 @@ export default function (props: GraphDashboardProps) {
       title="Replica GC Queue"
       sources={storeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>cr.store.queue.replicagc.process.success</li>
+            <li>cr.store.queue.replicagc.pending</li>
+            <li>cr.store.queue.replicagc.removereplica</li>
+          </ul>
+        </>
+      }
     >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
@@ -165,6 +207,22 @@ export default function (props: GraphDashboardProps) {
       title="Replication Queue"
       sources={storeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>cr.store.queue.replicate.process.success</li>
+            <li>cr.store.queue.replicate.pending</li>
+            <li>cr.store.queue.replicate.addreplica</li>
+            <li>cr.store.queue.replicate.removereplica</li>
+            <li>cr.store.queue.replicate.removedeadreplica</li>
+            <li>cr.store.queue.replicate.removelearnerreplica</li>
+            <li>cr.store.queue.replicate.rebalancereplica</li>
+            <li>cr.store.queue.replicate.transferlease</li>
+            <li>cr.store.queue.replicate.purgatory</li>
+          </ul>
+        </>
+      }
     >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
@@ -218,6 +276,15 @@ export default function (props: GraphDashboardProps) {
       title="Split Queue"
       sources={storeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>cr.store.queue.split.process.success</li>
+            <li>cr.store.queue.split.pending</li>
+          </ul>
+        </>
+      }
     >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
@@ -237,6 +304,15 @@ export default function (props: GraphDashboardProps) {
       title="Merge Queue"
       sources={storeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>cr.store.queue.merge.process.success</li>
+            <li>cr.store.queue.merge.pending</li>
+          </ul>
+        </>
+      }
     >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
@@ -256,6 +332,15 @@ export default function (props: GraphDashboardProps) {
       title="Raft Log Queue"
       sources={storeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>cr.store.queue.raftlog.process.success</li>
+            <li>cr.store.queue.raftlog.pending</li>
+          </ul>
+        </>
+      }
     >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
@@ -275,6 +360,15 @@ export default function (props: GraphDashboardProps) {
       title="Raft Snapshot Queue"
       sources={storeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>cr.store.queue.raftsnapshot.process.success</li>
+            <li>cr.store.queue.raftsnapshot.pending</li>
+          </ul>
+        </>
+      }
     >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
@@ -294,6 +388,15 @@ export default function (props: GraphDashboardProps) {
       title="Consistency Checker Queue"
       sources={storeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>cr.store.queue.consistency.process.success</li>
+            <li>cr.store.queue.consistency.pending</li>
+          </ul>
+        </>
+      }
     >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
@@ -313,6 +416,15 @@ export default function (props: GraphDashboardProps) {
       title="Time Series Maintenance Queue"
       sources={storeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>cr.store.queue.tsmaintenance.process.success</li>
+            <li>cr.store.queue.tsmaintenance.pending</li>
+          </ul>
+        </>
+      }
     >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
@@ -332,6 +444,15 @@ export default function (props: GraphDashboardProps) {
       title="MVCC GC Queue"
       sources={storeSources}
       tenantSource={tenantSource}
+      tooltip={
+        <>
+          Metrics:
+          <ul>
+            <li>cr.store.queue.gc.process.success</li>
+            <li>cr.store.queue.gc.pending</li>
+          </ul>
+        </>
+      }
     >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
@@ -351,7 +472,15 @@ export default function (props: GraphDashboardProps) {
       title="Protected Timestamp Records"
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`Number of protected timestamp records (used by backups, changefeeds, etc. to prevent MVCC GC)`}
+      tooltip={
+        <>
+          Number of protected timestamp records (used by backups, changefeeds,
+          etc. to prevent MVCC GC)
+          <br />
+          <br />
+          Metric: cr.node.spanconfig.kvsubscriber.protected_record_count
+        </>
+      }
     >
       <Axis units={AxisUnits.Count} label="Records">
         {nodeIDs.map(nid => (

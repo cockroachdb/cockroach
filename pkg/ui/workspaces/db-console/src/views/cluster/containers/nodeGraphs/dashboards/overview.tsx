@@ -39,8 +39,21 @@ export default function (props: GraphDashboardProps) {
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`A moving average of the number of SELECT, INSERT, UPDATE, and DELETE statements
-        successfully executed per second ${tooltipSelection}.`}
+      tooltip={
+        <span>
+          A moving average of the number of SELECT, INSERT, UPDATE, and DELETE
+          statements successfully executed per second {tooltipSelection}.
+          <br />
+          <br />
+          Metrics:
+          <ul>
+            <li>cr.node.sql.select.count</li>
+            <li>cr.node.sql.update.count</li>
+            <li>cr.node.sql.insert.count</li>
+            <li>cr.node.sql.delete.count</li>
+          </ul>
+        </span>
+      }
       preCalcGraphSize={true}
     >
       <Axis label="queries">
@@ -79,6 +92,9 @@ export default function (props: GraphDashboardProps) {
             This time only includes SELECT, INSERT, UPDATE and DELETE statements
             and does not include network latency between the node and client.
           </em>
+          <br />
+          <br />
+          Metric: cr.node.sql.service.latency-p99
         </div>
       }
       preCalcGraphSize={true}
@@ -100,7 +116,15 @@ export default function (props: GraphDashboardProps) {
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`A moving average of the number of SQL statements executed per second that experienced contention ${tooltipSelection}.`}
+      tooltip={
+        <span>
+          A moving average of the number of SQL statements executed per second
+          that experienced contention {tooltipSelection}.
+          <br />
+          <br />
+          Metric: cr.node.sql.distsql.contended_queries.count
+        </span>
+      }
       preCalcGraphSize={true}
     >
       <Axis label="Average number of queries per second">
@@ -122,6 +146,9 @@ export default function (props: GraphDashboardProps) {
             Ranges are subsets of your data, which are replicated to ensure
             survivability.
           </em>
+          <br />
+          <br />
+          Metric: cr.store.replicas
         </div>
       }
       preCalcGraphSize={true}
@@ -143,7 +170,18 @@ export default function (props: GraphDashboardProps) {
       isKvGraph={true}
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={<CapacityGraphTooltip tooltipSelection={tooltipSelection} />}
+      tooltip={
+        <>
+          <CapacityGraphTooltip tooltipSelection={tooltipSelection} />
+          <br />
+          Metrics:
+          <ul>
+            <li>cr.store.capacity</li>
+            <li>cr.store.capacity.available</li>
+            <li>cr.store.capacity.used</li>
+          </ul>
+        </>
+      }
       preCalcGraphSize={true}
     >
       <Axis units={AxisUnits.Bytes} label="capacity">
