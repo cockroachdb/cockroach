@@ -37,7 +37,7 @@ func registerDisaggRebalance(r registry.Registry) {
 		EncryptionSupport: registry.EncryptionAlwaysDisabled,
 		Timeout:           1 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.Spec().Cloud != spec.AWS {
+			if c.Cloud() != spec.AWS {
 				t.Skip("disagg-rebalance is only configured to run on AWS")
 			}
 			c.Put(ctx, t.Cockroach(), "./cockroach")
