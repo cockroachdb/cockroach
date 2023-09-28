@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -626,27 +625,21 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 }
 
 func (rq *replicateQueue) shouldQueue(
-	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, conf *roachpb.SpanConfig,
 ) (shouldQueue bool, priority float64) {
-	// TODO(baptist): Change to Replica.SpanConfig() once the refactor is done to
-	// have that use the confReader.
-	conf, err := confReader.GetSpanConfigForKey(ctx, repl.startKey)
-	if err != nil {
-		return false, 0
-	}
 	desc := repl.Desc()
 	return rq.planner.ShouldPlanChange(
 		ctx,
 		now,
 		repl,
 		desc,
-		&conf,
+		conf,
 		rq.canTransferLeaseFrom,
 	)
 }
 
 func (rq *replicateQueue) process(
-	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, repl *Replica, conf *roachpb.SpanConfig,
 ) (processed bool, err error) {
 	retryOpts := retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
@@ -654,18 +647,12 @@ func (rq *replicateQueue) process(
 		Multiplier:     2,
 		MaxRetries:     5,
 	}
-	// TODO(baptist): Change to Replica.SpanConfig() once the refactor is done to
-	// have that use the confReader.
-	conf, err := confReader.GetSpanConfigForKey(ctx, repl.startKey)
-	if err != nil {
-		return false, err
-	}
 	desc := repl.Desc()
 	// Use a retry loop in order to backoff in the case of snapshot errors,
 	// usually signaling that a rebalancing reservation could not be made with the
 	// selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		requeue, err := rq.processOneChangeWithTracing(ctx, repl, desc, &conf)
+		requeue, err := rq.processOneChangeWithTracing(ctx, repl, desc, conf)
 		if isSnapshotError(err) {
 			// If ChangeReplicas failed because the snapshot failed, we attempt to
 			// retry the operation. The most likely causes of the snapshot failing
@@ -690,7 +677,7 @@ func (rq *replicateQueue) process(
 		}
 
 		if testingAggressiveConsistencyChecks {
-			if _, err := rq.store.consistencyQueue.process(ctx, repl, confReader); err != nil {
+			if _, err := rq.store.consistencyQueue.process(ctx, repl, conf); err != nil {
 				log.KvDistribution.Warningf(ctx, "%v", err)
 			}
 		}
@@ -1143,7 +1130,7 @@ func (rq *replicateQueue) canTransferLeaseFrom(
 }
 
 func (*replicateQueue) postProcessScheduled(
-	ctx context.Context, replica replicaInQueue, priority float64,
+	ctx context.Context, replica replicaInQueue, conf *roachpb.SpanConfig, priority float64,
 ) {
 }
 

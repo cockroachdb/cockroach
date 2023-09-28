@@ -76,13 +76,17 @@ func (r *Replica) AdminSplit(
 	if len(args.SplitKey) == 0 {
 		return kvpb.AdminSplitResponse{}, kvpb.NewErrorf("cannot split range with no key provided")
 	}
+	conf, err := r.LoadSpanConfig(ctx)
+	if err != nil {
+		return kvpb.AdminSplitResponse{}, kvpb.NewError(err)
+	}
 
-	err := r.executeAdminCommandWithDescriptor(ctx, func(desc *roachpb.RangeDescriptor) error {
+	kvErr := r.executeAdminCommandWithDescriptor(ctx, func(desc *roachpb.RangeDescriptor) error {
 		var err error
-		reply, err = r.adminSplitWithDescriptor(ctx, args, desc, true /* delayable */, reason, false /* findFirstSafeKey */)
+		reply, err = r.adminSplitWithDescriptor(ctx, args, desc, conf, true /* delayable */, reason, false /* findFirstSafeKey */)
 		return err
 	})
-	return reply, err
+	return reply, kvErr
 }
 
 func maybeDescriptorChangedError(
@@ -298,6 +302,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	ctx context.Context,
 	args kvpb.AdminSplitRequest,
 	desc *roachpb.RangeDescriptor,
+	conf *roachpb.SpanConfig,
 	delayable bool,
 	reason redact.RedactableString,
 	findFirstSafeKey bool,
@@ -323,7 +328,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		if len(args.SplitKey) == 0 {
 			// Find a key to split by size.
 			var err error
-			targetSize := r.GetMaxBytes(ctx) / 2
+			targetSize := conf.RangeMaxBytes / 2
 			foundSplitKey, err = storage.MVCCFindSplitKey(
 				ctx, r.store.TODOEngine(), desc.StartKey, desc.EndKey, targetSize)
 			if err != nil {
@@ -3562,8 +3567,8 @@ type RelocateOneOptions interface {
 	Allocator() allocatorimpl.Allocator
 	// StorePool returns the store's configured store pool.
 	StorePool() storepool.AllocatorStorePool
-	// SpanConfig returns the span configuration for the range with start key.
-	SpanConfig(ctx context.Context, startKey roachpb.RKey) (*roachpb.SpanConfig, error)
+	// LoadSpanConfig returns the span configuration for the range with start key.
+	LoadSpanConfig(ctx context.Context, startKey roachpb.RKey) (*roachpb.SpanConfig, error)
 	// LeaseHolder returns the descriptor of the replica which holds the lease
 	// on the range with start key.
 	Leaseholder(ctx context.Context, startKey roachpb.RKey) (roachpb.ReplicaDescriptor, error)
@@ -3583,19 +3588,11 @@ func (roo *replicaRelocateOneOptions) StorePool() storepool.AllocatorStorePool {
 	return roo.store.cfg.StorePool
 }
 
-// SpanConfig returns the span configuration for the range with start key.
-func (roo *replicaRelocateOneOptions) SpanConfig(
+// LoadSpanConfig returns the span configuration for the range with start key.
+func (roo *replicaRelocateOneOptions) LoadSpanConfig(
 	ctx context.Context, startKey roachpb.RKey,
 ) (*roachpb.SpanConfig, error) {
-	confReader, err := roo.store.GetConfReader(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "can't relocate range")
-	}
-	conf, err := confReader.GetSpanConfigForKey(ctx, startKey)
-	if err != nil {
-		return nil, err
-	}
-	return &conf, nil
+	return roo.store.GetSpanConfigForKey(ctx, startKey)
 }
 
 // Leaseholder returns the descriptor of the replica which holds the lease on
@@ -3635,7 +3632,7 @@ func RelocateOne(
 	allocator := options.Allocator()
 	storePool := options.StorePool()
 
-	conf, err := options.SpanConfig(ctx, desc.StartKey)
+	conf, err := options.LoadSpanConfig(ctx, desc.StartKey)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -4007,8 +4004,8 @@ func (r *Replica) adminScatter(
 		if currentAttempt == maxAttempts-1 || !requeue {
 			allowLeaseTransfer = true
 		}
-		desc, conf := r.DescAndSpanConfig()
-		_, err := rq.replicaCanBeProcessed(ctx, r, false /* acquireLeaseIfNeeded */)
+		desc := r.Desc()
+		conf, err := rq.replicaCanBeProcessed(ctx, r, false /* acquireLeaseIfNeeded */)
 		if err != nil {
 			// The replica can not be processed, so skip it.
 			break
@@ -4032,7 +4029,12 @@ func (r *Replica) adminScatter(
 	// done by transferring the lease to any of the given N replicas with
 	// probability 1/N of choosing each.
 	if args.RandomizeLeases && r.OwnsValidLease(ctx, r.store.Clock().NowAsClockTimestamp()) {
-		desc, conf := r.DescAndSpanConfig()
+		desc := r.Desc()
+		conf, err := r.LoadSpanConfig(ctx)
+		if err != nil {
+			// We don't have the span config for this range.
+			return kvpb.AdminScatterResponse{}, err
+		}
 		potentialLeaseTargets := r.store.allocator.ValidLeaseTargets(
 			ctx, r.store.cfg.StorePool, desc, conf, desc.Replicas().VoterDescriptors(), r, allocator.TransferLeaseOptions{})
 		if len(potentialLeaseTargets) > 0 {

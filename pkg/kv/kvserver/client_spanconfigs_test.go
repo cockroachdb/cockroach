@@ -58,6 +58,7 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 				StoreKVSubscriberOverride: mockSubscriber,
 			},
 		},
+		DisableSQLServer: true,
 	}
 	s := serverutils.StartServerOnly(t, args)
 	defer s.Stopper().Stop(context.Background())
@@ -82,60 +83,6 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 	require.True(t, added[0].GetTarget().GetSpan().Equal(span))
 	addedCfg := added[0].GetConfig()
 	require.True(t, addedCfg.Equal(conf))
-
-	require.NotNil(t, mockSubscriber.callback)
-	mockSubscriber.callback(ctx, span) // invoke the callback
-	testutils.SucceedsSoon(t, func() error {
-		repl := store.LookupReplica(keys.MustAddr(key))
-		gotConfig, err := repl.LoadSpanConfig(ctx)
-		require.NoError(t, err)
-		if !gotConfig.Equal(conf) {
-			return errors.Newf("expected config=%s, got config=%s", conf.String(), gotConfig.String())
-		}
-		return nil
-	})
-}
-
-// TestFallbackSpanConfigOverride ensures that
-// spanconfig.store.fallback_config_override works as expected.
-func TestFallbackSpanConfigOverride(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	st := cluster.MakeTestingClusterSettings()
-	spanConfigStore := spanconfigstore.New(
-		roachpb.TestingDefaultSpanConfig(),
-		st,
-		spanconfigstore.NewEmptyBoundsReader(),
-		nil,
-	)
-	var t0 = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
-	mockSubscriber := newMockSpanConfigSubscriber(t0, spanConfigStore)
-
-	ctx := context.Background()
-	args := base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			Store: &kvserver.StoreTestingKnobs{
-				DisableMergeQueue: true,
-				DisableSplitQueue: true,
-				DisableGCQueue:    true,
-			},
-			SpanConfig: &spanconfig.TestingKnobs{
-				StoreKVSubscriberOverride: mockSubscriber,
-			},
-		},
-	}
-	s := serverutils.StartServerOnly(t, args)
-	defer s.Stopper().Stop(context.Background())
-
-	key, err := s.ScratchRange()
-	require.NoError(t, err)
-	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
-	require.NoError(t, err)
-	repl := store.LookupReplica(keys.MustAddr(key))
-	span := repl.Desc().RSpan().AsRawSpanWithNoLocals()
-
-	conf := roachpb.SpanConfig{NumReplicas: 5, NumVoters: 3}
-	spanconfigstore.FallbackConfigOverride.Override(ctx, &st.SV, &conf)
 
 	require.NotNil(t, mockSubscriber.callback)
 	mockSubscriber.callback(ctx, span) // invoke the callback
