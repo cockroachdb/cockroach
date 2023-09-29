@@ -2522,11 +2522,7 @@ func (c *SyncedCluster) pgurls(
 		if err != nil {
 			return nil, err
 		}
-		sharedClusterName := ""
-		if desc.ServiceMode == ServiceModeShared {
-			sharedClusterName = virtualClusterName
-		}
-		m[node] = c.NodeURL(host, desc.Port, sharedClusterName)
+		m[node] = c.NodeURL(host, desc.Port, virtualClusterName, desc.ServiceMode)
 	}
 	return m, nil
 }
