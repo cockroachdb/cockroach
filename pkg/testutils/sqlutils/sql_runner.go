@@ -75,12 +75,27 @@ type Fataler interface {
 	Fatalf(string, ...interface{})
 }
 
+func fmtMessage(message string) string {
+	if message != "" {
+		message = "[" + message + "] "
+	}
+	return message
+}
+
 // Exec is a wrapper around gosql.Exec that kills the test on error.
 func (sr *SQLRunner) Exec(t Fataler, query string, args ...interface{}) gosql.Result {
+	return sr.ExecWithMessage(t, "", query, args...)
+}
+
+// ExecWithMessage works similarly to Exec, but allows the caller to add
+// additional context to the error message.
+func (sr *SQLRunner) ExecWithMessage(
+	t Fataler, message string, query string, args ...interface{},
+) gosql.Result {
 	helperOrNoop(t)()
 	r, err := sr.DB.ExecContext(context.Background(), query, args...)
 	if err != nil {
-		t.Fatalf("error executing '%s': %s", query, err)
+		t.Fatalf("%serror executing query=%q args=%q: %s", fmtMessage(message), query, args, err)
 	}
 	return r
 }
@@ -133,14 +148,22 @@ func (sr *SQLRunner) ExecSucceedsSoon(t Fataler, query string, args ...interface
 func (sr *SQLRunner) ExecRowsAffected(
 	t Fataler, expRowsAffected int, query string, args ...interface{},
 ) {
+	sr.ExecRowsAffectedWithMessage(t, expRowsAffected, "", query, args...)
+}
+
+// ExecRowsAffectedWithMessage works similarly to ExecRowsAffected, but allows
+// the caller to add additional context to the error message.
+func (sr *SQLRunner) ExecRowsAffectedWithMessage(
+	t Fataler, expRowsAffected int, message string, query string, args ...interface{},
+) {
 	helperOrNoop(t)()
-	r := sr.Exec(t, query, args...)
+	r := sr.ExecWithMessage(t, message, query, args...)
 	numRows, err := r.RowsAffected()
 	if err != nil {
-		t.Fatalf("%v", err)
+		t.Fatalf("%s%v", fmtMessage(message), err)
 	}
 	if numRows != int64(expRowsAffected) {
-		t.Fatalf("expected %d affected rows, got %d on '%s'", expRowsAffected, numRows, query)
+		t.Fatalf("%sexpected %d affected rows, got %d on query=%q args=%q", fmtMessage(message), expRowsAffected, numRows, query, args)
 	}
 }
 
