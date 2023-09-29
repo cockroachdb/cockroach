@@ -136,17 +136,39 @@ func (st *statementTree) Pop() {
 //	statement1: UPDATE t1
 //	├── statement2: UPDATE t2
 //	└── statement3: UPDATE t1
-func (st *statementTree) CanMutateTable(tabID cat.StableID, typ mutationType) bool {
+//
+// isPostStmt indicates that this mutation will be evaluated at the end of the
+// statement (e.g., as part of a foreign key constraint).
+func (st *statementTree) CanMutateTable(
+	tabID cat.StableID, typ mutationType, isPostStmt bool,
+) bool {
 	if len(st.stmts) == 0 {
 		panic(errors.AssertionFailedf("unexpected empty tree"))
 	}
-	curr := &st.stmts[len(st.stmts)-1]
+	if isPostStmt && len(st.stmts) == 1 {
+		return true
+	}
+	offset := 1
+	if isPostStmt {
+		// If this mutation will be evaluated at the end of the current statement,
+		// the mutation should be added to the parent statement. This is because
+		// during execution, we step the transaction sequence point before starting
+		// check evaluations, so all updates in the current statement will be
+		// visible.
+		offset = 2
+	}
+	curr := &st.stmts[len(st.stmts)-offset]
 	// Check the children of the current statement for a conflict.
-	if curr.childrenConflictWithMutation(tabID, typ) {
+	if !isPostStmt && curr.childrenConflictWithMutation(tabID, typ) {
 		return false
 	}
 	// Check the current statement and all parent statements for a conflict.
 	for i := range st.stmts {
+		if isPostStmt && i == len(st.stmts)-1 {
+			// Don't check against the originating statement since we're adding this
+			// mutation to the parent statement.
+			break
+		}
 		n := &st.stmts[i]
 		if n.conflictsWithMutation(tabID, typ) {
 			return false
@@ -155,9 +177,17 @@ func (st *statementTree) CanMutateTable(tabID cat.StableID, typ mutationType) bo
 	// The new mutation is valid, so track it.
 	switch typ {
 	case simpleInsert:
-		curr.simpleInsertTables.Add(int(tabID))
+		if isPostStmt {
+			curr.childrenSimpleInsertTables.Add(int(tabID))
+		} else {
+			curr.simpleInsertTables.Add(int(tabID))
+		}
 	case generalMutation:
-		curr.generalMutationTables.Add(int(tabID))
+		if isPostStmt {
+			curr.childrenGeneralMutationTables.Add(int(tabID))
+		} else {
+			curr.generalMutationTables.Add(int(tabID))
+		}
 	}
 	return true
 }
