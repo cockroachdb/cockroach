@@ -70,7 +70,7 @@ case "${CLOUD}" in
       # - "aws" to ensure we select tests that now no longer have "default" because they have the "aws" tag
       # Ideally, refactor the tags themselves to be explicit about what cloud they are for and when they can run.
       # https://github.com/cockroachdb/cockroach/issues/100605
-      FILTER="tag:aws tag:default"
+      FILTER="tag:aws tag:default tag:azure"
     ;;
   aws)
     if [ -z "${FILTER}" ]; then
@@ -79,7 +79,8 @@ case "${CLOUD}" in
     ;;
   azure)
     if [ -z "${FILTER}" ]; then
-      FILTER="tag:owner-cdc"
+      # Subset of tests for now.
+      FILTER="tag:azure tag:owner-cdc tag:owner-disaster-recovery"
     fi
     ;;
   *)
