@@ -420,9 +420,17 @@ message LocalOnlySessionData {
   // DurableLockingForSerializable is true if we should use durable locking for
   // SELECT FOR UPDATE statements, SELECT FOR SHARE statements, and constraint
   // checks under serializable isolation. (Serializable isolation does not
-  // require locking for correctness, so by default we use best-effor locks for
+  // require locking for correctness, so by default we use best-effort locks for
   // better performance.) Weaker isolation levels always use durable locking.
   bool durable_locking_for_serializable = 109;
+  // SharedLockingForSerializable, if set to true, means SELECT FOR SHARE and
+  // SELECT FOR KEY SHARE statements issued by transactions that run with
+  // serializable isolation will acquire shared locks; otherwise, they'll
+  // perform non-locking reads.
+  //
+  // Weaker isolation levels always acquire shared locks for SELECT FOR SHARE
+  // and SELECT FOR KEY SHARE statements, regardless of this session setting.
+  bool shared_locking_for_serializable = 112;
   // MaxRetriesForReadCommitted indicates the maximum number of
   // automatic retries to perform for statements in explicit READ COMMITTED
   // transactions that see a transaction retry error.

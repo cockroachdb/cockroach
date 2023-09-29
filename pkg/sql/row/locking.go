@@ -27,16 +27,12 @@ func GetKeyLockingStrength(lockStrength descpb.ScanLockingStrength) lock.Strengt
 		// Promote to FOR_SHARE.
 		fallthrough
 	case descpb.ScanLockingStrength_FOR_SHARE:
-		// We currently perform no per-key locking when FOR_SHARE is used
-		// because Shared locks have not yet been implemented.
-		return lock.None
+		return lock.Shared
 
 	case descpb.ScanLockingStrength_FOR_NO_KEY_UPDATE:
 		// Promote to FOR_UPDATE.
 		fallthrough
 	case descpb.ScanLockingStrength_FOR_UPDATE:
-		// We currently perform exclusive per-key locking when FOR_UPDATE is
-		// used because Update locks have not yet been implemented.
 		return lock.Exclusive
 
 	default:

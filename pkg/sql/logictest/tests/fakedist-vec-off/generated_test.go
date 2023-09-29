@@ -1653,6 +1653,13 @@ func TestLogic_select(
 	runLogicTest(t, "select")
 }
 
+func TestLogic_select_for_share(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "select_for_share")
+}
+
 func TestLogic_select_for_update(
 	t *testing.T,
 ) {

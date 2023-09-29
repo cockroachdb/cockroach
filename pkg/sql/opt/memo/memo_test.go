@@ -400,6 +400,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().DurableLockingForSerializable = false
 	notStale()
 
+	// Stale enable_shared_locking_for_serializable.
+	evalCtx.SessionData().SharedLockingForSerializable = true
+	stale()
+	evalCtx.SessionData().SharedLockingForSerializable = false
+	notStale()
+
 	// Stale txn isolation level.
 	evalCtx.TxnIsoLevel = isolation.ReadCommitted
 	stale()

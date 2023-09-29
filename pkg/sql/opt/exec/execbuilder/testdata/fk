@@ -46,6 +46,11 @@ vectorized: true
 statement ok
 SET enable_implicit_fk_locking_for_serializable = true
 
+# We need to enable shared locks for serializable transactions for this to have
+# a meaningful effect.
+statement ok
+SET enable_shared_locking_for_serializable=true
+
 query T
 EXPLAIN INSERT INTO child VALUES (1,1), (2,2)
 ----
