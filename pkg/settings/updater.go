@@ -247,5 +247,106 @@ func (u updater) SetFromStorage(
 		return err
 	}
 
-	return u.setInternal(ctx, key, value, d, origin)
+	if !u.sv.SpecializedToVirtualCluster() /* system tenant */ ||
+		d.Class() == TenantWritable {
+		// The value is being loaded from the current virtual cluster's
+		// system.settings. Load it as an active value.
+		return u.setInternal(ctx, key, value, d, origin)
+	}
+
+	// Here we are looking at a TenantReadOnly or SystemOnly setting
+	// from within a virtual cluster.
+
+	if d.Class() == SystemOnly {
+		// Attempting to load a SystemOnly setting from a virtual
+		// cluster's system.settings table.
+		//
+		// This is always invalid. The caller should have prevented this
+		// point from being reached, so this is really protection against
+		// API misuse.
+		return errors.AssertionFailedf("programming error: cannot set SystemOnly %q", key)
+	}
+
+	if d.Class() != TenantReadOnly {
+		return errors.AssertionFailedf("unhandled class %v", d.Class())
+	}
+
+	defer func() {
+		// After the code below sets the default value, we ensure that the
+		// new default is also copied to the in-RAM store for all settings
+		// that didn't have an active value in the virtual tenant yet.
+		if u.sv.getValueOrigin(ctx, d.getSlot()) == OriginDefault {
+			d.setToDefault(ctx, u.sv)
+		}
+	}()
+
+	// We are receiving an alternate default for a TenantReadOnly
+	// setting. Here we do not configure the main setting value (via
+	// setInternal or .set on the setting itself): many tests use
+	// .Override earlier and we do not want to change the override.
+	// Instead, we update the default.
+	switch setting := d.(type) {
+	case *StringSetting:
+		u.sv.setDefaultOverride(setting.getSlot(), value.Value)
+		return nil
+
+	case *ProtobufSetting:
+		p, err := setting.DecodeValue(value.Value)
+		if err != nil {
+			return err
+		}
+		u.sv.setDefaultOverride(setting.getSlot(), p)
+		return nil
+
+	case *BoolSetting:
+		b, err := setting.DecodeValue(value.Value)
+		if err != nil {
+			return err
+		}
+		u.sv.setDefaultOverride(setting.getSlot(), b)
+		return nil
+
+	case numericSetting:
+		i, err := setting.DecodeValue(value.Value)
+		if err != nil {
+			return err
+		}
+		u.sv.setDefaultOverride(setting.getSlot(), i)
+		return nil
+
+	case *FloatSetting:
+		f, err := setting.DecodeValue(value.Value)
+		if err != nil {
+			return err
+		}
+		u.sv.setDefaultOverride(setting.getSlot(), f)
+		return nil
+
+	case *DurationSetting:
+		d, err := setting.DecodeValue(value.Value)
+		if err != nil {
+			return err
+		}
+		u.sv.setDefaultOverride(setting.getSlot(), d)
+		return nil
+
+	case *DurationSettingWithExplicitUnit:
+		d, err := setting.DecodeValue(value.Value)
+		if err != nil {
+			return err
+		}
+		u.sv.setDefaultOverride(setting.getSlot(), d)
+		return nil
+
+	case *VersionSetting:
+		// We intentionally avoid updating the setting through this code path.
+		// The specific setting backed by VersionSetting is the cluster version
+		// setting, changes to which are propagated through direct RPCs to each
+		// node in the cluster instead of gossip. This is done using the
+		// BumpClusterVersion RPC.
+		return nil
+
+	default:
+		return errors.AssertionFailedf("unhandled type: %T", d)
+	}
 }

@@ -26,6 +26,11 @@ import (
 // read concurrently by different callers.
 var registry = make(map[InternalKey]internalSetting)
 
+// tenantReadOnlyKeys contains the keys of settings that have the
+// class TenantReadOnly. This is used to initialize defaults in the
+// tenant settings watcher.
+var tenantReadOnlyKeys []InternalKey
+
 // aliasRegistry contains the mapping of names to keys, for names
 // different from the keys.
 var aliasRegistry = make(map[SettingName]aliasEntry)
@@ -52,9 +57,12 @@ func TestingSaveRegistry() func() {
 	for k, v := range aliasRegistry {
 		origAliases[k] = v
 	}
+	var origTenantReadOnlyKeys = make([]InternalKey, len(tenantReadOnlyKeys))
+	copy(origTenantReadOnlyKeys, tenantReadOnlyKeys)
 	return func() {
 		registry = origRegistry
 		aliasRegistry = origAliases
+		tenantReadOnlyKeys = origTenantReadOnlyKeys
 	}
 }
 
@@ -277,6 +285,9 @@ func register(class Class, key InternalKey, desc string, s internalSetting) {
 	s.init(class, key, desc, slot)
 	registry[key] = s
 	slotTable[slot] = s
+	if class == TenantReadOnly {
+		tenantReadOnlyKeys = append(tenantReadOnlyKeys, key)
+	}
 }
 
 func registerAlias(key InternalKey, name SettingName, nameStatus NameStatus) {
@@ -301,6 +312,13 @@ func Keys(forSystemTenant bool) (res []InternalKey) {
 	}
 	sort.Slice(res, func(i, j int) bool { return res[i] < res[j] })
 	return res
+}
+
+// TenantReadOnlyKeys returns a array with all the known keys that
+// have the class TenantReadOnly. It might not be sorted.
+// The caller must refrain from modifying the return value.
+func TenantReadOnlyKeys() []InternalKey {
+	return tenantReadOnlyKeys
 }
 
 // ConsoleKeys return an array with all cluster settings keys

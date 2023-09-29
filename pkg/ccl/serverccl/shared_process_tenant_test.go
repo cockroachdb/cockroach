@@ -37,7 +37,7 @@ func TestSharedProcessTenantNoSpanLimit(t *testing.T) {
 	_, err := db.Exec("CREATE TENANT hello; ALTER TENANT hello START SERVICE SHARED")
 	require.NoError(t, err)
 
-	_, err = db.Exec("ALTER TENANT ALL SET CLUSTER SETTING spanconfig.virtual_cluster.max_spans = 1000")
+	_, err = db.Exec("SET CLUSTER SETTING spanconfig.virtual_cluster.max_spans = 1000")
 	require.NoError(t, err)
 
 	var tenantDB *gosql.DB
