@@ -2910,6 +2910,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
+	// CockroachDB extension.
+	`enable_shared_locking_for_serializable`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_shared_locking_for_serializable`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("enable_shared_locking_for_serializable", s)
+			if err != nil {
+				return err
+			}
+			m.SetSharedLockingForSerializable(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().SharedLockingForSerializable), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {

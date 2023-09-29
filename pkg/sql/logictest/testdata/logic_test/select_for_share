@@ -1,0 +1,119 @@
+# LogicTest: !local-mixed-22.2-23.1
+
+statement ok
+CREATE TABLE t(a INT PRIMARY KEY);
+INSERT INTO t VALUES(1);
+GRANT ALL ON t TO testuser;
+CREATE USER testuser2 WITH VIEWACTIVITY;
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser;
+GRANT ALL ON t TO testuser2;
+
+user testuser
+
+statement ok
+SET enable_shared_locking_for_serializable = true;
+
+statement ok
+BEGIN
+
+query I
+SELECT * FROM t WHERE a = 1 FOR SHARE;
+----
+1
+
+# Start another transaction to show multiple transactions can acquire SHARED
+# locks at the same time.
+
+user root
+
+statement ok
+SET enable_shared_locking_for_serializable = true;
+
+statement ok
+BEGIN
+
+query I
+SELECT * FROM t  WHERE a = 1 FOR SHARE;
+----
+1
+
+user testuser2
+
+statement async writeReq count 1
+UPDATE t SET a = 2 WHERE a = 1
+
+# TODO(arul): Until https://github.com/cockroachdb/cockroach/issues/107766 is
+# addressed, we'll incorrectly report shared locks as having "Exclusive" lock
+# strength; We'll also only report a single holder (the other row in there is
+# the waiting UPDATE request, not the second shared lock holder). However,
+# having this query in here is useful to make sure there are locks and waiters
+# on our key, meaning setting the cluster setting above actually did something;
+# otherwise, had we used non-locking reads, we'd have failed here.
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
+----
+database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
+test           public       t           /Table/106/1/1/0  Exclusive      Unreplicated  SERIALIZABLE     true     true
+test           public       t           /Table/106/1/1/0  Exclusive      Unreplicated  SERIALIZABLE     false    true
+
+# Commit the first transaction and rollback the second.
+
+user testuser
+
+statement ok
+COMMIT
+
+user root
+
+statement ok
+ROLLBACK
+
+user testuser2
+
+# Now that both the transactions that issued shared lock reads have been
+# finalized, the write should be able to proceed.
+
+awaitstatement writeReq
+
+query I
+SELECT * FROM t;
+----
+2
+
+# ------------------------------------------------------------------------------
+# Tests to ensure the enable_shared_locking_for_serializable session variable
+# works as expected.
+# -----------------------------------------------------------------------------
+
+user testuser
+
+statement ok
+SET enable_shared_locking_for_serializable = false
+
+statement ok
+BEGIN ISOLATION LEVEL SERIALIZABLE
+
+query I
+SELECT * FROM t WHERE a = 2 FOR SHARE
+----
+2
+
+user testuser2
+
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
+----
+database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
+
+user testuser
+
+statement ok
+COMMIT
+
+# TODO(arul): Add a test to show that the session setting doesn't apply to read
+# committed transactions. We currently can't issue SELECT FOR SHARE statements
+# in read committed transactions because durable locking hasn't been fully
+# hooked up.
+
+
+
