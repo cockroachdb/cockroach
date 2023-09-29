@@ -377,6 +377,25 @@ func registerRestore(r registry.Registry) {
 				m.Go(dul.Runner)
 				m.Go(func(ctx context.Context) error {
 					defer dul.Done()
+					t.Status(`running setup statements`)
+					db, err := rd.c.ConnE(ctx, rd.t.L(), rd.c.Node(1)[0])
+					if err != nil {
+						return errors.Wrapf(err, "failure to run setup statements")
+					}
+					// Run set-up SQL statements. In particular, enable collecting CPU
+					// profiles automatically if CPU usage is high. Historically, we
+					// observed CPU going as high as 100%, e.g. see issue #111160.
+					// TODO(pavelkalinnikov): enable CPU profiling in all roachtests.
+					for _, stmt := range []string{
+						"SET CLUSTER SETTING server.cpu_profile.duration = '2s'",
+						"SET CLUSTER SETTING server.cpu_profile.cpu_usage_combined_threshold = 80",
+						"SET CLUSTER SETTING server.cpu_profile.enabled = true",
+					} {
+						_, err := db.Exec(stmt)
+						if err != nil {
+							return errors.Wrapf(err, "error executing setup stmt [%s]", stmt)
+						}
+					}
 					t.Status(`running restore`)
 					metricCollector := rd.initRestorePerfMetrics(ctx, durationGauge)
 					if err := rd.run(ctx, ""); err != nil {
