@@ -77,6 +77,11 @@ case "${CLOUD}" in
       FILTER="tag:aws"
     fi
     ;;
+  azure)
+    if [ -z "${FILTER}" ]; then
+      FILTER="tag:owner-cdc"
+    fi
+    ;;
   *)
     echo "unknown cloud ${CLOUD}"
     exit 1
