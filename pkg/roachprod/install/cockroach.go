@@ -13,6 +13,7 @@ package install
 import (
 	"context"
 	_ "embed" // required for go:embed
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -355,13 +356,20 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 	}
 
 	if startOpts.IsVirtualCluster() {
-		if err := c.createVirtualClusterMetadata(ctx, l, startOpts); err != nil {
+		startOpts.VirtualClusterID, err = c.upsertVirtualClusterMetadata(ctx, l, startOpts)
+		if err != nil {
 			return err
 		}
-	}
 
-	if err := c.distributeTenantCerts(ctx, l, startOpts.KVCluster, startOpts.VirtualClusterID); err != nil {
-		return err
+		l.Printf("virtual cluster ID: %d", startOpts.VirtualClusterID)
+
+		if err := c.distributeTenantCerts(ctx, l, startOpts.KVCluster, startOpts.VirtualClusterID); err != nil {
+			return err
+		}
+	} else {
+		if err := c.distributeCerts(ctx, l); err != nil {
+			return err
+		}
 	}
 
 	nodes := c.TargetNodes()
@@ -1078,15 +1086,16 @@ func (c *SyncedCluster) distributeCerts(ctx context.Context, l *logger.Logger) e
 	return nil
 }
 
-// createVirtualClusterMetadata creates the virtual cluster, if
-// necessary. We only need to run the statements in this function
-// against a single connection to the storage cluster.
-func (c *SyncedCluster) createVirtualClusterMetadata(
+// upsertVirtualClusterMetadata creates the virtual cluster metadata,
+// if necessary, and marks the service as started internally. We only
+// need to run the statements in this function against a single
+// connection to the storage cluster.
+func (c *SyncedCluster) upsertVirtualClusterMetadata(
 	ctx context.Context, l *logger.Logger, startOpts StartOpts,
-) error {
+) (int, error) {
 	runSQL := func(stmt string) (string, error) {
 		results, err := startOpts.KVCluster.ExecSQL(ctx, l, startOpts.KVCluster.Nodes[:1], "", 0, []string{
-			"--format", "raw", "-e", stmt,
+			"--format", "json", "-e", stmt,
 		})
 		if err != nil {
 			return "", err
@@ -1098,42 +1107,75 @@ func (c *SyncedCluster) createVirtualClusterMetadata(
 		return results[0].CombinedOut, nil
 	}
 
-	tenantExistsQuery := fmt.Sprintf(
-		"SELECT 1 FROM system.tenants WHERE name = '%s'", startOpts.VirtualClusterName,
-	)
+	virtualClusterIDByName := func(name string) (int, error) {
+		type tenantRow struct {
+			ID string `json:"id"`
+		}
 
-	existsOut, err := runSQL(tenantExistsQuery)
+		query := fmt.Sprintf(
+			"SELECT id FROM system.tenants WHERE name = '%s'", startOpts.VirtualClusterName,
+		)
+
+		existsOut, err := runSQL(query)
+		if err != nil {
+			return -1, err
+		}
+
+		var tenants []tenantRow
+		if err := json.Unmarshal([]byte(existsOut), &tenants); err != nil {
+			return -1, fmt.Errorf("failed to unmarshal system.tenants output: %w", err)
+		}
+
+		if len(tenants) == 0 {
+			return -1, nil
+		}
+
+		n, err := strconv.Atoi(tenants[0].ID)
+		if err != nil {
+			return -1, fmt.Errorf("failed to parse virtual cluster ID: %w", err)
+		}
+
+		return n, nil
+	}
+
+	virtualClusterID, err := virtualClusterIDByName(startOpts.VirtualClusterName)
 	if err != nil {
-		return err
+		return -1, err
 	}
 
-	// Check if virtual cluster already exists, in which case there is
-	// nothing to do.
-	if !strings.Contains(existsOut, "0 rows") {
-		return nil
-	}
-
-	l.Printf("Creating virtual cluster metadata")
+	l.Printf("Starting virtual cluster")
 	serviceMode := "SHARED"
 	if startOpts.Target == StartServiceForVirtualCluster {
 		serviceMode = "EXTERNAL"
 	}
 
-	createTenantStmts := []string{
-		fmt.Sprintf("CREATE TENANT '%s'", startOpts.VirtualClusterName),
-		fmt.Sprintf("ALTER TENANT '%s' START SERVICE %s", startOpts.VirtualClusterName, serviceMode),
+	var virtualClusterStmts []string
+	if virtualClusterID <= 0 {
+		// If the virtual cluster metadata does not exist yet, create it.
+		virtualClusterStmts = append(virtualClusterStmts,
+			fmt.Sprintf("CREATE TENANT '%s'", startOpts.VirtualClusterName),
+		)
 	}
 
-	_, err = runSQL(strings.Join(createTenantStmts, "; "))
-	return err
+	virtualClusterStmts = append(virtualClusterStmts, fmt.Sprintf(
+		"ALTER TENANT '%s' START SERVICE %s",
+		startOpts.VirtualClusterName, serviceMode),
+	)
+
+	_, err = runSQL(strings.Join(virtualClusterStmts, "; "))
+	if err != nil {
+		return -1, err
+	}
+
+	return virtualClusterIDByName(startOpts.VirtualClusterName)
 }
 
 // distributeCerts distributes certs if it's a secure cluster.
 func (c *SyncedCluster) distributeTenantCerts(
-	ctx context.Context, l *logger.Logger, storageCluster *SyncedCluster, tenantID int,
+	ctx context.Context, l *logger.Logger, storageCluster *SyncedCluster, virtualClusterID int,
 ) error {
 	if c.Secure {
-		return c.DistributeTenantCerts(ctx, l, storageCluster, tenantID)
+		return c.DistributeTenantCerts(ctx, l, storageCluster, virtualClusterID)
 	}
 	return nil
 }
