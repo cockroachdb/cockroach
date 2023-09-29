@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 )
 
@@ -376,8 +378,28 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(
 		"resolved": fmt.Sprintf("'%s'", resolvedInterval),
 	}
 
-	jobID, err := newChangefeedCreator(db, l, fmt.Sprintf("%s.%s", targetDB, targetTable),
-		cmvt.kafka.manager.sinkURL(ctx), makeDefaultFeatureFlags()).
+	// MuxRangefeed in various forms is available starting from v22.2.
+	muxRangeFeedSupported := func() bool {
+		return version.MustParse("v" + h.Context().FromVersion).AtLeast(v222)
+	}
+
+	// Rangefeed scheduler available in 23.2
+	rangefeedSchedulerSupported := func() bool {
+		// the version we upgraded to is the current, and the set of upgraded nodes is "every node"
+		allNodesUpgradedToCurrent := h.Context().ToVersion == clusterupgrade.MainVersion && len(h.Context().ToVersionNodes) == len(cmvt.crdbNodes)
+		return allNodesUpgradedToCurrent || h.LowestBinaryVersion().AtLeast(v232)
+	}
+
+	var ff cdcFeatureFlags
+	if !muxRangeFeedSupported() {
+		ff.MuxRangefeed.v = &featureDisabled
+	}
+	if !rangefeedSchedulerSupported() {
+		ff.RangeFeedScheduler.v = &featureDisabled
+	}
+
+	jobID, err := newChangefeedCreator(db, l, r, fmt.Sprintf("%s.%s", targetDB, targetTable),
+		cmvt.kafka.manager.sinkURL(ctx), ff).
 		With(options).
 		Create()
 	if err != nil {
@@ -434,7 +456,31 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 	cleanupKafka := tester.StartKafka(t, c)
 	defer cleanupKafka()
 
+	// MuxRangefeed in various forms is available starting from v22.2.
+	setMuxRangeFeedEnabled := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
+		if version.MustParse("v" + h.Context().FromVersion).AtLeast(v222) {
+			coin := r.Int()%2 == 0
+			l.PrintfCtx(ctx, "Setting changefeed.mux_rangefeed.enabled=%t at version %s", coin, h.LowestBinaryVersion())
+			return h.Exec(r, "SET CLUSTER SETTING changefeed.mux_rangefeed.enabled=$1", coin)
+		}
+		return nil
+	}
+
+	// Rangefeed scheduler available in 23.2
+	setRangeFeedSchedulerEnabled := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
+		// the version we upgraded to is the current, and the set of upgraded nodes is "every node"
+		allNodesUpgradedToCurrent := h.Context().ToVersion == clusterupgrade.MainVersion && len(h.Context().ToVersionNodes) == len(tester.crdbNodes)
+		if allNodesUpgradedToCurrent || h.LowestBinaryVersion().AtLeast(v232) {
+			coin := r.Int()%2 == 0
+			l.PrintfCtx(ctx, "Setting kv.rangefeed.scheduler.enabled=%t at version %s", coin, h.LowestBinaryVersion())
+			return h.Exec(r, "SET CLUSTER SETTING kv.rangefeed.scheduler.enabled=$1", coin)
+		}
+		return nil
+	}
+
 	// Register hooks.
+	mvt.OnStartup("use mux", setMuxRangeFeedEnabled)
+	mvt.OnStartup("use scheduler", setRangeFeedSchedulerEnabled)
 	mvt.OnStartup("start changefeed", tester.createChangeFeed)
 	mvt.OnStartup("create validator", tester.setupValidator)
 	mvt.OnStartup("init workload", tester.initWorkload)
@@ -447,7 +493,12 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// not when any nodes are offline. This is important because the validator relies on a db connection.
 	mvt.InMixedVersion("wait and validate", tester.waitAndValidate)
 
-	mvt.AfterUpgradeFinalized("wait and validate", tester.waitAndValidate)
+	// Enable/disable mux rangefeed related settings in mixed version.
+	mvt.InMixedVersion("use mux", setMuxRangeFeedEnabled)
+	mvt.InMixedVersion("use scheduler", setRangeFeedSchedulerEnabled)
 
+	mvt.AfterUpgradeFinalized("use mux", setMuxRangeFeedEnabled)
+	mvt.AfterUpgradeFinalized("use scheduler", setRangeFeedSchedulerEnabled)
+	mvt.AfterUpgradeFinalized("wait and validate", tester.waitAndValidate)
 	mvt.Run()
 }
