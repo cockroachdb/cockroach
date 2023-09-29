@@ -1447,6 +1447,10 @@ type ExecutorConfig struct {
 	// AutoConfigProvider informs the auto config runner job of new
 	// tasks to run.
 	AutoConfigProvider acprovider.Provider
+
+	// VirtualClusterName contains the name of the virtual cluster
+	// (tenant).
+	VirtualClusterName roachpb.TenantName
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us

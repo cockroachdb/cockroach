@@ -1625,6 +1625,14 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`virtual_cluster_name`: {
+		Hidden: true,
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return string(evalCtx.ExecCfg.VirtualClusterName), nil
+		},
+	},
+
+	// CockroachDB extension.
 	`allow_prepare_as_opt_plan`: {
 		Hidden: true,
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {

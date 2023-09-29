@@ -1886,6 +1886,7 @@ session_var ::=
 	| 'LC_COLLATE'
 	| 'LC_CTYPE'
 	| 'TIME' 'ZONE'
+	| 'VIRTUAL_CLUSTER_NAME'
 
 var_name ::=
 	name
