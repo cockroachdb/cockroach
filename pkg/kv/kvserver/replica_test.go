@@ -2736,7 +2736,7 @@ func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 
 	var spans spanset.SpanSet
 	cmd, _ := batcheval.LookupCommand(kvpb.EndTxn)
-	cmd.DeclareKeys(
+	err := cmd.DeclareKeys(
 		&roachpb.RangeDescriptor{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("e")},
 		&kvpb.Header{},
 		&kvpb.EndTxnRequest{
@@ -2757,6 +2757,7 @@ func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 		nil,
 		0,
 	)
+	require.NoError(t, err)
 	for _, tc := range []struct {
 		access       spanset.SpanAccess
 		key          roachpb.Key

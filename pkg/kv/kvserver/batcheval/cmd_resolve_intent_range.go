@@ -33,8 +33,8 @@ func declareKeysResolveIntentRange(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
-	declareKeysResolveIntentCombined(rs, req, latchSpans)
+) error {
+	return declareKeysResolveIntentCombined(rs, req, latchSpans)
 }
 
 // ResolveIntentRange resolves write intents in the specified
