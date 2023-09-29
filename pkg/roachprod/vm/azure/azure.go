@@ -50,6 +50,8 @@ var providerInstance = &Provider{}
 
 var envSubscriptionID = os.Getenv("AZURE_SUBSCRIPTION_ID")
 
+var isTeamCity = os.Getenv("TC_BUILD_ID") != ""
+
 // Init registers the Azure provider with vm.Providers.
 //
 // If the Azure CLI utilities are not installed, the provider is a stub.
@@ -61,9 +63,12 @@ func Init() error {
 	providerInstance = New()
 	providerInstance.OperationTimeout = 10 * time.Minute
 	providerInstance.SyncDelete = false
-	if _, err := exec.LookPath("az"); err != nil {
-		vm.Providers[ProviderName] = flagstub.New(&Provider{}, cliErr)
-		return err
+	// We don't even execute cli commands, as everything is done via the SDK API
+	if !isTeamCity {
+		if _, err := exec.LookPath("az"); err != nil {
+			vm.Providers[ProviderName] = flagstub.New(&Provider{}, cliErr)
+			return err
+		}
 	}
 	if _, err := providerInstance.getAuthToken(); err != nil {
 		vm.Providers[ProviderName] = flagstub.New(&Provider{}, authErr)

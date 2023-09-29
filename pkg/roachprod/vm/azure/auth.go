@@ -35,7 +35,12 @@ func (p *Provider) getAuthorizer() (ret autorest.Authorizer, err error) {
 
 	// Use the azure CLI to bootstrap our authentication.
 	// https://docs.microsoft.com/en-us/go/azure/azure-sdk-go-authorization
-	ret, err = auth.NewAuthorizerFromCLI()
+	if isTeamCity {
+		ret, err = auth.NewAuthorizerFromEnvironment()
+	} else {
+		ret, err = auth.NewAuthorizerFromCLI()
+	}
+
 	if err == nil {
 		p.mu.Lock()
 		p.mu.authorizer = ret
