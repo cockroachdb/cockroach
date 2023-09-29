@@ -49,6 +49,11 @@ insert cookies
 statement ok
 SET enable_implicit_fk_locking_for_serializable = true
 
+# We als need to enable shared locks for serializable transactions for this to
+# have a meaningful effect.
+statement ok
+SET enable_shared_locking_for_serializable=true
+
 query T
 EXPLAIN (OPT) INSERT INTO cookies VALUES (1, 1)
 ----

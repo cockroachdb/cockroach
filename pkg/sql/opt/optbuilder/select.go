@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -697,6 +698,7 @@ func (b *Builder) buildScan(
 	}
 	if locking.isSet() {
 		private.Locking = locking.get()
+		// TODO(arul, michae2): This needs a cluster version check.
 		if b.evalCtx.TxnIsoLevel != isolation.Serializable ||
 			b.evalCtx.SessionData().DurableLockingForSerializable {
 			// Under weaker isolation levels we use fully-durable locks for SELECT FOR
@@ -714,6 +716,21 @@ func (b *Builder) buildScan(
 			// does not require locking for correctness, so by default we use
 			// best-effort locks for better performance.)
 			private.Locking.Durability = tree.LockDurabilityGuaranteed
+		}
+		// Check if we can actually use shared locks here, or we need to use
+		// non-locking reads instead.
+		if private.Locking.Strength == tree.ForShare || private.Locking.Strength == tree.ForKeyShare {
+			// Shared locks weren't a thing prior to v23.2, so we must use non-locking
+			// reads.
+			if !b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V23_2) ||
+				// And in >= v23.2, their locking behavior for serializable transactions
+				// is dictated by session setting.
+				(b.evalCtx.TxnIsoLevel == isolation.Serializable &&
+					!b.evalCtx.SessionData().SharedLockingForSerializable) {
+				// Reset locking information as we've determined we're going to be
+				// performing a non-locking read.
+				private.Locking = opt.Locking{}
+			}
 		}
 		if private.Locking.WaitPolicy == tree.LockWaitSkipLocked && tab.FamilyCount() > 1 {
 			// TODO(rytaft): We may be able to support this if enough columns are
@@ -1442,6 +1459,11 @@ func (b *Builder) validateLockingInFrom(
 	if !locking.isSet() {
 		// No FOR [KEY] UPDATE/SHARE locking modes in scope.
 		return
+	}
+
+	if b.evalCtx.TxnReadOnly {
+		panic(pgerror.Newf(pgcode.ReadOnlySQLTransaction,
+			"cannot execute %s in a read-only transaction", locking.get().Strength))
 	}
 
 	switch {
