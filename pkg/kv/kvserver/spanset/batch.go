@@ -891,6 +891,19 @@ func addLockTableSpans(spans *SpanSet) *SpanSet {
 		if span.EndKey != nil {
 			ltEndKey, _ = keys.LockTableSingleKey(span.EndKey, nil)
 		}
+		if sa == SpanReadOnly && span.Timestamp == hlc.MaxTimestamp {
+			// Shared lock acquisition uses a read-only latch access with
+			// the maximum timestamp. This gives it sufficient isolation to
+			// write to the lock table without having to declare a write
+			// latch and be serialized with other shared lock acquisitions.
+			// For details, see DefaultDeclareIsolatedKeys.
+			//
+			// For the sake of this function, we consider this to be strong
+			// enough to declare write access to the lock table. This could
+			// be made cleaner if latch spans operated on locking strengths
+			// instead of read/write access.
+			sa = SpanReadWrite
+		}
 		withLocks.AddNonMVCC(sa, roachpb.Span{Key: ltKey, EndKey: ltEndKey})
 	})
 	return withLocks
