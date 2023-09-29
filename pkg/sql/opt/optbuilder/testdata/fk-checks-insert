@@ -686,7 +686,7 @@ insert child
                      └── p:7 = parent.p:8
 
 # Verify that we lock the parent when necessary.
-build set=enable_implicit_fk_locking_for_serializable=true
+build set=(enable_implicit_fk_locking_for_serializable=true,enable_shared_locking_for_serializable=true)
 INSERT INTO child VALUES (100, 1), (200, 1)
 ----
 insert child

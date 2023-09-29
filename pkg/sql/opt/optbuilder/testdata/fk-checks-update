@@ -572,7 +572,7 @@ update child
                      └── p:10 = parent.p:12
 
 # Verify that we lock the parent when necessary.
-build set=enable_implicit_fk_locking_for_serializable=true
+build set=(enable_implicit_fk_locking_for_serializable=true,enable_shared_locking_for_serializable=true)
 UPDATE child SET p = p+1, c = c+1
 ----
 update child
@@ -644,7 +644,7 @@ update child
                 └── filters
                      └── c:23 = grandchild2.c:26
 
-build set=enable_implicit_fk_locking_for_serializable=true
+build set=(enable_implicit_fk_locking_for_serializable=true,enable_shared_locking_for_serializable=true)
 UPDATE self SET y = 3
 ----
 update self
@@ -674,7 +674,7 @@ update self
                 └── filters
                      └── y:10 = x:11
 
-build set=enable_implicit_fk_locking_for_serializable=true
+build set=(enable_implicit_fk_locking_for_serializable=true,enable_shared_locking_for_serializable=true)
 UPDATE self SET x = 3
 ----
 update self
