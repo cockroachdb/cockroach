@@ -99,10 +99,23 @@ var _ settingswatcher.Storage = (*settingsCacheWriter)(nil)
 func storeCachedSettingsKVs(ctx context.Context, eng storage.Engine, kvs []roachpb.KeyValue) error {
 	batch := eng.NewBatch()
 	defer batch.Close()
+
+	// Remove previous entries -- they are now stale.
+	if _, _, _, err := storage.MVCCDeleteRange(ctx, batch,
+		keys.LocalStoreCachedSettingsKeyMin,
+		keys.LocalStoreCachedSettingsKeyMax,
+		0 /* no limit */, hlc.Timestamp{}, storage.MVCCWriteOptions{}, false /* returnKeys */); err != nil {
+		return err
+	}
+
+	// Now we can populate the cache with new entries.
 	for _, kv := range kvs {
 		kv.Value.Timestamp = hlc.Timestamp{} // nb: Timestamp is not part of checksum
+		cachedSettingsKey := keys.StoreCachedSettingsKey(kv.Key)
+		// A new value is added, or an existing value is updated.
+		log.VEventf(ctx, 1, "storing cached setting: %s -> %+v", cachedSettingsKey, kv.Value)
 		if err := storage.MVCCPut(
-			ctx, batch, keys.StoreCachedSettingsKey(kv.Key), hlc.Timestamp{}, kv.Value, storage.MVCCWriteOptions{},
+			ctx, batch, cachedSettingsKey, hlc.Timestamp{}, kv.Value, storage.MVCCWriteOptions{},
 		); err != nil {
 			return err
 		}
@@ -151,6 +164,7 @@ func initializeCachedSettings(
 					" skipping settings updates.")
 		}
 		settingKey := settings.InternalKey(settingKeyS)
+		log.VEventf(ctx, 1, "loaded cached setting: %s -> %+v", settingKey, val)
 		if err := updater.Set(ctx, settingKey, val); err != nil {
 			log.Warningf(ctx, "setting %q to %v failed: %+v", settingKey, val, err)
 		}
