@@ -100,22 +100,22 @@ describe("timescale utils", (): void => {
       assert.deepEqual(
         findClosestTimeScale(
           defaultTimeScaleOptions,
-          defaultTimeScaleOptions["Past 10 Minutes"].windowSize.asSeconds(),
+          defaultTimeScaleOptions["Past Hour"].windowSize.asSeconds(),
           moment().unix(),
         ),
         {
-          ...defaultTimeScaleOptions["Past 10 Minutes"],
-          key: "Past 10 Minutes",
+          ...defaultTimeScaleOptions["Past Hour"],
+          key: "Past Hour",
         },
       );
       // `seconds` == window size of one of the default options, `startSeconds` is in the past.
       assert.deepEqual(
         findClosestTimeScale(
           defaultTimeScaleOptions,
-          defaultTimeScaleOptions["Past 10 Minutes"].windowSize.asSeconds(),
+          defaultTimeScaleOptions["Past Hour"].windowSize.asSeconds(),
           moment().subtract(1, "day").unix(),
         ),
-        { ...defaultTimeScaleOptions["Past 10 Minutes"], key: "Custom" },
+        { ...defaultTimeScaleOptions["Past Hour"], key: "Custom" },
       );
     });
   });

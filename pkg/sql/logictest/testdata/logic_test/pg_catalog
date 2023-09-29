@@ -2788,6 +2788,7 @@ enable_insert_fast_path                                    on                  N
 enable_multiple_modifications_of_table                     off                 NULL      NULL        NULL        string
 enable_multiregion_placement_policy                        off                 NULL      NULL        NULL        string
 enable_seqscan                                             on                  NULL      NULL        NULL        string
+enable_shared_locking_for_serializable                     off                 NULL      NULL        NULL        string
 enable_super_regions                                       off                 NULL      NULL        NULL        string
 enable_zigzag_join                                         off                 NULL      NULL        NULL        string
 enforce_home_region                                        off                 NULL      NULL        NULL        string
@@ -2949,6 +2950,7 @@ enable_insert_fast_path                                    on                  N
 enable_multiple_modifications_of_table                     off                 NULL  user     NULL      off                 off
 enable_multiregion_placement_policy                        off                 NULL  user     NULL      off                 off
 enable_seqscan                                             on                  NULL  user     NULL      on                  on
+enable_shared_locking_for_serializable                     off                 NULL  user     NULL      off                 off
 enable_super_regions                                       off                 NULL  user     NULL      off                 off
 enable_zigzag_join                                         off                 NULL  user     NULL      off                 off
 enforce_home_region                                        off                 NULL  user     NULL      off                 off
@@ -3107,6 +3109,7 @@ enable_insert_fast_path                                    NULL    NULL     NULL
 enable_multiple_modifications_of_table                     NULL    NULL     NULL     NULL        NULL
 enable_multiregion_placement_policy                        NULL    NULL     NULL     NULL        NULL
 enable_seqscan                                             NULL    NULL     NULL     NULL        NULL
+enable_shared_locking_for_serializable                     NULL    NULL     NULL     NULL        NULL
 enable_super_regions                                       NULL    NULL     NULL     NULL        NULL
 enable_zigzag_join                                         NULL    NULL     NULL     NULL        NULL
 enforce_home_region                                        NULL    NULL     NULL     NULL        NULL

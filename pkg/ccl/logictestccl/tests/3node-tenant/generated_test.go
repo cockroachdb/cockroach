@@ -1675,6 +1675,13 @@ func TestTenantLogic_select(
 	runLogicTest(t, "select")
 }
 
+func TestTenantLogic_select_for_share(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "select_for_share")
+}
+
 func TestTenantLogic_select_for_update(
 	t *testing.T,
 ) {

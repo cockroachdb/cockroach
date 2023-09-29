@@ -101,16 +101,16 @@ describe("<TimeScaleDropdown> component", function () {
     );
 
     // Default state.
-    getByText("Past 10 Minutes");
-    getByText("10m");
+    getByText("Past Hour");
+    getByText("1h");
     expect(queryByText("Past 6 Hours")).toBeNull();
 
     // Select a different preset option.
-    userEvent.click(getByText("Past 10 Minutes"));
+    userEvent.click(getByText("Past Hour"));
     userEvent.click(getByText("Past 6 Hours"));
 
     expect(mockSetTimeScale).toHaveBeenCalledTimes(1);
-    expect(queryByText("Past 10 Minutes")).toBeNull();
+    expect(queryByText("Past Hour")).toBeNull();
     getByText("Past 6 Hours");
     getByText("6h");
   });
@@ -126,7 +126,7 @@ describe("<TimeScaleDropdown> component", function () {
         />
       </MemoryRouter>,
     );
-    getByText("Past 10 Minutes");
+    getByText("Past Hour");
 
     // Click left, and it shows a custom time.
     userEvent.click(
@@ -136,21 +136,21 @@ describe("<TimeScaleDropdown> component", function () {
     );
     expect(mockSetTimeScale).toHaveBeenCalledTimes(1);
     for (const expectedText of getExpectedCustomText(
-      getNow().subtract(moment.duration(10, "m")),
-      getNow().subtract(moment.duration(10 * 2, "m")),
-      "10m",
+      getNow().subtract(moment.duration(1, "h")),
+      getNow().subtract(moment.duration(1 * 2, "h")),
+      "1h",
     )) {
       getByText(expectedText);
     }
 
-    // Click right, and it reverts to "Past 10 minutes".
+    // Click right, and it reverts to "Past Hour".
     userEvent.click(
       getByRole("button", {
         name: "next time interval",
       }),
     );
     expect(mockSetTimeScale).toHaveBeenCalledTimes(2);
-    getByText("Past 10 Minutes");
+    getByText("Past Hour");
   });
 
   it("initializes the custom selection to the current time interval", () => {
@@ -165,7 +165,7 @@ describe("<TimeScaleDropdown> component", function () {
       </MemoryRouter>,
     );
     // Switch to a bigger time interval
-    userEvent.click(getByText("Past 10 Minutes"));
+    userEvent.click(getByText("Past Hour"));
     userEvent.click(getByText("Past 6 Hours"));
     expect(mockSetTimeScale).toHaveBeenCalledTimes(1);
 
@@ -198,9 +198,9 @@ describe("<TimeScaleDropdown> component", function () {
     );
 
     // When a preset option is selected, the dropdown should open to other preset options.
-    userEvent.click(getByText("Past 10 Minutes"));
+    userEvent.click(getByText("Past Hour"));
     getByText("Past 30 Minutes");
-    getByText("Past Hour");
+    getByText("Past 6 Hours");
 
     // Change to a custom selection
     userEvent.click(
@@ -211,9 +211,9 @@ describe("<TimeScaleDropdown> component", function () {
 
     // When a custom option is selected, the dropdown should open to the custom selector.
     const expectedText = getExpectedCustomText(
-      getNow().subtract(moment.duration(10, "m")),
-      getNow().subtract(moment.duration(10 * 2, "m")),
-      "10m",
+      getNow().subtract(moment.duration(1, "h")),
+      getNow().subtract(moment.duration(1 * 2, "h")),
+      "1h",
     );
     userEvent.click(getByText(expectedText[0]));
     getAllByText("Start (UTC)");
@@ -222,12 +222,12 @@ describe("<TimeScaleDropdown> component", function () {
     // Clicking "Preset time intervals" should bring the dropdown back to the preset options.
     userEvent.click(getByText("Preset time intervals"));
     getByText("Past 30 Minutes");
-    getByText("Past Hour");
+    getByText("Past 6 Hours");
   });
 });
 
 const initialEntries = [
-  "#/metrics/overview/cluster", // Past 10 minutes
+  "#/metrics/overview/cluster", // Past Hour
   `#/metrics/overview/cluster/cluster?start=${moment()
     .subtract(1, "hour")
     .format("X")}&end=${moment().format("X")}`, // Past hour
@@ -236,10 +236,10 @@ const initialEntries = [
     .format("X")}&end=${moment().format("X")}`, // Past 6 hours
   "#/metrics/overview/cluster/cluster?start=1584528492&end=1584529092", // 10 minutes
   "#/metrics/overview/cluster?start=1583319565&end=1584529165", // 2 weeks
-  "#/metrics/overview/node/1", // Node 1 - Past 10 minutes
+  "#/metrics/overview/node/1", // Node 1 - Past Hour
   `#/metrics/overview/node/2?start=${moment()
     .subtract(10, "minutes")
-    .format("X")}&end=${moment().format("X")}`, // Node 2 - Past 10 minutes
+    .format("X")}&end=${moment().format("X")}`, // Node 2 - Past Hour
   "#/metrics/overview/node/3?start=1584528726&end=1584529326", // Node 3 - 10 minutes
 ];
 
@@ -284,15 +284,15 @@ describe("TimeScaleDropdown functions", function () {
   });
 
   describe("formatRangeSelectSelected", () => {
-    it("formatRangeSelectSelected must return title Past 10 Minutes", () => {
+    it("formatRangeSelectSelected must return title Past Hour", () => {
       const title = formatRangeSelectSelected(
         currentWindow,
         state.currentScale,
         "UTC",
       );
       assert.deepEqual(title, {
-        key: "Past 10 Minutes",
-        timeLabel: "10m",
+        key: "Past Hour",
+        timeLabel: "1h",
         timeWindow: currentWindow,
       });
     });
@@ -319,7 +319,7 @@ describe("TimeScaleDropdown functions", function () {
         timeStart,
         timeEnd,
         key: "Custom",
-        timeLabel: "10m",
+        timeLabel: "1h",
         timeWindow: currentWindow,
       });
     });
