@@ -17,6 +17,8 @@ import (
 	"math"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -623,6 +625,7 @@ func (b *Builder) scanParams(
 	}
 
 	locking, err := b.buildLocking(scan.Locking)
+
 	if err != nil {
 		return exec.ScanParams{}, opt.ColMap{}, err
 	}
@@ -2920,6 +2923,21 @@ func (b *Builder) buildLocking(locking opt.Locking) (opt.Locking, error) {
 			return opt.Locking{}, unimplemented.NewWithIssuef(
 				100193, "guaranteed-durable locking not yet implemented",
 			)
+		}
+		// Check if we can actually use shared locks here, or we need to use
+		// non-locking reads instead.
+		if locking.Strength == tree.ForShare || locking.Strength == tree.ForKeyShare {
+			// Shared locks weren't a thing prior to v23.2, so we must use non-locking
+			// reads.
+			if !b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V23_2) ||
+				// And in >= v23.2, their locking behavior for serializable transactions
+				// is dictated by session setting.
+				(b.evalCtx.TxnIsoLevel == isolation.Serializable &&
+					!b.evalCtx.SessionData().SharedLockingForSerializable) {
+				// Reset locking information as we've determined we're going to be
+				// performing a non-locking read.
+				return opt.Locking{}, nil // early return; do not set b.ContainsNonDefaultKeyLocking
+			}
 		}
 		b.ContainsNonDefaultKeyLocking = true
 	}
