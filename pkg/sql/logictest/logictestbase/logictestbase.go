@@ -472,7 +472,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		Name:                        "local-mixed-22.2-23.1",
 		NumNodes:                    1,
 		OverrideDistSQLMode:         "off",
-		BootstrapVersion:            clusterversion.V22_2,
+		BootstrapVersion:            clusterversion.TestingBinaryMinSupportedVersionKey,
 		DisableUpgrade:              true,
 		DeclarativeCorpusCollection: true,
 	},

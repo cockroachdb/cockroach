@@ -44,6 +44,9 @@ func TestDatabaseRoleSettingsUserIDMigration1500Users(t *testing.T) {
 }
 
 func runTestDatabaseRoleSettingsUserIDMigration(t *testing.T, numUsers int) {
+	if clusterversion.ByKey(clusterversion.V23_1).LessEq(clusterversion.TestingBinaryMinSupportedVersion) {
+		t.Skip("not applicable for 23.1+")
+	}
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 

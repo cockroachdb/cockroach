@@ -165,5 +165,8 @@ func TestEnsureConsistentBinaryVersion(t *testing.T) {
 // TestEnsureConsistentMinBinaryVersion ensures that BinaryMinSupportedVersionKey
 // maps to a version equal to binaryMinSupportedVersion.
 func TestEnsureConsistentMinBinaryVersion(t *testing.T) {
+	if !AllowVersionSkipping {
+		t.Skip("not applicable without version skipping enabled")
+	}
 	require.Equal(t, ByKey(BinaryMinSupportedVersionKey), binaryMinSupportedVersion)
 }

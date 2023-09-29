@@ -72,6 +72,9 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 	// be changed to V23_2Start and updated to the next Start key everytime the
 	// compatability window moves forward.
 	startCV := clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs
+	if clusterversion.ByKey(clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs).Less(clusterversion.TestingBinaryMinSupportedVersion) {
+		startCV = clusterversion.V23_2Start
+	}
 	endCV := startCV + 1
 
 	ch := make(chan chan error)
@@ -85,7 +88,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				Server: &server.TestingKnobs{
-					BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
+					BootstrapVersionKeyOverride:    clusterversion.TestingBinaryMinSupportedVersionKey,
 					BinaryVersionOverride:          clusterversion.ByKey(startCV),
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},

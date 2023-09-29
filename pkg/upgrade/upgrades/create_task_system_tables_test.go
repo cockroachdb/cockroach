@@ -25,6 +25,9 @@ import (
 )
 
 func TestTaskTablesMigration(t *testing.T) {
+	if clusterversion.ByKey(clusterversion.V23_1).LessEq(clusterversion.TestingBinaryMinSupportedVersion) {
+		t.Skip("not applicable for 23.1+")
+	}
 	skip.UnderStressRace(t)
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()

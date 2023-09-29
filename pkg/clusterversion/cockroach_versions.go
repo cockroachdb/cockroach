@@ -902,21 +902,33 @@ const (
 // feels out of place. A "cluster version" and a "binary version" are two
 // separate concepts.
 var (
+	TestingBinaryMinSupportedVersionKey = V23_1
 	// binaryMinSupportedVersion is the earliest version of data supported by
 	// this binary. If this binary is started using a store marked with an older
 	// version than binaryMinSupportedVersion, then the binary will exit with
 	// an error. This typically trails the current release by one (see top-level
 	// comment).
-	binaryMinSupportedVersion = ByKey(BinaryMinSupportedVersionKey)
+	// Note: this variable is used for tests, and it is not the source of truth.
+	// See BinaryMinSupportedVersionKey for source of truth.
+	// If the `COCKROACH_ALLOW_VERSION_SKIPPING` environment variable is set to `true`,
+	// binaryMinSupportedVersion is set to BinaryMinSupportedVersionKey.
+	binaryMinSupportedVersion = ByKey(TestingBinaryMinSupportedVersionKey)
 
 	BinaryVersionKey = V23_2
 	// binaryVersion is the version of this binary.
 	//
 	// This is the version that a new cluster will use when created.
 	binaryVersion = ByKey(BinaryVersionKey)
+	// AllowVersionSkipping indicates if version skipping is enabled.
+	AllowVersionSkipping = false
 )
 
 func init() {
+	if envutil.EnvOrDefaultBool("COCKROACH_ALLOW_VERSION_SKIPPING", false) {
+		AllowVersionSkipping = true
+		TestingBinaryMinSupportedVersionKey = BinaryMinSupportedVersionKey
+		binaryMinSupportedVersion = ByKey(TestingBinaryMinSupportedVersionKey)
+	}
 	if finalVersion > invalidVersionKey {
 		if binaryVersion != ByKey(finalVersion) {
 			panic("binary version does not match final version")

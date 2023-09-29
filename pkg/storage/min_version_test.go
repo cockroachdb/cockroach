@@ -93,6 +93,11 @@ func TestMinVersion(t *testing.T) {
 }
 
 func TestSetMinVersion(t *testing.T) {
+	// TODO: the test can be removed when we stop supporting testing 22.2? Figure out a way to mark them as deletable?
+	// TODO: implement skip.WithClusterVersionGreaterEq maygbe?
+	if clusterversion.ByKey(clusterversion.V23_1).LessEq(clusterversion.TestingBinaryMinSupportedVersion) {
+		t.Skip("not applicable for 23.1+")
+	}
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

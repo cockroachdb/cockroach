@@ -124,6 +124,9 @@ func TestRangeFeed(t *testing.T) {
 }
 
 func TestMigrationCache(t *testing.T) {
+	if clusterversion.ByKey(clusterversion.V23_1).LessEq(clusterversion.TestingBinaryMinSupportedVersion) {
+		t.Skip("not applicable for 23.1+")
+	}
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
