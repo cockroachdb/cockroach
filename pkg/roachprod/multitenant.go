@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/errors"
 )
 
 // StartServiceForVirtualCluster starts SQL/HTTP instances for a
@@ -67,11 +66,6 @@ func StartServiceForVirtualCluster(
 		startCluster = ec
 	}
 
-	if startOpts.VirtualClusterID < 2 {
-		return errors.Errorf("invalid virtual cluster ID %d (must be 2 or higher)", startOpts.VirtualClusterID)
-	}
-	startOpts.VirtualClusterName = defaultVirtualClusterName(startOpts.VirtualClusterID)
-
 	if startOpts.Target == install.StartServiceForVirtualCluster {
 		l.Printf("Starting SQL/HTTP instances for the virtual cluster")
 	}
@@ -87,15 +81,6 @@ func StopServiceForVirtualCluster(
 		return err
 	}
 
-	stopOpts.VirtualClusterName = defaultVirtualClusterName(stopOpts.VirtualClusterID)
 	label := install.VirtualClusterLabel(stopOpts.VirtualClusterName, stopOpts.SQLInstance)
 	return c.Stop(ctx, l, stopOpts.Sig, stopOpts.Wait, stopOpts.MaxWait, label)
-}
-
-// defaultVirtualClusterName returns the virtual cluster name used for
-// the virtual cluster with ID given.
-//
-// TODO(herko): Allow users to pass in a virtual cluster name.
-func defaultVirtualClusterName(virtualClusterID int) string {
-	return fmt.Sprintf("virtual-cluster-%d", virtualClusterID)
 }
