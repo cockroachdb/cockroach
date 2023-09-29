@@ -107,7 +107,7 @@ export function makeTransactionsColumns(
   const sampledExecStatsBarChartOptions: BarChartOptions<TransactionInfo> = {
     classes: defaultBarChartOptions.classes,
     displayNoSamples: (d: TransactionInfo) => {
-      return longToInt(d.stats_data.stats.exec_stats?.count) == 0;
+      return longToInt(d.stats_data.stats.exec_stats?.count) === 0;
     },
   };
 

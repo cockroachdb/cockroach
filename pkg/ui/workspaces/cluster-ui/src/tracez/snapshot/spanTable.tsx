@@ -179,7 +179,7 @@ const makeColumns = (
       name: "icons",
       title: "",
       cell: span => {
-        return span.current_recording_mode != RecordingMode.OFF ? (
+        return span.current_recording_mode !== RecordingMode.OFF ? (
           // Use a viewbox to shrink the icon just a bit while leaving it centered.
           <CircleFilled className={cx("icon-red")} viewBox={"-1 -1 12 12"} />
         ) : span.current ? (

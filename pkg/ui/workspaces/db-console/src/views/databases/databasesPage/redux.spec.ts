@@ -67,7 +67,7 @@ class TestDriver {
   }
 
   private findDatabase(name: string) {
-    return _.find(this.properties().databases, row => row.name == name);
+    return _.find(this.properties().databases, row => row.name === name);
   }
 }
 

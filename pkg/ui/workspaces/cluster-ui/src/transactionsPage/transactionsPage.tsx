@@ -182,7 +182,7 @@ export class TransactionsPage extends React.Component<
 
     // Search query.
     const searchQuery = searchParams.get("q") || undefined;
-    if (onSearchComplete && searchQuery && search != searchQuery) {
+    if (onSearchComplete && searchQuery && search !== searchQuery) {
       onSearchComplete(searchQuery);
     }
 
@@ -245,7 +245,7 @@ export class TransactionsPage extends React.Component<
     const searchParams = new URLSearchParams(history.location.search);
     const currentTab = searchParams.get("tab") || "";
     const searchQueryString = searchParams.get("q") || "";
-    if (currentTab === tab && search && search != searchQueryString) {
+    if (currentTab === tab && search && search !== searchQueryString) {
       syncHistory(
         {
           q: search,
@@ -291,7 +291,7 @@ export class TransactionsPage extends React.Component<
 
   isSortSettingSameAsReqSort = (): boolean => {
     return (
-      getSortColumn(this.props.reqSortSetting) ==
+      getSortColumn(this.props.reqSortSetting) ===
       this.props.sortSetting.columnTitle
     );
   };
@@ -442,7 +442,7 @@ export class TransactionsPage extends React.Component<
   hasReqSortOption = (): boolean => {
     let found = false;
     Object.values(SqlStatsSortOptions).forEach((option: SqlStatsSortType) => {
-      if (getSortColumn(option) == this.props.sortSetting.columnTitle) {
+      if (getSortColumn(option) === this.props.sortSetting.columnTitle) {
         found = true;
       }
     });
@@ -543,7 +543,7 @@ export class TransactionsPage extends React.Component<
     const showSortWarning =
       !this.isSortSettingSameAsReqSort() &&
       this.hasReqSortOption() &&
-      transactionsToDisplay.length == this.props.limit;
+      transactionsToDisplay.length === this.props.limit;
 
     return (
       <>

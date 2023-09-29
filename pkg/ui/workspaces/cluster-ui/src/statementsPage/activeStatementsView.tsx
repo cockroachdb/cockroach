@@ -239,7 +239,7 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
   const countActiveFilters = calculateActiveFilters(filters);
   // The "Idle" execution status does not apply to statements.
   const executionStatuses = Object.values(ExecutionStatus).filter(
-    status => status != ExecutionStatus.Idle,
+    status => status !== ExecutionStatus.Idle,
   );
   const filteredStatements = filterActiveStatements(
     statements,

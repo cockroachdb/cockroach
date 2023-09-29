@@ -230,13 +230,13 @@ export class DatabaseDetailsPage extends React.Component<
     // View Mode.
     const view = searchParams.get("viewMode") || undefined;
     let viewMode = ViewMode.Tables;
-    if (view == ViewMode.Grants.toString()) {
+    if (view === ViewMode.Grants.toString()) {
       viewMode = ViewMode.Grants;
     }
     if (
       this.props.onViewModeChange &&
       view &&
-      viewMode != this.props.viewMode
+      viewMode !== this.props.viewMode
     ) {
       this.props.onViewModeChange(viewMode);
     }
@@ -245,19 +245,19 @@ export class DatabaseDetailsPage extends React.Component<
     const ascending = (searchParams.get("ascending") || undefined) === "true";
     const columnTitle = searchParams.get("columnTitle") || undefined;
     const sortSetting =
-      viewMode == ViewMode.Tables
+      viewMode === ViewMode.Tables
         ? this.props.sortSettingTables
         : this.props.sortSettingGrants;
     const onSortingChange =
-      viewMode == ViewMode.Tables
+      viewMode === ViewMode.Tables
         ? this.props.onSortingTablesChange
         : this.props.onSortingGrantsChange;
 
     if (
       onSortingChange &&
       columnTitle &&
-      (sortSetting.columnTitle != columnTitle ||
-        sortSetting.ascending != ascending)
+      (sortSetting.columnTitle !== columnTitle ||
+        sortSetting.ascending !== ascending)
     ) {
       onSortingChange(columnTitle, ascending);
     }
@@ -293,17 +293,17 @@ export class DatabaseDetailsPage extends React.Component<
     // No new tables to update
     if (
       !this.props.tables ||
-      this.props.tables.length == 0 ||
+      this.props.tables.length === 0 ||
       this.props.tables.every(x => x.loaded || x.loading)
     ) {
       return false;
     }
 
-    if (this.state.pagination.current != prevState.pagination.current) {
+    if (this.state.pagination.current !== prevState.pagination.current) {
       return true;
     }
 
-    if (prevProps && this.props.search != prevProps.search) {
+    if (prevProps && this.props.search !== prevProps.search) {
       return true;
     }
 
@@ -314,7 +314,7 @@ export class DatabaseDetailsPage extends React.Component<
       i++
     ) {
       const table = filteredTables[i];
-      if (!table.loaded && !table.loading && table.requestError == undefined) {
+      if (!table.loaded && !table.loading && table.requestError == null) {
         return true;
       }
     }
@@ -371,7 +371,7 @@ export class DatabaseDetailsPage extends React.Component<
       this.props.history,
     );
     const onSortingChange =
-      this.props.viewMode == ViewMode.Tables
+      this.props.viewMode === ViewMode.Tables
         ? this.props.onSortingTablesChange
         : this.props.onSortingGrantsChange;
 
@@ -470,9 +470,9 @@ export class DatabaseDetailsPage extends React.Component<
 
     // Avoid the loop if no filters/search are applied
     if (
-      (!search || search.length == 0) &&
-      regionsSelected.length == 0 &&
-      nodesSelected.length == 0
+      (!search || search.length === 0) &&
+      regionsSelected.length === 0 &&
+      nodesSelected.length === 0
     ) {
       return tables;
     }
@@ -480,11 +480,11 @@ export class DatabaseDetailsPage extends React.Component<
     return tables
       .filter(table => (search ? filterBySearchQuery(table, search) : true))
       .filter(table => {
-        if (regionsSelected.length == 0 && nodesSelected.length == 0)
+        if (regionsSelected.length === 0 && nodesSelected.length === 0)
           return true;
 
-        let foundRegion = regionsSelected.length == 0;
-        let foundNode = nodesSelected.length == 0;
+        let foundRegion = regionsSelected.length === 0;
+        let foundNode = nodesSelected.length === 0;
 
         table.details.nodes?.forEach(node => {
           const n = node?.toString() || "";
@@ -791,7 +791,7 @@ export class DatabaseDetailsPage extends React.Component<
     const regions = unique(Object.values(nodeRegions));
 
     const sortSetting =
-      this.props.viewMode == ViewMode.Tables
+      this.props.viewMode === ViewMode.Tables
         ? this.props.sortSettingTables
         : this.props.sortSettingGrants;
 
@@ -801,7 +801,7 @@ export class DatabaseDetailsPage extends React.Component<
     // Only show the filter component when the viewMode is Tables and if at
     // least one of drop-down is shown.
     const filterComponent =
-      this.props.viewMode == ViewMode.Tables && (showNodes || showRegions) ? (
+      this.props.viewMode === ViewMode.Tables && (showNodes || showRegions) ? (
         <PageConfigItem>
           <Filter
             hideAppNames={true}
