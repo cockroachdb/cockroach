@@ -48,13 +48,13 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	// here.
 	reflect.TypeOf((*tree.AlterTable)(nil)):          {fn: AlterTable, statementTag: tree.AlterTableTag, on: true, checks: alterTableChecks},
 	reflect.TypeOf((*tree.CreateIndex)(nil)):         {fn: CreateIndex, statementTag: tree.CreateIndexTag, on: true, checks: isV231Active},
-	reflect.TypeOf((*tree.DropDatabase)(nil)):        {fn: DropDatabase, statementTag: tree.DropDatabaseTag, on: true, checks: isV221Active},
+	reflect.TypeOf((*tree.DropDatabase)(nil)):        {fn: DropDatabase, statementTag: tree.DropDatabaseTag, on: true, checks: nil},
 	reflect.TypeOf((*tree.DropOwnedBy)(nil)):         {fn: DropOwnedBy, statementTag: tree.DropOwnedByTag, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.DropSchema)(nil)):          {fn: DropSchema, statementTag: tree.DropSchemaTag, on: true, checks: isV221Active},
-	reflect.TypeOf((*tree.DropSequence)(nil)):        {fn: DropSequence, statementTag: tree.DropSequenceTag, on: true, checks: isV221Active},
-	reflect.TypeOf((*tree.DropTable)(nil)):           {fn: DropTable, statementTag: tree.DropTableTag, on: true, checks: isV221Active},
-	reflect.TypeOf((*tree.DropType)(nil)):            {fn: DropType, statementTag: tree.DropTypeTag, on: true, checks: isV221Active},
-	reflect.TypeOf((*tree.DropView)(nil)):            {fn: DropView, statementTag: tree.DropViewTag, on: true, checks: isV221Active},
+	reflect.TypeOf((*tree.DropSchema)(nil)):          {fn: DropSchema, statementTag: tree.DropSchemaTag, on: true, checks: nil},
+	reflect.TypeOf((*tree.DropSequence)(nil)):        {fn: DropSequence, statementTag: tree.DropSequenceTag, on: true, checks: nil},
+	reflect.TypeOf((*tree.DropTable)(nil)):           {fn: DropTable, statementTag: tree.DropTableTag, on: true, checks: nil},
+	reflect.TypeOf((*tree.DropType)(nil)):            {fn: DropType, statementTag: tree.DropTypeTag, on: true, checks: nil},
+	reflect.TypeOf((*tree.DropView)(nil)):            {fn: DropView, statementTag: tree.DropViewTag, on: true, checks: nil},
 	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {fn: CommentOnConstraint, statementTag: tree.CommentOnConstraintTag, on: true, checks: isV222Active},
 	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {fn: CommentOnDatabase, statementTag: tree.CommentOnDatabaseTag, on: true, checks: isV222Active},
 	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {fn: CommentOnSchema, statementTag: tree.CommentOnSchemaTag, on: true, checks: isV222Active},
@@ -201,10 +201,6 @@ func getDeclarativeSchemaChangerModeForStmt(
 		ret = sessiondatapb.UseNewSchemaChangerUnsafe
 	}
 	return ret
-}
-
-var isV221Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversion.ClusterVersion) bool {
-	return activeVersion.IsActive(clusterversion.TODODelete_V22_1)
 }
 
 var isV222Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversion.ClusterVersion) bool {

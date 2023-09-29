@@ -277,13 +277,10 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 					return errors.Wrap(err, "checking if existing table is empty")
 				}
 				details.Tables[i].WasEmpty = len(res) == 0
-				if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2Start) {
-					// Update the descriptor in the job record and in the database with the ImportStartTime
-					details.Tables[i].Desc.ImportStartWallTime = details.Walltime
-					err := bindImportStartTime(ctx, p, tblDesc.GetID(), details.Walltime)
-					if err != nil {
-						return err
-					}
+				// Update the descriptor in the job record and in the database with the ImportStartTime
+				details.Tables[i].Desc.ImportStartWallTime = details.Walltime
+				if err := bindImportStartTime(ctx, p, tblDesc.GetID(), details.Walltime); err != nil {
+					return err
 				}
 			}
 		}
