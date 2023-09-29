@@ -36,7 +36,7 @@ import (
 )
 
 var enforcePlannerSanityCheck = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.schemachanger.strict_planning_sanity_check.enabled",
 	"enforce strict sanity checks in the declarative schema changer planner",
 	buildutil.CrdbTestBuild,

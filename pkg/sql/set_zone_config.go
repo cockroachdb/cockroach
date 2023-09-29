@@ -1078,7 +1078,7 @@ func validateZoneAttrsAndLocalitiesForSystemTenant(
 // SecondaryTenantZoneConfigsEnabled that allows virtual clusters to modify all
 // type of constraints in zone configs (i.e. not only zones and regions).
 var secondaryTenantsAllZoneConfigsEnabled = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled",
 	"enable unrestricted usage of ALTER CONFIGURE ZONE in virtual clusters",
 	false,

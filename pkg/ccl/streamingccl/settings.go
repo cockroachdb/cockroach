@@ -17,7 +17,7 @@ import (
 // CrossClusterReplicationEnabled enables the ability to setup and control a
 // cross cluster replication stream.
 var CrossClusterReplicationEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cross_cluster_replication.enabled",
 	"enables the ability to setup and control a cross cluster replication stream",
 	false,
@@ -26,7 +26,7 @@ var CrossClusterReplicationEnabled = settings.RegisterBoolSetting(
 // StreamReplicationStreamLivenessTrackFrequency controls frequency to check
 // the liveness of a streaming replication producer job.
 var StreamReplicationStreamLivenessTrackFrequency = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"stream_replication.stream_liveness_track_frequency",
 	"controls how frequent we check for the liveness of a replication stream producer job",
 	time.Minute,
@@ -35,7 +35,7 @@ var StreamReplicationStreamLivenessTrackFrequency = settings.RegisterDurationSet
 // StreamReplicationJobLivenessTimeout controls how long we wait for to kill
 // an inactive producer job.
 var StreamReplicationJobLivenessTimeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"stream_replication.job_liveness_timeout",
 	"controls how long we wait for to kill an inactive producer job",
 	3*24*time.Hour,

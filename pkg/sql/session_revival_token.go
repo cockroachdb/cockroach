@@ -25,7 +25,7 @@ import (
 // setting since this is only intended to be used by CockroachDB-serverless
 // at the time of this writing.
 var AllowSessionRevival = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"server.user_login.session_revival_token.enabled",
 	"if set, the cluster is able to create session revival tokens and use them "+
 		"to authenticate a new session",

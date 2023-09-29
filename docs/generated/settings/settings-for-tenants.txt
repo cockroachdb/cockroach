@@ -1,323 +1,323 @@
 Setting	Type	Default	Description	Class
-admission.epoch_lifo.enabled	boolean	false	when true, epoch-LIFO behavior is enabled when there is significant delay in admission	tenant-rw
-admission.epoch_lifo.epoch_closing_delta_duration	duration	5ms	the delta duration before closing an epoch, for epoch-LIFO admission control ordering	tenant-rw
-admission.epoch_lifo.epoch_duration	duration	100ms	the duration of an epoch, for epoch-LIFO admission control ordering	tenant-rw
-admission.epoch_lifo.queue_delay_threshold_to_switch_to_lifo	duration	105ms	the queue delay encountered by a (tenant,priority) for switching to epoch-LIFO ordering	tenant-rw
-admission.sql_kv_response.enabled	boolean	true	when true, work performed by the SQL layer when receiving a KV response is subject to admission control	tenant-rw
-admission.sql_sql_response.enabled	boolean	true	when true, work performed by the SQL layer when receiving a DistSQL response is subject to admission control	tenant-rw
-bulkio.backup.deprecated_full_backup_with_subdir.enabled	boolean	false	when true, a backup command with a user specified subdirectory will create a full backup at the subdirectory if no backup already exists at that subdirectory	tenant-rw
-bulkio.backup.file_size	byte size	128 MiB	target size for individual data files produced during BACKUP	tenant-rw
-bulkio.backup.read_timeout	duration	5m0s	amount of time after which a read attempt is considered timed out, which causes the backup to fail	tenant-rw
-bulkio.backup.read_with_priority_after	duration	1m0s	amount of time since the read-as-of time above which a BACKUP should use priority when retrying reads	tenant-rw
-bulkio.stream_ingestion.minimum_flush_interval	duration	5s	the minimum timestamp between flushes; flushes may still occur if internal buffers fill up	tenant-rw
-changefeed.backfill.concurrent_scan_requests	integer	0	number of concurrent scan requests per node issued during a backfill	tenant-rw
-changefeed.backfill.scan_request_size	integer	524288	the maximum number of bytes returned by each scan request	tenant-rw
-changefeed.balance_range_distribution.enabled	boolean	false	if enabled, the ranges are balanced equally among all nodes	tenant-rw
-changefeed.batch_reduction_retry.enabled	boolean	false	if true, kafka changefeeds upon erroring on an oversized batch will attempt to resend the messages with progressively lower batch sizes	tenant-rw
-changefeed.event_consumer_worker_queue_size	integer	16	if changefeed.event_consumer_workers is enabled, this setting sets the maxmimum number of events which a worker can buffer	tenant-rw
-changefeed.event_consumer_workers	integer	0	the number of workers to use when processing events: <0 disables, 0 assigns a reasonable default, >0 assigns the setting value. for experimental/core changefeeds and changefeeds using parquet format, this is disabled	tenant-rw
-changefeed.fast_gzip.enabled	boolean	true	use fast gzip implementation	tenant-rw
-changefeed.frontier_highwater_lag_checkpoint_threshold	duration	10m0s	controls the maximum the high-water mark is allowed to lag behind the leading spans of the frontier before per-span checkpointing is enabled; if 0, checkpointing due to high-water lag is disabled	tenant-rw
-changefeed.memory.per_changefeed_limit	byte size	512 MiB	controls amount of data that can be buffered per changefeed	tenant-rw
-changefeed.min_highwater_advance	duration	0s	minimum amount of time the changefeed high water mark must advance for it to be eligible for checkpointing; Default of 0 will checkpoint every time frontier advances, as long as the rate of checkpointing keeps up with the rate of frontier changes	tenant-rw
-changefeed.node_throttle_config	string		specifies node level throttling configuration for all changefeeeds	tenant-rw
-changefeed.protect_timestamp.max_age	duration	96h0m0s	fail the changefeed if the protected timestamp age exceeds this threshold; 0 disables expiration	tenant-rw
-changefeed.protect_timestamp_interval	duration	10m0s	controls how often the changefeed forwards its protected timestamp to the resolved timestamp	tenant-rw
-changefeed.schema_feed.read_with_priority_after	duration	1m0s	retry with high priority if we were not able to read descriptors for too long; 0 disables	tenant-rw
-changefeed.sink_io_workers	integer	0	the number of workers used by changefeeds when sending requests to the sink (currently webhook only): <0 disables, 0 assigns a reasonable default, >0 assigns the setting value	tenant-rw
-cloudstorage.azure.concurrent_upload_buffers	integer	1	controls the number of concurrent buffers that will be used by the Azure client when uploading chunks.Each buffer can buffer up to cloudstorage.write_chunk.size of memory during an upload	tenant-rw
-cloudstorage.http.custom_ca	string		custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage	tenant-rw
-cloudstorage.timeout	duration	10m0s	the timeout for import/export storage operations	tenant-rw
-cluster.organization	string		organization name	tenant-rw
-cluster.preserve_downgrade_option	string		disable (automatic or manual) cluster version upgrade from the specified version until reset	tenant-rw
-diagnostics.forced_sql_stat_reset.interval	duration	2h0m0s	interval after which the reported SQL Stats are reset even if not collected by telemetry reporter. It has a max value of 24H.	tenant-rw
-diagnostics.reporting.enabled	boolean	true	enable reporting diagnostic metrics to cockroach labs	tenant-rw
-diagnostics.reporting.interval	duration	1h0m0s	interval at which diagnostics data should be reported	tenant-rw
-enterprise.license	string		the encoded cluster license	tenant-rw
-external.graphite.endpoint	string		if nonempty, push server metrics to the Graphite or Carbon server at the specified host:port	tenant-rw
-external.graphite.interval	duration	10s	the interval at which metrics are pushed to Graphite (if enabled)	tenant-rw
-feature.backup.enabled	boolean	true	set to true to enable backups, false to disable; default is true	tenant-rw
-feature.changefeed.enabled	boolean	true	set to true to enable changefeeds, false to disable; default is true	tenant-rw
-feature.export.enabled	boolean	true	set to true to enable exports, false to disable; default is true	tenant-rw
-feature.import.enabled	boolean	true	set to true to enable imports, false to disable; default is true	tenant-rw
-feature.restore.enabled	boolean	true	set to true to enable restore, false to disable; default is true	tenant-rw
-feature.schema_change.enabled	boolean	true	set to true to enable schema changes, false to disable; default is true	tenant-rw
-feature.stats.enabled	boolean	true	set to true to enable CREATE STATISTICS/ANALYZE, false to disable; default is true	tenant-rw
-jobs.retention_time	duration	336h0m0s	the amount of time for which records for completed jobs are retained	tenant-rw
-kv.bulk_sst.target_size	byte size	16 MiB	target size for SSTs emitted from export requests; export requests (i.e. BACKUP) may buffer up to the sum of kv.bulk_sst.target_size and kv.bulk_sst.max_allowed_overage in memory	tenant-ro
-kv.closed_timestamp.follower_reads.enabled	boolean	true	allow (all) replicas to serve consistent historical reads based on closed timestamp information	tenant-ro
-kv.closed_timestamp.lead_for_global_reads_override	duration	0s	if nonzero, overrides the lead time that global_read ranges use to publish closed timestamps	tenant-ro
-kv.closed_timestamp.side_transport_interval	duration	200ms	the interval at which the closed timestamp side-transport attempts to advance each range's closed timestamp; set to 0 to disable the side-transport	tenant-ro
-kv.closed_timestamp.target_duration	duration	3s	if nonzero, attempt to provide closed timestamp notifications for timestamps trailing cluster time by approximately this duration	tenant-ro
-kv.protectedts.reconciliation.interval	duration	5m0s	the frequency for reconciling jobs with protected timestamp records	tenant-ro
-kv.rangefeed.client.stream_startup_rate	integer	100	controls the rate per second the client will initiate new rangefeed stream for a single range; 0 implies unlimited	tenant-rw
-kv.rangefeed.closed_timestamp_refresh_interval	duration	3s	the interval at which closed-timestamp updatesare delivered to rangefeeds; set to 0 to use kv.closed_timestamp.side_transport_interval	tenant-ro
-kv.rangefeed.enabled	boolean	false	if set, rangefeed registration is enabled	tenant-ro
-kv.rangefeed.range_stuck_threshold	duration	1m0s	restart rangefeeds if they don't emit anything for the specified threshold; 0 disables (kv.rangefeed.closed_timestamp_refresh_interval takes precedence)	tenant-rw
-kv.transaction.max_intents_bytes	integer	4194304	maximum number of bytes used to track locks in transactions	tenant-rw
-kv.transaction.max_refresh_spans_bytes	integer	4194304	maximum number of bytes used to track refresh spans in serializable transactions	tenant-rw
-kv.transaction.reject_over_max_intents_budget.enabled	boolean	false	if set, transactions that exceed their lock tracking budget (kv.transaction.max_intents_bytes) are rejected instead of having their lock spans imprecisely compressed	tenant-rw
-schedules.backup.gc_protection.enabled	boolean	true	enable chaining of GC protection across backups run as part of a schedule	tenant-rw
-security.ocsp.mode	enumeration	off	use OCSP to check whether TLS certificates are revoked. If the OCSP server is unreachable, in strict mode all certificates will be rejected and in lax mode all certificates will be accepted. [off = 0, lax = 1, strict = 2]	tenant-rw
-security.ocsp.timeout	duration	3s	timeout before considering the OCSP server unreachable	tenant-rw
-server.auth_log.sql_connections.enabled	boolean	false	if set, log SQL client connect and disconnect events (note: may hinder performance on loaded nodes)	tenant-rw
-server.auth_log.sql_sessions.enabled	boolean	false	if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)	tenant-rw
-server.authentication_cache.enabled	boolean	true	enables a cache used during authentication to avoid lookups to system tables when retrieving per-user authentication-related information	tenant-rw
-server.child_metrics.enabled	boolean	false	enables the exporting of child metrics, additional prometheus time series with extra labels	tenant-rw
-server.client_cert_expiration_cache.capacity	integer	1000	the maximum number of client cert expirations stored	tenant-rw
-server.clock.forward_jump_check.enabled	boolean	false	if enabled, forward clock jumps > max_offset/2 will cause a panic	tenant-rw
-server.clock.persist_upper_bound_interval	duration	0s	the interval between persisting the wall time upper bound of the clock. The clock does not generate a wall time greater than the persisted timestamp and will panic if it sees a wall time greater than this value. When cockroach starts, it waits for the wall time to catch-up till this persisted timestamp. This guarantees monotonic wall time across server restarts. Not setting this or setting a value of 0 disables this feature.	tenant-rw
-server.eventlog.enabled	boolean	true	if set, logged notable events are also stored in the table system.eventlog	tenant-rw
-server.eventlog.ttl	duration	2160h0m0s	if nonzero, entries in system.eventlog older than this duration are periodically purged	tenant-rw
-server.host_based_authentication.configuration	string		host-based authentication configuration to use during connection authentication	tenant-rw
-server.hot_ranges_request.node.timeout	duration	5m0s	the duration allowed for a single node to return hot range data before the request is cancelled; if set to 0, there is no timeout	tenant-rw
-server.hsts.enabled	boolean	false	if true, HSTS headers will be sent along with all HTTP requests. The headers will contain a max-age setting of one year. Browsers honoring the header will always use HTTPS to access the DB Console. Ensure that TLS is correctly configured prior to enabling.	tenant-rw
-server.identity_map.configuration	string		system-identity to database-username mappings	tenant-rw
-server.log_gc.max_deletions_per_cycle	integer	1000	the maximum number of entries to delete on each purge of log-like system tables	tenant-rw
-server.log_gc.period	duration	1h0m0s	the period at which log-like system tables are checked for old entries	tenant-rw
-server.max_connections_per_gateway	integer	-1	the maximum number of SQL connections per gateway allowed at a given time (note: this will only limit future connection attempts and will not affect already established connections). Negative values result in unlimited number of connections. Superusers are not affected by this limit.	tenant-rw
-server.oidc_authentication.autologin.enabled	boolean	false	if true, logged-out visitors to the DB Console will be automatically redirected to the OIDC login endpoint	tenant-rw
-server.oidc_authentication.button_text	string	Log in with your OIDC provider	text to show on button on DB Console login page to login with your OIDC provider (only shown if OIDC is enabled)	tenant-rw
-server.oidc_authentication.claim_json_key	string		sets JSON key of principal to extract from payload after OIDC authentication completes (usually email or sid)	tenant-rw
-server.oidc_authentication.client_id	string		sets OIDC client id	tenant-rw
-server.oidc_authentication.client_secret	string		sets OIDC client secret	tenant-rw
-server.oidc_authentication.enabled	boolean	false	enables or disabled OIDC login for the DB Console	tenant-rw
-server.oidc_authentication.principal_regex	string	(.+)	regular expression to apply to extracted principal (see claim_json_key setting) to translate to SQL user (golang regex format, must include 1 grouping to extract)	tenant-rw
-server.oidc_authentication.provider_url	string		sets OIDC provider URL ({provider_url}/.well-known/openid-configuration must resolve)	tenant-rw
-server.oidc_authentication.redirect_url	string	https://localhost:8080/oidc/v1/callback	sets OIDC redirect URL via a URL string or a JSON string containing a required `redirect_urls` key with an object that maps from region keys to URL strings (URLs should point to your load balancer and must route to the path /oidc/v1/callback)	tenant-rw
-server.oidc_authentication.scopes	string	openid	sets OIDC scopes to include with authentication request (space delimited list of strings, required to start with `openid`)	tenant-rw
-server.rangelog.ttl	duration	720h0m0s	if nonzero, entries in system.rangelog older than this duration are periodically purged	tenant-rw
-server.shutdown.connection_wait	duration	0s	the maximum amount of time a server waits for all SQL connections to be closed before proceeding with a drain. (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)	tenant-rw
-server.shutdown.drain_wait	duration	0s	the amount of time a server waits in an unready state before proceeding with a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting. --drain-wait is to specify the duration of the whole draining process, while server.shutdown.drain_wait is to set the wait time for health probes to notice that the node is not ready.)	tenant-rw
-server.shutdown.jobs_wait	duration	10s	the maximum amount of time a server waits for all currently executing jobs to notice drain request and to perform orderly shutdown	tenant-rw
-server.shutdown.query_wait	duration	10s	the timeout for waiting for active queries to finish during a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)	tenant-rw
-server.time_until_store_dead	duration	5m0s	the time after which if there is no new gossiped information about a store, it is considered dead	tenant-rw
-server.user_login.cert_password_method.auto_scram_promotion.enabled	boolean	true	whether to automatically promote cert-password authentication to use SCRAM	tenant-rw
-server.user_login.downgrade_scram_stored_passwords_to_bcrypt.enabled	boolean	true	if server.user_login.password_encryption=crdb-bcrypt, this controls whether to automatically re-encode stored passwords using scram-sha-256 to crdb-bcrypt	tenant-rw
-server.user_login.min_password_length	integer	1	the minimum length accepted for passwords set in cleartext via SQL. Note that a value lower than 1 is ignored: passwords cannot be empty in any case.	tenant-rw
-server.user_login.password_encryption	enumeration	scram-sha-256	which hash method to use to encode cleartext passwords passed via ALTER/CREATE USER/ROLE WITH PASSWORD [crdb-bcrypt = 2, scram-sha-256 = 3]	tenant-rw
-server.user_login.password_hashes.default_cost.crdb_bcrypt	integer	10	the hashing cost to use when storing passwords supplied as cleartext by SQL clients with the hashing method crdb-bcrypt (allowed range: 4-31)	tenant-rw
-server.user_login.password_hashes.default_cost.scram_sha_256	integer	10610	the hashing cost to use when storing passwords supplied as cleartext by SQL clients with the hashing method scram-sha-256 (allowed range: 4096-240000000000)	tenant-rw
-server.user_login.rehash_scram_stored_passwords_on_cost_change.enabled	boolean	true	if server.user_login.password_hashes.default_cost.scram_sha_256 differs from, the cost in a stored hash, this controls whether to automatically re-encode stored passwords using scram-sha-256 with the new default cost	tenant-rw
-server.user_login.timeout	duration	10s	timeout after which client authentication times out if some system range is unavailable (0 = no timeout)	tenant-rw
-server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled	boolean	true	if server.user_login.password_encryption=scram-sha-256, this controls whether to automatically re-encode stored passwords using crdb-bcrypt to scram-sha-256	tenant-rw
-server.web_session.purge.ttl	duration	1h0m0s	if nonzero, entries in system.web_sessions older than this duration are periodically purged	tenant-rw
-server.web_session.timeout	duration	168h0m0s	the duration that a newly created web session will be valid	tenant-rw
-sql.auth.change_own_password.enabled	boolean	false	controls whether a user is allowed to change their own password, even if they have no other privileges	tenant-rw
-sql.auth.public_schema_create_privilege.enabled	boolean	true	determines whether to grant all users the CREATE privileges on the public schema when it is created	tenant-rw
-sql.auth.resolve_membership_single_scan.enabled	boolean	true	determines whether to populate the role membership cache with a single scan	tenant-rw
-sql.closed_session_cache.capacity	integer	1000	the maximum number of sessions in the cache	tenant-rw
-sql.closed_session_cache.time_to_live	integer	3600	the maximum time to live, in seconds	tenant-rw
-sql.contention.event_store.capacity	byte size	64 MiB	the in-memory storage capacity per-node of contention event store	tenant-rw
-sql.contention.event_store.duration_threshold	duration	0s	minimum contention duration to cause the contention events to be collected into crdb_internal.transaction_contention_events	tenant-rw
-sql.contention.txn_id_cache.max_size	byte size	64 MiB	the maximum byte size TxnID cache will use (set to 0 to disable)	tenant-rw
-sql.cross_db_fks.enabled	boolean	false	if true, creating foreign key references across databases is allowed	tenant-rw
-sql.cross_db_sequence_owners.enabled	boolean	false	if true, creating sequences owned by tables from other databases is allowed	tenant-rw
-sql.cross_db_sequence_references.enabled	boolean	false	if true, sequences referenced by tables from other databases are allowed	tenant-rw
-sql.cross_db_views.enabled	boolean	false	if true, creating views that refer to other databases is allowed	tenant-rw
+admission.epoch_lifo.enabled	boolean	false	when true, epoch-LIFO behavior is enabled when there is significant delay in admission	application
+admission.epoch_lifo.epoch_closing_delta_duration	duration	5ms	the delta duration before closing an epoch, for epoch-LIFO admission control ordering	application
+admission.epoch_lifo.epoch_duration	duration	100ms	the duration of an epoch, for epoch-LIFO admission control ordering	application
+admission.epoch_lifo.queue_delay_threshold_to_switch_to_lifo	duration	105ms	the queue delay encountered by a (tenant,priority) for switching to epoch-LIFO ordering	application
+admission.sql_kv_response.enabled	boolean	true	when true, work performed by the SQL layer when receiving a KV response is subject to admission control	application
+admission.sql_sql_response.enabled	boolean	true	when true, work performed by the SQL layer when receiving a DistSQL response is subject to admission control	application
+bulkio.backup.deprecated_full_backup_with_subdir.enabled	boolean	false	when true, a backup command with a user specified subdirectory will create a full backup at the subdirectory if no backup already exists at that subdirectory	application
+bulkio.backup.file_size	byte size	128 MiB	target size for individual data files produced during BACKUP	application
+bulkio.backup.read_timeout	duration	5m0s	amount of time after which a read attempt is considered timed out, which causes the backup to fail	application
+bulkio.backup.read_with_priority_after	duration	1m0s	amount of time since the read-as-of time above which a BACKUP should use priority when retrying reads	application
+bulkio.stream_ingestion.minimum_flush_interval	duration	5s	the minimum timestamp between flushes; flushes may still occur if internal buffers fill up	application
+changefeed.backfill.concurrent_scan_requests	integer	0	number of concurrent scan requests per node issued during a backfill	application
+changefeed.backfill.scan_request_size	integer	524288	the maximum number of bytes returned by each scan request	application
+changefeed.balance_range_distribution.enabled	boolean	false	if enabled, the ranges are balanced equally among all nodes	application
+changefeed.batch_reduction_retry.enabled	boolean	false	if true, kafka changefeeds upon erroring on an oversized batch will attempt to resend the messages with progressively lower batch sizes	application
+changefeed.event_consumer_worker_queue_size	integer	16	if changefeed.event_consumer_workers is enabled, this setting sets the maxmimum number of events which a worker can buffer	application
+changefeed.event_consumer_workers	integer	0	the number of workers to use when processing events: <0 disables, 0 assigns a reasonable default, >0 assigns the setting value. for experimental/core changefeeds and changefeeds using parquet format, this is disabled	application
+changefeed.fast_gzip.enabled	boolean	true	use fast gzip implementation	application
+changefeed.frontier_highwater_lag_checkpoint_threshold	duration	10m0s	controls the maximum the high-water mark is allowed to lag behind the leading spans of the frontier before per-span checkpointing is enabled; if 0, checkpointing due to high-water lag is disabled	application
+changefeed.memory.per_changefeed_limit	byte size	512 MiB	controls amount of data that can be buffered per changefeed	application
+changefeed.min_highwater_advance	duration	0s	minimum amount of time the changefeed high water mark must advance for it to be eligible for checkpointing; Default of 0 will checkpoint every time frontier advances, as long as the rate of checkpointing keeps up with the rate of frontier changes	application
+changefeed.node_throttle_config	string		specifies node level throttling configuration for all changefeeeds	application
+changefeed.protect_timestamp.max_age	duration	96h0m0s	fail the changefeed if the protected timestamp age exceeds this threshold; 0 disables expiration	application
+changefeed.protect_timestamp_interval	duration	10m0s	controls how often the changefeed forwards its protected timestamp to the resolved timestamp	application
+changefeed.schema_feed.read_with_priority_after	duration	1m0s	retry with high priority if we were not able to read descriptors for too long; 0 disables	application
+changefeed.sink_io_workers	integer	0	the number of workers used by changefeeds when sending requests to the sink (currently webhook only): <0 disables, 0 assigns a reasonable default, >0 assigns the setting value	application
+cloudstorage.azure.concurrent_upload_buffers	integer	1	controls the number of concurrent buffers that will be used by the Azure client when uploading chunks.Each buffer can buffer up to cloudstorage.write_chunk.size of memory during an upload	application
+cloudstorage.http.custom_ca	string		custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage	application
+cloudstorage.timeout	duration	10m0s	the timeout for import/export storage operations	application
+cluster.organization	string		organization name	application
+cluster.preserve_downgrade_option	string		disable (automatic or manual) cluster version upgrade from the specified version until reset	application
+diagnostics.forced_sql_stat_reset.interval	duration	2h0m0s	interval after which the reported SQL Stats are reset even if not collected by telemetry reporter. It has a max value of 24H.	application
+diagnostics.reporting.enabled	boolean	true	enable reporting diagnostic metrics to cockroach labs	application
+diagnostics.reporting.interval	duration	1h0m0s	interval at which diagnostics data should be reported	application
+enterprise.license	string		the encoded cluster license	application
+external.graphite.endpoint	string		if nonempty, push server metrics to the Graphite or Carbon server at the specified host:port	application
+external.graphite.interval	duration	10s	the interval at which metrics are pushed to Graphite (if enabled)	application
+feature.backup.enabled	boolean	true	set to true to enable backups, false to disable; default is true	application
+feature.changefeed.enabled	boolean	true	set to true to enable changefeeds, false to disable; default is true	application
+feature.export.enabled	boolean	true	set to true to enable exports, false to disable; default is true	application
+feature.import.enabled	boolean	true	set to true to enable imports, false to disable; default is true	application
+feature.restore.enabled	boolean	true	set to true to enable restore, false to disable; default is true	application
+feature.schema_change.enabled	boolean	true	set to true to enable schema changes, false to disable; default is true	application
+feature.stats.enabled	boolean	true	set to true to enable CREATE STATISTICS/ANALYZE, false to disable; default is true	application
+jobs.retention_time	duration	336h0m0s	the amount of time for which records for completed jobs are retained	application
+kv.bulk_sst.target_size	byte size	16 MiB	target size for SSTs emitted from export requests; export requests (i.e. BACKUP) may buffer up to the sum of kv.bulk_sst.target_size and kv.bulk_sst.max_allowed_overage in memory	system-visible
+kv.closed_timestamp.follower_reads.enabled	boolean	true	allow (all) replicas to serve consistent historical reads based on closed timestamp information	system-visible
+kv.closed_timestamp.lead_for_global_reads_override	duration	0s	if nonzero, overrides the lead time that global_read ranges use to publish closed timestamps	system-visible
+kv.closed_timestamp.side_transport_interval	duration	200ms	the interval at which the closed timestamp side-transport attempts to advance each range's closed timestamp; set to 0 to disable the side-transport	system-visible
+kv.closed_timestamp.target_duration	duration	3s	if nonzero, attempt to provide closed timestamp notifications for timestamps trailing cluster time by approximately this duration	system-visible
+kv.protectedts.reconciliation.interval	duration	5m0s	the frequency for reconciling jobs with protected timestamp records	system-visible
+kv.rangefeed.client.stream_startup_rate	integer	100	controls the rate per second the client will initiate new rangefeed stream for a single range; 0 implies unlimited	application
+kv.rangefeed.closed_timestamp_refresh_interval	duration	3s	the interval at which closed-timestamp updatesare delivered to rangefeeds; set to 0 to use kv.closed_timestamp.side_transport_interval	system-visible
+kv.rangefeed.enabled	boolean	false	if set, rangefeed registration is enabled	system-visible
+kv.rangefeed.range_stuck_threshold	duration	1m0s	restart rangefeeds if they don't emit anything for the specified threshold; 0 disables (kv.rangefeed.closed_timestamp_refresh_interval takes precedence)	application
+kv.transaction.max_intents_bytes	integer	4194304	maximum number of bytes used to track locks in transactions	application
+kv.transaction.max_refresh_spans_bytes	integer	4194304	maximum number of bytes used to track refresh spans in serializable transactions	application
+kv.transaction.reject_over_max_intents_budget.enabled	boolean	false	if set, transactions that exceed their lock tracking budget (kv.transaction.max_intents_bytes) are rejected instead of having their lock spans imprecisely compressed	application
+schedules.backup.gc_protection.enabled	boolean	true	enable chaining of GC protection across backups run as part of a schedule	application
+security.ocsp.mode	enumeration	off	use OCSP to check whether TLS certificates are revoked. If the OCSP server is unreachable, in strict mode all certificates will be rejected and in lax mode all certificates will be accepted. [off = 0, lax = 1, strict = 2]	application
+security.ocsp.timeout	duration	3s	timeout before considering the OCSP server unreachable	application
+server.auth_log.sql_connections.enabled	boolean	false	if set, log SQL client connect and disconnect events (note: may hinder performance on loaded nodes)	application
+server.auth_log.sql_sessions.enabled	boolean	false	if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)	application
+server.authentication_cache.enabled	boolean	true	enables a cache used during authentication to avoid lookups to system tables when retrieving per-user authentication-related information	application
+server.child_metrics.enabled	boolean	false	enables the exporting of child metrics, additional prometheus time series with extra labels	application
+server.client_cert_expiration_cache.capacity	integer	1000	the maximum number of client cert expirations stored	application
+server.clock.forward_jump_check.enabled	boolean	false	if enabled, forward clock jumps > max_offset/2 will cause a panic	application
+server.clock.persist_upper_bound_interval	duration	0s	the interval between persisting the wall time upper bound of the clock. The clock does not generate a wall time greater than the persisted timestamp and will panic if it sees a wall time greater than this value. When cockroach starts, it waits for the wall time to catch-up till this persisted timestamp. This guarantees monotonic wall time across server restarts. Not setting this or setting a value of 0 disables this feature.	application
+server.eventlog.enabled	boolean	true	if set, logged notable events are also stored in the table system.eventlog	application
+server.eventlog.ttl	duration	2160h0m0s	if nonzero, entries in system.eventlog older than this duration are periodically purged	application
+server.host_based_authentication.configuration	string		host-based authentication configuration to use during connection authentication	application
+server.hot_ranges_request.node.timeout	duration	5m0s	the duration allowed for a single node to return hot range data before the request is cancelled; if set to 0, there is no timeout	application
+server.hsts.enabled	boolean	false	if true, HSTS headers will be sent along with all HTTP requests. The headers will contain a max-age setting of one year. Browsers honoring the header will always use HTTPS to access the DB Console. Ensure that TLS is correctly configured prior to enabling.	application
+server.identity_map.configuration	string		system-identity to database-username mappings	application
+server.log_gc.max_deletions_per_cycle	integer	1000	the maximum number of entries to delete on each purge of log-like system tables	application
+server.log_gc.period	duration	1h0m0s	the period at which log-like system tables are checked for old entries	application
+server.max_connections_per_gateway	integer	-1	the maximum number of SQL connections per gateway allowed at a given time (note: this will only limit future connection attempts and will not affect already established connections). Negative values result in unlimited number of connections. Superusers are not affected by this limit.	application
+server.oidc_authentication.autologin.enabled	boolean	false	if true, logged-out visitors to the DB Console will be automatically redirected to the OIDC login endpoint	application
+server.oidc_authentication.button_text	string	Log in with your OIDC provider	text to show on button on DB Console login page to login with your OIDC provider (only shown if OIDC is enabled)	application
+server.oidc_authentication.claim_json_key	string		sets JSON key of principal to extract from payload after OIDC authentication completes (usually email or sid)	application
+server.oidc_authentication.client_id	string		sets OIDC client id	application
+server.oidc_authentication.client_secret	string		sets OIDC client secret	application
+server.oidc_authentication.enabled	boolean	false	enables or disabled OIDC login for the DB Console	application
+server.oidc_authentication.principal_regex	string	(.+)	regular expression to apply to extracted principal (see claim_json_key setting) to translate to SQL user (golang regex format, must include 1 grouping to extract)	application
+server.oidc_authentication.provider_url	string		sets OIDC provider URL ({provider_url}/.well-known/openid-configuration must resolve)	application
+server.oidc_authentication.redirect_url	string	https://localhost:8080/oidc/v1/callback	sets OIDC redirect URL via a URL string or a JSON string containing a required `redirect_urls` key with an object that maps from region keys to URL strings (URLs should point to your load balancer and must route to the path /oidc/v1/callback)	application
+server.oidc_authentication.scopes	string	openid	sets OIDC scopes to include with authentication request (space delimited list of strings, required to start with `openid`)	application
+server.rangelog.ttl	duration	720h0m0s	if nonzero, entries in system.rangelog older than this duration are periodically purged	application
+server.shutdown.connection_wait	duration	0s	the maximum amount of time a server waits for all SQL connections to be closed before proceeding with a drain. (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)	application
+server.shutdown.drain_wait	duration	0s	the amount of time a server waits in an unready state before proceeding with a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting. --drain-wait is to specify the duration of the whole draining process, while server.shutdown.drain_wait is to set the wait time for health probes to notice that the node is not ready.)	application
+server.shutdown.jobs_wait	duration	10s	the maximum amount of time a server waits for all currently executing jobs to notice drain request and to perform orderly shutdown	application
+server.shutdown.query_wait	duration	10s	the timeout for waiting for active queries to finish during a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)	application
+server.time_until_store_dead	duration	5m0s	the time after which if there is no new gossiped information about a store, it is considered dead	application
+server.user_login.cert_password_method.auto_scram_promotion.enabled	boolean	true	whether to automatically promote cert-password authentication to use SCRAM	application
+server.user_login.downgrade_scram_stored_passwords_to_bcrypt.enabled	boolean	true	if server.user_login.password_encryption=crdb-bcrypt, this controls whether to automatically re-encode stored passwords using scram-sha-256 to crdb-bcrypt	application
+server.user_login.min_password_length	integer	1	the minimum length accepted for passwords set in cleartext via SQL. Note that a value lower than 1 is ignored: passwords cannot be empty in any case.	application
+server.user_login.password_encryption	enumeration	scram-sha-256	which hash method to use to encode cleartext passwords passed via ALTER/CREATE USER/ROLE WITH PASSWORD [crdb-bcrypt = 2, scram-sha-256 = 3]	application
+server.user_login.password_hashes.default_cost.crdb_bcrypt	integer	10	the hashing cost to use when storing passwords supplied as cleartext by SQL clients with the hashing method crdb-bcrypt (allowed range: 4-31)	application
+server.user_login.password_hashes.default_cost.scram_sha_256	integer	10610	the hashing cost to use when storing passwords supplied as cleartext by SQL clients with the hashing method scram-sha-256 (allowed range: 4096-240000000000)	application
+server.user_login.rehash_scram_stored_passwords_on_cost_change.enabled	boolean	true	if server.user_login.password_hashes.default_cost.scram_sha_256 differs from, the cost in a stored hash, this controls whether to automatically re-encode stored passwords using scram-sha-256 with the new default cost	application
+server.user_login.timeout	duration	10s	timeout after which client authentication times out if some system range is unavailable (0 = no timeout)	application
+server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled	boolean	true	if server.user_login.password_encryption=scram-sha-256, this controls whether to automatically re-encode stored passwords using crdb-bcrypt to scram-sha-256	application
+server.web_session.purge.ttl	duration	1h0m0s	if nonzero, entries in system.web_sessions older than this duration are periodically purged	application
+server.web_session.timeout	duration	168h0m0s	the duration that a newly created web session will be valid	application
+sql.auth.change_own_password.enabled	boolean	false	controls whether a user is allowed to change their own password, even if they have no other privileges	application
+sql.auth.public_schema_create_privilege.enabled	boolean	true	determines whether to grant all users the CREATE privileges on the public schema when it is created	application
+sql.auth.resolve_membership_single_scan.enabled	boolean	true	determines whether to populate the role membership cache with a single scan	application
+sql.closed_session_cache.capacity	integer	1000	the maximum number of sessions in the cache	application
+sql.closed_session_cache.time_to_live	integer	3600	the maximum time to live, in seconds	application
+sql.contention.event_store.capacity	byte size	64 MiB	the in-memory storage capacity per-node of contention event store	application
+sql.contention.event_store.duration_threshold	duration	0s	minimum contention duration to cause the contention events to be collected into crdb_internal.transaction_contention_events	application
+sql.contention.txn_id_cache.max_size	byte size	64 MiB	the maximum byte size TxnID cache will use (set to 0 to disable)	application
+sql.cross_db_fks.enabled	boolean	false	if true, creating foreign key references across databases is allowed	application
+sql.cross_db_sequence_owners.enabled	boolean	false	if true, creating sequences owned by tables from other databases is allowed	application
+sql.cross_db_sequence_references.enabled	boolean	false	if true, sequences referenced by tables from other databases are allowed	application
+sql.cross_db_views.enabled	boolean	false	if true, creating views that refer to other databases is allowed	application
 sql.defaults.cost_scans_with_default_col_size.enabled	boolean	false	"setting to true uses the same size for all columns to compute scan cost
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.datestyle	enumeration	iso, mdy	"default value for DateStyle session setting [iso, mdy = 0, iso, dmy = 1, iso, ymd = 2]
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.default_hash_sharded_index_bucket_count	integer	16	"used as bucket count if bucket count is not specified in hash sharded index definition
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.default_int_size	integer	8	"the size, in bytes, of an INT type
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.disallow_full_table_scans.enabled	boolean	false	"setting to true rejects queries that have planned a full table scan
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.distsql	enumeration	auto	"default distributed SQL execution mode [off = 0, auto = 1, on = 2, always = 3]
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.experimental_alter_column_type.enabled	boolean	false	"default value for experimental_alter_column_type session setting; enables the use of ALTER COLUMN TYPE for general conversions
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.experimental_distsql_planning	enumeration	off	"default experimental_distsql_planning mode; enables experimental opt-driven DistSQL planning [off = 0, on = 1]
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.experimental_enable_unique_without_index_constraints.enabled	boolean	false	"default value for experimental_enable_unique_without_index_constraints session setting;disables unique without index constraints by default
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.experimental_implicit_column_partitioning.enabled	boolean	false	"default value for experimental_enable_temp_tables; allows for the use of implicit column partitioning
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.experimental_temporary_tables.enabled	boolean	false	"default value for experimental_enable_temp_tables; allows for use of temporary tables by default
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.foreign_key_cascades_limit	integer	10000	"default value for foreign_key_cascades_limit session setting; limits the number of cascading operations that run as part of a single query
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.idle_in_session_timeout	duration	0s	"default value for the idle_in_session_timeout; default value for the idle_in_session_timeout session setting; controls the duration a session is permitted to idle before the session is terminated; if set to 0, there is no timeout
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.idle_in_transaction_session_timeout	duration	0s	"default value for the idle_in_transaction_session_timeout; controls the duration a session is permitted to idle in a transaction before the session is terminated; if set to 0, there is no timeout
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.implicit_select_for_update.enabled	boolean	true	"default value for enable_implicit_select_for_update session setting; enables FOR UPDATE locking during the row-fetch phase of mutation statements
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.insert_fast_path.enabled	boolean	true	"default value for enable_insert_fast_path session setting; enables a specialized insert path
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.intervalstyle	enumeration	postgres	"default value for IntervalStyle session setting [postgres = 0, iso_8601 = 1, sql_standard = 2]
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.large_full_scan_rows	float	1000	"default value for large_full_scan_rows session setting which determines the maximum table size allowed for a full scan when disallow_full_table_scans is set to true
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.locality_optimized_partitioned_index_scan.enabled	boolean	true	"default value for locality_optimized_partitioned_index_scan session setting; enables searching for rows in the current region before searching remote regions
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.lock_timeout	duration	0s	"default value for the lock_timeout; default value for the lock_timeout session setting; controls the duration a query is permitted to wait while attempting to acquire a lock on a key or while blocking on an existing lock in order to perform a non-locking read on a key; if set to 0, there is no timeout
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.on_update_rehome_row.enabled	boolean	true	"default value for on_update_rehome_row; enables ON UPDATE rehome_row() expressions to trigger on updates
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.optimizer_use_histograms.enabled	boolean	true	"default value for optimizer_use_histograms session setting; enables usage of histograms in the optimizer by default
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.optimizer_use_multicol_stats.enabled	boolean	true	"default value for optimizer_use_multicol_stats session setting; enables usage of multi-column stats in the optimizer by default
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.override_alter_primary_region_in_super_region.enabled	boolean	false	"default value for override_alter_primary_region_in_super_region; allows for altering the primary region even if the primary region is a member of a super region
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.override_multi_region_zone_config.enabled	boolean	false	"default value for override_multi_region_zone_config; allows for overriding the zone configs of a multi-region table or database
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.prefer_lookup_joins_for_fks.enabled	boolean	false	"default value for prefer_lookup_joins_for_fks session setting; causes foreign key operations to use lookup joins when possible
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.primary_region	string		"if not empty, all databases created without a PRIMARY REGION will implicitly have the given PRIMARY REGION
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.reorder_joins_limit	integer	8	"default number of joins to reorder
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.require_explicit_primary_keys.enabled	boolean	false	"default value for requiring explicit primary keys in CREATE TABLE statements
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.results_buffer.size	byte size	16 KiB	"default size of the buffer that accumulates results for a statement or a batch of statements before they are sent to the client. This can be overridden on an individual connection with the 'results_buffer_size' parameter. Note that auto-retries generally only happen while no results have been delivered to the client, so reducing this size can increase the number of retriable errors a client receives. On the other hand, increasing the buffer size can increase the delay until the client receives the first result row. Updating the setting only affects new connections. Setting to 0 disables any buffering.
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.serial_normalization	enumeration	rowid	"default handling of SERIAL in table definitions [rowid = 0, virtual_sequence = 1, sql_sequence = 2, sql_sequence_cached = 3, unordered_rowid = 4]
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.statement_timeout	duration	0s	"default value for the statement_timeout; default value for the statement_timeout session setting; controls the duration a query is permitted to run before it is canceled; if set to 0, there is no timeout
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.stub_catalog_tables.enabled	boolean	true	"default value for stub_catalog_tables session setting
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.super_regions.enabled	boolean	false	"default value for enable_super_regions; allows for the usage of super regions
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.transaction_rows_read_err	integer	0	"the limit for the number of rows read by a SQL transaction which - once exceeded - will fail the transaction (or will trigger a logging event to SQL_INTERNAL_PERF for internal transactions); use 0 to disable
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.transaction_rows_read_log	integer	0	"the threshold for the number of rows read by a SQL transaction which - once exceeded - will trigger a logging event to SQL_PERF (or SQL_INTERNAL_PERF for internal transactions); use 0 to disable
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.transaction_rows_written_err	integer	0	"the limit for the number of rows written by a SQL transaction which - once exceeded - will fail the transaction (or will trigger a logging event to SQL_INTERNAL_PERF for internal transactions); use 0 to disable
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.transaction_rows_written_log	integer	0	"the threshold for the number of rows written by a SQL transaction which - once exceeded - will trigger a logging event to SQL_PERF (or SQL_INTERNAL_PERF for internal transactions); use 0 to disable
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.use_declarative_schema_changer	enumeration	on	"default value for use_declarative_schema_changer session setting;disables new schema changer by default [off = 0, on = 1, unsafe = 2, unsafe_always = 3]
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.vectorize	enumeration	on	"default vectorize mode [on = 0, on = 2, experimental_always = 3, off = 4]
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.zigzag_join.enabled	boolean	false	"default value for enable_zigzag_join session setting; disallows use of zig-zag join by default
 This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
-sql.distsql.temp_storage.workmem	byte size	64 MiB	maximum amount of memory in bytes a processor can use before falling back to temp storage	tenant-rw
-sql.guardrails.max_row_size_err	byte size	512 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an error is returned; use 0 to disable	tenant-rw
-sql.guardrails.max_row_size_log	byte size	64 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF if the mutating statement was internal); use 0 to disable	tenant-rw
-sql.hash_sharded_range_pre_split.max	integer	16	max pre-split ranges to have when adding hash sharded index to an existing table	tenant-rw
-sql.insights.anomaly_detection.enabled	boolean	true	enable per-fingerprint latency recording and anomaly detection	tenant-rw
-sql.insights.anomaly_detection.latency_threshold	duration	50ms	statements must surpass this threshold to trigger anomaly detection and identification	tenant-rw
-sql.insights.anomaly_detection.memory_limit	byte size	1.0 MiB	the maximum amount of memory allowed for tracking statement latencies	tenant-rw
-sql.insights.execution_insights_capacity	integer	1000	the size of the per-node store of execution insights	tenant-rw
-sql.insights.high_retry_count.threshold	integer	10	the number of retries a slow statement must have undergone for its high retry count to be highlighted as a potential problem	tenant-rw
-sql.insights.latency_threshold	duration	100ms	amount of time after which an executing statement is considered slow. Use 0 to disable.	tenant-rw
-sql.log.slow_query.experimental_full_table_scans.enabled	boolean	false	when set to true, statements that perform a full table/index scan will be logged to the slow query log even if they do not meet the latency threshold. Must have the slow query log enabled for this setting to have any effect.	tenant-rw
-sql.log.slow_query.internal_queries.enabled	boolean	false	when set to true, internal queries which exceed the slow query log threshold are logged to a separate log. Must have the slow query log enabled for this setting to have any effect.	tenant-rw
-sql.log.slow_query.latency_threshold	duration	0s	when set to non-zero, log statements whose service latency exceeds the threshold to a secondary logger on each node	tenant-rw
-sql.log.user_audit	string		user/role-based audit logging configuration. An enterprise license is required for this cluster setting to take effect.	tenant-rw
-sql.log.user_audit.reduced_config.enabled	boolean	false	enables logic to compute a reduced audit configuration, computing the audit configuration only once at session start instead of at each SQL event. The tradeoff with the increase in performance (~5%), is that changes to the audit configuration (user role memberships/cluster setting) are not reflected within session. Users will need to start a new session to see these changes in their auditing behaviour.	tenant-rw
-sql.metrics.index_usage_stats.enabled	boolean	true	collect per index usage statistics	tenant-rw
-sql.metrics.max_mem_reported_stmt_fingerprints	integer	100000	the maximum number of reported statement fingerprints stored in memory	tenant-rw
-sql.metrics.max_mem_reported_txn_fingerprints	integer	100000	the maximum number of reported transaction fingerprints stored in memory	tenant-rw
-sql.metrics.max_mem_stmt_fingerprints	integer	100000	the maximum number of statement fingerprints stored in memory	tenant-rw
-sql.metrics.max_mem_txn_fingerprints	integer	100000	the maximum number of transaction fingerprints stored in memory	tenant-rw
-sql.metrics.statement_details.dump_to_logs.enabled	boolean	false	dump collected statement statistics to node logs when periodically cleared	tenant-rw
-sql.metrics.statement_details.enabled	boolean	true	collect per-statement query statistics	tenant-rw
-sql.metrics.statement_details.gateway_node.enabled	boolean	false	save the gateway node for each statement fingerprint. If false, the value will be stored as 0.	tenant-rw
-sql.metrics.statement_details.index_recommendation_collection.enabled	boolean	true	generate an index recommendation for each fingerprint ID	tenant-rw
-sql.metrics.statement_details.max_mem_reported_idx_recommendations	integer	5000	the maximum number of reported index recommendation info stored in memory	tenant-rw
-sql.metrics.statement_details.plan_collection.enabled	boolean	false	periodically save a logical plan for each fingerprint	tenant-rw
-sql.metrics.statement_details.plan_collection.period	duration	5m0s	the time until a new logical plan is collected	tenant-rw
-sql.metrics.statement_details.threshold	duration	0s	minimum execution time to cause statement statistics to be collected. If configured, no transaction stats are collected.	tenant-rw
-sql.metrics.transaction_details.enabled	boolean	true	collect per-application transaction statistics	tenant-rw
-sql.multiple_modifications_of_table.enabled	boolean	false	if true, allow statements containing multiple INSERT ON CONFLICT, UPSERT, UPDATE, or DELETE subqueries modifying the same table, at the risk of data corruption if the same row is modified multiple times by a single statement (multiple INSERT subqueries without ON CONFLICT cannot cause corruption and are always allowed)	tenant-rw
-sql.multiregion.drop_primary_region.enabled	boolean	true	allows dropping the PRIMARY REGION of a database if it is the last region	tenant-rw
-sql.notices.enabled	boolean	true	enable notices in the server/client protocol being sent	tenant-rw
-sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled	boolean	false	if enabled, uniqueness checks may be planned for mutations of UUID columns updated with gen_random_uuid(); otherwise, uniqueness is assumed due to near-zero collision probability	tenant-rw
-sql.schema.telemetry.recurrence	string	@weekly	cron-tab recurrence for SQL schema telemetry job	tenant-ro
-sql.show_ranges_deprecated_behavior.enabled	boolean	false	if set, SHOW RANGES and crdb_internal.ranges{_no_leases} behave with deprecated pre-v23.1 semantics. NB: the new SHOW RANGES interface has richer WITH options than pre-v23.1 SHOW RANGES.	tenant-rw
-sql.spatial.experimental_box2d_comparison_operators.enabled	boolean	false	enables the use of certain experimental box2d comparison operators	tenant-rw
-sql.stats.activity.persisted_rows.max	integer	200000	maximum number of rows of statement and transaction activity that will be persisted in the system tables	tenant-rw
-sql.stats.automatic_collection.enabled	boolean	true	automatic statistics collection mode	tenant-rw
-sql.stats.automatic_collection.fraction_stale_rows	float	0.2	target fraction of stale rows per table that will trigger a statistics refresh	tenant-rw
-sql.stats.automatic_collection.min_stale_rows	integer	500	target minimum number of stale rows per table that will trigger a statistics refresh	tenant-rw
-sql.stats.cleanup.recurrence	string	@hourly	cron-tab recurrence for SQL Stats cleanup job	tenant-rw
-sql.stats.flush.enabled	boolean	true	if set, SQL execution statistics are periodically flushed to disk	tenant-rw
-sql.stats.flush.interval	duration	10m0s	the interval at which SQL execution statistics are flushed to disk, this value must be less than or equal to 1 hour	tenant-rw
-sql.stats.forecasts.enabled	boolean	true	when true, enables generation of statistics forecasts by default for all tables	tenant-rw
-sql.stats.histogram_buckets.count	integer	200	maximum number of histogram buckets to build during table statistics collection	tenant-rw
-sql.stats.histogram_collection.enabled	boolean	true	histogram collection mode	tenant-rw
-sql.stats.histogram_samples.count	integer	10000	number of rows sampled for histogram construction during table statistics collection	tenant-rw
-sql.stats.multi_column_collection.enabled	boolean	true	multi-column statistics collection mode	tenant-rw
-sql.stats.non_default_columns.min_retention_period	duration	24h0m0s	minimum retention period for table statistics collected on non-default columns	tenant-rw
-sql.stats.persisted_rows.max	integer	1000000	maximum number of rows of statement and transaction statistics that will be persisted in the system tables before compaction begins	tenant-rw
-sql.stats.post_events.enabled	boolean	false	if set, an event is logged for every CREATE STATISTICS job	tenant-rw
-sql.stats.response.max	integer	20000	the maximum number of statements and transaction stats returned in a CombinedStatements request	tenant-rw
-sql.stats.response.show_internal.enabled	boolean	false	controls if statistics for internal executions should be returned by the CombinedStatements and if internal sessions should be returned by the ListSessions endpoints. These endpoints are used to display statistics on the SQL Activity pages	tenant-rw
-sql.stats.system_tables.enabled	boolean	true	when true, enables use of statistics on system tables by the query optimizer	tenant-rw
-sql.stats.system_tables_autostats.enabled	boolean	true	when true, enables automatic collection of statistics on system tables	tenant-rw
-sql.telemetry.query_sampling.enabled	boolean	false	when set to true, executed queries will emit an event on the telemetry logging channel	tenant-rw
-sql.telemetry.query_sampling.internal.enabled	boolean	false	when set to true, internal queries will be sampled in telemetry logging	tenant-rw
-sql.temp_object_cleaner.cleanup_interval	duration	30m0s	how often to clean up orphaned temporary objects	tenant-rw
-sql.temp_object_cleaner.wait_interval	duration	30m0s	how long after creation a temporary object will be cleaned up	tenant-rw
-sql.log.all_statements.enabled	boolean	false	set to true to enable logging of all executed statements	tenant-rw
-sql.trace.session_eventlog.enabled	boolean	false	set to true to enable session tracing; note that enabling this may have a negative performance impact	tenant-rw
-sql.trace.stmt.enable_threshold	duration	0s	enables tracing on all statements; statements executing for longer than this duration will have their trace logged (set to 0 to disable); note that enabling this may have a negative performance impact; this setting applies to individual statements within a transaction and is therefore finer-grained than sql.trace.txn.enable_threshold	tenant-rw
-sql.trace.txn.enable_threshold	duration	0s	enables tracing on all transactions; transactions open for longer than this duration will have their trace logged (set to 0 to disable); note that enabling this may have a negative performance impact; this setting is coarser-grained than sql.trace.stmt.enable_threshold because it applies to all statements within a transaction as well as client communication (e.g. retries)	tenant-rw
-sql.ttl.default_delete_batch_size	integer	100	default amount of rows to delete in a single query during a TTL job	tenant-rw
-sql.ttl.default_delete_rate_limit	integer	0	default delete rate limit (rows per second) per node for each TTL job. Use 0 to signify no rate limit.	tenant-rw
-sql.ttl.default_select_batch_size	integer	500	default amount of rows to select in a single query during a TTL job	tenant-rw
-sql.ttl.job.enabled	boolean	true	whether the TTL job is enabled	tenant-rw
-sql.txn.read_committed_syntax.enabled	boolean	false	set to true to allow transactions to use the READ COMMITTED isolation level if specified by BEGIN/SET commands	tenant-rw
-sql.txn_fingerprint_id_cache.capacity	integer	100	the maximum number of txn fingerprint IDs stored	tenant-rw
-storage.max_sync_duration	duration	20s	maximum duration for disk operations; any operations that take longer than this setting trigger a warning log entry or process crash	tenant-ro
-storage.max_sync_duration.fatal.enabled	boolean	true	if true, fatal the process when a disk operation exceeds storage.max_sync_duration	tenant-rw
-storage.value_blocks.enabled	boolean	true	set to true to enable writing of value blocks in sstables	tenant-rw
-timeseries.storage.enabled	boolean	true	if set, periodic timeseries data is stored within the cluster; disabling is not recommended unless you are storing the data elsewhere	tenant-rw
-timeseries.storage.resolution_10s.ttl	duration	240h0m0s	the maximum age of time series data stored at the 10 second resolution. Data older than this is subject to rollup and deletion.	tenant-rw
-timeseries.storage.resolution_30m.ttl	duration	2160h0m0s	the maximum age of time series data stored at the 30 minute resolution. Data older than this is subject to deletion.	tenant-rw
-trace.debug_http_endpoint.enabled	boolean	false	if set, traces for recent requests can be seen at https://<ui>/debug/requests	tenant-rw
-trace.jaeger.agent	string		the address of a Jaeger agent to receive traces using the Jaeger UDP Thrift protocol, as <host>:<port>. If no port is specified, 6381 will be used.	tenant-rw
-trace.opentelemetry.collector	string		address of an OpenTelemetry trace collector to receive traces using the otel gRPC protocol, as <host>:<port>. If no port is specified, 4317 will be used.	tenant-rw
-trace.snapshot.rate	duration	0s	if non-zero, interval at which background trace snapshots are captured	tenant-rw
-trace.span_registry.enabled	boolean	true	if set, ongoing traces can be seen at https://<ui>/#/debug/tracez	tenant-rw
-trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.	tenant-rw
-ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui [etc/utc = 0, america/new_york = 1]	tenant-rw
-version	version	1000023.1-26	set the active cluster version in the format '<major>.<minor>'	tenant-rw
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
+sql.distsql.temp_storage.workmem	byte size	64 MiB	maximum amount of memory in bytes a processor can use before falling back to temp storage	application
+sql.guardrails.max_row_size_err	byte size	512 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an error is returned; use 0 to disable	application
+sql.guardrails.max_row_size_log	byte size	64 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF if the mutating statement was internal); use 0 to disable	application
+sql.hash_sharded_range_pre_split.max	integer	16	max pre-split ranges to have when adding hash sharded index to an existing table	application
+sql.insights.anomaly_detection.enabled	boolean	true	enable per-fingerprint latency recording and anomaly detection	application
+sql.insights.anomaly_detection.latency_threshold	duration	50ms	statements must surpass this threshold to trigger anomaly detection and identification	application
+sql.insights.anomaly_detection.memory_limit	byte size	1.0 MiB	the maximum amount of memory allowed for tracking statement latencies	application
+sql.insights.execution_insights_capacity	integer	1000	the size of the per-node store of execution insights	application
+sql.insights.high_retry_count.threshold	integer	10	the number of retries a slow statement must have undergone for its high retry count to be highlighted as a potential problem	application
+sql.insights.latency_threshold	duration	100ms	amount of time after which an executing statement is considered slow. Use 0 to disable.	application
+sql.log.slow_query.experimental_full_table_scans.enabled	boolean	false	when set to true, statements that perform a full table/index scan will be logged to the slow query log even if they do not meet the latency threshold. Must have the slow query log enabled for this setting to have any effect.	application
+sql.log.slow_query.internal_queries.enabled	boolean	false	when set to true, internal queries which exceed the slow query log threshold are logged to a separate log. Must have the slow query log enabled for this setting to have any effect.	application
+sql.log.slow_query.latency_threshold	duration	0s	when set to non-zero, log statements whose service latency exceeds the threshold to a secondary logger on each node	application
+sql.log.user_audit	string		user/role-based audit logging configuration. An enterprise license is required for this cluster setting to take effect.	application
+sql.log.user_audit.reduced_config.enabled	boolean	false	enables logic to compute a reduced audit configuration, computing the audit configuration only once at session start instead of at each SQL event. The tradeoff with the increase in performance (~5%), is that changes to the audit configuration (user role memberships/cluster setting) are not reflected within session. Users will need to start a new session to see these changes in their auditing behaviour.	application
+sql.metrics.index_usage_stats.enabled	boolean	true	collect per index usage statistics	application
+sql.metrics.max_mem_reported_stmt_fingerprints	integer	100000	the maximum number of reported statement fingerprints stored in memory	application
+sql.metrics.max_mem_reported_txn_fingerprints	integer	100000	the maximum number of reported transaction fingerprints stored in memory	application
+sql.metrics.max_mem_stmt_fingerprints	integer	100000	the maximum number of statement fingerprints stored in memory	application
+sql.metrics.max_mem_txn_fingerprints	integer	100000	the maximum number of transaction fingerprints stored in memory	application
+sql.metrics.statement_details.dump_to_logs.enabled	boolean	false	dump collected statement statistics to node logs when periodically cleared	application
+sql.metrics.statement_details.enabled	boolean	true	collect per-statement query statistics	application
+sql.metrics.statement_details.gateway_node.enabled	boolean	false	save the gateway node for each statement fingerprint. If false, the value will be stored as 0.	application
+sql.metrics.statement_details.index_recommendation_collection.enabled	boolean	true	generate an index recommendation for each fingerprint ID	application
+sql.metrics.statement_details.max_mem_reported_idx_recommendations	integer	5000	the maximum number of reported index recommendation info stored in memory	application
+sql.metrics.statement_details.plan_collection.enabled	boolean	false	periodically save a logical plan for each fingerprint	application
+sql.metrics.statement_details.plan_collection.period	duration	5m0s	the time until a new logical plan is collected	application
+sql.metrics.statement_details.threshold	duration	0s	minimum execution time to cause statement statistics to be collected. If configured, no transaction stats are collected.	application
+sql.metrics.transaction_details.enabled	boolean	true	collect per-application transaction statistics	application
+sql.multiple_modifications_of_table.enabled	boolean	false	if true, allow statements containing multiple INSERT ON CONFLICT, UPSERT, UPDATE, or DELETE subqueries modifying the same table, at the risk of data corruption if the same row is modified multiple times by a single statement (multiple INSERT subqueries without ON CONFLICT cannot cause corruption and are always allowed)	application
+sql.multiregion.drop_primary_region.enabled	boolean	true	allows dropping the PRIMARY REGION of a database if it is the last region	application
+sql.notices.enabled	boolean	true	enable notices in the server/client protocol being sent	application
+sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled	boolean	false	if enabled, uniqueness checks may be planned for mutations of UUID columns updated with gen_random_uuid(); otherwise, uniqueness is assumed due to near-zero collision probability	application
+sql.schema.telemetry.recurrence	string	@weekly	cron-tab recurrence for SQL schema telemetry job	system-visible
+sql.show_ranges_deprecated_behavior.enabled	boolean	false	if set, SHOW RANGES and crdb_internal.ranges{_no_leases} behave with deprecated pre-v23.1 semantics. NB: the new SHOW RANGES interface has richer WITH options than pre-v23.1 SHOW RANGES.	application
+sql.spatial.experimental_box2d_comparison_operators.enabled	boolean	false	enables the use of certain experimental box2d comparison operators	application
+sql.stats.activity.persisted_rows.max	integer	200000	maximum number of rows of statement and transaction activity that will be persisted in the system tables	application
+sql.stats.automatic_collection.enabled	boolean	true	automatic statistics collection mode	application
+sql.stats.automatic_collection.fraction_stale_rows	float	0.2	target fraction of stale rows per table that will trigger a statistics refresh	application
+sql.stats.automatic_collection.min_stale_rows	integer	500	target minimum number of stale rows per table that will trigger a statistics refresh	application
+sql.stats.cleanup.recurrence	string	@hourly	cron-tab recurrence for SQL Stats cleanup job	application
+sql.stats.flush.enabled	boolean	true	if set, SQL execution statistics are periodically flushed to disk	application
+sql.stats.flush.interval	duration	10m0s	the interval at which SQL execution statistics are flushed to disk, this value must be less than or equal to 1 hour	application
+sql.stats.forecasts.enabled	boolean	true	when true, enables generation of statistics forecasts by default for all tables	application
+sql.stats.histogram_buckets.count	integer	200	maximum number of histogram buckets to build during table statistics collection	application
+sql.stats.histogram_collection.enabled	boolean	true	histogram collection mode	application
+sql.stats.histogram_samples.count	integer	10000	number of rows sampled for histogram construction during table statistics collection	application
+sql.stats.multi_column_collection.enabled	boolean	true	multi-column statistics collection mode	application
+sql.stats.non_default_columns.min_retention_period	duration	24h0m0s	minimum retention period for table statistics collected on non-default columns	application
+sql.stats.persisted_rows.max	integer	1000000	maximum number of rows of statement and transaction statistics that will be persisted in the system tables before compaction begins	application
+sql.stats.post_events.enabled	boolean	false	if set, an event is logged for every CREATE STATISTICS job	application
+sql.stats.response.max	integer	20000	the maximum number of statements and transaction stats returned in a CombinedStatements request	application
+sql.stats.response.show_internal.enabled	boolean	false	controls if statistics for internal executions should be returned by the CombinedStatements and if internal sessions should be returned by the ListSessions endpoints. These endpoints are used to display statistics on the SQL Activity pages	application
+sql.stats.system_tables.enabled	boolean	true	when true, enables use of statistics on system tables by the query optimizer	application
+sql.stats.system_tables_autostats.enabled	boolean	true	when true, enables automatic collection of statistics on system tables	application
+sql.telemetry.query_sampling.enabled	boolean	false	when set to true, executed queries will emit an event on the telemetry logging channel	application
+sql.telemetry.query_sampling.internal.enabled	boolean	false	when set to true, internal queries will be sampled in telemetry logging	application
+sql.temp_object_cleaner.cleanup_interval	duration	30m0s	how often to clean up orphaned temporary objects	application
+sql.temp_object_cleaner.wait_interval	duration	30m0s	how long after creation a temporary object will be cleaned up	application
+sql.log.all_statements.enabled	boolean	false	set to true to enable logging of all executed statements	application
+sql.trace.session_eventlog.enabled	boolean	false	set to true to enable session tracing; note that enabling this may have a negative performance impact	application
+sql.trace.stmt.enable_threshold	duration	0s	enables tracing on all statements; statements executing for longer than this duration will have their trace logged (set to 0 to disable); note that enabling this may have a negative performance impact; this setting applies to individual statements within a transaction and is therefore finer-grained than sql.trace.txn.enable_threshold	application
+sql.trace.txn.enable_threshold	duration	0s	enables tracing on all transactions; transactions open for longer than this duration will have their trace logged (set to 0 to disable); note that enabling this may have a negative performance impact; this setting is coarser-grained than sql.trace.stmt.enable_threshold because it applies to all statements within a transaction as well as client communication (e.g. retries)	application
+sql.ttl.default_delete_batch_size	integer	100	default amount of rows to delete in a single query during a TTL job	application
+sql.ttl.default_delete_rate_limit	integer	0	default delete rate limit (rows per second) per node for each TTL job. Use 0 to signify no rate limit.	application
+sql.ttl.default_select_batch_size	integer	500	default amount of rows to select in a single query during a TTL job	application
+sql.ttl.job.enabled	boolean	true	whether the TTL job is enabled	application
+sql.txn.read_committed_syntax.enabled	boolean	false	set to true to allow transactions to use the READ COMMITTED isolation level if specified by BEGIN/SET commands	application
+sql.txn_fingerprint_id_cache.capacity	integer	100	the maximum number of txn fingerprint IDs stored	application
+storage.max_sync_duration	duration	20s	maximum duration for disk operations; any operations that take longer than this setting trigger a warning log entry or process crash	system-visible
+storage.max_sync_duration.fatal.enabled	boolean	true	if true, fatal the process when a disk operation exceeds storage.max_sync_duration	application
+storage.value_blocks.enabled	boolean	true	set to true to enable writing of value blocks in sstables	application
+timeseries.storage.enabled	boolean	true	if set, periodic timeseries data is stored within the cluster; disabling is not recommended unless you are storing the data elsewhere	application
+timeseries.storage.resolution_10s.ttl	duration	240h0m0s	the maximum age of time series data stored at the 10 second resolution. Data older than this is subject to rollup and deletion.	application
+timeseries.storage.resolution_30m.ttl	duration	2160h0m0s	the maximum age of time series data stored at the 30 minute resolution. Data older than this is subject to deletion.	application
+trace.debug_http_endpoint.enabled	boolean	false	if set, traces for recent requests can be seen at https://<ui>/debug/requests	application
+trace.jaeger.agent	string		the address of a Jaeger agent to receive traces using the Jaeger UDP Thrift protocol, as <host>:<port>. If no port is specified, 6381 will be used.	application
+trace.opentelemetry.collector	string		address of an OpenTelemetry trace collector to receive traces using the otel gRPC protocol, as <host>:<port>. If no port is specified, 4317 will be used.	application
+trace.snapshot.rate	duration	0s	if non-zero, interval at which background trace snapshots are captured	application
+trace.span_registry.enabled	boolean	true	if set, ongoing traces can be seen at https://<ui>/#/debug/tracez	application
+trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.	application
+ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui [etc/utc = 0, america/new_york = 1]	application
+version	version	1000023.1-26	set the active cluster version in the format '<major>.<minor>'	application

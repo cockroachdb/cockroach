@@ -491,7 +491,7 @@ func authCertPassword(
 //
 // It is exported for use in tests.
 var AutoSelectPasswordAuth = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.user_login.cert_password_method.auto_scram_promotion.enabled",
 	"whether to automatically promote cert-password authentication to use SCRAM",
 	true,

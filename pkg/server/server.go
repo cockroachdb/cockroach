@@ -1113,7 +1113,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			kvStoresIterator:         kvserver.MakeStoresIterator(node.stores),
 			inspectzServer:           inspectzServer,
 
-			notifyChangeToTenantReadOnlySettings: tenantSettingsWatcher.SetAlternateDefaults,
+			notifyChangeToSystemVisibleSettings: tenantSettingsWatcher.SetAlternateDefaults,
 		},
 		SQLConfig:                &cfg.SQLConfig,
 		BaseConfig:               &cfg.BaseConfig,
