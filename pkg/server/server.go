@@ -2145,8 +2145,16 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		return err
 	}
 
-	if err := s.node.tenantSettingsWatcher.Start(workersCtx, s.sqlServer.execCfg.SystemTableIDResolver); err != nil {
-		return errors.Wrap(err, "failed to initialize the tenant settings watcher")
+	startSettingsWatcher := true
+	if serverKnobs := s.cfg.TestingKnobs.Server; serverKnobs != nil {
+		if serverKnobs.(*TestingKnobs).DisableSettingsWatcher {
+			startSettingsWatcher = false
+		}
+	}
+	if startSettingsWatcher {
+		if err := s.node.tenantSettingsWatcher.Start(workersCtx, s.sqlServer.execCfg.SystemTableIDResolver); err != nil {
+			return errors.Wrap(err, "failed to initialize the tenant settings watcher")
+		}
 	}
 	if err := s.tenantCapabilitiesWatcher.Start(ctx); err != nil {
 		return errors.Wrap(err, "initializing tenant capabilities")

@@ -216,7 +216,14 @@ type fakeStorage struct {
 func (f *fakeStorage) SnapshotKVs(ctx context.Context, kvs []roachpb.KeyValue) {
 	f.Lock()
 	defer f.Unlock()
-	f.kvs = kvs
+	nonDeletions := make([]roachpb.KeyValue, 0, len(kvs))
+	for _, kv := range kvs {
+		if !kv.Value.IsPresent() {
+			continue
+		}
+		nonDeletions = append(nonDeletions, kv)
+	}
+	f.kvs = nonDeletions
 	f.numWrites++
 }
 

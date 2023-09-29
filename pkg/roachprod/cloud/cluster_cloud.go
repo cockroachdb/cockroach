@@ -154,7 +154,7 @@ func (c *Cluster) PrintDetails(logger *logger.Logger) {
 		logger.Printf("(no expiration)")
 	}
 	for _, vm := range c.VMs {
-		logger.Printf("  %s\t%s\t%s\t%s", vm.Name, vm.DNS, vm.PrivateIP, vm.PublicIP)
+		logger.Printf("  %s\t%s\t%s\t%s\t%s\t%s\t%s", vm.Name, vm.DNS, vm.PrivateIP, vm.PublicIP, vm.MachineType, vm.CPUArch, vm.CPUFamily)
 	}
 }
 

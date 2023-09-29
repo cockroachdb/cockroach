@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 const strKey = "testing.str"
@@ -285,4 +287,76 @@ func TestSettingsShowAll(t *testing.T) {
 	if !hasIntKey || !hasStrKey {
 		t.Fatalf("show all did not find the test keys: %q", rows)
 	}
+}
+
+func TestSettingsPersistenceEndToEnd(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// We're going to restart the test server, but expecting storage to
+	// persist. Define a sticky VFS for this purpose.
+	stickyVFSRegistry := server.NewStickyVFSRegistry()
+	serverKnobs := &server.TestingKnobs{
+		StickyVFSRegistry: stickyVFSRegistry,
+	}
+	serverArgs := base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		StoreSpecs: []base.StoreSpec{
+			{InMemory: true, StickyVFSID: "1"},
+		},
+		Knobs: base.TestingKnobs{
+			Server: serverKnobs,
+		},
+	}
+
+	ts, sqlDB, _ := serverutils.StartServer(t, serverArgs)
+	defer ts.Stopper().Stop(ctx)
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	// We need a custom value for the cluster setting that's guaranteed
+	// to be different from the default. So check that it's not equal to
+	// the default always.
+	const differentValue = `something`
+
+	setting, _ := settings.LookupForLocalAccessByKey("cluster.organization", true)
+	s := setting.(*settings.StringSetting)
+	st := ts.ClusterSettings()
+	require.NotEqual(t, s.Get(&st.SV), differentValue)
+	origValue := db.QueryStr(t, `SHOW CLUSTER SETTING cluster.organization`)[0][0]
+
+	// Customize the setting.
+	db.Exec(t, `SET CLUSTER SETTING cluster.organization = $1`, differentValue)
+	newValue := db.QueryStr(t, `SHOW CLUSTER SETTING cluster.organization`)[0][0]
+
+	// Restart the server; verify the setting customization is preserved.
+	// For this we disable the settings watcher, to ensure that
+	// only the value loaded by the local persisted cache is used.
+	ts.Stopper().Stop(ctx)
+	serverKnobs.DisableSettingsWatcher = true
+	ts, sqlDB, _ = serverutils.StartServer(t, serverArgs)
+	defer ts.Stopper().Stop(ctx)
+	db = sqlutils.MakeSQLRunner(sqlDB)
+
+	db.CheckQueryResults(t, `SHOW CLUSTER SETTING cluster.organization`, [][]string{{newValue}})
+
+	// Restart the server to make the setting writable again.
+	ts.Stopper().Stop(ctx)
+	serverKnobs.DisableSettingsWatcher = false
+	ts, sqlDB, _ = serverutils.StartServer(t, serverArgs)
+	defer ts.Stopper().Stop(ctx)
+	db = sqlutils.MakeSQLRunner(sqlDB)
+
+	// Reset the setting, then check the original value is restored.
+	db.Exec(t, `RESET CLUSTER SETTING cluster.organization`)
+	db.CheckQueryResults(t, `SHOW CLUSTER SETTING cluster.organization`, [][]string{{origValue}})
+
+	// Restart the server; verify the original value is still there.
+	ts.Stopper().Stop(ctx)
+	ts, sqlDB, _ = serverutils.StartServer(t, serverArgs)
+	defer ts.Stopper().Stop(ctx)
+	db = sqlutils.MakeSQLRunner(sqlDB)
+
+	db.CheckQueryResults(t, `SHOW CLUSTER SETTING cluster.organization`, [][]string{{origValue}})
 }
