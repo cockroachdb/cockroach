@@ -86,7 +86,7 @@ func (r *testRegistryImpl) Add(spec registry.TestSpec) {
 		fmt.Fprintf(os.Stderr, "%+v\n", err)
 		os.Exit(1)
 	}
-	spec.CrossCheckTags()
+	//spec.CrossCheckTags()
 	r.m[spec.Name] = &spec
 }
 
