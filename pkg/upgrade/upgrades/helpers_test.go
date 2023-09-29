@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -197,4 +199,30 @@ func ExecForCountInTxns(
 		})
 		require.NoError(t, err)
 	}
+}
+
+// ValidateSystemDatabaseSchemaVersionBumped validates that the system database
+// schema version has been bumped to the expected version.
+func ValidateSystemDatabaseSchemaVersionBumped(
+	t *testing.T, sqlDB *gosql.DB, expectedVersion clusterversion.Key,
+) {
+	expectedSchemaVersion := clusterversion.ByKey(expectedVersion)
+
+	var actualSchemaVersionBytes []byte
+	require.NoError(t, sqlDB.QueryRow(
+		`SELECT crdb_internal.json_to_pb(
+    'cockroach.roachpb.Version',
+    crdb_internal.pb_to_json(
+        'cockroach.sql.sqlbase.Descriptor',
+        descriptor,
+        false
+    )->'database'->'systemDatabaseSchemaVersion')
+FROM system.descriptor WHERE id = $1`,
+		keys.SystemDatabaseID,
+	).Scan(&actualSchemaVersionBytes))
+
+	actualSchemaVersion := roachpb.Version{}
+	require.NoError(t, protoutil.Unmarshal(actualSchemaVersionBytes, &actualSchemaVersion))
+
+	require.Equal(t, expectedSchemaVersion, actualSchemaVersion)
 }
