@@ -1646,6 +1646,7 @@ func TestReplicateQueueShouldQueueNonVoter(t *testing.T) {
 		" constraints='{\"+rack=3\": 1}', voter_constraints='{\"+rack=1\": 1}'")
 	require.NoError(t, err)
 
+	matchString := "rebalance target found for non-voter, enqueuing"
 	require.Eventually(t, func() bool {
 		// NB: Manually enqueuing the replica on server 0 (i.e. rack 1) is copacetic
 		// because we know that it is the leaseholder (since it is the only voting
@@ -1662,8 +1663,10 @@ func TestReplicateQueueShouldQueueNonVoter(t *testing.T) {
 			log.Errorf(ctx, "processErr: %s", processErr.Error())
 			return false
 		}
-		if matched, err := regexp.Match("rebalance target found for non-voter, enqueuing",
+		if matched, err := regexp.Match(matchString,
 			[]byte(recording.String())); !matched {
+			log.Infof(ctx, "didn't find matching string '%s' in trace %s",
+				matchString, recording.String())
 			require.NoError(t, err)
 			return false
 		}
