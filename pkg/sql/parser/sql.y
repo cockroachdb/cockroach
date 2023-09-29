@@ -7486,6 +7486,7 @@ session_var:
 // TIME ZONE is special: it is two tokens, but is really the identifier "TIME ZONE".
 | TIME ZONE { $$ = "timezone" }
 | TIME error // SHOW HELP: SHOW SESSION
+| VIRTUAL_CLUSTER_NAME
 
 session_var_parts:
   '.' IDENT
