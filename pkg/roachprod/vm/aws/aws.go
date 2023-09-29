@@ -864,9 +864,10 @@ func (p *Provider) listRegion(
 	var data struct {
 		Reservations []struct {
 			Instances []struct {
-				InstanceID string `json:"InstanceId"`
-				LaunchTime string
-				Placement  struct {
+				InstanceID   string `json:"InstanceId"`
+				Architecture string
+				LaunchTime   string
+				Placement    struct {
 					AvailabilityZone string
 				}
 				PrivateDNSName   string `json:"PrivateDnsName"`
@@ -982,6 +983,7 @@ func (p *Provider) listRegion(
 				RemoteUser:             opts.RemoteUserName,
 				VPC:                    in.VpcID,
 				MachineType:            in.InstanceType,
+				CPUArch:                vm.ParseArch(in.Architecture),
 				Zone:                   in.Placement.AvailabilityZone,
 				NonBootAttachedVolumes: nonBootableVolumes,
 			}

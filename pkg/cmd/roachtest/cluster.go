@@ -597,6 +597,9 @@ func MachineTypeToCPUs(s string) int {
 		if _, err := fmt.Sscanf(s, "n2-highcpu-%d", &v); err == nil {
 			return v
 		}
+		if _, err := fmt.Sscanf(s, "n2-custom-%d", &v); err == nil {
+			return v
+		}
 		if _, err := fmt.Sscanf(s, "n2-highmem-%d", &v); err == nil {
 			return v
 		}
@@ -650,9 +653,7 @@ func MachineTypeToCPUs(s string) int {
 
 	// TODO(pbardea): Non-default Azure machine types are not supported
 	// and will return unknown machine type error.
-	fmt.Fprintf(os.Stderr, "unknown machine type: %s\n", s)
-	os.Exit(1)
-	return -1
+	panic(fmt.Sprintf("unknown machine type: %s\n", s))
 }
 
 type nodeSelector interface {

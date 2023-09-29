@@ -126,6 +126,8 @@ type jsonVM struct {
 		ProvisioningModel         string
 	}
 	MachineType string
+	// CPU platform corresponding to machine type; see https://cloud.google.com/compute/docs/cpu-platforms
+	CPUPlatform string
 	SelfLink    string
 	Zone        string
 	instanceDisksResponse
@@ -168,6 +170,7 @@ func (jsonVM *jsonVM) toVM(
 	}
 
 	machineType := lastComponent(jsonVM.MachineType)
+	cpuPlatform := jsonVM.CPUPlatform
 	zone := lastComponent(jsonVM.Zone)
 	remoteUser := config.SharedUser
 	if !opts.useSharedUser {
@@ -238,6 +241,8 @@ func (jsonVM *jsonVM) toVM(
 		RemoteUser:             remoteUser,
 		VPC:                    vpc,
 		MachineType:            machineType,
+		CPUArch:                vm.ParseArch(cpuPlatform),
+		CPUFamily:              strings.Replace(strings.ToLower(cpuPlatform), "intel ", "", 1),
 		Zone:                   zone,
 		Project:                project,
 		NonBootAttachedVolumes: volumes,
@@ -253,10 +258,10 @@ type jsonAuth struct {
 // DefaultProviderOpts returns a new gce.ProviderOpts with default values set.
 func DefaultProviderOpts() *ProviderOpts {
 	return &ProviderOpts{
-		// projects needs space for one project, which is set by the flags for
-		// commands that accept a single project.
+		// N.B. we set minCPUPlatform to "Intel Ice Lake" by default because it's readily available in the majority of GCE
+		// regions. Furthermore, it gets us closer to AWS instances like m6i which exclusively run Ice Lake.
 		MachineType:          "n2-standard-4",
-		MinCPUPlatform:       "",
+		MinCPUPlatform:       "Intel Ice Lake",
 		Zones:                nil,
 		Image:                DefaultImage,
 		SSDCount:             1,
@@ -803,7 +808,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 
 	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n2-standard-4",
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
-	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "",
+	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "Intel Ice Lake",
 		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform)")
 	flags.StringVar(&o.Image, ProviderName+"-image", DefaultImage,
 		"Image to use to create the vm, "+
@@ -982,6 +987,10 @@ func (p *Provider) Create(
 				}
 			}
 		}
+		if providerOpts.MinCPUPlatform != "" {
+			l.Printf("WARNING: --gce-min-cpu-platform is ignored for T2A instances")
+			providerOpts.MinCPUPlatform = ""
+		}
 	}
 	//TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
 	if useArmAMI {
@@ -1145,7 +1154,8 @@ func (p *Provider) Create(
 // N.B. Only n1, n2 and c2 instances are supported since we don't typically use other instance types.
 // Consult https://cloud.google.com/compute/docs/disks/#local_ssd_machine_type_restrictions for other types of instances.
 func AllowedLocalSSDCount(machineType string) ([]int, error) {
-	machineTypes := regexp.MustCompile(`^([cn])(\d+)-.+-(\d+)$`)
+	// E.g., n2-standard-4, n2-custom-8-16384.
+	machineTypes := regexp.MustCompile(`^([cn])(\d+)-[a-z]+-(\d+)(?:-\d+)?$`)
 	matches := machineTypes.FindStringSubmatch(machineType)
 
 	if len(matches) >= 3 {
@@ -1189,7 +1199,7 @@ func AllowedLocalSSDCount(machineType string) ([]int, error) {
 			}
 		}
 	}
-	return nil, fmt.Errorf("unsupported machine type: %q", machineType)
+	return nil, fmt.Errorf("unsupported machine type: %q, matches: %v", machineType, matches)
 }
 
 // N.B. neither boot disk nor additional persistent disks are assigned VM labels by default.
@@ -1529,15 +1539,47 @@ func populateCostPerHour(l *logger.Logger, vms vm.List) error {
 							},
 						},
 					},
-					Preemptible: vm.Preemptible,
-					MachineType: &cloudbilling.MachineType{
-						PredefinedMachineType: &cloudbilling.PredefinedMachineType{
-							MachineType: machineType,
-						},
-					},
+					Preemptible:     vm.Preemptible,
 					PersistentDisks: []*cloudbilling.PersistentDisk{},
 					Region:          zone[:len(zone)-2],
 				},
+			}
+			if !strings.Contains(machineType, "custom") {
+				workload.ComputeVmWorkload.MachineType = &cloudbilling.MachineType{
+					PredefinedMachineType: &cloudbilling.PredefinedMachineType{
+						MachineType: machineType,
+					},
+				}
+			} else {
+				decodeCustomType := func() (string, int64, int64, error) {
+					parts := strings.Split(machineType, "-")
+					decodeErr := errors.Newf("invalid custom machineType %s", machineType)
+					if len(parts) != 4 {
+						return "", 0, 0, decodeErr
+					}
+					series, cpus, memory := parts[0], parts[2], parts[3]
+					cpusInt, parseErr := strconv.Atoi(cpus)
+					if parseErr != nil {
+						return "", 0, 0, decodeErr
+					}
+					memoryInt, parseErr := strconv.Atoi(memory)
+					if parseErr != nil {
+						return "", 0, 0, decodeErr
+					}
+					return series, int64(cpusInt), int64(memoryInt), nil
+				}
+				series, cpus, memory, err := decodeCustomType()
+				if err != nil {
+					l.Errorf("Error estimating VM costs (will continue without): %v", err)
+					continue
+				}
+				workload.ComputeVmWorkload.MachineType = &cloudbilling.MachineType{
+					CustomMachineType: &cloudbilling.CustomMachineType{
+						MachineSeries:   series,
+						VirtualCpuCount: cpus,
+						MemorySizeGb:    float64(memory / 1024),
+					},
+				}
 			}
 			for _, v := range vm.NonBootAttachedVolumes {
 				workload.ComputeVmWorkload.PersistentDisks = append(workload.ComputeVmWorkload.PersistentDisks, &cloudbilling.PersistentDisk{
