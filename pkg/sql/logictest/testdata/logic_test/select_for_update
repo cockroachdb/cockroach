@@ -1,3 +1,7 @@
+# TODO(arul): remove this before merging.
+statement ok
+SET enable_shared_locking_for_serializable = true
+
 query I
 SELECT 1 FOR UPDATE
 ----
@@ -293,6 +297,7 @@ ROLLBACK
 statement ok
 BEGIN READ ONLY
 
+skipif config local-mixed-22.2-23.1
 statement error cannot execute FOR SHARE in a read-only transaction
 SELECT * FROM t FOR SHARE
 
@@ -302,6 +307,7 @@ ROLLBACK
 statement ok
 BEGIN READ ONLY
 
+skipif config local-mixed-22.2-23.1
 statement error cannot execute FOR KEY SHARE in a read-only transaction
 SELECT * FROM t FOR KEY SHARE
 

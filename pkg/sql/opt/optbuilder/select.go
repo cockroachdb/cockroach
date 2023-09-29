@@ -697,6 +697,7 @@ func (b *Builder) buildScan(
 	}
 	if locking.isSet() {
 		private.Locking = locking.get()
+		// TODO(arul, michae2): This needs a cluster version check.
 		if b.evalCtx.TxnIsoLevel != isolation.Serializable ||
 			b.evalCtx.SessionData().DurableLockingForSerializable {
 			// Under weaker isolation levels we use fully-durable locks for SELECT FOR
