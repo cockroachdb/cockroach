@@ -199,6 +199,7 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 	if s.storage != nil {
 		bufferSize = settings.MaxSettings * 3
 	}
+
 	c := rangefeedcache.NewWatcher(
 		"settings-watcher",
 		s.clock, s.f,
@@ -255,7 +256,7 @@ func (s *SettingsWatcher) maybeUpdateSnapshot(ctx context.Context, update rangef
 	case rangefeedcache.CompleteUpdate:
 		s.snapshot = eventKVs
 	case rangefeedcache.IncrementalUpdate:
-		s.snapshot = rangefeedbuffer.MergeKVs(s.snapshot, eventKVs)
+		s.snapshot = rangefeedbuffer.MergeKVsKeepingDeletions(s.snapshot, eventKVs)
 	}
 	s.storage.SnapshotKVs(ctx, s.snapshot)
 }

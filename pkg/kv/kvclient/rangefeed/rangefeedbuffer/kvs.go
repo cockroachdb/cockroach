@@ -70,3 +70,38 @@ func MergeKVs(base, updates []roachpb.KeyValue) []roachpb.KeyValue {
 	}
 	return r
 }
+
+// MergeKVsKeepingDeletions merges two sets of KVs into a single set
+// of KVs with at most one KV for any key. The latest value in the
+// merged set wins. If the latest value in the set corresponds to a
+// deletion (i.e. its IsPresent() method returns false), the deletion
+// entry will override the previous entry.
+//
+// Note that the assumption is that base has no duplicated keys. If the set
+// of updates is empty, base is returned directly.
+func MergeKVsKeepingDeletions(base, updates []roachpb.KeyValue) []roachpb.KeyValue {
+	if len(updates) == 0 {
+		return base
+	}
+	combined := make([]roachpb.KeyValue, 0, len(base)+len(updates))
+	combined = append(append(combined, base...), updates...)
+	sort.Slice(combined, func(i, j int) bool {
+		cmp := combined[i].Key.Compare(combined[j].Key)
+		if cmp == 0 {
+			return combined[i].Value.Timestamp.Less(combined[j].Value.Timestamp)
+		}
+		return cmp < 0
+	})
+	r := combined[:0]
+	for _, kv := range combined {
+		prevIsSameKey := len(r) > 0 && r[len(r)-1].Key.Equal(kv.Key)
+		if prevIsSameKey {
+			// Update the existing entry with the new one.
+			r[len(r)-1] = kv
+		} else {
+			// Add the new entry.
+			r = append(r, kv)
+		}
+	}
+	return r
+}

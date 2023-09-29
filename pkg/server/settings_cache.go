@@ -101,10 +101,24 @@ func storeCachedSettingsKVs(ctx context.Context, eng storage.Engine, kvs []roach
 	defer batch.Close()
 	for _, kv := range kvs {
 		kv.Value.Timestamp = hlc.Timestamp{} // nb: Timestamp is not part of checksum
-		if err := storage.MVCCPut(
-			ctx, batch, keys.StoreCachedSettingsKey(kv.Key), hlc.Timestamp{}, kv.Value, storage.MVCCWriteOptions{},
-		); err != nil {
-			return err
+		cachedSettingsKey := keys.StoreCachedSettingsKey(kv.Key)
+		if kv.Value.IsPresent() {
+			// A new value is added, or an existing value is updated.
+			log.VEventf(ctx, 1, "storing cached setting: %s -> %+v", cachedSettingsKey, kv.Value)
+			if err := storage.MVCCPut(
+				ctx, batch, cachedSettingsKey, hlc.Timestamp{}, kv.Value, storage.MVCCWriteOptions{},
+			); err != nil {
+				return err
+			}
+		} else {
+			// The value was deleted (cluster setting was RESET).
+			// Removed the cached entry.
+			log.VEventf(ctx, 1, "deleting cached setting: %s", cachedSettingsKey)
+			if _, err := storage.MVCCDelete(
+				ctx, batch, cachedSettingsKey, hlc.Timestamp{}, storage.MVCCWriteOptions{},
+			); err != nil {
+				return err
+			}
 		}
 	}
 	return batch.Commit(false /* sync */)
@@ -151,6 +165,7 @@ func initializeCachedSettings(
 					" skipping settings updates.")
 		}
 		settingKey := settings.InternalKey(settingKeyS)
+		log.VEventf(ctx, 1, "loaded cached setting: %s -> %+v", settingKey, val)
 		if err := updater.Set(ctx, settingKey, val); err != nil {
 			log.Warningf(ctx, "setting %q to %v failed: %+v", settingKey, val, err)
 		}
