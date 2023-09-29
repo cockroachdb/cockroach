@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -25,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,15 +35,23 @@ import (
 // source timestamp will then commit together on the destination side. To
 // simulate full-fledged span config replication, this test writes to a dummy
 // span configuration table, listens to updates on the dummy table, and
-// replicates these updates to the actual span configuration table.
+// replicates these updates to the actual span configuration table. The test
+// also occasionally induces a full scan on a rangefeed cache retry, validates
+// the full scan does not change the previously seen persisted state.
 func TestIngestSpanConfigs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	toIngestCh := make(chan ingestedRecords)
+	errorInjectionCh := make(chan error)
+	rng, _ := randutil.NewPseudoRand()
+
 	streamingTestKnobs := &sql.StreamingTestingKnobs{
 		RightAfterSpanConfigFlush: initFlushHook(toIngestCh),
+		SpanConfigRangefeedCacheKnobs: &rangefeedcache.TestingKnobs{
+			ErrorInjectionCh: errorInjectionCh,
+		},
 	}
 
 	h, sourceAccessor, sourceTenant, cleanup := replicationtestutils.NewReplicationHelperWithDummySpanConfigTable(ctx, t, streamingTestKnobs)
@@ -130,7 +141,7 @@ func TestIngestSpanConfigs(t *testing.T) {
 		},
 	} {
 		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
+		if !t.Run(tc.name, func(t *testing.T) {
 			require.NoError(t, sourceAccessor.UpdateSpanConfigRecords(ctx, tc.deletes, tc.updates,
 				hlc.MinTimestamp,
 				hlc.MaxTimestamp))
@@ -141,34 +152,61 @@ func TestIngestSpanConfigs(t *testing.T) {
 			}
 			require.Equal(t, tc.expectedDeletes, toIngest.toDelete)
 
-			actualSpanConfigRecords, err := ingestor.accessor.GetSpanConfigRecords(ctx, i12DestTarget)
-			require.NoError(t, err)
-			require.Equal(t,
-				replicationtestutils.PrettyRecords(tc.expectedPersistedUserSpans),
-				replicationtestutils.PrettyRecords(actualSpanConfigRecords))
-		})
+			verifyPersisted := func() {
+				actualSpanConfigRecords, err := ingestor.accessor.GetSpanConfigRecords(ctx, i12DestTarget)
+				require.NoError(t, err)
+				require.Equal(t,
+					replicationtestutils.PrettyRecords(tc.expectedPersistedUserSpans),
+					replicationtestutils.PrettyRecords(actualSpanConfigRecords))
+			}
+
+			verifyPersisted()
+
+			if rng.Intn(3) == 0 {
+				errorInjectionCh <- errors.New("uh oh")
+				// After a full scan, the persisted state should remain the same.
+
+				toIngest := <-toIngestCh
+
+				// The first observed update after a full scan will always be the tenant split point
+				require.Equal(t, makeRecord(destTenantSplitPoint, 14400), toIngest.toUpdate[0])
+
+				// The remaining updates should be everything else that's been persisted.
+				if len(tc.expectedPersistedUserSpans) > 0 {
+					require.Equal(t, replicationtestutils.PrettyRecords(tc.expectedPersistedUserSpans), replicationtestutils.PrettyRecords(toIngest.toUpdate[1:]))
+				}
+				verifyPersisted()
+			}
+		}) {
+			break
+		}
 	}
 }
 
-// TestIngestSpanConfigsInitialScan tests that the correct span configs are
+// TestIngestSpanConfigsFullScan tests that the correct span configs are
 // updated after the rangefeed which listens to the span config table completes
-// an initial scan. To do so, the test does the following in a loop:
+// an full scan. To do so, the test does the following in a loop:
 //
 // 1. Write some updates to a dummy span config table
 //
-// 2. Open a new span config client on the dummy table, inducing a range feed
-// initial scan
+// 2. Induce a range feed full scan either by opening an new span config
+// client, or by triggering a rangefeedcache retryable error.
 //
-// 3. Ingest the initial scan updates on the real span config table and validate
+// 3. Ingest the full scan updates on the real span config table and validate
 // the expected span configs were updated and deleted.
-func TestIngestSpanConfigsInitialScan(t *testing.T) {
+func TestIngestSpanConfigsFullScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	toIngestCh := make(chan ingestedRecords)
+	errorInjectionCh := make(chan error)
+
 	streamingTestKnobs := &sql.StreamingTestingKnobs{
 		RightAfterSpanConfigFlush: initFlushHook(toIngestCh),
+		SpanConfigRangefeedCacheKnobs: &rangefeedcache.TestingKnobs{
+			ErrorInjectionCh: errorInjectionCh,
+		},
 	}
 
 	h, sourceAccessor, sourceTenant, cleanup := replicationtestutils.NewReplicationHelperWithDummySpanConfigTable(ctx, t, streamingTestKnobs)
@@ -191,7 +229,8 @@ func TestIngestSpanConfigsInitialScan(t *testing.T) {
 	makeRecord := func(targetSpan roachpb.Span, ttl int) spanconfig.Record {
 		return replicationtestutils.MakeSpanConfigRecord(t, targetSpan, ttl)
 	}
-	for _, tc := range []testCase{
+
+	testCases := []testCase{
 		{
 			// Observe the initial scan delete
 			//
@@ -255,9 +294,11 @@ func TestIngestSpanConfigsInitialScan(t *testing.T) {
 			expectedInitScanDeletes:    []spanconfig.Target{splitRecord.GetTarget(), spanconfig.MakeTargetFromSpan(i12Dest)},
 			expectedPersistedUserSpans: []spanconfig.Record{makeRecord(i1Dest, 1), makeRecord(i2Dest, 2)},
 		},
-	} {
+	}
+
+	for testCaseNum, tc := range testCases {
 		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
+		if !t.Run(tc.name, func(t *testing.T) {
 			if len(tc.deletesDuringPause) == 0 {
 				tc.deletesDuringPause = make([][]spanconfig.Target, len(tc.expectedInitScanUpdates))
 			}
@@ -266,7 +307,6 @@ func TestIngestSpanConfigsInitialScan(t *testing.T) {
 					hlc.MinTimestamp,
 					hlc.MaxTimestamp))
 			}
-
 			ingestor, cleanupIngestor := createDummySpanConfigIngestor(
 				ctx,
 				t,
@@ -282,17 +322,37 @@ func TestIngestSpanConfigsInitialScan(t *testing.T) {
 				return ingestor.ingestSpanConfigs(ctx, sourceTenant.Name)
 			})
 
-			toIngest := <-toIngestCh
-			require.Equal(t, replicationtestutils.PrettyRecords(tc.expectedInitScanUpdates), replicationtestutils.PrettyRecords(toIngest.toUpdate))
-			require.Equal(t, tc.expectedInitScanDeletes, toIngest.toDelete)
+			checkFullScanResults := func(observed ingestedRecords, expectedTestCaseUpdateInExpectedDeletes bool) {
+				require.Equal(t, replicationtestutils.PrettyRecords(tc.expectedInitScanUpdates), replicationtestutils.PrettyRecords(observed.toUpdate))
 
-			i12DestTarget := []spanconfig.Target{spanconfig.MakeTargetFromSpan(i12Dest)}
-			actualSpanConfigRecords, err := ingestor.accessor.GetSpanConfigRecords(ctx, i12DestTarget)
-			require.NoError(t, err)
-			require.Equal(t,
-				replicationtestutils.PrettyRecords(tc.expectedPersistedUserSpans),
-				replicationtestutils.PrettyRecords(actualSpanConfigRecords))
-		})
+				if expectedTestCaseUpdateInExpectedDeletes {
+					if testCaseNum+1 < len(testCases) {
+						// If we expected this test case update to be deleted, just use the
+						// next test case's expected deletes, if possible.
+						require.Equal(t, testCases[testCaseNum+1].expectedInitScanDeletes, observed.toDelete)
+					}
+				} else {
+					require.Equal(t, tc.expectedInitScanDeletes, observed.toDelete)
+				}
+
+				i12DestTarget := []spanconfig.Target{spanconfig.MakeTargetFromSpan(i12Dest)}
+				actualSpanConfigRecords, err := ingestor.accessor.GetSpanConfigRecords(ctx, i12DestTarget)
+				require.NoError(t, err)
+				require.Equal(t,
+					replicationtestutils.PrettyRecords(tc.expectedPersistedUserSpans),
+					replicationtestutils.PrettyRecords(actualSpanConfigRecords))
+			}
+
+			checkFullScanResults(<-toIngestCh, false)
+
+			// See the same initial scan via a retry
+			errorInjectionCh <- errors.New("uh oh")
+
+			// The update added in this test case will be deleted while processing the full scan on retry.
+			checkFullScanResults(<-toIngestCh, true)
+		}) {
+			break
+		}
 	}
 }
 
