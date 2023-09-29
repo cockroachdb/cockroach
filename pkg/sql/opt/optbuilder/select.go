@@ -1465,6 +1465,11 @@ func (b *Builder) validateLockingInFrom(
 		return
 	}
 
+	if b.evalCtx.TxnReadOnly {
+		panic(pgerror.Newf(pgcode.ReadOnlySQLTransaction,
+			"cannot execute %s in a read-only transaction", locking.get().Strength))
+	}
+
 	switch {
 	case sel.Distinct:
 		b.raiseLockingContextError(locking, "DISTINCT clause")

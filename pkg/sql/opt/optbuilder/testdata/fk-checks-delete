@@ -182,7 +182,7 @@ delete parent
                      └── other:16 = child2.p:18
 
 # Verify that we do *not* lock the child, even with implicit FK locking.
-build set=enable_implicit_fk_locking_for_serializable=true
+build set=(enable_implicit_fk_locking_for_serializable=true,enable_shared_locking_for_serializable=true)
 DELETE FROM parent WHERE p = 3
 ----
 delete parent

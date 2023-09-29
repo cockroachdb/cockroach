@@ -36,7 +36,7 @@ project
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-no-key-update
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT * FROM t FOR SHARE
 ----
 project
@@ -45,7 +45,7 @@ project
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-share
 
-build
+build set=enable_shared_locking_for_serializable=true 
 SELECT * FROM t FOR KEY SHARE
 ----
 project
@@ -54,7 +54,7 @@ project
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-key-share
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT * FROM t FOR KEY SHARE FOR SHARE
 ----
 project
@@ -63,7 +63,7 @@ project
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-share
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
 ----
 project
@@ -72,7 +72,7 @@ project
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-no-key-update
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
 ----
 project
@@ -251,7 +251,7 @@ project
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-update
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT * FROM (SELECT a FROM t FOR NO KEY UPDATE) FOR KEY SHARE
 ----
 project
@@ -260,7 +260,7 @@ project
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-no-key-update
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT * FROM (SELECT a FROM t FOR KEY SHARE) FOR NO KEY UPDATE
 ----
 project
@@ -701,7 +701,7 @@ project
       └── filters
            └── t.a:1 = u.a:5
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t FOR SHARE OF u
 ----
 project
@@ -717,12 +717,12 @@ project
       └── filters
            └── t.a:1 = u.a:5
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
 ----
 error (42P01): relation "t2" in FOR UPDATE clause not found in FROM clause
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
 ----
 project
@@ -738,7 +738,7 @@ project
       └── filters
            └── t2.a:1 = u2.a:5
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR UPDATE
 ----
 project
@@ -754,7 +754,7 @@ project
       └── filters
            └── t.a:1 = u.a:5
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR NO KEY UPDATE OF t
 ----
 project
@@ -770,7 +770,7 @@ project
       └── filters
            └── t.a:1 = u.a:5
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT * FROM t JOIN u USING (a) FOR SHARE FOR NO KEY UPDATE OF t FOR UPDATE OF u
 ----
 project
@@ -952,7 +952,7 @@ project
       │    └── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       └── filters (true)
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT * FROM t, u FOR SHARE OF t FOR UPDATE OF u
 ----
 project
@@ -1240,7 +1240,7 @@ project
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-no-key-update,nowait
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT * FROM t FOR SHARE NOWAIT
 ----
 project
@@ -1249,7 +1249,7 @@ project
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-share,nowait
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT * FROM t FOR KEY SHARE NOWAIT
 ----
 project
@@ -1258,7 +1258,7 @@ project
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-key-share,nowait
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT
 ----
 project
@@ -1267,7 +1267,7 @@ project
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-share,nowait
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE
 ----
 project
@@ -1276,7 +1276,7 @@ project
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-no-key-update,nowait
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE FOR UPDATE NOWAIT
 ----
 project
@@ -1332,7 +1332,7 @@ project
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-no-key-update,skip-locked
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT * FROM t FOR SHARE SKIP LOCKED
 ----
 project
@@ -1341,7 +1341,7 @@ project
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-share,skip-locked
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT * FROM t FOR KEY SHARE SKIP LOCKED
 ----
 project
@@ -1350,7 +1350,7 @@ project
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-key-share,skip-locked
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED
 ----
 project
@@ -1359,7 +1359,7 @@ project
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-share,skip-locked
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED FOR NO KEY UPDATE
 ----
 project
@@ -1368,7 +1368,7 @@ project
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       └── locking: for-no-key-update,skip-locked
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED FOR NO KEY UPDATE FOR UPDATE SKIP LOCKED
 ----
 project
@@ -1408,7 +1408,7 @@ SELECT 1 FROM families FOR UPDATE OF families SKIP LOCKED
 ----
 error (0A000): SKIP LOCKED cannot be used for tables with multiple column families
 
-build
+build set=enable_shared_locking_for_serializable=true
 SELECT 1 FROM families FOR SHARE SKIP LOCKED
 ----
 error (0A000): SKIP LOCKED cannot be used for tables with multiple column families
