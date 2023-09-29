@@ -161,7 +161,6 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"contention",
 			"index_recommendations",
 			"retries",
-			"last_retry_reason",
 			"error_code",
 			"crdb_internal.redact(last_error_redactable) as last_error_redactable",
 		},
