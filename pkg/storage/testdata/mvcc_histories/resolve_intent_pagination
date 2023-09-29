@@ -192,6 +192,7 @@ resolve_intent_range t=B k=a end=z status=COMMITTED maxKeys=1 batched
 >> resolve_intent_range t=B k=a end=z status=COMMITTED maxKeys=1 batched
 resolve_intent_range: "a"-"z" -> resolved 1 key(s), 56 bytes
 resolve_intent_range: resume span ["a\x00","z") RESUME_KEY_LIMIT
+resolve_intent_range: released shared or exclusive locks
 resolve_intent_range: batch after write is non-empty
 stats: val_bytes=-48 live_bytes=-48 intent_count=-1 intent_bytes=-18 lock_count=-2 lock_bytes=-66 lock_age=-198
 >> at end:
@@ -209,6 +210,7 @@ resolve_intent_range t=B k=a end=z status=COMMITTED targetBytes=1 batched
 >> resolve_intent_range t=B k=a end=z status=COMMITTED targetBytes=1 batched
 resolve_intent_range: "a"-"z" -> resolved 1 key(s), 84 bytes
 resolve_intent_range: resume span ["b\x00","z") RESUME_BYTE_LIMIT
+resolve_intent_range: released shared or exclusive locks
 resolve_intent_range: batch after write is non-empty
 stats: val_bytes=-48 live_bytes=-48 intent_count=-1 intent_bytes=-18 lock_count=-3 lock_bytes=-132 lock_age=-297
 >> at end:
@@ -222,6 +224,7 @@ resolve_intent_range t=B k=a end=z status=COMMITTED maxKeys=1 batched
 ----
 >> resolve_intent_range t=B k=a end=z status=COMMITTED maxKeys=1 batched
 resolve_intent_range: "a"-"z" -> resolved 1 key(s), 28 bytes
+resolve_intent_range: released shared or exclusive locks
 resolve_intent_range: batch after write is non-empty
 stats: lock_count=-1 lock_bytes=-66 lock_age=-99
 >> at end:
