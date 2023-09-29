@@ -2331,11 +2331,13 @@ func newFlowControlTestHelper(t *testing.T, tc *testcluster.TestCluster) *flowCo
 }
 
 func (h *flowControlTestHelper) init() {
-	if _, err := h.tc.Conns[0].Exec(`SET CLUSTER SETTING kvadmission.flow_control.enabled = true`); err != nil {
-		h.t.Fatal(err)
-	}
-	if _, err := h.tc.Conns[0].Exec(`SET CLUSTER SETTING kvadmission.flow_control.mode = 'apply_to_all'`); err != nil {
-		h.t.Fatal(err)
+	// Reach into each server's cluster setting and override. This causes any
+	// registered change callbacks to run immediately, which is important since
+	// running them with some lag (which happens when using SQL and `SET CLUSTER
+	// SETTING`) interferes with the later activities in these tests.
+	for _, s := range h.tc.Servers {
+		kvflowcontrol.Enabled.Override(context.Background(), &s.ClusterSettings().SV, true)
+		kvflowcontrol.Mode.Override(context.Background(), &s.ClusterSettings().SV, int64(kvflowcontrol.ApplyToAll))
 	}
 }
 
