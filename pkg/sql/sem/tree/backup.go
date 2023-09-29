@@ -40,13 +40,14 @@ const (
 
 // BackupOptions describes options for the BACKUP execution.
 type BackupOptions struct {
-	CaptureRevisionHistory     Expr
-	IncludeAllSecondaryTenants Expr
-	EncryptionPassphrase       Expr
-	Detached                   *DBool
-	EncryptionKMSURI           StringOrPlaceholderOptList
-	IncrementalStorage         StringOrPlaceholderOptList
-	ExecutionLocality          Expr
+	CaptureRevisionHistory          Expr
+	IncludeAllSecondaryTenants      Expr
+	EncryptionPassphrase            Expr
+	Detached                        *DBool
+	EncryptionKMSURI                StringOrPlaceholderOptList
+	IncrementalStorage              StringOrPlaceholderOptList
+	ExecutionLocality               Expr
+	UpdatesClusterMonitoringMetrics Expr
 }
 
 var _ NodeFormatter = &BackupOptions{}
@@ -312,6 +313,12 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("include_all_virtual_clusters = ")
 		ctx.FormatNode(o.IncludeAllSecondaryTenants)
 	}
+
+	if o.UpdatesClusterMonitoringMetrics != nil {
+		maybeAddSep()
+		ctx.WriteString("updates_cluster_monitoring_metrics = ")
+		ctx.FormatNode(o.UpdatesClusterMonitoringMetrics)
+	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -365,6 +372,13 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 		o.IncludeAllSecondaryTenants = other.IncludeAllSecondaryTenants
 	}
 
+	if o.UpdatesClusterMonitoringMetrics != nil {
+		if other.UpdatesClusterMonitoringMetrics != nil {
+			return errors.New("updates_cluster_monitoring_metrics option specified multiple times")
+		}
+	} else {
+		o.UpdatesClusterMonitoringMetrics = other.UpdatesClusterMonitoringMetrics
+	}
 	return nil
 }
 
@@ -377,7 +391,8 @@ func (o BackupOptions) IsDefault() bool {
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
 		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
 		o.ExecutionLocality == options.ExecutionLocality &&
-		o.IncludeAllSecondaryTenants == options.IncludeAllSecondaryTenants
+		o.IncludeAllSecondaryTenants == options.IncludeAllSecondaryTenants &&
+		o.UpdatesClusterMonitoringMetrics == options.UpdatesClusterMonitoringMetrics
 }
 
 // Format implements the NodeFormatter interface.
