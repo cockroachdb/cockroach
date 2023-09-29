@@ -778,7 +778,6 @@ func NewLeaseManager(
 	lm := &Manager{
 		storage: storage{
 			nodeIDContainer: nodeIDContainer,
-			writer:          newKVWriter(codec, db.KV(), keys.LeaseTableID, settingsWatcher),
 			db:              db,
 			clock:           clock,
 			settings:        settings,
@@ -804,6 +803,7 @@ func NewLeaseManager(
 	lm.storage.regionPrefix = &atomic.Value{}
 	lm.storage.regionPrefix.Store(enum.One)
 	lm.storage.sessionBasedLeasingMode = lm
+	lm.storage.writer = newKVWriter(codec, db.KV(), keys.LeaseTableID, settingsWatcher, lm)
 	lm.stopper.AddCloser(lm.sem.Closer("stopper"))
 	lm.mu.descriptors = make(map[descpb.ID]*descriptorState)
 	lm.mu.updatesResolvedTimestamp = clock.Now()

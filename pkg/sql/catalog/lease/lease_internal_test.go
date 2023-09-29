@@ -1588,14 +1588,14 @@ func TestSessionLeasingClusterSetting(t *testing.T) {
 
 		// Validate that the mode we just set is active and the provider handles
 		// it properly.
-		require.True(t, lm.isSessionBasedLeasingModeActive(SessionBasedLeasingMode(idx)))
+		require.True(t, lm.sessionBasedLeasingModeAtLeast(SessionBasedLeasingMode(idx)))
 		require.Equal(t, lm.getSessionBasedLeasingMode(), SessionBasedLeasingMode(idx))
 		// Validate that the previous minimums are active and forwards ones are not.
 		for mode := SessionBasedLeasingOff; mode <= SessionBasedLeasingMode(idx); mode++ {
-			require.True(t, lm.isSessionBasedLeasingModeActive(mode))
+			require.True(t, lm.sessionBasedLeasingModeAtLeast(mode))
 		}
 		for mode := SessionBasedLeasingMode(idx) + 1; mode <= SessionBasedOnly; mode++ {
-			require.False(t, lm.isSessionBasedLeasingModeActive(mode))
+			require.False(t, lm.sessionBasedLeasingModeAtLeast(mode))
 		}
 	}
 }
