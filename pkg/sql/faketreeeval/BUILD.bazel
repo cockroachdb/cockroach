@@ -22,6 +22,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util/duration",
         "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/hlc",
         "//pkg/util/mon",
         "//pkg/util/rangedesc",
         "@com_github_cockroachdb_errors//:errors",

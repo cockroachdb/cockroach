@@ -76,14 +76,18 @@ func declareKeysExport(
 	latchSpans *spanset.SpanSet,
 	lockSpans *lockspanset.LockSpanSet,
 	maxOffset time.Duration,
-) {
-	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+) error {
+	err := DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+	if err != nil {
+		return err
+	}
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeGCThresholdKey(header.RangeID)})
 	// Export requests will usually not hold latches during their evaluation.
 	//
 	// See call to `AssertAllowed()` in GetGCThreshold() to understand why we need
 	// to disable these assertions for export requests.
 	latchSpans.DisableUndeclaredAccessAssertions()
+	return nil
 }
 
 // evalExport dumps the requested keys into files of non-overlapping key ranges

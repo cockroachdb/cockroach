@@ -29,13 +29,14 @@ func declareKeysProbe(
 	_ *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
+) error {
 	// Declare no keys. This means that we're not even serializing with splits
 	// (i.e. a probe could be directed at a key that will become the right-hand
 	// side of the split, and the split races ahead of the probe though the probe
 	// will still execute on the left-hand side). This is acceptable; we want the
 	// probe to bypass as much of the above-raft machinery as possible so that it
 	// gives us a signal on the replication layer alone.
+	return nil
 }
 
 func init() {

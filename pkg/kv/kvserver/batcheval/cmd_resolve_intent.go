@@ -31,7 +31,7 @@ func init() {
 
 func declareKeysResolveIntentCombined(
 	rs ImmutableRangeState, req kvpb.Request, latchSpans *spanset.SpanSet,
-) {
+) error {
 	var status roachpb.TransactionStatus
 	var txnID uuid.UUID
 	var minTxnTS hlc.Timestamp
@@ -51,6 +51,7 @@ func declareKeysResolveIntentCombined(
 		// intent, but we can't tell whether we will or not ahead of time.
 		latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.AbortSpanKey(rs.GetRangeID(), txnID)})
 	}
+	return nil
 }
 
 func declareKeysResolveIntent(
@@ -60,8 +61,8 @@ func declareKeysResolveIntent(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
-	declareKeysResolveIntentCombined(rs, req, latchSpans)
+) error {
+	return declareKeysResolveIntentCombined(rs, req, latchSpans)
 }
 
 func resolveToMetricType(status roachpb.TransactionStatus, poison bool) *result.Metrics {

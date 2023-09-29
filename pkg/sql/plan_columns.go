@@ -98,6 +98,8 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 		return n.resultColumns
 	case *invertedJoinNode:
 		return n.columns
+	case *showFingerprintsNode:
+		return n.columns
 
 	// Nodes with a fixed schema.
 	case *scrubNode:
@@ -114,8 +116,6 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 		return n.getColumns(mut, colinfo.AlterRangeRelocateColumns)
 	case *scatterNode:
 		return n.getColumns(mut, colinfo.AlterTableScatterColumns)
-	case *showFingerprintsNode:
-		return n.getColumns(mut, colinfo.ShowFingerprintsColumns)
 	case *splitNode:
 		return n.getColumns(mut, colinfo.AlterTableSplitColumns)
 	case *unsplitNode:

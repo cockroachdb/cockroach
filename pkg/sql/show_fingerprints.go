@@ -14,20 +14,28 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
 type showFingerprintsNode struct {
-	optColumnsSlot
+	columns colinfo.ResultColumns
 
 	tableDesc catalog.TableDescriptor
 	indexes   []catalog.Index
+
+	tenantSpec tenantSpec
 
 	run showFingerprintsRun
 }
@@ -52,6 +60,10 @@ type showFingerprintsNode struct {
 func (p *planner) ShowFingerprints(
 	ctx context.Context, n *tree.ShowFingerprints,
 ) (planNode, error) {
+	if n.TenantSpec != nil {
+		return p.planShowTenantFingerprint(ctx, n.TenantSpec)
+	}
+
 	// We avoid the cache so that we can observe the fingerprints without
 	// taking a lease, like other SHOW commands.
 	tableDesc, err := p.ResolveUncachedTableDescriptorEx(
@@ -65,8 +77,31 @@ func (p *planner) ShowFingerprints(
 	}
 
 	return &showFingerprintsNode{
+		columns:   colinfo.ShowFingerprintsColumns,
 		tableDesc: tableDesc,
 		indexes:   tableDesc.ActiveIndexes(),
+	}, nil
+}
+
+func (p *planner) planShowTenantFingerprint(
+	ctx context.Context, ts *tree.TenantSpec,
+) (planNode, error) {
+	if err := CanManageTenant(ctx, p); err != nil {
+		return nil, err
+	}
+
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "fingerprint"); err != nil {
+		return nil, err
+	}
+
+	tspec, err := p.planTenantSpec(ctx, ts, "SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER")
+	if err != nil {
+		return nil, err
+	}
+
+	return &showFingerprintsNode{
+		columns:    colinfo.ShowTenantFingerprintsColumns,
+		tenantSpec: tspec,
 	}, nil
 }
 
@@ -83,7 +118,48 @@ func (n *showFingerprintsNode) startExec(params runParams) error {
 	return nil
 }
 
+func (n *showFingerprintsNode) nextTenant(params runParams) (bool, error) {
+	if n.run.rowIdx > 0 {
+		return false, nil
+	}
+
+	tinfo, err := n.tenantSpec.getTenantInfo(params.ctx, params.p)
+	if err != nil {
+		return false, err
+	}
+
+	tid, err := roachpb.MakeTenantID(tinfo.ID)
+	if err != nil {
+		return false, err
+	}
+
+	fingerprint, err := params.p.FingerprintSpan(params.ctx,
+		keys.MakeTenantSpan(tid),
+		hlc.Timestamp{},
+		false,
+		true)
+	if err != nil {
+		return false, err
+	}
+
+	endTime := hlc.Timestamp{
+		WallTime: params.p.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
+	}
+	n.run.values = []tree.Datum{
+		tree.NewDString(string(tinfo.Name)),
+		eval.TimestampToDecimalDatum(endTime),
+		tree.NewDInt(tree.DInt(fingerprint)),
+	}
+	n.run.rowIdx++
+
+	return true, nil
+}
+
 func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
+	if n.tenantSpec != nil {
+		return n.nextTenant(params)
+	}
+
 	if n.run.rowIdx >= len(n.indexes) {
 		return false, nil
 	}
