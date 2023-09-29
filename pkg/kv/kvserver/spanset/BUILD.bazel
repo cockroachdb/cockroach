@@ -33,6 +33,7 @@ go_test(
     embed = [":spanset"],
     deps = [
         "//pkg/keys",
+        "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/testutils",
