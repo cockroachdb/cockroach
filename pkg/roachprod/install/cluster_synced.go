@@ -1693,7 +1693,7 @@ tar cvf %[3]s certs
 // DistributeTenantCerts will generate and distribute certificates to all of the
 // nodes, using the host cluster to generate tenant certificates.
 func (c *SyncedCluster) DistributeTenantCerts(
-	ctx context.Context, l *logger.Logger, hostCluster *SyncedCluster, tenantID int,
+	ctx context.Context, l *logger.Logger, hostCluster *SyncedCluster, virtualClusterID int,
 ) error {
 	if hostCluster.checkForTenantCertificates(ctx, l) {
 		return nil
@@ -1708,7 +1708,7 @@ func (c *SyncedCluster) DistributeTenantCerts(
 		return err
 	}
 
-	if err := hostCluster.createTenantCertBundle(ctx, l, tenantCertsTarName, tenantID, nodeNames); err != nil {
+	if err := hostCluster.createTenantCertBundle(ctx, l, tenantCertsTarName, virtualClusterID, nodeNames); err != nil {
 		return err
 	}
 
@@ -1727,7 +1727,11 @@ func (c *SyncedCluster) DistributeTenantCerts(
 // This function assumes it is running on a host cluster node that already has
 // had the main cert bundle created.
 func (c *SyncedCluster) createTenantCertBundle(
-	ctx context.Context, l *logger.Logger, bundleName string, tenantID int, nodeNames []string,
+	ctx context.Context,
+	l *logger.Logger,
+	bundleName string,
+	virtualClusterID int,
+	nodeNames []string,
 ) error {
 	display := fmt.Sprintf("%s: initializing tenant certs", c.Name)
 	return c.Parallel(ctx, l, c.Nodes[0:1], func(ctx context.Context, node Node) (*RunResultDetails, error) {
@@ -1757,7 +1761,7 @@ tar cvf %[4]s $CERT_DIR
 `,
 			cockroachNodeBinary(c, node),
 			strings.Join(nodeNames, " "),
-			tenantID,
+			virtualClusterID,
 			bundleName,
 		)
 
