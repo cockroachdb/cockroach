@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -29,8 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -267,71 +264,6 @@ func channelWaitWithTimeout(t *testing.T, ch chan struct{}) {
 	case <-time.After(timeOut):
 		t.Fatal("test timed out")
 	}
-}
-func TestBiDirectionalRangefeedNotUsedUntilUpgradeFinalilzed(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-
-	startServerAtVer := func(ver roachpb.Version) (*testcluster.TestCluster, func()) {
-		st := cluster.MakeTestingClusterSettingsWithVersions(ver, ver, true)
-		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual, // Turn off replication queues.
-			ServerArgs: base.TestServerArgs{
-				Settings: st,
-				Knobs: base.TestingKnobs{
-					KVClient: &kvcoord.ClientTestingKnobs{
-						TransportFactory: makeTransportFactory(false, nil, nil),
-					},
-
-					Server: &server.TestingKnobs{
-						DisableAutomaticVersionUpgrade: make(chan struct{}),
-						BinaryVersionOverride:          ver,
-					},
-				},
-			},
-		})
-		return tc, func() { tc.Stopper().Stop(ctx) }
-	}
-
-	// Create a small table; run rangefeed.  The transport factory we injected above verifies
-	// that we use the old rangefeed implementation.
-	runRangeFeed := func(tc *testcluster.TestCluster, opts ...kvcoord.RangeFeedOption) {
-		ts := tc.Server(0)
-
-		sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-		startTime := ts.Clock().Now()
-
-		sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-		sqlDB.Exec(t, `CREATE TABLE foo (key INT PRIMARY KEY)`)
-		sqlDB.Exec(t, `INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000)`)
-
-		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
-			ts.DB(), keys.SystemSQLCodec, "defaultdb", "foo")
-		fooSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
-
-		allSeen, onValue := observeNValues(1000)
-		closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startTime, onValue, false)
-		defer closeFeed()
-		channelWaitWithTimeout(t, allSeen)
-	}
-
-	t.Run("rangefeed-stream-disabled-prior-to-version-upgrade", func(t *testing.T) {
-		noRfStreamVer := clusterversion.ByKey(clusterversion.TODODelete_V22_2RangefeedUseOneStreamPerNode - 1)
-		tc, cleanup := startServerAtVer(noRfStreamVer)
-		defer cleanup()
-		runRangeFeed(tc)
-	})
-
-	t.Run("rangefeed-stream-disabled-via-environment", func(t *testing.T) {
-		defer kvcoord.TestingSetEnableMuxRangeFeed(false)()
-		// Even though we could use rangefeed stream, it's disabled via kill switch.
-		rfStreamVer := clusterversion.ByKey(clusterversion.TODODelete_V22_2RangefeedUseOneStreamPerNode)
-		tc, cleanup := startServerAtVer(rfStreamVer)
-		defer cleanup()
-		runRangeFeed(tc, kvcoord.WithMuxRangeFeed())
-	})
 }
 
 func TestMuxRangeFeedConnectsToNodeOnce(t *testing.T) {

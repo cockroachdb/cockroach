@@ -102,9 +102,8 @@ func ContainsDescID(haystack scpb.Element, needle catid.DescID) (contains bool) 
 	return contains
 }
 
-// MinElementVersion returns the minimum cluster version at which an element may
-// be used.
-func MinElementVersion(el scpb.Element) clusterversion.Key {
+// VersionSupportsElementUse checks if an element may be used at a given version.
+func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVersion) bool {
 	switch el.(type) {
 	case *scpb.Database, *scpb.Schema, *scpb.View, *scpb.Sequence, *scpb.Table,
 		*scpb.AliasType, *scpb.ColumnFamily, *scpb.Column, *scpb.PrimaryIndex,
@@ -120,21 +119,19 @@ func MinElementVersion(el scpb.Element) clusterversion.Key {
 		*scpb.Namespace, *scpb.Owner, *scpb.UserPrivileges,
 		*scpb.DatabaseRegionConfig, *scpb.DatabaseRoleSetting, *scpb.DatabaseComment,
 		*scpb.SchemaParent, *scpb.SchemaComment, *scpb.SchemaChild:
-		return clusterversion.TODODelete_V22_1
-	case *scpb.CompositeType, *scpb.CompositeTypeAttrType, *scpb.CompositeTypeAttrName:
-		return clusterversion.V23_1
+		// These elements need v22.1 so they can be used without checking any version gates.
+		return true
 	case *scpb.IndexColumn, *scpb.EnumTypeValue, *scpb.TableZoneConfig:
-		return clusterversion.V22_2
+		return version.IsActive(clusterversion.V22_2)
 	case *scpb.DatabaseData, *scpb.TableData, *scpb.IndexData, *scpb.TablePartitioning,
 		*scpb.Function, *scpb.FunctionName, *scpb.FunctionVolatility, *scpb.FunctionLeakProof,
-		*scpb.FunctionNullInputBehavior, *scpb.FunctionBody, *scpb.FunctionParamDefaultExpression:
-		return clusterversion.V23_1
-	case *scpb.ColumnNotNull, *scpb.CheckConstraintUnvalidated,
-		*scpb.UniqueWithoutIndexConstraintUnvalidated, *scpb.ForeignKeyConstraintUnvalidated,
-		*scpb.IndexZoneConfig, *scpb.TableSchemaLocked:
-		return clusterversion.V23_1
+		*scpb.FunctionNullInputBehavior, *scpb.FunctionBody, *scpb.FunctionParamDefaultExpression,
+		*scpb.ColumnNotNull, *scpb.CheckConstraintUnvalidated, *scpb.UniqueWithoutIndexConstraintUnvalidated,
+		*scpb.ForeignKeyConstraintUnvalidated, *scpb.IndexZoneConfig, *scpb.TableSchemaLocked, *scpb.CompositeType,
+		*scpb.CompositeTypeAttrType, *scpb.CompositeTypeAttrName:
+		return version.IsActive(clusterversion.V23_1)
 	case *scpb.SequenceOption:
-		return clusterversion.V23_2
+		return version.IsActive(clusterversion.V23_2)
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))
 	}
