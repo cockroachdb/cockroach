@@ -1548,9 +1548,9 @@ if [[ $VERSION = v22 ]]; then
 fi
 %[1]s cert create-node %[2]s $SHARED_ARGS
 %[1]s cert create-tenant-client %[3]d %[2]s $SHARED_ARGS
-+%[1]s cert create-client root $TENANT_SCOPE_OPT $SHARED_ARGS
-+%[1]s cert create-client testuser $TENANT_SCOPE_OPT $SHARED_ARGS
-+tar cvf %[4]s $CERT_DIR
+%[1]s cert create-client root $TENANT_SCOPE_OPT $SHARED_ARGS
+%[1]s cert create-client testuser $TENANT_SCOPE_OPT $SHARED_ARGS
+tar cvf %[4]s $CERT_DIR
 `,
 			cockroachNodeBinary(c, node),
 			strings.Join(nodeNames, " "),
