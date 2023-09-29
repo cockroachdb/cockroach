@@ -65,7 +65,7 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef(
       value: number,
       unit: string,
     ) => {
-      const multiplier = unit == "milliseconds" ? 0.001 : 1;
+      const multiplier = unit === "milliseconds" ? 0.001 : 1;
       return conditional ? value * multiplier : 0; // num seconds
     };
 
@@ -126,7 +126,7 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef(
       };
     });
 
-    if (planGists && selectedPlanGist == "") {
+    if (planGists && selectedPlanGist === "") {
       setSelectedPlanGist(planGists[0]);
     }
 
@@ -183,7 +183,7 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef(
                       performance.
                     </span>
                   </div>
-                  {getTraceSampleRate(conditional, traceSampleRate) == 1 && (
+                  {getTraceSampleRate(conditional, traceSampleRate) === 1 && (
                     <div className={cx("diagnostic__warning")}>
                       <InlineAlert
                         intent="warning"

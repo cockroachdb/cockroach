@@ -123,7 +123,7 @@ export const insightsTableTitles: InsightsTableTitleType = {
   },
   query: (execType: InsightExecEnum) => {
     let tooltipText = `The ${execType} query.`;
-    if (execType == InsightExecEnum.TRANSACTION) {
+    if (execType === InsightExecEnum.TRANSACTION) {
       tooltipText = "The queries attempted in the transaction.";
     }
     return makeToolTip(<p>{tooltipText}</p>, "query", execType);

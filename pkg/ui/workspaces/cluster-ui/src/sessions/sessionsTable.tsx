@@ -85,7 +85,7 @@ const StatementTableCell = (props: { session: ISession }) => {
   const { session } = props;
 
   if (!(session.active_queries?.length > 0)) {
-    if (session.last_active_query == "") {
+    if (session.last_active_query === "") {
       return <div>{"N/A"}</div>;
     }
     return <div>{session.last_active_query}</div>;
@@ -111,7 +111,7 @@ function formatSessionStart(session: ISession) {
 }
 
 function formatStatementStart(session: ISession) {
-  if (session.active_queries.length == 0) {
+  if (session.active_queries.length === 0) {
     return <>N/A</>;
   }
   const start = moment

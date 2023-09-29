@@ -211,8 +211,8 @@ export class DatabasesPage extends React.Component<
     if (
       this.props.onSortingChange &&
       columnTitle &&
-      (sortSetting.columnTitle != columnTitle ||
-        sortSetting.ascending != ascending)
+      (sortSetting.columnTitle !== columnTitle ||
+        sortSetting.ascending !== ascending)
     ) {
       this.props.onSortingChange("Databases", columnTitle, ascending);
     }
@@ -232,7 +232,7 @@ export class DatabasesPage extends React.Component<
     const searchParams = new URLSearchParams(history.location.search);
 
     const searchQuery = searchParams.get("q") || undefined;
-    if (onSearchComplete && searchQuery && search != searchQuery) {
+    if (onSearchComplete && searchQuery && search !== searchQuery) {
       onSearchComplete(searchQuery);
     }
 
@@ -284,7 +284,7 @@ export class DatabasesPage extends React.Component<
     // Search
     const searchParams = new URLSearchParams(history.location.search);
     const searchQueryString = searchParams.get("q") || "";
-    if (search && search != searchQueryString) {
+    if (search && search !== searchQueryString) {
       syncHistory(
         {
           q: search,
@@ -459,11 +459,11 @@ export class DatabasesPage extends React.Component<
     return databases
       .filter(db => (search ? filterBySearchQuery(db, search) : true))
       .filter(db => {
-        if (regionsSelected.length == 0 && nodesSelected.length == 0)
+        if (regionsSelected.length === 0 && nodesSelected.length === 0)
           return true;
 
-        let foundRegion = regionsSelected.length == 0;
-        let foundNode = nodesSelected.length == 0;
+        let foundRegion = regionsSelected.length === 0;
+        let foundNode = nodesSelected.length === 0;
 
         db.nodes?.forEach(node => {
           const n = node?.toString() || "";
@@ -487,17 +487,17 @@ export class DatabasesPage extends React.Component<
     // No new dbs to update
     if (
       !this.props.databases ||
-      this.props.databases.length == 0 ||
+      this.props.databases.length === 0 ||
       this.props.databases.every(x => x.loaded || x.loading)
     ) {
       return false;
     }
 
-    if (this.state.pagination.current != prevState.pagination.current) {
+    if (this.state.pagination.current !== prevState.pagination.current) {
       return true;
     }
 
-    if (prevProps && this.props.search != prevProps.search) {
+    if (prevProps && this.props.search !== prevProps.search) {
       return true;
     }
 
@@ -508,7 +508,7 @@ export class DatabasesPage extends React.Component<
       i++
     ) {
       const db = filteredDatabases[i];
-      if (db.loaded || db.loading || db.requestError != undefined) {
+      if (db.loaded || db.loading || db.requestError != null) {
         continue;
       }
       // Info is not loaded for a visible database.

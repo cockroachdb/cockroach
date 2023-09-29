@@ -48,7 +48,7 @@ const SpanStatus: React.FC<{
   const spanID = span?.span_id;
   const [recordingInFlight, setRecordingInFlight] = useState(false);
   const traceID = span?.trace_id;
-  const recording = span?.current_recording_mode != RecordingMode.OFF;
+  const recording = span?.current_recording_mode !== RecordingMode.OFF;
 
   const toggleRecording = useCallback(() => {
     setRecordingInFlight(true);
