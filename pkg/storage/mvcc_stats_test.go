@@ -145,7 +145,7 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 	ts4 := hlc.Timestamp{WallTime: 4 * 1e9}
 	txn.Status = roachpb.COMMITTED
 	txn.WriteTimestamp.Forward(ts4)
-	if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
+	if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
 		roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
 		MVCCResolveWriteIntentOptions{},
 	); err != nil {
@@ -235,7 +235,7 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 	ts4 := hlc.Timestamp{WallTime: 4 * 1e9}
 	txn.Status = roachpb.COMMITTED
 	txn.WriteTimestamp.Forward(ts4)
-	if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
+	if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
 		roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
 		MVCCResolveWriteIntentOptions{},
 	); err != nil {
@@ -323,7 +323,7 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 	// push as it would happen for a SNAPSHOT txn)
 	ts4 := hlc.Timestamp{WallTime: 4 * 1e9}
 	txn.WriteTimestamp.Forward(ts4)
-	if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
+	if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
 		roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
 		MVCCResolveWriteIntentOptions{},
 	); err != nil {
@@ -701,7 +701,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 		txnCommit := txn.Clone()
 		txnCommit.Status = roachpb.COMMITTED
 		txnCommit.WriteTimestamp.Forward(ts3)
-		if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, &aggMS,
+		if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, &aggMS,
 			roachpb.MakeLockUpdate(txnCommit, roachpb.Span{Key: key}),
 			MVCCResolveWriteIntentOptions{},
 		); err != nil {
@@ -738,7 +738,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 		txnAbort := txn.Clone()
 		txnAbort.Status = roachpb.ABORTED
 		txnAbort.WriteTimestamp.Forward(ts3)
-		if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, &aggMS,
+		if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, &aggMS,
 			roachpb.MakeLockUpdate(txnAbort, roachpb.Span{Key: key}),
 			MVCCResolveWriteIntentOptions{},
 		); err != nil {
@@ -876,7 +876,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 
 		txnAbort := txn.Clone()
 		txnAbort.Status = roachpb.ABORTED // doesn't change m2ValSize, fortunately
-		if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, &aggMS,
+		if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, &aggMS,
 			roachpb.MakeLockUpdate(txnAbort, roachpb.Span{Key: key}),
 			MVCCResolveWriteIntentOptions{},
 		); err != nil {
@@ -1392,7 +1392,7 @@ func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 
 	// Now abort the intent.
 	txn.Status = roachpb.ABORTED
-	if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
+	if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
 		roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
 		MVCCResolveWriteIntentOptions{},
 	); err != nil {
@@ -1811,13 +1811,13 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		desc := fmt.Sprintf("ranged=%t", ranged)
 		if s.Txn != nil {
 			if !ranged {
-				if _, _, _, err := MVCCResolveWriteIntent(ctx, s.batch, s.MSDelta, s.intent(status), MVCCResolveWriteIntentOptions{}); err != nil {
+				if _, _, _, _, err := MVCCResolveWriteIntent(ctx, s.batch, s.MSDelta, s.intent(status), MVCCResolveWriteIntentOptions{}); err != nil {
 					return false, desc + ": " + err.Error()
 				}
 			} else {
 				max := s.rng.Int63n(5)
 				desc += fmt.Sprintf(", max=%d", max)
-				if _, _, _, _, err := MVCCResolveWriteIntentRange(
+				if _, _, _, _, _, err := MVCCResolveWriteIntentRange(
 					ctx, s.batch, s.MSDelta, s.intentRange(status),
 					MVCCResolveWriteIntentRangeOptions{}); err != nil {
 					return false, desc + ": " + err.Error()
