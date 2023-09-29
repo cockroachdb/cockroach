@@ -16,6 +16,8 @@ import (
 	"encoding/csv"
 	"encoding/gob"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/ts/tsutil"
 	"io"
 	"os"
 	"regexp"
@@ -25,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
-	"github.com/cockroachdb/cockroach/pkg/ts/tsutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -61,15 +62,10 @@ will then convert it to the --format requested in the current invocation.
 		defer cancel()
 
 		var convertFile string
-		if args[0] != "" {
+		if len(args) > 0 {
 			convertFile = args[0]
 		}
 
-		req := &tspb.DumpRequest{
-			StartNanos: time.Time(debugTimeSeriesDumpOpts.from).UnixNano(),
-			EndNanos:   time.Time(debugTimeSeriesDumpOpts.to).UnixNano(),
-			Names:      names,
-		}
 		var w tsWriter
 		switch debugTimeSeriesDumpOpts.format {
 		case tsDumpRaw:
@@ -77,30 +73,6 @@ will then convert it to the --format requested in the current invocation.
 				return errors.Errorf("input file is already in raw format")
 			}
 			// Special case, we don't go through the text output code.
-			conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
-			if err != nil {
-				return err
-			}
-			defer finish()
-
-		if debugTimeSeriesDumpOpts.format == tsDumpRaw {
-			tsClient := tspb.NewTimeSeriesClient(conn)
-			stream, err := tsClient.DumpRaw(context.Background(), req)
-			if err != nil {
-				return err
-			}
-
-			// Buffer the writes to os.Stdout since we're going to
-			// be writing potentially a lot of data to it.
-			w := bufio.NewWriter(os.Stdout)
-			if err := tsutil.DumpRawTo(stream, w); err != nil {
-				return err
-			}
-			return w.Flush()
-		}
-
-		var w tsWriter
-		switch debugTimeSeriesDumpOpts.format {
 		case tsDumpCSV:
 			w = csvTSWriter{w: csv.NewWriter(os.Stdout)}
 		case tsDumpTSV:
@@ -117,13 +89,39 @@ will then convert it to the --format requested in the current invocation.
 
 		var recv func() (*tspb.TimeSeriesData, error)
 		if convertFile == "" {
-			conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
+			// To enable conversion without a running cluster, we want to skip
+			// connecting to the server when converting an existing tsdump.
+			conn, finish, err := getClientGRPCConn(ctx, serverCfg)
 			if err != nil {
 				return err
 			}
 			defer finish()
 
+			names, err := serverpb.GetInternalTimeseriesNamesFromServer(ctx, conn)
+			if err != nil {
+				return err
+			}
+			req := &tspb.DumpRequest{
+				StartNanos: time.Time(debugTimeSeriesDumpOpts.from).UnixNano(),
+				EndNanos:   time.Time(debugTimeSeriesDumpOpts.to).UnixNano(),
+				Names:      names,
+			}
 			tsClient := tspb.NewTimeSeriesClient(conn)
+
+			if debugTimeSeriesDumpOpts.format == tsDumpRaw {
+				stream, err := tsClient.DumpRaw(context.Background(), req)
+				if err != nil {
+					return err
+				}
+
+				// Buffer the writes to os.Stdout since we're going to
+				// be writing potentially a lot of data to it.
+				w := bufio.NewWriter(os.Stdout)
+				if err := tsutil.DumpRawTo(stream, w); err != nil {
+					return err
+				}
+				return w.Flush()
+			}
 			stream, err := tsClient.Dump(context.Background(), req)
 			if err != nil {
 				return err
