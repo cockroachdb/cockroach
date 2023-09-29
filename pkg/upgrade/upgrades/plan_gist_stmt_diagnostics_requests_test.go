@@ -98,6 +98,8 @@ func TestStmtDiagForPlanGistMigration(t *testing.T) {
 	)
 	// Validate that the table has new schema.
 	validateSchemaExists(true)
+
+	upgrades.ValidateSystemDatabaseSchemaVersionBumped(t, sqlDB, clusterversion.V23_2_StmtDiagForPlanGist)
 }
 
 // getOldStmtDiagReqsDescriptor returns the
