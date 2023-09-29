@@ -72,6 +72,7 @@ type leaseFields struct {
 	version      descpb.DescriptorVersion
 	instanceID   base.SQLInstanceID
 	expiration   tree.DTimestamp
+	sessionID    []byte
 }
 
 type writer interface {
