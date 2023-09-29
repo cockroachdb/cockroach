@@ -316,7 +316,7 @@ func startDistChangefeed(
 }
 
 var enableBalancedRangeDistribution = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.balance_range_distribution.enable",
 	"if enabled, the ranges are balanced equally among all nodes",
 	util.ConstantWithMetamorphicTestBool(
@@ -508,7 +508,7 @@ func (w *changefeedResultWriter) Err() error {
 }
 
 var rebalanceThreshold = settings.RegisterFloatSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.balance_range_distribution.sensitivity",
 	"rebalance if the number of ranges on a node exceeds the average by this fraction",
 	0.05,

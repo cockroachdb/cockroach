@@ -108,7 +108,7 @@ SHOW CLUSTER SETTING sql.notices.enabled
 ----
 true
 
-# Verify that we disallow setting a TenantWritable setting that is overridden.
+# Verify that we disallow setting a ApplicationLevel setting that is overridden.
 statement error cluster setting 'sql.notices.enabled' is currently overridden by the operator
 SET CLUSTER SETTING sql.notices.enabled = false
 
@@ -138,7 +138,7 @@ SHOW CLUSTER SETTING sql.notices.enabled
 ----
 true
 
-# Verify that the tenant cannot modify TenantReadOnly settings.
+# Verify that the tenant cannot modify SystemVisible settings.
 query T
 SHOW CLUSTER SETTING kv.protectedts.reconciliation.interval
 ----

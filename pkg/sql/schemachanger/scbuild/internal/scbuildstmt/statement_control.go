@@ -31,7 +31,7 @@ type statementsForceControl map[string]bool
 //
 // Note: We can only control statements implemented in declarative schema changer.
 var forceDeclarativeStatements = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.schema.force_declarative_statements",
 	"forcefully enable or disable declarative schema changer for specific statements",
 	"",

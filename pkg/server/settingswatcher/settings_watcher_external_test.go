@@ -239,10 +239,10 @@ func (f *fakeStorage) getNumWrites() int {
 	return f.numWrites
 }
 
-var _ = settings.RegisterStringSetting(settings.TenantWritable, "str.foo", "desc", "")
-var _ = settings.RegisterStringSetting(settings.TenantWritable, "str.bar", "desc", "bar")
-var _ = settings.RegisterIntSetting(settings.TenantWritable, "i0", "desc", 0)
-var _ = settings.RegisterIntSetting(settings.TenantWritable, "i1", "desc", 1)
+var _ = settings.RegisterStringSetting(settings.ApplicationLevel, "str.foo", "desc", "")
+var _ = settings.RegisterStringSetting(settings.ApplicationLevel, "str.bar", "desc", "bar")
+var _ = settings.RegisterIntSetting(settings.ApplicationLevel, "i0", "desc", 0)
+var _ = settings.RegisterIntSetting(settings.ApplicationLevel, "i1", "desc", 1)
 
 func TestSettingsWatcherWithOverrides(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -529,7 +529,7 @@ func TestStaleRowsDoNotCauseSettingsToRegress(t *testing.T) {
 	)
 
 	fakeSetting := settings.RegisterStringSetting(
-		settings.TenantWritable, fakeSettingName, "for testing", defaultFakeSettingValue,
+		settings.ApplicationLevel, fakeSettingName, "for testing", defaultFakeSettingValue,
 	)
 
 	// Set a cluster setting in the real cluster and read its raw KV.
@@ -627,11 +627,11 @@ func TestStaleRowsDoNotCauseSettingsToRegress(t *testing.T) {
 	settingStillHasValueAfterAShortWhile(t, defaultFakeSettingValue)
 }
 
-var _ = settings.RegisterStringSetting(settings.TenantReadOnly, "str.baz", "desc", "initial")
+var _ = settings.RegisterStringSetting(settings.SystemVisible, "str.baz", "desc", "initial")
 var _ = settings.RegisterStringSetting(settings.SystemOnly, "str.yay", "desc", "")
 
 // TestNotifyCalledUponReadOnlySettingChanges verifies that the notify
-// function callback is called when a TenantReadOnly setting is
+// function callback is called when a SystemVisible setting is
 // updated in system.settings.
 func TestNotifyCalledUponReadOnlySettingChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -683,9 +683,9 @@ func TestNotifyCalledUponReadOnlySettingChanges(t *testing.T) {
 
 	t.Run("initial scan", func(t *testing.T) {
 		// The notifier is called at least once for all the
-		// pre-existing TenantReadOnly settings.
+		// pre-existing SystemVisible settings.
 		testutils.SucceedsSoon(t, func() error {
-			for _, k := range settings.TenantReadOnlyKeys() {
+			for _, k := range settings.SystemVisibleKeys() {
 				seen, v := contains(k)
 				if !seen {
 					return errors.Newf("%s not seen yet", k)
@@ -716,7 +716,7 @@ func TestNotifyCalledUponReadOnlySettingChanges(t *testing.T) {
 
 			// The rangefeed event for str.baz was delivered after those for
 			// str.foo and str.yay. If we had incorrectly notified an update
-			// for non-TenantReadOnly setting, they would show up in the
+			// for non-SystemVisible setting, they would show up in the
 			// updated list.
 			mu.Lock()
 			defer mu.Unlock()

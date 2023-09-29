@@ -246,7 +246,7 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 			w = rrw
 		} else if openCursor {
 			// The result of the first statement will be used to open a SQL cursor.
-			cursorHelper, err = g.newCursorHelper(ctx, plan.(*planComponents))
+			cursorHelper, err = g.newCursorHelper(plan.(*planComponents))
 			if err != nil {
 				return err
 			}
@@ -377,9 +377,7 @@ func (d *droppingResultWriter) Err() error {
 	return d.err
 }
 
-func (g *routineGenerator) newCursorHelper(
-	ctx context.Context, plan *planComponents,
-) (*plpgsqlCursorHelper, error) {
+func (g *routineGenerator) newCursorHelper(plan *planComponents) (*plpgsqlCursorHelper, error) {
 	open := g.expr.CursorDeclaration
 	if open.NameArgIdx < 0 || open.NameArgIdx >= len(g.args) {
 		panic(errors.AssertionFailedf("unexpected name argument index: %d", open.NameArgIdx))
@@ -389,15 +387,17 @@ func (g *routineGenerator) newCursorHelper(
 			"opening an unnamed cursor is not yet supported",
 		)
 	}
+	// Use context.Background(), since the cursor can outlive the context in which
+	// it was created.
 	planCols := plan.main.planColumns()
 	cursorHelper := &plpgsqlCursorHelper{
-		ctx:        ctx,
+		ctx:        context.Background(),
 		cursorName: tree.Name(tree.MustBeDString(g.args[open.NameArgIdx])),
 		resultCols: make(colinfo.ResultColumns, len(planCols)),
 	}
 	copy(cursorHelper.resultCols, planCols)
 	cursorHelper.container.Init(
-		ctx,
+		cursorHelper.ctx,
 		getTypesFromResultColumns(planCols),
 		g.p.ExtendedEvalContextCopy(),
 		"routine_open_cursor", /* opName */

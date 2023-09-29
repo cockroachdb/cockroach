@@ -22,7 +22,7 @@ import (
 // at the expense of possibly incomplete data, or raised for complete data, at the cost
 // of a possibly slower response.
 var HotRangesRequestNodeTimeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.hot_ranges_request.node.timeout",
 	"the duration allowed for a single node to return hot range data before the request is cancelled; if set to 0, there is no timeout",
 	time.Minute*5,

@@ -22,7 +22,7 @@ import (
 // MaxBytes controls the maximum number of bytes worth of spans and metadata
 // which can be protected by all protected timestamp records.
 var MaxBytes = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.protectedts.max_bytes",
 	"if non-zero the limit of the number of bytes of spans and metadata which can be protected",
 	1<<20, // 1 MiB
@@ -33,7 +33,7 @@ var MaxBytes = settings.RegisterIntSetting(
 // MaxSpans controls the maximum number of spans which can be protected
 // by all protected timestamp records.
 var MaxSpans = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.protectedts.max_spans",
 	"if non-zero the limit of the number of spans which can be protected",
 	32768,
@@ -44,7 +44,7 @@ var MaxSpans = settings.RegisterIntSetting(
 // PollInterval defines how frequently the protectedts state is polled by the
 // Tracker.
 var PollInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.protectedts.poll_interval",
 	// TODO(ajwerner): better description.
 	"the interval at which the protectedts subsystem state is polled",

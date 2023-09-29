@@ -866,7 +866,7 @@ var metamorphicDefaultUseIndexLookupForDescriptorsInDatabase = util.ConstantWith
 // namespace table should be used to fetch the set of descriptors needed to
 // materialize most system tables.
 var useIndexLookupForDescriptorsInDatabase = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.catalog.virtual_tables.use_index_lookup_for_descriptors_in_database.enabled",
 	"if enabled, virtual tables will do a lookup against the namespace table to"+
 		" find the descriptors in a database instead of scanning all descriptors",

@@ -30,7 +30,7 @@ import (
 // from the host cluster.
 var (
 	ReadBatchCost = settings.RegisterFloatSetting(
-		settings.TenantReadOnly,
+		settings.SystemVisible,
 		"tenant_cost_model.read_batch_cost",
 		"base cost of a read batch in Request Units",
 		0.50,
@@ -38,7 +38,7 @@ var (
 	)
 
 	ReadRequestCost = settings.RegisterFloatSetting(
-		settings.TenantReadOnly,
+		settings.SystemVisible,
 		"tenant_cost_model.read_request_cost",
 		"base cost of a read request in Request Units",
 		0.125,
@@ -46,7 +46,7 @@ var (
 	)
 
 	ReadPayloadCostPerMiB = settings.RegisterFloatSetting(
-		settings.TenantReadOnly,
+		settings.SystemVisible,
 		"tenant_cost_model.read_payload_cost_per_mebibyte",
 		"cost of a read payload in Request Units per MiB",
 		16,
@@ -54,7 +54,7 @@ var (
 	)
 
 	WriteBatchCost = settings.RegisterFloatSetting(
-		settings.TenantReadOnly,
+		settings.SystemVisible,
 		"tenant_cost_model.write_batch_cost",
 		"base cost of a write batch in Request Units",
 		1,
@@ -62,7 +62,7 @@ var (
 	)
 
 	WriteRequestCost = settings.RegisterFloatSetting(
-		settings.TenantReadOnly,
+		settings.SystemVisible,
 		"tenant_cost_model.write_request_cost",
 		"base cost of a write request in Request Units",
 		1,
@@ -70,7 +70,7 @@ var (
 	)
 
 	WritePayloadCostPerMiB = settings.RegisterFloatSetting(
-		settings.TenantReadOnly,
+		settings.SystemVisible,
 		"tenant_cost_model.write_payload_cost_per_mebibyte",
 		"cost of a write payload in Request Units per MiB",
 		1024,
@@ -78,7 +78,7 @@ var (
 	)
 
 	SQLCPUSecondCost = settings.RegisterFloatSetting(
-		settings.TenantReadOnly,
+		settings.SystemVisible,
 		"tenant_cost_model.sql_cpu_second_cost",
 		"cost of a CPU-second in SQL pods in Request Units",
 		333.3333,
@@ -86,7 +86,7 @@ var (
 	)
 
 	PgwireEgressCostPerMiB = settings.RegisterFloatSetting(
-		settings.TenantReadOnly,
+		settings.SystemVisible,
 		"tenant_cost_model.pgwire_egress_cost_per_mebibyte",
 		"cost of client <-> SQL ingress/egress per MiB",
 		1024,
@@ -94,7 +94,7 @@ var (
 	)
 
 	ExternalIOEgressCostPerMiB = settings.RegisterFloatSetting(
-		settings.TenantReadOnly,
+		settings.SystemVisible,
 		"tenant_cost_model.external_io_egress_per_mebibyte",
 		"cost of a write to external storage in Request Units per MiB",
 		1024,
@@ -102,7 +102,7 @@ var (
 	)
 
 	ExternalIOIngressCostPerMiB = settings.RegisterFloatSetting(
-		settings.TenantReadOnly,
+		settings.SystemVisible,
 		"tenant_cost_model.external_io_ingress_per_mebibyte",
 		"cost of a read from external storage in Request Units per MiB",
 		0,
@@ -110,7 +110,7 @@ var (
 	)
 
 	CrossRegionNetworkCostSetting = settings.RegisterStringSetting(
-		settings.TenantReadOnly,
+		settings.SystemVisible,
 		"tenant_cost_model.cross_region_network_cost",
 		"network cost table for cross-region traffic",
 		"",

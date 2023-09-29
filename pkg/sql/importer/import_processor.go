@@ -57,7 +57,7 @@ var progressUpdateInterval = time.Second * 10
 
 var importPKAdderBufferSize = func() *settings.ByteSizeSetting {
 	s := settings.RegisterByteSizeSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"kv.bulk_ingest.pk_buffer_size",
 		"the initial size of the BulkAdder buffer handling primary index imports",
 		32<<20,
@@ -67,7 +67,7 @@ var importPKAdderBufferSize = func() *settings.ByteSizeSetting {
 
 var importPKAdderMaxBufferSize = func() *settings.ByteSizeSetting {
 	s := settings.RegisterByteSizeSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"kv.bulk_ingest.max_pk_buffer_size",
 		"the maximum size of the BulkAdder buffer handling primary index imports",
 		128<<20,
@@ -77,7 +77,7 @@ var importPKAdderMaxBufferSize = func() *settings.ByteSizeSetting {
 
 var importIndexAdderBufferSize = func() *settings.ByteSizeSetting {
 	s := settings.RegisterByteSizeSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"kv.bulk_ingest.index_buffer_size",
 		"the initial size of the BulkAdder buffer handling secondary index imports",
 		32<<20,
@@ -87,7 +87,7 @@ var importIndexAdderBufferSize = func() *settings.ByteSizeSetting {
 
 var importIndexAdderMaxBufferSize = func() *settings.ByteSizeSetting {
 	s := settings.RegisterByteSizeSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"kv.bulk_ingest.max_index_buffer_size",
 		"the maximum size of the BulkAdder buffer handling secondary index imports",
 		512<<20,
@@ -96,7 +96,7 @@ var importIndexAdderMaxBufferSize = func() *settings.ByteSizeSetting {
 }()
 
 var readerParallelismSetting = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.import.reader_parallelism",
 	"number of parallel workers to use to convert read data for formats that support parallel conversion; 0 indicates number of cores",
 	0,

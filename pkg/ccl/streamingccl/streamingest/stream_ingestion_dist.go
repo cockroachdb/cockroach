@@ -39,7 +39,7 @@ import (
 )
 
 var replanThreshold = settings.RegisterFloatSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"stream_replication.replan_flow_threshold",
 	"fraction of nodes in the producer or consumer job that would need to change to refresh the"+
 		" physical execution plan. If set to 0, the physical plan will not automatically refresh.",
@@ -48,7 +48,7 @@ var replanThreshold = settings.RegisterFloatSetting(
 )
 
 var replanFrequency = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"stream_replication.replan_flow_frequency",
 	"frequency at which the consumer job checks to refresh its physical execution plan",
 	10*time.Minute,

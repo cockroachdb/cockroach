@@ -36,7 +36,7 @@ import (
 
 // TargetPeriodSetting is exported for testing purposes.
 var TargetPeriodSetting = settings.RegisterDurationSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"tenant_cost_control_period",
 	"target duration between token bucket requests (requires restart)",
 	10*time.Second,
@@ -46,7 +46,7 @@ var TargetPeriodSetting = settings.RegisterDurationSetting(
 
 // CPUUsageAllowance is exported for testing purposes.
 var CPUUsageAllowance = settings.RegisterDurationSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"tenant_cpu_usage_allowance",
 	"this much CPU usage per second is considered background usage and "+
 		"doesn't contribute to consumption; for example, if it is set to 10ms, "+
@@ -59,7 +59,7 @@ var CPUUsageAllowance = settings.RegisterDurationSetting(
 // ExternalIORUAccountingMode controls whether external ingress and
 // egress bytes are included in RU calculations.
 var ExternalIORUAccountingMode = *settings.RegisterStringSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"tenant_external_io_ru_accounting_mode",
 	"controls how external IO RU accounting behaves; allowed values are 'on' (external IO RUs are accounted for and callers wait for RUs), "+
 		"'nowait' (external IO RUs are accounted for but callers do not wait for RUs), "+

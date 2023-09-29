@@ -40,7 +40,7 @@ const (
 // TableStatisticsRetentionPeriod controls the cluster setting for the
 // retention period of statistics that are not collected by default.
 var TableStatisticsRetentionPeriod = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.non_default_columns.min_retention_period",
 	"minimum retention period for table statistics collected on non-default columns",
 	defaultKeepTime,

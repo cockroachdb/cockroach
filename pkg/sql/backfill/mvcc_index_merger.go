@@ -43,7 +43,7 @@ import (
 // indexBackfillMergeBatchSize is the maximum number of rows we attempt to merge
 // in a single transaction during the merging process.
 var indexBackfillMergeBatchSize = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.index_backfill.merge_batch_size",
 	"the number of rows we merge between temporary and adding indexes in a single batch",
 	1000,
@@ -54,7 +54,7 @@ var indexBackfillMergeBatchSize = settings.RegisterIntSetting(
 // merge from the temporary index in a single transaction during the merging
 // process.
 var indexBackfillMergeBatchBytes = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.index_backfill.merge_batch_bytes",
 	"the max number of bytes we merge between temporary and adding indexes in a single batch",
 	16<<20,
@@ -66,7 +66,7 @@ var indexBackfillMergeBatchBytes = settings.RegisterIntSetting(
 // default to 4 as higher values didn't seem to improve the index build times in
 // the schemachange/index/tpcc/w=1000 roachtest.
 var indexBackfillMergeNumWorkers = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.index_backfill.merge_num_workers",
 	"the number of parallel merges per node in the cluster",
 	4,

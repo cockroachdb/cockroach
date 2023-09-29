@@ -53,7 +53,7 @@ import (
 )
 
 var collectTxnStatsSampleRate = settings.RegisterFloatSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.txn_stats.sample_rate",
 	"the probability that a given transaction will collect execution statistics (displayed in the DB Console)",
 	0.01,
@@ -322,7 +322,7 @@ func (c *inFlightTraceCollector) finish() {
 }
 
 var inFlightTraceCollectorPollInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stmt_diagnostics.in_flight_trace_collector.poll_interval",
 	"determines the interval between polling done by the in-flight trace "+
 		"collector for the statement bundle, set to zero to disable",
@@ -331,7 +331,7 @@ var inFlightTraceCollectorPollInterval = settings.RegisterDurationSetting(
 )
 
 var timeoutTraceCollectionEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stmt_diagnostics.timeout_trace_collection.enabled",
 	"determines whether the in-flight trace collection is performed when building "+
 		"the statement bundle if the timeout is detected",

@@ -31,7 +31,7 @@ import (
 const ReportTopHottestRanges = 5
 
 var TelemetryHotRangesStatsInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.telemetry.hot_ranges_stats.interval",
 	"the time interval to log hot ranges stats",
 	4*time.Hour,
@@ -39,14 +39,14 @@ var TelemetryHotRangesStatsInterval = settings.RegisterDurationSetting(
 )
 
 var TelemetryHotRangesStatsEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.telemetry.hot_ranges_stats.enabled",
 	"enable/disable capturing hot ranges statistics to the telemetry logging channel",
 	true,
 )
 
 var TelemetryHotRangesStatsLoggingDelay = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.telemetry.hot_ranges_stats.logging_delay",
 	"the time delay between emitting individual hot ranges stats logs",
 	1*time.Second,

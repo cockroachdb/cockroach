@@ -1770,7 +1770,7 @@ func (t *logicTest) newCluster(
 	}
 
 	for settingName, value := range toa.clusterSettings {
-		t.waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal(
+		t.waitForSystemVisibleClusterSettingToTakeEffectOrFatal(
 			settingName, value, params.ServerArgs.Insecure,
 		)
 	}
@@ -1778,10 +1778,10 @@ func (t *logicTest) newCluster(
 	t.setSessionUser(username.RootUser, 0 /* nodeIdx */, false /* newSession */)
 }
 
-// waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal waits until all tenant
+// waitForSystemVisibleClusterSettingToTakeEffectOrFatal waits until all tenant
 // servers are aware about the supplied setting's expected value. Fatal's if
 // this doesn't happen within the SucceedsSoonDuration.
-func (t *logicTest) waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal(
+func (t *logicTest) waitForSystemVisibleClusterSettingToTakeEffectOrFatal(
 	settingName string, expValue string, insecure bool,
 ) {
 	// Wait until all tenant servers are aware of the setting override.

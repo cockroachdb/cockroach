@@ -697,7 +697,7 @@ func (s *cloudStorageSink) setDataFileTimestamp() {
 
 // enableAsyncFlush controls async flushing behavior for this sink.
 var enableAsyncFlush = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.cloudstorage.async_flush.enabled",
 	"enable async flushing",
 	true,

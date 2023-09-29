@@ -28,14 +28,14 @@ import (
 // RemoteSSTs lets external SSTables get iterated directly in some cases,
 // rather than being downloaded entirely first.
 var remoteSSTs = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.bulk_ingest.stream_external_ssts.enabled",
 	"if enabled, external SSTables are iterated directly in some cases, rather than being downloaded entirely first",
 	true,
 )
 
 var remoteSSTSuffixCacheSize = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.bulk_ingest.stream_external_ssts.suffix_cache_size",
 	"size of suffix of remote SSTs to download and cache before reading from remote stream",
 	64<<10,

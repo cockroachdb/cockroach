@@ -73,21 +73,21 @@ func registerLimiterSettings(providerType cloudpb.ExternalStorageProvider) {
 
 	limiterSettings[providerType] = readAndWriteSettings{
 		read: rateAndBurstSettings{
-			rate: settings.RegisterByteSizeSetting(settings.TenantWritable, readRateName,
+			rate: settings.RegisterByteSizeSetting(settings.ApplicationLevel, readRateName,
 				"limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero",
 				0,
 			),
-			burst: settings.RegisterByteSizeSetting(settings.TenantWritable, readBurstName,
+			burst: settings.RegisterByteSizeSetting(settings.ApplicationLevel, readBurstName,
 				"burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero",
 				0,
 			),
 		},
 		write: rateAndBurstSettings{
-			rate: settings.RegisterByteSizeSetting(settings.TenantWritable, writeRateName,
+			rate: settings.RegisterByteSizeSetting(settings.ApplicationLevel, writeRateName,
 				"limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero",
 				0,
 			),
-			burst: settings.RegisterByteSizeSetting(settings.TenantWritable, writeBurstName,
+			burst: settings.RegisterByteSizeSetting(settings.ApplicationLevel, writeBurstName,
 				"burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero",
 				0,
 			),

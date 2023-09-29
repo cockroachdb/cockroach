@@ -436,28 +436,28 @@ func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 }
 
 var schedulerEnabledSetting = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"jobs.scheduler.enabled",
 	"enable/disable job scheduler",
 	true,
 )
 
 var schedulerPaceSetting = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"jobs.scheduler.pace",
 	"how often to scan system.scheduled_jobs table",
 	time.Minute,
 )
 
 var schedulerMaxJobsPerIterationSetting = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"jobs.scheduler.max_jobs_per_iteration",
 	"how many schedules to start per iteration; setting to 0 turns off this limit",
 	5,
 )
 
 var schedulerScheduleExecutionTimeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"jobs.scheduler.schedule_execution.timeout",
 	"sets a timeout on for schedule execution; 0 disables timeout",
 	30*time.Second,

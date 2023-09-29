@@ -36,7 +36,7 @@ const CacheEnabledSettingName = "server.authentication_cache.enabled"
 // CacheEnabled is a cluster setting that determines if the
 // sessioninit.Cache and associated logic is enabled.
 var CacheEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	CacheEnabledSettingName,
 	"enables a cache used during authentication to avoid lookups to system tables "+
 		"when retrieving per-user authentication-related information",

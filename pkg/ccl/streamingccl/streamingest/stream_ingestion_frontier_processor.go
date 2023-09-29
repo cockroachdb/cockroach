@@ -39,7 +39,7 @@ import (
 // JobCheckpointFrequency controls the frequency of frontier checkpoints into
 // the jobs table.
 var JobCheckpointFrequency = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"stream_replication.job_checkpoint_frequency",
 	"controls the frequency with which partitions update their progress; if 0, disabled",
 	10*time.Second,
@@ -52,7 +52,7 @@ var JobCheckpointFrequency = settings.RegisterDurationSetting(
 // TODO(adityamaru): This timer should be removed once each job is aware of whether
 // it is profiling or not.
 var DumpFrontierEntries = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"stream_replication.dump_frontier_entries_frequency",
 	"controls the frequency with which the frontier entries are persisted; if 0, disabled",
 	10*time.Minute,
