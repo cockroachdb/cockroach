@@ -22,6 +22,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"math/rand"
 	"net"
 	"net/url"
 	"path/filepath"
@@ -56,7 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"golang.org/x/exp/rand"
 	"golang.org/x/oauth2/clientcredentials"
 )
 
@@ -285,7 +285,7 @@ func (ct *cdcTester) runTPCCWorkload(args tpccArgs) {
 	if !ct.t.SkipInit() {
 		ct.t.Status("installing TPCC workload")
 		tpcc.install(ct.ctx, ct.cluster)
-		if args.SchemaLockTables.enabled() {
+		if args.SchemaLockTables.enabled(globalEnthropy) == featureEnabled {
 			ct.t.Status(fmt.Sprintf("Setting schema_locked for %s", allTpccTargets))
 			ct.lockSchema(allTpccTargets)
 		}
@@ -392,32 +392,55 @@ var allLedgerTargets []string = []string{
 	`ledger.session`,
 }
 
-type featureFlag int
+type featureFlag struct {
+	v *featureState
+}
 
-const (
-	metamorphicFlag featureFlag = iota
-	featureDisabled
-	featureEnabled
+type featureState int
+
+var (
+	featureUnset    featureState = 0
+	featureDisabled featureState = 1
+	featureEnabled  featureState = 2
 )
 
-func (f featureFlag) enabled() bool {
-	switch f {
-	case metamorphicFlag:
+func (s featureState) bool() bool {
+	return s == featureEnabled
+}
+
+type enthropy struct {
+	*rand.Rand
+}
+
+func (r *enthropy) Bool() bool {
+	if r.Rand == nil {
 		return rand.Int()%2 == 0
-	case featureEnabled:
-		return true
-	case featureDisabled:
-		return false
-	default:
-		panic("invalid feature flag value")
 	}
+	return r.Rand.Int()%2 == 0
+}
+
+var globalRand *rand.Rand
+var globalEnthropy enthropy
+
+func (f *featureFlag) enabled(r enthropy) featureState {
+	if f.v != nil {
+		return *f.v
+	}
+
+	if r.Bool() {
+		f.v = &featureEnabled
+		return featureEnabled
+	}
+	f.v = &featureDisabled
+	return featureDisabled
 }
 
 // cdcFeatureFlags describes various cdc feature flags.
 // zero value cdcFeatureFlags uses metamorphic settings for features.
 type cdcFeatureFlags struct {
-	MuxRangefeed     featureFlag
-	SchemaLockTables featureFlag
+	MuxRangefeed       featureFlag
+	RangeFeedScheduler featureFlag
+	SchemaLockTables   featureFlag
 }
 
 func makeDefaultFeatureFlags() cdcFeatureFlags {
@@ -473,7 +496,7 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 		args.sinkType, args.targets, feedOptions,
 	))
 	db := ct.DB()
-	jobID, err := newChangefeedCreator(db, ct.logger, targetsStr, sinkURI, makeDefaultFeatureFlags()).
+	jobID, err := newChangefeedCreator(db, ct.logger, globalRand, targetsStr, sinkURI, makeDefaultFeatureFlags()).
 		With(feedOptions).Create()
 	if err != nil {
 		ct.t.Fatalf("failed to create changefeed: %s", err.Error())
@@ -690,7 +713,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"min_checkpoint_frequency": "'2s'",
 		"diff":                     "",
 	}
-	_, err := newChangefeedCreator(db, t.L(), "bank.bank", kafka.sinkURL(ctx), makeDefaultFeatureFlags()).
+	_, err := newChangefeedCreator(db, t.L(), globalRand, "bank.bank", kafka.sinkURL(ctx), makeDefaultFeatureFlags()).
 		With(options).
 		Create()
 	if err != nil {
@@ -855,7 +878,7 @@ func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"diff":                      "",
 	}
 
-	_, err := newChangefeedCreator(db, t.L(), "foo", kafka.sinkURL(ctx), makeDefaultFeatureFlags()).
+	_, err := newChangefeedCreator(db, t.L(), globalRand, "foo", kafka.sinkURL(ctx), makeDefaultFeatureFlags()).
 		With(options).
 		Args(kafka.schemaRegistryURL(ctx)).
 		Create()
@@ -1002,7 +1025,7 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	for _, f := range feeds {
 		t.Status(f.desc)
-		_, err := newChangefeedCreator(db, t.L(), "auth_test_table", f.queryArg, makeDefaultFeatureFlags()).Create()
+		_, err := newChangefeedCreator(db, t.L(), globalRand, "auth_test_table", f.queryArg, makeDefaultFeatureFlags()).Create()
 		if err != nil {
 			t.Fatalf("%s: %s", f.desc, err.Error())
 		}
@@ -2454,17 +2477,19 @@ func (lw *ledgerWorkload) run(ctx context.Context, c cluster.Cluster, workloadDu
 // changefeedCreator wraps the process of creating a changefeed with
 // different options and sinks
 type changefeedCreator struct {
-	db        *gosql.DB
-	logger    *logger.Logger
-	targets   string
-	sinkURL   string
-	options   map[string]string
-	extraArgs []interface{}
-	useMux    bool
+	db              *gosql.DB
+	logger          *logger.Logger
+	targets         string
+	sinkURL         string
+	options         map[string]string
+	extraArgs       []interface{}
+	flags           cdcFeatureFlags
+	rng             enthropy
+	settingsApplied bool
 }
 
 func newChangefeedCreator(
-	db *gosql.DB, logger *logger.Logger, targets, sinkURL string, flags cdcFeatureFlags,
+	db *gosql.DB, logger *logger.Logger, r *rand.Rand, targets, sinkURL string, flags cdcFeatureFlags,
 ) *changefeedCreator {
 	return &changefeedCreator{
 		db:      db,
@@ -2472,7 +2497,8 @@ func newChangefeedCreator(
 		targets: targets,
 		sinkURL: sinkURL,
 		options: make(map[string]string),
-		useMux:  flags.MuxRangefeed.enabled(),
+		flags:   flags,
+		rng:     enthropy{Rand: r},
 	}
 }
 
@@ -2495,17 +2521,44 @@ func (cfc *changefeedCreator) Args(args ...interface{}) *changefeedCreator {
 	return cfc
 }
 
+// applySettings aplies various settings to the cluster -- once per the
+// lifetime of changefeedCreator
+func (cfc *changefeedCreator) applySettings() error {
+	if cfc.settingsApplied {
+		return nil
+	}
+	// kv.rangefeed.enabled is required for changefeeds to run
+	if _, err := cfc.db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
+		return err
+	}
+
+	muxEnabled := cfc.flags.MuxRangefeed.enabled(cfc.rng)
+	if muxEnabled != featureUnset {
+		cfc.logger.Printf("Setting changefeed.mux_rangefeed.enabled to %t", muxEnabled.bool())
+		if _, err := cfc.db.Exec(
+			"SET CLUSTER SETTING changefeed.mux_rangefeed.enabled = $1", muxEnabled.bool(),
+		); err != nil {
+			return err
+		}
+	}
+
+	schedEnabled := cfc.flags.RangeFeedScheduler.enabled(cfc.rng)
+	if schedEnabled != featureUnset {
+		cfc.logger.Printf("Setting kv.rangefeed.scheduler.enabled to %t", schedEnabled.bool())
+		if _, err := cfc.db.Exec(
+			"SET CLUSTER SETTING kv.rangefeed.scheduler.enabled = $1", schedEnabled.bool(),
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Create builds the SQL statement that creates the changefeed job,
 // and executes it. Returns the job ID corresponding to the
 // changefeed, and any errors that occurred in the process
 func (cfc *changefeedCreator) Create() (int, error) {
-	// kv.rangefeed.enabled is required for changefeeds to run
-	if _, err := cfc.db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
-		return -1, err
-	}
-
-	cfc.logger.Printf("Setting changefeed.mux_rangefeed.enabled to %t", cfc.useMux)
-	if _, err := cfc.db.Exec("SET CLUSTER SETTING changefeed.mux_rangefeed.enabled = $1", cfc.useMux); err != nil {
+	if err := cfc.applySettings(); err != nil {
 		return -1, err
 	}
 
