@@ -950,7 +950,7 @@ func PgURL(
 		if ip == "" {
 			return nil, errors.Errorf("empty ip: %v", ips)
 		}
-		urls = append(urls, c.NodeURL(ip, desc.Port, opts.VirtualClusterName))
+		urls = append(urls, c.NodeURL(ip, desc.Port, opts.VirtualClusterName, desc.ServiceMode))
 	}
 	if len(urls) != len(nodes) {
 		return nil, errors.Errorf("have nodes %v, but urls %v from ips %v", nodes, urls, ips)
