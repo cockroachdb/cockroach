@@ -437,7 +437,7 @@ SIGHUP), unless you also configure --max-wait.
 }
 
 var startInstanceCmd = &cobra.Command{
-	Use:   "start-sql --storage-cluster <storage-cluster> [--external-cluster <virtual-cluster-nodes]",
+	Use:   "start-sql <name> --storage-cluster <storage-cluster> [--external-cluster <virtual-cluster-nodes]",
 	Short: "start the SQL/HTTP service for a virtual cluster as a separate process",
 	Long: `Start SQL/HTTP instances for a virtual cluster as separate processes.
 
@@ -446,8 +446,6 @@ The --storage-cluster flag must be used to specify a storage cluster
 will create the virtual cluster on the storage cluster if it does not
 exist already.  If creating multiple virtual clusters on the same
 node, the --sql-instance flag must be passed to differentiate them.
-
-The --cluster-id flag can be used to specify the tenant ID; it defaults to 2.
 
 The instance is started in shared process (in memory) mode by
 default. To start an external process instance, pass the
@@ -471,7 +469,7 @@ The --args and --env flags can be used to pass arbitrary command line flags and
 environment variables to the cockroach process.
 ` + tagHelp + `
 `,
-	Args: cobra.NoArgs,
+	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		clusterSettingsOpts := []install.ClusterSettingOption{
 			install.TagOption(tag),
@@ -497,13 +495,14 @@ environment variables to the cockroach process.
 			startOpts.Target = install.StartServiceForVirtualCluster
 		}
 
+		startOpts.VirtualClusterName = args[0]
 		return roachprod.StartServiceForVirtualCluster(context.Background(),
 			config.Logger, externalProcessNodes, storageCluster, startOpts, clusterSettingsOpts...)
 	}),
 }
 
 var stopInstanceCmd = &cobra.Command{
-	Use:   "stop-sql <cluster> --cluster-id <id> --sql-instance <instance> [--sig] [--wait]",
+	Use:   "stop-sql <cluster> --cluster <name> --sql-instance <instance> [--sig] [--wait]",
 	Short: "stop sql instances on a cluster",
 	Long: `Stop sql instances on a cluster.
 
@@ -525,11 +524,11 @@ non-terminating signal (e.g. SIGHUP), unless you also configure --max-wait.
 			wait = true
 		}
 		stopOpts := roachprod.StopOpts{
-			Wait:             wait,
-			MaxWait:          maxWait,
-			Sig:              sig,
-			VirtualClusterID: virtualClusterID,
-			SQLInstance:      sqlInstance,
+			Wait:               wait,
+			MaxWait:            maxWait,
+			Sig:                sig,
+			VirtualClusterName: virtualClusterName,
+			SQLInstance:        sqlInstance,
 		}
 		clusterName := args[0]
 		return roachprod.StopServiceForVirtualCluster(context.Background(), config.Logger, clusterName, stopOpts)

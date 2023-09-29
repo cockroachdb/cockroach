@@ -49,7 +49,6 @@ var (
 	secure                = false
 	virtualClusterName    string
 	sqlInstance           int
-	virtualClusterID      int
 	extraSSHOptions       = ""
 	nodeEnv               []string
 	tag                   string
@@ -212,8 +211,6 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 
 	startInstanceCmd.Flags().StringVarP(&storageCluster, "storage-cluster", "S", "", "storage cluster")
 	_ = startInstanceCmd.MarkFlagRequired("storage-cluster")
-	startInstanceCmd.Flags().IntVarP(&startOpts.VirtualClusterID,
-		"cluster-id", "i", startOpts.VirtualClusterID, "internal ID for the virtual cluster")
 	startInstanceCmd.Flags().IntVar(&startOpts.SQLInstance,
 		"sql-instance", 0, "specific SQL/HTTP instance to connect to (this is a roachprod abstraction for separate-process deployments distinct from the internal instance ID)")
 	startInstanceCmd.Flags().StringVar(&externalProcessNodes, "external-cluster", externalProcessNodes, "start service in external mode, as a separate process in the given nodes")
@@ -224,9 +221,6 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 		stopProcessesCmd.Flags().BoolVar(&waitFlag, "wait", waitFlag, "wait for processes to exit")
 		stopProcessesCmd.Flags().IntVar(&maxWait, "max-wait", maxWait, "approx number of seconds to wait for processes to exit")
 	}
-
-	stopInstanceCmd.Flags().IntVarP(&virtualClusterID, "cluster-id", "t", virtualClusterID, "internal ID for the virtual cluster")
-	stopInstanceCmd.Flags().IntVar(&sqlInstance, "sql-instance", 0, "specific SQL/HTTP instance to stop")
 
 	syncCmd.Flags().BoolVar(&listOpts.IncludeVolumes, "include-volumes", false, "Include volumes when syncing")
 
@@ -355,7 +349,7 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 		cmd.Flags().BoolVar(&secure,
 			"secure", false, "use a secure cluster")
 	}
-	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd, adminurlCmd} {
+	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd, adminurlCmd, stopInstanceCmd} {
 		cmd.Flags().StringVar(&virtualClusterName,
 			"cluster", "", "specific virtual cluster to connect to")
 		cmd.Flags().IntVar(&sqlInstance,
