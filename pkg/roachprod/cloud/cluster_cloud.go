@@ -12,6 +12,7 @@ package cloud
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"regexp"
 	"sort"
@@ -280,19 +281,20 @@ func CreateCluster(
 
 // DestroyCluster TODO(peter): document
 func DestroyCluster(l *logger.Logger, c *Cluster) error {
-	err := vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
+	// DNS entries are destroyed first to ensure that the GC job will not try
+	// and clean-up entries prematurely.
+	dnsErr := vm.FanOutDNS(c.VMs, func(p vm.DNSProvider, vms vm.List) error {
+		return p.DeleteRecordsBySubdomain(context.Background(), c.Name)
+	})
+	// Allow both DNS and VM operations to run before returning any errors.
+	clusterErr := vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
 		// Enable a fast-path for providers that can destroy a cluster in one shot.
 		if x, ok := p.(vm.DeleteCluster); ok {
 			return x.DeleteCluster(l, c.Name)
 		}
 		return p.Delete(l, vms)
 	})
-	if err != nil {
-		return err
-	}
-	return vm.FanOutDNS(c.VMs, func(p vm.DNSProvider, vms vm.List) error {
-		return p.DeleteRecordsBySubdomain(c.Name)
-	})
+	return errors.CombineErrors(dnsErr, clusterErr)
 }
 
 // ExtendCluster TODO(peter): document
