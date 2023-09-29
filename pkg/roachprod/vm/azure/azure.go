@@ -15,6 +15,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"strconv"
@@ -46,6 +47,8 @@ const (
 
 // providerInstance is the instance to be registered into vm.Providers by Init.
 var providerInstance = &Provider{}
+
+var envSubscriptionID = os.Getenv("AZURE_SUBSCRIPTION_ID")
 
 // Init registers the Azure provider with vm.Providers.
 //
@@ -159,12 +162,12 @@ func getAzureDefaultLabelMap(opts vm.CreateOpts) map[string]string {
 }
 
 func (p *Provider) AddLabels(l *logger.Logger, vms vm.List, labels map[string]string) error {
-	l.Printf("adding labels to Azure VMs not yet supported")
+	log.Printf("adding labels to Azure VMs not yet supported")
 	return nil
 }
 
 func (p *Provider) RemoveLabels(l *logger.Logger, vms vm.List, labels []string) error {
-	l.Printf("removing labels from Azure VMs not yet supported")
+	log.Printf("removing labels from Azure VMs not yet supported")
 	return nil
 }
 
@@ -240,8 +243,7 @@ func (p *Provider) Create(
 			location := providerOpts.Locations[locIdx]
 
 			// Create a resource group within the location.
-			group, err := p.getOrCreateResourceGroup(
-				ctx, getClusterResourceGroupName(location), location, clusterTags)
+			group, err := p.getOrCreateResourceGroup(ctx, getClusterResourceGroupName(location), location, clusterTags)
 			if err != nil {
 				return err
 			}
@@ -1015,6 +1017,19 @@ func (p *Provider) getOrCreateNetworkSecurityGroup(
 						DestinationPortRange:     to.StringPtr("9090"),
 					},
 				},
+				{
+					Name: to.StringPtr("Kafka_Inbound"),
+					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+						Priority:                 to.Int32Ptr(346),
+						Protocol:                 network.SecurityRuleProtocolTCP,
+						Access:                   network.SecurityRuleAccessAllow,
+						Direction:                network.SecurityRuleDirectionInbound,
+						SourceAddressPrefix:      to.StringPtr("*"),
+						SourcePortRange:          to.StringPtr("*"),
+						DestinationAddressPrefix: to.StringPtr("*"),
+						DestinationPortRange:     to.StringPtr("9092"),
+					},
+				},
 			},
 		},
 		Location: resourceGroup.Location,
@@ -1050,6 +1065,9 @@ func (p *Provider) createVNets(
 	}
 
 	groupsClient := resources.NewGroupsClient(*sub.SubscriptionID)
+	if groupsClient.Authorizer, err = p.getAuthorizer(); err != nil {
+		return nil, err
+	}
 
 	vnetResourceGroupTags := make(map[string]*string)
 	vnetResourceGroupTags[tagComment] = to.StringPtr("DO NOT DELETE: Used by all roachprod clusters")
@@ -1478,8 +1496,11 @@ func (p *Provider) createUltraDisk(
 	return disk, err
 }
 
-// getSubscription chooses the first available subscription. The value
-// is memoized in the Provider instance.
+// getSubscription chooses the subscription matching env.AZURE_SUBSCRIPTION_ID
+// If env.AZURE_SUBSCRIPTION_ID does not exist, it will return the first result.
+// The Azure CLI allows users to set a default subscription, however, the
+// current API does not read the relevant attribute.
+// The value is memoized in the Provider instance.
 func (p *Provider) getSubscription(
 	ctx context.Context,
 ) (sub subscriptions.Subscription, err error) {
@@ -1498,18 +1519,26 @@ func (p *Provider) getSubscription(
 		return
 	}
 
-	page, err := sc.List(ctx)
-	if err == nil {
-		if len(page.Values()) == 0 {
-			err = errors.New("did not find Azure subscription")
-			return sub, err
+	for list, e := sc.ListComplete(ctx); list.NotDone(); err = list.NextWithContext(ctx) {
+		if e != nil {
+			err = e
+			return
 		}
-		sub = page.Values()[0]
 
-		p.mu.Lock()
-		defer p.mu.Unlock()
-		p.mu.subscription = page.Values()[0]
+		sub = list.Value()
+		if envSubscriptionID == "" {
+			log.Printf("env.AZURE_SUBSCRIPTION_ID not found, returning first subscription")
+			break
+		}
+		if sub.SubscriptionID == &envSubscriptionID {
+			log.Printf("returning subscription matching env.AZURE_SUBSCRIPTION_ID")
+			break
+		}
 	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.mu.subscription = sub
 	return
 }
 

@@ -297,7 +297,8 @@ func DefaultCreateOpts() CreateOpts {
 		Lifetime:       12 * time.Hour,
 		GeoDistributed: false,
 		VMProviders:    []string{},
-		OsVolumeSize:   10,
+		// This is the minimum
+		OsVolumeSize: 32,
 		// N.B. When roachprod is used via CLI, this will be overridden by {"roachprod":"true"}.
 		CustomLabels: map[string]string{"roachtest": "true"},
 	}
