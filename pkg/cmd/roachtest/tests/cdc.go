@@ -392,32 +392,33 @@ var allLedgerTargets []string = []string{
 	`ledger.session`,
 }
 
-type featureFlag int
+type featureFlag struct {
+	v *bool
+}
 
-const (
-	metamorphicFlag featureFlag = iota
-	featureDisabled
-	featureEnabled
+var (
+	featureDisabled = false
+	featureEnabled  = true
 )
 
-func (f featureFlag) enabled() bool {
-	switch f {
-	case metamorphicFlag:
-		return rand.Int()%2 == 0
-	case featureEnabled:
-		return true
-	case featureDisabled:
-		return false
-	default:
-		panic("invalid feature flag value")
+func (f *featureFlag) enabled() bool {
+	if f.v != nil {
+		return *f.v
 	}
+	if rand.Int()%2 == 0 {
+		f.v = &featureEnabled
+		return true
+	}
+	f.v = &featureDisabled
+	return false
 }
 
 // cdcFeatureFlags describes various cdc feature flags.
 // zero value cdcFeatureFlags uses metamorphic settings for features.
 type cdcFeatureFlags struct {
-	MuxRangefeed     featureFlag
-	SchemaLockTables featureFlag
+	MuxRangefeed       featureFlag
+	RangeFeedScheduler featureFlag
+	SchemaLockTables   featureFlag
 }
 
 func makeDefaultFeatureFlags() cdcFeatureFlags {
@@ -2371,7 +2372,7 @@ type changefeedCreator struct {
 	sinkURL   string
 	options   map[string]string
 	extraArgs []interface{}
-	useMux    bool
+	flags     cdcFeatureFlags
 }
 
 func newChangefeedCreator(
@@ -2383,7 +2384,7 @@ func newChangefeedCreator(
 		targets: targets,
 		sinkURL: sinkURL,
 		options: make(map[string]string),
-		useMux:  flags.MuxRangefeed.enabled(),
+		flags:   flags,
 	}
 }
 
@@ -2415,8 +2416,16 @@ func (cfc *changefeedCreator) Create() (int, error) {
 		return -1, err
 	}
 
-	cfc.logger.Printf("Setting changefeed.mux_rangefeed.enabled to %t", cfc.useMux)
-	if _, err := cfc.db.Exec("SET CLUSTER SETTING changefeed.mux_rangefeed.enabled = $1", cfc.useMux); err != nil {
+	cfc.logger.Printf("Setting changefeed.mux_rangefeed.enabled to %t", cfc.flags.MuxRangefeed.enabled())
+	if _, err := cfc.db.Exec(
+		"SET CLUSTER SETTING changefeed.mux_rangefeed.enabled = $1", cfc.flags.MuxRangefeed.enabled(),
+	); err != nil {
+		return -1, err
+	}
+	cfc.logger.Printf("Setting kv.rangefeed.scheduler.enabled to %t", cfc.flags.RangeFeedScheduler.enabled())
+	if _, err := cfc.db.Exec(
+		"SET CLUSTER SETTING kv.rangefeed.scheduler.enabled = $1", cfc.flags.RangeFeedScheduler.enabled(),
+	); err != nil {
 		return -1, err
 	}
 

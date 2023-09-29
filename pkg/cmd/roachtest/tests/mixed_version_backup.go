@@ -87,15 +87,6 @@ var (
 		MaxRetries:     80,
 	}
 
-	v231 = version.MustParse("v23.1.0")
-	v222 = version.MustParse("v22.2.0")
-
-	// minActivelySupportedVersion is the minimum cluster version that
-	// should be active for this test to perform any backups or
-	// restores. We are only interested in releases where we are still
-	// actively fixing bugs in patch releases.
-	minActivelySupportedVersion = v222
-
 	// systemTablesInFullClusterBackup includes all system tables that
 	// are included as part of a full cluster backup. It should include
 	// every table that opts-in to cluster backup (see `system_schema.go`).

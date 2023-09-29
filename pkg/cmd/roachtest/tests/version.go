@@ -27,6 +27,18 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+var (
+	v232 = version.MustParse("v23.2.0")
+	v231 = version.MustParse("v23.1.0")
+	v222 = version.MustParse("v22.2.0")
+
+	// minActivelySupportedVersion is the minimum cluster version that
+	// should be active for this test to perform any backups or
+	// restores. We are only interested in releases where we are still
+	// actively fixing bugs in patch releases.
+	minActivelySupportedVersion = v222
+)
+
 // TODO(tbg): remove this test. Use the harness in versionupgrade.go
 // to make a much better one, much more easily.
 func registerVersion(r registry.Registry) {
