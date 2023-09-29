@@ -107,10 +107,7 @@ func (s *SQLStats) GetApplicationStats(appName string, internal bool) sqlstats.A
 	}
 	a := ssmemstorage.New(
 		s.st,
-		s.uniqueStmtFingerprintLimit,
-		s.uniqueTxnFingerprintLimit,
-		&s.atomic.uniqueStmtFingerprintCount,
-		&s.atomic.uniqueTxnFingerprintCount,
+		s.atomic,
 		s.mu.mon,
 		appName,
 		s.knobs,
