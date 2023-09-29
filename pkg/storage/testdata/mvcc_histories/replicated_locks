@@ -631,6 +631,7 @@ resolve_intent t=A k=k1 status=COMMITTED
 ----
 >> resolve_intent t=A k=k1 status=COMMITTED
 resolve_intent: "k1" -> resolved key = true
+resolve_intent: released shared or exclusive locks
 stats: lock_count=-1 lock_bytes=-69 lock_age=-90
 >> at end:
 data: "k1"/5.000000000,0 -> /BYTES/v1
@@ -670,6 +671,7 @@ resolve_intent t=A k=k1 status=ABORTED
 ----
 >> resolve_intent t=A k=k1 status=ABORTED
 resolve_intent: "k1" -> resolved key = true
+resolve_intent: released shared or exclusive locks
 stats: lock_count=-1 lock_bytes=-71 lock_age=-90
 >> at end:
 data: "k1"/5.000000000,0 -> /BYTES/v1
@@ -711,6 +713,7 @@ with t=A
 ----
 >> resolve_intent k=k1 status=PENDING t=A
 resolve_intent: "k1" -> resolved key = true
+resolve_intent: released shared or exclusive locks
 stats: lock_count=-1 lock_bytes=-71 lock_age=-90
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
@@ -839,6 +842,7 @@ with t=A
 ----
 >> resolve_intent k=k1 status=PENDING t=A
 resolve_intent: "k1" -> resolved key = true
+resolve_intent: released shared or exclusive locks
 stats: lock_count=-1 lock_bytes=-69 lock_age=-90
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=2 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
@@ -865,6 +869,7 @@ resolve_intent_range t=A k=k2 end=k5 status=COMMITTED
 ----
 >> resolve_intent_range t=A k=k2 end=k5 status=COMMITTED
 resolve_intent_range: "k2"-"k5" -> resolved 3 key(s)
+resolve_intent_range: released shared or exclusive locks
 stats: key_count=-1 key_bytes=-39 val_count=-3 val_bytes=-202 live_count=+1 live_bytes=-47 gc_bytes_age=-17460 intent_count=-3 intent_bytes=-49 lock_count=-7 lock_bytes=-278 lock_age=-630
 >> at end:
 data: "k1"/5.000000000,0 -> /BYTES/v1
@@ -879,6 +884,7 @@ resolve_intent t=B k=k1 status=ABORTED
 ----
 >> resolve_intent t=B k=k1 status=ABORTED
 resolve_intent: "k1" -> resolved key = true
+resolve_intent: released shared or exclusive locks
 stats: lock_count=-1 lock_bytes=-67 lock_age=-89
 >> at end:
 data: "k1"/5.000000000,0 -> /BYTES/v1

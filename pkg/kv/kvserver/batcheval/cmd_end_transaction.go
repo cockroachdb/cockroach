@@ -595,7 +595,7 @@ func resolveLocalLocksWithPagination(
 			//
 			// Note that the underlying pebbleIterator will still be reused
 			// since readWriter is a pebbleBatch in the typical case.
-			ok, numBytes, resumeSpan, err := storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update,
+			ok, numBytes, resumeSpan, _, err := storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update,
 				storage.MVCCResolveWriteIntentOptions{TargetBytes: targetBytes})
 			if err != nil {
 				return 0, 0, 0, errors.Wrapf(err, "resolving write intent at %s on end transaction [%s]", span, txn.Status)
@@ -630,8 +630,10 @@ func resolveLocalLocksWithPagination(
 		externalLocks = append(externalLocks, outSpans...)
 		if inSpan != nil {
 			update.Span = *inSpan
-			numKeys, numBytes, resumeSpan, resumeReason, err := storage.MVCCResolveWriteIntentRange(ctx, readWriter, ms, update,
-				storage.MVCCResolveWriteIntentRangeOptions{MaxKeys: maxKeys, TargetBytes: targetBytes})
+			numKeys, numBytes, resumeSpan, resumeReason, _, err :=
+				storage.MVCCResolveWriteIntentRange(ctx, readWriter, ms, update,
+					storage.MVCCResolveWriteIntentRangeOptions{MaxKeys: maxKeys, TargetBytes: targetBytes},
+				)
 			if err != nil {
 				return 0, 0, 0, errors.Wrapf(err, "resolving write intent range at %s on end transaction [%s]", span, txn.Status)
 			}

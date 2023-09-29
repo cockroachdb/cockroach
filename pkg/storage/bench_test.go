@@ -339,7 +339,7 @@ func setupKeysWithIntent(
 					// is not one that should be resolved.
 					continue
 				}
-				found, _, _, err := MVCCResolveWriteIntent(context.Background(), batch, nil, lu, MVCCResolveWriteIntentOptions{})
+				found, _, _, _, err := MVCCResolveWriteIntent(context.Background(), batch, nil, lu, MVCCResolveWriteIntentOptions{})
 				require.Equal(b, true, found)
 				require.NoError(b, err)
 			}
@@ -567,7 +567,7 @@ func BenchmarkIntentResolution(b *testing.B) {
 							b.StartTimer()
 						}
 						lockUpdate.Key = keys[i%numIntentKeys]
-						found, _, _, err := MVCCResolveWriteIntent(context.Background(), batch, nil, lockUpdate, MVCCResolveWriteIntentOptions{})
+						found, _, _, _, err := MVCCResolveWriteIntent(context.Background(), batch, nil, lockUpdate, MVCCResolveWriteIntentOptions{})
 						if !found || err != nil {
 							b.Fatalf("intent not found or err %s", err)
 						}
@@ -627,7 +627,7 @@ func BenchmarkIntentRangeResolution(b *testing.B) {
 										rangeNum := i % numRanges
 										lockUpdate.Key = keys[rangeNum*numKeysPerRange]
 										lockUpdate.EndKey = keys[(rangeNum+1)*numKeysPerRange]
-										resolved, _, span, _, err := MVCCResolveWriteIntentRange(
+										resolved, _, span, _, _, err := MVCCResolveWriteIntentRange(
 											context.Background(), batch, nil, lockUpdate,
 											MVCCResolveWriteIntentRangeOptions{MaxKeys: 1000})
 										if err != nil {
@@ -1901,7 +1901,7 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 			key := makeKey(nil, j)
 			lu := lockUpdate
 			lu.Key = key
-			found, _, _, err := MVCCResolveWriteIntent(
+			found, _, _, _, err := MVCCResolveWriteIntent(
 				ctx, batch, nil, lu, MVCCResolveWriteIntentOptions{})
 			require.Equal(b, true, found)
 			require.NoError(b, err)
