@@ -469,7 +469,9 @@ func (h *plpgsqlCursorHelper) Close() error {
 		h.iter.Close()
 		h.iter = nil
 	}
-	h.container.Close(h.ctx)
+	// TODO(#111485): use proper context, perhaps by changing `Close` signature
+	// to take it.
+	h.container.Close(context.Background())
 	return h.lastErr
 }
 
