@@ -62,6 +62,10 @@ const (
 
 type noOIDCConfigured struct{}
 
+func (c *noOIDCConfigured) GetBasePathForTest() string {
+	return ""
+}
+
 var _ ui.OIDCUI = &noOIDCConfigured{}
 
 func (c *noOIDCConfigured) GetOIDCConf() ui.OIDCUIConf {
@@ -74,6 +78,7 @@ func (c *noOIDCConfigured) GetOIDCConf() ui.OIDCUIConf {
 // the rest of the node's functionality
 type OIDC interface {
 	ui.OIDCUI
+	GetBasePathForTest() string
 }
 
 // ConfigureOIDC is a hook for the `oidcccl` library to add OIDC login support. It's called during
