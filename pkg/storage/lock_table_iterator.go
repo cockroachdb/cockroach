@@ -59,7 +59,8 @@ import (
 // is essential to avoiding quadratic behavior during shared lock acquisition
 // and release.
 type LockTableIterator struct {
-	iter EngineIterator
+	iter   EngineIterator
+	prefix bool
 	// If set, return locks with any strength held by this transaction.
 	matchTxnID uuid.UUID
 	// If set, return locks held by any transaction with this strength or
@@ -133,6 +134,7 @@ func NewLockTableIterator(
 	ltIter := lockTableIteratorPool.Get().(*LockTableIterator)
 	*ltIter = LockTableIterator{
 		iter:            iter,
+		prefix:          opts.Prefix,
 		matchTxnID:      opts.MatchTxnID,
 		matchMinStr:     opts.MatchMinStr,
 		itersBeforeSeek: ltIter.itersBeforeSeek,
@@ -320,6 +322,27 @@ func (i *LockTableIterator) advanceToMatchingLock(
 					ltKey.TxnUUID = i.matchTxnID
 					seekKey, *seekKeyBuf = ltKey.ToEngineKey(*seekKeyBuf)
 				} else {
+					// Seek to the next key prefix (locks on the next user key).
+					// Unlike the two reverse iteration cases and the forward
+					// iteration case where we have yet to reach /key/shared/txnID,
+					// this case deserves special consideration.
+					if i.prefix {
+						// If we are configured as a prefix iterator, do not seek to
+						// the next key prefix. Instead, return the IterExhausted
+						// state. This is more than just an optimization. Seeking to
+						// the next key prefix would move the underlying iterator
+						// (which is also configured for prefix iteration) to the
+						// next key prefix, if such a key prefix exists.
+						//
+						// This case could be decoupled from the itersBeforeSeek
+						// optimization. When performing prefix iteration, we could
+						// immediately detect cases where there are no more possible
+						// matching locks in the key prefix and return an exhausted
+						// state, instead of waiting until we decide to seek to do
+						// so. It's not clear that this additional complexity and
+						// code duplication is worth it, so we don't do it for now.
+						return pebble.IterExhausted, nil
+					}
 					// TODO(nvanbenschoten): for now, we call SeekEngineKeyGEWithLimit
 					// with the prefix of the next lock table key. If EngineIterator
 					// exposed an interface that called NextPrefix(), we could use that
