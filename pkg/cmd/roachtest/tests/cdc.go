@@ -1068,6 +1068,11 @@ func registerCDC(r registry.Registry) {
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			vmoduleLevel = 1
+			defer func() {
+				vmoduleLevel = 0
+			}()
+
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
