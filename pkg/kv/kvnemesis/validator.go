@@ -705,7 +705,10 @@ func (v *validator) processOp(op Operation) {
 		//
 		// So we ignore the results of failIfError, calling it only for its side
 		// effect of perhaps registering a failure with the validator.
-		v.failIfError(op, t.Result, exceptRollback, exceptAmbiguous, exceptSharedLockPromotionError)
+		v.failIfError(
+			op, t.Result,
+			exceptRollback, exceptAmbiguous, exceptSharedLockPromotionError, exceptSkipLockedReplayError,
+		)
 
 		ops := t.Ops
 		if t.CommitInBatch != nil {
@@ -1208,6 +1211,7 @@ func (v *validator) checkError(
 		exceptAmbiguous, exceptOmitted, exceptRetry,
 		exceptDelRangeUsingTombstoneStraddlesRangeBoundary,
 		exceptSharedLockPromotionError,
+		exceptSkipLockedReplayError,
 	}
 	sl = append(sl, extraExceptions...)
 	return v.failIfError(op, r, sl...)

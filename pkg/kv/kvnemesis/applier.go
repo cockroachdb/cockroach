@@ -115,6 +115,10 @@ func exceptSharedLockPromotionError(err error) bool { // true if lock promotion 
 	return errors.Is(err, &concurrency.LockPromotionError{})
 }
 
+func exceptSkipLockedReplayError(err error) bool { // true if skip locked replay error
+	return errors.Is(err, &concurrency.SkipLockedReplayError{})
+}
+
 func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 	switch o := op.GetValue().(type) {
 	case *GetOperation,
