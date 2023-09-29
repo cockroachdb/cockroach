@@ -30,29 +30,37 @@ import (
 type kvWriter struct {
 	db *kv.DB
 
-	oldWriter bootstrap.KVWriter
-	newWriter bootstrap.KVWriter
+	sessionBasedWriter bootstrap.KVWriter
+	oldWriter          bootstrap.KVWriter
+	newWriter          bootstrap.KVWriter
 
-	settingsWatcher *settingswatcher.SettingsWatcher
+	settingsWatcher   *settingswatcher.SettingsWatcher
+	sessionModeReader sessionBasedLeasingModeReader
 }
 
 func newKVWriter(
-	codec keys.SQLCodec, db *kv.DB, id descpb.ID, settingsWatcher *settingswatcher.SettingsWatcher,
+	codec keys.SQLCodec,
+	db *kv.DB,
+	id descpb.ID,
+	settingsWatcher *settingswatcher.SettingsWatcher,
+	sessionModeReader sessionBasedLeasingModeReader,
 ) *kvWriter {
 	return &kvWriter{
-		db:              db,
-		newWriter:       bootstrap.MakeKVWriter(codec, leaseTableWithID(id)),
-		oldWriter:       bootstrap.MakeKVWriter(codec, systemschema.V22_2_LeaseTable()),
-		settingsWatcher: settingsWatcher,
+		db:                 db,
+		sessionBasedWriter: bootstrap.MakeKVWriter(codec, leaseTableWithID(id, systemschema.LeaseTable_V24_1())),
+		newWriter:          bootstrap.MakeKVWriter(codec, leaseTableWithID(id, systemschema.LeaseTable())),
+		oldWriter:          bootstrap.MakeKVWriter(codec, systemschema.V22_2_LeaseTable()),
+		settingsWatcher:    settingsWatcher,
+		sessionModeReader:  sessionModeReader,
 	}
 }
 
-func leaseTableWithID(id descpb.ID) catalog.TableDescriptor {
+func leaseTableWithID(id descpb.ID, table systemschema.SystemTable) catalog.TableDescriptor {
 	if id == keys.LeaseTableID {
-		return systemschema.LeaseTable()
+		return table
 	}
 	// Custom IDs are only used for testing.
-	mut := systemschema.LeaseTable().NewBuilder().
+	mut := table.NewBuilder().
 		BuildExistingMutable().(*tabledesc.Mutable)
 	mut.ID = id
 	return mut.ImmutableCopy().(catalog.TableDescriptor)
@@ -66,7 +74,17 @@ func (w *kvWriter) versionGuard(
 
 func (w *kvWriter) insertLease(ctx context.Context, txn *kv.Txn, l leaseFields) error {
 	return w.do(ctx, txn, l, func(guard settingswatcher.VersionGuard, b *kv.Batch) error {
-		if guard.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrDualWrite) {
+		// Write a session based lease, if at the very least we are dual writing
+		// both expiration and session based leases.
+		if w.sessionModeReader.isSessionBasedLeasingModeActive(SessionBasedDualWrite) &&
+			l.sessionID != nil {
+			err := w.sessionBasedWriter.Insert(ctx, b, false /*kvTrace*/, leaseAsSessionBasedDatum(l)...)
+			if err != nil {
+				return err
+			}
+		}
+		if guard.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrDualWrite) &&
+			!w.sessionModeReader.isSessionBasedLeasingModeActive(SessionBasedOnly) {
 			err := w.newWriter.Insert(ctx, b, false /*kvTrace */, leaseAsRbrDatum(l)...)
 			if err != nil {
 				return err
@@ -84,7 +102,17 @@ func (w *kvWriter) insertLease(ctx context.Context, txn *kv.Txn, l leaseFields) 
 
 func (w *kvWriter) deleteLease(ctx context.Context, txn *kv.Txn, l leaseFields) error {
 	return w.do(ctx, txn, l, func(guard settingswatcher.VersionGuard, b *kv.Batch) error {
-		if guard.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrDualWrite) {
+		// Delete session based lease, if at the very least we are dual writing
+		// both expiration and session based leases.
+		if w.sessionModeReader.isSessionBasedLeasingModeActive(SessionBasedDualWrite) &&
+			l.sessionID != nil {
+			err := w.sessionBasedWriter.Delete(ctx, b, false /*kvTrace*/, leaseAsSessionBasedDatum(l)...)
+			if err != nil {
+				return err
+			}
+		}
+		if guard.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrDualWrite) &&
+			!w.sessionModeReader.isSessionBasedLeasingModeActive(SessionBasedOnly) {
 			err := w.newWriter.Delete(ctx, b, false /*kvTrace */, leaseAsRbrDatum(l)...)
 			if err != nil {
 				return err
@@ -124,6 +152,16 @@ func (w *kvWriter) do(
 	}
 	run = (*kv.Txn).CommitInBatch
 	return w.db.Txn(ctx, do)
+}
+
+func leaseAsSessionBasedDatum(l leaseFields) []tree.Datum {
+	return []tree.Datum{
+		tree.NewDInt(tree.DInt(l.descID)),
+		tree.NewDInt(tree.DInt(l.version)),
+		tree.NewDInt(tree.DInt(l.instanceID)),
+		tree.NewDBytes(tree.DBytes(l.sessionID)),
+		tree.NewDBytes(tree.DBytes(l.regionPrefix)),
+	}
 }
 
 func leaseAsRbrDatum(l leaseFields) []tree.Datum {
