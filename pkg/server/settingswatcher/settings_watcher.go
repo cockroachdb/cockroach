@@ -199,6 +199,7 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 	if s.storage != nil {
 		bufferSize = settings.MaxSettings * 3
 	}
+
 	c := rangefeedcache.NewWatcher(
 		"settings-watcher",
 		s.clock, s.f,
