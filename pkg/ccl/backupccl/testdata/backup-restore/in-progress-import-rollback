@@ -37,6 +37,7 @@ SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled = false;
 exec-sql
 EXPORT INTO CSV 'nodelocal://1/export1/' FROM SELECT * FROM baz;
 ----
+NOTICE: EXPORT is not the recommended way to move data out of CockroachDB and may be deprecated in the future. Please consider exporting data with changefeeds instead: https://www.cockroachlabs.com/docs/stable/export-data-with-changefeeds
 
 
 # Pause the import job, in order to back up the importing data.
