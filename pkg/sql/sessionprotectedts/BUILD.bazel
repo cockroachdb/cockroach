@@ -1,0 +1,52 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "sessionprotectedts",
+    srcs = ["session_protected_ts.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sessionprotectedts",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/kv/kvserver/protectedts/ptreconcile",
+        "//pkg/sql/isql",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/util/hlc",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "sessionprotectedts_test",
+    srcs = [
+        "main_test.go",
+        "session_protected_ts_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    deps = [
+        ":sessionprotectedts",
+        "//pkg/base",
+        "//pkg/kv/kvclient/kvtenant",
+        "//pkg/kv/kvserver/protectedts",
+        "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/kv/kvserver/protectedts/ptreconcile",
+        "//pkg/kv/kvserver/protectedts/ptstorage",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/sql/isql",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)
