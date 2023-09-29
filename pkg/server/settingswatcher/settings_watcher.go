@@ -45,7 +45,12 @@ type SettingsWatcher struct {
 	f        *rangefeed.Factory
 	stopper  *stop.Stopper
 	dec      RowDecoder
-	storage  Storage
+
+	// storage is used to persist a local cache of the setting
+	// overrides, for use when a node starts up before KV is ready.
+	storage Storage
+	// snapshot is what goes into the local cache.
+	snapshot []roachpb.KeyValue
 
 	overridesMonitor OverridesMonitor
 
@@ -194,24 +199,6 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 	if s.storage != nil {
 		bufferSize = settings.MaxSettings * 3
 	}
-	var snapshot []roachpb.KeyValue // used with storage
-	maybeUpdateSnapshot := func(update rangefeedcache.Update) {
-		// Only record the update to the buffer if we're writing to storage.
-		if s.storage == nil ||
-			// and the update has some new information to write.
-			(update.Type == rangefeedcache.IncrementalUpdate && len(update.Events) == 0) {
-			return
-		}
-		eventKVs := rangefeedbuffer.EventsToKVs(update.Events,
-			rangefeedbuffer.RangeFeedValueEventToKV)
-		switch update.Type {
-		case rangefeedcache.CompleteUpdate:
-			snapshot = eventKVs
-		case rangefeedcache.IncrementalUpdate:
-			snapshot = rangefeedbuffer.MergeKVs(snapshot, eventKVs)
-		}
-		s.storage.SnapshotKVs(ctx, snapshot)
-	}
 	c := rangefeedcache.NewWatcher(
 		"settings-watcher",
 		s.clock, s.f,
@@ -223,7 +210,7 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 		},
 		func(ctx context.Context, update rangefeedcache.Update) {
 			noteUpdate(update)
-			maybeUpdateSnapshot(update)
+			s.maybeUpdateSnapshot(ctx, update)
 		},
 		s.testingWatcherKnobs,
 	)
@@ -253,6 +240,24 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 	case <-ctx.Done():
 		return errors.Wrap(ctx.Err(), "failed to retrieve initial cluster settings")
 	}
+}
+
+func (s *SettingsWatcher) maybeUpdateSnapshot(ctx context.Context, update rangefeedcache.Update) {
+	// Only record the update to the buffer if we're writing to storage.
+	if s.storage == nil ||
+		// and the update has some new information to write.
+		(update.Type == rangefeedcache.IncrementalUpdate && len(update.Events) == 0) {
+		return
+	}
+	eventKVs := rangefeedbuffer.EventsToKVs(update.Events,
+		rangefeedbuffer.RangeFeedValueEventToKV)
+	switch update.Type {
+	case rangefeedcache.CompleteUpdate:
+		s.snapshot = eventKVs
+	case rangefeedcache.IncrementalUpdate:
+		s.snapshot = rangefeedbuffer.MergeKVs(s.snapshot, eventKVs)
+	}
+	s.storage.SnapshotKVs(ctx, s.snapshot)
 }
 
 // TestingRestart restarts the rangefeeds and waits for the initial
