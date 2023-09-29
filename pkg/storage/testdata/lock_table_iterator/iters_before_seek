@@ -227,7 +227,7 @@ stats
 ----
 seek-ge k=b: output: k=b str=shared txn=8
 next: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 3, 13), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 3, 13), (rev, 0, 0))
+stats: (interface (dir, seek, step): (fwd, 2, 13), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 2, 13), (rev, 0, 0))
 
 # txn8, forward iteration with limit
 iter upper=z match-txn-id=8
@@ -282,7 +282,7 @@ stats
 ----
 seek-ge k=b: output: k=b str=shared txn=13
 next: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 2, 10), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 2, 10), (rev, 0, 0))
+stats: (interface (dir, seek, step): (fwd, 1, 10), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 1, 10), (rev, 0, 0))
 
 # txn13, forward iteration with limit
 iter upper=z match-txn-id=13
@@ -337,7 +337,7 @@ stats
 ----
 seek-ge k=b: output: k=b str=shared txn=15
 next: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 2, 8), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 2, 8), (rev, 0, 0))
+stats: (interface (dir, seek, step): (fwd, 1, 8), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 1, 8), (rev, 0, 0))
 
 # txn15, forward iteration with limit
 iter upper=z match-txn-id=15
@@ -701,7 +701,7 @@ stats
 seek-ge k=b: output: k=b str=intent txn=1
 next: output: k=b str=exclusive txn=1
 next: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 2, 7), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 2, 7), (rev, 0, 0))
+stats: (interface (dir, seek, step): (fwd, 1, 7), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 1, 7), (rev, 0, 0))
 
 # exclusive min strength, forward iteration with limit
 iter upper=z match-min-str=exclusive
@@ -768,7 +768,7 @@ stats
 ----
 seek-ge k=b: output: k=b str=intent txn=1
 next: output: . (exhausted)
-stats: (interface (dir, seek, step): (fwd, 2, 7), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 2, 7), (rev, 0, 0))
+stats: (interface (dir, seek, step): (fwd, 1, 7), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 1, 7), (rev, 0, 0))
 
 # intent min strength, forward iteration with limit
 iter upper=z match-min-str=intent
