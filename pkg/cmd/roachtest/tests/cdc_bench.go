@@ -166,6 +166,8 @@ func formatSI(num int64) string {
 	return fmt.Sprintf("%d%s", int64(numSI), suffix)
 }
 
+var vmoduleLevel = 0
+
 // makeCDCBenchOptions creates common cluster options for CDC benchmarks.
 func makeCDCBenchOptions() (option.StartOpts, install.ClusterSettings) {
 	opts := option.DefaultStartOpts()
@@ -220,6 +222,10 @@ func makeCDCBenchOptions() (option.StartOpts, install.ClusterSettings) {
 	// due to elevated goroutine scheduling latency.
 	// Current default is 4s which should be sufficient.
 	// settings.Env = append(settings.Env, "COCKROACH_NETWORK_TIMEOUT=6s")
+
+	if vmoduleLevel > 0 {
+		opts.RoachprodOpts.ExtraArgs = []string{"--vmodule=changefeed_processors=2"}
+	}
 
 	return opts, settings
 }
