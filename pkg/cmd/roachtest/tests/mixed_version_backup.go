@@ -87,14 +87,11 @@ var (
 		MaxRetries:     80,
 	}
 
-	v231 = version.MustParse("v23.1.0")
-	v222 = version.MustParse("v22.2.0")
-
-	// minActivelySupportedVersion is the minimum cluster version that
+	// minActivelySupportedBackupVersion is the minimum cluster version that
 	// should be active for this test to perform any backups or
 	// restores. We are only interested in releases where we are still
 	// actively fixing bugs in patch releases.
-	minActivelySupportedVersion = v222
+	minActivelySupportedBackupVersion = v222
 
 	// systemTablesInFullClusterBackup includes all system tables that
 	// are included as part of a full cluster backup. It should include
@@ -1249,10 +1246,10 @@ func (mvb *mixedVersionBackup) setClusterSettings(
 // window. Crucially, this also stops this test from hitting bugs
 // already fixed in later releases.
 func (mvb *mixedVersionBackup) skipBackups(l *logger.Logger, h *mixedversion.Helper) bool {
-	if lv := h.LowestBinaryVersion(); !lv.AtLeast(minActivelySupportedVersion) {
+	if lv := h.LowestBinaryVersion(); !lv.AtLeast(minActivelySupportedBackupVersion) {
 		l.Printf(
 			"skipping step because %s is lower than minimum actively supported version %s",
-			lv, minActivelySupportedVersion,
+			lv, minActivelySupportedBackupVersion,
 		)
 		return true
 	}
