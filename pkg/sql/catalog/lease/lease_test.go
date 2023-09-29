@@ -82,16 +82,16 @@ type leaseTest struct {
 }
 
 func init() {
-	lease.MoveTablePrimaryIndexIDto2 = func(
-		ctx context.Context, t *testing.T, s serverutils.ApplicationLayerInterface, id descpb.ID,
+	lease.MoveTablePrimaryIndexIDtoTarget = func(
+		ctx context.Context, t *testing.T, s serverutils.ApplicationLayerInterface, id descpb.ID, indexID descpb.IndexID,
 	) {
 		require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			t, err := col.MutableByID(txn.KV()).Table(ctx, id)
 			if err != nil {
 				return err
 			}
-			t.PrimaryIndex.ID = 2
-			t.NextIndexID++
+			t.PrimaryIndex.ID = indexID
+			t.NextIndexID = indexID + 1
 			return col.WriteDesc(ctx, false /* kvTrace */, t, txn.KV())
 		}))
 	}

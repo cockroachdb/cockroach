@@ -12,6 +12,7 @@ package lease
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"strings"
 	"testing"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
@@ -39,11 +41,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// MoveTablePrimaryIndexIDto2 is used to move the primary index of the created
-// lease table from 1 to 2. It is injected from the lease_test package so that
+// MoveTablePrimaryIndexID used to move the primary index of the created
+// lease table from 1 to some target. It is injected from the lease_test package so that
 // it can use sql primitives.
-var MoveTablePrimaryIndexIDto2 func(
-	context.Context, *testing.T, serverutils.ApplicationLayerInterface, descpb.ID,
+var MoveTablePrimaryIndexIDtoTarget func(
+	context.Context, *testing.T, serverutils.ApplicationLayerInterface, descpb.ID, descpb.IndexID,
 )
 
 // TestKVWriterMatchesIEWriter is a rather involved test to exercise the
@@ -51,68 +53,85 @@ var MoveTablePrimaryIndexIDto2 func(
 // to the underlying key-value store. It does this by teeing operations to
 // both under different table prefixes and then fetching the histories of
 // those tables, removing the prefix and exact timestamps, and ensuring
-// they are the same.
+// they are the same. This test will run against both the old and new table
+// formats (with expiration or session ID).
 func TestKVWriterMatchesIEWriter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer srv.Stopper().Stop(ctx)
-	s := srv.ApplicationLayer()
+	for _, mode := range []SessionBasedLeasingMode{SessionBasedLeasingOff, SessionBasedOnly} {
+		t.Run(fmt.Sprintf("Session based leasing mode: %v", mode), func(t *testing.T) {
+			ctx := context.Background()
+			serverArgs := base.TestServerArgs{}
+			serverArgs.Settings = cluster.MakeClusterSettings()
+			LeaseEnableSessionBasedLeasing.Override(ctx, &serverArgs.Settings.SV, int64(mode))
+			srv, sqlDB, kvDB := serverutils.StartServer(t, serverArgs)
+			defer srv.Stopper().Stop(ctx)
+			s := srv.ApplicationLayer()
 
-	// Otherwise, we wouldn't get complete SSTs in our export under stress.
-	sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t)).Exec(
-		t, "SET CLUSTER SETTING admission.elastic_cpu.enabled = false",
-	)
+			// Otherwise, we wouldn't get complete SSTs in our export under stress.
+			sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t)).Exec(
+				t, "SET CLUSTER SETTING admission.elastic_cpu.enabled = false",
+			)
 
-	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	schema := systemschema.LeaseTableSchema
-	makeTable := func(name string) (id descpb.ID) {
-		tdb.Exec(t, strings.Replace(schema, "system.lease", name, 1))
-		tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = $1", name).Scan(&id)
-		// The MR variant of the table uses a non-
-		MoveTablePrimaryIndexIDto2(ctx, t, s, id)
-		return id
-	}
-	lease1ID := makeTable("lease1")
-	lease2ID := makeTable("lease2")
-
-	ie := s.InternalExecutor().(isql.Executor)
-	codec := s.Codec()
-	settingsWatcher := s.SettingsWatcher().(*settingswatcher.SettingsWatcher)
-	w := teeWriter{
-		a: newInternalExecutorWriter(ie, "defaultdb.public.lease1"),
-		b: newKVWriter(codec, kvDB, lease2ID, settingsWatcher),
-	}
-	start := kvDB.Clock().Now()
-	groups := generateWriteOps(2<<10, 1<<10)
-	for {
-		ops, ok := groups()
-		if !ok {
-			break
-		}
-		do := func(i int, txn *kv.Txn) error {
-			return ops[i].f(w, ctx, txn, ops[i].leaseFields)
-		}
-		if len(ops) == 1 {
-			require.NoError(t, do(0, nil /* txn */))
-		} else {
-			require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				for i := range ops {
-					if err := do(i, txn); err != nil {
-						return err
-					}
+			tdb := sqlutils.MakeSQLRunner(sqlDB)
+			schema := systemschema.LeaseTableSchema
+			if mode == SessionBasedOnly {
+				schema = systemschema.LeaseTableSchema_V24_1
+			}
+			makeTable := func(name string) (id descpb.ID) {
+				tdb.Exec(t, strings.Replace(schema, "system.lease", name, 1))
+				tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = $1", name).Scan(&id)
+				// Modifies the primary index IDs to line up with the session based
+				// or multi-region expiry based formats of the table.
+				if mode == SessionBasedOnly {
+					MoveTablePrimaryIndexIDtoTarget(ctx, t, s, id, 3)
+				} else {
+					MoveTablePrimaryIndexIDtoTarget(ctx, t, s, id, 2)
 				}
-				return nil
-			}))
-		}
+				return id
+			}
+			lease1ID := makeTable("lease1")
+			lease2ID := makeTable("lease2")
+
+			ie := s.InternalExecutor().(isql.Executor)
+			codec := s.Codec()
+			settingsWatcher := s.SettingsWatcher().(*settingswatcher.SettingsWatcher)
+			modeReader := s.LeaseManager().(sessionBasedLeasingModeReader)
+			w := teeWriter{
+				a: newInternalExecutorWriter(ie, "defaultdb.public.lease1", mode),
+				b: newKVWriter(codec, kvDB, lease2ID, settingsWatcher, modeReader),
+			}
+			start := kvDB.Clock().Now()
+			groups := generateWriteOps(2<<10, 1<<10)
+			for {
+				ops, ok := groups()
+				if !ok {
+					break
+				}
+				do := func(i int, txn *kv.Txn) error {
+					return ops[i].f(w, ctx, txn, ops[i].leaseFields)
+				}
+				if len(ops) == 1 {
+					require.NoError(t, do(0, nil /* txn */))
+				} else {
+					require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+						for i := range ops {
+							if err := do(i, txn); err != nil {
+								return err
+							}
+						}
+						return nil
+					}))
+				}
+			}
+			require.Equal(
+				t,
+				getRawHistoryKVs(ctx, t, kvDB, lease1ID, start, codec),
+				getRawHistoryKVs(ctx, t, kvDB, lease2ID, start, codec),
+			)
+		})
 	}
-	require.Equal(
-		t,
-		getRawHistoryKVs(ctx, t, kvDB, lease1ID, start, codec),
-		getRawHistoryKVs(ctx, t, kvDB, lease2ID, start, codec),
-	)
 }
 
 // getRawHistoryKVs will pull the complete revision history of the table since
@@ -211,6 +230,7 @@ func generateWriteOps(n, numGroups int) func() (_ []writeOp, wantMore bool) {
 			version:      descpb.DescriptorVersion(rand.Intn(vals)),
 			instanceID:   base.SQLInstanceID(rand.Intn(vals)),
 			expiration:   *ts,
+			sessionID:    []byte(ts.String()),
 			regionPrefix: enum.One,
 		}
 		return lf
