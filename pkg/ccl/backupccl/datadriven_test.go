@@ -435,6 +435,7 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 	defer ds.cleanup(ctx, t)
 	datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 		execWithTagAndPausePoint := func(jobType jobspb.Type) string {
+			ds.noticeBuffer = nil
 			const user = "root"
 			sqlDB := ds.getSQLDB(t, lastCreatedCluster, user)
 			// First, run the schema change.
