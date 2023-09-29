@@ -80,7 +80,7 @@ case "${CLOUD}" in
   azure)
     if [ -z "${FILTER}" ]; then
       # Subset of tests for now.
-      FILTER="tag:azure tag:owner-cdc tag:owner-disaster-recovery"
+      FILTER="tag:azure"
     fi
     ;;
   *)
