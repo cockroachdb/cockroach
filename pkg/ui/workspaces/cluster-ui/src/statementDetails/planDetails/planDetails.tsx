@@ -173,7 +173,7 @@ function ExplainPlan({
             />
             <SummaryCardItem
               label="Average Execution Time"
-              value={formatNumberForDisplay(plan.stats.run_lat.mean, duration)}
+              value={formatNumberForDisplay(plan.stats.run_lat?.mean, duration)}
             />
             <SummaryCardItem
               label="Execution Count"
@@ -181,7 +181,7 @@ function ExplainPlan({
             />
             <SummaryCardItem
               label="Average Rows Read"
-              value={formatNumberForDisplay(plan.stats.rows_read.mean, count)}
+              value={formatNumberForDisplay(plan.stats.rows_read?.mean, count)}
             />
           </SummaryCard>
         </Col>
