@@ -747,9 +747,13 @@ func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
 			break
 		}
 		if g.isSameTxn(qqg.guard.txnMeta()) {
-			return false, nil, errors.AssertionFailedf(
-				"SKIP LOCKED request should not find another waiting request from the same transaction",
-			)
+			// A SKIP LOCKED request should not find another waiting request from its
+			// own transaction, at least not in the way that SQL uses KV. The only way
+			// we can end up finding another request in the lock's wait queue from our
+			// own transaction is if we're a replay. Instead of handling this case,
+			// and defining sane semantics, we simply return an error. We mark the
+			// error for the benefit of KVNemesis.
+			return false, nil, MarkSkipLockedReplayError(errors.Errorf("SKIP LOCKED request should not find another waiting request from the same transaction"))
 		}
 		if lock.Conflicts(qqg.mode, makeLockMode(str, g.txnMeta(), g.ts), &g.lt.settings.SV) {
 			return true, nil, nil // the conflict isn't with a lock holder, nil is returned
@@ -4277,4 +4281,22 @@ func MarkLockPromotionError(cause error) error {
 		return nil
 	}
 	return errors.Mark(cause, &LockPromotionError{})
+}
+
+// SkipLockedReplayError is used to mark errors resulting from replayed SKIP
+// LOCKED requests that discover other requests from their own transactions in
+// a lock's wait queue. We mark such errors for the benefit of KVNemesis.
+type SkipLockedReplayError struct{}
+
+func (e *SkipLockedReplayError) Error() string {
+	return "skip locked replay error"
+}
+
+// MarkSkipLockedReplayError wraps the given error, if non-nil, as a skip locked
+// replay error.
+func MarkSkipLockedReplayError(cause error) error {
+	if cause == nil {
+		return nil
+	}
+	return errors.Mark(cause, &SkipLockedReplayError{})
 }
