@@ -70,7 +70,7 @@ type spanConfigIngestor struct {
 	testingKnobs             *sql.StreamingTestingKnobs
 
 	// Dynamic state maintained during ingestion.
-	initialScanComplete         bool
+	bufferingFullScan           bool
 	bufferedUpdates             []spanconfig.Record
 	bufferedDeletes             []spanconfig.Target
 	lastBufferedSourceTimestamp hlc.Timestamp
@@ -161,6 +161,9 @@ func (sc *spanConfigIngestor) consumeEvent(ctx context.Context, event streamingc
 	case streamingccl.SpanConfigEvent:
 		return sc.bufferRecord(ctx, event.GetSpanConfigEvent())
 	case streamingccl.CheckpointEvent:
+		if sc.bufferingFullScan && sc.bufferIsEmpty() {
+			return errors.AssertionFailedf("a flush after the full scan checkpoint must have data in it")
+		}
 		return sc.maybeFlushOnCheckpoint(ctx)
 	default:
 		return errors.AssertionFailedf("received non span config update %s", event)
@@ -193,7 +196,12 @@ func (sc *spanConfigIngestor) bufferRecord(
 		return nil
 	}
 	targetSpan := roachpb.Span{Key: destStartKey, EndKey: destEndKey}
-	if err := sc.maybeFlushOnUpdate(ctx, update.Timestamp); err != nil {
+
+	firstUpdateFromFullScan := !sc.bufferingFullScan && update.FromFullScan
+	if firstUpdateFromFullScan {
+		// If we detect the first update from a full scan, we can reset what's currently in the buffer.
+		sc.resetBuffer()
+	} else if err := sc.maybeFlushOnUpdate(ctx, update.Timestamp); err != nil {
 		return err
 	}
 	target := spanconfig.MakeTargetFromSpan(targetSpan)
@@ -207,6 +215,9 @@ func (sc *spanConfigIngestor) bufferRecord(
 		sc.bufferedUpdates = append(sc.bufferedUpdates, record)
 	}
 	sc.lastBufferedSourceTimestamp = update.Timestamp
+	if firstUpdateFromFullScan {
+		sc.bufferingFullScan = true
+	}
 	return nil
 }
 
@@ -216,8 +227,8 @@ func (sc *spanConfigIngestor) bufferIsEmpty() bool {
 func (sc *spanConfigIngestor) maybeFlushOnUpdate(
 	ctx context.Context, updateTimestamp hlc.Timestamp,
 ) error {
-	// If this event was originally written at a later timestamp and the initial scan has complete, flush the current buffer.
-	if sc.initialScanComplete &&
+	// If this event was originally written at a later timestamp and from an incremental scan, flush the current buffer.
+	if !sc.bufferingFullScan &&
 		sc.lastBufferedSourceTimestamp.Less(updateTimestamp) &&
 		!sc.bufferIsEmpty() {
 		return sc.flushEvents(ctx)
@@ -226,10 +237,14 @@ func (sc *spanConfigIngestor) maybeFlushOnUpdate(
 }
 
 func (sc *spanConfigIngestor) maybeFlushOnCheckpoint(ctx context.Context) error {
+	defer func() {
+		// Since the span config event stream always checkpoints at the end of full
+		// scan processing, on the ingestion side then, we are guaranteed to be done
+		// buffering a full scan after processing the checkpoint.
+		sc.bufferingFullScan = false
+	}()
 	if !sc.bufferIsEmpty() {
 		return sc.flushEvents(ctx)
-	} else if !sc.initialScanComplete {
-		return errors.AssertionFailedf("a flush after the initial scan checkpoint must have data in it")
 	}
 	return nil
 }
@@ -250,9 +265,8 @@ func (sc *spanConfigIngestor) flushEvents(ctx context.Context) error {
 			return errors.Errorf("sqlliveness session has expired")
 		}
 		var err error
-		if !sc.initialScanComplete {
-			// The first flush will always contain all span configs found during the initial scan.
-			err = sc.flushInitialScan(ctx, sessionStart, sessionExpiration)
+		if sc.bufferingFullScan {
+			err = sc.flushFullScan(ctx, sessionStart, sessionExpiration)
 		} else {
 			err = sc.accessor.UpdateSpanConfigRecords(
 				ctx, sc.bufferedDeletes, sc.bufferedUpdates, sessionStart, sessionExpiration,
@@ -273,24 +287,30 @@ func (sc *spanConfigIngestor) flushEvents(ctx context.Context) error {
 		}
 		break
 	}
-
-	sc.bufferedUpdates = sc.bufferedUpdates[:0]
-	sc.bufferedDeletes = sc.bufferedDeletes[:0]
+	sc.resetBuffer()
 	return nil
 }
 
-// flushInitialScan flushes all contents from the source side rangefeed's
-// initial scan. The function assumes the buffer contains only updates from the
-// initial scan. To obey destination side span config invariants, the function
+func (sc *spanConfigIngestor) resetBuffer() {
+	sc.bufferedUpdates = sc.bufferedUpdates[:0]
+	sc.bufferedDeletes = sc.bufferedDeletes[:0]
+}
+
+// flushFullScan flushes all contents from the source side rangefeed's
+// full scan. The function assumes the buffer contains only updates from the
+// full scan. To obey destination side span config invariants, the function
 // deletes all existing span config records related to the replicating tenant in
-// the same transaction that it writes all initial scan updates.
-func (sc *spanConfigIngestor) flushInitialScan(
+// the same transaction that it writes all full scan updates.
+func (sc *spanConfigIngestor) flushFullScan(
 	ctx context.Context, sessionStart, sessionExpiration hlc.Timestamp,
 ) error {
-	log.Infof(ctx, "flushing initial span configuration state (%d records)", len(sc.bufferedUpdates))
+	log.Infof(ctx, "flushing full span configuration state (%d records)", len(sc.bufferedUpdates))
 
 	if len(sc.bufferedDeletes) != 0 {
-		return errors.AssertionFailedf("initial scan flush should not contain records to delete")
+		return errors.AssertionFailedf("full scan flush should not contain records to delete")
+	}
+	if len(sc.bufferedUpdates) == 0 {
+		return errors.AssertionFailedf("full scan flush must contain records to update")
 	}
 	target := spanconfig.MakeTargetFromSpan(sc.destinationTenantKeySpan)
 	return sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -314,7 +334,6 @@ func (sc *spanConfigIngestor) flushInitialScan(
 		if sc.testingKnobs != nil && sc.testingKnobs.RightAfterSpanConfigFlush != nil {
 			sc.testingKnobs.RightAfterSpanConfigFlush(ctx, sc.bufferedUpdates, bufferedDeletes)
 		}
-		sc.initialScanComplete = true
 		return nil
 	})
 }
