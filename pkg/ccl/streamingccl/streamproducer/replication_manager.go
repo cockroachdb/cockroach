@@ -92,7 +92,7 @@ func newReplicationStreamManagerWithPrivilegesCheck(
 		execCfg.Settings, execCfg.NodeInfo.LogicalClusterID(), "REPLICATION")
 	if enterpriseCheckErr != nil {
 		return nil, pgerror.Wrap(enterpriseCheckErr,
-			pgcode.InsufficientPrivilege, "replication requires enterprise license")
+			pgcode.InsufficientPrivilege, "physical replication requires an enterprise license on the primary (and secondary) cluster")
 	}
 
 	return &replicationStreamManagerImpl{evalCtx: evalCtx, txn: txn}, nil
