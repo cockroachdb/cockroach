@@ -277,6 +277,31 @@ func (r *Replica) updateTimestampCache(
 				// transaction or not.
 				addToTSCache(start, end, t.Txn.WriteTimestamp, uuid.UUID{})
 			}
+		case *kvpb.ResolveIntentRequest:
+			// Update the timestamp cache on the key the request point resolved if
+			// there was a replicated {shared, exclusive} lock on that key, and the
+			// transaction that acquired that lock was successfully committed[1].
+			//
+			// [1] This is indicated by resolvedTS being non-empty.
+			resolvedTS := resp.(*kvpb.ResolveIntentResponse).ReplicatedLocksResolvedTimestamp
+			if !resolvedTS.IsEmpty() {
+				addToTSCache(start, end, resolvedTS, txnID)
+			}
+		case *kvpb.ResolveIntentRangeRequest:
+			// Update the timestamp cache over the entire span the request operated
+			// over if there was at least one replicated {shared,exclusive} lock that
+			// was resolved as part of committing the transaction[1].
+			//
+			// NB: It's not strictly required that we bump the timestamp cache over
+			// the entire span on which the request operated; we could instead return
+			// information about specific point {shared, exclusive} replicated locks
+			// and only bump the timestamp cache over those keys -- we choose not to.
+			//
+			// [1] Indicated by resolvedTS being non-empty.
+			resolvedTS := resp.(*kvpb.ResolveIntentRangeResponse).ReplicatedLocksResolvedTimestamp
+			if !resolvedTS.IsEmpty() {
+				addToTSCache(start, end, resolvedTS, txnID)
+			}
 		default:
 			addToTSCache(start, end, ts, txnID)
 		}
@@ -548,6 +573,7 @@ func (r *Replica) CanCreateTxnRecord(
 			if tombstoneTimestamp == lease.Start.ToTimestamp() {
 				return false, kvpb.ABORT_REASON_NEW_LEASE_PREVENTS_TXN
 			}
+			log.Infof(ctx, "!!!!!! tombstoneTS : %v", tombstoneTimestamp)
 			return false, kvpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED
 		default:
 			// If we find another transaction's ID then that transaction has

@@ -1479,6 +1479,15 @@ message ResolveIntentRequest {
 // ResolveIntent() method.
 message ResolveIntentResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // ReplicatedLocksResolvedTimestamp, if non-empty, indicates that a replicated
+  // lock with strength lock.Shared or lock.Exclusive was resolved at this
+  // timestamp for a committed transaction. Notably, this field is left unset if
+  // only a write intent was resolved.
+  //
+  // The caller must bump the timestamp cache to this timestamp. This ensures
+  // the replicated lock (acquired by a now committed) continues to provide
+  // protection against other writers even after it has been resolved.
+  util.hlc.Timestamp replicated_locks_resolved_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
 // A ResolveIntentRangeRequest is arguments to the ResolveIntentRange() method.
@@ -1523,6 +1532,17 @@ message ResolveIntentRangeRequest {
 // ResolveIntent() method.
 message ResolveIntentRangeResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // ReplicatedLocksResolvedTimestamp, if non-empty, indicates that at least one
+  // replicated lock with strength lock.Shared or lock.Exclusive was resolved at
+  // this timestamp for a committed transaction by the ResolveIntentRange
+  // request. Notably, this field is left unset if only a write intent was
+  // resolved.
+  //
+  // The caller must bump the timestamp cache to this timestamp over the entire
+  // range specified in the ResolveIntentRangeRequest. This ensures the
+  // replicated lock (acquired by a now committed) continues to provide
+  // protection against other writers even after it has been resolved.
+  util.hlc.Timestamp replicated_locks_resolved_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
 // A MergeRequest contains arguments to the Merge() method. It

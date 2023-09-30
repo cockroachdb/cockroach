@@ -96,8 +96,9 @@ func ResolveIntent(
 		// The observation was from the wrong node. Ignore.
 		update.ClockWhilePending = roachpb.ObservedTimestamp{}
 	}
-	ok, numBytes, resumeSpan, _, err := storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update,
-		storage.MVCCResolveWriteIntentOptions{TargetBytes: h.TargetBytes})
+	ok, numBytes, resumeSpan, replicatedSharedOrExclusiveLocksResolved, err :=
+		storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update,
+			storage.MVCCResolveWriteIntentOptions{TargetBytes: h.TargetBytes})
 	if err != nil {
 		return result.Result{}, err
 	}
@@ -107,6 +108,15 @@ func ResolveIntent(
 		reply.ResumeSpan = resumeSpan
 		reply.ResumeReason = kvpb.RESUME_BYTE_LIMIT
 		return result.Result{}, nil
+	}
+	if ok && replicatedSharedOrExclusiveLocksResolved && update.Status == roachpb.COMMITTED {
+		// A replicated {shared, exclusive} lock was resolved for a committed
+		// transaction. Now that the lock is no longer there, we still need to make
+		// sure other transactions can't write underneath the transaction's commit
+		// timestamp to the key. We return the transaction's commit timestamp on the
+		// response and update the timestamp cache a few layers above to ensure
+		// this.
+		reply.ReplicatedLocksResolvedTimestamp = update.Txn.WriteTimestamp
 	}
 
 	var res result.Result

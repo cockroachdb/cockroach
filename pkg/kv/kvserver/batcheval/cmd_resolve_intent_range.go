@@ -55,7 +55,7 @@ func ResolveIntentRange(
 		// The observation was from the wrong node. Ignore.
 		update.ClockWhilePending = roachpb.ObservedTimestamp{}
 	}
-	numKeys, numBytes, resumeSpan, resumeReason, _, err :=
+	numKeys, numBytes, resumeSpan, resumeReason, replicatedSharedOrExclusiveLocksResolved, err :=
 		storage.MVCCResolveWriteIntentRange(ctx, readWriter, ms, update,
 			storage.MVCCResolveWriteIntentRangeOptions{MaxKeys: h.MaxSpanRequestKeys, TargetBytes: h.TargetBytes},
 		)
@@ -73,6 +73,20 @@ func ResolveIntentRange(
 		// RESUME_INTENT_LIMIT here, but since the given limit is a key limit we
 		// return RESUME_KEY_LIMIT for symmetry.
 		reply.ResumeReason = resumeReason
+	}
+	if replicatedSharedOrExclusiveLocksResolved && update.Status == roachpb.COMMITTED {
+		// A replicated {shared, exclusive} lock was resolved for a committed
+		// transaction. Now that the lock is no longer there, we still need to make
+		// sure other transactions can't write underneath the transaction's commit
+		// timestamp to the key. We return the transaction's commit timestamp on the
+		// response and update the timestamp cache a few layers above to ensure
+		// this.
+		//
+		// NB: Doing so will update the timestamp cache over the entire key span the
+		// request operated over -- we're losing fidelity about which key(s) had
+		// locks. We could do a better job tracking and plumbing this information
+		// up, but we choose not to.
+		reply.ReplicatedLocksResolvedTimestamp = update.Txn.WriteTimestamp
 	}
 
 	var res result.Result
