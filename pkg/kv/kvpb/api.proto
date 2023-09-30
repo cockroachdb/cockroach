@@ -1479,6 +1479,17 @@ message ResolveIntentRequest {
 // ResolveIntent() method.
 message ResolveIntentResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // ReplicatedLocksReleasedCommitTimestamp, if non-empty, indicates that a
+  // replicated lock with strength Shared or Exclusive was released by a
+  // transaction who committed at this timestamp. Notably, this field is left
+  // unset if only a write intent was resolved. The field is also left unset for
+  // transactions who aborted.
+  //
+  // The caller must bump the timestamp cache across the resolution span to this
+  // commit timestamp. Doing so ensures that the released lock (acquired by a
+  // now committed transaction) continues to provide protection against other
+  // writers up to the commit timestamp, even after the lock has been released.
+  util.hlc.Timestamp replicated_locks_released_commit_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
 // A ResolveIntentRangeRequest is arguments to the ResolveIntentRange() method.
@@ -1523,6 +1534,17 @@ message ResolveIntentRangeRequest {
 // ResolveIntent() method.
 message ResolveIntentRangeResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // ReplicatedLocksReleasedCommitTimestamp, if non-empty, indicates that at
+  // least one replicated lock with strength Shared or Exclusive was released by
+  // a transaction who committed at this timestamp. Notably, this field is left
+  // unset if only a write intent was resolved. The field is also left unset for
+  // transactions who aborted.
+  //
+  // The caller must bump the timestamp cache across the resolution span to this
+  // commit timestamp. Doing so ensures that the released lock (acquired by a
+  // now committed transaction) continues to provide protection against other
+  // writers up to the commit timestamp, even after the lock has been released.
+  util.hlc.Timestamp replicated_locks_released_commit_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
 // A MergeRequest contains arguments to the Merge() method. It

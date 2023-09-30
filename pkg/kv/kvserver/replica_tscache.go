@@ -277,6 +277,32 @@ func (r *Replica) updateTimestampCache(
 				// transaction or not.
 				addToTSCache(start, end, t.Txn.WriteTimestamp, uuid.UUID{})
 			}
+		case *kvpb.ResolveIntentRequest:
+			// Update the timestamp cache on the key the request resolved if there
+			// was a replicated {shared, exclusive} lock on that key which was
+			// released, and the transaction that has acquired that lock was
+			// successfully committed[1].
+			//
+			// [1] This is indicated by releasedTs being non-empty.
+			releasedTs := resp.(*kvpb.ResolveIntentResponse).ReplicatedLocksReleasedCommitTimestamp
+			if !releasedTs.IsEmpty() {
+				addToTSCache(start, end, releasedTs, txnID)
+			}
+		case *kvpb.ResolveIntentRangeRequest:
+			// Update the timestamp cache over the entire span the request operated
+			// over if there was at least one replicated {shared,exclusive} lock
+			// that was released as part of committing the transaction[1].
+			//
+			// NB: It's not strictly required that we bump the timestamp cache over
+			// the entire span on which the request operated; we could instead return
+			// information about specific point {shared, exclusive} replicated locks
+			// and only bump the timestamp cache over those keys -- we choose not to.
+			//
+			// [1] Indicated by releasedTs being non-empty.
+			releasedTs := resp.(*kvpb.ResolveIntentRangeResponse).ReplicatedLocksReleasedCommitTimestamp
+			if !releasedTs.IsEmpty() {
+				addToTSCache(start, end, releasedTs, txnID)
+			}
 		default:
 			addToTSCache(start, end, ts, txnID)
 		}
