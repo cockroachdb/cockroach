@@ -185,7 +185,7 @@ func TestCPUTimeEndToEnd(t *testing.T) {
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 
-	if srv := tc.Server(0); srv.StartedDefaultTestTenant() {
+	if srv := tc.Server(0); srv.TenantController().StartedDefaultTestTenant() {
 		systemSqlDB := srv.SystemLayer().SQLConn(t, "system")
 		_, err := systemSqlDB.Exec(`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
 		require.NoError(t, err)

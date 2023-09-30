@@ -96,7 +96,7 @@ func TestTenantUpgrade(t *testing.T) {
 			},
 			Settings: settings,
 		}
-		tenant, err := ts.StartTenant(ctx, tenantArgs)
+		tenant, err := ts.TenantController().StartTenant(ctx, tenantArgs)
 		require.NoError(t, err)
 		return tenant, tenant.SQLConn(t, "")
 	}
@@ -128,7 +128,7 @@ func TestTenantUpgrade(t *testing.T) {
 
 		t.Log("restart the tenant")
 		tenantServer.AppStopper().Stop(ctx)
-		tenantServer, err := ts.StartTenant(ctx, base.TestTenantArgs{
+		tenantServer, err := ts.TenantController().StartTenant(ctx, base.TestTenantArgs{
 			TenantID: roachpb.MustMakeTenantID(initialTenantID),
 		})
 		require.NoError(t, err)
@@ -152,7 +152,7 @@ func TestTenantUpgrade(t *testing.T) {
 		t.Log("restart the new tenant")
 		tenant.AppStopper().Stop(ctx)
 		var err error
-		tenant, err = ts.StartTenant(ctx, base.TestTenantArgs{
+		tenant, err = ts.TenantController().StartTenant(ctx, base.TestTenantArgs{
 			TenantID: roachpb.MustMakeTenantID(postUpgradeTenantID),
 		})
 		require.NoError(t, err)
@@ -291,7 +291,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			},
 			Settings: settings,
 		}
-		tenant, err := ts.StartTenant(ctx, tenantArgs)
+		tenant, err := ts.TenantController().StartTenant(ctx, tenantArgs)
 		require.NoError(t, err)
 		tenantDB := tenant.SQLConn(t, "")
 		return tenant, tenantDB

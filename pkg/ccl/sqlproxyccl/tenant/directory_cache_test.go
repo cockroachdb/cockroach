@@ -642,7 +642,7 @@ func destroyTenant(tc serverutils.TestClusterInterface, id roachpb.TenantID) err
 func startTenant(
 	ctx context.Context, tenantStopper *stop.Stopper, srv serverutils.TestServerInterface, id uint64,
 ) (string, error) {
-	t, err := srv.StartTenant(
+	t, err := srv.TenantController().StartTenant(
 		ctx,
 		base.TestTenantArgs{
 			TenantID: roachpb.MustMakeTenantID(id),

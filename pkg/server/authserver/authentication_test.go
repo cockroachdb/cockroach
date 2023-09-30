@@ -635,7 +635,7 @@ func TestLogoutClearsCookies(t *testing.T) {
 	})
 
 	t.Run("secondary tenant", func(t *testing.T) {
-		ts, err := s.StartTenant(context.Background(), base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
+		ts, err := s.TenantController().StartTenant(context.Background(), base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -790,7 +790,7 @@ func TestAuthenticationMux(t *testing.T) {
 		{"POST", ts.URLPrefix + "query", tsReqBuffer.Bytes(), ""},
 	} {
 		t.Run("path="+tc.path, func(t *testing.T) {
-			if s.StartedDefaultTestTenant() && strings.HasPrefix(tc.path, ts.URLPrefix) {
+			if s.TenantController().StartedDefaultTestTenant() && strings.HasPrefix(tc.path, ts.URLPrefix) {
 				// As of this writing, timeseries requests to secondary
 				// tenants are overly restricted. This is a feature gap. See
 				// issue #102378.
@@ -899,7 +899,7 @@ func TestGRPCAuthentication(t *testing.T) {
 		_ = conn.Close() // nolint:grpcconnclose
 	}(conn)
 	for _, subsystem := range subsystems {
-		if subsystem.storageOnly && s.StartedDefaultTestTenant() {
+		if subsystem.storageOnly && s.TenantController().StartedDefaultTestTenant() {
 			// Subsystem only available on the system tenant.
 			continue
 		}
@@ -928,7 +928,7 @@ func TestGRPCAuthentication(t *testing.T) {
 		_ = conn.Close() // nolint:grpcconnclose
 	}(conn)
 	for _, subsystem := range subsystems {
-		if subsystem.storageOnly && s.StartedDefaultTestTenant() {
+		if subsystem.storageOnly && s.TenantController().StartedDefaultTestTenant() {
 			// Subsystem only available on the system tenant.
 			continue
 		}

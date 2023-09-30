@@ -41,7 +41,7 @@ func setup(
 	})
 
 	ten2ID := roachpb.MustMakeTenantID(2)
-	tenant2, err := tc.Server(0).StartTenant(ctx, base.TestTenantArgs{
+	tenant2, err := tc.Server(0).TenantController().StartTenant(ctx, base.TestTenantArgs{
 		TenantID: ten2ID,
 	})
 	require.NoError(t, err)

@@ -110,7 +110,7 @@ func TestServerStartupGuardrails(t *testing.T) {
 			// to succeed for all test cases but server creation is expected to succeed
 			// only if tenantBinaryVersion is at least equal to the version corresponding
 			// to TenantLogicalVersionKey.
-			_, err := s.StartTenant(context.Background(),
+			_, err := s.TenantController().StartTenant(context.Background(),
 				base.TestTenantArgs{
 					Settings: tenantSettings,
 					TenantID: serverutils.TestTenantID(),
