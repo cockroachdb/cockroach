@@ -690,7 +690,7 @@ func TestStatsAreDeletedForDroppedTables(t *testing.T) {
 	// Cached protected timestamp state delays MVCC GC, update it every second.
 	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '1s';")
 
-	if s.StartedDefaultTestTenant() {
+	if s.TenantController().StartedDefaultTestTenant() {
 		systemDB.Exec(t, "SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true")
 		// Block until we see that zone configs are enabled.
 		testutils.SucceedsSoon(t, func() error {

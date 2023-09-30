@@ -189,7 +189,7 @@ func TestTenantRateLimiter(t *testing.T) {
 	})
 	ctx := context.Background()
 	tenantID := serverutils.TestTenantID()
-	ts, err := s.StartTenant(ctx, base.TestTenantArgs{
+	ts, err := s.TenantController().StartTenant(ctx, base.TestTenantArgs{
 		TenantID: tenantID,
 		TestingKnobs: base.TestingKnobs{
 			JobsTestingKnobs: &jobs.TestingKnobs{
@@ -385,7 +385,7 @@ func TestTenantCtx(t *testing.T) {
 		var tsql *gosql.DB
 		if sharedProcess {
 			var err error
-			_, tsql, err = s.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
+			_, tsql, err = s.TenantController().StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
 				TenantName: "test",
 				TenantID:   tenantID,
 			})

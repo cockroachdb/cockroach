@@ -88,7 +88,7 @@ func TestDataDriven(t *testing.T) {
 		tenantArgs := base.TestTenantArgs{
 			TenantID: serverutils.TestTenantID(),
 		}
-		testTenantInterface, err := tc.Server(0).StartTenant(ctx, tenantArgs)
+		testTenantInterface, err := tc.Server(0).TenantController().StartTenant(ctx, tenantArgs)
 		require.NoError(t, err)
 
 		tenantSQLDB := testTenantInterface.SQLConn(t, "")

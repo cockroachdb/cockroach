@@ -131,7 +131,7 @@ func TestTenantUnauthenticatedAccess(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	_, err := s.StartTenant(ctx,
+	_, err := s.TenantController().StartTenant(ctx,
 		base.TestTenantArgs{
 			TenantID: roachpb.MustMakeTenantID(securitytest.EmbeddedTenantIDs()[0]),
 			TestingKnobs: base.TestingKnobs{
@@ -200,7 +200,7 @@ func TestTenantProcessDebugging(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	tenant, _, err := s.StartSharedProcessTenant(ctx,
+	tenant, _, err := s.TenantController().StartSharedProcessTenant(ctx,
 		base.TestSharedProcessTenantArgs{
 			TenantID:   serverutils.TestTenantID(),
 			TenantName: "processdebug",
@@ -325,7 +325,7 @@ func TestNonExistentTenant(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	_, err := s.StartTenant(ctx,
+	_, err := s.TenantController().StartTenant(ctx,
 		base.TestTenantArgs{
 			TenantID:            serverutils.TestTenantID(),
 			DisableCreateTenant: true,

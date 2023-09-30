@@ -313,7 +313,7 @@ func TestServerControllerDefaultHTTPTenant(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	_, sql, err := s.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
+	_, sql, err := s.TenantController().StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
 		TenantName: "hello",
 		TenantID:   roachpb.MustMakeTenantID(10),
 	})

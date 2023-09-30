@@ -202,7 +202,7 @@ func TestEnsureAllTablesQueries(t *testing.T) {
 
 	// Exclude the 3 system tables which don't use autostats.
 	systemTablesWithStats := bootstrap.NumSystemTablesForSystemTenant - 3
-	if srv.StartedDefaultTestTenant() {
+	if srv.TenantController().StartedDefaultTestTenant() {
 		// Exclude system tables that are not present in the tenant key space.
 		systemTablesWithStats -= 6
 	}

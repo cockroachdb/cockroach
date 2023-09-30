@@ -81,7 +81,7 @@ func TestTraceAnalyzer(t *testing.T) {
 
 	const gatewayNode = 0
 	srv, s := tc.Server(gatewayNode), tc.ApplicationLayer(gatewayNode)
-	if srv.StartedDefaultTestTenant() {
+	if srv.TenantController().StartedDefaultTestTenant() {
 		systemSqlDB := srv.SystemLayer().SQLConn(t, "system")
 		_, err := systemSqlDB.Exec(`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
 		require.NoError(t, err)
