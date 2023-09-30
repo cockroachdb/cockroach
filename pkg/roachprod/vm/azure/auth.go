@@ -53,14 +53,14 @@ func (p *Provider) getAuthorizer() (ret autorest.Authorizer, err error) {
 
 // getAuthToken extracts the JWT token from the active Authorizer.
 func (p *Provider) getAuthToken() (string, error) {
-	auth, err := p.getAuthorizer()
+	authorizer, err := p.getAuthorizer()
 	if err != nil {
 		return "", err
 	}
 
 	// We'll steal the auth Bearer token by creating a fake HTTP request.
 	fake := &http.Request{}
-	if _, err := auth.WithAuthorization()(&stealAuth{}).Prepare(fake); err != nil {
+	if _, err := authorizer.WithAuthorization()(&stealAuth{}).Prepare(fake); err != nil {
 		return "", err
 	}
 	return fake.Header.Get("Authorization")[7:], nil
