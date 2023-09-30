@@ -1343,3 +1343,14 @@ statement ok
 RESET vectorize
 
 subtest end
+
+# Regression test for vectorized cross join consuming the left source for INNER
+# join type when the right input is empty (#111474).
+statement ok
+CREATE TABLE t111474_0 (c0 INT);
+CREATE TABLE t111474_1 (c0 INT);
+INSERT INTO t111474_0 (c0) VALUES (1);
+
+query II
+SELECT * FROM t111474_0, t111474_1 WHERE ascii('') > 0;
+----
