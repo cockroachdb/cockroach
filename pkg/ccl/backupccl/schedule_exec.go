@@ -99,11 +99,25 @@ func (e *scheduledBackupExecutor) executeBackup(
 	}
 	backupStmt.AsOf = tree.AsOfClause{Expr: endTime}
 
-	log.Infof(ctx, "Starting scheduled backup %d", sj.ScheduleID())
-
 	// Invoke backup plan hook.
 	hook, cleanup := cfg.PlanHookMaker(ctx, "exec-backup", txn.KV(), sj.Owner())
 	defer cleanup()
+
+	planner := hook.(sql.PlanHookState)
+	currentClusterID := planner.ExtendedEvalContext().ClusterID
+	currentDetails := sj.ScheduleDetails()
+	if currentClusterID != currentDetails.ClusterID {
+		log.Infof(ctx, "pausing backups Schedule %d and updating Cluster ID in schedule details. persisted cluster ID %d is different than current cluster ID %d",
+			sj.ScheduleID(),
+			currentDetails.ClusterID,
+			currentClusterID)
+		currentDetails.ClusterID = currentClusterID
+		sj.SetScheduleDetails(*currentDetails)
+		sj.Pause()
+		return nil
+	}
+
+	log.Infof(ctx, "Starting scheduled backup %d", sj.ScheduleID())
 
 	if knobs, ok := cfg.TestingKnobs.(*jobs.TestingKnobs); ok {
 		if knobs.OverrideAsOfClause != nil {
@@ -111,7 +125,7 @@ func (e *scheduledBackupExecutor) executeBackup(
 		}
 	}
 
-	backupFn, err := planBackup(ctx, hook.(sql.PlanHookState), backupStmt)
+	backupFn, err := planBackup(ctx, planner, backupStmt)
 	if err != nil {
 		return err
 	}
