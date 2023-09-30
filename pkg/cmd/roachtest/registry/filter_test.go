@@ -1,0 +1,111 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package registry
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/cockroachdb/datadriven"
+)
+
+func TestFilterMatchAndDescribe(t *testing.T) {
+	// Create a library of tests.
+	var tests []TestSpec
+
+	for _, name1 := range []string{"component_foo", "component_bar"} {
+		for _, name2 := range []string{"test_foo", "bench_bar"} {
+			for _, owner := range []Owner{"team1", "team2"} {
+				for _, suites := range []SuiteSet{ManualOnly, Suites(Nightly), Suites(Nightly, Weekly)} {
+					for _, clouds := range []CloudSet{AllClouds, AllExceptAWS, OnlyGCE} {
+						suite := suites.String()
+						if suite == "<none>" {
+							suite = ""
+						} else {
+							suite = "-" + suite
+						}
+						t := TestSpec{
+							Name:             fmt.Sprintf("%s/%s-%s%s-%s", name1, name2, owner, suite, clouds),
+							Owner:            owner,
+							CompatibleClouds: clouds,
+							Suites:           suites,
+						}
+						if name2 == "bench_bar" {
+							t.Benchmark = true
+						}
+						tests = append(tests, t)
+					}
+				}
+			}
+		}
+	}
+
+	datadriven.RunTest(t, "testdata/filter", func(t *testing.T, d *datadriven.TestData) string {
+		filters := strings.Fields(d.Input)
+		var options []TestFilterOption
+		var testName string
+		for _, arg := range d.CmdArgs {
+			switch arg.Key {
+			case "cloud":
+				options = append(options, WithCloud(arg.Vals[0]))
+			case "suite":
+				options = append(options, WithSuite(arg.Vals[0]))
+			case "owner":
+				options = append(options, WithOwner(Owner(arg.Vals[0])))
+			case "benchmarks":
+				options = append(options, OnlyBenchmarks())
+			case "test":
+				testName = arg.Vals[0]
+			default:
+				d.Fatalf(t, "unknown parameter %s", arg)
+			}
+		}
+
+		filter := NewTestFilter(filters, options...)
+
+		switch d.Cmd {
+		case "filter":
+			matches, err := filter.FilterWithErr(tests)
+			if err != nil {
+				return fmt.Sprintf("error: %v", err)
+			}
+			lines := make([]string, len(matches))
+			for i := range matches {
+				lines[i] = matches[i].Name
+			}
+			return strings.Join(lines, "\n")
+
+		case "test-matches":
+			var spec *TestSpec
+			for i := range tests {
+				if tests[i].Name == testName {
+					spec = &tests[i]
+				}
+			}
+			if spec == nil {
+				d.Fatalf(t, "no such test %q", testName)
+			}
+			matches, reason := filter.Matches(spec)
+			if matches {
+				reason = "matches"
+			}
+			return fmt.Sprintf("%s %s", testName, reason)
+
+		case "describe":
+			return strings.Join(filter.Describe(), "\n")
+
+		default:
+			d.Fatalf(t, "unknown command %s", d.Cmd)
+			return ""
+		}
+	})
+}
