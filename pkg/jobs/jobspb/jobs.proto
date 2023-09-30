@@ -179,7 +179,12 @@ message StreamIngestionProgress {
   // the cutover time gets set.
   repeated roachpb.Span remaining_cutover_spans = 8 [(gogoproto.nullable) = false];
 
-  // Next Id: 9
+  // InitialSplitComplete is true if the stream ingestion job has
+  // already split the tenant's keyspace according to the plan from
+  // the source tenant.
+  bool initial_split_complete = 9;
+
+  // Next Id: 10
 }
 
 message StreamReplicationDetails {

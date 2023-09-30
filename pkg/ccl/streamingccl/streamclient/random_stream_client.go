@@ -206,6 +206,7 @@ type randomEventGenerator struct {
 	config                     randomStreamConfig
 	numEventsSinceLastResolved int
 	sstMaker                   SSTableMakerFn
+	codec                      keys.SQLCodec
 	tableDesc                  *tabledesc.Mutable
 	systemKVs                  []roachpb.KeyValue
 }
@@ -228,6 +229,7 @@ func newRandomEventGenerator(
 		numEventsSinceLastResolved: 0,
 		sstMaker:                   fn,
 		tableDesc:                  tableDesc,
+		codec:                      keys.MakeSQLCodec(config.tenantID),
 		systemKVs:                  systemKVs,
 	}, nil
 }
@@ -238,7 +240,7 @@ func (r *randomEventGenerator) generateNewEvent() streamingccl.Event {
 		// Emit a CheckpointEvent.
 		resolvedTime := timeutil.Now()
 		hlcResolvedTime := hlc.Timestamp{WallTime: resolvedTime.UnixNano()}
-		resolvedSpan := jobspb.ResolvedSpan{Span: r.tableDesc.TableSpan(keys.SystemSQLCodec), Timestamp: hlcResolvedTime}
+		resolvedSpan := jobspb.ResolvedSpan{Span: r.tableDesc.TableSpan(r.codec), Timestamp: hlcResolvedTime}
 		event = streamingccl.MakeCheckpointEvent([]jobspb.ResolvedSpan{resolvedSpan})
 		r.numEventsSinceLastResolved = 0
 	} else {
@@ -257,11 +259,11 @@ func (r *randomEventGenerator) generateNewEvent() streamingccl.Event {
 			size := 10 + r.rng.Intn(30)
 			keyVals := make([]roachpb.KeyValue, 0, size)
 			for i := 0; i < size; i++ {
-				keyVals = append(keyVals, makeRandomKey(r.rng, r.config, r.tableDesc))
+				keyVals = append(keyVals, makeRandomKey(r.rng, r.config, r.codec, r.tableDesc))
 			}
 			event = streamingccl.MakeSSTableEvent(r.sstMaker(keyVals))
 		} else {
-			event = streamingccl.MakeKVEvent(makeRandomKey(r.rng, r.config, r.tableDesc))
+			event = streamingccl.MakeKVEvent(makeRandomKey(r.rng, r.config, r.codec, r.tableDesc))
 		}
 		r.numEventsSinceLastResolved++
 	}
@@ -360,6 +362,7 @@ func (m *RandomStreamClient) Plan(ctx context.Context, _ streampb.StreamID) (Top
 	log.Infof(ctx, "planning random stream for tenant %d", m.config.tenantID)
 
 	// Allocate table IDs and return one per partition address in the topology.
+	srcCodec := keys.MakeSQLCodec(m.config.tenantID)
 	for i := 0; i < m.config.numPartitions; i++ {
 		tableID := m.getNextTableID()
 		tableDesc, err := m.tableDescForID(tableID)
@@ -375,7 +378,7 @@ func (m *RandomStreamClient) Plan(ctx context.Context, _ streampb.StreamID) (Top
 				ID:                strconv.Itoa(i),
 				SrcAddr:           streamingccl.PartitionAddress(partitionURI),
 				SubscriptionToken: []byte(partitionURI),
-				Spans:             []roachpb.Span{tableDesc.TableSpan(keys.SystemSQLCodec)},
+				Spans:             []roachpb.Span{tableDesc.TableSpan(srcCodec)},
 			})
 	}
 
@@ -579,7 +582,7 @@ func rekey(tenantID roachpb.TenantID, k roachpb.Key) roachpb.Key {
 }
 
 func makeRandomKey(
-	r *rand.Rand, config randomStreamConfig, tableDesc *tabledesc.Mutable,
+	r *rand.Rand, config randomStreamConfig, codec keys.SQLCodec, tableDesc *tabledesc.Mutable,
 ) roachpb.KeyValue {
 	// Create a key holding a random integer.
 	keyDatum := tree.NewDInt(tree.DInt(r.Intn(config.valueRange)))
@@ -590,7 +593,7 @@ func makeRandomKey(
 	var colIDToRowIndex catalog.TableColMap
 	colIDToRowIndex.Set(index.GetKeyColumnID(0), 0)
 
-	keyPrefix := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableDesc.GetID(), index.GetID())
+	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, tableDesc.GetID(), index.GetID())
 	k, _, err := rowenc.EncodeIndexKey(tableDesc, index, colIDToRowIndex, tree.Datums{keyDatum}, keyPrefix)
 	if err != nil {
 		panic(err)
