@@ -1536,6 +1536,16 @@ func queryLocksArgs(key, endKey []byte, includeUncontended bool) kvpb.QueryLocks
 	}
 }
 
+func resolveIntentArgsString(
+	s string, txn enginepb.TxnMeta, status roachpb.TransactionStatus,
+) kvpb.ResolveIntentRequest {
+	return kvpb.ResolveIntentRequest{
+		RequestHeader: kvpb.RequestHeader{Key: roachpb.Key(s)},
+		IntentTxn:     txn,
+		Status:        status,
+	}
+}
+
 func resolveIntentRangeArgsString(
 	s, e string, txn enginepb.TxnMeta, status roachpb.TransactionStatus,
 ) *kvpb.ResolveIntentRangeRequest {
@@ -14310,4 +14320,227 @@ func TestRangeSplitAndRHSRemovalRacesWithFollowerRead(t *testing.T) {
 	go func() { defer wg.Done(); split() }()
 	go func() { defer wg.Done(); read() }()
 	wg.Wait()
+}
+
+// TestResolveIntentReplicatedLocksBumsTSCache ensures that performing point
+// intent resolution over keys on which we have acquired replicated shared or
+// exclusive locks bumps the timestamp cache for those keys if the transaction
+// has successfully committed. Otherwise, if the transaction is aborted, intent
+// resolution does not bump the timestamp cache.
+func TestResolveIntentReplicatedLocksBumpsTSCache(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	newTxn := func(key string, ts hlc.Timestamp) *roachpb.Transaction {
+		// We're going to use read committed isolation level here, as that's the
+		// only one which makes sense in the context of this test. That's because
+		// serializable transactions cannot commit before refreshing their reads,
+		// and refreshing reads bumps the timestamp cache.
+		txn := roachpb.MakeTransaction("test", roachpb.Key(key), isolation.ReadCommitted, roachpb.NormalUserPriority, ts, 0, 0, 0)
+		return &txn
+	}
+
+	run := func(t *testing.T, isCommit, isReplicated bool, str lock.Strength) {
+		ctx := context.Background()
+		tc := testContext{}
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		startTime := timeutil.Unix(0, 123)
+		tc.manualClock = timeutil.NewManualTime(startTime)
+		sc := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
+		sc.TestingKnobs.DisableCanAckBeforeApplication = true
+		tc.StartWithStoreConfig(ctx, t, stopper, sc)
+
+		// Write some keys at time t0.
+		t0 := timeutil.Unix(1, 0)
+		tc.manualClock.MustAdvanceTo(t0)
+		err := tc.store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			for _, keyStr := range []string{"a", "b", "c"} {
+				err := txn.Put(ctx, roachpb.Key(keyStr), "value")
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		require.NoError(t, err)
+
+		// Scan [a, e) at t1, acquiring locks as dictated by the test setup. Verify
+		// the scan result is correct.
+		t1 := timeutil.Unix(2, 0)
+		ba := &kvpb.BatchRequest{}
+		txn := newTxn("a", makeTS(t1.UnixNano(), 0))
+		ba.Timestamp = makeTS(t1.UnixNano(), 0)
+		ba.Txn = txn
+		span := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("e")}
+		sArgs := scanArgs(span.Key, span.EndKey)
+		sArgs.KeyLockingStrength = str
+		sArgs.KeyLockingDurability = lock.Unreplicated
+		if isReplicated {
+			sArgs.KeyLockingDurability = lock.Replicated
+		}
+		ba.Add(sArgs)
+		_, pErr := tc.Sender().Send(ctx, ba)
+		require.Nil(t, pErr)
+
+		// Commit the transaction at t2.
+		t2 := timeutil.Unix(3, 0)
+		ba = &kvpb.BatchRequest{}
+		txn.WriteTimestamp = makeTS(t2.UnixNano(), 0)
+		ba.Txn = txn
+		et, _ := endTxnArgs(txn, isCommit)
+		// Omit lock spans so that we can release locks asynchronously, as if
+		// the locks were on a different range than the txn record.
+		et.LockSpans = nil
+		ba.Add(&et)
+		_, pErr = tc.Sender().Send(ctx, ba)
+		require.Nil(t, pErr)
+
+		status := roachpb.ABORTED
+		if isCommit {
+			status = roachpb.COMMITTED
+		}
+
+		// Perform point intent resolution.
+		ba = &kvpb.BatchRequest{}
+		for _, keyStr := range []string{"a", "b", "c"} {
+			resolveIntentArgs := resolveIntentArgsString(keyStr, txn.TxnMeta, status)
+			ba.Add(&resolveIntentArgs)
+		}
+		_, pErr = tc.Sender().Send(ctx, ba)
+		require.Nil(t, pErr)
+
+		expectedRTS := makeTS(t1.UnixNano(), 0) // we scanned at t1 over [a, e)
+		if isCommit && isReplicated {
+			expectedRTS = makeTS(t2.UnixNano(), 0)
+		}
+
+		rTS, _ := tc.store.tsCache.GetMax(roachpb.Key("a"), nil)
+		require.Equal(t, expectedRTS, rTS)
+		rTS, _ = tc.store.tsCache.GetMax(roachpb.Key("b"), nil)
+		require.Equal(t, expectedRTS, rTS)
+		rTS, _ = tc.store.tsCache.GetMax(roachpb.Key("c"), nil)
+		require.Equal(t, expectedRTS, rTS)
+		rTS, _ = tc.store.tsCache.GetMax(roachpb.Key("d"), nil)
+		require.Equal(t, makeTS(t1.UnixNano(), 0), rTS) // we scanned at t1 over [a, e)
+	}
+
+	testutils.RunTrueAndFalse(t, "isCommit", func(t *testing.T, isCommit bool) {
+		testutils.RunTrueAndFalse(t, "isReplicated", func(t *testing.T, isReplicated bool) {
+			for _, str := range []lock.Strength{lock.Shared, lock.Exclusive} {
+				t.Run(str.String(), func(t *testing.T) {
+					run(t, isCommit, isReplicated, str)
+				})
+			}
+		})
+	})
+}
+
+// TestResolveIntentRangeReplicatedLocksBumpsTSCache is like
+// TestResolveIntentReplicatedLocksBumpsTSCache, except it tests
+// ResolveIntentRange requests instead of ResolveIntent requests. As a result,
+// we assert that the timestamp cache is bumped over the entire range specified
+// in the ResolveIntentRangeRequest, not just the point keys that had locks on
+// them.
+func TestResolveIntentRangeReplicatedLocksBumpsTSCache(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	newTxn := func(key string, ts hlc.Timestamp) *roachpb.Transaction {
+		// We're going to use read committed isolation level here, as that's the
+		// only one which makes sense in the context of this test. That's because
+		// serializable transactions cannot commit before refreshing their reads,
+		// and refreshing reads bumps the timestamp cache.
+		txn := roachpb.MakeTransaction("test", roachpb.Key(key), isolation.ReadCommitted, roachpb.NormalUserPriority, ts, 0, 0, 0)
+		return &txn
+	}
+
+	run := func(t *testing.T, isCommit, isReplicated bool, str lock.Strength) {
+		ctx := context.Background()
+		tc := testContext{}
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		startTime := timeutil.Unix(0, 123)
+		tc.manualClock = timeutil.NewManualTime(startTime)
+		sc := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
+		sc.TestingKnobs.DisableCanAckBeforeApplication = true
+		tc.StartWithStoreConfig(ctx, t, stopper, sc)
+
+		// Write some keys at time t0.
+		t0 := timeutil.Unix(1, 0)
+		tc.manualClock.MustAdvanceTo(t0)
+		err := tc.store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			for _, keyStr := range []string{"a", "b", "c"} {
+				err := txn.Put(ctx, roachpb.Key(keyStr), "value")
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		require.NoError(t, err)
+
+		// Scan [a, e) at t1, acquiring locks as dictated by the test setup. Verify
+		// the scan result is correct.
+		t1 := timeutil.Unix(2, 0)
+		ba := &kvpb.BatchRequest{}
+		txn := newTxn("a", makeTS(t1.UnixNano(), 0))
+		ba.Timestamp = makeTS(t1.UnixNano(), 0)
+		ba.Txn = txn
+		span := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("e")}
+		sArgs := scanArgs(span.Key, span.EndKey)
+		sArgs.KeyLockingStrength = str
+		sArgs.KeyLockingDurability = lock.Unreplicated
+		if isReplicated {
+			sArgs.KeyLockingDurability = lock.Replicated
+		}
+		ba.Add(sArgs)
+		_, pErr := tc.Sender().Send(ctx, ba)
+		require.Nil(t, pErr)
+
+		// Commit the transaction at t2.
+		t2 := timeutil.Unix(3, 0)
+		ba = &kvpb.BatchRequest{}
+		txn.WriteTimestamp = makeTS(t2.UnixNano(), 0)
+		ba.Txn = txn
+		et, _ := endTxnArgs(txn, isCommit)
+		// Omit lock spans so that we can release locks asynchronously, as if
+		// the locks were on a different range than the txn record.
+		et.LockSpans = nil
+		ba.Add(&et)
+		_, pErr = tc.Sender().Send(ctx, ba)
+		require.Nil(t, pErr)
+
+		status := roachpb.ABORTED
+		if isCommit {
+			status = roachpb.COMMITTED
+		}
+
+		// Perform point intent resolution.
+		ba = &kvpb.BatchRequest{}
+		resolveIntentRangeArgs := resolveIntentRangeArgsString("a", "e", txn.TxnMeta, status)
+		ba.Add(resolveIntentRangeArgs)
+		_, pErr = tc.Sender().Send(ctx, ba)
+		require.Nil(t, pErr)
+
+		expectedRTS := makeTS(t1.UnixNano(), 0) // we scanned at t1 over [a, e)
+		if isCommit && isReplicated {
+			expectedRTS = makeTS(t2.UnixNano(), 0)
+		}
+
+		for _, keyStr := range []string{"a", "b", "c", "d"} {
+			rTS, _ := tc.store.tsCache.GetMax(roachpb.Key(keyStr), nil)
+			require.Equal(t, expectedRTS, rTS)
+		}
+	}
+
+	testutils.RunTrueAndFalse(t, "isCommit", func(t *testing.T, isCommit bool) {
+		testutils.RunTrueAndFalse(t, "isReplicated", func(t *testing.T, isReplicated bool) {
+			for _, str := range []lock.Strength{lock.Shared, lock.Exclusive} {
+				t.Run(str.String(), func(t *testing.T) {
+					run(t, isCommit, isReplicated, str)
+				})
+			}
+		})
+	})
 }
