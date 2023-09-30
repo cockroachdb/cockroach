@@ -329,7 +329,7 @@ func TestServerShutdownReleasesSession(t *testing.T) {
 		return 0 < len(rows)
 	}
 
-	tmpTenant, err := s.StartTenant(ctx, tenantArgs)
+	tmpTenant, err := s.TenantController().StartTenant(ctx, tenantArgs)
 	require.NoError(t, err)
 
 	tmpSQLInstance := tmpTenant.SQLInstanceID()

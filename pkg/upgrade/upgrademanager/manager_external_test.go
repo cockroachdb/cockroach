@@ -347,7 +347,7 @@ FROM system.job_info WHERE job_id = $1 AND info_key = 'legacy_payload')`, jobID)
 		runTestForDB(t, systemSQLDB)
 	})
 	t.Run("tenant", func(t *testing.T) {
-		tenant, err := ts.StartTenant(ctx, base.TestTenantArgs{
+		tenant, err := ts.TenantController().StartTenant(ctx, base.TestTenantArgs{
 			TenantID: roachpb.MustMakeTenantID(10),
 			TestingKnobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
