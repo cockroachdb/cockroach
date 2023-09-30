@@ -948,7 +948,7 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 					},
 				}
 			}
-			tt, err := tc.Server(i).StartTenant(ctx, base.TestTenantArgs{
+			tt, err := tc.Server(i).TenantController().StartTenant(ctx, base.TestTenantArgs{
 				TenantID:     serverutils.TestTenantID(),
 				Locality:     localities[i],
 				TestingKnobs: knobs,
