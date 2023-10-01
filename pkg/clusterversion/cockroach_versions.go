@@ -93,7 +93,7 @@ type Key int
 //	   (ii) V21_1Start (keyed to v20.2.0-1})
 //
 //	You'll then want to backport (i) to the release branch itself (i.e.
-//	release-20.2). You'll also want to bump binaryMinSupportedVersion. In the
+//	release-20.2). You'll also want to bump BinaryMinSupportedVersion. In the
 //	example above, you'll set it to V20_2. This indicates that the
 //	minimum binary version required in a cluster with nodes running
 //	v21.1 binaries (including pre-release alphas) is v20.2, i.e. that an
@@ -917,26 +917,26 @@ const (
 // feels out of place. A "cluster version" and a "binary version" are two
 // separate concepts.
 var (
-	// binaryMinSupportedVersion is the earliest version of data supported by
+	// BinaryMinSupportedVersion is the earliest version of data supported by
 	// this binary. If this binary is started using a store marked with an older
-	// version than binaryMinSupportedVersion, then the binary will exit with
+	// version than BinaryMinSupportedVersion, then the binary will exit with
 	// an error. This typically trails the current release by one (see top-level
 	// comment).
-	binaryMinSupportedVersion = ByKey(BinaryMinSupportedVersionKey)
+	BinaryMinSupportedVersion = ByKey(BinaryMinSupportedVersionKey)
 
 	BinaryVersionKey = V23_2
-	// binaryVersion is the version of this binary.
+	// BinaryVersion is the version of this binary.
 	//
 	// This is the version that a new cluster will use when created.
-	binaryVersion = ByKey(BinaryVersionKey)
+	BinaryVersion = ByKey(BinaryVersionKey)
 )
 
 func init() {
 	if finalVersion > invalidVersionKey {
-		if binaryVersion != ByKey(finalVersion) {
+		if BinaryVersion != ByKey(finalVersion) {
 			panic("binary version does not match final version")
 		}
-	} else if binaryVersion.Internal == 0 {
+	} else if BinaryVersion.Internal == 0 {
 		panic("a non-upgrade cluster version must be the final version")
 	}
 }

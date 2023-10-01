@@ -27,7 +27,7 @@ func TestVersionsAreValid(t *testing.T) {
 }
 
 // TestPreserveVersionsForMinBinaryVersion ensures that versions
-// at or above binaryMinSupportedVersion are not deleted.
+// at or above BinaryMinSupportedVersion are not deleted.
 func TestPreserveVersionsForMinBinaryVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -37,7 +37,7 @@ func TestPreserveVersionsForMinBinaryVersion(t *testing.T) {
 	}
 	for _, namedVersion := range versionsSingleton {
 		v := namedVersion.Version
-		if v.Less(binaryMinSupportedVersion) {
+		if v.Less(BinaryMinSupportedVersion) {
 			prevVersion = namedVersion
 			continue
 		}
@@ -46,7 +46,7 @@ func TestPreserveVersionsForMinBinaryVersion(t *testing.T) {
 				"version(s) between %s (%s) and %s (%s) is(are) at or above minBinaryVersion (%s) and should not be removed",
 				prevVersion.Key, prevVersion.Version,
 				namedVersion.Key, namedVersion.Version,
-				binaryMinSupportedVersion)
+				BinaryMinSupportedVersion)
 		}
 		prevVersion = namedVersion
 	}
@@ -157,13 +157,13 @@ func TestGetVersionsBetween(t *testing.T) {
 }
 
 // TestEnsureConsistentBinaryVersion ensures that BinaryVersionKey maps to a
-// version equal to binaryVersion.
+// version equal to BinaryVersion.
 func TestEnsureConsistentBinaryVersion(t *testing.T) {
-	require.Equal(t, ByKey(BinaryVersionKey), binaryVersion)
+	require.Equal(t, ByKey(BinaryVersionKey), BinaryVersion)
 }
 
 // TestEnsureConsistentMinBinaryVersion ensures that BinaryMinSupportedVersionKey
-// maps to a version equal to binaryMinSupportedVersion.
+// maps to a version equal to BinaryMinSupportedVersion.
 func TestEnsureConsistentMinBinaryVersion(t *testing.T) {
-	require.Equal(t, ByKey(BinaryMinSupportedVersionKey), binaryMinSupportedVersion)
+	require.Equal(t, ByKey(BinaryMinSupportedVersionKey), BinaryMinSupportedVersion)
 }

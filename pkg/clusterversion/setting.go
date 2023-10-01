@@ -41,9 +41,9 @@ const KeyVersionSetting = "version"
 // the version setting without looking at what's been persisted: The setting
 // specifies the minimum binary version we have to expect to be in a mixed
 // cluster with. We can't assume it is this binary's
-// binaryMinSupportedVersion as the cluster could've started up earlier and
+// BinaryMinSupportedVersion as the cluster could've started up earlier and
 // enabled features that are no longer compatible it; we can't assume it's our
-// binaryVersion as that would enable features that may trip up older versions
+// BinaryVersion as that would enable features that may trip up older versions
 // running in the same cluster. Hence, only once we get word of the "safe"
 // version to use can we allow moving parts that actually need to know what's
 // going on.
@@ -218,7 +218,7 @@ func (cv *clusterVersionSetting) ValidateBinaryVersions(
 
 // SettingsListDefault is part of the VersionSettingImpl interface.
 func (cv *clusterVersionSetting) SettingsListDefault() string {
-	return binaryVersion.String()
+	return BinaryVersion.String()
 }
 
 func (cv *clusterVersionSetting) validateBinaryVersions(
