@@ -393,7 +393,7 @@ func TestLockTableBasic(t *testing.T) {
 				acq := roachpb.MakeLockAcquisition(req.Txn, roachpb.Key(key), durability, strength)
 				var ignored []enginepb.IgnoredSeqNumRange
 				if d.HasArg("ignored-seqs") {
-					ignored = scanIgnoredSeqNumbers(t, d)
+					ignored = ScanIgnoredSeqNumbers(t, d)
 				}
 				acq.IgnoredSeqNums = ignored
 				if err := lt.AcquireLock(&acq); err != nil {
@@ -437,7 +437,7 @@ func TestLockTableBasic(t *testing.T) {
 				span := getSpan(t, d, s)
 				var ignored []enginepb.IgnoredSeqNumRange
 				if d.HasArg("ignored-seqs") {
-					ignored = scanIgnoredSeqNumbers(t, d)
+					ignored = ScanIgnoredSeqNumbers(t, d)
 				}
 				// TODO(sbhola): also test STAGING.
 				intent := &roachpb.LockUpdate{
@@ -803,7 +803,7 @@ func GetStrength(t *testing.T, d *datadriven.TestData, strS string) lock.Strengt
 	}
 }
 
-func scanIgnoredSeqNumbers(t *testing.T, d *datadriven.TestData) []enginepb.IgnoredSeqNumRange {
+func ScanIgnoredSeqNumbers(t *testing.T, d *datadriven.TestData) []enginepb.IgnoredSeqNumRange {
 	var ignored []enginepb.IgnoredSeqNumRange
 	var seqsStr string
 	d.ScanArgs(t, "ignored-seqs", &seqsStr)
@@ -1561,9 +1561,7 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		keys = append(keys, roachpb.Key(string(rune('a'+i))))
 	}
-	// TODO(nvanbenschoten): add lock.Shared back in once #111144 is fixed.
-	//strs := []lock.Strength{lock.None, lock.Shared, lock.Exclusive, lock.Intent}
-	strs := []lock.Strength{lock.None, lock.Exclusive, lock.Intent}
+	strs := []lock.Strength{lock.None, lock.Shared, lock.Exclusive, lock.Intent}
 	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 	const numActiveTxns = 8
 	var activeTxns [numActiveTxns]*enginepb.TxnMeta

@@ -76,8 +76,8 @@ import (
 // check-opt-no-conflicts            req=<req-name>
 // is-key-locked-by-conflicting-txn  req=<req-name> key=<key> strength=<strength>
 //
-// on-lock-acquired  req=<req-name> key=<key> [seq=<seq>] [dur=r|u] [strength=<strength>]
-// on-lock-updated   req=<req-name> txn=<txn-name> key=<key> status=[committed|aborted|pending] [ts=<int>[,<int>]]
+// on-lock-acquired  req=<req-name> key=<key> [seq=<seq>] [dur=r|u] [str=<strength>]
+// on-lock-updated   req=<req-name> txn=<txn-name> key=<key> status=[committed|aborted|pending] [ts=<int>[,<int>]] [ignored-seqs=<int>[-<int>][,<int>[-<int>]]
 // on-txn-updated    txn=<txn-name> status=[committed|aborted|pending] [ts=<int>[,<int>]]
 //
 // on-lease-updated  leaseholder=<bool> lease-seq=<seq>
@@ -377,6 +377,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				}
 				var key string
 				d.ScanArgs(t, "key", &key)
+				// TODO(nvanbenschoten): replace with scanLockStrength.
 				strength := concurrency.ScanLockStrength(t, d)
 				ok, txn, err := g.IsKeyLockedByConflictingTxn(roachpb.Key(key), strength)
 				if err != nil {
@@ -416,7 +417,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				}
 				var str lock.Strength
 				if d.HasArg("str") {
-					str = concurrency.ScanLockStrength(t, d)
+					str = scanLockStrength(t, d)
 				} else {
 					// If no lock strength is provided in the test, infer it from the
 					// durability.
@@ -478,6 +479,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				if d.HasArg("ts") {
 					ts = scanTimestamp(t, d)
 				}
+				ignoredSeqNums := scanIgnoredSeqNumbers(t, d)
 
 				// Confirm that the request has a corresponding ResolveIntent.
 				found := false
@@ -502,6 +504,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					log.Eventf(ctx, "%s txn %s @ %s", verb, txn.Short(), key)
 					span := roachpb.Span{Key: roachpb.Key(key)}
 					up := roachpb.MakeLockUpdate(txnUpdate, span)
+					up.IgnoredSeqNums = ignoredSeqNums
 					m.OnLockUpdated(ctx, &up)
 				})
 				return c.waitAndCollect(t, mon)
