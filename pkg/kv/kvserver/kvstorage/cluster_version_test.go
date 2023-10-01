@@ -34,8 +34,8 @@ func TestStoresClusterVersionIncompatible(t *testing.T) {
 
 	ctx := context.Background()
 
-	current := clusterversion.ByKey(clusterversion.BinaryVersionKey)
-	minSupported := clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
+	current := clusterversion.BinaryVersion
+	minSupported := clusterversion.BinaryMinSupportedVersion
 
 	future := current
 	future.Major++

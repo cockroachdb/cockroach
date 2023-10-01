@@ -34,7 +34,7 @@ func TestTenantIDSequenceForSystemTenant(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey),
+					BinaryVersionOverride:          clusterversion.BinaryMinSupportedVersion,
 					BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
 				},
 			},

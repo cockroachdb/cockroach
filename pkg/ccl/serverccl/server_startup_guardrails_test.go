@@ -34,9 +34,8 @@ func TestServerStartupGuardrails(t *testing.T) {
 	// returned by this function to work both on master (where the dev
 	// offset applies) and on release branches (where it doesn't).
 	v := func(major, minor int32) roachpb.Version {
-		binaryVersion := clusterversion.ByKey(clusterversion.BinaryVersionKey)
 		var offset int32
-		if binaryVersion.Major > clusterversion.DevOffset {
+		if clusterversion.BinaryVersion.Major > clusterversion.DevOffset {
 			offset = clusterversion.DevOffset
 		}
 		return roachpb.Version{Major: offset + major, Minor: minor}

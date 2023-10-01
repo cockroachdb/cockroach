@@ -665,8 +665,8 @@ func newInitServerConfig(
 		//
 		// Refer to the header comment on BinaryVersionOverride for more details.
 		if ov := knobs.(*TestingKnobs).BinaryVersionOverride; ov != (roachpb.Version{}) {
-			if binaryMinSupportedVersion.Equal(clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)) {
-				binaryVersion = clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
+			if binaryMinSupportedVersion.Equal(clusterversion.BinaryMinSupportedVersion) {
+				binaryVersion = clusterversion.BinaryMinSupportedVersion
 			} else {
 				binaryVersion = ov
 			}

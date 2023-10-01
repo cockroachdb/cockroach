@@ -177,7 +177,7 @@ func (p *planner) createTenantInternal(
 		// The cluster is running the latest version.
 		// Use this version to create the tenant and bootstrap it using the host
 		// cluster's bootstrapping logic.
-		tenantVersion.Version = clusterversion.ByKey(clusterversion.BinaryVersionKey)
+		tenantVersion.Version = clusterversion.BinaryVersion
 		bootstrapVersionOverride = 0
 	}
 

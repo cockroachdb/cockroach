@@ -499,7 +499,7 @@ func bootstrapCluster(
 				// ready to use in the test.
 				if knobs.BinaryVersionOverride != (roachpb.Version{}) {
 					if initCfg.binaryMinSupportedVersion.Equal(
-						clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)) {
+						clusterversion.BinaryMinSupportedVersion) {
 						initialValuesOpts.OverrideKey = clusterversion.BinaryMinSupportedVersionKey
 					}
 				}

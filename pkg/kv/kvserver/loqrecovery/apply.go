@@ -448,10 +448,8 @@ func CheckEnginesVersion(
 	plan loqrecoverypb.ReplicaUpdatePlan,
 	ignoreInternal bool,
 ) error {
-	binaryVersion := clusterversion.ByKey(clusterversion.BinaryVersionKey)
-	binaryMinSupportedVersion := clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
 	clusterVersion, err := kvstorage.SynthesizeClusterVersionFromEngines(
-		ctx, engines, binaryVersion, binaryMinSupportedVersion,
+		ctx, engines, clusterversion.BinaryVersion, clusterversion.BinaryMinSupportedVersion,
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed to get cluster version from storage")

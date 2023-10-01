@@ -626,7 +626,7 @@ func (e *quorumRecoveryEnv) getOrCreateStore(
 		); err != nil {
 			t.Fatalf("failed to populate test store ident: %v", err)
 		}
-		v := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+		v := clusterversion.BinaryVersion
 		if err := kvstorage.WriteClusterVersionToEngines(ctx, []storage.Engine{eng}, clusterversion.ClusterVersion{Version: v}); err != nil {
 			t.Fatalf("failed to populate test store cluster version: %v", err)
 		}
@@ -658,7 +658,7 @@ func (e *quorumRecoveryEnv) handleCollectReplicas(
 		// This is unrealistic as we don't have metadata. We need to fake it here
 		// to pass planner checks.
 		e.replicas.ClusterID = e.clusterID.String()
-		e.replicas.Version = clusterversion.ByKey(clusterversion.BinaryVersionKey)
+		e.replicas.Version = clusterversion.BinaryVersion
 	}
 	e.replicas.Descriptors = e.meta
 	return "ok", nil

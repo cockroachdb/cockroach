@@ -263,7 +263,7 @@ func TestPostJobInfoTableQueryDuplicateJobInfo(t *testing.T) {
 			false, // initializeVersion
 		)
 		require.NoError(t, clusterversion.Initialize(ctx,
-			clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey), &settings.SV))
+			clusterversion.BinaryMinSupportedVersion, &settings.SV))
 		return settings
 	}
 

@@ -26,7 +26,7 @@ func TestVersionIsPreserved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	current := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+	current := clusterversion.BinaryVersion
 	current.Patch += 1
 
 	replicaInfo := infoWithVersion(current)

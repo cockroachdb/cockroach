@@ -37,8 +37,8 @@ func TestFirstUpgradesAfterPreExistingRelease(t *testing.T) {
 	// Compute the set of pre-existing releases supported by this binary.
 	// This excludes the latest release if the binary version is a release.
 	preExistingReleases := make(map[roachpb.Version]struct{})
-	minBinaryVersion := clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
-	binaryVersion := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+	minBinaryVersion := clusterversion.BinaryMinSupportedVersion
+	binaryVersion := clusterversion.BinaryVersion
 	for _, v := range clusterversion.ListBetween(minBinaryVersion, binaryVersion) {
 		preExistingReleases[roachpb.Version{Major: v.Major, Minor: v.Minor}] = struct{}{}
 	}

@@ -40,8 +40,8 @@ func TestSupportedReleases(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	expected := make(map[roachpb.Version]struct{})
-	earliest := clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
-	latest := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+	earliest := clusterversion.BinaryMinSupportedVersion
+	latest := clusterversion.BinaryVersion
 	var incumbent roachpb.Version
 	for _, v := range clusterversion.ListBetween(earliest, latest) {
 		if v.Major != incumbent.Major && v.Minor != incumbent.Minor {

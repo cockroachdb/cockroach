@@ -312,7 +312,7 @@ func TestJobInfoUpgradeRegressionTests(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride:          clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey),
+				BinaryVersionOverride:          clusterversion.BinaryMinSupportedVersion,
 				BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
 			},
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),

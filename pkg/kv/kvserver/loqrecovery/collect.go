@@ -113,10 +113,8 @@ func CollectStoresReplicaInfo(
 
 	// Synthesizing version from engine ensures that binary is compatible with
 	// the store, so we don't need to do any extra checks.
-	binaryVersion := clusterversion.ByKey(clusterversion.BinaryVersionKey)
-	binaryMinSupportedVersion := clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
 	version, err := kvstorage.SynthesizeClusterVersionFromEngines(
-		ctx, stores, binaryVersion, binaryMinSupportedVersion,
+		ctx, stores, clusterversion.BinaryVersion, clusterversion.BinaryMinSupportedVersion,
 	)
 	if err != nil {
 		return loqrecoverypb.ClusterReplicaInfo{}, CollectionStats{}, errors.WithHint(err,

@@ -87,7 +87,7 @@ func (ps *profileSetter) Set(v string) error {
 var endProfileTask = autoconfigpb.Task{
 	TaskID:      autoconfigpb.TaskID(math.MaxUint64),
 	Description: "end of configuration profile",
-	MinVersion:  clusterversion.ByKey(clusterversion.BinaryVersionKey),
+	MinVersion:  clusterversion.BinaryVersion,
 	Payload: &autoconfigpb.Task_SimpleSQL{
 		SimpleSQL: &autoconfigpb.SimpleSQL{},
 	},

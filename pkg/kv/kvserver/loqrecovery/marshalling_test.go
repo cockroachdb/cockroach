@@ -31,7 +31,7 @@ import (
 func TestJsonSerialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	newVersion := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+	newVersion := clusterversion.BinaryVersion
 
 	rs := []loqrecoverypb.ReplicaInfo{
 		{
