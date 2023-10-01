@@ -59,12 +59,12 @@ func buildFromLeftBatch(b *crossJoinerBase, currentBatch coldata.Batch, sel []in
 	if b.isCrossJoin {
 		curSrcStartIdx := bs.curSrcStartIdx
 		outStartIndex := destStartIdx
-		for curSrcStartIdx < leftSrcEndIdx && outStartIndex < outputCapacity {
+		for i := 0; i < leftNumRepeats; i++ {
 			if done := b.helper.AccountForSet(outStartIndex); done {
 				// Use a smaller output capacity for the current set of rows if
 				// producing the output causes the budget to be exceeded.
 				//outputCapacity = outStartIndex + 1
-				// fmt.Println("overflowed")  // msirek-temp
+				//fmt.Println("overflowed") // msirek-temp
 				break
 			}
 			outStartIndex++
@@ -142,6 +142,7 @@ func buildFromLeftBatch(b *crossJoinerBase, currentBatch coldata.Batch, sel []in
 							val := srcCol.Get(srcStartIdx)
 							for i := 0; i < toAppend; i++ {
 								outCol.Set(outStartIdx, val)
+								b.helper.AccountForSet(outStartIdx)
 								outStartIdx++
 							}
 						}
@@ -157,12 +158,12 @@ func buildFromLeftBatch(b *crossJoinerBase, currentBatch coldata.Batch, sel []in
 	if b.isCrossJoin {
 		curSrcStartIdx := bs.curSrcStartIdx
 		outStartIndex := destStartIdx
-		for curSrcStartIdx < leftSrcEndIdx && outStartIndex < outputCapacity {
+		for curSrcStartIdx < b.builderState.setup.leftSrcEndIdx && outStartIndex < outputCapacity {
 			if done := b.helper.AccountForSet(outStartIndex); done {
 				// Use a smaller output capacity for the current set of rows if
 				// producing the output causes the budget to be exceeded.
 				//outputCapacity = outStartIndex + 1
-				//fmt.Println("overflowed") // msirek-temp
+				//fmt.Println("overflowed2") // msirek-temp
 				break
 			}
 			outStartIndex++
