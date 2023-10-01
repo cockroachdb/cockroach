@@ -1,0 +1,182 @@
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-txn name=txn3 ts=10,1 epoch=0
+----
+
+new-txn name=txn4 ts=10,1 epoch=0
+----
+
+new-txn name=txn5 ts=10,1 epoch=0
+----
+
+# -----------------------------------------------------------------------------
+# Ensure releasing the first of multiple shared lock holders results in correct
+# pushes.
+# -----------------------------------------------------------------------------
+
+new-request name=req1 txn=txn1 ts=10,1
+  get key=a str=shared
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+on-lock-acquired req=req1 key=a dur=u str=shared
+----
+[-] acquire lock: txn 00000001 @ ‹a›
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+new-request name=req2 txn=txn2 ts=10,1
+  get key=a str=shared
+----
+
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+on-lock-acquired req=req2 key=a dur=u str=shared
+----
+[-] acquire lock: txn 00000002 @ ‹a›
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+new-request name=req3 txn=txn3 ts=10,1
+  get key=a str=shared
+----
+
+sequence req=req3
+----
+[3] sequence req3: sequencing request
+[3] sequence req3: acquiring latches
+[3] sequence req3: scanning lock table for conflicting locks
+[3] sequence req3: sequencing complete, returned guard
+
+on-lock-acquired req=req3 key=a dur=u str=shared
+----
+[-] acquire lock: txn 00000003 @ ‹a›
+
+finish req=req3
+----
+[-] finish req3: finishing request
+
+new-request name=req4 txn=txn4 ts=10,1
+  get key=a str=shared
+----
+
+sequence req=req4
+----
+[4] sequence req4: sequencing request
+[4] sequence req4: acquiring latches
+[4] sequence req4: scanning lock table for conflicting locks
+[4] sequence req4: sequencing complete, returned guard
+
+on-lock-acquired req=req4 key=a dur=u str=shared
+----
+[-] acquire lock: txn 00000004 @ ‹a›
+
+finish req=req4
+----
+[-] finish req4: finishing request
+
+debug-lock-table
+----
+num=1
+ lock: "a"
+  holders: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+# Setup complete.
+
+new-request name=req5 txn=txn5 ts=10,1
+  get key=a str=exclusive
+----
+
+sequence req=req5
+----
+[5] sequence req5: sequencing request
+[5] sequence req5: acquiring latches
+[5] sequence req5: scanning lock table for conflicting locks
+[5] sequence req5: waiting in lock wait-queues
+[5] sequence req5: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
+[5] sequence req5: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[5] sequence req5: pushing txn 00000001 to abort
+[5] sequence req5: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+# Commit txn1 (the transaction req5 is pushing) to have it release the lock. req5
+# should start pushing txn2.
+on-txn-updated txn=txn1 status=committed
+----
+[-] update txn: committing txn1
+[5] sequence req5: resolving intent ‹"a"› for txn 00000001 with COMMITTED status
+[5] sequence req5: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
+[5] sequence req5: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
+[5] sequence req5: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[5] sequence req5: pushing txn 00000002 to abort
+[5] sequence req5: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+# Abort txn2 (the transaction req5 is now pushing) to have it release the lock.
+# req5 should start pushing txn3 now.
+on-txn-updated txn=txn2 status=aborted
+----
+[-] update txn: aborting txn2
+[5] sequence req5: resolving intent ‹"a"› for txn 00000002 with ABORTED status
+[5] sequence req5: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
+[5] sequence req5: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
+[5] sequence req5: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[5] sequence req5: pushing txn 00000003 to abort
+[5] sequence req5: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+# This time, instead of finalizing the transaction that's begin pushed (txn3),
+# we'll instead finalize txn4 (the other shared lock holder) instead. Nothing
+# should change in terms of who req5 is pushing as a result.
+on-txn-updated txn=txn4 status=aborted
+----
+[-] update txn: aborting txn4
+
+debug-lock-table
+----
+num=1
+ lock: "a"
+  holders: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 5, strength: Exclusive, txn: 00000005-0000-0000-0000-000000000000
+   distinguished req: 5
+
+# Unlock the key entirely, ensure req5 can proceed.
+on-txn-updated txn=txn3 status=committed
+----
+[-] update txn: committing txn3
+[5] sequence req5: resolving intent ‹"a"› for txn 00000003 with COMMITTED status
+[5] sequence req5: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
+[5] sequence req5: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
+[5] sequence req5: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[5] sequence req5: pushing txn 00000004 to abort
+[5] sequence req5: resolving intent ‹"a"› for txn 00000004 with ABORTED status
+[5] sequence req5: lock wait-queue event: done waiting
+[5] sequence req5: conflicted with ‹00000004-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
+[5] sequence req5: acquiring latches
+[5] sequence req5: scanning lock table for conflicting locks
+[5] sequence req5: sequencing complete, returned guard
+
+finish req=req5
+----
+[-] finish req5: finishing request
