@@ -3452,48 +3452,104 @@ func (kl *keyLocks) requestDone(g *lockTableGuardImpl) (gc bool) {
 	return kl.isEmptyLock()
 }
 
-// tryFreeLockOnReplicatedAcquire attempts to free a write-uncontended lock
-// during the state transition from the Unreplicated durability to the
-// Replicated durability. This is possible because a Replicated lock is also
-// stored as an MVCC intent, so it does not need to also be stored in the
-// lockTable if locking requests are not queuing on it. This is beneficial
-// because it serves as a mitigation for #49973. Since we aren't currently great
-// at avoiding excessive contention on limited scans when locks are in the
-// lockTable, it's better the keep locks out of the lockTable when possible.
+// tryFreeLockOnReplicatedAcquire attempts to free a lock on a write-uncontended
+// key during a re-acquisition. The lock is free-ed only if the replicated lock
+// provides sufficient protection, whereby tracking the replicated lock is
+// pointless.
 //
-// If any of the readers do truly contend with this lock even after their limit
-// has been applied, they will notice during their MVCC scan and re-enter the
-// queue (possibly recreating the lock through AddDiscoveredLock). Still, in
-// practice this seems to work well in avoiding most of the artificial
-// concurrency discussed in #49973.
+// A boolean indicating whether the lock was free-ed or not is returned to the
+// caller. If it was free-ed, the caller should not re-add the replicate lock
+// back to the lock table. Additionally, if the last lock on a key was cleared,
+// it's the caller's responsibility to remove the receiver from the lock table's
+// tree. A boolean, mustGC, is returned true in this case.
 //
-// Acquires l.mu.
-func (kl *keyLocks) tryFreeLockOnReplicatedAcquire() bool {
+// Historically, this served as a mitigation for #49973, prior to the
+// introduction of optimistic evaluation. The benefits of keeping this scheme
+// around today are less pronounced, and may be re-evaluated.
+//
+// Acquires kl.mu.
+func (kl *keyLocks) tryFreeLockOnReplicatedAcquire(
+	acq *roachpb.LockAcquisition,
+) (freed bool, mustGC bool) {
 	kl.mu.Lock()
 	defer kl.mu.Unlock()
 
-	// Bail if not locked with only the Unreplicated durability.
-	if anyReplicated, _ := kl.isAnyLockHeldReplicated(); !kl.isLocked() || anyReplicated {
-		return false
+	if !kl.isLockedBy(acq.Txn.ID) {
+		// The lock isn't held by the transaction that's acquiring the replicated
+		// lock. There's no opportunity to free anything up.
+		return false /* freed */, false /* mustGC */
 	}
 
-	// Bail if the lock has waiting locking requests. It is not uncontended.
+	// Bail if the lock has waiting locking requests. It isn't uncontended, so we
+	// can't free it, otherwise:
+	// 1. EITHER the request would proceed to evaluation and re-discover the
+	// (newly acquired) replicated lock and re-add it to the lock table,
+	// performing wasted work.
+	// 2. OR it would wait on a different lock and give up a (potential) claim on
+	// this one, thereby allowing other requests to potentially barge in front of
+	// it once this lock is actually released.
 	if kl.queuedLockingRequests.Len() != 0 {
-		return false
+		return false /* freed */, false /* mustGC */
 	}
 
-	// The lock is uncontended by other locking requests, so we're safe to drop
-	// it. This may release non-locking readers who were waiting on the lock.
-	//
-	// TODO(arul): Once we support replicated shared locks, we only want to clear
-	// the lock holder that's promoting its durability from unreplicated to
-	// replicated -- not all lock holders.
-	kl.clearAllLockHolders()
+	tl := kl.heldBy[acq.Txn.ID].Value
+
+	// Bail if the transaction doesn't hold just an unreplicated lock -- there's
+	// no potential to forget anything here.
+	if !tl.isHeldUnreplicated() || tl.isHeldReplicated() {
+		return false /* freed */, false /* mustGC */
+	}
+
+	// Bail if there's an epoch number mismatch, as we can't compare sequence
+	// numbers across epochs. Note that we're not making any effort to forget
+	// unreplicated locks if the replicated lock acquisition corresponds to a
+	// newer epoch -- we defer to acquireLock to handle epcoh bumps instead.
+	if tl.txn.Epoch != acq.Txn.Epoch {
+		return false /* freed */, false /* mustGC */
+	}
+
+	// The transaction is trying to re-acquire a replicated lock on this key, and
+	// it holds an unreplicated lock that we may be able to forget as the key is
+	// uncontended. However, to do so, the replicated lock must provide enough
+	// protection to subsume the unreplicated lock(s). Check that.
+	canFree := true
+	for _, str := range unreplicatedHolderStrengths {
+		if str > acq.Strength && tl.unreplicatedInfo.held(str) {
+			// The replicated lock isn't of sufficient lock strength.
+			canFree = false
+			break
+		}
+		// NB: Strictly speaking, we should also be checking if the sequence number
+		// of the unreplicated lock we're about to forget here is less than or equal
+		// to the replicated lock acquisition. Otherwise, a savepoint rollback could
+		// cause us to roll back the replicated lock (in favor of which we're
+		// deciding to no longer track this unreplicated lock). However, this would
+		// mean that the common case of unreplicated locks being re-acquired as
+		// replicated ones won't be able to take advantage of this optimization
+		// (think SELECT FOR UPDATE or implicit exclusive locks acquired as part of
+		// UPDATE statements). We thus decide to ignore sequence numbers in our
+		// determination here -- savepoint rollbacks are rare enough. It's also
+		// not like unreplicated locks can't be lost for other reasons.
+	}
+	if !canFree {
+		// The replicated lock acquisition doesn't offer sufficient protection
+		return false /* freed */, false /* mustGC */
+	}
+
+	kl.clearLockHeldBy(acq.Txn.ID)
+	if kl.isLocked() {
+		return true /* freed */, false /* mustGC */
+	}
+
+	// If this was the only transaction that held the lock, then the key is now
+	// unlocked. Note that the waiters being released here are necessarily
+	// waiting readers -- if there were any contending locking requests, we
+	// wouldn't have gotten here.
 	gc := kl.releaseWaitersOnKeyUnlocked()
 	if !gc {
 		panic("expected lockIsFree to return true")
 	}
-	return true
+	return true /* freed */, true /* mustGC */
 }
 
 // releaseWaitersOnKeyUnlocked is called when the key, referenced in the
@@ -3907,9 +3963,9 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 	default:
 		return errors.AssertionFailedf("unsupported lock strength %s", acq.Strength)
 	}
-	var l *keyLocks
+	var kl *keyLocks
 	t.locks.mu.Lock()
-	// Can't release tree.mu until call l.acquireLock() since someone may find
+	// Can't release tree.mu until call kl.acquireLock() since someone may find
 	// an empty lock and remove it from the tree. If we expect that keyLocks
 	// will already be in tree we can optimize this by first trying with a
 	// tree.mu.RLock().
@@ -3929,30 +3985,36 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 		}
 		var lockSeqNum uint64
 		lockSeqNum, checkMaxLocks = t.locks.nextLockSeqNum()
-		l = &keyLocks{id: lockSeqNum, key: acq.Key}
-		l.queuedLockingRequests.Init()
-		l.waitingReaders.Init()
-		l.holders.Init()
-		l.heldBy = make(map[uuid.UUID]*list.Element[*txnLock])
-		t.locks.Set(l)
+		kl = &keyLocks{id: lockSeqNum, key: acq.Key}
+		kl.queuedLockingRequests.Init()
+		kl.waitingReaders.Init()
+		kl.holders.Init()
+		kl.heldBy = make(map[uuid.UUID]*list.Element[*txnLock])
+		t.locks.Set(kl)
 		t.locks.numKeysLocked.Add(1)
 	} else {
-		l = iter.Cur()
-		if acq.Durability == lock.Replicated && l.tryFreeLockOnReplicatedAcquire() {
-			// Don't remember uncontended replicated locks. Just like in the
-			// case where the lock is initially added as replicated, we drop
-			// replicated locks from the lockTable when being upgraded from
-			// Unreplicated to Replicated, whenever possible.
-			// TODO(sumeer): now that limited scans evaluate optimistically, we
-			// should consider removing this hack. But see the comment in the
-			// preceding block about maxKeysLocked.
-			t.locks.Delete(l)
-			t.locks.mu.Unlock()
-			t.locks.numKeysLocked.Add(-1)
-			return nil
+		kl = iter.Cur()
+		if acq.Durability == lock.Replicated {
+			if freed, mustGC := kl.tryFreeLockOnReplicatedAcquire(acq); freed {
+				// Don't remember uncontended replicated locks. Just like in the case
+				// where the lock is initially added as replicated, we drop replicated
+				// locks from the lockTable when being upgraded from Unreplicated to
+				// Replicated, whenever possible.
+				//
+				// TODO(sumeer): now that limited scans evaluate optimistically, we should
+				// consider removing this hack. But see the comment in the preceding block
+				// about maxKeysLocked.
+				if mustGC {
+					// The key is no longer locked; it can be removed from the tree.
+					t.locks.Delete(kl)
+					t.locks.numKeysLocked.Add(-1)
+				}
+				t.locks.mu.Unlock()
+				return nil // don't remember the replicated lock
+			}
 		}
 	}
-	err := l.acquireLock(acq, t.clock, t.settings)
+	err := kl.acquireLock(acq, t.clock, t.settings)
 	t.locks.mu.Unlock()
 
 	if checkMaxLocks {
