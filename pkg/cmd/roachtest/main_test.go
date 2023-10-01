@@ -32,7 +32,7 @@ func init() {
 }
 
 func makeRegistry(names ...string) testRegistryImpl {
-	r := makeTestRegistry(spec.GCE, "", "", false /* preferSSD */, false /* benchOnly */)
+	r := makeTestRegistry(spec.GCE, "", "", false /* preferSSD */)
 	dummyRun := func(context.Context, test.Test, cluster.Cluster) {}
 
 	for _, name := range names {
@@ -55,7 +55,7 @@ func TestSampleSpecs(t *testing.T) {
 
 	for _, f := range []float64{0.01, 0.5, 1.0} {
 		t.Run(fmt.Sprintf("Sample-%.3f", f), func(t *testing.T) {
-			specs := testsToRun(r, filter, false /* runSkipped */, f /* selectProbability */, false /* print */)
+			specs, _ := testsToRun(r, filter, false /* runSkipped */, f /* selectProbability */, false /* print */)
 
 			matched := map[string]int{"abc": 0, "def": 0, "ghi": 0, "jkl": 0}
 			for _, s := range specs {
@@ -74,7 +74,7 @@ func TestSampleSpecs(t *testing.T) {
 	filter = registry.NewTestFilter([]string{"abc"})
 	for _, f := range []float64{0.01, 0.5, 1.0} {
 		t.Run(fmt.Sprintf("Sample-abc-%.3f", f), func(t *testing.T) {
-			specs := testsToRun(r, filter, false /* runSkipped */, f /* selectProbability */, false /* print */)
+			specs, _ := testsToRun(r, filter, false /* runSkipped */, f /* selectProbability */, false /* print */)
 
 			matched := map[string]int{"abc": 0, "def": 0, "ghi": 0, "jkl": 0}
 			for _, s := range specs {
