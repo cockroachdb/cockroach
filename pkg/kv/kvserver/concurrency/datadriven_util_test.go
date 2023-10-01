@@ -175,6 +175,8 @@ func scanSingleRequest(
 		return enginepb.TxnSeq(n)
 	}
 	maybeGetStr := func() lock.Strength {
+		// TODO(arul): everywhere we use "strength" instead of "str" -- use
+		// "strength" here as well.
 		s, ok := fields["str"]
 		if !ok {
 			return lock.None
