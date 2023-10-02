@@ -186,6 +186,9 @@ func TestLockTableIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Disable the metamorphic value for deterministic iteration stats.
+	DisableMetamorphicLockTableItersBeforeSeek(t)
+
 	var eng Engine
 	defer func() {
 		if eng != nil {
@@ -351,7 +354,12 @@ func TestLockTableIterator(t *testing.T) {
 type randKey []byte
 
 func (randKey) generate(r *rand.Rand) randKey {
-	return randutil.RandBytes(r, 2)
+	k := roachpb.Key(randutil.RandBytes(r, 1))
+	if r.Intn(2) != 0 {
+		// Randomly generate keys that are the direct successor to other keys.
+		k = k.Next()
+	}
+	return randKey(k)
 }
 
 func (k randKey) toRoachKey() roachpb.Key {
@@ -437,6 +445,24 @@ func (randLockTableIterOpKind) generate(r *rand.Rand) randLockTableIterOpKind {
 	return randLockTableIterOpKind(r.Intn(int(numLockTableIterOpKinds)))
 }
 
+// lockTableIterOpKindPrefixIterPermitted is a map from randLockTableIterOpKind
+// to a boolean indicating whether the operation is compatible with iterators
+// configured for prefix iteration.
+var lockTableIterOpKindPrefixIterPermitted = [...]bool{
+	lockTableIterOpKindSeekGE:          true,
+	lockTableIterOpKindSeekLT:          false,
+	lockTableIterOpKindSeekGEWithLimit: false,
+	lockTableIterOpKindSeekLTWithLimit: false,
+	lockTableIterOpKindNext:            true,
+	lockTableIterOpKindPrev:            false,
+	lockTableIterOpKindNextWithLimit:   false,
+	lockTableIterOpKindPrevWithLimit:   false,
+}
+
+func (op randLockTableIterOpKind) prefixIterPermitted() bool {
+	return lockTableIterOpKindPrefixIterPermitted[op]
+}
+
 // randLockTableIterOp is a quick.Generator for LockTableIterator operations.
 type randLockTableIterOp struct {
 	op    randLockTableIterOpKind
@@ -450,6 +476,10 @@ func (randLockTableIterOp) Generate(r *rand.Rand, size int) reflect.Value {
 		k:     randKey{}.generate(r),
 		limit: randKey{}.generate(r),
 	})
+}
+
+func (op randLockTableIterOp) prefixIterPermitted() bool {
+	return op.op.prefixIterPermitted()
 }
 
 func (op randLockTableIterOp) apply(t *testing.T, iter EngineIterator, b *strings.Builder) {
@@ -588,7 +618,9 @@ func TestLockTableIteratorEquivalence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	lockTableIter := func(ks []randLockTableKey, ops []randLockTableIterOp, f randLockTableIterFilter) string {
+	lockTableIter := func(
+		ks []randLockTableKey, ops []randLockTableIterOp, f randLockTableIterFilter, prefix bool,
+	) string {
 		eng := createTestPebbleEngine()
 		defer eng.Close()
 
@@ -599,6 +631,7 @@ func TestLockTableIteratorEquivalence(t *testing.T) {
 
 		// Then use a LockTableIterator with an appropriate filter config.
 		iter, err := NewLockTableIterator(eng, LockTableIteratorOptions{
+			Prefix:      prefix,
 			UpperBound:  keys.LockTableSingleKeyEnd,
 			MatchTxnID:  f.matchTxnID.toUUID(),
 			MatchMinStr: f.matchMinStr.toStr(),
@@ -608,12 +641,17 @@ func TestLockTableIteratorEquivalence(t *testing.T) {
 
 		var b strings.Builder
 		for _, op := range ops {
+			if prefix && !op.prefixIterPermitted() {
+				continue
+			}
 			op.apply(t, iter, &b)
 		}
 		return b.String()
 	}
 
-	preFilterIter := func(ks []randLockTableKey, ops []randLockTableIterOp, f randLockTableIterFilter) string {
+	preFilterIter := func(
+		ks []randLockTableKey, ops []randLockTableIterOp, f randLockTableIterFilter, prefix bool,
+	) string {
 		eng := createTestPebbleEngine()
 		defer eng.Close()
 
@@ -625,6 +663,7 @@ func TestLockTableIteratorEquivalence(t *testing.T) {
 
 		// Then use a raw engine iterator.
 		iter, err := eng.NewEngineIterator(IterOptions{
+			Prefix:     prefix,
 			UpperBound: keys.LockTableSingleKeyEnd,
 		})
 		require.NoError(t, err)
@@ -632,10 +671,52 @@ func TestLockTableIteratorEquivalence(t *testing.T) {
 
 		var b strings.Builder
 		for _, op := range ops {
+			if prefix && !op.prefixIterPermitted() {
+				continue
+			}
 			op.apply(t, iter, &b)
 		}
 		return b.String()
 	}
 
 	require.NoError(t, quick.CheckEqual(lockTableIter, preFilterIter, nil))
+}
+
+func TestLockTableItersBeforeSeekHelper(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Disable the metamorphic value.
+	DisableMetamorphicLockTableItersBeforeSeek(t)
+
+	// Check that the value is 5.
+	require.Equal(t, 5, lockTableItersBeforeSeek)
+
+	var h lockTableItersBeforeSeekHelper
+	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+
+	// Seek to keyA. Should start stepping.
+	require.False(t, h.shouldSeek(keyA))
+	// Step. Same key. Should step again.
+	require.False(t, h.shouldSeek(keyA))
+	// Step. Same key. Should step again.
+	require.False(t, h.shouldSeek(keyA))
+	// Step. Same key. Should step again.
+	require.False(t, h.shouldSeek(keyA))
+	// Step. Same key. Should step again.
+	require.False(t, h.shouldSeek(keyA))
+	// Step. Same key. Should start seeking.
+	require.True(t, h.shouldSeek(keyA))
+	// Seek. Same key. Should keep seeking if not new key prefix.
+	require.True(t, h.shouldSeek(keyA))
+	// Seek. New key. Should start stepping again.
+	require.False(t, h.shouldSeek(keyB))
+
+	// Test that the key is copied and not referenced.
+	for i := 0; i < lockTableItersBeforeSeek; i++ {
+		keyUnstable := roachpb.Key("unstable")
+		require.False(t, h.shouldSeek(keyUnstable))
+		keyUnstable[0] = 'a'
+	}
+	require.True(t, h.shouldSeek(roachpb.Key("unstable")))
 }

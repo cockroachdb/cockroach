@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,31 +22,19 @@ func TestIncrementCounter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	t.Run("panics when log.MetricName not registered", func(t *testing.T) {
-		l := &LogMetricsRegistry{}
-		l.mu.counters = map[log.MetricName]*metric.Counter{}
-		require.PanicsWithErrorf(t,
-			`MetricName not registered in LogMetricsRegistry: "unregistered"`,
-			func() {
-				l.IncrementCounter("unregistered", 1)
-			}, "expected IncrementCounter to panic for unregistered metric")
-	})
-
-	t.Run("increments counter", func(t *testing.T) {
-		l := newLogMetricsRegistry()
-		func() {
-			l.mu.Lock()
-			defer l.mu.Unlock()
-			require.Zero(t, l.mu.metricsStruct.FluentSinkConnErrors.Count())
-		}()
-		l.IncrementCounter(log.FluentSinkConnectionError, 1)
-		l.IncrementCounter(log.FluentSinkConnectionError, 2)
-		func() {
-			l.mu.Lock()
-			defer l.mu.Unlock()
-			require.Equal(t, int64(3), l.mu.metricsStruct.FluentSinkConnErrors.Count())
-		}()
-	})
+	l := newLogMetricsRegistry()
+	func() {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		require.Zero(t, l.metricsStruct.FluentSinkConnErrors.Count())
+	}()
+	l.IncrementCounter(log.FluentSinkConnectionError, 1)
+	l.IncrementCounter(log.FluentSinkConnectionError, 2)
+	func() {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		require.Equal(t, int64(3), l.metricsStruct.FluentSinkConnErrors.Count())
+	}()
 }
 
 func TestNewRegistry(t *testing.T) {
@@ -66,6 +53,6 @@ func TestNewRegistry(t *testing.T) {
 
 type fakeLogMetrics struct{}
 
-func (*fakeLogMetrics) IncrementCounter(_ log.MetricName, _ int64) {}
+func (*fakeLogMetrics) IncrementCounter(_ log.Metric, _ int64) {}
 
 var _ log.LogMetrics = (*fakeLogMetrics)(nil)

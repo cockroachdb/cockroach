@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -58,12 +59,17 @@ import (
 // is essential to avoiding quadratic behavior during shared lock acquisition
 // and release.
 type LockTableIterator struct {
-	iter EngineIterator
+	iter   EngineIterator
+	prefix bool
 	// If set, return locks with any strength held by this transaction.
 	matchTxnID uuid.UUID
 	// If set, return locks held by any transaction with this strength or
 	// stronger.
 	matchMinStr lock.Strength
+	// Used to avoid iterating over all shared locks on a key when not necessary,
+	// given the filtering criteria. See the comment about "skip past locks" above
+	// for details about why this is important.
+	itersBeforeSeek lockTableItersBeforeSeekHelper
 }
 
 var _ EngineIterator = &LockTableIterator{}
@@ -127,9 +133,11 @@ func NewLockTableIterator(
 	}
 	ltIter := lockTableIteratorPool.Get().(*LockTableIterator)
 	*ltIter = LockTableIterator{
-		iter:        iter,
-		matchTxnID:  opts.MatchTxnID,
-		matchMinStr: opts.MatchMinStr,
+		iter:            iter,
+		prefix:          opts.Prefix,
+		matchTxnID:      opts.MatchTxnID,
+		matchMinStr:     opts.MatchMinStr,
+		itersBeforeSeek: ltIter.itersBeforeSeek,
 	}
 	return ltIter, nil
 }
@@ -248,6 +256,7 @@ func (i *LockTableIterator) PrevEngineKeyWithLimit(
 func (i *LockTableIterator) advanceToMatchingLock(
 	dir int, limit roachpb.Key,
 ) (state pebble.IterValidityState, err error) {
+	defer i.itersBeforeSeek.reset()
 	for {
 		engineKey, err := i.iter.UnsafeEngineKey()
 		if err != nil {
@@ -261,14 +270,96 @@ func (i *LockTableIterator) advanceToMatchingLock(
 			return pebble.IterValid, nil
 		}
 
-		// TODO(nvanbenschoten): implement a maxItersBeforeSeek-like algorithm
-		// to skip over ignored locks and bound the work performed by the
-		// iterator for ignored locks.
+		// We found a non-matching lock. Determine whether to step or seek past it.
+		// We only ever seek if we found a shared lock, because no other locking
+		// strength allows for multiple locks to be held by different transactions
+		// on the same key.
+		var seek bool
+		if str == lock.Shared {
+			seek = i.itersBeforeSeek.shouldSeek(engineKey.Key)
+		}
 
-		if dir < 0 {
-			state, err = i.iter.PrevEngineKeyWithLimit(limit)
+		// Advance to the next key, either by stepping or seeking.
+		if seek {
+			ltKey, ltKeyErr := engineKey.ToLockTableKey()
+			if ltKeyErr != nil {
+				return 0, ltKeyErr
+			}
+			seekKeyBuf := &i.itersBeforeSeek.seekKeyBuf
+			var seekKey EngineKey
+			if dir < 0 {
+				// If iterating backwards and searching for locks held by a specific
+				// transaction, determine whether we have yet to reach key/shared/txnID
+				// or have already passed it. If we have not yet passed it, seek to the
+				// specific version, remembering to offset the txn ID by 1 to account
+				// for the exclusive reverse seek. Otherwise, seek past the maximum
+				// (first) txn ID to the previous locking strength (exclusive).
+				// NOTE: Recall that txnIDs in the lock table key version are ordered in
+				// reverse lexicographical order.
+				if i.matchTxnID != uuid.Nil && bytes.Compare(txnID.GetBytes(), i.matchTxnID.GetBytes()) < 0 {
+					// The subtraction cannot underflow because matchTxnID cannot be the
+					// zero UUID if we are in this branch, with the iterator positioned
+					// after the matchTxnID. Assert for good measure.
+					if i.matchTxnID == uuid.Nil {
+						panic("matchTxnID is unexpectedly the zero UUID")
+					}
+					ltKey.TxnUUID = uuid.FromUint128(i.matchTxnID.ToUint128().Sub(1))
+					seekKey, *seekKeyBuf = ltKey.ToEngineKey(*seekKeyBuf)
+				} else {
+					ltKey.TxnUUID = uuid.Max
+					seekKey, *seekKeyBuf = ltKey.ToEngineKey(*seekKeyBuf)
+				}
+				state, err = i.iter.SeekEngineKeyLTWithLimit(seekKey, limit)
+			} else {
+				// If iterating forwards and searching for locks held by a specific
+				// transaction, determine whether we have yet to reach /key/shared/txnID
+				// or have already passed it. If we have not yet passed it, seek to the
+				// specific version. Otherwise, seek to the next key prefix.
+				// NOTE: Recall that txnIDs in the lock table key version are ordered in
+				// reverse lexicographical order.
+				// NOTE: Recall that shared locks are ordered last for a given key.
+				if i.matchTxnID != uuid.Nil && bytes.Compare(txnID.GetBytes(), i.matchTxnID.GetBytes()) > 0 {
+					ltKey.TxnUUID = i.matchTxnID
+					seekKey, *seekKeyBuf = ltKey.ToEngineKey(*seekKeyBuf)
+				} else {
+					// Seek to the next key prefix (locks on the next user key).
+					// Unlike the two reverse iteration cases and the forward
+					// iteration case where we have yet to reach /key/shared/txnID,
+					// this case deserves special consideration.
+					if i.prefix {
+						// If we are configured as a prefix iterator, do not seek to
+						// the next key prefix. Instead, return the IterExhausted
+						// state. This is more than just an optimization. Seeking to
+						// the next key prefix would move the underlying iterator
+						// (which is also configured for prefix iteration) to the
+						// next key prefix, if such a key prefix exists.
+						//
+						// This case could be decoupled from the itersBeforeSeek
+						// optimization. When performing prefix iteration, we could
+						// immediately detect cases where there are no more possible
+						// matching locks in the key prefix and return an exhausted
+						// state, instead of waiting until we decide to seek to do
+						// so. It's not clear that this additional complexity and
+						// code duplication is worth it, so we don't do it for now.
+						return pebble.IterExhausted, nil
+					}
+					// TODO(nvanbenschoten): for now, we call SeekEngineKeyGEWithLimit
+					// with the prefix of the next lock table key. If EngineIterator
+					// exposed an interface that called NextPrefix(), we could use that
+					// instead. This will require adding a NextPrefixWithLimit() method
+					// to pebble.
+					var seekKeyPrefix roachpb.Key
+					seekKeyPrefix, *seekKeyBuf = keys.LockTableSingleNextKey(ltKey.Key, *seekKeyBuf)
+					seekKey = EngineKey{Key: seekKeyPrefix}
+				}
+				state, err = i.iter.SeekEngineKeyGEWithLimit(seekKey, limit)
+			}
 		} else {
-			state, err = i.iter.NextEngineKeyWithLimit(limit)
+			if dir < 0 {
+				state, err = i.iter.PrevEngineKeyWithLimit(limit)
+			} else {
+				state, err = i.iter.NextEngineKeyWithLimit(limit)
+			}
 		}
 		if state != pebble.IterValid || err != nil {
 			return state, err
@@ -288,7 +379,9 @@ func (i *LockTableIterator) matchingLock(str lock.Strength, txnID uuid.UUID) boo
 // Close implements the EngineIterator interface.
 func (i *LockTableIterator) Close() {
 	i.iter.Close()
-	*i = LockTableIterator{}
+	*i = LockTableIterator{
+		itersBeforeSeek: i.itersBeforeSeek,
+	}
 	lockTableIteratorPool.Put(i)
 }
 
@@ -407,4 +500,91 @@ func checkLockTableKeyOrNil(key roachpb.Key) error {
 		return nil
 	}
 	return checkLockTableKey(key)
+}
+
+// defaultLockTableItersBeforeSeek is the default value for the
+// lockTableItersBeforeSeek metamorphic value.
+const defaultLockTableItersBeforeSeek = 5
+
+// lockTableItersBeforeSeek is the number of iterations to perform across the
+// shared locks on a single user key before seeking past them. This is used to
+// avoid iterating over all shared locks on a key when not necessary, given the
+// filtering criteria.
+var lockTableItersBeforeSeek = util.ConstantWithMetamorphicTestRange(
+	"lock-table-iters-before-seek",
+	defaultLockTableItersBeforeSeek, /* defaultValue */
+	0,                               /* min */
+	3,                               /* max */
+)
+
+// DisableMetamorphicLockTableItersBeforeSeek disables the metamorphic value for
+// the duration of a test, resetting it at the end.
+func DisableMetamorphicLockTableItersBeforeSeek(t interface {
+	Helper()
+	Cleanup(func())
+}) {
+	t.Helper()
+	prev := lockTableItersBeforeSeek
+	lockTableItersBeforeSeek = defaultLockTableItersBeforeSeek
+	t.Cleanup(func() {
+		lockTableItersBeforeSeek = prev
+	})
+}
+
+// lockTableItersBeforeSeekHelper is a helper struct that keeps track of the
+// number of iterations performed across the shared locks on a single user key
+// while searching for matching locks in the lock table. It is used to determine
+// when to seek past the shared locks to avoid O(ignored_locks) work.
+//
+// This is similar to the dynamic itersBeforeSeek algorithm that is used by
+// pebbleMVCCScanner when scanning over mvcc versions for a key. However, we
+// don't adaptively adjust the number of itersBeforeSeek as we go. Instead, we
+// reset the iteration counter to lockTableItersBeforeSeek (default: 5) on each
+// new key prefix. Doing something more sophisticated introduces complexity and
+// it's not clear that this is worth it.
+//
+// The zero value is ready to use.
+type lockTableItersBeforeSeekHelper struct {
+	curItersBeforeSeek int
+	curKeyPrefix       roachpb.Key
+
+	// Buffers that avoids allocations.
+	keyPrefixBuf []byte
+	seekKeyBuf   []byte
+}
+
+func (h *lockTableItersBeforeSeekHelper) reset() {
+	// Clearing the curKeyPrefix ensures that the next call to shouldSeek() will
+	// save the new key prefix and reset curItersBeforeSeek. This is why the zero
+	// value of the struct is ready to use.
+	h.curKeyPrefix = nil
+}
+
+func (h *lockTableItersBeforeSeekHelper) shouldSeek(keyPrefix roachpb.Key) bool {
+	if h.alwaysSeek() {
+		return true
+	}
+	if !h.curKeyPrefix.Equal(keyPrefix) {
+		// New key prefix (or curKeyPrefix was nil). Save it and reset the iteration
+		// count.
+		h.saveKeyPrefix(keyPrefix)
+		h.curItersBeforeSeek = lockTableItersBeforeSeek
+	} else {
+		// Same key prefix as before. Check if we should seek.
+		if h.curItersBeforeSeek == 0 {
+			return true
+		}
+	}
+	h.curItersBeforeSeek--
+	return false
+}
+
+func (h *lockTableItersBeforeSeekHelper) alwaysSeek() bool {
+	// Only returns true in tests when the metamorphic value is set to 0.
+	return lockTableItersBeforeSeek == 0
+}
+
+func (h *lockTableItersBeforeSeekHelper) saveKeyPrefix(keyPrefix roachpb.Key) {
+	h.keyPrefixBuf = append(h.keyPrefixBuf[:0], keyPrefix...)
+	h.curKeyPrefix = h.keyPrefixBuf
 }
