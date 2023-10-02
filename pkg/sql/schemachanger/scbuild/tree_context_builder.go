@@ -36,6 +36,7 @@ func newSemaCtx(d Dependencies) *tree.SemaContext {
 	semaCtx.NameResolver = d.CatalogReader()
 	semaCtx.DateStyle = d.SessionData().GetDateStyle()
 	semaCtx.IntervalStyle = d.SessionData().GetIntervalStyle()
+	semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(d.ClusterSettings().Version)
 	return &semaCtx
 }
 
