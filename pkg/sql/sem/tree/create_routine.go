@@ -395,13 +395,18 @@ type RoutineReturnType struct {
 // DropRoutine represents a DROP FUNCTION or DROP PROCEDURE statement.
 type DropRoutine struct {
 	IfExists     bool
+	Procedure    bool
 	Routines     RoutineObjs
 	DropBehavior DropBehavior
 }
 
 // Format implements the NodeFormatter interface.
 func (node *DropRoutine) Format(ctx *FmtCtx) {
-	ctx.WriteString("DROP FUNCTION ")
+	if node.Procedure {
+		ctx.WriteString("DROP PROCEDURE ")
+	} else {
+		ctx.WriteString("DROP FUNCTION ")
+	}
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
