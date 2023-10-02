@@ -141,7 +141,7 @@ var virtClusterWithAppServiceInitTasks = append(
 )
 
 func enableReplication(baseTasks []autoconfigpb.Task) []autoconfigpb.Task {
-	return append(baseTasks,
+	return append(baseTasks[:len(baseTasks):len(baseTasks)],
 		makeTask("enable rangefeeds and replication",
 			/* nonTxnSQL */ []string{
 				"SET CLUSTER SETTING kv.rangefeed.enabled = true",
