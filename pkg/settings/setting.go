@@ -176,9 +176,10 @@ const (
 	//
 	//   - the setting may be accessed from the shared KV/storage layer;
 	//
-	//   - AND the setting should only be controllable by SREs (not
-	//     end-users) in CockroachCloud Serverless, AND a single value
-	//     is meant to apply to all virtual clusters simultaneously;
+	//   - AND the setting should only be controllable by operators of
+	//     the storage cluster (e.g. SREs in the case of Serverless) but
+	//     having the storage cluster's value be observable by virtual
+	//     clusters is desirable.
 	//
 	//     (If this part of the condition does not hold, consider
 	//     ApplicationLevel instead.)
@@ -190,12 +191,26 @@ const (
 	//     (If this part of the condition does not hold, consider
 	//     SystemOnly instead.)
 	//
-	// Note that even though SystemVisible settings are meant to apply
-	// equally to all virtual clusters, we have a "break-the-glass" way
-	// to change the value observed by one or more virtual cluster,
-	// using ALTER VIRTUAL CLUSTER SET CLUSTER SETTING. This can be used
-	// during e.g. troubleshooting, to allow changing the observed value
-	// for a virtual cluster without a code change.
+	// One use cases is to enable optimizations in the KV client side of
+	// virtual cluster RPCs. For example, if the storage layer uses a
+	// setting to decide the size of a response, making the setting
+	// visible enables the client in virtual cluster ocde to
+	// pre-allocate response buffers to match the size they expect to
+	// receive.
+	//
+	// Another use case is KV/storage feature flags, to enable a UX
+	// improvement in virtual clusters by avoiding requesting
+	// storage-level functionality when it is not enabled, such as
+	// rangefeeds and provide a better error message.
+	// (Without this extra logic, the error reported by KV/storage
+	// might be hard to read by end-users.)
+	//
+	// As a reminder, the setting values observed by a virtual cluster,
+	// both for its own application settings and those it observes for
+	// system-visible settings, can be overridden using ALTER VIRTUAL
+	// CLUSTER SET CLUSTER SETTING. This can be used during e.g.
+	// troubleshooting, to allow changing the observed value for a
+	// virtual cluster without a code change.
 	SystemVisible
 
 	// ApplicationLevel settings are readable and can optionally be
@@ -229,6 +244,13 @@ const (
 	// are neatly partitioned such that a given virtual cluster can
 	// never observe the value set for another virtual cluster nor that
 	// set for the system tenant/interface.
+	//
+	// As a reminder, the setting values observed by a virtual cluster,
+	// both for its own application settings and those it observes for
+	// system-visible settings, can be overridden using ALTER VIRTUAL
+	// CLUSTER SET CLUSTER SETTING. This can be used during e.g.
+	// troubleshooting, to allow changing the observed value for a
+	// virtual cluster without a code change.
 	ApplicationLevel
 )
 
