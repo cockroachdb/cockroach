@@ -1068,6 +1068,12 @@ func restorePlanHook(
 		return nil, nil, nil, false,
 			errors.New("cannot run RESTORE with schema_only until cluster has fully upgraded to 22.2")
 	}
+
+	if restoreStmt.Options.RemoveRegions && !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V23_1) {
+		return nil, nil, nil, false,
+			errors.Newf("to set the remove_regions option, cluster version must be >= %s", clusterversion.V23_1.String())
+	}
+
 	if !restoreStmt.Options.SchemaOnly && restoreStmt.Options.VerifyData {
 		return nil, nil, nil, false,
 			errors.New("to set the verify_backup_table_data option, the schema_only option must be set")
