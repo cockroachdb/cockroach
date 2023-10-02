@@ -82,6 +82,15 @@ func (cfg *Config) ValidateAddrs(ctx context.Context) error {
 		return invalidFlagErr(err, cliflags.ListenHTTPAddr)
 	}
 	cfg.HTTPAddr = net.JoinHostPort(httpHost, httpPort)
+
+	// Validate secondary tenant port configuration
+	if cfg.SecondaryTenantPortOffset > 0 && cfg.SecondaryTenantPortMin > 0 {
+		return errors.Newf("cannot specify both %s and %s", cliflags.SecondaryTenantPortMin.Name, cliflags.SecondaryTenantPortOffset.Name)
+	}
+	if cfg.SecondaryTenantPortMax > 0 && cfg.SecondaryTenantPortMax <= cfg.SecondaryTenantPortMin {
+		return errors.Newf("%s must be greater than %s", cliflags.SecondaryTenantPortMin.Name, cliflags.SecondaryTenantPortMax.Name)
+	}
+
 	return nil
 }
 

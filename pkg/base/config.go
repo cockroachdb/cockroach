@@ -422,6 +422,12 @@ type Config struct {
 	// See: https://github.com/cockroachdb/cockroach/issues/84585
 	SecondaryTenantPortOffset int
 
+	// SecondaryTenantPortMin and SecondaryTenantPortMax allow the
+	// user to specify the upper and lower bound of the range of
+	// ports used by secondary tenants.
+	SecondaryTenantPortMin int
+	SecondaryTenantPortMax int
+
 	// Enables the use of an PTP hardware clock user space API for HLC current time.
 	// This contains the path to the device to be used (i.e. /dev/ptp0)
 	ClockDevicePath string

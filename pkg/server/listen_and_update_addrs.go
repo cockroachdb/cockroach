@@ -13,8 +13,10 @@ package server
 import (
 	"context"
 	"net"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/errors"
 )
 
@@ -31,6 +33,99 @@ func (l *ListenError) Error() string { return l.cause.Error() }
 
 // Unwrap is because ListenError is a wrapper.
 func (l *ListenError) Unwrap() error { return l.cause }
+
+// ListenerFactoryForConfig return an RPCListenerFactory for the given
+// configuration. If the configuration does not specify any secondary
+// tenant port configuration, no factory is returned.
+func ListenerFactoryForConfig(cfg *BaseConfig, portStartHint int) (RPCListenerFactory, error) {
+	// TODO:(ssd): We use != here becauses demo uses a negative
+	// port offset. But, demo could now just pass a min/max.
+	if cfg.Config.SecondaryTenantPortOffset != 0 {
+		_, port, err := addr.SplitHostPort(cfg.Addr, "0")
+		if err != nil {
+			return nil, err
+		}
+		var pnum int
+		if port != "" {
+			pnum, err = strconv.Atoi(port)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if pnum == 0 {
+			return nil, errors.Newf("no base port available for computation in %q", cfg.Addr)
+		}
+
+		lowerBound := pnum + cfg.Config.SecondaryTenantPortOffset
+		if cfg.Config.SecondaryTenantPortMax > 0 && lowerBound > cfg.Config.SecondaryTenantPortMax {
+			return nil, errors.Newf("base port+offset is greater than max (%d)", lowerBound, cfg.Config.SecondaryTenantPortMax)
+		}
+
+		rlf := &rangeListenerFactory{
+			startHint:  portStartHint,
+			lowerBound: lowerBound,
+			upperBound: cfg.Config.SecondaryTenantPortMax,
+		}
+		return rlf.ListenAndUpdateAddrs, nil
+	}
+
+	if cfg.Config.SecondaryTenantPortMin > 0 {
+		rlf := &rangeListenerFactory{
+			startHint:  portStartHint,
+			lowerBound: cfg.Config.SecondaryTenantPortMin,
+			upperBound: cfg.Config.SecondaryTenantPortMax,
+		}
+		return rlf.ListenAndUpdateAddrs, nil
+	}
+
+	return nil, nil
+}
+
+// The rangeListenerFactory tries to listen on a port between
+// lowerBound and upperBound.  The provided startHint allows the
+// caller to specify an offset into the range to speed up port
+// selection.
+type rangeListenerFactory struct {
+	startHint  int
+	lowerBound int
+	upperBound int
+}
+
+func (rlf *rangeListenerFactory) ListenAndUpdateAddrs(
+	ctx context.Context, listenAddr, advertiseAddr *string, connName string,
+) (net.Listener, error) {
+	h, _, err := addr.SplitHostPort(*listenAddr, "0")
+	if err != nil {
+		return nil, err
+	}
+	if rlf.upperBound > 0 && rlf.lowerBound > rlf.upperBound {
+		return nil, errors.AssertionFailedf("lower bound %d larger than upper bound %d", rlf.lowerBound, rlf.upperBound)
+	}
+
+	nextPort := rlf.lowerBound + rlf.startHint
+	if rlf.upperBound > 0 && nextPort > rlf.lowerBound {
+		nextPort = rlf.lowerBound
+	}
+
+	var ln net.Listener
+	for rlf.upperBound == 0 || nextPort <= rlf.upperBound {
+		nextAddr := net.JoinHostPort(h, strconv.Itoa(nextPort))
+		ln, err = net.Listen("tcp", nextAddr)
+		if err == nil {
+			if err := UpdateAddrs(ctx, listenAddr, advertiseAddr, ln.Addr()); err != nil {
+				return nil, errors.Wrapf(err, "internal error: cannot parse %s listen address", connName)
+			}
+			return ln, nil
+		}
+		// If we have no upper bound, we just try once.
+		if rlf.upperBound == 0 {
+			return nil, err
+		}
+		// TODO(ssd): check for EADDRINUSE and return any other error.
+		nextPort++
+	}
+	return nil, errors.Wrapf(err, "port range (%d, %d) exhausted", rlf.lowerBound, rlf.upperBound)
+}
 
 // ListenAndUpdateAddrs starts a TCP listener on the specified address
 // then updates the address and advertised address fields based on the

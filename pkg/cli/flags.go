@@ -540,10 +540,16 @@ func init() {
 			cliflagcfg.BoolFlag(f, &startBackground, cliflags.Background)
 		}
 
-		// TODO(knz): Remove this port offset mechanism once we implement
+		// TODO(knz): Remove these port configuration mechanisms once we implement
 		// a shared listener. See: https://github.com/cockroachdb/cockroach/issues/84585
 		cliflagcfg.IntFlag(f, &baseCfg.SecondaryTenantPortOffset, cliflags.SecondaryTenantPortOffset)
 		_ = f.MarkHidden(cliflags.SecondaryTenantPortOffset.Name)
+
+		cliflagcfg.IntFlag(f, &baseCfg.SecondaryTenantPortMin, cliflags.SecondaryTenantPortMin)
+		_ = f.MarkHidden(cliflags.SecondaryTenantPortMin.Name)
+
+		cliflagcfg.IntFlag(f, &baseCfg.SecondaryTenantPortMax, cliflags.SecondaryTenantPortMax)
+		_ = f.MarkHidden(cliflags.SecondaryTenantPortMax.Name)
 	}
 
 	// Multi-tenancy start-sql command flags.
