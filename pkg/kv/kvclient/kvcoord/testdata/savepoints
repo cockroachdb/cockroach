@@ -22,6 +22,10 @@ get k
 ----
 "k" -> b
 
+can-use x
+----
+true
+
 release x
 ----
 2 <noignore>
@@ -71,6 +75,10 @@ get k
 ----
 "k" -> b
 
+can-use x
+----
+true
+
 rollback x
 ----
 2 [2-2]
@@ -118,12 +126,20 @@ savepoint y
 put k cr
 ----
 
+can-use y
+----
+true
+
 release y
 ----
 3 <noignore>
 
 put k dr
 ----
+
+can-use x
+----
+true
 
 rollback x
 ----
@@ -168,6 +184,10 @@ savepoint x
 put a d2
 ----
 
+can-use x
+----
+true
+
 rollback x
 ----
 3 [3-3]
@@ -181,6 +201,10 @@ savepoint x
 
 put b 2
 ----
+
+can-use x
+----
+true
 
 rollback x
 ----
@@ -248,9 +272,17 @@ savepoint x
 ----
 1 <noignore>
 
+can-use x
+----
+true
+
 rollback x
 ----
 1 <noignore>
+
+can-use x
+----
+true
 
 release x
 ----
@@ -284,6 +316,10 @@ savepoint x
 put k da
 ----
 
+can-use x
+----
+true
+
 rollback x
 ----
 1 [1-1]
@@ -298,6 +334,10 @@ get k
 
 put k db
 ----
+
+can-use x
+----
+true
 
 rollback x
 ----
@@ -338,9 +378,17 @@ reset
 txn error cleared
 txn id not changed
 
+can-use x
+----
+true
+
 release x
 ----
 0 <noignore>
+
+can-use x
+----
+true
 
 rollback x
 ----
@@ -364,6 +412,10 @@ savepoint x
 cput k v bogus_expected
 ----
 (*kvpb.ConditionFailedError) unexpected value
+
+can-use x
+----
+true
 
 rollback x
 ----
@@ -398,6 +450,10 @@ get conflict-key locking nowait
 ----
 (*kvpb.LockConflictError) conflicting locks on "conflict-key" [reason=wait_policy]
 
+can-use x
+----
+true
+
 rollback x
 ----
 0 <noignore>
@@ -405,6 +461,10 @@ rollback x
 put conflict-key b nowait
 ----
 (*kvpb.LockConflictError) conflicting locks on "conflict-key" [reason=wait_policy]
+
+can-use x
+----
+true
 
 rollback x
 ----
@@ -439,6 +499,10 @@ get conflict-key-2 lock-timeout
 ----
 (*kvpb.LockConflictError) conflicting locks on "conflict-key-2" [reason=lock_timeout]
 
+can-use x
+----
+true
+
 rollback x
 ----
 0 <noignore>
@@ -446,6 +510,10 @@ rollback x
 put conflict-key-2 b lock-timeout
 ----
 (*kvpb.LockConflictError) conflicting locks on "conflict-key-2" [reason=lock_timeout]
+
+can-use x
+----
+true
 
 rollback x
 ----
@@ -469,6 +537,10 @@ savepoint x
 inject-error
 ----
 injected error
+
+can-use x
+----
+false
 
 rollback x
 ----
@@ -498,9 +570,17 @@ reset
 txn error cleared
 txn id changed
 
+can-use x
+----
+true
+
 release x
 ----
 0 <noignore>
+
+can-use x
+----
+true
 
 rollback x
 ----
@@ -526,6 +606,10 @@ retry
 ----
 synthetic error: TransactionRetryWithProtoRefreshError: forced retry
 epoch: 0 -> 1
+
+can-use x
+----
+false
 
 rollback x
 ----
