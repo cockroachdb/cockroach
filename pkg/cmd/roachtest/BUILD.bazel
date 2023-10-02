@@ -10,6 +10,7 @@ go_library(
         "monitor.go",
         "run.go",
         "slack.go",
+        "test_filter.go",
         "test_impl.go",
         "test_registry.go",
         "test_runner.go",

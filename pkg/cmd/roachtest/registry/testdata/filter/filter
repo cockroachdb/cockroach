@@ -1,0 +1,72 @@
+# Check filtering.
+
+filter cloud=gce
+component_foo/
+----
+component_foo/test_foo-cdc-local,gce,aws,azure
+component_foo/test_foo-cdc-local,gce,azure
+component_foo/test_foo-cdc-nightly-local,gce,aws,azure
+component_foo/test_foo-cdc-nightly-local,gce,azure
+component_foo/test_foo-cdc-nightly,weekly-local,gce,aws,azure
+component_foo/test_foo-cdc-nightly,weekly-local,gce,azure
+component_foo/test_foo-kv-local,gce,aws,azure
+component_foo/test_foo-kv-local,gce,azure
+component_foo/test_foo-kv-nightly-local,gce,aws,azure
+component_foo/test_foo-kv-nightly-local,gce,azure
+component_foo/test_foo-kv-nightly,weekly-local,gce,aws,azure
+component_foo/test_foo-kv-nightly,weekly-local,gce,azure
+component_foo/bench_bar-cdc-gce
+component_foo/bench_bar-cdc-nightly-gce
+component_foo/bench_bar-cdc-nightly,weekly-gce
+component_foo/bench_bar-kv-gce
+component_foo/bench_bar-kv-nightly-gce
+component_foo/bench_bar-kv-nightly,weekly-gce
+
+filter cloud=gce benchmarks
+component_foo/
+----
+component_foo/bench_bar-cdc-gce
+component_foo/bench_bar-cdc-nightly-gce
+component_foo/bench_bar-cdc-nightly,weekly-gce
+component_foo/bench_bar-kv-gce
+component_foo/bench_bar-kv-nightly-gce
+component_foo/bench_bar-kv-nightly,weekly-gce
+
+filter suite=nightly
+component_foo benchmark_bar
+----
+component_foo/test_foo-cdc-nightly-local,gce,aws,azure
+component_foo/test_foo-cdc-nightly-local,gce,azure
+component_foo/test_foo-cdc-nightly,weekly-local,gce,aws,azure
+component_foo/test_foo-cdc-nightly,weekly-local,gce,azure
+component_foo/test_foo-kv-nightly-local,gce,aws,azure
+component_foo/test_foo-kv-nightly-local,gce,azure
+component_foo/test_foo-kv-nightly,weekly-local,gce,aws,azure
+component_foo/test_foo-kv-nightly,weekly-local,gce,azure
+component_foo/bench_bar-cdc-nightly-gce
+component_foo/bench_bar-cdc-nightly,weekly-gce
+component_foo/bench_bar-kv-nightly-gce
+component_foo/bench_bar-kv-nightly,weekly-gce
+
+filter cloud=gce suite=weekly owner=cdc
+----
+component_foo/test_foo-cdc-nightly,weekly-local,gce,aws,azure
+component_foo/test_foo-cdc-nightly,weekly-local,gce,azure
+component_foo/bench_bar-cdc-nightly,weekly-gce
+component_bar/test_foo-cdc-nightly,weekly-local,gce,aws,azure
+component_bar/test_foo-cdc-nightly,weekly-local,gce,azure
+component_bar/bench_bar-cdc-nightly,weekly-gce
+
+filter cloud=gce suite=weekly owner=cdc
+----
+component_foo/test_foo-cdc-nightly,weekly-local,gce,aws,azure
+component_foo/test_foo-cdc-nightly,weekly-local,gce,azure
+component_foo/bench_bar-cdc-nightly,weekly-gce
+component_bar/test_foo-cdc-nightly,weekly-local,gce,aws,azure
+component_bar/test_foo-cdc-nightly,weekly-local,gce,azure
+component_bar/bench_bar-cdc-nightly,weekly-gce
+
+filter cloud=gce suite=weekly owner=kv benchmarks
+----
+component_foo/bench_bar-kv-nightly,weekly-gce
+component_bar/bench_bar-kv-nightly,weekly-gce
