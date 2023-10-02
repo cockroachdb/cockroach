@@ -80,6 +80,10 @@ type sqlConn struct {
 	clusterID           string
 	clusterOrganization string
 
+	// virtualClusterName is the last known virtual cluster name from
+	// the server, used to report any changes upon (re)connects.
+	virtualClusterName string
+
 	// isSystemTenantUnderSecondaryTenants is true if the current
 	// connection is to the system tenant and there are secondary
 	// tenants defined.
@@ -337,6 +341,8 @@ func (c *sqlConn) GetServerMetadata(
 				return 0, "", "", errors.Wrap(err, "incorrect data while retrieving node id")
 			}
 			nodeID = int32(id)
+		case "VirtualClusterName":
+			c.virtualClusterName = row[2]
 
 			// Fields for v1.0 compatibility.
 		case "Distribution":
@@ -490,6 +496,7 @@ func (c *sqlConn) GetServerInfo() ServerInfo {
 		ServerExecutableVersion: c.serverBuild,
 		ClusterID:               c.clusterID,
 		Organization:            c.clusterOrganization,
+		VirtualClusterName:      c.virtualClusterName,
 	}
 }
 

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -42,6 +43,16 @@ type pebbleIterator struct {
 	rangeKeyMaskingBuf []byte
 	// Filter to use if masking is enabled.
 	maskFilter mvccWallTimeIntervalRangeKeyMask
+	// [minTimestamp,maxTimestamp] contain the encoded timestamp bounds of the
+	// iterator, if any. This iterator will not return keys outside these
+	// timestamps. These are encoded because lexicographic comparison on encoded
+	// timestamps is equivalent to the comparison on decoded timestamps. These
+	// timestamps are enforced through the IterOptions.SkipPoint function, which
+	// is provided with encoded keys.
+	//
+	// NB: minTimestamp and maxTimestamp are both inclusive.
+	minTimestamp []byte // inclusive
+	maxTimestamp []byte // inclusive
 
 	// Buffer used to store MVCCRangeKeyVersions returned by RangeKeys(). Lazily
 	// initialized the first time an iterator's RangeKeys() method is called.
@@ -209,7 +220,7 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 	if !opts.Prefix && len(opts.UpperBound) == 0 && len(opts.LowerBound) == 0 {
 		panic("iterator must set prefix or upper bound or lower bound")
 	}
-	if opts.MinTimestampHint.IsSet() && opts.MaxTimestampHint.IsEmpty() {
+	if opts.MinTimestamp.IsSet() && opts.MaxTimestamp.IsEmpty() {
 		panic("min timestamp hint set without max timestamp hint")
 	}
 	if opts.Prefix && opts.RangeKeyMaskingBelow.IsSet() {
@@ -249,15 +260,36 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 		p.options.RangeKeyMasking.Filter = p.getBlockPropertyFilterMask
 	}
 
-	if opts.MaxTimestampHint.IsSet() {
+	if opts.MaxTimestamp.IsSet() {
+		// Install an IterOptions.SkipPoint function to ensure that we skip over
+		// any keys outside the the time bounds that don't get excluded by the
+		// coarse, opportunistic block-property filters. To avoid decoding
+		// per-KV, the SkipPoint function performs lexicographic comparisons on
+		// encoded timestamps, which is equivalent to the decoded, logical
+		// comparisons when ignoring the synthetic bit. In lexicographic order,
+		// the encoded key with the synthetic bit set sorts after the same
+		// timestamp without the synthetic bit. Timestamps differing only in the
+		// synthetic bit should otherwise be equal, so we take care to construct
+		// a minimum bound without the bit and a maximum bound with the bit to
+		// be inclusive on both ends.
+		p.minTimestamp = encodeMVCCTimestamp(hlc.Timestamp{
+			WallTime: opts.MinTimestamp.WallTime,
+			Logical:  opts.MinTimestamp.Logical,
+		})
+		p.maxTimestamp = append(encodeMVCCTimestamp(hlc.Timestamp{
+			WallTime: opts.MaxTimestamp.WallTime,
+			Logical:  opts.MaxTimestamp.Logical,
+		}), 0x01 /* Synthetic bit */)
+		p.options.SkipPoint = p.skipPointIfOutsideTimeBounds
+
 		// TODO(erikgrinaker): For compatibility with SSTables written by 21.2 nodes
 		// or earlier, we filter on table properties too. We still wrote these
 		// properties in 22.1, but stop doing so in 22.2. We can remove this
 		// filtering when nodes are guaranteed to no longer have SSTables written by
 		// 21.2 or earlier (which can still happen e.g. when clusters are upgraded
 		// through multiple major versions in rapid succession).
-		encodedMinTS := string(encodeMVCCTimestamp(opts.MinTimestampHint))
-		encodedMaxTS := string(encodeMVCCTimestamp(opts.MaxTimestampHint))
+		encodedMinTS := string(p.minTimestamp)
+		encodedMaxTS := string(p.maxTimestamp)
 		p.options.TableFilter = func(userProps map[string]string) bool {
 			tableMinTS := userProps["crdb.ts.min"]
 			if len(tableMinTS) == 0 {
@@ -269,7 +301,7 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 			}
 			return encodedMaxTS >= tableMinTS && encodedMinTS <= tableMaxTS
 		}
-		// We are given an inclusive [MinTimestampHint, MaxTimestampHint]. The
+		// We are given an inclusive [MinTimestamp, MaxTimestamp]. The
 		// MVCCWAllTimeIntervalCollector has collected the WallTimes and we need
 		// [min, max), i.e., exclusive on the upper bound.
 		//
@@ -278,8 +310,8 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 		// Pebble-internal performance optimization.
 		pkf := [2]pebble.BlockPropertyFilter{
 			sstable.NewBlockIntervalFilter(mvccWallTimeIntervalCollector,
-				uint64(opts.MinTimestampHint.WallTime),
-				uint64(opts.MaxTimestampHint.WallTime)+1),
+				uint64(opts.MinTimestamp.WallTime),
+				uint64(opts.MaxTimestamp.WallTime)+1),
 		}
 		p.options.PointKeyFilters = pkf[:1:2]
 		// NB: We disable range key block filtering because of complications in
@@ -917,6 +949,53 @@ func (p *pebbleIterator) CloneContext() CloneContext {
 
 func (p *pebbleIterator) getBlockPropertyFilterMask() pebble.BlockPropertyFilterMask {
 	return &p.maskFilter
+}
+
+func (p *pebbleIterator) skipPointIfOutsideTimeBounds(key []byte) (skip bool) {
+	if len(key) == 0 {
+		return false
+	}
+	// Last byte is the version length + 1 when there is a version,
+	// else it is 0.
+	versionLen := int(key[len(key)-1])
+	if versionLen == 0 {
+		// This is not an MVCC key.
+		return false
+	}
+	// prefixPartEnd points to the sentinel byte, unless this is a bare suffix, in
+	// which case the index is -1.
+	prefixPartEnd := len(key) - 1 - versionLen
+	// Sanity check: the index should be >= -1. Additionally, if the index is >=
+	// 0, it should point to the sentinel byte, as this is a full EngineKey. If
+	// the key appears invalid and we don't understand it, don't skip it so the
+	// iterator will observe it and hopefully propagate an error up the stack.
+	if prefixPartEnd < -1 || (prefixPartEnd >= 0 && key[prefixPartEnd] != sentinel) {
+		return false
+	}
+
+	switch versionLen - 1 {
+	case engineKeyVersionWallTimeLen, engineKeyVersionWallAndLogicalTimeLen, engineKeyVersionWallLogicalAndSyntheticTimeLen:
+		// INVARIANT: -1 <= prefixPartEnd < len(b) - 1.
+		// Version consists of the bytes after the sentinel and before the length.
+		ts := key[prefixPartEnd+1 : len(key)-1]
+		// Lexicographic comparison on the encoded timestamps is equivalent to the
+		// comparison on decoded timestamps, so we avoid the need to decode the
+		// walltimes by performing simple byte comarisons.
+		if bytes.Compare(ts, p.minTimestamp) < 0 {
+			return true
+		}
+		if bytes.Compare(ts, p.maxTimestamp) > 0 {
+			return true
+		}
+		// minTimestamp ≤ ts ≤ maxTimestamp
+		//
+		// The key's timestamp is within the iterator's configured bounds.
+		return false
+	default:
+		// Not a MVCC key.
+		return false
+	}
+
 }
 
 func (p *pebbleIterator) destroy() {

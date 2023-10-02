@@ -324,7 +324,7 @@ ClusterID
 Organization
 Version
 Channel
-
+VirtualClusterName
 
 # The validity of the rows in this table are tested elsewhere; we merely assert the columns.
 query ITTTTTTTTTTTRTTIITTITT colnames

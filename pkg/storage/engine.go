@@ -420,38 +420,22 @@ type IterOptions struct {
 	// the iterator. UpperBound must be provided unless Prefix is true, in which
 	// case the end of the prefix will be used as the upper bound.
 	UpperBound roachpb.Key
-	// MinTimestampHint and MaxTimestampHint, if set, indicate that keys outside
-	// of the time range formed by [MinTimestampHint, MaxTimestampHint] do not
-	// need to be presented by the iterator. The underlying iterator may be able
-	// to efficiently skip over keys outside of the hinted time range, e.g., when
-	// an SST indicates that it contains no keys within the time range. Intents
+	// MinTimestamp and MaxTimestamp, if set, indicate that only keys
+	// within the time range formed by [MinTimestamp, MaxTimestamp] should be
+	// returned. The underlying iterator may be able to efficiently skip over
+	// keys outside of the hinted time range, e.g., when a block handle
+	// indicates that the block contains no keys within the time range. Intents
 	// will not be visible to such iterators at all. This is only relevant for
 	// MVCCIterators.
 	//
-	// Note that time bound hints are strictly a performance optimization, and
-	// iterators with time bounds hints will frequently return keys outside of the
-	// [start, end] time range. If you must guarantee that you never see a key
-	// outside of the time bounds, perform your own filtering.
-	//
-	// NB: The iterator may surface stale data. Pebble range tombstones do not have
-	// timestamps and thus may be ignored entirely depending on whether their SST
-	// happens to satisfy the filter. Furthermore, keys outside the timestamp
-	// range may be stale and must be ignored -- for example, consider a key foo@5
-	// written in an SST with timestamp range [3-7], and then a non-MVCC removal
-	// or update of this key in a different SST with timestamp range [3-5]. Using
-	// an iterator with range [6-9] would surface the old foo@5 key because it
-	// would return all keys in the old [3-7] SST but not take into account the
-	// separate [3-5] SST where foo@5 was removed or updated. See also:
-	// https://github.com/cockroachdb/pebble/issues/1786
+	// Note that time-bound iterators previously were only a performance
+	// optimization but now guarantee that no keys outside of the [start, end]
+	// time range will be returned.
 	//
 	// NB: Range keys are not currently subject to timestamp filtering due to
 	// complications with MVCCIncrementalIterator. See:
 	// https://github.com/cockroachdb/cockroach/issues/86260
-	//
-	// Currently, the only way to correctly use such an iterator is to use it in
-	// concert with an iterator without timestamp hints, as done by
-	// MVCCIncrementalIterator.
-	MinTimestampHint, MaxTimestampHint hlc.Timestamp
+	MinTimestamp, MaxTimestamp hlc.Timestamp
 	// KeyTypes specifies the types of keys to surface: point and/or range keys.
 	// Use HasPointAndRange() to determine which key type is present at a given
 	// iterator position, and RangeBounds() and RangeKeys() to access range keys.
