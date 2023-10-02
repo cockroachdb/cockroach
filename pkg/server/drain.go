@@ -503,7 +503,11 @@ func (s *drainServer) logOpenConns(ctx context.Context) error {
 		for {
 			select {
 			case <-ticker.C:
-				log.Ops.Infof(ctx, "number of open connections: %d\n", s.sqlServer.pgServer.GetConnCancelMapLen())
+				openConns := s.sqlServer.pgServer.GetConnCancelMapLen()
+				log.Ops.Infof(ctx, "number of open connections: %d\n", openConns)
+				if openConns == 0 {
+					return
+				}
 			case <-s.stopper.ShouldQuiesce():
 				return
 			case <-ctx.Done():
