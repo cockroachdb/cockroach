@@ -176,8 +176,9 @@ type MVCCValueMerger struct {
 
 	// Used to avoid heap allocations when passing pointer to `Unmarshal()`.
 	meta enginepb.MVCCMetadata
-	// Used to avoid heap allocations in Finish().
-	merged roachpb.InternalTimeSeriesData
+	// merged and metaSubset are used to avoid heap allocations in Finish().
+	merged     roachpb.InternalTimeSeriesData
+	metaSubset enginepb.MVCCMetadataSubsetForMergeSerialization
 }
 
 const (
@@ -271,13 +272,14 @@ func (t *MVCCValueMerger) Finish(includesBase bool) ([]byte, io.Closer, error) {
 			totalLen += len(rawByteOp)
 		}
 		// See the motivating comment in mvcc.proto.
-		var meta enginepb.MVCCMetadataSubsetForMergeSerialization
-		meta.RawBytes = make([]byte, mvccHeaderSize, mvccHeaderSize+totalLen)
-		meta.RawBytes[mvccTagPos] = byte(roachpb.ValueType_BYTES)
-		for _, rawByteOp := range t.rawByteOps {
-			meta.RawBytes = append(meta.RawBytes, rawByteOp...)
+		t.metaSubset = enginepb.MVCCMetadataSubsetForMergeSerialization{
+			RawBytes: make([]byte, mvccHeaderSize, mvccHeaderSize+totalLen),
 		}
-		res, err := protoutil.Marshal(&meta)
+		t.metaSubset.RawBytes[mvccTagPos] = byte(roachpb.ValueType_BYTES)
+		for _, rawByteOp := range t.rawByteOps {
+			t.metaSubset.RawBytes = append(t.metaSubset.RawBytes, rawByteOp...)
+		}
+		res, err := protoutil.Marshal(&t.metaSubset)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -319,15 +321,15 @@ func (t *MVCCValueMerger) Finish(includesBase bool) ([]byte, io.Closer, error) {
 		return nil, nil, err
 	}
 	// See the motivating comment in mvcc.proto.
-	var meta enginepb.MVCCMetadataSubsetForMergeSerialization
+	t.metaSubset = enginepb.MVCCMetadataSubsetForMergeSerialization{}
 	if !(t.oldestMergeTS == hlc.LegacyTimestamp{}) {
-		meta.MergeTimestamp = &t.oldestMergeTS
+		t.metaSubset.MergeTimestamp = &t.oldestMergeTS
 	}
 	tsTag := byte(roachpb.ValueType_TIMESERIES)
 	header := make([]byte, mvccHeaderSize)
 	header[mvccTagPos] = tsTag
-	meta.RawBytes = append(header, tsBytes...)
-	res, err := protoutil.Marshal(&meta)
+	t.metaSubset.RawBytes = append(header, tsBytes...)
+	res, err := protoutil.Marshal(&t.metaSubset)
 	if err != nil {
 		return nil, nil, err
 	}
