@@ -194,7 +194,7 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 		extraArgs...,
 	)
 
-	externalUrls, err := c.ExternalPGUrl(ctx, t.L(), c.Node(tn.node), "")
+	externalUrls, err := c.ExternalPGUrl(ctx, t.L(), c.Node(tn.node), "", 0)
 	require.NoError(t, err)
 	u, err := url.Parse(externalUrls[0])
 	require.NoError(t, err)
