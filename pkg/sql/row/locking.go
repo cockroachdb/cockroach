@@ -57,3 +57,18 @@ func GetWaitPolicy(lockWaitPolicy descpb.ScanLockingWaitPolicy) lock.WaitPolicy 
 		panic(errors.AssertionFailedf("unknown wait policy %s", lockWaitPolicy))
 	}
 }
+
+// GetKeyLockingDurability returns the configured lock durability to use for
+// key-value scans.
+func GetKeyLockingDurability(lockDurability descpb.ScanLockingDurability) lock.Durability {
+	switch lockDurability {
+	case descpb.ScanLockingDurability_BEST_EFFORT:
+		return lock.Unreplicated
+
+	case descpb.ScanLockingDurability_GUARANTEED:
+		return lock.Replicated
+
+	default:
+		panic(errors.AssertionFailedf("unknown lock durability %s", lockDurability))
+	}
+}

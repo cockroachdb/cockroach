@@ -153,6 +153,7 @@ func newTableReader(
 			Reverse:                    spec.Reverse,
 			LockStrength:               spec.LockingStrength,
 			LockWaitPolicy:             spec.LockingWaitPolicy,
+			LockDurability:             spec.LockingDurability,
 			LockTimeout:                flowCtx.EvalCtx.SessionData().LockTimeout,
 			Alloc:                      &tr.alloc,
 			MemMonitor:                 flowCtx.Mon,

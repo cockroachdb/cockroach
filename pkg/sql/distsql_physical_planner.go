@@ -1665,6 +1665,7 @@ func initTableReaderSpecTemplate(
 		TableDescriptorModificationTime: n.desc.GetModificationTime(),
 		LockingStrength:                 n.lockingStrength,
 		LockingWaitPolicy:               n.lockingWaitPolicy,
+		LockingDurability:               n.lockingDurability,
 	}
 	if err := rowenc.InitIndexFetchSpec(&s.FetchSpec, codec, n.desc, n.index, colIDs); err != nil {
 		return nil, execinfrapb.PostProcessSpec{}, err
@@ -2740,6 +2741,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 		Type:              descpb.InnerJoin,
 		LockingStrength:   n.table.lockingStrength,
 		LockingWaitPolicy: n.table.lockingWaitPolicy,
+		LockingDurability: n.table.lockingDurability,
 		MaintainOrdering:  len(n.reqOrdering) > 0,
 		LimitHint:         n.limitHint,
 	}
@@ -2817,6 +2819,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		Type:              n.joinType,
 		LockingStrength:   n.table.lockingStrength,
 		LockingWaitPolicy: n.table.lockingWaitPolicy,
+		LockingDurability: n.table.lockingDurability,
 		// TODO(sumeer): specifying ordering here using isFirstJoinInPairedJoiner
 		// is late in the sense that the cost of this has not been taken into
 		// account. Make this decision earlier in CustomFuncs.GenerateLookupJoins.
@@ -2949,6 +2952,7 @@ func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 		OutputGroupContinuationForLeftRow: n.isFirstJoinInPairedJoiner,
 		LockingStrength:                   n.table.lockingStrength,
 		LockingWaitPolicy:                 n.table.lockingWaitPolicy,
+		LockingDurability:                 n.table.lockingDurability,
 	}
 
 	fetchColIDs := make([]descpb.ColumnID, len(n.table.cols))
@@ -3045,6 +3049,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 			fixedValues:       valuesSpec,
 			lockingStrength:   side.scan.lockingStrength,
 			lockingWaitPolicy: side.scan.lockingWaitPolicy,
+			lockingDurability: side.scan.lockingDurability,
 		}
 	}
 
@@ -3064,6 +3069,7 @@ type zigzagPlanningSide struct {
 	fixedValues       *execinfrapb.ValuesCoreSpec
 	lockingStrength   descpb.ScanLockingStrength
 	lockingWaitPolicy descpb.ScanLockingWaitPolicy
+	lockingDurability descpb.ScanLockingDurability
 }
 
 type zigzagPlanningInfo struct {

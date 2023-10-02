@@ -710,6 +710,6 @@ insert child
                 ├── scan parent
                 │    ├── columns: parent.p:8!null
                 │    ├── flags: disabled not visible index feature
-                │    └── locking: for-share
+                │    └── locking: for-share,durability-guaranteed
                 └── filters
                      └── p:7 = parent.p:8

@@ -27,8 +27,9 @@ import (
 // txnKVStreamer handles retrieval of key/values.
 type txnKVStreamer struct {
 	kvBatchFetcherHelper
-	streamer   *kvstreamer.Streamer
-	keyLocking lock.Strength
+	streamer       *kvstreamer.Streamer
+	lockStrength   lock.Strength
+	lockDurability lock.Durability
 
 	spans       roachpb.Spans
 	spanIDs     []int
@@ -53,14 +54,16 @@ var _ KVBatchFetcher = &txnKVStreamer{}
 func newTxnKVStreamer(
 	streamer *kvstreamer.Streamer,
 	lockStrength descpb.ScanLockingStrength,
+	lockDurability descpb.ScanLockingDurability,
 	acc *mon.BoundAccount,
 	kvPairsRead *int64,
 	batchRequestsIssued *int64,
 ) KVBatchFetcher {
 	f := &txnKVStreamer{
-		streamer:   streamer,
-		keyLocking: GetKeyLockingStrength(lockStrength),
-		acc:        acc,
+		streamer:       streamer,
+		lockStrength:   GetKeyLockingStrength(lockStrength),
+		lockDurability: GetKeyLockingDurability(lockDurability),
+		acc:            acc,
 	}
 	f.kvBatchFetcherHelper.init(f.nextBatch, kvPairsRead, batchRequestsIssued)
 	return f
@@ -99,7 +102,7 @@ func (f *txnKVStreamer) SetupNextFetch(
 		reqsScratch[i] = kvpb.RequestUnion{}
 	}
 	// TODO(yuzefovich): consider supporting COL_BATCH_RESPONSE scan format.
-	reqs := spansToRequests(spans, kvpb.BATCH_RESPONSE, false /* reverse */, f.keyLocking, reqsScratch)
+	reqs := spansToRequests(spans, kvpb.BATCH_RESPONSE, false /* reverse */, f.lockStrength, f.lockDurability, reqsScratch)
 	if err := f.streamer.Enqueue(ctx, reqs); err != nil {
 		return err
 	}
