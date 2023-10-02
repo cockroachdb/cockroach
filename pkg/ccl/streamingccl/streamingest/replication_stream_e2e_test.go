@@ -381,7 +381,7 @@ func TestTenantStreamingCancelIngestion(t *testing.T) {
 		jobutils.WaitForJobToFail(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 
 		// Check if the producer job has released protected timestamp.
-		requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer.ApplicationLayer(), jobspb.JobID(producerJobID))
+		requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer, jobspb.JobID(producerJobID))
 
 		// Check if dest tenant key ranges are not cleaned up.
 		destTenantSpan := keys.MakeTenantSpan(args.DestTenantID)
@@ -422,6 +422,8 @@ func TestTenantStreamingDropTenantCancelsStream(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "slow test") // takes >1mn under race
+
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
 
@@ -449,7 +451,7 @@ func TestTenantStreamingDropTenantCancelsStream(t *testing.T) {
 		jobutils.WaitForJobToFail(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 
 		// Check if the producer job has released protected timestamp.
-		requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer.ApplicationLayer(), jobspb.JobID(producerJobID))
+		requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer, jobspb.JobID(producerJobID))
 
 		// Wait for the GC job to finish
 		c.DestSysSQL.Exec(t, "SHOW JOBS WHEN COMPLETE SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC'")
@@ -788,6 +790,8 @@ func TestProtectedTimestampManagement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "slow test") // takes >1mn under race.
+
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
 	// Override the replication job details ReplicationTTLSeconds to a small value
@@ -802,7 +806,7 @@ func TestProtectedTimestampManagement(t *testing.T) {
 			// greater or equal to the frontier we know we have replicated up until.
 			waitForProducerProtection := func(c *replicationtestutils.TenantStreamingClusters, frontier hlc.Timestamp, producerJobID int) {
 				testutils.SucceedsSoon(t, func() error {
-					srv := c.SrcSysServer.ApplicationLayer()
+					srv := c.SrcSysServer
 					job, err := srv.JobRegistry().(*jobs.Registry).LoadJob(ctx, jobspb.JobID(producerJobID))
 					if err != nil {
 						return err
@@ -830,7 +834,7 @@ func TestProtectedTimestampManagement(t *testing.T) {
 			// protecting the destination tenant.
 			checkNoDestinationProtection := func(c *replicationtestutils.TenantStreamingClusters, replicationJobID int) {
 				execCfg := c.DestSysServer.ExecutorConfig().(sql.ExecutorConfig)
-				require.NoError(t, c.DestCluster.Server(0).InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				require.NoError(t, c.DestSysServer.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 					j, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobspb.JobID(replicationJobID), txn)
 					require.NoError(t, err)
 					payload := j.Payload()
@@ -844,7 +848,7 @@ func TestProtectedTimestampManagement(t *testing.T) {
 			checkDestinationProtection := func(c *replicationtestutils.TenantStreamingClusters, frontier hlc.Timestamp, replicationJobID int) {
 				execCfg := c.DestSysServer.ExecutorConfig().(sql.ExecutorConfig)
 				ptp := execCfg.ProtectedTimestampProvider
-				require.NoError(t, c.DestCluster.Server(0).InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				require.NoError(t, c.DestSysServer.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 					j, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobspb.JobID(replicationJobID), txn)
 					if err != nil {
 						return err
@@ -886,7 +890,7 @@ func TestProtectedTimestampManagement(t *testing.T) {
 			// startup, and the first progress update (t2) is greater than 1s. This is
 			// important because if `frontier@t2 - ReplicationTTLSeconds < t1` then we
 			// will not update the PTS record.
-			now := c.SrcCluster.Server(0).Clock().Now().Add(int64(time.Second)*2, 0)
+			now := c.SrcCluster.Server(0).SystemLayer().Clock().Now().Add(int64(time.Second)*2, 0)
 			c.WaitUntilReplicatedTime(now, jobspb.JobID(replicationJobID))
 
 			// Check that the producer and replication job have written a protected
@@ -925,7 +929,7 @@ func TestProtectedTimestampManagement(t *testing.T) {
 			}
 
 			// Check if the producer job has released protected timestamp.
-			requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer.ApplicationLayer(), jobspb.JobID(producerJobID))
+			requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer, jobspb.JobID(producerJobID))
 
 			// Check if the replication job has released protected timestamp.
 			checkNoDestinationProtection(c, replicationJobID)
@@ -936,7 +940,7 @@ func TestProtectedTimestampManagement(t *testing.T) {
 
 			// Check if dest tenant key range is cleaned up.
 			destTenantSpan := keys.MakeTenantSpan(args.DestTenantID)
-			rows, err := c.DestCluster.Server(0).DB().
+			rows, err := c.DestSysServer.DB().
 				Scan(ctx, destTenantSpan.Key, destTenantSpan.EndKey, 10)
 			require.NoError(t, err)
 			require.Empty(t, rows)
