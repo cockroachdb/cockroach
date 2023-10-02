@@ -44,15 +44,7 @@ assertion type=conformance under=0 over=0 unavailable=0 violating=0
 
 eval duration=10m
 ----
-failed assertion sample 1
-  conformance unavailable=0 under=0 over=0 violating=0 
-  actual unavailable=0 under=0, over=0 violating=5
-violating constraints:
-  r1:000000{0000-2000} [(n1,s1):1, (n4,s4):4, (n3,s3):3, (n2,s2):5NON_VOTER] applying num_replicas=4 num_voters=3 constraints=[+region=a:2 +region=b:2] voter_constraints=[+region=a:2 +region=b:1]
-  r2:000000{2000-4000} [(n5,s5):1, (n1,s1):2, (n3,s3):4, (n2,s2):5NON_VOTER] applying num_replicas=4 num_voters=3 constraints=[+region=a:2 +region=b:2] voter_constraints=[+region=a:2 +region=b:1]
-  r3:000000{4000-6000} [(n5,s5):1, (n4,s4):2, (n2,s2):4, (n1,s1):5NON_VOTER] applying num_replicas=4 num_voters=3 constraints=[+region=a:2 +region=b:2] voter_constraints=[+region=a:2 +region=b:1]
-  r4:000000{6000-8000} [(n1,s1):4, (n4,s4):2, (n3,s3):3, (n2,s2):5NON_VOTER] applying num_replicas=4 num_voters=3 constraints=[+region=a:2 +region=b:2] voter_constraints=[+region=a:2 +region=b:1]
-  r5:00000{08000-10000} [(n2,s2):4, (n4,s4):2, (n3,s3):3, (n1,s1):5NON_VOTER] applying num_replicas=4 num_voters=3 constraints=[+region=a:2 +region=b:2] voter_constraints=[+region=a:2 +region=b:1]
+OK
 
 topology
 ----

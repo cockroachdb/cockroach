@@ -3759,6 +3759,7 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 				rebalanceConstraintsChecker,
 				existingRepls,
 				nil,
+				VoterTarget,
 				sp.GetLocalitiesByStore(existingRepls),
 				sp.IsStoreReadyForRoutineReplicaTransfer,
 				a.ScorerOptions(ctx),
@@ -5524,6 +5525,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			rebalanceConstraintsChecker,
 			existingRepls,
 			nil,
+			VoterTarget,
 			sp.GetLocalitiesByStore(existingRepls),
 			func(context.Context, roachpb.StoreID) bool { return true },
 			a.ScorerOptions(ctx),
@@ -9146,4 +9148,147 @@ func TestingQPSLoadScorerOptions(
 		RebalanceImpact:              MakeQPSOnlyDim(qpsPerReplica),
 	}
 	return options
+}
+
+// TestAllocatorRebalanceTargetVoterConstraintUnsatisfied exercises the
+// promotion path in allocator.RebalanceVoter. It was possible previously for a
+// satisfiable voter constraint to remain unsatisfied indefinitely (#106559).
+func TestAllocatorRebalanceTargetVoterConstraintUnsatisfied(t *testing.T) {
+	ctx := context.Background()
+	storesFn := func(storeRegions ...string) []*roachpb.StoreDescriptor {
+		var descs []*roachpb.StoreDescriptor
+		for i, storeRegion := range storeRegions {
+			descs = append(descs, &roachpb.StoreDescriptor{
+				StoreID: roachpb.StoreID(i + 1),
+				Node: roachpb.NodeDescriptor{
+					NodeID: roachpb.NodeID(i + 1),
+					Locality: roachpb.Locality{Tiers: []roachpb.Tier{
+						{Key: "region", Value: storeRegion},
+					}},
+				},
+				// Leave the stats as mostly the same to avoid complicating examples.
+				Capacity: roachpb.StoreCapacity{RangeCount: 0, Capacity: 200, Available: 200},
+			})
+
+		}
+		return descs
+	}
+
+	regionConjunctionFn := func(regionName string, numReplicas int32) roachpb.ConstraintsConjunction {
+		return roachpb.ConstraintsConjunction{
+			NumReplicas: numReplicas,
+			Constraints: []roachpb.Constraint{
+				{
+					Type:  roachpb.Constraint_REQUIRED,
+					Key:   "region",
+					Value: regionName,
+				},
+			},
+		}
+	}
+
+	stopper, g, sp, a, _ := CreateTestAllocator(ctx, 6, false /* deterministic */)
+	defer stopper.Stop(ctx)
+	storeLocalities := []string{"a", "a", "b", "b", "c", "c"}
+	gossiputil.NewStoreGossiper(g).GossipStores(storesFn(storeLocalities...), t)
+
+	testCases := []struct {
+		name                            string
+		existingVoters                  []roachpb.ReplicaDescriptor
+		existingNonVoters               []roachpb.ReplicaDescriptor
+		spanConfig                      roachpb.SpanConfig
+		expectedPromote, expectedDemote roachpb.ReplicationTarget
+		expectNoop                      bool
+	}{
+		{
+			// Unsatisfied voter constraint (a:2) requires the non-voter in locality
+			// a to be promoted.
+			name:              "[a(non-voter),a,b,b] -> [a,a,b,b(non-voter)]",
+			existingVoters:    replicas(2, 3, 4),
+			existingNonVoters: replicas(1),
+			spanConfig: roachpb.SpanConfig{
+				NumReplicas: 4,
+				NumVoters:   3,
+				Constraints: []roachpb.ConstraintsConjunction{
+					regionConjunctionFn("a", 2), regionConjunctionFn("b", 2),
+				},
+				VoterConstraints: []roachpb.ConstraintsConjunction{
+					regionConjunctionFn("a", 2), regionConjunctionFn("b", 1),
+				},
+			},
+			expectedPromote: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1},
+			expectedDemote:  roachpb.ReplicationTarget{NodeID: 4, StoreID: 4},
+		},
+		{
+			// Similar to above, except the additional voter region (c) has higher
+			// diversity than the above example. This shouldn't affect the promotion,
+			// which still takes place as higher priority than diversity.
+			name:              "[a(non-voter),a,b,b,c] -> [a,a,b,b,c(non-voter)]",
+			existingVoters:    replicas(2, 3, 4, 5),
+			existingNonVoters: replicas(1),
+			spanConfig: roachpb.SpanConfig{
+				NumReplicas: 5,
+				NumVoters:   4,
+				Constraints: []roachpb.ConstraintsConjunction{
+					regionConjunctionFn("a", 2), regionConjunctionFn("b", 2), regionConjunctionFn("c", 1),
+				},
+				VoterConstraints: []roachpb.ConstraintsConjunction{
+					regionConjunctionFn("a", 2), regionConjunctionFn("b", 2),
+				},
+			},
+			expectedPromote: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1},
+			expectedDemote:  roachpb.ReplicationTarget{NodeID: 5, StoreID: 5},
+		},
+		{
+			// The constraints and voter constraints are satisfied, there's no action
+			// to take here.
+			name:              "[a,a,b,b(non-voter)] -> no-op",
+			existingVoters:    replicas(1, 2, 3),
+			existingNonVoters: replicas(4),
+			spanConfig: roachpb.SpanConfig{
+				NumReplicas: 4,
+				NumVoters:   3,
+				Constraints: []roachpb.ConstraintsConjunction{
+					regionConjunctionFn("a", 2), regionConjunctionFn("b", 2),
+				},
+				VoterConstraints: []roachpb.ConstraintsConjunction{
+					regionConjunctionFn("a", 2), regionConjunctionFn("b", 1),
+				},
+			},
+			expectNoop: true,
+		},
+
+		{
+			// There are no constraints to satisfy, should be a no-op.
+			name:              "[a,a(non-voter),b,b(non-voter),c] -> no-op",
+			existingVoters:    replicas(1, 3, 5),
+			existingNonVoters: replicas(2, 4),
+			spanConfig: roachpb.SpanConfig{
+				NumReplicas: 5,
+				NumVoters:   3,
+			},
+			expectNoop: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			for i := range tc.existingNonVoters {
+				tc.existingNonVoters[i].Type = roachpb.NON_VOTER
+			}
+			promote, demote, details, ok := a.RebalanceVoter(
+				ctx, sp, &tc.spanConfig, nil, tc.existingVoters, tc.existingNonVoters,
+				allocator.RangeUsageInfo{}, storepool.StoreFilterNone, a.ScorerOptions(ctx))
+			if tc.expectNoop {
+				require.False(t, ok, "expected ok to be false, details=%v", details)
+				require.Equal(t, roachpb.ReplicationTarget{}, promote)
+				require.Equal(t, roachpb.ReplicationTarget{}, demote)
+			} else {
+				require.Equal(t, tc.expectedPromote, promote, "locality promoted=%s, expected=%s, details=%s",
+					storeLocalities[promote.StoreID-1], storeLocalities[tc.expectedPromote.StoreID-1], details)
+				require.Equal(t, tc.expectedDemote, demote, "locality demoted=%s, expected=%s, details=%s",
+					storeLocalities[demote.StoreID-1], storeLocalities[tc.expectedDemote.StoreID-1], details)
+			}
+		})
+	}
 }
