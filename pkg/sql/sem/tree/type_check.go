@@ -75,6 +75,10 @@ type SemaContext struct {
 	DateStyle pgdate.DateStyle
 	// IntervalStyle refers to the IntervalStyle to parse as.
 	IntervalStyle duration.IntervalStyle
+
+	// UnsupportedTypeChecker is used to determine whether a builtin data type is
+	// supported by the current cluster version. It may be unset.
+	UnsupportedTypeChecker UnsupportedTypeChecker
 }
 
 // SemaProperties is a holder for required and derived properties
@@ -599,6 +603,9 @@ func (expr *CastExpr) TypeCheck(
 	if err != nil {
 		return nil, err
 	}
+	if err = CheckUnsupportedType(ctx, semaCtx, exprType); err != nil {
+		return nil, err
+	}
 	expr.Type = exprType
 	canElideCast := true
 	switch {
@@ -737,6 +744,9 @@ func (expr *AnnotateTypeExpr) TypeCheck(
 ) (TypedExpr, error) {
 	annotateType, err := ResolveType(ctx, expr.Type, semaCtx.GetTypeResolver())
 	if err != nil {
+		return nil, err
+	}
+	if err = CheckUnsupportedType(ctx, semaCtx, annotateType); err != nil {
 		return nil, err
 	}
 	expr.Type = annotateType
@@ -3410,4 +3420,25 @@ func getMostSignificantOverload(
 		return QualifiedOverload{}, pgerror.Newf(pgcode.UndefinedFunction, "unknown signature: %s", getFuncSig())
 	}
 	return ret, nil
+}
+
+// UnsupportedTypeChecker is used to check that a type is supported by the
+// current cluster version. It is an interface because some packages cannot
+// import the clusterversion package.
+type UnsupportedTypeChecker interface {
+	// CheckType returns an error if the given type is not supported by the
+	// current cluster version.
+	CheckType(ctx context.Context, typ *types.T) error
+}
+
+// CheckUnsupportedType returns an error if the given type is not supported by
+// the current cluster version. If the given SemaContext is nil or
+// uninitialized, CheckUnsupportedType returns nil.
+func CheckUnsupportedType(ctx context.Context, semaCtx *SemaContext, typ *types.T) error {
+	if semaCtx == nil || semaCtx.UnsupportedTypeChecker == nil {
+		// Sometimes TypeCheck() is called with a nil SemaContext for tests, and
+		// some (non-test) locations don't initialize all fields of the SemaContext.
+		return nil
+	}
+	return semaCtx.UnsupportedTypeChecker.CheckType(ctx, typ)
 }
