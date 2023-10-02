@@ -2088,6 +2088,13 @@ func TestTenantLogic_tenant_from_tenant(
 	runLogicTest(t, "tenant_from_tenant")
 }
 
+func TestTenantLogic_tenant_from_tenant_hint(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "tenant_from_tenant_hint")
+}
+
 func TestTenantLogic_tenant_slow_repro(
 	t *testing.T,
 ) {

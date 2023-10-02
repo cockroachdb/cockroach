@@ -226,6 +226,13 @@ func (p *planner) createDatabase(
 func (p *planner) createDescriptor(
 	ctx context.Context, descriptor catalog.MutableDescriptor, jobDesc string,
 ) error {
+	if err := p.shouldRestrictAccessToSystemInterface(ctx,
+		"DDL execution",   /* operation */
+		"running the DDL", /* alternate action */
+	); err != nil {
+		return err
+	}
+
 	if !descriptor.IsNew() {
 		return errors.AssertionFailedf(
 			"expected new descriptor, not a modification of version %d",
