@@ -29,3 +29,18 @@ func TestConsoleKeysVisibility(t *testing.T) {
 		}
 	}
 }
+
+func TestSettingListWithPreviousApplicationClass(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for key := range settings.TestingListPrevAppSettings() {
+		setting, found := settings.LookupForLocalAccessByKey(key, true /* forSystemTenant */)
+		if !found {
+			t.Fatalf("not found: %q", key)
+		}
+
+		if setting.InternalKey() != key {
+			t.Errorf("prev-application setting list must contain key %q, doesn't match %q", setting.InternalKey(), key)
+		}
+	}
+}
