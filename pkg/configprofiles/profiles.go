@@ -112,7 +112,7 @@ var virtClusterInitTasks = []autoconfigpb.Task{
 		},
 	),
 	// Finally.
-	makeTask("use the application virtual cluster template by default in CREATE VIRTUAL CLSUTER",
+	makeTask("use the application virtual cluster template by default in CREATE VIRTUAL CLUSTER",
 		/* nonTxnSQL */ []string{
 			"SET CLUSTER SETTING sql.create_virtual_cluster.default_template = 'template'",
 		},
@@ -141,7 +141,7 @@ var virtClusterWithAppServiceInitTasks = append(
 )
 
 func enableReplication(baseTasks []autoconfigpb.Task) []autoconfigpb.Task {
-	return append(baseTasks,
+	return append(baseTasks[:len(baseTasks):len(baseTasks)],
 		makeTask("enable rangefeeds and replication",
 			/* nonTxnSQL */ []string{
 				"SET CLUSTER SETTING kv.rangefeed.enabled = true",
