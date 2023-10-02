@@ -43,7 +43,7 @@ type alterTenantCapabilityNode struct {
 func (p *planner) AlterTenantCapability(
 	ctx context.Context, n *tree.AlterTenantCapability,
 ) (planNode, error) {
-	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "grant/revoke capabilities to"); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "grant/revoke capabilities to", p.execCfg.Settings); err != nil {
 		return nil, err
 	}
 	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V23_1TenantCapabilities) {

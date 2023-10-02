@@ -89,7 +89,7 @@ func (p *planner) createTenantInternal(
 	if p.EvalContext().TxnReadOnly {
 		return tid, readOnlyError("create_tenant()")
 	}
-	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "create"); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "create", p.execCfg.Settings); err != nil {
 		return tid, err
 	}
 	if err := CanManageTenant(ctx, p); err != nil {
@@ -264,7 +264,7 @@ func CreateTenantRecord(
 	testingKnobs *TenantTestingKnobs,
 ) (roachpb.TenantID, error) {
 	const op = "create"
-	if err := rejectIfCantCoordinateMultiTenancy(codec, op); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(codec, op, settings); err != nil {
 		return roachpb.TenantID{}, err
 	}
 	if err := rejectIfSystemTenant(info.ID, op); err != nil {

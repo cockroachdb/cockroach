@@ -35,7 +35,7 @@ import (
 // to take this action.
 func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *mtinfopb.TenantInfo) error {
 	const op = "gc"
-	if err := rejectIfCantCoordinateMultiTenancy(execCfg.Codec, op); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(execCfg.Codec, op, execCfg.Settings); err != nil {
 		return err
 	}
 	if err := rejectIfSystemTenant(info.ID, op); err != nil {

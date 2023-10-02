@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
@@ -123,16 +124,76 @@ func checkPrivilegesForSetting(
 		privilege.MODIFYCLUSTERSETTING, privilege.MODIFYSQLCLUSTERSETTING, privilege.VIEWCLUSTERSETTING, action, name)
 }
 
+// RestrictAccessToSystemInterface restricts access to certain SQL
+// features from the system tenant/interface. This restriction exists
+// to prevent the following UX surprise:
+//
+//   - end-user desires to achieve a certain outcome in a virtual cluster;
+//   - however, they mess up their connection string and connect to the
+//     system tenant instead;
+//   - without this setting, the resulting SQL would succeed in the
+//     system tenant and the user would not realize they were not
+//     connected to the right place.
+var RestrictAccessToSystemInterface = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"sql.restrict_system_interface.enabled",
+	"if enabled, certain statements produce errors or warnings when run from the system interface to encourage use of a virtual cluster",
+	false)
+
+// TipUserAboutSystemInterface informs the user in error payloads
+// about the existence of the system interface. This is a UX
+// enhancement meant to facilitate the transition from single-tenant,
+// non-virtualized CockroachDB to virtual clusters.
+var TipUserAboutSystemInterface = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"sql.error_tip_system_interface.enabled",
+	"if enabled, certain errors contain a tip to use the system interface",
+	false)
+
+func (p *planner) maybeAddSystemInterfaceHint(err error, operation redact.SafeString) error {
+	return maybeAddSystemInterfaceHint(err, operation, p.ExecCfg().Codec, p.ExecCfg().Settings)
+}
+
+func maybeAddSystemInterfaceHint(
+	err error, operation redact.SafeString, codec keys.SQLCodec, st *cluster.Settings,
+) error {
+	if err == nil {
+		return nil
+	}
+	forSystemTenant := codec.ForSystemTenant()
+	tipSystemInterface := !forSystemTenant && TipUserAboutSystemInterface.Get(&st.SV)
+	if !tipSystemInterface {
+		return err
+	}
+	return errors.WithHintf(err, "Connect to the system interface and %s from there.", operation)
+}
+
 // SetClusterSetting sets cluster settings.
 // Privileges: super user.
 func (p *planner) SetClusterSetting(
 	ctx context.Context, n *tree.SetClusterSetting,
 ) (planNode, error) {
+	forSystemTenant := p.ExecCfg().Codec.ForSystemTenant()
+	tipSystemInterface := !forSystemTenant && TipUserAboutSystemInterface.Get(&p.ExecCfg().Settings.SV)
+
 	name := settings.SettingName(strings.ToLower(n.Name))
 	st := p.EvalContext().Settings
-	setting, ok, nameStatus := settings.LookupForLocalAccess(name, p.ExecCfg().Codec.ForSystemTenant())
+	setting, ok, nameStatus := settings.LookupForLocalAccess(name, forSystemTenant)
 	if !ok {
-		return nil, errors.Errorf("unknown cluster setting '%s'", name)
+		var err error
+		if tipSystemInterface {
+			// Does the setting exist at all? If it does, inform the user better.
+			_, ok, _ := settings.LookupForLocalAccess(name, true /* forSystemTenant */)
+			if ok {
+				err = p.maybeAddSystemInterfaceHint(
+					pgerror.Newf(pgcode.InsufficientPrivilege, "cannot modify storage-level setting from virtual cluster"),
+					"modify the cluster setting")
+			}
+		}
+		if err == nil {
+			err = pgerror.Newf(pgcode.UndefinedParameter, "unknown cluster setting '%s'", name)
+		}
+		return nil, err
 	}
 	if nameStatus != settings.NameActive {
 		p.BufferClientNotice(ctx, settingNameDeprecationNotice(name, setting.Name()))
@@ -143,14 +204,27 @@ func (p *planner) SetClusterSetting(
 		return nil, err
 	}
 
-	if !p.execCfg.Codec.ForSystemTenant() {
+	if !forSystemTenant {
 		switch setting.Class() {
 		case settings.SystemOnly:
 			// The Lookup call above should never return SystemOnly settings if this
 			// is a tenant.
 			return nil, errors.AssertionFailedf("looked up system-only setting")
+
 		case settings.SystemVisible:
-			return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "setting %s is only settable by the operator", name)
+			return nil, p.maybeAddSystemInterfaceHint(
+				pgerror.Newf(pgcode.InsufficientPrivilege, "setting %s is only settable by the operator", name),
+				"modify the cluster setting")
+		}
+	} else {
+		switch setting.Class() {
+		case settings.ApplicationLevel:
+			if !p.EvalContext().SessionData().Internal && RestrictAccessToSystemInterface.Get(&p.ExecCfg().Settings.SV) {
+				return nil, errors.WithHintf(
+					pgerror.Newf(pgcode.InsufficientPrivilege, "blocked update to application-level setting %s from the system interface", setting.Name()),
+					"Access blocked via %s to prevent likely user errors.\n"+
+						"Try changing the setting from a virtual cluster instead.", RestrictAccessToSystemInterface.Name())
+			}
 		}
 	}
 

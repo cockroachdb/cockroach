@@ -226,6 +226,14 @@ func (p *planner) createDatabase(
 func (p *planner) createDescriptor(
 	ctx context.Context, descriptor catalog.MutableDescriptor, jobDesc string,
 ) error {
+	if p.ExecCfg().Codec.ForSystemTenant() && !p.EvalContext().SessionData().Internal &&
+		RestrictAccessToSystemInterface.Get(&p.ExecCfg().Settings.SV) {
+		return errors.WithHintf(
+			pgerror.Newf(pgcode.InsufficientPrivilege, "blocked DDL from the system interface"),
+			"Object creation blocked via %s to prevent likely user errors.\n"+
+				"Try running the DDL from a virtual cluster instead.", RestrictAccessToSystemInterface.Name())
+	}
+
 	if !descriptor.IsNew() {
 		return errors.AssertionFailedf(
 			"expected new descriptor, not a modification of version %d",

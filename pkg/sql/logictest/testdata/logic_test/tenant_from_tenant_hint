@@ -1,0 +1,17 @@
+# LogicTest: 3node-tenant-default-configs
+# tenant-cluster-setting-override-opt: sql.error_tip_system_interface.enabled=true
+
+statement error only the system tenant can create other tenants.*\nHINT: Connect to the system interface
+CREATE TENANT "hello"
+
+statement error only the system tenant can show other tenants.*\nHINT: Connect to the system interface
+SHOW TENANT "hello"
+
+statement error only the system tenant can show other tenants.*\nHINT: Connect to the system interface
+SHOW TENANTS
+
+statement error only the system tenant can drop other tenants.*\nHINT: Connect to the system interface
+DROP TENANT "hello"
+
+statement error cannot modify storage-level setting from virtual cluster\nHINT: Connect to the system interface
+SET CLUSTER SETTING trace.redact_at_virtual_cluster_boundary.enabled = false;
