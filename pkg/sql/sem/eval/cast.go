@@ -407,6 +407,13 @@ func performCastWithoutPrecisionTruncation(
 	case types.StringFamily, types.CollatedStringFamily:
 		var s string
 		typ := t
+		if typ.Oid() == oid.T_refcursor {
+			if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_2) {
+				return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+					"refcursor not supported until version 23.2",
+				)
+			}
+		}
 		switch t := d.(type) {
 		case *tree.DBitArray:
 			s = t.BitArray.String()
