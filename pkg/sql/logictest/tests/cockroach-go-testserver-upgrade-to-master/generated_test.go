@@ -161,3 +161,10 @@ func TestLogic_mixed_version_upgrade_repair_descriptors(
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "mixed_version_upgrade_repair_descriptors")
 }
+
+func TestLogic_pg_lsn_mixed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "pg_lsn_mixed")
+}
