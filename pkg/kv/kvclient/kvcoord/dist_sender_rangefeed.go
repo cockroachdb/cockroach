@@ -626,11 +626,10 @@ func handleRangefeedError(
 		// If we got an EOF, treat it as a signal to restart single range feed.
 		return rangefeedErrorInfo{}, nil
 	case errors.HasType(err, (*kvpb.StoreNotFoundError)(nil)):
-		// These errors are likely to be unique to the replica that
-		// reported them, so no action is required before the next
-		// retry.
+		// We shouldn't be seeing these errors if descriptors are correct, but if
+		// we do, we'd rather evict descriptor before retrying.
 		metrics.Errors.StoreNotFound.Inc(1)
-		return rangefeedErrorInfo{}, nil
+		return rangefeedErrorInfo{evict: true}, nil
 	case errors.HasType(err, (*kvpb.NodeUnavailableError)(nil)):
 		// These errors are likely to be unique to the replica that
 		// reported them, so no action is required before the next
