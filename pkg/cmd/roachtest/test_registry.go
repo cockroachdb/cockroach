@@ -142,9 +142,7 @@ func (r *testRegistryImpl) PromFactory() promauto.Factory {
 	return promauto.With(r.promRegistry)
 }
 
-// GetTests returns all the tests that match the given regexp, sorted by name.
-// Skipped tests are included, and tests that don't match their minVersion spec
-// are also included but marked as skipped.
+// GetTests returns all the tests that match the given filter, sorted by name.
 func (r testRegistryImpl) GetTests(
 	filter *registry.TestFilter,
 ) ([]registry.TestSpec, []registry.TestSpec) {
@@ -170,9 +168,8 @@ func (r testRegistryImpl) GetTests(
 
 // List lists tests that match one of the filters.
 func (r testRegistryImpl) List(filters []string) []registry.TestSpec {
-	filter := registry.NewTestFilter(filters, true)
+	filter := registry.NewTestFilter(filters)
 	tests, _ := r.GetTests(filter)
-	sort.Slice(tests, func(i, j int) bool { return tests[i].Name < tests[j].Name })
 	return tests
 }
 

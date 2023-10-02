@@ -132,8 +132,8 @@ Examples:
 			r := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg, listBench)
 			tests.RegisterTests(&r)
 
-			filter := registry.NewTestFilter(args, runSkipped)
-			specs := testsToRun(r, filter, selectProbability, false)
+			filter := registry.NewTestFilter(args)
+			specs := testsToRun(r, filter, runSkipped, selectProbability, false)
 
 			for _, s := range specs {
 				var skip string
@@ -226,13 +226,17 @@ runner itself.
 }
 
 func testsToRun(
-	r testRegistryImpl, filter *registry.TestFilter, selectProbability float64, print bool,
+	r testRegistryImpl,
+	filter *registry.TestFilter,
+	runSkipped bool,
+	selectProbability float64,
+	print bool,
 ) []registry.TestSpec {
 	specs, tagMismatch := r.GetTests(filter)
 
 	var notSkipped []registry.TestSpec
 	for _, s := range specs {
-		if s.Skip == "" || filter.RunSkipped {
+		if s.Skip == "" || runSkipped {
 			notSkipped = append(notSkipped, s)
 		} else {
 			if print && teamCity {

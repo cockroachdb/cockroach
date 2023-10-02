@@ -75,7 +75,7 @@ func TestMatchOrSkip(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			f := registry.NewTestFilter(c.filter, false)
+			f := registry.NewTestFilter(c.filter)
 			spec := &registry.TestSpec{Name: c.name, Owner: OwnerUnitTest, Tags: c.tags}
 			if value := spec.Match(f); c.expected != value {
 				t.Fatalf("expected %v, but found %v", c.expected, value)
@@ -247,7 +247,7 @@ type runnerTest struct {
 func setupRunnerTest(t *testing.T, r testRegistryImpl, testFilters []string) *runnerTest {
 	ctx := context.Background()
 
-	tests := testsToRun(r, registry.NewTestFilter(testFilters, false), 1.0, true)
+	tests := testsToRun(r, registry.NewTestFilter(testFilters), false, 1.0, true)
 	cr := newClusterRegistry()
 
 	stopper := stop.NewStopper()
@@ -448,7 +448,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 			}
 		},
 	})
-	tests := testsToRun(r, registry.NewTestFilter(nil, false), 1.0, true)
+	tests := testsToRun(r, registry.NewTestFilter(nil), false, 1.0, true)
 	lopt := loggingOpt{
 		l:            nilLogger(),
 		tee:          logger.NoTee,

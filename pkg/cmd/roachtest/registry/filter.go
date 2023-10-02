@@ -27,15 +27,14 @@ type TestFilter struct {
 	//
 	// This set contains each tag, so the above examples would be represented as `["foo,bar"]` and
 	// `["foo", "bar"]` respectively..
-	Tags       map[string]struct{}
-	RunSkipped bool
+	Tags map[string]struct{}
 }
 
 // NewTestFilter initializes a new filter. The strings are interpreted
 // as regular expressions. As a special case, a `tag:` prefix implies
 // that the remainder of the string filters tests by tag, and not by
 // name.
-func NewTestFilter(filter []string, runSkipped bool) *TestFilter {
+func NewTestFilter(filter []string) *TestFilter {
 	var name []string
 	tags := make(map[string]struct{})
 	for _, v := range filter {
@@ -61,8 +60,7 @@ func NewTestFilter(filter []string, runSkipped bool) *TestFilter {
 	}
 
 	return &TestFilter{
-		Name:       makeRE(name),
-		Tags:       tags,
-		RunSkipped: runSkipped,
+		Name: makeRE(name),
+		Tags: tags,
 	}
 }

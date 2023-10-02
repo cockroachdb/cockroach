@@ -193,7 +193,7 @@ func runTests(register func(registry.Registry), args []string, benchOnly bool) e
 	defer stopper.Stop(context.Background())
 	runner := newTestRunner(cr, stopper)
 
-	filter := registry.NewTestFilter(args, runSkipped)
+	filter := registry.NewTestFilter(args)
 	clusterType := roachprodCluster
 	bindTo := ""
 	if cloud == spec.Local {
@@ -231,7 +231,7 @@ func runTests(register func(registry.Registry), args []string, benchOnly bool) e
 		return err
 	}
 
-	specs := testsToRun(r, filter, selectProbability, true)
+	specs := testsToRun(r, filter, runSkipped, selectProbability, true)
 
 	n := len(specs)
 	if n*count < parallelism {
