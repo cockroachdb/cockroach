@@ -123,6 +123,7 @@ BNF_SRCS = [
     "//docs/generated/sql/bnf:drop_func_stmt.bnf",
     "//docs/generated/sql/bnf:drop_index.bnf",
     "//docs/generated/sql/bnf:drop_owned_by_stmt.bnf",
+    "//docs/generated/sql/bnf:drop_proc_stmt.bnf",
     "//docs/generated/sql/bnf:drop_role_stmt.bnf",
     "//docs/generated/sql/bnf:drop_schedule_stmt.bnf",
     "//docs/generated/sql/bnf:drop_schema.bnf",

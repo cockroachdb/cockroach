@@ -652,6 +652,7 @@ drop_ddl_stmt ::=
 	| drop_schema_stmt
 	| drop_type_stmt
 	| drop_func_stmt
+	| drop_proc_stmt
 
 drop_role_stmt ::=
 	'DROP' role_or_group_or_user role_spec_list
@@ -1866,6 +1867,10 @@ drop_type_stmt ::=
 drop_func_stmt ::=
 	'DROP' 'FUNCTION' function_with_paramtypes_list opt_drop_behavior
 	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' function_with_paramtypes_list opt_drop_behavior
+
+drop_proc_stmt ::=
+	'DROP' 'PROCEDURE' function_with_paramtypes_list opt_drop_behavior
+	| 'DROP' 'PROCEDURE' 'IF' 'EXISTS' function_with_paramtypes_list opt_drop_behavior
 
 explain_option_name ::=
 	non_reserved_word
