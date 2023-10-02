@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
@@ -75,6 +76,10 @@ type SemaContext struct {
 	DateStyle pgdate.DateStyle
 	// IntervalStyle refers to the IntervalStyle to parse as.
 	IntervalStyle duration.IntervalStyle
+
+	// Version accesses the current cluster version. It is used to verify that
+	// types are supported by the current cluster version. It may be unset.
+	Version clusterversion.Handle
 }
 
 // SemaProperties is a holder for required and derived properties
@@ -599,6 +604,9 @@ func (expr *CastExpr) TypeCheck(
 	if err != nil {
 		return nil, err
 	}
+	if err = CheckUnsupportedType(ctx, semaCtx.Version, exprType); err != nil {
+		return nil, err
+	}
 	expr.Type = exprType
 	canElideCast := true
 	switch {
@@ -737,6 +745,9 @@ func (expr *AnnotateTypeExpr) TypeCheck(
 ) (TypedExpr, error) {
 	annotateType, err := ResolveType(ctx, expr.Type, semaCtx.GetTypeResolver())
 	if err != nil {
+		return nil, err
+	}
+	if err = CheckUnsupportedType(ctx, semaCtx.Version, annotateType); err != nil {
 		return nil, err
 	}
 	expr.Type = annotateType
@@ -3410,4 +3421,23 @@ func getMostSignificantOverload(
 		return QualifiedOverload{}, pgerror.Newf(pgcode.UndefinedFunction, "unknown signature: %s", getFuncSig())
 	}
 	return ret, nil
+}
+
+// CheckUnsupportedType returns an error if the given type is not supported by
+// the current cluster version. If the given version handle is nil,
+// CheckUnsupportedType returns nil.
+func CheckUnsupportedType(ctx context.Context, version clusterversion.Handle, typ *types.T) error {
+	if version == nil {
+		return nil
+	}
+	var errorTypeString string
+	if typ.Family() == types.PGLSNFamily {
+		errorTypeString = "pg_lsn"
+	}
+	if errorTypeString != "" && !version.IsActive(ctx, clusterversion.V23_2) {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"%s not supported until version 23.2", errorTypeString,
+		)
+	}
+	return nil
 }

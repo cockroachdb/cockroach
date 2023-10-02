@@ -11,8 +11,10 @@
 package optbuilder
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -139,6 +141,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	// named parameters to the scope so that references to them in the body can
 	// be resolved.
 	bodyScope := b.allocScope()
+	version := b.evalCtx.Settings.Version
 	var paramTypes tree.ParamTypes
 	for i := range cf.Params {
 		param := &cf.Params[i]
@@ -146,6 +149,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		if err != nil {
 			panic(err)
 		}
+		// The parameter type must be supported by the current cluster version.
+		checkUnsupportedType(b.ctx, version, typ)
 		if types.IsRecordType(typ) {
 			if language == tree.RoutineLangSQL {
 				panic(pgerror.Newf(pgcode.InvalidFunctionDefinition,
@@ -258,7 +263,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		// TODO(mgartner): stmtScope.cols does not describe the result
 		// columns of the statement. We should use physical.Presentation
 		// instead.
-		err = validateReturnType(funcReturnType, stmtScope.cols)
+		err = validateReturnType(b.ctx, version, funcReturnType, stmtScope.cols)
 		if err != nil {
 			panic(err)
 		}
@@ -301,7 +306,15 @@ func formatFuncBodyStmt(fmtCtx *tree.FmtCtx, ast tree.NodeFormatter, newLine boo
 	fmtCtx.WriteString(";")
 }
 
-func validateReturnType(expected *types.T, cols []scopeColumn) error {
+func validateReturnType(
+	ctx context.Context, version clusterversion.Handle, expected *types.T, cols []scopeColumn,
+) error {
+	// The return type must be supported by the current cluster version.
+	checkUnsupportedType(ctx, version, expected)
+	for i := range cols {
+		checkUnsupportedType(ctx, version, cols[i].typ)
+	}
+
 	// If return type is void, any column types are valid.
 	if expected.Equivalent(types.Void) {
 		return nil
@@ -404,5 +417,11 @@ func checkStmtVolatility(
 		if stmtScope.expr.Relational().VolatilitySet.HasVolatile() {
 			panic(pgerror.Newf(pgcode.InvalidParameterValue, "volatile statement not allowed in stable function: %s", stmt.String()))
 		}
+	}
+}
+
+func checkUnsupportedType(ctx context.Context, version clusterversion.Handle, typ *types.T) {
+	if err := tree.CheckUnsupportedType(ctx, version, typ); err != nil {
+		panic(err)
 	}
 }
