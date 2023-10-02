@@ -724,3 +724,13 @@ n1
 12.123
 ----
 1
+
+exec-ddl
+CREATE TABLE thash (i INT, j INT, k INT, CONSTRAINT "primary" PRIMARY KEY(i) USING HASH WITH BUCKET_COUNT=8)
+----
+
+copy-from
+COPY thash FROM STDIN WITH CSV
+1,2,3
+----
+1
