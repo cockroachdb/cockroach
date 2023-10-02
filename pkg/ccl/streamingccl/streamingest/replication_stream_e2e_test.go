@@ -1165,7 +1165,7 @@ func TestLoadProducerAndIngestionProgress(t *testing.T) {
 func TestStreamingRegionalConstraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
+	skip.WithIssue(t, 111541)
 	skip.UnderStressRace(t, "takes too long under stress race")
 
 	ctx := context.Background()
