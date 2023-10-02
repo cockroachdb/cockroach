@@ -176,8 +176,9 @@ type MVCCValueMerger struct {
 
 	// Used to avoid heap allocations when passing pointer to `Unmarshal()`.
 	meta enginepb.MVCCMetadata
-	// Used to avoid heap allocations in Finish().
-	merged roachpb.InternalTimeSeriesData
+	// merged and metaSubset are used to avoid heap allocations in Finish().
+	merged     roachpb.InternalTimeSeriesData
+	metaSubset enginepb.MVCCMetadataSubsetForMergeSerialization
 }
 
 const (
@@ -271,13 +272,15 @@ func (t *MVCCValueMerger) Finish(includesBase bool) ([]byte, io.Closer, error) {
 			totalLen += len(rawByteOp)
 		}
 		// See the motivating comment in mvcc.proto.
-		var meta enginepb.MVCCMetadataSubsetForMergeSerialization
-		meta.RawBytes = make([]byte, mvccHeaderSize, mvccHeaderSize+totalLen)
+		meta := &t.metaSubset // avoid allocation
+		*meta = enginepb.MVCCMetadataSubsetForMergeSerialization{
+			RawBytes: make([]byte, mvccHeaderSize, mvccHeaderSize+totalLen),
+		}
 		meta.RawBytes[mvccTagPos] = byte(roachpb.ValueType_BYTES)
 		for _, rawByteOp := range t.rawByteOps {
 			meta.RawBytes = append(meta.RawBytes, rawByteOp...)
 		}
-		res, err := protoutil.Marshal(&meta)
+		res, err := protoutil.Marshal(meta)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -321,7 +324,7 @@ func (t *MVCCValueMerger) Finish(includesBase bool) ([]byte, io.Closer, error) {
 		return nil, nil, err
 	}
 	// See the motivating comment in mvcc.proto.
-	var meta enginepb.MVCCMetadataSubsetForMergeSerialization
+	meta := &t.metaSubset // avoid allocation
 	if !(t.oldestMergeTS == hlc.LegacyTimestamp{}) {
 		meta.MergeTimestamp = &t.oldestMergeTS
 	}
@@ -329,7 +332,7 @@ func (t *MVCCValueMerger) Finish(includesBase bool) ([]byte, io.Closer, error) {
 	header := make([]byte, mvccHeaderSize)
 	header[mvccTagPos] = tsTag
 	meta.RawBytes = append(header, tsBytes...)
-	res, err := protoutil.Marshal(&meta)
+	res, err := protoutil.Marshal(meta)
 	if err != nil {
 		return nil, nil, err
 	}
