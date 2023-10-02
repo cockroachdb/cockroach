@@ -1856,6 +1856,8 @@ oid     typname                typnamespace  typowner    typlen  typbyval  typty
 1562    varbit                 4294967110    NULL        -1      false     b
 1563    _varbit                4294967110    NULL        -1      false     b
 1700    numeric                4294967110    NULL        -1      false     b
+1790    refcursor              4294967110    NULL        -1      false     b
+2201    _refcursor             4294967110    NULL        -1      false     b
 2202    regprocedure           4294967110    NULL        4       true      b
 2205    regclass               4294967110    NULL        4       true      b
 2206    regtype                4294967110    NULL        4       true      b
@@ -1969,6 +1971,8 @@ oid     typname                typcategory  typispreferred  typisdefined  typdel
 1562    varbit                 V            false           true          ,         0         0        1563
 1563    _varbit                A            false           true          ,         0         1562     0
 1700    numeric                N            false           true          ,         0         0        1231
+1790    refcursor              S            false           true          ,         0         0        2201
+2201    _refcursor             A            false           true          ,         0         1790     0
 2202    regprocedure           N            false           true          ,         0         0        2207
 2205    regclass               N            false           true          ,         0         0        2210
 2206    regtype                N            false           true          ,         0         0        2211
@@ -2082,6 +2086,8 @@ oid     typname                typinput        typoutput        typreceive      
 1562    varbit                 varbit_in       varbit_out       varbit_recv       varbit_send       0         0          0
 1563    _varbit                array_in        array_out        array_recv        array_send        0         0          0
 1700    numeric                numeric_in      numeric_out      numeric_recv      numeric_send      0         0          0
+1790    refcursor              refcursorin     refcursorout     refcursorrecv     refcursorsend     0         0          0
+2201    _refcursor             array_in        array_out        array_recv        array_send        0         0          0
 2202    regprocedure           regprocedurein  regprocedureout  regprocedurerecv  regproceduresend  0         0          0
 2205    regclass               regclassin      regclassout      regclassrecv      regclasssend      0         0          0
 2206    regtype                regtypein       regtypeout       regtyperecv       regtypesend       0         0          0
@@ -2195,6 +2201,8 @@ oid     typname                typalign  typstorage  typnotnull  typbasetype  ty
 1562    varbit                 NULL      NULL        false       0            -1
 1563    _varbit                NULL      NULL        false       0            -1
 1700    numeric                NULL      NULL        false       0            -1
+1790    refcursor              NULL      NULL        false       0            -1
+2201    _refcursor             NULL      NULL        false       0            -1
 2202    regprocedure           NULL      NULL        false       0            -1
 2205    regclass               NULL      NULL        false       0            -1
 2206    regtype                NULL      NULL        false       0            -1
@@ -2308,6 +2316,8 @@ oid     typname                typndims  typcollation  typdefaultbin  typdefault
 1562    varbit                 0         0             NULL           NULL        NULL
 1563    _varbit                0         0             NULL           NULL        NULL
 1700    numeric                0         0             NULL           NULL        NULL
+1790    refcursor              0         3403232968    NULL           NULL        NULL
+2201    _refcursor             0         3403232968    NULL           NULL        NULL
 2202    regprocedure           0         0             NULL           NULL        NULL
 2205    regclass               0         0             NULL           NULL        NULL
 2206    regtype                0         0             NULL           NULL        NULL

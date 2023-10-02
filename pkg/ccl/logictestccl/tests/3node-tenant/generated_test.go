@@ -1500,6 +1500,13 @@ func TestTenantLogic_redact_descriptor(
 	runLogicTest(t, "redact_descriptor")
 }
 
+func TestTenantLogic_refcursor(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "refcursor")
+}
+
 func TestTenantLogic_rename_atomic(
 	t *testing.T,
 ) {

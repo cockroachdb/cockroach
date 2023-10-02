@@ -78,6 +78,14 @@ func ValidateColumnDefType(ctx context.Context, version clusterversion.Handle, t
 				return pgerror.Newf(pgcode.Syntax, `invalid locale %s`, t.Locale())
 			}
 		}
+		if t.Oid() == oid.T_refcursor {
+			if !version.IsActive(ctx, clusterversion.V23_2) {
+				return pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"refcursor not supported until version 23.2",
+				)
+			}
+		}
 
 	case types.DecimalFamily:
 		switch {
