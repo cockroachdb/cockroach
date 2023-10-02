@@ -327,6 +327,12 @@ var (
 	Name = &T{InternalType: InternalType{
 		Family: StringFamily, Oid: oid.T_name, Locale: &emptyLocale}}
 
+	// RefCursor is the type for a variable representing the name of a cursor in a
+	// PLpgSQL routine. It is equivalent to String, but has a different oid
+	// (T_refcursor), which makes it display differently.
+	RefCursor = &T{InternalType: InternalType{
+		Family: StringFamily, Oid: oid.T_refcursor, Locale: &emptyLocale}}
+
 	// Bytes is the type of a list of raw byte values.
 	Bytes = &T{InternalType: InternalType{
 		Family: BytesFamily, Oid: oid.T_bytea, Locale: &emptyLocale}}
@@ -730,6 +736,8 @@ const (
 	// Deprecated after 19.1, since it's now represented using the Oid field.
 	visibleQCHAR = 9
 
+	visibleREFCURSOR = 202
+
 	// Deprecated after 19.1, since it's now represented using the Oid field.
 	visibleVARBIT = 10
 
@@ -901,7 +909,7 @@ func MakeChar(width int32) *T {
 // oidCanBeCollatedString returns true if the given oid is can be a CollatedString.
 func oidCanBeCollatedString(o oid.Oid) bool {
 	switch o {
-	case oid.T_text, oid.T_varchar, oid.T_bpchar, oid.T_char, oid.T_name:
+	case oid.T_text, oid.T_varchar, oid.T_bpchar, oid.T_char, oid.T_name, oid.T_refcursor:
 		return true
 	}
 	return false
@@ -1556,6 +1564,8 @@ func (t *T) Name() string {
 			return "varchar"
 		case oid.T_name:
 			return "name"
+		case oid.T_refcursor:
+			return "refcursor"
 		}
 		panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 
@@ -1760,6 +1770,9 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		case oid.T_name:
 			// Type modifiers not allowed for name.
 			return "name"
+		case oid.T_refcursor:
+			// Type modifiers not allowed for refcursor.
+			return "refcursor"
 		default:
 			panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 		}
@@ -2327,6 +2340,8 @@ func (t *T) upgradeType() error {
 			t.InternalType.Oid = oid.T_bpchar
 		case visibleQCHAR:
 			t.InternalType.Oid = oid.T_char
+		case visibleREFCURSOR:
+			t.InternalType.Oid = oid.T_refcursor
 		case visibleNONE:
 			t.InternalType.Oid = oid.T_text
 		default:
@@ -2491,6 +2506,8 @@ func (t *T) downgradeType() error {
 			t.InternalType.VisibleType = visibleCHAR
 		case oid.T_char:
 			t.InternalType.VisibleType = visibleQCHAR
+		case oid.T_refcursor:
+			t.InternalType.VisibleType = visibleREFCURSOR
 		case oid.T_name:
 			t.InternalType.Family = name
 		default:
@@ -2810,6 +2827,8 @@ func (t *T) stringTypeSQL() string {
 		typName = `"char"`
 	case oid.T_name:
 		typName = "NAME"
+	case oid.T_refcursor:
+		typName = "REFCURSOR"
 	}
 
 	// In general, if there is a specified width we want to print it next to the
