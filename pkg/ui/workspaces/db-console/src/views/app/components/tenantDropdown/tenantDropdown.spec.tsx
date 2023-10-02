@@ -21,7 +21,7 @@ jest.mock("src/redux/cookies", () => ({
 }));
 
 describe("TenantDropdown", () => {
-  it("returns null if there's no current tenant", () => {
+  it("returns null if there's no current virtual cluster", () => {
     (
       selectTenantsFromMultitenantSessionCookie as jest.MockedFn<
         typeof selectTenantsFromMultitenantSessionCookie
@@ -34,7 +34,7 @@ describe("TenantDropdown", () => {
     expect(wrapper.isEmptyRender());
   });
   // Mutli-tenant scenarios
-  it("returns null if there are no tenants or less than 2 tenants in the session cookie", () => {
+  it("returns null if there are no virtual clusters or less than 2 in the session cookie", () => {
     (
       selectTenantsFromMultitenantSessionCookie as jest.MockedFn<
         typeof selectTenantsFromMultitenantSessionCookie
@@ -46,7 +46,7 @@ describe("TenantDropdown", () => {
     const wrapper = shallow(<TenantDropdown />);
     expect(wrapper.isEmptyRender());
   });
-  it("returns a dropdown list of tenant options if there are multiple tenant in the session cookie", () => {
+  it("returns a dropdown list of tenant options if there are multiple virtual clusters in the session cookie", () => {
     (
       selectTenantsFromMultitenantSessionCookie as jest.MockedFn<
         typeof selectTenantsFromMultitenantSessionCookie
@@ -56,9 +56,11 @@ describe("TenantDropdown", () => {
       getCookieValue as jest.MockedFn<typeof getCookieValue>
     ).mockReturnValueOnce("system");
     const wrapper = shallow(<TenantDropdown />);
-    expect(wrapper.find({ children: "Tenant: system" }).length).toEqual(1);
+    expect(
+      wrapper.find({ children: "Virtual cluster: system" }).length,
+    ).toEqual(1);
   });
-  it("returns a dropdown if the there is a single tenant option but isn't system tenant", () => {
+  it("returns a dropdown if the there is a single virtual cluster option but isn't system", () => {
     (
       selectTenantsFromMultitenantSessionCookie as jest.MockedFn<
         typeof selectTenantsFromMultitenantSessionCookie
@@ -68,6 +70,8 @@ describe("TenantDropdown", () => {
       getCookieValue as jest.MockedFn<typeof getCookieValue>
     ).mockReturnValueOnce("app");
     const wrapper = shallow(<TenantDropdown />);
-    expect(wrapper.find({ children: "Tenant: app" }).length).toEqual(1);
+    expect(wrapper.find({ children: "Virtual cluster: app" }).length).toEqual(
+      1,
+    );
   });
 });

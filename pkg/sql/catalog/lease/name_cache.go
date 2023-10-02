@@ -35,9 +35,10 @@ type nameCache struct {
 }
 
 // Resolves a (qualified) name to the descriptor's ID.
-// Returns a valid descriptorVersionState for descriptor with that name,
-// if the name had been previously cached and the cache has a descriptor
-// version that has not expired. Returns nil otherwise.
+// Returns a valid descriptorVersionState and expiration (hlc.Timestamp)
+// for descriptor with that name, if the name had been previously cached
+// and the cache has a descriptor version that has not expired.
+// Returns nil (and empty timestamp) otherwise.
 // This method handles normalizing the descriptor name.
 // The descriptor's refcount is incremented before returning, so the caller
 // is responsible for releasing it to the leaseManager.
@@ -47,14 +48,15 @@ func (c *nameCache) get(
 	parentSchemaID descpb.ID,
 	name string,
 	timestamp hlc.Timestamp,
-) *descriptorVersionState {
+) (desc *descriptorVersionState, expiration hlc.Timestamp) {
 	c.mu.RLock()
-	desc, ok := c.descriptors.GetByName(
+	var ok bool
+	desc, ok = c.descriptors.GetByName(
 		parentID, parentSchemaID, name,
 	).(*descriptorVersionState)
 	c.mu.RUnlock()
 	if !ok {
-		return nil
+		return nil, expiration
 	}
 	expensiveLogEnabled := log.ExpensiveLogEnabled(ctx, 2)
 	desc.mu.Lock()
@@ -63,7 +65,7 @@ func (c *nameCache) get(
 		// This get() raced with a release operation. Remove this cache
 		// entry if needed.
 		c.remove(desc)
-		return nil
+		return nil, hlc.Timestamp{}
 	}
 
 	defer desc.mu.Unlock()
@@ -79,11 +81,11 @@ func (c *nameCache) get(
 
 	// Expired descriptor. Don't hand it out.
 	if desc.hasExpiredLocked(timestamp) {
-		return nil
+		return nil, hlc.Timestamp{}
 	}
 
 	desc.incRefCountLocked(ctx, expensiveLogEnabled)
-	return desc
+	return desc, desc.mu.expiration
 }
 
 func (c *nameCache) insert(desc *descriptorVersionState) {

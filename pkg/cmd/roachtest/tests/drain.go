@@ -85,7 +85,7 @@ func runEarlyExitInConnectionWait(ctx context.Context, t test.Test, c cluster.Cl
 		connectionWaitDuration = 100 * time.Second
 		queryWaitDuration      = 10 * time.Second
 
-		// server.shutdown.lease_transfer_wait defaults to 5 seconds.
+		// server.shutdown.lease_transfer_iteration.timeout defaults to 5 seconds.
 		leaseTransferWaitDuration = 5 * time.Second
 
 		// pokeDuringDrainWaitDelay is the amount of time after drain begins when we
@@ -132,9 +132,9 @@ func runEarlyExitInConnectionWait(ctx context.Context, t test.Test, c cluster.Cl
 			c.Node(nodeToDrain),
 			// --drain-wait is set to a low value so that we can confirm that it
 			// gets automatically upgraded to use a higher value larger than the sum
-			// of server.shutdown.drain_wait, server.shutdown.connection_wait,
-			// server.shutdown.query_wait times two, and
-			// server.shutdown.lease_transfer_wait.
+			// of server.shutdown.initial_wait, server.shutdown.connections.timeout,
+			// server.shutdown.transactions.timeout times two, and
+			// server.shutdown.lease_transfer_iteration.timeout.
 			"./cockroach node drain --self --insecure --drain-wait=10s",
 		)
 		if err != nil {
@@ -370,10 +370,10 @@ func prepareCluster(
 	defer db.Close()
 
 	waitPhasesSettingStmts := []string{
-		"SET CLUSTER SETTING server.shutdown.jobs_wait = '0s';",
-		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.drain_wait = '%fs';", drainWait.Seconds()),
-		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.query_wait = '%fs'", queryWait.Seconds()),
-		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.connection_wait = '%fs'", connectionWait.Seconds()),
+		"SET CLUSTER SETTING server.shutdown.jobs.timeout = '0s';",
+		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.initial_wait = '%fs';", drainWait.Seconds()),
+		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.transactions.timeout = '%fs'", queryWait.Seconds()),
+		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.connections.timeout = '%fs'", connectionWait.Seconds()),
 	}
 	for _, stmt := range waitPhasesSettingStmts {
 		_, err = db.ExecContext(ctx, stmt)
