@@ -308,7 +308,7 @@ func CreateTenantRecord(
 	if info.Name == "" {
 		// No name: generate one if we are at the appropriate version.
 		if settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
-			info.Name = roachpb.TenantName(fmt.Sprintf("tenant-%d", info.ID))
+			info.Name = roachpb.TenantName(fmt.Sprintf("cluster-%d", info.ID))
 		}
 	}
 
