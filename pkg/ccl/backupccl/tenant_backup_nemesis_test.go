@@ -143,7 +143,7 @@ func TestTenantBackupNemesis(t *testing.T) {
 	)
 	defer hostClusterCleanupFn()
 
-	tenant10, err := tc.Servers[0].StartTenant(ctx, base.TestTenantArgs{
+	tenant10, err := tc.Servers[0].TenantController().StartTenant(ctx, base.TestTenantArgs{
 		TenantID: roachpb.MustMakeTenantID(10),
 		TestingKnobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -244,7 +244,7 @@ func TestTenantBackupNemesis(t *testing.T) {
 	//
 	// We check bank.bank which has had the workload running against it
 	// and any table from a completed nemesis.
-	tenant11, err := tc.Servers[0].StartTenant(ctx, base.TestTenantArgs{
+	tenant11, err := tc.Servers[0].TenantController().StartTenant(ctx, base.TestTenantArgs{
 		TenantName:          "cluster-11",
 		DisableCreateTenant: true,
 	})

@@ -104,7 +104,7 @@ type TenantStreamingClusters struct {
 	Args            TenantStreamingClustersArgs
 	SrcCluster      *testcluster.TestCluster
 	SrcTenantConn   *gosql.DB
-	SrcSysServer    serverutils.TestServerInterface
+	SrcSysServer    serverutils.ApplicationLayerInterface
 	SrcSysSQL       *sqlutils.SQLRunner
 	SrcTenantSQL    *sqlutils.SQLRunner
 	SrcTenantServer serverutils.ApplicationLayerInterface
@@ -112,7 +112,7 @@ type TenantStreamingClusters struct {
 	SrcCleanup      func()
 
 	DestCluster    *testcluster.TestCluster
-	DestSysServer  serverutils.TestServerInterface
+	DestSysServer  serverutils.ApplicationLayerInterface
 	DestSysSQL     *sqlutils.SQLRunner
 	DestTenantConn *gosql.DB
 	DestTenantSQL  *sqlutils.SQLRunner
@@ -330,9 +330,9 @@ func startC2CTestCluster(
 	}
 
 	c := testcluster.StartTestCluster(t, numNodes, params)
-	c.Server(0).Clock().Now()
+
 	// TODO(casper): support adding splits when we have multiple nodes.
-	pgURL, cleanupSinkCert := sqlutils.PGUrl(t, c.Server(0).AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanupSinkCert := sqlutils.PGUrl(t, c.Server(0).SystemLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	return c, pgURL, func() {
 		c.Stopper().Stop(ctx)
 		cleanupSinkCert()
@@ -355,12 +355,12 @@ func CreateMultiTenantStreamingCluster(
 		Args:          args,
 		SrcCluster:    cluster,
 		SrcSysSQL:     sqlutils.MakeSQLRunner(cluster.ServerConn(0)),
-		SrcSysServer:  cluster.Server(0),
+		SrcSysServer:  cluster.Server(0).SystemLayer(),
 		SrcURL:        url,
 		SrcCleanup:    cleanup,
 		DestCluster:   cluster,
 		DestSysSQL:    sqlutils.MakeSQLRunner(cluster.ServerConn(destNodeIdx)),
-		DestSysServer: cluster.Server(destNodeIdx),
+		DestSysServer: cluster.Server(destNodeIdx).SystemLayer(),
 		Rng:           rng,
 	}
 	tsc.setupSrcTenant()
@@ -403,12 +403,12 @@ func CreateTenantStreamingClusters(
 		Args:          args,
 		SrcCluster:    srcCluster,
 		SrcSysSQL:     sqlutils.MakeSQLRunner(srcCluster.ServerConn(0)),
-		SrcSysServer:  srcCluster.Server(0),
+		SrcSysServer:  srcCluster.Server(0).SystemLayer(),
 		SrcURL:        srcURL,
 		SrcCleanup:    srcCleanup,
 		DestCluster:   destCluster,
 		DestSysSQL:    sqlutils.MakeSQLRunner(destCluster.ServerConn(0)),
-		DestSysServer: destCluster.Server(0),
+		DestSysServer: destCluster.Server(0).SystemLayer(),
 		Rng:           rng,
 	}
 	tsc.setupSrcTenant()
