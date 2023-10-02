@@ -111,7 +111,7 @@ var virtClusterInitTasks = []autoconfigpb.Task{
 		},
 	),
 	// Finally.
-	makeTask("use the application virtual cluster template by default in CREATE VIRTUAL CLSUTER",
+	makeTask("use the application virtual cluster template by default in CREATE VIRTUAL CLUSTER",
 		/* nonTxnSQL */ []string{
 			"SET CLUSTER SETTING sql.create_tenant.default_template = 'template'",
 		},
