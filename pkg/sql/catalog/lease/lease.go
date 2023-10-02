@@ -38,7 +38,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	kvstorage "github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -96,7 +98,8 @@ var LeaseEnableSessionBasedLeasing = settings.RegisterEnumSetting(
 	settings.ApplicationLevel,
 	"sql.catalog.experimental_use_session_based_leasing",
 	"enables session based leasing for internal testing.",
-	"off",
+	util.ConstantWithMetamorphicTestChoice("experimental_use_session_based_leasing",
+		"off", "dual_write").(string),
 	map[int64]string{
 		int64(SessionBasedLeasingOff): "off",
 		int64(SessionBasedDualWrite):  "dual_write",
@@ -503,7 +506,7 @@ func (m *Manager) insertDescriptorVersions(id descpb.ID, versions []historicalDe
 		existingVersion := t.mu.active.findVersion(versions[i].desc.GetVersion())
 		if existingVersion == nil {
 			t.mu.active.insert(
-				newDescriptorVersionState(t, versions[i].desc, versions[i].expiration, nil, false))
+				newDescriptorVersionState(t, versions[i].desc, versions[i].expiration, nil, nil, false))
 		}
 	}
 }
@@ -572,10 +575,26 @@ func acquireNodeLease(
 			}
 			newest := m.findNewest(id)
 			var minExpiration hlc.Timestamp
+			var lastLease *storedLease
 			if newest != nil {
 				minExpiration = newest.getExpiration()
+				l := newest.getStoredLease()
+				lastLease = &l
 			}
-			desc, expiration, regionPrefix, err := m.storage.acquire(ctx, minExpiration, id)
+			// A session will be populated within the leasing infrastructure only when
+			// session based leasing is enabled. This session will be stored both inside
+			// the leases table and descriptor version states in memory, and can be
+			// consulted for the expiry depending on the mode
+			// (see SessionBasedLeasingMode).
+			var session sqlliveness.Session
+			if m.sessionBasedLeasingModeAtLeast(SessionBasedDualWrite) {
+				var err error
+				session, err = m.livenessProvider.Session(ctx)
+				if err != nil {
+					return false, errors.Wrapf(err, "lease acquisition was unable to resolve liveness session")
+				}
+			}
+			desc, expiration, regionPrefix, err := m.storage.acquire(ctx, minExpiration, session, id, lastLease)
 			if err != nil {
 				return nil, err
 			}
@@ -587,7 +606,7 @@ func acquireNodeLease(
 			t.mu.takenOffline = false
 			defer t.mu.Unlock()
 			var newDescVersionState *descriptorVersionState
-			newDescVersionState, toRelease, err = t.upsertLeaseLocked(ctx, desc, expiration, regionPrefix)
+			newDescVersionState, toRelease, err = t.upsertLeaseLocked(ctx, desc, expiration, session, regionPrefix)
 			if err != nil {
 				return nil, err
 			}
@@ -595,7 +614,7 @@ func acquireNodeLease(
 				m.names.insert(newDescVersionState)
 			}
 			if toRelease != nil {
-				releaseLease(ctx, toRelease, m)
+				releaseLease(ctx, toRelease, m, true /* async */)
 			}
 			return true, nil
 		})
@@ -611,8 +630,8 @@ func acquireNodeLease(
 }
 
 // releaseLease from store.
-func releaseLease(ctx context.Context, lease *storedLease, m *Manager) {
-	if m.IsDraining() {
+func releaseLease(ctx context.Context, lease *storedLease, m *Manager, async bool) {
+	if m.IsDraining() || !async {
 		// Release synchronously to guarantee release before exiting.
 		m.storage.release(ctx, m.stopper, lease)
 		return
@@ -673,7 +692,7 @@ func purgeOldVersions(
 			return t.removeInactiveVersions()
 		}()
 		for _, l := range leases {
-			releaseLease(ctx, l, m)
+			releaseLease(ctx, l, m, true /* async */)
 		}
 	}
 
@@ -732,6 +751,7 @@ type Manager struct {
 	rangeFeedFactory *rangefeed.Factory
 	storage          storage
 	settings         *cluster.Settings
+	livenessProvider sqlliveness.Provider
 	mu               struct {
 		syncutil.Mutex
 		// TODO(james): Track size of leased descriptors in memory.
@@ -770,6 +790,7 @@ func NewLeaseManager(
 	clock *hlc.Clock,
 	settings *cluster.Settings,
 	settingsWatcher *settingswatcher.SettingsWatcher,
+	livenessProvider sqlliveness.Provider,
 	codec keys.SQLCodec,
 	testingKnobs ManagerTestingKnobs,
 	stopper *stop.Stopper,
@@ -793,6 +814,7 @@ func NewLeaseManager(
 			}),
 		},
 		settings:         settings,
+		livenessProvider: livenessProvider,
 		rangeFeedFactory: rangeFeedFactory,
 		testingKnobs:     testingKnobs,
 		names:            makeNameCache(),
@@ -1132,7 +1154,7 @@ func (m *Manager) SetDraining(
 			return t.removeInactiveVersions()
 		}()
 		for _, l := range leases {
-			releaseLease(ctx, l, m)
+			releaseLease(ctx, l, m, true /* async */)
 		}
 		if reporter != nil {
 			// Report progress through the Drain RPC.
