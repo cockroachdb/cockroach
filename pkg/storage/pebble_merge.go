@@ -293,21 +293,21 @@ func (t *MVCCValueMerger) Finish(includesBase bool) ([]byte, io.Closer, error) {
 		StartTimestampNanos: t.timeSeriesOps[0].StartTimestampNanos,
 		SampleDurationNanos: t.timeSeriesOps[0].SampleDurationNanos,
 	}
-	for _, timeSeriesOp := range t.timeSeriesOps {
-		if timeSeriesOp.StartTimestampNanos != t.merged.StartTimestampNanos {
+	for i := range t.timeSeriesOps {
+		if t.timeSeriesOps[i].StartTimestampNanos != t.merged.StartTimestampNanos {
 			return nil, nil, errors.Errorf("start timestamp mismatch")
 		}
-		if timeSeriesOp.SampleDurationNanos != t.merged.SampleDurationNanos {
+		if t.timeSeriesOps[i].SampleDurationNanos != t.merged.SampleDurationNanos {
 			return nil, nil, errors.Errorf("sample duration mismatch")
 		}
-		if !isColumnar && len(timeSeriesOp.Offset) > 0 {
+		if !isColumnar && len(t.timeSeriesOps[i].Offset) > 0 {
 			ensureColumnar(&t.merged)
-			ensureColumnar(&timeSeriesOp)
+			ensureColumnar(&t.timeSeriesOps[i])
 			isColumnar = true
 		} else if isColumnar {
-			ensureColumnar(&timeSeriesOp)
+			ensureColumnar(&t.timeSeriesOps[i])
 		}
-		proto.Merge(&t.merged, &timeSeriesOp)
+		proto.Merge(&t.merged, &t.timeSeriesOps[i])
 	}
 	if isColumnar {
 		sortAndDeduplicateColumns(&t.merged)
