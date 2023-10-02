@@ -79,6 +79,12 @@ var staticProfiles = map[string]configProfile{
 	},
 }
 
+// virtClusterInitTasks is the list of tasks that are run when
+// virtualization is enabled but no virtual cluster has been created yet.
+//
+// NOTE: DO NOT MODIFY TASKS HERE. Task execution is identified by the
+// task ID; already-run tasks will not re-run. Add tasks at the end of
+// each config profile. See enableReplication() for an example.
 var virtClusterInitTasks = []autoconfigpb.Task{
 	makeTask("initial cluster config",
 		/* nonTxnSQL */ []string{
@@ -120,8 +126,11 @@ var virtClusterInitTasks = []autoconfigpb.Task{
 	),
 }
 
+// NOTE: DO NOT MODIFY TASKS HERE. Task execution is identified by the
+// task ID; already-run tasks will not re-run. Add tasks at the end of
+// each config profile. See enableReplication() for an example.
 var virtClusterWithAppServiceInitTasks = append(
-	virtClusterInitTasks,
+	virtClusterInitTasks[:len(virtClusterInitTasks):len(virtClusterInitTasks)],
 	makeTask("create an application virtual cluster",
 		nil, /* nonTxnSQL */
 		/* txnSQL */ []string{
