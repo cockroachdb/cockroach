@@ -316,19 +316,19 @@ func (t *MVCCValueMerger) Finish(includesBase bool) ([]byte, io.Closer, error) {
 	} else {
 		sortAndDeduplicateRows(&t.merged)
 	}
-	tsBytes, err := protoutil.Marshal(&t.merged)
-	if err != nil {
-		return nil, nil, err
+
+	t.metaSubset = enginepb.MVCCMetadataSubsetForMergeSerialization{
+		RawBytes: make([]byte, mvccHeaderSize+t.merged.Size()),
 	}
+	t.metaSubset.RawBytes[mvccTagPos] = byte(roachpb.ValueType_TIMESERIES)
 	// See the motivating comment in mvcc.proto.
-	t.metaSubset = enginepb.MVCCMetadataSubsetForMergeSerialization{}
 	if !(t.oldestMergeTS == hlc.LegacyTimestamp{}) {
 		t.metaSubset.MergeTimestamp = &t.oldestMergeTS
 	}
-	tsTag := byte(roachpb.ValueType_TIMESERIES)
-	header := make([]byte, mvccHeaderSize)
-	header[mvccTagPos] = tsTag
-	t.metaSubset.RawBytes = append(header, tsBytes...)
+	_, err := protoutil.MarshalToSizedBuffer(&t.merged, t.metaSubset.RawBytes[mvccHeaderSize:])
+	if err != nil {
+		return nil, nil, err
+	}
 	res, err := protoutil.Marshal(&t.metaSubset)
 	if err != nil {
 		return nil, nil, err
