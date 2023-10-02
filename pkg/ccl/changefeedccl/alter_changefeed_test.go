@@ -1199,10 +1199,12 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 			if initialCheckpoint.Len() > 0 {
 				return true, nil
 			}
+			t.Logf("span %s %s %s", r.Span.String(), r.BoundaryType.String(), r.Timestamp.String())
 
 			// A backfill begins when the associated resolved event arrives, which has a
 			// timestamp such that all backfill spans have a timestamp of timestamp.Next().
 			if r.BoundaryType == expectedBoundaryType {
+				t.Logf("setting boundary timestamp %s", r.Timestamp.String())
 				backfillTimestamp = r.Timestamp
 				return false, nil
 			}
@@ -1212,18 +1214,24 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 			if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
 				initialCheckpoint.Add(p.Checkpoint.Spans...)
 				atomic.StoreInt32(&foundCheckpoint, 1)
+				t.Logf("found checkpoint %v", p.Checkpoint.Spans)
 			}
 
 			// Filter non-backfill-related spans
 			if !r.Timestamp.Equal(backfillTimestamp.Next()) {
+				skip := !(backfillTimestamp.IsEmpty() || r.Timestamp.LessEq(backfillTimestamp.Next()))
+				t.Logf("handling span %s: %t", r.Span.String(), skip)
 				// Only allow spans prior to a valid backfillTimestamp to avoid moving past the backfill
-				return !(backfillTimestamp.IsEmpty() || r.Timestamp.LessEq(backfillTimestamp.Next())), nil
+				return skip, nil
 			}
 
 			// Only allow resolving if we definitely won't have a completely resolved table
 			if !r.Span.Equal(tableSpan) && haveGaps {
-				return rnd.Intn(10) > 7, nil
+				skip := rnd.Intn(10) > 7
+				t.Logf("handling span %s: %t", r.Span.String(), skip)
+				return skip, nil
 			}
+			t.Logf("skipping span %s", r.Span.String())
 			haveGaps = true
 			return true, nil
 		}

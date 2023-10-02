@@ -534,7 +534,7 @@ func (c *transientCluster) startTenantService(
 		}
 
 		var err error
-		ts, err = c.servers[serverIdx].StartTenant(ctx, args)
+		ts, err = c.servers[serverIdx].TenantController().StartTenant(ctx, args)
 		if err != nil {
 			return err
 		}
@@ -547,7 +547,7 @@ func (c *transientCluster) startTenantService(
 		}))
 	} else {
 		var err error
-		ts, _, err = c.servers[serverIdx].StartSharedProcessTenant(ctx,
+		ts, _, err = c.servers[serverIdx].TenantController().StartSharedProcessTenant(ctx,
 			base.TestSharedProcessTenantArgs{
 				TenantID:   roachpb.MustMakeTenantID(secondaryTenantID),
 				TenantName: demoTenantName,

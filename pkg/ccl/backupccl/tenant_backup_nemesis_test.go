@@ -71,7 +71,7 @@ func TestTenantBackupWithCanceledImport(t *testing.T) {
 	)
 	defer hostClusterCleanupFn()
 
-	tenant10, err := tc.Servers[0].StartTenant(ctx, base.TestTenantArgs{
+	tenant10, err := tc.Servers[0].TenantController().StartTenant(ctx, base.TestTenantArgs{
 		TenantID: roachpb.MustMakeTenantID(10),
 		TestingKnobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -100,7 +100,7 @@ func TestTenantBackupWithCanceledImport(t *testing.T) {
 	hostSQLDB.Exec(t, "BACKUP TENANT 10 INTO LATEST IN 'nodelocal://1/tenant-backup'")
 	hostSQLDB.Exec(t, "RESTORE TENANT 10 FROM LATEST IN 'nodelocal://1/tenant-backup' WITH virtual_cluster_name = 'cluster-11'")
 
-	tenant11, err := tc.Servers[0].StartTenant(ctx, base.TestTenantArgs{
+	tenant11, err := tc.Servers[0].TenantController().StartTenant(ctx, base.TestTenantArgs{
 		TenantName:          "cluster-11",
 		DisableCreateTenant: true,
 	})

@@ -78,7 +78,7 @@ func TestCreateAsVTable(t *testing.T) {
 			}
 
 			fqName := name.FQString()
-			if s.StartedDefaultTestTenant() {
+			if s.TenantController().StartedDefaultTestTenant() {
 				// Some of the virtual tables are currently only available in
 				// the system tenant.
 				// TODO(yuzefovich): update this list when #54252 is addressed.
@@ -295,7 +295,7 @@ func TestCreateAsShow(t *testing.T) {
 	for i, testCase := range testCases {
 		t.Run(testCase.sql, func(t *testing.T) {
 			if testCase.setup != "" {
-				if s.StartedDefaultTestTenant() && strings.Contains(testCase.setup, "create_tenant") {
+				if s.TenantController().StartedDefaultTestTenant() && strings.Contains(testCase.setup, "create_tenant") {
 					// Only the system tenant has the ability to create other
 					// tenants.
 					return

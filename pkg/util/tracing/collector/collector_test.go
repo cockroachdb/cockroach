@@ -256,7 +256,7 @@ func TestClusterInflightTraces(t *testing.T) {
 				tenants := make([]serverutils.ApplicationLayerInterface, len(tc.Servers))
 				dbs := make([]*gosql.DB, len(tc.Servers))
 				for i, s := range tc.Servers {
-					tenant, db, err := s.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{TenantName: "app"})
+					tenant, db, err := s.TenantController().StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{TenantName: "app"})
 					require.NoError(t, err)
 					tenants[i] = tenant
 					dbs[i] = db
@@ -279,7 +279,7 @@ func TestClusterInflightTraces(t *testing.T) {
 				tenants := make([]serverutils.ApplicationLayerInterface, len(tc.Servers))
 				dbs := make([]*gosql.DB, len(tc.Servers))
 				for i := range tc.Servers {
-					tenant, err := tc.Servers[i].StartTenant(ctx, base.TestTenantArgs{TenantID: tenantID})
+					tenant, err := tc.Servers[i].TenantController().StartTenant(ctx, base.TestTenantArgs{TenantID: tenantID})
 					require.NoError(t, err)
 					tenants[i] = tenant
 					dbs[i] = tenant.SQLConn(t, "")
