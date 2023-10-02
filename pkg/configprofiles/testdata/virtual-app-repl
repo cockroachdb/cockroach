@@ -26,8 +26,8 @@ WHERE variable IN (
 )
 ORDER BY variable
 ----
-cross_cluster_replication.enabled false
-kv.rangefeed.enabled false
+cross_cluster_replication.enabled true
+kv.rangefeed.enabled true
 server.controller.default_tenant application
 server.secondary_tenants.redact_trace.enabled false
 spanconfig.storage_coalesce_adjacent.enabled false

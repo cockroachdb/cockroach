@@ -79,6 +79,13 @@ var staticProfiles = map[string]configProfile{
 	},
 }
 
+// virtClusterInitTasks is the list of tasks that are run when
+// virtualization is enabled but no virtual cluster has been created yet.
+//
+// NOTE: DO NOT MODIFY TASKS HERE. Task execution is identified by the
+// task ID; already-run tasks will not re-run. Add tasks at the end of
+// each config profile. See enableReplication() and
+// discourageSystemInterface() for examples.
 var virtClusterInitTasks = []autoconfigpb.Task{
 	makeTask("initial cluster config",
 		/* nonTxnSQL */ []string{
@@ -111,7 +118,7 @@ var virtClusterInitTasks = []autoconfigpb.Task{
 		},
 	),
 	// Finally.
-	makeTask("use the application virtual cluster template by default in CREATE VIRTUAL CLSUTER",
+	makeTask("use the application virtual cluster template by default in CREATE VIRTUAL CLUSTER",
 		/* nonTxnSQL */ []string{
 			"SET CLUSTER SETTING sql.create_tenant.default_template = 'template'",
 		},
@@ -119,8 +126,12 @@ var virtClusterInitTasks = []autoconfigpb.Task{
 	),
 }
 
+// NOTE: DO NOT MODIFY TASKS HERE. Task execution is identified by the
+// task ID; already-run tasks will not re-run. Add tasks at the end of
+// each config profile. See enableReplication() and
+// discourageSystemInterface() for examples.
 var virtClusterWithAppServiceInitTasks = append(
-	virtClusterInitTasks,
+	virtClusterInitTasks[:len(virtClusterInitTasks):len(virtClusterInitTasks)],
 	makeTask("create an application virtual cluster",
 		nil, /* nonTxnSQL */
 		/* txnSQL */ []string{
@@ -140,7 +151,7 @@ var virtClusterWithAppServiceInitTasks = append(
 )
 
 func enableReplication(baseTasks []autoconfigpb.Task) []autoconfigpb.Task {
-	return append(baseTasks,
+	return append(baseTasks[:len(baseTasks):len(baseTasks)],
 		makeTask("enable rangefeeds and replication",
 			/* nonTxnSQL */ []string{
 				"SET CLUSTER SETTING kv.rangefeed.enabled = true",
