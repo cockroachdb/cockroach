@@ -11,6 +11,7 @@
 package optbuilder
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -146,6 +147,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		if err != nil {
 			panic(err)
 		}
+		// The parameter type must be supported by the current cluster version.
+		checkUnsupportedType(b.ctx, b.semaCtx, typ)
 		if types.IsRecordType(typ) {
 			if language == tree.RoutineLangSQL {
 				panic(pgerror.Newf(pgcode.InvalidFunctionDefinition,
@@ -258,7 +261,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		// TODO(mgartner): stmtScope.cols does not describe the result
 		// columns of the statement. We should use physical.Presentation
 		// instead.
-		err = validateReturnType(funcReturnType, stmtScope.cols)
+		err = validateReturnType(b.ctx, b.semaCtx, funcReturnType, stmtScope.cols)
 		if err != nil {
 			panic(err)
 		}
@@ -301,7 +304,15 @@ func formatFuncBodyStmt(fmtCtx *tree.FmtCtx, ast tree.NodeFormatter, newLine boo
 	fmtCtx.WriteString(";")
 }
 
-func validateReturnType(expected *types.T, cols []scopeColumn) error {
+func validateReturnType(
+	ctx context.Context, semaCtx *tree.SemaContext, expected *types.T, cols []scopeColumn,
+) error {
+	// The return type must be supported by the current cluster version.
+	checkUnsupportedType(ctx, semaCtx, expected)
+	for i := range cols {
+		checkUnsupportedType(ctx, semaCtx, cols[i].typ)
+	}
+
 	// If return type is void, any column types are valid.
 	if expected.Equivalent(types.Void) {
 		return nil
@@ -404,5 +415,11 @@ func checkStmtVolatility(
 		if stmtScope.expr.Relational().VolatilitySet.HasVolatile() {
 			panic(pgerror.Newf(pgcode.InvalidParameterValue, "volatile statement not allowed in stable function: %s", stmt.String()))
 		}
+	}
+}
+
+func checkUnsupportedType(ctx context.Context, semaCtx *tree.SemaContext, typ *types.T) {
+	if err := tree.CheckUnsupportedType(ctx, semaCtx, typ); err != nil {
+		panic(err)
 	}
 }

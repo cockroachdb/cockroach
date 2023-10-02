@@ -404,6 +404,7 @@ func newInternalPlanner(
 	p.semaCtx.NameResolver = p
 	p.semaCtx.DateStyle = sd.GetDateStyle()
 	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
+	p.semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(execCfg.Settings.Version)
 
 	plannerMon := mon.NewMonitor(redact.Sprintf("internal-planner.%s.%s", user, opName),
 		mon.MemoryResource,
@@ -903,6 +904,7 @@ func (p *planner) resetPlanner(
 	p.semaCtx.NameResolver = p
 	p.semaCtx.DateStyle = sd.GetDateStyle()
 	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
+	p.semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(p.execCfg.Settings.Version)
 
 	p.autoCommit = false
 
