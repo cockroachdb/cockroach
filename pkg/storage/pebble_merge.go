@@ -294,7 +294,8 @@ func (t *MVCCValueMerger) Finish(includesBase bool) ([]byte, io.Closer, error) {
 		StartTimestampNanos: t.timeSeriesOps[0].StartTimestampNanos,
 		SampleDurationNanos: t.timeSeriesOps[0].SampleDurationNanos,
 	}
-	for _, timeSeriesOp := range t.timeSeriesOps {
+	for i := range t.timeSeriesOps {
+		timeSeriesOp := &t.timeSeriesOps[i]
 		if timeSeriesOp.StartTimestampNanos != merged.StartTimestampNanos {
 			return nil, nil, errors.Errorf("start timestamp mismatch")
 		}
@@ -303,12 +304,12 @@ func (t *MVCCValueMerger) Finish(includesBase bool) ([]byte, io.Closer, error) {
 		}
 		if !isColumnar && len(timeSeriesOp.Offset) > 0 {
 			ensureColumnar(merged)
-			ensureColumnar(&timeSeriesOp)
+			ensureColumnar(timeSeriesOp)
 			isColumnar = true
 		} else if isColumnar {
-			ensureColumnar(&timeSeriesOp)
+			ensureColumnar(timeSeriesOp)
 		}
-		proto.Merge(merged, &timeSeriesOp)
+		proto.Merge(merged, timeSeriesOp)
 	}
 	if isColumnar {
 		sortAndDeduplicateColumns(merged)
