@@ -59,7 +59,7 @@ func (t *TracePutter) InitPut(key, value interface{}, failOnTombstones bool) {
 
 }
 func (t *TracePutter) Del(key ...interface{}) {
-	log.VEventfDepth(t.Ctx, 1, 2, "Del %v", key)
+	log.VEventfDepth(t.Ctx, 1, 2, "Del %v", key...)
 	t.Putter.Del(key...)
 }
 
