@@ -24,6 +24,7 @@ The commands are:
 	execfactory  generate exec.Factory interface
 	execexplain  generate explain factory
 	execplangist generate plan gist factory
+	fastpath     generate fast-path optimizer rules
 
 The sources can be file names and/or filepath.Glob patterns.
 
@@ -59,6 +60,7 @@ The commands are:
 	execfactory  generate exec.Factory interface
 	execexplain  generate explain factory
 	execplangist generate plan gist factory
+	fastpath     generate fast-path optimizer rules
 
 The sources can be file names and/or filepath.Glob patterns.
 
@@ -95,6 +97,7 @@ The commands are:
 	execfactory  generate exec.Factory interface
 	execexplain  generate explain factory
 	execplangist generate plan gist factory
+	fastpath     generate fast-path optimizer rules
 
 The sources can be file names and/or filepath.Glob patterns.
 

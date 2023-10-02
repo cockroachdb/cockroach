@@ -38,7 +38,12 @@ func (r RuleName) IsNormalize() bool {
 
 // IsExplore returns true if r is an exploration rule.
 func (r RuleName) IsExplore() bool {
-	return r > startExploreRule
+	return r > startExploreRule && r < startFastPathRule
+}
+
+// IsFastPath returns true if r is a fast-path rule.
+func (r RuleName) IsFastPath() bool {
+	return r > startFastPathRule
 }
 
 // Make linter happy.
@@ -46,3 +51,4 @@ var _ = InvalidRuleName
 var _ = NumManualRuleNames
 var _ = RuleName.IsNormalize
 var _ = RuleName.IsExplore
+var _ = RuleName.IsFastPath

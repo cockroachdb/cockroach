@@ -91,7 +91,7 @@ type newRuleGen struct {
 	md           *metadata
 	w            *matchWriter
 	uniquifier   uniquifier
-	normalize    bool
+	ruleType     ruleType
 	thisVar      string
 	factoryVar   string
 	boundStmts   map[lang.Expr]string
@@ -113,6 +113,14 @@ func (g *newRuleGen) init(compiled *lang.CompiledExpr, md *metadata, w *matchWri
 	}
 }
 
+type ruleType int
+
+const (
+	ruleTypeNorm ruleType = iota
+	ruleTypeExplore
+	ruleTypeFastPath
+)
+
 // genRule generates match and replace code for one rule within the scope of
 // a particular op construction method.
 func (g *newRuleGen) genRule(rule *lang.RuleExpr) {
@@ -123,22 +131,30 @@ func (g *newRuleGen) genRule(rule *lang.RuleExpr) {
 	matchName := rule.Match.SingleName()
 	define := g.compiled.LookupDefine(matchName)
 
-	// Determine whether the rule is a normalization or exploration rule and
-	// set up context accordingly.
-	g.normalize = rule.Tags.Contains("Normalize")
-	if g.normalize {
+	// Determine whether the rule is a normalization, exploration, or fast-path
+	// rule and set up context accordingly.
+	if rule.Tags.Contains("Normalize") {
+		g.ruleType = ruleTypeNorm
 		g.thisVar = "_f"
 		g.factoryVar = "_f"
-	} else {
+	} else if rule.Tags.Contains("Explore") {
+		g.ruleType = ruleTypeExplore
 		g.thisVar = "_e"
 		g.factoryVar = "_e.f"
 		g.innerExploreMatch = g.findInnerExploreMatch(rule.Match)
+	} else if rule.Tags.Contains("FastPath") {
+		g.ruleType = ruleTypeFastPath
+		g.thisVar = "_fp"
+		g.factoryVar = "_fp.f"
+	} else {
+		panic("unexpected rule type")
 	}
 
 	g.w.writeIndent("// [%s]\n", rule.Name)
 	marker := g.w.nestIndent("{\n")
 
-	if g.normalize {
+	switch g.ruleType {
+	case ruleTypeNorm:
 		// For normalization rules, expression fields are passed as parameters
 		// to the factory method, so use those parameters directly.
 		for index, matchArg := range rule.Match.Args {
@@ -151,7 +167,7 @@ func (g *newRuleGen) genRule(rule *lang.RuleExpr) {
 		}
 
 		g.genNormalizeReplace(define, rule)
-	} else {
+	case ruleTypeExplore:
 		// For exploration rules, the memo expression is passed as a parameter,
 		// so use accessors to get its fields.
 		if rule.Match == g.innerExploreMatch {
@@ -168,6 +184,10 @@ func (g *newRuleGen) genRule(rule *lang.RuleExpr) {
 		context := &contextDecl{code: "_root", typ: g.md.typeOf(define)}
 		g.genConstantMatchArgs(rule.Match, define, context)
 		g.genExploreReplace(define, rule)
+	case ruleTypeFastPath:
+		context := &contextDecl{code: "_root", typ: g.md.typeOf(define)}
+		g.genConstantMatchArgs(rule.Match, define, context)
+		g.genFastPathReplace(define, rule)
 	}
 
 	g.w.unnestToMarker(marker, "}\n")
@@ -454,7 +474,7 @@ func (g *newRuleGen) genMatchNameAndChildren(
 	// There's no need to invert execution logic in that case.
 	invertExecution := noMatch && len(match.Args) != 0
 	if invertExecution {
-		if !g.normalize {
+		if g.ruleType == ruleTypeExplore {
 			panic("nomatch with a name/child matcher is not yet supported in explore rules")
 		}
 
@@ -472,7 +492,7 @@ func (g *newRuleGen) genMatchNameAndChildren(
 	// Generate extra looping code in case of exploration patterns, since any
 	// expression in the group can match, rather than just the normalized
 	// expression.
-	if !g.normalize {
+	if g.ruleType == ruleTypeExplore {
 		// If matching only scalar expressions, then don't need to loop over all
 		// expressions in the group, since scalar groups have at most one
 		// normalized expression.
@@ -804,6 +824,44 @@ func (g *newRuleGen) genExploreReplace(define *lang.DefineExpr, rule *lang.RuleE
 	g.w.unnest("}\n")
 }
 
+func (g *newRuleGen) genFastPathReplace(define *lang.DefineExpr, rule *lang.RuleExpr) {
+	switch t := rule.Replace.(type) {
+	case *lang.FuncExpr:
+		name, ok := t.Name.(*lang.NameExpr)
+		if !ok {
+			panic("exploration pattern with dynamic replace name not yet supported")
+		}
+		opDef := g.compiled.LookupDefine(string(*name))
+		opTyp := g.md.typeOf(opDef)
+
+		g.genBoundStatements(t)
+		g.w.nestIndent("_expr := &%s{\n", opTyp.name)
+		for i, arg := range t.Args {
+			field := opDef.Fields[i]
+
+			// Use fieldStorePrefix, since parameter is being stored into a field.
+			g.w.writeIndent("%s: %s", g.md.fieldName(field), fieldStorePrefix(g.md.typeOf(field)))
+			g.genNestedExpr(arg)
+			g.w.write(",\n")
+		}
+		g.w.unnest("}")
+		if rule.Replace.InferredType() == lang.AnyDataType {
+			g.genTypeConversion(define)
+		}
+		g.w.writeIndent("\n")
+		g.w.writeIndent("_interned := _fp.f.Memo().Add%sToGroup(_expr, _root)\n", opDef.Name)
+		g.w.writeIndent("return _interned, true\n")
+	case *lang.CustomFuncExpr:
+		if t.Name != "Root" {
+			panic("top-level custom functions are not allowed in fast-path rule")
+		}
+		g.w.writeIndent("// The matched expression will be kept as-is.\n")
+		g.w.writeIndent("return _root, true\n")
+	default:
+		panic(fmt.Sprintf("unsupported replace expression in fast-path rule: %s", rule.Replace))
+	}
+}
+
 // genBoundStatements is called before genNestedExpr in order to generate zero
 // or more statements that construct subtrees of the given expression that are
 // bound to variables. Those variables can be used when constructing other parts
@@ -1006,11 +1064,18 @@ func (g *newRuleGen) genCustomFunc(customFunc *lang.CustomFuncExpr) {
 		g.w.write("%s.Op()", ref.Label)
 	} else if customFunc.Name == "Root" {
 		// Handle Root function.
-		if g.normalize {
-			// The root expression can only be accessed during exploration.
-			panic("the root expression can only be accessed during exploration")
+		if g.ruleType == ruleTypeNorm {
+			// The root expression can only be accessed during exploration and the
+			// fast-path rules.
+			panic("the root expression cannot be accessed during normalization")
 		}
 		g.w.write("_root")
+	} else if customFunc.Name == "Required" {
+		if g.ruleType != ruleTypeFastPath {
+			// The root required properties can only be accessed in fast-path rules.
+			panic("the root required properties can only be accessed for fast-path rules")
+		}
+		g.w.write("_required")
 	} else {
 		funcName := string(customFunc.Name)
 		g.w.write("%s.funcs.%s(", g.thisVar, funcName)

@@ -111,11 +111,15 @@ genrule(
         ":ops",
         "//pkg/sql/opt/xform:rules",
         "//pkg/sql/opt/norm:rules",
+        "//pkg/sql/opt/fastpath:rules",
     ],
     outs = ["rule_name.og.go"],
     cmd = """
       $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ rulenames \
-          $(locations :ops) $(locations //pkg/sql/opt/norm:rules) $(locations //pkg/sql/opt/xform:rules)
+          $(locations :ops) \
+          $(locations //pkg/sql/opt/norm:rules) \
+          $(locations //pkg/sql/opt/xform:rules) \
+          $(locations //pkg/sql/opt/fastpath:rules)
     """,
     exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
     visibility = [

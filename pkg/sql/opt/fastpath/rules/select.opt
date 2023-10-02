@@ -1,0 +1,59 @@
+# =============================================================================
+# select.opt contains fast-path rules for Select operators.
+# =============================================================================
+
+# PlaceholderSelectFastPath attempts to produce a fully optimized memo with
+# placeholders. This is only possible in very simple cases and involves special
+# operators (PlaceholderScan) which use placeholders and resolve them at
+# execbuild time.
+[PlaceholderSelectFastPath, FastPath]
+(Select
+    (Scan $private:*) &
+        (HasPlaceholders (Root)) &
+        (CheckRowCountForFastPath (Root)) &
+        (IsEmptyOrdering (RequiredOrdering (Required)))
+    $filters:* &
+        (CanUseFiltersInPlaceholderScan $filters) &
+        (Let
+            ($index $ok):(FindPlaceholderScanIndex
+                $private
+                $filters
+            )
+            $ok
+        )
+)
+=>
+(PlaceholderScan
+    (MakePlaceholderScanSpan $filters $private $index)
+    (MakePlaceholderScanPrivate (Root) $private $index)
+)
+
+# PlaceholderProjectSelectFastPath is similar to PlaceholderSelectFastPath,
+# but allows a do-nothing Project operator on top of the Select. It's safe to
+# remove the project because the presentation property still enforces the final
+# result columns, and the PlaceholderScan only projects the required columns.
+[PlaceholderProjectSelectFastPath, FastPath]
+(Project
+    (Select
+        (Scan $private:*) &
+            (HasPlaceholders (Root)) &
+            (CheckRowCountForFastPath (Root)) &
+            (IsEmptyOrdering (RequiredOrdering (Required)))
+        $filters:* &
+            (CanUseFiltersInPlaceholderScan $filters) &
+            (Let
+                ($index $ok):(FindPlaceholderScanIndex
+                    $private
+                    $filters
+                )
+                $ok
+            )
+    )
+    []
+    *
+)
+=>
+(PlaceholderScan
+    (MakePlaceholderScanSpan $filters $private $index)
+    (MakePlaceholderScanPrivate (Root) $private $index)
+)

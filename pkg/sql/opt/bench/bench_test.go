@@ -754,13 +754,15 @@ func newHarness(tb testing.TB, query benchQuery, schemas []string) *harness {
 		tb.Fatalf("%v", err)
 	}
 
-	// If there are no placeholders, we explore during PREPARE.
-	if len(query.args) == 0 {
+	// Try the fast path rules unconditionally.
+	var ok bool
+	if ok, err = h.optimizer.TryFastPath(); err != nil {
+		tb.Fatalf("%v", err)
+	}
+	if !ok && len(query.args) == 0 {
+		// If we didn't take a fast path and there are no arguments, we optimize
+		// during PREPARE.
 		if _, err := h.optimizer.Optimize(); err != nil {
-			tb.Fatalf("%v", err)
-		}
-	} else {
-		if _, _, err := h.optimizer.TryPlaceholderFastPath(); err != nil {
 			tb.Fatalf("%v", err)
 		}
 	}

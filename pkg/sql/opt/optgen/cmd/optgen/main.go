@@ -97,6 +97,7 @@ func (g *optgen) run(args ...string) bool {
 	case "factory":
 	case "ops":
 	case "rulenames":
+	case "fastpath":
 
 	case "execfactory", "execexplain", "execplangist":
 		runValidate = false
@@ -193,6 +194,10 @@ func (g *optgen) run(args ...string) bool {
 	case "execplangist":
 		var gen execPlanGistGen
 		err = g.generate(compiled, gen.generate)
+
+	case "fastpath":
+		var gen fastPathGen
+		err = g.generate(compiled, gen.generate)
 	}
 
 	if err != nil {
@@ -273,6 +278,7 @@ func (g *optgen) usage() {
 	fmt.Fprintf(g.stdErr, "\texecfactory  generate exec.Factory interface\n")
 	fmt.Fprintf(g.stdErr, "\texecexplain  generate explain factory\n")
 	fmt.Fprintf(g.stdErr, "\texecplangist generate plan gist factory\n")
+	fmt.Fprintf(g.stdErr, "\tfastpath     generate fast-path optimizer rules\n")
 
 	fmt.Fprintf(g.stdErr, "\n")
 

@@ -9,6 +9,7 @@ go_library(
         "explorer_gen.go",
         "exprs_gen.go",
         "factory_gen.go",
+        "fast_path_gen.go",
         "main.go",
         "match_writer.go",
         "metadata.go",
