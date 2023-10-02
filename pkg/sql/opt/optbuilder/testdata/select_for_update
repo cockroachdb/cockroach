@@ -25,7 +25,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-update
+      └── locking: for-update,durability-guaranteed
 
 build
 SELECT * FROM t FOR NO KEY UPDATE
@@ -34,7 +34,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-no-key-update
+      └── locking: for-no-key-update,durability-guaranteed
 
 build
 SELECT * FROM t FOR SHARE
@@ -43,7 +43,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-share
+      └── locking: for-share,durability-guaranteed
 
 build
 SELECT * FROM t FOR KEY SHARE
@@ -52,7 +52,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-key-share
+      └── locking: for-key-share,durability-guaranteed
 
 build
 SELECT * FROM t FOR KEY SHARE FOR SHARE
@@ -61,7 +61,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-share
+      └── locking: for-share,durability-guaranteed
 
 build
 SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
@@ -70,7 +70,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-no-key-update
+      └── locking: for-no-key-update,durability-guaranteed
 
 build
 SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
@@ -79,7 +79,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-update
+      └── locking: for-update,durability-guaranteed
 
 build
 SELECT * FROM t FOR UPDATE OF t
@@ -88,7 +88,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-update
+      └── locking: for-update,durability-guaranteed
 
 build
 SELECT * FROM t FOR UPDATE OF t2
@@ -102,7 +102,7 @@ project
  ├── columns: "?column?":5!null
  ├── scan t
  │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
- │    └── locking: for-update
+ │    └── locking: for-update,durability-guaranteed
  └── projections
       └── 1 [as="?column?":5]
 
@@ -117,7 +117,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t [as=t2]
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-update
+      └── locking: for-update,durability-guaranteed
 
 build
 SELECT * FROM t AS t2 FOR UPDATE OF t
@@ -131,7 +131,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t [as=t2]
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-update
+      └── locking: for-update,durability-guaranteed
 
 # ------------------------------------------------------------------------------
 # Tests with numeric table references.
@@ -145,7 +145,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-update
+      └── locking: for-update,durability-guaranteed
 
 build
 SELECT * FROM [53 AS t] FOR UPDATE OF t
@@ -154,7 +154,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-update
+      └── locking: for-update,durability-guaranteed
 
 build
 SELECT * FROM [53 AS t] FOR UPDATE OF t2
@@ -172,7 +172,7 @@ project
  ├── columns: a:1!null
  └── scan t [as=t2]
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-update
+      └── locking: for-update,durability-guaranteed
 
 build
 SELECT * FROM v FOR UPDATE OF v
@@ -181,7 +181,7 @@ project
  ├── columns: a:1!null
  └── scan t [as=t2]
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-update
+      └── locking: for-update,durability-guaranteed
 
 build
 SELECT * FROM v FOR UPDATE OF v2
@@ -209,7 +209,7 @@ project
  ├── columns: a:1!null
  └── scan t [as=t2]
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-update
+      └── locking: for-update,durability-guaranteed
 
 build
 SELECT * FROM v AS v2 FOR UPDATE OF v
@@ -223,7 +223,7 @@ project
  ├── columns: a:1!null
  └── scan t [as=t2]
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-update
+      └── locking: for-update,durability-guaranteed
 
 # ------------------------------------------------------------------------------
 # Tests with subqueries.
@@ -240,7 +240,7 @@ project
  ├── columns: a:1!null
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-update
+      └── locking: for-update,durability-guaranteed
 
 build
 SELECT * FROM (SELECT a FROM t FOR UPDATE)
@@ -249,7 +249,7 @@ project
  ├── columns: a:1!null
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-update
+      └── locking: for-update,durability-guaranteed
 
 build
 SELECT * FROM (SELECT a FROM t FOR NO KEY UPDATE) FOR KEY SHARE
@@ -258,7 +258,7 @@ project
  ├── columns: a:1!null
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-no-key-update
+      └── locking: for-no-key-update,durability-guaranteed
 
 build
 SELECT * FROM (SELECT a FROM t FOR KEY SHARE) FOR NO KEY UPDATE
@@ -267,7 +267,7 @@ project
  ├── columns: a:1!null
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-no-key-update
+      └── locking: for-no-key-update,durability-guaranteed
 
 build
 SELECT * FROM (SELECT a FROM t) FOR UPDATE OF t
@@ -281,7 +281,7 @@ project
  ├── columns: a:1!null
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-update
+      └── locking: for-update,durability-guaranteed
 
 build
 SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE
@@ -290,7 +290,7 @@ project
  ├── columns: a:1!null
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-update
+      └── locking: for-update,durability-guaranteed
 
 build
 SELECT * FROM (SELECT a FROM t FOR UPDATE) AS r
@@ -299,7 +299,7 @@ project
  ├── columns: a:1!null
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-update
+      └── locking: for-update,durability-guaranteed
 
 build
 SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE OF t
@@ -313,7 +313,7 @@ project
  ├── columns: a:1!null
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-update
+      └── locking: for-update,durability-guaranteed
 
 build
 SELECT (SELECT a FROM t) FOR UPDATE
@@ -346,7 +346,7 @@ project
                      ├── columns: t.a:1!null
                      └── scan t
                           ├── columns: t.a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-                          └── locking: for-update
+                          └── locking: for-update,durability-guaranteed
 
 build
 SELECT (SELECT a FROM t) FOR UPDATE OF t
@@ -368,7 +368,7 @@ project
                      ├── columns: t.a:1!null
                      └── scan t
                           ├── columns: t.a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-                          └── locking: for-update
+                          └── locking: for-update,durability-guaranteed
 
 build
 SELECT (SELECT a FROM t) AS r FOR UPDATE
@@ -401,7 +401,7 @@ project
                      ├── columns: a:1!null
                      └── scan t
                           ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-                          └── locking: for-update
+                          └── locking: for-update,durability-guaranteed
 
 build
 SELECT (SELECT a FROM t) AS r FOR UPDATE OF t
@@ -423,7 +423,7 @@ project
                      ├── columns: a:1!null
                      └── scan t
                           ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-                          └── locking: for-update
+                          └── locking: for-update,durability-guaranteed
 
 build
 SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE
@@ -434,7 +434,7 @@ project
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       ├── scan t
       │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       └── filters
            └── any: eq
                 ├── project
@@ -458,7 +458,7 @@ project
                 │    ├── columns: a:5!null
                 │    └── scan t
                 │         ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:7 tableoid:8
-                │         └── locking: for-update
+                │         └── locking: for-update,durability-guaranteed
                 └── a:1
 
 build
@@ -470,7 +470,7 @@ project
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       ├── scan t
       │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       └── filters
            └── any: eq
                 ├── project
@@ -494,7 +494,7 @@ project
                 │    ├── columns: a:5!null
                 │    └── scan t
                 │         ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:7 tableoid:8
-                │         └── locking: for-update
+                │         └── locking: for-update,durability-guaranteed
                 └── a:1
 
 build
@@ -506,7 +506,7 @@ project
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       ├── scan t
       │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       └── filters
            └── any: eq
                 ├── project
@@ -530,7 +530,7 @@ project
                 │    ├── columns: b:6
                 │    └── scan t
                 │         ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:7 tableoid:8
-                │         └── locking: for-update
+                │         └── locking: for-update,durability-guaranteed
                 └── a:1
 
 build
@@ -542,7 +542,7 @@ project
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
       ├── scan t
       │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       └── filters
            └── any: eq
                 ├── project
@@ -566,7 +566,7 @@ project
                 │    ├── columns: b:6
                 │    └── scan t
                 │         ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:7 tableoid:8
-                │         └── locking: for-update
+                │         └── locking: for-update,durability-guaranteed
                 └── a:1
 
 # ------------------------------------------------------------------------------
@@ -614,7 +614,7 @@ with &1
  │    ├── columns: t.a:1!null
  │    └── scan t
  │         ├── columns: t.a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
- │         └── locking: for-update
+ │         └── locking: for-update,durability-guaranteed
  └── with-scan &1
       ├── columns: a:5!null
       └── mapping:
@@ -629,7 +629,7 @@ with &1 (cte)
  │    ├── columns: t.a:1!null
  │    └── scan t
  │         ├── columns: t.a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
- │         └── locking: for-update
+ │         └── locking: for-update,durability-guaranteed
  └── with-scan &1 (cte)
       ├── columns: a:5!null
       └── mapping:
@@ -648,10 +648,10 @@ project
       ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       ├── scan t
       │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       ├── scan u
       │    ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       └── filters
            └── t.a:1 = u.a:5
 
@@ -664,7 +664,7 @@ project
       ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       ├── scan t
       │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       ├── scan u
       │    └── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       └── filters
@@ -681,7 +681,7 @@ project
       │    └── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
       ├── scan u
       │    ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       └── filters
            └── t.a:1 = u.a:5
 
@@ -694,10 +694,10 @@ project
       ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       ├── scan t
       │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       ├── scan u
       │    ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       └── filters
            └── t.a:1 = u.a:5
 
@@ -710,10 +710,10 @@ project
       ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       ├── scan t
       │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       ├── scan u
       │    ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
-      │    └── locking: for-share
+      │    └── locking: for-share,durability-guaranteed
       └── filters
            └── t.a:1 = u.a:5
 
@@ -731,10 +731,10 @@ project
       ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 t2.tableoid:4 u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
       ├── scan t [as=t2]
       │    ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 t2.tableoid:4
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       ├── scan u [as=u2]
       │    ├── columns: u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
-      │    └── locking: for-share
+      │    └── locking: for-share,durability-guaranteed
       └── filters
            └── t2.a:1 = u2.a:5
 
@@ -747,10 +747,10 @@ project
       ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       ├── scan t
       │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       ├── scan u
       │    ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       └── filters
            └── t.a:1 = u.a:5
 
@@ -763,10 +763,10 @@ project
       ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       ├── scan t
       │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
-      │    └── locking: for-no-key-update
+      │    └── locking: for-no-key-update,durability-guaranteed
       ├── scan u
       │    ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
-      │    └── locking: for-key-share
+      │    └── locking: for-key-share,durability-guaranteed
       └── filters
            └── t.a:1 = u.a:5
 
@@ -779,10 +779,10 @@ project
       ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       ├── scan t
       │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
-      │    └── locking: for-no-key-update
+      │    └── locking: for-no-key-update,durability-guaranteed
       ├── scan u
       │    ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       └── filters
            └── t.a:1 = u.a:5
 
@@ -799,10 +799,10 @@ project
       ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 t2.tableoid:4 u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
       ├── scan t [as=t2]
       │    ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 t2.tableoid:4
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       ├── scan u [as=u2]
       │    ├── columns: u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       └── filters
            └── t2.a:1 = u2.a:5
 
@@ -830,7 +830,7 @@ project
       ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 t2.tableoid:4 u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
       ├── scan t [as=t2]
       │    ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 t2.tableoid:4
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       ├── scan u [as=u2]
       │    └── columns: u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
       └── filters
@@ -847,7 +847,7 @@ project
       │    └── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 t2.tableoid:4
       ├── scan u [as=u2]
       │    ├── columns: u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       └── filters
            └── t2.a:1 = u2.a:5
 
@@ -860,10 +860,10 @@ project
       ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 t2.tableoid:4 u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
       ├── scan t [as=t2]
       │    ├── columns: t2.a:1!null b:2 t2.crdb_internal_mvcc_timestamp:3 t2.tableoid:4
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       ├── scan u [as=u2]
       │    ├── columns: u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       └── filters
            └── t2.a:1 = u2.a:5
 
@@ -881,10 +881,10 @@ project
       ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
       ├── scan t
       │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       ├── scan u [as=u2]
       │    ├── columns: u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       └── filters
            └── t.a:1 = u2.a:5
 
@@ -912,10 +912,10 @@ project
       ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
       ├── scan t
       │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       ├── scan u [as=u2]
       │    ├── columns: u2.a:5!null c:6 u2.crdb_internal_mvcc_timestamp:7 u2.tableoid:8
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       └── filters
            └── t.a:1 = u2.a:5
 
@@ -932,10 +932,10 @@ project
       ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       ├── scan t
       │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       ├── scan u
       │    ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       └── filters (true)
 
 build
@@ -947,7 +947,7 @@ project
       ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       ├── scan t
       │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       ├── scan u
       │    └── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       └── filters (true)
@@ -961,10 +961,10 @@ project
       ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       ├── scan t
       │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
-      │    └── locking: for-share
+      │    └── locking: for-share,durability-guaranteed
       ├── scan u
       │    ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       └── filters (true)
 
 build
@@ -976,12 +976,12 @@ project
       ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6
       ├── scan t
       │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       ├── project
       │    ├── columns: u.a:5!null c:6
       │    └── scan u
       │         ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
-      │         └── locking: for-update
+      │         └── locking: for-update,durability-guaranteed
       └── filters (true)
 
 build
@@ -1002,7 +1002,7 @@ project
       │    ├── columns: u.a:5!null c:6
       │    └── scan u
       │         ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
-      │         └── locking: for-update
+      │         └── locking: for-update,durability-guaranteed
       └── filters (true)
 
 # ------------------------------------------------------------------------------
@@ -1027,7 +1027,7 @@ project
       ├── columns: a:1!null b:2!null c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
       ├── scan indexed
       │    ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       └── filters
            └── b:2 = 2
 
@@ -1040,7 +1040,7 @@ project
       ├── columns: a:1!null b:2!null c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
       ├── scan indexed
       │    ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       └── filters
            └── (b:2 >= 2) AND (b:2 <= 10)
 
@@ -1059,10 +1059,10 @@ project
       │    ├── columns: t.a:1!null b:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       │    ├── scan t
       │    │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
-      │    │    └── locking: for-update
+      │    │    └── locking: for-update,durability-guaranteed
       │    ├── scan u
       │    │    ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
-      │    │    └── locking: for-update
+      │    │    └── locking: for-update,durability-guaranteed
       │    └── filters
       │         └── b:2 = u.a:5
       └── filters
@@ -1079,10 +1079,10 @@ project
       │    ├── columns: t.a:1!null b:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
       │    ├── scan t
       │    │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
-      │    │    └── locking: for-update
+      │    │    └── locking: for-update,durability-guaranteed
       │    ├── scan u
       │    │    ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
-      │    │    └── locking: for-update
+      │    │    └── locking: for-update,durability-guaranteed
       │    └── filters
       │         └── b:2 = u.a:5
       └── filters
@@ -1099,10 +1099,10 @@ project
       │    ├── columns: t.a:1!null t.b:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 indexed.a:5!null indexed.b:6!null c:7 indexed.crdb_internal_mvcc_timestamp:8 indexed.tableoid:9
       │    ├── scan t
       │    │    ├── columns: t.a:1!null t.b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
-      │    │    └── locking: for-update
+      │    │    └── locking: for-update,durability-guaranteed
       │    ├── scan indexed
       │    │    ├── columns: indexed.a:5!null indexed.b:6 c:7 indexed.crdb_internal_mvcc_timestamp:8 indexed.tableoid:9
-      │    │    └── locking: for-update
+      │    │    └── locking: for-update,durability-guaranteed
       │    └── filters
       │         └── t.b:2 = indexed.b:6
       └── filters
@@ -1130,7 +1130,7 @@ project
       ├── columns: a:1!null b:2!null c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
       ├── scan inverted
       │    ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       └── filters
            └── b:2 @> ARRAY[1,2]
 
@@ -1143,7 +1143,7 @@ project
       ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
       ├── scan inverted
       │    ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       └── filters
            └── b:2 <@ ARRAY[1,2]
 
@@ -1159,10 +1159,10 @@ project
       │    ├── scan inverted [as=i1]
       │    │    ├── columns: i1.a:1!null i1.b:2 i1.c:3 i1.crdb_internal_mvcc_timestamp:4 i1.tableoid:5
       │    │    ├── flags: force-index=b_inv
-      │    │    └── locking: for-update
+      │    │    └── locking: for-update,durability-guaranteed
       │    ├── scan inverted [as=i2]
       │    │    ├── columns: i2.a:7!null i2.b:8 i2.c:9 i2.crdb_internal_mvcc_timestamp:10 i2.tableoid:11
-      │    │    └── locking: for-update
+      │    │    └── locking: for-update,durability-guaranteed
       │    └── filters (true)
       └── filters
            └── i1.b:2 @> i2.b:8
@@ -1192,7 +1192,7 @@ project
       ├── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
       ├── scan zigzag
       │    ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       └── filters
            └── (b:2 = 5) AND (c:3 = 6.0)
 
@@ -1205,7 +1205,7 @@ project
       ├── columns: a:1!null b:2 c:3 d:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
       ├── scan zigzag
       │    ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
-      │    └── locking: for-update
+      │    └── locking: for-update,durability-guaranteed
       └── filters
            └── d:4 @> '{"a": {"b": "c"}, "f": "g"}'
 
@@ -1229,7 +1229,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-update,nowait
+      └── locking: for-update,nowait,durability-guaranteed
 
 build
 SELECT * FROM t FOR NO KEY UPDATE NOWAIT
@@ -1238,7 +1238,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-no-key-update,nowait
+      └── locking: for-no-key-update,nowait,durability-guaranteed
 
 build
 SELECT * FROM t FOR SHARE NOWAIT
@@ -1247,7 +1247,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-share,nowait
+      └── locking: for-share,nowait,durability-guaranteed
 
 build
 SELECT * FROM t FOR KEY SHARE NOWAIT
@@ -1256,7 +1256,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-key-share,nowait
+      └── locking: for-key-share,nowait,durability-guaranteed
 
 build
 SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT
@@ -1265,7 +1265,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-share,nowait
+      └── locking: for-share,nowait,durability-guaranteed
 
 build
 SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE
@@ -1274,7 +1274,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-no-key-update,nowait
+      └── locking: for-no-key-update,nowait,durability-guaranteed
 
 build
 SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE FOR UPDATE NOWAIT
@@ -1283,7 +1283,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-update,nowait
+      └── locking: for-update,nowait,durability-guaranteed
 
 build
 SELECT * FROM t FOR UPDATE OF t NOWAIT
@@ -1292,7 +1292,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-update,nowait
+      └── locking: for-update,nowait,durability-guaranteed
 
 build
 SELECT * FROM t FOR UPDATE OF t2 NOWAIT
@@ -1306,7 +1306,7 @@ project
  ├── columns: "?column?":5!null
  ├── scan t
  │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
- │    └── locking: for-update,nowait
+ │    └── locking: for-update,nowait,durability-guaranteed
  └── projections
       └── 1 [as="?column?":5]
 
@@ -1321,7 +1321,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-update,skip-locked
+      └── locking: for-update,skip-locked,durability-guaranteed
 
 build
 SELECT * FROM t FOR NO KEY UPDATE SKIP LOCKED
@@ -1330,7 +1330,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-no-key-update,skip-locked
+      └── locking: for-no-key-update,skip-locked,durability-guaranteed
 
 build
 SELECT * FROM t FOR SHARE SKIP LOCKED
@@ -1339,7 +1339,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-share,skip-locked
+      └── locking: for-share,skip-locked,durability-guaranteed
 
 build
 SELECT * FROM t FOR KEY SHARE SKIP LOCKED
@@ -1348,7 +1348,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-key-share,skip-locked
+      └── locking: for-key-share,skip-locked,durability-guaranteed
 
 build
 SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED
@@ -1357,7 +1357,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-share,skip-locked
+      └── locking: for-share,skip-locked,durability-guaranteed
 
 build
 SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED FOR NO KEY UPDATE
@@ -1366,7 +1366,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-no-key-update,skip-locked
+      └── locking: for-no-key-update,skip-locked,durability-guaranteed
 
 build
 SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED FOR NO KEY UPDATE FOR UPDATE SKIP LOCKED
@@ -1375,7 +1375,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-update,skip-locked
+      └── locking: for-update,skip-locked,durability-guaranteed
 
 build
 SELECT * FROM t FOR UPDATE OF t SKIP LOCKED
@@ -1384,7 +1384,7 @@ project
  ├── columns: a:1!null b:2
  └── scan t
       ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      └── locking: for-update,skip-locked
+      └── locking: for-update,skip-locked,durability-guaranteed
 
 build
 SELECT * FROM t FOR UPDATE OF t2 SKIP LOCKED
@@ -1398,7 +1398,7 @@ project
  ├── columns: "?column?":5!null
  ├── scan t
  │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
- │    └── locking: for-update,skip-locked
+ │    └── locking: for-update,skip-locked,durability-guaranteed
  └── projections
       └── 1 [as="?column?":5]
 

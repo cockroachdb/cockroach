@@ -5,9 +5,6 @@ SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true
 
 subtest select_for_update
 
-# SELECT FOR UPDATE is prohibited under weaker isolation levels until we improve
-# locking. See #57031, #75457, #100144, #100193.
-
 statement ok
 CREATE TABLE supermarket (
   person STRING PRIMARY KEY,
@@ -15,14 +12,15 @@ CREATE TABLE supermarket (
   starts_with STRING GENERATED ALWAYS AS (left(person, 1)) STORED,
   ends_with STRING GENERATED ALWAYS AS (right(person, 3)) STORED,
   INDEX (starts_with),
-  INDEX (ends_with)
+  INDEX (ends_with),
+  FAMILY (person, aisle, starts_with, ends_with)
 )
 
 statement ok
 INSERT INTO supermarket (person, aisle)
   VALUES ('abbie', 1), ('gideon', 2), ('matilda', 3), ('michael', 4)
 
-# SELECT FOR UPDATE should still work under serializable isolation.
+# Use SELECT FOR UPDATE under serializable isolation.
 statement ok
 BEGIN
 
@@ -37,25 +35,29 @@ UPDATE supermarket SET aisle = 2 WHERE person = 'abbie'
 statement ok
 COMMIT
 
-# It should fail under read committed isolation.
+# Use SELECT FOR UPDATE under read committed isolation.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
 
-query error pgcode 0A000 guaranteed-durable locking not yet implemented
+query I
 SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE
+----
+3
 
 statement ok
 ROLLBACK
 
-# It should also fail under snapshot isolation.
+# Use SELECT FOR UPDATE under snapshot isolation.
 statement ok
 SET CLUSTER SETTING sql.txn.snapshot_isolation_syntax.enabled = true
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT
 
-query error pgcode 0A000 guaranteed-durable locking not yet implemented
+query I
 SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE
+----
+3
 
 statement ok
 ROLLBACK
@@ -63,14 +65,14 @@ ROLLBACK
 statement ok
 RESET CLUSTER SETTING sql.txn.snapshot_isolation_syntax.enabled
 
-# SELECT FOR UPDATE in a subquery should also fail under read committed.
+# Use SELECT FOR UPDATE in a subquery under read committed isolation.
 statement ok
 BEGIN TRANSACTION
 
 statement ok
 SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
 
-query error pgcode 0A000 guaranteed-durable locking not yet implemented
+statement ok
 UPDATE supermarket
   SET aisle = (SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE)
   WHERE person = 'michael'
@@ -78,21 +80,24 @@ UPDATE supermarket
 statement ok
 ROLLBACK
 
-# It should also fail in a CTE.
+# Use SELECT FOR UPDATE in a CTE under read committed isolation.
 statement ok
 BEGIN TRANSACTION
 
 statement ok
 SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
 
-query error pgcode 0A000 guaranteed-durable locking not yet implemented
+query I
 WITH s AS
   (SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE)
 SELECT aisle + 1 FROM s
+----
+4
 
 statement ok
 ROLLBACK
 
+# Use SELECT FOR UPDATE in a UDF under read committed isolation.
 statement ok
 CREATE FUNCTION wrangle (name STRING) RETURNS INT LANGUAGE SQL AS $$
   SELECT aisle FROM supermarket WHERE person = name FOR UPDATE
@@ -101,8 +106,7 @@ $$
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
 
-# But calling that function should fail.
-query error pgcode 0A000 guaranteed-durable locking not yet implemented
+statement ok
 INSERT INTO supermarket (person, aisle) VALUES ('grandma', wrangle('matilda'))
 
 statement ok
@@ -114,42 +118,50 @@ DROP FUNCTION wrangle
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
 
-# Preparing a SELECT FOR UPDATE should succeed under read committed.
+# Prepare and execute a SELECT FOR UPDATE under read committed isolation.
 statement ok
 PREPARE psa AS SELECT aisle FROM supermarket WHERE person = $1::STRING FOR UPDATE
 
-# But execution should fail.
-query error pgcode 0A000 guaranteed-durable locking not yet implemented
+query I
 EXECUTE psa('matilda')
+----
+3
 
 statement ok
 DEALLOCATE psa
 
-# SELECT FOR UPDATE using a lookup join should also fail.
-query error pgcode 0A000 guaranteed-durable locking not yet implemented
+# Use SELECT FOR UPDATE with a lookup join under read committed isolation.
+query I
 WITH names AS MATERIALIZED
   (SELECT 'matilda' AS person)
 SELECT aisle
   FROM names
   NATURAL INNER LOOKUP JOIN supermarket
   FOR UPDATE
+----
+3
 
-# SELECT FOR UPDATE using an index join should also fail.
-query error pgcode 0A000 guaranteed-durable locking not yet implemented
+# Use SELECT FOR UPDATE with an index join under read committed isolation.
+query I rowsort
 SELECT aisle
   FROM supermarket@supermarket_starts_with_idx
   WHERE starts_with = 'm'
   FOR UPDATE
+----
+3
+4
 
-# SELECT FOR UPDATE using a zigzag join should also fail.
+# Use SELECT FOR UPDATE with a zigzag join under read committed isolation.
 statement ok
 SET enable_zigzag_join = true
 
-query error pgcode 0A000 guaranteed-durable locking not yet implemented
+query I
 SELECT aisle
   FROM supermarket@{FORCE_ZIGZAG}
   WHERE starts_with = 'm' AND ends_with = 'lda'
   FOR UPDATE
+----
+3
 
 statement ok
 RESET enable_zigzag_join
