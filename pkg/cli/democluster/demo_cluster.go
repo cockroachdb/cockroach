@@ -425,31 +425,43 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 			c.adminPassword = demoPassword
 		}
 
-		if c.demoCtx.Multitenant && !c.demoCtx.Insecure {
-			// Also create the user/password for the secondary tenant.
-			ts := c.tenantServers[0]
-			tctx := ts.AnnotateCtx(ctx)
-			ieTenant := ts.InternalExecutor().(isql.Executor)
-			_, err = ieTenant.Exec(tctx, "tenant-password", nil,
-				fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", demoUsername, demoPassword))
-			if err != nil {
-				return err
+		if c.demoCtx.Multitenant {
+			if !c.demoCtx.Insecure {
+				// Also create the user/password for the secondary tenant.
+				ts := c.tenantServers[0]
+				tctx := ts.AnnotateCtx(ctx)
+				ieTenant := ts.InternalExecutor().(isql.Executor)
+				_, err = ieTenant.Exec(tctx, "tenant-password", nil,
+					fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", demoUsername, demoPassword))
+				if err != nil {
+					return err
+				}
+				_, err = ieTenant.Exec(tctx, "tenant-grant", nil, fmt.Sprintf("GRANT admin TO %s", demoUsername))
+				if err != nil {
+					return err
+				}
 			}
-			_, err = ieTenant.Exec(tctx, "tenant-grant", nil, fmt.Sprintf("GRANT admin TO %s", demoUsername))
-			if err != nil {
-				return err
-			}
-		}
 
-		if c.demoCtx.Multitenant && !c.demoCtx.DisableServerController {
-			// Select the default tenant.
 			ie := c.firstServer.InternalExecutor().(isql.Executor)
-			// Choose the tenant to use when no tenant is specified on a
-			// connection or web URL.
-			if _, err := ie.Exec(ctx, "default-tenant", nil,
-				`SET CLUSTER SETTING `+multitenant.DefaultClusterSelectSettingName+` = $1`,
-				demoTenantName); err != nil {
-				return err
+
+			if !c.demoCtx.DisableServerController {
+				// Select the default tenant.
+				// Choose the tenant to use when no tenant is specified on a
+				// connection or web URL.
+				if _, err := ie.Exec(ctx, "default-tenant", nil,
+					`SET CLUSTER SETTING `+multitenant.DefaultClusterSelectSettingName+` = $1`,
+					demoTenantName); err != nil {
+					return err
+				}
+			}
+
+			for _, s := range []string{
+				string(sql.RestrictAccessToSystemInterface.Name()),
+				string(sql.TipUserAboutSystemInterface.Name()),
+			} {
+				if _, err := ie.Exec(ctx, "restrict-system-interface", nil, fmt.Sprintf(`SET CLUSTER SETTING %s = true`, s)); err != nil {
+					return err
+				}
 			}
 		}
 
