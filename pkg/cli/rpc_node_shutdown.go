@@ -17,6 +17,8 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -66,11 +68,11 @@ func doDrain(
 	if err := timeutil.RunWithTimeout(ctx, "get-drain-settings", 5*time.Second, func(ctx context.Context) error {
 		shutdownSettings, err := c.Settings(ctx, &serverpb.SettingsRequest{
 			Keys: []string{
-				"server.shutdown.drain_wait",
-				"server.shutdown.connection_wait",
-				"server.shutdown.jobs_wait",
-				"server.shutdown.query_wait",
-				"server.shutdown.lease_transfer_wait",
+				string(server.DrainWait.InternalKey()),
+				string(server.ConnectionShutdownTimeout.InternalKey()),
+				string(server.JobShutdownTimeout.InternalKey()),
+				string(server.QueryShutdownTimeout.InternalKey()),
+				string(kvserver.LeaseTransferPerIterationTimeout.InternalKey()),
 			},
 			UnredactedValues: true,
 		})
@@ -85,7 +87,7 @@ func doDrain(
 			}
 			minWait += wait
 			// query_wait is used twice during draining, so count it twice here.
-			if k == "server.shutdown.query_wait" {
+			if k == string(server.QueryShutdownTimeout.InternalKey()) {
 				minWait += wait
 			}
 		}
@@ -107,7 +109,7 @@ func doDrain(
 	if errors.HasType(err, (*timeutil.TimeoutError)(nil)) || grpcutil.IsTimeout(err) {
 		log.Infof(ctx, "drain timed out: %v", err)
 		err = errors.New("drain timeout, consider adjusting --drain-wait, especially under " +
-			"custom server.shutdown.{drain,query,connection,lease_transfer}_wait cluster settings")
+			"custom server.shutdown cluster settings")
 	}
 	return
 }

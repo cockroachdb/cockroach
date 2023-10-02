@@ -1328,6 +1328,8 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 
 	// These tests involve stopping and starting nodes, so to reduce flakiness,
 	// we increase the lease Transfer timeout.
+	// Note: we use the old name of the setting for the benefit of mixed-version
+	// testing.
 	if _, err := t.db.Exec("SET CLUSTER SETTING server.shutdown.lease_transfer_wait = '40s'"); err != nil {
 		t.Fatal(err)
 	}

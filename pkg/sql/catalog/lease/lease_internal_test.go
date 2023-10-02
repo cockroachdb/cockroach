@@ -396,7 +396,7 @@ CREATE TEMP TABLE t2 (temp int);
 
 	for _, tableName := range []string{"t", "t2"} {
 		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
-		lease := leaseManager.names.get(
+		lease, _ := leaseManager.names.get(
 			context.Background(),
 			tableDesc.GetParentID(),
 			tableDesc.GetParentSchemaID(),
@@ -440,17 +440,17 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Check that the cache has been updated.
-	if leaseManager.names.get(
+	if lease, _ := leaseManager.names.get(
 		context.Background(),
 		tableDesc.GetParentID(),
 		tableDesc.GetParentSchemaID(),
 		"test",
 		s.Clock().Now(),
-	) != nil {
+	); lease != nil {
 		t.Fatalf("old name still in cache")
 	}
 
-	lease := leaseManager.names.get(
+	lease, _ := leaseManager.names.get(
 		context.Background(),
 		tableDesc.GetParentID(),
 		tableDesc.GetParentSchemaID(),
@@ -494,7 +494,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 
 	// Check the assumptions this tests makes: that there is a cache entry
 	// (with a valid lease).
-	if lease := leaseManager.names.get(
+	if lease, _ := leaseManager.names.get(
 		context.Background(),
 		tableDesc.GetParentID(),
 		tableDesc.GetParentSchemaID(),
@@ -509,7 +509,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	leaseManager.ExpireLeases(s.Clock())
 
 	// Check the name no longer resolves.
-	if lease := leaseManager.names.get(
+	if lease, _ := leaseManager.names.get(
 		context.Background(),
 		tableDesc.GetParentID(),
 		tableDesc.GetParentSchemaID(),
@@ -556,7 +556,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// There is a cache entry.
-	lease := leaseManager.names.get(
+	lease, _ := leaseManager.names.get(
 		context.Background(),
 		tableDesc.GetParentID(),
 		tableDesc.GetParentSchemaID(),
@@ -577,7 +577,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Check the name resolves to the new lease.
-	newLease := leaseManager.names.get(context.Background(), tableDesc.GetParentID(), tableDesc.GetParentSchemaID(), tableName, s.Clock().Now())
+	newLease, _ := leaseManager.names.get(context.Background(), tableDesc.GetParentID(), tableDesc.GetParentSchemaID(), tableName, s.Clock().Now())
 	if newLease == nil {
 		t.Fatalf("name cache doesn't contain entry for (%d, %s)", tableDesc.GetParentID(), tableName)
 	}
@@ -621,13 +621,13 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "test")
 
 	// Check that we cannot get the table by a different name.
-	if leaseManager.names.get(
+	if lease, _ := leaseManager.names.get(
 		context.Background(),
 		tableDesc.GetParentID(),
 		tableDesc.GetParentSchemaID(),
 		"tEsT",
 		s.Clock().Now(),
-	) != nil {
+	); lease != nil {
 		t.Fatalf("lease manager incorrectly found table with different case")
 	}
 }

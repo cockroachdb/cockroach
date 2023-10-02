@@ -840,10 +840,9 @@ func (m *Manager) AcquireByName(
 		return desc, nil
 	}
 	// Check if we have cached an ID for this name.
-	descVersion := m.names.get(ctx, parentID, parentSchemaID, name, timestamp)
+	descVersion, expiration := m.names.get(ctx, parentID, parentSchemaID, name, timestamp)
 	if descVersion != nil {
 		if descVersion.GetModificationTime().LessEq(timestamp) {
-			expiration := descVersion.getExpiration()
 			// If this lease is nearly expired, ensure a renewal is queued.
 			durationUntilExpiry := time.Duration(expiration.WallTime - timestamp.WallTime)
 			if durationUntilExpiry < m.storage.leaseRenewalTimeout() {
