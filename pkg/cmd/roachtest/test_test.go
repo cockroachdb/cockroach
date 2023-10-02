@@ -44,45 +44,7 @@ const defaultParallelism = 10
 
 func mkReg(t *testing.T) testRegistryImpl {
 	t.Helper()
-	return makeTestRegistry(spec.GCE, "", "", false /* preferSSD */, false /* benchOnly */)
-}
-
-func TestMatchOrSkip(t *testing.T) {
-	testCases := []struct {
-		filter   []string
-		name     string
-		tags     map[string]struct{}
-		expected registry.MatchType
-	}{
-		{nil, "foo", nil, registry.Matched},
-		{nil, "foo", registry.Tags("bar"), registry.Matched},
-		{[]string{"tag:bar"}, "foo", registry.Tags("bar"), registry.Matched},
-		// Partial tag match is not supported
-		{[]string{"tag:b"}, "foo", registry.Tags("bar"), registry.FailedTags},
-		{[]string{"tag:b"}, "foo", nil, registry.FailedTags},
-		{[]string{"tag:f"}, "foo", registry.Tags("bar"), registry.FailedTags},
-		// Specifying no tag filters matches all tags.
-		{[]string{"f"}, "foo", registry.Tags("bar"), registry.Matched},
-		{[]string{"f"}, "bar", registry.Tags("bar"), registry.FailedFilter},
-		{[]string{"f", "tag:bar"}, "foo", registry.Tags("bar"), registry.Matched},
-		{[]string{"f", "tag:b"}, "foo", registry.Tags("bar"), registry.FailedTags},
-		{[]string{"f", "tag:f"}, "foo", registry.Tags("bar"), registry.FailedTags},
-		// Match tests that have both tags 'abc' and 'bar'
-		{[]string{"f", "tag:abc,bar"}, "foo", registry.Tags("abc", "bar"), registry.Matched},
-		{[]string{"f", "tag:abc,bar"}, "foo", registry.Tags("abc"), registry.FailedTags},
-		// Match tests that have tag 'abc' but not 'bar'
-		{[]string{"f", "tag:abc,!bar"}, "foo", registry.Tags("abc"), registry.Matched},
-		{[]string{"f", "tag:abc,!bar"}, "foo", registry.Tags("abc", "bar"), registry.FailedTags},
-	}
-	for _, c := range testCases {
-		t.Run("", func(t *testing.T) {
-			f := registry.NewTestFilter(c.filter)
-			spec := &registry.TestSpec{Name: c.name, Owner: OwnerUnitTest, Tags: c.tags}
-			if value := spec.Match(f); c.expected != value {
-				t.Fatalf("expected %v, but found %v", c.expected, value)
-			}
-		})
-	}
+	return makeTestRegistry(spec.GCE, "", "", false /* preferSSD */)
 }
 
 func nilLogger() *logger.Logger {
@@ -259,7 +221,7 @@ type runnerTest struct {
 func setupRunnerTest(t *testing.T, r testRegistryImpl, testFilters []string) *runnerTest {
 	ctx := context.Background()
 
-	tests := testsToRun(r, registry.NewTestFilter(testFilters), false, 1.0, true)
+	tests, _ := testsToRun(r, registry.NewTestFilter(testFilters), false, 1.0, true)
 	cr := newClusterRegistry()
 
 	stopper := stop.NewStopper()
@@ -422,7 +384,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			r := makeTestRegistry(spec.GCE, "", "", false /* preferSSD */, false /* benchOnly */)
+			r := makeTestRegistry(spec.GCE, "", "", false /* preferSSD */)
 			err := r.prepareSpec(&c.spec)
 			if !testutils.IsError(err, c.expectedErr) {
 				t.Fatalf("expected %q, but found %q", c.expectedErr, err.Error())
@@ -458,7 +420,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 			}
 		},
 	})
-	tests := testsToRun(r, registry.NewTestFilter(nil), false, 1.0, true)
+	tests, _ := testsToRun(r, registry.NewTestFilter(nil), false, 1.0, true)
 	lopt := loggingOpt{
 		l:            nilLogger(),
 		tee:          logger.NoTee,

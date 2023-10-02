@@ -1,0 +1,262 @@
+# Check filtering.
+
+filter cloud=gce
+component_foo/
+----
+component_foo/test_foo-team1-local,gce,aws,azure
+component_foo/test_foo-team1-local,gce,azure
+component_foo/test_foo-team1-gce
+component_foo/test_foo-team1-nightly-local,gce,aws,azure
+component_foo/test_foo-team1-nightly-local,gce,azure
+component_foo/test_foo-team1-nightly-gce
+component_foo/test_foo-team1-nightly,weekly-local,gce,aws,azure
+component_foo/test_foo-team1-nightly,weekly-local,gce,azure
+component_foo/test_foo-team1-nightly,weekly-gce
+component_foo/test_foo-team2-local,gce,aws,azure
+component_foo/test_foo-team2-local,gce,azure
+component_foo/test_foo-team2-gce
+component_foo/test_foo-team2-nightly-local,gce,aws,azure
+component_foo/test_foo-team2-nightly-local,gce,azure
+component_foo/test_foo-team2-nightly-gce
+component_foo/test_foo-team2-nightly,weekly-local,gce,aws,azure
+component_foo/test_foo-team2-nightly,weekly-local,gce,azure
+component_foo/test_foo-team2-nightly,weekly-gce
+component_foo/bench_bar-team1-local,gce,aws,azure
+component_foo/bench_bar-team1-local,gce,azure
+component_foo/bench_bar-team1-gce
+component_foo/bench_bar-team1-nightly-local,gce,aws,azure
+component_foo/bench_bar-team1-nightly-local,gce,azure
+component_foo/bench_bar-team1-nightly-gce
+component_foo/bench_bar-team1-nightly,weekly-local,gce,aws,azure
+component_foo/bench_bar-team1-nightly,weekly-local,gce,azure
+component_foo/bench_bar-team1-nightly,weekly-gce
+component_foo/bench_bar-team2-local,gce,aws,azure
+component_foo/bench_bar-team2-local,gce,azure
+component_foo/bench_bar-team2-gce
+component_foo/bench_bar-team2-nightly-local,gce,aws,azure
+component_foo/bench_bar-team2-nightly-local,gce,azure
+component_foo/bench_bar-team2-nightly-gce
+component_foo/bench_bar-team2-nightly,weekly-local,gce,aws,azure
+component_foo/bench_bar-team2-nightly,weekly-local,gce,azure
+component_foo/bench_bar-team2-nightly,weekly-gce
+
+filter cloud=gce benchmarks
+component_foo/
+----
+component_foo/bench_bar-team1-local,gce,aws,azure
+component_foo/bench_bar-team1-local,gce,azure
+component_foo/bench_bar-team1-gce
+component_foo/bench_bar-team1-nightly-local,gce,aws,azure
+component_foo/bench_bar-team1-nightly-local,gce,azure
+component_foo/bench_bar-team1-nightly-gce
+component_foo/bench_bar-team1-nightly,weekly-local,gce,aws,azure
+component_foo/bench_bar-team1-nightly,weekly-local,gce,azure
+component_foo/bench_bar-team1-nightly,weekly-gce
+component_foo/bench_bar-team2-local,gce,aws,azure
+component_foo/bench_bar-team2-local,gce,azure
+component_foo/bench_bar-team2-gce
+component_foo/bench_bar-team2-nightly-local,gce,aws,azure
+component_foo/bench_bar-team2-nightly-local,gce,azure
+component_foo/bench_bar-team2-nightly-gce
+component_foo/bench_bar-team2-nightly,weekly-local,gce,aws,azure
+component_foo/bench_bar-team2-nightly,weekly-local,gce,azure
+component_foo/bench_bar-team2-nightly,weekly-gce
+
+filter suite=nightly
+component_foo benchmark_bar
+----
+component_foo/test_foo-team1-nightly-local,gce,aws,azure
+component_foo/test_foo-team1-nightly-local,gce,azure
+component_foo/test_foo-team1-nightly-gce
+component_foo/test_foo-team1-nightly,weekly-local,gce,aws,azure
+component_foo/test_foo-team1-nightly,weekly-local,gce,azure
+component_foo/test_foo-team1-nightly,weekly-gce
+component_foo/test_foo-team2-nightly-local,gce,aws,azure
+component_foo/test_foo-team2-nightly-local,gce,azure
+component_foo/test_foo-team2-nightly-gce
+component_foo/test_foo-team2-nightly,weekly-local,gce,aws,azure
+component_foo/test_foo-team2-nightly,weekly-local,gce,azure
+component_foo/test_foo-team2-nightly,weekly-gce
+component_foo/bench_bar-team1-nightly-local,gce,aws,azure
+component_foo/bench_bar-team1-nightly-local,gce,azure
+component_foo/bench_bar-team1-nightly-gce
+component_foo/bench_bar-team1-nightly,weekly-local,gce,aws,azure
+component_foo/bench_bar-team1-nightly,weekly-local,gce,azure
+component_foo/bench_bar-team1-nightly,weekly-gce
+component_foo/bench_bar-team2-nightly-local,gce,aws,azure
+component_foo/bench_bar-team2-nightly-local,gce,azure
+component_foo/bench_bar-team2-nightly-gce
+component_foo/bench_bar-team2-nightly,weekly-local,gce,aws,azure
+component_foo/bench_bar-team2-nightly,weekly-local,gce,azure
+component_foo/bench_bar-team2-nightly,weekly-gce
+
+filter cloud=gce suite=weekly owner=team1
+----
+component_foo/test_foo-team1-nightly,weekly-local,gce,aws,azure
+component_foo/test_foo-team1-nightly,weekly-local,gce,azure
+component_foo/test_foo-team1-nightly,weekly-gce
+component_foo/bench_bar-team1-nightly,weekly-local,gce,aws,azure
+component_foo/bench_bar-team1-nightly,weekly-local,gce,azure
+component_foo/bench_bar-team1-nightly,weekly-gce
+component_bar/test_foo-team1-nightly,weekly-local,gce,aws,azure
+component_bar/test_foo-team1-nightly,weekly-local,gce,azure
+component_bar/test_foo-team1-nightly,weekly-gce
+component_bar/bench_bar-team1-nightly,weekly-local,gce,aws,azure
+component_bar/bench_bar-team1-nightly,weekly-local,gce,azure
+component_bar/bench_bar-team1-nightly,weekly-gce
+
+filter cloud=gce suite=weekly owner=team1
+----
+component_foo/test_foo-team1-nightly,weekly-local,gce,aws,azure
+component_foo/test_foo-team1-nightly,weekly-local,gce,azure
+component_foo/test_foo-team1-nightly,weekly-gce
+component_foo/bench_bar-team1-nightly,weekly-local,gce,aws,azure
+component_foo/bench_bar-team1-nightly,weekly-local,gce,azure
+component_foo/bench_bar-team1-nightly,weekly-gce
+component_bar/test_foo-team1-nightly,weekly-local,gce,aws,azure
+component_bar/test_foo-team1-nightly,weekly-local,gce,azure
+component_bar/test_foo-team1-nightly,weekly-gce
+component_bar/bench_bar-team1-nightly,weekly-local,gce,aws,azure
+component_bar/bench_bar-team1-nightly,weekly-local,gce,azure
+component_bar/bench_bar-team1-nightly,weekly-gce
+
+filter cloud=aws suite=weekly owner=team2 benchmarks
+----
+component_foo/bench_bar-team2-nightly,weekly-local,gce,aws,azure
+component_bar/bench_bar-team2-nightly,weekly-local,gce,aws,azure
+
+# Check reasons for failing to match.
+
+test-matches cloud=aws test=component_foo/test_foo-team1-gce
+component_foo/
+----
+component_foo/test_foo-team1-gce is not compatible with AWS
+
+test-matches cloud=gce suite=nightly test=component_foo/test_foo-team1-gce
+component_foo/
+----
+component_foo/test_foo-team1-gce is not part of the "nightly" suite
+
+test-matches cloud=aws test=component_bar/test_foo-team1-gce
+component_foo/
+----
+component_bar/test_foo-team1-gce does not match regex "component_foo/" and is not compatible with AWS
+
+test-matches cloud=aws test=component_bar/test_foo-team2-nightly-local,gce,aws,azure
+component_foo/
+----
+component_bar/test_foo-team2-nightly-local,gce,aws,azure does not match regex "component_foo/"
+
+test-matches cloud=aws suite=weekly owner=team1 test=component_foo/test_foo-team2-gce
+----
+component_foo/test_foo-team2-gce does not have owner "team1", is not part of the "weekly" suite, and is not compatible with AWS
+
+test-matches test=component_foo/test_foo-team1-gce
+tag:aws
+----
+component_foo/test_foo-team1-gce does not match tags
+
+# Check error messages.
+
+filter
+component_blargle
+----
+error: no tests match regexp "component_blargle"
+
+filter benchmarks
+component_blargle
+----
+error: no benchmarks match regexp "component_blargle"
+
+filter cloud=aws suite=nightly owner=team1
+component_blargle
+----
+error: no tests match regexp "component_blargle"
+
+filter suite=badsuite owner=team1
+foo
+----
+error: no tests in suite "badsuite"
+
+filter suite=badsuite owner=team1 benchmarks
+foo
+----
+error: no benchmarks in suite "badsuite"
+
+filter cloud=gce suite=nightly owner=team1
+foo-team1-gce
+----
+error: no tests in suite "nightly" match regexp "foo-team1-gce"
+
+filter cloud=gce suite=nightly owner=team1 benchmarks
+foo-team1-gce
+----
+error: no benchmarks match regexp "foo-team1-gce"
+
+filter suite=nightly owner=team2
+foo-team1
+----
+error: no tests with owner "team2" match regexp "foo-team1"
+
+filter cloud=azure suite=weekly owner=team2
+-gce
+----
+error: no tests match criteria; some tests match but are not compatible with Azure
+
+filter suite=weekly owner=team1
+team1-nightly- team2-nightly,weekly-
+----
+error: no tests match criteria
+
+# Check descriptions.
+
+describe
+----
+all tests
+
+describe benchmarks
+----
+all benchmarks
+
+describe
+foo
+----
+tests which match regex "foo"
+
+describe cloud=gce
+----
+tests which are compatible with GCE
+
+describe cloud=gce benchmarks
+foo
+----
+benchmarks which match regex "foo" and are compatible with GCE
+
+describe cloud=gce suite=nightly
+----
+tests which are compatible with GCE and are part of the "nightly" suite
+
+describe cloud=local owner=foo benchmarks
+----
+benchmarks which are compatible with Local and have owner "foo"
+
+describe cloud=gce suite=nightly
+foo
+----
+tests which:
+ - match regex "foo", and
+ - are compatible with GCE, and
+ - are part of the "nightly" suite
+
+describe cloud=gce suite=nightly benchmarks
+foo
+----
+tests which:
+ - match regex "foo", and
+ - are compatible with GCE, and
+ - are part of the "nightly" suite
+
+describe
+tag:aws tag:default
+----
+tests which match tag aws OR default
