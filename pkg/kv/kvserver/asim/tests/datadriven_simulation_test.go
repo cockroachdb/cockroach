@@ -47,7 +47,7 @@ import (
 //     simulation. The default values are: rw_ratio=0 rate=0 min_block=1
 //     max_block=1 min_key=1 max_key=10_000 access_skew=false.
 //
-//   - "ken_cluster" [nodes=<int>] [stores_per_node=<int>]
+//   - "gen_cluster" [nodes=<int>] [stores_per_node=<int>]
 //     Initialize the cluster generator parameters. On the next call to eval,
 //     the cluster generator is called to create the initial state used in the
 //     simulation. The default values are: nodes=3 stores_per_node=1.
@@ -73,6 +73,11 @@ import (
 //     Set the liveness status of the node with ID NodeID. This applies at the
 //     start of the simulation or with some delay after the simulation starts,
 //     if specified.
+//
+//   - set_locality node=<int> [delay=<duration] locality=string
+//     Sets the locality of the node with ID NodeID. This applies at the start
+//     of the simulation or with some delay after the simulation stats, if
+//     specified.
 //
 //   - add_node: [stores=<int>] [locality=<string>] [delay=<duration>]
 //     Add a node to the cluster after initial generation with some delay,
@@ -283,6 +288,19 @@ func TestDataDriven(t *testing.T) {
 				eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetNodeLivenessEvent{
 					NodeId:         state.NodeID(nodeID),
 					LivenessStatus: livenessStatus,
+				})
+				return ""
+			case "set_locality":
+				var nodeID int
+				var localityString string
+				var delay time.Duration
+				scanArg(t, d, "node", &nodeID)
+				scanArg(t, d, "locality", &localityString)
+				scanIfExists(t, d, "delay", &delay)
+
+				eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetNodeLocalityEvent{
+					NodeID:         state.NodeID(nodeID),
+					LocalityString: localityString,
 				})
 				return ""
 			case "set_capacity":
