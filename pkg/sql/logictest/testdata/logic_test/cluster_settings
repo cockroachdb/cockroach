@@ -307,7 +307,7 @@ SELECT crdb_internal.create_tenant(10)
 skipif config 3node-tenant-default-configs
 skipif config local-mixed-22.2-23.1
 statement ok
-ALTER TENANT "tenant-10" SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='5M'
+ALTER TENANT "cluster-10" SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='5M'
 
 skipif config 3node-tenant-default-configs
 skipif config local-mixed-22.2-23.1
@@ -327,7 +327,7 @@ ALTER TENANT [10] RESET CLUSTER SETTING server.mem_profile.total_dump_size_limit
 skipif config 3node-tenant-default-configs
 skipif config local-mixed-22.2-23.1
 statement ok
-ALTER TENANT "tenant-10" RESET CLUSTER SETTING server.mem_profile.total_dump_size_limit
+ALTER TENANT "cluster-10" RESET CLUSTER SETTING server.mem_profile.total_dump_size_limit
 
 skipif config 3node-tenant-default-configs
 skipif config local-mixed-22.2-23.1
@@ -363,7 +363,7 @@ NULL
 skipif config 3node-tenant-default-configs
 skipif config local-mixed-22.2-23.1
 query T
-SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT "tenant-10"
+SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT "cluster-10"
 ----
 NULL
 
@@ -398,7 +398,7 @@ jobs.retention_time  d  no-override
 skipif config 3node-tenant-default-configs
 skipif config local-mixed-22.2-23.1
 query TTT
-SELECT variable, type, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT "tenant-10"]
+SELECT variable, type, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT "cluster-10"]
 WHERE variable IN ('jobs.scheduler.enabled', 'jobs.retention_time') ORDER BY 1
 ----
 jobs.retention_time  d  no-override
@@ -415,7 +415,7 @@ jobs.scheduler.enabled  b  false  no-override
 skipif config 3node-tenant-default-configs
 skipif config local-mixed-22.2-23.1
 query TTBT
-SELECT variable, type, public, origin FROM [SHOW ALL CLUSTER SETTINGS FOR TENANT "tenant-10"]
+SELECT variable, type, public, origin FROM [SHOW ALL CLUSTER SETTINGS FOR TENANT "cluster-10"]
 WHERE variable IN ('jobs.scheduler.enabled', 'jobs.retention_time') ORDER BY 1
 ----
 jobs.retention_time     d  true   no-override

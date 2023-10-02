@@ -30,8 +30,8 @@ query-sql
 SELECT id,name,data_state,service_mode,active,json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'deprecatedDataState'),json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'droppedName') FROM system.tenants;
 ----
 1 system 1 2 true READY 
-5 <nil> 2 0 false DROP tenant-5
-6 tenant-6 1 1 true READY 
+5 <nil> 2 0 false DROP cluster-5
+6 cluster-6 1 1 true READY 
 
 exec-sql
 BACKUP INTO 'nodelocal://1/cluster_without_tenants'
@@ -103,7 +103,7 @@ query-sql
 SELECT id,name,data_state,service_mode,active,json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'deprecatedDataState'),json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'droppedName') FROM system.tenants;
 ----
 1 system 1 2 true READY 
-6 tenant-6 1 1 true READY 
+6 cluster-6 1 1 true READY 
 
 
 exec-sql expect-error-regex=(tenant 6 not in backup)
@@ -121,8 +121,8 @@ RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH virtual_cluster_nam
 ----
 regex matches error
 
-exec-sql expect-error-regex=(tenant with name "tenant-6" already exists)
-RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH virtual_cluster_name = 'tenant-6';
+exec-sql expect-error-regex=(tenant with name "cluster-6" already exists)
+RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH virtual_cluster_name = 'cluster-6';
 ----
 regex matches error
 
@@ -135,7 +135,7 @@ SELECT id,name,data_state,service_mode,active,json_extract_path_text(crdb_intern
 ----
 1 system 1 2 true READY 
 2 newname 1 1 true READY 
-6 tenant-6 1 1 true READY 
+6 cluster-6 1 1 true READY 
 
 # Check that another service mode is also preserved.
 exec-sql
