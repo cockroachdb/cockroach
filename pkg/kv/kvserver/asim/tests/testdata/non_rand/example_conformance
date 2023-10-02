@@ -1,0 +1,89 @@
+# This test reproduces #106559, where a (satisfiable) voter constraint will
+# never be satisfied if every existing replica is necessary to satisfy either a
+# voter or non-voter constraint. See the topology below.
+gen_cluster nodes=3
+----
+
+# Setup the localities of nodes in the cluster, note the first 3 nodes are
+# effectively ignored.
+# TODO(kvoli): Add variadic add_node command for this case.
+add_node locality=region=us-east-1
+----
+
+add_node locality=region=us-east-1
+----
+
+add_node locality=region=us-west-1
+----
+
+add_node locality=region=us-west-1
+----
+
+add_node locality=region=us-central-1
+----
+
+add_node locality=region=us-central-1
+----
+
+add_node locality=region=us-central-1
+----
+
+add_node locality=region=eu-west-1
+----
+
+add_node locality=region=eu-west-1
+----
+
+add_node locality=region=eu-west-1
+----
+
+# Generate 10 ranges, these will be be placed uniformly over the cluster,
+# ignoring constraints initially.
+gen_ranges ranges=10
+----
+
+# Update the span config to be exactly the replica placement seen in #106559,
+set_span_config 
+[0,10000): num_replicas=6 num_voters=5 constraints={'+region=eu-west-1':1,'+region=us-central-1':1,'+region=us-east-1':2,'+region=us-west-1':2} voter_constraints={'+region=eu-west-1':1,'+region=us-central-1':1,'+region=us-east-1':2,'+region=us-west-1':1}
+----
+
+# 15 minutes after starting, switch the span config to the config applied in
+# #106559.
+set_span_config delay=15m
+[0,10000): num_replicas=6 num_voters=5 constraints={'+region=eu-west-1':1,'+region=us-central-1':1,'+region=us-east-1':1,'+region=us-west-1':1} voter_constraints={'+region=us-west-1':2,'+region=us-east-1':2}
+----
+
+assertion type=conformance under=0 over=0 unavailable=0 violating=0
+----
+
+eval duration=30m
+----
+failed assertion sample 1
+  conformance unavailable=0 under=0 over=0 violating=0 
+  actual unavailable=0 under=0, over=0 violating=9
+violating constraints:
+  r1:000000{0000-1000} [(n11,s11):12, (n5,s5):8, (n6,s6):9, (n7,s7):4, (n10,s10):5, (n3,s3):11NON_VOTER] applying num_replicas=6 num_voters=5 constraints=[+region=eu-west-1:1 +region=us-central-1:1 +region=us-east-1:1 +region=us-west-1:1] voter_constraints=[+region=us-east-1:2 +region=us-west-1:2]
+  r2:000000{1000-2000} [(n10,s10):7, (n5,s5):8, (n4,s4):9, (n13,s13):4, (n7,s7):11, (n2,s2):10NON_VOTER] applying num_replicas=6 num_voters=5 constraints=[+region=eu-west-1:1 +region=us-central-1:1 +region=us-east-1:1 +region=us-west-1:1] voter_constraints=[+region=us-east-1:2 +region=us-west-1:2]
+  r4:000000{3000-4000} [(n7,s7):10, (n5,s5):13, (n4,s4):7, (n11,s11):4, (n9,s9):5, (n1,s1):12NON_VOTER] applying num_replicas=6 num_voters=5 constraints=[+region=eu-west-1:1 +region=us-central-1:1 +region=us-east-1:1 +region=us-west-1:1] voter_constraints=[+region=us-east-1:2 +region=us-west-1:2]
+  r5:000000{4000-5000} [(n7,s7):8, (n6,s6):9, (n11,s11):12, (n9,s9):4, (n5,s5):5, (n1,s1):13NON_VOTER] applying num_replicas=6 num_voters=5 constraints=[+region=eu-west-1:1 +region=us-central-1:1 +region=us-east-1:1 +region=us-west-1:1] voter_constraints=[+region=us-east-1:2 +region=us-west-1:2]
+  r6:000000{5000-6000} [(n7,s7):8, (n4,s4):7, (n6,s6):11, (n13,s13):4, (n8,s8):5, (n2,s2):10NON_VOTER] applying num_replicas=6 num_voters=5 constraints=[+region=eu-west-1:1 +region=us-central-1:1 +region=us-east-1:1 +region=us-west-1:1] voter_constraints=[+region=us-east-1:2 +region=us-west-1:2]
+  r7:000000{6000-7000} [(n6,s6):11, (n5,s5):12, (n4,s4):7, (n12,s12):4, (n8,s8):5, (n2,s2):10NON_VOTER] applying num_replicas=6 num_voters=5 constraints=[+region=eu-west-1:1 +region=us-central-1:1 +region=us-east-1:1 +region=us-west-1:1] voter_constraints=[+region=us-east-1:2 +region=us-west-1:2]
+  r8:000000{7000-8000} [(n9,s9):7, (n6,s6):13, (n7,s7):14, (n13,s13):4, (n4,s4):5, (n3,s3):12NON_VOTER] applying num_replicas=6 num_voters=5 constraints=[+region=eu-west-1:1 +region=us-central-1:1 +region=us-east-1:1 +region=us-west-1:1] voter_constraints=[+region=us-east-1:2 +region=us-west-1:2]
+  r9:000000{8000-9000} [(n4,s4):9, (n10,s10):8, (n12,s12):7, (n6,s6):12, (n7,s7):15, (n1,s1):14NON_VOTER] applying num_replicas=6 num_voters=5 constraints=[+region=eu-west-1:1 +region=us-central-1:1 +region=us-east-1:1 +region=us-west-1:1] voter_constraints=[+region=us-east-1:2 +region=us-west-1:2]
+  r10:00000{09000-10000} [(n7,s7):12, (n6,s6):11, (n4,s4):9, (n13,s13):4, (n8,s8):5, (n3,s3):10NON_VOTER] applying num_replicas=6 num_voters=5 constraints=[+region=eu-west-1:1 +region=us-central-1:1 +region=us-east-1:1 +region=us-west-1:1] voter_constraints=[+region=us-east-1:2 +region=us-west-1:2]
+
+topology
+----
+AU_EAST
+  AU_EAST_1
+  │ └── [1 2 3]
+eu-west-1
+  └── [11 12 13]
+us-central-1
+  └── [8 9 10]
+us-east-1
+  └── [4 5]
+us-west-1
+  └── [6 7]
+
+# vim:ft=sh
