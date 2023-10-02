@@ -149,6 +149,14 @@ accept requests.`,
 		Description: "TCP port number offset to use for the secondary in-memory tenant.",
 	}
 
+	ApplicationInternalRPCPortRange = FlagInfo{
+		Name: "internal-rpc-port-range",
+		Description: `
+TCP port range to use for the internal RPC service for application-level servers.
+This service is used for node-to-node RPC traffic and to serve data for 'debug zip'.
+`,
+	}
+
 	SQLMem = FlagInfo{
 		Name: "max-sql-memory",
 		Description: `
@@ -777,8 +785,8 @@ Disable use of "external" IO, such as to S3, GCS, or the file system (nodelocal)
 	ExternalIOEnableNonAdminImplicitAndArbitraryOutbound = FlagInfo{
 		Name: "external-io-enable-non-admin-implicit-access",
 		Description: `
-Allow non-admin users to specify arbitrary network addressses (e.g. https:// URIs or custom endpoints in s3:// URIs) and 
-implicit credentials (machine account/role providers) when running operations like IMPORT/EXPORT/BACKUP/etc. 
+Allow non-admin users to specify arbitrary network addressses (e.g. https:// URIs or custom endpoints in s3:// URIs) and
+implicit credentials (machine account/role providers) when running operations like IMPORT/EXPORT/BACKUP/etc.
 Note: that --external-io-disable-http or --external-io-disable-implicit-credentials still apply, this only removes the admin-user requirement.`,
 	}
 
@@ -1647,7 +1655,7 @@ this flag is applied.`,
 	ZipRedactLogs = FlagInfo{
 		Name: "redact-logs",
 		Description: `
-DEPRECATED: Redact text that may contain confidential data or PII from 
+DEPRECATED: Redact text that may contain confidential data or PII from
 retrieved log entries.
 <PRE>
 
@@ -1680,9 +1688,9 @@ For large clusters, this can dramatically increase debug zip size/file count.
 		Description: `
 Fetch stack traces for all goroutines running on each targeted node in nodes/*/stacks.txt
 and nodes/*/stacks_with_labels.txt files. Note that fetching stack traces for all goroutines is
-a "stop-the-world" operation, which can momentarily have negative impacts on SQL service 
-latency. Note that any periodic goroutine dumps previously taken on the node will still be 
-included in nodes/*/goroutines/*.txt.gz, as these would have already been generated and don't 
+a "stop-the-world" operation, which can momentarily have negative impacts on SQL service
+latency. Note that any periodic goroutine dumps previously taken on the node will still be
+included in nodes/*/goroutines/*.txt.gz, as these would have already been generated and don't
 require any additional stop-the-world operations to be collected.
 `,
 	}
@@ -1725,7 +1733,7 @@ dependencies on other tables.
 	ImportMaxRowSize = FlagInfo{
 		Name: "max-row-size",
 		Description: `
-Override limits on line size when importing Postgres dump files. This setting 
+Override limits on line size when importing Postgres dump files. This setting
 may need to be tweaked if the Postgres dump file has extremely long lines.
 `,
 	}
@@ -1846,7 +1854,7 @@ without any other details.
 	ExportDestination = FlagInfo{
 		Name: "destination",
 		Description: `
-The destination to export data. 
+The destination to export data.
 If the export format is readable and this flag left unspecified,
 defaults to display the exported data in the terminal output.
 `,
@@ -1855,7 +1863,7 @@ defaults to display the exported data in the terminal output.
 	ExportTableFormat = FlagInfo{
 		Name: "format",
 		Description: `
-Selects the format to export table rows from backups. 
+Selects the format to export table rows from backups.
 Only csv is supported at the moment.
 `,
 	}
@@ -1868,9 +1876,9 @@ Only csv is supported at the moment.
 	StartKey = FlagInfo{
 		Name: "start-key",
 		Description: `
-Start key and format as [<format>:]<key>. Supported formats: raw, hex, bytekey. 
+Start key and format as [<format>:]<key>. Supported formats: raw, hex, bytekey.
 The raw format supports escaped text. For example, "raw:\x01k" is
-the prefix for range local keys. 
+the prefix for range local keys.
 The bytekey format does not require table-key prefix.`,
 	}
 
@@ -1905,7 +1913,7 @@ host, or a full well-formed URI.
 </PRE>
 If a destination is not specified, the default URI scheme and host will be used,
 and the basename from the source will be used as the destination directory.
-For example: 'userfile://defaultdb.public.userfiles_root/yourdirectory' 
+For example: 'userfile://defaultdb.public.userfiles_root/yourdirectory'
 <PRE>
 
 </PRE>

@@ -18,5 +18,6 @@ go_test(
     deps = [
         ":addr",
         "//pkg/testutils",
+        "@com_github_stretchr_testify//require",
     ],
 )

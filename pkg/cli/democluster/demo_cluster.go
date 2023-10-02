@@ -933,12 +933,15 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		args.Addr = fmt.Sprintf("127.0.0.1:%d", rpcPort)
 		args.SQLAddr = fmt.Sprintf("127.0.0.1:%d", sqlPort)
 		if !demoCtx.DisableServerController {
-			// The code in NewDemoCluster put the KV ports higher
-			// so we need to subtract the number of nodes to get
-			// back to the "good" ports.
-			// We reduce NumNodes by 1 because the server controller
-			// uses 1-based indexing for servers.
-			args.SecondaryTenantPortOffset = -(demoCtx.NumNodes + 1)
+			// The code in NewDemoCluster put the KV ports higher so
+			// we need to subtract the number of nodes to get back
+			// to the "good" ports.
+			//
+			// We reduce lower bound of the port range by 1 because
+			// the server controller uses 1-based indexing for
+			// servers.
+			args.ApplicationInternalRPCPortMin = rpcPort - (demoCtx.NumNodes + 1)
+			args.ApplicationInternalRPCPortMax = args.ApplicationInternalRPCPortMin + 1024
 		}
 	}
 	if httpPort := demoCtx.httpPort(serverIdx, forSystemTenant); httpPort != 0 {
