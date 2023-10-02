@@ -701,7 +701,6 @@ func (c *transientCluster) startNodeAsync(
 
 				// Don't block if we are shutting down.
 			case <-ctx.Done():
-			case <-s.Stopper().ShouldQuiesce():
 			case <-c.stopper.ShouldQuiesce():
 			case <-timeoutCh:
 			}
@@ -736,7 +735,12 @@ func (c *transientCluster) waitForRPCAddrReadinessOrError(
 	case <-ctx.Done():
 		return errors.CombineErrors(ctx.Err(), errors.Newf("server %d startup aborted due to context cancellation", idx))
 	case <-c.servers[idx].Stopper().ShouldQuiesce():
-		return errors.Newf("server %d stopped prematurely", idx)
+		select {
+		case err := <-errCh:
+			return err
+		case <-time.After(30 * time.Second):
+		}
+		return errors.Newf("server %d stopped prematurely without returning error", idx)
 	case <-c.stopper.ShouldQuiesce():
 		return errors.Newf("demo cluster stopped prematurely while starting server %d", idx)
 	}
