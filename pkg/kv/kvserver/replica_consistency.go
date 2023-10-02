@@ -701,7 +701,7 @@ func (r *Replica) computeChecksumPostApply(
 	// Raft-consistent (i.e. not in the middle of an AddSSTable).
 	spans := rditer.MakeReplicatedKeySpans(&desc)
 	var snap storage.Reader
-	if r.store.cfg.SharedStorageEnabled || storage.UseEFOS.Get(&r.ClusterSettings().SV) {
+	if r.store.cfg.SharedStorageEnabled || storage.ShouldUseEFOS(&r.ClusterSettings().SV) {
 		efos := r.store.TODOEngine().NewEventuallyFileOnlySnapshot(spans)
 		if util.RaceEnabled {
 			ss := rditer.MakeReplicatedKeySpanSet(&desc)
