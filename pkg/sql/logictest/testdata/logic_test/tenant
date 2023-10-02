@@ -572,4 +572,4 @@ statement error blocked DDL from the system interface.*\nHINT:.*\nTry running th
 CREATE VIEW foo AS SELECT latitude,longitude FROM system.locations
 
 statement ok
-RESET CLUSTER SETTING sql.restrict_system_interface.enabled = false
+RESET CLUSTER SETTING sql.restrict_system_interface.enabled
