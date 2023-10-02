@@ -191,6 +191,7 @@ go_library(
         "reparent_database.go",
         "resolve_oid.go",
         "resolver.go",
+        "restricted_system_interface.go",
         "revert.go",
         "revoke_role.go",
         "routine.go",

@@ -43,7 +43,7 @@ func (p *planner) DropTenantByID(
 		return readOnlyError("DROP VIRTUAL CLUSTER")
 	}
 
-	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "drop"); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "drop", p.execCfg.Settings); err != nil {
 		return err
 	}
 

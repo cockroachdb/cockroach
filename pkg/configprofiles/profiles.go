@@ -63,19 +63,19 @@ var staticProfiles = map[string]configProfile{
 	},
 	"virtual+noapp": {
 		description: "virtualization enabled but no virtual cluster defined yet",
-		tasks:       virtClusterInitTasks,
+		tasks:       discourageSystemInterface(virtClusterInitTasks),
 	},
 	"virtual+noapp+repl": {
 		description: "virtualization enabled but no virtual cluster defined yet, with replication enabled",
-		tasks:       enableReplication(virtClusterInitTasks),
+		tasks:       discourageSystemInterface(enableReplication(virtClusterInitTasks)),
 	},
 	"virtual+app+sharedservice": {
 		description: "one virtual cluster configured to serve SQL application traffic",
-		tasks:       virtClusterWithAppServiceInitTasks,
+		tasks:       discourageSystemInterface(virtClusterWithAppServiceInitTasks),
 	},
 	"virtual+app+sharedservice+repl": {
 		description: "one virtual cluster configured to serve SQL application traffic, with replication enabled",
-		tasks:       enableReplication(virtClusterWithAppServiceInitTasks),
+		tasks:       discourageSystemInterface(enableReplication(virtClusterWithAppServiceInitTasks)),
 	},
 }
 
@@ -159,6 +159,18 @@ func enableReplication(baseTasks []autoconfigpb.Task) []autoconfigpb.Task {
 			nil, /* txnSQL */
 		),
 	)
+}
+
+func discourageSystemInterface(baseTasks []autoconfigpb.Task) []autoconfigpb.Task {
+	return append(baseTasks[:len(baseTasks):len(baseTasks)],
+		makeTask("discourage use of the system interface",
+			/* nonTxnSQL */ []string{
+				// Inform the user they better use a virtual cluster and not point load to the system interface.
+				"SET CLUSTER SETTING sql.restrict_system_interface.enabled = true",
+				"SET CLUSTER SETTING sql.error_tip_system_interface.enabled = true",
+			},
+			nil, /* txnSQL */
+		))
 }
 
 func makeTask(description string, nonTxnSQL, txnSQL []string) autoconfigpb.Task {

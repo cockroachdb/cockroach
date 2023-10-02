@@ -96,7 +96,7 @@ func (p *planner) planShowTenantFingerprint(
 		return nil, err
 	}
 
-	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "fingerprint"); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "fingerprint", p.execCfg.Settings); err != nil {
 		return nil, err
 	}
 

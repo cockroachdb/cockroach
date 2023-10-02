@@ -22,7 +22,9 @@ WHERE variable IN (
 'sql.create_virtual_cluster.default_template',
 'server.controller.default_target_cluster',
 'kv.rangefeed.enabled',
-'physical_replication.enabled'
+'physical_replication.enabled',
+'sql.restrict_system_interface.enabled',
+'sql.error_tip_system_interface.enabled'
 )
 ORDER BY variable
 ----
@@ -33,6 +35,8 @@ spanconfig.range_coalescing.application.enabled false
 spanconfig.range_coalescing.system.enabled false
 sql.create_virtual_cluster.default_template template
 sql.drop_virtual_cluster.enabled false
+sql.error_tip_system_interface.enabled true
+sql.restrict_system_interface.enabled true
 sql.virtual_cluster.feature_access.multiregion.enabled true
 sql.virtual_cluster.feature_access.zone_configs.enabled true
 sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled true
