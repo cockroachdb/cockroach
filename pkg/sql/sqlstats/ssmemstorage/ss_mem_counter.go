@@ -166,8 +166,8 @@ func (s *SQLStatsAtomicCounters) tryAddTxnFingerprint() (ok bool) {
 func (s *SQLStatsAtomicCounters) freeByCnt(
 	uniqueStmtFingerprintCount, uniqueTxnFingerprintCount int64,
 ) {
-	atomic.AddInt64(&s.uniqueStmtFingerprintCount, uniqueStmtFingerprintCount)
-	atomic.AddInt64(&s.uniqueTxnFingerprintCount, uniqueTxnFingerprintCount)
+	atomic.AddInt64(&s.uniqueStmtFingerprintCount, -uniqueStmtFingerprintCount)
+	atomic.AddInt64(&s.uniqueTxnFingerprintCount, -uniqueTxnFingerprintCount)
 }
 
 // GetTotalFingerprintCount returns total number of unique statement and
