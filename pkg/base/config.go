@@ -422,6 +422,13 @@ type Config struct {
 	// See: https://github.com/cockroachdb/cockroach/issues/84585
 	SecondaryTenantPortOffset int
 
+	// ApplicationInternalRPCPortMin/PortMax define the range of TCP ports
+	// used to start the internal RPC service for application-level
+	// servers. This service is used for node-to-node RPC traffic and to
+	// serve data for 'debug zip'.
+	ApplicationInternalRPCPortMin int
+	ApplicationInternalRPCPortMax int
+
 	// Enables the use of an PTP hardware clock user space API for HLC current time.
 	// This contains the path to the device to be used (i.e. /dev/ptp0)
 	ClockDevicePath string
@@ -495,6 +502,8 @@ func (cfg *Config) InitDefaults() {
 	cfg.ClockDevicePath = ""
 	cfg.AcceptSQLWithoutTLS = false
 	cfg.SecondaryTenantPortOffset = 0
+	cfg.ApplicationInternalRPCPortMin = 0
+	cfg.ApplicationInternalRPCPortMax = 0
 }
 
 // HTTPRequestScheme returns "http" or "https" based on the value of
