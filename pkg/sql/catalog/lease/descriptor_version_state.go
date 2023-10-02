@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -30,6 +31,7 @@ type storedLease struct {
 	prefix     []byte
 	version    int
 	expiration tree.DTimestamp
+	sessionID  []byte
 }
 
 func (s *storedLease) String() string {
@@ -64,6 +66,9 @@ type descriptorVersionState struct {
 		// is associated with the version, or the ModificationTime of the next version
 		// when the version isn't associated with a lease.
 		expiration hlc.Timestamp
+
+		// The session that was used to acquire this descriptor version.
+		session sqlliveness.Session
 
 		refcount int
 		// Set if the node has a lease on this descriptor version.
@@ -101,7 +106,11 @@ func (s *descriptorVersionState) String() string {
 
 // stringLocked reads mu.refcount and thus needs to have mu held.
 func (s *descriptorVersionState) stringLocked() redact.RedactableString {
-	return redact.Sprintf("%d(%q) ver=%d:%s, refcount=%d", s.GetID(), s.GetName(), s.GetVersion(), s.mu.expiration, s.mu.refcount)
+	var sessionID string
+	if s.mu.session != nil {
+		sessionID = s.mu.session.ID().String()
+	}
+	return redact.Sprintf("%d(%q,%s) ver=%d:%s, refcount=%d", s.GetID(), s.GetName(), s.GetVersion(), s.mu.expiration, sessionID, s.mu.refcount)
 }
 
 // hasExpired checks if the descriptor is too old to be used (by a txn
@@ -115,7 +124,18 @@ func (s *descriptorVersionState) hasExpired(timestamp hlc.Timestamp) bool {
 // hasExpired checks if the descriptor is too old to be used (by a txn
 // operating) at the given timestamp.
 func (s *descriptorVersionState) hasExpiredLocked(timestamp hlc.Timestamp) bool {
-	return s.mu.expiration.LessEq(timestamp)
+	// Pick the longest expiration between the session and
+	// the store expiration, once we hit the draining mode
+	// (which will start checking against the new table).
+	expiration := s.mu.expiration
+	if s.mu.session != nil &&
+		s.t.m.isSessionBasedLeasingModeActive(SessionBasedDrain) {
+		sessionExpiry := s.mu.session.Expiration()
+		if expiration.Less(sessionExpiry) {
+			expiration = sessionExpiry
+		}
+	}
+	return expiration.LessEq(timestamp)
 }
 
 func (s *descriptorVersionState) incRefCount(ctx context.Context, expensiveLogEnabled bool) {
@@ -134,7 +154,30 @@ func (s *descriptorVersionState) incRefCountLocked(ctx context.Context, expensiv
 func (s *descriptorVersionState) getExpiration() hlc.Timestamp {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.mu.expiration
+
+	// Pick the longest expiration between the session and
+	// the store expiration, once we hit the draining mode
+	//	// (which will start checking against the new table).
+	expiration := s.mu.expiration
+	if s.mu.session != nil &&
+		s.t.m.isSessionBasedLeasingModeActive(SessionBasedDrain) {
+		sessionExpiry := s.mu.session.Expiration()
+		if expiration.Less(sessionExpiry) {
+			expiration = sessionExpiry
+		}
+	}
+
+	return expiration
+}
+
+// getStoredLease returns a copy of the stored lease.
+func (s *descriptorVersionState) getStoredLease() storedLease {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.mu.lease == nil {
+		return storedLease{}
+	}
+	return *s.mu.lease
 }
 
 // The lease expiration stored in the database is of a different type.

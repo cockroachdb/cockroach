@@ -39,7 +39,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	kvstorage "github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -97,7 +99,8 @@ var LeaseEnableSessionBasedLeasing = settings.RegisterEnumSetting(
 	settings.ApplicationLevel,
 	"sql.catalog.experimental_use_session_based_leasing",
 	"enables session based leasing for internal testing.",
-	"off",
+	util.ConstantWithMetamorphicTestChoice("experimental_use_session_based_leasing",
+		"off", "dual_write").(string),
 	map[int64]string{
 		int64(SessionBasedLeasingOff): "off",
 		int64(SessionBasedDualWrite):  "dual_write",
@@ -504,7 +507,7 @@ func (m *Manager) insertDescriptorVersions(id descpb.ID, versions []historicalDe
 		existingVersion := t.mu.active.findVersion(versions[i].desc.GetVersion())
 		if existingVersion == nil {
 			t.mu.active.insert(
-				newDescriptorVersionState(t, versions[i].desc, versions[i].expiration, nil, false))
+				newDescriptorVersionState(t, versions[i].desc, versions[i].expiration, nil, nil, false))
 		}
 	}
 }
@@ -573,10 +576,22 @@ func acquireNodeLease(
 			}
 			newest := m.findNewest(id)
 			var minExpiration hlc.Timestamp
+			var lastLease storedLease
 			if newest != nil {
 				minExpiration = newest.getExpiration()
+				lastLease = newest.getStoredLease()
 			}
-			desc, expiration, regionPrefix, err := m.storage.acquire(ctx, minExpiration, id)
+			var session sqlliveness.Session
+			// Retreive session information when session based leasing
+			// is enabled.
+			if m.isSessionBasedLeasingModeActive(SessionBasedDualWrite) {
+				var err error
+				session, err = m.livenessProvider.Session(ctx)
+				if err != nil {
+					return false, errors.Wrapf(err, "lease acquisition was unable to resolve liveness session")
+				}
+			}
+			desc, expiration, regionPrefix, err := m.storage.acquire(ctx, minExpiration, session, id, &lastLease)
 			if err != nil {
 				return nil, err
 			}
@@ -585,7 +600,7 @@ func acquireNodeLease(
 			t.mu.takenOffline = false
 			defer t.mu.Unlock()
 			var newDescVersionState *descriptorVersionState
-			newDescVersionState, toRelease, err = t.upsertLeaseLocked(ctx, desc, expiration, regionPrefix)
+			newDescVersionState, toRelease, err = t.upsertLeaseLocked(ctx, desc, expiration, session, regionPrefix)
 			if err != nil {
 				return nil, err
 			}
@@ -610,9 +625,22 @@ func acquireNodeLease(
 
 // releaseLease from store.
 func releaseLease(ctx context.Context, lease *storedLease, m *Manager) {
+	releaseLeaseWithNotify(ctx, lease, m, nil)
+}
+
+// releaseLeaseWithNotify from store and notifies a channel.
+func releaseLeaseWithNotify(
+	ctx context.Context, lease *storedLease, m *Manager, notifyCh chan struct{},
+) {
+	notify := func() {
+		if notifyCh != nil {
+			close(notifyCh)
+		}
+	}
 	if m.IsDraining() {
 		// Release synchronously to guarantee release before exiting.
 		m.storage.release(ctx, m.stopper, lease)
+		notify()
 		return
 	}
 
@@ -625,7 +653,9 @@ func releaseLease(ctx context.Context, lease *storedLease, m *Manager) {
 		newCtx, "sql.descriptorState: releasing descriptor lease",
 		func(ctx context.Context) {
 			m.storage.release(ctx, m.stopper, lease)
+			notify()
 		}); err != nil {
+		notify()
 		log.Warningf(ctx, "error: %s, not releasing lease: %q", err, lease)
 	}
 }
@@ -730,6 +760,7 @@ type Manager struct {
 	rangeFeedFactory *rangefeed.Factory
 	storage          storage
 	settings         *cluster.Settings
+	livenessProvider sqlliveness.Provider
 	mu               struct {
 		syncutil.Mutex
 		// TODO(james): Track size of leased descriptors in memory.
@@ -768,6 +799,7 @@ func NewLeaseManager(
 	clock *hlc.Clock,
 	settings *cluster.Settings,
 	settingsWatcher *settingswatcher.SettingsWatcher,
+	livenessProvider sqlliveness.Provider,
 	codec keys.SQLCodec,
 	testingKnobs ManagerTestingKnobs,
 	stopper *stop.Stopper,
@@ -791,6 +823,7 @@ func NewLeaseManager(
 			}),
 		},
 		settings:         settings,
+		livenessProvider: livenessProvider,
 		rangeFeedFactory: rangeFeedFactory,
 		testingKnobs:     testingKnobs,
 		names:            makeNameCache(),
