@@ -6931,7 +6931,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`{"capabilities": {}, "deprecatedId": "1"}`,
 				},
 				{
-					`10`, `true`, `tenant-10`,
+					`10`, `true`, `cluster-10`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
 					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10"}`,
@@ -6975,7 +6975,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`10`, `false`, `NULL`,
 					strconv.Itoa(int(mtinfopb.DataStateDrop)),
 					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
-					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedDataState": "DROP", "deprecatedId": "10", "droppedName": "tenant-10"}`,
+					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedDataState": "DROP", "deprecatedId": "10", "droppedName": "cluster-10"}`,
 				},
 			},
 		)
@@ -7007,7 +7007,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`{"capabilities": {}, "deprecatedId": "1"}`,
 				},
 				{
-					`10`, `true`, `tenant-10`,
+					`10`, `true`, `cluster-10`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
 					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10"}`,
@@ -7059,7 +7059,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`{"capabilities": {}, "deprecatedId": "1"}`,
 				},
 				{
-					`10`, `true`, `tenant-10`,
+					`10`, `true`, `cluster-10`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
 					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10"}`,
@@ -7099,7 +7099,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`{"capabilities": {}, "deprecatedId": "1"}`,
 				},
 				{
-					`10`, `true`, `tenant-10`,
+					`10`, `true`, `cluster-10`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
 					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10"}`,
@@ -7161,19 +7161,19 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`{"capabilities": {}, "deprecatedId": "1"}`,
 				},
 				{
-					`10`, `true`, `tenant-10`,
+					`10`, `true`, `cluster-10`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
 					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10"}`,
 				},
 				{
-					`11`, `true`, `tenant-11`,
+					`11`, `true`, `cluster-11`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
 					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "11"}`,
 				},
 				{
-					`20`, `true`, `tenant-20`,
+					`20`, `true`, `cluster-20`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
 					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "20"}`,
@@ -7218,7 +7218,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB.Exec(t, `ALTER TENANT [20] STOP SERVICE`)
 		restoreDB.Exec(t, `DROP TENANT [20] IMMEDIATE`)
 
-		restoreDB.Exec(t, `RESTORE TENANT 11 FROM 'nodelocal://1/clusterwide' WITH virtual_cluster = '20', virtual_cluster_name = 'tenant-20'`)
+		restoreDB.Exec(t, `RESTORE TENANT 11 FROM 'nodelocal://1/clusterwide' WITH virtual_cluster = '20', virtual_cluster_name = 'cluster-20'`)
 
 		tenantID = roachpb.MustMakeTenantID(20)
 		if err := restoreTC.Server(0).TenantController().WaitForTenantReadiness(ctx, tenantID); err != nil {
@@ -7226,7 +7226,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		}
 
 		_, restoreConn20 := serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantName: "tenant-20", DisableCreateTenant: true},
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantName: "cluster-20", DisableCreateTenant: true},
 		)
 		defer restoreConn20.Close()
 		restoreTenant20 := sqlutils.MakeSQLRunner(restoreConn20)
@@ -7239,7 +7239,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		// Remove tenant 11, then confirm restoring 11 over 10 fails.
 		restoreDB.Exec(t, `ALTER TENANT [11] STOP SERVICE`)
 		restoreDB.Exec(t, `DROP TENANT [11] IMMEDIATE`)
-		restoreDB.ExpectErr(t, `exists`, `RESTORE TENANT 11 FROM 'nodelocal://1/clusterwide' WITH virtual_cluster_name = 'tenant-10'`)
+		restoreDB.ExpectErr(t, `exists`, `RESTORE TENANT 11 FROM 'nodelocal://1/clusterwide' WITH virtual_cluster_name = 'cluster-10'`)
 
 		// Verify tenant 20 is still unaffected.
 		restoreTenant20.CheckQueryResults(t, `select * from foo.baz`, tenant11.QueryStr(t, `select * from foo.baz`))
@@ -9602,6 +9602,8 @@ func TestProtectRestoreTargets(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "slow test") // takes >1mn under race
+
 	numAccounts := 100
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
@@ -9638,7 +9640,7 @@ func TestProtectRestoreTargets(t *testing.T) {
 	}{
 		{
 			name:        "tenant",
-			restoreStmt: `RESTORE TENANT 10 FROM LATEST IN $1 WITH detached, virtual_cluster_name = 'tenant-20'`,
+			restoreStmt: `RESTORE TENANT 10 FROM LATEST IN $1 WITH detached, virtual_cluster_name = 'cluster-20'`,
 		},
 		{
 			name:        "tenantid",
