@@ -176,6 +176,8 @@ type MVCCValueMerger struct {
 
 	// Used to avoid heap allocations when passing pointer to `Unmarshal()`.
 	meta enginepb.MVCCMetadata
+	// Used to avoid heap allocations in Finish().
+	merged roachpb.InternalTimeSeriesData
 }
 
 const (
@@ -287,31 +289,32 @@ func (t *MVCCValueMerger) Finish(includesBase bool) ([]byte, io.Closer, error) {
 	// compatible with any version that supports row format only. Then we can drop support
 	// for row format entirely. It requires significant cleanup effort as many tests target
 	// the row format.
-	var merged roachpb.InternalTimeSeriesData
-	merged.StartTimestampNanos = t.timeSeriesOps[0].StartTimestampNanos
-	merged.SampleDurationNanos = t.timeSeriesOps[0].SampleDurationNanos
+	t.merged = roachpb.InternalTimeSeriesData{
+		StartTimestampNanos: t.timeSeriesOps[0].StartTimestampNanos,
+		SampleDurationNanos: t.timeSeriesOps[0].SampleDurationNanos,
+	}
 	for _, timeSeriesOp := range t.timeSeriesOps {
-		if timeSeriesOp.StartTimestampNanos != merged.StartTimestampNanos {
+		if timeSeriesOp.StartTimestampNanos != t.merged.StartTimestampNanos {
 			return nil, nil, errors.Errorf("start timestamp mismatch")
 		}
-		if timeSeriesOp.SampleDurationNanos != merged.SampleDurationNanos {
+		if timeSeriesOp.SampleDurationNanos != t.merged.SampleDurationNanos {
 			return nil, nil, errors.Errorf("sample duration mismatch")
 		}
 		if !isColumnar && len(timeSeriesOp.Offset) > 0 {
-			ensureColumnar(&merged)
+			ensureColumnar(&t.merged)
 			ensureColumnar(&timeSeriesOp)
 			isColumnar = true
 		} else if isColumnar {
 			ensureColumnar(&timeSeriesOp)
 		}
-		proto.Merge(&merged, &timeSeriesOp)
+		proto.Merge(&t.merged, &timeSeriesOp)
 	}
 	if isColumnar {
-		sortAndDeduplicateColumns(&merged)
+		sortAndDeduplicateColumns(&t.merged)
 	} else {
-		sortAndDeduplicateRows(&merged)
+		sortAndDeduplicateRows(&t.merged)
 	}
-	tsBytes, err := protoutil.Marshal(&merged)
+	tsBytes, err := protoutil.Marshal(&t.merged)
 	if err != nil {
 		return nil, nil, err
 	}
