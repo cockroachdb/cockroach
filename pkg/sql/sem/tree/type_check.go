@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/lib/pq/oid"
 	"golang.org/x/text/language"
 )
 
@@ -3433,6 +3434,8 @@ func CheckUnsupportedType(ctx context.Context, version clusterversion.Handle, ty
 	var errorTypeString string
 	if typ.Family() == types.PGLSNFamily {
 		errorTypeString = "pg_lsn"
+	} else if typ.Oid() == oid.T_refcursor {
+		errorTypeString = "refcursor"
 	}
 	if errorTypeString != "" && !version.IsActive(ctx, clusterversion.V23_2) {
 		return pgerror.Newf(pgcode.FeatureNotSupported,

@@ -68,6 +68,7 @@ func TestParseColumnType(t *testing.T) {
 		{"CHAR(11) COLLATE de", types.MakeCollatedString(types.MakeChar(11), "de")},
 		{"VARCHAR COLLATE en", types.MakeCollatedString(types.VarChar, "en")},
 		{"VARCHAR(2) COLLATE en", types.MakeCollatedString(types.MakeVarChar(2), "en")},
+		{"REFCURSOR", types.RefCursor},
 	}
 	for i, d := range testData {
 		t.Run(d.str, func(t *testing.T) {
