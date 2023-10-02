@@ -1612,7 +1612,7 @@ func (tc *TestCluster) ReplicationMode() base.TestClusterReplicationMode {
 // ToggleReplicateQueues implements TestClusterInterface.
 func (tc *TestCluster) ToggleReplicateQueues(active bool) {
 	for _, s := range tc.Servers {
-		_ = s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
+		_ = s.StorageLayer().GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			store.SetReplicateQueueActive(active)
 			return nil
 		})
