@@ -12,9 +12,6 @@ GIT_GREP="git $CONFIGS grep"
 EXISTING_GO_GENERATE_COMMENTS="
 pkg/config/field.go://go:generate stringer --type=Field --linecomment
 pkg/rpc/context.go://go:generate mockgen -destination=mocks_generated_test.go --package=. Dialbacker
-pkg/roachprod/vm/aws/config.go://go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg aws -o embedded.go config.json old.json
-pkg/roachprod/vm/aws/config.go://go:generate gofmt -s -w embedded.go
-pkg/roachprod/vm/aws/config.go://go:generate goimports -w embedded.go
 pkg/roachprod/vm/aws/config.go://go:generate terraformgen -o terraform/main.tf
 pkg/roachprod/prometheus/prometheus.go://go:generate mockgen -package=prometheus -destination=mocks_generated_test.go . Cluster
 pkg/cmd/roachtest/clusterstats/collector.go://go:generate mockgen -package=clusterstats -destination mocks_generated_test.go github.com/cockroachdb/cockroach/pkg/roachprod/prometheus Client
@@ -27,9 +24,6 @@ pkg/kv/kvserver/spanlatch/manager.go://go:generate ../../../util/interval/generi
 pkg/kv/kvpb/api.go://go:generate mockgen -package=kvpbmock -destination=kvpbmock/mocks_generated.go . InternalClient,Internal_RangeFeedClient,Internal_MuxRangeFeedClient
 pkg/kv/kvpb/batch.go://go:generate go run gen/main.go --filename batch_generated.go *.pb.go
 pkg/security/certmgr/cert.go://go:generate mockgen -package=certmgr -destination=mocks_generated_test.go . Cert
-pkg/security/securitytest/securitytest.go://go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg securitytest -o embedded.go -ignore README.md -ignore regenerate.sh test_certs
-pkg/security/securitytest/securitytest.go://go:generate gofmt -s -w embedded.go
-pkg/security/securitytest/securitytest.go://go:generate goimports -w embedded.go
 pkg/spanconfig/spanconfigstore/span_store.go://go:generate ../../util/interval/generic/gen.sh *entry spanconfigstore
 pkg/sql/conn_fsm.go://go:generate ../util/fsm/gen/reports.sh TxnStateTransitions stateNoTxn
 pkg/sql/opt/optgen/lang/gen.go://go:generate langgen -out expr.og.go exprs lang.opt
