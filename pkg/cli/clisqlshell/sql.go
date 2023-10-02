@@ -945,24 +945,6 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 			dbName = c.refreshDatabaseName()
 		}
 
-		// Do we have a "cluster" option; either as an options= parameter
-		// or as a prefix to the database name?
-		opts := parsedURL.GetExtraOptions()
-		var logicalCluster string
-		if extOptsS := opts.Get("options"); extOptsS != "" {
-			extOpts, err := pgurl.ParseExtendedOptions(extOptsS)
-			if err == nil {
-				logicalCluster = extOpts.Get("cluster")
-			}
-		}
-		if urlDB := parsedURL.GetDatabase(); strings.HasPrefix(urlDB, "cluster:") {
-			parts := strings.SplitN(urlDB, "/", 2)
-			logicalCluster = parts[0][len("cluster:"):]
-		}
-		if logicalCluster != "" {
-			logicalCluster += "/"
-		}
-
 		c.fullPrompt = rePromptFmt.ReplaceAllStringFunc(c.iCtx.customPromptPattern, func(m string) string {
 			// See:
 			// https://www.postgresql.org/docs/15/app-psql.html#APP-PSQL-PROMPTING
@@ -1029,6 +1011,10 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 
 			case "%C":
 				// CockroachDB extension: the logical cluster name.
+				logicalCluster := c.conn.GetServerInfo().VirtualClusterName
+				if logicalCluster != "" {
+					logicalCluster += "/"
+				}
 				return logicalCluster
 
 			default:
