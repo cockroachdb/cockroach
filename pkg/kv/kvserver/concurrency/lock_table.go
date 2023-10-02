@@ -3222,6 +3222,17 @@ func (kl *keyLocks) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bo
 			// The lock transitioned from held to unheld as a result of this lock
 			// update.
 			gc = kl.releaseWaitersOnKeyUnlocked()
+		} else {
+			// If we're in this branch, it must be the case that there are multiple
+			// shared locks held on this key, and as a result, releasing one of the
+			// locks hasn't transitioned the key to unlocked. However, the lock that
+			// we just released may have belonged to the claimant transaction -- the
+			// one that any waiters on this key were pushing. If this is the case,
+			// we'll need to inform these waiters about a new claimant they should be
+			// pushing instead. A call to informActiveWaiters will do exactly that.
+			// Note that if the lock that was cleared didn't belong to a transaction
+			// all waiters were pushing, the call to informActiveWaiters will no-op.
+			kl.informActiveWaiters()
 		}
 		return true, gc
 	}
@@ -3304,6 +3315,8 @@ func (kl *keyLocks) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bo
 		kl.clearLockHeldBy(txn.ID)
 		if !kl.isLocked() {
 			gc = kl.releaseWaitersOnKeyUnlocked()
+		} else {
+			kl.informActiveWaiters()
 		}
 		return true, gc
 	}

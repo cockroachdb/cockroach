@@ -101,6 +101,12 @@ func getLockDurability(t *testing.T, d *datadriven.TestData, durS string) lock.D
 	}
 }
 
+func scanLockStrength(t *testing.T, d *datadriven.TestData) lock.Strength {
+	var strS string
+	d.ScanArgs(t, "str", &strS)
+	return concurrency.GetStrength(t, d, strS)
+}
+
 func scanWaitPolicy(t *testing.T, d *datadriven.TestData, required bool) lock.WaitPolicy {
 	const key = "wait-policy"
 	if !required && !d.HasArg(key) {
@@ -119,6 +125,13 @@ func scanWaitPolicy(t *testing.T, d *datadriven.TestData, required bool) lock.Wa
 		d.Fatalf(t, "unknown wait policy: %s", policy)
 		return 0
 	}
+}
+
+func scanIgnoredSeqNumbers(t *testing.T, d *datadriven.TestData) []enginepb.IgnoredSeqNumRange {
+	if !d.HasArg("ignored-seqs") {
+		return nil
+	}
+	return concurrency.ScanIgnoredSeqNumbers(t, d)
 }
 
 func scanPoisonPolicy(t *testing.T, d *datadriven.TestData) poison.Policy {
