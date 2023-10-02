@@ -1248,6 +1248,7 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 			rebalanceConstraintsChecker,
 			replicas,
 			nil,
+			VoterTarget,
 			existingStoreLocalities,
 			func(context.Context, roachpb.StoreID) bool { return true },
 			options,
