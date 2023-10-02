@@ -108,17 +108,19 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Max Checkpoint Latency"
+      title="Progress Timestamp"
       isKvGraph={false}
-      tooltip={`The most any changefeed's persisted checkpoint is behind the present.  Larger values indicate issues with successfully ingesting or emitting changes.  If errors cause a changefeed to restart, or the changefeed is paused and unpaused, emitted data up to the last checkpoint may be re-emitted.`}
+      tooltip={`The latest timestamp up to which events have been successfully emitted for all changefeeds. Changefeeds will not emit data written before this timestamp. If this metric is stuck or far in the past, this indicates that one or more changefeeds are not making sufficient progress. If errors cause a changefeed to restart or if the changefeed is paused and unpaused, data emitted ahead of this timestamp may be re-emitted.`}
       tenantSource={tenantSource}
     >
-      <Axis units={AxisUnits.Duration} label="time">
+      <Axis units={AxisUnits.Duration} label="timestamp">
         <Metric
-          name="cr.node.changefeed.max_behind_nanos"
-          title="Max Checkpoint Latency"
+          name="cr.node.changefeed.checkpoint_progress"
+          title="Progress Timestamp"
+          // The value of this metric only increases with time (guaranteed by changefeeds). If we have two readings within some time window, the maximal value is the most up-to-date.
           downsampleMax
-          aggregateMax
+          // Take the oldest checkpoint from all running changefeeds. This is the latest timestamp for which all events have been emitted.
+          aggregateMin
         />
       </Axis>
     </LineGraph>,
