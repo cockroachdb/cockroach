@@ -64,6 +64,7 @@ go_test(
     ],
     args = ["-test.timeout=295s"],
     exec_properties = {"Pool": "medium"},
+    shard_count = 4,
     deps = [
         ":ttljob",
         "//pkg/base",

@@ -391,7 +391,7 @@ type RoutineReturnType struct {
 // DropFunction represents a DROP FUNCTION statement.
 type DropFunction struct {
 	IfExists     bool
-	Functions    FuncObjs
+	Functions    RoutineObjs
 	DropBehavior DropBehavior
 }
 
@@ -408,11 +408,11 @@ func (node *DropFunction) Format(ctx *FmtCtx) {
 	}
 }
 
-// FuncObjs is a slice of FuncObj.
-type FuncObjs []FuncObj
+// RoutineObjs is a slice of RoutineObj.
+type RoutineObjs []RoutineObj
 
 // Format implements the NodeFormatter interface.
-func (node FuncObjs) Format(ctx *FmtCtx) {
+func (node RoutineObjs) Format(ctx *FmtCtx) {
 	for i := range node {
 		if i > 0 {
 			ctx.WriteString(", ")
@@ -421,14 +421,15 @@ func (node FuncObjs) Format(ctx *FmtCtx) {
 	}
 }
 
-// FuncObj represents a function object DROP FUNCTION tries to drop.
-type FuncObj struct {
+// RoutineObj represents a routine (function or procedure) object in DROP,
+// GRANT, and REVOKE statements.
+type RoutineObj struct {
 	FuncName RoutineName
 	Params   RoutineParams
 }
 
 // Format implements the NodeFormatter interface.
-func (node *FuncObj) Format(ctx *FmtCtx) {
+func (node *RoutineObj) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.FuncName)
 	if node.Params != nil {
 		ctx.WriteString("(")
@@ -437,8 +438,10 @@ func (node *FuncObj) Format(ctx *FmtCtx) {
 	}
 }
 
-// ParamTypes returns a slice of parameter types of the function.
-func (node FuncObj) ParamTypes(ctx context.Context, res TypeReferenceResolver) ([]*types.T, error) {
+// ParamTypes returns a slice of parameter types of the routine.
+func (node RoutineObj) ParamTypes(
+	ctx context.Context, res TypeReferenceResolver,
+) ([]*types.T, error) {
 	// TODO(chengxiong): handle INOUT, OUT and VARIADIC argument classes when we
 	// support them. This is because only IN and INOUT arg types need to be
 	// considered to match a overload.
@@ -458,7 +461,7 @@ func (node FuncObj) ParamTypes(ctx context.Context, res TypeReferenceResolver) (
 
 // AlterFunctionOptions represents a ALTER FUNCTION...action statement.
 type AlterFunctionOptions struct {
-	Function FuncObj
+	Function RoutineObj
 	Options  RoutineOptions
 }
 
@@ -474,7 +477,7 @@ func (node *AlterFunctionOptions) Format(ctx *FmtCtx) {
 
 // AlterFunctionRename represents a ALTER FUNCTION...RENAME statement.
 type AlterFunctionRename struct {
-	Function FuncObj
+	Function RoutineObj
 	NewName  Name
 }
 
@@ -488,7 +491,7 @@ func (node *AlterFunctionRename) Format(ctx *FmtCtx) {
 
 // AlterFunctionSetSchema represents a ALTER FUNCTION...SET SCHEMA statement.
 type AlterFunctionSetSchema struct {
-	Function      FuncObj
+	Function      RoutineObj
 	NewSchemaName Name
 }
 
@@ -502,7 +505,7 @@ func (node *AlterFunctionSetSchema) Format(ctx *FmtCtx) {
 
 // AlterFunctionSetOwner represents the ALTER FUNCTION...OWNER TO statement.
 type AlterFunctionSetOwner struct {
-	Function FuncObj
+	Function RoutineObj
 	NewOwner RoleSpec
 }
 
@@ -516,7 +519,7 @@ func (node *AlterFunctionSetOwner) Format(ctx *FmtCtx) {
 
 // AlterFunctionDepExtension represents the ALTER FUNCTION...DEPENDS ON statement.
 type AlterFunctionDepExtension struct {
-	Function  FuncObj
+	Function  RoutineObj
 	Remove    bool
 	Extension Name
 }

@@ -856,11 +856,11 @@ func (u *sqlSymUnion) stmts() tree.Statements {
 func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
     return u.val.(*tree.RoutineBody)
 }
-func (u *sqlSymUnion) functionObj() tree.FuncObj {
-    return u.val.(tree.FuncObj)
+func (u *sqlSymUnion) functionObj() tree.RoutineObj {
+    return u.val.(tree.RoutineObj)
 }
-func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
-    return u.val.(tree.FuncObjs)
+func (u *sqlSymUnion) functionObjs() tree.RoutineObjs {
+    return u.val.(tree.RoutineObjs)
 }
 func (u *sqlSymUnion) tenantReplicationOptions() *tree.TenantReplicationOptions {
   return u.val.(*tree.TenantReplicationOptions)
@@ -981,7 +981,7 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %token <str> PARALLEL PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACEMENT PLACING
 %token <str> PLAN PLANS POINT POINTM POINTZ POINTZM POLYGON POLYGONM POLYGONZ POLYGONZM
 %token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIOR PRIORITY PRIVILEGES
-%token <str> PROCEDURAL PROCEDURE PUBLIC PUBLICATION
+%token <str> PROCEDURAL PROCEDURE PROCEDURES PUBLIC PUBLICATION
 
 %token <str> QUERIES QUERY QUOTE
 
@@ -1684,8 +1684,8 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %type <tree.Statement> routine_return_stmt routine_body_stmt
 %type <tree.Statements> routine_body_stmt_list
 %type <*tree.RoutineBody> opt_routine_body
-%type <tree.FuncObj> function_with_paramtypes
-%type <tree.FuncObjs> function_with_paramtypes_list
+%type <tree.RoutineObj> function_with_paramtypes
+%type <tree.RoutineObjs> function_with_paramtypes_list
 %type <empty> opt_link_sym
 
 %type <*tree.LabelSpec> label_spec
@@ -4920,7 +4920,7 @@ drop_func_stmt:
 function_with_paramtypes_list:
   function_with_paramtypes
   {
-    $$.val = tree.FuncObjs{$1.functionObj()}
+    $$.val = tree.RoutineObjs{$1.functionObj()}
   }
   | function_with_paramtypes_list ',' function_with_paramtypes
   {
@@ -4930,14 +4930,14 @@ function_with_paramtypes_list:
 function_with_paramtypes:
   db_object_name func_params
   {
-    $$.val = tree.FuncObj{
+    $$.val = tree.RoutineObj{
       FuncName: $1.unresolvedObjectName().ToRoutineName(),
       Params: $2.routineParams(),
     }
   }
   | db_object_name
   {
-    $$.val = tree.FuncObj{
+    $$.val = tree.RoutineObj{
       FuncName: $1.unresolvedObjectName().ToRoutineName(),
     }
   }
@@ -6255,6 +6255,18 @@ grant_stmt:
       WithGrantOption: $11.bool(),
     }
   }
+| GRANT privileges ON ALL PROCEDURES IN SCHEMA schema_name_list TO role_spec_list opt_with_grant_option
+  {
+    $$.val = &tree.Grant{
+      Privileges: $2.privilegeList(),
+      Targets: tree.GrantTargetList{
+        Schemas: $8.objectNamePrefixList(),
+        AllProceduresInSchema: true,
+      },
+      Grantees: $10.roleSpecList(),
+      WithGrantOption: $11.bool(),
+    }
+  }
 | GRANT SYSTEM privileges TO role_spec_list opt_with_grant_option
   {
     $$.val = &tree.Grant{
@@ -6390,6 +6402,30 @@ revoke_stmt:
       Targets: tree.GrantTargetList{
         Schemas: $11.objectNamePrefixList(),
         AllFunctionsInSchema: true,
+      },
+      Grantees: $13.roleSpecList(),
+      GrantOptionFor: true,
+    }
+  }
+| REVOKE privileges ON ALL PROCEDURES IN SCHEMA schema_name_list FROM role_spec_list
+  {
+    $$.val = &tree.Revoke{
+      Privileges: $2.privilegeList(),
+      Targets: tree.GrantTargetList{
+        Schemas: $8.objectNamePrefixList(),
+        AllProceduresInSchema: true,
+      },
+      Grantees: $10.roleSpecList(),
+      GrantOptionFor: false,
+    }
+  }
+| REVOKE GRANT OPTION FOR privileges ON ALL PROCEDURES IN SCHEMA schema_name_list FROM role_spec_list
+  {
+    $$.val = &tree.Revoke{
+      Privileges: $5.privilegeList(),
+      Targets: tree.GrantTargetList{
+        Schemas: $11.objectNamePrefixList(),
+        AllProceduresInSchema: true,
       },
       Grantees: $13.roleSpecList(),
       GrantOptionFor: true,
@@ -9087,6 +9123,10 @@ grant_targets:
   {
     $$.val = tree.GrantTargetList{Functions: $2.functionObjs()}
   }
+| PROCEDURE function_with_paramtypes_list
+  {
+    $$.val = tree.GrantTargetList{Procedures: $2.functionObjs()}
+  }
 
 // backup_targets is similar to grant_targets but used by backup and restore, and thus
 // supports tenants, but does not support sequences, types, or other SQL nouns
@@ -11544,7 +11584,7 @@ target_object_type:
   }
 | FUNCTIONS
   {
-    $$.val = privilege.Functions
+    $$.val = privilege.Routines
   }
 | ROUTINES error
   {
@@ -16876,6 +16916,7 @@ unreserved_keyword:
 | PRIORITY
 | PRIVILEGES
 | PROCEDURE
+| PROCEDURES
 | PUBLIC
 | PUBLICATION
 | QUERIES
@@ -17429,6 +17470,7 @@ bare_label_keywords:
 | PRIORITY
 | PRIVILEGES
 | PROCEDURE
+| PROCEDURES
 | PUBLIC
 | PUBLICATION
 | QUERIES

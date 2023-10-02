@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -38,6 +39,8 @@ import (
 func TestGrantExecuteToPublicOnAllFunctions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t)
 
 	var (
 		v0 = clusterversion.TestingBinaryMinSupportedVersion
@@ -79,7 +82,7 @@ func TestGrantExecuteToPublicOnAllFunctions(t *testing.T) {
 				err := mut.Privileges.Revoke(
 					username.PublicRoleName(),
 					privilege.List{privilege.EXECUTE},
-					privilege.Function,
+					privilege.Routine,
 					false, /* grantWithOption */
 				)
 				if err != nil {

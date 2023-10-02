@@ -121,10 +121,11 @@ func (n *dropFunctionNode) Close(ctx context.Context)           {}
 // the function is not found. An error is also returning if a builtin function
 // is matched.
 func (p *planner) matchUDF(
-	ctx context.Context, fn *tree.FuncObj, required bool,
+	ctx context.Context, routineObj *tree.RoutineObj, required bool,
 ) (*tree.QualifiedOverload, error) {
 	path := p.CurrentSearchPath()
-	fnDef, err := p.ResolveFunction(ctx, fn.FuncName.ToUnresolvedObjectName().ToUnresolvedName(), &path)
+	name := routineObj.FuncName.ToUnresolvedObjectName().ToUnresolvedName()
+	fnDef, err := p.ResolveFunction(ctx, name, &path)
 	if err != nil {
 		if !required && errors.Is(err, tree.ErrFunctionUndefined) {
 			return nil, nil
@@ -132,11 +133,11 @@ func (p *planner) matchUDF(
 		return nil, err
 	}
 
-	paramTypes, err := fn.ParamTypes(ctx, p)
+	paramTypes, err := routineObj.ParamTypes(ctx, p)
 	if err != nil {
 		return nil, err
 	}
-	ol, err := fnDef.MatchOverload(paramTypes, fn.FuncName.Schema(), &path)
+	ol, err := fnDef.MatchOverload(paramTypes, routineObj.FuncName.Schema(), &path)
 	if err != nil {
 		if !required && errors.Is(err, tree.ErrFunctionUndefined) {
 			return nil, nil

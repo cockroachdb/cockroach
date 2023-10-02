@@ -37,6 +37,12 @@ grant_stmt ::=
 	| 'GRANT' 'ALL'  'ON' 'ALL' 'FUNCTIONS' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list 
 	| 'GRANT' privilege_list 'ON' 'ALL' 'FUNCTIONS' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list 'WITH' 'GRANT' 'OPTION'
 	| 'GRANT' privilege_list 'ON' 'ALL' 'FUNCTIONS' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list 
+	| 'GRANT' 'ALL' 'PRIVILEGES' 'ON' 'ALL' 'PROCEDURES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list 'WITH' 'GRANT' 'OPTION'
+	| 'GRANT' 'ALL' 'PRIVILEGES' 'ON' 'ALL' 'PROCEDURES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list 
+	| 'GRANT' 'ALL'  'ON' 'ALL' 'PROCEDURES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list 'WITH' 'GRANT' 'OPTION'
+	| 'GRANT' 'ALL'  'ON' 'ALL' 'PROCEDURES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list 
+	| 'GRANT' privilege_list 'ON' 'ALL' 'PROCEDURES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list 'WITH' 'GRANT' 'OPTION'
+	| 'GRANT' privilege_list 'ON' 'ALL' 'PROCEDURES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list 
 	| 'GRANT' 'SYSTEM' 'ALL' 'PRIVILEGES' 'TO' role_spec_list 'WITH' 'GRANT' 'OPTION'
 	| 'GRANT' 'SYSTEM' 'ALL' 'PRIVILEGES' 'TO' role_spec_list 
 	| 'GRANT' 'SYSTEM' 'ALL'  'TO' role_spec_list 'WITH' 'GRANT' 'OPTION'

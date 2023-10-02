@@ -262,7 +262,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			userNames[fnDesc.GetPrivileges().Owner()] = append(
 				userNames[fnDesc.GetPrivileges().Owner()],
 				objectAndType{
-					ObjectType: privilege.Function,
+					ObjectType: privilege.Routine,
 					ObjectName: name.String(),
 				},
 			)

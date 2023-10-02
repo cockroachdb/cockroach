@@ -54,6 +54,11 @@ func (p *VirtualTablePrivilege) GetObjectType() privilege.ObjectType {
 	return privilege.VirtualTable
 }
 
+// GetObjectTypeString implements the Object interface.
+func (p *VirtualTablePrivilege) GetObjectTypeString() string {
+	return string(privilege.VirtualTable)
+}
+
 // GetName implements the Object interface.
 func (p *VirtualTablePrivilege) GetName() string {
 	return fmt.Sprintf("%s.%s", p.SchemaName, p.TableName)

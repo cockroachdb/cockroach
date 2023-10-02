@@ -123,8 +123,8 @@ const (
 	Type ObjectType = "type"
 	// Sequence represents a sequence object.
 	Sequence ObjectType = "sequence"
-	// Function represent a function object.
-	Function ObjectType = "function"
+	// Routine represents a function or procedure object.
+	Routine ObjectType = "routine"
 	// Global represents global privileges.
 	Global ObjectType = "global"
 	// VirtualTable represents a virtual table object.
@@ -139,7 +139,7 @@ var isDescriptorBacked = map[ObjectType]bool{
 	Table:              true,
 	Type:               true,
 	Sequence:           true,
-	Function:           true,
+	Routine:            true,
 	Global:             false,
 	VirtualTable:       false,
 	ExternalConnection: false,
@@ -156,7 +156,7 @@ var (
 	TablePrivileges       = List{ALL, BACKUP, CHANGEFEED, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
 	SchemaPrivileges      = List{ALL, CREATE, USAGE}
 	TypePrivileges        = List{ALL, USAGE}
-	FunctionPrivileges    = List{ALL, EXECUTE}
+	RoutinePrivileges     = List{ALL, EXECUTE}
 	// SequencePrivileges is appended with TablePrivileges as well. This is because
 	// before v22.2 we treated Sequences the same as Tables. This is to avoid making
 	// certain privileges unavailable after upgrade migration.
@@ -389,8 +389,8 @@ func GetValidPrivilegesForObject(objectType ObjectType) (List, error) {
 		return SequencePrivileges, nil
 	case Any:
 		return AllPrivileges, nil
-	case Function:
-		return FunctionPrivileges, nil
+	case Routine:
+		return RoutinePrivileges, nil
 	case Global:
 		return GlobalPrivileges, nil
 	case VirtualTable:
@@ -467,6 +467,13 @@ func (o ObjectType) IsDescriptorBacked() bool {
 type Object interface {
 	// GetObjectType returns the privilege.ObjectType of the Object.
 	GetObjectType() ObjectType
+	// GetObjectTypeString returns a human-readable representation of the
+	// privilege.ObjectType.
+	// NOTE: It may not match the privilege.ObjectType directly because it may
+	// be more specific for some object types. For example, for functions and
+	// procedures it will return "function" and "procedure", respectively,
+	// instead of the more generic term "routine".
+	GetObjectTypeString() string
 	// GetName returns the name of the object. For example, the name of a
 	// table, schema or database.
 	GetName() string
