@@ -39,8 +39,9 @@ export default function (props: GraphDashboardProps) {
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`A moving average of the number of SELECT, INSERT, UPDATE, and DELETE statements
-        successfully executed per second ${tooltipSelection}.`}
+      tooltip={`A moving average of the number of SELECT, INSERT, UPDATE, and DELETE
+          statements successfully executed per second ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
       preCalcGraphSize={true}
     >
       <Axis label="queries">
@@ -81,6 +82,7 @@ export default function (props: GraphDashboardProps) {
           </em>
         </div>
       }
+      showMetricsInTooltip={true}
       preCalcGraphSize={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
@@ -100,7 +102,9 @@ export default function (props: GraphDashboardProps) {
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`A moving average of the number of SQL statements executed per second that experienced contention ${tooltipSelection}.`}
+      tooltip={`A moving average of the number of SQL statements executed per second
+          that experienced contention ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
       preCalcGraphSize={true}
     >
       <Axis label="Average number of queries per second">
@@ -124,6 +128,7 @@ export default function (props: GraphDashboardProps) {
           </em>
         </div>
       }
+      showMetricsInTooltip={true}
       preCalcGraphSize={true}
     >
       <Axis label="replicas">
@@ -144,6 +149,7 @@ export default function (props: GraphDashboardProps) {
       sources={storeSources}
       tenantSource={tenantSource}
       tooltip={<CapacityGraphTooltip tooltipSelection={tooltipSelection} />}
+      showMetricsInTooltip={true}
       preCalcGraphSize={true}
     >
       <Axis units={AxisUnits.Bytes} label="capacity">
