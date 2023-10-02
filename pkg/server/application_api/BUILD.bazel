@@ -33,6 +33,7 @@ go_test(
         "zcfg_test.go",
     ],
     args = ["-test.timeout=895s"],
+    shard_count = 8,
     deps = [
         "//pkg/base",
         "//pkg/ccl/streamingccl",

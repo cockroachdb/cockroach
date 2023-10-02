@@ -219,9 +219,9 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 				type1array = asMutable(sqlDesc).(*typedesc.Mutable)
 			case nameAndType{name: "_type2", objType: "type"}:
 				type2array = asMutable(sqlDesc).(*typedesc.Mutable)
-			case nameAndType{name: "func1", objType: "function"}:
+			case nameAndType{name: "func1", objType: "routine"}:
 				func1 = asMutable(sqlDesc).(*funcdesc.Mutable)
-			case nameAndType{name: "func2", objType: "function"}:
+			case nameAndType{name: "func2", objType: "routine"}:
 				func2 = asMutable(sqlDesc).(*funcdesc.Mutable)
 			}
 		}

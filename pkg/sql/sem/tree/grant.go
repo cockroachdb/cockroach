@@ -32,17 +32,20 @@ type Grant struct {
 // GrantTargetList represents a list of targets.
 // Only one field may be non-nil.
 type GrantTargetList struct {
-	Databases NameList
-	Schemas   ObjectNamePrefixList
-	Tables    TableAttrs
-	Types     []*UnresolvedObjectName
-	Functions FuncObjs
+	Databases  NameList
+	Schemas    ObjectNamePrefixList
+	Tables     TableAttrs
+	Types      []*UnresolvedObjectName
+	Functions  RoutineObjs
+	Procedures RoutineObjs
 	// If the target is for all sequences in a set of schemas.
 	AllSequencesInSchema bool
 	// If the target is for all tables in a set of schemas.
 	AllTablesInSchema bool
 	// If the target is for all functions in a set of schemas.
 	AllFunctionsInSchema bool
+	// If the target is for all procedures in a set of schemas.
+	AllProceduresInSchema bool
 	// If the target is system.
 	System bool
 	// If the target is External Connection.
@@ -69,6 +72,9 @@ func (tl *GrantTargetList) Format(ctx *FmtCtx) {
 	} else if tl.AllFunctionsInSchema {
 		ctx.WriteString("ALL FUNCTIONS IN SCHEMA ")
 		ctx.FormatNode(&tl.Schemas)
+	} else if tl.AllProceduresInSchema {
+		ctx.WriteString("ALL PROCEDURES IN SCHEMA ")
+		ctx.FormatNode(&tl.Schemas)
 	} else if tl.Schemas != nil {
 		ctx.WriteString("SCHEMA ")
 		ctx.FormatNode(&tl.Schemas)
@@ -86,6 +92,9 @@ func (tl *GrantTargetList) Format(ctx *FmtCtx) {
 	} else if tl.Functions != nil {
 		ctx.WriteString("FUNCTION ")
 		ctx.FormatNode(tl.Functions)
+	} else if tl.Procedures != nil {
+		ctx.WriteString("PROCEDURE ")
+		ctx.FormatNode(tl.Procedures)
 	} else {
 		if tl.Tables.SequenceOnly {
 			ctx.WriteString("SEQUENCE ")

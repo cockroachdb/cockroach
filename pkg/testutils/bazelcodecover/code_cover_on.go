@@ -77,6 +77,11 @@ func emitCoverageCountersImpl(dir string) (err error) {
 		return err
 	}
 
+	if _, err := fmt.Fprintf(file, "mode: set\n"); err != nil {
+		file.Close()
+		return err
+	}
+
 	for name, counts := range coverdata.Counters {
 		if strings.HasPrefix(name, "external/") ||
 			strings.HasPrefix(name, "bazel-out/") {

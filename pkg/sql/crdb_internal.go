@@ -6635,7 +6635,7 @@ CREATE TABLE crdb_internal.default_privileges (
 									schema,      // schema_name
 									role,        // role
 									forAllRoles, // for_all_roles
-									tree.NewDString(privilege.Functions.String()),           // object_type
+									tree.NewDString(privilege.Routines.String()),            // object_type
 									tree.NewDString(username.PublicRoleName().Normalized()), // grantee
 									tree.NewDString(privilege.EXECUTE.String()),             // privilege_type
 									tree.DBoolFalse, // is_grantable

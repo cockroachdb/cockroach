@@ -532,6 +532,11 @@ func (desc *immutable) GetObjectType() privilege.ObjectType {
 	return privilege.Database
 }
 
+// GetObjectTypeString implements the Object interface.
+func (desc *immutable) GetObjectTypeString() string {
+	return string(privilege.Database)
+}
+
 // SkipNamespace implements the descriptor interface.
 func (desc *immutable) SkipNamespace() bool {
 	return false
