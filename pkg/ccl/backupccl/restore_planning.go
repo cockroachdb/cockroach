@@ -1224,6 +1224,11 @@ func restorePlanHook(
 		return nil, nil, nil, false, err
 	}
 
+	if restoreStmt.Options.RemoveRegions && !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V23_2) {
+		return nil, nil, nil, false,
+			errors.Newf("to set the remove_regions option, cluster version must be >= %s", clusterversion.V23_2.String())
+	}
+
 	if !restoreStmt.Options.SchemaOnly && restoreStmt.Options.VerifyData {
 		return nil, nil, nil, false,
 			errors.New("to set the verify_backup_table_data option, the schema_only option must be set")
