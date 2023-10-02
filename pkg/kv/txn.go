@@ -1672,6 +1672,14 @@ func (txn *Txn) ReleaseSavepoint(ctx context.Context, s SavepointToken) error {
 	return txn.mu.sender.ReleaseSavepoint(ctx, s)
 }
 
+// CanUseSavepoint checks whether it would be valid to roll back or release
+// the given savepoint in the current transaction state. It will never error.
+func (txn *Txn) CanUseSavepoint(ctx context.Context, s SavepointToken) bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.CanUseSavepoint(ctx, s)
+}
+
 // DeferCommitWait defers the transaction's commit-wait operation, passing
 // responsibility of commit-waiting from the Txn to the caller of this
 // method. The method returns a function which the caller must eventually

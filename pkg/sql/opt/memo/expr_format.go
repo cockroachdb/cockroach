@@ -969,8 +969,7 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 		} else {
 			tp.Child("recursive-call")
 		}
-		// Only print the exception handler for the top-level call.
-		if udf.Def.ExceptionBlock != nil && strings.HasPrefix(udf.Def.Name, "exception_block") {
+		if udf.Def.ExceptionBlock != nil {
 			n = tp.Child("exception-handler")
 			for i := range udf.Def.ExceptionBlock.Codes {
 				code := udf.Def.ExceptionBlock.Codes[i]
