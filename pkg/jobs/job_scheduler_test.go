@@ -65,7 +65,9 @@ func TestJobSchedulerReschedulesRunning(t *testing.T) {
 		t.Run(wait.String(), func(t *testing.T) {
 			// Create job with the target wait behavior.
 			j := h.newScheduledJob(t, "j", "j sql")
-			j.SetScheduleDetails(jobstest.AddDummyScheduleDetails(jobspb.ScheduleDetails{Wait: wait}))
+			details := j.ScheduleDetails()
+			details.Wait = wait
+			j.SetScheduleDetails(*details)
 			require.NoError(t, j.SetSchedule("@hourly"))
 
 			require.NoError(t,
