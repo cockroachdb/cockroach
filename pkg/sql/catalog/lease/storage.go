@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -121,12 +122,19 @@ func (s storage) crossValidateDuringRenewal() bool {
 // acquire a lease on the most recent version of a descriptor. If the lease
 // cannot be obtained because the descriptor is in the process of being dropped
 // or offline (currently only applicable to tables), the error will be of type
-// inactiveTableError. The expiration time set for the lease > minExpiration.
+// inactiveTableError. The expiration time set for the lease > minExpiration. A
+// non-nil session should be provided when session based leasing is enabled,
+// which will cause stored leases to populated sessionIDs.
 func (s storage) acquire(
-	ctx context.Context, minExpiration hlc.Timestamp, id descpb.ID,
+	ctx context.Context,
+	minExpiration hlc.Timestamp,
+	session sqlliveness.Session,
+	id descpb.ID,
+	lastLease *storedLease,
 ) (desc catalog.Descriptor, expiration hlc.Timestamp, prefix []byte, _ error) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	prefix = s.getRegionPrefix()
+	var sessionID []byte
 	acquireInTxn := func(ctx context.Context, txn *kv.Txn) (err error) {
 
 		// Run the descriptor read as high-priority, thereby pushing any intents out
@@ -147,7 +155,7 @@ func (s storage) acquire(
 		// written a value to the database, which we'd leak if we did not delete it.
 		// Note that the expiration is part of the primary key in the table, so we
 		// would not overwrite the old entry if we just were to do another insert.
-		if !expiration.IsEmpty() && desc != nil {
+		if (!expiration.IsEmpty() || sessionID != nil) && desc != nil {
 			prevExpirationTS := storedLeaseExpiration(expiration)
 			if err := s.writer.deleteLease(ctx, txn, leaseFields{
 				regionPrefix: prefix,
@@ -155,6 +163,7 @@ func (s storage) acquire(
 				version:      desc.GetVersion(),
 				instanceID:   instanceID,
 				expiration:   prevExpirationTS,
+				sessionID:    sessionID,
 			}); err != nil {
 				return errors.Wrap(err, "deleting ambiguously created lease")
 			}
@@ -180,12 +189,28 @@ func (s storage) acquire(
 		log.VEventf(ctx, 2, "storage attempting to acquire lease %v@%v", desc, expiration)
 
 		ts := storedLeaseExpiration(expiration)
+		if session != nil {
+			sessionID = session.ID().UnsafeBytes()
+		}
 		lf := leaseFields{
 			regionPrefix: prefix,
 			descID:       desc.GetID(),
 			version:      desc.GetVersion(),
 			instanceID:   s.nodeIDContainer.SQLInstanceID(),
 			expiration:   ts,
+			sessionID:    sessionID,
+		}
+		// When the sessionID is set insert lease will upsert a new lease replacing any
+		// existing ones. For session based leases we only need to refresh them if the
+		// version has changed or if the previous lease was expiry based (i.e. the
+		// sessionID was not set).
+		if lastLease != nil &&
+			lastLease.sessionID != nil &&
+			descpb.DescriptorVersion(lastLease.version) == desc.GetVersion() {
+			lf.sessionID = nil
+			// This will be used by the release above in case of txn retry
+			// errors.
+			sessionID = nil
 		}
 		return s.writer.insertLease(ctx, txn, lf)
 	}
@@ -239,6 +264,7 @@ func (s storage) release(ctx context.Context, stopper *stop.Stopper, lease *stor
 			version:      descpb.DescriptorVersion(lease.version),
 			instanceID:   instanceID,
 			expiration:   lease.expiration,
+			sessionID:    lease.sessionID,
 		}
 		err := s.writer.deleteLease(ctx, nil /* txn */, lf)
 		if err != nil {
