@@ -2049,14 +2049,16 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// executes a SQL query, this must be done after the SQL layer is ready.
 	s.node.recordJoinEvent(ctx)
 
-	// Start the SQL subsystem.
-	if err := s.sqlServer.preStart(
-		workersCtx,
-		s.stopper,
-		s.cfg.TestingKnobs,
-		orphanedLeasesTimeThresholdNanos,
-	); err != nil {
-		return err
+	if !s.cfg.DisableSQLServer {
+		// Start the SQL subsystem.
+		if err := s.sqlServer.preStart(
+			workersCtx,
+			s.stopper,
+			s.cfg.TestingKnobs,
+			orphanedLeasesTimeThresholdNanos,
+		); err != nil {
+			return err
+		}
 	}
 
 	// Initialize the external storage builders configuration params now that the
@@ -2202,6 +2204,10 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 // This mirrors the implementation of (*SQLServerWrapper).AcceptClients.
 // TODO(knz): Find a way to implement this method only once for both.
 func (s *topLevelServer) AcceptClients(ctx context.Context) error {
+	// Don't listen on the SQL port if the SQL Server is not starting.
+	if s.cfg.DisableSQLServer {
+		return nil
+	}
 	workersCtx := s.AnnotateCtx(context.Background())
 
 	if err := startServeSQL(
@@ -2234,6 +2240,10 @@ func (s *topLevelServer) AcceptClients(ctx context.Context) error {
 // AcceptInternalClients starts listening for incoming SQL connections on the
 // internal loopback interface.
 func (s *topLevelServer) AcceptInternalClients(ctx context.Context) error {
+	// Don't listen on the SQL port if the SQL Server is not starting.
+	if s.cfg.DisableSQLServer {
+		return nil
+	}
 	connManager := netutil.MakeTCPServer(ctx, s.stopper)
 
 	return s.stopper.RunAsyncTaskEx(ctx,

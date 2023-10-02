@@ -720,7 +720,7 @@ func (mgcq *mvccGCQueue) process(
 	}
 
 	var snap storage.Reader
-	if repl.store.cfg.SharedStorageEnabled || storage.UseEFOS.Get(&repl.ClusterSettings().SV) {
+	if repl.store.cfg.SharedStorageEnabled || storage.ShouldUseEFOS(&repl.ClusterSettings().SV) {
 		efos := repl.store.TODOEngine().NewEventuallyFileOnlySnapshot(rditer.MakeReplicatedKeySpans(desc))
 		if util.RaceEnabled {
 			ss := rditer.MakeReplicatedKeySpanSet(desc)
