@@ -109,6 +109,9 @@ func newLogScope(t tShim, mostlyInline bool) (sc *TestLogScope) {
 	// We'll use this as a double-check that our save and restore
 	// logic work properly.
 	sc.previous.appliedConfig = DescribeAppliedConfig()
+	if logging.metrics == nil {
+		SetLogMetrics(&TestLogMetricsImpl{})
+	}
 
 	logging.allSinkInfos.mu.Lock()
 	sc.previous.allSinkInfos = logging.allSinkInfos.mu.sinkInfos
@@ -500,3 +503,14 @@ func isDirEmpty(dirname string) (bool, error) {
 	}
 	return len(list) == 0, nil
 }
+
+// TestLogMetricsImpl is a dummy implementation of the LogMetrics
+// interface, used for tests. This allows tests that exercise codepaths
+// making use of log metrics proceed without error.
+//
+// NB: All operations performed against *TestLogMetricsImpl are no-ops.
+type TestLogMetricsImpl struct{}
+
+func (t *TestLogMetricsImpl) IncrementCounter(_ Metric, _ int64) {}
+
+var _ LogMetrics = (*TestLogMetricsImpl)(nil)

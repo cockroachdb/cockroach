@@ -486,10 +486,9 @@ func (b *msgBuf) concatMessages(prefix string, suffix string, delimiter string) 
 }
 
 func (b *msgBuf) dropFirstMsg() {
-	// TODO(knz): This needs to get reported somehow, see
-	// https://github.com/cockroachdb/cockroach/issues/72453
 	firstMsg := b.messages[0]
 	b.messages = b.messages[1:]
 	b.sizeBytes -= uint64(firstMsg.Len())
+	logging.metrics.IncrementCounter(BufferedSinkMessagesDropped, 1)
 	putBuffer(firstMsg)
 }

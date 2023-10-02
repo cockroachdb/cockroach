@@ -29,15 +29,26 @@ type LogMetrics interface {
 	// The LogMetrics implementation must have metadata defined
 	// for the given MetricName within its own scope. See
 	// pkg/util/log/logmetrics for details.
-	IncrementCounter(metric MetricName, amount int64)
+	IncrementCounter(metric Metric, amount int64)
 }
 
-// MetricName represents the name of a metric registered &
-// used within the log package, available to use in the LogMetrics
-// interface.
-type MetricName string
+// Metric is the enum representation of each metric supported within the log package.
+// NB: When adding a metric here, be sure to add to log.Metrics below.
+// NB: The metric also needs to be added to pkg/util/log/logmetrics, where we
+// need to register the metric and define its metadata.
+//
+// We use an enum representation as an optimization within LogMetrics implementations
+// when doing lookups for underlying metric counters.
+type Metric int
 
-// FluentSinkConnectionError is the MetricName for the metric
-// used to count fluent-server log sink connection errors. Please
-// refer to its metric metadata for more details (hint: see usages).
-const FluentSinkConnectionError MetricName = "fluent.sink.conn.errors"
+const (
+	FluentSinkConnectionError Metric = iota
+	BufferedSinkMessagesDropped
+	LogMessageCount
+)
+
+var Metrics = []Metric{
+	FluentSinkConnectionError,
+	BufferedSinkMessagesDropped,
+	LogMessageCount,
+}
