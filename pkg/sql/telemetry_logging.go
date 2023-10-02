@@ -37,6 +37,7 @@ var TelemetryMaxEventFrequency = settings.RegisterIntSetting(
 		"transaction are counted as 1 unit.",
 	defaultMaxEventFrequency,
 	settings.NonNegativeInt,
+	settings.WithPublic,
 )
 
 var telemetryInternalQueriesEnabled = settings.RegisterBoolSetting(
