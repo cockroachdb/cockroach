@@ -1221,6 +1221,7 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %type <tree.Statement> drop_view_stmt
 %type <tree.Statement> drop_sequence_stmt
 %type <tree.Statement> drop_func_stmt
+%type <tree.Statement> drop_proc_stmt
 %type <tree.Statement> drop_virtual_cluster_stmt
 %type <bool>           opt_immediate
 
@@ -4917,6 +4918,32 @@ drop_func_stmt:
   }
 | DROP FUNCTION error // SHOW HELP: DROP FUNCTION
 
+// %Help: DROP PROCEDURE - remove a procedure
+// %Category: DDL
+// %Text:
+// DROP PROCEDURE [ IF EXISTS ] name [ ( [ [ argmode ] [ argname ] argtype [, ...] ] ) ] [, ...]
+//    [ CASCADE | RESTRICT ]
+// %SeeAlso: WEBDOCS/drop-procedure.html
+drop_proc_stmt:
+  DROP PROCEDURE function_with_paramtypes_list opt_drop_behavior
+  {
+    $$.val = &tree.DropRoutine{
+      Procedure: true,
+      Routines: $3.routineObjs(),
+      DropBehavior: $4.dropBehavior(),
+    }
+  }
+| DROP PROCEDURE IF EXISTS function_with_paramtypes_list opt_drop_behavior
+  {
+    $$.val = &tree.DropRoutine{
+      IfExists: true,
+      Procedure: true,
+      Routines: $5.routineObjs(),
+      DropBehavior: $6.dropBehavior(),
+    }
+  }
+| DROP PROCEDURE error // SHOW HELP: DROP PROCEDURE
+
 function_with_paramtypes_list:
   function_with_paramtypes
   {
@@ -5477,6 +5504,7 @@ drop_ddl_stmt:
 | drop_schema_stmt   // EXTEND WITH HELP: DROP SCHEMA
 | drop_type_stmt     // EXTEND WITH HELP: DROP TYPE
 | drop_func_stmt     // EXTEND WITH HELP: DROP FUNCTION
+| drop_proc_stmt     // EXTEND WITH HELP: DROP FUNCTION
 
 // %Help: DROP VIEW - remove a view
 // %Category: DDL
