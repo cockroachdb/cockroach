@@ -22,11 +22,16 @@ go_library(
 
 go_test(
     name = "registry_test",
-    srcs = ["test_spec_test.go"],
+    srcs = [
+        "filter_test.go",
+        "test_spec_test.go",
+    ],
     args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
     embed = [":registry"],
     deps = [
         "//pkg/cmd/roachtest/spec",
+        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
     ],
 )
