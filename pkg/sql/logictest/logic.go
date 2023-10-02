@@ -1555,7 +1555,7 @@ func (t *logicTest) newCluster(
 				opt.apply(&tenantArgs.TestingKnobs)
 			}
 
-			tenant, err := t.cluster.Server(i).StartTenant(context.Background(), tenantArgs)
+			tenant, err := t.cluster.Server(i).TenantController().StartTenant(context.Background(), tenantArgs)
 			if err != nil {
 				t.rootT.Fatalf("%+v", err)
 			}
