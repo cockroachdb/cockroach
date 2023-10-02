@@ -20,13 +20,16 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
+	"github.com/lib/pq"
 	"golang.org/x/time/rate"
 )
 
@@ -96,6 +99,26 @@ func maybeDisableMergeQueue(db *gosql.DB) error {
 	return err
 }
 
+// errSplitOrScatterUnsupported can be used to check whether split/scatter
+// operations are unsupported.
+func errSplitOrScatterIsUnsupported(err error) bool {
+	if strings.Contains(err.Error(), "does not have capability") {
+		// The split or scatter operation is enabled SQL-side, but a
+		// capability restriction prevents its use.
+		//
+		// TODO(knz): Update the connector to use a SQLSTATE for RPC
+		// errors and use that here.
+		return true
+	}
+	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
+		return pqErr.Code == pq.ErrorCode(pgcode.FeatureNotSupported.String())
+	}
+	if pgErr := (*pgconn.PgError)(nil); errors.As(err, &pgErr) {
+		return pgErr.Code == pgcode.FeatureNotSupported.String()
+	}
+	return pgerror.GetPGCode(err) == pgcode.FeatureNotSupported
+}
+
 // Split creates the range splits defined by the given table.
 func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency int) error {
 	// Prevent the merge queue from immediately discarding our splits.
@@ -103,31 +126,8 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 		return err
 	}
 
-	// Check to see if we're allowed to perform any splits - if we're in a tenant,
-	// we can't perform splits.
-	_, err := db.Exec("SHOW RANGES FROM TABLE system.descriptor")
-	if err != nil {
-		if strings.Contains(err.Error(), "not fully contained in tenant") ||
-			strings.Contains(err.Error(), errorutil.UnsupportedUnderClusterVirtualizationMessage) {
-			log.Infof(ctx, `skipping workload splits; can't split on tenants'`)
-			//nolint:returnerrcheck
-			return nil
-		}
-		return err
-	}
-
 	if table.Splits.NumBatches <= 0 {
 		return nil
-	}
-
-	// Test that we can actually perform a scatter.
-	if _, err := db.Exec("ALTER TABLE system.jobs SCATTER"); err != nil {
-		if strings.Contains(err.Error(), "operation is disabled within a virtual cluster") {
-			log.Infof(ctx, `skipping workload splits; can't scatter on tenants'`)
-			//nolint:returnerrcheck
-			return nil
-		}
-		return err
 	}
 
 	splitPoints := make([][]interface{}, 0, table.Splits.NumBatches)
@@ -171,12 +171,9 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 					// not) help you.
 					stmt := buf.String()
 					if _, err := db.Exec(stmt); err != nil {
-						if strings.Contains(err.Error(), errorutil.UnsupportedUnderClusterVirtualizationMessage) {
+						if errSplitOrScatterIsUnsupported(err) {
 							// We don't care about split errors if we're running a workload
 							// with virtual clusters; we can't do them so we'll just continue.
-							//
-							// TODO(knz): This seems incorrect: this should be possible
-							// with the right capability. See: #109422.
 							break
 						}
 						return errors.Wrapf(err, "executing %s", stmt)
@@ -187,10 +184,12 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 						tree.NameString(table.Name), split, split)
 					stmt = buf.String()
 					if _, err := db.Exec(stmt); err != nil {
-						// SCATTER can collide with normal replicate queue
-						// operations and fail spuriously, so only print the
-						// error.
-						log.Warningf(ctx, `%s: %v`, stmt, err)
+						if !errSplitOrScatterIsUnsupported(err) {
+							// SCATTER can collide with normal replicate queue
+							// operations and fail spuriously, so only print the
+							// error.
+							log.Warningf(ctx, `%s: %v`, stmt, err)
+						}
 					}
 
 					select {
