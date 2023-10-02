@@ -107,7 +107,7 @@ func TestSharedProcessServerInheritsTempStorageLimit(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	// Start a shared process tenant server.
-	ts, _, err := s.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
+	ts, _, err := s.TenantController().StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
 		TenantName: "hello",
 	})
 	require.NoError(t, err)
@@ -131,18 +131,18 @@ func TestServerSQLConn(t *testing.T) {
 	systemTenant := s.SystemLayer()
 
 	// Start some secondary tenant servers.
-	secondaryTenantExtNoName, err := s.StartTenant(ctx, base.TestTenantArgs{
+	secondaryTenantExtNoName, err := s.TenantController().StartTenant(ctx, base.TestTenantArgs{
 		TenantID: roachpb.MustMakeTenantID(2),
 	})
 	require.NoError(t, err)
 
-	secondaryTenantExtNamed, err := s.StartTenant(ctx, base.TestTenantArgs{
+	secondaryTenantExtNamed, err := s.TenantController().StartTenant(ctx, base.TestTenantArgs{
 		TenantName: "hello",
 		TenantID:   roachpb.MustMakeTenantID(10),
 	})
 	require.NoError(t, err)
 
-	secondaryTenantSh, _, err := s.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
+	secondaryTenantSh, _, err := s.TenantController().StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
 		TenantName: "world",
 	})
 	require.NoError(t, err)

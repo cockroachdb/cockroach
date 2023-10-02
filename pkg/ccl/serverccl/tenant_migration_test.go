@@ -101,7 +101,7 @@ func TestValidateTargetTenantClusterVersion(t *testing.T) {
 			defer s.Stopper().Stop(context.Background())
 
 			ctx := context.Background()
-			upgradePod, err := s.StartTenant(ctx,
+			upgradePod, err := s.TenantController().StartTenant(ctx,
 				base.TestTenantArgs{
 					Settings: makeSettings(),
 					TenantID: serverutils.TestTenantID(),

@@ -116,7 +116,7 @@ func TestTraceForTenantWithLocalKVServer(t *testing.T) {
 	testStmt := "SELECT 1 FROM t WHERE id=1"
 	var testStmtTrace tracingpb.Recording
 
-	_, tenantDB, err := s.StartSharedProcessTenant(ctx,
+	_, tenantDB, err := s.TenantController().StartSharedProcessTenant(ctx,
 		base.TestSharedProcessTenantArgs{
 			TenantName:  tenantName,
 			UseDatabase: "test",

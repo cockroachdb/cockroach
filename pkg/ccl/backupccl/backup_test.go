@@ -3365,7 +3365,7 @@ func TestBackupTenantsWithRevisionHistory(t *testing.T) {
 	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
-	_, err := tc.Servers[0].StartTenant(ctx, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
+	_, err := tc.Servers[0].TenantController().StartTenant(ctx, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
 	require.NoError(t, err)
 
 	const msg = "can not backup tenants with revision history"
@@ -9628,7 +9628,7 @@ func TestProtectRestoreTargets(t *testing.T) {
 
 	ctx := context.Background()
 	if !tc.StartedDefaultTestTenant() {
-		_, err := tc.Servers[0].StartTenant(ctx, base.TestTenantArgs{TenantID: roachpb.
+		_, err := tc.Servers[0].TenantController().StartTenant(ctx, base.TestTenantArgs{TenantID: roachpb.
 			MustMakeTenantID(10)})
 		require.NoError(t, err)
 	}

@@ -315,7 +315,7 @@ func TestErrorOnRollback(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	getTargetKey := func(s serverutils.TestServerInterface, tableID uint32) string {
-		if s.StartedDefaultTestTenant() {
+		if s.TenantController().StartedDefaultTestTenant() {
 			return fmt.Sprintf("/Tenant/%d/Table/%d/1/1/0", serverutils.TestTenantID().ToUint64(), tableID)
 		}
 		return fmt.Sprintf("/Table/%d/1/1/0", tableID)
