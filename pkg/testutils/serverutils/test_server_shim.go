@@ -317,7 +317,7 @@ func StartTenant(
 func StartSharedProcessTenant(
 	t TestFataler, ts TestServerInterface, params base.TestSharedProcessTenantArgs,
 ) (ApplicationLayerInterface, *gosql.DB) {
-	tenant, goDB, err := ts.StartSharedProcessTenant(context.Background(), params)
+	tenant, goDB, err := ts.TenantController().StartSharedProcessTenant(context.Background(), params)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
