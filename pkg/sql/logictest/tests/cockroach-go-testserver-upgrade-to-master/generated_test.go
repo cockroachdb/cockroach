@@ -127,6 +127,13 @@ func TestLogic_mixed_version_range_tombstones(
 	runLogicTest(t, "mixed_version_range_tombstones")
 }
 
+func TestLogic_mixed_version_refcursor(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_refcursor")
+}
+
 func TestLogic_mixed_version_role_members_user_ids(
 	t *testing.T,
 ) {

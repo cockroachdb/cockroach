@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/lib/pq/oid"
 )
 
 type unsupportedTypeChecker struct {
@@ -37,6 +38,8 @@ func (tc *unsupportedTypeChecker) CheckType(ctx context.Context, typ *types.T) e
 	var errorTypeString string
 	if typ.Family() == types.PGLSNFamily {
 		errorTypeString = "pg_lsn"
+	} else if typ.Oid() == oid.T_refcursor {
+		errorTypeString = "refcursor"
 	}
 	if errorTypeString != "" && !tc.version.IsActive(ctx, clusterversion.V23_2) {
 		return pgerror.Newf(pgcode.FeatureNotSupported,

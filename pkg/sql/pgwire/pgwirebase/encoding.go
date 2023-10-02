@@ -817,7 +817,7 @@ func DecodeDatum(
 		return tree.NewDEnum(e), nil
 	}
 	switch id {
-	case oid.T_text, oid.T_varchar, oid.T_unknown:
+	case oid.T_text, oid.T_varchar, oid.T_refcursor, oid.T_unknown:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
