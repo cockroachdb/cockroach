@@ -497,6 +497,7 @@ go_library(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sessioninit",
         "//pkg/sql/sessionphase",
+        "//pkg/sql/sessionprotectedts",
         "//pkg/sql/span",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqlfsm",
