@@ -178,7 +178,7 @@ const (
 	//
 	//   - AND the setting should only be controllable by SREs (not
 	//     end-users) in CockroachCloud Serverless, AND a single value
-	//     must apply to all virtual clusters simultaneously;
+	//     is meant to apply to all virtual clusters simultaneously;
 	//
 	//     (If this part of the condition does not hold, consider
 	//     ApplicationLevel instead.)
@@ -189,6 +189,13 @@ const (
 	//
 	//     (If this part of the condition does not hold, consider
 	//     SystemOnly instead.)
+	//
+	// Note that even though SystemVisible settings are meant to apply
+	// equally to all virtual clusters, we have a "break-the-glass" way
+	// to change the value observed by one or more virtual cluster,
+	// using ALTER VIRTUAL CLUSTER SET CLUSTER SETTING. This can be used
+	// during e.g. troubleshooting, to allow changing the observed value
+	// for a virtual cluster without a code change.
 	SystemVisible
 
 	// ApplicationLevel settings are readable and can optionally be
@@ -216,6 +223,12 @@ const (
 	//
 	//       (If this part of the condition does not hold, consider
 	//       SystemOnly or SystemVisible instead.)
+	//
+	// Note that each SQL layer has its own copy of ApplicationLevel
+	// settings; including the system tenant/interface. However, they
+	// are neatly partitioned such that a given virtual cluster can
+	// never observe the value set for another virtual cluster nor that
+	// set for the system tenant/interface.
 	ApplicationLevel
 )
 

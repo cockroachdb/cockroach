@@ -219,9 +219,9 @@ func NewMVCCIncrementalIterator(
 			LowerBound: opts.StartKey,
 			UpperBound: opts.EndKey,
 			// The call to startTime.Next() converts our exclusive start bound into
-			// the inclusive start bound that MinTimestampHint expects.
-			MinTimestampHint:     opts.StartTime.Next(),
-			MaxTimestampHint:     opts.EndTime,
+			// the inclusive start bound that MinTimestampt expects.
+			MinTimestamp:         opts.StartTime.Next(),
+			MaxTimestamp:         opts.EndTime,
 			RangeKeyMaskingBelow: tbiRangeKeyMasking,
 		})
 		if err != nil {

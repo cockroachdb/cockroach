@@ -242,6 +242,8 @@ CREATE TABLE crdb_internal.node_build_info (
 			"Build":        info.Short(),
 			"Version":      info.Tag,
 			"Channel":      info.Channel,
+
+			"VirtualClusterName": string(execCfg.VirtualClusterName),
 		} {
 			if err := addRow(
 				tree.NewDInt(tree.DInt(nodeID)),
