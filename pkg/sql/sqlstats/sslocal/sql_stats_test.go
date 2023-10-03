@@ -506,6 +506,17 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		require.Equal(t, tc.curFingerprintCount, sqlStats.GetTotalFingerprintCount(),
 			"testCase: %+v", tc)
 	}
+
+	// Verify reset works correctly.
+	require.NoError(t, sqlStats.Reset(ctx))
+	require.Zero(t, sqlStats.GetTotalFingerprintCount())
+
+	// Verify the count again after the reset.
+	for _, tc := range testCases {
+		recordStats(&tc)
+		require.Equal(t, tc.curFingerprintCount, sqlStats.GetTotalFingerprintCount(),
+			"testCase: %+v", tc)
+	}
 }
 
 func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
@@ -634,6 +645,9 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			}
 			require.Equal(t, expectedCount, len(stats), "testCase: %+v, stats: %+v", txn, stats)
 		}
+
+		require.NoError(t, sqlStats.Reset(ctx))
+		require.Zero(t, sqlStats.GetTotalFingerprintCount())
 	})
 }
 
