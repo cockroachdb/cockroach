@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/robfig/cron/v3"
 )
@@ -462,7 +464,12 @@ func (s scheduledJobStorageTxn) Create(ctx context.Context, j *ScheduledJob) err
 	if j.rec.ScheduleID != 0 {
 		return errors.New("cannot specify schedule id when creating new cron job")
 	}
-
+	if j.rec.ScheduleDetails.ClusterID.Equal(uuid.UUID{}) {
+		return errors.New("scheduled job created without a cluster ID")
+	}
+	if j.rec.ScheduleDetails.CreationClusterVersion.Equal(clusterversion.ClusterVersion{}) {
+		return errors.New("scheduled job created without a cluster version")
+	}
 	if !j.isDirty() {
 		return errors.New("no settings specified for scheduled job")
 	}

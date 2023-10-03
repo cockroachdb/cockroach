@@ -25,7 +25,7 @@ func ensureSQLSchemaTelemetrySchedule(
 ) error {
 	return d.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		_, err := schematelemetrycontroller.CreateSchemaTelemetrySchedule(
-			ctx, txn, d.Settings,
+			ctx, txn, d.Settings, d.ClusterID,
 		)
 		// If the schedule already exists, we have nothing more to do. This
 		// logic makes the upgrade idempotent.

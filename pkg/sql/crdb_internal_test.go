@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -1832,6 +1833,7 @@ func TestVirtualPTSTable(t *testing.T) {
 		sj.SetOwner(username.TestUserName())
 		sj.SetScheduleLabel("test-schedule")
 		sj.SetExecutionDetails(tree.ScheduledBackupExecutor.InternalName(), jobspb.ExecutionArguments{})
+		sj.SetScheduleDetails(jobstest.AddDummyScheduleDetails(jobspb.ScheduleDetails{}))
 
 		err := internalDB.Txn(ctx2, func(ctx3 context.Context, txn isql.Txn) error {
 			err2 := jobs.ScheduledJobTxn(txn).Create(ctx3, sj)

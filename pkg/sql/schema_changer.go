@@ -1627,6 +1627,8 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 							scheduledJobs,
 							scTable.GetPrivileges().Owner(),
 							scTable,
+							sc.execCfg.NodeInfo.LogicalClusterID(),
+							sc.settings.Version.ActiveVersion(ctx),
 						)
 						if err != nil {
 							return err
