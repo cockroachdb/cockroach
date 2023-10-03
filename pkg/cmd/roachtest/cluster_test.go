@@ -203,7 +203,8 @@ type machineTypeTestCase struct {
 	expectedArch        vm.CPUArch
 }
 
-func TestAWSMachineType(t *testing.T) {
+// TODO(srosenberg): restore the change in https://github.com/cockroachdb/cockroach/pull/111140 after 23.2 branch cut.
+func TestAWSMachineTypeNew(t *testing.T) {
 	testCases := []machineTypeTestCase{}
 
 	xlarge := func(cpus int) string {
@@ -319,18 +320,19 @@ func TestAWSMachineType(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%d/%s/%t/%s", tc.cpus, tc.mem, tc.localSSD, tc.arch), func(t *testing.T) {
-			machineType, selectedArch := spec.AWSMachineType(tc.cpus, tc.mem, tc.localSSD, tc.arch)
+			machineType, selectedArch := spec.AWSMachineTypeNew(tc.cpus, tc.mem, tc.localSSD, tc.arch)
 
 			require.Equal(t, tc.expectedMachineType, machineType)
 			require.Equal(t, tc.expectedArch, selectedArch)
 		})
 	}
 	// spec.Low is not supported.
-	require.Panics(t, func() { spec.AWSMachineType(4, spec.Low, false, vm.ArchAMD64) })
-	require.Panics(t, func() { spec.AWSMachineType(16, spec.Low, false, vm.ArchARM64) })
+	require.Panics(t, func() { spec.AWSMachineTypeNew(4, spec.Low, false, vm.ArchAMD64) })
+	require.Panics(t, func() { spec.AWSMachineTypeNew(16, spec.Low, false, vm.ArchARM64) })
 }
 
-func TestGCEMachineType(t *testing.T) {
+// TODO(srosenberg): restore the change in https://github.com/cockroachdb/cockroach/pull/111140 after 23.2 branch cut.
+func TestGCEMachineTypeNew(t *testing.T) {
 	testCases := []machineTypeTestCase{}
 
 	addAMD := func(mem spec.MemPerCPU) {
@@ -413,7 +415,7 @@ func TestGCEMachineType(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%d/%s/%s", tc.cpus, tc.mem, tc.arch), func(t *testing.T) {
-			machineType, selectedArch := spec.GCEMachineType(tc.cpus, tc.mem, tc.arch)
+			machineType, selectedArch := spec.GCEMachineTypeNew(tc.cpus, tc.mem, tc.arch)
 
 			require.Equal(t, tc.expectedMachineType, machineType)
 			require.Equal(t, tc.expectedArch, selectedArch)
