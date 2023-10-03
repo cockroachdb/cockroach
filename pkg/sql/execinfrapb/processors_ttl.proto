@@ -87,4 +87,7 @@ message TTLSpec {
     (gogoproto.customname) = "AOSTDuration",
     (gogoproto.stdduration) = true
   ];
+
+  // SelectRateLimit controls how many records can be selected per second.
+  optional int64 select_rate_limit = 14 [(gogoproto.nullable) = false];
 }

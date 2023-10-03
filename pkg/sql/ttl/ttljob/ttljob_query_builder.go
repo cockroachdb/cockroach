@@ -51,14 +51,15 @@ type QueryBounds struct {
 }
 
 type SelectQueryParams struct {
-	RelationName    string
-	PKColNames      []string
-	PKColDirs       []catenumpb.IndexColumn_Direction
-	Bounds          QueryBounds
-	AOSTDuration    time.Duration
-	SelectBatchSize int64
-	TTLExpr         catpb.Expression
-	SelectDuration  *aggmetric.Histogram
+	RelationName      string
+	PKColNames        []string
+	PKColDirs         []catenumpb.IndexColumn_Direction
+	Bounds            QueryBounds
+	AOSTDuration      time.Duration
+	SelectBatchSize   int64
+	TTLExpr           catpb.Expression
+	SelectDuration    *aggmetric.Histogram
+	SelectRateLimiter *quotapool.RateLimiter
 }
 
 // SelectQueryBuilder is responsible for maintaining state around the SELECT
@@ -132,6 +133,12 @@ func (b *SelectQueryBuilder) Run(
 		}
 		query = b.cachedQuery
 	}
+
+	tokens, err := b.SelectRateLimiter.Acquire(ctx, b.SelectBatchSize)
+	if err != nil {
+		return nil, false, err
+	}
+	defer tokens.Consume()
 
 	start := timeutil.Now()
 	// Use a nil txn so that the AOST clause is handled correctly. Currently,
@@ -241,6 +248,7 @@ func (b *DeleteQueryBuilder) Run(
 		return 0, err
 	}
 	defer tokens.Consume()
+
 	start := timeutil.Now()
 	rowCount, err := txn.ExecEx(
 		ctx,
