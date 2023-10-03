@@ -298,7 +298,7 @@ const (
 
 // MaxCommandSize wraps "kv.raft.command.max_size".
 var MaxCommandSize = settings.RegisterByteSizeSetting(
-	settings.ApplicationLevel,
+	settings.SystemVisible, // used by SQL/bulk to determine mutation batch sizes
 	"kv.raft.command.max_size",
 	"maximum size of a raft command",
 	MaxCommandSizeDefault,

@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -7122,7 +7123,9 @@ func TestImportRowErrorLargeRows(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(connDB)
 	// Our input file has an 8MB row
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.raft.command.max_size = '4MiB'`)
+	for _, l := range []serverutils.ApplicationLayerInterface{tc.Server(0), tc.Server(0).SystemLayer()} {
+		kvserverbase.MaxCommandSize.Override(ctx, &l.ClusterSettings().SV, 4<<20)
+	}
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
 	sqlDB.Exec(t, "CREATE TABLE simple (s string)")
 	defer sqlDB.Exec(t, "DROP table simple")
