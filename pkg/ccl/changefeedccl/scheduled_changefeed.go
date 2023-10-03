@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 )
@@ -461,7 +462,10 @@ func invokeCreateChangefeed(ctx context.Context, createChangefeedFn sql.PlanHook
 	return g.Wait()
 }
 
-func makeScheduleDetails(opts map[string]string) (jobspb.ScheduleDetails, error) {
+// TODO(msbutler): move this function into scheduleBase and remove duplicate function in scheduled backups.
+func makeScheduleDetails(
+	opts map[string]string, clusterID uuid.UUID, version clusterversion.ClusterVersion,
+) (jobspb.ScheduleDetails, error) {
 	var details jobspb.ScheduleDetails
 	if v, ok := opts[optOnExecFailure]; ok {
 		if err := schedulebase.ParseOnError(v, &details); err != nil {
@@ -474,6 +478,8 @@ func makeScheduleDetails(opts map[string]string) (jobspb.ScheduleDetails, error)
 			return details, err
 		}
 	}
+	details.ClusterID = clusterID
+	details.CreationClusterVersion = version
 	return details, nil
 }
 
@@ -600,7 +606,7 @@ func doCreateChangefeedSchedule(
 		return err
 	}
 
-	details, err := makeScheduleDetails(spec.scheduleOpts)
+	details, err := makeScheduleDetails(spec.scheduleOpts, evalCtx.ClusterID, p.ExecCfg().Settings.Version.ActiveVersion(ctx))
 	if err != nil {
 		return err
 	}
