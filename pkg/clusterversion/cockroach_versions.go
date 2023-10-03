@@ -499,6 +499,12 @@ const (
 	// role for all existing functions.
 	V23_2_GrantExecuteToPublic
 
+	// V23_2_EnablePebbleFormatVirtualSSTables enables the Pebble
+	// FormatMajorVersion for virtual sstables. Note that the ratcheting for the
+	// format major version in Pebble should have happened with
+	// V23_2_PebbleFormatVirtualSSTables above.
+	V23_2_EnablePebbleFormatVirtualSSTables
+
 	// *************************************************
 	// Step (1) Add new versions here.
 	// Do not add new versions to a patch release.
@@ -831,6 +837,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_2_GrantExecuteToPublic,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 26},
+	},
+	{
+		Key:     V23_2_EnablePebbleFormatVirtualSSTables,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 28},
 	},
 
 	// *************************************************
