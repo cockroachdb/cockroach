@@ -505,6 +505,20 @@ const (
 	// *************************************************
 )
 
+// V23_2_EnablePebbleFormatVirtualSSTables aliases the cluster version after
+// V23_2_PebbleFormatVirtualSSTables.
+//
+// Cluster versions that trigger a Pebble FormatMajorVersion bump should
+// be followed up with another cluster version that guarantees that all Pebble
+// migrations for that FormatMajorVersion bump have completed, and any feature
+// gates should rely on the latter one. See pkg/storage/pebble.go for more on
+// this.
+//
+// We forgot to add such a second cluster version for
+// V23_2_PebbleFormatVirtualSSTables, so the cluster version after it is aliased
+// with V23_2_EnablePebbleFormatVirtualSSTables.
+const V23_2_EnablePebbleFormatVirtualSSTables = V23_2_PebbleFormatVirtualSSTables + 1
+
 func (k Key) String() string {
 	return ByKey(k).String()
 }
