@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -591,8 +592,9 @@ func TestLargeDynamicRows(t *testing.T) {
 	require.NoError(t, err)
 
 	// 4.0 MiB is minimum, copy sets max row size to this value / 3
-	err = conn.Exec(ctx, "SET CLUSTER SETTING kv.raft.command.max_size = '4.0MiB'")
-	require.NoError(t, err)
+	for _, l := range []serverutils.ApplicationLayerInterface{s, s.SystemLayer()} {
+		kvserverbase.MaxCommandSize.Override(ctx, &l.ClusterSettings().SV, 4<<20)
+	}
 
 	err = conn.Exec(ctx, "CREATE TABLE t (s STRING)")
 	require.NoError(t, err)
@@ -611,8 +613,9 @@ func TestLargeDynamicRows(t *testing.T) {
 	batchNumber = 0
 
 	// Reset and make sure we use 1 batch.
-	err = conn.Exec(ctx, "RESET CLUSTER SETTING kv.raft.command.max_size")
-	require.NoError(t, err)
+	for _, l := range []serverutils.ApplicationLayerInterface{s, s.SystemLayer()} {
+		kvserverbase.MaxCommandSize.Override(ctx, &l.ClusterSettings().SV, kvserverbase.MaxCommandSizeDefault)
+	}
 
 	// This won't work if the batch size gets set to less than 5. When the batch
 	// size is 4, the test hook will count an extra empty batch.
