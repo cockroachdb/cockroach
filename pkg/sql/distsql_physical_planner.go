@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -1891,6 +1892,28 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		// kept the reference to it in TableReaderSpec (rather than allocating
 		// new slices in generateScanSpans and PartitionSpans).
 		tr.Spans = sp.Spans
+
+		// In some cases, sp.Spans might be an alias to scanNode.spans, and in
+		// order to protect the latter from modification (which we must do in
+		// case the query might need to be retried-as-local), we might need to
+		// perform a copy. In particular, we need to care about the scenario
+		// when the following conditions are met:
+		// - 1. the query might be distributed (if it's not distributed, then
+		//      retry-as-local mechanism won't kick in)
+		// - 2. this SpanPartition is assigned to the local node (for all remote
+		//      nodes the spans will be serialized and sent over the wire, so it
+		//      doesn't matter if the remote node modifies them - it'll have its
+		//      own copy).
+		if !planCtx.isLocal && sp.SQLInstanceID == dsp.gatewaySQLInstanceID {
+			// Check additionally that we, indeed, have memory aliasing, and
+			// only then perform the copy.
+			spPointer := (*reflect.SliceHeader)(unsafe.Pointer(&sp.Spans))
+			infoPointer := (*reflect.SliceHeader)(unsafe.Pointer(&info.spans))
+			if spPointer.Data == infoPointer.Data {
+				tr.Spans = make(roachpb.Spans, len(sp.Spans))
+				copy(tr.Spans, sp.Spans)
+			}
+		}
 
 		tr.Parallelize = info.parallelize
 		if !tr.Parallelize {
