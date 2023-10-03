@@ -702,6 +702,7 @@ func (m *Manager) runMigration(
 				InternalExecutor: m.ie,
 				JobRegistry:      m.jr,
 				TestingKnobs:     &m.knobs,
+				ClusterID:        m.clusterID,
 			}); err != nil {
 				return err
 			}
@@ -889,6 +890,7 @@ func (m *Manager) checkPreconditions(ctx context.Context, versions []roachpb.Ver
 			LeaseManager:     m.lm,
 			InternalExecutor: m.ie,
 			JobRegistry:      m.jr,
+			ClusterID:        m.clusterID,
 		}); err != nil {
 			return errors.Wrapf(
 				err,
