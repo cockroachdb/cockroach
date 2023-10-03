@@ -302,25 +302,9 @@ func getSourceStatsInfo(
 	}
 	whereClauseOldestDate := buffer.String()
 
-	getRuntime := func(table string) (float32, error) {
-		var queryToGetClusterTotalRunTime string
-		if activityTableHasAllData {
-			queryToGetClusterTotalRunTime = fmt.Sprintf(`
-SELECT COALESCE(
-         execution_total_cluster_seconds,
-       0)
-FROM %s %s LIMIT 1`, table, whereClause)
-		} else {
-			queryToGetClusterTotalRunTime = fmt.Sprintf(`
-SELECT COALESCE(
-          sum(
-             (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT *
-             (statistics -> 'statistics' ->> 'cnt')::FLOAT
-          ),
-       0)
-FROM %s %s`, table, whereClause)
-		}
+	getRuntime := func(table string, createQuery func(tableName string) string) (float32, error) {
 
+		queryToGetClusterTotalRunTime := createQuery(table)
 		it, err := ie.QueryIteratorEx(
 			ctx,
 			fmt.Sprintf(`console-combined-stmts-%s-total-runtime`, table),
@@ -335,12 +319,19 @@ FROM %s %s`, table, whereClause)
 		if err != nil {
 			return 0, err
 		}
+
+		defer func() {
+			err = closeIterator(it, err)
+		}()
+
 		ok, err := it.Next(ctx)
 		if err != nil {
 			return 0, err
 		}
+
+		// It's possible the table is empty. Just return 0.
 		if !ok {
-			return 0, errors.New("expected one row but got none on getSourceStatsInfo.getRuntime")
+			return 0, nil
 		}
 
 		var row tree.Datums
@@ -387,12 +378,30 @@ FROM %s %s`, table, whereClauseOldestDate), args...)
 		return &oldestTs, nil
 	}
 
+	createActivityTableQuery := func(table string) string {
+		return fmt.Sprintf(`
+SELECT COALESCE(
+         execution_total_cluster_seconds,
+       0)
+FROM %s %s LIMIT 1`, table, whereClause)
+	}
+
+	createStatsTableQuery := func(table string) string {
+		return fmt.Sprintf(`
+SELECT COALESCE(
+          sum(
+             (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT *
+             (statistics -> 'statistics' ->> 'cnt')::FLOAT
+          ),
+       0)
+FROM %s %s`, table, whereClause)
+	}
 	// We return statement info for both req modes (statements only and transactions only),
 	// since statements are also returned for transactions only mode.
 	stmtsRuntime = 0
 	if activityTableHasAllData {
 		stmtSourceTable = "crdb_internal.statement_activity"
-		stmtsRuntime, err = getRuntime(stmtSourceTable)
+		stmtsRuntime, err = getRuntime(stmtSourceTable, createActivityTableQuery)
 		if err != nil {
 			return 0, 0, nil, stmtSourceTable, "", err
 		}
@@ -404,7 +413,7 @@ FROM %s %s`, table, whereClauseOldestDate), args...)
 	// If there are no results from the activity table, retrieve the data from the persisted table.
 	if stmtsRuntime == 0 {
 		stmtSourceTable = "crdb_internal.statement_statistics_persisted" + tableSuffix
-		stmtsRuntime, err = getRuntime(stmtSourceTable)
+		stmtsRuntime, err = getRuntime(stmtSourceTable, createStatsTableQuery)
 		if err != nil {
 			return 0, 0, nil, stmtSourceTable, "", err
 		}
@@ -417,7 +426,7 @@ FROM %s %s`, table, whereClauseOldestDate), args...)
 	// with data in-memory.
 	if stmtsRuntime == 0 {
 		stmtSourceTable = "crdb_internal.statement_statistics"
-		stmtsRuntime, err = getRuntime(stmtSourceTable)
+		stmtsRuntime, err = getRuntime(stmtSourceTable, createStatsTableQuery)
 		if err != nil {
 			return 0, 0, nil, stmtSourceTable, "", err
 		}
@@ -431,7 +440,7 @@ FROM %s %s`, table, whereClauseOldestDate), args...)
 	if req.FetchMode == nil || req.FetchMode.StatsType != serverpb.CombinedStatementsStatsRequest_StmtStatsOnly {
 		if activityTableHasAllData {
 			txnSourceTable = "crdb_internal.transaction_activity"
-			txnsRuntime, err = getRuntime(txnSourceTable)
+			txnsRuntime, err = getRuntime(txnSourceTable, createActivityTableQuery)
 			if err != nil {
 				return 0, 0, nil, stmtSourceTable, txnSourceTable, err
 			}
@@ -439,7 +448,7 @@ FROM %s %s`, table, whereClauseOldestDate), args...)
 		// If there are no results from the activity table, retrieve the data from the persisted table.
 		if txnsRuntime == 0 {
 			txnSourceTable = "crdb_internal.transaction_statistics_persisted" + tableSuffix
-			txnsRuntime, err = getRuntime(txnSourceTable)
+			txnsRuntime, err = getRuntime(txnSourceTable, createStatsTableQuery)
 			if err != nil {
 				return 0, 0, nil, stmtSourceTable, txnSourceTable, err
 			}
@@ -448,7 +457,7 @@ FROM %s %s`, table, whereClauseOldestDate), args...)
 		// with data in-memory.
 		if txnsRuntime == 0 {
 			txnSourceTable = "crdb_internal.transaction_statistics"
-			txnsRuntime, err = getRuntime(txnSourceTable)
+			txnsRuntime, err = getRuntime(txnSourceTable, createStatsTableQuery)
 			if err != nil {
 				return 0, 0, nil, stmtSourceTable, txnSourceTable, err
 			}
