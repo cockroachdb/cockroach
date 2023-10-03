@@ -87,7 +87,7 @@ type Provider struct {
 		syncutil.Mutex
 
 		authorizer     autorest.Authorizer
-		subscription   subscriptions.Subscription
+		subscriptionId string
 		resourceGroups map[string]resources.Group
 		subnets        map[string]network.Subnet
 		securityGroups map[string]network.SecurityGroup
@@ -245,8 +245,7 @@ func (p *Provider) Create(
 			location := providerOpts.Locations[locIdx]
 
 			// Create a resource group within the location.
-			group, err := p.getOrCreateResourceGroup(
-				ctx, getClusterResourceGroupName(location), location, clusterTags)
+			group, err := p.getOrCreateResourceGroup(ctx, getClusterResourceGroupName(location), location, clusterTags)
 			if err != nil {
 				return err
 			}
@@ -287,7 +286,7 @@ func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
 	if err != nil {
 		return err
 	}
-	client := compute.NewVirtualMachinesClient(*sub.ID)
+	client := compute.NewVirtualMachinesClient(sub)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return err
 	}
@@ -335,7 +334,7 @@ func (p *Provider) DeleteCluster(l *logger.Logger, name string) error {
 	if err != nil {
 		return err
 	}
-	client := resources.NewGroupsClient(*sub.SubscriptionID)
+	client := resources.NewGroupsClient(sub)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return err
 	}
@@ -386,7 +385,7 @@ func (p *Provider) Extend(l *logger.Logger, vms vm.List, lifetime time.Duration)
 	if err != nil {
 		return err
 	}
-	client := compute.NewVirtualMachinesClient(*sub.SubscriptionID)
+	client := compute.NewVirtualMachinesClient(sub)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return err
 	}
@@ -466,7 +465,7 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 	}
 
 	// We're just going to list all VMs and filter.
-	client := compute.NewVirtualMachinesClient(*sub.SubscriptionID)
+	client := compute.NewVirtualMachinesClient(sub)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return nil, err
 	}
@@ -549,7 +548,7 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 	// Such a cluster won't be found by listing all azure VMs like above.
 	// Normally we don't want to access these clusters except for deleting them.
 	if opts.IncludeEmptyClusters {
-		groupsClient := resources.NewGroupsClient(*sub.SubscriptionID)
+		groupsClient := resources.NewGroupsClient(sub)
 		if groupsClient.Authorizer, err = p.getAuthorizer(); err != nil {
 			return nil, err
 		}
@@ -651,7 +650,7 @@ func (p *Provider) createVM(
 		return
 	}
 
-	client := compute.NewVirtualMachinesClient(*sub.SubscriptionID)
+	client := compute.NewVirtualMachinesClient(sub)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return
 	}
@@ -816,7 +815,7 @@ func (p *Provider) createNIC(
 	if err != nil {
 		return
 	}
-	client := network.NewInterfacesClient(*sub.SubscriptionID)
+	client := network.NewInterfacesClient(sub)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return
 	}
@@ -872,7 +871,7 @@ func (p *Provider) getOrCreateNetworkSecurityGroup(
 	if err != nil {
 		return network.SecurityGroup{}, err
 	}
-	client := network.NewSecurityGroupsClient(*sub.SubscriptionID)
+	client := network.NewSecurityGroupsClient(sub)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return network.SecurityGroup{}, err
 	}
@@ -1054,7 +1053,7 @@ func (p *Provider) createVNets(
 		return nil, err
 	}
 
-	groupsClient := resources.NewGroupsClient(*sub.SubscriptionID)
+	groupsClient := resources.NewGroupsClient(sub)
 	if groupsClient.Authorizer, err = p.getAuthorizer(); err != nil {
 		return nil, err
 	}
@@ -1178,7 +1177,7 @@ func (p *Provider) createVNet(
 	if err != nil {
 		return
 	}
-	client := network.NewVirtualNetworksClient(*sub.SubscriptionID)
+	client := network.NewVirtualNetworksClient(sub)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return
 	}
@@ -1231,7 +1230,7 @@ func (p *Provider) createVNetPeerings(
 	if err != nil {
 		return err
 	}
-	client := network.NewVirtualNetworkPeeringsClient(*sub.SubscriptionID)
+	client := network.NewVirtualNetworkPeeringsClient(sub)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return err
 	}
@@ -1296,7 +1295,7 @@ func (p *Provider) createIP(
 	if err != nil {
 		return
 	}
-	ipc := network.NewPublicIPAddressesClient(*sub.SubscriptionID)
+	ipc := network.NewPublicIPAddressesClient(sub)
 	if ipc.Authorizer, err = p.getAuthorizer(); err != nil {
 		return
 	}
@@ -1340,12 +1339,12 @@ func (p *Provider) fillNetworkDetails(ctx context.Context, m *vm.VM, nicID azure
 		return err
 	}
 
-	nicClient := network.NewInterfacesClient(*sub.SubscriptionID)
+	nicClient := network.NewInterfacesClient(sub)
 	if nicClient.Authorizer, err = p.getAuthorizer(); err != nil {
 		return err
 	}
 
-	ipClient := network.NewPublicIPAddressesClient(*sub.SubscriptionID)
+	ipClient := network.NewPublicIPAddressesClient(sub)
 	ipClient.Authorizer = nicClient.Authorizer
 
 	iface, err := nicClient.Get(ctx, nicID.resourceGroup, nicID.resourceName, "" /*expand*/)
@@ -1411,7 +1410,7 @@ func (p *Provider) getOrCreateResourceGroup(
 		return resources.Group{}, err
 	}
 
-	client := resources.NewGroupsClient(*sub.SubscriptionID)
+	client := resources.NewGroupsClient(sub)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return resources.Group{}, err
 	}
@@ -1452,7 +1451,7 @@ func (p *Provider) createUltraDisk(
 		return compute.Disk{}, err
 	}
 
-	client := compute.NewDisksClient(*sub.SubscriptionID)
+	client := compute.NewDisksClient(sub)
 	if client.Authorizer, err = p.getAuthorizer(); err != nil {
 		return compute.Disk{}, err
 	}
@@ -1486,39 +1485,48 @@ func (p *Provider) createUltraDisk(
 	return disk, err
 }
 
-// getSubscription chooses the first available subscription. The value
-// is memoized in the Provider instance.
-func (p *Provider) getSubscription(
-	ctx context.Context,
-) (sub subscriptions.Subscription, err error) {
-	sub = func() subscriptions.Subscription {
+// getSubscription returns env.AZURE_SUBSCRIPTION_ID if it exists
+// or the first subscription when listing all available via an API call.
+// The value is memoized in the Provider instance.
+func (p *Provider) getSubscription(ctx context.Context) (string, error) {
+	subscriptionId := func() string {
 		p.mu.Lock()
 		defer p.mu.Unlock()
-		return p.mu.subscription
+		return p.mu.subscriptionId
 	}()
 
-	if sub.SubscriptionID != nil {
-		return
+	if subscriptionId != "" {
+		return subscriptionId, nil
 	}
 
-	sc := subscriptions.NewClient()
-	if sc.Authorizer, err = p.getAuthorizer(); err != nil {
-		return
-	}
+	subscriptionId = os.Getenv("AZURE_SUBSCRIPTION_ID")
 
-	page, err := sc.List(ctx)
-	if err == nil {
-		if len(page.Values()) == 0 {
-			err = errors.New("did not find Azure subscription")
-			return sub, err
+	// Fallback to retrieving the first subscription
+	if subscriptionId == "" {
+		authorizer, err := p.getAuthorizer()
+		if err != nil {
+			return "", err
 		}
-		sub = page.Values()[0]
+		sc := subscriptions.NewClient()
+		sc.Authorizer = authorizer
 
-		p.mu.Lock()
-		defer p.mu.Unlock()
-		p.mu.subscription = page.Values()[0]
+		page, err := sc.List(ctx)
+		if err == nil {
+			if len(page.Values()) == 0 {
+				err = errors.New("did not find Azure subscription")
+				return "", err
+			}
+			s := page.Values()[0].SubscriptionID
+			if s != nil {
+				subscriptionId = *s
+			}
+		}
 	}
-	return
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.mu.subscriptionId = subscriptionId
+	return subscriptionId, nil
 }
 
 // getResourceGroupByName receives a string name and returns
