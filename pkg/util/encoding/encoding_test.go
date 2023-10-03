@@ -26,6 +26,7 @@ import (
 	// Blank import so projections are initialized correctly.
 	_ "github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
@@ -831,7 +832,7 @@ func TestEncodeBitArray(t *testing.T) {
 				0, 0xba}},
 		{bitarray.MakeZeroBitArray(62),
 			[]byte{0x3a,
-				0x88, //word 0
+				0x88, // word 0
 				0, 0xc6}},
 		{bitarray.Not(bitarray.MakeZeroBitArray(62)),
 			[]byte{0x3a,
@@ -2620,6 +2621,36 @@ func TestPrettyPrintValueEncoded(t *testing.T) {
 		if str != test.expected {
 			t.Errorf("%d: got %q expected %q", i, str, test.expected)
 		}
+	}
+}
+
+func TestUnsafeConvertStringToBytes(t *testing.T) {
+	// Large input runs slowly.
+	skip.UnderStress(t)
+
+	testCases := []struct {
+		desc     string
+		input    string
+		expected []byte
+	}{
+		{
+			desc:     "empty",
+			input:    "",
+			expected: nil,
+		},
+		{
+			// Previous impl could not handle strings longer than math.MaxInt32.
+			// See https://github.com/cockroachdb/cockroach/issues/111626
+			desc:     "large input",
+			input:    string(make([]byte, math.MaxInt32+1)),
+			expected: make([]byte, math.MaxInt32+1),
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			actual := UnsafeConvertStringToBytes(tc.input)
+			require.Equal(t, tc.expected, actual)
+		})
 	}
 }
 
