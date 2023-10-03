@@ -1920,6 +1920,30 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		// new slices in generateScanSpans and PartitionSpans).
 		tr.Spans = sp.Spans
 
+		// In some cases, sp.Spans might be an alias to scanNode.spans, and in
+		// order to protect the latter from modification (which we must do in
+		// case the query might need to be retried-as-local), we might need to
+		// perform a copy. In particular, we need to care about the scenario
+		// when the following conditions are met:
+		// - 1. the query might be distributed (if it's not distributed, then
+		//      retry-as-local mechanism won't kick in)
+		// - 2. this SpanPartition is assigned to the local node (for all remote
+		//      nodes the spans will be serialized and sent over the wire, so it
+		//      doesn't matter if the remote node modifies them - it'll have its
+		//      own copy).
+		//
+		// NB: not making a copy for local plans means that scanNode.spans might
+		// be modified during the execution. At the time of writing, this
+		// doesn't matter, so we choose the performance angle.
+		if !planCtx.isLocal && sp.SQLInstanceID == dsp.gatewaySQLInstanceID {
+			// Note that we might be copying the spans in more cases than
+			// strictly necessary (e.g. because we allocated a fresh slice in
+			// partitionSpansEx above), but we choose to be a bit conservative
+			// here.
+			tr.Spans = make(roachpb.Spans, len(sp.Spans))
+			copy(tr.Spans, sp.Spans)
+		}
+
 		tr.Parallelize = info.parallelize
 		if !tr.Parallelize {
 			tr.BatchBytesLimit = dsp.distSQLSrv.TestingKnobs.TableReaderBatchBytesLimit
