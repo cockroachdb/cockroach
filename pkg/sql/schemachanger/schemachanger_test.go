@@ -828,12 +828,17 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"ALTER TABLE t2 ADD COLUMN p INT DEFAULT 50;",
 			"ALTER TABLE t2 DROP COLUMN p;",
 			"ALTER TABLE t2 ALTER PRIMARY KEY USING COLUMNS (j);",
+			"DROP TABLE IF EXISTS t1, t2;",
+			"CREATE TABLE t1 (rowid INT NOT NULL);",
+			"ALTER TABLE t1 ALTER PRIMARY KEY USING COLUMNS (rowid); -- special case where column name `rowid` is used",
 
 			// Statements expected to fail.
 			"CREATE TABLE t1 (); -- expect a DuplicateRelation error",
 			"ALTER TABLE t1 DROP COLUMN xyz; -- expect a rejected (sql_safe_updates = true) warning",
 			"ALTER TABLE t1 DROP COLUMN xyz; -- expect a UndefinedColumn error",
 			"ALTER TABLE txyz ADD COLUMN i INT DEFAULT 30; -- expect a UndefinedTable error",
+			"SELECT (*) FROM t1; -- expect to be skipped because of the syntax error",
+			"FROM t1 SELECT *; -- ditto",
 
 			// statements with TCL commands or empty content.
 			"",
