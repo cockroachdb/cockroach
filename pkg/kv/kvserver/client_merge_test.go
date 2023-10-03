@@ -3718,6 +3718,8 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderMetamorphicWithIssue(t, 111624)
+
 	// We will be testing the SSTs written on store2's engine.
 	var receivingEng, sendingEng storage.Engine
 	// All of these variables will be populated later, after starting the cluster..
