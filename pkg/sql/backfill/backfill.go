@@ -335,7 +335,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	// read or used
 	if err := cb.fetcher.StartScan(
 		ctx, []roachpb.Span{sp}, nil, /* spanIDs */
-		rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
+		rowinfra.GetDefaultBatchBytesLimit(cb.evalCtx.TestingKnobs.ForceProductionValues),
 		chunkSize,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
@@ -864,7 +864,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	defer fetcher.Close(ctx)
 	if err := fetcher.StartScan(
 		ctx, []roachpb.Span{sp}, nil, /* spanIDs */
-		rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
+		rowinfra.GetDefaultBatchBytesLimit(ib.evalCtx.TestingKnobs.ForceProductionValues),
 		initBufferSize,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
