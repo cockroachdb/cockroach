@@ -81,7 +81,7 @@ func (s *StringSetting) Validate(sv *Values, v string) error {
 // Override sets the setting to the given value, assuming
 // it passes validation.
 func (s *StringSetting) Override(ctx context.Context, sv *Values, v string) {
-	sv.setValueOrigin(ctx, s.slot, OriginExplicitlySet)
+	sv.setValueOrigin(ctx, s.slot, OriginOverride)
 	_ = s.set(ctx, sv, v)
 	sv.setDefaultOverride(s.slot, v)
 }
