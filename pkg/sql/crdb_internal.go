@@ -6159,7 +6159,7 @@ CREATE TABLE crdb_internal.cluster_database_privileges (
 	database_name   STRING NOT NULL,
 	grantee         STRING NOT NULL,
 	privilege_type  STRING NOT NULL,
-	is_grantable 		STRING,
+	is_grantable    STRING,
 	INDEX(database_name)
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -6221,9 +6221,9 @@ func makeClusterDatabasePrivilegesFromDescriptor(
 					return err
 				}
 				if err := addRow(
-					dbNameStr,                           // database_name
-					userNameStr,                         // grantee
-					tree.NewDString(priv.Kind.String()), // privilege_type
+					dbNameStr,   // database_name
+					userNameStr, // grantee
+					tree.NewDString(string(priv.Kind.DisplayName())), // privilege_type
 					yesOrNoDatum(isGrantable),
 				); err != nil {
 					return err
@@ -6628,12 +6628,12 @@ CREATE TABLE crdb_internal.default_privileges (
 										database, // database_name
 										// When the schema_name is NULL, that means the default
 										// privileges are defined at the database level.
-										schema,                         // schema_name
-										role,                           // role
-										forAllRoles,                    // for_all_roles
-										objectTypeDatum,                // object_type
-										grantee,                        // grantee
-										tree.NewDString(priv.String()), // privilege_type
+										schema,          // schema_name
+										role,            // role
+										forAllRoles,     // for_all_roles
+										objectTypeDatum, // object_type
+										grantee,         // grantee
+										tree.NewDString(string(priv.DisplayName())),                         // privilege_type
 										tree.MakeDBool(tree.DBool(priv.IsSetIn(userPrivs.WithGrantOption))), // is_grantable
 									); err != nil {
 										return err
@@ -6646,14 +6646,14 @@ CREATE TABLE crdb_internal.default_privileges (
 							for _, objectType := range privilege.GetTargetObjectTypes() {
 								if catprivilege.GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, objectType) {
 									if err := addRow(
-										database,                                // database_name
-										schema,                                  // schema_name
-										role,                                    // role
-										forAllRoles,                             // for_all_roles
-										tree.NewDString(objectType.String()),    // object_type
-										role,                                    // grantee
-										tree.NewDString(privilege.ALL.String()), // privilege_type
-										tree.DBoolTrue,                          // is_grantable
+										database,                             // database_name
+										schema,                               // schema_name
+										role,                                 // role
+										forAllRoles,                          // for_all_roles
+										tree.NewDString(objectType.String()), // object_type
+										role,                                 // grantee
+										tree.NewDString(string(privilege.ALL.DisplayName())), // privilege_type
+										tree.DBoolTrue, // is_grantable
 									); err != nil {
 										return err
 									}
@@ -6667,7 +6667,7 @@ CREATE TABLE crdb_internal.default_privileges (
 									forAllRoles, // for_all_roles
 									tree.NewDString(privilege.Types.String()),               // object_type
 									tree.NewDString(username.PublicRoleName().Normalized()), // grantee
-									tree.NewDString(privilege.USAGE.String()),               // privilege_type
+									tree.NewDString(string(privilege.USAGE.DisplayName())),  // privilege_type
 									tree.DBoolFalse, // is_grantable
 								); err != nil {
 									return err
@@ -6679,9 +6679,9 @@ CREATE TABLE crdb_internal.default_privileges (
 									schema,      // schema_name
 									role,        // role
 									forAllRoles, // for_all_roles
-									tree.NewDString(privilege.Routines.String()),            // object_type
-									tree.NewDString(username.PublicRoleName().Normalized()), // grantee
-									tree.NewDString(privilege.EXECUTE.String()),             // privilege_type
+									tree.NewDString(privilege.Routines.String()),             // object_type
+									tree.NewDString(username.PublicRoleName().Normalized()),  // grantee
+									tree.NewDString(string(privilege.EXECUTE.DisplayName())), // privilege_type
 									tree.DBoolFalse, // is_grantable
 								); err != nil {
 									return err
@@ -8622,7 +8622,10 @@ var crdbInternalKVSystemPrivileges = virtualSchemaView{
 	comment: `this vtable is a view on system.privileges with the root user and is used to back SHOW SYSTEM GRANTS`,
 	schema: `
 CREATE VIEW crdb_internal.kv_system_privileges AS
-SELECT *
+SELECT username, path,
+       crdb_internal.privilege_name(privileges) AS privileges,
+       crdb_internal.privilege_name(grant_options) AS grant_options,
+       user_id
 FROM system.privileges;`,
 	resultColumns: resultColsFromColDescs(systemschema.SystemPrivilegeTable.TableDesc().Columns),
 }

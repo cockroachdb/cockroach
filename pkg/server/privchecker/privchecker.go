@@ -122,7 +122,7 @@ func (c *adminPrivilegeChecker) RequireViewClusterSettingOrModifyClusterSettingP
 	}
 	return grpcstatus.Errorf(
 		codes.PermissionDenied, "this operation requires the %s or %s system privileges",
-		privilege.VIEWCLUSTERSETTING, privilege.MODIFYCLUSTERSETTING)
+		privilege.VIEWCLUSTERSETTING.DisplayName(), privilege.MODIFYCLUSTERSETTING.DisplayName())
 }
 
 // RequireViewActivityAndNoViewActivityRedactedPermission requires
@@ -155,7 +155,7 @@ func (c *adminPrivilegeChecker) RequireViewActivityAndNoViewActivityRedactedPerm
 		} else {
 			return grpcstatus.Errorf(
 				codes.PermissionDenied, "this operation requires %s system privilege and is not allowed for %s system privilege",
-				privilege.VIEWACTIVITY, privilege.VIEWACTIVITYREDACTED)
+				privilege.VIEWACTIVITY.DisplayName(), privilege.VIEWACTIVITYREDACTED.DisplayName())
 		}
 		return c.RequireViewActivityPermission(ctx)
 	}
@@ -182,7 +182,7 @@ func (c *adminPrivilegeChecker) RequireViewClusterMetadataPermission(
 	}
 	return grpcstatus.Errorf(
 		codes.PermissionDenied, "this operation requires the %s system privilege",
-		privilege.VIEWCLUSTERMETADATA)
+		privilege.VIEWCLUSTERMETADATA.DisplayName())
 }
 
 // RequireRepairClusterMetadataPermission requires the user have admin
@@ -205,7 +205,7 @@ func (c *adminPrivilegeChecker) RequireRepairClusterMetadataPermission(
 	}
 	return grpcstatus.Errorf(
 		codes.PermissionDenied, "this operation requires the %s system privilege",
-		privilege.REPAIRCLUSTERMETADATA)
+		privilege.REPAIRCLUSTERMETADATA.DisplayName())
 }
 
 // RequireViewDebugPermission requires the user have admin or the
@@ -226,7 +226,7 @@ func (c *adminPrivilegeChecker) RequireViewDebugPermission(ctx context.Context) 
 	}
 	return grpcstatus.Errorf(
 		codes.PermissionDenied, "this operation requires the %s system privilege",
-		privilege.VIEWDEBUG)
+		privilege.VIEWDEBUG.DisplayName())
 }
 
 // GetUserAndRole is part of the CheckerForRPCHandlers interface.
@@ -310,8 +310,8 @@ func (c *adminPrivilegeChecker) HasPrivilegeOrRoleOption(
 	} else if privilegeName {
 		return true, nil
 	}
-	privName := privilege.String()
-	roleOption, ok := roleoption.ByName[privName]
+	maybeRoleOptionName := string(privilege.DisplayName())
+	roleOption, ok := roleoption.ByName[maybeRoleOptionName]
 	if !ok {
 		return false, nil
 	}
