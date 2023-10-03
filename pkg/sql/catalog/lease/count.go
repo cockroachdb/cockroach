@@ -16,6 +16,8 @@ import (
 	"strings"
 
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -37,16 +39,32 @@ func CountLeases(
 	at hlc.Timestamp,
 	forAnyVersion bool,
 ) (int, error) {
-	var whereClauses []string
+	leasingMode := SessionBasedLeasingMode(LeaseEnableSessionBasedLeasing.Get(&settings.SV))
+	whereClauses := make([][]string, 2)
 	for _, t := range versions {
 		versionClause := ""
 		if !forAnyVersion {
 			versionClause = fmt.Sprintf("AND version = %d", t.Version)
 		}
-		whereClauses = append(
-			whereClauses,
+		whereClauses[0] = append(
+			whereClauses[0],
 			fmt.Sprintf(`("descID" = %d %s AND expiration > $1)`, t.ID, versionClause),
 		)
+		whereClauses[1] = append(whereClauses[1],
+			fmt.Sprintf(`(desc_id = %d %s AND (crdb_internal.sql_liveness_is_alive(session_id)))`,
+				t.ID, versionClause),
+		)
+	}
+
+	whereClauseIdx := make([]int, 0, 2)
+	syntheticDescriptors := make(catalog.Descriptors, 0, 2)
+	if leasingMode != SessionBasedOnly {
+		syntheticDescriptors = append(syntheticDescriptors, nil)
+		whereClauseIdx = append(whereClauseIdx, 0)
+	}
+	if leasingMode >= SessionBasedDrain {
+		syntheticDescriptors = append(syntheticDescriptors, systemschema.LeaseTable_V24_1())
+		whereClauseIdx = append(whereClauseIdx, 1)
 	}
 
 	var count int
@@ -62,15 +80,32 @@ func CountLeases(
 		}
 		// Depending on the database configuration query by region or the
 		// entire table.
-		if cachedDatabaseRegions != nil && cachedDatabaseRegions.IsMultiRegion() {
-			count, err = countLeasesByRegion(ctx, txn, prober, regionMap, at, whereClauses)
-		} else {
-			count, err = countLeasesNonMultiRegion(ctx, txn, at, whereClauses)
+		for i := range syntheticDescriptors {
+			whereClause := whereClauses[whereClauseIdx[i]]
+			descsToInject := syntheticDescriptors[i : i+1]
+			if descsToInject[0] == nil {
+				descsToInject = nil
+			}
+			err := txn.WithSyntheticDescriptors(descsToInject,
+				func() error {
+					var err error
+					if cachedDatabaseRegions != nil && cachedDatabaseRegions.IsMultiRegion() {
+						// If we are injecting a raw leases descriptors, that will not have the enum
+						// type set, so convert the region to byte equivalent physical representation.
+						count, err = countLeasesByRegion(ctx, txn, prober, regionMap, cachedDatabaseRegions, len(descsToInject) > 0, at, whereClause)
+					} else {
+						count, err = countLeasesNonMultiRegion(ctx, txn, at, whereClause)
+					}
+					return err
+				})
+			if err != nil {
+				return err
+			}
+			// Exit if either the session or expiry based counts are zero.
+			if count > 0 {
+				return nil
+			}
 		}
-		if err != nil {
-			return err
-		}
-
 		return nil
 	}); err != nil {
 		return 0, err
@@ -107,22 +142,43 @@ func countLeasesByRegion(
 	txn isql.Txn,
 	prober regionliveness.Prober,
 	regionMap regionliveness.LiveRegions,
+	cachedDBRegions regionliveness.CachedDatabaseRegions,
+	convertRegionsToBytes bool,
 	at hlc.Timestamp,
 	whereClauses []string,
 ) (int, error) {
+	regionClause := "crdb_region=$2::system.crdb_internal_region"
+	if convertRegionsToBytes {
+		regionClause = "crdb_region=$2"
+	}
 	stmt := fmt.Sprintf(
 		`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE `,
 		at.AsOfSystemTime(),
-	) + `crdb_region=$2::system.crdb_internal_region AND (` + strings.Join(whereClauses, " OR ") + ")"
+	) + regionClause + ` AND (` + strings.Join(whereClauses, " OR ") + ")"
 	var count int
 	if err := regionMap.ForEach(func(region string) error {
+		regionEnumValue := region
+		// The leases table descriptor injected does not have the type of the column
+		// set to the region enum type. So, instead convert the logical value to
+		// the physical one for comparison.
+		// TODO(fqazi): In 24.2 when this table format is default we can stop using
+		// synthetic descriptors and use the first code path.
+		if convertRegionsToBytes {
+			regionTypeDesc := cachedDBRegions.GetRegionEnumTypeDesc().AsRegionEnumTypeDescriptor()
+			for i := 0; i < regionTypeDesc.NumEnumMembers(); i++ {
+				if regionTypeDesc.GetMemberLogicalRepresentation(i) == region {
+					regionEnumValue = string(regionTypeDesc.GetMemberPhysicalRepresentation(i))
+					break
+				}
+			}
+		}
 		var values tree.Datums
 		queryRegionRows := func(countCtx context.Context) error {
 			var err error
 			values, err = txn.QueryRowEx(
 				countCtx, "count-leases", txn.KV(),
 				sessiondata.NodeUserSessionDataOverride,
-				stmt, at.GoTime(), region,
+				stmt, at.GoTime(), regionEnumValue,
 			)
 			return err
 		}
