@@ -99,12 +99,13 @@ func (c *rowFetcherStatCollector) StartScan(
 	ctx context.Context,
 	spans roachpb.Spans,
 	spanIDs []int,
+	spansMode row.SpansHandlingMode,
 	batchBytesLimit rowinfra.BytesLimit,
 	limitHint rowinfra.RowLimit,
 ) error {
 	start := timeutil.Now()
 	c.cpuStopWatch.Start()
-	err := c.Fetcher.StartScan(ctx, spans, spanIDs, batchBytesLimit, limitHint)
+	err := c.Fetcher.StartScan(ctx, spans, spanIDs, spansMode, batchBytesLimit, limitHint)
 	c.startScanStallTime += timeutil.Since(start)
 	c.cpuStopWatch.Stop()
 	return err

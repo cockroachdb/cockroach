@@ -2317,6 +2317,9 @@ const SpansOverhead = int64(unsafe.Sizeof(Spans{}))
 func (a Spans) MemUsage() int64 {
 	// Slice the full capacity of a so we can account for the memory
 	// used by spans past the length of a.
+	// TODO(yuzefovich): we expect that all spans in [len:cap] range don't have
+	// any keys set (we can assert this in test builds), so we could calculate
+	// memory usage of those only as SpanOverhead * (cap-len).
 	aCap := a[:cap(a)]
 	size := SpansOverhead
 	for i := range aCap {

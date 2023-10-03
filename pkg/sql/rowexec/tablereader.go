@@ -216,8 +216,11 @@ func (tr *tableReader) startScan(ctx context.Context) error {
 	log.VEventf(ctx, 1, "starting scan with limitBatches %t", limitBatches)
 	var err error
 	if tr.maxTimestampAge == 0 {
+		// Since the spans come directly from the proto, we don't want to modify
+		// the spans slice.
+		spansMode := row.DoNotModifySpans
 		err = tr.fetcher.StartScan(
-			ctx, tr.Spans, nil /* spanIDs */, bytesLimit, tr.limitHint,
+			ctx, tr.Spans, nil /* spanIDs */, spansMode, bytesLimit, tr.limitHint,
 		)
 	} else {
 		initialTS := tr.FlowCtx.Txn.ReadTimestamp()

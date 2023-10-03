@@ -210,15 +210,14 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 
 			// Index joins will always return exactly one output row per input row.
 			s.cf.setEstimatedRowCount(uint64(rowCount))
-			// Note that the fetcher takes ownership of the spans slice - it
-			// will modify it and perform the memory accounting. We don't care
-			// about the modification here, but we want to be conscious about
-			// the memory accounting - we don't double count for any memory of
-			// spans because the spanAssembler released all of the relevant
-			// memory from its account in GetSpans().
+			// Note that the fetcher will perform the memory accounting for the
+			// spans. We don't want to double count for any memory of spans
+			// because the spanAssembler released all the relevant memory from
+			// its account in GetSpans(), so we do nothing with accounting here.
 			if err := s.cf.StartScan(
 				s.Ctx,
 				spans,
+				row.CanModifySpans,
 				false, /* limitBatches */
 				rowinfra.NoBytesLimit,
 				rowinfra.NoRowLimit,

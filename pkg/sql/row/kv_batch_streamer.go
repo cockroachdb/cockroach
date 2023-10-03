@@ -74,6 +74,7 @@ func (f *txnKVStreamer) SetupNextFetch(
 	ctx context.Context,
 	spans roachpb.Spans,
 	spanIDs []int,
+	_ SpansHandlingMode,
 	bytesLimit rowinfra.BytesLimit,
 	_ rowinfra.KeyLimit,
 	_ bool,
@@ -101,6 +102,10 @@ func (f *txnKVStreamer) SetupNextFetch(
 	for i := len(spans); i < len(reqsScratch); i++ {
 		reqsScratch[i] = kvpb.RequestUnion{}
 	}
+	// TODO(yuzefovich): I think we're missing memory accounting for the
+	// overhead of roachpb.Span objects for 'spans' (i.e. the streamer properly
+	// accounts for the keys, but not for the roachpb.Span objects, and the
+	// caller doesn't account for those either).
 	// TODO(yuzefovich): consider supporting COL_BATCH_RESPONSE scan format.
 	reqs := spansToRequests(spans, kvpb.BATCH_RESPONSE, false /* reverse */, f.lockStrength, f.lockDurability, reqsScratch)
 	if err := f.streamer.Enqueue(ctx, reqs); err != nil {

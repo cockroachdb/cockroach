@@ -107,9 +107,29 @@ type KVBatchFetcherResponse struct {
 	kvPairsRead int64
 }
 
+// SpansHandlingMode determines how 'spans' argument of SetupNextFetch must be
+// handled by the KVBatchFetcher.
+type SpansHandlingMode bool
+
+const (
+	// DoNotModifySpans indicates that the KVBatchFetcher **cannot** modify the
+	// 'spans' argument of SetupNextFetch in any way.
+	DoNotModifySpans SpansHandlingMode = false
+	// CanModifySpans indicates that the KVBatchFetcher can modify the 'spans'
+	// argument of SetupNextFetch as it pleases. (Note that keys inside the
+	// roachpb.Span objects won't ever be mutated.)
+	CanModifySpans = true
+)
+
 // KVBatchFetcher abstracts the logic of fetching KVs in batches.
 type KVBatchFetcher interface {
-	// SetupNextFetch prepares the fetch of the next set of spans.
+	// SetupNextFetch prepares the fetch of the next set of spans. The fetcher
+	// will always perform memory accounting for spans. SetupNextFetch can be
+	// called multiple times, and the memory accounting will be updated
+	// accordingly (i.e. the memory usage of "old" spans is released and the
+	// usage of "new" spans is tracked).
+	//
+	// spansMode determines whether the spans slice can be modified.
 	//
 	// spansCanOverlap indicates whether spans might be unordered and
 	// overlapping. If true, then spanIDs must be non-nil.
@@ -122,6 +142,7 @@ type KVBatchFetcher interface {
 		ctx context.Context,
 		spans roachpb.Spans,
 		spanIDs []int,
+		spansMode SpansHandlingMode,
 		batchBytesLimit rowinfra.BytesLimit,
 		firstBatchKeyLimit rowinfra.KeyLimit,
 		spansCanOverlap bool,
@@ -496,17 +517,19 @@ func (rf *Fetcher) setTxnAndSendFn(txn *kv.Txn, sendFn sendFunc) error {
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times. Cannot be used if WillUseKVProvider was set to true in Init().
 //
-// The fetcher takes ownership of the spans slice - it can modify the slice and
-// will perform the memory accounting accordingly (if Init() was called with
-// non-nil memory monitor). The caller can only reuse the spans slice after the
-// fetcher has been closed, and if the caller does, it becomes responsible for
-// the memory accounting.
+// The fetcher will perform the memory accounting for the spans slice (if acc
+// was provided in the constructor) and might modify it (depending on
+// spansMode). The caller can only reuse the spans slice after all rows have
+// been fetched (i.e. NextBatch returned MoreKVs=false) or the fetcher has been
+// closed.
 //
-// The fetcher also takes ownership of the spanIDs slice - it can modify the
+// The fetcher takes full ownership of the spanIDs slice - it can modify the
 // slice, but it will **not** perform the memory accounting. It is the caller's
 // responsibility to track the memory under the spanIDs slice, and the slice
 // can only be reused once the fetcher has been closed. Notably, the capacity of
 // the slice will not be increased by the fetcher.
+//
+// If spanIDs is non-nil, then it must be of the same length as spans.
 //
 // spanIDs is a slice of user-defined identifiers of spans. If spanIDs is
 // non-nil, then it must be of the same length as spans, and some methods of the
@@ -534,6 +557,7 @@ func (rf *Fetcher) StartScan(
 	ctx context.Context,
 	spans roachpb.Spans,
 	spanIDs []int,
+	spansMode SpansHandlingMode,
 	batchBytesLimit rowinfra.BytesLimit,
 	rowLimitHint rowinfra.RowLimit,
 ) error {
@@ -545,7 +569,8 @@ func (rf *Fetcher) StartScan(
 	}
 
 	if err := rf.kvFetcher.SetupNextFetch(
-		ctx, spans, spanIDs, batchBytesLimit, rf.rowLimitToKeyLimit(rowLimitHint), rf.args.SpansCanOverlap,
+		ctx, spans, spanIDs, spansMode, batchBytesLimit,
+		rf.rowLimitToKeyLimit(rowLimitHint), rf.args.SpansCanOverlap,
 	); err != nil {
 		return err
 	}
@@ -644,8 +669,12 @@ func (rf *Fetcher) StartInconsistentScan(
 		return err
 	}
 
+	// Currently, the inconsistent scan is used only by the table reader in
+	// which case we cannot modify the spans since it would corrupt the
+	// TableReaderSpec proto.
+	spansMode := DoNotModifySpans
 	if err := rf.kvFetcher.SetupNextFetch(
-		ctx, spans, nil, batchBytesLimit,
+		ctx, spans, nil /* spanIDs */, spansMode, batchBytesLimit,
 		rf.rowLimitToKeyLimit(rowLimitHint), false, /* spansCanOverlap */
 	); err != nil {
 		return err
