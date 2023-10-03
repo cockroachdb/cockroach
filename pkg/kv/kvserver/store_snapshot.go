@@ -505,7 +505,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	keyRanges := rditer.MakeReplicatedKeySpans(header.State.Desc)
 
 	doExcise := header.SharedReplicate || (storage.UseExciseForSnapshots.Get(&s.ClusterSettings().SV) &&
-		s.cfg.Settings.Version.IsActive(ctx, clusterversion.V23_2_PebbleFormatVirtualSSTables))
+		s.cfg.Settings.Version.IsActive(ctx, clusterversion.V23_2_EnablePebbleFormatVirtualSSTables))
 	if header.SharedReplicate && !s.cfg.SharedStorageEnabled {
 		return noSnap, sendSnapshotError(ctx, s, stream, errors.New("cannot accept shared sstables"))
 	}
