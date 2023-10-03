@@ -53,14 +53,19 @@ var providerInstance = &Provider{}
 func Init() error {
 	const cliErr = "please install the Azure CLI utilities " +
 		"(https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)"
-	const authErr = "please use `az login` to login to Azure"
+	const authErr = "unable to authenticate; please use `az login` or double check environment variables"
 
 	providerInstance = New()
 	providerInstance.OperationTimeout = 10 * time.Minute
 	providerInstance.SyncDelete = false
-	if _, err := exec.LookPath("az"); err != nil {
-		vm.Providers[ProviderName] = flagstub.New(&Provider{}, cliErr)
-		return err
+
+	// If the appropriate environment variables are not set for api access,
+	// then the authenticated CLI must be installed.
+	if !hasEnvAuth {
+		if _, err := exec.LookPath("az"); err != nil {
+			vm.Providers[ProviderName] = flagstub.New(&Provider{}, cliErr)
+			return err
+		}
 	}
 	if _, err := providerInstance.getAuthToken(); err != nil {
 		vm.Providers[ProviderName] = flagstub.New(&Provider{}, authErr)
@@ -1050,6 +1055,9 @@ func (p *Provider) createVNets(
 	}
 
 	groupsClient := resources.NewGroupsClient(*sub.SubscriptionID)
+	if groupsClient.Authorizer, err = p.getAuthorizer(); err != nil {
+		return nil, err
+	}
 
 	vnetResourceGroupTags := make(map[string]*string)
 	vnetResourceGroupTags[tagComment] = to.StringPtr("DO NOT DELETE: Used by all roachprod clusters")
