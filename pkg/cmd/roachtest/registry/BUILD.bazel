@@ -16,6 +16,7 @@ go_library(
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/spec",
         "//pkg/cmd/roachtest/test",
+        "//pkg/internal/team",
         "@com_github_prometheus_client_golang//prometheus/promauto",
     ],
 )
