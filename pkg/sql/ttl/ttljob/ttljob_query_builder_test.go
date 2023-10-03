@@ -345,7 +345,12 @@ func TestSelectQueryBuilder(t *testing.T) {
 					AOSTDuration:    0,
 					SelectBatchSize: 2,
 					TTLExpr:         ttlColName,
-					SelectDuration:  aggmetric.MakeBuilder().Histogram(metric.HistogramOptions{}).AddChild(),
+					SelectDuration:  testHistogram(),
+					SelectRateLimiter: quotapool.NewRateLimiter(
+						"",
+						quotapool.Inf(),
+						math.MaxInt64,
+					),
 				},
 				cutoff,
 			)
@@ -458,7 +463,7 @@ func TestDeleteQueryBuilder(t *testing.T) {
 					PKColNames:      pkColNames,
 					DeleteBatchSize: 2,
 					TTLExpr:         ttlColName,
-					DeleteDuration:  aggmetric.MakeBuilder().Histogram(metric.HistogramOptions{}).AddChild(),
+					DeleteDuration:  testHistogram(),
 					DeleteRateLimiter: quotapool.NewRateLimiter(
 						"",
 						quotapool.Inf(),
@@ -484,4 +489,10 @@ func TestDeleteQueryBuilder(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
+}
+
+func testHistogram() *aggmetric.Histogram {
+	return aggmetric.MakeBuilder().Histogram(metric.HistogramOptions{
+		SigFigs: 1,
+	}).AddChild()
 }
