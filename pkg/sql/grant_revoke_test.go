@@ -114,7 +114,7 @@ func TestNoOpGrant(t *testing.T) {
 			}
 
 			// Grant privilege `privilege` on `objectType` `objectName` to user `roach`.
-			tdb.Exec(t, fmt.Sprintf("GRANT %v ON %v %v TO %v", priv, objectType, objectName, userRoach.Normalized()))
+			tdb.Exec(t, fmt.Sprintf("GRANT %v ON %v %v TO %v", priv.DisplayName(), objectType, objectName, userRoach.Normalized()))
 			desc := retrieveDescriptorByObjectType(objectType)
 			userPriv, ok := desc.GetPrivileges().FindUser(userRoach)
 			require.True(t, ok)
@@ -123,7 +123,7 @@ func TestNoOpGrant(t *testing.T) {
 
 			// Repeat and check we no-oped this GRANT by asserting that the privilege remains there and
 			// the table version remains the same.
-			tdb.Exec(t, fmt.Sprintf("GRANT %v ON %v %v TO %v", priv, objectType, objectName, userRoach.Normalized()))
+			tdb.Exec(t, fmt.Sprintf("GRANT %v ON %v %v TO %v", priv.DisplayName(), objectType, objectName, userRoach.Normalized()))
 			desc = retrieveDescriptorByObjectType(objectType)
 			userPriv, ok = desc.GetPrivileges().FindUser(userRoach)
 			require.True(t, ok)
@@ -233,7 +233,7 @@ func TestNoOpRevoke(t *testing.T) {
 		for _, priv := range testCase.allowedPrivs {
 			// Revoke privilege `privilege` on `objectType` `objectName` from user `roach`.
 			// Since `roach` has no privileges at all, those revokes should be treated as no-ops.
-			tdb.Exec(t, fmt.Sprintf("REVOKE %v ON %v %v FROM %v", priv, objectType, objectName, userRoach.Normalized()))
+			tdb.Exec(t, fmt.Sprintf("REVOKE %v ON %v %v FROM %v", priv.DisplayName(), objectType, objectName, userRoach.Normalized()))
 			desc := retrieveDescriptorByObjectType(objectType)
 			require.Equal(t, objectVersionBeforeRevoke, desc.GetVersion())
 		}
