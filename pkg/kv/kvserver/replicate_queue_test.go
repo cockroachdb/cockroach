@@ -1578,6 +1578,10 @@ func TestReplicateQueueShouldQueueNonVoter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// The zone config change leads to snapshot timeouts under stress race which
+	// make the test take 300+s.
+	skip.UnderStressRace(t)
+
 	ctx := context.Background()
 	serverArgs := make(map[int]base.TestServerArgs)
 	// Assign each store a rack number so we can constrain individual voting and
