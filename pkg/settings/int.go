@@ -89,7 +89,7 @@ func (i *IntSetting) Validate(v int64) error {
 //
 // For testing usage only.
 func (i *IntSetting) Override(ctx context.Context, sv *Values, v int64) {
-	sv.setValueOrigin(ctx, i.slot, OriginExplicitlySet)
+	sv.setValueOrigin(ctx, i.slot, OriginOverride)
 	sv.setInt64(ctx, i.slot, v)
 	sv.setDefaultOverride(i.slot, v)
 }

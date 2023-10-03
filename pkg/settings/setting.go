@@ -301,13 +301,15 @@ const (
 	// OriginExternallySet indicates the value has been set externally, such as
 	// via a host-cluster override for this or all tenant(s).
 	OriginExternallySet
+	// OriginOverride indicates the value has been set via a test override.
+	OriginOverride
 )
 
 func (v ValueOrigin) String() string {
-	if v > OriginExternallySet {
+	if v > OriginOverride {
 		return fmt.Sprintf("invalid (%d)", v)
 	}
-	return [...]string{"default", "override", "external-override"}[v]
+	return [...]string{"default", "override", "external-override", "test-override"}[v]
 }
 
 // SafeValue implements the redact.SafeValue interface.
