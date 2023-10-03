@@ -13,8 +13,10 @@ package schemachanger_test
 import (
 	"context"
 	"encoding/hex"
+	"flag"
 	"fmt"
 	"math/rand"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -36,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/sctest"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -880,4 +883,34 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 	}
 
 	sctest.CompareLegacyAndDeclarative(t, ss)
+}
+
+var logictestStmtsCorpusFile = flag.String("logictest-stmt-corpus-path", "", "path to logictest stmts corpus")
+
+func TestComparatorFromLogicTests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	if *logictestStmtsCorpusFile == "" {
+		skip.IgnoreLint(t, "require `--logictest-stmt-corpus-path` to be set")
+	}
+
+	bytes, err := os.ReadFile(*logictestStmtsCorpusFile)
+	require.NoError(t, err)
+	corpus := scpb.LogicTestStmtsCorpus{}
+	err = protoutil.Unmarshal(bytes, &corpus)
+	require.NoError(t, err)
+
+	for _, entry := range corpus.Entries {
+		subtestName := entry.Name
+		subtestStatements := entry.Statements
+		t.Run(entry.Name, func(t *testing.T) {
+			t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+			t.Logf("running schema changer comparator testing on statements collected from logic test %q\n", subtestName)
+			ss := &staticSQLStmtLineProvider{
+				stmts: subtestStatements,
+			}
+			sctest.CompareLegacyAndDeclarative(t, ss)
+			t.Logf("schema changer comparator testing succeeded on logic test %q\n", subtestName)
+		})
+	}
 }
