@@ -9,6 +9,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/jobs/jobstest",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
+        "//pkg/jobs/jobspb",
         "//pkg/scheduledjobs",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/sem/tree",
@@ -16,6 +18,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/syncutil",
+        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],

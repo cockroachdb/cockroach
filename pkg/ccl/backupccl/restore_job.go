@@ -78,6 +78,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -1698,7 +1699,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// the first place, as a special case.
 		publishDescriptors := func(ctx context.Context, txn descs.Txn) error {
 			return r.publishDescriptors(
-				ctx, p.ExecCfg().JobRegistry, p.ExecCfg().JobsKnobs(), txn, p.User(), details, nil,
+				ctx, p.ExecCfg().JobRegistry, p.ExecCfg().JobsKnobs(), txn, p.User(), details, nil, p.ExecCfg().NodeInfo.LogicalClusterID(),
 			)
 		}
 		if err := r.execCfg.InternalDB.DescsTxn(ctx, publishDescriptors); err != nil {
@@ -1840,7 +1841,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	publishDescriptors := func(ctx context.Context, txn descs.Txn) (err error) {
 		return r.publishDescriptors(
 			ctx, p.ExecCfg().JobRegistry, p.ExecCfg().JobsKnobs(), txn, p.User(),
-			details, devalidateIndexes,
+			details, devalidateIndexes, p.ExecCfg().NodeInfo.LogicalClusterID(),
 		)
 	}
 	if err := r.execCfg.InternalDB.DescsTxn(ctx, publishDescriptors); err != nil {
@@ -2223,6 +2224,7 @@ func (r *restoreResumer) publishDescriptors(
 	user username.SQLUsername,
 	details jobspb.RestoreDetails,
 	devalidateIndexes map[descpb.ID][]descpb.IndexID,
+	clusterID uuid.UUID,
 ) (err error) {
 	if details.DescriptorsPublished {
 		return nil
@@ -2290,6 +2292,7 @@ func (r *restoreResumer) publishDescriptors(
 				return err
 			}
 		}
+
 		version := r.settings.Version.ActiveVersion(ctx)
 		if err := mutTable.AllocateIDs(ctx, version); err != nil {
 			return err
@@ -2302,6 +2305,8 @@ func (r *restoreResumer) publishDescriptors(
 				jobs.ScheduledJobTxn(txn),
 				user,
 				mutTable,
+				clusterID,
+				version,
 			)
 			if err != nil {
 				return err

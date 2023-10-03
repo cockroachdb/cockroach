@@ -12,7 +12,10 @@ syntax = "proto3";
 package cockroach.jobs.jobspb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb";
 
+import "gogoproto/gogo.proto";
 import "google/protobuf/any.proto";
+import "clusterversion/cluster_version.proto";
+
 
 // ScheduleDetails describes how to schedule and execute the job.
 message ScheduleDetails {
@@ -44,6 +47,19 @@ message ScheduleDetails {
 
   // How to handle failed jobs.
   ErrorHandlingBehavior on_error = 2;
+
+  // ClusterID is populated at schedule creation with the ClusterID, in case a
+  // schedule resuming later, needs to use this information, e.g. to determine if it
+  // has been restored into a different cluster, which might mean it should
+  // terminate, pause or update some other state.
+  //
+  // A resuming schedule may change the cluster_id
+  // on resumption.
+  bytes cluster_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "ClusterID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+
+  // CreationClusterVersion documents the cluster version this schedule was created on.
+  clusterversion.ClusterVersion creation_cluster_version = 4 [(gogoproto.nullable) = false];
 }
 
 // ExecutionArguments describes data needed to execute scheduled jobs.
