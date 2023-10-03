@@ -36,7 +36,7 @@ import (
 // measure of how long closed timestamp updates are supposed to take from the
 // leaseholder to the followers.
 var ClosedTimestampPropagationSlack = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
+	settings.SystemVisible,
 	"kv.closed_timestamp.propagation_slack",
 	"a conservative estimate of the amount of time expect for closed timestamps to "+
 		"propagate from a leaseholder to followers. This is taken into account by "+
