@@ -55,7 +55,11 @@ export default function (props: GraphDashboardProps) {
           name="cr.store.replicas.leaders_not_leaseholders"
           title="Leaders w/o Lease"
         />
-        <Metric name="cr.store.ranges.unavailable" title="Unavailable" />
+        <Metric
+          name="cr.store.ranges.unavailable"
+          title="Unavailable"
+          color="#F16969"
+        />
         <Metric
           name="cr.store.ranges.underreplicated"
           title="Under-replicated"

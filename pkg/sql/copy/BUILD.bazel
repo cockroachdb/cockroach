@@ -16,6 +16,7 @@ go_test(
         "//pkg/base",
         "//pkg/cli/clisqlclient",
         "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/kvserverbase",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",

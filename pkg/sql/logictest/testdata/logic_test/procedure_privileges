@@ -24,16 +24,40 @@ NULL     root     test              public           test_priv_p1_100107  test  
 NULL     root     test              public           test_priv_p2_100108  test             public          test_priv_p2  ALL             YES
 NULL     root     test              test_priv_sc1    test_priv_p3_100109  test             test_priv_sc1   test_priv_p3  ALL             YES
 
-# TODO(mgartner): Add SHOW GRANTS ON PROCEDURE and SHOW PROCEDURES tests here
-# and below.
-# query TTTTTTB colnames,rowsort
-# SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3
-# ----
-#
-# query TTTTTTB colnames,rowsort
-# SHOW GRANTS ON PROCEDURE test_priv_p1(), test_priv_p2(INT), test_priv_p3()
-# ----
-#
+query TTTTTTB colnames,rowsort
+SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3
+----
+database_name  schema_name    routine_id  routine_signature   grantee  privilege_type  is_grantable
+test           public         100107      test_priv_p1()      admin    ALL             true
+test           public         100107      test_priv_p1()      public   EXECUTE         false
+test           public         100107      test_priv_p1()      root     ALL             true
+test           public         100108      test_priv_p2(int8)  admin    ALL             true
+test           public         100108      test_priv_p2(int8)  public   EXECUTE         false
+test           public         100108      test_priv_p2(int8)  root     ALL             true
+test           test_priv_sc1  100109      test_priv_p3()      admin    ALL             true
+test           test_priv_sc1  100109      test_priv_p3()      public   EXECUTE         false
+test           test_priv_sc1  100109      test_priv_p3()      root     ALL             true
+
+query TTTTTTB colnames,rowsort
+SHOW GRANTS ON PROCEDURE test_priv_p1(), test_priv_p2(INT), test_priv_p3()
+----
+database_name  schema_name    routine_id  routine_signature   grantee  privilege_type  is_grantable
+test           public         100107      test_priv_p1()      admin    ALL             true
+test           public         100107      test_priv_p1()      public   EXECUTE         false
+test           public         100107      test_priv_p1()      root     ALL             true
+test           public         100108      test_priv_p2(int8)  admin    ALL             true
+test           public         100108      test_priv_p2(int8)  public   EXECUTE         false
+test           public         100108      test_priv_p2(int8)  root     ALL             true
+test           test_priv_sc1  100109      test_priv_p3()      admin    ALL             true
+test           test_priv_sc1  100109      test_priv_p3()      public   EXECUTE         false
+test           test_priv_sc1  100109      test_priv_p3()      root     ALL             true
+
+# TODO(mgartner): Fix the error message. It should mention "procedure" instead
+# of "function".
+statement error pgcode 42883 function test_priv_p2\(string\) does not exist: function undefined
+SHOW GRANTS ON PROCEDURE test_priv_p2(STRING)
+
+# TODO(mgartner): Uncomment once we support SHOW PROCEDURES.
 # query TTTTTT colnames
 # SELECT * FROM [SHOW PROCEDURES] ORDER BY function_name, result_data_type
 # ----
@@ -75,9 +99,22 @@ NULL     test_user  test              public           test_priv_p1_100107  test
 NULL     test_user  test              public           test_priv_p2_100108  test             public          test_priv_p2  EXECUTE         YES
 NULL     test_user  test              test_priv_sc1    test_priv_p3_100109  test             test_priv_sc1   test_priv_p3  EXECUTE         YES
 
-# query TTTTTTB colnames,rowsort
-# SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3
-# ----
+query TTTTTTB colnames,rowsort
+SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3
+----
+database_name  schema_name    routine_id  routine_signature   grantee    privilege_type  is_grantable
+test           public         100107      test_priv_p1()      admin      ALL             true
+test           public         100107      test_priv_p1()      public     EXECUTE         false
+test           public         100107      test_priv_p1()      root       ALL             true
+test           public         100107      test_priv_p1()      test_user  EXECUTE         true
+test           public         100108      test_priv_p2(int8)  admin      ALL             true
+test           public         100108      test_priv_p2(int8)  public     EXECUTE         false
+test           public         100108      test_priv_p2(int8)  root       ALL             true
+test           public         100108      test_priv_p2(int8)  test_user  EXECUTE         true
+test           test_priv_sc1  100109      test_priv_p3()      admin      ALL             true
+test           test_priv_sc1  100109      test_priv_p3()      public     EXECUTE         false
+test           test_priv_sc1  100109      test_priv_p3()      root       ALL             true
+test           test_priv_sc1  100109      test_priv_p3()      test_user  EXECUTE         true
 
 statement error pgcode 2BP01 pq: cannot drop role/user test_user: grants still exist on.*
 DROP USER test_user;
@@ -107,9 +144,22 @@ NULL     test_user  test              public           test_priv_p1_100107  test
 NULL     test_user  test              public           test_priv_p2_100108  test             public          test_priv_p2  EXECUTE         NO
 NULL     test_user  test              test_priv_sc1    test_priv_p3_100109  test             test_priv_sc1   test_priv_p3  EXECUTE         NO
 
-# query TTTTTTB colnames,rowsort
-# SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3
-# ----
+query TTTTTTB colnames,rowsort
+SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3
+----
+database_name  schema_name    routine_id  routine_signature   grantee    privilege_type  is_grantable
+test           public         100107      test_priv_p1()      admin      ALL             true
+test           public         100107      test_priv_p1()      public     EXECUTE         false
+test           public         100107      test_priv_p1()      root       ALL             true
+test           public         100107      test_priv_p1()      test_user  EXECUTE         false
+test           public         100108      test_priv_p2(int8)  admin      ALL             true
+test           public         100108      test_priv_p2(int8)  public     EXECUTE         false
+test           public         100108      test_priv_p2(int8)  root       ALL             true
+test           public         100108      test_priv_p2(int8)  test_user  EXECUTE         false
+test           test_priv_sc1  100109      test_priv_p3()      admin      ALL             true
+test           test_priv_sc1  100109      test_priv_p3()      public     EXECUTE         false
+test           test_priv_sc1  100109      test_priv_p3()      root       ALL             true
+test           test_priv_sc1  100109      test_priv_p3()      test_user  EXECUTE         false
 
 statement ok
 REVOKE EXECUTE ON PROCEDURE test_priv_p1(), test_priv_p2(int), test_priv_sc1.test_priv_p3 FROM test_user;
@@ -130,9 +180,19 @@ NULL     root     test              public           test_priv_p1_100107  test  
 NULL     root     test              public           test_priv_p2_100108  test             public          test_priv_p2  ALL             YES
 NULL     root     test              test_priv_sc1    test_priv_p3_100109  test             test_priv_sc1   test_priv_p3  ALL             YES
 
-# query TTTTTTB colnames,rowsort
-# SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3
-# ----
+query TTTTTTB colnames,rowsort
+SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3
+----
+database_name  schema_name    routine_id  routine_signature   grantee  privilege_type  is_grantable
+test           public         100107      test_priv_p1()      admin    ALL             true
+test           public         100107      test_priv_p1()      public   EXECUTE         false
+test           public         100107      test_priv_p1()      root     ALL             true
+test           public         100108      test_priv_p2(int8)  admin    ALL             true
+test           public         100108      test_priv_p2(int8)  public   EXECUTE         false
+test           public         100108      test_priv_p2(int8)  root     ALL             true
+test           test_priv_sc1  100109      test_priv_p3()      admin    ALL             true
+test           test_priv_sc1  100109      test_priv_p3()      public   EXECUTE         false
+test           test_priv_sc1  100109      test_priv_p3()      root     ALL             true
 
 # Granting on functions should have no effect on procedures.
 statement ok
@@ -176,9 +236,22 @@ NULL     test_user  test              public           test_priv_p1_100107  test
 NULL     test_user  test              public           test_priv_p2_100108  test             public          test_priv_p2  EXECUTE         YES
 NULL     test_user  test              test_priv_sc1    test_priv_p3_100109  test             test_priv_sc1   test_priv_p3  EXECUTE         YES
 
-# query TTTTTTB colnames,rowsort
-# SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3
-# ----
+query TTTTTTB colnames,rowsort
+SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3
+----
+database_name  schema_name    routine_id  routine_signature   grantee    privilege_type  is_grantable
+test           public         100107      test_priv_p1()      admin      ALL             true
+test           public         100107      test_priv_p1()      public     EXECUTE         false
+test           public         100107      test_priv_p1()      root       ALL             true
+test           public         100107      test_priv_p1()      test_user  EXECUTE         true
+test           public         100108      test_priv_p2(int8)  admin      ALL             true
+test           public         100108      test_priv_p2(int8)  public     EXECUTE         false
+test           public         100108      test_priv_p2(int8)  root       ALL             true
+test           public         100108      test_priv_p2(int8)  test_user  EXECUTE         true
+test           test_priv_sc1  100109      test_priv_p3()      admin      ALL             true
+test           test_priv_sc1  100109      test_priv_p3()      public     EXECUTE         false
+test           test_priv_sc1  100109      test_priv_p3()      root       ALL             true
+test           test_priv_sc1  100109      test_priv_p3()      test_user  EXECUTE         true
 
 # Revoking on functions should have no effect on procedures.
 statement ok
@@ -225,9 +298,22 @@ NULL     test_user  test              public           test_priv_p1_100107  test
 NULL     test_user  test              public           test_priv_p2_100108  test             public          test_priv_p2  EXECUTE         NO
 NULL     test_user  test              test_priv_sc1    test_priv_p3_100109  test             test_priv_sc1   test_priv_p3  EXECUTE         NO
 
-# query TTTTTTB colnames,rowsort
-# SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3
-# ----
+query TTTTTTB colnames,rowsort
+SHOW GRANTS ON PROCEDURE test_priv_p1, test_priv_p2, test_priv_p3
+----
+database_name  schema_name    routine_id  routine_signature   grantee    privilege_type  is_grantable
+test           public         100107      test_priv_p1()      admin      ALL             true
+test           public         100107      test_priv_p1()      public     EXECUTE         false
+test           public         100107      test_priv_p1()      root       ALL             true
+test           public         100107      test_priv_p1()      test_user  EXECUTE         false
+test           public         100108      test_priv_p2(int8)  admin      ALL             true
+test           public         100108      test_priv_p2(int8)  public     EXECUTE         false
+test           public         100108      test_priv_p2(int8)  root       ALL             true
+test           public         100108      test_priv_p2(int8)  test_user  EXECUTE         false
+test           test_priv_sc1  100109      test_priv_p3()      admin      ALL             true
+test           test_priv_sc1  100109      test_priv_p3()      public     EXECUTE         false
+test           test_priv_sc1  100109      test_priv_p3()      root       ALL             true
+test           test_priv_sc1  100109      test_priv_p3()      test_user  EXECUTE         false
 
 # Revoking on functions should have no effect on procedures.
 statement ok
@@ -274,17 +360,19 @@ NULL     root     test              test_priv_sc1    test_priv_p3_100109  test  
 query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_p1, test_priv_p2, test_priv_p3
 ----
-database_name  schema_name    function_id  function_signature  grantee  privilege_type  is_grantable
-test           public         100107       test_priv_p1()      admin    ALL             true
-test           public         100107       test_priv_p1()      public   EXECUTE         false
-test           public         100107       test_priv_p1()      root     ALL             true
-test           public         100108       test_priv_p2(int8)  admin    ALL             true
-test           public         100108       test_priv_p2(int8)  public   EXECUTE         false
-test           public         100108       test_priv_p2(int8)  root     ALL             true
-test           test_priv_sc1  100109       test_priv_p3()      admin    ALL             true
-test           test_priv_sc1  100109       test_priv_p3()      public   EXECUTE         false
-test           test_priv_sc1  100109       test_priv_p3()      root     ALL             true
+database_name  schema_name    routine_id  routine_signature   grantee  privilege_type  is_grantable
+test           public         100107      test_priv_p1()      admin    ALL             true
+test           public         100107      test_priv_p1()      public   EXECUTE         false
+test           public         100107      test_priv_p1()      root     ALL             true
+test           public         100108      test_priv_p2(int8)  admin    ALL             true
+test           public         100108      test_priv_p2(int8)  public   EXECUTE         false
+test           public         100108      test_priv_p2(int8)  root     ALL             true
+test           test_priv_sc1  100109      test_priv_p3()      admin    ALL             true
+test           test_priv_sc1  100109      test_priv_p3()      public   EXECUTE         false
+test           test_priv_sc1  100109      test_priv_p3()      root     ALL             true
 
+# TODO(mgartner): These work due to a bug, but they should all be DROP PROCEDURE
+# once that command is supported.
 statement ok
 DROP FUNCTION test_priv_p1;
 DROP FUNCTION test_priv_p2;
@@ -448,79 +536,109 @@ subtest end
 #
 # subtest end
 
-# TODO(mgartner): Add SHOW GRANTS tests. These tests have been copied from
-# udf_privileges as a starting place.
-# subtest show_grants
-#
-# statement ok
-# CREATE SCHEMA sc_test_show_grants;
-# SET search_path = sc_test_show_grants;
-# CREATE FUNCTION f_test_show_grants(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
-# CREATE FUNCTION f_test_show_grants(INT, string, OID) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
-# CREATE USER u_test_show_grants;
-# GRANT EXECUTE ON FUNCTION f_test_show_grants(INT), f_test_show_grants(INT, string, OID) TO u_test_show_grants;
-#
-# statement error pgcode 42725 pq: function name "f_test_show_grants" is not unique
-# SHOW GRANTS ON FUNCTION f_test_show_grants;
-#
-# query TTTTTTB colnames
-# SELECT * FROM [
-#   SHOW GRANTS ON FUNCTION f_test_show_grants(INT), f_test_show_grants(INT, string, OID)
-# ] ORDER BY function_signature, grantee
-# ----
-#
-# statement error pgcode 42883 pq: function f_test_show_grants\(string\) does not exist: function undefined
-# SHOW GRANTS ON FUNCTION f_test_show_grants(string);
-#
-# query TTTTTTB colnames
-# SELECT * FROM [SHOW GRANTS ON FUNCTION f_test_show_grants(INT)] ORDER BY grantee
-# ----
-#
-# query TTTTTTB colnames
-# SELECT * FROM [SHOW GRANTS ON FUNCTION f_test_show_grants(INT, string, OID)] ORDER BY function_signature, grantee
-# ----
-#
-# statement error pgcode 42883 pq: unknown function: f_not_existing\(\): function undefined
-# SHOW GRANTS ON FUNCTION f_not_existing;
-#
-# query TTTTTTB colnames
-# SELECT * FROM [
-#   SHOW GRANTS ON FUNCTION f_test_show_grants(INT), f_test_show_grants(INT, string, OID) FOR u_test_show_grants
-# ] ORDER BY function_id
-# ----
-#
-# query TTTTTB colnames
-# SELECT * FROM [SHOW GRANTS FOR u_test_show_grants] ORDER BY relation_name
-# ----
-#
-# statement ok
-# SET search_path = public;
-#
-# subtest end
-#
-# subtest udf_create_privilege
-#
-# statement ok
-# CREATE SCHEMA sc_test_priv;
-#
-# user testuser
-#
-# statement error pgcode 42501 pq: user testuser does not have CREATE privilege on schema sc_test_priv
-# CREATE FUNCTION sc_test_priv.f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
-#
-# user root
-#
-# statement ok
-# GRANT CREATE ON SCHEMA sc_test_priv TO testuser
-#
-# user testuser
-#
-# statement ok
-# CREATE FUNCTION sc_test_priv.f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
-#
-# user root
-#
-# subtest end
+subtest show_grants
+
+statement ok
+CREATE SCHEMA sc_test_show_grants;
+SET search_path = sc_test_show_grants;
+CREATE PROCEDURE p_test_show_grants(INT) LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE PROCEDURE p_test_show_grants(INT, string, OID) LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE FUNCTION test_priv_f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE USER u_test_show_grants;
+GRANT EXECUTE ON PROCEDURE p_test_show_grants(INT), p_test_show_grants(INT, string, OID) TO u_test_show_grants;
+
+# TODO(mgartner): Fix the error message to mention "procedure" or "routine"
+# instead of "function".
+statement error pgcode 42725 pq: function name "p_test_show_grants" is not unique
+SHOW GRANTS ON PROCEDURE p_test_show_grants;
+
+query TTTTTTB colnames
+SELECT * FROM [
+  SHOW GRANTS ON PROCEDURE p_test_show_grants(INT), p_test_show_grants(INT, string, OID)
+] ORDER BY routine_signature, grantee
+----
+database_name  schema_name          routine_id  routine_signature                    grantee             privilege_type  is_grantable
+test           sc_test_show_grants  100111      p_test_show_grants(int8)             admin               ALL             true
+test           sc_test_show_grants  100111      p_test_show_grants(int8)             public              EXECUTE         false
+test           sc_test_show_grants  100111      p_test_show_grants(int8)             root                ALL             true
+test           sc_test_show_grants  100111      p_test_show_grants(int8)             u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  100112      p_test_show_grants(int8, text, oid)  admin               ALL             true
+test           sc_test_show_grants  100112      p_test_show_grants(int8, text, oid)  public              EXECUTE         false
+test           sc_test_show_grants  100112      p_test_show_grants(int8, text, oid)  root                ALL             true
+test           sc_test_show_grants  100112      p_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
+
+# TODO(mgartner): Fix the error message to mention "procedure" or "routine"
+# instead of "function".
+statement error pgcode 42883 pq: function p_test_show_grants\(string\) does not exist: function undefined
+SHOW GRANTS ON PROCEDURE p_test_show_grants(string);
+
+query TTTTTTB colnames
+SELECT * FROM [SHOW GRANTS ON PROCEDURE p_test_show_grants(INT)] ORDER BY grantee
+----
+database_name  schema_name          routine_id  routine_signature         grantee             privilege_type  is_grantable
+test           sc_test_show_grants  100111      p_test_show_grants(int8)  admin               ALL             true
+test           sc_test_show_grants  100111      p_test_show_grants(int8)  public              EXECUTE         false
+test           sc_test_show_grants  100111      p_test_show_grants(int8)  root                ALL             true
+test           sc_test_show_grants  100111      p_test_show_grants(int8)  u_test_show_grants  EXECUTE         false
+
+query TTTTTTB colnames
+SELECT * FROM [SHOW GRANTS ON PROCEDURE p_test_show_grants(INT, string, OID)] ORDER BY routine_signature, grantee
+----
+database_name  schema_name          routine_id  routine_signature                    grantee             privilege_type  is_grantable
+test           sc_test_show_grants  100112      p_test_show_grants(int8, text, oid)  admin               ALL             true
+test           sc_test_show_grants  100112      p_test_show_grants(int8, text, oid)  public              EXECUTE         false
+test           sc_test_show_grants  100112      p_test_show_grants(int8, text, oid)  root                ALL             true
+test           sc_test_show_grants  100112      p_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
+
+# TODO(mgartner): Fix the error message to mention "procedure" or "routine"
+# instead of "function".
+statement error pgcode 42883 pq: unknown function: p_not_existing\(\): function undefined
+SHOW GRANTS ON PROCEDURE p_not_existing;
+
+query TTTTTTB colnames
+SELECT * FROM [
+  SHOW GRANTS ON PROCEDURE p_test_show_grants(INT), p_test_show_grants(INT, string, OID) FOR u_test_show_grants
+] ORDER BY routine_id
+----
+database_name  schema_name          routine_id  routine_signature                    grantee             privilege_type  is_grantable
+test           sc_test_show_grants  100111      p_test_show_grants(int8)             u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  100112      p_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
+
+query TTTTTB colnames
+SELECT * FROM [SHOW GRANTS FOR u_test_show_grants] ORDER BY relation_name
+----
+database_name  schema_name          relation_name                        grantee             privilege_type  is_grantable
+test           sc_test_show_grants  p_test_show_grants(int8)             u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  p_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
+
+statement ok
+SET search_path = public;
+
+subtest end
+
+subtest udf_create_privilege
+
+statement ok
+CREATE SCHEMA sc_test_priv;
+
+user testuser
+
+statement error pgcode 42501 pq: user testuser does not have CREATE privilege on schema sc_test_priv
+CREATE PROCEDURE sc_test_priv.f() LANGUAGE SQL AS $$ SELECT 1 $$;
+
+user root
+
+statement ok
+GRANT CREATE ON SCHEMA sc_test_priv TO testuser
+
+user testuser
+
+statement ok
+CREATE PROCEDURE sc_test_priv.f() LANGUAGE SQL AS $$ SELECT 1 $$;
+
+user root
+
+subtest end
 
 # TODO(mgartner): Add ALTER PROCEDURE tests. These tests have been
 # copied from udf_privileges as a starting place.

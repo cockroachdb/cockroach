@@ -1213,8 +1213,12 @@ statement ok
 DROP TABLE target
 
 # Regression test for UPSERT batching logic (#51391).
+user host-cluster-root
+
 statement ok
 SET CLUSTER SETTING kv.raft.command.max_size='4MiB';
+
+user root
 
 statement ok
 CREATE TABLE src (s STRING);
@@ -1230,8 +1234,12 @@ FROM
 statement ok
 UPSERT INTO dest (s) (SELECT s FROM src)
 
+user host-cluster-root
+
 statement ok
 RESET CLUSTER SETTING kv.raft.command.max_size;
+
+user root
 
 statement ok
 DROP TABLE src;
