@@ -17,7 +17,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -913,18 +912,12 @@ func prettyPrintInvertedIndexKey(b []byte) (string, []byte, error) {
 // modified if the input string is expected to be used again - doing so could
 // violate Go semantics.
 func UnsafeConvertStringToBytes(s string) []byte {
+	// unsafe.StringData output is unspecified for empty string input so always
+	// return nil.
 	if len(s) == 0 {
 		return nil
 	}
-	// We unsafely convert the string to a []byte to avoid the
-	// usual allocation when converting to a []byte. This is
-	// kosher because we know that EncodeBytes{,Descending} does
-	// not keep a reference to the value it encodes. The first
-	// step is getting access to the string internals.
-	hdr := (*reflect.StringHeader)(unsafe.Pointer(&s))
-	// Next we treat the string data as a maximally sized array which we
-	// slice. This usage is safe because the pointer value remains in the string.
-	return (*[0x7fffffff]byte)(unsafe.Pointer(hdr.Data))[:len(s):len(s)]
+	return unsafe.Slice(unsafe.StringData(s), len(s))
 }
 
 // EncodeStringAscending encodes the string value using an escape-based encoding. See
@@ -985,18 +978,7 @@ func EncodeEmptyArray(b []byte) []byte {
 
 // EncodeStringDescending is the descending version of EncodeStringAscending.
 func EncodeStringDescending(b []byte, s string) []byte {
-	if len(s) == 0 {
-		return EncodeBytesDescending(b, nil)
-	}
-	// We unsafely convert the string to a []byte to avoid the
-	// usual allocation when converting to a []byte. This is
-	// kosher because we know that EncodeBytes{,Descending} does
-	// not keep a reference to the value it encodes. The first
-	// step is getting access to the string internals.
-	hdr := (*reflect.StringHeader)(unsafe.Pointer(&s))
-	// Next we treat the string data as a maximally sized array which we
-	// slice. This usage is safe because the pointer value remains in the string.
-	arg := (*[0x7fffffff]byte)(unsafe.Pointer(hdr.Data))[:len(s):len(s)]
+	arg := UnsafeConvertStringToBytes(s)
 	return EncodeBytesDescending(b, arg)
 }
 
