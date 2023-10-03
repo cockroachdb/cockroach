@@ -574,19 +574,23 @@ func TestCache(t *testing.T) {
 		if expected, actual := true, boolFA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
-		// The updated status remains in sv. A new updater is able to pick
-		// it up.
+		// If the updater doesn't have a key, e.g. if the setting has been deleted,
+		// Resetting it from the cache.
 		settings.NewUpdater(sv).ResetRemaining(ctx)
 
-		if expected, actual := 1, changes.boolTA; expected != actual {
+		if expected, actual := 2, changes.boolTA; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
 		}
 
-		if expected, actual := 1, changes.i1A; expected != actual {
+		if expected, actual := 2, changes.i1A; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
 		}
 
-		if expected, actual := true, boolFA.Get(sv); expected != actual {
+		if expected, actual := false, boolFA.Get(sv); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+
+		if expected, actual := false, boolFA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 	})

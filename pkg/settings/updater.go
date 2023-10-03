@@ -60,6 +60,7 @@ func EncodeProtobuf(p protoutil.Message) string {
 
 type updater struct {
 	sv *Values
+	m  map[InternalKey]struct{}
 }
 
 // Updater is a helper for updating the in-memory settings.
@@ -110,6 +111,7 @@ func NewUpdater(sv *Values) Updater {
 	}
 	return updater{
 		sv: sv,
+		m:  make(map[InternalKey]struct{}),
 	}
 }
 
@@ -124,10 +126,14 @@ func (u updater) getSetting(key InternalKey, value EncodedValue) (internalSettin
 		// Likely a new setting this old node doesn't know about.
 		return nil, errors.Errorf("unknown setting '%s'", key)
 	}
-	if expected := d.Typ(); value.Type != expected {
-		return nil, errors.Errorf("setting '%s' defined as type %s, not %s", d.Name(), expected, value.Type)
-	}
 	return d, nil
+}
+
+func checkType(d internalSetting, value EncodedValue) error {
+	if expected := d.Typ(); value.Type != expected {
+		return errors.Errorf("setting '%s' defined as type %s, not %s", d.Name(), expected, value.Type)
+	}
+	return nil
 }
 
 // Set attempts update a setting and notes that it was updated.
@@ -148,6 +154,11 @@ func (u updater) setInternal(
 ) error {
 	// Mark the setting as modified, such that
 	// (updater).ResetRemaining() does not touch it.
+	u.m[key] = struct{}{}
+
+	if err := checkType(d, value); err != nil {
+		return err
+	}
 	u.sv.setValueOrigin(ctx, d.getSlot(), origin)
 
 	switch setting := d.(type) {
@@ -220,19 +231,24 @@ func (u updater) SetToDefault(ctx context.Context, key InternalKey) error {
 		return errors.Errorf("unknown setting '%s'", key)
 	}
 
+	u.m[key] = struct{}{}
 	u.sv.setValueOrigin(ctx, d.getSlot(), OriginDefault)
 	d.setToDefault(ctx, u.sv)
 	return nil
 }
 
-// ResetRemaining sets all settings not updated by the updater to their default values.
+// ResetRemaining sets all settings not explicitly set via this
+// updater to their default values.
 func (u updater) ResetRemaining(ctx context.Context) {
 	for _, v := range registry {
 		if u.sv.SpecializedToVirtualCluster() && v.Class() == SystemOnly {
 			// Don't try to reset system settings on a non-system tenant.
 			continue
 		}
-		if u.sv.getValueOrigin(ctx, v.getSlot()) == OriginDefault {
+		if _, setInThisUpdater := u.m[v.InternalKey()]; !setInThisUpdater &&
+			// We need to preserve test overrides.
+			u.sv.getValueOrigin(ctx, v.getSlot()) != OriginOverride {
+			u.sv.setValueOrigin(ctx, v.getSlot(), OriginDefault)
 			v.setToDefault(ctx, u.sv)
 		}
 	}
@@ -271,10 +287,14 @@ func (u updater) SetFromStorage(
 		return errors.AssertionFailedf("unhandled class %v", d.Class())
 	}
 
+	if err := checkType(d, value); err != nil {
+		return err
+	}
+
 	defer func() {
 		// After the code below sets the default value, we ensure that the
 		// new default is also copied to the in-RAM store for all settings
-		// that didn't have an active value in the virtual tenant yet.
+		// that didn't have an active value in the virtual cluster yet.
 		if u.sv.getValueOrigin(ctx, d.getSlot()) == OriginDefault {
 			d.setToDefault(ctx, u.sv)
 		}

@@ -20,7 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -288,31 +290,52 @@ func TestSettingsShowAll(t *testing.T) {
 	}
 }
 
+// TestSettingsPersistenceEndToEnd checks that a stale entry in the
+// local cache on one node properly gets overridden by an update to
+// the setting, either on the same node or another.
 func TestSettingsPersistenceEndToEnd(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "slow test") // test takes >1mn under race
 
 	ctx := context.Background()
 
 	// We're going to restart the test server, but expecting storage to
 	// persist. Define a sticky VFS for this purpose.
 	stickyVFSRegistry := server.NewStickyVFSRegistry()
+	// We'll also need stable listeners to enable port reuse across restarts.
+	lisReg := listenerutil.NewListenerRegistry()
+	defer lisReg.Close()
+
 	serverKnobs := &server.TestingKnobs{
 		StickyVFSRegistry: stickyVFSRegistry,
 	}
-	serverArgs := base.TestServerArgs{
-		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-		StoreSpecs: []base.StoreSpec{
-			{InMemory: true, StickyVFSID: "1"},
+	testClusterArgs := base.TestClusterArgs{
+		ReusableListenerReg: lisReg,
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		},
-		Knobs: base.TestingKnobs{
-			Server: serverKnobs,
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: {
+				StoreSpecs: []base.StoreSpec{{InMemory: true, StickyVFSID: "1"}},
+				Knobs:      base.TestingKnobs{Server: serverKnobs},
+			},
+			1: {
+				StoreSpecs: []base.StoreSpec{{InMemory: true, StickyVFSID: "2"}},
+				Knobs:      base.TestingKnobs{Server: serverKnobs},
+			},
 		},
 	}
 
-	ts, sqlDB, _ := serverutils.StartServer(t, serverArgs)
-	defer ts.Stopper().Stop(ctx)
-	db := sqlutils.MakeSQLRunner(sqlDB)
+	tc := serverutils.StartCluster(t, 2, testClusterArgs)
+	defer tc.Stopper().Stop(ctx)
+
+	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	// Make the tests (slightly) faster.
+	db.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10 ms'")
+	db.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
+	db.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10 ms'")
 
 	// We need a custom value for the cluster setting that's guaranteed
 	// to be different from the default. So check that it's not equal to
@@ -321,41 +344,88 @@ func TestSettingsPersistenceEndToEnd(t *testing.T) {
 
 	setting, _ := settings.LookupForLocalAccessByKey("cluster.organization", true)
 	s := setting.(*settings.StringSetting)
-	st := ts.ClusterSettings()
+	st := tc.SystemLayer(0).ClusterSettings()
 	require.NotEqual(t, s.Get(&st.SV), differentValue)
 	origValue := db.QueryStr(t, `SHOW CLUSTER SETTING cluster.organization`)[0][0]
 
-	// Customize the setting.
-	db.Exec(t, `SET CLUSTER SETTING cluster.organization = $1`, differentValue)
-	newValue := db.QueryStr(t, `SHOW CLUSTER SETTING cluster.organization`)[0][0]
+	// Regression test for #70567.
+	t.Run("same node", func(t *testing.T) {
+		// Customize the setting.
+		db.Exec(t, `SET CLUSTER SETTING cluster.organization = $1`, differentValue)
+		newValue := db.QueryStr(t, `SHOW CLUSTER SETTING cluster.organization`)[0][0]
+		t.Logf("setting customized")
 
-	// Restart the server; verify the setting customization is preserved.
-	// For this we disable the settings watcher, to ensure that
-	// only the value loaded by the local persisted cache is used.
-	ts.Stopper().Stop(ctx)
-	serverKnobs.DisableSettingsWatcher = true
-	ts, sqlDB, _ = serverutils.StartServer(t, serverArgs)
-	defer ts.Stopper().Stop(ctx)
-	db = sqlutils.MakeSQLRunner(sqlDB)
+		// Restart the server; verify the setting customization is preserved.
+		// For this we disable the settings watcher, to ensure that
+		// only the value loaded by the local persisted cache is used.
+		tc.StopServer(0)
+		serverKnobs.DisableSettingsWatcher = true
+		require.NoError(t, tc.RestartServer(0))
+		db = sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
-	db.CheckQueryResults(t, `SHOW CLUSTER SETTING cluster.organization`, [][]string{{newValue}})
+		t.Logf("restarted server and checking value")
+		db.CheckQueryResults(t, `SHOW CLUSTER SETTING cluster.organization`, [][]string{{newValue}})
 
-	// Restart the server to make the setting writable again.
-	ts.Stopper().Stop(ctx)
-	serverKnobs.DisableSettingsWatcher = false
-	ts, sqlDB, _ = serverutils.StartServer(t, serverArgs)
-	defer ts.Stopper().Stop(ctx)
-	db = sqlutils.MakeSQLRunner(sqlDB)
+		// Restart the server to make the setting writable again.
+		tc.StopServer(0)
+		serverKnobs.DisableSettingsWatcher = false
+		require.NoError(t, tc.RestartServer(0))
+		db = sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
-	// Reset the setting, then check the original value is restored.
-	db.Exec(t, `RESET CLUSTER SETTING cluster.organization`)
-	db.CheckQueryResults(t, `SHOW CLUSTER SETTING cluster.organization`, [][]string{{origValue}})
+		// Reset the setting, then check the original value is restored.
+		db.Exec(t, `RESET CLUSTER SETTING cluster.organization`)
+		db.CheckQueryResults(t, `SHOW CLUSTER SETTING cluster.organization`, [][]string{{origValue}})
+		t.Logf("setting reset")
 
-	// Restart the server; verify the original value is still there.
-	ts.Stopper().Stop(ctx)
-	ts, sqlDB, _ = serverutils.StartServer(t, serverArgs)
-	defer ts.Stopper().Stop(ctx)
-	db = sqlutils.MakeSQLRunner(sqlDB)
+		// Restart the server; verify the original value is still there.
+		tc.StopServer(0)
+		require.NoError(t, tc.RestartServer(0))
+		db = sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
-	db.CheckQueryResults(t, `SHOW CLUSTER SETTING cluster.organization`, [][]string{{origValue}})
+		t.Logf("restarted server and checking value")
+		db.CheckQueryResults(t, `SHOW CLUSTER SETTING cluster.organization`, [][]string{{origValue}})
+	})
+
+	// Regression test for #111610.
+	t.Run("different node", func(t *testing.T) {
+		db2 := sqlutils.MakeSQLRunner(tc.ServerConn(1))
+
+		// Customize the setting on 1st node.
+		db.Exec(t, `SET CLUSTER SETTING cluster.organization = $1`, differentValue)
+		t.Logf("setting customized, waiting for value on 2nd node")
+
+		// Verify the setting has propagated to both nodes.
+		testutils.SucceedsSoon(t, func() error {
+			res := db2.QueryStr(t, `SHOW CLUSTER SETTING cluster.organization`)
+			if res[0][0] != differentValue {
+				err := errors.Newf("not updated yet: expecting %v, got %v", differentValue, res[0][0])
+				t.Log(err)
+				return err
+			}
+			return nil
+		})
+
+		t.Logf("stopping 2nd node")
+		// Stop the 2nd node; we want to reset the setting while the first
+		// node is down and see if the 2nd node picks it up afterwards.
+		tc.StopServer(1)
+
+		// Reset the setting to defaults on 1st node.
+		db.Exec(t, `RESET CLUSTER SETTING cluster.organization`)
+		t.Logf("2nd node stopped, resetting on 1st node")
+
+		// Restart the 2nd node; assert the default is eventually
+		// observed there.
+		require.NoError(t, tc.RestartServer(1))
+		t.Logf("2nd node restarted, waiting on reset to become visible")
+		db2 = sqlutils.MakeSQLRunner(tc.ServerConn(1))
+
+		testutils.SucceedsSoon(t, func() error {
+			res := db2.QueryStr(t, `SHOW CLUSTER SETTING cluster.organization`)
+			if res[0][0] != origValue {
+				return errors.New("not updated yet")
+			}
+			return nil
+		})
+	})
 }
