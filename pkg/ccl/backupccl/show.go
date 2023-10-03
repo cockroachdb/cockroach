@@ -1193,7 +1193,8 @@ func showPrivileges(ctx context.Context, desc catalog.Descriptor) (string, error
 		var privsWithGrantOption []string
 		for _, priv := range privs {
 			if priv.GrantOption {
-				privsWithGrantOption = append(privsWithGrantOption, priv.Kind.String())
+				privsWithGrantOption = append(privsWithGrantOption,
+					string(priv.Kind.DisplayName()))
 			}
 		}
 
@@ -1211,7 +1212,8 @@ func showPrivileges(ctx context.Context, desc catalog.Descriptor) (string, error
 		var privsWithoutGrantOption []string
 		for _, priv := range privs {
 			if !priv.GrantOption {
-				privsWithoutGrantOption = append(privsWithoutGrantOption, priv.Kind.String())
+				privsWithoutGrantOption = append(privsWithoutGrantOption,
+					string(priv.Kind.DisplayName()))
 			}
 
 		}

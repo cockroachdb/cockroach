@@ -304,7 +304,7 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 					ctx,
 					pgnotice.Newf(
 						"some privileges have no effect on sequences: %s",
-						sequencePrivilegesNoOp.SortedNames(),
+						sequencePrivilegesNoOp.SortedDisplayNames(),
 					),
 				)
 			}
@@ -333,9 +333,9 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 
 		eventDetails := eventpb.CommonSQLPrivilegeEventDetails{}
 		if n.isGrant {
-			eventDetails.GrantedPrivileges = n.desiredprivs.SortedNames()
+			eventDetails.GrantedPrivileges = n.desiredprivs.SortedDisplayNames()
 		} else {
-			eventDetails.RevokedPrivileges = n.desiredprivs.SortedNames()
+			eventDetails.RevokedPrivileges = n.desiredprivs.SortedDisplayNames()
 		}
 
 		switch d := descriptor.(type) {

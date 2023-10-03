@@ -144,8 +144,8 @@ VALUES ($1, $2, $3, $4, (
 					upsertStmt,
 					user.Normalized(),
 					systemPrivilegeObject.GetPath(),
-					privList.SortedNames(),
-					grantOptionList.SortedNames(),
+					privList.SortedKeys(),
+					grantOptionList.SortedKeys(),
 				); err != nil {
 					return err
 				}
@@ -212,8 +212,8 @@ VALUES ($1, $2, $3, $4, (
 					upsertStmt,
 					user.Normalized(),
 					systemPrivilegeObject.GetPath(),
-					privList.SortedNames(),
-					grantOptionList.SortedNames(),
+					privList.SortedKeys(),
+					grantOptionList.SortedKeys(),
 				); err != nil {
 					return err
 				}

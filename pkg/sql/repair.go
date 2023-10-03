@@ -215,15 +215,14 @@ func comparePrivileges(
 	prevUserPrivileges []catpb.UserPrivileges,
 	objectType privilege.ObjectType,
 ) error {
-	computePrivilegeChanges := func(prev, cur *catpb.UserPrivileges) (granted, revoked []string, retErr error) {
+	computePrivilegeChanges := func(prev, cur *catpb.UserPrivileges) (granted, revoked privilege.List, retErr error) {
 		// User has no privileges anymore after upsert, all privileges revoked.
 		prevPrivList, err := privilege.ListFromBitField(prev.Privileges, objectType)
 		if err != nil {
 			return nil, nil, err
 		}
 		if cur == nil {
-			revoked = prevPrivList.SortedNames()
-			return nil, revoked, nil
+			return nil, prevPrivList, nil
 		}
 
 		// User privileges have not changed.
@@ -232,8 +231,8 @@ func comparePrivileges(
 		}
 
 		// Construct a set of this user's old privileges (before upsert).
-		prevPrivilegeSet := make(map[string]struct{})
-		for _, priv := range prevPrivList.SortedNames() {
+		prevPrivilegeSet := make(map[privilege.Kind]struct{})
+		for _, priv := range prevPrivList {
 			prevPrivilegeSet[priv] = struct{}{}
 		}
 
@@ -242,7 +241,7 @@ func comparePrivileges(
 		if err != nil {
 			return nil, nil, err
 		}
-		for _, priv := range curPrivList.SortedNames() {
+		for _, priv := range curPrivList {
 			if _, ok := prevPrivilegeSet[priv]; !ok {
 				// New privileges that do not exist in the old privileges set imply that they have been granted.
 				granted = append(granted, priv)
@@ -257,7 +256,7 @@ func comparePrivileges(
 		for priv := range prevPrivilegeSet {
 			revoked = append(revoked, priv)
 		}
-		sort.Strings(revoked)
+		sort.Slice(revoked, func(i, j int) bool { return revoked[i].DisplayName() < revoked[j].DisplayName() })
 
 		return granted, revoked, nil
 	}
@@ -293,12 +292,11 @@ func comparePrivileges(
 	for i := range curUserPrivileges {
 		username := curUserPrivileges[i].User().Normalized()
 		if _, ok := curUserMap[username]; ok {
-			privList, err := privilege.ListFromBitField(curUserPrivileges[i].Privileges, objectType)
+			granted, err := privilege.ListFromBitField(curUserPrivileges[i].Privileges, objectType)
 			if err != nil {
 				return err
 			}
-			granted := privList.SortedNames()
-			if granted == nil {
+			if len(granted) == 0 {
 				continue
 			}
 			if err := logPrivilegeEvents(
@@ -317,15 +315,15 @@ func logPrivilegeEvents(
 	ctx context.Context,
 	p *planner,
 	existing catalog.MutableDescriptor,
-	grantedPrivileges []string,
-	revokedPrivileges []string,
+	grantedPrivileges privilege.List,
+	revokedPrivileges privilege.List,
 	grantee string,
 ) error {
 
 	eventDetails := eventpb.CommonSQLPrivilegeEventDetails{
 		Grantee:           grantee,
-		GrantedPrivileges: grantedPrivileges,
-		RevokedPrivileges: revokedPrivileges,
+		GrantedPrivileges: grantedPrivileges.SortedDisplayNames(),
+		RevokedPrivileges: revokedPrivileges.SortedDisplayNames(),
 	}
 
 	switch md := existing.(type) {

@@ -911,7 +911,7 @@ func (b *builderState) checkOwnershipOrPrivilegesOnSchemaDesc(
 	switch sc.SchemaKind() {
 	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
 		panic(pgerror.Newf(pgcode.InsufficientPrivilege,
-			"%s permission denied for schema %q", p.RequiredPrivilege.String(), name))
+			"%s permission denied for schema %q", p.RequiredPrivilege.DisplayName(), name))
 	case catalog.SchemaUserDefined:
 		b.ensureDescriptor(sc.GetID())
 		if p.RequireOwnership {
