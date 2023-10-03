@@ -49,6 +49,7 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlliveness",
         "//pkg/storage",
+        "//pkg/util",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/log",

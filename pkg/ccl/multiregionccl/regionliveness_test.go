@@ -306,7 +306,7 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 			PhysicalRepresentation: nil,
 			LogicalRepresentation:  "FakeRegion",
 		})
-		return mut
+		return builder.BuildExistingMutableType()
 	})
 	require.NoError(t, lm.WaitForNoVersion(ctx, descpb.ID(tableID), cachedDatabaseRegions, retry.Options{}))
 }

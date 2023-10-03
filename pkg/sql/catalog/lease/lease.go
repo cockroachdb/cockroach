@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	kvstorage "github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -97,7 +98,8 @@ var LeaseEnableSessionBasedLeasing = settings.RegisterEnumSetting(
 	settings.ApplicationLevel,
 	"sql.catalog.experimental_use_session_based_leasing",
 	"enables session based leasing for internal testing.",
-	"off",
+	util.ConstantWithMetamorphicTestChoice("experimental_use_session_based_leasing",
+		"off", "session").(string),
 	map[int64]string{
 		int64(SessionBasedLeasingOff): "off",
 		int64(SessionBasedDualWrite):  "dual_write",
@@ -118,6 +120,8 @@ func (m *Manager) getSessionBasedLeasingMode() SessionBasedLeasingMode {
 	return SessionBasedLeasingMode(LeaseEnableSessionBasedLeasing.Get(&m.settings.SV))
 }
 
+// WaitForNoVersion returns once there are no unexpired leases left
+// for any version of the descriptor.
 // WaitForNoVersion returns once there are no unexpired leases left
 // for any version of the descriptor.
 func (m *Manager) WaitForNoVersion(
@@ -145,6 +149,9 @@ func (m *Manager) WaitForNoVersion(
 		if count != lastCount {
 			lastCount = count
 			log.Infof(ctx, "waiting for %d leases to expire: desc=%d", count, id)
+		}
+		if lastCount == 0 {
+			break
 		}
 	}
 	return nil
