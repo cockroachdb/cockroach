@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -51,7 +52,7 @@ type Cluster interface {
 	// ValidateAfterUpdateSystemVersion performs any required validation after
 	// the system version is updated. This is used to perform additional
 	// validation during the tenant upgrade interlock.
-	ValidateAfterUpdateSystemVersion(ctx context.Context) error
+	ValidateAfterUpdateSystemVersion(ctx context.Context, txn *kv.Txn) error
 
 	// UntilClusterStable invokes the given closure until the cluster membership
 	// is stable, i.e once the set of nodes in the cluster before and after the

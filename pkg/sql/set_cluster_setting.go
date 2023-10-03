@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -513,7 +514,7 @@ func setVersionSetting(
 	// Updates the version inside the system.settings table.
 	// If we are already at or above the target version, then this
 	// function is idempotent.
-	updateVersionSystemSetting := func(ctx context.Context, version clusterversion.ClusterVersion, postSettingValidate func(ctx context.Context) error) error {
+	updateVersionSystemSetting := func(ctx context.Context, version clusterversion.ClusterVersion, postSettingValidate func(ctx context.Context, txn *kv.Txn) error) error {
 		rawValue, err := protoutil.Marshal(&version)
 		if err != nil {
 			return err
@@ -562,10 +563,9 @@ func setVersionSetting(
 			// servers present at the time of the settings update, matches the
 			// set that was present when the fence bump occurred (see comment in
 			// upgrademanager.Migrate() for more details).
-			if err = postSettingValidate(ctx); err != nil {
+			if err = postSettingValidate(ctx, txn.KV()); err != nil {
 				return err
 			}
-
 			return err
 		})
 	}
