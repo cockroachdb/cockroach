@@ -293,3 +293,18 @@ define UniqueChecksItemPrivate {
     # in the error message.
     KeyCols ColList
 }
+
+# Lock
+[Relational, Mutation]
+define Lock {
+    Input RelExpr
+    _ LockPrivate
+}
+
+[Private]
+define LockPrivate {
+    Table TableID
+    Locking Locking
+    KeyCols ColList
+    Cols ColSet
+}

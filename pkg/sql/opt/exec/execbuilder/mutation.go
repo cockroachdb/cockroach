@@ -14,6 +14,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
@@ -38,8 +40,13 @@ func (b *Builder) buildMutationInput(
 	}
 	if shouldApplyImplicitLocking {
 		// Re-entrance is not possible because mutations are never nested.
+		prevAllowLocking := b.allowLocking
+		b.allowLocking = true
 		b.forceForUpdateLocking = true
-		defer func() { b.forceForUpdateLocking = false }()
+		defer func() {
+			b.allowLocking = prevAllowLocking
+			b.forceForUpdateLocking = false
+		}()
 	}
 
 	input, err := b.buildRelational(inputExpr)
@@ -161,6 +168,11 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 	// TODO(rytaft): try to relax this restriction (see #58047).
 	if len(ins.UniqueChecks) > 0 {
 		return execPlan{}, false, nil
+	}
+
+	if !b.allowLocking {
+		b.allowLocking = true
+		defer func() { b.allowLocking = false }()
 	}
 
 	md := b.mem.Metadata()
@@ -716,6 +728,10 @@ func mutationOutputColMap(mutation memo.RelExpr) opt.ColMap {
 // violated. Those queries are each wrapped in an ErrorIfRows operator, which
 // will throw an appropriate error in case the inner query returns any rows.
 func (b *Builder) buildUniqueChecks(checks memo.UniqueChecksExpr) error {
+	if !b.allowLocking {
+		b.allowLocking = true
+		defer func() { b.allowLocking = false }()
+	}
 	md := b.mem.Metadata()
 	for i := range checks {
 		c := &checks[i]
@@ -746,6 +762,10 @@ func (b *Builder) buildUniqueChecks(checks memo.UniqueChecksExpr) error {
 }
 
 func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
+	if !b.allowLocking {
+		b.allowLocking = true
+		defer func() { b.allowLocking = false }()
+	}
 	md := b.mem.Metadata()
 	for i := range checks {
 		c := &checks[i]
@@ -911,6 +931,10 @@ func mkFKCheckErr(md *opt.Metadata, c *memo.FKChecksItem, keyVals tree.Datums) e
 }
 
 func (b *Builder) buildFKCascades(withID opt.WithID, cascades memo.FKCascades) error {
+	if !b.allowLocking {
+		b.allowLocking = true
+		defer func() { b.allowLocking = false }()
+	}
 	if len(cascades) == 0 {
 		return nil
 	}
@@ -1101,4 +1125,38 @@ func unwrapProjectExprs(input memo.RelExpr) memo.RelExpr {
 		return unwrapProjectExprs(proj.Input)
 	}
 	return input
+}
+
+func (b *Builder) buildLock(lock *memo.LockExpr) (execPlan, error) {
+	// Don't bother creating the lookup join if we don't need it.
+	if !lock.Locking.IsLocking() ||
+		!b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V23_2) ||
+		(b.evalCtx.TxnIsoLevel == isolation.Serializable &&
+			!b.evalCtx.SessionData().OptimizerUseLockOpForSerializable) ||
+		((lock.Locking.Strength == tree.ForShare || lock.Locking.Strength == tree.ForKeyShare) &&
+			b.evalCtx.TxnIsoLevel == isolation.Serializable &&
+			!b.evalCtx.SessionData().SharedLockingForSerializable) {
+		return b.buildRelational(lock.Input)
+	}
+
+	join := &memo.LookupJoinExpr{
+		Input: lock.Input,
+		LookupJoinPrivate: memo.LookupJoinPrivate{
+			JoinType:              opt.InnerJoinOp,
+			Table:                 lock.Table,
+			Index:                 cat.PrimaryIndex,
+			KeyCols:               lock.KeyCols,
+			Cols:                  lock.Cols,
+			LookupColsAreTableKey: true,
+			Locking:               lock.Locking,
+		},
+	}
+	memo.CopyLockGroupIntoLookupJoin(lock, join)
+
+	if !b.allowLocking {
+		b.allowLocking = true
+		defer func() { b.allowLocking = false }()
+	}
+
+	return b.buildLookupJoin(join)
 }

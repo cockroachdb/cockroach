@@ -292,6 +292,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.DeleteExpr:
 		ep, err = b.buildDelete(t)
 
+	case *memo.LockExpr:
+		ep, err = b.buildLock(t)
+
 	case *memo.CreateTableExpr:
 		ep, err = b.buildCreateTable(t)
 
@@ -2904,6 +2907,9 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 }
 
 func (b *Builder) buildLocking(locking opt.Locking) (opt.Locking, error) {
+	if !b.allowLocking {
+		return opt.Locking{}, nil
+	}
 	if b.forceForUpdateLocking {
 		locking = locking.Max(forUpdateLocking)
 	}
@@ -2911,7 +2917,7 @@ func (b *Builder) buildLocking(locking opt.Locking) (opt.Locking, error) {
 		// Raise error if row-level locking is part of a read-only transaction.
 		if b.evalCtx.TxnReadOnly {
 			return opt.Locking{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
-				"cannot execute %s in a read-only transaction", locking.Strength.String(),
+				"cannot execute SELECT %s in a read-only transaction", locking.Strength.String(),
 			)
 		}
 		if locking.Form == tree.LockPredicate {
@@ -3639,7 +3645,8 @@ func (b *Builder) statementTag(expr memo.RelExpr) string {
 	switch expr.Op() {
 	case opt.OpaqueRelOp, opt.OpaqueMutationOp, opt.OpaqueDDLOp:
 		return expr.Private().(*memo.OpaqueRelPrivate).Metadata.String()
-
+	case opt.LockOp:
+		return "SELECT " + expr.Private().(*memo.LockPrivate).Locking.Strength.String()
 	default:
 		return expr.Op().SyntaxTag()
 	}
