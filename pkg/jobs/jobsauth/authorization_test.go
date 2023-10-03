@@ -125,7 +125,8 @@ func (a *testAuthAccessor) HasGlobalPrivilegeOrRoleOption(
 	if ok {
 		return true, nil
 	}
-	if roleOption, ok := roleoption.ByName[privilege.String()]; ok {
+	maybeRoleOptionName := string(privilege.DisplayName())
+	if roleOption, ok := roleoption.ByName[maybeRoleOptionName]; ok {
 		return a.HasRoleOption(ctx, roleOption)
 	}
 	return false, nil

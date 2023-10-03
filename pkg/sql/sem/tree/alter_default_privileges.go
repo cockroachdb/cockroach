@@ -72,7 +72,7 @@ type AbbreviatedGrant struct {
 // Format implements the NodeFormatter interface.
 func (n *AbbreviatedGrant) Format(ctx *FmtCtx) {
 	ctx.WriteString("GRANT ")
-	n.Privileges.Format(&ctx.Buffer)
+	n.Privileges.FormatNames(&ctx.Buffer)
 	ctx.WriteString(" ON ")
 	switch n.Target {
 	case privilege.Tables:
@@ -108,7 +108,7 @@ func (n *AbbreviatedRevoke) Format(ctx *FmtCtx) {
 	if n.GrantOptionFor {
 		ctx.WriteString("GRANT OPTION FOR ")
 	}
-	n.Privileges.Format(&ctx.Buffer)
+	n.Privileges.FormatNames(&ctx.Buffer)
 	ctx.WriteString(" ON ")
 	switch n.Target {
 	case privilege.Tables:

@@ -13,7 +13,6 @@ package catpb
 import (
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -376,7 +375,7 @@ func (p PrivilegeDescriptor) ValidateSuperuserPrivileges(
 			return fmt.Errorf(
 				"user %s must have exactly %s privileges on %s",
 				user,
-				allowedSuperuserPrivileges,
+				allowedSuperuserPrivileges.SortedDisplayNames(),
 				privilegeObject(parentID, objectType, objectName),
 			)
 		}
@@ -413,7 +412,7 @@ func (p PrivilegeDescriptor) Validate(
 		return errors.AssertionFailedf(
 			"user %s must not have %s privileges on %s",
 			u.User(),
-			privList,
+			privList.SortedDisplayNames(),
 			privilegeObject(parentID, objectType, objectName),
 		)
 	}
@@ -483,7 +482,7 @@ func (p PrivilegeDescriptor) Show(
 			return nil, err
 		}
 		sort.Slice(privileges, func(i, j int) bool {
-			return strings.Compare(privileges[i].Kind.String(), privileges[j].Kind.String()) < 0
+			return privileges[i].Kind.DisplayName() < privileges[j].Kind.DisplayName()
 		})
 		ret = append(ret, UserPrivilege{
 			User:       userPriv.User(),

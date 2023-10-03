@@ -180,7 +180,7 @@ func TestGrantDefaultPrivileges(t *testing.T) {
 		for _, grantee := range tc.grantees {
 			for _, privilege := range tc.privileges {
 				if !newPrivileges.CheckPrivilege(grantee, privilege) {
-					t.Errorf("expected %s to have %s privilege", grantee, privilege)
+					t.Errorf("expected %s to have %s privilege", grantee, privilege.DisplayName())
 				}
 			}
 		}
@@ -303,7 +303,7 @@ func TestRevokeDefaultPrivileges(t *testing.T) {
 		for _, grantee := range tc.grantees {
 			for _, privilege := range tc.expectedPrivileges {
 				if !newPrivileges.CheckPrivilege(grantee, privilege) {
-					t.Errorf("expected %s to have %s privilege", grantee, privilege)
+					t.Errorf("expected %s to have %s privilege", grantee, privilege.DisplayName())
 				}
 			}
 		}
@@ -380,7 +380,7 @@ func TestPresetDefaultPrivileges(t *testing.T) {
 
 		if targetObject == privilege.Types {
 			if !newPrivileges.CheckPrivilege(username.PublicRoleName(), privilege.USAGE) {
-				t.Errorf("expected %s to have %s on types", username.PublicRoleName(), privilege.USAGE)
+				t.Errorf("expected %s to have %s on types", username.PublicRoleName(), privilege.USAGE.DisplayName())
 			}
 		}
 	}
@@ -410,7 +410,7 @@ func TestPresetDefaultPrivilegesInSchema(t *testing.T) {
 
 		if targetObject == privilege.Types {
 			if newPrivileges.CheckPrivilege(username.PublicRoleName(), privilege.USAGE) {
-				t.Errorf("%s should not have %s on types", username.PublicRoleName(), privilege.USAGE)
+				t.Errorf("%s should not have %s on types", username.PublicRoleName(), privilege.USAGE.DisplayName())
 			}
 		}
 	}
@@ -727,7 +727,7 @@ func TestDefaultPrivileges(t *testing.T) {
 		for _, userAndGrant := range tc.expectedGrantsOnObject {
 			for _, grant := range userAndGrant.grants {
 				if !createdPrivileges.CheckPrivilege(userAndGrant.user, grant) {
-					t.Errorf("expected to find %s privilege for %s", grant.String(), userAndGrant.user)
+					t.Errorf("expected to find %s privilege for %s", grant.DisplayName(), userAndGrant.user)
 				}
 			}
 		}

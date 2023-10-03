@@ -28,7 +28,6 @@ STRINGER_SRCS = [
     "//pkg/sql/pgwire/pgwirebase:preparetype_string.go",
     "//pkg/sql/pgwire/pgwirebase:servererrfieldtype_string.go",
     "//pkg/sql/pgwire/pgwirebase:servermessagetype_string.go",
-    "//pkg/sql/privilege:kind_string.go",
     "//pkg/sql/roleoption:option_string.go",
     "//pkg/sql/schemachange:columnconversionkind_string.go",
     "//pkg/sql/schemachanger/rel/internal/comparetest:testattr_string.go",

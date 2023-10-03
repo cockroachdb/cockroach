@@ -183,7 +183,7 @@ func (p *DefaultPrivilegeDescriptor) Validate() error {
 					return err
 				}
 				return errors.AssertionFailedf("user %s must not have %s privileges on %s",
-					u.User(), privList, privilegeObjectType,
+					u.User(), privList.SortedDisplayNames(), privilegeObjectType,
 				)
 			}
 		}

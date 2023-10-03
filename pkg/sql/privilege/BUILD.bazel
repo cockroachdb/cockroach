@@ -4,9 +4,9 @@ load("//build:STRINGER.bzl", "stringer")
 go_library(
     name = "privilege",
     srcs = [
+        "kind.go",
         "privilege.go",
         "target_object_type.go",
-        ":gen-kind-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/privilege",
     visibility = ["//visibility:public"],
@@ -31,13 +31,7 @@ go_test(
         ":privilege",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",
     ],
-)
-
-stringer(
-    name = "gen-kind-stringer",
-    src = "privilege.go",
-    additional_args = ["-linecomment"],
-    typ = "Kind",
 )

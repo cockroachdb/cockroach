@@ -371,7 +371,7 @@ func TestMaybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(t *testing.T) {
 				// Check that the incompatible privileges are removed from the
 				// PrivilegeDescriptor.
 				if test.privilegeDesc.CheckPrivilege(testUser, priv) {
-					t.Errorf("found incompatible privilege %s", priv.String())
+					t.Errorf("found incompatible privilege %s", priv.DisplayName())
 				}
 
 				forAllRoles := test.defaultPrivilegeDesc.
@@ -381,7 +381,7 @@ func TestMaybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(t *testing.T) {
 				if !forAllRoles.DefaultPrivilegesPerObject[privilege.Tables].CheckPrivilege(testUser, priv) {
 					t.Errorf(
 						"expected incompatible privilege %s to be converted to a default privilege",
-						priv.String(),
+						priv.DisplayName(),
 					)
 				}
 			}
