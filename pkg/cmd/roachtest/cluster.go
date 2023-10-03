@@ -944,12 +944,24 @@ func (f *clusterFactory) newCluster(
 	}
 	// loop assumes maxAttempts is atleast (1).
 	for i := 1; ; i++ {
+		// NB: this intentionally avoids re-using the name across iterations in
+		// the loop. See:
+		//
+		// https://github.com/cockroachdb/cockroach/issues/67906#issuecomment-887477675
+		genName := f.genName(cfg)
+		// Logs for creating a new cluster go to a dedicated log file.
+		var retryStr string
+		if i > 1 {
+			retryStr = "-retry" + strconv.Itoa(i-1)
+		}
+		logPath := filepath.Join(f.artifactsDir, runnerLogsDir, "cluster-create", genName+retryStr+".log")
+		l, err := logger.RootLogger(logPath, teeOpt)
+		if err != nil {
+			log.Fatalf(ctx, "%v", err)
+		}
+
 		c := &clusterImpl{
-			// NB: this intentionally avoids re-using the name across iterations in
-			// the loop. See:
-			//
-			// https://github.com/cockroachdb/cockroach/issues/67906#issuecomment-887477675
-			name:       f.genName(cfg),
+			name:       genName,
 			spec:       cfg.spec,
 			expiration: cfg.spec.Expiration(),
 			r:          f.r,
@@ -959,19 +971,9 @@ func (f *clusterFactory) newCluster(
 				owned: true,
 				alloc: cfg.alloc,
 			},
+			l: l,
 		}
 		c.status("creating cluster")
-
-		// Logs for creating a new cluster go to a dedicated log file.
-		var retryStr string
-		if i > 1 {
-			retryStr = "-retry" + strconv.Itoa(i-1)
-		}
-		logPath := filepath.Join(f.artifactsDir, runnerLogsDir, "cluster-create", c.name+retryStr+".log")
-		l, err := logger.RootLogger(logPath, teeOpt)
-		if err != nil {
-			log.Fatalf(ctx, "%v", err)
-		}
 
 		l.PrintfCtx(ctx, "Attempting cluster creation (attempt #%d/%d)", i, maxAttempts)
 		createVMOpts.ClusterName = c.name
