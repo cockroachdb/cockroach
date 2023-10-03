@@ -99,6 +99,7 @@ func registerCDCBench(r registry.Registry) {
 					Cluster:          r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
 					CompatibleClouds: registry.AllExceptAWS,
 					Suites:           registry.Suites(registry.Nightly),
+					Tags:             registry.Tags("azure"),
 					RequiresLicense:  true,
 					Timeout:          2 * time.Hour, // catchup scans with 100k ranges can take >1 hour
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -129,6 +130,7 @@ func registerCDCBench(r registry.Registry) {
 				Cluster:          r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
 				CompatibleClouds: registry.AllExceptAWS,
 				Suites:           registry.Suites(registry.Nightly),
+				Tags:             registry.Tags("azure"),
 				RequiresLicense:  true,
 				Timeout:          time.Hour,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
