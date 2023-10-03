@@ -39,7 +39,7 @@ func (node *Revoke) Format(ctx *FmtCtx) {
 	// NB: we cannot use FormatNode() here because node.Privileges is
 	// not an AST node. This is OK, because a privilege list cannot
 	// contain sensitive information.
-	node.Privileges.Format(&ctx.Buffer)
+	node.Privileges.FormatNames(&ctx.Buffer)
 	if !node.Targets.System {
 		ctx.WriteString(" ON ")
 		ctx.FormatNode(&node.Targets)

@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -8069,6 +8070,57 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			Volatility: volatility.Leakproof,
 		},
 	),
+
+	"crdb_internal.privilege_name": makeBuiltin(tree.FunctionProperties{
+		Category:     builtinconstants.CategoryString,
+		Undocumented: true,
+	},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "internal_key", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
+				s := tree.MustBeDString(args[0])
+				name, err := privilege.KeyToName(string(s))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(name), nil
+			},
+			Info:       "Converts the internal storage key of a privilege to its display name.",
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "internal_key", Typ: types.StringArray}},
+			ReturnType: tree.FixedReturnType(types.StringArray),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
+				src := tree.MustBeDArray(args[0])
+				dst := *src
+				dst.Array = make(tree.Datums, len(src.Array))
+				for idx := range src.Array {
+					if src.Array[idx] == tree.DNull {
+						dst.Array[idx] = tree.DNull
+						continue
+					}
+					storageKey := string(tree.MustBeDString(src.Array[idx]))
+					name, err := privilege.KeyToName(storageKey)
+					if err != nil {
+						return nil, err
+					}
+					dst.Array[idx] = tree.NewDString(name)
+				}
+				return &dst, nil
+			},
+			Info:       "Converts the internal storage key of a privilege to its display name.",
+			Volatility: volatility.Immutable,
+		},
+	),
+
 	"crdb_internal.redactable_sql_constants": makeBuiltin(tree.FunctionProperties{
 		Category:     builtinconstants.CategoryString,
 		Undocumented: true,

@@ -111,7 +111,7 @@ func (node *Grant) Format(ctx *FmtCtx) {
 	if node.Targets.System {
 		ctx.WriteString(" SYSTEM ")
 	}
-	node.Privileges.Format(&ctx.Buffer)
+	node.Privileges.FormatNames(&ctx.Buffer)
 	if !node.Targets.System {
 		ctx.WriteString(" ON ")
 		ctx.FormatNode(&node.Targets)

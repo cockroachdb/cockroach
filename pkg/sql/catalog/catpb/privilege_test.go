@@ -349,7 +349,7 @@ func TestValidPrivilegesForObjects(t *testing.T) {
 			err := privDesc.Validate(id, tc.objectType, "whatever", catpb.DefaultSuperuserPrivileges)
 			if err == nil {
 				t.Fatalf("unexpected success, %s should not be a valid privilege for a %s",
-					priv, tc.objectType)
+					priv.DisplayName(), tc.objectType)
 			}
 		}
 	}
@@ -364,9 +364,9 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 		return descriptor.Validate(keys.SystemDatabaseID, privilege.Table, "whatever", privilege.ReadData)
 	}
 
-	rootWrongPrivilegesErr := "user root must have exactly SELECT " +
+	rootWrongPrivilegesErr := "user root must have exactly \\[SELECT\\] " +
 		`privileges on (system )?table "whatever"`
-	adminWrongPrivilegesErr := "user admin must have exactly SELECT " +
+	adminWrongPrivilegesErr := "user admin must have exactly \\[SELECT\\] " +
 		`privileges on (system )?table "whatever"`
 
 	{

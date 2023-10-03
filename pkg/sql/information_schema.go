@@ -382,14 +382,14 @@ https://www.postgresql.org/docs/9.5/infoschema-column-privileges.html`,
 					if priv.Mask()&u.Privileges != 0 {
 						for _, cd := range table.PublicColumns() {
 							if err := addRow(
-								tree.DNull,                             // grantor
-								tree.NewDString(u.User().Normalized()), // grantee
-								dbNameStr,                              // table_catalog
-								scNameStr,                              // table_schema
-								tree.NewDString(table.GetName()),       // table_name
-								tree.NewDString(cd.GetName()),          // column_name
-								tree.NewDString(priv.String()),         // privilege_type
-								tree.DNull,                             // is_grantable
+								tree.DNull,                                  // grantor
+								tree.NewDString(u.User().Normalized()),      // grantee
+								dbNameStr,                                   // table_catalog
+								scNameStr,                                   // table_schema
+								tree.NewDString(table.GetName()),            // table_name
+								tree.NewDString(cd.GetName()),               // column_name
+								tree.NewDString(string(priv.DisplayName())), // privilege_type
+								tree.DNull,                                  // is_grantable
 							); err != nil {
 								return err
 							}
@@ -1121,9 +1121,9 @@ var builtinTypePrivileges = []struct {
 	grantee *tree.DString
 	kind    *tree.DString
 }{
-	{tree.NewDString(username.RootUser), tree.NewDString(privilege.ALL.String())},
-	{tree.NewDString(username.AdminRole), tree.NewDString(privilege.ALL.String())},
-	{tree.NewDString(username.PublicRole), tree.NewDString(privilege.USAGE.String())},
+	{tree.NewDString(username.RootUser), tree.NewDString(string(privilege.ALL.DisplayName()))},
+	{tree.NewDString(username.AdminRole), tree.NewDString(string(privilege.ALL.DisplayName()))},
+	{tree.NewDString(username.PublicRole), tree.NewDString(string(privilege.USAGE.DisplayName()))},
 }
 
 // Custom; PostgreSQL has data_type_privileges, which only shows one row per type,
@@ -1177,12 +1177,12 @@ var informationSchemaTypePrivilegesTable = virtualSchemaTable{
 								return err
 							}
 							if err := addRow(
-								userNameStr,                         // grantee
-								dbNameStr,                           // type_catalog
-								scNameStr,                           // type_schema
-								typeNameStr,                         // type_name
-								tree.NewDString(priv.Kind.String()), // privilege_type
-								yesOrNoDatum(isGrantable),           // is_grantable
+								userNameStr, // grantee
+								dbNameStr,   // type_catalog
+								scNameStr,   // type_schema
+								typeNameStr, // type_name
+								tree.NewDString(string(priv.Kind.DisplayName())), // privilege_type
+								yesOrNoDatum(isGrantable),                        // is_grantable
 							); err != nil {
 								return err
 							}
@@ -1223,11 +1223,11 @@ var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 								return err
 							}
 							if err := addRow(
-								userNameStr,                         // grantee
-								dbNameStr,                           // table_catalog
-								scNameStr,                           // table_schema
-								tree.NewDString(priv.Kind.String()), // privilege_type
-								yesOrNoDatum(isGrantable),           // is_grantable
+								userNameStr, // grantee
+								dbNameStr,   // table_catalog
+								scNameStr,   // table_schema
+								tree.NewDString(string(priv.Kind.DisplayName())), // privilege_type
+								yesOrNoDatum(isGrantable),                        // is_grantable
 							); err != nil {
 								return err
 							}
@@ -1494,7 +1494,7 @@ var informationSchemaUserPrivileges = virtualSchemaTable{
 					if err != nil {
 						return err
 					}
-					for _, p := range validPrivs.SortedNames() {
+					for _, p := range validPrivs.SortedDisplayNames() {
 						if err := addRow(
 							grantee,            // grantee
 							dbNameStr,          // table_catalog
@@ -1558,14 +1558,14 @@ func populateTablePrivileges(
 						return err
 					}
 					if err := addRow(
-						tree.DNull,                          // grantor
-						granteeNameStr,                      // grantee
-						dbNameStr,                           // table_catalog
-						scNameStr,                           // table_schema
-						tbNameStr,                           // table_name
-						tree.NewDString(priv.Kind.String()), // privilege_type
-						yesOrNoDatum(isGrantable),           // is_grantable
-						yesOrNoDatum(priv.Kind == privilege.SELECT), // with_hierarchy
+						tree.DNull,     // grantor
+						granteeNameStr, // grantee
+						dbNameStr,      // table_catalog
+						scNameStr,      // table_schema
+						tbNameStr,      // table_name
+						tree.NewDString(string(priv.Kind.DisplayName())), // privilege_type
+						yesOrNoDatum(isGrantable),                        // is_grantable
+						yesOrNoDatum(priv.Kind == privilege.SELECT),      // with_hierarchy
 					); err != nil {
 						return err
 					}
@@ -1769,7 +1769,7 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 		}
 		for _, db := range dbDescs {
 			dbNameStr := tree.NewDString(db.GetName())
-			exPriv := tree.NewDString(privilege.EXECUTE.String())
+			exPriv := tree.NewDString(string(privilege.EXECUTE.DisplayName()))
 			roleNameForBuiltins := []*tree.DString{
 				tree.NewDString(username.AdminRole),
 				tree.NewDString(username.RootUser),
@@ -1854,16 +1854,16 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 								return err
 							}
 							if err := addRow(
-								tree.DNull,                          // grantor
-								userNameStr,                         // grantee
-								dbNameStr,                           // specific_catalog
-								scNameStr,                           // specific_schema
-								fnSpecificName,                      // specific_name
-								dbNameStr,                           // routine_catalog
-								scNameStr,                           // routine_schema
-								fnName,                              // routine_name
-								tree.NewDString(priv.Kind.String()), // privilege_type
-								yesOrNoDatum(isGrantable),           // is_grantable
+								tree.DNull,     // grantor
+								userNameStr,    // grantee
+								dbNameStr,      // specific_catalog
+								scNameStr,      // specific_schema
+								fnSpecificName, // specific_name
+								dbNameStr,      // routine_catalog
+								scNameStr,      // routine_schema
+								fnName,         // routine_name
+								tree.NewDString(string(priv.Kind.DisplayName())), // privilege_type
+								yesOrNoDatum(isGrantable),                        // is_grantable
 							); err != nil {
 								return err
 							}

@@ -35,16 +35,16 @@ func (s *baseStatusServer) UserSQLRoles(
 	var resp serverpb.UserSQLRolesResponse
 	if !isAdmin {
 		for _, privKind := range privilege.GlobalPrivileges {
-			privName := privKind.String()
 			hasPriv, err := s.privilegeChecker.HasGlobalPrivilege(ctx, username, privKind)
 			if err != nil {
 				return nil, srverrors.ServerError(ctx, err)
 			}
+			privName := privKind.DisplayName()
 			if hasPriv {
-				resp.Roles = append(resp.Roles, privName)
+				resp.Roles = append(resp.Roles, string(privName))
 				continue
 			}
-			roleOpt, ok := roleoption.ByName[privName]
+			roleOpt, ok := roleoption.ByName[string(privName)]
 			if !ok {
 				continue
 			}
@@ -53,7 +53,7 @@ func (s *baseStatusServer) UserSQLRoles(
 				return nil, srverrors.ServerError(ctx, err)
 			}
 			if hasRole {
-				resp.Roles = append(resp.Roles, privName)
+				resp.Roles = append(resp.Roles, string(privName))
 			}
 		}
 	} else {
