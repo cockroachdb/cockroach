@@ -58,6 +58,11 @@ func (s *maskedSetting) Class() Class {
 	return s.setting.Class()
 }
 
+// IsUnsafe returns whether the underlying setting is unsafe.
+func (s *maskedSetting) IsUnsafe() bool {
+	return s.setting.IsUnsafe()
+}
+
 // TestingIsReportable is used in testing for reportability.
 func TestingIsReportable(s Setting) bool {
 	if _, ok := s.(*maskedSetting); ok {

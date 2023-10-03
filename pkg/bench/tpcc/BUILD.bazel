@@ -21,6 +21,7 @@ go_test(
     embed = [":tpcc"],
     deps = [
         "//pkg/base",
+        "//pkg/kv/kvserver/logstore",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
