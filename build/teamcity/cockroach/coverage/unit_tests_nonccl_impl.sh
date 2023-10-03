@@ -10,6 +10,7 @@ $(bazel info bazel-bin --config=ci)/pkg/cmd/bazci/bazci_/bazci -- \
   --@io_bazel_rules_go//go/config:cover_format=lcov --combined_report=lcov \
   --instrumentation_filter="//pkg/..." \
   --profile=/artifacts/profile.gz \
+  --flaky_test_attempts=4 \
   //pkg:small_non_ccl_tests //pkg:medium_non_ccl_tests //pkg:large_non_ccl_tests
 
 lcov_file="$(bazel info output_path)/_coverage/_coverage_report.dat"
