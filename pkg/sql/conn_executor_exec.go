@@ -1301,6 +1301,7 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 		ex.server.cfg.Clock,
 		ex.server.cfg.InternalDB.Executor(),
 		ex.extraTxnState.descCollection,
+		ex.server.cfg.Settings,
 		ex.state.mu.txn,
 		inRetryBackoff,
 	)

@@ -35,13 +35,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	kvstorage "github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -99,8 +99,9 @@ var LeaseEnableSessionBasedLeasing = settings.RegisterEnumSetting(
 	settings.ApplicationLevel,
 	"sql.catalog.experimental_use_session_based_leasing",
 	"enables session based leasing for internal testing.",
-	util.ConstantWithMetamorphicTestChoice("experimental_use_session_based_leasing",
-		"off", "dual_write").(string),
+	/*util.ConstantWithMetamorphicTestChoice("experimental_use_session_based_leasing",
+	  "off", "session").(string),*/
+	"session",
 	map[int64]string{
 		int64(SessionBasedLeasingOff): "off",
 		int64(SessionBasedDualWrite):  "dual_write",
@@ -123,6 +124,8 @@ func (m *Manager) getSessionBasedLeasingMode() SessionBasedLeasingMode {
 
 // WaitForNoVersion returns once there are no unexpired leases left
 // for any version of the descriptor.
+// WaitForNoVersion returns once there are no unexpired leases left
+// for any version of the descriptor.
 func (m *Manager) WaitForNoVersion(
 	ctx context.Context, id descpb.ID, retryOpts retry.Options,
 ) error {
@@ -130,27 +133,57 @@ func (m *Manager) WaitForNoVersion(
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
 		now := m.storage.clock.Now()
-		stmt := fmt.Sprintf(`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d AND expiration > $1)`,
-			now.AsOfSystemTime(),
-			id)
-		values, err := m.storage.db.Executor().QueryRowEx(
-			ctx, "count-leases", nil, /* txn */
-			sessiondata.RootUserSessionDataOverride,
-			stmt, now.GoTime(),
-		)
-		if err != nil {
-			return err
+		stmts := make([]string, 0, 2)
+		syntheticDescriptors := make([]catalog.Descriptor, 0, 2)
+		if !m.isSessionBasedLeasingModeActive(SessionBasedOnly) {
+			stmts = append(stmts, fmt.Sprintf(`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d AND expiration > $1)`,
+				now.AsOfSystemTime(),
+				id))
+			syntheticDescriptors = append(syntheticDescriptors, nil)
 		}
-		if values == nil {
-			return errors.New("failed to count leases")
+		if m.isSessionBasedLeasingModeActive(SessionBasedDrain) {
+			stmts = append(stmts,
+				fmt.Sprintf(`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d AND (crdb_internal.sql_liveness_is_alive("sessionID")))`,
+					now.AsOfSystemTime(),
+					id))
+			syntheticDescriptors = append(syntheticDescriptors, systemschema.LeaseTable_V24_1())
 		}
-		count := int(tree.MustBeDInt(values[0]))
-		if count == 0 {
+
+		for stmtIdx := range stmts {
+			var values tree.Datums
+			descsToInject := syntheticDescriptors[stmtIdx : stmtIdx+1]
+			if descsToInject[0] == nil {
+				descsToInject = nil
+			}
+			executor := m.storage.db.Executor()
+			err := executor.WithSyntheticDescriptors(descsToInject, func() error {
+				var err error
+				values, err = executor.QueryRowEx(
+					ctx, "count-leases", nil, /* txn */
+					sessiondata.RootUserSessionDataOverride,
+					stmts[stmtIdx], now.GoTime(),
+				)
+				return err
+			})
+			if err != nil {
+				return err
+			}
+			if values == nil {
+				return errors.New("failed to count leases")
+			}
+			count := int(tree.MustBeDInt(values[0]))
+			if count == 0 {
+				lastCount = count
+				continue
+			}
+			if count != lastCount {
+				lastCount = count
+				log.Infof(ctx, "waiting for %d leases to expire: desc=%d", count, id)
+			}
 			break
 		}
-		if count != lastCount {
-			lastCount = count
-			log.Infof(ctx, "waiting for %d leases to expire: desc=%d", count, id)
+		if lastCount == 0 {
+			break
 		}
 	}
 	return nil
@@ -198,7 +231,7 @@ func (m *Manager) WaitForOneVersion(
 		// version of the descriptor.
 		now := m.storage.clock.Now()
 		descs := []IDVersion{NewIDVersionPrev(desc.GetName(), desc.GetID(), desc.GetVersion())}
-		count, err := CountLeases(ctx, m.storage.db.Executor(), descs, now)
+		count, err := CountLeases(ctx, m.storage.db.Executor(), m.settings, descs, now)
 		if err != nil {
 			return nil, err
 		}
