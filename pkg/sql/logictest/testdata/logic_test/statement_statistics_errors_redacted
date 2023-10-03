@@ -12,6 +12,7 @@
 statement ok
 GRANT SYSTEM VIEWACTIVITYREDACTED TO testuser;
 
+skipif config local-mixed-23.1
 query TTB
 SHOW SYSTEM GRANTS
 ----

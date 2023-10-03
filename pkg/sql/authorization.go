@@ -328,12 +328,12 @@ func (p *planner) MustCheckGrantOptionsForUser(
 	if privList.Len() > 1 {
 		return pgerror.Newf(
 			code, "user %s missing WITH GRANT OPTION privilege on one or more of %s",
-			user, privList.String(),
+			user, privList,
 		)
 	}
 	return pgerror.Newf(
 		code, "user %s missing WITH GRANT OPTION privilege on %s",
-		user, privList.String(),
+		user, privList,
 	)
 }
 
@@ -809,7 +809,8 @@ func (p *planner) HasGlobalPrivilegeOrRoleOption(
 	if ok {
 		return true, nil
 	}
-	if roleOption, ok := roleoption.ByName[privilege.String()]; ok {
+	maybeRoleOptionName := string(privilege.DisplayName())
+	if roleOption, ok := roleoption.ByName[maybeRoleOptionName]; ok {
 		return p.HasRoleOption(ctx, roleOption)
 	}
 	return false, nil

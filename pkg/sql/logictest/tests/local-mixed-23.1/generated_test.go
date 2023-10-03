@@ -1814,13 +1814,6 @@ func TestLogic_show_grants_on_virtual_table(
 	runLogicTest(t, "show_grants_on_virtual_table")
 }
 
-func TestLogic_show_grants_synthetic(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "show_grants_synthetic")
-}
-
 func TestLogic_show_indexes(
 	t *testing.T,
 ) {
