@@ -310,8 +310,8 @@ func (c *adminPrivilegeChecker) HasPrivilegeOrRoleOption(
 	} else if privilegeName {
 		return true, nil
 	}
-	privName := privilege.String()
-	roleOption, ok := roleoption.ByName[privName]
+	maybeRoleOptionName := string(privilege.DisplayName())
+	roleOption, ok := roleoption.ByName[maybeRoleOptionName]
 	if !ok {
 		return false, nil
 	}

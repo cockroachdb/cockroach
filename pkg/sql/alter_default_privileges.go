@@ -231,9 +231,9 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 
 			eventDetails := eventpb.CommonSQLPrivilegeEventDetails{}
 			if n.n.IsGrant {
-				eventDetails.GrantedPrivileges = privileges.SortedNames()
+				eventDetails.GrantedPrivileges = privileges.SortedDisplayNames()
 			} else {
-				eventDetails.RevokedPrivileges = privileges.SortedNames()
+				eventDetails.RevokedPrivileges = privileges.SortedDisplayNames()
 			}
 			event := eventpb.AlterDefaultPrivileges{
 				CommonSQLEventDetails: eventpb.CommonSQLEventDetails{
@@ -314,9 +314,9 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForDatabase(
 
 		eventDetails := eventpb.CommonSQLPrivilegeEventDetails{}
 		if n.n.IsGrant {
-			eventDetails.GrantedPrivileges = privileges.SortedNames()
+			eventDetails.GrantedPrivileges = privileges.SortedDisplayNames()
 		} else {
-			eventDetails.RevokedPrivileges = privileges.SortedNames()
+			eventDetails.RevokedPrivileges = privileges.SortedDisplayNames()
 		}
 		event := eventpb.AlterDefaultPrivileges{
 			CommonSQLEventDetails: eventpb.CommonSQLEventDetails{
