@@ -694,14 +694,42 @@ func purgeOldVersions(
 	}
 
 	removeInactives := func(dropped bool) {
-		leases := func() []*storedLease {
+		leases, leaseToExpire := func() (leasesToRemove []*storedLease, leasesToExpire *descriptorVersionState) {
 			t.mu.Lock()
 			defer t.mu.Unlock()
 			t.mu.takenOffline = dropped
-			return t.removeInactiveVersions()
+			return t.removeInactiveVersions(), t.mu.active.findPreviousToExpire(dropped)
 		}()
 		for _, l := range leases {
 			releaseLease(ctx, l, m)
+		}
+		// If there are old versions with an active refcount, we cannot allow
+		// these to stay forever. So, setup an expiry on them, which is required
+		// for session based leases.
+		if leaseToExpire != nil {
+			func() {
+				m.mu.Lock()
+				leaseToExpire.mu.Lock()
+				defer leaseToExpire.mu.Unlock()
+				defer m.mu.Unlock()
+				// In dual-write mode there will already be an expiration set,
+				// so we don't need to modify it if it's valid.
+				if leaseToExpire.mu.expiration.Less(m.storage.db.KV().Clock().Now()) {
+					// Expire any active old versions into the future based on the lease
+					// duration. If the session lifetime had been longer then use
+					// that. We will only expire later into the future, then what
+					// was previously observed, since transactions may have already
+					// picked this time.
+					leaseToExpire.mu.expiration = m.storage.db.KV().Clock().Now().AddDuration(LeaseDuration.Get(&m.storage.settings.SV))
+					if sessionExpiry := leaseToExpire.mu.session.Expiration(); leaseToExpire.mu.expiration.Less(sessionExpiry) {
+						leaseToExpire.mu.expiration = sessionExpiry
+					}
+				}
+				leaseToExpire.mu.session = nil
+				if leaseToExpire.mu.lease != nil {
+					m.mu.leasesToExpire = append(m.mu.leasesToExpire, leaseToExpire)
+				}
+			}()
 		}
 	}
 
@@ -765,6 +793,10 @@ type Manager struct {
 		syncutil.Mutex
 		// TODO(james): Track size of leased descriptors in memory.
 		descriptors map[descpb.ID]*descriptorState
+
+		// Session based leases that will be removed with expiry, since
+		// a new version has arrived.
+		leasesToExpire []*descriptorVersionState
 
 		// updatesResolvedTimestamp keeps track of a timestamp before which all
 		// descriptor updates have already been seen.
@@ -1190,10 +1222,23 @@ func (m *Manager) findDescriptorState(id descpb.ID, create bool) *descriptorStat
 // RangefeedLeases is not active.
 func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB) {
 	descUpdateCh := make(chan catalog.Descriptor)
-	m.watchForUpdates(ctx, descUpdateCh)
+	descDelCh := make(chan descpb.ID)
+	m.watchForUpdates(ctx, descUpdateCh, descDelCh)
 	_ = s.RunAsyncTask(ctx, "refresh-leases", func(ctx context.Context) {
 		for {
 			select {
+			case id := <-descDelCh:
+				// Descriptor is marked as deleted, so mark it for deletion or
+				// remove it if it's no longer in use.
+				_ = s.RunAsyncTask(ctx, "purge deleted descriptor", func(ctx context.Context) {
+					state := m.findNewest(id)
+					if state != nil {
+						if err := purgeOldVersions(ctx, db, id, true, state.GetVersion(), m); err != nil {
+							log.Warningf(ctx, "error purging leases for deleted descriptor %d",
+								id)
+						}
+					}
+				})
 			case desc := <-descUpdateCh:
 				// NB: We allow nil descriptors to be sent to synchronize the updating of
 				// descriptors.
@@ -1256,7 +1301,9 @@ func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB)
 
 // watchForUpdates will watch a rangefeed on the system.descriptor table for
 // updates.
-func (m *Manager) watchForUpdates(ctx context.Context, descUpdateCh chan<- catalog.Descriptor) {
+func (m *Manager) watchForUpdates(
+	ctx context.Context, descUpdateCh chan<- catalog.Descriptor, descDelCh chan<- descpb.ID,
+) {
 	if log.V(1) {
 		log.Infof(ctx, "using rangefeeds for lease manager updates")
 	}
@@ -1269,6 +1316,15 @@ func (m *Manager) watchForUpdates(ctx context.Context, descUpdateCh chan<- catal
 		ctx context.Context, ev *kvpb.RangeFeedValue,
 	) {
 		if len(ev.Value.RawBytes) == 0 {
+			id, err := m.Codec().DecodeDescMetadataID(ev.Key)
+			if err != nil {
+				log.Infof(ctx, "unable to decode metadata key %v", ev.Key)
+				return
+			}
+			select {
+			case <-ctx.Done():
+			case descDelCh <- descpb.ID(id):
+			}
 			return
 		}
 		b, err := descbuilder.FromSerializedValue(&ev.Value)
@@ -1328,10 +1384,59 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 				refreshTimer.Read = true
 				refreshTimer.Reset(m.storage.jitteredLeaseDuration() / 2)
 
+				// Clean up session based leases that have expired.
+				m.cleanupExpiredSessionLeases(ctx)
+
 				m.refreshSomeLeases(ctx)
 			}
 		}
 	})
+}
+
+// Expires session based leases marked for removal.
+func (m *Manager) cleanupExpiredSessionLeases(ctx context.Context) {
+	now := m.storage.db.KV().Clock().Now()
+	latest := -1
+	var leasesToDiscard []*descriptorVersionState
+	func() {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		// Go through the leases which are already sorted
+		// by expiration time, and find out which ones have
+		// expired.
+		for i, desc := range m.mu.leasesToExpire {
+			if desc.hasExpired(now) {
+				latest = i
+			} else {
+				break
+			}
+		}
+		if latest >= 0 {
+			leasesToDiscard = m.mu.leasesToExpire[0 : latest+1]
+			m.mu.leasesToExpire = m.mu.leasesToExpire[latest+1:]
+		}
+	}()
+
+	// For each expired lease clean up the corresponding row in the leases table.
+	if len(leasesToDiscard) > 0 {
+		if err := m.stopper.RunAsyncTask(ctx, "clearing expired session based leases from storage", func(ctx context.Context) {
+			for _, l := range leasesToDiscard {
+				l.mu.Lock()
+				leaseToDelete := l.mu.lease
+				l.mu.lease = nil
+				l.mu.Unlock()
+				// Its possible the reference count has concurrently hit
+				// zero and been cleaned up, so check if there is a lease
+				// to delete first.
+				if leaseToDelete != nil {
+					m.storage.release(ctx, m.stopper, leaseToDelete)
+				}
+
+			}
+		}); err != nil {
+			log.Infof(ctx, "unable to delete leases from storage %s", err)
+		}
+	}
 }
 
 // Refresh some of the current leases.
