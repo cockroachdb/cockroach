@@ -73,7 +73,9 @@ func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstab
 		ValueBlocksEnabled.Get(&cs.SV) {
 		format = sstable.TableFormatPebblev3
 	}
-	if cs.Version.IsActive(ctx, clusterversion.V23_2_PebbleFormatVirtualSSTables) && ValueBlocksEnabled.Get(&cs.SV) {
+	// NB: V23_2_StmtDiagForPlanGist is one after V23_2_PebbleFormatVirtualSSTables
+	// which ratchets the format major version forward in pebble.
+	if cs.Version.IsActive(ctx, clusterversion.V23_2_StmtDiagForPlanGist) && ValueBlocksEnabled.Get(&cs.SV) {
 		format = sstable.TableFormatPebblev4
 	}
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)

@@ -504,8 +504,10 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	// TODO(jeffreyxiao): Re-evaluate as the default range size grows.
 	keyRanges := rditer.MakeReplicatedKeySpans(header.State.Desc)
 
+	// NB: V23_2_StmtDiagForPlanGist is one after V23_2_PebbleFormatVirtualSSTables
+	// which ratchets the format major version forward in pebble.
 	doExcise := header.SharedReplicate || (storage.UseExciseForSnapshots.Get(&s.ClusterSettings().SV) &&
-		s.cfg.Settings.Version.IsActive(ctx, clusterversion.V23_2_PebbleFormatVirtualSSTables))
+		s.cfg.Settings.Version.IsActive(ctx, clusterversion.V23_2_StmtDiagForPlanGist))
 	if header.SharedReplicate && !s.cfg.SharedStorageEnabled {
 		return noSnap, sendSnapshotError(ctx, s, stream, errors.New("cannot accept shared sstables"))
 	}
