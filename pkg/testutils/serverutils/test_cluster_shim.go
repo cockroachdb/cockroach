@@ -51,6 +51,9 @@ type TestClusterInterface interface {
 	// StopServer stops a single server.
 	StopServer(idx int)
 
+	// RestartServer restarts a single server.
+	RestartServer(idx int) error
+
 	// Stopper retrieves the stopper for this test cluster. Tests should call or
 	// defer the Stop() method on this stopper after starting a test cluster.
 	Stopper() *stop.Stopper
