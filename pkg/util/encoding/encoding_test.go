@@ -2623,6 +2623,15 @@ func TestPrettyPrintValueEncoded(t *testing.T) {
 	}
 }
 
+// TestUnsafeConvertStringToBytesLargeInput tests that
+// UnsafeConvertStringToBytes can handle strings longer than math.MaxInt32.
+// See https://github.com/cockroachdb/cockroach/issues/111626
+func TestUnsafeConvertStringToBytesLargeInput(t *testing.T) {
+	expected := make([]byte, math.MaxInt32+1)
+	actual := UnsafeConvertStringToBytes(string(expected))
+	require.Equal(t, expected, actual)
+}
+
 func BenchmarkEncodeBoolValue(b *testing.B) {
 	rng, _ := randutil.NewTestRand()
 	rd := randData{rng}
