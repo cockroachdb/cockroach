@@ -1423,9 +1423,15 @@ func (m *Manager) DeleteOrphanedLeases(ctx context.Context, timeThreshold int64)
 		// This could have been implemented using DELETE WHERE, but DELETE WHERE
 		// doesn't implement AS OF SYSTEM TIME.
 
-		// Read orphaned leases.
+		// Read orphaned leases, and join against the internal session
+		// table in case we have dual written leases.
 		query := `
-SELECT "descID", version, expiration, crdb_region FROM system.public.lease AS OF SYSTEM TIME %d WHERE "nodeID" = %d
+SELECT l."descID", l.version, l.expiration, s."sessionID", l.crdb_region FROM 
+	 system.public.lease as l LEFT OUTER JOIN "".crdb_internal.kv_session_based_leases as s ON l."nodeID"=s."nodeID" AND
+	  l."descID"=s."descID" AND l.version=s.version
+	  AS OF SYSTEM TIME %d 
+	 WHERE l."nodeID" = %d AND l."nodeID"=s."nodeID" AND s."descID"=l."descID" AND s.version=l.version AND
+	     l.crdb_region=s.crdb_region
 `
 		sqlQuery := fmt.Sprintf(query, timeThreshold, instanceID)
 		var rows []tree.Datums
@@ -1454,10 +1460,13 @@ SELECT "descID", version, expiration, crdb_region FROM system.public.lease AS OF
 				version:    int(tree.MustBeDInt(row[1])),
 				expiration: tree.MustBeDTimestamp(row[2]),
 			}
-			if len(row) == 4 {
-				if ed, ok := row[3].(*tree.DEnum); ok {
+			if len(rows) >= 4 && row[3] != tree.DNull {
+				lease.sessionID = []byte(tree.MustBeDBytes(row[3]))
+			}
+			if len(row) == 5 {
+				if ed, ok := row[4].(*tree.DEnum); ok {
 					lease.prefix = ed.PhysicalRep
-				} else if bd, ok := row[3].(*tree.DBytes); ok {
+				} else if bd, ok := row[4].(*tree.DBytes); ok {
 					lease.prefix = []byte((*bd))
 				}
 			}
