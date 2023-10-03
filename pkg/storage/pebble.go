@@ -108,7 +108,7 @@ var ValueBlocksEnabled = settings.RegisterBoolSetting(
 var UseEFOS = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"storage.experimental.eventually_file_only_snapshots.enabled",
-	"set to true to use eventually-file-only-snapshots",
+	"set to true to use eventually-file-only-snapshots even when kv.snapshot_receiver.excise.enabled is false",
 	util.ConstantWithMetamorphicTestBool(
 		"storage.experimental.eventually_file_only_snapshots.enabled", false), /* defaultValue */
 	settings.WithPublic)
