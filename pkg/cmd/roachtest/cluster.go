@@ -105,6 +105,7 @@ var (
 	overrideFlagset  *pflag.FlagSet
 	overrideNumNodes = -1
 	clusterName      string
+	local            bool
 	clusterWipe      bool
 	zonesF           string
 	teamCity         bool
