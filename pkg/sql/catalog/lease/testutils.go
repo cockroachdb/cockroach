@@ -98,3 +98,15 @@ func (m *Manager) TestingAcquireAndAssertMinVersion(
 func (m *Manager) TestingOutstandingLeasesGauge() *metric.Gauge {
 	return m.storage.outstandingLeases
 }
+
+// TestingSessionBasedLeasesExpiredGauge returns the session based leases
+// expired gauge that is used by this lease manager.
+func (m *Manager) TestingSessionBasedLeasesExpiredGauge() *metric.Gauge {
+	return m.storage.sessionBasedLeasesExpired
+}
+
+// TestingSessionBasedLeasesWaitingToExpireGauge returns the session based leases
+// waiting to expire gauge that is used by this lease manager.
+func (m *Manager) TestingSessionBasedLeasesWaitingToExpireGauge() *metric.Gauge {
+	return m.storage.sessionBasedLeasesWaitingToExpire
+}
