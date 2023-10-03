@@ -727,7 +727,7 @@ func TestDefaultPrivileges(t *testing.T) {
 		for _, userAndGrant := range tc.expectedGrantsOnObject {
 			for _, grant := range userAndGrant.grants {
 				if !createdPrivileges.CheckPrivilege(userAndGrant.user, grant) {
-					t.Errorf("expected to find %s privilege for %s", grant.String(), userAndGrant.user)
+					t.Errorf("expected to find %s privilege for %s", grant.DisplayName(), userAndGrant.user)
 				}
 			}
 		}
