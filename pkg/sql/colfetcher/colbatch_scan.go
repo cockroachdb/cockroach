@@ -241,10 +241,14 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 		s.Ctx, s.flowCtx, "colbatchscan", s.processorID,
 		&s.contentionEventsListener, &s.scanStatsListener, &s.tenantConsumptionListener,
 	)
+	// Since the spans come directly from the proto, we don't want to modify
+	// the spans slice.
+	spansMode := row.DoNotModifySpans
 	limitBatches := !s.parallelize
 	if err := s.cf.StartScan(
 		s.Ctx,
 		s.Spans,
+		spansMode,
 		limitBatches,
 		s.batchBytesLimit,
 		s.limitHint,

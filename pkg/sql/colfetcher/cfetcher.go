@@ -535,13 +535,14 @@ func cFetcherFirstBatchLimit(limitHint rowinfra.RowLimit, maxKeysPerRow uint32) 
 // StartScan initializes and starts the key-value scan. Can only be used
 // multiple times if cFetcherArgs.singleUse was set to false in Init().
 //
-// The fetcher takes ownership of the spans slice - it can modify the slice and
-// will perform the memory accounting accordingly. The caller can only reuse the
-// spans slice after the fetcher emits a zero-length batch, and if the caller
-// does, it becomes responsible for the memory accounting.
+// The fetcher will perform the memory accounting for the spans slice and might
+// modify it (depending on spansMode). The caller can only reuse the spans slice
+// after all rows have been fetched (i.e. NextBatch returned a zero-length
+// batch) or the fetcher has been closed.
 func (cf *cFetcher) StartScan(
 	ctx context.Context,
 	spans roachpb.Spans,
+	spansMode row.SpansHandlingMode,
 	limitBatches bool,
 	batchBytesLimit rowinfra.BytesLimit,
 	limitHint rowinfra.RowLimit,
@@ -559,7 +560,8 @@ func (cf *cFetcher) StartScan(
 	cf.machine.state[0] = stateResetBatch
 	cf.machine.state[1] = stateInitFetch
 	return cf.fetcher.SetupNextFetch(
-		ctx, spans, nil /* spanIDs */, batchBytesLimit, firstBatchLimit, false, /* spansCanOverlap */
+		ctx, spans, nil /* spanIDs */, spansMode,
+		batchBytesLimit, firstBatchLimit, false, /* spansCanOverlap */
 	)
 }
 

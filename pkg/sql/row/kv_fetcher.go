@@ -314,12 +314,13 @@ func (f *KVFetcher) NextKV(
 // SetupNextFetch overrides the same method from the wrapped KVBatchFetcher in
 // order to reset this KVFetcher.
 //
-// The fetcher takes ownership of the spans slice - it can modify the slice and
-// will perform the memory accounting accordingly (if acc is non-nil). The
-// caller can only reuse the spans slice after the fetcher has been closed, and
-// if the caller does, it becomes responsible for the memory accounting.
+// The fetcher will perform the memory accounting for the spans slice (if acc
+// was provided in the constructor) and might modify it (depending on
+// spansMode). The caller can only reuse the spans slice after all rows have
+// been fetched (i.e. NextBatch returned MoreKVs=false) or the fetcher has been
+// closed.
 //
-// The fetcher also takes ownership of the spanIDs slice - it can modify the
+// The fetcher takes full ownership of the spanIDs slice - it can modify the
 // slice, but it will **not** perform the memory accounting. It is the caller's
 // responsibility to track the memory under the spanIDs slice, and the slice
 // can only be reused once the fetcher has been closed. Notably, the capacity of
@@ -330,6 +331,7 @@ func (f *KVFetcher) SetupNextFetch(
 	ctx context.Context,
 	spans roachpb.Spans,
 	spanIDs []int,
+	spansMode SpansHandlingMode,
 	batchBytesLimit rowinfra.BytesLimit,
 	firstBatchKeyLimit rowinfra.KeyLimit,
 	spansCanOverlap bool,
@@ -338,7 +340,7 @@ func (f *KVFetcher) SetupNextFetch(
 	f.batchResponse = nil
 	f.spanID = 0
 	return f.KVBatchFetcher.SetupNextFetch(
-		ctx, spans, spanIDs, batchBytesLimit, firstBatchKeyLimit, spansCanOverlap,
+		ctx, spans, spanIDs, spansMode, batchBytesLimit, firstBatchKeyLimit, spansCanOverlap,
 	)
 }
 
@@ -368,7 +370,13 @@ func (f *KVProvider) NextBatch(context.Context) (KVBatchFetcherResponse, error) 
 
 // SetupNextFetch implements the KVBatchFetcher interface.
 func (f *KVProvider) SetupNextFetch(
-	context.Context, roachpb.Spans, []int, rowinfra.BytesLimit, rowinfra.KeyLimit, bool,
+	context.Context,
+	roachpb.Spans,
+	[]int,
+	SpansHandlingMode,
+	rowinfra.BytesLimit,
+	rowinfra.KeyLimit,
+	bool,
 ) error {
 	return nil
 }

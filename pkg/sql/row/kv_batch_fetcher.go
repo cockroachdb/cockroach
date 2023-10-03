@@ -95,20 +95,16 @@ type sendFunc func(
 type identifiableSpans struct {
 	roachpb.Spans
 	spanIDs []int
-}
-
-// swap swaps two spans as well as their span IDs.
-func (s *identifiableSpans) swap(i, j int) {
-	s.Spans.Swap(i, j)
-	if s.spanIDs != nil {
-		s.spanIDs[i], s.spanIDs[j] = s.spanIDs[j], s.spanIDs[i]
-	}
+	// If set, then each span is deeply reset on pop().
+	deepResetOnPop bool
 }
 
 // pop removes the first span as well as its span ID from s and returns them.
 func (s *identifiableSpans) pop() (roachpb.Span, int) {
 	origSpan := s.Spans[0]
-	s.Spans[0] = roachpb.Span{}
+	if s.deepResetOnPop {
+		s.Spans[0] = roachpb.Span{}
+	}
 	s.Spans = s.Spans[1:]
 	var spanID int
 	if s.spanIDs != nil {
@@ -136,20 +132,23 @@ func (s *identifiableSpans) reset() {
 // txnKVFetcher handles retrieval of key/values.
 type txnKVFetcher struct {
 	kvBatchFetcherHelper
-	// "Constant" fields, provided by the caller.
+
 	sendFn sendFunc
 	// spans is the list of Spans that will be read by this KV Fetcher. If an
 	// individual Span has only a start key, it will be interpreted as a
 	// single-key fetch and may use a GetRequest under the hood.
 	spans identifiableSpans
-	// spansScratch is the initial state of spans (given to the fetcher when
-	// starting the scan) that we need to hold on to since we're poping off
-	// spans in nextBatch(). Any resume spans are copied into this struct when
-	// processing each response.
+	// resumeSpans is the list of "resume spans" that were encountered on the
+	// last fetch. Once the current BatchResponse is fully processed, this list
+	// is transitioned into 'spans' to be read on the next fetch.
 	//
-	// scratchSpans.Len() is the number of resume spans we have accumulated
-	// during the last fetch.
-	scratchSpans identifiableSpans
+	// Internally, depending on SpansHandlingMode, the underlying spans slice
+	// can either be the same as the "original" spans slice provided in
+	// SetupNextFetch or freshly allocated one. spanIDs is always the one that
+	// was passed in SetupNextFetch.
+	resumeSpans identifiableSpans
+	// spansMode determines how the "original" spans slice must be handled.
+	spansMode SpansHandlingMode
 
 	curSpanID int
 
@@ -201,13 +200,23 @@ type txnKVFetcher struct {
 	// getResponseScratch is reused to return the result of Get requests.
 	getResponseScratch [1]roachpb.KeyValue
 
-	acc *mon.BoundAccount
-	// spansAccountedFor, batchResponseAccountedFor, and reqsScratchAccountedFor
-	// track the number of bytes that we've already registered with acc in
-	// regards to spans, the batch response, and reqsScratch, respectively.
-	spansAccountedFor         int64
-	batchResponseAccountedFor int64
-	reqsScratchAccountedFor   int64
+	acc          *mon.BoundAccount
+	accountedFor struct {
+		// spans tracks the number of bytes that we've already registered with
+		// acc in regard to 'spans' field.
+		spans int64
+		// originalSpans tracks the number of bytes that we've already
+		// registered with acc in regard to the spans slice that was passed on
+		// the last call to SetupNextFetch when spansMode is DoNotModifySpans.
+		// In such a scenario, even though we might be done with that spans
+		// slice, we must keep it accounted for according to the contract.
+		originalSpans int64
+		// batchResponse and reqsScratch track the number of bytes that we've
+		// already registered with acc in regard to the batch response and
+		// reqsScratch, respectively.
+		batchResponse int64
+		reqsScratch   int64
+	}
 
 	// If set, we will use the production value for kvBatchSize.
 	forceProductionKVBatchSize bool
@@ -378,12 +387,13 @@ func (f *txnKVFetcher) maybeInitAdmissionPacer(
 
 // SetupNextFetch sets up the Fetcher for the next set of spans.
 //
-// The fetcher takes ownership of the spans slice - it can modify the slice and
-// will perform the memory accounting accordingly (if acc is non-nil). The
-// caller can only reuse the spans slice after the fetcher has been closed, and
-// if the caller does, it becomes responsible for the memory accounting.
+// The fetcher will perform the memory accounting for the spans slice (if acc
+// was provided in the constructor) and might modify it (depending on
+// spansMode). The caller can only reuse the spans slice after all rows have
+// been fetched (i.e. NextBatch returned MoreKVs=false) or the fetcher has been
+// closed.
 //
-// The fetcher also takes ownership of the spanIDs slice - it can modify the
+// The fetcher takes full ownership of the spanIDs slice - it can modify the
 // slice, but it will **not** perform the memory accounting. It is the caller's
 // responsibility to track the memory under the spanIDs slice, and the slice
 // can only be reused once the fetcher has been closed. Notably, the capacity of
@@ -425,6 +435,7 @@ func (f *txnKVFetcher) SetupNextFetch(
 	ctx context.Context,
 	spans roachpb.Spans,
 	spanIDs []int,
+	spansMode SpansHandlingMode,
 	batchBytesLimit rowinfra.BytesLimit,
 	firstBatchKeyLimit rowinfra.KeyLimit,
 	spansCanOverlap bool,
@@ -489,40 +500,75 @@ func (f *txnKVFetcher) SetupNextFetch(
 	f.batchBytesLimit = batchBytesLimit
 	f.firstBatchKeyLimit = firstBatchKeyLimit
 
-	// Account for the memory of the spans that we're taking the ownership of.
+	// Account for the memory of the spans according to the contract of
+	// SetupNextFetch.
 	if f.acc != nil {
 		newSpansAccountedFor := spans.MemUsage()
 		if err := f.acc.Grow(ctx, newSpansAccountedFor); err != nil {
 			return err
 		}
-		f.spansAccountedFor = newSpansAccountedFor
+		f.accountedFor.spans = newSpansAccountedFor
 	}
 
 	if spanIDs != nil && len(spans) != len(spanIDs) {
 		return errors.AssertionFailedf("unexpectedly non-nil spanIDs slice has a different length than spans")
 	}
 
-	// Since the fetcher takes ownership of the spans slice, we don't need to
-	// perform the deep copy. Notably, the spans might be modified (when the
-	// fetcher receives the resume spans), but the fetcher will always keep the
-	// memory accounting up to date.
 	f.spans = identifiableSpans{
 		Spans:   spans,
 		spanIDs: spanIDs,
 	}
-	if f.reverse {
-		// Reverse scans receive the spans in decreasing order. Note that we
-		// need to be this tricky since we're updating the spans in place.
-		i, j := 0, f.spans.Len()-1
-		for i < j {
-			f.spans.swap(i, j)
-			i++
-			j--
+	f.spansMode = spansMode
+	if spansMode == DoNotModifySpans {
+		// Currently, in DoNotModifySpans mode we never reuse the scratch spans
+		// slice that we allocate between SetupNextFetch calls because that mode
+		// is only used when SetupNextFetch is called only once. If that ever
+		// changes, we'll need to keep the reference while keeping the proper
+		// memory accounting.
+		if f.reverse {
+			// Reverse scans receive the spans in decreasing order, so we need
+			// to revert the slice. However, we cannot modify the original spans
+			// slice, so we need to copy and revert it straight into our own
+			// scratch space.
+			//
+			// Note that for simplicity we delay the memory accounting for this
+			// slice until we're done with the first fetch(). This seems
+			// acceptable given that we did account for the keys inside the
+			// spans, so we're only missing accounting for roachpb.Span objects
+			// (i.e. the overhead). Currently, this code path should only be
+			// triggered when we have a handful of spans to scan (because lookup
+			// and index joins use CanModifySpans).
+			spansScratch := make(roachpb.Spans, len(spans))
+			for i, j := 0, len(spans)-1; i < len(spans); i, j = i+1, j-1 {
+				spansScratch[i] = spans[j]
+			}
+			f.spans.Spans = spansScratch
+			// We just allocated our own spans slice and will only use that
+			// going forward, so it's safe to modify it - the original spans
+			// slice won't be affected.
+			f.spans.deepResetOnPop = true
+			f.resumeSpans = f.spans
+		} else {
+			// For forward scans when we can't modify the spans slice, we don't
+			// pre-allocate anything for the resume spans - we'll make that
+			// allocation lazily in push().
+			f.resumeSpans = identifiableSpans{
+				spanIDs:        spanIDs,
+				deepResetOnPop: true,
+			}
+		}
+	} else {
+		// We can modify the spans slice as we please, so we will also use it
+		// as our scratch space.
+		f.spans.deepResetOnPop = true
+		f.resumeSpans = f.spans
+		if buildutil.CrdbTestBuild && f.reverse {
+			return errors.AssertionFailedf(
+				"reverse is currently expected to be used only by" +
+					"the table reader which doesn't allow spans modification",
+			)
 		}
 	}
-	// Keep the reference to the full identifiable spans. We will never need
-	// larger slices when processing the resume spans.
-	f.scratchSpans = f.spans
 
 	return nil
 }
@@ -559,7 +605,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	monitoring := f.acc != nil
 
 	const tokenFetchAllocation = 1 << 10
-	if !monitoring || f.batchResponseAccountedFor < tokenFetchAllocation {
+	if !monitoring || f.accountedFor.batchResponse < tokenFetchAllocation {
 		// In case part of this batch ends up being evaluated locally, we want
 		// that local evaluation to do memory accounting since we have reserved
 		// negligible bytes. Ideally, we would split the memory reserved across
@@ -567,15 +613,15 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		// do not yet have that capability.
 		ba.AdmissionHeader.NoMemoryReservedAtSource = true
 	}
-	if monitoring && f.batchResponseAccountedFor < tokenFetchAllocation {
+	if monitoring && f.accountedFor.batchResponse < tokenFetchAllocation {
 		// Pre-reserve a token fraction of the maximum amount of memory this scan
 		// could return. Most of the time, scans won't use this amount of memory,
 		// so it's unnecessary to reserve it all. We reserve something rather than
 		// nothing at all to preserve some accounting.
-		if err := f.acc.Resize(ctx, f.batchResponseAccountedFor, tokenFetchAllocation); err != nil {
+		if err := f.acc.Resize(ctx, f.accountedFor.batchResponse, tokenFetchAllocation); err != nil {
 			return err
 		}
-		f.batchResponseAccountedFor = tokenFetchAllocation
+		f.accountedFor.batchResponse = tokenFetchAllocation
 	}
 
 	br, err := f.sendFn(ctx, ba)
@@ -594,7 +640,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	// TODO(yuzefovich): BatchResponse.Size ignores the overhead of the
 	// GetResponse and ScanResponse structs. We should include it here.
 	returnedBytes := int64(br.Size())
-	if monitoring && (returnedBytes > int64(f.batchBytesLimit) || returnedBytes > f.batchResponseAccountedFor) {
+	if monitoring && (returnedBytes > int64(f.batchBytesLimit) || returnedBytes > f.accountedFor.batchResponse) {
 		// Resize up to the actual amount of bytes we got back from the fetch,
 		// but don't ratchet down below f.batchBytesLimit if we ever exceed it.
 		// We would much prefer to over-account than under-account, especially when
@@ -613,10 +659,10 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		// likely that we'll expose ourselves to OOM conditions, so that's the
 		// reasoning for why we never ratchet this account down past the maximum
 		// fetch size once it's exceeded.
-		if err := f.acc.Resize(ctx, f.batchResponseAccountedFor, returnedBytes); err != nil {
+		if err := f.acc.Resize(ctx, f.accountedFor.batchResponse, returnedBytes); err != nil {
 			return err
 		}
-		f.batchResponseAccountedFor = returnedBytes
+		f.accountedFor.batchResponse = returnedBytes
 	}
 
 	// Do admission control after we've accounted for the response bytes.
@@ -625,7 +671,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	}
 
 	f.batchIdx++
-	f.scratchSpans.reset()
+	f.resumeSpans.reset()
 	f.alreadyFetched = true
 	// Keep the reference to the requests slice in order to reuse in the future
 	// after making sure to nil out the requests in order to lose references to
@@ -637,10 +683,10 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	}
 	if monitoring {
 		reqsScratchMemUsage := requestUnionOverhead * int64(cap(f.reqsScratch))
-		if err := f.acc.Resize(ctx, f.reqsScratchAccountedFor, reqsScratchMemUsage); err != nil {
+		if err := f.acc.Resize(ctx, f.accountedFor.reqsScratch, reqsScratchMemUsage); err != nil {
 			return err
 		}
-		f.reqsScratchAccountedFor = reqsScratchMemUsage
+		f.accountedFor.reqsScratch = reqsScratchMemUsage
 	}
 
 	// TODO(radu): We should fetch the next chunk in the background instead of waiting for the next
@@ -766,7 +812,7 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 
 		// Check whether we need to resume scanning this span.
 		header := reply.Header()
-		if header.NumKeys > 0 && f.scratchSpans.Len() > 0 {
+		if header.NumKeys > 0 && f.resumeSpans.Len() > 0 {
 			return KVBatchFetcherResponse{}, errors.Errorf(
 				"span with results after resume span; it shouldn't happen given that "+
 					"we're only scanning non-overlapping spans. New spans: %s",
@@ -776,7 +822,7 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 		// Any requests that were not fully completed will have the ResumeSpan set.
 		// Here we accumulate all of them.
 		if resumeSpan := header.ResumeSpan; resumeSpan != nil {
-			f.scratchSpans.push(*resumeSpan, f.curSpanID)
+			f.resumeSpans.push(*resumeSpan, f.curSpanID)
 		}
 
 		ret := KVBatchFetcherResponse{
@@ -838,19 +884,32 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 	}
 	// No more responses from the last BatchRequest.
 	if f.alreadyFetched {
-		if f.scratchSpans.Len() == 0 {
+		if f.resumeSpans.Len() == 0 {
 			// If we are out of keys, we can return and we're finished with the
 			// fetch.
 			return KVBatchFetcherResponse{MoreKVs: false}, nil
 		}
 		// We have some resume spans.
-		f.spans = f.scratchSpans
+		f.spans = f.resumeSpans
 		if f.acc != nil {
+			if f.spansMode == DoNotModifySpans && f.accountedFor.originalSpans == 0 {
+				// We just finished our first fetch, and we cannot modify the
+				// spans. This means that we must be using our own scratch space
+				// for resume spans from now on. The contract of SetupNextFetch
+				// says that we must keep accounting for the "original" spans
+				// slice too, so we do that here. (In other words, we need to
+				// account for two slices going forward.)
+				if err = f.acc.Grow(ctx, f.accountedFor.spans); err != nil {
+					return KVBatchFetcherResponse{}, err
+				}
+				f.accountedFor.originalSpans = f.accountedFor.spans
+				f.accountedFor.spans = 0
+			}
 			newSpansMemUsage := f.spans.MemUsage()
-			if err := f.acc.Resize(ctx, f.spansAccountedFor, newSpansMemUsage); err != nil {
+			if err = f.acc.Resize(ctx, f.accountedFor.spans, newSpansMemUsage); err != nil {
 				return KVBatchFetcherResponse{}, err
 			}
-			f.spansAccountedFor = newSpansMemUsage
+			f.accountedFor.spans = newSpansMemUsage
 		}
 	}
 	// We have more work to do. Ask the KV layer to continue where it left off.
@@ -868,12 +927,12 @@ func (f *txnKVFetcher) reset(ctx context.Context) {
 	f.remainingBatches = nil
 	f.remainingColBatches = nil
 	f.spans = identifiableSpans{}
-	f.scratchSpans = identifiableSpans{}
+	f.resumeSpans = identifiableSpans{}
 	// Release only the allocations made by this fetcher. Note that we're still
 	// keeping the reference to reqsScratch, so we don't release the allocation
 	// for it.
-	f.acc.Shrink(ctx, f.batchResponseAccountedFor+f.spansAccountedFor)
-	f.batchResponseAccountedFor, f.spansAccountedFor = 0, 0
+	f.acc.Shrink(ctx, f.accountedFor.spans+f.accountedFor.originalSpans+f.accountedFor.batchResponse)
+	f.accountedFor.spans, f.accountedFor.originalSpans, f.accountedFor.batchResponse = 0, 0, 0
 }
 
 // Close releases the resources of this txnKVFetcher.

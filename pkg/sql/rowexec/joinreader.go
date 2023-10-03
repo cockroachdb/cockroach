@@ -1031,13 +1031,9 @@ func (jr *joinReader) readInput() (
 	}
 
 	log.VEventf(jr.Ctx(), 1, "scanning %d spans", len(spans))
-	// Note that the fetcher takes ownership of the spans slice - it will modify
-	// it and perform the memory accounting. We don't care about the
-	// modification here, but we want to be conscious about the memory
-	// accounting - we don't double count for any memory of spans because the
-	// joinReaderStrategy doesn't account for any memory used by the spans.
+	// Note that the fetcher will perform the memory accounting for the spans.
 	if err = jr.fetcher.StartScan(
-		jr.Ctx(), spans, spanIDs, jr.getBatchBytesLimit(), rowinfra.NoRowLimit,
+		jr.Ctx(), spans, spanIDs, row.CanModifySpans, jr.getBatchBytesLimit(), rowinfra.NoRowLimit,
 	); err != nil {
 		jr.MoveToDraining(err)
 		return jrStateUnknown, nil, jr.DrainHelper()
@@ -1104,7 +1100,7 @@ func (jr *joinReader) fetchLookupRow() (joinReaderState, *execinfrapb.ProducerMe
 
 			log.VEventf(jr.Ctx(), 1, "scanning %d remote spans", len(spans))
 			if err := jr.fetcher.StartScan(
-				jr.Ctx(), spans, spanIDs, jr.getBatchBytesLimit(), rowinfra.NoRowLimit,
+				jr.Ctx(), spans, spanIDs, row.CanModifySpans, jr.getBatchBytesLimit(), rowinfra.NoRowLimit,
 			); err != nil {
 				jr.MoveToDraining(err)
 				return jrStateUnknown, jr.DrainHelper()

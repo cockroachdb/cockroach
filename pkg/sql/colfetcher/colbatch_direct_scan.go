@@ -61,9 +61,13 @@ func (s *ColBatchDirectScan) Init(ctx context.Context) {
 		s.Ctx, s.flowCtx, "colbatchdirectscan", s.processorID,
 		&s.contentionEventsListener, &s.scanStatsListener, &s.tenantConsumptionListener,
 	)
+	// Since the spans come directly from the proto, we don't want to modify
+	// the spans slice.
+	spansMode := row.DoNotModifySpans
 	firstBatchLimit := cFetcherFirstBatchLimit(s.limitHint, s.spec.MaxKeysPerRow)
 	err := s.fetcher.SetupNextFetch(
-		ctx, s.Spans, nil /* spanIDs */, s.batchBytesLimit, firstBatchLimit, false, /* spansCanOverlap */
+		ctx, s.Spans, nil /* spanIDs */, spansMode,
+		s.batchBytesLimit, firstBatchLimit, false, /* spansCanOverlap */
 	)
 	if err != nil {
 		colexecerror.InternalError(err)

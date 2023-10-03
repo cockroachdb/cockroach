@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type initFetcherArgs struct {
@@ -162,6 +163,7 @@ func TestNextRowSingle(t *testing.T) {
 				ctx,
 				roachpb.Spans{tableDesc.IndexSpan(codec, tableDesc.GetPrimaryIndexID())},
 				nil, /* spanIDs */
+				DoNotModifySpans,
 				rowinfra.NoBytesLimit,
 				rowinfra.NoRowLimit,
 			); err != nil {
@@ -267,6 +269,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 				ctx,
 				roachpb.Spans{tableDesc.IndexSpan(codec, tableDesc.GetPrimaryIndexID())},
 				nil, /* spanIDs */
+				DoNotModifySpans,
 				rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
 				10, /*limitHint*/
 			); err != nil {
@@ -362,6 +365,7 @@ func TestRowFetcherMemoryLimits(t *testing.T) {
 		ctx,
 		roachpb.Spans{tableDesc.IndexSpan(codec, tableDesc.GetPrimaryIndexID())},
 		nil, /* spanIDs */
+		DoNotModifySpans,
 		rowinfra.NoBytesLimit,
 		rowinfra.NoRowLimit,
 	)
@@ -440,6 +444,7 @@ INDEX(c)
 			roachpb.Span{Key: midKey, EndKey: endKey},
 		},
 		nil, /* spanIDs */
+		DoNotModifySpans,
 		rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
 		// Set a limitHint of 1 to more quickly end the first batch, causing a
 		// batch that ends between rows.
@@ -599,6 +604,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 				ctx,
 				roachpb.Spans{tableDesc.IndexSpan(codec, tableDesc.PublicNonPrimaryIndexes()[0].GetID())},
 				nil, /* spanIDs */
+				DoNotModifySpans,
 				rowinfra.NoBytesLimit,
 				rowinfra.NoRowLimit,
 			); err != nil {
@@ -742,4 +748,109 @@ func TestFetcherUninitialized(t *testing.T) {
 	// before the fetcher was fully initialized.
 	var fetcher Fetcher
 	assert.Zero(t, fetcher.GetBytesRead())
+}
+
+// TestFetcherNoSpansModification verifies that the txnKVFetcher doesn't modify
+// the spans passed to it when DoNotModifySpans mode is used. It is a regression
+// test for #110712 which occurred because the txnKVFetcher could modify the
+// spans in the TableReaderSpec proto when resume spans occurred.
+func TestFetcherNoSpansModification(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	codec := srv.ApplicationLayer().Codec()
+
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	runner.Exec(t, "CREATE TABLE t (k INT PRIMARY KEY)")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "defaultdb", "t")
+
+	// We will use the lowest possible row limit of 1. The row fetcher
+	// internally adds 1 to that limit, so it'll actually set MaxSpanRequestKeys
+	// to 2. Thus, in order to trigger the usage of the resume spans (meaning
+	// that we need to issue at least 2 BatchRequests), we need to scan at least
+	// 3 rows (either as a single full scan or via multiple spans).
+	var rowLimit = rowinfra.RowLimit(1)
+	const numRows = 3
+	runner.Exec(t, "INSERT INTO t SELECT generate_series(1, $1)", numRows)
+	// The bytes limit doesn't matter in this test.
+	var batchBytesLimit = rowinfra.GetDefaultBatchBytesLimit(true /* forceProductionValue */)
+
+	// getScan returns a span for the Scan request such that it would scan all
+	// keys in [start, end) range.
+	getScan := func(start, end int64) roachpb.Span {
+		keyPrefix := tableDesc.IndexSpan(codec, tableDesc.GetPrimaryIndexID()).Key
+		startKey := encoding.EncodeVarintAscending(keyPrefix[:len(keyPrefix):len(keyPrefix)], start)
+		endKey := encoding.EncodeVarintAscending(keyPrefix[:len(keyPrefix):len(keyPrefix)], end)
+		return roachpb.Span{Key: startKey, EndKey: endKey}
+	}
+
+	for _, tc := range []struct {
+		name     string
+		reverse  bool
+		spans    roachpb.Spans
+		rowCount int
+	}{
+		{
+			name:     "full scan (single span)",
+			spans:    roachpb.Spans{tableDesc.IndexSpan(codec, tableDesc.GetPrimaryIndexID())},
+			rowCount: numRows,
+		},
+		{
+			name: "multiple spans (forward)",
+			spans: roachpb.Spans{
+				getScan(0, 2),
+				getScan(2, 4),
+			},
+			rowCount: numRows,
+		},
+		{
+			name:    "multiple spans (reverse)",
+			reverse: true,
+			spans: roachpb.Spans{
+				getScan(0, 2),
+				getScan(2, 4),
+			},
+			rowCount: numRows,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Make a deep copy of the spans.
+			origSpans := make(roachpb.Spans, len(tc.spans))
+			for i := range tc.spans {
+				origSpans[i].Key = append(roachpb.Key{}, tc.spans[i].Key...)
+				origSpans[i].EndKey = append(roachpb.Key{}, tc.spans[i].EndKey...)
+			}
+
+			txn := kv.NewTxn(ctx, kvDB, 0)
+			rf := initFetcher(
+				t, codec, txn, initFetcherArgs{tableDesc: tableDesc},
+				tc.reverse, &tree.DatumAlloc{}, nil, /* memMon */
+			)
+			defer rf.Close(ctx)
+
+			err := rf.StartScan(ctx, tc.spans, nil /* spanIDs */, DoNotModifySpans, batchBytesLimit, rowLimit)
+			require.NoError(t, err)
+			require.Equal(t, origSpans, tc.spans)
+
+			// Crux of the test - ensure that passed-in spans aren't modified in
+			// any way after having produced another row.
+			var rowCount int
+			for {
+				r, _, err := rf.NextRow(ctx)
+				require.NoError(t, err)
+				require.Equal(t, origSpans, tc.spans)
+				if r == nil {
+					break
+				}
+				rowCount++
+			}
+			// Sanity check that we fetched as many rows as we expected and that
+			// we issued at least 2 BatchRequests.
+			require.Equal(t, tc.rowCount, rowCount)
+			require.GreaterOrEqual(t, rf.GetBatchRequestsIssued(), int64(2))
+		})
+	}
 }
