@@ -166,7 +166,6 @@ func registerRubyPG(r registry.Registry) {
 
 		// Find all the failed and errored tests.
 		results := newORMTestsResults()
-		blocklistName, expectedFailures := "rubyPGBlocklist", rubyPGBlocklist
 
 		scanner := bufio.NewScanner(bytes.NewReader(rawResults))
 		totalTests := int64(0)
@@ -199,8 +198,12 @@ func registerRubyPG(r registry.Registry) {
 			}
 			test = strs[1]
 
-			issue, expectedFailure := expectedFailures[test]
+			issue, expectedFailure := rubyPGBlocklist[test]
+			ignoredReason, expectedIgnored := rubyPGIgnorelist[test]
 			switch {
+			case expectedIgnored:
+				results.results[test] = fmt.Sprintf("--- SKIP: %s due to %s (expected)", test, ignoredReason)
+				results.ignoredCount++
 			case expectedFailure:
 				results.results[test] = fmt.Sprintf("--- FAIL: %s - %s (expected)",
 					test, maybeAddGithubLink(issue),
@@ -221,10 +224,11 @@ func registerRubyPG(r registry.Registry) {
 			t.Fatalf("failed to find total number of tests run")
 		}
 		totalPasses := int(totalTests) - (results.failUnexpectedCount + results.failExpectedCount)
-		results.passUnexpectedCount = len(expectedFailures) - results.failExpectedCount
+		results.passUnexpectedCount = len(rubyPGBlocklist) - results.failExpectedCount
 		results.passExpectedCount = totalPasses - results.passUnexpectedCount
 
-		results.summarizeAll(t, "ruby-pg", blocklistName, expectedFailures, version, rubyPGVersion)
+		const blocklistName = "rubyPGBlocklist"
+		results.summarizeAll(t, "ruby-pg", blocklistName, rubyPGBlocklist, version, rubyPGVersion)
 	}
 
 	r.Add(registry.TestSpec{

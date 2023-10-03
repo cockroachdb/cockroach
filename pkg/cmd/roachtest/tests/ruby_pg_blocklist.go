@@ -135,7 +135,6 @@ var rubyPGBlocklist = blocklist{
 	`running with sync_* methods PG::Connection connection information related to SSL can retrieve a single ssl connection attribute`:                                                                                           "unknown",
 	`running with sync_* methods PG::Connection connection information related to SSL can retrieve connection's ssl state`:                                                                                                      "unknown",
 	`running with sync_* methods PG::Connection connects using URI with UnixSocket host`:                                                                                                                                        "unknown",
-	`running with sync_* methods PG::Connection consume_input should raise ConnectionBad for a closed connection`:                                                                                                               "unknown",
 	`running with sync_* methods PG::Connection deprecated forms of methods should forward exec to exec_params`:                                                                                                                 "unknown",
 	`running with sync_* methods PG::Connection deprecated forms of methods should forward send_query to send_query_params`:                                                                                                     "unknown",
 	`running with sync_* methods PG::Connection doesn't collapse sequential notifications`:                                                                                                                                      "unknown",
@@ -198,4 +197,8 @@ var rubyPGBlocklist = blocklist{
 	`with a Fiber scheduler connects to a server with setting default encoding`:                                                                                                                                                 "unknown",
 	`with a Fiber scheduler should convert strings and parameters to #prepare and #exec_prepared`:                                                                                                                               "unknown",
 	`with a Fiber scheduler waits when sending query data`:                                                                                                                                                                      "unknown",
+}
+
+var rubyPGIgnorelist = blocklist{
+	`running with sync_* methods PG::Connection consume_input should raise ConnectionBad for a closed connection`: "unknown",
 }
