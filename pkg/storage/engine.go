@@ -1020,6 +1020,7 @@ type Engine interface {
 	// files. These files can be referred to by multiple stores, but are not
 	// modified or deleted by the Engine doing the ingestion.
 	IngestExternalFiles(ctx context.Context, external []pebble.ExternalFile) (pebble.IngestOperationStats, error)
+
 	// PreIngestDelay offers an engine the chance to backpressure ingestions.
 	// When called, it may choose to block if the engine determines that it is in
 	// or approaching a state where further ingestions may risk its health.
@@ -1028,7 +1029,21 @@ type Engine interface {
 	// counts for the given key span, along with how many of those bytes are on
 	// remote, as well as specifically external remote, storage.
 	ApproximateDiskBytes(from, to roachpb.Key) (total, remote, external uint64, _ error)
-
+	// ConvertFilesToBatchAndCommit converts local files with the given paths to
+	// a WriteBatch and commits the batch with sync=true. The files represented
+	// in paths must not be overlapping -- this is the same contract as
+	// IngestLocalFiles*. Additionally, clearedSpans represents the spans which
+	// must be deleted before writing the data contained in these paths.
+	//
+	// This method is expected to be used instead of IngestLocalFiles* or
+	// IngestAndExciseFiles when the sum of the file sizes is small.
+	//
+	// TODO(sumeer): support this as an alternative to IngestAndExciseFiles.
+	// This should be easy since we use NewSSTEngineIterator to read the ssts,
+	// which supports multiple levels.
+	ConvertFilesToBatchAndCommit(
+		ctx context.Context, paths []string, clearedSpans []roachpb.Span,
+	) error
 	// CompactRange ensures that the specified range of key value pairs is
 	// optimized for space efficiency.
 	CompactRange(start, end roachpb.Key) error
