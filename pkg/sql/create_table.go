@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/lib/pq/oid"
@@ -2421,6 +2422,8 @@ func newTableDesc(
 			jobs.ScheduledJobTxn(params.p.InternalSQLTxn()),
 			params.p.User(),
 			ret,
+			params.p.extendedEvalCtx.ClusterID,
+			params.p.execCfg.Settings.Version.ActiveVersion(params.ctx),
 		)
 		if err != nil {
 			return nil, err
@@ -2434,7 +2437,11 @@ func newTableDesc(
 // for a given table. newRowLevelTTLScheduledJob assumes that
 // tblDesc.RowLevelTTL is not nil.
 func newRowLevelTTLScheduledJob(
-	env scheduledjobs.JobSchedulerEnv, owner username.SQLUsername, tblDesc *tabledesc.Mutable,
+	env scheduledjobs.JobSchedulerEnv,
+	owner username.SQLUsername,
+	tblDesc *tabledesc.Mutable,
+	clusterID uuid.UUID,
+	clusterVersion clusterversion.ClusterVersion,
 ) (*jobs.ScheduledJob, error) {
 	sj := jobs.NewScheduledJob(env)
 	sj.SetScheduleLabel(ttlbase.BuildScheduleLabel(tblDesc))
@@ -2442,7 +2449,9 @@ func newRowLevelTTLScheduledJob(
 	sj.SetScheduleDetails(jobspb.ScheduleDetails{
 		Wait: jobspb.ScheduleDetails_WAIT,
 		// If a job fails, try again at the allocated cron time.
-		OnError: jobspb.ScheduleDetails_RETRY_SCHED,
+		OnError:                jobspb.ScheduleDetails_RETRY_SCHED,
+		ClusterID:              clusterID,
+		CreationClusterVersion: clusterVersion,
 	})
 
 	if err := sj.SetSchedule(tblDesc.RowLevelTTL.DeletionCronOrDefault()); err != nil {
@@ -2469,6 +2478,8 @@ func CreateRowLevelTTLScheduledJob(
 	s jobs.ScheduledJobStorage,
 	owner username.SQLUsername,
 	tblDesc *tabledesc.Mutable,
+	clusterID uuid.UUID,
+	version clusterversion.ClusterVersion,
 ) (*jobs.ScheduledJob, error) {
 	if !tblDesc.HasRowLevelTTL() {
 		return nil, errors.AssertionFailedf("CreateRowLevelTTLScheduledJob called with no .RowLevelTTL: %#v", tblDesc)
@@ -2476,7 +2487,7 @@ func CreateRowLevelTTLScheduledJob(
 
 	telemetry.Inc(sqltelemetry.RowLevelTTLCreated)
 	env := JobSchedulerEnv(knobs)
-	j, err := newRowLevelTTLScheduledJob(env, owner, tblDesc)
+	j, err := newRowLevelTTLScheduledJob(env, owner, tblDesc, clusterID, version)
 	if err != nil {
 		return nil, err
 	}
