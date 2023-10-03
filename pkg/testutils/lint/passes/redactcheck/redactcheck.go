@@ -151,8 +151,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"FormatCode": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/privilege": {
-						"Kind":       {},
-						"ObjectType": {},
+						"KindInternalKey": {},
+						"KindDisplayName": {},
+						"ObjectType":      {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants": {
 						"ConstraintType": {},
