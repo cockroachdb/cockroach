@@ -2402,6 +2402,95 @@ func (p *Pebble) BufferedSize() int {
 	return 0
 }
 
+// ConvertFilesToBatchAndCommit implements the Engine interface.
+func (p *Pebble) ConvertFilesToBatchAndCommit(
+	_ context.Context, paths []string, clearedSpans []roachpb.Span,
+) error {
+	files := make([]sstable.ReadableFile, len(paths))
+	closeFiles := func() {
+		for i := range files {
+			if files[i] != nil {
+				files[i].Close()
+			}
+		}
+	}
+	for i, fileName := range paths {
+		f, err := p.FS.Open(fileName)
+		if err != nil {
+			closeFiles()
+			return err
+		}
+		files[i] = f
+	}
+	iter, err := NewSSTEngineIterator(
+		[][]sstable.ReadableFile{files},
+		IterOptions{
+			KeyTypes:   IterKeyTypePointsAndRanges,
+			LowerBound: roachpb.KeyMin,
+			UpperBound: roachpb.KeyMax,
+		}, true)
+	if err != nil {
+		// TODO(sumeer): we don't call closeFiles() since in the error case some
+		// of the files may be closed. See the code in
+		// https://github.com/cockroachdb/pebble/blob/master/external_iterator.go#L104-L113
+		// which closes the opened readers. At this point in the code we don't
+		// know which files are already closed. The callee needs to be fixed to
+		// not close any of the files or close all the files in the error case.
+		// The natural behavior would be to not close any file. Fix this in
+		// Pebble, and then adjust the code here if needed.
+		return err
+	}
+	defer iter.Close()
+
+	batch := p.NewWriteBatch()
+	for i := range clearedSpans {
+		err :=
+			batch.ClearRawRange(clearedSpans[i].Key, clearedSpans[i].EndKey, true, true)
+		if err != nil {
+			return err
+		}
+	}
+	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: roachpb.KeyMin})
+	for valid {
+		hasPoint, hasRange := iter.HasPointAndRange()
+		if hasPoint {
+			var k EngineKey
+			if k, err = iter.UnsafeEngineKey(); err != nil {
+				break
+			}
+			var v []byte
+			if v, err = iter.UnsafeValue(); err != nil {
+				break
+			}
+			if err = batch.PutEngineKey(k, v); err != nil {
+				break
+			}
+		}
+		if hasRange && iter.RangeKeyChanged() {
+			var rangeBounds roachpb.Span
+			if rangeBounds, err = iter.EngineRangeBounds(); err != nil {
+				break
+			}
+			rangeKeys := iter.EngineRangeKeys()
+			for i := range rangeKeys {
+				if err = batch.PutEngineRangeKey(rangeBounds.Key, rangeBounds.EndKey, rangeKeys[i].Version,
+					rangeKeys[i].Value); err != nil {
+					break
+				}
+			}
+			if err != nil {
+				break
+			}
+		}
+		valid, err = iter.NextEngineKey()
+	}
+	if err != nil {
+		batch.Close()
+		return err
+	}
+	return batch.Commit(true)
+}
+
 type pebbleReadOnly struct {
 	parent *Pebble
 	// The iterator reuse optimization in pebbleReadOnly is for servicing a
