@@ -828,12 +828,17 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"ALTER TABLE t2 ADD COLUMN p INT DEFAULT 50;",
 			"ALTER TABLE t2 DROP COLUMN p;",
 			"ALTER TABLE t2 ALTER PRIMARY KEY USING COLUMNS (j);",
+			"DROP TABLE IF EXISTS t1, t2;",
+			"CREATE TABLE t1 (rowid INT NOT NULL);",
+			"ALTER TABLE t1 ALTER PRIMARY KEY USING COLUMNS (rowid); -- special case where column name `rowid` is used",
 
 			// Statements expected to fail.
 			"CREATE TABLE t1 (); -- expect a DuplicateRelation error",
 			"ALTER TABLE t1 DROP COLUMN xyz; -- expect a rejected (sql_safe_updates = true) warning",
 			"ALTER TABLE t1 DROP COLUMN xyz; -- expect a UndefinedColumn error",
 			"ALTER TABLE txyz ADD COLUMN i INT DEFAULT 30; -- expect a UndefinedTable error",
+			"SELECT (*) FROM t1; -- expect to be skipped because of the syntax error",
+			"FROM t1 SELECT *; -- ditto",
 
 			// statements with TCL commands or empty content.
 			"",
@@ -847,7 +852,8 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"COMMIT;",
 			"BEGIN;",
 			"SELECT 1/0;",
-			"INSERT INTO t2 VALUES (1002, 1003); INSERT INTO t1 VALUES (1001, 1002); -- expect to be skipped",
+			"DROP TABLE IF EXISTS t2  -- expect to be ignored",
+			"INSERT INTO t2 VALUES (1002, 1003); INSERT INTO t1 VALUES (1001, 1002);  -- expect to be ignored",
 			"ROLLBACK;",
 
 			// statements that will be altered due to known behavioral differences in LSC vs DSC.
