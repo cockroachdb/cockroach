@@ -1379,7 +1379,7 @@ func Create(
 			if err := cleanupFailedCreate(l, clusterName); err != nil {
 				l.Errorf("Error while cleaning up partially-created cluster: %s\n", err)
 			} else {
-				l.Errorf("Cleaning up OK\n")
+				l.Printf("Cleaning up OK\n")
 			}
 		}()
 	} else {
