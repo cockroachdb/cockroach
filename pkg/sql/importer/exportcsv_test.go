@@ -611,14 +611,15 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 				0: {
 					Knobs: base.TestingKnobs{
 						SQLExecutor: &sql.ExecutorTestingKnobs{
-							DistSQLReceiverPushCallbackFactory: func(query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
+							DistSQLReceiverPushCallbackFactory: func(query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
 								if strings.Contains(query, "EXPORT") {
-									return func(_ rowenc.EncDatumRow, _ coldata.Batch, meta *execinfrapb.ProducerMetadata) {
+									return func(row rowenc.EncDatumRow, batch coldata.Batch, meta *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
 										if meta != nil && meta.Err != nil {
 											if testutils.IsError(meta.Err, "ReadWithinUncertaintyIntervalError") {
 												close(gotRWUIOnGateway)
 											}
 										}
+										return row, batch, meta
 									}
 								}
 								return nil
