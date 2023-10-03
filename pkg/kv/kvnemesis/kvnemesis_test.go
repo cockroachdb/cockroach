@@ -102,7 +102,7 @@ func (cfg kvnemesisTestCfg) testClusterArgs(tr *SeqTracker) base.TestClusterArgs
 		}
 	}
 
-	if p := cfg.injectReproposalErrorProb; p > 0 {
+	if p := cfg.invalidLeaseAppliedIndexProb; p > 0 {
 		var mu syncutil.Mutex
 		seen := map[string]int{}
 		storeKnobs.LeaseIndexFilter = func(pd *kvserver.ProposalData) kvpb.LeaseAppliedIndex {

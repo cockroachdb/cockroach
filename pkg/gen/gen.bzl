@@ -19,7 +19,6 @@
 # generated go files.
 
 load("@io_bazel_rules_go//go:def.bzl", "GoSource")
-load(":bindata.bzl", "BINDATA_SRCS")
 load(":docs.bzl", "DOCS_SRCS")
 load(":execgen.bzl", "EXECGEN_SRCS")
 load(":gomock.bzl", "GOMOCK_SRCS")
@@ -288,12 +287,6 @@ def docs():
     _hoist_no_prefix(
         name = "docs",
         srcs = DOCS_SRCS,
-    )
-
-def bindata():
-    _hoist_no_prefix(
-        name = "bindata",
-        srcs = BINDATA_SRCS,
     )
 
 def parser():
