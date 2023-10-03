@@ -16,6 +16,77 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
 
+// TODO(srosenberg): restore the change in https://github.com/cockroachdb/cockroach/pull/111140 after 23.2 branch cut.
+func AWSMachineType(
+	cpus int, mem MemPerCPU, shouldSupportLocalSSD bool, arch vm.CPUArch,
+) (string, vm.CPUArch) {
+	return AWSMachineTypeOld(cpus, mem, arch)
+}
+
+// TODO(srosenberg): restore the change in https://github.com/cockroachdb/cockroach/pull/111140 after 23.2 branch cut.
+func GCEMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
+	return GCEMachineTypeOld(cpus, mem, arch)
+}
+
+// AWSMachineType selects a machine type given the desired number of CPUs and
+// memory per CPU ratio. Also returns the architecture of the selected machine type.
+func AWSMachineTypeOld(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
+	// TODO(erikgrinaker): These have significantly less RAM than
+	// their GCE counterparts. Consider harmonizing them.
+	family := "c6id" // 2 GB RAM per CPU
+	selectedArch := vm.ArchAMD64
+	if arch == vm.ArchFIPS {
+		selectedArch = vm.ArchFIPS
+	} else if arch == vm.ArchARM64 {
+		family = "c7g" // 2 GB RAM per CPU (graviton3)
+		selectedArch = vm.ArchARM64
+	}
+
+	if mem == High {
+		family = "m6i" // 4 GB RAM per CPU
+		if arch == vm.ArchARM64 {
+			family = "m7g" // 4 GB RAM per CPU (graviton3)
+		}
+	} else if mem == Low {
+		panic("low memory per CPU not available for AWS")
+	}
+
+	var size string
+	switch {
+	case cpus <= 2:
+		size = "large"
+	case cpus <= 4:
+		size = "xlarge"
+	case cpus <= 8:
+		size = "2xlarge"
+	case cpus <= 16:
+		size = "4xlarge"
+	case cpus <= 32:
+		size = "8xlarge"
+	case cpus <= 48:
+		size = "12xlarge"
+	case cpus <= 64:
+		size = "16xlarge"
+	case cpus <= 96:
+		size = "24xlarge"
+	default:
+		panic(fmt.Sprintf("no aws machine type with %d cpus", cpus))
+	}
+
+	// There is no m7g.24xlarge, fall back to m6i.24xlarge.
+	if family == "m7g" && size == "24xlarge" {
+		family = "m6i"
+		selectedArch = vm.ArchAMD64
+	}
+	// There is no c7g.24xlarge, fall back to c6id.24xlarge.
+	if family == "c7g" && size == "24xlarge" {
+		family = "c6id"
+		selectedArch = vm.ArchAMD64
+	}
+
+	return fmt.Sprintf("%s.%s", family, size), selectedArch
+}
+
 // AWSMachineType selects a machine type given the desired number of CPUs, memory per CPU,
 // support for locally-attached SSDs and CPU architecture. It returns a compatible machine type and its architecture.
 //
@@ -28,7 +99,7 @@ import (
 //
 // At the time of writing, the intel machines are all third-generation Xeon, "Ice Lake" which are isomorphic to
 // GCE's n2-(standard|highmem|custom) _with_ --minimum-cpu-platform="Intel Ice Lake" (roachprod's default).
-func AWSMachineType(
+func AWSMachineTypeNew(
 	cpus int, mem MemPerCPU, shouldSupportLocalSSD bool, arch vm.CPUArch,
 ) (string, vm.CPUArch) {
 	family := "m6i" // 4 GB RAM per CPU
@@ -105,6 +176,45 @@ func AWSMachineType(
 	return fmt.Sprintf("%s.%s", family, size), selectedArch
 }
 
+// GCEMachineType selects a machine type given the desired number of CPUs and
+// memory per CPU ratio. Also returns the architecture of the selected machine type.
+func GCEMachineTypeOld(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
+	// TODO(peter): This is awkward: at or below 16 cpus, use n2-standard so that
+	// the machines have a decent amount of RAM. We could use custom machine
+	// configurations, but the rules for the amount of RAM per CPU need to be
+	// determined (you can't request any arbitrary amount of RAM).
+	series := "n2"
+	selectedArch := vm.ArchAMD64
+	if arch == vm.ArchFIPS {
+		selectedArch = vm.ArchFIPS
+	}
+	var kind string
+	switch mem {
+	case Auto:
+		if cpus > 16 {
+			kind = "highcpu"
+		} else {
+			kind = "standard"
+		}
+	case Standard:
+		kind = "standard" // 3.75 GB RAM per CPU
+	case High:
+		kind = "highmem" // 6.5 GB RAM per CPU
+	case Low:
+		kind = "highcpu" // 0.9 GB RAM per CPU
+	}
+	if arch == vm.ArchARM64 && mem == Auto && cpus <= 48 {
+		series = "t2a"
+		kind = "standard"
+		selectedArch = vm.ArchARM64
+	}
+	// N.B. n2 family does not support single CPU machines.
+	if series == "n2" && cpus == 1 {
+		cpus = 2
+	}
+	return fmt.Sprintf("%s-%s-%d", series, kind, cpus), selectedArch
+}
+
 // GCEMachineType selects a machine type given the desired number of CPUs, memory per CPU, and CPU architecture.
 // It returns a compatible machine type and its architecture.
 //
@@ -118,7 +228,7 @@ func AWSMachineType(
 // At the time of writing, the intel machines are all third-generation xeon, "Ice Lake" assuming
 // --minimum-cpu-platform="Intel Ice Lake" (roachprod's default). This is isomorphic to AWS's m6i or c6i.
 // The only exception is low memory machines (n2-highcpu-xxx), which aren't available in AWS.
-func GCEMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
+func GCEMachineTypeNew(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
 	series := "n2"
 	selectedArch := vm.ArchAMD64
 
