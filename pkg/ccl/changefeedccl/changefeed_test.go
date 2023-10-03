@@ -3912,7 +3912,6 @@ func TestChangefeedStopOnSchemaChange(t *testing.T) {
 		sysDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
 		sysDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'")
 		sysDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '50ms'")
-		sysDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '50ms'")
 
 		t.Run("add column not null", func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE add_column_not_null (a INT PRIMARY KEY)`)
@@ -4047,7 +4046,6 @@ func TestChangefeedNoBackfill(t *testing.T) {
 		sysDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
 		sysDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms'")
 		sysDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10ms'")
-		sysDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10ms'")
 
 		t.Run("add column not null", func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE add_column_not_null (a INT PRIMARY KEY)`)
