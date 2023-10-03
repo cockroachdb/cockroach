@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -66,8 +67,9 @@ func BenchmarkTPCC(b *testing.B) {
 				StoreSpecs: []base.StoreSpec{{Path: td}},
 			}, cleanup
 		}),
-		setupStmt(`
-SET CLUSTER SETTING kv.raft_log.synchronization.disabled = true`),
+		setupServer(func(tb testing.TB, s serverutils.TestServerInterface) {
+			logstore.DisableSyncRaftLog.Override(context.Background(), &s.SystemLayer().ClusterSettings().SV, true)
+		}),
 	}
 
 	for _, opts := range []options{
@@ -142,6 +144,9 @@ func (bm *benchmark) startCockroach(b testing.TB) {
 		s.Stopper().Stop(context.Background())
 	})
 
+	for _, fn := range bm.setupServer {
+		fn(b, s)
+	}
 	for _, stmt := range bm.setupStmts {
 		sqlutils.MakeSQLRunner(db).Exec(b, stmt)
 	}

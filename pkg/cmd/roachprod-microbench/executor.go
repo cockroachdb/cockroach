@@ -439,11 +439,7 @@ func (e *executor) executeBenchmarks() error {
 
 	e.log.Printf("Completed benchmarks, results located at %s", e.outputDir)
 	if errorCount != 0 {
-		if e.lenient {
-			e.log.Printf("Ignoring errors in benchmark results (lenient flag was set)")
-		} else {
-			return errors.Newf("Found %d errors during remote execution", errorCount)
-		}
+		return errors.Newf("Found %d errors during remote execution", errorCount)
 	}
 	return nil
 }
