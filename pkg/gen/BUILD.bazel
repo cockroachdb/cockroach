@@ -1,6 +1,5 @@
 load(
     ":gen.bzl",
-    "bindata",
     "bnf",
     "diagrams",
     "docs",
@@ -15,8 +14,6 @@ load(
     "stringer",
     "ui",
 )
-
-bindata()
 
 execgen()
 
@@ -53,7 +50,6 @@ gen(
 gen(
     name = "code",
     srcs = [
-        ":bindata",
         ":execgen",
         ":go_proto",
         ":gomock",
