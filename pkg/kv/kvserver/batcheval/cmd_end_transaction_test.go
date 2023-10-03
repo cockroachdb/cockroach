@@ -1651,7 +1651,7 @@ func TestResolveLocalLocks(t *testing.T) {
 				err := storage.MVCCPut(ctx, batch, intToKey(i), ts, roachpb.MakeValueFromString("a"), storage.MVCCWriteOptions{Txn: &txn})
 				require.NoError(t, err)
 			}
-			resolvedLocks, externalLocks, err := resolveLocalLocksWithPagination(
+			resolvedLocks, releasedReplLocks, externalLocks, err := resolveLocalLocksWithPagination(
 				ctx,
 				batch,
 				(&MockEvalCtx{
@@ -1674,6 +1674,7 @@ func TestResolveLocalLocks(t *testing.T) {
 				require.Equal(t, tc.expectedResolvedLocks[i].Key, lock.Key)
 				require.Equal(t, tc.expectedResolvedLocks[i].EndKey, lock.EndKey)
 			}
+			require.Len(t, releasedReplLocks, 0)
 			require.Equal(t, len(tc.expectedExternalLocks), len(externalLocks))
 			for i, lock := range externalLocks {
 				require.Equal(t, tc.expectedExternalLocks[i].Key, lock.Key)

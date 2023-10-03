@@ -138,6 +138,14 @@ func (r *Replica) updateTimestampCache(
 			// transaction's MinTimestamp, which is consulted in CanCreateTxnRecord.
 			key := transactionTombstoneMarker(start, txnID)
 			addToTSCache(key, nil, ts, txnID)
+			// Additionally, EndTxn requests that release replicated locks for
+			// committed transactions bump the timestamp cache over those lock
+			// spans to the commit timestamp of the transaction to ensure that
+			// the released locks continue to provide protection against writes
+			// underneath the transaction's commit timestamp.
+			for _, sp := range resp.(*kvpb.EndTxnResponse).ReplicatedLocksReleasedOnCommit {
+				addToTSCache(sp.Key, sp.EndKey, br.Txn.WriteTimestamp, txnID)
+			}
 		case *kvpb.HeartbeatTxnRequest:
 			// HeartbeatTxn requests record a tombstone entry when the record is
 			// initially written. This is used when considering potential 1PC
