@@ -241,7 +241,11 @@ func BenchmarkRun(b *testing.B) {
 
 func TestNewVsInvariants(t *testing.T) {
 	ctx := context.Background()
-	const N = 100000
+	N := 100000
+	if util.RaceEnabled {
+		// Reduce the row count under race. Otherwise, the test takes >5m.
+		N /= 100
+	}
 
 	for _, tc := range []randomRunGCTestSpec{
 		{
