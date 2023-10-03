@@ -1149,9 +1149,7 @@ func (r *testRunner) runTest(
 		shout(ctx, l, stdout, "=== RUN   %s  [metrics: https://go.crdb.dev/roachtest-grafana/%s/%s/%d/%d]",
 			testRunID, vm.SanitizeLabel(runID), vm.SanitizeLabel(testRunID), t.start.UnixMilli(), t.start.Add(30*time.Minute).UnixMilli())
 	} else {
-		if !teamCity {
-			shout(ctx, l, stdout, "=== RUN   %s", testRunID)
-		}
+		shout(ctx, l, stdout, "=== RUN   %s", testRunID)
 	}
 	select {
 	case <-testReturnedCh:
