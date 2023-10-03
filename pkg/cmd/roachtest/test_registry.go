@@ -19,18 +19,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
-	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
-
-var loadTeams = func() (team.Map, error) {
-	return team.DefaultLoadTeams()
-}
-
-func ownerToAlias(o registry.Owner) team.Alias {
-	return team.Alias(fmt.Sprintf("cockroachdb/%s", o))
-}
 
 type testRegistryImpl struct {
 	m            map[string]*registry.TestSpec
@@ -119,12 +110,8 @@ func (r *testRegistryImpl) prepareSpec(spec *registry.TestSpec) error {
 	if spec.Owner == `` {
 		return fmt.Errorf(`%s: unspecified owner`, spec.Name)
 	}
-	teams, err := loadTeams()
-	if err != nil {
-		return err
-	}
-	if _, ok := teams[ownerToAlias(spec.Owner)]; !ok {
-		return fmt.Errorf(`%s: unknown owner [%s]`, spec.Name, spec.Owner)
+	if !spec.Owner.IsValid() {
+		return fmt.Errorf(`%s: unknown owner %q`, spec.Name, spec.Owner)
 	}
 	if len(spec.Tags) == 0 {
 		spec.Tags = registry.Tags(registry.DefaultTag)

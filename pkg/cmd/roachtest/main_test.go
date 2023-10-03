@@ -24,11 +24,9 @@ import (
 )
 
 func init() {
-	loadTeams = func() (team.Map, error) {
-		return map[team.Alias]team.Team{
-			ownerToAlias(OwnerUnitTest): {},
-		}, nil
-	}
+	registry.OverrideTeams(team.Map{
+		OwnerUnitTest.ToTeamAlias(): {},
+	})
 }
 
 func makeRegistry(names ...string) testRegistryImpl {
