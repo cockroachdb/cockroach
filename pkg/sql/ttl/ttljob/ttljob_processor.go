@@ -13,6 +13,7 @@ package ttljob
 import (
 	"bytes"
 	"context"
+	"math"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -44,10 +45,17 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// ttlProcessor manages the work managed by a single node for a job run by
+// rowLevelTTLResumer. SpanToQueryBounds converts a DistSQL span into
+// QueryBounds. The QueryBounds are passed to SelectQueryBuilder and
+// DeleteQueryBuilder which manage the state for the SELECT/DELETE loop
+// that is run by runTTLOnQueryBounds.
 type ttlProcessor struct {
 	execinfra.ProcessorBase
 	ttlSpec execinfrapb.TTLSpec
 }
+
+var _ execinfra.RowSource = (*ttlProcessor)(nil)
 
 func (t *ttlProcessor) Start(ctx context.Context) {
 	ctx = t.StartInternal(ctx, "ttl")
@@ -67,6 +75,19 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	tableID := details.TableID
 	cutoff := details.Cutoff
 	ttlExpr := ttlSpec.TTLExpr
+
+	selectRateLimit := ttlSpec.SelectRateLimit
+	// Default 0 value to "unlimited" in case job started on node <= v23.2.
+	// todo(sql-foundations): Remove this in 25.1 for consistency with
+	//  deleteRateLimit.
+	if selectRateLimit == 0 {
+		selectRateLimit = math.MaxInt64
+	}
+	selectRateLimiter := quotapool.NewRateLimiter(
+		"ttl-select",
+		quotapool.Limit(selectRateLimit),
+		selectRateLimit,
+	)
 
 	deleteRateLimit := ttlSpec.DeleteRateLimit
 	deleteRateLimiter := quotapool.NewRateLimiter(
@@ -142,14 +163,15 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 					start := timeutil.Now()
 					selectBuilder := MakeSelectQueryBuilder(
 						SelectQueryParams{
-							RelationName:    relationName,
-							PKColNames:      pkColNames,
-							PKColDirs:       pkColDirs,
-							Bounds:          bounds,
-							AOSTDuration:    ttlSpec.AOSTDuration,
-							SelectBatchSize: ttlSpec.SelectBatchSize,
-							TTLExpr:         ttlExpr,
-							SelectDuration:  metrics.SelectDuration,
+							RelationName:      relationName,
+							PKColNames:        pkColNames,
+							PKColDirs:         pkColDirs,
+							Bounds:            bounds,
+							AOSTDuration:      ttlSpec.AOSTDuration,
+							SelectBatchSize:   ttlSpec.SelectBatchSize,
+							TTLExpr:           ttlExpr,
+							SelectDuration:    metrics.SelectDuration,
+							SelectRateLimiter: selectRateLimiter,
 						},
 						cutoff,
 					)
@@ -245,7 +267,9 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	)
 }
 
-// spanRowCount should be checked even if the function returns an error because it may have partially succeeded
+// runTTLOnQueryBounds runs the SELECT/DELETE loop for a single DistSQL span.
+// spanRowCount should be checked even if the function returns an error
+// because it may have partially succeeded.
 func (t *ttlProcessor) runTTLOnQueryBounds(
 	ctx context.Context,
 	metrics rowLevelTTLMetrics,
@@ -289,6 +313,7 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 		if err != nil {
 			return spanRowCount, errors.Wrapf(err, "error selecting rows to delete")
 		}
+
 		numExpiredRows := int64(len(expiredRowsPKs))
 		metrics.RowSelections.Inc(numExpiredRows)
 
