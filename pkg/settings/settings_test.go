@@ -809,14 +809,14 @@ func TestOverride(t *testing.T) {
 	require.Equal(t, false, overrideBool.Get(sv))
 
 	// Override changes the origin.
-	require.Equal(t, settings.OriginExplicitlySet, overrideBool.ValueOrigin(ctx, sv))
+	require.Equal(t, settings.OriginOverride, overrideBool.ValueOrigin(ctx, sv))
 
 	u := settings.NewUpdater(sv)
 	u.ResetRemaining(ctx)
 	require.Equal(t, false, overrideBool.Get(sv))
 
 	// ResetRemaining does not change the origin for overridden settings.
-	require.Equal(t, settings.OriginExplicitlySet, overrideBool.ValueOrigin(ctx, sv))
+	require.Equal(t, settings.OriginOverride, overrideBool.ValueOrigin(ctx, sv))
 
 	// Test override for int setting.
 	require.Equal(t, int64(0), overrideInt.Get(sv))
