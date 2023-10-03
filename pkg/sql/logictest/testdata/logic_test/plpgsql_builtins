@@ -1,0 +1,95 @@
+# Testing crdb_internal.plpgsql_gen_cursor_name.
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
+----
+<unnamed portal 1>
+
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
+----
+<unnamed portal 2>
+
+statement ok
+BEGIN;
+DECLARE "<unnamed portal 3>" CURSOR FOR SELECT 1;
+
+query T
+SELECT name FROM pg_cursors;
+----
+<unnamed portal 3>
+
+# Skip manually generated duplicate names.
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
+----
+<unnamed portal 4>
+
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
+----
+<unnamed portal 5>
+
+statement ok
+CLOSE "<unnamed portal 3>";
+
+# Keep incrementing after a "gap" opens.
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
+----
+<unnamed portal 6>
+
+statement ok;
+ABORT;
+
+# Continue incrementing over transaction boundaries.
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
+----
+<unnamed portal 7>
+
+# If the name is already set, don't generate a new one.
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name('foo');
+----
+foo
+
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name('bar');
+----
+bar
+
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name('');
+----
+·
+
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
+----
+<unnamed portal 8>
+
+# Starting a new session restarts the counter.
+user testuser
+
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
+----
+<unnamed portal 1>
+
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
+----
+<unnamed portal 2>
+
+# Returning to the old session continues the old counter.
+user root
+
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
+----
+<unnamed portal 9>
+
+query T
+SELECT crdb_internal.plpgsql_gen_cursor_name(NULL);
+----
+<unnamed portal 10>
