@@ -15,6 +15,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"strconv"
@@ -164,12 +165,12 @@ func getAzureDefaultLabelMap(opts vm.CreateOpts) map[string]string {
 }
 
 func (p *Provider) AddLabels(l *logger.Logger, vms vm.List, labels map[string]string) error {
-	l.Printf("adding labels to Azure VMs not yet supported")
+	log.Printf("adding labels to Azure VMs not yet supported")
 	return nil
 }
 
 func (p *Provider) RemoveLabels(l *logger.Logger, vms vm.List, labels []string) error {
-	l.Printf("removing labels from Azure VMs not yet supported")
+	log.Printf("removing labels from Azure VMs not yet supported")
 	return nil
 }
 
