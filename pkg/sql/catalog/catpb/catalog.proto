@@ -195,6 +195,8 @@ message RowLevelTTL {
   optional bool label_metrics = 10 [(gogoproto.nullable) = false];
   // ExpirationExpr is the custom assigned expression for calculating when the TTL should apply to a row.
   optional string expiration_expr = 11 [(gogoproto.nullable)=false, (gogoproto.casttype)="Expression"];
+  // SelectRateLimit is the maximum amount of rows to select per second.
+  optional int64 select_rate_limit = 12 [(gogoproto.nullable)=false];
 }
 
 // AutoStatsSettings represents settings related to automatic statistics

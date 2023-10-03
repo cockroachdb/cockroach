@@ -48,6 +48,14 @@ var (
 		settings.PositiveInt,
 		settings.WithPublic,
 	)
+	defaultSelectRateLimit = settings.RegisterIntSetting(
+		settings.ApplicationLevel,
+		"sql.ttl.default_select_rate_limit",
+		"default select rate limit (rows per second) per node for each TTL job. Use 0 to signify no rate limit.",
+		0,
+		settings.NonNegativeInt,
+		settings.WithPublic,
+	)
 	defaultDeleteRateLimit = settings.RegisterIntSetting(
 		settings.ApplicationLevel,
 		"sql.ttl.default_delete_rate_limit",
@@ -91,6 +99,20 @@ func GetDeleteBatchSize(sv *settings.Values, ttl *catpb.RowLevelTTL) int64 {
 		bs = defaultDeleteBatchSize.Get(sv)
 	}
 	return bs
+}
+
+// GetSelectRateLimit returns the table storage param value if specified or
+// falls back to the cluster setting.
+func GetSelectRateLimit(sv *settings.Values, ttl *catpb.RowLevelTTL) int64 {
+	rl := ttl.SelectRateLimit
+	if rl == 0 {
+		rl = defaultSelectRateLimit.Get(sv)
+	}
+	// Put the maximum tokens possible if there is no rate limit.
+	if rl == 0 {
+		rl = math.MaxInt64
+	}
+	return rl
 }
 
 // GetDeleteRateLimit returns the table storage param value if specified or
