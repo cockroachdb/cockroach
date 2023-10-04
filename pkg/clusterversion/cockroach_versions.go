@@ -511,7 +511,7 @@ const (
 	V23_2_MVCCStatisticsTable
 
 	// V23_2_AddSystemExecInsightsTable is the version at which Cockroach creates
-	// stmnt_exec_insights and txn_exec_insights system tables.
+	// {statement|transaction}_execution_insights system tables.
 	V23_2_AddSystemExecInsightsTable
 
 	// *************************************************
