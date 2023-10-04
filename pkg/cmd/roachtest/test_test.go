@@ -174,19 +174,19 @@ func TestRunnerRun(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			rt := setupRunnerTest(t, r, c.filters)
 
-			var clusterAllocator clusterAllocatorFn
-			// run without cluster allocator error injection
-			err := rt.runner.Run(ctx, rt.tests, 1, /* count */
-				defaultParallelism, rt.copt, testOpts{}, rt.lopt, clusterAllocator)
+			const count = 1
+			err := rt.runner.Run(ctx, rt.tests, count, defaultParallelism, rt.copt, testOpts{}, rt.lopt)
 
 			assertTestCompletion(t, rt.tests, c.filters, rt.runner.getCompletedTests(), err, c.expErr)
 
 			// N.B. skip the case of no matching tests
 			if len(rt.tests) > 0 {
 				// run _with_ cluster allocator error injection
-				clusterAllocator = alwaysFailingClusterAllocator
-				err = rt.runner.Run(ctx, rt.tests, 1, /* count */
-					defaultParallelism, rt.copt, testOpts{}, rt.lopt, clusterAllocator)
+				copt := rt.copt
+				copt.preAllocateClusterFn = func(ctx context.Context, t registry.TestSpec, arch vm.CPUArch) error {
+					return errors.New("cluster creation failed")
+				}
+				err = rt.runner.Run(ctx, rt.tests, count, defaultParallelism, copt, testOpts{}, rt.lopt)
 
 				assertTestCompletion(t,
 					rt.tests, c.filters, rt.runner.getCompletedTests(),
@@ -235,7 +235,7 @@ func TestRunnerEncryptionAtRest(t *testing.T) {
 	for i := 0; i < 10000; i++ {
 		require.NoError(t, rt.runner.Run(
 			context.Background(), rt.tests, 1 /* count */, 1, /* parallelism */
-			rt.copt, testOpts{}, rt.lopt, nil, // clusterAllocator
+			rt.copt, testOpts{}, rt.lopt,
 		))
 		if atomic.LoadInt32(&sawEncrypted) == 0 {
 			// NB: since it's a 50% chance, the probability of *not* hitting
@@ -371,7 +371,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 		},
 	}
 	err := runner.Run(ctx, []registry.TestSpec{test}, 1, /* count */
-		defaultParallelism, copt, testOpts{}, lopt, nil /* clusterAllocator */)
+		defaultParallelism, copt, testOpts{}, lopt)
 	if !testutils.IsError(err, "some tests failed") {
 		t.Fatalf("expected error \"some tests failed\", got: %v", err)
 	}
@@ -466,7 +466,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 		stderr:       io.Discard,
 		artifactsDir: "",
 	}
-	return runner.Run(ctx, tests, 1, 1, clustersOpt{}, testOpts{}, lopt, nil /* clusterAllocator */)
+	return runner.Run(ctx, tests, 1, 1, clustersOpt{}, testOpts{}, lopt)
 }
 
 func TestExitCode(t *testing.T) {
