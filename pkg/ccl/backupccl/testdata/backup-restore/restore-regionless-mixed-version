@@ -32,10 +32,10 @@ new-cluster name=s2 beforeVersion=23_2_Start share-io-dir=s1 disable-tenant
 ----
 
 # restore fails when cluster is in mixed version state while upgrading to 23.2
-exec-sql
+exec-sql expect-error-regex=(cluster version must be >= *)
 RESTORE FROM LATEST IN 'nodelocal://1/cluster_backup/' WITH remove_regions;
 ----
-pq: to set the remove_regions option, cluster version must be >= 1000023.1-26
+regex matches error
 
 # upgrade cluster
 upgrade-cluster version=23_2
