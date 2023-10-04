@@ -313,7 +313,6 @@ func runGenerativeSplitAndScatter(
 			layerToFileIterFactory,
 			backupLocalityMap,
 			filter,
-			spec.UseSimpleImportSpans,
 			restoreSpanEntriesCh,
 		)
 	})

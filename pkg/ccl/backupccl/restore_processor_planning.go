@@ -59,17 +59,16 @@ var memoryMonitorSSTs = settings.RegisterBoolSetting(
 )
 
 type restoreJobMetadata struct {
-	jobID                jobspb.JobID
-	dataToRestore        restorationData
-	restoreTime          hlc.Timestamp
-	encryption           *jobspb.BackupEncryptionOptions
-	kmsEnv               cloud.KMSEnv
-	uris                 []string
-	backupLocalityInfo   []jobspb.RestoreDetails_BackupLocalityInfo
-	spanFilter           spanCoveringFilter
-	numImportSpans       int
-	useSimpleImportSpans bool
-	execLocality         roachpb.Locality
+	jobID              jobspb.JobID
+	dataToRestore      restorationData
+	restoreTime        hlc.Timestamp
+	encryption         *jobspb.BackupEncryptionOptions
+	kmsEnv             cloud.KMSEnv
+	uris               []string
+	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo
+	spanFilter         spanCoveringFilter
+	numImportSpans     int
+	execLocality       roachpb.Locality
 }
 
 // distRestore plans a 2 stage distSQL flow for a distributed restore. It
@@ -204,7 +203,6 @@ func distRestore(
 			ChunkSize:                int64(chunkSize),
 			NumEntries:               int64(md.numImportSpans),
 			NumNodes:                 int64(numNodes),
-			UseSimpleImportSpans:     md.useSimpleImportSpans,
 			UseFrontierCheckpointing: md.spanFilter.useFrontierCheckpointing,
 			JobID:                    int64(md.jobID),
 		}
