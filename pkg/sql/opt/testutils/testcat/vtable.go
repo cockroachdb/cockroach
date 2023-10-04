@@ -135,6 +135,7 @@ var systemTables = []string{
 	systemschema.TenantSettingsTableSchema,
 	systemschema.SpanCountTableSchema,
 	systemschema.SystemPrivilegeTableSchema,
+	systemschema.SystemMVCCStatisticsSchema,
 	systemschema.TxnExecutionStatsTableSchema,
 	systemschema.StatementExecutionStatsTableSchema,
 }
