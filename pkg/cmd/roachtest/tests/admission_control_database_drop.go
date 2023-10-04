@@ -34,10 +34,10 @@ func registerDatabaseDrop(r registry.Registry) {
 		spec.Zones("us-east1-b"),
 		spec.VolumeSize(500),
 		spec.Cloud(spec.GCE),
+		spec.GCEMinCPUPlatform("Intel Ice Lake"),
+		spec.GCEVolumeType("pd-ssd"),
 	)
 	clusterSpec.InstanceType = "n2-standard-8"
-	clusterSpec.GCEMinCPUPlatform = "Intel Ice Lake"
-	clusterSpec.GCEVolumeType = "pd-ssd"
 
 	r.Add(registry.TestSpec{
 		Name:             "admission-control/database-drop",
