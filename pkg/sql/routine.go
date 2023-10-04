@@ -276,12 +276,14 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 			return err
 		}
 		if openCursor {
-			return cursorHelper.createCursor(g.p)
+			return cursorHelper.createCursor(g.p, g.expr.BlockState)
 		}
 		return nil
 	})
 	if err != nil {
-		if cursorHelper != nil {
+		if cursorHelper != nil && !cursorHelper.addedCursor {
+			// The cursor wasn't successfully added to the list, so we clean it up
+			// here.
 			err = errors.CombineErrors(err, cursorHelper.Close())
 		}
 		return g.handleException(ctx, err)
@@ -324,12 +326,36 @@ func (g *routineGenerator) handleException(ctx context.Context, err error) error
 	blockState.ExceptionHandler = nil
 	for i, code := range exceptionHandler.Codes {
 		if code == caughtCode {
-			spErr := g.p.Txn().RollbackToSavepoint(ctx, blockState.SavepointTok.(kv.SavepointToken))
-			if spErr == nil {
-				g.reset(ctx, g.p, exceptionHandler.Actions[i], g.args)
-				err = g.startInternal(ctx, g.p.Txn())
+			cursErr := g.closeCursors(blockState)
+			if cursErr != nil {
+				return errors.CombineErrors(err, cursErr)
 			}
-			return errors.CombineErrors(err, spErr)
+			spErr := g.p.Txn().RollbackToSavepoint(ctx, blockState.SavepointTok.(kv.SavepointToken))
+			if spErr != nil {
+				return errors.CombineErrors(err, spErr)
+			}
+			g.reset(ctx, g.p, exceptionHandler.Actions[i], g.args)
+			return g.startInternal(ctx, g.p.Txn())
+		}
+	}
+	return err
+}
+
+// closeCursors closes any cursors that were opened within the scope of the
+// current block. It is used for PLpgSQL exception handling.
+func (g *routineGenerator) closeCursors(blockState *tree.BlockState) error {
+	if blockState == nil {
+		return nil
+	}
+	var err error
+	for _, name := range blockState.Cursors {
+		if g.p.sqlCursors.getCursor(name) == nil {
+			// This cursor has already been closed.
+			continue
+		}
+		if curErr := g.p.sqlCursors.closeCursor(name); curErr != nil {
+			// Attempt to close all cursors in the block, even if one throws an error.
+			err = errors.CombineErrors(err, curErr)
 		}
 	}
 	return err
@@ -453,20 +479,20 @@ func (g *routineGenerator) newCursorHelper(plan *planComponents) (*plpgsqlCursor
 // TODO(drewk): while the row container can spill to disk, we should default to
 // lazy execution for cursors for performance reasons.
 type plpgsqlCursorHelper struct {
-	ctx        context.Context
-	cursorName tree.Name
-	cursorSql  string
+	ctx         context.Context
+	cursorName  tree.Name
+	cursorSql   string
+	addedCursor bool
 
 	// Fields related to implementing the isql.Rows interface.
 	container    rowContainerHelper
 	iter         *rowContainerIterator
 	resultCols   colinfo.ResultColumns
 	lastRow      tree.Datums
-	lastErr      error
 	rowsAffected int
 }
 
-func (h *plpgsqlCursorHelper) createCursor(p *planner) error {
+func (h *plpgsqlCursorHelper) createCursor(p *planner, blockState *tree.BlockState) error {
 	h.iter = newRowContainerIterator(h.ctx, h.container)
 	cursor := &sqlCursor{
 		Rows:       h,
@@ -478,16 +504,26 @@ func (h *plpgsqlCursorHelper) createCursor(p *planner) error {
 	if err := p.checkIfCursorExists(h.cursorName); err != nil {
 		return err
 	}
-	return p.sqlCursors.addCursor(h.cursorName, cursor)
+	if err := p.sqlCursors.addCursor(h.cursorName, cursor); err != nil {
+		return err
+	}
+	if blockState != nil {
+		// Add the cursor name to the block's state. This allows the exception handler
+		// to close it, if necessary.
+		blockState.Cursors = append(blockState.Cursors, h.cursorName)
+	}
+	h.addedCursor = true
+	return nil
 }
 
 var _ isql.Rows = &plpgsqlCursorHelper{}
 
 // Next implements the isql.Rows interface.
 func (h *plpgsqlCursorHelper) Next(_ context.Context) (bool, error) {
-	h.lastRow, h.lastErr = h.iter.Next()
-	if h.lastErr != nil {
-		return false, h.lastErr
+	var err error
+	h.lastRow, err = h.iter.Next()
+	if err != nil {
+		return false, err
 	}
 	if h.lastRow != nil {
 		h.rowsAffected++
@@ -512,7 +548,7 @@ func (h *plpgsqlCursorHelper) Close() error {
 		h.iter = nil
 	}
 	h.container.Close(h.ctx)
-	return h.lastErr
+	return nil
 }
 
 // Types implements the isql.Rows interface.
