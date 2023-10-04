@@ -64,7 +64,7 @@ CALL no_exist()
 
 # The error message for a non-existent function within a procedure call should
 # still mention "function".
-statement error pgcode 42883 unknown function: foo\(\): function undefined
+statement error pgcode 42883 unknown function: foo\(\)
 CALL p(foo())
 
 statement ok

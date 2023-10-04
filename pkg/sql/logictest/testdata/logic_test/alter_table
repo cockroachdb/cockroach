@@ -3083,10 +3083,10 @@ CREATE FUNCTION f3() RETURNS INT AS 'SELECT a FROM t_twocol' LANGUAGE SQL;
 statement ok
 ALTER TABLE t_twocol DROP COLUMN b CASCADE;
 
-statement error pq: unknown function: f1\(\): function undefined
+statement error pq: unknown function: f1\(\)
 SELECT f1();
 
-statement error pq: unknown function: f2\(\): function undefined
+statement error pq: unknown function: f2\(\)
 SELECT f2();
 
 query T
