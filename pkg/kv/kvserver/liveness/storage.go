@@ -50,13 +50,29 @@ func NewKVStorage(db *kv.DB) Storage {
 // LivenessUpdate contains the information for CPutting a new version of a
 // liveness record. It has both the new and the old version of the proto.
 type LivenessUpdate struct {
-	newLiveness livenesspb.Liveness
-	oldLiveness livenesspb.Liveness
+	NewLiveness livenesspb.Liveness
+	OldLiveness livenesspb.Liveness
 	// oldRaw is the raw value from which `old` was decoded. Used for CPuts as the
 	// existing value. Note that we don't simply marshal `old` as that would break
 	// if unmarshalling/marshaling doesn't round-trip. Nil means that a liveness
 	// record for the respected node is not expected to exist in the database.
 	oldRaw []byte
+}
+
+// isStorageErrRetryable is used to determine if an error returned by KV
+// storage while persisting liveness is retryable by the upper layer (i.e.
+// NodeLiveness). Such errors should be marked with ErrRetryLivenessSentinel.
+func isStorageErrRetryable(ctx context.Context, err error) bool {
+	if errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)) {
+		// We generally want to retry ambiguous errors immediately, except if the
+		// ctx is canceled - in which case the ambiguous error is probably caused
+		// by the cancellation (and in any case it's pointless to retry with a
+		// canceled ctx).
+		return ctx.Err() == nil
+	} else if errors.Is(err, kv.OnePCNotAllowedError{}) {
+		return true
+	}
+	return false
 }
 
 // Get returns a slice containing the liveness record of all nodes that have
@@ -103,8 +119,8 @@ func (ls *storageImpl) Update(
 		v = new(roachpb.Value)
 
 		b := txn.NewBatch()
-		key := keys.NodeLivenessKey(update.newLiveness.NodeID)
-		if err := v.SetProto(&update.newLiveness); err != nil {
+		key := keys.NodeLivenessKey(update.NewLiveness.NodeID)
+		if err := v.SetProto(&update.NewLiveness); err != nil {
 			log.Fatalf(ctx, "failed to marshall proto: %s", err)
 		}
 		b.CPut(key, v, update.oldRaw)
@@ -134,13 +150,13 @@ func (ls *storageImpl) Update(
 				return Record{}, errors.Wrapf(err, "couldn't update node liveness from CPut actual value")
 			}
 			return Record{}, handleCondFailed(Record{Liveness: actualLiveness, raw: tErr.ActualValue.TagAndDataBytes()})
-		} else if isErrRetryLiveness(ctx, err) {
-			return Record{}, &errRetryLiveness{err}
+		} else if isStorageErrRetryable(ctx, err) {
+			return Record{}, errors.Mark(err, ErrRetryLivenessSentinel)
 		}
 		return Record{}, err
 	}
 
-	return Record{Liveness: update.newLiveness, raw: v.TagAndDataBytes()}, nil
+	return Record{Liveness: update.NewLiveness, raw: v.TagAndDataBytes()}, nil
 }
 
 // Create creates a liveness record for the node specified by the
@@ -178,17 +194,20 @@ func (ls *storageImpl) Create(ctx context.Context, nodeID roachpb.NodeID) error 
 			})
 			return txn.Run(ctx, b)
 		})
+		if err != nil {
+			if isStorageErrRetryable(ctx, err) {
+				err = errors.Mark(err, ErrRetryLivenessSentinel)
+				log.VEventf(ctx, 2, "failed to create liveness record for node %d, because of %s. retrying...", nodeID, err)
+				continue
+			}
 
-		if err == nil {
-			// We'll learn about this liveness record through gossip eventually, so we
-			// don't bother updating our in-memory view of node liveness.
-			log.Infof(ctx, "created liveness record for n%d", nodeID)
-			return nil
-		}
-		if !isErrRetryLiveness(ctx, err) {
 			return err
 		}
-		log.VEventf(ctx, 2, "failed to create liveness record for node %d, because of %s. retrying...", nodeID, err)
+
+		// We'll learn about this liveness record through gossip eventually, so we
+		// don't bother updating our in-memory view of node liveness.
+		log.Infof(ctx, "created liveness record for n%d", nodeID)
+		return nil
 	}
 	if err := ctx.Err(); err != nil {
 		return err

@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -658,69 +660,121 @@ func TestDecommissionSelf(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t) // can't handle 7-node clusters
 
-	// Set up test cluster.
-	ctx := context.Background()
-	tc := serverutils.StartCluster(t, 7, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-		},
-		ReplicationMode: base.ReplicationManual, // saves time
-	})
-	defer tc.Stopper().Stop(ctx)
+	testutils.RunTrueAndFalse(t, "force ambiguity", func(t *testing.T, ambiguousLiveness bool) {
+		// Set up test cluster.
+		ctx := context.Background()
+		tc := serverutils.NewCluster(t, 7, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			},
+			ReplicationMode: base.ReplicationManual, // saves time
+		})
+		adminSrv := tc.Server(4)
 
-	// Decommission several nodes, including the node we're submitting the
-	// decommission request to. We use the admin client in order to test the
-	// admin server's logic, which involves a subsequent DecommissionStatus
-	// call which could fail if used from a node that's just decommissioned.
-	adminSrv := tc.Server(4)
-	adminClient := adminSrv.GetAdminClient(t)
-	decomNodeIDs := []roachpb.NodeID{
-		tc.Server(4).NodeID(),
-		tc.Server(5).NodeID(),
-		tc.Server(6).NodeID(),
-	}
+		adminLiveness := adminSrv.NodeLiveness().(*liveness.NodeLiveness)
+		adminKVLivenessStorage := liveness.NewKVStorage(adminSrv.DB())
+		adminOverrideLivenessStorage := liveness.TestStorageWrapper{
+			GetImpl: func(ctx context.Context, nodeID roachpb.NodeID) (liveness.Record, error) {
+				return adminKVLivenessStorage.Get(ctx, nodeID)
+			},
+			UpdateImpl: func(ctx context.Context, update liveness.LivenessUpdate, handleCondFailed func(actual liveness.Record) error) (liveness.Record, error) {
+				record, err := adminKVLivenessStorage.Update(ctx, update, handleCondFailed)
 
-	// The DECOMMISSIONING call should return a full status response.
-	resp, err := adminClient.Decommission(ctx, &serverpb.DecommissionRequest{
-		NodeIDs:          decomNodeIDs,
-		TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
-	})
-	require.NoError(t, err)
-	require.Len(t, resp.Status, len(decomNodeIDs))
-	for i, nodeID := range decomNodeIDs {
-		status := resp.Status[i]
-		require.Equal(t, nodeID, status.NodeID)
-		// Liveness entries may not have been updated yet.
-		require.Contains(t, []livenesspb.MembershipStatus{
-			livenesspb.MembershipStatus_ACTIVE,
-			livenesspb.MembershipStatus_DECOMMISSIONING,
-		}, status.Membership, "unexpected membership status %v for node %v", status, nodeID)
-	}
+				if ambiguousLiveness {
+					// This ambiguity is injected on writing the "DECOMMISSIONED"
+					// membership status for adminSrv's "self" NodeID (n5), in order to
+					// test how retries work after the node is no longer allowed to make
+					// KV RPCs to the cluster. As such, we also wait after performing the
+					// update to ensure RPC disconnection.
+					if err == nil && update.NewLiveness.NodeID == adminSrv.NodeID() && update.NewLiveness.Membership == livenesspb.MembershipStatus_DECOMMISSIONED {
+						testutils.SucceedsSoon(t, func() error {
+							adminLivenessRecord, ok := adminLiveness.GetLiveness(adminSrv.NodeID())
+							if !ok {
+								return errors.Errorf("n%d did not return a liveness record", adminSrv.NodeID())
+							}
+							if !adminLivenessRecord.Membership.Decommissioned() {
+								return errors.Errorf("n%d does not yet have liveness membership status decommissioned, "+
+									"current status: %v", adminSrv.NodeID(), adminLivenessRecord.Membership)
+							}
 
-	// The DECOMMISSIONED call should return an empty response, to avoid
-	// erroring due to loss of cluster RPC access when decommissioning self.
-	resp, err = adminClient.Decommission(ctx, &serverpb.DecommissionRequest{
-		NodeIDs:          decomNodeIDs,
-		TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONED,
-	})
-	require.NoError(t, err)
-	require.Empty(t, resp.Status)
+							return nil
+						})
+						ambiguousError := kvpb.NewAmbiguousResultErrorf("error=[manufactured ambiguity!]")
+						return liveness.Record{}, errors.Mark(ambiguousError, liveness.ErrRetryLivenessSentinel)
+					}
+				}
 
-	// The nodes should now have been (or soon become) decommissioned.
-	for i := 0; i < tc.NumServers(); i++ {
-		srv := tc.Server(i)
-		expect := livenesspb.MembershipStatus_ACTIVE
-		for _, nodeID := range decomNodeIDs {
-			if srv.NodeID() == nodeID {
-				expect = livenesspb.MembershipStatus_DECOMMISSIONED
-				break
-			}
+				return record, err
+			},
+			CreateImpl: func(ctx context.Context, nodeID roachpb.NodeID) error {
+				return adminKVLivenessStorage.Create(ctx, nodeID)
+			},
+			ScanImpl: func(ctx context.Context) ([]liveness.Record, error) {
+				return adminKVLivenessStorage.Scan(ctx)
+			},
 		}
-		require.Eventually(t, func() bool {
-			liveness, ok := srv.NodeLiveness().(*liveness.NodeLiveness).GetLiveness(srv.NodeID())
-			return ok && liveness.Membership == expect
-		}, 5*time.Second, 100*time.Millisecond, "timed out waiting for node %v status %v", i, expect)
-	}
+		adminLiveness.TestingOverrideStorage(adminOverrideLivenessStorage)
+
+		tc.Start(t)
+		defer tc.Stopper().Stop(ctx)
+
+		// Decommission several nodes, including the node we're submitting the
+		// decommission request to. We use the admin client in order to test the
+		// admin server's logic, which involves a subsequent DecommissionStatus
+		// call which could fail if used from a node that's just decommissioned.
+		adminClient := adminSrv.GetAdminClient(t)
+		decomNodeIDs := []roachpb.NodeID{
+			tc.Server(4).NodeID(),
+			tc.Server(5).NodeID(),
+			tc.Server(6).NodeID(),
+		}
+
+		// The DECOMMISSIONING call should return a full status response.
+		resp, err := adminClient.Decommission(ctx, &serverpb.DecommissionRequest{
+			NodeIDs:          decomNodeIDs,
+			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
+		})
+		require.NoError(t, err)
+		require.Len(t, resp.Status, len(decomNodeIDs))
+		for i, nodeID := range decomNodeIDs {
+			status := resp.Status[i]
+			require.Equal(t, nodeID, status.NodeID)
+			// Liveness entries may not have been updated yet.
+			require.Contains(t, []livenesspb.MembershipStatus{
+				livenesspb.MembershipStatus_ACTIVE,
+				livenesspb.MembershipStatus_DECOMMISSIONING,
+			}, status.Membership, "unexpected membership status %v for node %v", status, nodeID)
+		}
+
+		// The DECOMMISSIONED call should return an empty response, to avoid
+		// erroring due to loss of cluster RPC access when decommissioning self.
+		resp, err = adminClient.Decommission(ctx, &serverpb.DecommissionRequest{
+			NodeIDs:          decomNodeIDs,
+			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONED,
+		})
+		require.NoError(t, err)
+		require.Empty(t, resp.Status)
+
+		// The nodes should now have been (or soon become) decommissioned.
+		deadline := 5 * time.Second
+		if syncutil.DeadlockEnabled {
+			deadline *= 5
+		}
+		for i := 0; i < tc.NumServers(); i++ {
+			srv := tc.Server(i)
+			expect := livenesspb.MembershipStatus_ACTIVE
+			for _, nodeID := range decomNodeIDs {
+				if srv.NodeID() == nodeID {
+					expect = livenesspb.MembershipStatus_DECOMMISSIONED
+					break
+				}
+			}
+			require.Eventually(t, func() bool {
+				liveness, ok := srv.NodeLiveness().(*liveness.NodeLiveness).GetLiveness(srv.NodeID())
+				return ok && liveness.Membership == expect
+			}, deadline, 100*time.Millisecond, "timed out waiting for node %v status %v", i, expect)
+		}
+	})
 }
 
 // TestDecommissionEnqueueReplicas tests that a decommissioning node's replicas

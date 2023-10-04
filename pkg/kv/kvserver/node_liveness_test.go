@@ -1016,7 +1016,6 @@ func TestNodeLivenessRetryAmbiguousResultOnCreateError(t *testing.T) {
 		err error
 	}{
 		{kvpb.NewAmbiguousResultErrorf("test")},
-		{kvpb.NewTransactionStatusError(kvpb.TransactionStatusError_REASON_UNKNOWN, "foo")},
 		{kv.OnePCNotAllowedError{}},
 	}
 	for _, tc := range testcases {

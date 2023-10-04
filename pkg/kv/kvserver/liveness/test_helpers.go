@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 const (
@@ -27,6 +28,39 @@ const (
 	// prevents the store pool from marking stores as dead.
 	TestTimeUntilNodeDeadOff = 24 * time.Hour
 )
+
+// TestStorageWrapper provides a simple liveness.Storage implementation for
+// which mock implementations can be supplied by tests.
+type TestStorageWrapper struct {
+	GetImpl    func(ctx context.Context, nodeID roachpb.NodeID) (Record, error)
+	UpdateImpl func(ctx context.Context, update LivenessUpdate, handleCondFailed func(actual Record) error) (Record, error)
+	CreateImpl func(ctx context.Context, nodeID roachpb.NodeID) error
+	ScanImpl   func(ctx context.Context) ([]Record, error)
+}
+
+var _ Storage = (*TestStorageWrapper)(nil)
+
+func (s TestStorageWrapper) Get(
+	ctx context.Context, nodeID roachpb.NodeID,
+) (Record, error) {
+	return s.GetImpl(ctx, nodeID)
+}
+
+func (s TestStorageWrapper) Update(
+	ctx context.Context,
+	update LivenessUpdate,
+	handleCondFailed func(actual Record) error,
+) (Record, error) {
+	return s.UpdateImpl(ctx, update, handleCondFailed)
+}
+
+func (s TestStorageWrapper) Create(ctx context.Context, nodeID roachpb.NodeID) error {
+	return s.CreateImpl(ctx, nodeID)
+}
+
+func (s TestStorageWrapper) Scan(ctx context.Context) ([]Record, error) {
+	return s.ScanImpl(ctx)
+}
 
 // PauseHeartbeatLoopForTest stops the periodic heartbeat. The function
 // waits until it acquires the heartbeatToken (unless heartbeat was
@@ -96,4 +130,14 @@ func (nl *NodeLiveness) TestingMaybeUpdate(ctx context.Context, newRec Record) {
 // before a node is considered not-live.
 func (nl *NodeLiveness) TestingGetLivenessThreshold() time.Duration {
 	return nl.livenessThreshold
+}
+
+// TestingOverrideStorage sets an overridden storage interface for use in
+// persisting liveness. Allows for tests to mock storage and return values.
+func (nl *NodeLiveness) TestingOverrideStorage(override Storage) {
+	if nl.started.Get() {
+		panic("liveness storage override is only permitted before start")
+	}
+
+	nl.storage = override
 }

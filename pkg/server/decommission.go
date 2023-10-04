@@ -352,6 +352,22 @@ func (s *topLevelServer) Decommission(
 
 	for _, nodeID := range nodeIDs {
 		statusChanged, err := s.nodeLiveness.SetMembershipStatus(ctx, nodeID, targetStatus)
+		if err != nil && errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)) {
+			// If we see an ambiguous error on writing DECOMMISSIONED to liveness for
+			// ourself, it may be that the liveness update actually succeeded, and
+			// our retry failed due to losing access to cluster RPC. In this case,
+			// see if we can validate that the update succeeded via our liveness
+			// cache. If so, we can log the error, but otherwise treat it as success.
+			if nodeID == s.NodeID() && targetStatus.Decommissioned() {
+				nodeLivenessRecord, ok := s.nodeLiveness.GetLiveness(nodeID)
+				if ok && nodeLivenessRecord.Membership.Decommissioned() {
+					log.Warningf(ctx, "ignoring ambiguous error on writing membership "+
+						"status %v for self (n%d); node appears to already be %v. err: %v",
+						targetStatus, nodeID, nodeLivenessRecord.Membership, err)
+					err = nil
+				}
+			}
+		}
 		if err != nil {
 			if errors.Is(err, liveness.ErrMissingRecord) {
 				return grpcstatus.Error(codes.NotFound, liveness.ErrMissingRecord.Error())

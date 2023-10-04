@@ -426,7 +426,7 @@ func (s *mockStorage) Get(ctx context.Context, nodeID roachpb.NodeID) (Record, e
 func (s *mockStorage) Update(
 	ctx context.Context, update LivenessUpdate, handleCondFailed func(actual Record) error,
 ) (Record, error) {
-	return Record{Liveness: update.newLiveness}, nil
+	return Record{Liveness: update.NewLiveness}, nil
 }
 
 func (s *mockStorage) Create(ctx context.Context, nodeID roachpb.NodeID) error {
