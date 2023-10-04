@@ -17,9 +17,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/stretchr/testify/require"
 )
 
 func tsd(name, source string, dps ...tspb.TimeSeriesDatapoint) tspb.TimeSeriesData {
@@ -206,5 +209,45 @@ func TestDiscardEarlierSamples(t *testing.T) {
 		}
 	} else {
 		t.Fatal("All samples unexpectedly discarded")
+	}
+}
+
+func BenchmarkMergeInternalTimeSeriesData(b *testing.B) {
+	// Construct time-series datapoints.
+	points := make([]tspb.TimeSeriesDatapoint, 60)
+	for i := range points {
+		points[i] = tsdp(5*time.Minute+time.Duration(i), float64(i))
+	}
+	ts := tsd("test.series", "", points...)
+
+	// Convert to InternalTimeSeriesData.
+	internal, err := ts.ToInternal(Resolution10s.SlabDuration(), resolution1ns.SampleDuration(), true)
+	require.NoError(b, err)
+
+	// Marshal to raw bytes.
+	srcBytes := make([][]byte, 0, len(internal))
+	var val roachpb.Value
+	for _, src := range internal {
+		err := val.SetProto(&src)
+		require.NoError(b, err)
+		bytes, err := protoutil.Marshal(&enginepb.MVCCMetadata{
+			RawBytes: val.RawBytes,
+		})
+		require.NoError(b, err)
+		srcBytes = append(srcBytes, bytes)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		merger := &storage.MVCCValueMerger{}
+		for _, bytes := range srcBytes {
+			err := merger.MergeNewer(bytes)
+			require.NoError(b, err)
+		}
+		_, closer, err := merger.Finish(false /* usePartialMerge */)
+		require.NoError(b, err)
+		if closer != nil {
+			_ = closer.Close()
+		}
 	}
 }
