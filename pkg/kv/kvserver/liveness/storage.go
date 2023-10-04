@@ -123,7 +123,11 @@ func (ls *storageImpl) Update(
 				},
 			},
 		})
-		return txn.Run(ctx, b)
+		err := txn.Run(ctx, b)
+		if err == nil && update.newLiveness.Membership == livenesspb.MembershipStatus_DECOMMISSIONED && update.newLiveness.NodeID == roachpb.NodeID(5) {
+			return kvpb.NewAmbiguousResultErrorf("error=[manufactured ambiguity!] (real error: %v)", err)
+		}
+		return err
 	}); err != nil {
 		if tErr := (*kvpb.ConditionFailedError)(nil); errors.As(err, &tErr) {
 			if tErr.ActualValue == nil {

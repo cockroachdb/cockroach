@@ -1113,14 +1113,24 @@ func (nl *NodeLiveness) updateLiveness(
 	if err := nl.verifyDiskHealth(ctx); err != nil {
 		return Record{}, err
 	}
+	var ambiguousError error
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = nl.stopper.ShouldQuiesce()
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		written, err := nl.updateLivenessAttempt(ctx, update, handleCondFailed)
 		if err != nil {
+			log.Errorf(ctx, "liveness update err: %v", err)
+			if errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)) {
+				ambiguousError = err
+			}
 			if errors.HasType(err, (*errRetryLiveness)(nil)) {
 				log.Infof(ctx, "retrying liveness update after %s", err)
+				time.Sleep(1 * time.Second)
 				continue
+			} else if grpcutil.IsConnectionRejected(err) && nl.cache.selfID() == update.newLiveness.NodeID && update.newLiveness.Membership == livenesspb.MembershipStatus_DECOMMISSIONED && ambiguousError != nil {
+				// Got a non-ambiguous error after an ambiguous error. If it's a permission denied and we are self-decommissioning, can we assume the write succeeded?
+				log.Warningf(ctx, "received a PermissionDenied error after an ambiguous write of `DECOMMISSIONED` membership status for self (n%d); assuming write succeeded", nl.cache.selfID())
+				return Record{}, nil
 			}
 			return Record{}, err
 		}
