@@ -144,7 +144,7 @@ func TestCoster(t *testing.T) {
 	runDataDrivenTest(
 		t, tu.TestDataPath(t, "coster", ""),
 		memo.ExprFmtHideRuleProps|memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|
-			memo.ExprFmtHideTypes|memo.ExprFmtHideNotVisibleIndexInfo,
+			memo.ExprFmtHideTypes|memo.ExprFmtHideNotVisibleIndexInfo|memo.ExprFmtHideFastPathChecks,
 	)
 }
 
@@ -165,7 +165,8 @@ func TestPhysicalProps(t *testing.T) {
 			memo.ExprFmtHideQualifications|
 			memo.ExprFmtHideScalars|
 			memo.ExprFmtHideTypes|
-			memo.ExprFmtHideNotVisibleIndexInfo,
+			memo.ExprFmtHideNotVisibleIndexInfo|
+			memo.ExprFmtHideFastPathChecks,
 	)
 }
 
@@ -180,7 +181,7 @@ func TestRuleProps(t *testing.T) {
 		t,
 		tu.TestDataPath(t, "ruleprops"),
 		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideQualifications|
-			memo.ExprFmtHideScalars|memo.ExprFmtHideTypes|memo.ExprFmtHideNotVisibleIndexInfo,
+			memo.ExprFmtHideScalars|memo.ExprFmtHideTypes|memo.ExprFmtHideNotVisibleIndexInfo|memo.ExprFmtHideFastPathChecks,
 	)
 }
 
@@ -197,7 +198,7 @@ func TestRules(t *testing.T) {
 		tu.TestDataPath(t, "rules"),
 		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps|
 			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes|
-			memo.ExprFmtHideNotVisibleIndexInfo,
+			memo.ExprFmtHideNotVisibleIndexInfo|memo.ExprFmtHideFastPathChecks,
 	)
 }
 
@@ -226,7 +227,7 @@ func TestExternal(t *testing.T) {
 		*externalTestData,
 		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps|
 			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes|
-			memo.ExprFmtHideNotVisibleIndexInfo,
+			memo.ExprFmtHideNotVisibleIndexInfo|memo.ExprFmtHideFastPathChecks,
 	)
 }
 
@@ -238,7 +239,7 @@ func TestPlaceholderFastPath(t *testing.T) {
 		tu.TestDataPath(t, "placeholder-fast-path"),
 		memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps|
 			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes|
-			memo.ExprFmtHideNotVisibleIndexInfo,
+			memo.ExprFmtHideNotVisibleIndexInfo|memo.ExprFmtHideFastPathChecks,
 	)
 }
 

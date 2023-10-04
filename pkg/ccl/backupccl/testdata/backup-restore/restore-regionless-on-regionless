@@ -152,7 +152,11 @@ subtest end
 subtest restore_regionless_on_regionless_table
 
 exec-sql
-DROP TABLE d.t;
+DROP DATABASE d;
+----
+
+exec-sql
+CREATE DATABASE d;
 ----
 
 exec-sql

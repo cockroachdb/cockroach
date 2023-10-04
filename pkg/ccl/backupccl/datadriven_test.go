@@ -83,6 +83,8 @@ var localityCfgs = map[string]roachpb.Locality{
 var clusterVersionKeys = map[string]clusterversion.Key{
 	"23_1_Start":          clusterversion.V23_1Start,
 	"23_1_MVCCTombstones": clusterversion.V23_1_MVCCRangeTombstonesUnconditionallyEnabled,
+	"23_2_Start":          clusterversion.V23_2Start,
+	"23_2":                clusterversion.V23_2,
 }
 
 type sqlDBKey struct {

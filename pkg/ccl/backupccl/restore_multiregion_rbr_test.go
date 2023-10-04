@@ -27,11 +27,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The goal of this test is to ensure that if a user ever performed a
-// regionless restore where the backed-up target has a regional by row table,
-// they would be able to get themselves out of a stuck state without needing
-// an enterprise license (in addition to testing the ability to use remove_regions
-// without said license).
+// The goal of this test is to ensure that a user is able to perform a
+// regionless restore and modify the restored object without an enterprise
+// license.
 func TestMultiRegionRegionlessRestoreNoLicense(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -55,9 +53,6 @@ func TestMultiRegionRegionlessRestoreNoLicense(t *testing.T) {
             CREATE TABLE d.t (x INT);
             INSERT INTO d.t VALUES (1), (2), (3);`,
 	)
-
-	// Make table regional by row.
-	mrSql.Exec(t, `ALTER TABLE d.t SET LOCALITY REGIONAL BY ROW;`)
 
 	if err := backuptestutils.VerifyBackupRestoreStatementResult(t, mrSql, `BACKUP DATABASE d INTO $1`, localFoo); err != nil {
 		t.Fatal(err)
@@ -84,12 +79,6 @@ func TestMultiRegionRegionlessRestoreNoLicense(t *testing.T) {
 	if err := backuptestutils.VerifyBackupRestoreStatementResult(t, sqlDB, `RESTORE DATABASE d FROM LATEST IN $1 WITH remove_regions`, localFoo); err != nil {
 		t.Fatal(err)
 	}
-
-	// Get us in the state that allows us to perform writes.
-	// This is the main purpose of this test - we want to ensure that this process is available
-	// to those without enterprise licenses.
-	sqlDB.Exec(t, `ALTER TABLE d.t ALTER COLUMN crdb_region SET DEFAULT 'us-east1';
-                        ALTER TABLE d.t CONFIGURE ZONE DISCARD;`)
 
 	// Perform some writes to d's table.
 	sqlDB.Exec(t, `INSERT INTO d.t VALUES (4), (5), (6)`)

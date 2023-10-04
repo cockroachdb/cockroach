@@ -71,36 +71,6 @@ func (c *CustomFuncs) HasInvertedIndexes(scanPrivate *memo.ScanPrivate) bool {
 	return false
 }
 
-// RemapScanColsInFilter returns a new FiltersExpr where columns in src's table
-// are replaced with columns of the same ordinal in dst's table. src and dst
-// must scan the same base table.
-func (c *CustomFuncs) RemapScanColsInFilter(
-	filters memo.FiltersExpr, src, dst *memo.ScanPrivate,
-) memo.FiltersExpr {
-	newFilters := c.remapScanColsInScalarExpr(&filters, src, dst).(*memo.FiltersExpr)
-	return *newFilters
-}
-
-func (c *CustomFuncs) remapScanColsInScalarExpr(
-	scalar opt.ScalarExpr, src, dst *memo.ScanPrivate,
-) opt.ScalarExpr {
-	md := c.e.mem.Metadata()
-	if md.Table(src.Table).ID() != md.Table(dst.Table).ID() {
-		panic(errors.AssertionFailedf("scans must have the same base table"))
-	}
-	if src.Cols.Len() != dst.Cols.Len() {
-		panic(errors.AssertionFailedf("scans must have the same number of columns"))
-	}
-	// Remap each column in src to a column in dst.
-	var colMap opt.ColMap
-	for srcCol, ok := src.Cols.Next(0); ok; srcCol, ok = src.Cols.Next(srcCol + 1) {
-		ord := src.Table.ColumnOrdinal(srcCol)
-		dstCol := dst.Table.ColumnID(ord)
-		colMap.Set(int(srcCol), int(dstCol))
-	}
-	return c.e.f.RemapCols(scalar, colMap)
-}
-
 // RemapJoinColsInFilter returns a new FiltersExpr where columns in leftSrc's
 // table are replaced with columns of the same ordinal in leftDst's table and
 // rightSrc's table are replaced with columns of the same ordinal in rightDst's

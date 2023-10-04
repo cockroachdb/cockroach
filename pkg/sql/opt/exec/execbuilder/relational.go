@@ -1210,7 +1210,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 				// Enhance the error with the EXPLAIN (OPT, VERBOSE) of the inner
 				// expression.
 				fmtFlags := memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes |
-					memo.ExprFmtHideNotVisibleIndexInfo
+					memo.ExprFmtHideNotVisibleIndexInfo | memo.ExprFmtHideFastPathChecks
 				explainOpt := o.FormatExpr(newRightSide, fmtFlags, false /* redactableValues */)
 				err = errors.WithDetailf(err, "newRightSide:\n%s", explainOpt)
 			}

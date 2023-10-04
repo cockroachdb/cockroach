@@ -220,3 +220,109 @@ SELECT f_103693(k2, v2) FROM t1_103693 INNER LOOKUP JOIN t2_103693 ON k1 = k2;
 1
 
 subtest end
+
+subtest select_for_update
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT);
+INSERT INTO kv VALUES (1,2), (3,4), (5,6);
+
+statement ok
+GRANT SELECT, UPDATE ON kv TO testuser;
+
+statement ok
+CREATE FUNCTION f_select_for_update(i INT) RETURNS kv AS
+$$
+  SELECT * FROM kv WHERE k = i FOR UPDATE;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_update(i INT, j INT) RETURNS VOID AS
+$$
+  UPDATE kv SET v = j WHERE k = i;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_select_and_update(i INT, j INT) RETURNS VOID AS
+$$
+  SELECT * FROM kv WHERE k = i FOR UPDATE;
+  UPDATE kv SET v = j WHERE k = i;
+$$ LANGUAGE SQL;
+
+statement ok
+SELECT f_select_and_update(1,1);
+
+query II rowsort
+SELECT * FROM kv;
+----
+1 1
+3 4
+5 6
+
+statement ok
+BEGIN; SELECT * FROM kv WHERE k = 3 FOR UPDATE;
+
+statement ok
+SELECT f_update(3,3);
+
+statement ok
+END;
+
+query II rowsort
+SELECT * FROM kv;
+----
+1 1
+3 3
+5 6
+
+statement ok
+BEGIN; SELECT * FROM kv WHERE k = 5 FOR UPDATE;
+
+statement ok
+SELECT f_update(5,5);
+
+statement ok
+ROLLBACK;
+
+query II rowsort
+SELECT * FROM kv;
+----
+1 1
+3 3
+5 6
+
+statement ok
+BEGIN;
+
+statement ok
+SELECT f_select_for_update(5);
+
+user testuser
+
+statement ok
+SET statement_timeout = '10ms'
+
+# Make sure that the UDF did acquire locks by attempting to acquire them in a
+# different session.
+query error pgcode 57014 query execution canceled due to statement timeout
+SELECT * FROM kv WHERE k = 5 FOR UPDATE;
+
+statement ok
+SET statement_timeout = 0
+
+user root
+
+statement ok
+SELECT f_update(5,5);
+
+statement ok
+END;
+
+query II rowsort
+SELECT * FROM kv;
+----
+1 1
+3 3
+5 5
+
+subtest end
