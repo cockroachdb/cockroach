@@ -218,6 +218,12 @@ func NewEventsExporter(
 				Version: "1.0",
 			},
 		},
+		obspb.StatementStatEvent: {
+			instrumentationScope: otel_pb.InstrumentationScope{
+				Name:    string(obspb.StatementStatEvent),
+				Version: "1.0",
+			},
+		},
 	}
 	s.buf.mu.memAccount = memMonitor.MakeBoundAccount()
 	return s
