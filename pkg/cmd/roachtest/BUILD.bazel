@@ -101,7 +101,6 @@ go_test(
         "//pkg/roachprod/vm/gce",
         "//pkg/testutils",
         "//pkg/testutils/echotest",
-        "//pkg/util/quotapool",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/version",
