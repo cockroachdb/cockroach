@@ -198,3 +198,92 @@ SHOW CREATE INDEXES FROM nonexistent
 
 statement error relation "nonexistent" does not exist
 SHOW CREATE SECONDARY INDEXES FROM nonexistent
+
+statement ok
+CREATE FUNCTION r1() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+CREATE FUNCTION r1(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+CREATE PROCEDURE r1(s STRING) LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+CREATE PROCEDURE r1(s STRING, i INT) LANGUAGE SQL AS 'SELECT 1'
+
+query TT
+SELECT * FROM [SHOW CREATE FUNCTION r1] ORDER BY 2
+----
+r1  CREATE FUNCTION public.r1()
+      RETURNS INT8
+      VOLATILE
+      NOT LEAKPROOF
+      CALLED ON NULL INPUT
+      LANGUAGE SQL
+      AS $$
+      SELECT 1;
+    $$
+r1  CREATE FUNCTION public.r1(IN i INT8)
+      RETURNS INT8
+      VOLATILE
+      NOT LEAKPROOF
+      CALLED ON NULL INPUT
+      LANGUAGE SQL
+      AS $$
+      SELECT 1;
+    $$
+
+query TT
+SELECT * FROM [SHOW CREATE PROCEDURE r1] ORDER BY 2
+----
+r1  CREATE PROCEDURE public.r1(IN s STRING)
+      LANGUAGE SQL
+      AS $$
+      SELECT 1;
+    $$
+r1  CREATE PROCEDURE public.r1(IN s STRING, IN i INT8)
+      LANGUAGE SQL
+      AS $$
+      SELECT 1;
+    $$
+
+statement ok
+CREATE SCHEMA sc
+
+statement ok
+CREATE FUNCTION sc.r2() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+CREATE PROCEDURE sc.r2(s STRING) LANGUAGE SQL AS 'SELECT 1'
+
+statement error pgcode 42883 pq: unknown function: r2()
+SHOW CREATE FUNCTION r2;
+
+# TODO(mgartner): Fix the error message here.
+statement error pgcode 42883 pq: unknown function: r2()
+SHOW CREATE PROCEDURE r2;
+
+statement ok
+SET search_path = sc;
+
+query TT
+SHOW CREATE FUNCTION r2
+----
+r2  CREATE FUNCTION sc.r2()
+      RETURNS INT8
+      VOLATILE
+      NOT LEAKPROOF
+      CALLED ON NULL INPUT
+      LANGUAGE SQL
+      AS $$
+      SELECT 1;
+    $$
+
+query TT
+SHOW CREATE PROCEDURE r2
+----
+r2  CREATE PROCEDURE sc.r2(IN s STRING)
+      LANGUAGE SQL
+      AS $$
+      SELECT 1;
+    $$

@@ -412,6 +412,7 @@ crdb_internal       cluster_transaction_statistics
 crdb_internal       cluster_transactions
 crdb_internal       cluster_txn_execution_insights
 crdb_internal       create_function_statements
+crdb_internal       create_procedure_statements
 crdb_internal       create_schema_statements
 crdb_internal       create_statements
 crdb_internal       create_type_statements
@@ -441,8 +442,8 @@ crdb_internal       kv_flow_token_deductions
 crdb_internal       kv_inherited_role_members
 crdb_internal       kv_node_liveness
 crdb_internal       kv_node_status
-crdb_internal       kv_repairable_catalog_corruptions
 crdb_internal       kv_protected_ts_records
+crdb_internal       kv_repairable_catalog_corruptions
 crdb_internal       kv_store_status
 crdb_internal       kv_system_privileges
 crdb_internal       leases
@@ -763,6 +764,7 @@ cluster_transaction_statistics
 cluster_transactions
 cluster_txn_execution_insights
 create_function_statements
+create_procedure_statements
 create_schema_statements
 create_statements
 create_type_statements
@@ -792,8 +794,8 @@ kv_flow_token_deductions
 kv_inherited_role_members
 kv_node_liveness
 kv_node_status
-kv_repairable_catalog_corruptions
 kv_protected_ts_records
+kv_repairable_catalog_corruptions
 kv_store_status
 kv_system_privileges
 leases
@@ -1177,6 +1179,7 @@ system         public              comments                                BASE 
 system         information_schema  constraint_column_usage                 SYSTEM VIEW  NO                  1
 system         information_schema  constraint_table_usage                  SYSTEM VIEW  NO                  1
 system         crdb_internal       create_function_statements              SYSTEM VIEW  NO                  1
+system         crdb_internal       create_procedure_statements             SYSTEM VIEW  NO                  1
 system         crdb_internal       create_schema_statements                SYSTEM VIEW  NO                  1
 system         crdb_internal       create_statements                       SYSTEM VIEW  NO                  1
 system         crdb_internal       create_type_statements                  SYSTEM VIEW  NO                  1
@@ -3163,6 +3166,7 @@ NULL     public   system         crdb_internal       cluster_transaction_statist
 NULL     public   system         crdb_internal       cluster_transactions                    SELECT          NO            YES
 NULL     public   system         crdb_internal       cluster_txn_execution_insights          SELECT          NO            YES
 NULL     public   system         crdb_internal       create_function_statements              SELECT          NO            YES
+NULL     public   system         crdb_internal       create_procedure_statements             SELECT          NO            YES
 NULL     public   system         crdb_internal       create_schema_statements                SELECT          NO            YES
 NULL     public   system         crdb_internal       create_statements                       SELECT          NO            YES
 NULL     public   system         crdb_internal       create_type_statements                  SELECT          NO            YES
@@ -3192,8 +3196,8 @@ NULL     public   system         crdb_internal       kv_flow_token_deductions   
 NULL     public   system         crdb_internal       kv_inherited_role_members               SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_liveness                        SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_status                          SELECT          NO            YES
-NULL     public   system         crdb_internal       kv_repairable_catalog_corruptions       SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_protected_ts_records                 SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_repairable_catalog_corruptions       SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_store_status                         SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_system_privileges                    SELECT          NO            YES
 NULL     public   system         crdb_internal       leases                                  SELECT          NO            YES
@@ -3833,6 +3837,7 @@ NULL     public   system         crdb_internal       cluster_transaction_statist
 NULL     public   system         crdb_internal       cluster_transactions                    SELECT          NO            YES
 NULL     public   system         crdb_internal       cluster_txn_execution_insights          SELECT          NO            YES
 NULL     public   system         crdb_internal       create_function_statements              SELECT          NO            YES
+NULL     public   system         crdb_internal       create_procedure_statements             SELECT          NO            YES
 NULL     public   system         crdb_internal       create_schema_statements                SELECT          NO            YES
 NULL     public   system         crdb_internal       create_statements                       SELECT          NO            YES
 NULL     public   system         crdb_internal       create_type_statements                  SELECT          NO            YES
@@ -3862,8 +3867,8 @@ NULL     public   system         crdb_internal       kv_flow_token_deductions   
 NULL     public   system         crdb_internal       kv_inherited_role_members               SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_liveness                        SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_status                          SELECT          NO            YES
-NULL     public   system         crdb_internal       kv_repairable_catalog_corruptions       SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_protected_ts_records                 SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_repairable_catalog_corruptions       SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_store_status                         SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_system_privileges                    SELECT          NO            YES
 NULL     public   system         crdb_internal       leases                                  SELECT          NO            YES

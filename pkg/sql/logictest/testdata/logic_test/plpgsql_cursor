@@ -857,5 +857,98 @@ FETCH FORWARD 3 FROM "<unnamed portal 11>";
 ----
 100
 
+# Testing CLOSE statements.
+#
+# Test CLOSE within the scope of a routine.
 statement ok
 ABORT;
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := 'foo';
+    curs2 STRING := 'bar';
+  BEGIN
+    RAISE NOTICE 'cursors: %', (SELECT count(*) FROM pg_cursors);
+    OPEN curs FOR SELECT 1;
+    RAISE NOTICE 'cursors: %', (SELECT count(*) FROM pg_cursors);
+    OPEN curs2 FOR SELECT 2;
+    RAISE NOTICE 'cursors: %', (SELECT count(*) FROM pg_cursors);
+    CLOSE curs;
+    RAISE NOTICE 'cursors: %', (SELECT count(*) FROM pg_cursors);
+    OPEN curs FOR SELECT 3;
+    RAISE NOTICE 'cursors: %', (SELECT count(*) FROM pg_cursors);
+    CLOSE curs;
+    CLOSE curs2;
+    RAISE NOTICE 'cursors: %', (SELECT count(*) FROM pg_cursors);
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: cursors: 0
+NOTICE: cursors: 1
+NOTICE: cursors: 2
+NOTICE: cursors: 1
+NOTICE: cursors: 2
+NOTICE: cursors: 0
+
+# Test CLOSE across statement boundaries.
+statement ok
+CREATE OR REPLACE FUNCTION f(curs STRING) RETURNS INT AS $$
+  BEGIN
+    CLOSE curs;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+BEGIN;
+
+statement ok
+DECLARE foo CURSOR FOR SELECT 1;
+
+query T
+SELECT name FROM pg_cursors;
+----
+foo
+
+statement ok
+SELECT f('foo');
+
+query T
+SELECT name FROM pg_cursors;
+----
+
+statement ok
+DECLARE foo CURSOR FOR SELECT 1;
+DECLARE bar CURSOR FOR SELECT 2;
+
+query T rowsort
+SELECT name FROM pg_cursors;
+----
+foo
+bar
+
+statement ok
+SELECT f('bar');
+
+query T
+SELECT name FROM pg_cursors;
+----
+foo
+
+statement ok
+SELECT f('foo');
+
+query T
+SELECT name FROM pg_cursors;
+----
+
+statement ok
+ABORT;
+
+# Test attempting to CLOSE a nonexistent cursor.
+statement error pgcode 34000 pq: cursor \"foo\" does not exist
+SELECT f('foo');

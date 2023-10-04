@@ -8463,6 +8463,24 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			CalledOnNullInput: true,
 		},
 	),
+	"crdb_internal.plpgsql_close": makeBuiltin(tree.FunctionProperties{
+		Category:     builtinconstants.CategoryString,
+		Undocumented: true,
+	},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "name", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return nil, errors.AssertionFailedf("expected non-null argument for plpgsql_close")
+				}
+				return tree.DNull, evalCtx.Planner.PLpgSQLCloseCursor(tree.Name(tree.MustBeDString(args[0])))
+			},
+			Info:              "This function is used internally to implement the PLpgSQL CLOSE statement.",
+			Volatility:        volatility.Volatile,
+			CalledOnNullInput: true,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {

@@ -1394,18 +1394,24 @@ func (s ShowCompletions) Format(ctx *FmtCtx) {
 
 var _ Statement = &ShowCompletions{}
 
-// ShowCreateFunction represents a SHOW CREATE FUNCTION statement.
-type ShowCreateFunction struct {
-	Name ResolvableFunctionReference
+// ShowCreateRoutine represents a SHOW CREATE FUNCTION or SHOW CREATE PROCEDURE
+// statement.
+type ShowCreateRoutine struct {
+	Name      ResolvableFunctionReference
+	Procedure bool
 }
 
 // Format implements the NodeFormatter interface.
-func (node *ShowCreateFunction) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW CREATE FUNCTION ")
+func (node *ShowCreateRoutine) Format(ctx *FmtCtx) {
+	if node.Procedure {
+		ctx.WriteString("SHOW CREATE PROCEDURE ")
+	} else {
+		ctx.WriteString("SHOW CREATE FUNCTION ")
+	}
 	ctx.FormatNode(&node.Name)
 }
 
-var _ Statement = &ShowCreateFunction{}
+var _ Statement = &ShowCreateRoutine{}
 
 // ShowCreateExternalConnections represents a SHOW CREATE EXTERNAL CONNECTION
 // statement.

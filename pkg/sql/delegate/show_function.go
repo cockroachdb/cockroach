@@ -18,14 +18,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func (d *delegator) delegateShowCreateFunction(n *tree.ShowCreateFunction) (tree.Statement, error) {
+func (d *delegator) delegateShowCreateFunction(n *tree.ShowCreateRoutine) (tree.Statement, error) {
 	// We don't need to filter by db since we don't allow cross-database
 	// references.
 	query := `
-SELECT function_name, create_statement
-FROM crdb_internal.create_function_statements
-WHERE schema_name = %[1]s
-AND function_name = %[2]s
+SELECT %[1]s, create_statement
+FROM crdb_internal.%[2]s
+WHERE schema_name = %[3]s
+AND %[1]s = %[4]s
 `
 	resolvableFunctionReference := &n.Name
 	un, ok := resolvableFunctionReference.FunctionReference.(*tree.UnresolvedName)
@@ -45,9 +45,18 @@ AND function_name = %[2]s
 		return nil, err
 	}
 
+	routineType := tree.UDFRoutine
+	tab := "create_function_statements"
+	nameCol := "function_name"
+	if n.Procedure {
+		routineType = tree.ProcedureRoutine
+		tab = "create_procedure_statements"
+		nameCol = "procedure_name"
+	}
+
 	var udfSchema string
 	for _, o := range fn.Overloads {
-		if o.Type == tree.UDFRoutine {
+		if o.Type == routineType {
 			udfSchema = o.Schema
 			break
 		}
@@ -69,6 +78,7 @@ AND function_name = %[2]s
 		}
 	}
 
-	fullQuery := fmt.Sprintf(query, lexbase.EscapeSQLString(udfSchema), lexbase.EscapeSQLString(un.Parts[0]))
+	fullQuery := fmt.Sprintf(query,
+		nameCol, tab, lexbase.EscapeSQLString(udfSchema), lexbase.EscapeSQLString(un.Parts[0]))
 	return d.parse(fullQuery)
 }
