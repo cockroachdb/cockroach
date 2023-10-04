@@ -4009,6 +4009,46 @@ weird_array    text[]                   '{a,"","b,c",a''::string,''::string,"a''
 int_array      bigint[]                 '{1,2}'::INT8[]                                                                 false  1016  -1
 varchar_array  character varying(32)[]  '{cat,dog}'::STRING[]                                                           false  1015  36
 
+# Regression test for atttypmod being populated for timestamp types (#110787)
+statement ok
+CREATE TABLE  timestamp_with_typmod(
+	a time(1) NULL,
+	b timetz(2) NULL,
+	c timestamp(3) NULL,
+	d timestamptz(4) NULL,
+	e interval(5) NULL,
+	f time NULL,
+	g timetz NULL,
+	h timestamp NULL,
+	i timestamptz NULL,
+	j interval NULL
+);
+
+query TTTBOI
+SELECT a.attname, format_type(a.atttypid, a.atttypmod),
+  pg_get_expr(d.adbin, d.adrelid), a.attnotnull, a.atttypid, a.atttypmod
+ FROM pg_attribute a
+ LEFT JOIN pg_attrdef d ON a.attrelid = d.adrelid AND a.attnum = d.adnum
+ LEFT JOIN pg_type t ON a.atttypid = t.oid
+ LEFT JOIN pg_collation c ON a.attcollation = c.oid AND a.attcollation <> t.typcollation
+WHERE a.attrelid = 'timestamp_with_typmod'::regclass
+  AND a.attnum > 0 AND NOT a.attisdropped
+ORDER BY a.attnum;
+----
+a      time(1) without time zone       NULL            false  1083  1
+b      time(2) with time zone          NULL            false  1266  2
+c      timestamp(3) without time zone  NULL            false  1114  3
+d      timestamp(4) with time zone     NULL            false  1184  4
+e      interval(5)                     NULL            false  1186  5
+f      time without time zone          NULL            false  1083  -1
+g      time with time zone             NULL            false  1266  -1
+h      timestamp without time zone     NULL            false  1114  -1
+i      timestamp with time zone        NULL            false  1184  -1
+j      interval                        NULL            false  1186  -1
+rowid  bigint                          unique_rowid()  true   20    -1
+
+
+
 # Regression test for limits on virtual index scans. (#53522)
 
 let $testid
@@ -4470,7 +4510,7 @@ JOIN pg_class ON pg_statistic_ext.stxrelid = pg_class.oid
 ----
 relname  stxname  stxnamespace  stxowner  stxstattarget  stxkeys  stxkind
 stxtbl   stxobj   105           NULL      -1             {2,3}    {d}
-stxtbl2  stxobj2  193           NULL      -1             {1,3}    {d}
+stxtbl2  stxobj2  194           NULL      -1             {1,3}    {d}
 stx      NULL     105           NULL      -1             {2}      {d}
 stx      NULL     105           NULL      -1             {1}      {d}
 

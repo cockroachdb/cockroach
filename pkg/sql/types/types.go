@@ -1313,6 +1313,12 @@ func (t *T) TypeModifier() int32 {
 		if width := t.Width(); width != 0 {
 			return width
 		}
+	case TimestampFamily, TimestampTZFamily, TimeFamily, TimeTZFamily, IntervalFamily:
+		// For timestamp the precision is the type modifier value.
+		if !t.InternalType.TimePrecisionIsSet {
+			return -1
+		}
+		return t.Precision()
 	case DecimalFamily:
 		// attTypMod is calculated by putting the precision in the upper
 		// bits and the scale in the lower bits of a 32-bit int, and adding
@@ -1714,10 +1720,10 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 			panic(errors.AssertionFailedf("programming error: unknown int width: %d", t.Width()))
 		}
 	case IntervalFamily:
-		// TODO(jordan): intervals can have typmods, but we don't support them in the same way.
-		// Masking is used to extract the precision (src/include/utils/timestamp.h), whereas
-		// we store it as `IntervalDurationField`.
-		return "interval"
+		if !haveTypmod || typmod < 0 {
+			return "interval"
+		}
+		return fmt.Sprintf("interval(%d)", typmod)
 	case JsonFamily:
 		// Only binary JSON is currently supported.
 		return "jsonb"
