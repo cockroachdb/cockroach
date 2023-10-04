@@ -840,7 +840,7 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"SELECT (*) FROM t1; -- expect to be skipped because of the syntax error",
 			"FROM t1 SELECT *; -- ditto",
 
-			// statements with TCL commands or empty content.
+			// Statements with TCL commands or empty content.
 			"",
 			"BEGIN;",
 			"INSERT INTO t2 VALUES (1001, 1002); INSERT INTO t1 VALUES (1000, 1001);",
@@ -852,8 +852,13 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"COMMIT;",
 			"BEGIN;",
 			"SELECT 1/0;",
-			"DROP TABLE IF EXISTS t2  -- expect to be ignored",
+			"DROP TABLE IF EXISTS t2;  -- expect to be ignored",
 			"INSERT INTO t2 VALUES (1002, 1003); INSERT INTO t1 VALUES (1001, 1002);  -- expect to be ignored",
+			"ROLLBACK;",
+			"DROP TABLE IF EXISTS t3; CREATE TABLE t3 (i INT PRIMARY KEY);",
+			"BEGIN;",
+			"ALTER TABLE t3 DROP CONSTRAINT t3_pkey;",
+			"DELETE FROM t3 WHERE i = 1;  -- expect to result in an error",
 			"ROLLBACK;",
 
 			// statements that will be altered due to known behavioral differences in LSC vs DSC.
