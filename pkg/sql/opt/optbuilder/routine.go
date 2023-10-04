@@ -11,6 +11,7 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -141,6 +142,10 @@ func (b *Builder) buildRoutine(
 	f *tree.FuncExpr, def *tree.ResolvedFunctionDefinition, inScope *scope, colRefs *opt.ColSet,
 ) (out opt.ScalarExpr, returnType *types.T, isMultiColDataSource bool) {
 	o := f.ResolvedOverload()
+
+	if o.Language == tree.RoutineLangPLpgSQL && !b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V23_2) {
+		panic(pgerror.Newf(pgcode.FeatureNotSupported, "version %v must be finalized to use PL/pgSQL", clusterversion.ByKey(clusterversion.V23_2)))
+	}
 	b.factory.Metadata().AddUserDefinedFunction(o, f.Func.ReferenceByName)
 
 	// Validate that the return types match the original return types defined in
