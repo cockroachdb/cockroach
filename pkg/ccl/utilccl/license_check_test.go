@@ -26,52 +26,39 @@ import (
 )
 
 func TestSettingAndCheckingLicense(t *testing.T) {
-	idA, _ := uuid.FromString("A0000000-0000-0000-0000-00000000000A")
-	idB, _ := uuid.FromString("B0000000-0000-0000-0000-00000000000B")
-
 	ctx := context.Background()
 	t0 := timeutil.Unix(0, 0)
 
 	licA, _ := (&licenseccl.License{
-		ClusterID:         []uuid.UUID{idA},
 		Type:              licenseccl.License_Enterprise,
 		ValidUntilUnixSec: t0.AddDate(0, 1, 0).Unix(),
-	}).Encode()
-
-	licB, _ := (&licenseccl.License{
-		ClusterID:         []uuid.UUID{idB},
-		Type:              licenseccl.License_Evaluation,
-		ValidUntilUnixSec: t0.AddDate(0, 2, 0).Unix(),
 	}).Encode()
 
 	st := cluster.MakeTestingClusterSettings()
 
 	for i, tc := range []struct {
-		lic          string
-		checkCluster uuid.UUID
-		checkTime    time.Time
-		err          string
+		lic       string
+		checkTime time.Time
+		err       string
 	}{
 		// NB: we're observing the update manifest as changed behavior -- detailed
 		// testing of that behavior is left to licenseccl's own tests.
-		{"", idA, t0, "requires an enterprise license"},
+		{"", t0, "requires an enterprise license"},
 		// adding a valid lic.
-		{licA, idA, t0, ""},
+		{licA, t0, ""},
 		// clearing an existing lic.
-		{"", idA, t0, "requires an enterprise license"},
-		// adding invalid lic.
-		{licB, idA, t0, "not valid for cluster"},
+		{"", t0, "requires an enterprise license"},
 		// clearing an existing, invalid lic.
-		{"", idA, t0, "requires an enterprise license"},
+		{"", t0, "requires an enterprise license"},
 	} {
 		updater := st.MakeUpdater()
 		if err := setLicense(ctx, updater, tc.lic); err != nil {
 			t.Fatal(err)
 		}
-		err := checkEnterpriseEnabledAt(st, tc.checkTime, tc.checkCluster, "", true)
+		err := checkEnterpriseEnabledAt(st, tc.checkTime, uuid.UUID{}, "", true)
 		if !testutils.IsError(err, tc.err) {
 			l, _ := decode(tc.lic)
-			t.Fatalf("%d: lic %v, update by %T, checked by %s at %s, got %q", i, l, updater, tc.checkCluster, tc.checkTime, err)
+			t.Fatalf("%d: lic %v, update by %T, checked at %s, got %q", i, l, updater, tc.checkTime, err)
 		}
 	}
 }
@@ -89,7 +76,6 @@ func TestGetLicenseTypePresent(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		updater := st.MakeUpdater()
 		lic, _ := (&licenseccl.License{
-			ClusterID:         []uuid.UUID{},
 			Type:              tc.licenseType,
 			ValidUntilUnixSec: 0,
 		}).Encode()
@@ -136,30 +122,25 @@ func TestSettingBadLicenseStrings(t *testing.T) {
 
 func TestTimeToEnterpriseLicenseExpiry(t *testing.T) {
 	ctx := context.Background()
-	id, _ := uuid.FromString("A0000000-0000-0000-0000-00000000000A")
 
 	t0 := timeutil.Unix(1603926294, 0)
 
 	lic1M, _ := (&licenseccl.License{
-		ClusterID:         []uuid.UUID{id},
 		Type:              licenseccl.License_Enterprise,
 		ValidUntilUnixSec: t0.AddDate(0, 1, 0).Unix(),
 	}).Encode()
 
 	lic2M, _ := (&licenseccl.License{
-		ClusterID:         []uuid.UUID{id},
 		Type:              licenseccl.License_Evaluation,
 		ValidUntilUnixSec: t0.AddDate(0, 2, 0).Unix(),
 	}).Encode()
 
 	lic0M, _ := (&licenseccl.License{
-		ClusterID:         []uuid.UUID{id},
 		Type:              licenseccl.License_Evaluation,
 		ValidUntilUnixSec: t0.AddDate(0, 0, 0).Unix(),
 	}).Encode()
 
 	licExpired, _ := (&licenseccl.License{
-		ClusterID:         []uuid.UUID{id},
 		Type:              licenseccl.License_Evaluation,
 		ValidUntilUnixSec: t0.AddDate(0, -1, 0).Unix(),
 	}).Encode()

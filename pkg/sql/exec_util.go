@@ -127,7 +127,7 @@ import (
 
 // ClusterOrganization is the organization name.
 var ClusterOrganization = settings.RegisterStringSetting(
-	settings.ApplicationLevel,
+	settings.SystemVisible,
 	"cluster.organization",
 	"organization name",
 	"",
@@ -144,11 +144,22 @@ func ClusterIsInternal(sv *settings.Values) bool {
 var ClusterSecret = settings.RegisterStringSetting(
 	settings.ApplicationLevel,
 	"cluster.secret",
-	"cluster specific secret",
+	"cluster specific secret, used to anonymize telemetry reports",
 	"",
 	// Even though string settings are non-reportable by default, we
 	// still mark them explicitly in case a future code change flips the
 	// default.
+	settings.WithReportable(false),
+)
+
+// ClusterLabel is an application-level free-form string that is not
+// used by CockroachDB. It can be used by end-users to label their
+// clusters.
+var _ = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	"cluster.label",
+	"cluster specific free-form label",
+	"",
 	settings.WithReportable(false),
 )
 

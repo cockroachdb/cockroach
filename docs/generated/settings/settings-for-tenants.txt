@@ -27,12 +27,12 @@ changefeed.sink_io_workers	integer	0	the number of workers used by changefeeds w
 cloudstorage.azure.concurrent_upload_buffers	integer	1	controls the number of concurrent buffers that will be used by the Azure client when uploading chunks.Each buffer can buffer up to cloudstorage.write_chunk.size of memory during an upload	application
 cloudstorage.http.custom_ca	string		custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage	application
 cloudstorage.timeout	duration	10m0s	the timeout for import/export storage operations	application
-cluster.organization	string		organization name	application
+cluster.organization	string		organization name	system-visible
 cluster.preserve_downgrade_option	string		disable (automatic or manual) cluster version upgrade from the specified version until reset	application
 diagnostics.forced_sql_stat_reset.interval	duration	2h0m0s	interval after which the reported SQL Stats are reset even if not collected by telemetry reporter. It has a max value of 24H.	application
 diagnostics.reporting.enabled	boolean	true	enable reporting diagnostic metrics to cockroach labs	application
 diagnostics.reporting.interval	duration	1h0m0s	interval at which diagnostics data should be reported	application
-enterprise.license	string		the encoded cluster license	application
+enterprise.license	string		the encoded cluster license	system-visible
 external.graphite.endpoint	string		if nonempty, push server metrics to the Graphite or Carbon server at the specified host:port	application
 external.graphite.interval	duration	10s	the interval at which metrics are pushed to Graphite (if enabled)	application
 feature.backup.enabled	boolean	true	set to true to enable backups, false to disable; default is true	application
@@ -315,4 +315,4 @@ trace.snapshot.rate	duration	0s	if non-zero, interval at which background trace 
 trace.span_registry.enabled	boolean	true	if set, ongoing traces can be seen at https://<ui>/#/debug/tracez	application
 trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.	application
 ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui [etc/utc = 0, america/new_york = 1]	application
-version	version	1000023.1-26	set the active cluster version in the format '<major>.<minor>'	application
+version	version	1000023.1-28	set the active cluster version in the format '<major>.<minor>'	application

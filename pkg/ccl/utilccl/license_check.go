@@ -9,7 +9,6 @@
 package utilccl
 
 import (
-	"bytes"
 	"context"
 	"strings"
 	"sync/atomic"
@@ -32,7 +31,7 @@ import (
 )
 
 var enterpriseLicense = settings.RegisterStringSetting(
-	settings.ApplicationLevel,
+	settings.SystemVisible,
 	"enterprise.license",
 	"the encoded cluster license",
 	"",
@@ -318,36 +317,12 @@ func check(
 		}
 	}
 
-	if l.ClusterID == nil {
-		if strings.EqualFold(l.OrganizationName, org) {
-			return nil
-		}
-		if !withDetails {
-			return errEnterpriseRequired
-		}
-		return pgerror.Newf(pgcode.CCLValidLicenseRequired,
-			"license valid only for %q", l.OrganizationName)
+	if strings.EqualFold(l.OrganizationName, org) {
+		return nil
 	}
-
-	for _, c := range l.ClusterID {
-		if cluster == c {
-			return nil
-		}
-	}
-
-	// no match, so compose an error message.
 	if !withDetails {
 		return errEnterpriseRequired
 	}
-	var matches bytes.Buffer
-	for i, c := range l.ClusterID {
-		if i > 0 {
-			matches.WriteString(", ")
-		}
-		matches.WriteString(c.String())
-	}
 	return pgerror.Newf(pgcode.CCLValidLicenseRequired,
-		"license for cluster(s) %s is not valid for cluster %s",
-		matches.String(), cluster.String(),
-	)
+		"license valid only for %q", l.OrganizationName)
 }

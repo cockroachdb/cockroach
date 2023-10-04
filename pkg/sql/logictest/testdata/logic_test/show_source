@@ -185,22 +185,20 @@ sql.defaults.distsql
 off
 
 query TTTBTTT colnames
-SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE variable LIKE '%organization'
+SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE variable LIKE 'cluster%label'
 ----
-variable              value  setting_type  public  description        default_value  origin
-cluster.organization  ·      s             true    organization name  ·              default
+variable       value  setting_type  public  description                       default_value  origin
+cluster.label  ·      s             false   cluster specific free-form label  ·              default
 
 query TTTTTT colnames
-SELECT * FROM [SHOW CLUSTER SETTINGS] WHERE variable LIKE '%organization'
+SELECT * FROM [SHOW CLUSTER SETTINGS] WHERE variable LIKE 'cluster%label'
 ----
-variable              value  setting_type  description        default_value  origin
-cluster.organization  ·      s             organization name  ·              default
+variable  value  setting_type  description  default_value  origin
 
 query TTTTTT colnames
-SELECT * FROM [SHOW PUBLIC CLUSTER SETTINGS] WHERE variable LIKE '%organization'
+SELECT * FROM [SHOW PUBLIC CLUSTER SETTINGS] WHERE variable LIKE 'cluster%label'
 ----
-variable              value  setting_type  description        default_value  origin
-cluster.organization  ·      s             organization name  ·              default
+variable  value  setting_type  description  default_value  origin
 
 query T colnames
 SELECT * FROM [SHOW SESSION_USER]

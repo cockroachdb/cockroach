@@ -302,20 +302,6 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
-statement error pgcode 0A000 pq: unimplemented: opening a cursor in a routine with an exception block is not yet supported
-CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
-  DECLARE
-    curs STRING;
-  BEGIN
-    OPEN curs FOR SELECT 1;
-    RETURN 0;
-  EXCEPTION
-    WHEN division_by_zero THEN
-      RETURN -1;
-  END
-$$ LANGUAGE PLpgSQL;
-BEGIN;
-
 statement ok
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
@@ -952,3 +938,218 @@ ABORT;
 # Test attempting to CLOSE a nonexistent cursor.
 statement error pgcode 34000 pq: cursor \"foo\" does not exist
 SELECT f('foo');
+
+# Testing cursors with exception handling.
+#
+# Cursors are allowed in routines with an exception block.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    curs CURSOR FOR SELECT 100;
+  BEGIN
+    curs := 'foo' || n::STRING;
+    OPEN curs;
+    RETURN 1 // n;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+# Successful cursor creation.
+query I
+SELECT f(1);
+----
+1
+
+query I
+FETCH foo1;
+----
+100
+
+# The cursor should be rolled back.
+query I
+SELECT f(0);
+----
+-1
+
+statement error pgcode 34000 pq: cursor \"foo0\" does not exist
+FETCH foo0;
+
+# The cursors opened within a block should be closed before exception-handling.
+statement ok
+ABORT;
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs CURSOR FOR SELECT 1;
+  BEGIN
+    curs := 'foo';
+    OPEN curs;
+    RAISE NOTICE '%', (SELECT array_agg(name) FROM pg_cursors)::STRING;
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RAISE NOTICE '%', (SELECT array_agg(name) FROM pg_cursors)::STRING;
+      RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: {foo}
+NOTICE: <NULL>
+
+statement error pgcode 34000 pq: cursor \"foo\" does not exist
+FETCH foo;
+
+# The exception block can catch an error thrown as the cursor is being opened.
+statement ok
+BEGIN;
+DECLARE dup CURSOR FOR SELECT 0;
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := 'foo';
+    curs2 STRING := 'dup';
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    OPEN curs2 FOR SELECT 200;
+  EXCEPTION
+    WHEN duplicate_cursor THEN
+      RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+-1
+
+# The first cursor should have been rolled back, but the original 'dup' cursor
+# should still be open.
+query T
+SELECT name FROM pg_cursors;
+----
+dup
+
+query I
+FETCH 3 FROM dup;
+----
+0
+
+# The exception handler can catch an error thrown as the cursor executes.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+query I
+SELECT f();
+----
+-1
+
+# The cursor should have been rolled back (or not created in the first place).
+statement error pgcode 34000 pq: cursor \"foo\" does not exist
+FETCH foo;
+
+# It is possible to open a cursor within the exception block.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      OPEN curs FOR SELECT 2;
+      RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+query I
+SELECT f();
+----
+-1
+
+# Should retrieve "2" from the second OPEN.
+query I
+FETCH 3 FROM foo;
+----
+2
+
+# The exception handler should not catch a duplicate cursor error thrown from
+# within the exception handler itself.
+statement ok
+ABORT;
+BEGIN;
+DECLARE dup CURSOR FOR SELECT 0;
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := 'foo';
+    curs2 STRING := 'dup';
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      OPEN curs2 FOR SELECT 300;
+    WHEN duplicate_cursor THEN
+      RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P03 pq: cursor \"dup\" already exists
+SELECT f();
+
+# Case where the cursor is opened and then closed before control reaches teh
+# exception handler.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT * FROM (VALUES (100), (200), (300));
+    RAISE NOTICE 'opened %', (SELECT array_agg(name) FROM pg_cursors)::STRING;
+    CLOSE curs;
+    RAISE NOTICE 'closed %', (SELECT array_agg(name) FROM pg_cursors)::STRING;
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RAISE NOTICE 'exception %', (SELECT array_agg(name) FROM pg_cursors)::STRING;
+      RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: opened {foo}
+NOTICE: closed <NULL>
+NOTICE: exception <NULL>
+
+query T
+SELECT name FROM pg_cursors;
+----
+
+statement ok
+ABORT;

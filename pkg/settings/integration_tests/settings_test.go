@@ -342,17 +342,17 @@ func TestSettingsPersistenceEndToEnd(t *testing.T) {
 	// the default always.
 	const differentValue = `something`
 
-	setting, _ := settings.LookupForLocalAccessByKey("cluster.organization", true)
+	setting, _ := settings.LookupForLocalAccessByKey("cluster.label", true)
 	s := setting.(*settings.StringSetting)
 	st := tc.SystemLayer(0).ClusterSettings()
 	require.NotEqual(t, s.Get(&st.SV), differentValue)
-	origValue := db.QueryStr(t, `SHOW CLUSTER SETTING cluster.organization`)[0][0]
+	origValue := db.QueryStr(t, `SHOW CLUSTER SETTING cluster.label`)[0][0]
 
 	// Regression test for #70567.
 	t.Run("same node", func(t *testing.T) {
 		// Customize the setting.
-		db.Exec(t, `SET CLUSTER SETTING cluster.organization = $1`, differentValue)
-		newValue := db.QueryStr(t, `SHOW CLUSTER SETTING cluster.organization`)[0][0]
+		db.Exec(t, `SET CLUSTER SETTING cluster.label = $1`, differentValue)
+		newValue := db.QueryStr(t, `SHOW CLUSTER SETTING cluster.label`)[0][0]
 		t.Logf("setting customized")
 
 		// Restart the server; verify the setting customization is preserved.
@@ -364,7 +364,7 @@ func TestSettingsPersistenceEndToEnd(t *testing.T) {
 		db = sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 		t.Logf("restarted server and checking value")
-		db.CheckQueryResults(t, `SHOW CLUSTER SETTING cluster.organization`, [][]string{{newValue}})
+		db.CheckQueryResults(t, `SHOW CLUSTER SETTING cluster.label`, [][]string{{newValue}})
 
 		// Restart the server to make the setting writable again.
 		tc.StopServer(0)
@@ -373,8 +373,8 @@ func TestSettingsPersistenceEndToEnd(t *testing.T) {
 		db = sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 		// Reset the setting, then check the original value is restored.
-		db.Exec(t, `RESET CLUSTER SETTING cluster.organization`)
-		db.CheckQueryResults(t, `SHOW CLUSTER SETTING cluster.organization`, [][]string{{origValue}})
+		db.Exec(t, `RESET CLUSTER SETTING cluster.label`)
+		db.CheckQueryResults(t, `SHOW CLUSTER SETTING cluster.label`, [][]string{{origValue}})
 		t.Logf("setting reset")
 
 		// Restart the server; verify the original value is still there.
@@ -383,7 +383,7 @@ func TestSettingsPersistenceEndToEnd(t *testing.T) {
 		db = sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 		t.Logf("restarted server and checking value")
-		db.CheckQueryResults(t, `SHOW CLUSTER SETTING cluster.organization`, [][]string{{origValue}})
+		db.CheckQueryResults(t, `SHOW CLUSTER SETTING cluster.label`, [][]string{{origValue}})
 	})
 
 	// Regression test for #111610.
@@ -391,12 +391,12 @@ func TestSettingsPersistenceEndToEnd(t *testing.T) {
 		db2 := sqlutils.MakeSQLRunner(tc.ServerConn(1))
 
 		// Customize the setting on 1st node.
-		db.Exec(t, `SET CLUSTER SETTING cluster.organization = $1`, differentValue)
+		db.Exec(t, `SET CLUSTER SETTING cluster.label = $1`, differentValue)
 		t.Logf("setting customized, waiting for value on 2nd node")
 
 		// Verify the setting has propagated to both nodes.
 		testutils.SucceedsSoon(t, func() error {
-			res := db2.QueryStr(t, `SHOW CLUSTER SETTING cluster.organization`)
+			res := db2.QueryStr(t, `SHOW CLUSTER SETTING cluster.label`)
 			if res[0][0] != differentValue {
 				err := errors.Newf("not updated yet: expecting %v, got %v", differentValue, res[0][0])
 				t.Log(err)
@@ -411,7 +411,7 @@ func TestSettingsPersistenceEndToEnd(t *testing.T) {
 		tc.StopServer(1)
 
 		// Reset the setting to defaults on 1st node.
-		db.Exec(t, `RESET CLUSTER SETTING cluster.organization`)
+		db.Exec(t, `RESET CLUSTER SETTING cluster.label`)
 		t.Logf("2nd node stopped, resetting on 1st node")
 
 		// Restart the 2nd node; assert the default is eventually
@@ -421,7 +421,7 @@ func TestSettingsPersistenceEndToEnd(t *testing.T) {
 		db2 = sqlutils.MakeSQLRunner(tc.ServerConn(1))
 
 		testutils.SucceedsSoon(t, func() error {
-			res := db2.QueryStr(t, `SHOW CLUSTER SETTING cluster.organization`)
+			res := db2.QueryStr(t, `SHOW CLUSTER SETTING cluster.label`)
 			if res[0][0] != origValue {
 				return errors.New("not updated yet")
 			}

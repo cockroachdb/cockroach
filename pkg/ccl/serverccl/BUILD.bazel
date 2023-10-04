@@ -71,6 +71,7 @@ go_test(
         "//pkg/server/serverpb",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/isql",
         "//pkg/sql/lexbase",
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/eval",

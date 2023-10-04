@@ -1826,7 +1826,12 @@ func (c *transientCluster) runWorkload(
 
 // EnableEnterprise enables enterprise features if available in this build.
 func (c *transientCluster) EnableEnterprise(ctx context.Context) (func(), error) {
-	db, err := gosql.Open("postgres", c.connURL)
+	purl, err := c.getNetworkURLForServer(ctx, 0, true /* includeAppName */, forSystemTenant)
+	if err != nil {
+		return nil, err
+	}
+	connURL := purl.ToPQ().String()
+	db, err := gosql.Open("postgres", connURL)
 	if err != nil {
 		return nil, err
 	}
