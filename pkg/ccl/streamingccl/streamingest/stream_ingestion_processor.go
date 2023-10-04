@@ -50,7 +50,7 @@ import (
 )
 
 var minimumFlushInterval = settings.RegisterDurationSettingWithExplicitUnit(
-	settings.ApplicationLevel,
+	settings.SystemOnly,
 	"bulkio.stream_ingestion.minimum_flush_interval",
 	"the minimum timestamp between flushes; flushes may still occur if internal buffers fill up",
 	5*time.Second,
@@ -59,7 +59,7 @@ var minimumFlushInterval = settings.RegisterDurationSettingWithExplicitUnit(
 )
 
 var maxKVBufferSize = settings.RegisterByteSizeSetting(
-	settings.ApplicationLevel,
+	settings.SystemOnly,
 	"bulkio.stream_ingestion.kv_buffer_size",
 	"the maximum size of the KV buffer allowed before a flush",
 	128<<20, // 128 MiB
@@ -67,7 +67,7 @@ var maxKVBufferSize = settings.RegisterByteSizeSetting(
 )
 
 var maxRangeKeyBufferSize = settings.RegisterByteSizeSetting(
-	settings.ApplicationLevel,
+	settings.SystemOnly,
 	"bulkio.stream_ingestion.range_key_buffer_size",
 	"the maximum size of the range key buffer allowed before a flush",
 	32<<20, // 32 MiB
@@ -75,7 +75,7 @@ var maxRangeKeyBufferSize = settings.RegisterByteSizeSetting(
 )
 
 var tooSmallRangeKeySize = settings.RegisterByteSizeSetting(
-	settings.ApplicationLevel,
+	settings.SystemOnly,
 	"bulkio.stream_ingestion.ingest_range_keys_as_writes",
 	"size below which a range key SST will be ingested using normal writes",
 	400*1<<10, // 400 KiB
@@ -86,7 +86,7 @@ var tooSmallRangeKeySize = settings.RegisterByteSizeSetting(
 // the system.jobs table to check whether the stream ingestion job has been
 // signaled to cutover.
 var cutoverSignalPollInterval = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
+	settings.SystemOnly,
 	"bulkio.stream_ingestion.cutover_signal_poll_interval",
 	"the interval at which the stream ingestion job checks if it has been signaled to cutover",
 	10*time.Second,
