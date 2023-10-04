@@ -1016,8 +1016,16 @@ CREATE TABLE system.mvcc_statistics (
 	table_id INT8 NOT NULL,
 	index_id INT8 NOT NULL,
 	statistics JSONB NOT NULL,
-	created_at_hash INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(created_at)), 8:::INT8)) STORED,
+	crdb_internal_created_at_database_id_index_id_table_id_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(created_at)), 16:::INT8)) STORED,
 	CONSTRAINT mvcc_statistics_pkey PRIMARY KEY (created_at ASC, database_id ASC, table_id ASC, index_id ASC) USING HASH WITH (bucket_count=16),
+	FAMILY "primary" (
+	    created_at,
+	    database_id,
+	    table_id,
+	    index_id,
+	    statistics,
+	    crdb_internal_created_at_database_id_index_id_table_id_shard_16
+	)
 );`
 
 	TxnExecutionStatsTableSchema = `
@@ -1044,6 +1052,7 @@ CREATE TABLE system.mvcc_statistics (
 		contention_info                    JSONB,
 		details                            JSONB,
 		created                            TIMESTAMPTZ NOT NULL DEFAULT now(),
+		crdb_internal_end_time_start_time_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(start_time, end_time)), 16:::INT8)) STORED,
 		CONSTRAINT "primary" PRIMARY KEY (transaction_id),
 		INDEX transaction_fingerprint_id_idx (transaction_fingerprint_id),
 		INDEX time_range_idx (start_time DESC, end_time DESC) USING HASH,
@@ -1069,7 +1078,8 @@ CREATE TABLE system.mvcc_statistics (
 			contention_time,
 			contention_info,
 			details,
-			created
+			created,
+		    crdb_internal_end_time_start_time_shard_16
 		)
 	);`
 
@@ -1103,6 +1113,7 @@ CREATE TABLE system.mvcc_statistics (
 		contention_info            JSONB,
 		details                    JSONB,
 		created                    TIMESTAMPTZ NOT NULL DEFAULT now(),
+		crdb_internal_end_time_start_time_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(start_time, end_time)), 16 ::: INT8)) STORED,
 		CONSTRAINT "primary" PRIMARY KEY (statement_id, transaction_id),
 		INDEX transaction_id_idx (transaction_id),
 		INDEX transaction_fingerprint_id_idx (transaction_fingerprint_id, start_time DESC, end_time DESC),
@@ -1136,7 +1147,8 @@ CREATE TABLE system.mvcc_statistics (
 			contention_time,
 			contention_info,
 			details,
-			created
+			created,
+		    crdb_internal_end_time_start_time_shard_16
 		)
 	);`
 )
@@ -4252,14 +4264,13 @@ var (
 			catconstants.MVCCStatistics,
 			descpb.InvalidID, // dynamically assigned table ID
 			[]descpb.ColumnDescriptor{
-				{Name: "created_at", ID: 1, Type: types.TimestampTZ,
-					DefaultExpr: &nowTZString},
+				{Name: "created_at", ID: 1, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
 				{Name: "database_id", ID: 2, Type: types.Int},
 				{Name: "table_id", ID: 3, Type: types.Int},
 				{Name: "index_id", ID: 4, Type: types.Int},
 				{Name: "statistics", ID: 5, Type: types.Jsonb},
 				{
-					Name:        "created_at_hash",
+					Name:        "crdb_internal_created_at_database_id_index_id_table_id_shard_16",
 					ID:          6,
 					Type:        types.Int4,
 					Nullable:    false,
@@ -4277,9 +4288,10 @@ var (
 						"table_id",
 						"index_id",
 						"statistics",
-						"created_at_hash",
+						"crdb_internal_created_at_database_id_index_id_table_id_shard_16",
 					},
-					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6},
+					DefaultColumnID: 5,
 				},
 			},
 			descpb.IndexDescriptor{
@@ -4287,7 +4299,7 @@ var (
 				ID:     1,
 				Unique: true,
 				KeyColumnNames: []string{
-					"created_at_hash",
+					"crdb_internal_created_at_database_id_index_id_table_id_shard_16",
 					"created_at",
 					"database_id",
 					"table_id",
@@ -4303,12 +4315,29 @@ var (
 				KeyColumnIDs: []descpb.ColumnID{6, 1, 2, 3, 4},
 				Sharded: catpb.ShardedDescriptor{
 					IsSharded:    true,
-					Name:         "created_at_hash",
+					Name:         "crdb_internal_created_at_database_id_index_id_table_id_shard_16",
 					ShardBuckets: 16, // Cluster setting default.
-					ColumnNames:  []string{"created_at"},
+					ColumnNames: []string{
+						"created_at",
+						"database_id",
+						"index_id",
+						"table_id",
+					},
 				},
 			},
 		),
+		func(tbl *descpb.TableDescriptor) {
+			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
+				Expr:                  "crdb_internal_created_at_database_id_index_id_table_id_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)",
+				Name:                  "check_crdb_internal_created_at_database_id_index_id_table_id_shard_16",
+				Validity:              descpb.ConstraintValidity_Validated,
+				ColumnIDs:             []descpb.ColumnID{6},
+				IsNonNullConstraint:   false,
+				FromHashShardedColumn: true,
+				ConstraintID:          tbl.NextConstraintID,
+			}}
+			tbl.NextConstraintID++
+		},
 	)
 
 	timeRangeHashComputeExpr = `mod(fnv32(crdb_internal.datums_to_bytes(start_time, end_time)), 16:::INT8)`
@@ -4342,7 +4371,7 @@ var (
 				{Name: "details", ID: 21, Type: types.Jsonb, Nullable: true},
 				{Name: "created", ID: 22, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
 				{
-					Name:        "time_range_hash",
+					Name:        "crdb_internal_end_time_start_time_shard_16",
 					ID:          23,
 					Type:        types.Int4,
 					Nullable:    false,
@@ -4377,7 +4406,7 @@ var (
 						"contention_info",
 						"details",
 						"created",
-						"time_range_hash",
+						"crdb_internal_end_time_start_time_shard_16",
 					},
 					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23},
 					DefaultColumnID: 0,
@@ -4405,25 +4434,42 @@ var (
 				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 			descpb.IndexDescriptor{
-				Name:           "time_range_idx",
-				ID:             3,
-				Unique:         false,
-				KeyColumnNames: []string{"start_time", "end_time"},
+				Name:   "time_range_idx",
+				ID:     3,
+				Unique: false,
+				KeyColumnNames: []string{
+					"crdb_internal_end_time_start_time_shard_16",
+					"start_time",
+					"end_time",
+				},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
 					catenumpb.IndexColumn_DESC,
 					catenumpb.IndexColumn_DESC,
 				},
-				KeyColumnIDs:       []descpb.ColumnID{6, 7},
+				KeyColumnIDs:       []descpb.ColumnID{23, 6, 7},
 				KeySuffixColumnIDs: []descpb.ColumnID{1},
 				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
 				Sharded: catpb.ShardedDescriptor{
 					IsSharded:    true,
-					Name:         "time_range_hash",
+					Name:         "crdb_internal_end_time_start_time_shard_16",
 					ShardBuckets: 16,
-					ColumnNames:  []string{"start_time", "end_time"},
+					ColumnNames:  []string{"end_time", "start_time"},
 				},
 			},
 		),
+		func(tbl *descpb.TableDescriptor) {
+			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
+				Expr:                  "crdb_internal_end_time_start_time_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)",
+				Name:                  "check_crdb_internal_end_time_start_time_shard_16",
+				Validity:              descpb.ConstraintValidity_Validated,
+				ColumnIDs:             []descpb.ColumnID{23},
+				IsNonNullConstraint:   false,
+				FromHashShardedColumn: true,
+				ConstraintID:          tbl.NextConstraintID,
+			}}
+			tbl.NextConstraintID++
+		},
 	)
 
 	StatementExecInsightsTable = makeSystemTable(
@@ -4456,17 +4502,16 @@ var (
 				{Name: "implicit_txn", ID: 22, Type: types.Bool, Nullable: true},
 				{Name: "cpu_sql_nanos", ID: 23, Type: types.Int, Nullable: true},
 				{Name: "error_code", ID: 24, Type: types.String, Nullable: true},
-				{Name: "service_lat_seconds", ID: 25, Type: types.Float, Nullable: true},
-				{Name: "retry_lat_seconds", ID: 26, Type: types.Float, Nullable: true},
-				{Name: "commit_lat_seconds", ID: 27, Type: types.Float, Nullable: true},
-				{Name: "idle_lat_seconds", ID: 28, Type: types.Float, Nullable: true},
-				{Name: "contention_time", ID: 29, Type: types.Interval, Nullable: true},
-				{Name: "contention_info", ID: 30, Type: types.Jsonb, Nullable: true},
-				{Name: "details", ID: 31, Type: types.Jsonb, Nullable: true},
-				{Name: "created", ID: 32, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
+				{Name: "contention_time", ID: 25, Type: types.Interval,
+					Nullable: true},
+				{Name: "contention_info", ID: 26, Type: types.Jsonb,
+					Nullable: true},
+				{Name: "details", ID: 27, Type: types.Jsonb, Nullable: true},
+				{Name: "created", ID: 28, Type: types.TimestampTZ,
+					DefaultExpr: &nowTZString},
 				{
-					Name:        "time_range_hash",
-					ID:          33,
+					Name:        "crdb_internal_end_time_start_time_shard_16",
+					ID:          29,
 					Type:        types.Int4,
 					Nullable:    false,
 					ComputeExpr: &timeRangeHashComputeExpr,
@@ -4502,17 +4547,13 @@ var (
 						"implicit_txn",
 						"cpu_sql_nanos",
 						"error_code",
-						"service_lat_seconds",
-						"retry_lat_seconds",
-						"commit_lat_seconds",
-						"idle_lat_seconds",
 						"contention_time",
 						"contention_info",
 						"details",
 						"created",
-						"time_range_hash",
+						"crdb_internal_end_time_start_time_shard_16",
 					},
-					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29},
 					DefaultColumnID: 0,
 				},
 			},
@@ -4569,25 +4610,42 @@ var (
 				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 			descpb.IndexDescriptor{
-				Name:           "time_range_idx",
-				ID:             5,
-				Unique:         false,
-				KeyColumnNames: []string{"start_time", "end_time"},
+				Name:   "time_range_idx",
+				ID:     5,
+				Unique: false,
+				KeyColumnNames: []string{
+					"crdb_internal_end_time_start_time_shard_16",
+					"start_time",
+					"end_time",
+				},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
 					catenumpb.IndexColumn_DESC,
 					catenumpb.IndexColumn_DESC,
 				},
-				KeyColumnIDs:       []descpb.ColumnID{10, 11},
+				KeyColumnIDs:       []descpb.ColumnID{29, 10, 11},
 				KeySuffixColumnIDs: []descpb.ColumnID{4, 2},
 				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
 				Sharded: catpb.ShardedDescriptor{
 					IsSharded:    true,
-					Name:         "time_range_hash",
-					ShardBuckets: 16,
-					ColumnNames:  []string{"start_time", "end_time"},
+					Name:         "crdb_internal_end_time_start_time_shard_16",
+					ShardBuckets: 16, // Cluster setting default.
+					ColumnNames:  []string{"end_time", "start_time"},
 				},
 			},
 		),
+		func(tbl *descpb.TableDescriptor) {
+			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
+				Expr:                  "crdb_internal_end_time_start_time_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)",
+				Name:                  "check_crdb_internal_end_time_start_time_shard_16",
+				Validity:              descpb.ConstraintValidity_Validated,
+				ColumnIDs:             []descpb.ColumnID{29},
+				IsNonNullConstraint:   false,
+				FromHashShardedColumn: true,
+				ConstraintID:          tbl.NextConstraintID,
+			}}
+			tbl.NextConstraintID++
+		},
 	)
 )
 
