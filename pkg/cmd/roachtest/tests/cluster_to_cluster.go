@@ -1002,7 +1002,7 @@ func c2cRegisterWrapper(
 		allZones = append(allZones, sp.multiregion.srcLocalities...)
 		allZones = append(allZones, sp.multiregion.destLocalities...)
 		allZones = append(allZones, sp.multiregion.workloadNodeZone)
-		clusterOps = append(clusterOps, spec.Zones(strings.Join(allZones, ",")))
+		clusterOps = append(clusterOps, spec.GCEZones(strings.Join(allZones, ",")))
 		clusterOps = append(clusterOps, spec.Geo())
 	}
 
@@ -1175,7 +1175,7 @@ func registerClusterToCluster(r registry.Registry) {
 				destLocalities:   []string{"us-central1-b", "us-west1-b", "us-west1-b", "us-west1-b"},
 				workloadNodeZone: "us-west1-b",
 			},
-			clouds: registry.AllExceptAWS,
+			clouds: registry.OnlyGCE,
 			suites: registry.Suites("nightly"),
 		},
 		{
