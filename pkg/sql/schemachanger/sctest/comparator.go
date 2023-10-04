@@ -71,7 +71,18 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 			// Skip lines with syntax error.
 			continue
 		}
-		line = modifyBlacklistedStmt(t, line, legacyTDB)
+
+		inTxn := isInATransaction(t, legacySQLDB)
+		// Pre-execution: modify `line` so that executing it produces the same
+		// state. This step is to account for the known behavior difference between
+		// the two schema changers.
+		// Only run when not in a transaction.
+		if !inTxn {
+			line = modifyBlacklistedStmt(t, line, legacyTDB)
+		}
+
+		// Execution: `line` must be executed in both clusters with the same error
+		// code.
 		_, errLegacy := legacySQLDB.Exec(line)
 		if pgcode.MakeCode(string(getPQErrCode(errLegacy))) == pgcode.FeatureNotSupported {
 			continue
@@ -80,22 +91,26 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 		requireNoErrOrSameErrCode(t, line, errLegacy, errDeclarative)
 		linesExecutedSoFar = append(linesExecutedSoFar, line)
 
-		if inFailedSQLTransaction(legacySQLDB) {
-			// Skip any identity checks if in a failed sql transaction because any
-			// statements will be ignored.
-			continue
-		}
-
-		// Perform a descriptor identity check after a DDL.
-		if containsStmtOfType(t, line, tree.TypeDDL) {
-			metaDataIdentityCheck(t, legacyTDB, declarativeTDB, linesExecutedSoFar)
+		// Post-execution: Check metadata level identity between two clusters.
+		// Only run when not in a transaction.
+		if !inTxn {
+			if containsStmtOfType(t, line, tree.TypeDDL) {
+				metaDataIdentityCheck(t, legacyTDB, declarativeTDB, linesExecutedSoFar)
+			}
 		}
 	}
 }
 
-func inFailedSQLTransaction(db *gosql.DB) bool {
-	_, err := db.Exec("SELECT 1;")
-	return pgcode.MakeCode(string(getPQErrCode(err))) == pgcode.InFailedSQLTransaction
+// isInATransaction returns true if connection `db` is currently in a transaction.
+func isInATransaction(t *testing.T, db *gosql.DB) bool {
+	rows, err := db.Query("SHOW transaction_status;")
+	if pgcode.MakeCode(string(getPQErrCode(err))) == pgcode.InFailedSQLTransaction {
+		// Txn is in `ERROR` state.
+		return true
+	}
+	res, err := sqlutils.RowsToStrMatrix(rows)
+	require.NoError(t, err)
+	return res[0][0] == `Open` // Txn is in `Open` state.
 }
 
 // sqlLineModifier is the standard signature that takes as input a sql stmt(s) line
@@ -183,13 +198,6 @@ WHERE col -> 'id' = pkcolid;`, name.String(), name.String()))
 			colIsHidden == "true" && colType == "IntFamily", colName
 	}
 
-	// A helper to determine whether the connection is currently in an open
-	// transaction.
-	isInAnOpenTransaction := func() bool {
-		res := tdb.QueryStr(t, `SHOW transaction_status;`)
-		return res[0][0] == `Open`
-	}
-
 	var newParsedStmts statements.Statements
 	var modified bool
 	for _, parsedStmt := range parsedStmts {
@@ -218,11 +226,6 @@ WHERE col -> 'id' = pkcolid;`, name.String(), name.String()))
 			parsedDropRowID, err := parser.ParseOne(fmt.Sprintf("ALTER TABLE %v DROP COLUMN IF EXISTS %v", tableName, implicitRowidColname))
 			require.NoError(t, err)
 			newParsedStmts = append(newParsedStmts, parsedCommit, parsedDropRowID)
-			if isInAnOpenTransaction() {
-				parsedBegin, err := parser.ParseOne("begin")
-				require.NoError(t, err)
-				newParsedStmts = append(newParsedStmts, parsedBegin)
-			}
 			modified = true
 		}
 	}
