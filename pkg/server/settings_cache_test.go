@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -79,8 +80,21 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 	}
 	var settingsCache []roachpb.KeyValue
 	testServer, _, _ := serverutils.StartServer(t, serverArgs)
-	closedts.TargetDuration.Override(ctx, &testServer.ClusterSettings().SV, 10*time.Millisecond)
-	closedts.SideTransportCloseInterval.Override(ctx, &testServer.ClusterSettings().SV, 10*time.Millisecond)
+
+	factor := 1
+	if util.RaceEnabled {
+		// Under race, all the goroutines are generally slower. If we
+		// accelerate the rangefeeds and the closed ts framework too much,
+		// it can start overwhelming the scheduler and starve everything
+		// of CPU time. So give everything some breathing time in that
+		// case.
+		//
+		// TODO(knz): Replace this by the change in #111753.
+		factor = 4
+	}
+	closedts.TargetDuration.Override(ctx, &testServer.ClusterSettings().SV, 10*time.Millisecond*time.Duration(factor))
+	closedts.SideTransportCloseInterval.Override(ctx, &testServer.ClusterSettings().SV, 10*time.Millisecond*time.Duration(factor))
+
 	testutils.SucceedsSoon(t, func() error {
 		store, err := testServer.GetStores().(*kvserver.Stores).GetStore(1)
 		if err != nil {
