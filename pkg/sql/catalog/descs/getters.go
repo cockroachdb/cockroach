@@ -142,13 +142,13 @@ func (g ByIDGetter) Function(
 	desc, err := g.Desc(ctx, id)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %d does not exist", id)
+			return nil, tree.NewRoutineUndefinedError("function %d does not exist", id)
 		}
 		return nil, err
 	}
 	fn, ok := desc.(catalog.FunctionDescriptor)
 	if !ok {
-		return nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %d does not exist", id)
+		return nil, tree.NewRoutineUndefinedError("function %d does not exist", id)
 	}
 	return fn, nil
 }

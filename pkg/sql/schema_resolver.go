@@ -521,9 +521,7 @@ func makeFunctionUndefinedError(
 			}
 		}
 	}
-	return wrap(errors.Wrapf(
-		tree.ErrFunctionUndefined, "unknown function: %s()", tree.ErrString(name),
-	))
+	return wrap(tree.NewRoutineUndefinedError("unknown function: %s()", tree.ErrString(name)))
 }
 
 func maybeLookupRoutine(
@@ -575,7 +573,7 @@ func (sr *schemaResolver) ResolveFunctionByOID(
 	if !funcdesc.IsOIDUserDefinedFunc(oid) {
 		qol, ok := tree.OidToQualifiedBuiltinOverload[oid]
 		if !ok {
-			return nil, nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %d not found", oid)
+			return nil, nil, tree.NewRoutineUndefinedError("function %d not found", oid)
 		}
 		fnName := tree.MakeQualifiedRoutineName(sr.CurrentDatabase(), qol.Schema, tree.OidToBuiltinName[oid])
 		return &fnName, qol.Overload, nil
@@ -603,7 +601,7 @@ func (sr *schemaResolver) FunctionDesc(
 	ctx context.Context, oid oid.Oid,
 ) (catalog.FunctionDescriptor, error) {
 	if !funcdesc.IsOIDUserDefinedFunc(oid) {
-		return nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %d not user-defined", oid)
+		return nil, tree.NewRoutineUndefinedError("function %d not user-defined", oid)
 	}
 	g := sr.byIDGetterBuilder().WithoutNonPublic().WithoutOtherParent(sr.typeResolutionDbID).Get()
 	descID := funcdesc.UserDefinedFunctionOIDToID(oid)

@@ -129,6 +129,8 @@ var requireConstFmt = map[string]bool{
 	"(github.com/cockroachdb/pebble.Logger).Fatalf":          true,
 	"(github.com/cockroachdb/pebble.LoggerAndTracer).Eventf": true,
 
+	"(github.com/cockroachdb/cockroach/pkg/sql/sem/tree).NewRoutineUndefinedError": true,
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen.errorf": true,
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen.wrapf":  true,
 

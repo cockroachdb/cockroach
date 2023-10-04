@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
@@ -54,7 +53,7 @@ func (d *DistSQLFunctionResolver) ResolveFunction(
 		return nil, err
 	}
 	if builtinDef == nil {
-		return nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %s not found", fn.Object())
+		return nil, tree.NewRoutineUndefinedError("function %s not found", fn.Object())
 	}
 	return builtinDef, nil
 }
@@ -67,7 +66,7 @@ func (d *DistSQLFunctionResolver) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
 ) (*tree.RoutineName, *tree.Overload, error) {
 	if !funcdesc.IsOIDUserDefinedFunc(oid) {
-		return nil, nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %d not found", oid)
+		return nil, nil, tree.NewRoutineUndefinedError("function %d not found", oid)
 	}
 	descID := funcdesc.UserDefinedFunctionOIDToID(oid)
 	funcDesc, err := d.g.Function(ctx, descID)

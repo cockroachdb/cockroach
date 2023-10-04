@@ -45,7 +45,7 @@ func (tc *Catalog) ResolveFunction(
 	if def, ok := tc.udfs[name.String()]; ok {
 		return def, nil
 	}
-	return nil, errors.Wrapf(tree.ErrFunctionUndefined, "unknown function: %s", name)
+	return nil, tree.NewRoutineUndefinedError("unknown function: %s", name)
 }
 
 // ResolveFunctionByOID part of the tree.FunctionReferenceResolver interface.
