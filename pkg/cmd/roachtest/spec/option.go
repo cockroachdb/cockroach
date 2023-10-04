@@ -198,6 +198,13 @@ func RandomlyUseZfs() Option {
 	}
 }
 
+// GCEMachineType sets the machine (instance) type when the cluster is on GCE.
+func GCEMachineType(machineType string) Option {
+	return func(spec *ClusterSpec) {
+		spec.GCE.MachineType = machineType
+	}
+}
+
 // GCEMinCPUPlatform sets the minimum CPU platform when the cluster is on GCE.
 func GCEMinCPUPlatform(platform string) Option {
 	return func(spec *ClusterSpec) {
@@ -209,6 +216,13 @@ func GCEMinCPUPlatform(platform string) Option {
 func GCEVolumeType(volumeType string) Option {
 	return func(spec *ClusterSpec) {
 		spec.GCE.VolumeType = volumeType
+	}
+}
+
+// AWSMachineType sets the machine (instance) type when the cluster is on AWS.
+func AWSMachineType(machineType string) Option {
+	return func(spec *ClusterSpec) {
+		spec.AWS.MachineType = machineType
 	}
 }
 
