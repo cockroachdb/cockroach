@@ -99,7 +99,7 @@ func descExists(sqlDB *gosql.DB, exists bool, id descpb.ID) error {
 	}
 	defer rows.Close()
 	if exists != rows.Next() {
-		return errors.Errorf("descriptor exists = %v", exists)
+		return errors.Errorf("descriptor exists expected=%v was=%v", exists, !exists)
 	}
 	return nil
 }
@@ -721,7 +721,7 @@ func TestDropTableDeleteData(t *testing.T) {
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	for i := 0; i < numTables; i++ {
 		if err := descExists(sqlDB, true, descs[i].GetID()); err != nil {
-			t.Fatal(err)
+			t.Fatalf("table (id=%d name=%s) was deleted. error: %v", descs[i].GetID(), descs[i].GetName(), err)
 		}
 		tableSpan := descs[i].TableSpan(keys.SystemSQLCodec)
 		tests.CheckKeyCountIncludingTombstoned(t, s, tableSpan, numKeys)
@@ -743,7 +743,7 @@ func TestDropTableDeleteData(t *testing.T) {
 	checkTableGCed := func(i int) {
 		testutils.SucceedsSoon(t, func() error {
 			if err := descExists(sqlDB, false, descs[i].GetID()); err != nil {
-				return err
+				return errors.Wrapf(err, "table (id=%d name=%s) not yet deleted", descs[i].GetID(), descs[i].GetName())
 			}
 			return zoneExists(sqlDB, nil, descs[i].GetID())
 		})
