@@ -107,6 +107,10 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 
 	ctx := context.Background()
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		RaftConfig: base.RaftConfig{
+			// Don't expire leases, even when manually adjusting clocks.
+			RangeLeaseDuration: time.Hour,
+		},
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				WallClock: manual,
