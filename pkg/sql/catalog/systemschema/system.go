@@ -1163,7 +1163,7 @@ var (
 	// modify these two expressions as well.
 	sqlStmtHashComputeExpr   = `mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8:::INT8)`
 	sqlTxnHashComputeExpr    = `mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id)), 8:::INT8)`
-	timestampHashComputeExpr = `mod(fnv32(crdb_internal.datums_to_bytes(created_at)), 8:::INT8)`
+	timestampHashComputeExpr = `mod(fnv32(crdb_internal.datums_to_bytes(created_at)), 16:::INT8)`
 )
 
 const (
