@@ -2154,7 +2154,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 		CompatibleClouds:  registry.AllExceptAWS,
 		Suites:            registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.Spec().Cloud != spec.GCE && !c.IsLocal() {
+			if c.Cloud() != spec.GCE && !c.IsLocal() {
 				t.Skip("uses gs://cockroachdb-backup-testing-long-ttl; see https://github.com/cockroachdb/cockroach/issues/105968")
 			}
 

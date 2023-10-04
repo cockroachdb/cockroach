@@ -47,7 +47,7 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 		// Uses CONFIGURE ZONE USING ... COPY FROM PARENT syntax.
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			firstAZ := gceGeoZones[0]
-			if c.Spec().Cloud == spec.AWS {
+			if c.Cloud() == spec.AWS {
 				firstAZ = awsGeoZones[0]
 			}
 			roachNodes := c.Range(1, nodes)
