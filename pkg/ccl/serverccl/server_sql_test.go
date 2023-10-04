@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -90,9 +91,9 @@ func TestTenantCannotSetClusterSetting(t *testing.T) {
 	}
 }
 
-// TestTenantCanUseEnterpriseFeatures verifies that tenants can get a license
-// from the env variable.
-func TestTenantCanUseEnterpriseFeatures(t *testing.T) {
+// TestTenantCanUseEnterpriseFeaturesWithEnvVar verifies that tenants
+// can get a license from the env variable.
+func TestTenantCanUseEnterpriseFeaturesWithEnvVar(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -104,10 +105,6 @@ func TestTenantCanUseEnterpriseFeatures(t *testing.T) {
 	defer envutil.TestSetEnv(t, "COCKROACH_TENANT_LICENSE", license)()
 
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
-		// Note: we can't use `TestTenantAlwaysEnabled` here because
-		// (currently) that requires the enterprise license to be set at
-		// the storage layer, which we just disabled above (because we
-		// want to check the effects of the env var instead).
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer s.Stopper().Stop(context.Background())
@@ -116,6 +113,40 @@ func TestTenantCanUseEnterpriseFeatures(t *testing.T) {
 	defer db.Close()
 
 	_, err := db.Exec(`BACKUP INTO 'userfile:///backup'`)
+	require.NoError(t, err)
+	_, err = db.Exec(`BACKUP INTO LATEST IN 'userfile:///backup'`)
+	require.NoError(t, err)
+}
+
+// TestTenantCanUseEnterpriseFeatures verifies that tenants can get a license
+// from the cluster setting.
+func TestTenantCanUseEnterpriseFeaturesWithSetting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	license, _ := (&licenseccl.License{
+		Type:             licenseccl.License_Enterprise,
+		OrganizationName: "mytest",
+	}).Encode()
+
+	defer ccl.TestingDisableEnterprise()()
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	ie := s.SystemLayer().InternalExecutor().(isql.Executor)
+	_, err := ie.Exec(ctx, "set-license", nil, "SET CLUSTER SETTING cluster.organization = 'mytest'")
+	require.NoError(t, err)
+	_, err = ie.Exec(ctx, "set-license", nil, "SET CLUSTER SETTING enterprise.license = $1", license)
+	require.NoError(t, err)
+
+	_, db := serverutils.StartTenant(t, s, base.TestTenantArgs{TenantID: serverutils.TestTenantID()})
+	defer db.Close()
+
+	_, err = db.Exec(`BACKUP INTO 'userfile:///backup'`)
 	require.NoError(t, err)
 	_, err = db.Exec(`BACKUP INTO LATEST IN 'userfile:///backup'`)
 	require.NoError(t, err)

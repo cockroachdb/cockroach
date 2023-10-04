@@ -501,7 +501,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SET application_name = $1", []preparedQueryTest{
 			baseTest.SetArgs("hello world"),
 		}},
-		{"SET CLUSTER SETTING cluster.organization = $1", []preparedQueryTest{
+		{"SET CLUSTER SETTING cluster.label = $1", []preparedQueryTest{
 			baseTest.SetArgs("hello world"),
 		}},
 		{"SHOW DATABASE", []preparedQueryTest{

@@ -16,7 +16,7 @@ CREATE DATABASE foo;
 sql-stats
 CREATE TABLE foo.a (a INT, CONSTRAINT a CHECK (a > 1));
 INSERT INTO foo.a SELECT unnest(ARRAY[1,2,3,4,5]);
-SET CLUSTER SETTING cluster.organization = 'ACME';
+SET CLUSTER SETTING cluster.label = 'ACME';
 SELECT (1, 20, 30, 40) = (SELECT a, 1, 2, 3 FROM foo.a LIMIT 1);
 ----
 error: pq: failed to satisfy CHECK constraint (a > 1:::INT8)

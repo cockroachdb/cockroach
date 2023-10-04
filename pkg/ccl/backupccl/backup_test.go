@@ -3991,7 +3991,7 @@ func setupBackupEncryptedTest(ctx context.Context, t *testing.T, sqlDB *sqlutils
 
 	// Let's throw it in some other cluster metadata too for fun.
 	sqlDB.Exec(t, `CREATE USER neverappears`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING cluster.organization = 'neverappears'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING cluster.label = 'neverappears'`)
 	sqlDB.Exec(t, `CREATE STATISTICS foo_stats FROM neverappears.neverappears`)
 }
 

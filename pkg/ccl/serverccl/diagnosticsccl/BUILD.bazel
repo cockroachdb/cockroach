@@ -25,6 +25,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog/lease",
+        "//pkg/sql/isql",
         "//pkg/testutils",
         "//pkg/testutils/diagutils",
         "//pkg/testutils/serverutils",

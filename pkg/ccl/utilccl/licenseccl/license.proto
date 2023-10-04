@@ -13,9 +13,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl
 import "gogoproto/gogo.proto";
 
 message License {
-    repeated bytes cluster_id = 1 [(gogoproto.nullable) = false,
-        (gogoproto.customname) = "ClusterID",
-        (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+    reserved 1;
     int64 valid_until_unix_sec = 2;
 
     enum Type {
