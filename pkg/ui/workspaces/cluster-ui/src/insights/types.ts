@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Moment } from "moment-timezone";
+import moment, { Moment } from "moment-timezone";
 import { Filters } from "../queryFilter";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { InsightCause } from "../api";
@@ -87,6 +87,7 @@ export type ContentionDetails = {
   contentionTimeMs: number;
 };
 
+// The return type of getTxnInsightsContentionDetailsApi.
 export type TxnContentionInsightDetails = {
   transactionExecutionID: string;
   application: string;
@@ -103,7 +104,6 @@ export type TxnInsightDetails = {
   txnDetails?: TxnInsightEvent;
   blockingContentionDetails?: ContentionDetails[];
   statements?: StmtInsightEvent[];
-  execType?: InsightExecEnum;
 };
 
 // Shown on the stmt insights overview page.
