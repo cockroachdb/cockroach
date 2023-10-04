@@ -25,7 +25,7 @@ import (
 
 // createRegionLivenessTables creates the system.region_liveness table.
 func createRegionLivenessTables(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	setDBLocality := false
 	// Since this is a re-use of an old key space, invalid data might exists,
@@ -96,5 +96,5 @@ func createRegionLivenessTables(
 		}
 	}
 
-	return nil
+	return bumpSystemDatabaseSchemaVersion(ctx, cs, d)
 }

@@ -277,6 +277,7 @@ var validationMap = []struct {
 			"RegionConfig":                  {status: iSolemnlySwearThisFieldIsValidated},
 			"DefaultPrivileges":             {status: iSolemnlySwearThisFieldIsValidated},
 			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
+			"SystemDatabaseSchemaVersion":   {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 	{

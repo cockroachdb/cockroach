@@ -76,5 +76,5 @@ func stmtDiagForPlanGistMigration(
 			return err
 		}
 	}
-	return nil
+	return bumpSystemDatabaseSchemaVersion(ctx, cs, d)
 }
