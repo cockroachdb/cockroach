@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -114,12 +114,8 @@ func (b *replicaAppBatch) Stage(
 
 	// TODO(tbg): these assertions should be pushed into
 	// (*appBatch).assertAndCheckCommand.
-	if err := b.assertNoCmdClosedTimestampRegression(ctx, cmd); err != nil {
-		return nil, err
-	}
-	if err := b.assertNoWriteBelowClosedTimestamp(cmd); err != nil {
-		return nil, err
-	}
+	b.assertNoCmdClosedTimestampRegression(ctx, cmd)
+	b.assertNoWriteBelowClosedTimestamp(ctx, cmd)
 
 	// Run any triggers that should occur before the batch is applied
 	// and before the write batch is staged in the batch.
@@ -579,11 +575,11 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	// Sanity check that the RaftClosedTimestamp doesn't go backwards.
 	existingClosed := r.mu.state.RaftClosedTimestamp
 	newClosed := b.state.RaftClosedTimestamp
-	if !newClosed.IsEmpty() && newClosed.Less(existingClosed) && raftClosedTimestampAssertionsEnabled {
-		r.mu.Unlock()
-		return errors.AssertionFailedf(
+	if !newClosed.IsEmpty() && newClosed.Less(existingClosed) {
+		err := errors.AssertionFailedf(
 			"raft closed timestamp regression; replica has: %s, new batch has: %s.",
 			existingClosed.String(), newClosed.String())
+		logcrash.ReportOrPanic(ctx, &b.r.ClusterSettings().SV, "%v", err)
 	}
 	r.mu.closedTimestampSetter = b.closedTimestampSetter
 
@@ -666,10 +662,6 @@ func (b *replicaAppBatch) Close() {
 	*b = replicaAppBatch{}
 }
 
-// raftClosedTimestampAssertionsEnabled provides an emergency way of shutting
-// down assertions.
-var raftClosedTimestampAssertionsEnabled = envutil.EnvOrDefaultBool("COCKROACH_RAFT_CLOSEDTS_ASSERTIONS_ENABLED", true)
-
 // Assert that the current command is not writing under the closed timestamp.
 // This check only applies to certain write commands, mainly IsIntentWrite,
 // since others (for example, EndTxn) can operate below the closed timestamp.
@@ -679,12 +671,11 @@ var raftClosedTimestampAssertionsEnabled = envutil.EnvOrDefaultBool("COCKROACH_R
 // cmd.Cmd.ClosedTimestamp. A command is allowed to write below the closed
 // timestamp carried by itself; in other words cmd.Cmd.ClosedTimestamp is a
 // promise about future commands, not the command carrying it.
-func (b *replicaAppBatch) assertNoWriteBelowClosedTimestamp(cmd *replicatedCmd) error {
+func (b *replicaAppBatch) assertNoWriteBelowClosedTimestamp(
+	ctx context.Context, cmd *replicatedCmd,
+) {
 	if !cmd.IsLocal() || !cmd.proposal.Request.AppliesTimestampCache() {
-		return nil
-	}
-	if !raftClosedTimestampAssertionsEnabled {
-		return nil
+		return
 	}
 	wts := cmd.Cmd.ReplicatedEvalResult.WriteTimestamp
 	if !wts.IsEmpty() && wts.LessEq(b.state.RaftClosedTimestamp) {
@@ -695,26 +686,21 @@ func (b *replicaAppBatch) assertNoWriteBelowClosedTimestamp(cmd *replicatedCmd) 
 		} else {
 			req.SafeString("request unknown; not leaseholder")
 		}
-		return errors.AssertionFailedf(
+		err := errors.AssertionFailedf(
 			"command writing below closed timestamp; cmd: %x, write ts: %s, "+
-				"batch state closed: %s, command closed: %s, request: %s, lease: %s.\n"+
-				"This assertion will fire again on restart; to ignore run with env var\n"+
-				"COCKROACH_RAFT_CLOSEDTS_ASSERTIONS_ENABLED=false",
+				"batch state closed: %s, command closed: %s, request: %s, lease: %s.\n",
 			cmd.ID, wts,
 			b.state.RaftClosedTimestamp, cmd.Cmd.ClosedTimestamp,
 			req, b.state.Lease)
+		logcrash.ReportOrPanic(ctx, &b.r.ClusterSettings().SV, "%v", err)
 	}
-	return nil
 }
 
 // Assert that the closed timestamp carried by the command is not below one from
 // previous commands.
 func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(
 	ctx context.Context, cmd *replicatedCmd,
-) error {
-	if !raftClosedTimestampAssertionsEnabled {
-		return nil
-	}
+) {
 	existingClosed := &b.state.RaftClosedTimestamp
 	newClosed := cmd.Cmd.ClosedTimestamp
 	if newClosed != nil && !newClosed.IsEmpty() && newClosed.Less(*existingClosed) {
@@ -740,16 +726,15 @@ func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(
 			}
 		}
 
-		return errors.AssertionFailedf(
+		err = errors.AssertionFailedf(
 			"raft closed timestamp regression in cmd: %x (term: %d, index: %d); batch state: %s, command: %s, lease: %s, req: %s, applying at LAI: %d.\n"+
 				"Closed timestamp was set by req: %s under lease: %s; applied at LAI: %d. Batch idx: %d.\n"+
-				"This assertion will fire again on restart; to ignore run with env var COCKROACH_RAFT_CLOSEDTS_ASSERTIONS_ENABLED=false\n"+
 				"Raft log tail:\n%s",
 			cmd.ID, cmd.Term, cmd.Index(), existingClosed, newClosed, b.state.Lease, req, cmd.LeaseIndex,
 			prevReq, b.closedTimestampSetter.lease, b.closedTimestampSetter.leaseIdx, b.ab.numEntriesProcessed,
 			logTail)
+		logcrash.ReportOrPanic(ctx, &b.r.ClusterSettings().SV, "%v", err)
 	}
-	return nil
 }
 
 // ephemeralReplicaAppBatch implements the apply.Batch interface.
