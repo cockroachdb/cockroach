@@ -1223,7 +1223,7 @@ func (b *builderState) ResolveUDF(
 	name := routineObj.FuncName.ToUnresolvedObjectName().ToUnresolvedName()
 	fd, err := b.cr.ResolveFunction(b.ctx, name, b.semaCtx.SearchPath)
 	if err != nil {
-		if p.IsExistenceOptional && errors.Is(err, tree.ErrFunctionUndefined) {
+		if p.IsExistenceOptional && errors.Is(err, tree.ErrRoutineUndefined) {
 			return nil
 		}
 		panic(err)
@@ -1235,7 +1235,7 @@ func (b *builderState) ResolveUDF(
 	}
 	ol, err := fd.MatchOverload(paramTypes, routineObj.FuncName.Schema(), b.semaCtx.SearchPath)
 	if err != nil {
-		if p.IsExistenceOptional && errors.Is(err, tree.ErrFunctionUndefined) {
+		if p.IsExistenceOptional && errors.Is(err, tree.ErrRoutineUndefined) {
 			return nil
 		}
 		panic(err)

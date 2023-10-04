@@ -1528,7 +1528,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			// Check if the function OID actually exists.
 			_, _, err := evalCtx.Planner.ResolveFunctionByOID(ctx, oid.(*tree.DOid).Oid)
 			if err != nil {
-				if errors.Is(err, tree.ErrFunctionUndefined) {
+				if errors.Is(err, tree.ErrRoutineUndefined) {
 					return eval.ObjectNotFound, nil
 				}
 				return eval.HasNoPrivilege, err
