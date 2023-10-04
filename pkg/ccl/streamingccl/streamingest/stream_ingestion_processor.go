@@ -55,6 +55,7 @@ var minimumFlushInterval = settings.RegisterDurationSettingWithExplicitUnit(
 	"the minimum timestamp between flushes; flushes may still occur if internal buffers fill up",
 	5*time.Second,
 	settings.WithPublic,
+	settings.WithName("physical_replication.consumer.minimum_flush_interval"),
 )
 
 var maxKVBufferSize = settings.RegisterByteSizeSetting(
@@ -62,6 +63,7 @@ var maxKVBufferSize = settings.RegisterByteSizeSetting(
 	"bulkio.stream_ingestion.kv_buffer_size",
 	"the maximum size of the KV buffer allowed before a flush",
 	128<<20, // 128 MiB
+	settings.WithName("physical_replication.consumer.kv_buffer_size"),
 )
 
 var maxRangeKeyBufferSize = settings.RegisterByteSizeSetting(
@@ -69,6 +71,7 @@ var maxRangeKeyBufferSize = settings.RegisterByteSizeSetting(
 	"bulkio.stream_ingestion.range_key_buffer_size",
 	"the maximum size of the range key buffer allowed before a flush",
 	32<<20, // 32 MiB
+	settings.WithName("physical_replication.consumer.range_key_buffer_size"),
 )
 
 var tooSmallRangeKeySize = settings.RegisterByteSizeSetting(
@@ -76,6 +79,7 @@ var tooSmallRangeKeySize = settings.RegisterByteSizeSetting(
 	"bulkio.stream_ingestion.ingest_range_keys_as_writes",
 	"size below which a range key SST will be ingested using normal writes",
 	400*1<<10, // 400 KiB
+	settings.WithName("physical_replication.consumer.ingest_range_keys_as_writes"),
 )
 
 // checkForCutoverSignalFrequency is the frequency at which the resumer polls
@@ -87,6 +91,7 @@ var cutoverSignalPollInterval = settings.RegisterDurationSetting(
 	"the interval at which the stream ingestion job checks if it has been signaled to cutover",
 	10*time.Second,
 	settings.NonNegativeDuration,
+	settings.WithName("physical_replication.consumer.cutover_signal_poll_interval"),
 )
 
 var streamIngestionResultTypes = []*types.T{
