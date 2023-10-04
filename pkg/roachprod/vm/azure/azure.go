@@ -94,6 +94,16 @@ type Provider struct {
 	}
 }
 
+func (p *Provider) SupportsSpotVMs() bool {
+	return false
+}
+
+func (p *Provider) GetPreemptedSpotVMs(
+	l *logger.Logger, vms vm.List, since time.Time,
+) ([]vm.PreemptedVM, error) {
+	return nil, nil
+}
+
 func (p *Provider) CreateVolumeSnapshot(
 	l *logger.Logger, volume vm.Volume, vsco vm.VolumeSnapshotCreateOpts,
 ) (vm.VolumeSnapshot, error) {

@@ -12,8 +12,13 @@ package gce
 
 import (
 	"strconv"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -55,6 +60,130 @@ func TestAllowedLocalSSDCount(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.EqualValues(t, c.expected, actual)
+			}
+		})
+	}
+}
+
+func Test_buildFilterPreemptionCliArgs(t *testing.T) {
+	type args struct {
+		vms         vm.List
+		projectName string
+		since       time.Time
+	}
+	tests := []struct {
+		name        string
+		args        args
+		wantCliArgs string
+		wantErr     error
+	}{
+		{
+			name: "One VM",
+			args: args{
+				vms: []vm.VM{
+					{
+						Name: "test-vm",
+						Zone: "us-west1-a",
+					},
+				},
+				projectName: "test-project",
+				since:       timeutil.Now().Add(-time.Hour * 3),
+			},
+			wantCliArgs: "logging read --project=test-project --format=json --freshness=4h resource.type=gce_instance AND " +
+				"(protoPayload.methodName=compute.instances.preempted) AND " +
+				"(protoPayload.resourceName=projects/test-project/zones/us-west1-a/instances/test-vm)",
+			wantErr: nil,
+		},
+		{name: "Two VMs + different project name + since 7 hrs",
+			args: args{
+				vms: []vm.VM{
+					{
+						Name: "test-vm",
+						Zone: "us-west1-a",
+					},
+					{
+						Name: "test-vm1",
+						Zone: "us-west1-a",
+					},
+				},
+				projectName: "test-project-z",
+				since:       timeutil.Now().Add(-time.Hour * 7),
+			},
+			wantCliArgs: "logging read --project=test-project-z --format=json --freshness=8h resource.type=gce_instance AND " +
+				"(protoPayload.methodName=compute.instances.preempted) AND " +
+				"(protoPayload.resourceName=projects/test-project-z/zones/us-west1-a/instances/test-vm OR " +
+				"protoPayload.resourceName=projects/test-project-z/zones/us-west1-a/instances/test-vm1)",
+			wantErr: nil,
+		},
+		{name: "Two VMs from different zones + since 4 hrs",
+			args: args{
+				vms: []vm.VM{
+					{
+						Name: "test-vm",
+						Zone: "us-west1-a",
+					},
+					{
+						Name: "test-vm1",
+						Zone: "us-east1-a",
+					},
+				},
+				projectName: "test-project",
+				since:       timeutil.Now().Add(-time.Hour * 4),
+			},
+			wantCliArgs: "logging read --project=test-project --format=json --freshness=5h resource.type=gce_instance AND " +
+				"(protoPayload.methodName=compute.instances.preempted) AND " +
+				"(protoPayload.resourceName=projects/test-project/zones/us-west1-a/instances/test-vm OR " +
+				"protoPayload.resourceName=projects/test-project/zones/us-east1-a/instances/test-vm1)",
+			wantErr: nil,
+		},
+		{name: "Nil VMs",
+			args: args{
+				vms:         nil,
+				projectName: "test-project",
+				since:       timeutil.Now().Add(-time.Hour * 4),
+			},
+			wantCliArgs: "",
+			wantErr:     errors.New("vms cannot be nil"),
+		},
+		{name: "Empty Project",
+			args: args{
+				vms: []vm.VM{
+					{
+						Name: "test-vm",
+						Zone: "us-west1-a",
+					},
+				},
+				projectName: "",
+				since:       timeutil.Now().Add(-time.Hour * 4),
+			},
+			wantCliArgs: "",
+			wantErr:     errors.New("project name cannot be empty"),
+		},
+		{name: "Since in future",
+			args: args{
+				vms: []vm.VM{
+					{
+						Name: "test-vm",
+						Zone: "us-west1-a",
+					},
+				},
+				projectName: "test",
+				since:       timeutil.Now().Add(time.Hour * 1),
+			},
+			wantCliArgs: "",
+			wantErr:     errors.New("since cannot be in the future"),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cliArgs, err := buildFilterPreemptionCliArgs(tt.args.vms, tt.args.projectName, tt.args.since)
+			if tt.wantErr == nil {
+				joinedString := strings.Join(cliArgs, " ")
+				assert.Equalf(t, tt.wantCliArgs, joinedString, "buildFilterPreemptionCliArgs(%v, %v, %v)", tt.args.vms, tt.args.projectName, tt.args.since)
+				assert.Equalf(t, tt.wantErr, err, "buildFilterPreemptionCliArgs(%v, %v, %v)", tt.args.vms, tt.args.projectName, tt.args.since)
+			} else {
+				assert.Equalf(t, []string(nil), cliArgs, "buildFilterPreemptionCliArgs(%v, %v, %v)", tt.args.vms, tt.args.projectName, tt.args.since)
+				assert.Equalf(t, tt.wantErr.Error(), err.Error(), "buildFilterPreemptionCliArgs(%v, %v, %v)", tt.args.vms, tt.args.projectName, tt.args.since)
 			}
 		})
 	}
