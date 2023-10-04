@@ -5847,6 +5847,7 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	params := base.TestClusterArgs{}
+	params.ServerArgs.FastRangefeeds = true
 	params.ServerArgs.ExternalIODir = dir
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.ServerArgs.DefaultTestTenant = base.TestControlsTenantsExplicitly
@@ -5888,10 +5889,6 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 
 		tablePrefix := tt.ExecutorConfig().(sql.ExecutorConfig).Codec.TablePrefix(uint32(tableID))
 		startPretty := tablePrefix.String()
-
-		// Speeds up the test.
-		systemTenantRunner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms';")
-		systemTenantRunner.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
 
 		// Run a full backup.
 		baseBackupURI := "userfile:///foo"
@@ -9154,11 +9151,12 @@ func TestGCDropIndexSpanExpansion(t *testing.T) {
 			},
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
+		// Speeds up the test.
+		FastRangefeeds: true,
 	}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.Conns[0]
 	sqlRunner := sqlutils.MakeSQLRunner(conn)
-	sqlRunner.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`) // speeds up the test
 
 	sqlRunner.Exec(t, `CREATE DATABASE test;`)
 	sqlRunner.Exec(t, ` USE test;`)
@@ -9313,6 +9311,8 @@ func TestExcludeDataFromBackupAndRestore(t *testing.T) {
 	tc, sqlDB, iodir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 10,
 		InitManualReplication, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
+				// Speeds up the test.
+				FastRangefeeds: true,
 				// Disabled to run within tenants because the function that sets up the restoring cluster
 				// has not been configured yet to run within tenants.
 				DefaultTestTenant: base.TODOTestTenantDisabled,
@@ -9348,7 +9348,6 @@ func TestExcludeDataFromBackupAndRestore(t *testing.T) {
 	defer cleanup()
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 	conn := tc.Conns[0]
 
 	sqlDB.Exec(t, `CREATE TABLE data.foo (id INT, INDEX bar(id))`)
@@ -9419,6 +9418,8 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 			// Test fails when run within a tenant as zone config
 			// updates are not allowed by default. Tracked with 73768.
 			DefaultTestTenant: base.TODOTestTenantDisabled,
+			// Make test faster.
+			FastRangefeeds: true,
 		},
 	}
 	args.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
@@ -9445,12 +9446,6 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 	_, err := conn.Exec("CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
-	require.NoError(t, err)
-
-	_, err = conn.Exec("SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms';")
-	require.NoError(t, err)
-
-	_, err = conn.Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'") // speeds up the test
 	require.NoError(t, err)
 
 	const tableRangeMaxBytes = 100 << 20
@@ -9518,6 +9513,9 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 		DisableLastProcessedCheck: true,
 	}
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+	// Make test faster.
+	params.ServerArgs.FastRangefeeds = true
+
 	tc := testcluster.StartTestCluster(t, 1, params)
 	defer tc.Stopper().Stop(ctx)
 
@@ -9527,9 +9525,6 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 	conn := tc.ServerConn(0)
 	runner := sqlutils.MakeSQLRunner(conn)
 	runner.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	// speeds up the test
-	runner.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
-	runner.Exec(t, `SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'`)
 
 	runner.Exec(t, `CREATE DATABASE test;`)
 	runner.Exec(t, `CREATE TABLE test.foo (k INT PRIMARY KEY, v BYTES)`)
@@ -10563,7 +10558,6 @@ func TestBackupDBWithViewOnAdjacentDBRange(t *testing.T) {
 
 	// Speeds up the test.
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 
 	// Create two databases da and db, and tables in such a way that the view
 	// db.dbview is on the same range as db.t2. Set da to have a short GC TTL of 1

@@ -1499,6 +1499,10 @@ func (t *logicTest) newCluster(
 		nodeParams.TempStorageConfig = base.DefaultTestTempStorageConfigWithSize(
 			nodeParams.Settings, tempStorageDiskLimit,
 		)
+
+		// Make the tests faster overall.
+		nodeParams.FastRangefeeds = true
+
 		paramsPerNode[i] = nodeParams
 	}
 	params.ServerArgsPerNode = paramsPerNode
@@ -1591,23 +1595,6 @@ func (t *logicTest) newCluster(
 
 		clusterSettings := toa.clusterSettings
 		if len(clusterSettings) > 0 {
-			// We reduce the closed timestamp duration on the host tenant so that the
-			// setting override can propagate to the tenant faster.
-			if _, err := conn.Exec(
-				"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'",
-			); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := conn.Exec(
-				"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'",
-			); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := conn.Exec(
-				"SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '50ms'",
-			); err != nil {
-				t.Fatal(err)
-			}
 			for settingName, value := range clusterSettings {
 				query := fmt.Sprintf("ALTER TENANT [$1] SET CLUSTER SETTING %s = $2", settingName)
 				if _, err := conn.Exec(query, tenantID.ToUint64(), value); err != nil {

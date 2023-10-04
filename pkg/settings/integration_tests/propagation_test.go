@@ -85,13 +85,14 @@ func runSettingDefaultPropagationTest(
 	ctx := context.Background()
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		// Speed up the tests.
+		FastRangefeeds: true,
 	})
 	defer s.Stopper().Stop(ctx)
 
 	sysDB := sqlutils.MakeSQLRunner(s.SystemLayer().SQLConn(t, ""))
 	sysDB.Exec(t, "SELECT crdb_internal.create_tenant($1, 'test')", serverutils.TestTenantID().ToUint64())
-	// Speed up the tests.
-	sysDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'")
+	sysDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 
 	expectation := func(setting settings.Setting, sysOverride, tenantOverride, tenantAllOverride string) string {
 		if tenantOverride != "" {

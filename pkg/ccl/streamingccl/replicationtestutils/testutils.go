@@ -303,6 +303,8 @@ func CreateServerArgs(args TenantStreamingClustersArgs) base.TestServerArgs {
 				EnableTenantIDReuse: true,
 			},
 		},
+		// Make the tests faster overall.
+		FastRangefeeds: true,
 	}
 }
 
@@ -499,6 +501,8 @@ var defaultSrcClusterSetting = map[string]string{
 	`kv.rangefeed.enabled`: `true`,
 	// Speed up the rangefeed. These were set by squinting at the settings set in
 	// the changefeed integration tests.
+	// TODO(ssd,knz): this seems to be redundant with the "FastRangefeeds"
+	// argument on TestServerArgs.
 	`kv.closed_timestamp.target_duration`:            `'100ms'`,
 	`kv.rangefeed.closed_timestamp_refresh_interval`: `'200ms'`,
 	`kv.closed_timestamp.side_transport_interval`:    `'50ms'`,
@@ -509,7 +513,7 @@ var defaultSrcClusterSetting = map[string]string{
 	// Make all AddSSTable operation to trigger AddSSTable events.
 	`kv.bulk_io_write.small_write_size`: `'1'`,
 	`jobs.registry.interval.adopt`:      `'1s'`,
-	// Speed up span reconciliation
+	// Speed up span reconciliation.
 	`spanconfig.reconciliation_job.checkpoint_interval`: `'100ms'`,
 }
 

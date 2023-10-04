@@ -432,9 +432,6 @@ func TestTenantStreamingDropTenantCancelsStream(t *testing.T) {
 		defer cleanup()
 		producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
 
-		c.DestSysSQL.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
-		c.DestSysSQL.Exec(t, "SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms';")
-
 		jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 		jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
@@ -876,9 +873,6 @@ func TestProtectedTimestampManagement(t *testing.T) {
 
 			c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 			defer cleanup()
-
-			c.DestSysSQL.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
-			c.DestSysSQL.Exec(t, "SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms';")
 
 			producerJobID, replicationJobID := c.StartStreamReplication(ctx)
 

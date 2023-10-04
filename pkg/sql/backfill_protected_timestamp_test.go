@@ -68,6 +68,8 @@ func TestValidationWithProtectedTS(t *testing.T) {
 				},
 			},
 		},
+		// Make the test faster.
+		FastRangefeeds: true,
 	})
 	defer s.Stopper().Stop(ctx)
 	ts := s.ApplicationLayer()
@@ -75,8 +77,7 @@ func TestValidationWithProtectedTS(t *testing.T) {
 	protectedts.PollInterval.Override(ctx, &tenantSettings.SV, time.Millisecond)
 	r := sqlutils.MakeSQLRunner(db)
 
-	systemSqlDb := s.SystemLayer().SQLConn(t, "system")
-	rSys := sqlutils.MakeSQLRunner(systemSqlDb)
+	systemSqlDb := sqlutils.MakeSQLRunner(db)
 
 	// Refreshes the in-memory protected timestamp state to asOf.
 	refreshTo := func(t *testing.T, tableKey roachpb.Key, asOf hlc.Timestamp) {
@@ -103,13 +104,6 @@ func TestValidationWithProtectedTS(t *testing.T) {
 		require.NoError(t, ptp.Refresh(ctx, asOf))
 	}
 
-	for _, sql := range []string{
-		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'",
-		"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval ='10ms'",
-		"SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval ='10ms'",
-	} {
-		rSys.Exec(t, sql)
-	}
 	for _, sql := range []string{
 		"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
 		"ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 1",

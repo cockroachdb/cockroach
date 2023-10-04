@@ -273,14 +273,13 @@ func TestUnsplitRanges(t *testing.T) {
 		params.Knobs.GCJob = &sql.GCJobTestingKnobs{
 			SkipWaitingForMVCCGC: true,
 		}
+		// Speed up how long it takes for the zone config changes to propagate.
+		params.FastRangefeeds = true
 
 		defer gcjob.SetSmallMaxGCIntervalForTest()()
 
 		s, sqlDB, kvDB := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(context.Background())
-
-		// Speed up how long it takes for the zone config changes to propagate.
-		sqltestutils.SetShortRangeFeedIntervals(t, sqlDB)
 
 		// Disable strict GC TTL enforcement because we're going to shove a zero-value
 		// TTL into the system with AddImmediateGCZoneConfig.

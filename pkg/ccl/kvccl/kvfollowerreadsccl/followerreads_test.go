@@ -738,6 +738,9 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 							},
 						},
 					},
+					// Speed up closing of timestamps, in order to sleep less
+					// below before we can use follower_read_timestamp().
+					FastRangefeeds: true,
 				},
 			},
 		})
@@ -747,11 +750,6 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	n1.Exec(t, `CREATE DATABASE t`)
 	n1.Exec(t, `CREATE TABLE test (k INT PRIMARY KEY)`)
 	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[1,2], 1)`)
-	// Speed up closing of timestamps, in order to sleep less below before we can
-	// use follower_read_timestamp(). follower_read_timestamp() uses the sum of
-	// the following settings.
-	n1.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.1s'`)
-	n1.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s'`)
 	n1.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.1s'`)
 
 	// Sleep so that we can perform follower reads. The read timestamp needs to be
@@ -878,6 +876,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer utilccl.TestingEnableEnterprise()()
+	defer log.Scope(t).Close(t)
 
 	skip.UnderStressRace(t, "times out")
 
@@ -900,6 +899,8 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 			localities[i] = locality
 			serverArgs[i] = base.TestServerArgs{
 				Locality: localities[i],
+				// Make test faster.
+				FastRangefeeds: true,
 			}
 		}
 		tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
@@ -961,8 +962,6 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 		// use follower_read_timestamp(). Note that we need to override the setting
 		// for the tenant as well, because the builtin is run in the tenant's sql pod.
 		systemSQL := sqlutils.MakeSQLRunner(tc.Conns[0])
-		systemSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.1s'`)
-		systemSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s'`)
 		systemSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.1s'`)
 		// We're making assertions on traces collected by the tenant using log lines
 		// in KV so we must ensure they're not redacted.

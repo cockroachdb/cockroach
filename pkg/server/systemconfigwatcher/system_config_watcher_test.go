@@ -46,15 +46,12 @@ func TestSystemConfigWatcher(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t,
 		base.TestServerArgs{
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			// Shorten the closed timestamp duration as a cheeky way to check the
+			// checkpointing code while also speeding up the test.
+			FastRangefeeds: true,
 		},
 	)
 	defer s.Stopper().Stop(ctx)
-	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	// Shorten the closed timestamp duration as a cheeky way to check the
-	// checkpointing code while also speeding up the test.
-	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10 ms'")
-	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
-	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10 ms'")
 
 	t.Run("system", func(t *testing.T) {
 		runTest(t, s, sqlDB, nil)

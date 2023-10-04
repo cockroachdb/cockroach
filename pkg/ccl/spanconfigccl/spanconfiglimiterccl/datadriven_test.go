@@ -77,10 +77,13 @@ func TestDataDriven(t *testing.T) {
 				Knobs: base.TestingKnobs{
 					SpanConfig: scKnobs,
 				},
+				// Make tests faster overall.
+				FastRangefeeds: true,
 			},
 		})
 		defer tc.Stopper().Stop(ctx)
 		{
+			// Lower the closed ts target duration even further than what FastRangefeeds does.
 			sysDB := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t, ""))
 			sysDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
 		}

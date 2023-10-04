@@ -31,14 +31,11 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Speeds up test.
+		FastRangefeeds: true,
+	})
 	defer s.Stopper().Stop(context.Background())
-
-	// speeds up test
-	{
-		sysDB := sqlutils.MakeSQLRunner(s.SystemLayer().SQLConn(t, ""))
-		sysDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
-	}
 
 	sqlConn := sqlutils.MakeSQLRunner(sqlDB)
 	sqlConn.Exec(t, `CREATE DATABASE test`)

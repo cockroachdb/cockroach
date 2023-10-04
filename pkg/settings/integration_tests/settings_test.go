@@ -308,11 +308,14 @@ func TestSettingsPersistenceEndToEnd(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Server: serverKnobs,
 		},
+		FastRangefeeds: true,
 	}
 
 	ts, sqlDB, _ := serverutils.StartServer(t, serverArgs)
 	defer ts.Stopper().Stop(ctx)
 	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	db.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 
 	// We need a custom value for the cluster setting that's guaranteed
 	// to be different from the default. So check that it's not equal to

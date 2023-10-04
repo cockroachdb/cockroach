@@ -92,6 +92,8 @@ func backupRestoreTestSetup(
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				DefaultTestTenant: base.TODOTestTenantDisabled,
+				// Make tests faster.
+				FastRangefeeds: true,
 			}})
 }
 

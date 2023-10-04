@@ -101,14 +101,11 @@ func TestGetZoneConfig(t *testing.T) {
 		DefaultZoneConfigOverride:       &defaultZoneConfig,
 		DefaultSystemZoneConfigOverride: &defaultZoneConfig,
 	}
+	// Set the closed_timestamp interval to be short to shorten the test duration.
+	params.FastRangefeeds = true
 
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
-	// Set the closed_timestamp interval to be short to shorten the test duration.
-	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '20ms'`)
 
 	type testCase struct {
 		objectID uint32
@@ -337,14 +334,11 @@ func TestCascadingZoneConfig(t *testing.T) {
 		DefaultZoneConfigOverride:       &defaultZoneConfig,
 		DefaultSystemZoneConfigOverride: &defaultZoneConfig,
 	}
+	// Set the closed_timestamp interval to be short to shorten the test duration.
+	params.FastRangefeeds = true
 
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
-	// Set the closed_timestamp interval to be short to shorten the test duration.
-	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '20ms'`)
 
 	type testCase struct {
 		objectID uint32
@@ -650,13 +644,11 @@ func BenchmarkGetZoneConfig(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	params, _ := createTestServerParams()
+	// Set the closed_timestamp interval to be short to shorten the test duration.
+	params.FastRangefeeds = true
+
 	s, sqlDB, _ := serverutils.StartServer(b, params)
 	defer s.Stopper().Stop(context.Background())
-	// Set the closed_timestamp interval to be short to shorten the test duration.
-	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	tdb.Exec(b, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
-	tdb.Exec(b, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
-	tdb.Exec(b, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '20ms'`)
 	cfg := forceNewConfig(b, s)
 
 	key := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(bootstrap.TestingUserDescID(0)))
