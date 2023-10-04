@@ -63,7 +63,7 @@ CPUQUOTA=1024
 TESTS="${TESTS-}"
 FILTER="${FILTER-}"
 case "${CLOUD}" in
-  gce)
+  gce | azure)
       # Confusing due to how we've handled tags in the past where it has been assumed that all tests should
       # be run on GCE. Now with refactoring of how tags are handled, we need:
       # - "default" to ensure we select tests that don't have any user specified tags (preserve old behavior)
@@ -75,12 +75,6 @@ case "${CLOUD}" in
   aws)
     if [ -z "${FILTER}" ]; then
       FILTER="tag:aws"
-    fi
-    ;;
-  azure)
-    if [ -z "${FILTER}" ]; then
-      # Soon to go away with Radu's tag changes.
-      FILTER="tag:azure"
     fi
     ;;
   *)

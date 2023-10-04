@@ -20,6 +20,7 @@ artifacts=/artifacts
 source $root/build/teamcity/util/roachtest_util.sh
 
 build/teamcity-roachtest-invoke.sh \
+  --disable-issue \
   --metamorphic-encryption-probability=0.5 \
   --select-probability="${SELECT_PROBABILITY:-1.0}" \
   --cloud="${CLOUD}" \
