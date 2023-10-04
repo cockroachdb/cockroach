@@ -938,7 +938,7 @@ var versionsSingleton = func() keyedVersions {
 var V23_2 = versionsSingleton[len(versionsSingleton)-1].Key
 
 const (
-	BinaryMinSupportedVersionKey = V22_2
+	BinaryMinSupportedVersionKey = V23_1
 )
 
 // TODO(irfansharif): clusterversion.binary{,MinimumSupported}Version
