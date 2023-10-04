@@ -1235,6 +1235,33 @@ func saveDiskUsageToLogsDir(ctx context.Context, c cluster.Cluster) error {
 	})
 }
 
+// savePreemptionStatusToLogsDir collects a summary of the preemption status to logs/preempted_vms.txt.
+func (c *clusterImpl) savePreemptionStatusToLogsDir(ctx context.Context, l *logger.Logger) error {
+	preemptedVms, err := c.CheckPreemptionStatus(ctx, l)
+	if err != nil {
+		return err
+	}
+	if len(preemptedVms) > 0 {
+		path := filepath.Join(c.t.ArtifactsDir(), "logs", "preempted_vms.txt")
+		// Create the file for writing
+		file, err := os.Create(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		// Write the preempted VMs to the file
+		for _, preemptedVM := range preemptedVms {
+			vmString := fmt.Sprintf("%v", preemptedVM)
+			_, err := file.WriteString(vmString + "\n")
+			if err != nil {
+				return err
+			}
+		}
+		fmt.Printf("Preempted VMs saved to: %s\n", path)
+	}
+	return nil
+}
+
 // CopyRoachprodState copies the roachprod state directory in to the test
 // artifacts.
 func (c *clusterImpl) CopyRoachprodState(ctx context.Context) error {
@@ -2634,4 +2661,39 @@ func (c *clusterImpl) StartGrafana(
 
 func (c *clusterImpl) StopGrafana(ctx context.Context, l *logger.Logger, dumpDir string) error {
 	return roachprod.StopGrafana(ctx, l, c.name, dumpDir)
+}
+
+func (c *clusterImpl) CheckPreemptionStatus(
+	ctx context.Context, l *logger.Logger,
+) ([]vm.PreemptedVM, error) {
+	pattern := "^" + regexp.QuoteMeta(c.name) + "$" // exact match of the cluster name
+	cloudClusters, err := roachprod.List(l, false /* listMine */, pattern, vm.ListOptions{})
+	if err != nil {
+		return []vm.PreemptedVM{}, err
+	}
+	cDetails, ok := cloudClusters.Clusters[c.name]
+	if !ok {
+		return []vm.PreemptedVM{}, errors.Wrapf(errClusterNotFound, "%q", c.name)
+	}
+	//bucket cDetails.vms  by provider
+	providerToVMs := make(map[string][]vm.VM)
+	for _, vm := range cDetails.VMs {
+		providerToVMs[vm.Provider] = append(providerToVMs[vm.Provider], vm)
+	}
+
+	//todo(babusrithar): Parallelize the calls to different cloud providers.
+	//iterate through providerToVMs and call preemptedVMs for each provider
+	var allPreemptedVMs []vm.PreemptedVM
+	for provider, vms := range providerToVMs {
+		if provider == spec.GCE {
+			p := vm.Providers[provider]
+			preemptedVMS, err := p.CheckPreemptionStatus(l, vms, cDetails.CreatedAt)
+			if err != nil {
+				return nil, err
+			}
+			allPreemptedVMs = append(allPreemptedVMs, preemptedVMS...)
+		}
+		//other providers are not supported yet
+	}
+	return allPreemptedVMs, nil
 }

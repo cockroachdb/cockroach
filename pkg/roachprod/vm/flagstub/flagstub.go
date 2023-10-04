@@ -32,6 +32,13 @@ type provider struct {
 	unimplemented string
 }
 
+func (p *provider) CheckPreemptionStatus(
+	l *logger.Logger, vms vm.List, since time.Time,
+) ([]vm.PreemptedVM, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (p *provider) CreateVolumeSnapshot(
 	l *logger.Logger, volume vm.Volume, vsco vm.VolumeSnapshotCreateOpts,
 ) (vm.VolumeSnapshot, error) {

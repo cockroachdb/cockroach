@@ -1022,6 +1022,12 @@ func (r *testRunner) runTest(
 					// TeamCity regards the test as successful.
 					shout(ctx, l, stdout, "##teamcity[testFailed name='%s' details='%s' flowId='%s']",
 						s.Name, teamCityEscape(output), testRunID)
+					preemptedVMs, err := c.CheckPreemptionStatus(ctx, l)
+					if err != nil {
+						shout(ctx, l, stdout, "failed to check preempted VMs: %s", err)
+					} else if len(preemptedVMs) > 0 {
+						shout(ctx, l, stdout, "##teamcity[ VMs preempted, potential infra flake caused test failure: %s", preemptedVMs)
+					}
 				}
 
 				shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", testRunID, durationStr, output)
@@ -1402,6 +1408,9 @@ func (r *testRunner) collectArtifacts(
 		// downloaded below.
 		if err := saveDiskUsageToLogsDir(ctx, c); err != nil {
 			t.L().Printf("failed to fetch disk uage summary: %s", err)
+		}
+		if err := c.savePreemptionStatusToLogsDir(ctx, t.L()); err != nil {
+			t.L().Printf("failed to check preemption status: %s", err)
 		}
 		if err := c.FetchLogs(ctx, t.L()); err != nil {
 			t.L().Printf("failed to download logs: %s", err)
