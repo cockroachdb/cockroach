@@ -1313,7 +1313,7 @@ func (dsp *DistSQLPlanner) deprecatedPartitionSpansSystem(
 ) (partitions []SpanPartition, ignoreMisplannedRanges bool, _ error) {
 	nodeMap := make(map[base.SQLInstanceID]int)
 	resolver := func(nodeID roachpb.NodeID) base.SQLInstanceID {
-		return dsp.deprecatedSQLInstanceIDForKVNodeIDSystem(ctx, planCtx, nodeID)
+		return dsp.healthySQLInstanceIDForKVNodeIDSystem(ctx, planCtx, nodeID)
 	}
 	for _, span := range spans {
 		var err error
@@ -1336,7 +1336,7 @@ func (dsp *DistSQLPlanner) deprecatedPartitionSpansSystem(
 func (dsp *DistSQLPlanner) partitionSpans(
 	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
 ) (partitions []SpanPartition, ignoreMisplannedRanges bool, _ error) {
-	resolver, err := dsp.makeInstanceResolver(ctx, planCtx.localityFilter)
+	resolver, err := dsp.makeInstanceResolver(ctx, planCtx)
 	if err != nil {
 		return nil, false, err
 	}
@@ -1368,11 +1368,11 @@ func (dsp *DistSQLPlanner) partitionSpans(
 	return partitions, ignoreMisplannedRanges, nil
 }
 
-// deprecatedSQLInstanceIDForKVNodeIDSystem returns the SQL instance that should
-// handle the range with the given node ID when planning is done on behalf of
-// the system tenant. It ensures that the chosen SQL instance is healthy and of
-// the compatible DistSQL version.
-func (dsp *DistSQLPlanner) deprecatedSQLInstanceIDForKVNodeIDSystem(
+// healthySQLInstanceIDForKVNodeIDSystem returns the SQL instance that
+// should handle the range with the given node ID when planning is
+// done on behalf of the system tenant. It ensures that the chosen SQL
+// instance is healthy and of the compatible DistSQL version.
+func (dsp *DistSQLPlanner) healthySQLInstanceIDForKVNodeIDSystem(
 	ctx context.Context, planCtx *PlanningCtx, nodeID roachpb.NodeID,
 ) base.SQLInstanceID {
 	sqlInstanceID := base.SQLInstanceID(nodeID)
@@ -1387,15 +1387,37 @@ func (dsp *DistSQLPlanner) deprecatedSQLInstanceIDForKVNodeIDSystem(
 	return sqlInstanceID
 }
 
-// instanceIDForKVNodeHostedInstance returns the SQL instance ID for an
-// instance that is hosted in the process of a KV node. Currently SQL
+// healthySQLInstanceIDForKVNodeHostedInstanceResolver returns the SQL instance ID for
+// an instance that is hosted in the process of a KV node. Currently SQL
 // instances run in KV node processes have IDs fixed to be equal to the KV
-// nodes' IDs, and all of the SQL instances for a given tenant are _either_
-// run in this mixed mode or standalone, meaning if this server is in mixed
-// mode, we can safely assume every other server is as well, and thus has
-// IDs matching node IDs.
-func instanceIDForKVNodeHostedInstance(nodeID roachpb.NodeID) base.SQLInstanceID {
-	return base.SQLInstanceID(nodeID)
+// nodes' IDs, and all of the SQL instances for a given tenant are _either_ run
+// in this mixed mode or standalone, meaning if this server is in mixed mode, we
+// can safely assume every other server is as well, and thus has IDs matching
+// node IDs.
+//
+// If the given node is not healthy, the gateway node is returned.
+func (dsp *DistSQLPlanner) healthySQLInstanceIDForKVNodeHostedInstanceResolver(
+	ctx context.Context, planCtx *PlanningCtx,
+) func(nodeID roachpb.NodeID) base.SQLInstanceID {
+	allHealthy, err := dsp.sqlAddressResolver.GetAllInstances(ctx)
+	if err != nil {
+		log.Warningf(ctx, "could not get all instances: %v", err)
+		return dsp.alwaysUseGateway
+	}
+
+	healthyNodes := make(map[base.SQLInstanceID]struct{}, len(allHealthy))
+	for _, n := range allHealthy {
+		healthyNodes[n.InstanceID] = struct{}{}
+	}
+
+	return func(nodeID roachpb.NodeID) base.SQLInstanceID {
+		sqlInstance := base.SQLInstanceID(nodeID)
+		if _, ok := healthyNodes[sqlInstance]; ok {
+			return sqlInstance
+		}
+		log.Warningf(ctx, "not planning on node %d", sqlInstance)
+		return dsp.gatewaySQLInstanceID
+	}
 }
 
 func (dsp *DistSQLPlanner) alwaysUseGateway(roachpb.NodeID) base.SQLInstanceID {
@@ -1409,12 +1431,18 @@ var noInstancesMatchingLocalityFilterErr = errors.New(
 // makeInstanceResolver returns a function that can choose the SQL instance ID
 // for a provided KV node ID.
 func (dsp *DistSQLPlanner) makeInstanceResolver(
-	ctx context.Context, locFilter roachpb.Locality,
+	ctx context.Context, planCtx *PlanningCtx,
 ) (func(roachpb.NodeID) base.SQLInstanceID, error) {
 	_, mixedProcessMode := dsp.distSQLSrv.NodeID.OptionalNodeID()
+	locFilter := planCtx.localityFilter
+
+	var mixedProcessSameNodeResolver func(nodeID roachpb.NodeID) base.SQLInstanceID
+	if mixedProcessMode {
+		mixedProcessSameNodeResolver = dsp.healthySQLInstanceIDForKVNodeHostedInstanceResolver(ctx, planCtx)
+	}
 
 	if mixedProcessMode && locFilter.Empty() {
-		return instanceIDForKVNodeHostedInstance, nil
+		return mixedProcessSameNodeResolver, nil
 	}
 
 	// GetAllInstances only returns healthy instances.
@@ -1479,7 +1507,7 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 			// locality filter in which case we can just use it.
 			if mixedProcessMode {
 				if ok, _ := nodeDesc.Locality.Matches(locFilter); ok {
-					return instanceIDForKVNodeHostedInstance(nodeID)
+					return mixedProcessSameNodeResolver(nodeID)
 				} else {
 					log.VEventf(ctx, 2,
 						"node %d locality %s does not match locality filter %s, finding alternative placement...",
@@ -1598,9 +1626,9 @@ func (dsp *DistSQLPlanner) getInstanceIDForScan(
 	}
 
 	if dsp.useGossipPlanning(ctx, planCtx) && planCtx.localityFilter.Empty() {
-		return dsp.deprecatedSQLInstanceIDForKVNodeIDSystem(ctx, planCtx, replDesc.NodeID), nil
+		return dsp.healthySQLInstanceIDForKVNodeIDSystem(ctx, planCtx, replDesc.NodeID), nil
 	}
-	resolver, err := dsp.makeInstanceResolver(ctx, planCtx.localityFilter)
+	resolver, err := dsp.makeInstanceResolver(ctx, planCtx)
 	if err != nil {
 		return 0, err
 	}

@@ -9,6 +9,7 @@ go_library(
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/sql/flowinfra",
         "//pkg/sql/sqlerrors",
+        "//pkg/sql/sqlinstance",
         "//pkg/util/circuit",
         "//pkg/util/grpcutil",
         "//pkg/util/sysutil",

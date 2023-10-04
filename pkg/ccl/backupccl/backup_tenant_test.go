@@ -12,15 +12,18 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/importer"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -29,9 +32,80 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+func TestBackupSharedProcessTenantNodeDown(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	skip.UnderRace(t, "multi-node, multi-tenant test too slow under race")
+	params := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
+	}
+	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+	tc, hostDB, _, cleanup := backupRestoreTestSetupWithParams(t, multiNode, 0, /* numAccounts */
+		InitManualReplication, params)
+	defer cleanup()
+
+	hostDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING sql.virtual_cluster.feature_access.manual_range_split.enabled=true")
+	hostDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING sql.virtual_cluster.feature_access.manual_range_scatter.enabled=true")
+	hostDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING server.sqlliveness.ttl='2s'")
+	hostDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING server.sqlliveness.heartbeat='250ms'")
+
+	testTenantID := roachpb.MustMakeTenantID(11)
+	tenantApp, tenantDB, err := tc.Server(0).StartSharedProcessTenant(ctx,
+		base.TestSharedProcessTenantArgs{
+			TenantID:   testTenantID,
+			TenantName: "test",
+		})
+	require.NoError(t, err)
+
+	hostDB.Exec(t, "ALTER TENANT test GRANT ALL CAPABILITIES")
+	err = tc.Server(0).TenantController().WaitForTenantCapabilities(ctx, testTenantID, map[tenantcapabilities.ID]string{
+		tenantcapabilities.CanUseNodelocalStorage: "true",
+	}, "")
+	require.NoError(t, err)
+
+	tenantSQL := sqlutils.MakeSQLRunner(tenantDB)
+	tenantSQL.Exec(t, "CREATE TABLE foo AS SELECT generate_series(1, 4000)")
+	tenantSQL.Exec(t, "ALTER TABLE foo SPLIT AT VALUES (500), (1000), (1500), (2000), (2500), (3000)")
+	tenantSQL.Exec(t, "ALTER TABLE foo SCATTER")
+
+	t.Log("waiting for SQL instances")
+	waitStart := timeutil.Now()
+	for i := 1; i < multiNode; i++ {
+		testutils.SucceedsSoon(t, func() error {
+			t.Logf("waiting for server %d", i)
+			db, err := tc.Server(i).SystemLayer().SQLConnE("cluster:test/defaultdb")
+			if err != nil {
+				return err
+			}
+			return db.Ping()
+		})
+	}
+	t.Logf("all SQL instances (took %s)", timeutil.Since(waitStart))
+
+	// Shut down a node.
+	t.Log("shutting down server 2 (n3)")
+	tc.StopServer(2)
+
+	// We use succeeds soon here since it still takes some time
+	// for instance-based planning to recognize the downed node.
+	sv := &tenantApp.ClusterSettings().SV
+	padding := 10 * time.Second
+	timeout := slinstance.DefaultTTL.Get(sv) + slinstance.DefaultHeartBeat.Get(sv) + padding
+	testutils.SucceedsWithin(t, func() error {
+		_, err := tenantDB.Exec("BACKUP INTO 'nodelocal://1/worker-failure'")
+		return err
+	}, timeout)
+}
 
 func TestBackupTenantImportingTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
