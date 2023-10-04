@@ -36,15 +36,15 @@ func registerDatabaseDrop(r registry.Registry) {
 		spec.Cloud(spec.GCE),
 		spec.GCEMinCPUPlatform("Intel Ice Lake"),
 		spec.GCEVolumeType("pd-ssd"),
+		spec.GCEMachineType("n2-standard-8"),
 	)
-	clusterSpec.InstanceType = "n2-standard-8"
 
 	r.Add(registry.TestSpec{
 		Name:             "admission-control/database-drop",
 		Timeout:          10 * time.Hour,
 		Owner:            registry.OwnerAdmissionControl,
 		Benchmark:        true,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Weekly),
 		Tags:             registry.Tags(`weekly`),
 		Cluster:          clusterSpec,

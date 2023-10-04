@@ -17,20 +17,21 @@ import (
 )
 
 // TODO(srosenberg): restore the change in https://github.com/cockroachdb/cockroach/pull/111140 after 23.2 branch cut.
-func AWSMachineType(
+func SelectAWSMachineType(
 	cpus int, mem MemPerCPU, shouldSupportLocalSSD bool, arch vm.CPUArch,
 ) (string, vm.CPUArch) {
-	return AWSMachineTypeOld(cpus, mem, arch)
+	return SelectAWSMachineTypeOld(cpus, mem, arch)
 }
 
 // TODO(srosenberg): restore the change in https://github.com/cockroachdb/cockroach/pull/111140 after 23.2 branch cut.
-func GCEMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
-	return GCEMachineTypeOld(cpus, mem, arch)
+func SelectGCEMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
+	return SelectGCEMachineTypeOld(cpus, mem, arch)
 }
 
-// AWSMachineType selects a machine type given the desired number of CPUs and
-// memory per CPU ratio. Also returns the architecture of the selected machine type.
-func AWSMachineTypeOld(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
+// SelectAWSMachineType selects a machine type given the desired number of CPUs
+// and memory per CPU ratio. Also returns the architecture of the selected
+// machine type.
+func SelectAWSMachineTypeOld(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
 	// TODO(erikgrinaker): These have significantly less RAM than
 	// their GCE counterparts. Consider harmonizing them.
 	family := "c6id" // 2 GB RAM per CPU
@@ -87,8 +88,9 @@ func AWSMachineTypeOld(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPU
 	return fmt.Sprintf("%s.%s", family, size), selectedArch
 }
 
-// AWSMachineType selects a machine type given the desired number of CPUs, memory per CPU,
-// support for locally-attached SSDs and CPU architecture. It returns a compatible machine type and its architecture.
+// SelectAWSMachineType selects a machine type given the desired number of CPUs,
+// memory per CPU, support for locally-attached SSDs and CPU architecture. It
+// returns a compatible machine type and its architecture.
 //
 // When MemPerCPU is Standard, the memory per CPU ratio is 4 GB. For High, it is 8 GB.
 // For Auto, it's 4 GB up to and including 16 CPUs, then 2 GB. Low is not supported.
@@ -99,7 +101,7 @@ func AWSMachineTypeOld(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPU
 //
 // At the time of writing, the intel machines are all third-generation Xeon, "Ice Lake" which are isomorphic to
 // GCE's n2-(standard|highmem|custom) _with_ --minimum-cpu-platform="Intel Ice Lake" (roachprod's default).
-func AWSMachineTypeNew(
+func SelectAWSMachineTypeNew(
 	cpus int, mem MemPerCPU, shouldSupportLocalSSD bool, arch vm.CPUArch,
 ) (string, vm.CPUArch) {
 	family := "m6i" // 4 GB RAM per CPU
@@ -176,9 +178,10 @@ func AWSMachineTypeNew(
 	return fmt.Sprintf("%s.%s", family, size), selectedArch
 }
 
-// GCEMachineType selects a machine type given the desired number of CPUs and
-// memory per CPU ratio. Also returns the architecture of the selected machine type.
-func GCEMachineTypeOld(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
+// SelectGCEMachineType selects a machine type given the desired number of CPUs
+// and memory per CPU ratio. Also returns the architecture of the selected
+// machine type.
+func SelectGCEMachineTypeOld(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
 	// TODO(peter): This is awkward: at or below 16 cpus, use n2-standard so that
 	// the machines have a decent amount of RAM. We could use custom machine
 	// configurations, but the rules for the amount of RAM per CPU need to be
@@ -215,8 +218,9 @@ func GCEMachineTypeOld(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPU
 	return fmt.Sprintf("%s-%s-%d", series, kind, cpus), selectedArch
 }
 
-// GCEMachineType selects a machine type given the desired number of CPUs, memory per CPU, and CPU architecture.
-// It returns a compatible machine type and its architecture.
+// SelectGCEMachineType selects a machine type given the desired number of CPUs,
+// memory per CPU, and CPU architecture.  It returns a compatible machine type
+// and its architecture.
 //
 // When MemPerCPU is Standard, the memory per CPU ratio is 4 GB. For High, it is 8 GB.
 // For Auto, it's 4 GB up to and including 16 CPUs, then 2 GB. Low is 1 GB.
@@ -228,7 +232,7 @@ func GCEMachineTypeOld(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPU
 // At the time of writing, the intel machines are all third-generation xeon, "Ice Lake" assuming
 // --minimum-cpu-platform="Intel Ice Lake" (roachprod's default). This is isomorphic to AWS's m6i or c6i.
 // The only exception is low memory machines (n2-highcpu-xxx), which aren't available in AWS.
-func GCEMachineTypeNew(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
+func SelectGCEMachineTypeNew(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
 	series := "n2"
 	selectedArch := vm.ArchAMD64
 
@@ -286,9 +290,9 @@ func GCEMachineTypeNew(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPU
 	return fmt.Sprintf("%s-%s-%d", series, kind, cpus), selectedArch
 }
 
-// AzureMachineType selects a machine type given the desired number of CPUs and
+// SelectAzureMachineType selects a machine type given the desired number of CPUs and
 // memory per CPU ratio.
-func AzureMachineType(cpus int, mem MemPerCPU) string {
+func SelectAzureMachineType(cpus int, mem MemPerCPU) string {
 	if mem != Auto && mem != Standard {
 		panic(fmt.Sprintf("custom memory per CPU not implemented for Azure, memory ratio requested: %d", mem))
 	}
