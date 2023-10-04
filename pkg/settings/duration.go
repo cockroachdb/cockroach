@@ -102,7 +102,7 @@ func (d *DurationSetting) Validate(v time.Duration) error {
 //
 // For testing usage only.
 func (d *DurationSetting) Override(ctx context.Context, sv *Values, v time.Duration) {
-	sv.setValueOrigin(ctx, d.slot, OriginExplicitlySet)
+	sv.setValueOrigin(ctx, d.slot, OriginOverride)
 	sv.setInt64(ctx, d.slot, int64(v))
 	sv.setDefaultOverride(d.slot, v)
 }

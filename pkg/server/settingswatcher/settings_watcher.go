@@ -58,9 +58,15 @@ type SettingsWatcher struct {
 	mu struct {
 		syncutil.Mutex
 
-		updater   settings.Updater
-		values    map[settings.InternalKey]settingsValue
+		updater settings.Updater
+
+		// values represent the values read from the system.settings
+		// table.
+		values map[settings.InternalKey]settingsValue
+		// overrides represent the values obtained from the overrides
+		// monitor, if any.
 		overrides map[settings.InternalKey]settings.EncodedValue
+
 		// storageClusterVersion is the cache of the storage cluster version
 		// inside secondary tenants. It will be uninitialized in a system
 		// tenant.
@@ -393,15 +399,11 @@ func (s *SettingsWatcher) maybeSet(
 	}
 	_, hasOverride := s.mu.overrides[key]
 	s.mu.values[key] = sv
-	if sv.tombstone {
-		// This event corresponds to a deletion.
-		if !hasOverride {
-			s.setDefaultLocked(ctx, key)
-		}
-	} else {
-		if !hasOverride {
-			s.setLocked(ctx, key, sv.val, settings.OriginExplicitlySet)
-		}
+	if !hasOverride {
+		// We only update the in-RAM value of the setting if there is no
+		// override. If there was an override, the override would have
+		// been set already via updateOverrides().
+		s.applyValueFromSystemSettingsOrDefaultLocked(ctx, key)
 	}
 
 	if class == settings.SystemVisible {
@@ -516,17 +518,26 @@ func (s *SettingsWatcher) updateOverrides(ctx context.Context) (updateCh <-chan 
 		if _, ok := newOverrides[key]; !ok {
 			delete(s.mu.overrides, key)
 
-			// Reset the setting to the value in the settings table (or the default
-			// value).
-			if sv, ok := s.mu.values[key]; ok && !sv.tombstone {
-				s.setLocked(ctx, key, sv.val, settings.OriginExplicitlySet)
-			} else {
-				s.setDefaultLocked(ctx, key)
-			}
+			s.applyValueFromSystemSettingsOrDefaultLocked(ctx, key)
 		}
 	}
 
 	return updateCh
+}
+
+// applyValueFromSystemSettingsOrDefaultLocked loads the value stored
+// in system.settings into the in-RAM store, or resets the setting to
+// default if the entry in system.settings was known to be deleted.
+func (s *SettingsWatcher) applyValueFromSystemSettingsOrDefaultLocked(
+	ctx context.Context, key settings.InternalKey,
+) {
+	if sv, ok := s.mu.values[key]; !ok || sv.tombstone {
+		// Value deleted from system.settings. Reset to default.
+		s.setDefaultLocked(ctx, key)
+	} else {
+		// Value added/updated in system.settings. Update the in-RAM value.
+		s.setLocked(ctx, key, sv.val, settings.OriginExplicitlySet)
+	}
 }
 
 func (s *SettingsWatcher) resetUpdater() {
