@@ -11,6 +11,8 @@ syntax = "proto3";
 package cockroach.obspb;
 
 import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
 
 import "obsservice/obspb/opentelemetry-proto/logs/v1/logs.proto";
 import "obsservice/obspb/opentelemetry-proto/common/v1/common.proto";
@@ -35,4 +37,294 @@ message Event {
 
   // The LogRecord containing the specific event information.
   opentelemetry.proto.logs.v1.LogRecord log_record = 3 [(gogoproto.nullable) = false ];
+}
+
+// AggregatedStatementStatistics wraps collected timings and metadata for some
+// query's execution over the given aggregation_interval.
+message AggregatedStatementStatistics {
+  uint64 id = 1 [(gogoproto.customname) = "ID"];
+  StatementStatisticsKey key = 2 [(gogoproto.nullable) = false];
+  StatementStatistics stats = 3 [(gogoproto.nullable) = false];
+  google.protobuf.Timestamp aggregated_ts = 4  [(gogoproto.nullable) = false,  (gogoproto.stdtime) = true];
+  google.protobuf.Duration aggregation_interval = 5 [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
+}
+
+message StatementStatisticsKey {
+  string query = 1;
+  string app = 2;
+  bool distSQL = 3;
+  bool failed = 4;
+  bool implicit_txn = 5;
+  bool vec = 6;
+  bool full_scan = 7;
+  string database = 8;
+  uint64 plan_hash = 9;
+  string query_summary = 10;
+  uint64 transaction_fingerprint_id = 11 [(gogoproto.customname) = "TransactionFingerprintID"];
+}
+
+message StatementStatistics {
+  // Count is the total number of times this statement was executed
+  // since the begin of the reporting period.
+  // When transmitted to the reporting server, this value gets
+  // quantized into buckets (few <10, dozens 10+, 100 or more).
+  int64 count = 1;
+
+  // FirstAttemptCount collects the total number of times a first
+  // attempt was executed (either the one time in explicitly committed
+  // statements, or the first time in implicitly committed statements
+  // with implicit retries).
+  // The proportion of statements that could be executed without retry
+  // can be computed as FirstAttemptCount / Count.
+  // The cumulative number of retries can be computed with
+  // Count - FirstAttemptCount.
+  //
+  // When transmitted to the reporting server, this value gets
+  // simplified so that the proportion of statements that could be
+  // executed without retry remains as FirstAttemptCount / Count.
+  int64 first_attempt_count = 2;
+
+  // MaxRetries collects the maximum observed number of automatic
+  // retries in the reporting period.
+  // When transmitted to the reporting server, this value gets
+  // quantized into buckets (few <10, dozens 10+, 100 or more).
+  int64 max_retries = 3;
+
+  // NumRows collects the number of rows returned or observed.
+  NumericStat num_rows = 4 [(gogoproto.nullable) = false];
+
+  // Phase latencies:
+
+  // IdleLat is the time spent in seconds in an open transaction waiting
+  // for the client to send the statement.
+  NumericStat idle_lat = 5 [(gogoproto.nullable) = false];
+
+  // ParseLat is the time in seconds to transform the SQL string into an AST.
+  NumericStat parse_lat = 6 [(gogoproto.nullable) = false];
+
+  // PlanLat is the time spent in seconds to transform the AST into a logical query plan.
+  NumericStat plan_lat = 7 [(gogoproto.nullable) = false];
+
+  // RunLat is the time in seconds to run the query and fetch/compute the result rows.
+  NumericStat run_lat = 8 [(gogoproto.nullable) = false];
+
+  // ServiceLat is the time in seconds to service the query, from start of parse to end of execute.
+  NumericStat service_lat = 9 [(gogoproto.nullable) = false];
+
+  // OverheadLat is the difference (seconds) between ServiceLat and the sum of parse+plan+run latencies.
+  // We store it separately (as opposed to computing it post-hoc) because the combined
+  // variance for the overhead cannot be derived from the variance of the separate latencies.
+  NumericStat overhead_lat = 10 [(gogoproto.nullable) = false];
+
+  // SensitiveInfo is info that needs to be scrubbed or redacted before being
+  // sent to the reg cluster.
+  SensitiveInfo sensitive_info = 11 [(gogoproto.nullable) = false];
+
+  // BytesRead collects the number of bytes read from disk.
+  NumericStat bytes_read = 12 [(gogoproto.nullable) = false];
+
+  // RowsRead collects the number of rows read from disk.
+  NumericStat rows_read = 13 [(gogoproto.nullable) = false];
+
+  // RowsWritten collects the number of rows written to disk.
+  NumericStat rows_written = 14 [(gogoproto.nullable) = false];
+
+  // ExecStats are the execution statistics for this statement. These statistics
+  // are sampled.
+  ExecStats exec_stats = 15 [(gogoproto.nullable) = false];
+
+  // SQLType is the type of the sql (DDL, DML, DCL or TCL)
+  string sql_type = 16 [(gogoproto.customname) = "SQLType"];
+
+  // LastExecTimestamp is the last timestamp the statement was executed.
+  google.protobuf.Timestamp last_exec_timestamp = 17 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+
+  // Nodes is the ordered list of nodes ids on which the statement was executed.
+  repeated int64 nodes = 18;
+
+  // Regions is the ordered list of regions on which the statement was executed.
+  repeated string regions = 19;
+
+  // PlanGists is the list of a compressed version of plan that can be converted (lossily)
+  // back into a logical plan.
+  // Each statement contain only one plan gist, but the same statement fingerprint id
+  // can contain more than one value.
+  repeated string plan_gists = 20;
+
+  // IndexRecommendations is the list of index recommendations generated for the statement fingerprint.
+  repeated string index_recommendations = 21;
+
+  // Indexes is the list of indexes used by the particular plan when executing the statement.
+  repeated string indexes = 22;
+
+  // LatencyInfo is the information about latency, such min, max, p50, p90 and p99.
+  LatencyInfo latency_info = 23 [(gogoproto.nullable) = false];
+
+  // last_error_code is the last error code for a failed statement, if it exists.
+  string last_error_code = 24;
+}
+
+message NumericStat {
+  // NumericStat keeps track of two running values --- the running mean and
+  // the running sum of squared differences from the mean. Using this along
+  // with the total count of values, we can compute variance using Welford's
+  // method. This is more reliable than keeping track of the sum of
+  // squared values, which is liable to overflow. See
+  // https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm
+  double mean = 1;
+  double squared_diffs = 2;
+}
+
+message SensitiveInfo {
+  option (gogoproto.equal) = true;
+  // LastErr collects the last error encountered.
+  // It is only reported once it's been redacted.
+  // See also: https://github.com/cockroachdb/cockroach/issues/53191
+  string last_err = 1;
+
+  // MostRecentPlanDescription is a serialized representation of the logical plan most recently captured for this query.
+  ExplainTreePlanNode most_recent_plan_description = 2 [(gogoproto.nullable) = false];
+
+  // Timestamp is the time at which the logical plan was last sampled.
+  google.protobuf.Timestamp most_recent_plan_timestamp = 3 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+}
+
+// ExplainTreePlanNode is a serialized representation of an EXPLAIN tree for a logical plan.
+message ExplainTreePlanNode {
+  option (gogoproto.equal) = true;
+  // Name is the type of node this is, e.g. "scan" or "index-join".
+  string name = 1;
+
+  message Attr {
+    option (gogoproto.equal) = true;
+    string key = 1;
+    string value = 2;
+  }
+
+  // Attrs are attributes of this plan node.
+  // Often there are many attributes with the same key, e.g. "render".
+  repeated Attr attrs = 2;
+
+  // Children are the nodes that feed into this one, e.g. two scans for a join.
+  repeated ExplainTreePlanNode children = 3;
+}
+
+// ExecStats contains execution statistics that apply to both statements
+// and transactions. These stats are currently collected using a sampling
+// approach.
+message ExecStats {
+  // Count keeps track of how many times execution stats were recorded. This is
+  // not necessarily equal to the number of times a statement/transaction was
+  // run.
+  int64 count = 1;
+
+  // NetworkBytes collects the number of bytes sent over the network.
+  NumericStat network_bytes = 2 [(gogoproto.nullable) = false];
+
+  // MaxMemUsage collects the maximum memory usage that occurred on a node.
+  NumericStat max_mem_usage = 3 [(gogoproto.nullable) = false];
+
+  // ContentionTime collects the time in seconds this statement spent contending.
+  NumericStat contention_time = 4 [(gogoproto.nullable) = false];
+
+  // NetworkMessages collects the number of messages that were sent over the
+  // network.
+  NumericStat network_messages = 5 [(gogoproto.nullable) = false];
+
+  // MaxDiskUsage collects the maximum temporary disk usage that occurred. This
+  // is set in cases where a query had to spill to disk, e.g. when performing a
+  // large sort where not all of the tuples fit in memory.
+  NumericStat max_disk_usage = 6 [(gogoproto.nullable) = false];
+
+  // CPUSQLNanos collects the cumulative CPU time spent executing SQL operations in
+  // nanoseconds. Currently, it is only collected for statements without
+  // mutations that have a vectorized plan.
+  NumericStat cpu_sql_nanos = 7 [(gogoproto.nullable) = false, (gogoproto.customname) = "CPUSQLNanos"];
+
+  // Internal storage iteration statistics.
+  MVCCIteratorStats mvcc_iterator_stats = 8 [(gogoproto.nullable) = false, (gogoproto.customname) = "MVCCIteratorStats"];
+}
+
+// Internal storage iteration statistics.
+message MVCCIteratorStats {
+  // StepCount collects the number of times the iterator moved forward or backward over the
+  // DB's underlying storage keyspace.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  NumericStat step_count = 1 [(gogoproto.nullable) = false];
+
+  // StepCountInternal collects the number of times the iterator moved forward or backward
+  // over LSM internal keys.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  NumericStat step_count_internal = 2 [(gogoproto.nullable) = false];
+
+  // SeekCount collects the number of times the iterator moved to a specific key/value pair
+  // in the DB's underlying storage keyspace.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  NumericStat seek_count = 3 [(gogoproto.nullable) = false];
+
+  // SeekCountInternal collects the number of times the iterator moved to a specific LSM
+  // internal key.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  NumericStat seek_count_internal = 4 [(gogoproto.nullable) = false];
+
+  // BlockBytes collects the bytes in the loaded SSTable data blocks.
+  // For details, see pebble.InternalIteratorStats.
+  NumericStat block_bytes = 5 [(gogoproto.nullable) = false];
+
+  // BlockBytesInCache collects the subset of BlockBytes in the block cache.
+  // For details, see pebble.InternalIteratorStats.
+  NumericStat block_bytes_in_cache = 6 [(gogoproto.nullable) = false];
+
+  // KeyBytes collects the bytes in keys that were iterated over.
+  // For details, see pebble.InternalIteratorStats.
+  NumericStat key_bytes = 7 [(gogoproto.nullable) = false];
+
+  // ValueBytes collects the bytes in values that were iterated over.
+  // For details, see pebble.InternalIteratorStats.
+  NumericStat value_bytes = 8 [(gogoproto.nullable) = false];
+
+  // PointCount collects the count of point keys iterated over.
+  // For details, see pebble.InternalIteratorStats.
+  NumericStat point_count = 9 [(gogoproto.nullable) = false];
+
+  // PointsCoveredByRangeTombstones collects the count of point keys that were iterated over that
+  // were covered by range tombstones.
+  // For details, see pebble.InternalIteratorStats and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  NumericStat points_covered_by_range_tombstones = 10 [(gogoproto.nullable) = false];
+
+  // RangeKeyCount collects the count of range keys encountered during iteration.
+  // For details, see pebble.RangeKeyIteratorStats and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  NumericStat range_key_count = 11 [(gogoproto.nullable) = false];
+
+  // RangeKeyContainedPoints collects the count of point keys encountered within the bounds of
+  // a range key.
+  // For details, see pebble.RangeKeyIteratorStats and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  NumericStat range_key_contained_points = 12 [(gogoproto.nullable) = false];
+
+  // RangeKeySkippedPoints collects the count of the subset of ContainedPoints point keys that
+  // were skipped during iteration due to range-key masking.
+  // For details, see pkg/storage/engine.go, pebble.RangeKeyIteratorStats, and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  NumericStat range_key_skipped_points = 13 [(gogoproto.nullable) = false];
+}
+
+// LatencyInfo contains more details about the latency.
+message LatencyInfo {
+  // Min is the minimum time in seconds spent executing the fingerprint.
+  double min = 1;
+
+  // Max is the maximum time in seconds spent executing the fingerprint.
+  double max = 2;
+
+  // P50 is the 50 Percentile in seconds for the fingerprint.
+  double p50 = 3;
+
+  // P90 is the 90 Percentile in seconds for the fingerprint.
+  double p90 = 4;
+
+  // P99 is the 99 Percentile in seconds for the fingerprint.
+  double p99 = 5;
 }
