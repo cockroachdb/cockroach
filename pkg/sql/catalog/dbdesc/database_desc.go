@@ -15,6 +15,7 @@ package dbdesc
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -253,6 +254,8 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	if desc.IsMultiRegion() {
 		desc.validateMultiRegion(vea)
 	}
+
+	desc.maybeValidateSystemDatabaseSchemaVersion(vea)
 }
 
 // validateMultiRegion performs checks specific to multi-region DBs.
@@ -264,6 +267,40 @@ func (desc *immutable) validateMultiRegion(vea catalog.ValidationErrorAccumulato
 	if desc.RegionConfig.PrimaryRegion == desc.RegionConfig.SecondaryRegion {
 		vea.Report(errors.AssertionFailedf(
 			"primary region is same as secondary region on multi-region db %d", desc.GetID()))
+	}
+}
+
+func (desc *immutable) maybeValidateSystemDatabaseSchemaVersion(
+	vea catalog.ValidationErrorAccumulator,
+) {
+	sv := desc.GetSystemDatabaseSchemaVersion()
+	if sv == nil {
+		return
+	}
+
+	if id := desc.GetID(); id != keys.SystemDatabaseID {
+		vea.Report(errors.AssertionFailedf(
+			`attempting to set system database schema version for non-system database descriptor (%d)`,
+			id,
+		))
+	}
+
+	binaryMinSupportedVersion := clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
+	if !binaryMinSupportedVersion.LessEq(*sv) {
+		vea.Report(errors.AssertionFailedf(
+			`attempting to set system database schema version to version lower than binary min supported version (%#v): %#v`,
+			binaryMinSupportedVersion,
+			*sv,
+		))
+	}
+
+	binaryVersion := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+	if !sv.LessEq(binaryVersion) {
+		vea.Report(errors.AssertionFailedf(
+			`attempting to set system database schema version to version higher than binary version (%#v): %#v`,
+			binaryVersion,
+			*sv,
+		))
 	}
 }
 
