@@ -50,7 +50,7 @@ func TestAggregatesMonitorMemory(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &ExecutorTestingKnobs{
-				DistSQLReceiverPushCallbackFactory: func(query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
+				DistSQLReceiverPushCallbackFactory: func(query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
 					var block bool
 					for _, testQuery := range statements {
 						block = block || query == testQuery
@@ -59,7 +59,7 @@ func TestAggregatesMonitorMemory(t *testing.T) {
 						return nil
 					}
 					var seenMeta bool
-					return func(_ rowenc.EncDatumRow, _ coldata.Batch, meta *execinfrapb.ProducerMetadata) {
+					return func(row rowenc.EncDatumRow, batch coldata.Batch, meta *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
 						if meta != nil && !seenMeta {
 							// If this is the first metadata object, then we
 							// know that the test query is almost done
@@ -69,6 +69,7 @@ func TestAggregatesMonitorMemory(t *testing.T) {
 							<-blockWorkerCh
 							seenMeta = true
 						}
+						return row, batch, meta
 					}
 				},
 			},
