@@ -2947,7 +2947,6 @@ var postgresPredefinedTypeIssues = map[string]int{
 	"macaddr8":      45813,
 	"money":         41578,
 	"path":          21286,
-	"pg_lsn":        -1,
 	"txid_snapshot": -1,
 	"xml":           43355,
 }
