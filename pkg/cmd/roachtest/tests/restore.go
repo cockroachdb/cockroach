@@ -745,8 +745,7 @@ func makeRestoreDriver(t test.Test, c cluster.Cluster, sp restoreSpecs) restoreD
 }
 
 func (rd *restoreDriver) prepareCluster(ctx context.Context) {
-
-	if rd.c.Spec().Cloud != rd.sp.backup.cloud {
+	if rd.c.Cloud() != rd.sp.backup.cloud {
 		// For now, only run the test on the cloud provider that also stores the backup.
 		rd.t.Skipf("test configured to run on %s", rd.sp.backup.cloud)
 	}

@@ -68,7 +68,7 @@ func registerFollowerReads(r registry.Registry) {
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Spec().Cloud == spec.GCE && c.Spec().Arch == vm.ArchARM64 {
+				if c.Cloud() == spec.GCE && c.Spec().Arch == vm.ArchARM64 {
 					t.Skip("arm64 in GCE is available only in us-central1")
 				}
 				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
