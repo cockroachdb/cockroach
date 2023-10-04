@@ -378,7 +378,7 @@ hello
 # because it doesn't propagate immediately.
 
 statement ok
-PREPARE sets(string) AS SET CLUSTER SETTING cluster.organization = $1
+PREPARE sets(string) AS SET CLUSTER SETTING cluster.label = $1
 
 statement ok
 EXECUTE sets('hello')

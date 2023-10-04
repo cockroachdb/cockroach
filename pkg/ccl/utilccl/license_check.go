@@ -31,7 +31,7 @@ import (
 )
 
 var enterpriseLicense = settings.RegisterStringSetting(
-	settings.ApplicationLevel,
+	settings.SystemVisible,
 	"enterprise.license",
 	"the encoded cluster license",
 	"",
