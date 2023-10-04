@@ -53,7 +53,6 @@ func alterZoneConfigAndClusterSettings(
 		`ALTER RANGE liveness CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 30;`,
 
 		`SET CLUSTER SETTING kv.range_merge.queue_interval = '50ms'`,
-		`SET CLUSTER SETTING kv.raft_log.disable_synchronization_unsafe = 'true'`,
 		`SET CLUSTER SETTING jobs.registry.interval.cancel = '180s';`,
 		`SET CLUSTER SETTING jobs.registry.interval.gc = '30s';`,
 		`SET CLUSTER SETTING jobs.retention_time = '15s';`,

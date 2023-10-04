@@ -46,7 +46,7 @@ var (
 	// rangeLogTTL is the TTL for rows in system.rangelog. If non zero, range log
 	// entries are periodically garbage collected.
 	rangeLogTTL = settings.RegisterDurationSetting(
-		settings.ApplicationLevel,
+		settings.SystemOnly,
 		"server.rangelog.ttl",
 		"if nonzero, entries in system.rangelog older than this duration are periodically purged",
 		30*24*time.Hour, // 30 days
