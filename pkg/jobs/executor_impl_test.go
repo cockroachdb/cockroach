@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -58,7 +59,7 @@ func TestInlineExecutorFailedJobsHandling(t *testing.T) {
 			j.rec.ExecutorType = InlineExecutorName
 
 			require.NoError(t, j.SetSchedule("@daily"))
-			j.SetScheduleDetails(jobspb.ScheduleDetails{OnError: test.onError})
+			j.SetScheduleDetails(jobstest.AddDummyScheduleDetails(jobspb.ScheduleDetails{OnError: test.onError}))
 
 			ctx := context.Background()
 			require.NoError(t, ScheduledJobDB(h.cfg.DB).Create(ctx, j))

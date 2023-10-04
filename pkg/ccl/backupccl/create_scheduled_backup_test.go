@@ -1146,9 +1146,9 @@ INSERT INTO t values (1), (10), (100);
 			s := th.loadSchedule(t, id)
 			s.SetNextRun(s.NextRun().Add(-365 * 24 * time.Hour))
 			// Set onError policy to the specified value.
-			s.SetScheduleDetails(jobspb.ScheduleDetails{
+			s.SetScheduleDetails(jobstest.AddDummyScheduleDetails(jobspb.ScheduleDetails{
 				OnError: onError,
-			})
+			}))
 			schedules := jobs.ScheduledJobDB(th.internalDB())
 			require.NoError(t, schedules.Update(context.Background(), s))
 		}

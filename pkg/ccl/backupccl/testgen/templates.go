@@ -96,10 +96,10 @@ import (
 {{- $tests := .Tests -}}
 {{- range $tests }}
 
-func TestRestoreEntryCover_numBackups_{{.NumBackups}}_simple_{{.SimpleImportSpans}}(t *testing.T) {
+func TestRestoreEntryCover_numBackups_{{.NumBackups}}(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	runTestRestoreEntryCover(t, {{.NumBackups}}, {{.SimpleImportSpans}})
+	runTestRestoreEntryCover(t, {{.NumBackups}})
 }
 {{- end }}
 `
