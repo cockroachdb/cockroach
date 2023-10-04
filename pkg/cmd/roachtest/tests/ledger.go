@@ -31,8 +31,8 @@ func registerLedger(r registry.Registry) {
 		Name:             fmt.Sprintf("ledger/nodes=%d/multi-az", nodes),
 		Owner:            registry.OwnerKV,
 		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(nodes+1, spec.CPU(16), spec.Geo(), spec.Zones(azs)),
-		CompatibleClouds: registry.AllExceptAWS,
+		Cluster:          r.MakeClusterSpec(nodes+1, spec.CPU(16), spec.Geo(), spec.GCEZones(azs)),
+		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			roachNodes := c.Range(1, nodes)
