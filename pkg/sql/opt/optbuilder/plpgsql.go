@@ -528,11 +528,6 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// This is handled by calling the plpgsql_open_cursor internal builtin
 			// function in a separate body statement that returns no results, similar
 			// to the RAISE implementation.
-			if b.hasExceptionBlock {
-				panic(unimplemented.New("open with exception block",
-					"opening a cursor in a routine with an exception block is not yet supported",
-				))
-			}
 			if t.Scroll == tree.Scroll {
 				panic(unimplemented.NewWithIssue(77102, "DECLARE SCROLL CURSOR"))
 			}

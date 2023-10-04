@@ -225,4 +225,11 @@ type BlockState struct {
 	// kv.SavepointToken. We use the empty interface here rather than
 	// kv.SavepointToken to avoid import cycles.
 	SavepointTok interface{}
+
+	// Cursors is a list of the names of cursors that have been opened within the
+	// current block. If the exception handler catches an exception, these cursors
+	// must be closed before the handler can proceed.
+	// TODO(111139): Once we support nested routine calls, we may have to track
+	// newly opened cursors differently.
+	Cursors []Name
 }

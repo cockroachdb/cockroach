@@ -2445,9 +2445,9 @@ func (ex *connExecutor) execCmd() (retErr error) {
 
 	var advInfo advanceInfo
 
-	// We close all pausable portals when we encounter err payload, otherwise
-	// there will be leftover bytes.
-	shouldClosePausablePortals := func(payload fsm.EventPayload) bool {
+	// We close all pausable portals and cursors when we encounter err payload,
+	// otherwise there will be leftover bytes.
+	shouldClosePausablePortalsAndCursors := func(payload fsm.EventPayload) bool {
 		switch payload.(type) {
 		case eventNonRetriableErrPayload, eventRetriableErrPayload:
 			return true
@@ -2459,11 +2459,14 @@ func (ex *connExecutor) execCmd() (retErr error) {
 	// If an event was generated, feed it to the state machine.
 	if ev != nil {
 		var err error
-		if shouldClosePausablePortals(payload) {
+		if shouldClosePausablePortalsAndCursors(payload) {
 			// We need this as otherwise, there'll be leftover bytes when
 			// txnState.finishSQLTxn() is being called, as the underlying resources of
 			// pausable portals hasn't been cleared yet.
 			ex.extraTxnState.prepStmtsNamespace.closeAllPausablePortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
+			if err := ex.extraTxnState.sqlCursors.closeAll(false /* errorOnWithHold */); err != nil {
+				log.Warningf(ctx, "error closing cursors: %v", err)
+			}
 		}
 		advInfo, err = ex.txnStateTransitionsApplyWrapper(ev, payload, res, pos)
 		if err != nil {
