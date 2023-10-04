@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -95,17 +94,6 @@ func nilLogger() *logger.Logger {
 		panic(err)
 	}
 	return l
-}
-
-func alwaysFailingClusterAllocator(
-	ctx context.Context,
-	t registry.TestSpec,
-	arch vm.CPUArch,
-	alloc *quotapool.IntAlloc,
-	artifactsDir string,
-	wStatus *workerStatus,
-) (*clusterImpl, *vm.CreateOpts, error) {
-	return nil, nil, errors.New("cluster creation failed")
 }
 
 func TestRunnerRun(t *testing.T) {
@@ -307,17 +295,19 @@ func assertTestCompletion(
 	expectedErr string,
 ) {
 	t.Helper()
-	require.True(t, len(completed) == len(tests))
 
-	for _, info := range completed {
-		if info.test == "pass" {
-			require.True(t, info.pass)
-		} else if info.test == "fail" {
-			require.True(t, !info.pass)
-		}
-	}
 	if !testutils.IsError(actualErr, expectedErr) {
 		t.Fatalf("expected err: %q, but found %v. Filters: %s", expectedErr, actualErr, filters)
+	}
+
+	require.Equal(t, len(tests), len(completed), "len(completed) invalid")
+
+	for i, info := range completed {
+		if info.test == "pass" {
+			require.Truef(t, info.pass, "expected test %s to pass", tests[i].Name)
+		} else if info.test == "fail" {
+			require.Falsef(t, info.pass, "expected test %s to fail", tests[i].Name)
+		}
 	}
 }
 
