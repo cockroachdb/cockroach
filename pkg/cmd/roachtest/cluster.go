@@ -785,7 +785,7 @@ type clusterFactory struct {
 	namePrefix string
 	// counter is incremented with every new cluster. It's used as part of the cluster's name.
 	// Accessed atomically.
-	counter uint64
+	counter atomic.Uint64
 	// The registry with whom all clustered will be registered.
 	r *clusterRegistry
 	// artifactsDir is the directory in which the cluster creation log file will be placed.
@@ -831,7 +831,7 @@ func (f *clusterFactory) genName(cfg clusterConfig) string {
 	if cfg.nameOverride != "" {
 		return cfg.nameOverride
 	}
-	count := atomic.AddUint64(&f.counter, 1)
+	count := f.counter.Add(1)
 	return makeClusterName(
 		fmt.Sprintf("%s-%02d-%s", f.namePrefix, count, cfg.spec.String()))
 }
