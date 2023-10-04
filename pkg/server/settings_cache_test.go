@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -172,9 +173,20 @@ func TestCachedSettingDeletionIsPersisted(t *testing.T) {
 
 	// Make the test faster.
 	st := ts.ClusterSettings()
-	closedts.TargetDuration.Override(ctx, &st.SV, 10*time.Millisecond)
-	closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 10*time.Millisecond)
-	kvserver.RangeFeedRefreshInterval.Override(ctx, &st.SV, 10*time.Millisecond)
+	factor := 1
+	if util.RaceEnabled {
+		// Under race, all the goroutines are generally slower. If we
+		// accelerate the rangefeeds and the closed ts framework too much,
+		// it can start overwhelming the scheduler and starve everything
+		// of CPU time. So give everything some breathing time in that
+		// case.
+		//
+		// TODO(knz): Replace this by the change in #111753.
+		factor = 4
+	}
+	closedts.TargetDuration.Override(ctx, &st.SV, 10*time.Millisecond*time.Duration(factor))
+	closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 10*time.Millisecond*time.Duration(factor))
+	kvserver.RangeFeedRefreshInterval.Override(ctx, &st.SV, 10*time.Millisecond*time.Duration(factor))
 
 	// Customize a setting.
 	db.Exec(t, `SET CLUSTER SETTING ui.display_timezone = 'America/New_York'`)
