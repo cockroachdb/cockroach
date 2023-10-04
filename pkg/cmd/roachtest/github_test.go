@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -175,6 +176,8 @@ func TestCreatePostRequest(t *testing.T) {
 		{true, false, true, false, "", createFailure(errors.New("other")), false, false, false, nil},
 		//Error during post test assertions
 		{true, false, false, false, "", createFailure(errDuringPostAssertions), false, false, false, nil},
+		//Error during dns operation
+		{true, false, false, false, "", createFailure(gce.ErrDNSOperation), true, false, true, nil},
 	}
 
 	reg := makeTestRegistry(spec.GCE, "", "", false, false)
@@ -246,7 +249,12 @@ func TestCreatePostRequest(t *testing.T) {
 				expectedLabels := []string{}
 				expectedMessagePrefix := ""
 
-				if errors.Is(c.failure.squashedErr, errClusterProvisioningFailed) {
+				if errors.Is(c.failure.squashedErr, gce.ErrDNSOperation) {
+					expectedTeam = "@cockroachdb/test-eng"
+					expectedLabels = []string{"T-testeng", "X-infra-flake"}
+					expectedName = "dns_problem"
+					expectedMessagePrefix = "test github_test failed due to "
+				} else if errors.Is(c.failure.squashedErr, errClusterProvisioningFailed) {
 					expectedTeam = "@cockroachdb/test-eng"
 					expectedLabels = []string{"T-testeng", "X-infra-flake"}
 					expectedName = "cluster_creation"
