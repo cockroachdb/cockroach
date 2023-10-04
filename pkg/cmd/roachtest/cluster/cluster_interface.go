@@ -175,4 +175,7 @@ type Cluster interface {
 	// per-node, but this could be changed. Another assumption is that all
 	// volumes are created identically.
 	ApplySnapshots(ctx context.Context, snapshots []vm.VolumeSnapshot) error
+
+	// GetPreemptedVMs gets any VMs that were part of the cluster but preempted by cloud vendor.
+	GetPreemptedVMs(ctx context.Context, l *logger.Logger) ([]vm.PreemptedVM, error)
 }

@@ -420,6 +420,12 @@ type ListOptions struct {
 	ComputeEstimatedCost bool
 }
 
+type PreemptedVM struct {
+	VMName      string
+	VM          VM
+	PreemptedAt time.Time
+}
+
 // A Provider is a source of virtual machines running on some hosting platform.
 type Provider interface {
 	CreateProviderOpts() ProviderOpts
@@ -471,6 +477,13 @@ type Provider interface {
 	ListVolumeSnapshots(l *logger.Logger, vslo VolumeSnapshotListOpts) ([]VolumeSnapshot, error)
 	// DeleteVolumeSnapshots permanently deletes the given snapshots.
 	DeleteVolumeSnapshots(l *logger.Logger, snapshot ...VolumeSnapshot) error
+
+	// SpotVM related APIs.
+
+	// SupportsSpotVMs returns if the provider supports spot VMs.
+	SupportsSpotVMs() bool
+	// GetPreemptedVMs checks if and returns a list of VMs that were preempted  since the time specified.
+	GetPreemptedVMs(l *logger.Logger, vms List, since time.Time) ([]PreemptedVM, error)
 }
 
 // DeleteCluster is an optional capability for a Provider which can

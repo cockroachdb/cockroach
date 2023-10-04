@@ -125,6 +125,17 @@ type Provider struct {
 	vm.DNSProvider
 }
 
+func (p *Provider) SupportsSpotVMs() bool {
+	return false
+}
+
+func (p *Provider) GetPreemptedVMs(
+	l *logger.Logger, vms vm.List, since time.Time,
+) ([]vm.PreemptedVM, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (p *Provider) CreateVolumeSnapshot(
 	l *logger.Logger, volume vm.Volume, vsco vm.VolumeSnapshotCreateOpts,
 ) (vm.VolumeSnapshot, error) {

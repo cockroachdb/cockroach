@@ -254,6 +254,17 @@ type Provider struct {
 	IAMProfile string
 }
 
+func (p *Provider) SupportsSpotVMs() bool {
+	return false
+}
+
+func (p *Provider) GetPreemptedVMs(
+	l *logger.Logger, vms vm.List, since time.Time,
+) ([]vm.PreemptedVM, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 const (
 	defaultSSDMachineType = "m6id.xlarge"
 	defaultMachineType    = "m6i.xlarge"
