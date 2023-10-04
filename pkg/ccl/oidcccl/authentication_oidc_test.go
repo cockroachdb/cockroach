@@ -16,7 +16,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"regexp"
 	"strings"
@@ -25,12 +24,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/coreos/go-oidc"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/oauth2"
 )
 
 func TestOIDCBadRequestIfDisabled(t *testing.T) {
@@ -58,6 +60,36 @@ func TestOIDCBadRequestIfDisabled(t *testing.T) {
 	}
 }
 
+type mockOidcManager struct {
+	oauth2Config *oauth2.Config
+	claimEmail   string
+}
+
+func (m mockOidcManager) Verify(ctx context.Context, s string) (*oidc.IDToken, error) {
+	return nil, nil
+}
+
+func (m mockOidcManager) Exchange(
+	ctx context.Context, s string, option ...oauth2.AuthCodeOption,
+) (*oauth2.Token, error) {
+	return nil, nil
+}
+
+func (m mockOidcManager) AuthCodeURL(s string, option ...oauth2.AuthCodeOption) string {
+	return m.oauth2Config.AuthCodeURL(s, option...)
+}
+
+func (m mockOidcManager) ExchangeVerifyGetClaims(
+	ctx context.Context, s string, s2 string,
+) (map[string]json.RawMessage, error) {
+	x := map[string]json.RawMessage{}
+	// The email is surrounded by double quotes because it's a serialized JSON string.
+	x["email"] = json.RawMessage([]byte(fmt.Sprintf(`"%s"`, m.claimEmail)))
+	return x, nil
+}
+
+var _ IOIDCManager = &mockOidcManager{}
+
 func TestOIDCEnabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -67,89 +99,38 @@ func TestOIDCEnabled(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
-	// Set up a test OIDC server that serves the JSON discovery document
-	var issuer string
-	oidcHandler := func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/.well-known/openid-configuration" {
-			w.Header().Set("content-type", "application/json")
-			fakeDiscoveryDocument := `
-{
- "issuer": "` + issuer + `",
- "authorization_endpoint": "https://accounts.cockroachlabs.com/o/oauth2/v2/auth",
- "device_authorization_endpoint": "https://oauth2.cockroachlabsapis.com/device/code",
- "token_endpoint": "https://oauth2.cockroachlabsapis.com/token",
- "userinfo_endpoint": "https://openidconnect.cockroachlabsapis.com/v1/userinfo",
- "revocation_endpoint": "https://oauth2.cockroachlabsapis.com/revoke",
- "jwks_uri": "https://www.cockroachlabsapis.com/oauth2/v3/certs",
- "response_types_supported": [
-  "code",
-  "token",
-  "id_token",
-  "code token",
-  "code id_token",
-  "token id_token",
-  "code token id_token",
-  "none"
- ],
- "subject_types_supported": [
-  "public"
- ],
- "id_token_signing_alg_values_supported": [
-  "RS256"
- ],
- "scopes_supported": [
-  "openid",
-  "email",
-  "profile"
- ],
- "token_endpoint_auth_methods_supported": [
-  "client_secret_post",
-  "client_secret_basic"
- ],
- "claims_supported": [
-  "aud",
-  "email",
-  "email_verified",
-  "exp",
-  "family_name",
-  "given_name",
-  "iat",
-  "iss",
-  "locale",
-  "name",
-  "picture",
-  "sub"
- ],
- "code_challenge_methods_supported": [
-  "plain",
-  "S256"
- ],
- "grant_types_supported": [
-  "authorization_code",
-  "refresh_token",
-  "urn:ietf:params:oauth:grant-type:device_code",
-  "urn:ietf:params:oauth:grant-type:jwt-bearer"
- ]
-}`
-			_, _ = fmt.Fprint(w, fakeDiscoveryDocument)
-			return
+	usernameUnderTest := "test"
+
+	realNewManager := NewOIDCManager
+	NewOIDCManager = func(ctx context.Context, conf oidcAuthenticationConf, redirectURL string, scopes []string) (IOIDCManager, error) {
+		c := &oauth2.Config{
+			ClientID:     conf.clientID,
+			ClientSecret: conf.clientSecret,
+			RedirectURL:  redirectURL,
+
+			Endpoint: oauth2.Endpoint{
+				AuthURL: "https://provider.example.com/endpoint",
+			},
+			Scopes: scopes,
 		}
-		http.Error(w, "wrong path", http.StatusBadRequest)
+		return &mockOidcManager{oauth2Config: c, claimEmail: fmt.Sprintf("%s@example.com", usernameUnderTest)}, nil
 	}
-	testOIDCServer := httptest.NewServer(http.HandlerFunc(oidcHandler))
-	defer testOIDCServer.Close()
-	issuer = testOIDCServer.URL
+	defer func() {
+		NewOIDCManager = realNewManager
+	}()
 
 	// Set minimum settings to successfully enable the OIDC client
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.provider_url = "`+testOIDCServer.URL+`"`)
+	sqlDB.Exec(t, fmt.Sprintf(`CREATE USER %s with password 'unused'`, usernameUnderTest))
+	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.provider_url = "providerURL"`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.client_id = "fake_client_id"`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.client_secret = "fake_client_secret"`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.redirect_url = "https://cockroachlabs.com/oidc/v1/callback"`)
+	sqlDB.Exec(t, `set cluster setting server.oidc_authentication.claim_json_key = "email"`)
+	sqlDB.Exec(t, `set cluster setting server.oidc_authentication.principal_regex = '^([^@]+)@[^@]+$'`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.enabled = "true"`)
 
 	testCertsContext := s.NewClientRPCContext(ctx, username.TestUserName())
-
 	client, err := testCertsContext.GetHTTPClient()
 	require.NoError(t, err)
 
@@ -158,44 +139,79 @@ func TestOIDCEnabled(t *testing.T) {
 		return http.ErrUseLastResponse
 	}
 
-	t.Run("login redirect", func(t *testing.T) {
-		resp, err := client.Get(s.AdminURL().WithPath("/oidc/v1/login").String())
-		if err != nil {
-			t.Fatalf("could not issue GET request to admin server: %s", err)
-		}
-		defer resp.Body.Close()
+	resp, err := client.Get(s.AdminURL().WithPath("/oidc/v1/login").String())
+	if err != nil {
+		t.Fatalf("could not issue GET request to admin server: %s", err)
+	}
+	defer resp.Body.Close()
 
-		if resp.StatusCode != 302 {
-			t.Fatalf("expected 302 status code but got: %d", resp.StatusCode)
-		}
-		if resp.Cookies()[0].Name != secretCookieName {
-			t.Fatal("Missing cookie")
-		}
-		authURL, err := url.Parse(resp.Header.Get("Location"))
-		require.NoError(t, err)
-		if authURL.Query().Get("client_id") != "fake_client_id" {
-			t.Fatal("expected fake client_id", authURL)
-		}
-		const expectedRedirectURL = "https://cockroachlabs.com/oidc/v1/callback"
-		if authURL.Query().Get("redirect_uri") != expectedRedirectURL {
-			t.Fatal("expected fake redirect_url", authURL)
-		}
+	if resp.StatusCode != 302 {
+		t.Fatalf("expected 302 status code but got: %d", resp.StatusCode)
+	}
+	if resp.Cookies()[0].Name != secretCookieName {
+		t.Fatal("Missing cookie")
+	}
+	cookie := resp.Cookies()[0]
 
-		state, err := decodeOIDCState(authURL.Query().Get("state"))
-		require.NoError(t, err)
-		// If we use hmac.Sum with the Message, it gets prepended to the hash.
-		if strings.Contains(string(state.TokenMAC), string(state.Token)) {
-			t.Fatal("HMAC generated incorrectly.")
-		}
+	authURL, err := url.Parse(resp.Header.Get("Location"))
+	require.NoError(t, err)
+	if authURL.Query().Get("client_id") != "fake_client_id" {
+		t.Fatal("expected fake client_id", authURL)
+	}
+	const expectedRedirectURL = "https://cockroachlabs.com/oidc/v1/callback"
+	if authURL.Query().Get("redirect_uri") != expectedRedirectURL {
+		t.Fatal("expected fake redirect_url", authURL)
+	}
 
-		key, err := base64.URLEncoding.DecodeString(resp.Cookies()[0].Value)
-		require.NoError(t, err)
-		mac := hmac.New(sha256.New, key)
-		mac.Write(state.Token)
-		if !hmac.Equal(mac.Sum(nil), state.TokenMAC) {
-			t.Fatal("HMAC hash doesn't match TokenMAC")
+	stateParam := authURL.Query().Get("state")
+	state, err := decodeOIDCState(stateParam)
+	require.NoError(t, err)
+	// If we use hmac.Sum with the Message, it gets prepended to the hash.
+	if strings.Contains(string(state.TokenMAC), string(state.Token)) {
+		t.Fatal("HMAC generated incorrectly.")
+	}
+
+	key, err := base64.URLEncoding.DecodeString(resp.Cookies()[0].Value)
+	require.NoError(t, err)
+	mac := hmac.New(sha256.New, key)
+	mac.Write(state.Token)
+	if !hmac.Equal(mac.Sum(nil), state.TokenMAC) {
+		t.Fatal("HMAC hash doesn't match TokenMAC")
+	}
+
+	// Simulate the OIDC provider invoking our callback.
+	req, err := http.NewRequest("GET", s.AdminURL().WithPath("/oidc/v1/callback").String(), nil)
+	require.NoError(t, err)
+
+	// The cookie set on the login request must be retained by the
+	// browser when the callback is invoked in order to verify that the
+	// `state` param matches the one that was sent during login.
+	req.AddCookie(cookie)
+	q := req.URL.Query()
+	q.Add("state", stateParam)
+	req.URL.RawQuery = q.Encode()
+
+	resp, err = client.Do(req)
+	if err != nil {
+		t.Fatalf("could not issue GET request to callback endpoint: %s", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 307 {
+		t.Fatalf("expected 307 status code but got: %d", resp.StatusCode)
+	}
+	if resp.Header.Get("Location") != "/" {
+		t.Fatalf("expected to be redirected to root")
+	}
+	foundCookie := false
+	for _, c := range resp.Cookies() {
+		if c.Name == authserver.SessionCookieName {
+			foundCookie = true
 		}
-	})
+	}
+	if !foundCookie {
+		t.Fatalf("no session cookie found in callback response")
+	}
 }
 
 func TestKeyAndSignedTokenIsValid(t *testing.T) {
