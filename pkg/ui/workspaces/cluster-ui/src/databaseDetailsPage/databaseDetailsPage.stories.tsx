@@ -103,9 +103,11 @@ const withoutData: DatabaseDetailsPageProps = {
 
 function createTable(): DatabaseDetailsPageDataTable {
   const roles = _.uniq(new Array(_.random(1, 3)).map(() => randomRole()));
-  const grants = _.uniq(
+  const privileges = _.uniq(
     new Array(_.random(1, 5)).map(() => randomTablePrivilege()),
   );
+  const columns = _.uniq(new Array(_.random(1, 5)).map(() => randomName()));
+  const indexes = _.uniq(new Array(_.random(1, 5)).map(() => randomName()));
 
   return {
     loading: false,
@@ -114,18 +116,27 @@ function createTable(): DatabaseDetailsPageDataTable {
     queryError: undefined,
     name: randomName(),
     details: {
-      columnCount: _.random(5, 42),
-      indexCount: _.random(1, 6),
-      userCount: roles.length,
-      roles: roles,
-      grants: grants,
-      statsLastUpdated: moment("0001-01-01T00:00:00Z"),
-      hasIndexRecommendations: false,
-      livePercentage: _.random(0, 100),
-      liveBytes: _.random(0, 10000),
-      totalBytes: _.random(0, 10000),
-      replicationSizeInBytes: _.random(0, 10000),
-      rangeCount: _.random(0, 10000),
+      grants: {
+        roles,
+        privileges,
+      },
+      schemaDetails: {
+        columns,
+        indexes,
+      },
+      statsLastUpdated: {
+        stats_last_created_at: moment("0001-01-01T00:00:00Z"),
+      },
+      indexStatRecs: {
+        has_index_recommendations: false,
+      },
+      spanStats: {
+        live_percentage: _.random(0, 100),
+        live_bytes: _.random(0, 10000),
+        total_bytes: _.random(0, 10000),
+        approximate_disk_bytes: _.random(0, 10000),
+        range_count: _.random(0, 10000),
+      },
     },
   };
 }
@@ -133,7 +144,8 @@ function createTable(): DatabaseDetailsPageDataTable {
 const withData: DatabaseDetailsPageProps = {
   loading: false,
   loaded: true,
-  lastError: null,
+  requestError: null,
+  queryError: undefined,
   showIndexRecommendations: true,
   csIndexUnusedDuration: indexUnusedDuration,
   name: randomName(),

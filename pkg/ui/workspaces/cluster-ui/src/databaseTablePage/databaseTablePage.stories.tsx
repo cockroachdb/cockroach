@@ -35,17 +35,24 @@ const withLoadingIndicator: DatabaseTablePageProps = {
   details: {
     loading: true,
     loaded: false,
-    lastError: undefined,
-    createStatement: "",
-    replicaCount: 0,
-    indexNames: [],
-    grants: [],
-    statsLastUpdated: moment("0001-01-01T00:00:00Z"),
-    livePercentage: 2.7,
-    liveBytes: 12345,
-    totalBytes: 456789,
-    sizeInBytes: 0,
-    rangeCount: 0,
+    requestError: null,
+    queryError: undefined,
+    createStatement: { create_statement: "" },
+    replicaData: {
+      nodeIDs: [],
+      nodeCount: 0,
+      replicaCount: 0,
+    },
+    indexData: { columns: [], indexes: [] },
+    grants: { all: [] },
+    statsLastUpdated: { stats_last_created_at: moment("0001-01-01T00:00:00Z") },
+    spanStats: {
+      live_percentage: 0,
+      live_bytes: 0,
+      total_bytes: 0,
+      approximate_disk_bytes: 0,
+      range_count: 0,
+    },
   },
   indexStats: {
     loading: true,
@@ -82,8 +89,10 @@ const withData: DatabaseTablePageProps = {
   details: {
     loading: false,
     loaded: true,
-    lastError: null,
-    createStatement: `
+    requestError: null,
+    queryError: undefined,
+    createStatement: {
+      create_statement: `
       CREATE TABLE public.${name} (
         id UUID NOT NULL,
         city VARCHAR NOT NULL,
@@ -94,22 +103,34 @@ const withData: DatabaseTablePageProps = {
         FAMILY "primary" (id, city, name, address, credit_card)
       )
     `,
-    replicaCount: 7,
-    indexNames: Array(3).map(randomName),
-    grants: [
-      {
-        user: randomRole(),
-        privileges: _.uniq(
-          new Array(_.random(1, 5)).map(() => randomTablePrivilege()),
-        ),
-      },
-    ],
-    statsLastUpdated: moment("0001-01-01T00:00:00Z"),
-    livePercentage: 2.7,
-    liveBytes: 12345,
-    totalBytes: 456789,
-    sizeInBytes: 44040192,
-    rangeCount: 4200,
+    },
+    replicaData: {
+      nodeIDs: [1, 2, 3, 4, 5, 6, 7],
+      nodeCount: 7,
+      replicaCount: 7,
+    },
+    indexData: {
+      columns: Array(3).map(randomName),
+      indexes: Array(3).map(randomName),
+    },
+    grants: {
+      all: [
+        {
+          user: randomRole(),
+          privileges: _.uniq(
+            new Array(_.random(1, 5)).map(() => randomTablePrivilege()),
+          ),
+        },
+      ],
+    },
+    statsLastUpdated: { stats_last_created_at: moment("0001-01-01T00:00:00Z") },
+    spanStats: {
+      live_percentage: 2.7,
+      live_bytes: 12345,
+      total_bytes: 456789,
+      approximate_disk_bytes: 44040192,
+      range_count: 4200,
+    },
   },
   showNodeRegionsSection: true,
   indexStats: {
