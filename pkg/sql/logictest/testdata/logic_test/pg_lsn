@@ -4,12 +4,6 @@ SELECT 'A01F0/1AAA'::pg_lsn
 ----
 A01F0/1AAA
 
-statement error could not parse pg_lsn
-SELECT 'A/G'::pg_lsn
-
-statement error could not parse pg_lsn
-SELECT '0G'::pg_lsn
-
 statement ok
 CREATE TABLE pg_lsn_table(id pg_lsn PRIMARY KEY, val pg_lsn)
 
@@ -80,3 +74,22 @@ SELECT * FROM ( VALUES
 23021024706816
 18446744073709551615
 -18446744073709551615
+
+statement error pgcode 22P02 pq: invalid input syntax for type pg_lsn: \"A/G\"
+SELECT 'A/G'::pg_lsn
+
+statement error pgcode 22P02 pq: invalid input syntax for type pg_lsn: \"0G\"
+SELECT '0G'::pg_lsn
+
+statement error pgcode 22P02 pq: invalid input syntax for type pg_lsn: \"ab\"
+SELECT 'ab'::PG_LSN;
+
+statement error pgcode 22P02 pq: pg_lsn\(\): invalid input syntax for type pg_lsn: \"ab\"
+SELECT pg_lsn('ab');
+
+statement error pgcode 22P02 pq: invalid input syntax for type pg_lsn: \"1\"
+SELECT '1'::PG_LSN;
+
+statement error pgcode 22P02 pq: invalid input syntax for type pg_lsn: \"\"
+SELECT ''::PG_LSN;
+
