@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+source "$(dirname $0)/roachtest_arch_util.sh"
+
 if [ "$#" -eq 0 ]; then
   echo "Builds all bits needed for roachtests and stages them in bin/ and lib/."
   echo ""
@@ -11,100 +13,47 @@ if [ "$#" -eq 0 ]; then
 fi
 
 os=linux
-function arch_to_config() {
-  case "$1" in
-    amd64)
-      echo "crosslinux"
-      ;;
-    arm64)
-      echo "crosslinuxarm"
-      ;;
-    amd64-fips)
-      echo "crosslinuxfips"
-      ;;
-    *)
-      echo "Error: invalid arch '$1'" >&2
-      exit 1
-      ;;
-  esac
-}
 
-arches=()
-crdb_extra_flags=""
+components=()
+extra_flags=""
 
 for arg in "$@"; do
   case "$arg" in
     --with-code-coverage)
-      crdb_extra_flags="--collect_code_coverage --bazel_code_coverage"
+      extra_flags="$arg"
       ;;
     *)
       # Fail now if the argument is not a valid arch.
       arch_to_config $arg >/dev/null || exit 1
-      arches+=($arg)
+      components+=($os/$arg/cockroach)
+      components+=($os/$arg/cockroach-ea)
+      components+=($os/$arg/workload)
+      components+=($os/$arg/libgeos)
       ;;
   esac
 done
 
-# Determine host cpu architecture, which we'll need for libgeos, below.
-if [[ "$(uname -m)" =~ (arm64|aarch64)$ ]]; then
-  host_arch=arm64
-else
-  host_arch=amd64
-fi
-
+# We need to build roachtest and geos libraries (necessary for local tests) for
+# the host architecture.
+host_arch=$(get_host_arch)
 echo "Host architecture: $host_arch"
+components+=($os/$host_arch/roachtest)
+components+=($os/$host_arch/libgeos)
 
 # Prepare the bin/ and lib/ directories.
-mkdir -p bin
-chmod o+rwx bin
-mkdir -p lib
-chmod o+rwx lib
+mkdir -p bin lib
+chmod o+rwx bin lib
 
-for arch in "${arches[@]}"; do
-  config=$(arch_to_config $arch)
-  echo "Building $config, os=$os, arch=$arch..."
-  # Build cockroach, workload and geos libs.
-  bazel build --config $config --config ci -c opt --config force_build_cdeps \
-        //pkg/cmd/cockroach $crdb_extra_flags
-  bazel build --config $config --config ci -c opt --config force_build_cdeps \
-        //pkg/cmd/workload //c-deps:libgeos
-  BAZEL_BIN=$(bazel info bazel-bin --config $config --config ci -c opt)
-
-  bazel build --config $config --config ci -c opt //pkg/cmd/cockroach-short \
-        --crdb_test $crdb_extra_flags
-  # Copy the binaries.
-  cp $BAZEL_BIN/pkg/cmd/cockroach/cockroach_/cockroach bin/cockroach.$os-$arch
-  cp $BAZEL_BIN/pkg/cmd/workload/workload_/workload    bin/workload.$os-$arch
-  # N.B. "-ea" suffix stands for enabled-assertions.
-  cp $BAZEL_BIN/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short bin/cockroach-ea.$os-$arch
-  # Make it writable to simplify cleanup and copying (e.g., scp retry).
-  chmod a+w bin/cockroach.$os-$arch bin/workload.$os-$arch bin/cockroach-ea.$os-$arch
-
-  # Copy geos libs.
-  cp $BAZEL_BIN/c-deps/libgeos_foreign/lib/libgeos.so   lib/libgeos.$os-$arch.so
-  cp $BAZEL_BIN/c-deps/libgeos_foreign/lib/libgeos_c.so lib/libgeos_c.$os-$arch.so
-  # Make it writable to simplify cleanup and copying (e.g., scp retry).
-  chmod a+w lib/libgeos.$os-$arch.so lib/libgeos_c.$os-$arch.so
+# Sort and dedup components (libgeos can show up twice).
+for comp in $(printf "%s\n" "${components[@]}" | sort -u); do
+  "$(dirname $0)"/roachtest_compile_component.sh $extra_flags $comp
 done
 
-# Build roachtest itself, for the host architecture.
-# We also build geos libs; roachtest runner may require them locally.
-config=$(arch_to_config $host_arch)
-echo "Building roachtest and libgeos ($config, os=$os, arch=$host_arch)..."
-
-bazel build --config $config --config ci  -c opt //pkg/cmd/roachtest
-bazel build --config $config --config ci -c opt --config force_build_cdeps \
-      //c-deps:libgeos
-
-BAZEL_BIN=$(bazel info bazel-bin --config $config --config ci -c opt)
-cp $BAZEL_BIN/pkg/cmd/roachtest/roachtest_/roachtest bin/roachtest
+cp -p bin/roachtest.$os-$host_arch bin/roachtest
 # N.B. geos does not support the architecture suffix (see getLibraryExt() in
 # geos.go).
-cp $BAZEL_BIN/c-deps/libgeos_foreign/lib/libgeos.so   lib/libgeos.so
-cp $BAZEL_BIN/c-deps/libgeos_foreign/lib/libgeos_c.so lib/libgeos_c.so
-
-# Make files writable to simplify cleanup and copying (e.g., scp retry).
-chmod a+w bin/roachtest lib/libgeos.so lib/libgeos_c.so
+cp -p lib/libgeos.$os-$host_arch.so lib/libgeos.so
+cp -p lib/libgeos_c.$os-$host_arch.so lib/libgeos_c.so
 
 ls -l bin
 ls -l lib
