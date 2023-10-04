@@ -99,7 +99,7 @@ var LeaseEnableSessionBasedLeasing = settings.RegisterEnumSetting(
 	"sql.catalog.experimental_use_session_based_leasing",
 	"enables session based leasing for internal testing.",
 	util.ConstantWithMetamorphicTestChoice("experimental_use_session_based_leasing",
-		"off", "session").(string),
+		"off", "dual_write").(string),
 	map[int64]string{
 		int64(SessionBasedLeasingOff): "off",
 		int64(SessionBasedDualWrite):  "dual_write",
@@ -1392,7 +1392,12 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 				// Clean up session based leases that have expired.
 				m.cleanupExpiredSessionLeases(ctx)
 
-				m.refreshSomeLeases(ctx)
+				// Refreshing leases is enabled unless we are past the drain mode,
+				// after which no expiry based leases should be created or updated.
+				// Existing ones can still be queried by schema changes.
+				if !m.sessionBasedLeasingModeAtLeast(SessionBasedDrain) {
+					m.refreshSomeLeases(ctx)
+				}
 			}
 		}
 	})
