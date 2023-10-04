@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -197,12 +198,13 @@ func TestServerReport(t *testing.T) {
 	// 3 + 3 = 6: set 3 initially and org is set mid-test for 3 altered settings,
 	// plus version, reporting and secret settings are set in startup
 	// migrations.
-	expected, actual := 6, len(last.AlteredSettings)
+	expected, actual := 7, len(last.AlteredSettings)
 	require.Equal(t, expected, actual, "expected %d changed settings, got %d: %v", expected, actual, last.AlteredSettings)
 
 	for key, expected := range map[string]string{
 		// Note: this uses setting _keys_, not setting names.
 		"cluster.organization":                     "<redacted>",
+		"cluster.label":                            "<redacted>",
 		"diagnostics.reporting.send_crash_reports": "false",
 		"server.time_until_store_dead":             "1m30s",
 		"version":                                  clusterversion.TestingBinaryVersion.String(),
@@ -434,6 +436,13 @@ func startReporterTest(
 	// Make sure the test's generated activity is the only activity we measure.
 	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 
+	// Ensure the org contains "Cockroach Labs" so the telemetry report
+	// is marked as "internal".
+	_, err := rt.server.SystemLayer().InternalExecutor().(isql.Executor).Exec(
+		context.Background(), "set-org", nil,
+		`SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - test'`)
+	require.NoError(t, err)
+
 	return rt
 }
 
@@ -451,8 +460,7 @@ func setupCluster(t *testing.T, db *gosql.DB) {
 	_, err = db.Exec(fmt.Sprintf(`CREATE DATABASE %s`, elemName))
 	require.NoError(t, err)
 
-	// Set cluster to an internal testing cluster
-	q := `SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing'`
+	q := `SET CLUSTER SETTING cluster.label = 'Some String'`
 	_, err = db.Exec(q)
 	require.NoError(t, err)
 }

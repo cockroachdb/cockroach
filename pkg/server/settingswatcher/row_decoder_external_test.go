@@ -60,7 +60,7 @@ func TestRowDecoder(t *testing.T) {
 			expStr:     "0.23",
 			expValType: "f",
 		},
-		"cluster.organization": {
+		"cluster.label": {
 			val:        "foobar",
 			expStr:     "foobar",
 			expValType: "s",

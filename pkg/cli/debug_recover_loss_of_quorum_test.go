@@ -196,7 +196,7 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 	})
 	tcBefore.Start(t)
 	s := sqlutils.MakeSQLRunner(tcBefore.Conns[0])
-	s.Exec(t, "set cluster setting cluster.organization='remove dead replicas test'")
+	s.Exec(t, "SET CLUSTER SETTING cluster.organization = 'remove dead replicas test'")
 	defer tcBefore.Stopper().Stop(ctx)
 
 	// We use scratch range to test special case for pending update on the
@@ -488,7 +488,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 	})
 	tc.Start(t)
 	s := sqlutils.MakeSQLRunner(tc.Conns[0])
-	s.Exec(t, "set cluster setting cluster.organization='remove dead replicas test'")
+	s.Exec(t, "SET CLUSTER SETTING cluster.organization = 'remove dead replicas test'")
 	defer tc.Stopper().Stop(ctx)
 
 	// We use scratch range to test special case for pending update on the
