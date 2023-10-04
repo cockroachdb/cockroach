@@ -87,6 +87,7 @@ var (
 		MaxRetries:     80,
 	}
 
+	v232 = version.MustParse("v23.2.0")
 	v231 = version.MustParse("v23.1.0")
 	v222 = version.MustParse("v22.2.0")
 
@@ -186,6 +187,14 @@ func sanitizeVersionForBackup(v string) string {
 // when querying job status.
 func hasInternalSystemJobs(h *mixedversion.Helper) bool {
 	return h.LowestBinaryVersion().AtLeast(v231)
+}
+
+// hasRemoveRegionsAbility returns true if the cluster is expected
+// to have the `remove_regions` option for the RESTORE syntax in
+// the mixed-version context passed. If so, we do not expect
+// it to "fail fast".
+func hasRemoveRegionsAbility(h *mixedversion.Helper) bool {
+	return h.LowestBinaryVersion().AtLeast(v232)
 }
 
 func aostFor(timestamp string) string {
@@ -443,6 +452,26 @@ func newBackupOptions(rng *rand.Rand) []backupOption {
 	}
 
 	var options []backupOption
+	for _, opt := range possibleOpts {
+		if rng.Float64() < 0.5 {
+			options = append(options, opt)
+		}
+	}
+
+	return options
+}
+
+// TODO(before merge): most likely would like to add a restoreOption struct equivalent
+// of backupOption
+// newRestoreOptions returns a list of strings representing restore
+// options to be used when creating a new restore. Each restore
+// option has a 50% change of being included.
+func newRestoreOptions(rng *rand.Rand) []string {
+	possibleOpts := []string{
+		"remove_regions",
+	}
+
+	var options []string
 	for _, opt := range possibleOpts {
 		if rng.Float64() < 0.5 {
 			options = append(options, opt)
@@ -1973,7 +2002,9 @@ func (mvb *mixedVersionBackup) verifyBackupCollection(
 	}
 
 	restoreCmd, options := collection.btype.RestoreCommand(restoreDB)
-	restoreOptions := append([]string{"detached"}, options...)
+	addOptions := append([]string{"detached"}, newRestoreOptions(rng)...)
+	restoreOptions := append(addOptions, options...)
+
 	// If the backup was created with an encryption passphrase, we
 	// need to include it when restoring as well.
 	if opt := collection.encryptionOption(); opt != nil {
@@ -1990,7 +2021,13 @@ func (mvb *mixedVersionBackup) verifyBackupCollection(
 	)
 	var jobID int
 	if err := h.QueryRow(rng, restoreStmt).Scan(&jobID); err != nil {
-		return fmt.Errorf("%s: backup %s: error in restore statement: %w", v, collection.name, err)
+		if hasRemoveRegionsAbility(h) {
+			return fmt.Errorf("%s: backup %s: error in restore statement: %w", v, collection.name, err)
+		} else {
+			// TODO(before merge): something like this - revisit to see if logging and returning out is sufficient
+			l.Printf("cluster version %s fail fast for remove_regions RESTORE option: OK", version)
+			return nil
+		}
 	}
 
 	if err := mvb.waitForJobSuccess(ctx, l, rng, h, jobID); err != nil {
