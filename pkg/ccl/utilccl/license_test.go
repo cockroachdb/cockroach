@@ -20,11 +20,6 @@ import (
 )
 
 func TestLicense(t *testing.T) {
-	clusterA, _ := uuid.FromString("A0000000-0000-0000-0000-00000000000A")
-	clusterB, _ := uuid.FromString("B0000000-0000-0000-0000-00000000000B")
-
-	clustersA, clustersB := []uuid.UUID{clusterA}, []uuid.UUID{clusterB}
-
 	t0 := timeutil.Unix(0, 0)
 	ts := t0.AddDate(40, 0, 0)
 	after := ts.Add(time.Hour * 24)
@@ -32,62 +27,59 @@ func TestLicense(t *testing.T) {
 	wayAfter := ts.Add(time.Hour * 24 * 365 * 200)
 
 	for i, tc := range []struct {
-		licType      licenseccl.License_Type
-		grantedTo    []uuid.UUID
-		expiration   time.Time
-		checkCluster uuid.UUID
-		checkOrg     string
-		checkTime    time.Time
-		err          string
+		licType    licenseccl.License_Type
+		expiration time.Time
+		checkOrg   string
+		checkTime  time.Time
+		err        string
 	}{
 		{licType: -1, err: "requires an enterprise license"},
-		{licenseccl.License_Evaluation, clustersA, ts, clusterA, "", ts, ""},
-		{licenseccl.License_Enterprise, clustersA, ts, clusterA, "", ts, ""},
-		{licenseccl.License_NonCommercial, clustersA, ts, clusterA, "", ts, ""},
-		{licenseccl.License_Evaluation, clustersA, after, clusterA, "", ts, ""},
-		{licenseccl.License_Evaluation, clustersA, ts, clusterA, "", before, ""},
-		{licenseccl.License_Evaluation, clustersA, wayAfter, clusterA, "", ts, ""},
+		{licenseccl.License_Evaluation, ts, "tc-1", ts, ""},
+		{licenseccl.License_Enterprise, ts, "tc-2", ts, ""},
+		{licenseccl.License_NonCommercial, ts, "tc-3", ts, ""},
+		{licenseccl.License_Evaluation, after, "tc-4", ts, ""},
+		{licenseccl.License_Evaluation, ts, "tc-5", before, ""},
+		{licenseccl.License_Evaluation, wayAfter, "tc-6", ts, ""},
 
 		// expirations.
-		{licenseccl.License_Evaluation, clustersA, ts, clusterA, "", after, "expired"},
-		{licenseccl.License_Evaluation, clustersA, after, clusterA, "", wayAfter, "expired"},
-		{licenseccl.License_NonCommercial, clustersA, after, clusterA, "", wayAfter, "expired"},
-		{licenseccl.License_NonCommercial, clustersA, t0, clusterA, "", wayAfter, ""},
-		{licenseccl.License_Evaluation, clustersA, t0, clusterA, "", wayAfter, ""},
+		{licenseccl.License_Evaluation, ts, "tc-7", after, "expired"},
+		{licenseccl.License_Evaluation, after, "tc-8", wayAfter, "expired"},
+		{licenseccl.License_NonCommercial, after, "tc-9", wayAfter, "expired"},
+		{licenseccl.License_NonCommercial, t0, "tc-10", wayAfter, ""},
+		{licenseccl.License_Evaluation, t0, "tc-11", wayAfter, ""},
 
 		// grace period.
-		{licenseccl.License_Enterprise, clustersA, after, clusterA, "", wayAfter, ""},
+		{licenseccl.License_Enterprise, after, "tc-12", wayAfter, ""},
 
 		// mismatch.
-		{licenseccl.License_Enterprise, clustersA, ts, clusterB, "", ts, "not valid for cluster"},
-		{licenseccl.License_Enterprise, clustersB, ts, clusterA, "", ts, "not valid for cluster"},
-		{licenseccl.License_Enterprise, append(clustersB, clusterA), ts, clusterA, "", ts, ""},
-		{licenseccl.License_Enterprise, nil, ts, clusterA, "", ts, "license valid only for"},
-		{licenseccl.License_Enterprise, nil, ts, clusterA, "tc-17", ts, ""},
+		{licenseccl.License_Enterprise, ts, "tc-13", ts, ""},
+		{licenseccl.License_Enterprise, ts, "", ts, "license valid only for"},
+		{licenseccl.License_Enterprise, ts, "tc-15", ts, ""},
 	} {
-		var lic *licenseccl.License
-		if tc.licType != -1 {
-			s, err := (&licenseccl.License{
-				ClusterID:         tc.grantedTo,
-				ValidUntilUnixSec: tc.expiration.Unix(),
-				Type:              tc.licType,
-				OrganizationName:  fmt.Sprintf("tc-%d", i),
-			}).Encode()
-			if err != nil {
-				t.Fatal(err)
-			}
+		t.Run("", func(t *testing.T) {
+			var lic *licenseccl.License
+			if tc.licType != -1 {
+				s, err := (&licenseccl.License{
+					ValidUntilUnixSec: tc.expiration.Unix(),
+					Type:              tc.licType,
+					OrganizationName:  fmt.Sprintf("tc-%d", i),
+				}).Encode()
+				if err != nil {
+					t.Fatal(err)
+				}
 
-			lic, err = decode(s)
-			if err != nil {
-				t.Fatal(err)
+				lic, err = decode(s)
+				if err != nil {
+					t.Fatal(err)
+				}
 			}
-		}
-		if err := check(
-			lic, tc.checkTime, tc.checkCluster, tc.checkOrg, "", true,
-		); !testutils.IsError(err, tc.err) {
-			t.Fatalf("%d: lic for %s to %s, checked by %s at %s.\n got %q", i,
-				tc.grantedTo, tc.expiration, tc.checkCluster, tc.checkTime, err)
-		}
+			if err := check(
+				lic, tc.checkTime, uuid.UUID{}, tc.checkOrg, "", true,
+			); !testutils.IsError(err, tc.err) {
+				t.Fatalf("%d: lic to %s, checked at %s.\n got %q", i,
+					tc.expiration, tc.checkTime, err)
+			}
+		})
 	}
 }
 
