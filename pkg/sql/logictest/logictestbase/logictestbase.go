@@ -469,10 +469,11 @@ var LogicTestConfigs = []TestClusterConfig{
 		Localities: multiregion15node5region3azsLocalities,
 	},
 	{
+		// TODO: rename this to something that reflects the versions used. Maybe use MinSupportedVersion instead.
 		Name:                        "local-mixed-22.2-23.1",
 		NumNodes:                    1,
 		OverrideDistSQLMode:         "off",
-		BootstrapVersion:            clusterversion.V22_2,
+		BootstrapVersion:            clusterversion.V23_1,
 		DisableUpgrade:              true,
 		DeclarativeCorpusCollection: true,
 	},

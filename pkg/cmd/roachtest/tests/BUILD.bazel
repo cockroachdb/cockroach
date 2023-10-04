@@ -234,6 +234,7 @@ go_library(
         "//pkg/testutils/floatcmp",
         "//pkg/testutils/jobutils",
         "//pkg/testutils/release",
+        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/ts/tspb",
         "//pkg/util",

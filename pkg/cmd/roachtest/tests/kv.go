@@ -684,6 +684,7 @@ func registerKVSplits(r registry.Registry) {
 	} {
 		item := item // for use in closure below
 		r.Add(registry.TestSpec{
+			Skip:             "111768, bump minBinary to 23.1",
 			Name:             fmt.Sprintf("kv/splits/nodes=3/quiesce=%t/lease=%s", item.quiesce, item.leases),
 			Owner:            registry.OwnerKV,
 			Timeout:          item.timeout,

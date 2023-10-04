@@ -1469,6 +1469,7 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
+		Skip:             "111768, bump minBinary to 23.1",
 		Name:             "cdc/bank",
 		Owner:            `cdc`,
 		Cluster:          r.MakeClusterSpec(4),

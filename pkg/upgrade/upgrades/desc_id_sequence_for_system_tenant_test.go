@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -29,6 +30,7 @@ import (
 )
 
 func TestDescriptorIDSequenceForSystemTenant(t *testing.T) {
+	skip.WithIssue(t, 111768, "bump minBinary to 23.1")
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

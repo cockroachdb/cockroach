@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble"
@@ -93,6 +94,7 @@ func TestMinVersion(t *testing.T) {
 }
 
 func TestSetMinVersion(t *testing.T) {
+	skip.WithIssue(t, 111768, "bump minBinary to 23.1")
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

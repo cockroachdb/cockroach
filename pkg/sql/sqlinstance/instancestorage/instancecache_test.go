@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -124,6 +125,7 @@ func TestRangeFeed(t *testing.T) {
 }
 
 func TestMigrationCache(t *testing.T) {
+	skip.WithIssue(t, 111768, "bump minBinary to 23.1")
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

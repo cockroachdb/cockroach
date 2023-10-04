@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -24,6 +25,7 @@ import (
 )
 
 func TestSystemPrivilegesIndexMigration(t *testing.T) {
+	skip.WithIssue(t, 111768, "bump minBinary to 23.1")
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 

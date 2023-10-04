@@ -44,6 +44,7 @@ func TestDatabaseRoleSettingsUserIDMigration1500Users(t *testing.T) {
 }
 
 func runTestDatabaseRoleSettingsUserIDMigration(t *testing.T, numUsers int) {
+	skip.WithIssue(t, 111768, "bump minBinary to 23.1")
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 

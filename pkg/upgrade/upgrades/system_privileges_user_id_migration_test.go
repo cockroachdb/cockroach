@@ -45,6 +45,7 @@ func TestSystemPrivilegesUserIDMigration1500Users(t *testing.T) {
 }
 
 func runTestSystemPrivilegesUserIDMigration(t *testing.T, numUsers int) {
+	skip.WithIssue(t, 111768, "bump minBinary to 23.1")
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 

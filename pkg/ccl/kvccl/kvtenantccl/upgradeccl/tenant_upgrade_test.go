@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
@@ -46,6 +47,7 @@ import (
 // upgraded and ensures that it is created at the final cluster version. It
 // also verifies that the version is correct after a restart
 func TestTenantUpgrade(t *testing.T) {
+	skip.WithIssue(t, 111768, "bump minBinary to 23.1")
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -182,6 +184,7 @@ func v0v1v2() (roachpb.Version, roachpb.Version, roachpb.Version) {
 // TestTenantUpgradeFailure exercises cases where the tenant dies
 // between version upgrades.
 func TestTenantUpgradeFailure(t *testing.T) {
+	skip.WithIssue(t, 111768, "bump minBinary to 23.1")
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

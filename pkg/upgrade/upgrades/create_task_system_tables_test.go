@@ -25,6 +25,7 @@ import (
 )
 
 func TestTaskTablesMigration(t *testing.T) {
+	skip.WithIssue(t, 111768, "bump minBinary to 23.1")
 	skip.UnderStressRace(t)
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()

@@ -34,6 +34,7 @@ import (
 {{- range $variantKey, $variantValue := $variants}}
 
 func TestTenantUpgradeInterlock_{{$variantValue}}_{{$testName}}(t *testing.T) {
+	skip.WithIssue(t, 111768, "bump minBinary to 23.1")
 	defer leaktest.AfterTest(t)()
 	// Times out under stress race.
 	skip.UnderStressRace(t)

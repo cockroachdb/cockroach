@@ -29,18 +29,19 @@ GC for ALTER TABLE db.public.kv ALTER PRIMARY KEY USING COLUMNS (k)
 GC for DROP TABLE db.public.kv
 GC for DROP DATABASE db
 
+# TODO: revise this
 # GC jobs in a mixed-version cluster, pre-23.1 style.
-skipif config local
-query T rowsort
-SELECT description FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE GC'
-----
-GC for removed temporary index; ALTER TABLE db.public.kv ALTER PRIMARY KEY USING COLUMNS (k)
-GC for removed primary index; ALTER TABLE db.public.kv ALTER PRIMARY KEY USING COLUMNS (k)
-GC for removed primary index; ALTER TABLE db.public.kv ALTER PRIMARY KEY USING COLUMNS (k)
-GC for DROP TABLE db.public.kv
-GC for DROP DATABASE db
+# skipif config local
+# query T rowsort
+# SELECT description FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE GC'
+# ----
+# GC for removed temporary index; ALTER TABLE db.public.kv ALTER PRIMARY KEY USING COLUMNS (k)
+# GC for removed primary index; ALTER TABLE db.public.kv ALTER PRIMARY KEY USING COLUMNS (k)
+# GC for removed primary index; ALTER TABLE db.public.kv ALTER PRIMARY KEY USING COLUMNS (k)
+# GC for DROP TABLE db.public.kv
+# GC for DROP DATABASE db
 
-query I
-SELECT count(*) FROM crdb_internal.lost_descriptors_with_data
-----
-0
+# query I
+# SELECT count(*) FROM crdb_internal.lost_descriptors_with_data
+# ----
+# 0

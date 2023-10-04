@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
@@ -57,6 +58,7 @@ func (*fakeResumer) CollectProfile(_ context.Context, _ interface{}) error {
 // TestCreateAdoptableJobPopulatesJobType verifies that the job_type column in system.jobs is populated
 // by CreateAdoptableJobWithTxn after upgrading to V23_1AddTypeColumnToJobsTable.
 func TestCreateAdoptableJobPopulatesJobType(t *testing.T) {
+	skip.WithIssue(t, 111768, "bump minBinary to 23.1")
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -96,6 +98,7 @@ func TestCreateAdoptableJobPopulatesJobType(t *testing.T) {
 // TestAlterSystemJobsTableAddJobTypeColumn verifies that the migrations that add & backfill
 // the type column to system.jobs succeed.
 func TestAlterSystemJobsTableAddJobTypeColumn(t *testing.T) {
+	skip.WithIssue(t, 111768, "bump minBinary to 23.1")
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -306,6 +307,7 @@ func TestAccessorsWithWrongSQLLivenessSession(t *testing.T) {
 // InfoStorage read path to error out on seeing more than one row per jobID,
 // info_key.
 func TestJobInfoUpgradeRegressionTests(t *testing.T) {
+	skip.WithIssue(t, 111768, "bump minBinary to 23.1")
 	defer leaktest.AfterTest(t)()
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{

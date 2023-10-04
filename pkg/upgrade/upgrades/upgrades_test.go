@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/stretchr/testify/require"
 )
@@ -34,6 +35,7 @@ func TestUniqueVersions(t *testing.T) {
 // registered for it, which is also in firstUpgradesAfterPreExistingReleases,
 // and vice-versa.
 func TestFirstUpgradesAfterPreExistingRelease(t *testing.T) {
+	skip.WithIssue(t, 111768, "bump minBinary to 23.1")
 	// Compute the set of pre-existing releases supported by this binary.
 	// This excludes the latest release if the binary version is a release.
 	preExistingReleases := make(map[roachpb.Version]struct{})

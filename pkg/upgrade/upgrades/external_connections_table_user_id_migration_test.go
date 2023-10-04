@@ -40,6 +40,7 @@ func TestExternalConnectionsUserIDMigration10Users(t *testing.T) {
 }
 
 func runTestExternalConnectionsUserIDMigration(t *testing.T, numUsers int) {
+	skip.WithIssue(t, 111768, "bump minBinary to 23.1")
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 

@@ -81,6 +81,7 @@ func BackupSuccessMixedVersion(t *testing.T, path string, factory TestServerFact
 // BackupRollbacksMixedVersion is like BackupRollbacks but in a mixed-version
 // cluster which is upgraded prior to restoring the backups.
 func BackupRollbacksMixedVersion(t *testing.T, path string, factory TestServerFactory) {
+	skip.WithIssue(t, 111768, "bump minBinary to 23.1")
 	// These tests are expensive.
 	skip.UnderStress(t)
 	skip.UnderRace(t)

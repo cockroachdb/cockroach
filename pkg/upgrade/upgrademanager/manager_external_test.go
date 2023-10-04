@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -63,6 +64,7 @@ import (
 // concurrent attempts to bump the cluster version detect the already running
 // upgrade and wait.
 func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
+	skip.WithIssue(t, 111768, "bump minBinary to 23.1")
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -247,6 +249,7 @@ RETURNING id;`, firstID).Scan(&secondID))
 // But, in case we are wrong about that reasoning, we handle it and
 // test it here.
 func TestPostJobInfoTableQueryDuplicateJobInfo(t *testing.T) {
+	skip.WithIssue(t, 111768, "bump minBinary to 23.1")
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -368,6 +371,7 @@ FROM system.job_info WHERE job_id = $1 AND info_key = 'legacy_payload')`, jobID)
 }
 
 func TestMigrateUpdatesReplicaVersion(t *testing.T) {
+	skip.WithIssue(t, 111768, "bump minBinary to 23.1")
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -558,6 +562,7 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 // concurrent attempts to perform an upgrade will block on the existing,
 // paused job.
 func TestPauseMigration(t *testing.T) {
+	skip.WithIssue(t, 111768, "bump minBinary to 23.1")
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

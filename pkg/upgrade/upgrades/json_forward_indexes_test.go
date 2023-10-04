@@ -25,6 +25,7 @@ import (
 )
 
 func TestJSONForwardingIndexes(t *testing.T) {
+	skip.WithIssue(t, 111768, "bump minBinary to 23.1")
 	var err error
 	skip.UnderStressRace(t)
 	defer leaktest.AfterTest(t)()

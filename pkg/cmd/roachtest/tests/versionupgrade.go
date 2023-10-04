@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
@@ -100,6 +101,7 @@ DROP TABLE splitmerge.t;
 }
 
 func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
+	skip.WithIssue(t, 111768, "bump minBinary to 23.1")
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
 	testOptions := []mixedversion.CustomOption{mixedversion.AlwaysUseFixtures}
 	if c.IsLocal() {
