@@ -120,14 +120,7 @@ ORDER BY object_type, object_name`, full)
 		{"t2", "incremental", beforeTS, incTS, "0", "false"},
 	}, res)
 
-	// Different systems output different precisions (i.e. local OS X vs CI).
-	// Truncate decimal places so Go's very rigid parsing will work.
-	// TODO(bardin): Consider using a third-party library for this, or some kind
-	// of time-freezing on the test cluster.
-	truncateBackupTimeRE := regexp.MustCompile(`^(.*\.[0-9]{2})[0-9]*\+00$`)
-	matchResult := truncateBackupTimeRE.FindStringSubmatch(beforeTS)
-	require.NotNil(t, matchResult, "%s does not match %s", beforeTS, truncateBackupTimeRE)
-	backupTime, err := time.Parse("2006-01-02 15:04:05.00", matchResult[1])
+	backupTime, err := time.Parse("2006-01-02 15:04:05.999999Z07", beforeTS)
 	require.NoError(t, err)
 	backupFolder := backupTime.Format(backupbase.DateBasedIntoFolderName)
 	resolvedBackupFolder := full + backupFolder
