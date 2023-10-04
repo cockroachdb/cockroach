@@ -4608,7 +4608,7 @@ project
 exec-ddl
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
   BEGIN
     OPEN curs FOR SELECT 1;
     RETURN 0;
@@ -4683,7 +4683,7 @@ exec-ddl
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
     i INT := 3;
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
   BEGIN
     OPEN curs FOR SELECT * FROM xy WHERE x = i;
     RETURN 0;
@@ -4767,9 +4767,9 @@ project
 exec-ddl
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
-    curs2 STRING := 'bar';
-    curs3 STRING := 'baz';
+    curs REFCURSOR := 'foo';
+    curs2 REFCURSOR := 'bar';
+    curs3 REFCURSOR := 'baz';
   BEGIN
     OPEN curs FOR SELECT 1;
     OPEN curs2 FOR SELECT 2;
@@ -4944,7 +4944,7 @@ project
 exec-ddl
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
   BEGIN
     OPEN curs FOR SELECT 1;
     CLOSE curs;
@@ -4989,7 +4989,7 @@ project
                      │    ├── key: ()
                      │    ├── fd: ()-->(11)
                      │    ├── project
-                     │    │    ├── columns: curs:1(string!null)
+                     │    │    ├── columns: curs:1(refcursor!null)
                      │    │    ├── cardinality: [1 - 1]
                      │    │    ├── stats: [rows=1]
                      │    │    ├── key: ()
@@ -5005,8 +5005,8 @@ project
                      │    └── projections
                      │         └── udf: _gen_cursor_name_5 [as="_gen_cursor_name_5":11, type=int, outer=(1), volatile, udf]
                      │              ├── args
-                     │              │    └── variable: curs:1 [type=string]
-                     │              ├── params: curs:8(string)
+                     │              │    └── variable: curs:1 [type=refcursor]
+                     │              ├── params: curs:8(refcursor)
                      │              └── body
                      │                   └── project
                      │                        ├── columns: "_stmt_open_1":10(int)
@@ -5031,20 +5031,20 @@ project
                      │                        │    │    ├── key: ()
                      │                        │    │    └── tuple [type=tuple]
                      │                        │    └── projections
-                     │                        │         └── case [as=curs:9, type=string, outer=(8), volatile]
+                     │                        │         └── case [as=curs:9, type=refcursor, outer=(8), volatile]
                      │                        │              ├── true [type=bool]
                      │                        │              ├── when [type=string]
                      │                        │              │    ├── is [type=bool]
-                     │                        │              │    │    ├── variable: curs:8 [type=string]
+                     │                        │              │    │    ├── variable: curs:8 [type=refcursor]
                      │                        │              │    │    └── null [type=unknown]
                      │                        │              │    └── function: crdb_internal.plpgsql_gen_cursor_name [type=string]
-                     │                        │              │         └── variable: curs:8 [type=string]
-                     │                        │              └── variable: curs:8 [type=string]
+                     │                        │              │         └── variable: curs:8 [type=refcursor]
+                     │                        │              └── variable: curs:8 [type=refcursor]
                      │                        └── projections
                      │                             └── udf: _stmt_open_1 [as="_stmt_open_1":10, type=int, outer=(9), volatile, udf]
                      │                                  ├── args
                      │                                  │    └── variable: curs:9 [type=string]
-                     │                                  ├── params: curs:2(string)
+                     │                                  ├── params: curs:2(refcursor)
                      │                                  └── body
                      │                                       ├── open-cursor
                      │                                       │    └── project
@@ -5076,8 +5076,8 @@ project
                      │                                            └── projections
                      │                                                 └── udf: _stmt_close_2 [as="_stmt_close_2":7, type=int, outer=(2), volatile, udf]
                      │                                                      ├── args
-                     │                                                      │    └── variable: curs:2 [type=string]
-                     │                                                      ├── params: curs:4(string)
+                     │                                                      │    └── variable: curs:2 [type=refcursor]
+                     │                                                      ├── params: curs:4(refcursor)
                      │                                                      └── body
                      │                                                           ├── project
                      │                                                           │    ├── columns: stmt_close_3:5(int)
@@ -5094,7 +5094,7 @@ project
                      │                                                           │    │    └── tuple [type=tuple]
                      │                                                           │    └── projections
                      │                                                           │         └── function: crdb_internal.plpgsql_close [as=stmt_close_3:5, type=int, outer=(4), volatile]
-                     │                                                           │              └── variable: curs:4 [type=string]
+                     │                                                           │              └── variable: curs:4 [type=refcursor]
                      │                                                           └── project
                      │                                                                ├── columns: stmt_return_4:6(int!null)
                      │                                                                ├── cardinality: [1 - 1]
@@ -5114,7 +5114,7 @@ project
 exec-ddl
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
   BEGIN
     OPEN curs FOR SELECT 1;
     RETURN 1 // 0;
@@ -5252,7 +5252,7 @@ project
 exec-ddl
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
     x INT;
   BEGIN
     OPEN curs FOR SELECT * FROM xy ORDER BY x;
@@ -5298,7 +5298,7 @@ project
                      │    ├── key: ()
                      │    ├── fd: ()-->(23)
                      │    ├── project
-                     │    │    ├── columns: x:2(int) curs:1(string!null)
+                     │    │    ├── columns: x:2(int) curs:1(refcursor!null)
                      │    │    ├── cardinality: [1 - 1]
                      │    │    ├── immutable
                      │    │    ├── stats: [rows=1]
@@ -5306,7 +5306,7 @@ project
                      │    │    ├── fd: ()-->(1,2)
                      │    │    ├── prune: (1,2)
                      │    │    ├── project
-                     │    │    │    ├── columns: curs:1(string!null)
+                     │    │    │    ├── columns: curs:1(refcursor!null)
                      │    │    │    ├── cardinality: [1 - 1]
                      │    │    │    ├── stats: [rows=1]
                      │    │    │    ├── key: ()
@@ -5325,9 +5325,9 @@ project
                      │    └── projections
                      │         └── udf: _gen_cursor_name_6 [as="_gen_cursor_name_6":23, type=int, outer=(1,2), volatile, udf]
                      │              ├── args
-                     │              │    ├── variable: curs:1 [type=string]
+                     │              │    ├── variable: curs:1 [type=refcursor]
                      │              │    └── variable: x:2 [type=int]
-                     │              ├── params: curs:19(string) x:20(int)
+                     │              ├── params: curs:19(refcursor) x:20(int)
                      │              └── body
                      │                   └── project
                      │                        ├── columns: "_stmt_open_1":22(int)
@@ -5352,21 +5352,21 @@ project
                      │                        │    │    ├── key: ()
                      │                        │    │    └── tuple [type=tuple]
                      │                        │    └── projections
-                     │                        │         └── case [as=curs:21, type=string, outer=(19), volatile]
+                     │                        │         └── case [as=curs:21, type=refcursor, outer=(19), volatile]
                      │                        │              ├── true [type=bool]
                      │                        │              ├── when [type=string]
                      │                        │              │    ├── is [type=bool]
-                     │                        │              │    │    ├── variable: curs:19 [type=string]
+                     │                        │              │    │    ├── variable: curs:19 [type=refcursor]
                      │                        │              │    │    └── null [type=unknown]
                      │                        │              │    └── function: crdb_internal.plpgsql_gen_cursor_name [type=string]
-                     │                        │              │         └── variable: curs:19 [type=string]
-                     │                        │              └── variable: curs:19 [type=string]
+                     │                        │              │         └── variable: curs:19 [type=refcursor]
+                     │                        │              └── variable: curs:19 [type=refcursor]
                      │                        └── projections
                      │                             └── udf: _stmt_open_1 [as="_stmt_open_1":22, type=int, outer=(20,21), volatile, udf]
                      │                                  ├── args
                      │                                  │    ├── variable: curs:21 [type=string]
                      │                                  │    └── variable: x:20 [type=int]
-                     │                                  ├── params: curs:3(string) x:4(int)
+                     │                                  ├── params: curs:3(refcursor) x:4(int)
                      │                                  └── body
                      │                                       ├── open-cursor
                      │                                       │    └── project
@@ -5394,9 +5394,9 @@ project
                      │                                            └── projections
                      │                                                 └── udf: _stmt_fetch_2 [as="_stmt_fetch_2":18, type=int, outer=(3,4), volatile, udf]
                      │                                                      ├── args
-                     │                                                      │    ├── variable: curs:3 [type=string]
+                     │                                                      │    ├── variable: curs:3 [type=refcursor]
                      │                                                      │    └── variable: x:4 [type=int]
-                     │                                                      ├── params: curs:10(string) x:11(int)
+                     │                                                      ├── params: curs:10(refcursor) x:11(int)
                      │                                                      └── body
                      │                                                           └── project
                      │                                                                ├── columns: "_stmt_exec_ret_4":17(int)
@@ -5431,7 +5431,7 @@ project
                      │                                                                │    │    │    └── tuple [type=tuple]
                      │                                                                │    │    └── projections
                      │                                                                │    │         └── function: crdb_internal.plpgsql_fetch [as=stmt_fetch_3:12, type=tuple{int}, outer=(10), volatile]
-                     │                                                                │    │              ├── variable: curs:10 [type=string]
+                     │                                                                │    │              ├── variable: curs:10 [type=refcursor]
                      │                                                                │    │              ├── const: 0 [type=int]
                      │                                                                │    │              ├── const: 1 [type=int]
                      │                                                                │    │              └── tuple [type=tuple{int}]
@@ -5442,9 +5442,9 @@ project
                      │                                                                └── projections
                      │                                                                     └── udf: _stmt_exec_ret_4 [as="_stmt_exec_ret_4":17, type=int, outer=(10,13), udf]
                      │                                                                          ├── args
-                     │                                                                          │    ├── variable: curs:10 [type=string]
+                     │                                                                          │    ├── variable: curs:10 [type=refcursor]
                      │                                                                          │    └── variable: x:13 [type=int]
-                     │                                                                          ├── params: curs:14(string) x:15(int)
+                     │                                                                          ├── params: curs:14(refcursor) x:15(int)
                      │                                                                          └── body
                      │                                                                               └── project
                      │                                                                                    ├── columns: stmt_return_5:16(int)
@@ -5465,7 +5465,7 @@ project
 exec-ddl
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
   BEGIN
     OPEN curs FOR SELECT * FROM xy ORDER BY x;
     MOVE curs;
