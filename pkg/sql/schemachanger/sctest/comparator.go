@@ -12,6 +12,7 @@ package sctest
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"strings"
 	"testing"
@@ -66,6 +67,10 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 
 	for ss.HasNextLine() {
 		line := ss.NextLine()
+		if _, err := parser.Parse(line); err != nil {
+			// Skip lines with syntax error.
+			continue
+		}
 		line = modifyBlacklistedStmt(t, line, legacyTDB)
 		_, errLegacy := legacySQLDB.Exec(line)
 		if pgcode.MakeCode(string(getPQErrCode(errLegacy))) == pgcode.FeatureNotSupported {
@@ -75,11 +80,22 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 		requireNoErrOrSameErrCode(t, line, errLegacy, errDeclarative)
 		linesExecutedSoFar = append(linesExecutedSoFar, line)
 
+		if inFailedSQLTransaction(legacySQLDB) {
+			// Skip any identity checks if in a failed sql transaction because any
+			// statements will be ignored.
+			continue
+		}
+
 		// Perform a descriptor identity check after a DDL.
 		if containsStmtOfType(t, line, tree.TypeDDL) {
 			metaDataIdentityCheck(t, legacyTDB, declarativeTDB, linesExecutedSoFar)
 		}
 	}
+}
+
+func inFailedSQLTransaction(db *gosql.DB) bool {
+	_, err := db.Exec("SELECT 1;")
+	return pgcode.MakeCode(string(getPQErrCode(err))) == pgcode.InFailedSQLTransaction
 }
 
 // sqlLineModifier is the standard signature that takes as input a sql stmt(s) line
@@ -141,10 +157,30 @@ func modifyAlterPKWithRowIDCol(
 	t *testing.T, parsedStmts statements.Statements, tdb *sqlutils.SQLRunner,
 ) (statements.Statements, bool) {
 	// A helper to determine whether table `name`'s current primary key column is
-	// the implicit `rowid` column.
-	isCurrentPrimaryKeyColumnRowID := func(name *tree.UnresolvedObjectName) bool {
-		res := tdb.QueryStr(t, fmt.Sprintf(`SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) -> 'table' -> 'primaryIndex' ->> 'keyColumnNames' FROM system.descriptor WHERE id = '%v'::REGCLASS;`, name.String()))
-		return res[0][0] == `["rowid"]`
+	// the implicitly created `rowid` column.
+	isCurrentPrimaryKeyColumnRowID := func(name *tree.UnresolvedObjectName) (bool, string) {
+		res := tdb.QueryStr(t, fmt.Sprintf(
+			`
+WITH columns AS
+ (SELECT jsonb_array_elements(crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) -> 'table' -> 'columns') AS col 
+  FROM system.descriptor 
+  WHERE id = '%v'::REGCLASS),
+pkcolumnids AS
+ (SELECT jsonb_array_elements(crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) -> 'table' -> 'primaryIndex' -> 'keyColumnIds') AS pkcolid 
+  FROM system.descriptor 
+  WHERE id = '%v'::REGCLASS)          
+SELECT col ->> 'name' as "colName", 
+       col ->> 'defaultExpr' as "defaultExpr", 
+       col ->> 'hidden' as "isHidden", 
+       col -> 'type' ->> 'family' as "columnFamilyType" 
+FROM columns, pkcolumnids
+WHERE col -> 'id' = pkcolid;`, name.String(), name.String()))
+		if len(res) != 1 {
+			return false, ""
+		}
+		colName, colDefExpr, colIsHidden, colType := res[0][0], res[0][1], res[0][2], res[0][3]
+		return strings.HasPrefix(colName, "rowid") && colDefExpr == "unique_rowid()" &&
+			colIsHidden == "true" && colType == "IntFamily", colName
 	}
 
 	// A helper to determine whether the connection is currently in an open
@@ -160,20 +196,18 @@ func modifyAlterPKWithRowIDCol(
 		newParsedStmts = append(newParsedStmts, parsedStmt)
 		var isAlterPKWithRowID bool
 		var tableName *tree.UnresolvedObjectName
+		var implicitRowidColname string
 		switch ast := parsedStmt.AST.(type) {
 		case *tree.AlterTable:
+			tableName = ast.Table
 			for _, cmd := range ast.Cmds {
 				switch cmd := cmd.(type) {
 				case *tree.AlterTableAlterPrimaryKey:
-					if isCurrentPrimaryKeyColumnRowID(ast.Table) {
-						isAlterPKWithRowID = true
-						tableName = ast.Table
-					}
+					isAlterPKWithRowID, implicitRowidColname = isCurrentPrimaryKeyColumnRowID(ast.Table)
 				case *tree.AlterTableAddConstraint:
 					if alterTableAddPK, ok := cmd.ConstraintDef.(*tree.UniqueConstraintTableDef); ok &&
-						alterTableAddPK.PrimaryKey && isCurrentPrimaryKeyColumnRowID(ast.Table) {
-						isAlterPKWithRowID = true
-						tableName = ast.Table
+						alterTableAddPK.PrimaryKey {
+						isAlterPKWithRowID, implicitRowidColname = isCurrentPrimaryKeyColumnRowID(ast.Table)
 					}
 				}
 			}
@@ -181,7 +215,7 @@ func modifyAlterPKWithRowIDCol(
 		if isAlterPKWithRowID {
 			parsedCommit, err := parser.ParseOne("commit")
 			require.NoError(t, err)
-			parsedDropRowID, err := parser.ParseOne(fmt.Sprintf("ALTER TABLE %v DROP COLUMN IF EXISTS rowid", tableName))
+			parsedDropRowID, err := parser.ParseOne(fmt.Sprintf("ALTER TABLE %v DROP COLUMN IF EXISTS %v", tableName, implicitRowidColname))
 			require.NoError(t, err)
 			newParsedStmts = append(newParsedStmts, parsedCommit, parsedDropRowID)
 			if isInAnOpenTransaction() {
