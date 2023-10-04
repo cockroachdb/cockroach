@@ -4081,7 +4081,7 @@ var (
 				KeyColumnNames: []string{"id"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
 					catenumpb.IndexColumn_ASC,
-					//catenumpb.IndexColumn_ASC,
+					// catenumpb.IndexColumn_ASC,
 				},
 				KeyColumnIDs: []descpb.ColumnID{1},
 			},
@@ -4311,6 +4311,8 @@ var (
 		),
 	)
 
+	timeRangeHashComputeExpr = `mod(fnv32(crdb_internal.datums_to_bytes(start_time, end_time)), 16:::INT8)`
+
 	TransactionExecInsightsTable = makeSystemTable(
 		TxnExecutionStatsTableSchema,
 		systemTable(
@@ -4339,6 +4341,14 @@ var (
 				{Name: "contention_info", ID: 20, Type: types.Jsonb, Nullable: true},
 				{Name: "details", ID: 21, Type: types.Jsonb, Nullable: true},
 				{Name: "created", ID: 22, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
+				{
+					Name:        "time_range_hash",
+					ID:          23,
+					Type:        types.Int4,
+					Nullable:    false,
+					ComputeExpr: &timeRangeHashComputeExpr,
+					Hidden:      true,
+				},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -4367,8 +4377,9 @@ var (
 						"contention_info",
 						"details",
 						"created",
+						"time_range_hash",
 					},
-					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23},
 					DefaultColumnID: 0,
 				},
 			},
@@ -4405,6 +4416,12 @@ var (
 				KeyColumnIDs:       []descpb.ColumnID{6, 7},
 				KeySuffixColumnIDs: []descpb.ColumnID{1},
 				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
+				Sharded: catpb.ShardedDescriptor{
+					IsSharded:    true,
+					Name:         "time_range_hash",
+					ShardBuckets: 16,
+					ColumnNames:  []string{"start_time", "end_time"},
+				},
 			},
 		),
 	)
@@ -4447,6 +4464,14 @@ var (
 				{Name: "contention_info", ID: 30, Type: types.Jsonb, Nullable: true},
 				{Name: "details", ID: 31, Type: types.Jsonb, Nullable: true},
 				{Name: "created", ID: 32, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
+				{
+					Name:        "time_range_hash",
+					ID:          33,
+					Type:        types.Int4,
+					Nullable:    false,
+					ComputeExpr: &timeRangeHashComputeExpr,
+					Hidden:      true,
+				},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -4485,8 +4510,9 @@ var (
 						"contention_info",
 						"details",
 						"created",
+						"time_range_hash",
 					},
-					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33},
 					DefaultColumnID: 0,
 				},
 			},
@@ -4554,6 +4580,12 @@ var (
 				KeyColumnIDs:       []descpb.ColumnID{10, 11},
 				KeySuffixColumnIDs: []descpb.ColumnID{4, 2},
 				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
+				Sharded: catpb.ShardedDescriptor{
+					IsSharded:    true,
+					Name:         "time_range_hash",
+					ShardBuckets: 16,
+					ColumnNames:  []string{"start_time", "end_time"},
+				},
 			},
 		),
 	)
