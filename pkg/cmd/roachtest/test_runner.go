@@ -175,6 +175,14 @@ type clustersOpt struct {
 
 	// Controls whether the cluster is cleaned up at the end of the test.
 	debugMode debugMode
+
+	// preAllocateClusterFn is a function called right before allocating a
+	// cluster. It allows the caller to e.g. inject errors for testing.
+	preAllocateClusterFn func(
+		ctx context.Context,
+		t registry.TestSpec,
+		arch vm.CPUArch,
+	) error
 }
 
 type debugMode int
@@ -235,7 +243,6 @@ func (r *testRunner) Run(
 	clustersOpt clustersOpt,
 	topt testOpts,
 	lopt loggingOpt,
-	clusterAllocator clusterAllocatorFn,
 ) error {
 	// Validate options.
 	if len(tests) == 0 {
@@ -279,9 +286,7 @@ func (r *testRunner) Run(
 			}
 		}
 	}
-	if clusterAllocator == nil {
-		clusterAllocator = defaultClusterAllocator(r, clustersOpt, lopt)
-	}
+	clusterAllocator := defaultClusterAllocator(r, clustersOpt, lopt)
 
 	n := len(tests)
 	if n*count < parallelism {
@@ -421,6 +426,12 @@ func defaultClusterAllocator(
 	) (*clusterImpl, *vm.CreateOpts, error) {
 		wStatus.SetStatus(fmt.Sprintf("creating cluster (arch=%q)", arch))
 		defer wStatus.SetStatus("")
+
+		if clustersOpt.preAllocateClusterFn != nil {
+			if err := clustersOpt.preAllocateClusterFn(ctx, t, arch); err != nil {
+				return nil, nil, err
+			}
+		}
 
 		existingClusterName := clustersOpt.clusterName
 		if existingClusterName != "" {
