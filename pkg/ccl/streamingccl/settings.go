@@ -17,7 +17,7 @@ import (
 // CrossClusterReplicationEnabled enables the ability to setup and control a
 // cross cluster replication stream.
 var CrossClusterReplicationEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
+	settings.SystemOnly,
 	"cross_cluster_replication.enabled",
 	"enables the ability to setup and control a cross cluster replication stream",
 	false,
@@ -27,7 +27,7 @@ var CrossClusterReplicationEnabled = settings.RegisterBoolSetting(
 // StreamReplicationStreamLivenessTrackFrequency controls frequency to check
 // the liveness of a streaming replication producer job.
 var StreamReplicationStreamLivenessTrackFrequency = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
+	settings.SystemOnly,
 	"stream_replication.stream_liveness_track_frequency",
 	"controls how frequent we check for the liveness of a replication stream producer job",
 	time.Minute,
@@ -37,7 +37,7 @@ var StreamReplicationStreamLivenessTrackFrequency = settings.RegisterDurationSet
 // StreamReplicationJobLivenessTimeout controls how long we wait for to kill
 // an inactive producer job.
 var StreamReplicationJobLivenessTimeout = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
+	settings.SystemOnly,
 	"stream_replication.job_liveness_timeout",
 	"controls how long we wait for to kill an inactive producer job",
 	3*24*time.Hour,
@@ -72,7 +72,7 @@ var StreamReplicationConsumerHeartbeatFrequency = settings.RegisterDurationSetti
 // JobCheckpointFrequency controls the frequency of frontier checkpoints into
 // the jobs table.
 var JobCheckpointFrequency = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
+	settings.SystemOnly,
 	"stream_replication.job_checkpoint_frequency",
 	"controls the frequency with which partitions update their progress; if 0, disabled",
 	10*time.Second,
@@ -81,7 +81,7 @@ var JobCheckpointFrequency = settings.RegisterDurationSetting(
 )
 
 var ReplanThreshold = settings.RegisterFloatSetting(
-	settings.ApplicationLevel,
+	settings.SystemOnly,
 	"stream_replication.replan_flow_threshold",
 	"fraction of nodes in the producer or consumer job that would need to change to refresh the"+
 		" physical execution plan. If set to 0, the physical plan will not automatically refresh.",
@@ -91,7 +91,7 @@ var ReplanThreshold = settings.RegisterFloatSetting(
 )
 
 var ReplanFrequency = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
+	settings.SystemOnly,
 	"stream_replication.replan_flow_frequency",
 	"frequency at which the consumer job checks to refresh its physical execution plan",
 	10*time.Minute,
@@ -105,7 +105,7 @@ var ReplanFrequency = settings.RegisterDurationSetting(
 // TODO(adityamaru): This timer should be removed once each job is aware of whether
 // it is profiling or not.
 var DumpFrontierEntries = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
+	settings.SystemOnly,
 	"physical_replication.consumer.dump_frontier_entries_frequency",
 	"controls the frequency with which the frontier entries are persisted; if 0, disabled",
 	10*time.Minute,
