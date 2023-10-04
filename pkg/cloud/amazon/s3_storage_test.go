@@ -75,6 +75,11 @@ func TestPutS3(t *testing.T) {
 		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
 	}
 
+	region := os.Getenv(NightlyEnvVarS3Params[S3RegionParam])
+	if region == "" {
+		skip.IgnoreLint(t, "AWS_REGION env var must be set")
+	}
+
 	testSettings := cluster.MakeTestingClusterSettings()
 
 	ctx := context.Background()
@@ -120,7 +125,7 @@ func TestPutS3(t *testing.T) {
 	})
 	t.Run("auth-specified", func(t *testing.T) {
 		uri := S3URI(bucket, fmt.Sprintf("backup-test-%d", testID),
-			&cloudpb.ExternalStorage_S3{AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: "us-east-1"},
+			&cloudpb.ExternalStorage_S3{AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: region},
 		)
 		cloudtestutils.CheckExportStore(
 			t, uri, false, user, nil /* db */, testSettings,
@@ -229,6 +234,11 @@ func TestPutS3AssumeRole(t *testing.T) {
 	if roleArn == "" {
 		skip.IgnoreLint(t, "AWS_ASSUME_ROLE env var must be set")
 	}
+	region := os.Getenv(NightlyEnvVarS3Params[S3RegionParam])
+	if region == "" {
+		skip.IgnoreLint(t, "AWS_REGION env var must be set")
+	}
+
 	t.Run("auth-implicit", func(t *testing.T) {
 		credentialsProvider := credentials.SharedCredentialsProvider{}
 		_, err := credentialsProvider.Retrieve()
@@ -237,7 +247,7 @@ func TestPutS3AssumeRole(t *testing.T) {
 				"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
 		}
 		uri := S3URI(bucket, testPath,
-			&cloudpb.ExternalStorage_S3{Auth: cloud.AuthParamImplicit, RoleARN: roleArn, Region: "us-east-1"},
+			&cloudpb.ExternalStorage_S3{Auth: cloud.AuthParamImplicit, RoleARN: roleArn, Region: region},
 		)
 		cloudtestutils.CheckExportStore(
 			t, uri, false, user, nil /* db */, testSettings,
@@ -249,7 +259,7 @@ func TestPutS3AssumeRole(t *testing.T) {
 
 	t.Run("auth-specified", func(t *testing.T) {
 		uri := S3URI(bucket, testPath,
-			&cloudpb.ExternalStorage_S3{Auth: cloud.AuthParamSpecified, RoleARN: roleArn, AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: "us-east-1"},
+			&cloudpb.ExternalStorage_S3{Auth: cloud.AuthParamSpecified, RoleARN: roleArn, AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: region},
 		)
 		cloudtestutils.CheckExportStore(
 			t, uri, false, user, nil /* db */, testSettings,
@@ -284,7 +294,7 @@ func TestPutS3AssumeRole(t *testing.T) {
 							AssumeRoleProvider: p,
 							AccessKey:          tc.accessKey,
 							Secret:             tc.secretKey,
-							Region:             "us-east-1",
+							Region:             region,
 						},
 					)
 					cloudtestutils.CheckNoPermission(
@@ -307,7 +317,7 @@ func TestPutS3AssumeRole(t *testing.T) {
 						DelegateRoleProviders: delegatesWithoutID,
 						AccessKey:             tc.accessKey,
 						Secret:                tc.secretKey,
-						Region:                "us-east-1",
+						Region:                region,
 					},
 				)
 				cloudtestutils.CheckNoPermission(
@@ -322,7 +332,7 @@ func TestPutS3AssumeRole(t *testing.T) {
 						DelegateRoleProviders: providerChain[:len(providerChain)-1],
 						AccessKey:             tc.accessKey,
 						Secret:                tc.secretKey,
-						Region:                "us-east-1",
+						Region:                region,
 					},
 				)
 

@@ -75,6 +75,10 @@ func TestS3ExternalConnection(t *testing.T) {
 	if bucket == "" {
 		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
 	}
+	region := os.Getenv(amazon.NightlyEnvVarS3Params[amazon.S3RegionParam])
+	if region == "" {
+		skip.IgnoreLint(t, "AWS_REGION env var must be set")
+	}
 
 	testID := cloudtestutils.NewTestID()
 
@@ -105,7 +109,7 @@ func TestS3ExternalConnection(t *testing.T) {
 			&cloudpb.ExternalStorage_S3{
 				AccessKey: creds.AccessKeyID,
 				Secret:    creds.SecretAccessKey,
-				Region:    "us-east-1",
+				Region:    region,
 				Auth:      cloud.AuthParamSpecified,
 			},
 		)
@@ -128,7 +132,7 @@ func TestS3ExternalConnection(t *testing.T) {
 		}
 
 		s3URI := amazon.S3URI(bucket, fmt.Sprintf("backup-ec-test-sse-256-%d", testID), &cloudpb.ExternalStorage_S3{
-			Region:        "us-east-1",
+			Region:        region,
 			Auth:          cloud.AuthParamImplicit,
 			ServerEncMode: "AES256",
 		})
@@ -141,7 +145,7 @@ func TestS3ExternalConnection(t *testing.T) {
 			skip.IgnoreLint(t, "AWS_KMS_KEY_ARN env var must be set")
 		}
 		s3KMSURI := amazon.S3URI(bucket, fmt.Sprintf("backup-ec-test-sse-kms-%d", testID), &cloudpb.ExternalStorage_S3{
-			Region:        "us-east-1",
+			Region:        region,
 			Auth:          cloud.AuthParamImplicit,
 			ServerEncMode: "aws:kms",
 			ServerKMSID:   v,
@@ -165,7 +169,7 @@ func TestS3ExternalConnection(t *testing.T) {
 
 		// Unsupported server side encryption option.
 		invalidS3URI := amazon.S3URI(bucket, fmt.Sprintf("backup-ec-test-sse-256-%d", testID), &cloudpb.ExternalStorage_S3{
-			Region:        "us-east-1",
+			Region:        region,
 			Auth:          cloud.AuthParamImplicit,
 			ServerEncMode: "unsupported-algorithm",
 		})
@@ -174,7 +178,7 @@ func TestS3ExternalConnection(t *testing.T) {
 			fmt.Sprintf(`BACKUP DATABASE foo INTO '%s'`, invalidS3URI))
 
 		invalidS3URI = amazon.S3URI(bucket, fmt.Sprintf("backup-ec-test-sse-256-%d", testID), &cloudpb.ExternalStorage_S3{
-			Region:        "us-east-1",
+			Region:        region,
 			Auth:          cloud.AuthParamImplicit,
 			ServerEncMode: "aws:kms",
 		})
