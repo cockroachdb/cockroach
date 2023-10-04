@@ -2495,6 +2495,7 @@ var builtinOidsArray = []string{
 	2524: `refcursor(oid: oid) -> refcursor`,
 	2525: `refcursor(tuple: tuple) -> refcursor`,
 	2526: `refcursor(geography: geography) -> refcursor`,
+	2527: `crdb_internal.reset_insights_tables() -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
