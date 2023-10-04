@@ -108,6 +108,6 @@ var DumpFrontierEntries = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"physical_replication.consumer.dump_frontier_entries_frequency",
 	"controls the frequency with which the frontier entries are persisted; if 0, disabled",
-	10*time.Minute,
+	0,
 	settings.NonNegativeDuration,
 )
