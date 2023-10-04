@@ -279,7 +279,7 @@ func runTests(register func(registry.Registry), args []string, benchOnly bool) e
 			skipInit:               skipInit,
 			goCoverEnabled:         goCoverEnabled,
 		},
-		lopt, nil /* clusterAllocator */)
+		lopt)
 
 	// Make sure we attempt to clean up. We run with a non-canceled ctx; the
 	// ctx above might be canceled in case a signal was received. If that's
