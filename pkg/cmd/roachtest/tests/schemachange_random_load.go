@@ -39,11 +39,6 @@ type randomLoadBenchSpec struct {
 }
 
 func registerSchemaChangeRandomLoad(r registry.Registry) {
-	geoZones := []string{"us-east1-b", "us-west1-b", "europe-west2-b"}
-	if r.MakeClusterSpec(1).Cloud == spec.AWS {
-		geoZones = []string{"us-east-2b", "us-west-1a", "eu-west-1a"}
-	}
-	geoZonesStr := strings.Join(geoZones, ",")
 	r.Add(registry.TestSpec{
 		Name:      "schemachange/random-load",
 		Owner:     registry.OwnerSQLFoundations,
@@ -51,8 +46,10 @@ func registerSchemaChangeRandomLoad(r registry.Registry) {
 		Cluster: r.MakeClusterSpec(
 			3,
 			spec.Geo(),
-			spec.Zones(geoZonesStr),
+			spec.GCEZones("us-east1-b,us-west1-b,europe-west2-b"),
+			spec.AWSZones("us-east-2b,us-west-1a,eu-west-1a"),
 		),
+		// TODO(radu): enable this test on AWS.
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,

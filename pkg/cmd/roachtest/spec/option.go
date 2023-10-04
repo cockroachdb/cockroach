@@ -80,12 +80,10 @@ func Geo() Option {
 	}
 }
 
-// Zones is a node option which requests Geo-distributed nodes. Note that this
-// overrides the --zones flag and is useful for tests that require running on
-// specific Zones.
-func Zones(zones string) Option {
+// DefaultZones sets the default zones (set with the --zones flag).
+func DefaultZones(zones string) Option {
 	return func(spec *ClusterSpec) {
-		spec.Zones = zones
+		spec.defaultZones = zones
 	}
 }
 
@@ -219,6 +217,17 @@ func GCEVolumeType(volumeType string) Option {
 	}
 }
 
+// GCEZones is a node option which requests Geo-distributed nodes; only applies
+// when the test runs on GCE.
+//
+// Note that this overrides the --zones flag and is useful for tests that
+// require running on specific zones.
+func GCEZones(zones string) Option {
+	return func(spec *ClusterSpec) {
+		spec.GCE.Zones = zones
+	}
+}
+
 // AWSMachineType sets the machine (instance) type when the cluster is on AWS.
 func AWSMachineType(machineType string) Option {
 	return func(spec *ClusterSpec) {
@@ -231,6 +240,17 @@ func AWSMachineType(machineType string) Option {
 func AWSVolumeThroughput(throughput int) Option {
 	return func(spec *ClusterSpec) {
 		spec.AWS.VolumeThroughput = throughput
+	}
+}
+
+// AWSZones is a node option which requests Geo-distributed nodes; only applies
+// when the test runs on AWS.
+//
+// Note that this overrides the --zones flag and is useful for tests that
+// require running on specific zones.
+func AWSZones(zones string) Option {
+	return func(spec *ClusterSpec) {
+		spec.AWS.Zones = zones
 	}
 }
 

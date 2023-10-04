@@ -71,6 +71,10 @@ type ClusterSpec struct {
 	// the spec.
 	defaultInstanceType string
 
+	// TODO(radu): defaultZones is the default zones specification (unless
+	// overridden by GCE.Zones or AWS.Zones); it does not belong in the spec.
+	defaultZones string
+
 	Arch      vm.CPUArch // CPU architecture; auto-chosen if left empty
 	NodeCount int
 	// CPUs is the number of CPUs per node.
@@ -80,7 +84,6 @@ type ClusterSpec struct {
 	RAID0                bool
 	VolumeSize           int
 	PreferLocalSSD       bool
-	Zones                string
 	Geo                  bool
 	Lifetime             time.Duration
 	ReusePolicy          clusterReusePolicy
@@ -100,6 +103,7 @@ type ClusterSpec struct {
 		MachineType    string
 		MinCPUPlatform string
 		VolumeType     string
+		Zones          string
 	}
 
 	// AWS-specific arguments. These values apply only on clusters instantiated on AWS.
@@ -107,6 +111,7 @@ type ClusterSpec struct {
 		MachineType string
 		// VolumeThroughput is the min provisioned EBS volume throughput.
 		VolumeThroughput int
+		Zones            string
 	}
 }
 
@@ -328,9 +333,21 @@ func (s *ClusterSpec) RoachprodOpts(
 			createVMOpts.SSDOpts.FileSystem = vm.Zfs
 		}
 	}
+
+	zonesStr := s.defaultZones
+	switch s.Cloud {
+	case AWS:
+		if s.AWS.Zones != "" {
+			zonesStr = s.AWS.Zones
+		}
+	case GCE:
+		if s.GCE.Zones != "" {
+			zonesStr = s.GCE.Zones
+		}
+	}
 	var zones []string
-	if s.Zones != "" {
-		zones = strings.Split(s.Zones, ",")
+	if zonesStr != "" {
+		zones = strings.Split(zonesStr, ",")
 		if !s.Geo {
 			zones = zones[:1]
 		}

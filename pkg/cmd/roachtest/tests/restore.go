@@ -481,7 +481,11 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry, backupCloud string
 		clusterOpts = append(clusterOpts, spec.Mem(hw.mem))
 	}
 	if len(hw.zones) > 0 {
-		clusterOpts = append(clusterOpts, spec.Zones(strings.Join(hw.zones, ",")))
+		// Each test is set up to run on one specific cloud, so it's ok that the
+		// zones will only make sense for one of them.
+		// TODO(radu): clean this up.
+		clusterOpts = append(clusterOpts, spec.GCEZones(strings.Join(hw.zones, ",")))
+		clusterOpts = append(clusterOpts, spec.AWSZones(strings.Join(hw.zones, ",")))
 		clusterOpts = append(clusterOpts, spec.Geo())
 	}
 	if hw.ebsThroughput != 0 {
