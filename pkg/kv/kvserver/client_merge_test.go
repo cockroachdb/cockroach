@@ -3718,8 +3718,6 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderMetamorphicWithIssue(t, 111624)
-
 	// We will be testing the SSTs written on store2's engine.
 	var receivingEng, sendingEng storage.Engine
 	// All of these variables will be populated later, after starting the cluster..
@@ -3798,11 +3796,15 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		}
 		keySpans := rditer.MakeReplicatedKeySpans(inSnap.Desc)
 		sstFileWriters := map[string]sstFileWriter{}
-		for _, span := range keySpans {
+		for i, span := range keySpans {
 			file := &storage.MemObject{}
 			writer := storage.MakeIngestionSSTWriter(ctx, st, file)
-			if err := writer.ClearRawRange(span.Key, span.EndKey, true, true); err != nil {
-				return err
+			// If UseExciseForSnapshots is enabled, the snapshot won't write the last
+			// ClearRange in the sstable.
+			if i < len(keySpans)-1 || !storage.UseExciseForSnapshots.Get(&st.SV) {
+				if err := writer.ClearRawRange(span.Key, span.EndKey, true, true); err != nil {
+					return err
+				}
 			}
 			sstFileWriters[string(span.Key)] = sstFileWriter{
 				span:   span,
