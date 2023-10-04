@@ -110,9 +110,19 @@ func RunNemesis(
 		for atomic.AddInt64(&stepsStartedAtomic, 1) <= int64(numSteps) {
 			stepIdx++
 			step := g.RandStep(rng)
-			trace, err := a.Apply(ctx, &step)
 
 			stepPrefix := fmt.Sprintf("w%d_step%d", workerIdx, stepIdx)
+			basename := fmt.Sprintf("%s_%T", stepPrefix, reflect.Indirect(reflect.ValueOf(step.Op.GetValue())).Interface())
+
+			{
+				// Write next step into file so we know steps if test deadlock and has
+				// to be killed.
+				var buf strings.Builder
+				step.format(&buf, formatCtx{indent: `  ` + workerName + ` PRE `})
+				l(ctx, basename, "%s", &buf)
+			}
+
+			trace, err := a.Apply(ctx, &step)
 			step.Trace = l(ctx, fmt.Sprintf("%s_trace", stepPrefix), "%s", trace.String())
 
 			stepsByWorker[workerIdx] = append(stepsByWorker[workerIdx], step)
@@ -127,7 +137,6 @@ func RunNemesis(
 				fmt.Fprintf(&buf, "  before: %s", step.Before)
 				step.format(&buf, formatCtx{indent: `  ` + workerName + prefix})
 				fmt.Fprintf(&buf, "\n  after: %s", step.After)
-				basename := fmt.Sprintf("%s_%T", stepPrefix, reflect.Indirect(reflect.ValueOf(step.Op.GetValue())).Interface())
 				l(ctx, basename, "%s", &buf)
 			}
 
