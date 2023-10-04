@@ -484,11 +484,10 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry, backupCloud string
 		clusterOpts = append(clusterOpts, spec.Zones(strings.Join(hw.zones, ",")))
 		clusterOpts = append(clusterOpts, spec.Geo())
 	}
-	s := r.MakeClusterSpec(hw.nodes, clusterOpts...)
-
 	if hw.ebsThroughput != 0 {
-		s.AWSVolumeThroughput = hw.ebsThroughput
+		clusterOpts = append(clusterOpts, spec.AWSVolumeThroughput(hw.ebsThroughput))
 	}
+	s := r.MakeClusterSpec(hw.nodes, clusterOpts...)
 
 	if backupCloud == spec.AWS && s.Cloud == spec.AWS && s.VolumeSize != 0 {
 		// Work around an issue that RAID0s local NVMe and GP3 storage together:

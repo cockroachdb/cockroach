@@ -92,10 +92,17 @@ type ClusterSpec struct {
 
 	GatherCores bool
 
-	// AWS-specific arguments.
-	//
-	// AWSVolumeThroughput is the min provisioned EBS volume throughput.
-	AWSVolumeThroughput int
+	// GCE-specific arguments. These values apply only on clusters instantiated on GCE.
+	GCE struct {
+		MinCPUPlatform string
+		VolumeType     string
+	}
+
+	// AWS-specific arguments. These values apply only on clusters instantiated on AWS.
+	AWS struct {
+		// VolumeThroughput is the min provisioned EBS volume throughput.
+		VolumeThroughput int
+	}
 }
 
 // MakeClusterSpec makes a ClusterSpec.
@@ -321,12 +328,12 @@ func (s *ClusterSpec) RoachprodOpts(
 	var providerOpts vm.ProviderOpts
 	switch s.Cloud {
 	case AWS:
-		providerOpts = getAWSOpts(machineType, zones, s.VolumeSize, s.AWSVolumeThroughput,
+		providerOpts = getAWSOpts(machineType, zones, s.VolumeSize, s.AWS.VolumeThroughput,
 			createVMOpts.SSDOpts.UseLocalSSD)
 	case GCE:
 		providerOpts = getGCEOpts(machineType, zones, s.VolumeSize, ssdCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
-			"" /* minCPUPlatform */, vm.ParseArch(createVMOpts.Arch),
+			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch),
 		)
 	case Azure:
 		providerOpts = getAzureOpts(machineType, zones)
