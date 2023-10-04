@@ -1742,11 +1742,11 @@ func (c *clusterImpl) removeLabels(labels []string) error {
 func (c *clusterImpl) ListSnapshots(
 	ctx context.Context, vslo vm.VolumeSnapshotListOpts,
 ) ([]vm.VolumeSnapshot, error) {
-	return roachprod.ListSnapshots(ctx, c.l, c.spec.Cloud, vslo)
+	return roachprod.ListSnapshots(ctx, c.l, c.Cloud(), vslo)
 }
 
 func (c *clusterImpl) DeleteSnapshots(ctx context.Context, snapshots ...vm.VolumeSnapshot) error {
-	return roachprod.DeleteSnapshots(ctx, c.l, c.spec.Cloud, snapshots...)
+	return roachprod.DeleteSnapshots(ctx, c.l, c.Cloud(), snapshots...)
 }
 
 func (c *clusterImpl) CreateSnapshot(
@@ -2548,7 +2548,7 @@ func (c *clusterImpl) ConnE(
 	// for cloud runs, we use the connection pool's default behaviour.
 	//
 	// https://github.com/lib/pq/issues/835
-	if c.spec.Cloud == spec.Local {
+	if c.Cloud() == spec.Local {
 		localConnLifetime := 10 * time.Second
 		db.SetConnMaxLifetime(localConnLifetime)
 	}
