@@ -44,7 +44,7 @@ alter backup schedule $fullID set schedule option on_previous_running = 'start';
 ----
 
 query-sql
-select on_error, on_wait
+select on_execution_failure, on_previous_running
 from [show schedules for backup]
 where id in ($fullID, $incID)
 order by backup_type asc;
@@ -57,7 +57,7 @@ alter backup schedule $fullID set schedule option on_previous_running = 'skip';
 ----
 
 query-sql
-select on_error, on_wait
+select on_execution_failure, on_previous_running
 from [show schedules for backup]
 where id in ($fullID, $incID)
 order by backup_type asc;
@@ -70,7 +70,7 @@ alter backup schedule $fullID set schedule option on_previous_running = 'wait';
 ----
 
 query-sql
-select on_error, on_wait
+select on_execution_failure, on_previous_running
 from [show schedules for backup]
 where id in ($fullID, $incID)
 order by backup_type asc;

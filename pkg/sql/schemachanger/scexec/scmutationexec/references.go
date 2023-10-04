@@ -565,7 +565,7 @@ func (i *immediateVisitor) SetObjectParentID(ctx context.Context, op scop.SetObj
 			ArgTypes:    make([]*types.T, len(t.GetParams())),
 			ReturnType:  t.GetReturnType().Type,
 			ReturnSet:   t.GetReturnType().ReturnSet,
-			IsProcedure: t.IsProcedure,
+			IsProcedure: t.IsProcedure(),
 		}
 		for i := range t.Params {
 			ol.ArgTypes[i] = t.Params[i].Type

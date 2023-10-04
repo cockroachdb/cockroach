@@ -127,6 +127,7 @@ const (
 	CrdbInternalClusterStmtStatsTableID
 	CrdbInternalClusterTxnStatsTableID
 	CrdbInternalCreateFunctionStmtsTableID
+	CrdbInternalCreateProcedureStmtsTableID
 	CrdbInternalCreateSchemaStmtsTableID
 	CrdbInternalCreateStmtsTableID
 	CrdbInternalCreateTypeStmtsTableID

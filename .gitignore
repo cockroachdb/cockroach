@@ -53,8 +53,6 @@ build/Railroad.jar
 # Generated code.
 *.pb.go
 *.pb.gw.go
-pkg/roachprod/vm/aws/embedded.go
-pkg/security/securitytest/embedded.go
 pkg/ccl/kvccl/kvtenantccl/upgradeinterlockccl/generated_test.go
 pkg/ccl/backupccl/data_driven_generated_test.go
 pkg/ccl/backupccl/restore_memory_monitoring_generated_test.go

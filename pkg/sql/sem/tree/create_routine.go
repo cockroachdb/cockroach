@@ -128,6 +128,10 @@ func (node *CreateRoutine) Format(ctx *FmtCtx) {
 		case RoutineBodyStr:
 			funcBody = t
 			continue
+		case RoutineLeakproof, RoutineVolatility, RoutineNullInputBehavior:
+			if node.IsProcedure {
+				continue
+			}
 		}
 		ctx.FormatNode(option)
 		ctx.WriteString("\n\t")

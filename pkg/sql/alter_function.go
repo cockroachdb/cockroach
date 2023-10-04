@@ -420,7 +420,7 @@ func toSchemaOverloadSignature(fnDesc *funcdesc.Mutable) descpb.SchemaDescriptor
 		ArgTypes:    make([]*types.T, len(fnDesc.GetParams())),
 		ReturnType:  fnDesc.ReturnType.Type,
 		ReturnSet:   fnDesc.ReturnType.ReturnSet,
-		IsProcedure: fnDesc.IsProcedure,
+		IsProcedure: fnDesc.IsProcedure(),
 	}
 	for i := range fnDesc.Params {
 		ret.ArgTypes[i] = fnDesc.Params[i].Type

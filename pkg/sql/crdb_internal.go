@@ -143,6 +143,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalClusterSettingsTableID:             crdbInternalClusterSettingsTable,
 		catconstants.CrdbInternalClusterStmtStatsTableID:            crdbInternalClusterStmtStatsTable,
 		catconstants.CrdbInternalCreateFunctionStmtsTableID:         crdbInternalCreateFunctionStmtsTable,
+		catconstants.CrdbInternalCreateProcedureStmtsTableID:        crdbInternalCreateProcedureStmtsTable,
 		catconstants.CrdbInternalCreateSchemaStmtsTableID:           crdbInternalCreateSchemaStmtsTable,
 		catconstants.CrdbInternalCreateStmtsTableID:                 crdbInternalCreateStmtsTable,
 		catconstants.CrdbInternalCreateTypeStmtsTableID:             crdbInternalCreateTypeStmtsTable,
@@ -3525,20 +3526,10 @@ CREATE TABLE crdb_internal.create_schema_statements (
 	},
 }
 
-var crdbInternalCreateFunctionStmtsTable = virtualSchemaTable{
-	comment: "CREATE statements for all user-defined functions",
-	schema: `
-CREATE TABLE crdb_internal.create_function_statements (
- database_id INT,
- database_name STRING,
- schema_id INT,
- schema_name STRING,
- function_id INT,
- function_name STRING,
- create_statement STRING
-)
-`,
-	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+func createRoutinePopulate(
+	procedure bool,
+) func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	return func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		var dbDescs []catalog.DatabaseDescriptor
 		if db == nil {
 			var err error
@@ -3577,8 +3568,10 @@ CREATE TABLE crdb_internal.create_function_statements (
 
 		for _, desc := range fnDescs {
 			fnDesc := desc.(catalog.FunctionDescriptor)
-			if err != nil {
-				return err
+			if procedure != fnDesc.IsProcedure() {
+				// Skip functions if procedure is true, and skip procedures
+				// otherwise.
+				continue
 			}
 			treeNode, err := fnDesc.ToCreateExpr()
 			treeNode.Name.ObjectNamePrefix = tree.ObjectNamePrefix{
@@ -3622,7 +3615,39 @@ CREATE TABLE crdb_internal.create_function_statements (
 			}
 		}
 		return nil
-	},
+	}
+}
+
+var crdbInternalCreateFunctionStmtsTable = virtualSchemaTable{
+	comment: "CREATE statements for all user-defined functions",
+	schema: `
+CREATE TABLE crdb_internal.create_function_statements (
+  database_id INT,
+  database_name STRING,
+  schema_id INT,
+  schema_name STRING,
+  function_id INT,
+  function_name STRING,
+  create_statement STRING
+)
+`,
+	populate: createRoutinePopulate(false /* procedure */),
+}
+
+var crdbInternalCreateProcedureStmtsTable = virtualSchemaTable{
+	comment: "CREATE statements for all user-defined procedures",
+	schema: `
+CREATE TABLE crdb_internal.create_procedure_statements (
+  database_id INT,
+  database_name STRING,
+  schema_id INT,
+  schema_name STRING,
+  procedure_id INT,
+  procedure_name STRING,
+  create_statement STRING
+)
+`,
+	populate: createRoutinePopulate(true /* procedure */),
 }
 
 // Prepare the row populate function.

@@ -338,6 +338,11 @@ func (*DummyEvalPlanner) GenUniqueCursorName() tree.Name {
 	return ""
 }
 
+// PLpgSQLCloseCursor is part of the eval.Planner interface.
+func (*DummyEvalPlanner) PLpgSQLCloseCursor(_ tree.Name) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
 var _ eval.Planner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,

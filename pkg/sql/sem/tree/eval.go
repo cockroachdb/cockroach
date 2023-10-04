@@ -2052,7 +2052,8 @@ func (e *MultipleResultsError) Error() string {
 func (expr *FuncExpr) MaybeWrapError(err error) error {
 	// If we are facing an explicit error, propagate it unchanged.
 	fName := expr.Func.String()
-	if fName == `crdb_internal.force_error` || fName == `crdb_internal.plpgsql_raise` {
+	if fName == `crdb_internal.force_error` || fName == `crdb_internal.plpgsql_raise` ||
+		fName == `crdb_internal.plpgsql_close` {
 		return err
 	}
 	// Otherwise, wrap it with context.
