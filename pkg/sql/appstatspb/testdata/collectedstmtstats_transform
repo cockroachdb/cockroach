@@ -1,0 +1,103 @@
+----
+----
+&obspb.AggregatedStatementStatistics{
+    ID:    0x3039,
+    Key:   obspb.StatementStatisticsKey{Query:"SELECT 1", App:"myApp", DistSQL:true, Failed:true, ImplicitTxn:true, Vec:true, FullScan:true, Database:"my_db", PlanHash:0x14036, QuerySummary:"summary", TransactionFingerprintID:0x15e8f},
+    Stats: obspb.StatementStatistics{
+        Count:             472,
+        FirstAttemptCount: 13,
+        MaxRetries:        45,
+        NumRows:           obspb.NumericStat{Mean:142987.3, SquaredDiffs:74126.4},
+        IdleLat:           obspb.NumericStat{Mean:129478.4, SquaredDiffs:2.9867455e+06},
+        ParseLat:          obspb.NumericStat{Mean:128974.4, SquaredDiffs:8943.4},
+        PlanLat:           obspb.NumericStat{Mean:849712.3, SquaredDiffs:1874.4},
+        RunLat:            obspb.NumericStat{Mean:891267.4, SquaredDiffs:4.1894233e+06},
+        ServiceLat:        obspb.NumericStat{Mean:1.86742134e+07, SquaredDiffs:1.289467124e+08},
+        OverheadLat:       obspb.NumericStat{Mean:1.892741244e+08, SquaredDiffs:4.21768433e+07},
+        SensitiveInfo:     obspb.SensitiveInfo{
+            LastErr:                   "last error",
+            MostRecentPlanDescription: obspb.ExplainTreePlanNode{
+                Name:  "plan 1",
+                Attrs: {
+                    &obspb.ExplainTreePlanNode_Attr{Key:"p1k1", Value:"p1v1"},
+                    &obspb.ExplainTreePlanNode_Attr{Key:"p1k2", Value:"p1v2"},
+                },
+                Children: {
+                    &obspb.ExplainTreePlanNode{
+                        Name:  "plan 2",
+                        Attrs: {
+                            &obspb.ExplainTreePlanNode_Attr{Key:"p2k1", Value:"p2v1"},
+                            &obspb.ExplainTreePlanNode_Attr{Key:"p2k2", Value:"p2v2"},
+                        },
+                        Children: {
+                            &obspb.ExplainTreePlanNode{
+                                Name:  "plan 3",
+                                Attrs: {
+                                    &obspb.ExplainTreePlanNode_Attr{Key:"p3k1", Value:"p3v1"},
+                                    &obspb.ExplainTreePlanNode_Attr{Key:"p3k2", Value:"p3v2"},
+                                },
+                                Children: nil,
+                            },
+                        },
+                    },
+                    &obspb.ExplainTreePlanNode{
+                        Name:  "plan 4",
+                        Attrs: {
+                            &obspb.ExplainTreePlanNode_Attr{Key:"p4k1", Value:"p4v1"},
+                            &obspb.ExplainTreePlanNode_Attr{Key:"p4k2", Value:"p4v2"},
+                        },
+                        Children: {
+                            &obspb.ExplainTreePlanNode{
+                                Name:  "plan 5",
+                                Attrs: {
+                                    &obspb.ExplainTreePlanNode_Attr{Key:"p5k1", Value:"p5v1"},
+                                    &obspb.ExplainTreePlanNode_Attr{Key:"p5k2", Value:"p5v2"},
+                                },
+                                Children: nil,
+                            },
+                        },
+                    },
+                },
+            },
+            MostRecentPlanTimestamp: time.Date(2023, time.October, 5, 16, 55, 39, 0, time.UTC),
+        },
+        BytesRead:   obspb.NumericStat{Mean:12471.5, SquaredDiffs:189675.34},
+        RowsRead:    obspb.NumericStat{Mean:1.289576434e+08, SquaredDiffs:1.58615354e+07},
+        RowsWritten: obspb.NumericStat{Mean:1.85671514e+07, SquaredDiffs:21.5},
+        ExecStats:   obspb.ExecStats{
+            Count:             19487,
+            NetworkBytes:      obspb.NumericStat{Mean:4187.4, SquaredDiffs:24.541},
+            MaxMemUsage:       obspb.NumericStat{Mean:4.5, SquaredDiffs:155.4},
+            ContentionTime:    obspb.NumericStat{Mean:12948.4, SquaredDiffs:12415.4},
+            NetworkMessages:   obspb.NumericStat{Mean:9814.4, SquaredDiffs:1857.4},
+            MaxDiskUsage:      obspb.NumericStat{Mean:17944.5, SquaredDiffs:108214.4},
+            CPUSQLNanos:       obspb.NumericStat{Mean:1924.3, SquaredDiffs:120984.44},
+            MVCCIteratorStats: obspb.MVCCIteratorStats{
+                StepCount:                      obspb.NumericStat{Mean:12515.3, SquaredDiffs:109871.5},
+                StepCountInternal:              obspb.NumericStat{Mean:1.2894714e+06, SquaredDiffs:6.73532465e+07},
+                SeekCount:                      obspb.NumericStat{Mean:74574.5, SquaredDiffs:129875.4},
+                SeekCountInternal:              obspb.NumericStat{Mean:84754.5, SquaredDiffs:571675.4},
+                BlockBytes:                     obspb.NumericStat{Mean:4.7456345e+06, SquaredDiffs:8573.5},
+                BlockBytesInCache:              obspb.NumericStat{Mean:4871.5, SquaredDiffs:757.4},
+                KeyBytes:                       obspb.NumericStat{Mean:483754.5, SquaredDiffs:85733.4},
+                ValueBytes:                     obspb.NumericStat{Mean:41745.4, SquaredDiffs:478374.5},
+                PointCount:                     obspb.NumericStat{Mean:375465.54, SquaredDiffs:41674.5},
+                PointsCoveredByRangeTombstones: obspb.NumericStat{Mean:32745.5, SquaredDiffs:24655.4},
+                RangeKeyCount:                  obspb.NumericStat{Mean:214.4, SquaredDiffs:423.34},
+                RangeKeyContainedPoints:        obspb.NumericStat{Mean:564.4, SquaredDiffs:785.4},
+                RangeKeySkippedPoints:          obspb.NumericStat{Mean:21.4, SquaredDiffs:4.5},
+            },
+        },
+        SQLType:              "sql type",
+        LastExecTimestamp:    time.Date(2023, time.October, 5, 18, 33, 39, 0, time.UTC),
+        Nodes:                {1, 3, 4},
+        Regions:              {"us-east-1", "us-west-2"},
+        PlanGists:            {"plan 1 gist", "plan 2 gist"},
+        IndexRecommendations: {"rec 1", "rec 2"},
+        Indexes:              {"index 1", "index 2"},
+        LatencyInfo:          obspb.LatencyInfo{Min:12.3, Max:485.4, P50:123.4, P90:245.3, P99:380.3},
+        LastErrorCode:        "last err code",
+    },
+    AggregatedTs:        time.Date(2023, time.October, 5, 17, 0, 0, 0, time.UTC),
+    AggregationInterval: 600000000000,
+}

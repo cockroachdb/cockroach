@@ -13,6 +13,7 @@ package appstatspb
 import (
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -273,4 +274,199 @@ func (s *LatencyInfo) checkPercentiles() {
 	if s.P50 > s.Max {
 		s.P50 = s.Max
 	}
+}
+
+// ToAggregatedStatementStatistics transforms this CollectedStatementStatistics into an
+// obspb.AggregatedStatementStatistics proto.
+//
+// The purpose of having a separate protobuf is to protect the external o11y systems from being impacted
+// by changes to CollectedStatementStatistics
+//
+// TODO(abarganier): What kind of redaction needs to happen here? Should we omit the Stats.SensitiveData?
+// TODO(abarganier): This is going to require a lot of allocations... We'll need to optimize eventually.
+func (s *CollectedStatementStatistics) ToAggregatedStatementStatistics() *obspb.AggregatedStatementStatistics {
+	out := &obspb.AggregatedStatementStatistics{
+		ID: uint64(s.ID),
+		Key: obspb.StatementStatisticsKey{
+			Query:                    s.Key.Query,
+			App:                      s.Key.App,
+			DistSQL:                  s.Key.DistSQL,
+			Failed:                   s.Key.Failed,
+			ImplicitTxn:              s.Key.ImplicitTxn,
+			Vec:                      s.Key.Vec,
+			FullScan:                 s.Key.FullScan,
+			Database:                 s.Key.Database,
+			PlanHash:                 s.Key.PlanHash,
+			QuerySummary:             s.Key.QuerySummary,
+			TransactionFingerprintID: uint64(s.Key.TransactionFingerprintID),
+		},
+		Stats: obspb.StatementStatistics{
+			Count:             s.Stats.Count,
+			FirstAttemptCount: s.Stats.FirstAttemptCount,
+			MaxRetries:        s.Stats.MaxRetries,
+			NumRows: obspb.NumericStat{
+				Mean:         s.Stats.NumRows.Mean,
+				SquaredDiffs: s.Stats.NumRows.SquaredDiffs,
+			},
+			IdleLat: obspb.NumericStat{
+				Mean:         s.Stats.IdleLat.Mean,
+				SquaredDiffs: s.Stats.IdleLat.SquaredDiffs,
+			},
+			ParseLat: obspb.NumericStat{
+				Mean:         s.Stats.ParseLat.Mean,
+				SquaredDiffs: s.Stats.ParseLat.SquaredDiffs,
+			},
+			PlanLat: obspb.NumericStat{
+				Mean:         s.Stats.PlanLat.Mean,
+				SquaredDiffs: s.Stats.PlanLat.SquaredDiffs,
+			},
+			RunLat: obspb.NumericStat{
+				Mean:         s.Stats.RunLat.Mean,
+				SquaredDiffs: s.Stats.RunLat.SquaredDiffs,
+			},
+			ServiceLat: obspb.NumericStat{
+				Mean:         s.Stats.ServiceLat.Mean,
+				SquaredDiffs: s.Stats.ServiceLat.SquaredDiffs,
+			},
+			OverheadLat: obspb.NumericStat{
+				Mean:         s.Stats.OverheadLat.Mean,
+				SquaredDiffs: s.Stats.OverheadLat.SquaredDiffs,
+			},
+			SensitiveInfo: obspb.SensitiveInfo{
+				LastErr:                 s.Stats.SensitiveInfo.LastErr,
+				MostRecentPlanTimestamp: s.Stats.SensitiveInfo.MostRecentPlanTimestamp,
+			},
+			BytesRead: obspb.NumericStat{
+				Mean:         s.Stats.BytesRead.Mean,
+				SquaredDiffs: s.Stats.BytesRead.SquaredDiffs,
+			},
+			RowsRead: obspb.NumericStat{
+				Mean:         s.Stats.RowsRead.Mean,
+				SquaredDiffs: s.Stats.RowsRead.SquaredDiffs,
+			},
+			RowsWritten: obspb.NumericStat{
+				Mean:         s.Stats.RowsWritten.Mean,
+				SquaredDiffs: s.Stats.RowsWritten.SquaredDiffs,
+			},
+			ExecStats: obspb.ExecStats{
+				Count: s.Stats.ExecStats.Count,
+				NetworkBytes: obspb.NumericStat{
+					Mean:         s.Stats.ExecStats.NetworkBytes.Mean,
+					SquaredDiffs: s.Stats.ExecStats.NetworkBytes.SquaredDiffs,
+				},
+				MaxMemUsage: obspb.NumericStat{
+					Mean:         s.Stats.ExecStats.MaxMemUsage.Mean,
+					SquaredDiffs: s.Stats.ExecStats.MaxMemUsage.SquaredDiffs,
+				},
+				ContentionTime: obspb.NumericStat{
+					Mean:         s.Stats.ExecStats.ContentionTime.Mean,
+					SquaredDiffs: s.Stats.ExecStats.ContentionTime.SquaredDiffs,
+				},
+				NetworkMessages: obspb.NumericStat{
+					Mean:         s.Stats.ExecStats.NetworkMessages.Mean,
+					SquaredDiffs: s.Stats.ExecStats.NetworkMessages.SquaredDiffs,
+				},
+				MaxDiskUsage: obspb.NumericStat{
+					Mean:         s.Stats.ExecStats.MaxDiskUsage.Mean,
+					SquaredDiffs: s.Stats.ExecStats.MaxDiskUsage.SquaredDiffs,
+				},
+				CPUSQLNanos: obspb.NumericStat{
+					Mean:         s.Stats.ExecStats.CPUSQLNanos.Mean,
+					SquaredDiffs: s.Stats.ExecStats.CPUSQLNanos.SquaredDiffs,
+				},
+				MVCCIteratorStats: obspb.MVCCIteratorStats{
+					StepCount: obspb.NumericStat{
+						Mean:         s.Stats.ExecStats.MVCCIteratorStats.StepCount.Mean,
+						SquaredDiffs: s.Stats.ExecStats.MVCCIteratorStats.StepCount.SquaredDiffs,
+					},
+					StepCountInternal: obspb.NumericStat{
+						Mean:         s.Stats.ExecStats.MVCCIteratorStats.StepCountInternal.Mean,
+						SquaredDiffs: s.Stats.ExecStats.MVCCIteratorStats.StepCountInternal.SquaredDiffs,
+					},
+					SeekCount: obspb.NumericStat{
+						Mean:         s.Stats.ExecStats.MVCCIteratorStats.SeekCount.Mean,
+						SquaredDiffs: s.Stats.ExecStats.MVCCIteratorStats.SeekCount.SquaredDiffs,
+					},
+					SeekCountInternal: obspb.NumericStat{
+						Mean:         s.Stats.ExecStats.MVCCIteratorStats.SeekCountInternal.Mean,
+						SquaredDiffs: s.Stats.ExecStats.MVCCIteratorStats.SeekCountInternal.SquaredDiffs,
+					},
+					BlockBytes: obspb.NumericStat{
+						Mean:         s.Stats.ExecStats.MVCCIteratorStats.BlockBytes.Mean,
+						SquaredDiffs: s.Stats.ExecStats.MVCCIteratorStats.BlockBytes.SquaredDiffs,
+					},
+					BlockBytesInCache: obspb.NumericStat{
+						Mean:         s.Stats.ExecStats.MVCCIteratorStats.BlockBytesInCache.Mean,
+						SquaredDiffs: s.Stats.ExecStats.MVCCIteratorStats.BlockBytesInCache.SquaredDiffs,
+					},
+					KeyBytes: obspb.NumericStat{
+						Mean:         s.Stats.ExecStats.MVCCIteratorStats.KeyBytes.Mean,
+						SquaredDiffs: s.Stats.ExecStats.MVCCIteratorStats.KeyBytes.SquaredDiffs,
+					},
+					ValueBytes: obspb.NumericStat{
+						Mean:         s.Stats.ExecStats.MVCCIteratorStats.ValueBytes.Mean,
+						SquaredDiffs: s.Stats.ExecStats.MVCCIteratorStats.ValueBytes.SquaredDiffs,
+					},
+					PointCount: obspb.NumericStat{
+						Mean:         s.Stats.ExecStats.MVCCIteratorStats.PointCount.Mean,
+						SquaredDiffs: s.Stats.ExecStats.MVCCIteratorStats.PointCount.SquaredDiffs,
+					},
+					PointsCoveredByRangeTombstones: obspb.NumericStat{
+						Mean:         s.Stats.ExecStats.MVCCIteratorStats.PointsCoveredByRangeTombstones.Mean,
+						SquaredDiffs: s.Stats.ExecStats.MVCCIteratorStats.PointsCoveredByRangeTombstones.SquaredDiffs,
+					},
+					RangeKeyCount: obspb.NumericStat{
+						Mean:         s.Stats.ExecStats.MVCCIteratorStats.RangeKeyCount.Mean,
+						SquaredDiffs: s.Stats.ExecStats.MVCCIteratorStats.RangeKeyCount.SquaredDiffs,
+					},
+					RangeKeyContainedPoints: obspb.NumericStat{
+						Mean:         s.Stats.ExecStats.MVCCIteratorStats.RangeKeyContainedPoints.Mean,
+						SquaredDiffs: s.Stats.ExecStats.MVCCIteratorStats.RangeKeyContainedPoints.SquaredDiffs,
+					},
+					RangeKeySkippedPoints: obspb.NumericStat{
+						Mean:         s.Stats.ExecStats.MVCCIteratorStats.RangeKeySkippedPoints.Mean,
+						SquaredDiffs: s.Stats.ExecStats.MVCCIteratorStats.RangeKeySkippedPoints.SquaredDiffs,
+					},
+				},
+			},
+			SQLType:              s.Stats.SQLType,
+			LastExecTimestamp:    s.Stats.LastExecTimestamp,
+			Nodes:                s.Stats.Nodes,
+			Regions:              s.Stats.Regions,
+			PlanGists:            s.Stats.PlanGists,
+			IndexRecommendations: s.Stats.IndexRecommendations,
+			Indexes:              s.Stats.Indexes,
+			LatencyInfo: obspb.LatencyInfo{
+				Min: s.Stats.LatencyInfo.Min,
+				Max: s.Stats.LatencyInfo.Max,
+				P50: s.Stats.LatencyInfo.P50,
+				P90: s.Stats.LatencyInfo.P90,
+				P99: s.Stats.LatencyInfo.P99,
+			},
+			LastErrorCode: s.Stats.LastErrorCode,
+		},
+		AggregatedTs:        s.AggregatedTs,
+		AggregationInterval: s.AggregationInterval,
+	}
+	out.Stats.SensitiveInfo.MostRecentPlanDescription = *transformTreePlanNodeRecursive(&s.Stats.SensitiveInfo.MostRecentPlanDescription)
+	return out
+}
+
+func transformTreePlanNodeRecursive(p *ExplainTreePlanNode) *obspb.ExplainTreePlanNode {
+	out := &obspb.ExplainTreePlanNode{
+		Name: p.Name,
+	}
+	for _, attr := range p.Attrs {
+		out.Attrs = append(
+			out.Attrs,
+			&obspb.ExplainTreePlanNode_Attr{
+				Key:   attr.Key,
+				Value: attr.Value,
+			},
+		)
+	}
+	for _, child := range p.Children {
+		out.Children = append(out.Children, transformTreePlanNodeRecursive(child))
+	}
+	return out
 }
