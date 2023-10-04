@@ -91,17 +91,13 @@ func genTestDataDriven() {
 
 func genTestRestoreEntryCover() {
 	type testCase struct {
-		NumBackups        int
-		SimpleImportSpans bool
+		NumBackups int
 	}
 	var testCases []testCase
 	for _, numBackups := range []int{1, 2, 3, 5, 9, 10, 11, 12} {
-		for _, simpleImportSpans := range []bool{true, false} {
-			testCases = append(testCases, testCase{
-				NumBackups:        numBackups,
-				SimpleImportSpans: simpleImportSpans,
-			})
-		}
+		testCases = append(testCases, testCase{
+			NumBackups: numBackups,
+		})
 	}
 
 	data := struct{ Tests []testCase }{Tests: testCases}

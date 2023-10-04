@@ -85,14 +85,6 @@ import (
 // tables we process in a single txn when restoring their table statistics.
 const restoreStatsInsertBatchSize = 10
 
-var useSimpleImportSpans = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"bulkio.restore.use_simple_import_spans",
-	"if set to true, restore will generate its import spans using the makeSimpleImportSpans algorithm",
-	false,
-	settings.WithName("bulkio.restore.simple_import_spans.enabled"),
-)
-
 var restoreStatsInsertionConcurrency = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"bulkio.restore.insert_stats_workers",
@@ -333,8 +325,6 @@ func restore(
 		return roachpb.RowCount{}, err
 	}
 
-	simpleImportSpans := useSimpleImportSpans.Get(&execCtx.ExecCfg().Settings.SV)
-
 	countSpansCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
 	genSpan := func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error {
 		defer close(spanCh)
@@ -345,7 +335,6 @@ func restore(
 			layerToIterFactory,
 			backupLocalityMap,
 			filter,
-			simpleImportSpans,
 			spanCh,
 		)
 	}
@@ -437,30 +426,24 @@ func restore(
 				execCtx,
 				job,
 				dataToRestore,
-				endTime,
 				encryption,
-				kmsEnv,
 				details.URIs,
 				backupLocalityInfo,
-				filter,
-				numImportSpans,
-				simpleImportSpans,
 				progCh,
 				genSpan,
 			)
 		}
 		md := restoreJobMetadata{
-			jobID:                job.ID(),
-			dataToRestore:        dataToRestore,
-			restoreTime:          endTime,
-			encryption:           encryption,
-			kmsEnv:               kmsEnv,
-			uris:                 details.URIs,
-			backupLocalityInfo:   backupLocalityInfo,
-			spanFilter:           filter,
-			numImportSpans:       numImportSpans,
-			useSimpleImportSpans: simpleImportSpans,
-			execLocality:         details.ExecutionLocality,
+			jobID:              job.ID(),
+			dataToRestore:      dataToRestore,
+			restoreTime:        endTime,
+			encryption:         encryption,
+			kmsEnv:             kmsEnv,
+			uris:               details.URIs,
+			backupLocalityInfo: backupLocalityInfo,
+			spanFilter:         filter,
+			numImportSpans:     numImportSpans,
+			execLocality:       details.ExecutionLocality,
 		}
 		return distRestore(
 			ctx,
@@ -3231,14 +3214,9 @@ func sendAddRemoteSSTs(
 	execCtx sql.JobExecContext,
 	job *jobs.Job,
 	dataToRestore restorationData,
-	restoreTime hlc.Timestamp,
 	encryption *jobspb.BackupEncryptionOptions,
-	kmsEnv cloud.KMSEnv,
 	uris []string,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
-	spanFilter spanCoveringFilter,
-	numImportSpans int,
-	useSimpleImportSpans bool,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	genSpan func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
 ) error {
@@ -3250,9 +3228,6 @@ func sendAddRemoteSSTs(
 
 	if encryption != nil {
 		return errors.AssertionFailedf("encryption not supported with online restore")
-	}
-	if useSimpleImportSpans {
-		return errors.AssertionFailedf("useSimpleImportSpans is not supported with online restore")
 	}
 	if len(uris) > 1 {
 		return errors.AssertionFailedf("online restore can only restore data from a full backup")
