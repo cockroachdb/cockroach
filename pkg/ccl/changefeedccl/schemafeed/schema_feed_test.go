@@ -55,6 +55,20 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 		default:
 		}
 	}
+	requireWaitingFor := func(t *testing.T, sf *schemaFeed, ts hlc.Timestamp) {
+		t.Helper()
+		testutils.SucceedsSoon(t, func() error {
+			sf.mu.Lock()
+			defer sf.mu.Unlock()
+
+			for _, w := range sf.mu.waiters {
+				if w.ts == ts {
+					return nil
+				}
+			}
+			return errors.Newf("expected to find waiter for ts=%s", ts)
+		})
+	}
 
 	m := schemaFeed{}
 	m.mu.highWater = ts(0)
@@ -97,6 +111,8 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	errCh7 := make(chan error, 1)
 	go func() { errCh7 <- m.waitForTS(ctx, ts(7)) }()
 	go func() { errCh6 <- m.waitForTS(ctx, ts(6)) }()
+	requireWaitingFor(t, &m, ts(7))
+	requireWaitingFor(t, &m, ts(6))
 	requireChannelEmpty(t, errCh6)
 	requireChannelEmpty(t, errCh7)
 
@@ -109,6 +125,7 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	require.NoError(t, m.ingestDescriptors(ctx, ts(5), ts(6), nil, validateFn))
 	require.NoError(t, <-errCh6)
 	requireChannelEmpty(t, errCh7)
+	requireWaitingFor(t, &m, ts(7))
 
 	// high-water advances again, unblocks errCh7
 	require.NoError(t, m.ingestDescriptors(ctx, ts(6), ts(7), nil, validateFn))
@@ -118,6 +135,7 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	errCh8 := make(chan error, 1)
 	ctxTS8, cancelTS8 := context.WithCancel(ctx)
 	go func() { errCh8 <- m.waitForTS(ctxTS8, ts(8)) }()
+	requireWaitingFor(t, &m, ts(8))
 	requireChannelEmpty(t, errCh8)
 	cancelTS8()
 	require.EqualError(t, <-errCh8, `context canceled`)
@@ -136,6 +154,8 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	errCh9 := make(chan error, 1)
 	go func() { errCh8 <- m.waitForTS(ctx, ts(8)) }()
 	go func() { errCh9 <- m.waitForTS(ctx, ts(9)) }()
+	requireWaitingFor(t, &m, ts(8))
+	requireWaitingFor(t, &m, ts(9))
 	requireChannelEmpty(t, errCh8)
 	requireChannelEmpty(t, errCh9)
 
@@ -147,9 +167,10 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	require.EqualError(t, <-errCh9, `descriptor: oh no!`)
 
 	// ts 8 is still unknown
+	requireWaitingFor(t, &m, ts(8))
 	requireChannelEmpty(t, errCh8)
 
-	// always return the earlist error seen (so waiting for ts 10 immediately
+	// always return the earliest error seen (so waiting for ts 10 immediately
 	// returns the 9 error now, it returned the ts 10 error above)
 	require.EqualError(t, m.waitForTS(ctx, ts(9)), `descriptor: oh no!`)
 
