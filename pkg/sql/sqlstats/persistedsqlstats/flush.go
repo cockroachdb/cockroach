@@ -17,6 +17,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
+	v1 "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/common/v1"
+	otel_logs_pb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/logs/v1"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -26,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -154,10 +158,16 @@ func (s *PersistedSQLStats) StmtsLimitSizeReached(ctx context.Context) (bool, er
 }
 
 func (s *PersistedSQLStats) flushStmtStats(ctx context.Context, aggregatedTs time.Time) {
+	exportStats := sqlStatsExportEnabled.Get(&s.SQLStats.GetClusterSettings().SV)
 	// s.doFlush directly logs errors if they are encountered. Therefore,
 	// no error is returned here.
 	_ = s.SQLStats.IterateStatementStats(ctx, sqlstats.IteratorOptions{},
 		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
+			if exportStats {
+				if err := s.exportStatementStats(ctx, s.getTimeNow(), statistics); err != nil {
+					log.Errorf(ctx, "marshalling stmt stat: %v", err)
+				}
+			}
 			s.doFlush(ctx, func() error {
 				return s.doFlushSingleStmtStats(ctx, statistics, aggregatedTs)
 			}, "failed to flush statement statistics" /* errMsg */)
@@ -168,6 +178,23 @@ func (s *PersistedSQLStats) flushStmtStats(ctx context.Context, aggregatedTs tim
 	if s.cfg.Knobs != nil && s.cfg.Knobs.OnStmtStatsFlushFinished != nil {
 		s.cfg.Knobs.OnStmtStatsFlushFinished()
 	}
+}
+
+func (s *PersistedSQLStats) exportStatementStats(
+	ctx context.Context, t time.Time, statistic *appstatspb.CollectedStatementStatistics,
+) error {
+	fromPool := s.exportedAggStmtStatPool.Get().(*obspb.AggregatedStatementStatistics)
+	defer s.exportedAggStmtStatPool.Put(fromPool)
+	statistic.CopyTo(fromPool)
+	statBytes, err := protoutil.Marshal(fromPool)
+	if err != nil {
+		return err
+	}
+	s.eventsExporter.SendEvent(ctx, obspb.StatementStatEvent, otel_logs_pb.LogRecord{
+		TimeUnixNano: uint64(t.UnixNano()),
+		Body:         &v1.AnyValue{Value: &v1.AnyValue_BytesValue{BytesValue: statBytes}},
+	})
+	return nil
 }
 
 func (s *PersistedSQLStats) flushTxnStats(ctx context.Context, aggregatedTs time.Time) {

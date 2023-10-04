@@ -13,6 +13,7 @@ package persistedsqlstats
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/errors"
 	"github.com/robfig/cron/v3"
@@ -148,3 +149,17 @@ var sqlStatsLimitTableCheckInterval = settings.RegisterDurationSetting(
 	1*time.Hour,
 	settings.NonNegativeDuration,
 )
+
+// sqlStatsExportEnabled is the cluster setting that controls whether we
+// export statement statistics to an external Observabiltiy Service. The export
+// is done on an interval determined by the setting
+var sqlStatsExportEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.stats.export.enabled",
+	"controls whether statement and transaction statistics are exported to "+
+		"the address pointed to by the CLI flag, --"+cliflags.ObsServiceAddr.Name+
+		". The frequency at which the stats are exported is determined by the "+
+		string(SQLStatsFlushInterval.Name())+" setting. Note that if the --"+cliflags.ObsServiceAddr.Name+
+		" was not set at node startup, enabling this setting will have no effect until the "+
+		"node is restarted with the flag set.",
+	false)

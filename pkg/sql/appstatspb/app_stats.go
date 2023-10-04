@@ -13,6 +13,7 @@ package appstatspb
 import (
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -272,5 +273,147 @@ func (s *LatencyInfo) checkPercentiles() {
 	}
 	if s.P50 > s.Max {
 		s.P50 = s.Max
+	}
+}
+
+// CopyTo copies the values from this  this CollectedStatementStatistics into an the provided other
+// obspb.AggregatedStatementStatistics proto.
+//
+// The purpose of having a separate protobuf is to protect the external o11y systems from being impacted
+// by changes to CollectedStatementStatistics
+//
+// TODO(abarganier): What kind of redaction needs to happen here? Should we omit the Stats.SensitiveData?
+func (s *CollectedStatementStatistics) CopyTo(other *obspb.AggregatedStatementStatistics) {
+	other.ID = uint64(s.ID)
+	other.Key.Query = s.Key.Query
+	other.Key.App = s.Key.App
+	other.Key.DistSQL = s.Key.DistSQL
+	other.Key.Failed = s.Key.Failed
+	other.Key.ImplicitTxn = s.Key.ImplicitTxn
+	other.Key.Vec = s.Key.Vec
+	other.Key.FullScan = s.Key.FullScan
+	other.Key.Database = s.Key.Database
+	other.Key.PlanHash = s.Key.PlanHash
+	other.Key.QuerySummary = s.Key.QuerySummary
+	other.Key.TransactionFingerprintID = uint64(s.Key.TransactionFingerprintID)
+	other.Stats.Count = s.Stats.Count
+	other.Stats.FirstAttemptCount = s.Stats.FirstAttemptCount
+	other.Stats.MaxRetries = s.Stats.MaxRetries
+	other.Stats.NumRows.Mean = s.Stats.NumRows.Mean
+	other.Stats.NumRows.SquaredDiffs = s.Stats.NumRows.SquaredDiffs
+	other.Stats.IdleLat.Mean = s.Stats.IdleLat.Mean
+	other.Stats.IdleLat.SquaredDiffs = s.Stats.IdleLat.SquaredDiffs
+	other.Stats.ParseLat.Mean = s.Stats.ParseLat.Mean
+	other.Stats.ParseLat.SquaredDiffs = s.Stats.ParseLat.SquaredDiffs
+	other.Stats.PlanLat.Mean = s.Stats.PlanLat.Mean
+	other.Stats.PlanLat.SquaredDiffs = s.Stats.PlanLat.SquaredDiffs
+	other.Stats.RunLat.Mean = s.Stats.RunLat.Mean
+	other.Stats.RunLat.SquaredDiffs = s.Stats.RunLat.SquaredDiffs
+	other.Stats.ServiceLat.Mean = s.Stats.ServiceLat.Mean
+	other.Stats.ServiceLat.SquaredDiffs = s.Stats.ServiceLat.SquaredDiffs
+	other.Stats.OverheadLat.Mean = s.Stats.OverheadLat.Mean
+	other.Stats.OverheadLat.SquaredDiffs = s.Stats.OverheadLat.SquaredDiffs
+	other.Stats.BytesRead.Mean = s.Stats.BytesRead.Mean
+	other.Stats.BytesRead.SquaredDiffs = s.Stats.BytesRead.SquaredDiffs
+	other.Stats.RowsRead.Mean = s.Stats.RowsRead.Mean
+	other.Stats.RowsRead.SquaredDiffs = s.Stats.RowsRead.SquaredDiffs
+	other.Stats.RowsWritten.Mean = s.Stats.RowsWritten.Mean
+	other.Stats.RowsWritten.SquaredDiffs = s.Stats.RowsWritten.SquaredDiffs
+	other.Stats.ExecStats.Count = s.Stats.ExecStats.Count
+	other.Stats.ExecStats.NetworkBytes.Mean = s.Stats.ExecStats.NetworkBytes.Mean
+	other.Stats.ExecStats.NetworkBytes.SquaredDiffs = s.Stats.ExecStats.NetworkBytes.SquaredDiffs
+	other.Stats.ExecStats.MaxMemUsage.Mean = s.Stats.ExecStats.MaxMemUsage.Mean
+	other.Stats.ExecStats.MaxMemUsage.SquaredDiffs = s.Stats.ExecStats.MaxMemUsage.SquaredDiffs
+	other.Stats.ExecStats.ContentionTime.Mean = s.Stats.ExecStats.ContentionTime.Mean
+	other.Stats.ExecStats.ContentionTime.SquaredDiffs = s.Stats.ExecStats.ContentionTime.SquaredDiffs
+	other.Stats.ExecStats.NetworkMessages.Mean = s.Stats.ExecStats.NetworkMessages.Mean
+	other.Stats.ExecStats.NetworkMessages.SquaredDiffs = s.Stats.ExecStats.NetworkMessages.SquaredDiffs
+	other.Stats.ExecStats.MaxDiskUsage.Mean = s.Stats.ExecStats.MaxDiskUsage.Mean
+	other.Stats.ExecStats.MaxDiskUsage.SquaredDiffs = s.Stats.ExecStats.MaxDiskUsage.SquaredDiffs
+	other.Stats.ExecStats.CPUSQLNanos.Mean = s.Stats.ExecStats.CPUSQLNanos.Mean
+	other.Stats.ExecStats.CPUSQLNanos.SquaredDiffs = s.Stats.ExecStats.CPUSQLNanos.SquaredDiffs
+	other.Stats.ExecStats.MVCCIteratorStats.StepCount.Mean = s.Stats.ExecStats.MVCCIteratorStats.StepCount.Mean
+	other.Stats.ExecStats.MVCCIteratorStats.StepCount.SquaredDiffs = s.Stats.ExecStats.MVCCIteratorStats.StepCount.SquaredDiffs
+	other.Stats.ExecStats.MVCCIteratorStats.StepCountInternal.Mean = s.Stats.ExecStats.MVCCIteratorStats.StepCountInternal.Mean
+	other.Stats.ExecStats.MVCCIteratorStats.StepCountInternal.SquaredDiffs = s.Stats.ExecStats.MVCCIteratorStats.StepCountInternal.SquaredDiffs
+	other.Stats.ExecStats.MVCCIteratorStats.SeekCount.Mean = s.Stats.ExecStats.MVCCIteratorStats.SeekCount.Mean
+	other.Stats.ExecStats.MVCCIteratorStats.SeekCount.SquaredDiffs = s.Stats.ExecStats.MVCCIteratorStats.SeekCount.SquaredDiffs
+	other.Stats.ExecStats.MVCCIteratorStats.SeekCountInternal.Mean = s.Stats.ExecStats.MVCCIteratorStats.SeekCountInternal.Mean
+	other.Stats.ExecStats.MVCCIteratorStats.SeekCountInternal.SquaredDiffs = s.Stats.ExecStats.MVCCIteratorStats.SeekCountInternal.SquaredDiffs
+	other.Stats.ExecStats.MVCCIteratorStats.BlockBytes.Mean = s.Stats.ExecStats.MVCCIteratorStats.BlockBytes.Mean
+	other.Stats.ExecStats.MVCCIteratorStats.BlockBytes.SquaredDiffs = s.Stats.ExecStats.MVCCIteratorStats.BlockBytes.SquaredDiffs
+	other.Stats.ExecStats.MVCCIteratorStats.BlockBytesInCache.Mean = s.Stats.ExecStats.MVCCIteratorStats.BlockBytesInCache.Mean
+	other.Stats.ExecStats.MVCCIteratorStats.BlockBytesInCache.SquaredDiffs = s.Stats.ExecStats.MVCCIteratorStats.BlockBytesInCache.SquaredDiffs
+	other.Stats.ExecStats.MVCCIteratorStats.KeyBytes.Mean = s.Stats.ExecStats.MVCCIteratorStats.KeyBytes.Mean
+	other.Stats.ExecStats.MVCCIteratorStats.KeyBytes.SquaredDiffs = s.Stats.ExecStats.MVCCIteratorStats.KeyBytes.SquaredDiffs
+	other.Stats.ExecStats.MVCCIteratorStats.ValueBytes.Mean = s.Stats.ExecStats.MVCCIteratorStats.ValueBytes.Mean
+	other.Stats.ExecStats.MVCCIteratorStats.ValueBytes.SquaredDiffs = s.Stats.ExecStats.MVCCIteratorStats.ValueBytes.SquaredDiffs
+	other.Stats.ExecStats.MVCCIteratorStats.PointCount.Mean = s.Stats.ExecStats.MVCCIteratorStats.PointCount.Mean
+	other.Stats.ExecStats.MVCCIteratorStats.PointCount.SquaredDiffs = s.Stats.ExecStats.MVCCIteratorStats.PointCount.SquaredDiffs
+	other.Stats.ExecStats.MVCCIteratorStats.PointsCoveredByRangeTombstones.Mean = s.Stats.ExecStats.MVCCIteratorStats.PointsCoveredByRangeTombstones.Mean
+	other.Stats.ExecStats.MVCCIteratorStats.PointsCoveredByRangeTombstones.SquaredDiffs = s.Stats.ExecStats.MVCCIteratorStats.PointsCoveredByRangeTombstones.SquaredDiffs
+	other.Stats.ExecStats.MVCCIteratorStats.RangeKeyCount.Mean = s.Stats.ExecStats.MVCCIteratorStats.RangeKeyCount.Mean
+	other.Stats.ExecStats.MVCCIteratorStats.RangeKeyCount.SquaredDiffs = s.Stats.ExecStats.MVCCIteratorStats.RangeKeyCount.SquaredDiffs
+	other.Stats.ExecStats.MVCCIteratorStats.RangeKeyContainedPoints.Mean = s.Stats.ExecStats.MVCCIteratorStats.RangeKeyContainedPoints.Mean
+	other.Stats.ExecStats.MVCCIteratorStats.RangeKeyContainedPoints.SquaredDiffs = s.Stats.ExecStats.MVCCIteratorStats.RangeKeyContainedPoints.SquaredDiffs
+	other.Stats.ExecStats.MVCCIteratorStats.RangeKeySkippedPoints.Mean = s.Stats.ExecStats.MVCCIteratorStats.RangeKeySkippedPoints.Mean
+	other.Stats.ExecStats.MVCCIteratorStats.RangeKeySkippedPoints.SquaredDiffs = s.Stats.ExecStats.MVCCIteratorStats.RangeKeySkippedPoints.SquaredDiffs
+	other.Stats.SQLType = s.Stats.SQLType
+	other.Stats.LastExecTimestamp = s.Stats.LastExecTimestamp
+	other.Stats.Nodes = s.Stats.Nodes
+	other.Stats.Regions = s.Stats.Regions
+	other.Stats.PlanGists = s.Stats.PlanGists
+	other.Stats.IndexRecommendations = s.Stats.IndexRecommendations
+	other.Stats.Indexes = s.Stats.Indexes
+	other.Stats.LatencyInfo.Min = s.Stats.LatencyInfo.Min
+	other.Stats.LatencyInfo.Max = s.Stats.LatencyInfo.Max
+	other.Stats.LatencyInfo.P50 = s.Stats.LatencyInfo.P50
+	other.Stats.LatencyInfo.P90 = s.Stats.LatencyInfo.P90
+	other.Stats.LatencyInfo.P99 = s.Stats.LatencyInfo.P99
+	other.Stats.LastErrorCode = s.Stats.LastErrorCode
+	other.AggregatedTs = s.AggregatedTs
+	other.AggregationInterval = s.AggregationInterval
+	other.Stats.SensitiveInfo.LastErr = s.Stats.SensitiveInfo.LastErr
+	other.Stats.SensitiveInfo.MostRecentPlanTimestamp = s.Stats.SensitiveInfo.MostRecentPlanTimestamp
+	s.Stats.SensitiveInfo.MostRecentPlanDescription.CopyToRecursive(&other.Stats.SensitiveInfo.MostRecentPlanDescription)
+}
+
+// CopyToRecursive copies all data from this ExplainPlanTreeNode into other. This is
+// done so recursively for all Children.
+func (p *ExplainTreePlanNode) CopyToRecursive(other *obspb.ExplainTreePlanNode) {
+	other.Name = p.Name
+	// Ensure Attr slices are equivalent in length
+	if len(p.Attrs) < len(other.Attrs) {
+		other.Attrs = other.Attrs[0:len(p.Attrs)]
+	}
+	if len(p.Attrs) > len(other.Attrs) {
+		for i := len(other.Attrs); i < len(p.Attrs); i++ {
+			other.Attrs = append(other.Attrs, new(obspb.ExplainTreePlanNode_Attr))
+		}
+	}
+	for i, attr := range p.Attrs {
+		// No guarantee that each element in other is defined, so instantiate if necessary.
+		if other.Attrs[i] == nil {
+			other.Attrs[i] = new(obspb.ExplainTreePlanNode_Attr)
+		}
+		other.Attrs[i].Key = attr.Key
+		other.Attrs[i].Value = attr.Value
+	}
+
+	// Now ensure Children slices are equivalent in length.
+	if len(p.Children) < len(other.Children) {
+		other.Children = other.Children[0:len(p.Children)]
+	}
+	if len(p.Children) > len(other.Children) {
+		for i := len(other.Children); i < len(p.Children); i++ {
+			other.Children = append(other.Children, new(obspb.ExplainTreePlanNode))
+		}
+	}
+	for i, child := range p.Children {
+		// Also ensure that each element is defined, and instantiate if necessary.
+		if other.Children[i] == nil {
+			other.Children[i] = new(obspb.ExplainTreePlanNode)
+		}
+		child.CopyToRecursive(other.Children[i])
 	}
 }

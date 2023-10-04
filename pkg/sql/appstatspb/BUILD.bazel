@@ -8,15 +8,25 @@ go_library(
     embed = [":appstatspb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/util"],
+    deps = [
+        "//pkg/obsservice/obspb",
+        "//pkg/util",
+    ],
 )
 
 go_test(
     name = "appstatspb_test",
     srcs = ["app_stats_test.go"],
     args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
     embed = [":appstatspb"],
-    deps = ["@com_github_stretchr_testify//require"],
+    deps = [
+        "//pkg/obsservice/obspb",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_kr_pretty//:pretty",
+        "@com_github_stretchr_testify//require",
+    ],
 )
 
 proto_library(

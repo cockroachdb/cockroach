@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/obs"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -93,6 +94,9 @@ type PersistedSQLStats struct {
 	lastSizeCheck time.Time
 
 	eventsExporter obs.EventsExporterInterface
+	// exportedAggStmtStatPool is an object pool used to recycle
+	// obspb.AggregatedStatementStatistics to cut down on allocations.
+	exportedAggStmtStatPool sync.Pool
 }
 
 var _ sqlstats.Provider = &PersistedSQLStats{}
@@ -107,6 +111,11 @@ func New(
 		memoryPressureSignal: make(chan struct{}),
 		drain:                make(chan struct{}),
 		eventsExporter:       eventsExporter,
+		exportedAggStmtStatPool: sync.Pool{
+			New: func() interface{} {
+				return new(obspb.AggregatedStatementStatistics)
+			},
+		},
 	}
 
 	p.jobMonitor = jobMonitor{
