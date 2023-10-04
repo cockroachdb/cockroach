@@ -315,6 +315,90 @@ type Provider struct {
 	ServiceAccount string
 }
 
+// LogEntry represents a single log entry from the gcloud logging(stack driver)
+type LogEntry struct {
+	LogName  string `json:"logName"`
+	Resource struct {
+		Labels struct {
+			InstanceID string `json:"instance_id"`
+		} `json:"labels"`
+	} `json:"resource"`
+	Timestamp    string `json:"timestamp"`
+	ProtoPayload struct {
+		ResourceName string `json:"resourceName"`
+	} `json:"protoPayload"`
+}
+
+func (p *Provider) SupportsSpotVMs() bool {
+	return true
+}
+
+// GetPreemptedSpotVMs checks the preemption status of the given VMs, by querying the GCP logging service.
+func (p *Provider) GetPreemptedSpotVMs(
+	l *logger.Logger, vms vm.List, since time.Time,
+) ([]vm.PreemptedVM, error) {
+	args, err := buildFilterPreemptionCliArgs(vms, p.GetProject(), since)
+	if err != nil {
+		l.Printf("Error building gcloud cli command: %v\n", err)
+		return nil, err
+	}
+	l.Printf("gcloud cli for preemption : " + strings.Join(append([]string{"gcloud"}, args...), " "))
+	var logEntries []LogEntry
+	if err := runJSONCommand(args, &logEntries); err != nil {
+		l.Printf("Error running gcloud cli command: %v\n", err)
+		return nil, err
+	}
+	// Extract the VM name and the time of preemption from logs.
+	var preemptedVMs []vm.PreemptedVM
+	for _, logEntry := range logEntries {
+		timestamp, err := time.Parse(time.RFC3339, logEntry.Timestamp)
+		if err != nil {
+			l.Printf("Error parsing gcp log timestamp: %v", err)
+			continue
+		}
+		preemptedVMs = append(preemptedVMs, vm.PreemptedVM{Name: logEntry.ProtoPayload.ResourceName, PreemptedAt: timestamp})
+	}
+	return preemptedVMs, nil
+}
+
+// buildFilterPreemptionCliArgs returns the arguments to be passed to gcloud cli to query the logs for preemption events.
+func buildFilterPreemptionCliArgs(
+	vms vm.List, projectName string, since time.Time,
+) ([]string, error) {
+	vmFullResourceNames := make([]string, len(vms))
+	if projectName == "" {
+		return nil, errors.New("project name cannot be empty")
+	}
+	if since.After(timeutil.Now()) {
+		return nil, errors.New("since cannot be in the future")
+	}
+	if vms == nil {
+		return nil, errors.New("vms cannot be nil")
+	}
+	// construct full resource names
+	for i, vmNode := range vms {
+		// example format : projects/cockroach-ephemeral/zones/us-east1-b/instances/test-name
+		vmFullResourceNames[i] = "projects/" + projectName + "/zones/" + vmNode.Zone + "/instances/" + vmNode.Name
+	}
+	// Prepend vmFullResourceNames with "protoPayload.resourceName=" to help with filter construction.
+	vmIDFilter := make([]string, len(vms))
+	for i, vmID := range vmFullResourceNames {
+		vmIDFilter[i] = fmt.Sprintf("protoPayload.resourceName=%s", vmID)
+	}
+	// Create a filter to match preemption events for the specified VM IDs
+	filter := fmt.Sprintf(`resource.type=gce_instance AND (protoPayload.methodName=compute.instances.preempted) AND (%s)`,
+		strings.Join(vmIDFilter, " OR "))
+	args := []string{
+		"logging",
+		"read",
+		"--project=" + projectName,
+		"--format=json",
+		fmt.Sprintf("--freshness=%dh", int(timeutil.Since(since).Hours()+1)), // only look at logs from the "since" specified
+		filter,
+	}
+	return args, nil
+}
+
 type snapshotJson struct {
 	CreationSizeBytes  string    `json:"creationSizeBytes"`
 	CreationTimestamp  time.Time `json:"creationTimestamp"`
@@ -998,7 +1082,7 @@ func (p *Provider) Create(
 			providerOpts.MinCPUPlatform = ""
 		}
 	}
-	//TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
+	// TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
 	if useArmAMI {
 		image = ARM64Image
 		l.Printf("Using ARM64 AMI: %s for machine type: %s", image, providerOpts.MachineType)

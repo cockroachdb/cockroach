@@ -2720,3 +2720,37 @@ func archForTest(ctx context.Context, l *logger.Logger, testSpec registry.TestSp
 
 	return arch
 }
+
+// GetPreemptedVMs gets any VMs that were part of the cluster but preempted by cloud vendor.
+func (c *clusterImpl) GetPreemptedVMs(
+	ctx context.Context, l *logger.Logger,
+) ([]vm.PreemptedVM, error) {
+	pattern := "^" + regexp.QuoteMeta(c.name) + "$" // exact match of the cluster name
+	cloudClusters, err := roachprod.List(l, false, pattern, vm.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	cDetails, ok := cloudClusters.Clusters[c.name]
+	if !ok {
+		return nil, errors.Wrapf(errClusterNotFound, "%q", c.name)
+	}
+	// Bucket cDetails.vms by provider
+	providerToVMs := make(map[string][]vm.VM)
+	for _, vm := range cDetails.VMs {
+		providerToVMs[vm.Provider] = append(providerToVMs[vm.Provider], vm)
+	}
+
+	// Iterate through providerToVMs and call preemptedVMs for each provider
+	var allPreemptedVMs []vm.PreemptedVM
+	for provider, vms := range providerToVMs {
+		p := vm.Providers[provider]
+		if p.SupportsSpotVMs() {
+			preemptedVMS, err := p.GetPreemptedSpotVMs(l, vms, cDetails.CreatedAt)
+			if err != nil {
+				return nil, err
+			}
+			allPreemptedVMs = append(allPreemptedVMs, preemptedVMS...)
+		}
+	}
+	return allPreemptedVMs, nil
+}
