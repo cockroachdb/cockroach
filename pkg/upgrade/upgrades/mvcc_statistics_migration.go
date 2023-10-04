@@ -20,12 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+
 	// Import for the side effect of registering the MVCC statistics update job.
 	_ "github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
@@ -38,7 +38,7 @@ func createMVCCStatisticsTableAndJobMigration(
 		ctx,
 		d.DB.KV(),
 		d.Settings,
-		keys.SystemSQLCodec,
+		d.Codec,
 		systemschema.SystemMVCCStatisticsTable,
 	)
 	if err != nil {
