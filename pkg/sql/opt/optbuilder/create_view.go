@@ -56,7 +56,7 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 		case nil:
 			// No error.
 		case error:
-			if errors.Is(recErr, tree.ErrFunctionUndefined) {
+			if errors.Is(recErr, tree.ErrRoutineUndefined) {
 				panic(
 					errors.WithHint(
 						recErr,

@@ -86,7 +86,7 @@ hello world
 statement ok
 DROP FUNCTION sc1.f2_new(STRING);
 
-statement error pgcode 42883 function undefined
+statement error pgcode 42883 function 108 does not exist
 SELECT [FUNCTION $fn_oid]('maybe')
 
 # Referencing UDF OID within a UDF
@@ -98,7 +98,7 @@ let $fn_oid
 SELECT oid FROM pg_catalog.pg_proc WHERE proname = 'f_in_udf'
 
 # TODO(chengxiong,mgartner): Fix this test when we enable support of calling UDFs from UDFs.
-statement error pgcode 42883 pq: function \d+ not found: function undefined
+statement error pgcode 42883 pq: function \d+ not found
 CREATE FUNCTION f_using_udf() RETURNS INT LANGUAGE SQL AS $$ SELECT [FUNCTION $fn_oid]() $$;
 
 # 814 is the OID of builtin function "length" with signature, and it's ok to

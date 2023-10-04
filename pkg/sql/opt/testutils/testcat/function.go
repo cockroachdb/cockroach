@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
@@ -45,7 +47,10 @@ func (tc *Catalog) ResolveFunction(
 	if def, ok := tc.udfs[name.String()]; ok {
 		return def, nil
 	}
-	return nil, errors.Wrapf(tree.ErrFunctionUndefined, "unknown function: %s", name)
+	return nil, errors.Mark(
+		pgerror.Newf(pgcode.UndefinedFunction, "unknown function: %s", name),
+		tree.ErrRoutineUndefined,
+	)
 }
 
 // ResolveFunctionByOID part of the tree.FunctionReferenceResolver interface.
