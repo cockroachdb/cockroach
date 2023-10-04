@@ -1441,15 +1441,9 @@ func TestSpansMemUsage(t *testing.T) {
 			s[j].Key = []byte(test.spans[j].start)
 			s[j].EndKey = []byte(test.spans[j].end)
 		}
-		for j := 0; j <= len(s); j++ {
-			// Test that we account for all memory used even when we reduce the length
-			// below the capacity.
-			reduced := s[:j]
-
-			if actual := reduced.MemUsage(); test.expected != actual {
-				t.Errorf("%d.%d: expected spans %v (sliced from %v) to return %d for MemUsage, instead got %d",
-					i, j, reduced, test.spans, test.expected, actual)
-			}
+		if actual := s.MemUsageUpToLen(); test.expected != actual {
+			t.Errorf("%d: expected spans %v to return %d for MemUsageUpToLen, instead got %d",
+				i, test.spans, test.expected, actual)
 		}
 	}
 }
