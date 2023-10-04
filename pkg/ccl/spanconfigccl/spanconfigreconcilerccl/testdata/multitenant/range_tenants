@@ -56,6 +56,7 @@ state offset=47
 /Table/6{2-3}                              database system (host)
 /Table/6{3-4}                              database system (host)
 /Table/6{4-5}                              database system (host)
+/Table/6{5-6}                              database system (host)
 /Tenant/10{-\x00}                          database system (tenant)
 /Tenant/11{-\x00}                          ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
 /Tenant/12{-\x00}                          ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
@@ -90,6 +91,7 @@ state offset=47
 /Table/6{2-3}                              database system (host)
 /Table/6{3-4}                              database system (host)
 /Table/6{4-5}                              database system (host)
+/Table/6{5-6}                              database system (host)
 /Tenant/10{-/Table/4}                      database system (tenant)
 /Tenant/10/Table/{4-5}                     database system (tenant)
 /Tenant/10/Table/{5-6}                     database system (tenant)
@@ -138,6 +140,7 @@ state offset=47
 /Tenant/10/Table/{59-60}                   database system (tenant)
 /Tenant/10/Table/6{0-1}                    database system (tenant)
 /Tenant/10/Table/6{1-2}                    database system (tenant)
+/Tenant/10/Table/6{2-3}                    database system (tenant)
 /Tenant/11{-\x00}                          ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
 /Tenant/12{-\x00}                          ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
 
@@ -175,6 +178,7 @@ mutations discard tenant=11
 state offset=81
 ----
 ...
+/Tenant/10/Table/2{4-5}                    database system (tenant)
 /Tenant/10/Table/2{5-6}                    database system (tenant)
 /Tenant/10/Table/2{6-7}                    database system (tenant)
 /Tenant/10/Table/2{7-8}                    database system (tenant)
@@ -207,6 +211,7 @@ state offset=81
 /Tenant/10/Table/{59-60}                   database system (tenant)
 /Tenant/10/Table/6{0-1}                    database system (tenant)
 /Tenant/10/Table/6{1-2}                    database system (tenant)
+/Tenant/10/Table/6{2-3}                    database system (tenant)
 /Tenant/10/Table/10{6-7}                   range default
 /Tenant/10/Table/10{7-8}                   range default
 /Tenant/11{-/Table/4}                      ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
@@ -257,6 +262,7 @@ state offset=81
 /Tenant/11/Table/{59-60}                   ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
 /Tenant/11/Table/6{0-1}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
 /Tenant/11/Table/6{1-2}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/6{2-3}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
 /Tenant/12{-\x00}                          ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
 
 query-sql tenant=11

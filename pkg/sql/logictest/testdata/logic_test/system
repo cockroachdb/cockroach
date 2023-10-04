@@ -84,6 +84,7 @@ public  join_tokens                      table     node  NULL
 public  lease                            table     node  NULL
 public  locations                        table     node  NULL
 public  migrations                       table     node  NULL
+public  mvcc_statistics                  table     node  NULL
 public  namespace                        table     node  NULL
 public  privileges                       table     node  NULL
 public  protected_ts_meta                table     node  NULL
@@ -244,6 +245,7 @@ SELECT id FROM system.descriptor ORDER BY 1
 59
 60
 61
+62
 100
 101
 102
@@ -864,6 +866,14 @@ system  public  migrations                       root    DELETE  true
 system  public  migrations                       root    INSERT  true
 system  public  migrations                       root    SELECT  true
 system  public  migrations                       root    UPDATE  true
+system  public  mvcc_statistics                  admin   DELETE  true
+system  public  mvcc_statistics                  admin   INSERT  true
+system  public  mvcc_statistics                  admin   SELECT  true
+system  public  mvcc_statistics                  admin   UPDATE  true
+system  public  mvcc_statistics                  root    DELETE  true
+system  public  mvcc_statistics                  root    INSERT  true
+system  public  mvcc_statistics                  root    SELECT  true
+system  public  mvcc_statistics                  root    UPDATE  true
 system  public  namespace                        admin   SELECT  true
 system  public  namespace                        root    SELECT  true
 system  public  privileges                       admin   DELETE  true

@@ -803,7 +803,7 @@ select count(*) from system.descriptor
 query I
 select $desc_count_pre_drop-$desc_count_post_drop
 ----
-13
+15
 
 # Tests for computed column rewrites.
 statement ok
