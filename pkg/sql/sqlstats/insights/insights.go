@@ -89,6 +89,13 @@ var HighRetryCountThreshold = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 	settings.WithPublic)
 
+// sqlInsightsFlushEnabled the insights flush job.
+var sqlInsightsFlushEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.insights.flush.enabled",
+	"enable the flush to the system statement and transaction insights tables",
+	false)
+
 // Metrics holds running measurements of various insights-related runtime stats.
 type Metrics struct {
 	// Fingerprints measures the number of statement fingerprints being monitored for
