@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -39,6 +40,7 @@ type TenantDeps struct {
 	LeaseManager *lease.Manager
 	JobRegistry  *jobs.Registry
 	SessionData  *sessiondata.SessionData
+	ClusterID    uuid.UUID
 
 	// TODO(ajwerner): Remove this in favor of the descs.DB above.
 	InternalExecutor isql.Executor

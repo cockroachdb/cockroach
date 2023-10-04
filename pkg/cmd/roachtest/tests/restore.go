@@ -866,13 +866,6 @@ func (rd *restoreDriver) prepareCluster(ctx context.Context) {
 	rd.c.Put(ctx, rd.t.Cockroach(), "./cockroach")
 	rd.c.Start(ctx, rd.t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 	rd.getAOST(ctx)
-
-	if rand.Intn(2) == 0 {
-		rd.t.L().Printf("Running non-default makeSimpleImportSpans")
-		conn := rd.c.Conn(ctx, rd.t.L(), 1)
-		_, err := conn.ExecContext(ctx, "SET CLUSTER SETTING bulkio.restore.simple_import_spans.enabled = true")
-		require.NoError(rd.t, err)
-	}
 }
 
 // getAOST gets the AOST to use in the restore cmd.

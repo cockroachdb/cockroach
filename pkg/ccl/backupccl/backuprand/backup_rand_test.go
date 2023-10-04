@@ -36,9 +36,7 @@ import (
 // randomly generated tables and verifies their data and schema are preserved.
 // It tests that full database backup as well as all subsets of per-table backup
 // roundtrip properly. 50% of the time, the test runs the restore with the
-// schema_only parameter, which does not restore any rows from user tables. The
-// test will also run with bulkio.restore.simple_import_spans.enabled set to true
-// 50% of the time.
+// schema_only parameter, which does not restore any rows from user tables.
 func TestBackupRestoreRandomDataRoundtrips(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -75,10 +73,6 @@ func TestBackupRestoreRandomDataRoundtrips(t *testing.T) {
 	runSchemaOnlyExtension := ""
 	if rng.Intn(10)%2 == 0 {
 		runSchemaOnlyExtension = ", schema_only"
-	}
-
-	if rng.Intn(2) == 0 {
-		sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.restore.simple_import_spans.enabled = true")
 	}
 
 	tables := sqlDB.Query(t, `SELECT name FROM crdb_internal.tables WHERE 

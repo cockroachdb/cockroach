@@ -96,6 +96,7 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 			JobRegistry:      execCtx.ExecCfg().JobRegistry,
 			TestingKnobs:     execCtx.ExecCfg().UpgradeTestingKnobs,
 			SessionData:      execCtx.SessionData(),
+			ClusterID:        execCtx.ExtendedEvalContext().ClusterID,
 		}
 
 		tenantDeps.SchemaResolverConstructor = func(
