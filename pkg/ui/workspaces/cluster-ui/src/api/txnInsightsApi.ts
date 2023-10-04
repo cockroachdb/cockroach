@@ -15,6 +15,7 @@ import {
   sqlResultsAreEmpty,
 } from "./sqlApi";
 import {
+  getInsightsFromProblemsAndCauses,
   InsightExecEnum,
   TransactionStatus,
   TxnInsightEvent,
