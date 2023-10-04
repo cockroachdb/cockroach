@@ -489,13 +489,13 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry, backupCloud string
 	}
 	s := r.MakeClusterSpec(hw.nodes, clusterOpts...)
 
-	if backupCloud == spec.AWS && s.Cloud == spec.AWS && s.VolumeSize != 0 {
+	if backupCloud == spec.AWS && s.VolumeSize != 0 {
 		// Work around an issue that RAID0s local NVMe and GP3 storage together:
 		// https://github.com/cockroachdb/cockroach/issues/98783.
 		//
 		// TODO(srosenberg): Remove this workaround when 98783 is addressed.
-		s.InstanceType, _ = spec.AWSMachineType(s.CPUs, s.Mem, s.PreferLocalSSD && s.VolumeSize == 0, vm.ArchAMD64)
-		s.InstanceType = strings.Replace(s.InstanceType, "d.", ".", 1)
+		s.AWS.MachineType, _ = spec.SelectAWSMachineType(s.CPUs, s.Mem, s.PreferLocalSSD && s.VolumeSize == 0, vm.ArchAMD64)
+		s.AWS.MachineType = strings.Replace(s.AWS.MachineType, "d.", ".", 1)
 		s.Arch = vm.ArchAMD64
 	}
 	return s
