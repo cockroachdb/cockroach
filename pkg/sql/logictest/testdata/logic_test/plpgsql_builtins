@@ -300,7 +300,7 @@ SELECT crdb_internal.plpgsql_raise('ERROR', '', '', '', '');
 # Testing crdb_internal.plpgsql_fetch.
 #
 # Parameters:
-#   Name:         String
+#   Name:         RefCursor
 #   Direction:    Int
 #   Count:        Int
 #   Result Types: Tuple

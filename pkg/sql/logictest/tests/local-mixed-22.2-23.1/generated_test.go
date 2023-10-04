@@ -1338,13 +1338,6 @@ func TestLogic_plpgsql_builtins(
 	runLogicTest(t, "plpgsql_builtins")
 }
 
-func TestLogic_plpgsql_cursor(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "plpgsql_cursor")
-}
-
 func TestLogic_poison_after_push(
 	t *testing.T,
 ) {
