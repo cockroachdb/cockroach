@@ -252,7 +252,7 @@ func (fd *ResolvedFunctionDefinition) MergeWith(
 // types. The overload from the most significant schema is returned. If
 // paramTypes==nil, an error is returned if the function name is not unique in
 // the most significant schema. If paramTypes is not nil, an error with
-// ErrFunctionUndefined cause is returned if not matched found.
+// ErrRoutineUndefined cause is returned if not matched found.
 func (fd *ResolvedFunctionDefinition) MatchOverload(
 	paramTypes []*types.T, explicitSchema string, searchPath SearchPath,
 ) (QualifiedOverload, error) {
@@ -293,8 +293,9 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 	}
 
 	if len(ret) == 0 {
-		return QualifiedOverload{}, errors.Wrapf(
-			ErrFunctionUndefined, "function %s(%s) does not exist", fd.Name, typeNames(),
+		return QualifiedOverload{}, errors.Mark(
+			pgerror.Newf(pgcode.UndefinedFunction, "function %s(%s) does not exist", fd.Name, typeNames()),
+			ErrRoutineUndefined,
 		)
 	}
 	if len(ret) > 1 {
@@ -391,7 +392,10 @@ func GetBuiltinFuncDefinitionOrFail(
 	}
 	if def == nil {
 		forError := fName // prevent fName from escaping
-		return nil, errors.Wrapf(ErrFunctionUndefined, "unknown function: %s()", ErrString(&forError))
+		return nil, errors.Mark(
+			pgerror.Newf(pgcode.UndefinedFunction, "unknown function: %s()", ErrString(&forError)),
+			ErrRoutineUndefined,
+		)
 	}
 	return def, nil
 }
@@ -400,7 +404,10 @@ func GetBuiltinFuncDefinitionOrFail(
 func GetBuiltinFunctionByOIDOrFail(oid oid.Oid) (*ResolvedFunctionDefinition, error) {
 	ol, ok := OidToQualifiedBuiltinOverload[oid]
 	if !ok {
-		return nil, errors.Wrapf(ErrFunctionUndefined, "function %d not found", oid)
+		return nil, errors.Mark(
+			pgerror.Newf(pgcode.UndefinedFunction, "function %d not found", oid),
+			ErrRoutineUndefined,
+		)
 	}
 	fd := &ResolvedFunctionDefinition{
 		Name:      OidToBuiltinName[oid],

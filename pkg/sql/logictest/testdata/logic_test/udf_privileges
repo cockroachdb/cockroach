@@ -601,7 +601,7 @@ test           sc_test_show_grants  100117      f_test_show_grants(int8, text, o
 test           sc_test_show_grants  100117      f_test_show_grants(int8, text, oid)  root                ALL             true
 test           sc_test_show_grants  100117      f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
 
-statement error pgcode 42883 pq: function f_test_show_grants\(string\) does not exist: function undefined
+statement error pgcode 42883 pq: function f_test_show_grants\(string\) does not exist
 SHOW GRANTS ON FUNCTION f_test_show_grants(string);
 
 query TTTTTTB colnames
@@ -622,7 +622,7 @@ test           sc_test_show_grants  100117      f_test_show_grants(int8, text, o
 test           sc_test_show_grants  100117      f_test_show_grants(int8, text, oid)  root                ALL             true
 test           sc_test_show_grants  100117      f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
 
-statement error pgcode 42883 pq: unknown function: f_not_existing\(\): function undefined
+statement error pgcode 42883 pq: unknown function: f_not_existing\(\)
 SHOW GRANTS ON FUNCTION f_not_existing;
 
 query TTTTTTB colnames

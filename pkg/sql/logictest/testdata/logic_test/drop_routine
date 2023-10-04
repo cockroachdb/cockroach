@@ -56,11 +56,11 @@ DROP FUNCTION f_test_drop;
 statement ok
 DROP FUNCTION IF EXISTS f_not_existing;
 
-statement error pgcode 42883 pq: unknown function: f_not_existing\(\): function undefined
+statement error pgcode 42883 pq: unknown function: f_not_existing\(\)
 DROP FUNCTION f_not_existing;
 
 # drop a function twice should fail.
-statement error pgcode 42883 pq: function f_test_drop\(\) does not exist: function undefined
+statement error pgcode 42883 pq: function f_test_drop\(\) does not exist
 BEGIN;
 DROP FUNCTION f_test_drop();
 DROP FUNCTION f_test_drop();
@@ -103,7 +103,7 @@ $$
 statement ok
 DROP FUNCTION f_test_drop(INT), f_test_drop(INT);
 
-statement error pgcode 42883 pq: unknown function: public.f_test_drop\(\): function undefined
+statement error pgcode 42883 pq: unknown function: public.f_test_drop\(\)
 SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_drop];
 
 query T
@@ -122,7 +122,7 @@ $$
 statement ok
 DROP FUNCTION f_test_drop(INT);
 
-statement error pgcode 42883 pq: unknown function: sc1.f_test_drop\(\): function undefined
+statement error pgcode 42883 pq: unknown function: sc1.f_test_drop\(\)
 SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
 
 # If there are identical function signatures in different schemas, multiple drop
@@ -163,10 +163,10 @@ DROP FUNCTION f_test_drop();
 DROP FUNCTION f_test_drop();
 COMMIT;
 
-statement error pgcode 42883 pq: unknown function: public.f_test_drop\(\): function undefined
+statement error pgcode 42883 pq: unknown function: public.f_test_drop\(\)
 SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_drop];
 
-statement error pgcode 42883 pq: unknown function: sc1.f_test_drop\(\): function undefined
+statement error pgcode 42883 pq: unknown function: sc1.f_test_drop\(\)
 SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
 
 statement ok

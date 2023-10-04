@@ -222,7 +222,7 @@ SELECT f_test_exec_dropped(123);
 statement ok
 DROP FUNCTION f_test_exec_dropped;
 
-statement error pgcode 42883 pq: unknown function: f_test_exec_dropped\(\): function undefined
+statement error pgcode 42883 pq: unknown function: f_test_exec_dropped\(\)
 SELECT f_test_exec_dropped(321);
 
 subtest end
@@ -724,7 +724,7 @@ subtest lowercase_hint_error_implicit_schema
 statement ok
 CREATE FUNCTION lowercase_hint_error_implicit_schema_fn() RETURNS INT AS 'SELECT 1' LANGUAGE SQL
 
-statement error function undefined\nHINT: lower-case alternative lowercase_hint_error_implicit_schema_fn exists
+statement error unknown function: LOWERCASE_HINT_ERROR_IMPLICIT_SCHEMA_FN\(\)\nHINT: lower-case alternative lowercase_hint_error_implicit_schema_fn exists
 SELECT "LOWERCASE_HINT_ERROR_IMPLICIT_SCHEMA_FN"();
 
 subtest end
@@ -734,7 +734,7 @@ subtest lowercase_hint_error_explicit_schema
 statement ok
 CREATE FUNCTION public.lowercase_hint_error_explicit_schema_fn() RETURNS INT AS 'SELECT 1' LANGUAGE SQL
 
-statement error function undefined\nHINT: lower-case alternative public.lowercase_hint_error_explicit_schema_fn exists
+statement error unknown function: public.LOWERCASE_HINT_ERROR_EXPLICIT_SCHEMA_FN\(\)\nHINT: lower-case alternative public.lowercase_hint_error_explicit_schema_fn exists
 SELECT public."LOWERCASE_HINT_ERROR_EXPLICIT_SCHEMA_FN"();
 
 subtest end

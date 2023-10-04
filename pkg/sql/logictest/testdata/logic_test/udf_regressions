@@ -356,7 +356,7 @@ SELECT fn(1);
 statement ok
 DROP FUNCTION fn;
 
-statement error pgcode 42883 pq: unknown function: fn\(\): function undefined
+statement error pgcode 42883 pq: unknown function: fn\(\)
 SELECT fn(1);
 
 subtest end
@@ -377,7 +377,7 @@ statement ok
 CREATE DATABASE d;
 USE d;
 
-statement error pgcode 42883 pq: unknown function: fn\(\): function undefined
+statement error pgcode 42883 pq: unknown function: fn\(\)
 SELECT fn(1);
 
 statement ok

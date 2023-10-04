@@ -33,13 +33,13 @@ SELECT pg_typeof('1'::OID), pg_typeof('pg_constraint'::REGCLASS), pg_typeof('pub
 ----
 oid  regclass  regnamespace
 
-statement error pq: unknown function: upper\(string\)\(\): function undefined
+statement error pq: unknown function: upper\(string\)\(\)
 SELECT 'upper(string)'::REGPROC
 
 statement error invalid function signature: upper
 SELECT 'upper'::REGPROCEDURE
 
-statement error pq: function upper\(int\) does not exist: function undefined
+statement error pq: function upper\(int\) does not exist
 SELECT 'upper(int)'::REGPROCEDURE
 
 query TT
@@ -102,10 +102,10 @@ SELECT 'upper'::REGPROC, 'upper(string)'::REGPROCEDURE, 'upper'::REGPROC::OID
 ----
 upper  upper  829
 
-query error pq: unknown function: blah\(ignored\)\(\): function undefined
+query error pq: unknown function: blah\(ignored\)\(\)
 SELECT 'blah(ignored)'::REGPROC
 
-query error pq: unknown function: blah\(\): function undefined
+query error pq: unknown function: blah\(\)
 SELECT 'blah(int, int)'::REGPROCEDURE
 
 query error pq: invalid name: expected separator .: blah \( ignored , ignored \)

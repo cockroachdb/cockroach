@@ -125,7 +125,7 @@ func (p *planner) matchUDF(
 	name := routineObj.FuncName.ToUnresolvedObjectName().ToUnresolvedName()
 	fnDef, err := p.ResolveFunction(ctx, name, &path)
 	if err != nil {
-		if !required && errors.Is(err, tree.ErrFunctionUndefined) {
+		if !required && errors.Is(err, tree.ErrRoutineUndefined) {
 			return nil, nil
 		}
 		return nil, err
@@ -137,7 +137,7 @@ func (p *planner) matchUDF(
 	}
 	ol, err := fnDef.MatchOverload(paramTypes, routineObj.FuncName.Schema(), &path)
 	if err != nil {
-		if !required && errors.Is(err, tree.ErrFunctionUndefined) {
+		if !required && errors.Is(err, tree.ErrRoutineUndefined) {
 			return nil, nil
 		}
 		return nil, err
