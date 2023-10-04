@@ -69,7 +69,7 @@ export type SqlApiResponse<ResultType> = {
 
 export type SqlApiQueryResponse<Result> = Result & { error?: Error };
 
-export const SQL_API_PATH = "/api/v2/sql/";
+export const SQL_API_PATH = "api/v2/sql/";
 
 /**
  * executeSql executes the provided SQL statements in a single transaction

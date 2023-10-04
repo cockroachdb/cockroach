@@ -12,7 +12,7 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { fetchData } from "./fetchData";
 import { propsToQueryString } from "../util";
 
-const JOBS_PATH = "/_admin/v1/jobs";
+const JOBS_PATH = "_admin/v1/jobs";
 
 export type JobsRequest = cockroach.server.serverpb.JobsRequest;
 export type JobsResponse = cockroach.server.serverpb.JobsResponse;

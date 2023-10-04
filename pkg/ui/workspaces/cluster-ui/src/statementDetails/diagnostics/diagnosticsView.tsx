@@ -22,7 +22,7 @@ import emptyListResultsImg from "src/assets/emptyState/empty-list-results.svg";
 import { filterByTimeScale, getDiagnosticsStatus } from "./diagnosticsUtils";
 import { EmptyTable } from "src/empty";
 import styles from "./diagnosticsView.module.scss";
-import { getBasePath, StatementDiagnosticsReport } from "../../api";
+import { StatementDiagnosticsReport, withBasePath } from "../../api";
 import {
   TimeScale,
   timeScale1hMinOptions,
@@ -209,9 +209,9 @@ export class DiagnosticsView extends React.Component<
                 as="a"
                 size="small"
                 intent="tertiary"
-                href={`${getBasePath()}/_admin/v1/stmtbundle/${
-                  diagnostic.statement_diagnostics_id
-                }`}
+                href={withBasePath(
+                  `_admin/v1/stmtbundle/${diagnostic.statement_diagnostics_id}`,
+                )}
                 onClick={() =>
                   this.props.onDownloadDiagnosticBundleClick &&
                   this.props.onDownloadDiagnosticBundleClick(
