@@ -12,6 +12,7 @@ package local
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -44,7 +45,7 @@ func (n *dnsProvider) Domain() string {
 }
 
 // CreateRecords is part of the vm.DNSProvider interface.
-func (n *dnsProvider) CreateRecords(records ...vm.DNSRecord) error {
+func (n *dnsProvider) CreateRecords(_ context.Context, records ...vm.DNSRecord) error {
 	unlock, err := lock.AcquireFilesystemLock(n.lockFilePath)
 	if err != nil {
 		return err
@@ -63,7 +64,9 @@ func (n *dnsProvider) CreateRecords(records ...vm.DNSRecord) error {
 }
 
 // LookupSRVRecords is part of the vm.DNSProvider interface.
-func (n *dnsProvider) LookupSRVRecords(service, proto, subdomain string) ([]vm.DNSRecord, error) {
+func (n *dnsProvider) LookupSRVRecords(
+	_ context.Context, service, proto, subdomain string,
+) ([]vm.DNSRecord, error) {
 	records, err := n.loadRecords()
 	if err != nil {
 		return nil, err

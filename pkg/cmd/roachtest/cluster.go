@@ -2345,24 +2345,24 @@ func addrToHostPort(addr string) (string, int, error) {
 // InternalAdminUIAddr returns the internal Admin UI address in the form host:port
 // for the specified node.
 func (c *clusterImpl) InternalAdminUIAddr(
-	_ context.Context, l *logger.Logger, node option.NodeListOption,
+	ctx context.Context, l *logger.Logger, node option.NodeListOption,
 ) ([]string, error) {
-	return c.adminUIAddr(l, node, false)
+	return c.adminUIAddr(ctx, l, node, false)
 }
 
 // ExternalAdminUIAddr returns the external Admin UI address in the form host:port
 // for the specified node.
 func (c *clusterImpl) ExternalAdminUIAddr(
-	_ context.Context, l *logger.Logger, node option.NodeListOption,
+	ctx context.Context, l *logger.Logger, node option.NodeListOption,
 ) ([]string, error) {
-	return c.adminUIAddr(l, node, true)
+	return c.adminUIAddr(ctx, l, node, true)
 }
 
 func (c *clusterImpl) adminUIAddr(
-	l *logger.Logger, node option.NodeListOption, external bool,
+	ctx context.Context, l *logger.Logger, node option.NodeListOption, external bool,
 ) ([]string, error) {
 	var addrs []string
-	adminURLs, err := roachprod.AdminURL(l, c.MakeNodes(node), "", 0, "",
+	adminURLs, err := roachprod.AdminURL(ctx, l, c.MakeNodes(node), "", 0, "",
 		external, false, false)
 	if err != nil {
 		return nil, err
