@@ -39,7 +39,7 @@ func registerKnex(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		require.NoError(t, err)

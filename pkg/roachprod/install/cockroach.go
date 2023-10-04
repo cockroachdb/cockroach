@@ -752,10 +752,12 @@ func (c *SyncedCluster) generateStartFlagsKV(node Node, startOpts StartOpts) []s
 			args = append(args, `--store`,
 				fmt.Sprintf(`path=%s,attrs=store%d:node%d:node%dstore%d`, storeDir, i, node, node, i))
 		}
-	} else if startOpts.ExtraArgs[idx] == "--store=" {
+	} else if strings.HasPrefix(startOpts.ExtraArgs[idx], "--store=") {
 		// The flag and path were provided together. Strip the flag prefix.
 		storeDir := strings.TrimPrefix(startOpts.ExtraArgs[idx], "--store=")
-		storeDirs = append(storeDirs, storeDir)
+		if !strings.Contains(storeDir, "type=mem") {
+			storeDirs = append(storeDirs, storeDir)
+		}
 	} else {
 		// Else, the store flag and path were specified as separate arguments. The
 		// path is the subsequent arg.
@@ -877,10 +879,12 @@ func (c *SyncedCluster) generateClusterSettingCmd(
 	}
 	url := c.NodeURL("localhost", port, SystemInterfaceName /* virtualClusterName */)
 
+	// We use `mkdir -p` here since the directory may not exist if an in-memory
+	// store is used.
 	clusterSettingsCmd += fmt.Sprintf(`
 		if ! test -e %s ; then
-			COCKROACH_CONNECT_TIMEOUT=%d %s sql --url %s -e "%s" && touch %s
-		fi`, path, startSQLTimeout, binary, url, clusterSettingsString, path)
+			COCKROACH_CONNECT_TIMEOUT=%d %s sql --url %s -e "%s" && mkdir -p %s && touch %s
+		fi`, path, startSQLTimeout, binary, url, clusterSettingsString, c.NodeDir(node, 1 /* storeIndex */), path)
 	return clusterSettingsCmd, nil
 }
 
