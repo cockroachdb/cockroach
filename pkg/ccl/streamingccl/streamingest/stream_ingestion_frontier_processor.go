@@ -36,34 +36,13 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// JobCheckpointFrequency controls the frequency of frontier checkpoints into
-// the jobs table.
-var JobCheckpointFrequency = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
-	"stream_replication.job_checkpoint_frequency",
-	"controls the frequency with which partitions update their progress; if 0, disabled",
-	10*time.Second,
-	settings.NonNegativeDuration,
+const (
+	streamIngestionFrontierProcName = `ingestfntr`
+
+	// frontierEntriesFilename is the name of the file at which the stream ingestion
+	// frontier periodically dumps its state.
+	frontierEntriesFilename = "~replication-frontier-entries.binpb"
 )
-
-// DumpFrontierEntries controls the frequency at which we persist the entries in
-// the frontier to the `system.job_info` table.
-//
-// TODO(adityamaru): This timer should be removed once each job is aware of whether
-// it is profiling or not.
-var DumpFrontierEntries = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
-	"stream_replication.dump_frontier_entries_frequency",
-	"controls the frequency with which the frontier entries are persisted; if 0, disabled",
-	10*time.Minute,
-	settings.NonNegativeDuration,
-)
-
-const streamIngestionFrontierProcName = `ingestfntr`
-
-// frontierEntriesFilename is the name of the file at which the stream ingestion
-// frontier periodically dumps its state.
-const frontierEntriesFilename = "~replication-frontier-entries.binpb"
 
 type streamIngestionFrontier struct {
 	execinfra.ProcessorBase
@@ -415,7 +394,7 @@ func (sf *streamIngestionFrontier) noteResolvedTimestamps(
 // the status of each partition.
 func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 	ctx := sf.Ctx()
-	updateFreq := JobCheckpointFrequency.Get(&sf.flowCtx.Cfg.Settings.SV)
+	updateFreq := streamingccl.JobCheckpointFrequency.Get(&sf.flowCtx.Cfg.Settings.SV)
 	if updateFreq == 0 || timeutil.Since(sf.lastPartitionUpdate) < updateFreq {
 		sf.updateLagMetric()
 		return nil
@@ -519,7 +498,7 @@ func (sf *streamIngestionFrontier) updateLagMetric() {
 // we always persist the entries to the same info key and so we never have more
 // than one row describing the state of the frontier at a given point in time.
 func (sf *streamIngestionFrontier) maybePersistFrontierEntries() error {
-	dumpFreq := DumpFrontierEntries.Get(&sf.FlowCtx.Cfg.Settings.SV)
+	dumpFreq := streamingccl.DumpFrontierEntries.Get(&sf.FlowCtx.Cfg.Settings.SV)
 	if dumpFreq == 0 || timeutil.Since(sf.lastFrontierDump) < dumpFreq {
 		return nil
 	}
