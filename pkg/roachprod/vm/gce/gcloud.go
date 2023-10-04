@@ -315,6 +315,66 @@ type Provider struct {
 	ServiceAccount string
 }
 
+// LogEntry is a struct representing a single log entry from the gcloud logging(stack driver)
+type LogEntry struct {
+	LogName  string `json:"logName"`
+	Resource struct {
+		Labels struct {
+			InstanceID string `json:"instance_id"`
+		} `json:"labels"`
+	} `json:"resource"`
+	Timestamp    string `json:"timestamp"`
+	ProtoPayload struct {
+		ResourceName string `json:"resourceName"`
+	} `json:"protoPayload"`
+}
+
+// CheckPreemptionStatus checks the preemption status of the given VMs, by querying the GCP logging service.
+func (p *Provider) CheckPreemptionStatus(
+	l *logger.Logger, vms vm.List, since time.Time,
+) ([]vm.PreemptedVM, error) {
+	vmFullResourceNames := make([]string, len(vms))
+	//iterate all vms and construct full resource names
+	for i, vmNode := range vms {
+		//example format : projects/cockroach-ephemeral/zones/us-east1-b/instances/test-name
+		vmFullResourceNames[i] = "projects/" + p.GetProject() + "/zones/" + vmNode.Zone + "/instances/" + vmNode.Name
+	}
+	//iterate through vmFullResourceNames and prepend with "protoPayload.resourceName=" to help with filter construction.
+	vmIDFilter := make([]string, len(vms))
+	for i, vmID := range vmFullResourceNames {
+		vmIDFilter[i] = fmt.Sprintf("protoPayload.resourceName=%s", vmID)
+	}
+	// Create a filter to match preemption events for the specified VM IDs
+	filter := fmt.Sprintf(`resource.type=gce_instance AND (protoPayload.methodName=compute.instances.preempted OR protoPayload.methodName=v1.compute.instances.stop)	AND (%s)`, strings.Join(vmIDFilter, " OR "))
+	args := []string{
+		"logging",
+		"read",
+		"--project=" + p.GetProject(),
+		"--format=json",
+		fmt.Sprintf("--freshness=%dh", int(time.Since(since).Hours()+1)), // only look at logs from the "since" specified
+		filter,
+	}
+	l.Printf(strings.Join(append([]string{"gcloud"}, args...), " "))
+	var logEntries []LogEntry
+	if err := runJSONCommand(args, &logEntries); err != nil {
+		l.Printf("error running gcloud command: %v\n", err)
+		return nil, err
+	}
+	var preemptedVMs []vm.PreemptedVM
+	// Process each log entry
+	for _, logEntry := range logEntries {
+
+		timestamp, err := time.Parse(time.RFC3339, logEntry.Timestamp)
+		if err != nil {
+			l.Printf("Error parsing timestamp: %v\n", err)
+			continue
+		}
+		preemptedVMs = append(preemptedVMs, vm.PreemptedVM{VMName: logEntry.ProtoPayload.ResourceName, PreemptedAt: timestamp})
+	}
+
+	return preemptedVMs, nil
+}
+
 type snapshotJson struct {
 	CreationSizeBytes  string    `json:"creationSizeBytes"`
 	CreationTimestamp  time.Time `json:"creationTimestamp"`

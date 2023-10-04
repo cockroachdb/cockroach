@@ -977,7 +977,12 @@ func (r *testRunner) runTest(
 
 			durationStr := fmt.Sprintf("%.2fs", t.duration().Seconds())
 			if t.Failed() {
-				output := fmt.Sprintf("%s\ntest artifacts and logs in: %s", t.failureMsg(), t.ArtifactsDir())
+				failureMsg := t.failureMsg()
+				preemptedVMNames := getPreemptedVMNames(ctx, c, l)
+				if preemptedVMNames != "" {
+					failureMsg = "VMs preempted during the test run :" + preemptedVMNames + "\n" + failureMsg
+				}
+				output := fmt.Sprintf("%s\ntest artifacts and logs in: %s", failureMsg, t.ArtifactsDir())
 
 				if teamCity {
 					// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
@@ -1151,6 +1156,25 @@ func (r *testRunner) runTest(
 		l.Printf("error during test teardown: %v; see test-teardown.log for details", err)
 	}
 	return nil
+}
+
+// Check for VMs preempted and return a failure message if any were preempted.
+func getPreemptedVMNames(ctx context.Context, c *clusterImpl, l *logger.Logger) string {
+	preemptedVMs, err := c.GetPreemptedVMs(ctx, l)
+	var preemptedVMNames string
+	if err != nil {
+		l.Printf("failed to check preempted VMs: %s", err)
+	} else if len(preemptedVMs) > 0 {
+
+		for _, item := range preemptedVMs {
+			if preemptedVMNames != "" {
+				preemptedVMNames += ", " + item.VMName
+			} else {
+				preemptedVMNames = item.VMName
+			}
+		}
+	}
+	return preemptedVMNames
 }
 
 // The assertions here are executed after each test, and may result in a test failure. Test authors

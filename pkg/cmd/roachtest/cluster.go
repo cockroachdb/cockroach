@@ -2765,3 +2765,38 @@ func archForTest(ctx context.Context, l *logger.Logger, testSpec registry.TestSp
 
 	return arch
 }
+
+func (c *clusterImpl) GetPreemptedVMs(
+	ctx context.Context, l *logger.Logger,
+) ([]vm.PreemptedVM, error) {
+	pattern := "^" + regexp.QuoteMeta(c.name) + "$" // exact match of the cluster name
+	cloudClusters, err := roachprod.List(l, false /* listMine */, pattern, vm.ListOptions{})
+	if err != nil {
+		return []vm.PreemptedVM{}, err
+	}
+	cDetails, ok := cloudClusters.Clusters[c.name]
+	if !ok {
+		return []vm.PreemptedVM{}, errors.Wrapf(errClusterNotFound, "%q", c.name)
+	}
+	//bucket cDetails.vms  by provider
+	providerToVMs := make(map[string][]vm.VM)
+	for _, vm := range cDetails.VMs {
+		providerToVMs[vm.Provider] = append(providerToVMs[vm.Provider], vm)
+	}
+
+	//todo(babusrithar): Parallelize the calls to different cloud providers.
+	//iterate through providerToVMs and call preemptedVMs for each provider
+	var allPreemptedVMs []vm.PreemptedVM
+	for provider, vms := range providerToVMs {
+		if provider == spec.GCE {
+			p := vm.Providers[provider]
+			preemptedVMS, err := p.CheckPreemptionStatus(l, vms, cDetails.CreatedAt)
+			if err != nil {
+				return nil, err
+			}
+			allPreemptedVMs = append(allPreemptedVMs, preemptedVMS...)
+		}
+		//other providers are not supported yet
+	}
+	return allPreemptedVMs, nil
+}

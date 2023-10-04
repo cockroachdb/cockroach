@@ -94,6 +94,13 @@ type Provider struct {
 	}
 }
 
+func (p *Provider) CheckPreemptionStatus(
+	l *logger.Logger, vms vm.List, since time.Time,
+) ([]vm.PreemptedVM, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (p *Provider) CreateVolumeSnapshot(
 	l *logger.Logger, volume vm.Volume, vsco vm.VolumeSnapshotCreateOpts,
 ) (vm.VolumeSnapshot, error) {
