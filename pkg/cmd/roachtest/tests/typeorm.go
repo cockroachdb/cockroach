@@ -25,7 +25,10 @@ import (
 )
 
 var typeORMReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var supportedTypeORMRelease = "0.3.17"
+
+// Use 0.3.18 from the upstream repo once it is released.
+const supportedTypeORMRelease = "remove-unsafe-crdb-setting"
+const typeORMRepo = "https://github.com/rafiss/typeorm.git"
 
 // This test runs TypeORM's full test suite against a single cockroach node.
 func registerTypeORM(r registry.Registry) {
@@ -117,7 +120,7 @@ func registerTypeORM(r registry.Registry) {
 			ctx,
 			t,
 			c,
-			"https://github.com/typeorm/typeorm.git",
+			typeORMRepo,
 			"/mnt/data1/typeorm",
 			supportedTypeORMRelease,
 			node,
