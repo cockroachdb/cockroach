@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -315,6 +316,7 @@ func MakeServer(
 	sqlMemMetrics sql.MemoryMetrics,
 	parentMemoryMonitor *mon.BytesMonitor,
 	histogramWindow time.Duration,
+	eventsExporter obs.EventsExporterInterface,
 	executorConfig *sql.ExecutorConfig,
 ) *Server {
 	ctx := ambientCtx.AnnotateCtx(context.Background())
@@ -337,7 +339,7 @@ func MakeServer(
 		nil, /* maxHist */
 		0, noteworthySQLMemoryUsageBytes, st)
 	server.sqlMemoryPool.StartNoReserved(ctx, parentMemoryMonitor)
-	server.SQLServer = sql.NewServer(executorConfig, server.sqlMemoryPool)
+	server.SQLServer = sql.NewServer(executorConfig, server.sqlMemoryPool, eventsExporter)
 
 	server.tenantSpecificConnMonitor = mon.NewMonitor("conn",
 		mon.MemoryResource,

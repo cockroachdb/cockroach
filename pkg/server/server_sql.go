@@ -1148,6 +1148,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sqlMemMetrics,
 		rootSQLMemoryMonitor,
 		cfg.HistogramWindowInterval(),
+		cfg.eventsExporter,
 		execCfg,
 	)
 
