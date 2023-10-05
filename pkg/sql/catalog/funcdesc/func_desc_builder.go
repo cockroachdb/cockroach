@@ -92,7 +92,7 @@ func (fdb *functionDescriptorBuilder) RunPostDeserializationChanges() (err error
 	// Set the ModificationTime field before doing anything else.
 	// Other changes may depend on it.
 	mustSetModTime, err := descpb.MustSetModificationTime(
-		fdb.original.ModificationTime, fdb.mvccTimestamp, fdb.original.Version,
+		fdb.original.ModificationTime, fdb.mvccTimestamp, fdb.original.Version, fdb.original.State,
 	)
 	if err != nil {
 		return err
