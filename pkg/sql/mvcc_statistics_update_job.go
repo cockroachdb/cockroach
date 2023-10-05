@@ -36,7 +36,19 @@ func (j *mvccStatisticsUpdateJob) Resume(ctx context.Context, execCtxI interface
 	// Delete samples older than configurable setting...
 	// Collect span stats for tenant descriptors...
 	// Write new samples...
-	return nil
+	execCtx := execCtxI.(JobExecContext)
+	stopper := execCtx.ExecCfg().DistSQLSrv.Stopper
+	j.job.MarkIdle(true)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+
+		case <-stopper.ShouldQuiesce():
+			return nil
+		}
+	}
 }
 
 func (j *mvccStatisticsUpdateJob) OnFailOrCancel(
