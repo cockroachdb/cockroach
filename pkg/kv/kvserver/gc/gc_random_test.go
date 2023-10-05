@@ -191,7 +191,7 @@ func BenchmarkRun(b *testing.B) {
 			},
 			ttl,
 			NoopGCer{},
-			func(ctx context.Context, intents []roachpb.Intent) error {
+			func(ctx context.Context, locks []roachpb.Lock) error {
 				return nil
 			},
 			func(ctx context.Context, txn *roachpb.Transaction) error {
@@ -360,7 +360,7 @@ func TestNewVsInvariants(t *testing.T) {
 			var stats enginepb.MVCCStats
 			require.NoError(t,
 				storage.MVCCGarbageCollect(ctx, eng, &stats, gcer.pointKeys(), gcThreshold))
-			for _, i := range gcer.intents {
+			for _, i := range gcer.locks {
 				l := roachpb.LockUpdate{
 					Span:   roachpb.Span{Key: i.Key},
 					Txn:    i.Txn,
@@ -823,8 +823,8 @@ type fakeGCer struct {
 	gcRangeKeyBatches [][]kvpb.GCRequest_GCRangeKey
 	gcClearRanges     []kvpb.GCRequest_GCClearRange
 	threshold         Threshold
-	intents           []roachpb.Intent
-	batches           [][]roachpb.Intent
+	locks             []roachpb.Lock
+	batches           [][]roachpb.Lock
 	txnIntents        []txnIntents
 }
 
@@ -871,9 +871,9 @@ func (f *fakeGCer) resolveIntentsAsync(_ context.Context, txn *roachpb.Transacti
 	return nil
 }
 
-func (f *fakeGCer) resolveIntents(_ context.Context, intents []roachpb.Intent) error {
-	f.intents = append(f.intents, intents...)
-	f.batches = append(f.batches, intents)
+func (f *fakeGCer) resolveIntents(_ context.Context, locks []roachpb.Lock) error {
+	f.locks = append(f.locks, locks...)
+	f.batches = append(f.batches, locks)
 	return nil
 }
 
@@ -883,9 +883,9 @@ func (f *fakeGCer) resolveIntents(_ context.Context, intents []roachpb.Intent) e
 // not relevant for old gc as it shouldn't be compared between such invocations.
 func (f *fakeGCer) normalize() {
 	sortIntents := func(i, j int) bool {
-		return intentLess(&f.intents[i], &f.intents[j])
+		return lockLess(&f.locks[i], &f.locks[j])
 	}
-	sort.Slice(f.intents, sortIntents)
+	sort.Slice(f.locks, sortIntents)
 	for i := range f.txnIntents {
 		sort.Slice(f.txnIntents[i].intents, sortIntents)
 	}
@@ -920,7 +920,7 @@ func (f *fakeGCer) clearRanges() []kvpb.GCRequest_GCClearRange {
 	return f.gcClearRanges
 }
 
-func intentLess(a, b *roachpb.Intent) bool {
+func lockLess(a, b *roachpb.Lock) bool {
 	cmp := a.Key.Compare(b.Key)
 	switch {
 	case cmp < 0:
