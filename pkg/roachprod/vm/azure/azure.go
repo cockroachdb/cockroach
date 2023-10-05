@@ -854,6 +854,79 @@ func (p *Provider) createNIC(
 	return
 }
 
+// securityRules returns an array of TCP security rules and contains
+// a list of well-known, and roachtest specific ports.
+func securityRules() *[]network.SecurityRule {
+	allowTCP := func(name string, priority int32, direction network.SecurityRuleDirection, destPortRange string) network.SecurityRule {
+		suffix := ""
+		switch direction {
+		case network.SecurityRuleDirectionInbound:
+			suffix = "_Inbound"
+		case network.SecurityRuleDirectionOutbound:
+			suffix = "_Outbound"
+		default:
+		}
+		res := network.SecurityRule{
+			Name: to.StringPtr(name + suffix),
+			SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+				Priority:                 to.Int32Ptr(priority),
+				Protocol:                 network.SecurityRuleProtocolTCP,
+				Access:                   network.SecurityRuleAccessAllow,
+				Direction:                direction,
+				SourceAddressPrefix:      to.StringPtr("*"),
+				SourcePortRange:          to.StringPtr("*"),
+				DestinationAddressPrefix: to.StringPtr("*"),
+				DestinationPortRange:     to.StringPtr(destPortRange),
+			},
+		}
+		return res
+	}
+
+	namedInbound := map[string]string{
+		"SSH":                "22",
+		"HTTP":               "80",
+		"HTTPS":              "43",
+		"CockroachPG":        "26257",
+		"CockroachAdmin":     "26258",
+		"Grafana":            "3000",
+		"Prometheus":         "9090",
+		"Kafka":              "9092",
+		"WorkloadPPROF":      "33333",
+		"WorkloadPrometheus": "2112-2120",
+	}
+
+	// The names for these are generated in the form Roachtest_<index>_Inbound.
+	// The mapped roachtests are not exhaustive, and at some point will be
+	// cumbersome to keep adding exceptions for.
+	// TODO: (miral) Consider removing all rules if this keeps tripping roachtests.
+	genericInbound := []string{
+		"8011",        // multitenant
+		"8081",        // backup/*
+		"9011",        // smoketest/secure/multitenan
+		"9081-9102",   // smoketest/secure/multitenant
+		"20011-20016", //multitenant/upgrade
+		"27257",       //acceptance/gossip/restart-node-one
+		"27259-27280", // various multitenant tenant SQL ports
+		"30258",       //acceptance/multitenant
+	}
+
+	// The extra 1 is for the single allow all TCP outbound allowTCP.
+	firewallRules := make([]network.SecurityRule, 1+len(namedInbound)+len(genericInbound))
+	firewallRules[0] = allowTCP("TCP_All", 300, network.SecurityRuleDirectionOutbound, "*")
+	r := 1
+	priority := 300
+	for ruleName, port := range namedInbound {
+		firewallRules[r] = allowTCP(ruleName, int32(priority+r), network.SecurityRuleDirectionInbound, port)
+		r++
+	}
+
+	for i, port := range genericInbound {
+		firewallRules[r] = allowTCP(fmt.Sprintf("Roachtest_%d", i), int32(priority+r), network.SecurityRuleDirectionInbound, port)
+		r++
+	}
+	return &firewallRules
+}
+
 func (p *Provider) getOrCreateNetworkSecurityGroup(
 	ctx context.Context, name string, resourceGroup resources.Group,
 ) (network.SecurityGroup, error) {
@@ -888,151 +961,7 @@ func (p *Provider) getOrCreateNetworkSecurityGroup(
 
 	future, err := client.CreateOrUpdate(ctx, *resourceGroup.Name, name, network.SecurityGroup{
 		SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{
-			SecurityRules: &[]network.SecurityRule{
-				{
-					Name: to.StringPtr("SSH_Inbound"),
-					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(300),
-						Protocol:                 network.SecurityRuleProtocolTCP,
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionInbound,
-						SourceAddressPrefix:      to.StringPtr("*"),
-						SourcePortRange:          to.StringPtr("*"),
-						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("22"),
-					},
-				},
-				{
-					Name: to.StringPtr("SSH_Outbound"),
-					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(301),
-						Protocol:                 network.SecurityRuleProtocolTCP,
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionOutbound,
-						SourceAddressPrefix:      to.StringPtr("*"),
-						SourcePortRange:          to.StringPtr("*"),
-						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("*"),
-					},
-				},
-				{
-					Name: to.StringPtr("HTTP_Inbound"),
-					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(320),
-						Protocol:                 network.SecurityRuleProtocolTCP,
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionInbound,
-						SourceAddressPrefix:      to.StringPtr("*"),
-						SourcePortRange:          to.StringPtr("*"),
-						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("80"),
-					},
-				},
-				{
-					Name: to.StringPtr("HTTP_Outbound"),
-					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(321),
-						Protocol:                 network.SecurityRuleProtocolTCP,
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionOutbound,
-						SourceAddressPrefix:      to.StringPtr("*"),
-						SourcePortRange:          to.StringPtr("*"),
-						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("*"),
-					},
-				},
-				{
-					Name: to.StringPtr("HTTPS_Inbound"),
-					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(340),
-						Protocol:                 network.SecurityRuleProtocolTCP,
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionInbound,
-						SourceAddressPrefix:      to.StringPtr("*"),
-						SourcePortRange:          to.StringPtr("*"),
-						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("443"),
-					},
-				},
-				{
-					Name: to.StringPtr("HTTPS_Outbound"),
-					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(341),
-						Protocol:                 network.SecurityRuleProtocolTCP,
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionOutbound,
-						SourceAddressPrefix:      to.StringPtr("*"),
-						SourcePortRange:          to.StringPtr("*"),
-						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("*"),
-					},
-				},
-				{
-					Name: to.StringPtr("CockroachPG_Inbound"),
-					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(342),
-						Protocol:                 network.SecurityRuleProtocolTCP,
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionInbound,
-						SourceAddressPrefix:      to.StringPtr("*"),
-						SourcePortRange:          to.StringPtr("*"),
-						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("26257"),
-					},
-				},
-				{
-					Name: to.StringPtr("CockroachAdmin_Inbound"),
-					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(343),
-						Protocol:                 network.SecurityRuleProtocolTCP,
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionInbound,
-						SourceAddressPrefix:      to.StringPtr("*"),
-						SourcePortRange:          to.StringPtr("*"),
-						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("26258"),
-					},
-				},
-				{
-					Name: to.StringPtr("Grafana_Inbound"),
-					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(344),
-						Protocol:                 network.SecurityRuleProtocolTCP,
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionInbound,
-						SourceAddressPrefix:      to.StringPtr("*"),
-						SourcePortRange:          to.StringPtr("*"),
-						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("3000"),
-					},
-				},
-				{
-					Name: to.StringPtr("Prometheus_Inbound"),
-					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(345),
-						Protocol:                 network.SecurityRuleProtocolTCP,
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionInbound,
-						SourceAddressPrefix:      to.StringPtr("*"),
-						SourcePortRange:          to.StringPtr("*"),
-						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("9090"),
-					},
-				},
-				{
-					Name: to.StringPtr("Kafka_Inbound"),
-					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
-						Priority:                 to.Int32Ptr(346),
-						Protocol:                 network.SecurityRuleProtocolTCP,
-						Access:                   network.SecurityRuleAccessAllow,
-						Direction:                network.SecurityRuleDirectionInbound,
-						SourceAddressPrefix:      to.StringPtr("*"),
-						SourcePortRange:          to.StringPtr("*"),
-						DestinationAddressPrefix: to.StringPtr("*"),
-						DestinationPortRange:     to.StringPtr("9092"),
-					},
-				},
-			},
+			SecurityRules: securityRules(),
 		},
 		Location: resourceGroup.Location,
 	})
