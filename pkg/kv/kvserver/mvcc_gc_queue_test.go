@@ -670,18 +670,18 @@ func testMVCCGCQueueProcessImpl(t *testing.T, useEfos bool) {
 	defer stopper.Stop(ctx)
 	tc.Start(ctx, t, stopper)
 
-	const intentAgeThreshold = 2 * time.Hour
+	const lockAgeThreshold = 2 * time.Hour
 	const txnCleanupThreshold = time.Hour
 
 	tc.manualClock.Advance(48 * 60 * 60 * 1e9) // 2d past the epoch
 	now := tc.Clock().Now().WallTime
 
-	ts1 := makeTS(now-2*24*60*60*1e9+1, 0)                     // 2d old (add one nanosecond so we're not using zero timestamp)
-	ts2 := makeTS(now-25*60*60*1e9, 0)                         // GC will occur at time=25 hours
-	ts2m1 := ts2.Prev()                                        // ts2 - 1 so we have something not right at the GC time
-	ts3 := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)     // 2h old
-	ts4 := makeTS(now-(intentAgeThreshold.Nanoseconds()-1), 0) // 2h-1ns old
-	ts5 := makeTS(now-1e9, 0)                                  // 1s old
+	ts1 := makeTS(now-2*24*60*60*1e9+1, 0)                   // 2d old (add one nanosecond so we're not using zero timestamp)
+	ts2 := makeTS(now-25*60*60*1e9, 0)                       // GC will occur at time=25 hours
+	ts2m1 := ts2.Prev()                                      // ts2 - 1 so we have something not right at the GC time
+	ts3 := makeTS(now-lockAgeThreshold.Nanoseconds(), 0)     // 2h old
+	ts4 := makeTS(now-(lockAgeThreshold.Nanoseconds()-1), 0) // 2h-1ns old
+	ts5 := makeTS(now-1e9, 0)                                // 1s old
 	mkKey := func(suff string) roachpb.Key {
 		var k roachpb.Key
 		k = append(k, keys.ScratchRangeMin...)
@@ -878,11 +878,11 @@ func testMVCCGCQueueProcessImpl(t *testing.T, useEfos bool) {
 		now := tc.Clock().Now()
 		newThreshold := gc.CalculateThreshold(now, conf.TTL())
 		return gc.Run(ctx, desc, snap, now, newThreshold, gc.RunOptions{
-			IntentAgeThreshold:  intentAgeThreshold,
+			LockAgeThreshold:    lockAgeThreshold,
 			TxnCleanupThreshold: txnCleanupThreshold,
 		},
 			conf.TTL(), gc.NoopGCer{},
-			func(ctx context.Context, intents []roachpb.Intent) error {
+			func(ctx context.Context, locks []roachpb.Lock) error {
 				return nil
 			},
 			func(ctx context.Context, txn *roachpb.Transaction) error {
@@ -1268,8 +1268,8 @@ func TestMVCCGCQueueIntentResolution(t *testing.T) {
 		newTransaction("txn1", roachpb.Key("0-0"), 1, tc.Clock()),
 		newTransaction("txn2", roachpb.Key("1-0"), 1, tc.Clock()),
 	}
-	intentAgeThreshold := gc.IntentAgeThreshold.Get(&tc.repl.store.ClusterSettings().SV)
-	intentResolveTS := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)
+	lockAgeThreshold := gc.LockAgeThreshold.Get(&tc.repl.store.ClusterSettings().SV)
+	intentResolveTS := makeTS(now-lockAgeThreshold.Nanoseconds(), 0)
 	txns[0].ReadTimestamp = intentResolveTS
 	txns[0].WriteTimestamp = intentResolveTS
 	// The MinTimestamp is used by pushers that don't find a transaction record to

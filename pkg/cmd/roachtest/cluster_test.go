@@ -320,15 +320,21 @@ func TestAWSMachineTypeNew(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%d/%s/%t/%s", tc.cpus, tc.mem, tc.localSSD, tc.arch), func(t *testing.T) {
-			machineType, selectedArch := spec.SelectAWSMachineTypeNew(tc.cpus, tc.mem, tc.localSSD, tc.arch)
+			machineType, selectedArch, _ := spec.SelectAWSMachineTypeNew(tc.cpus, tc.mem, tc.localSSD, tc.arch)
 
 			require.Equal(t, tc.expectedMachineType, machineType)
 			require.Equal(t, tc.expectedArch, selectedArch)
 		})
 	}
 	// spec.Low is not supported.
-	require.Panics(t, func() { spec.SelectAWSMachineTypeNew(4, spec.Low, false, vm.ArchAMD64) })
-	require.Panics(t, func() { spec.SelectAWSMachineTypeNew(16, spec.Low, false, vm.ArchARM64) })
+	_, _, err := spec.SelectAWSMachineTypeNew(4, spec.Low, false, vm.ArchAMD64)
+	require.Error(t, err)
+
+	_, _, err2 := spec.SelectAWSMachineTypeNew(16, spec.Low, false, vm.ArchAMD64)
+	require.Error(t, err2)
+
+	_, err3 := spec.SelectAzureMachineType(4, spec.High)
+	require.Error(t, err3)
 }
 
 // TODO(srosenberg): restore the change in https://github.com/cockroachdb/cockroach/pull/111140 after 23.2 branch cut.
