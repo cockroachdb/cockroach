@@ -11,6 +11,7 @@
 package rangefeed_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -65,6 +66,7 @@ func TestRangeFeeds(t *testing.T) {
 		e := newEnv(t)
 		defer e.close()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) (output string) {
+			e.setDefaultStepOptions()
 			return handleCommandBatch(t, e, d)
 		})
 	})
@@ -73,8 +75,10 @@ func TestRangeFeeds(t *testing.T) {
 type command func(t *testing.T, e *env, d *datadriven.TestData)
 
 var commands = map[string]command{
-	"put":          handlePutKey,
-	"create-feed":  handleCreateFeed,
+	"options":     handleOptions,
+	"put":         handlePutKey,
+	"del-range":   handleDelRange,
+	"create-feed": handleCreateFeed,
 }
 
 var linePosRe = regexp.MustCompile(`^(.*:)(\d+)$`)
@@ -162,17 +166,21 @@ func waitAllFeeds(e *env) []string {
 		}
 		select {
 		case <-data.waitCheckpoint(now, data.span):
-			stream := data.takeValues().asSortedData(false)
+			stream := data.takeValues().asSortedData(e.sortByTime)
 			rs = append(rs, dumpKVS(stream, prefix, e.tts, e.startKey)...)
 		case <-time.After(timeout):
-			rs = append(rs, prefix + "timeout")
+			rs = append(rs, prefix+"timeout")
 		case <-data.waitError():
-			stream := data.takeValues().asSortedData(false)
+			stream := data.takeValues().asSortedData(e.sortByTime)
 			rs = append(rs, dumpKVS(stream, prefix, e.tts, e.startKey)...)
 			rs = append(rs, fmt.Sprintf("%s%q", prefix, data.err()))
 		}
 	}
 	return rs
+}
+
+func handleOptions(t *testing.T, e *env, d *datadriven.TestData) {
+	e.sortByTime = d.HasArg("sortByTime")
 }
 
 func handlePutKey(t *testing.T, e *env, d *datadriven.TestData) {
@@ -190,6 +198,17 @@ func handlePutKey(t *testing.T, e *env, d *datadriven.TestData) {
 	} else {
 		e.tts.addNextTs(kv.Value.Timestamp)
 	}
+}
+
+func handleDelRange(t *testing.T, e *env, d *datadriven.TestData) {
+	db := e.tc.SystemLayer(0).DB()
+	var key, endKey string
+	d.ScanArgs(t, "start", &key)
+	d.ScanArgs(t, "end", &endKey)
+	kk := e.startKey.key(key)
+	ekk := e.startKey.key(endKey)
+	require.NoError(t, db.DelRangeUsingTombstone(context.Background(), kk, ekk),
+		"failed to del range")
 }
 
 func handleCreateFeed(t *testing.T, e *env, d *datadriven.TestData) {
@@ -255,6 +274,7 @@ func createTestFeed(
 	opts := []crangefeed.Option{
 		crangefeed.WithOnCheckpoint(fd.onCheckpoint),
 		crangefeed.WithDiff(o.withDiff),
+		crangefeed.WithOnDeleteRange(fd.onDeleteRange),
 		crangefeed.WithOnInternalError(fd.onInternalError),
 	}
 	rf, err := rff.RangeFeed(ctx, "nice", []roachpb.Span{span}, o.initialTs, fd.onValue, opts...)
@@ -285,6 +305,9 @@ type env struct {
 
 	// work keys
 	startKey testKey
+
+	// runtime configurable output options
+	sortByTime bool
 }
 
 func newEnv(t *testing.T) *env {
@@ -332,6 +355,10 @@ func (e *env) close() {
 	e.tc.Stopper().Stop(context.Background())
 }
 
+func (e *env) setDefaultStepOptions() {
+	e.sortByTime = false
+}
+
 type timestamps struct {
 	nameToTs map[string]hlc.Timestamp
 	tsToName map[hlc.Timestamp]string
@@ -355,7 +382,7 @@ func (t timestamps) addTs(name string, ts hlc.Timestamp) (hlc.Timestamp, bool) {
 }
 
 func (t timestamps) addNextTs(ts hlc.Timestamp) {
-	name := fmt.Sprintf("ts%d", len(t.tsToName) + 1)
+	name := fmt.Sprintf("ts%d", len(t.tsToName)+1)
 	t.addTs(name, ts)
 }
 
@@ -445,6 +472,13 @@ func (d *feedData) onInternalError(_ context.Context, err error) {
 	d.t.Logf("on internal error: %s", err)
 }
 
+func (d *feedData) onDeleteRange(_ context.Context, dr *kvpb.RangeFeedDeleteRange) {
+	d.dataMu.Lock()
+	defer d.dataMu.Unlock()
+	d.dataMu.values = append(d.dataMu.values, testFeedEvent{delRange: dr})
+	d.t.Logf("on delete range: %s", dr.Span.String())
+}
+
 // NB: frontier update happens after checkpoint update so there's no guarantee
 // that frontier is up to date at the time returned channel is closed.
 func (d *feedData) waitCheckpoint(ts hlc.Timestamp, span roachpb.Span) <-chan interface{} {
@@ -490,8 +524,9 @@ func (d *feedData) takeValues() (s eventStream) {
 }
 
 type testFeedEvent struct {
-	v  *kvpb.RangeFeedValue
-	cp *kvpb.RangeFeedCheckpoint
+	v        *kvpb.RangeFeedValue
+	cp       *kvpb.RangeFeedCheckpoint
+	delRange *kvpb.RangeFeedDeleteRange
 }
 
 type eventStream []testFeedEvent
@@ -513,6 +548,21 @@ func (s eventStream) asSortedData(byTimestamp bool) kvs {
 					Timestamp: e.v.Timestamp(),
 				},
 				val: *e.v,
+			})
+		case e.delRange != nil:
+			data = append(data, sorted{
+				MVCCRangeKey: storage.MVCCRangeKey{
+					StartKey:  e.delRange.Span.Key,
+					EndKey:    e.delRange.Span.EndKey,
+					Timestamp: e.delRange.Timestamp,
+				},
+				val: storage.MVCCRangeKeyValue{
+					RangeKey: storage.MVCCRangeKey{
+						StartKey:  e.delRange.Span.Key,
+						EndKey:    e.delRange.Span.EndKey,
+						Timestamp: e.delRange.Timestamp,
+					},
+				},
 			})
 		}
 	}
@@ -551,6 +601,11 @@ func (s sorted) equals(o sorted) bool {
 				return false
 			}
 			return !v.PrevValue.IsPresent() || v.PrevValue.EqualTagAndData(ov.PrevValue)
+		}
+		return false
+	case storage.MVCCRangeKeyValue:
+		if ov, ok := o.val.(storage.MVCCRangeKeyValue); ok {
+			return v.RangeKey.Compare(ov.RangeKey) == 0 && bytes.Equal(v.Value, ov.Value)
 		}
 		return false
 	default:
@@ -618,6 +673,9 @@ func dumpKVS(data kvs, indent string, tts timestamps, kk testKey) []string {
 				val += fmt.Sprintf(", ts=%s", tsn)
 			}
 			ss = append(ss, val)
+		case storage.MVCCRangeKeyValue:
+			ss = append(ss, fmt.Sprintf("%skey=%s, endKey=%s", indent, kk.print(kv.RangeKey.StartKey),
+				kk.print(kv.RangeKey.EndKey)))
 		default:
 			panic(fmt.Sprintf("unknown data element in dump: %T, %+q", v, v))
 		}
