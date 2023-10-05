@@ -289,13 +289,18 @@ func (s *ClusterSpec) RoachprodOpts(
 		if machineType == "" {
 			// If no machine type was specified, choose one
 			// based on the cloud and CPU count.
+			var err error
 			switch s.Cloud {
 			case AWS:
-				machineType, selectedArch = SelectAWSMachineType(s.CPUs, s.Mem, s.PreferLocalSSD && s.VolumeSize == 0, arch)
+				machineType, selectedArch, err = SelectAWSMachineType(s.CPUs, s.Mem, s.PreferLocalSSD && s.VolumeSize == 0, arch)
 			case GCE:
 				machineType, selectedArch = SelectGCEMachineType(s.CPUs, s.Mem, arch)
 			case Azure:
-				machineType = SelectAzureMachineType(s.CPUs, s.Mem)
+				machineType, err = SelectAzureMachineType(s.CPUs, s.Mem)
+			}
+
+			if err != nil {
+				return vm.CreateOpts{}, nil, err
 			}
 			if selectedArch != "" && selectedArch != arch {
 				// TODO(srosenberg): we need a better way to monitor the rate of this mismatch, i.e.,
