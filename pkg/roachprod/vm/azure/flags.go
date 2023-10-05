@@ -32,7 +32,7 @@ type ProviderOpts struct {
 }
 
 var defaultLocations = []string{
-	"eastus2",
+	"eastus",
 	"westus",
 	"westeurope",
 }
