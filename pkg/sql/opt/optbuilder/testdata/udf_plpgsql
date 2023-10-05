@@ -5247,3 +5247,310 @@ project
                      │                                                                     └── projections
                      │                                                                          └── const: -1 [as=stmt_return_3:5]
                      └── const: 1
+
+# Testing FETCH/MOVE.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := 'foo';
+    x INT;
+  BEGIN
+    OPEN curs FOR SELECT * FROM xy ORDER BY x;
+    FETCH curs INTO x;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-all
+SELECT f();
+----
+project
+ ├── columns: f:24(int)
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── stats: [rows=1]
+ ├── cost: 0.05
+ ├── key: ()
+ ├── fd: ()-->(24)
+ ├── prune: (24)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── cost: 0.02
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── udf: f [as=f:24, type=int, volatile, udf]
+           └── body
+                └── limit
+                     ├── columns: "_gen_cursor_name_6":23(int)
+                     ├── cardinality: [1 - 1]
+                     ├── volatile
+                     ├── stats: [rows=1]
+                     ├── key: ()
+                     ├── fd: ()-->(23)
+                     ├── project
+                     │    ├── columns: "_gen_cursor_name_6":23(int)
+                     │    ├── cardinality: [1 - 1]
+                     │    ├── volatile
+                     │    ├── stats: [rows=1]
+                     │    ├── key: ()
+                     │    ├── fd: ()-->(23)
+                     │    ├── project
+                     │    │    ├── columns: x:2(int) curs:1(string!null)
+                     │    │    ├── cardinality: [1 - 1]
+                     │    │    ├── immutable
+                     │    │    ├── stats: [rows=1]
+                     │    │    ├── key: ()
+                     │    │    ├── fd: ()-->(1,2)
+                     │    │    ├── prune: (1,2)
+                     │    │    ├── project
+                     │    │    │    ├── columns: curs:1(string!null)
+                     │    │    │    ├── cardinality: [1 - 1]
+                     │    │    │    ├── stats: [rows=1]
+                     │    │    │    ├── key: ()
+                     │    │    │    ├── fd: ()-->(1)
+                     │    │    │    ├── prune: (1)
+                     │    │    │    ├── values
+                     │    │    │    │    ├── cardinality: [1 - 1]
+                     │    │    │    │    ├── stats: [rows=1]
+                     │    │    │    │    ├── key: ()
+                     │    │    │    │    └── tuple [type=tuple]
+                     │    │    │    └── projections
+                     │    │    │         └── const: 'foo' [as=curs:1, type=string]
+                     │    │    └── projections
+                     │    │         └── cast: INT8 [as=x:2, type=int, immutable]
+                     │    │              └── null [type=unknown]
+                     │    └── projections
+                     │         └── udf: _gen_cursor_name_6 [as="_gen_cursor_name_6":23, type=int, outer=(1,2), volatile, udf]
+                     │              ├── args
+                     │              │    ├── variable: curs:1 [type=string]
+                     │              │    └── variable: x:2 [type=int]
+                     │              ├── params: curs:19(string) x:20(int)
+                     │              └── body
+                     │                   └── project
+                     │                        ├── columns: "_stmt_open_1":22(int)
+                     │                        ├── outer: (19,20)
+                     │                        ├── cardinality: [1 - 1]
+                     │                        ├── volatile
+                     │                        ├── stats: [rows=1]
+                     │                        ├── key: ()
+                     │                        ├── fd: ()-->(22)
+                     │                        ├── project
+                     │                        │    ├── columns: curs:21(string)
+                     │                        │    ├── outer: (19)
+                     │                        │    ├── cardinality: [1 - 1]
+                     │                        │    ├── volatile
+                     │                        │    ├── stats: [rows=1]
+                     │                        │    ├── key: ()
+                     │                        │    ├── fd: ()-->(21)
+                     │                        │    ├── prune: (21)
+                     │                        │    ├── values
+                     │                        │    │    ├── cardinality: [1 - 1]
+                     │                        │    │    ├── stats: [rows=1]
+                     │                        │    │    ├── key: ()
+                     │                        │    │    └── tuple [type=tuple]
+                     │                        │    └── projections
+                     │                        │         └── case [as=curs:21, type=string, outer=(19), volatile]
+                     │                        │              ├── true [type=bool]
+                     │                        │              ├── when [type=string]
+                     │                        │              │    ├── is [type=bool]
+                     │                        │              │    │    ├── variable: curs:19 [type=string]
+                     │                        │              │    │    └── null [type=unknown]
+                     │                        │              │    └── function: crdb_internal.plpgsql_gen_cursor_name [type=string]
+                     │                        │              │         └── variable: curs:19 [type=string]
+                     │                        │              └── variable: curs:19 [type=string]
+                     │                        └── projections
+                     │                             └── udf: _stmt_open_1 [as="_stmt_open_1":22, type=int, outer=(20,21), volatile, udf]
+                     │                                  ├── args
+                     │                                  │    ├── variable: curs:21 [type=string]
+                     │                                  │    └── variable: x:20 [type=int]
+                     │                                  ├── params: curs:3(string) x:4(int)
+                     │                                  └── body
+                     │                                       ├── open-cursor
+                     │                                       │    └── project
+                     │                                       │         ├── columns: t.public.xy.x:5(int) t.public.xy.y:6(int)
+                     │                                       │         ├── stats: [rows=1000]
+                     │                                       │         └── scan t.public.xy
+                     │                                       │              ├── columns: t.public.xy.x:5(int) t.public.xy.y:6(int) t.public.xy.rowid:7(int!null) t.public.xy.crdb_internal_mvcc_timestamp:8(decimal) t.public.xy.tableoid:9(oid)
+                     │                                       │              ├── stats: [rows=1000]
+                     │                                       │              ├── key: (7)
+                     │                                       │              ├── fd: (7)-->(5,6,8,9)
+                     │                                       │              └── prune: (5-9)
+                     │                                       └── project
+                     │                                            ├── columns: "_stmt_fetch_2":18(int)
+                     │                                            ├── outer: (3,4)
+                     │                                            ├── cardinality: [1 - 1]
+                     │                                            ├── volatile
+                     │                                            ├── stats: [rows=1]
+                     │                                            ├── key: ()
+                     │                                            ├── fd: ()-->(18)
+                     │                                            ├── values
+                     │                                            │    ├── cardinality: [1 - 1]
+                     │                                            │    ├── stats: [rows=1]
+                     │                                            │    ├── key: ()
+                     │                                            │    └── tuple [type=tuple]
+                     │                                            └── projections
+                     │                                                 └── udf: _stmt_fetch_2 [as="_stmt_fetch_2":18, type=int, outer=(3,4), volatile, udf]
+                     │                                                      ├── args
+                     │                                                      │    ├── variable: curs:3 [type=string]
+                     │                                                      │    └── variable: x:4 [type=int]
+                     │                                                      ├── params: curs:10(string) x:11(int)
+                     │                                                      └── body
+                     │                                                           └── project
+                     │                                                                ├── columns: "_stmt_exec_ret_4":17(int)
+                     │                                                                ├── outer: (10)
+                     │                                                                ├── cardinality: [1 - 1]
+                     │                                                                ├── volatile
+                     │                                                                ├── stats: [rows=1]
+                     │                                                                ├── key: ()
+                     │                                                                ├── fd: ()-->(17)
+                     │                                                                ├── project
+                     │                                                                │    ├── columns: x:13(int)
+                     │                                                                │    ├── outer: (10)
+                     │                                                                │    ├── cardinality: [1 - 1]
+                     │                                                                │    ├── volatile
+                     │                                                                │    ├── stats: [rows=1]
+                     │                                                                │    ├── key: ()
+                     │                                                                │    ├── fd: ()-->(13)
+                     │                                                                │    ├── prune: (13)
+                     │                                                                │    ├── project
+                     │                                                                │    │    ├── columns: stmt_fetch_3:12(tuple{int})
+                     │                                                                │    │    ├── outer: (10)
+                     │                                                                │    │    ├── cardinality: [1 - 1]
+                     │                                                                │    │    ├── volatile
+                     │                                                                │    │    ├── stats: [rows=1]
+                     │                                                                │    │    ├── key: ()
+                     │                                                                │    │    ├── fd: ()-->(12)
+                     │                                                                │    │    ├── prune: (12)
+                     │                                                                │    │    ├── values
+                     │                                                                │    │    │    ├── cardinality: [1 - 1]
+                     │                                                                │    │    │    ├── stats: [rows=1]
+                     │                                                                │    │    │    ├── key: ()
+                     │                                                                │    │    │    └── tuple [type=tuple]
+                     │                                                                │    │    └── projections
+                     │                                                                │    │         └── function: crdb_internal.plpgsql_fetch [as=stmt_fetch_3:12, type=tuple{int}, outer=(10), volatile]
+                     │                                                                │    │              ├── variable: curs:10 [type=string]
+                     │                                                                │    │              ├── const: 0 [type=int]
+                     │                                                                │    │              ├── const: 1 [type=int]
+                     │                                                                │    │              └── tuple [type=tuple{int}]
+                     │                                                                │    │                   └── null [type=int]
+                     │                                                                │    └── projections
+                     │                                                                │         └── column-access: 0 [as=x:13, type=int, outer=(12)]
+                     │                                                                │              └── variable: stmt_fetch_3:12 [type=tuple{int}]
+                     │                                                                └── projections
+                     │                                                                     └── udf: _stmt_exec_ret_4 [as="_stmt_exec_ret_4":17, type=int, outer=(10,13), udf]
+                     │                                                                          ├── args
+                     │                                                                          │    ├── variable: curs:10 [type=string]
+                     │                                                                          │    └── variable: x:13 [type=int]
+                     │                                                                          ├── params: curs:14(string) x:15(int)
+                     │                                                                          └── body
+                     │                                                                               └── project
+                     │                                                                                    ├── columns: stmt_return_5:16(int)
+                     │                                                                                    ├── outer: (15)
+                     │                                                                                    ├── cardinality: [1 - 1]
+                     │                                                                                    ├── stats: [rows=1]
+                     │                                                                                    ├── key: ()
+                     │                                                                                    ├── fd: ()-->(16)
+                     │                                                                                    ├── values
+                     │                                                                                    │    ├── cardinality: [1 - 1]
+                     │                                                                                    │    ├── stats: [rows=1]
+                     │                                                                                    │    ├── key: ()
+                     │                                                                                    │    └── tuple [type=tuple]
+                     │                                                                                    └── projections
+                     │                                                                                         └── variable: x:15 [as=stmt_return_5:16, type=int, outer=(15)]
+                     └── const: 1 [type=int]
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT * FROM xy ORDER BY x;
+    MOVE curs;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:16
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:16]
+           └── body
+                └── limit
+                     ├── columns: "_gen_cursor_name_5":15
+                     ├── project
+                     │    ├── columns: "_gen_cursor_name_5":15
+                     │    ├── project
+                     │    │    ├── columns: curs:1!null
+                     │    │    ├── values
+                     │    │    │    └── tuple
+                     │    │    └── projections
+                     │    │         └── const: 'foo' [as=curs:1]
+                     │    └── projections
+                     │         └── udf: _gen_cursor_name_5 [as="_gen_cursor_name_5":15]
+                     │              ├── args
+                     │              │    └── variable: curs:1
+                     │              ├── params: curs:12
+                     │              └── body
+                     │                   └── project
+                     │                        ├── columns: "_stmt_open_1":14
+                     │                        ├── project
+                     │                        │    ├── columns: curs:13
+                     │                        │    ├── values
+                     │                        │    │    └── tuple
+                     │                        │    └── projections
+                     │                        │         └── case [as=curs:13]
+                     │                        │              ├── true
+                     │                        │              ├── when
+                     │                        │              │    ├── is
+                     │                        │              │    │    ├── variable: curs:12
+                     │                        │              │    │    └── null
+                     │                        │              │    └── function: crdb_internal.plpgsql_gen_cursor_name
+                     │                        │              │         └── variable: curs:12
+                     │                        │              └── variable: curs:12
+                     │                        └── projections
+                     │                             └── udf: _stmt_open_1 [as="_stmt_open_1":14]
+                     │                                  ├── args
+                     │                                  │    └── variable: curs:13
+                     │                                  ├── params: curs:2
+                     │                                  └── body
+                     │                                       ├── open-cursor
+                     │                                       │    └── project
+                     │                                       │         ├── columns: x:3 y:4
+                     │                                       │         └── scan xy
+                     │                                       │              └── columns: x:3 y:4 rowid:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+                     │                                       └── project
+                     │                                            ├── columns: "_stmt_fetch_2":11
+                     │                                            ├── values
+                     │                                            │    └── tuple
+                     │                                            └── projections
+                     │                                                 └── udf: _stmt_fetch_2 [as="_stmt_fetch_2":11]
+                     │                                                      ├── args
+                     │                                                      │    └── variable: curs:2
+                     │                                                      ├── params: curs:8
+                     │                                                      └── body
+                     │                                                           ├── project
+                     │                                                           │    ├── columns: stmt_fetch_3:9
+                     │                                                           │    ├── values
+                     │                                                           │    │    └── tuple
+                     │                                                           │    └── projections
+                     │                                                           │         └── function: crdb_internal.plpgsql_fetch [as=stmt_fetch_3:9]
+                     │                                                           │              ├── variable: curs:8
+                     │                                                           │              ├── const: 0
+                     │                                                           │              ├── const: 1
+                     │                                                           │              └── tuple
+                     │                                                           └── project
+                     │                                                                ├── columns: stmt_return_4:10!null
+                     │                                                                ├── values
+                     │                                                                │    └── tuple
+                     │                                                                └── projections
+                     │                                                                     └── const: 0 [as=stmt_return_4:10]
+                     └── const: 1

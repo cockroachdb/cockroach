@@ -163,10 +163,14 @@ func (i *rowContainerIterator) Next() (tree.Datums, error) {
 		// All rows have been exhausted.
 		return nil, nil
 	}
-	row, err := i.iter.Row()
+	origRow, err := i.iter.Row()
 	if err != nil {
 		return nil, err
 	}
+	// Shallow-copy the row to ensure that it is safe to hold on to after Next()
+	// and Close() calls - see the RowIterator interface.
+	row := make(tree.Datums, len(origRow))
+	copy(row, origRow)
 	return row, nil
 }
 

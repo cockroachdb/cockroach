@@ -1622,8 +1622,8 @@ func (*QueryIntentRequest) flags() flag {
 	return isRead | isPrefix | updatesTSCache | updatesTSCacheOnErr
 }
 func (*QueryLocksRequest) flags() flag         { return isRead | isRange }
-func (*ResolveIntentRequest) flags() flag      { return isWrite }
-func (*ResolveIntentRangeRequest) flags() flag { return isWrite | isRange }
+func (*ResolveIntentRequest) flags() flag      { return isWrite | updatesTSCache }
+func (*ResolveIntentRangeRequest) flags() flag { return isWrite | isRange | updatesTSCache }
 func (*TruncateLogRequest) flags() flag        { return isWrite }
 func (*MergeRequest) flags() flag              { return isWrite | canBackpressure }
 func (*RequestLeaseRequest) flags() flag {

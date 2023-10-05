@@ -8481,6 +8481,54 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			CalledOnNullInput: true,
 		},
 	),
+	"crdb_internal.plpgsql_fetch": makeBuiltin(tree.FunctionProperties{
+		Category:     builtinconstants.CategoryString,
+		Undocumented: true,
+	},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "name", Typ: types.String},
+				{Name: "direction", Typ: types.Int},
+				{Name: "count", Typ: types.Int},
+				{Name: "resultTypes", Typ: types.Any},
+			},
+			ReturnType: tree.IdentityReturnType(3),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				cursorName := tree.MustBeDString(args[0])
+				cursorDir := tree.MustBeDInt(args[1])
+				cursorCount := tree.MustBeDInt(args[2])
+				resultTypes := args[3].(tree.TypedExpr).ResolvedType().TupleContents()
+				if cursorDir < 0 || cursorDir > tree.DInt(tree.FetchBackwardAll) {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "invalid fetch/move direction: %d", cursorDir)
+				}
+				cursor := &tree.CursorStmt{
+					Name:      tree.Name(cursorName),
+					FetchType: tree.FetchType(cursorDir),
+					Count:     int64(cursorCount),
+				}
+				row, err := evalCtx.Planner.PLpgSQLFetchCursor(ctx, cursor)
+				if err != nil {
+					return nil, err
+				}
+				res := make(tree.Datums, len(resultTypes))
+				for i := 0; i < len(resultTypes); i++ {
+					if i < len(row) {
+						res[i], err = eval.PerformCastNoTruncate(ctx, evalCtx, row[i], resultTypes[i])
+						if err != nil {
+							return nil, err
+						}
+					} else {
+						res[i] = tree.DNull
+					}
+				}
+				tup := tree.MakeDTuple(types.MakeTuple(resultTypes), res...)
+				return &tup, nil
+			},
+			Info:              "This function is used internally to implement the PLpgSQL FETCH and MOVE statements.",
+			Volatility:        volatility.Volatile,
+			CalledOnNullInput: true,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
