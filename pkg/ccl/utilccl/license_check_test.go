@@ -66,29 +66,56 @@ func TestSettingAndCheckingLicense(t *testing.T) {
 func TestGetLicenseTypePresent(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range []struct {
-		licenseType licenseccl.License_Type
-		expected    string
+		typ           licenseccl.License_Type
+		expectedType  string
+		usage         licenseccl.License_Usage
+		expectedUsage string
 	}{
-		{licenseccl.License_NonCommercial, "NonCommercial"},
-		{licenseccl.License_Enterprise, "Enterprise"},
-		{licenseccl.License_Evaluation, "Evaluation"},
+		{licenseccl.License_NonCommercial, "NonCommercial", licenseccl.PreProduction, "pre-production"},
+		{licenseccl.License_Enterprise, "Enterprise", licenseccl.Production, "production"},
+		{licenseccl.License_Evaluation, "Evaluation", licenseccl.Development, "development"},
+		{licenseccl.License_Enterprise, "Enterprise", licenseccl.Unspecified, ""},
 	} {
 		st := cluster.MakeTestingClusterSettings()
 		updater := st.MakeUpdater()
 		lic, _ := (&licenseccl.License{
-			Type:              tc.licenseType,
+			Type:              tc.typ,
 			ValidUntilUnixSec: 0,
+			Usage:             tc.usage,
 		}).Encode()
 		if err := setLicense(ctx, updater, lic); err != nil {
 			t.Fatal(err)
 		}
-		actual, err := GetLicenseType(st)
+		actualType, err := GetLicenseType(st)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if actual != tc.expected {
-			t.Fatalf("expected license type %s, got %s", tc.expected, actual)
+		if actualType != tc.expectedType {
+			t.Fatalf("expected license type %s, got %s", tc.expectedType, actualType)
 		}
+		actualUsage, err := GetLicenseUsage(st)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if actualUsage != tc.expectedUsage {
+			t.Fatalf("expected license usage %s, got %s", tc.expectedUsage, actualUsage)
+		}
+	}
+}
+
+func TestUnknownUsageEnum(t *testing.T) {
+	// This literal was generated with an enum value of 100 for usage, to show
+	// what happens if we add more usages later and then try to apply one to an
+	// older node which does not include it.
+	l, err := decode(`crl-0-GAIoZA`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expected, got := "Evaluation", l.Type.String(); got != expected {
+		t.Fatalf("expected license type %s, got %s", expected, got)
+	}
+	if expected, got := "other", l.Usage.String(); got != expected {
+		t.Fatalf("expected license usage %q, got %q", expected, got)
 	}
 }
 
