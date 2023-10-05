@@ -625,12 +625,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 					}
 					// First, we update the DistSQL receiver with the error to
 					// be returned to the client eventually.
-					//
-					// In order to not protect DistSQLReceiver.status with a
-					// mutex, we do not update the status here and, instead,
-					// rely on the DistSQLReceiver detecting the error the next
-					// time an object is pushed into it.
-					recv.setErrorWithoutStatusUpdate(res.err, true /* willDeferStatusUpdate */)
+					recv.SetError(res.err)
 					// Now explicitly cancel the local flow.
 					flow.Cancel()
 				}()
@@ -925,11 +920,9 @@ type DistSQLReceiver struct {
 		row   rowResultWriter
 		batch batchResultWriter
 	}
-	// updateStatus, if true, indicates that a concurrent goroutine has set an
-	// error on the rowResultWriter without updating status, so the main
-	// goroutine needs to update the status.
-	updateStatus atomic.Bool
-	status       execinfra.ConsumerStatus
+	// status is execinfra.ConsumerStatus of the receiver. It should not be
+	// accessed directly - use getStatus() and setStatus() helpers instead.
+	status atomic.Uint32
 
 	stmtType tree.StatementReturnType
 
@@ -998,6 +991,14 @@ type DistSQLReceiver struct {
 		// Possibly updated arguments are returned.
 		pushCallback func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata)
 	}
+}
+
+func (r *DistSQLReceiver) getStatus() execinfra.ConsumerStatus {
+	return execinfra.ConsumerStatus(r.status.Load())
+}
+
+func (r *DistSQLReceiver) setStatus(s execinfra.ConsumerStatus) {
+	r.status.Store(uint32(s))
 }
 
 // rowResultWriter is a subset of CommandResult to be used with the
@@ -1237,8 +1238,7 @@ func MakeDistSQLReceiver(
 // fashion - locally.
 func (r *DistSQLReceiver) resetForLocalRerun(stats topLevelQueryStats) {
 	r.resultWriterMu.row.SetError(nil)
-	r.updateStatus.Store(false)
-	r.status = execinfra.NeedMoreRows
+	r.setStatus(execinfra.NeedMoreRows)
 	r.dataPushed = false
 	r.closed = false
 	r.stats = stats
@@ -1276,13 +1276,12 @@ func (r *DistSQLReceiver) getError() error {
 	return r.resultWriterMu.row.Err()
 }
 
-// setErrorWithoutStatusUpdate sets the error in the rowResultWriter but does
-// **not** update the status of the DistSQLReceiver. willDeferStatusUpdate
-// indicates whether the main goroutine should update the status the next time
-// it pushes something into the DistSQLReceiver.
+// SetError provides a convenient way for a client to pass in an error, thus
+// pretending that a query execution error happened. The error is passed along
+// to the resultWriter.
 //
-// NOTE: consider using SetError() instead.
-func (r *DistSQLReceiver) setErrorWithoutStatusUpdate(err error, willDeferStatusUpdate bool) {
+// The status of DistSQLReceiver is updated accordingly.
+func (r *DistSQLReceiver) SetError(err error) {
 	r.resultWriterMu.Lock()
 	defer r.resultWriterMu.Unlock()
 	// Check if the error we just received should take precedence over a
@@ -1307,47 +1306,16 @@ func (r *DistSQLReceiver) setErrorWithoutStatusUpdate(err error, willDeferStatus
 			}
 		}
 		r.resultWriterMu.row.SetError(err)
-		r.updateStatus.Store(willDeferStatusUpdate)
 	}
-}
-
-// updateStatusAfterError updates the status of the DistSQLReceiver after it
-// has received an error.
-func (r *DistSQLReceiver) updateStatusAfterError(err error) {
 	// If we encountered an error, we will transition to draining unless we were
 	// canceled.
 	if r.ctx.Err() != nil {
 		log.VEventf(r.ctx, 1, "encountered error (transitioning to shutting down): %v", r.ctx.Err())
-		r.status = execinfra.ConsumerClosed
+		r.setStatus(execinfra.ConsumerClosed)
 	} else {
 		log.VEventf(r.ctx, 1, "encountered error (transitioning to draining): %v", err)
-		r.status = execinfra.DrainRequested
+		r.setStatus(execinfra.DrainRequested)
 	}
-}
-
-// SetError provides a convenient way for a client to pass in an error, thus
-// pretending that a query execution error happened. The error is passed along
-// to the resultWriter.
-//
-// The status of DistSQLReceiver is updated accordingly.
-func (r *DistSQLReceiver) SetError(err error) {
-	r.setErrorWithoutStatusUpdate(err, false /* willDeferStatusUpdate */)
-	r.updateStatusAfterError(err)
-}
-
-// checkConcurrentError sets the status if an error has been set by another
-// goroutine that did not also update the status.
-func (r *DistSQLReceiver) checkConcurrentError() {
-	if r.status != execinfra.NeedMoreRows || !r.updateStatus.Load() {
-		// If the status already is not NeedMoreRows, then it doesn't matter if
-		// there was a concurrent error set.
-		return
-	}
-	previousErr := r.getError()
-	if previousErr == nil {
-		previousErr = errors.AssertionFailedf("unexpectedly updateStatus is set but there is no error")
-	}
-	r.updateStatusAfterError(previousErr)
 }
 
 // pushMeta takes in non-empty metadata object and pushes it to the result
@@ -1394,7 +1362,7 @@ func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra
 	}
 	// Release the meta object. It is unsafe for use after this call.
 	meta.Release()
-	return r.status
+	return r.getStatus()
 }
 
 // handleCommErr handles the communication error (the one returned when
@@ -1405,12 +1373,12 @@ func (r *DistSQLReceiver) handleCommErr(commErr error) {
 	// client (that's why we don't set the error on the resultWriter).
 	if errors.Is(commErr, ErrLimitedResultClosed) {
 		log.VEvent(r.ctx, 1, "encountered ErrLimitedResultClosed (transitioning to draining)")
-		r.status = execinfra.DrainRequested
+		r.setStatus(execinfra.DrainRequested)
 	} else if errors.Is(commErr, errIEResultChannelClosed) {
 		log.VEvent(r.ctx, 1, "encountered errIEResultChannelClosed (transitioning to draining)")
-		r.status = execinfra.DrainRequested
+		r.setStatus(execinfra.DrainRequested)
 	} else if errors.Is(commErr, ErrPortalLimitHasBeenReached) {
-		r.status = execinfra.SwitchToAnotherPortal
+		r.setStatus(execinfra.SwitchToAnotherPortal)
 	} else {
 		// Set the error on the resultWriter to notify the consumer about
 		// it. Most clients don't care to differentiate between
@@ -1439,18 +1407,17 @@ func (r *DistSQLReceiver) handleCommErr(commErr error) {
 func (r *DistSQLReceiver) Push(
 	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) execinfra.ConsumerStatus {
-	r.checkConcurrentError()
 	if r.testingKnobs.pushCallback != nil {
 		row, _, meta = r.testingKnobs.pushCallback(row, nil /* batch */, meta)
 	}
 	if meta != nil {
 		return r.pushMeta(meta)
 	}
-	if r.ctx.Err() != nil && r.status != execinfra.ConsumerClosed {
+	if r.ctx.Err() != nil && r.getStatus() != execinfra.ConsumerClosed {
 		r.SetError(r.ctx.Err())
 	}
-	if r.status != execinfra.NeedMoreRows {
-		return r.status
+	if status := r.getStatus(); status != execinfra.NeedMoreRows {
+		return status
 	}
 
 	if r.stmtType != tree.Rows {
@@ -1459,7 +1426,7 @@ func (r *DistSQLReceiver) Push(
 		// ensuring that the last stage in the pipeline will return a single-column
 		// row with the row count in it, so just grab that and exit.
 		r.resultWriterMu.row.SetRowsAffected(r.ctx, n)
-		return r.status
+		return r.getStatus()
 	}
 
 	ensureDecodedRow := func() error {
@@ -1479,11 +1446,11 @@ func (r *DistSQLReceiver) Push(
 	if r.isTenantExplainAnalyze {
 		if err := ensureDecodedRow(); err != nil {
 			r.SetError(err)
-			return r.status
+			return r.getStatus()
 		}
 		if len(r.row) != len(r.outputTypes) {
 			r.SetError(errors.Errorf("expected number of columns and output types to be the same"))
-			return r.status
+			return r.getStatus()
 		}
 		if r.egressCounter == nil {
 			r.egressCounter = NewTenantNetworkEgressCounter()
@@ -1493,7 +1460,7 @@ func (r *DistSQLReceiver) Push(
 
 	if r.discardRows {
 		// Discard rows.
-		return r.status
+		return r.getStatus()
 	}
 
 	if r.existsMode {
@@ -1501,11 +1468,11 @@ func (r *DistSQLReceiver) Push(
 		// row is pushed or not, so the contents do not matter.
 		r.row = []tree.Datum{}
 		log.VEvent(r.ctx, 2, `a row is pushed in "exists" mode, so transition to draining`)
-		r.status = execinfra.DrainRequested
+		r.setStatus(execinfra.DrainRequested)
 	} else {
 		if err := ensureDecodedRow(); err != nil {
 			r.SetError(err)
-			return r.status
+			return r.getStatus()
 		}
 	}
 	r.tracing.TraceExecRowsResult(r.ctx, r.row)
@@ -1513,30 +1480,29 @@ func (r *DistSQLReceiver) Push(
 		r.handleCommErr(commErr)
 	}
 	r.dataPushed = true
-	return r.status
+	return r.getStatus()
 }
 
 // PushBatch is part of the execinfra.BatchReceiver interface.
 func (r *DistSQLReceiver) PushBatch(
 	batch coldata.Batch, meta *execinfrapb.ProducerMetadata,
 ) execinfra.ConsumerStatus {
-	r.checkConcurrentError()
 	if r.testingKnobs.pushCallback != nil {
 		_, batch, meta = r.testingKnobs.pushCallback(nil /* row */, batch, meta)
 	}
 	if meta != nil {
 		return r.pushMeta(meta)
 	}
-	if r.ctx.Err() != nil && r.status != execinfra.ConsumerClosed {
+	if r.ctx.Err() != nil && r.getStatus() != execinfra.ConsumerClosed {
 		r.SetError(r.ctx.Err())
 	}
-	if r.status != execinfra.NeedMoreRows {
-		return r.status
+	if status := r.getStatus(); status != execinfra.NeedMoreRows {
+		return status
 	}
 
 	if batch.Length() == 0 {
 		// Nothing to do on the zero-length batch.
-		return r.status
+		return r.getStatus()
 	}
 
 	if r.stmtType != tree.Rows {
@@ -1544,7 +1510,7 @@ func (r *DistSQLReceiver) PushBatch(
 		// ensuring that the last stage in the pipeline will return a single-column
 		// row with the row count in it, so just grab that and exit.
 		r.resultWriterMu.row.SetRowsAffected(r.ctx, int(batch.ColVec(0).Int64()[0]))
-		return r.status
+		return r.getStatus()
 	}
 
 	if r.isTenantExplainAnalyze {
@@ -1556,7 +1522,7 @@ func (r *DistSQLReceiver) PushBatch(
 
 	if r.discardRows {
 		// Discard rows.
-		return r.status
+		return r.getStatus()
 	}
 
 	if r.existsMode {
@@ -1569,7 +1535,7 @@ func (r *DistSQLReceiver) PushBatch(
 		r.handleCommErr(commErr)
 	}
 	r.dataPushed = true
-	return r.status
+	return r.getStatus()
 }
 
 var (
