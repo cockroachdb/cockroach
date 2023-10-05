@@ -121,6 +121,7 @@ go_test(
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
+        "//pkg/sql/sqlliveness/slbase",
         "//pkg/sql/sqlliveness/slprovider",
         "//pkg/sql/types",
         "//pkg/storage",
