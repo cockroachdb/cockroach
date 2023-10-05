@@ -30,9 +30,9 @@ func DropFunction(b BuildCtx, n *tree.DropRoutine) {
 	var toCheckBackRefs []catid.DescID
 	var toCheckBackRefsNames []*scpb.FunctionName
 	for _, f := range n.Routines {
-		elts := b.ResolveUDF(&f, ResolveParams{
+		elts := b.ResolveRoutine(&f, ResolveParams{
 			IsExistenceOptional: n.IfExists,
-		})
+		}, n.Procedure)
 		_, _, fn := scpb.FindFunction(elts)
 		if fn == nil {
 			continue

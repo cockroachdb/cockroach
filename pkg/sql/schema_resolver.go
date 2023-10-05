@@ -435,13 +435,14 @@ func (sr *schemaResolver) runWithOptions(flags resolveFlags, fn func()) {
 }
 
 func (sr *schemaResolver) ResolveFunction(
-	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+	ctx context.Context, name tree.UnresolvedRoutineName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
-	if name.NumParts > 3 || len(name.Parts[0]) == 0 || name.Star {
+	uname := name.UnresolvedName()
+	if uname.NumParts > 3 || len(uname.Parts[0]) == 0 || uname.Star {
 		return nil, pgerror.Newf(pgcode.InvalidName, "invalid function name: %s", name)
 	}
 
-	fn, err := name.ToRoutineName()
+	fn, err := uname.ToRoutineName()
 	if err != nil {
 		return nil, err
 	}
@@ -490,20 +491,35 @@ func (sr *schemaResolver) ResolveFunction(
 // function name and find a suggested function name if possible.
 func makeFunctionUndefinedError(
 	ctx context.Context,
-	name *tree.UnresolvedName,
+	name tree.UnresolvedRoutineName,
 	path tree.SearchPath,
 	fn tree.RoutineName,
 	sr *schemaResolver,
 ) error {
+	uname := name.UnresolvedName()
+	makeRoutineName := func(n *tree.UnresolvedName) (tree.UnresolvedRoutineName, error) {
+		switch name.(type) {
+		case tree.UnresolvedFunctionName:
+			return tree.MakeUnresolvedFunctionName(n), nil
+		case tree.UnresolvedProcedureName:
+			return tree.MakeUnresolvedProcedureName(n), nil
+		default:
+			return nil, errors.AssertionFailedf("unexpected routine name type")
+		}
+	}
 	var lowerName tree.UnresolvedName
 	if fn.ExplicitSchema {
-		lowerName = tree.MakeUnresolvedName(strings.ToLower(name.Parts[1]), strings.ToLower(name.Parts[0]))
+		lowerName = tree.MakeUnresolvedName(strings.ToLower(uname.Parts[1]), strings.ToLower(uname.Parts[0]))
 	} else {
-		lowerName = tree.MakeUnresolvedName(strings.ToLower(name.Parts[0]))
+		lowerName = tree.MakeUnresolvedName(strings.ToLower(uname.Parts[0]))
+	}
+	lowerRoutineName, err := makeRoutineName(&lowerName)
+	if err != nil {
+		return err
 	}
 	wrap := func(err error) error { return err }
-	if lowerName != *name {
-		alternative, err := sr.ResolveFunction(ctx, &lowerName, path)
+	if lowerName != *uname {
+		alternative, err := sr.ResolveFunction(ctx, lowerRoutineName, path)
 		if err != nil {
 			switch pgerror.GetPGCode(err) {
 			case pgcode.UndefinedFunction, pgcode.UndefinedSchema:
@@ -521,7 +537,11 @@ func makeFunctionUndefinedError(
 			}
 		}
 	}
-	return wrap(tree.NewRoutineUndefinedError("unknown function: %s()", tree.ErrString(name)))
+	if _, ok := name.(tree.UnresolvedProcedureName); ok {
+		return wrap(tree.NewRoutineUndefinedError("unknown procedure: %s()", tree.ErrString(uname)))
+	} else {
+		return wrap(tree.NewRoutineUndefinedError("unknown function: %s()", tree.ErrString(uname)))
+	}
 }
 
 func maybeLookupRoutine(
