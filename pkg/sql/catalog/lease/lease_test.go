@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -132,6 +133,10 @@ func (t *leaseTest) getLeases(descID descpb.ID) string {
 		FULL OUTER JOIN  "".crdb_internal.kv_session_based_leases as s
 		ON l."descID" = s.desc_id AND l."nodeID" = s.sql_instance_id AND l.version=s.version
    WHERE COALESCE("descID", s.desc_id) = $1 AND COALESCE("nodeID", s.sql_instance_id) > $2
+UNION
+  SELECT version, sql_instance_id as "nodeID"
+    FROM "".crdb_internal.kv_session_based_leases
+   WHERE "desc_id" = $1 AND "sql_instance_id" > $2
 ORDER BY version, "nodeID";
 `
 	rows, err := t.db.Query(sql, descID, baseIDForLeaseTest)
@@ -3008,6 +3013,9 @@ func TestLeaseTxnDeadlineExtension(t *testing.T) {
 	// Leasing setting used above conflicts with disabling replication when
 	// starting the single server, so skip those.
 	params.PartOfCluster = true
+	// Disable session based leasing, since a zero duration only
+	// applies to the expiry, and not the acquisition length.
+	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &params.Settings.SV, int64(lease.SessionBasedLeasingOff))
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(ctx context.Context, req *kvpb.BatchRequest) *kvpb.Error {
 			filterMu.Lock()
@@ -3173,6 +3181,216 @@ SELECT * FROM T1`)
 	})
 }
 
+// Validates that the transaction deadline can be extended
+// past the original lease duration, for session based leases
+// this would mean past the TTL we started with. We also additionally
+// confirm that transaction deadlines and the leases they depend on will
+// have a fixed time on them allowing them to expire.
+func TestLeaseTxnDeadlineExtensionWithSession(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	filterMu := syncutil.Mutex{}
+	blockTxn := make(chan struct{})
+	blockedOnce := false
+	var txnID string
+
+	var params base.TestServerArgs
+	params.DefaultTestTenant = base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
+		base.TestTenantProbabilistic, 112957,
+	)
+	params.Settings = cluster.MakeTestingClusterSettings()
+	// Set the lease duration such that the next lease acquisition will
+	// require the lease to be reacquired.
+	lease.LeaseDuration.Override(ctx, &params.Settings.SV, 0)
+	// Allow a maximum expiry of 10 seconds
+	const livenessTTLForTest = 20 * time.Second
+	const livenessExpiryDelay = livenessTTLForTest * 2
+	slbase.DefaultTTL.Override(ctx, &params.Settings.SV, livenessTTLForTest)
+	// Leasing setting used above conflicts with disabling replication when
+	// starting the single server, so skip those.
+	params.PartOfCluster = true
+	// Disable session based leasing, since a zero duration only
+	// applies to the expiry, and not the acquisition length.
+	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &params.Settings.SV, int64(lease.SessionBasedOnly))
+	params.Knobs.Store = &kvserver.StoreTestingKnobs{
+		TestingRequestFilter: func(ctx context.Context, req *kvpb.BatchRequest) *kvpb.Error {
+			filterMu.Lock()
+			// Wait for a commit with the txnID, and only allows
+			// it to resume when the channel gets unblocked.
+			if req.Txn != nil && req.Txn.ID.String() == txnID {
+				filterMu.Unlock()
+				// There will only be a single EndTxn request in
+				// flight due to the transaction ID filter and
+				// blocked once flag, so no mutex is needed here.
+				if req.IsSingleEndTxnRequest() && !blockedOnce {
+					<-blockTxn
+					blockedOnce = true
+				}
+			} else {
+				filterMu.Unlock()
+			}
+			return nil
+		},
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	lm := s.LeaseManager().(*lease.Manager)
+	leasesWaitingToExpireGauge := lm.TestingSessionBasedLeasesWaitingToExpireGauge()
+	leasesExpiredGauge := lm.TestingSessionBasedLeasesExpiredGauge()
+	defer s.Stopper().Stop(ctx)
+	// Setup tables for the test.
+	_, err := sqlDB.Exec(`
+CREATE TABLE t1(val int);
+	`)
+	require.NoError(t, err)
+	// Validates that transaction deadlines can move forward once the session
+	// TTL is reached (i.e. the transaction deadline will be moved when the next
+	// statement is executed).
+	t.Run("validate-lease-txn-deadline-ext", func(t *testing.T) {
+		conn, err := sqlDB.Conn(ctx)
+		require.NoError(t, err)
+		descModConn := sqlutils.MakeSQLRunner(sqlDB)
+		waitChan := make(chan error)
+		resumeChan := make(chan struct{})
+		go func() {
+			ctx = context.Background()
+			// Start a transaction that will lease out a table,
+			// and let the lease duration expire.
+			_, err := conn.ExecContext(ctx, `
+BEGIN;
+SELECT * FROM t1;
+	`)
+			if err != nil {
+				waitChan <- err
+				return
+			}
+			// Fetch the transaction ID, so that we can delay the commit
+			txnIDResult := conn.QueryRowContext(ctx, `SELECT id FROM crdb_internal.node_transactions WHERE session_id IN (SELECT * FROM [SHOW session_id]);`)
+			if txnIDResult.Err() != nil {
+				waitChan <- txnIDResult.Err()
+				return
+			}
+			filterMu.Lock()
+			err = txnIDResult.Scan(&txnID)
+			blockedOnce = false
+			filterMu.Unlock()
+			if err != nil {
+				waitChan <- err
+				return
+			}
+			// Inform the main routine that it can cause an operation
+			// to block us.
+			waitChan <- nil
+			<-resumeChan
+			// Execute an insert once the other transaction
+			// gets a lease. The lease renewal should adjust
+			// our deadline.
+			_, err = conn.ExecContext(ctx, `
+INSERT INTO t1 VALUES (1);
+COMMIT;`,
+			)
+			waitChan <- err
+		}()
+
+		// Wait for the TXN ID and hook to be setup.
+		err = <-waitChan
+		require.NoError(t, err)
+		// Issue a select from a different connection that will
+		// need a lease.
+		descModConn.Exec(t, `
+SELECT * FROM T1;`)
+		resumeChan <- struct{}{}
+		// Wait for sqlliveness TTL plus some delta.
+		time.Sleep(livenessExpiryDelay)
+		blockTxn <- struct{}{}
+		err = <-waitChan
+		require.NoError(t, err)
+	})
+
+	// Validates that the transaction deadline extension can be blocked,
+	// if the lease can't be renewed, for example if the descriptor gets
+	// modified. Specifically, we are going to release leases on old descriptor
+	// versions after the expiry has passed.
+	t.Run("validate-lease-txn-deadline-ext-blocked", func(t *testing.T) {
+		conn, err := sqlDB.Conn(ctx)
+		require.NoError(t, err)
+		descModConn := sqlutils.MakeSQLRunner(sqlDB)
+		waitChan := make(chan error)
+		resumeChan := make(chan struct{})
+		go func() {
+			ctx = context.Background()
+			// Start a transaction that will lease out a table,
+			// and let the lease duration expire.
+			_, err := conn.ExecContext(ctx, `
+BEGIN;
+SELECT * FROM t1;
+	`)
+			if err != nil {
+				waitChan <- err
+				return
+			}
+			// Fetch the transaction ID, so that we can delay the commit
+			txnIDResult := conn.QueryRowContext(ctx, `SELECT id FROM crdb_internal.node_transactions WHERE session_id IN (SELECT * FROM [SHOW session_id]);`)
+			if txnIDResult.Err() != nil {
+				waitChan <- txnIDResult.Err()
+				return
+			}
+			filterMu.Lock()
+			err = txnIDResult.Scan(&txnID)
+			blockedOnce = false
+			filterMu.Unlock()
+			if err != nil {
+				waitChan <- err
+				return
+			}
+			// Inform the main routine that it can cause an operation
+			// to block us.
+			waitChan <- nil
+			<-resumeChan
+			// Execute an insert on the same connection and attempt
+			// to commit, this operation will eventually fail. This should happen
+			// within ~10 seconds of the session based lease expiring on
+			// the older version (we give extra time to reduce flakiness).
+			end := timeutil.Now().Add(livenessExpiryDelay)
+			for timeutil.Now().Before(end) {
+				_, err = conn.ExecContext(ctx, `INSERT INTO t1 VALUES (1);`)
+				if err != nil {
+					waitChan <- err
+					return
+				}
+			}
+			_, err = conn.ExecContext(ctx, `
+COMMIT;`,
+			)
+			if err == nil {
+				err = errors.New("Failing did not get expected error")
+			} else if !testutils.IsError(err, "pq: restart transaction: TransactionRetryWithProtoRefreshError: TransactionRetryError: retry txn \\(RETRY_COMMIT_DEADLINE_EXCEEDED -.*") {
+				err = errors.Wrap(err, "Failed unexpected error")
+			} else {
+				err = nil
+			}
+			waitChan <- err
+		}()
+
+		// Wait for the TXN ID and hook to be setup.
+		err = <-waitChan
+		require.NoError(t, err)
+		// Issue an alter column on a different connection, which
+		// will require a lease.
+		descModConn.Exec(t, `
+ALTER TABLE T1 ALTER COLUMN VAL SET DEFAULT 5;
+SELECT * FROM T1`)
+		resumeChan <- struct{}{}
+		blockTxn <- struct{}{}
+		err = <-waitChan
+		require.NoError(t, err)
+		require.GreaterOrEqualf(t, leasesExpiredGauge.Value(), int64(1), "leases did not expire")
+		require.Equalf(t, int64(0), leasesWaitingToExpireGauge.Value(), "no leases are waiting to expire")
+	})
+}
+
 // Validates that the transaction deadline will be
 // updated for implicit transactions before the autocommit,
 // if the deadline is found to be expired.
@@ -3335,7 +3553,12 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 	})
 	f.Store(noop)
 	ctx := context.Background()
+	// Session based leases will retry with the same value, which KV will be smart
+	// enough to cancel out on the replica when ambigious results happen. So,
+	// this test breaks on this setting.
+	settings := cluster.MakeTestingClusterSettings()
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: settings,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingResponseFilter: func(ctx context.Context, request *kvpb.BatchRequest, response *kvpb.BatchResponse) *kvpb.Error {
@@ -3346,6 +3569,7 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
+	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &s.ClusterSettings().SV, int64(lease.SessionBasedLeasingOff))
 	codec := s.Codec()
 
 	sqlutils.MakeSQLRunner(sqlDB).Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
@@ -3455,13 +3679,13 @@ func TestDescriptorRemovedFromCacheWhenLeaseRenewalForThisDescriptorFails(t *tes
 	}
 	params.Settings = cluster.MakeTestingClusterSettings()
 
-	// Set lease duration to something small so that the periodical lease refresh is kicked off often where the testing
-	// knob will be invoked, and eventually the logic to remove unfound descriptor from cache will be triggered.
-	lease.LeaseDuration.Override(ctx, &params.Settings.SV, time.Second)
-
 	srv, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
+	// Set lease duration to something small so that the periodical lease refresh is kicked off often where the testing
+	// knob will be invoked, and eventually the logic to remove unfound descriptor from cache will be triggered.
+	lease.LeaseDuration.Override(ctx, &s.ClusterSettings().SV, time.Second)
+	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &s.ClusterSettings().SV, int64(lease.SessionBasedLeasingOff))
 	tdb = sqlutils.MakeSQLRunner(sqlDB)
 
 	sql := `
