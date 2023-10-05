@@ -17,6 +17,7 @@ package sql
 
 import (
 	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -30,10 +31,7 @@ type mvccStatisticsUpdateJob struct {
 
 var _ jobs.Resumer = (*mvccStatisticsUpdateJob)(nil)
 
-func (j *mvccStatisticsUpdateJob) Resume(
-	ctx context.Context, execCtxI interface{},
-) (jobErr error) {
-
+func (j *mvccStatisticsUpdateJob) Resume(ctx context.Context, execCtxI interface{}) (jobErr error) {
 	// TODO(zachlite):
 	// Delete samples older than configurable setting...
 	// Collect span stats for tenant descriptors...
