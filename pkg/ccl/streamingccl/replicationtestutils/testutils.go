@@ -151,7 +151,7 @@ func (c *TenantStreamingClusters) init() {
 		c.Args.DestInitFunc(c.T, c.DestSysSQL)
 	}
 	// Enable stream replication on dest by default.
-	c.DestSysSQL.Exec(c.T, `SET CLUSTER SETTING cross_cluster_replication.enabled = true;`)
+	c.DestSysSQL.Exec(c.T, `SET CLUSTER SETTING physical_replication.enabled = true;`)
 }
 
 // StartDestTenant starts the destination tenant and returns a cleanup

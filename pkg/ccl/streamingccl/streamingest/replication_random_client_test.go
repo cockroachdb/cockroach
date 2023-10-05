@@ -220,9 +220,9 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 
 	// Attempt to run the ingestion job without enabling the experimental setting.
 	_, err = conn.Exec(query)
-	require.True(t, testutils.IsError(err, "cross cluster replication is disabled"))
+	require.True(t, testutils.IsError(err, "physical replication is disabled"))
 
-	_, err = conn.Exec(`SET CLUSTER SETTING cross_cluster_replication.enabled = true;`)
+	_, err = conn.Exec(`SET CLUSTER SETTING physical_replication.enabled = true;`)
 	require.NoError(t, err)
 
 	_, err = conn.Exec(query)

@@ -93,16 +93,7 @@ func ingestionPlanHook(
 	}
 
 	if !streamingccl.CrossClusterReplicationEnabled.Get(&p.ExecCfg().Settings.SV) {
-		return nil, nil, nil, false, errors.WithTelemetry(
-			pgerror.WithCandidateCode(
-				errors.WithHint(
-					errors.Newf("cross cluster replication is disabled"),
-					"You can enable cross cluster replication by running `SET CLUSTER SETTING cross_cluster_replication.enabled = true`.",
-				),
-				pgcode.ExperimentalFeature,
-			),
-			"cross_cluster_replication.enabled",
-		)
+		return nil, nil, nil, false, physicalReplicationDisabledErr
 	}
 
 	if !p.ExecCfg().Codec.ForSystemTenant() {
