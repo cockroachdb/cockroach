@@ -310,7 +310,7 @@ type RunOptions struct {
 // CleanupIntentsFunc synchronously resolves the supplied intents
 // (which may be PENDING, in which case they are first pushed) while
 // taking care of proper batching.
-type CleanupIntentsFunc func(context.Context, []roachpb.Intent) error
+type CleanupIntentsFunc func(context.Context, []roachpb.Lock) error
 
 // CleanupTxnIntentsAsyncFunc asynchronously cleans up intents from a
 // transaction record, pushing the transaction first if it is
@@ -551,7 +551,7 @@ func processReplicatedLocks(
 		opts := storage.LockTableIteratorOptions{
 			LowerBound:  ltStartKey,
 			UpperBound:  ltEndKey,
-			MatchMinStr: lock.Intent,
+			MatchMinStr: lock.Shared, // any strength
 		}
 		iter, err := storage.NewLockTableIterator(reader, opts)
 		if err != nil {
@@ -570,10 +570,10 @@ func processReplicatedLocks(
 				return err
 			}
 			if meta.Txn == nil {
-				return errors.AssertionFailedf("intent without transaction")
+				return errors.AssertionFailedf("lock without transaction")
 			}
-			// Keep track of intent to resolve if older than the intent
-			// expiration threshold.
+			// Keep track of lock to resolve if it is older than the expiration
+			// threshold.
 			if meta.Timestamp.ToTimestamp().Less(intentExp) {
 				info.IntentsConsidered++
 				key, err := iter.EngineKey()
@@ -584,10 +584,7 @@ func processReplicatedLocks(
 				if err != nil {
 					return err
 				}
-				if ltKey.Strength != lock.Intent {
-					return errors.AssertionFailedf("unexpected strength for LockTableKey %s", ltKey.Strength)
-				}
-				if err := intentBatcher.addAndMaybeFlushIntents(ctx, ltKey.Key, &meta); err != nil {
+				if err := intentBatcher.addAndMaybeFlushIntents(ctx, ltKey.Key, ltKey.Strength, &meta); err != nil {
 					if errors.Is(err, ctx.Err()) {
 						return err
 					}
@@ -1013,7 +1010,7 @@ type intentBatcher struct {
 
 	// Maps from txn ID to bool and intent slice to accumulate a batch.
 	pendingTxns          map[uuid.UUID]bool
-	pendingIntents       []roachpb.Intent
+	pendingLocks         []roachpb.Lock
 	collectedIntentBytes int64
 
 	alloc bufalloc.ByteAllocator
@@ -1057,7 +1054,7 @@ func newIntentBatcher(
 // the subsequent batch.
 // Returns error if batch flushing was needed and failed.
 func (b *intentBatcher) addAndMaybeFlushIntents(
-	ctx context.Context, key roachpb.Key, meta *enginepb.MVCCMetadata,
+	ctx context.Context, key roachpb.Key, str lock.Strength, meta *enginepb.MVCCMetadata,
 ) error {
 	var err error = nil
 	txnID := meta.Txn.ID
@@ -1065,7 +1062,7 @@ func (b *intentBatcher) addAndMaybeFlushIntents(
 	// Check batching thresholds if we need to flush collected data. Transaction
 	// count is treated specially because we want to check it only when we find
 	// a new transaction.
-	if int64(len(b.pendingIntents)) >= b.options.maxIntentsPerIntentCleanupBatch ||
+	if int64(len(b.pendingLocks)) >= b.options.maxIntentsPerIntentCleanupBatch ||
 		b.collectedIntentBytes >= b.options.maxIntentKeyBytesPerIntentCleanupBatch ||
 		!existingTransaction && int64(len(b.pendingTxns)) >= b.options.maxTxnsPerIntentCleanupBatch {
 		err = b.maybeFlushPendingIntents(ctx)
@@ -1075,7 +1072,7 @@ func (b *intentBatcher) addAndMaybeFlushIntents(
 	// so that batcher is left in consistent state and don't miss any keys if
 	// caller resumes batching.
 	b.alloc, key = b.alloc.Copy(key, 0)
-	b.pendingIntents = append(b.pendingIntents, roachpb.MakeIntent(meta.Txn, key))
+	b.pendingLocks = append(b.pendingLocks, roachpb.MakeLock(meta.Txn, key, str))
 	b.collectedIntentBytes += int64(len(key))
 	b.pendingTxns[txnID] = true
 
@@ -1084,7 +1081,7 @@ func (b *intentBatcher) addAndMaybeFlushIntents(
 
 // maybeFlushPendingIntents resolves currently collected intents.
 func (b *intentBatcher) maybeFlushPendingIntents(ctx context.Context) error {
-	if len(b.pendingIntents) == 0 {
+	if len(b.pendingLocks) == 0 {
 		// If there's nothing to flush we will try to preserve context
 		// for the sake of consistency with how flush behaves when context
 		// is canceled during cleanup.
@@ -1093,7 +1090,7 @@ func (b *intentBatcher) maybeFlushPendingIntents(ctx context.Context) error {
 
 	var err error
 	cleanupIntentsFn := func(ctx context.Context) error {
-		return b.cleanupIntentsFn(ctx, b.pendingIntents)
+		return b.cleanupIntentsFn(ctx, b.pendingLocks)
 	}
 	if b.options.intentCleanupBatchTimeout > 0 {
 		err = timeutil.RunWithTimeout(
@@ -1113,7 +1110,7 @@ func (b *intentBatcher) maybeFlushPendingIntents(ctx context.Context) error {
 		// cleanupIntentsFn will push them to finalize them.
 		b.gcStats.PushTxn += len(b.pendingTxns)
 
-		b.gcStats.ResolveTotal += len(b.pendingIntents)
+		b.gcStats.ResolveTotal += len(b.pendingLocks)
 	}
 
 	// Get rid of current transactions and intents regardless of
@@ -1121,7 +1118,7 @@ func (b *intentBatcher) maybeFlushPendingIntents(ctx context.Context) error {
 	for k := range b.pendingTxns {
 		delete(b.pendingTxns, k)
 	}
-	b.pendingIntents = b.pendingIntents[:0]
+	b.pendingLocks = b.pendingLocks[:0]
 	b.collectedIntentBytes = 0
 	return err
 }
