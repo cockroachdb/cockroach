@@ -154,6 +154,8 @@ type Writer struct {
 	// The purpose of this cache is to avoid allocating an array of
 	// file.ColumnChunkWriter every time we call a colWriter.
 	columnChunkWriterCache [][]file.ColumnChunkWriter
+
+	closed bool
 }
 
 // NewWriter constructs a new Writer which outputs to
@@ -284,6 +286,9 @@ func (w *Writer) Flush() error {
 // Close closes the writer and flushes any buffered data to the sink.
 // If the sink implements io.WriteCloser, it will be closed by this method.
 func (w *Writer) Close() error {
+	defer func() {
+		w.closed = true
+	}()
 	if w.currentRowGroupWriter != nil {
 		if err := w.currentRowGroupWriter.Close(); err != nil {
 			return err
@@ -291,4 +296,9 @@ func (w *Writer) Close() error {
 	}
 	w.bufferedBytesEstimate = 0
 	return w.writer.Close()
+}
+
+// Closed returns true if the writer has been closed.
+func (w *Writer) Closed() bool {
+	return w.closed
 }
