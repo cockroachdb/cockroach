@@ -145,6 +145,11 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	mvt.InMixedVersion(
 		"test schema change step",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+			if c.IsLocal() {
+				l.Printf("skipping schemachange step in bors until #111844 is fixed")
+				return nil
+			}
+
 			tc := h.Context()
 			// We currently only stage the `workload` binary built off the
 			// SHA being tested; therefore, we skip testing the schemachange
