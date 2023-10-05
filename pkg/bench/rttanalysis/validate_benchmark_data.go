@@ -51,7 +51,7 @@ var expectationsHeader = []string{"exp", "benchmark"}
 
 var (
 	rewriteFlag = flag.Bool("rewrite", false,
-		"if non-empty, a regexp of benchmarks to rewrite")
+		"determines if benchmarks should be rewritten")
 	rewriteIterations = flag.Int("rewrite-iterations", 50,
 		"if re-writing, the number of times to execute each benchmark to "+
 			"determine the range of possible values")
@@ -73,7 +73,8 @@ func runBenchmarkExpectationTests(t *testing.T, r *Registry) {
 
 	defer func() {
 		if t.Failed() {
-			t.Log("see the --rewrite flag to re-run the benchmarks and adjust the expectations")
+			t.Log("see the -rewrite flag to re-run the benchmarks and adjust the expectations")
+			t.Log("usage: ./dev test --rewrite pkg/bench/rttanalysis -f=TestBenchmarkExpectation/ --test-args '-rewrite-iterations=N'")
 		}
 	}()
 
