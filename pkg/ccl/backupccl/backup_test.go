@@ -7717,6 +7717,7 @@ USE d;
 CREATE SCHEMA sc;
 CREATE TABLE sc.tb (x INT);
 CREATE TYPE sc.typ AS ENUM ('hello');
+CREATE FUNCTION f() RETURNS INT AS $$ SELECT 1 $$ LANGUAGE SQL;
 `)
 
 		// Back up the database.
@@ -7736,19 +7737,35 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 
 		<-beforePublishingNotif
 
-		// Verify that the descriptors are offline.
+		// Verify that the descriptors are offline. Also check that they don't have
+		// any PostDeserializationChanges, since that would cause the version to
+		// get bumped during the cluster upgrade that rewrites all descriptors
+		// with PostDeserializationChanges.
 
 		dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "d")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, dbDesc.DatabaseDesc().State)
+		require.Equal(t, descpb.DescriptorVersion(1), dbDesc.DatabaseDesc().Version)
+		require.Empty(t, dbDesc.GetPostDeserializationChanges())
 
 		schemaDesc := desctestutils.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), "sc")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, schemaDesc.SchemaDesc().State)
+		require.Equal(t, descpb.DescriptorVersion(1), schemaDesc.SchemaDesc().Version)
+		require.Empty(t, schemaDesc.GetPostDeserializationChanges())
 
 		tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "d", "sc", "tb")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, tableDesc.GetState())
+		require.Equal(t, descpb.DescriptorVersion(1), tableDesc.GetVersion())
+		require.Empty(t, tableDesc.GetPostDeserializationChanges())
 
 		typeDesc := desctestutils.TestingGetTypeDescriptor(kvDB, keys.SystemSQLCodec, "d", "sc", "typ")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, typeDesc.TypeDesc().State)
+		require.Equal(t, descpb.DescriptorVersion(1), typeDesc.TypeDesc().Version)
+		require.Empty(t, typeDesc.GetPostDeserializationChanges())
+
+		funcDesc := desctestutils.TestingGetFunctionDescriptor(kvDB, keys.SystemSQLCodec, "d", "public", "f")
+		require.Equal(t, descpb.DescriptorState_OFFLINE, funcDesc.FuncDesc().State)
+		require.Equal(t, descpb.DescriptorVersion(1), funcDesc.FuncDesc().Version)
+		require.Empty(t, funcDesc.GetPostDeserializationChanges())
 
 		// Verify that the descriptors are not visible.
 		// TODO (lucy): Arguably there should be a SQL test where we manually create
@@ -7783,6 +7800,7 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 
 		close(continueNotif)
 		require.NoError(t, g.Wait())
+
 	})
 
 	t.Run("restore-into-existing-database", func(t *testing.T) {
