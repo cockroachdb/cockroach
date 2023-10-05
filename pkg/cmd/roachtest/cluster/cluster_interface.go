@@ -136,7 +136,7 @@ type Cluster interface {
 	) error
 
 	FetchTimeseriesData(ctx context.Context, l *logger.Logger) error
-	FetchDebugZip(ctx context.Context, l *logger.Logger, dest string) error
+	FetchDebugZip(ctx context.Context, l *logger.Logger, dest string, opts ...option.Option) error
 	RefetchCertsFromNode(ctx context.Context, node int) error
 
 	StartGrafana(ctx context.Context, l *logger.Logger, promCfg *prometheus.Config) error
