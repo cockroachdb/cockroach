@@ -1,0 +1,224 @@
+# LogicTest: !local-mixed-22.2-23.1
+
+statement ok
+CREATE TABLE xy (x INT, y INT);
+
+subtest cast
+
+# Cast to REFCURSOR.
+query T
+SELECT 'foo'::REFCURSOR;
+----
+foo
+
+# Cast to REFCURSOR using the vectorized engine.
+query T
+SELECT 'foo'::REFCURSOR FROM generate_series(1, 100) LIMIT 1;
+----
+foo
+
+subtest table
+
+# Table that references REFCURSOR.
+statement ok
+CREATE TABLE t (x REFCURSOR);
+
+# Add a REFCURSOR column.
+statement ok
+ALTER TABLE xy ADD COLUMN curs REFCURSOR;
+
+statement ok
+INSERT INTO xy VALUES (1, 2, 'foo');
+
+query IIT
+SELECT * FROM xy;
+----
+1  2  foo
+
+# Alter a column type to REFCURSOR.
+statement ok
+DROP TABLE IF EXISTS xy;
+CREATE TABLE xy (x INT, y INT);
+SET enable_experimental_alter_column_type_general=true;
+
+statement ok
+ALTER TABLE xy ALTER COLUMN y TYPE REFCURSOR;
+
+statement ok
+INSERT INTO xy VALUES (1, 'bar');
+
+query IT
+SELECT * FROM xy;
+----
+1  bar
+
+statement ok
+DROP TABLE IF EXISTS xy;
+CREATE TABLE xy (x INT, y INT);
+INSERT INTO xy VALUES (1, 2);
+INSERT INTO xy VALUES (3, 4);
+
+# Create a partial index that uses the REFCURSOR type.
+statement ok
+CREATE INDEX part ON xy (x) WHERE y::REFCURSOR < '3';
+
+query II
+SELECT * FROM xy@part WHERE y::REFCURSOR < '3';
+----
+1  2
+
+statement ok
+DROP TABLE IF EXISTS xy;
+CREATE TABLE xy (x INT, y INT);
+INSERT INTO xy VALUES (1, 2);
+
+# Add a check constraint that uses the REFCURSOR type.
+statement ok
+ALTER TABLE xy ADD CONSTRAINT bar CHECK (y::REFCURSOR < 'baz');
+
+query II
+SELECT * FROM xy;
+----
+1  2
+
+subtest type
+
+# UDT that references REFCURSOR.
+statement ok
+CREATE TYPE typ AS (x INT, y REFCURSOR);
+
+query T
+SELECT (100, 'bar')::typ;
+----
+(100,bar)
+
+subtest function
+
+# Function that returns REFCURSOR.
+statement ok
+CREATE FUNCTION f() RETURNS REFCURSOR AS $$
+  SELECT 'foo';
+$$ LANGUAGE SQL;
+
+query T
+SELECT f();
+----
+foo
+
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f() RETURNS REFCURSOR AS $$
+  BEGIN
+    RETURN 'foo';
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+foo
+
+statement ok
+DROP FUNCTION f;
+
+# Function that takes REFCURSOR argument.
+statement ok
+CREATE FUNCTION f(curs REFCURSOR) RETURNS INT AS $$
+  SELECT 0;
+$$ LANGUAGE SQL;
+
+query I
+SELECT f('foo');
+----
+0
+
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f(curs REFCURSOR) RETURNS INT AS $$
+  BEGIN
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f('foo');
+----
+0
+
+statement ok
+DROP FUNCTION f;
+
+# Function that references REFCURSOR internally.
+statement ok
+CREATE FUNCTION f() RETURNS INT AS $$
+  SELECT 'foo'::REFCURSOR;
+  SELECT 0;
+$$ LANGUAGE SQL;
+
+query I
+SELECT f();
+----
+0
+
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    SELECT 'foo'::REFCURSOR;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+0
+
+statement ok
+DROP FUNCTION f;
+
+# Function that returns a composite type with REFCURSOR component.
+statement ok
+CREATE FUNCTION f() RETURNS typ AS $$
+  SELECT (1, 'foo');
+$$ LANGUAGE SQL;
+
+query T
+SELECT f();
+----
+(1,foo)
+
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f() RETURNS typ AS $$
+  BEGIN
+    RETURN (1, 'foo');
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+(1,foo)
+
+subtest error
+
+# TODO(drewk): REFCURSOR should not support collation.
+query T
+SELECT 'foo'::REFCURSOR COLLATE en;
+----
+foo
+
+# REFCURSOR does not have a width.
+statement error pgcode 42601 syntax error
+SELECT 'foo'::REFCURSOR(2);
+
+subtest end
