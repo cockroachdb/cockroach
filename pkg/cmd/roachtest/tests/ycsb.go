@@ -50,7 +50,7 @@ func registerYCSB(r registry.Registry) {
 	) {
 		// For now, we only want to run the zfs tests on GCE, since only GCE supports
 		// starting roachprod instances on zfs.
-		if c.Spec().FileSystem == spec.Zfs && c.Spec().Cloud != spec.GCE {
+		if c.Spec().FileSystem == spec.Zfs && c.Cloud() != spec.GCE {
 			t.Skip("YCSB zfs benchmark can only be run on GCE", "")
 		}
 

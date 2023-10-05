@@ -818,7 +818,7 @@ func (rd *replicationDriver) backupAfterFingerprintMismatch(
 		return nil
 	}
 	prefix := "gs"
-	if rd.c.Spec().Cloud == spec.AWS {
+	if rd.c.Cloud() == spec.AWS {
 		prefix = "s3"
 	}
 	collection := fmt.Sprintf("%s://%s/c2c-fingerprint-mismatch/%s/%s/%s?AUTH=implicit", prefix, testutils.BackupTestingBucketLongTTL(), rd.rs.name, rd.c.Name(), tenantName)
@@ -1002,7 +1002,7 @@ func c2cRegisterWrapper(
 		allZones = append(allZones, sp.multiregion.srcLocalities...)
 		allZones = append(allZones, sp.multiregion.destLocalities...)
 		allZones = append(allZones, sp.multiregion.workloadNodeZone)
-		clusterOps = append(clusterOps, spec.Zones(strings.Join(allZones, ",")))
+		clusterOps = append(clusterOps, spec.GCEZones(strings.Join(allZones, ",")))
 		clusterOps = append(clusterOps, spec.Geo())
 	}
 
@@ -1175,7 +1175,7 @@ func registerClusterToCluster(r registry.Registry) {
 				destLocalities:   []string{"us-central1-b", "us-west1-b", "us-west1-b", "us-west1-b"},
 				workloadNodeZone: "us-west1-b",
 			},
-			clouds: registry.AllExceptAWS,
+			clouds: registry.OnlyGCE,
 			suites: registry.Suites("nightly"),
 		},
 		{

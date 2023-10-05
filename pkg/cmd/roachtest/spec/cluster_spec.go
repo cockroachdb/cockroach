@@ -65,11 +65,18 @@ type ClusterSpec struct {
 	// TODO(#104029): We should remove the Cloud field; the tests now specify
 	// their compatible clouds.
 	Cloud string
-	Arch  vm.CPUArch // CPU architecture; auto-chosen if left empty
-	// TODO(radu): An InstanceType can only make sense in the context of a
-	// specific cloud. We should replace this with cloud-specific arguments.
-	InstanceType string // auto-chosen if left empty
-	NodeCount    int
+
+	// TODO(radu): defaultInstanceType is the default machine type used (unless
+	// overridden by GCE.MachineType or AWS.MachineType); it does not belong in
+	// the spec.
+	defaultInstanceType string
+
+	// TODO(radu): defaultZones is the default zones specification (unless
+	// overridden by GCE.Zones or AWS.Zones); it does not belong in the spec.
+	defaultZones string
+
+	Arch      vm.CPUArch // CPU architecture; auto-chosen if left empty
+	NodeCount int
 	// CPUs is the number of CPUs per node.
 	CPUs                 int
 	Mem                  MemPerCPU
@@ -77,7 +84,6 @@ type ClusterSpec struct {
 	RAID0                bool
 	VolumeSize           int
 	PreferLocalSSD       bool
-	Zones                string
 	Geo                  bool
 	Lifetime             time.Duration
 	ReusePolicy          clusterReusePolicy
@@ -91,24 +97,29 @@ type ClusterSpec struct {
 
 	GatherCores bool
 
-	// GCE-specific arguments.
-	//
-	// TODO(irfansharif): This cluster spec type suffers the curse of
-	// generality. Make it easier to just inject cloud-specific arguments.
-	GCEMinCPUPlatform string
-	GCEVolumeType     string
-	// AWS-specific arguments.
-	//
-	// AWSVolumeThroughput is the min provisioned EBS volume throughput.
-	AWSVolumeThroughput int
+	// GCE-specific arguments. These values apply only on clusters instantiated on GCE.
+	GCE struct {
+		MachineType    string
+		MinCPUPlatform string
+		VolumeType     string
+		Zones          string
+	}
+
+	// AWS-specific arguments. These values apply only on clusters instantiated on AWS.
+	AWS struct {
+		MachineType string
+		// VolumeThroughput is the min provisioned EBS volume throughput.
+		VolumeThroughput int
+		Zones            string
+	}
 }
 
 // MakeClusterSpec makes a ClusterSpec.
 func MakeClusterSpec(cloud string, instanceType string, nodeCount int, opts ...Option) ClusterSpec {
-	spec := ClusterSpec{Cloud: cloud, InstanceType: instanceType, NodeCount: nodeCount}
-	defaultOpts := []Option{CPU(4), nodeLifetimeOption(12 * time.Hour), ReuseAny()}
+	spec := ClusterSpec{Cloud: cloud, defaultInstanceType: instanceType, NodeCount: nodeCount}
+	defaultOpts := []Option{CPU(4), nodeLifetime(12 * time.Hour), ReuseAny()}
 	for _, o := range append(defaultOpts, opts...) {
-		o.apply(&spec)
+		o(&spec)
 	}
 	return spec
 }
@@ -256,31 +267,42 @@ func (s *ClusterSpec) RoachprodOpts(
 
 	createVMOpts.GeoDistributed = s.Geo
 	createVMOpts.Arch = string(arch)
-	machineType := s.InstanceType
 	ssdCount := s.SSDs
+
+	machineType := s.defaultInstanceType
+	switch s.Cloud {
+	case AWS:
+		if s.AWS.MachineType != "" {
+			machineType = s.AWS.MachineType
+		}
+	case GCE:
+		if s.GCE.MachineType != "" {
+			machineType = s.GCE.MachineType
+		}
+	}
 
 	if s.CPUs != 0 {
 		// Default to the user-supplied machine type, if any.
 		// Otherwise, pick based on requested CPU count.
 		var selectedArch vm.CPUArch
 
-		if len(machineType) == 0 {
+		if machineType == "" {
 			// If no machine type was specified, choose one
 			// based on the cloud and CPU count.
 			switch s.Cloud {
 			case AWS:
-				machineType, selectedArch = AWSMachineType(s.CPUs, s.Mem, s.PreferLocalSSD && s.VolumeSize == 0, arch)
+				machineType, selectedArch = SelectAWSMachineType(s.CPUs, s.Mem, s.PreferLocalSSD && s.VolumeSize == 0, arch)
 			case GCE:
-				machineType, selectedArch = GCEMachineType(s.CPUs, s.Mem, arch)
+				machineType, selectedArch = SelectGCEMachineType(s.CPUs, s.Mem, arch)
 			case Azure:
-				machineType = AzureMachineType(s.CPUs, s.Mem)
+				machineType = SelectAzureMachineType(s.CPUs, s.Mem)
 			}
-		}
-		if selectedArch != "" && selectedArch != arch {
-			// TODO(srosenberg): we need a better way to monitor the rate of this mismatch, i.e.,
-			// other than grepping cluster creation logs.
-			fmt.Printf("WARN: requested arch %s for machineType %s, but selected %s\n", arch, machineType, selectedArch)
-			createVMOpts.Arch = string(selectedArch)
+			if selectedArch != "" && selectedArch != arch {
+				// TODO(srosenberg): we need a better way to monitor the rate of this mismatch, i.e.,
+				// other than grepping cluster creation logs.
+				fmt.Printf("WARN: requested arch %s for machineType %s, but selected %s\n", arch, machineType, selectedArch)
+				createVMOpts.Arch = string(selectedArch)
+			}
 		}
 
 		// Local SSD can only be requested
@@ -314,9 +336,21 @@ func (s *ClusterSpec) RoachprodOpts(
 			createVMOpts.SSDOpts.FileSystem = vm.Zfs
 		}
 	}
+
+	zonesStr := s.defaultZones
+	switch s.Cloud {
+	case AWS:
+		if s.AWS.Zones != "" {
+			zonesStr = s.AWS.Zones
+		}
+	case GCE:
+		if s.GCE.Zones != "" {
+			zonesStr = s.GCE.Zones
+		}
+	}
 	var zones []string
-	if s.Zones != "" {
-		zones = strings.Split(s.Zones, ",")
+	if zonesStr != "" {
+		zones = strings.Split(zonesStr, ",")
 		if !s.Geo {
 			zones = zones[:1]
 		}
@@ -330,12 +364,12 @@ func (s *ClusterSpec) RoachprodOpts(
 	var providerOpts vm.ProviderOpts
 	switch s.Cloud {
 	case AWS:
-		providerOpts = getAWSOpts(machineType, zones, s.VolumeSize, s.AWSVolumeThroughput,
+		providerOpts = getAWSOpts(machineType, zones, s.VolumeSize, s.AWS.VolumeThroughput,
 			createVMOpts.SSDOpts.UseLocalSSD)
 	case GCE:
 		providerOpts = getGCEOpts(machineType, zones, s.VolumeSize, ssdCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
-			s.GCEMinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCEVolumeType,
+			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCE.VolumeType,
 		)
 	case Azure:
 		providerOpts = getAzureOpts(machineType, zones)

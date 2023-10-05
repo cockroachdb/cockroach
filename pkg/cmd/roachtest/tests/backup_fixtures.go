@@ -129,7 +129,7 @@ type backupDriver struct {
 
 func (bd *backupDriver) prepareCluster(ctx context.Context) {
 
-	if bd.c.Spec().Cloud != bd.sp.backup.cloud {
+	if bd.c.Cloud() != bd.sp.backup.cloud {
 		// For now, only run the test on the cloud provider that also stores the backup.
 		bd.t.Skip(fmt.Sprintf("test configured to run on %s", bd.sp.backup.cloud))
 	}

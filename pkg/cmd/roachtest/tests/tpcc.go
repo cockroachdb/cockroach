@@ -743,8 +743,8 @@ func registerTPCC(r registry.Registry) {
 				Name:  tc.name,
 				Owner: registry.OwnerSQLFoundations,
 				// Add an extra node which serves as the workload nodes.
-				Cluster:           r.MakeClusterSpec(len(regions)*nodesPerRegion+1, spec.Geo(), spec.Zones(strings.Join(zs, ","))),
-				CompatibleClouds:  registry.AllExceptAWS,
+				Cluster:           r.MakeClusterSpec(len(regions)*nodesPerRegion+1, spec.Geo(), spec.GCEZones(strings.Join(zs, ","))),
+				CompatibleClouds:  registry.OnlyGCE,
 				Suites:            registry.Suites(registry.Nightly),
 				EncryptionSupport: registry.EncryptionMetamorphic,
 				Leases:            registry.MetamorphicLeases,
@@ -953,7 +953,7 @@ func registerTPCC(r registry.Registry) {
 		EstimatedMaxGCE:   5000,
 		EstimatedMaxAWS:   5000,
 
-		Clouds: registry.AllExceptAWS,
+		Clouds: registry.OnlyGCE,
 		Suites: registry.Suites(registry.Nightly),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
@@ -968,7 +968,7 @@ func registerTPCC(r registry.Registry) {
 		EstimatedMaxGCE:   2000,
 		EstimatedMaxAWS:   2000,
 
-		Clouds: registry.AllExceptAWS,
+		Clouds: registry.OnlyGCE,
 		Suites: registry.Suites(registry.Nightly),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
@@ -1238,10 +1238,10 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 		// No specifier.
 	case multiZone:
 		nameParts = append(nameParts, "multi-az")
-		opts = append(opts, spec.Geo(), spec.Zones(strings.Join(b.Distribution.zones(), ",")))
+		opts = append(opts, spec.Geo(), spec.GCEZones(strings.Join(b.Distribution.zones(), ",")))
 	case multiRegion:
 		nameParts = append(nameParts, "multi-region")
-		opts = append(opts, spec.Geo(), spec.Zones(strings.Join(b.Distribution.zones(), ",")))
+		opts = append(opts, spec.Geo(), spec.GCEZones(strings.Join(b.Distribution.zones(), ",")))
 	default:
 		panic("unexpected")
 	}
