@@ -159,7 +159,7 @@ type Catalog interface {
 
 	// ResolveFunction resolves a function by name.
 	ResolveFunction(
-		ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+		ctx context.Context, name tree.UnresolvedRoutineName, path tree.SearchPath,
 	) (*tree.ResolvedFunctionDefinition, error)
 
 	// ResolveFunctionByOID resolves a function overload by OID.
