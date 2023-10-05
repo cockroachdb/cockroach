@@ -1,0 +1,63 @@
+# This test ensures that backups schedules pause when the schedule realizes it
+# is being executed on a new cluster.
+
+create-replication-clusters
+----
+
+start-replication-stream
+----
+
+# Create test schedule that will begin a backup immediately
+exec-sql as=source-tenant
+CREATE SCHEDULE datatest
+FOR BACKUP INTO 'nodelocal://1/example-schedule'
+RECURRING '@weekly' FULL BACKUP ALWAYS
+WITH SCHEDULE OPTIONS first_run = 'now';
+----
+
+let $fullID as=source-tenant
+WITH SCHEDULES AS (SHOW SCHEDULES FOR BACKUP) SELECT id FROM schedules WHERE label='datatest';
+----
+
+# wait for one scheduled backup to succeed
+query-sql retry as=source-tenant
+SELECT count(job_id) FROM [SHOW JOBS] WHERE job_type = 'BACKUP' AND status = 'succeeded';
+----
+1
+
+let $ts as=source-system
+SELECT clock_timestamp()::timestamp::string
+----
+
+cutover ts=$ts
+----
+
+start-replicated-tenant
+----
+
+# Induce the replicated schedule to begin on the restored cluster, and
+# ensure the schedule pauses, since it will realize its running on a new cluster.
+exec-sql as=destination-tenant
+UPDATE system.scheduled_jobs SET next_run = now() WHERE schedule_id = $fullID
+----
+
+# An empty next run indicates the schedule is paused.
+query-sql retry as=destination-tenant
+SELECT next_run FROM system.scheduled_jobs WHERE schedule_id = $fullID
+----
+<nil>
+
+
+# Unpause the schedule and force it to run immediately. When we Resumed the
+# schedule by setting next_run to now above, the schedule's clusterID was
+# updated, so the schedule should not pause again.
+exec-sql as=destination-tenant
+UPDATE system.scheduled_jobs SET next_run = now() WHERE schedule_id = $fullID
+----
+
+
+# Wait for above backup schedule to succeed
+query-sql retry as=destination-tenant
+SELECT count(job_id) FROM [SHOW JOBS] WHERE job_type = 'BACKUP' AND status = 'succeeded'
+----
+2
