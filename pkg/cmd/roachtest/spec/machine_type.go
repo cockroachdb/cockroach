@@ -14,12 +14,13 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/errors"
 )
 
 // TODO(srosenberg): restore the change in https://github.com/cockroachdb/cockroach/pull/111140 after 23.2 branch cut.
 func SelectAWSMachineType(
 	cpus int, mem MemPerCPU, shouldSupportLocalSSD bool, arch vm.CPUArch,
-) (string, vm.CPUArch) {
+) (string, vm.CPUArch, error) {
 	return SelectAWSMachineTypeOld(cpus, mem, arch)
 }
 
@@ -31,7 +32,7 @@ func SelectGCEMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.
 // SelectAWSMachineType selects a machine type given the desired number of CPUs
 // and memory per CPU ratio. Also returns the architecture of the selected
 // machine type.
-func SelectAWSMachineTypeOld(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch) {
+func SelectAWSMachineTypeOld(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch, error) {
 	// TODO(erikgrinaker): These have significantly less RAM than
 	// their GCE counterparts. Consider harmonizing them.
 	family := "c6id" // 2 GB RAM per CPU
@@ -49,7 +50,7 @@ func SelectAWSMachineTypeOld(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, 
 			family = "m7g" // 4 GB RAM per CPU (graviton3)
 		}
 	} else if mem == Low {
-		panic("low memory per CPU not available for AWS")
+		return "", "", errors.New("low memory per CPU not available for AWS")
 	}
 
 	var size string
@@ -71,7 +72,7 @@ func SelectAWSMachineTypeOld(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, 
 	case cpus <= 96:
 		size = "24xlarge"
 	default:
-		panic(fmt.Sprintf("no aws machine type with %d cpus", cpus))
+		return "", "", errors.Newf("no aws machine type with %d cpus", cpus)
 	}
 
 	// There is no m7g.24xlarge, fall back to m6i.24xlarge.
@@ -85,7 +86,7 @@ func SelectAWSMachineTypeOld(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, 
 		selectedArch = vm.ArchAMD64
 	}
 
-	return fmt.Sprintf("%s.%s", family, size), selectedArch
+	return fmt.Sprintf("%s.%s", family, size), selectedArch, nil
 }
 
 // SelectAWSMachineType selects a machine type given the desired number of CPUs,
@@ -103,7 +104,7 @@ func SelectAWSMachineTypeOld(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, 
 // GCE's n2-(standard|highmem|custom) _with_ --minimum-cpu-platform="Intel Ice Lake" (roachprod's default).
 func SelectAWSMachineTypeNew(
 	cpus int, mem MemPerCPU, shouldSupportLocalSSD bool, arch vm.CPUArch,
-) (string, vm.CPUArch) {
+) (string, vm.CPUArch, error) {
 	family := "m6i" // 4 GB RAM per CPU
 	selectedArch := vm.ArchAMD64
 
@@ -133,7 +134,7 @@ func SelectAWSMachineTypeNew(
 			selectedArch = vm.ArchAMD64
 		}
 	case Low:
-		panic("low memory per CPU not available for AWS")
+		return "", "", errors.New("low memory per CPU not available for AWS")
 	}
 
 	var size string
@@ -175,7 +176,7 @@ func SelectAWSMachineTypeNew(
 		family += "d"
 	}
 
-	return fmt.Sprintf("%s.%s", family, size), selectedArch
+	return fmt.Sprintf("%s.%s", family, size), selectedArch, nil
 }
 
 // SelectGCEMachineType selects a machine type given the desired number of CPUs
@@ -292,26 +293,26 @@ func SelectGCEMachineTypeNew(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, 
 
 // SelectAzureMachineType selects a machine type given the desired number of CPUs and
 // memory per CPU ratio.
-func SelectAzureMachineType(cpus int, mem MemPerCPU) string {
+func SelectAzureMachineType(cpus int, mem MemPerCPU) (string, error) {
 	if mem != Auto && mem != Standard {
-		panic(fmt.Sprintf("custom memory per CPU not implemented for Azure, memory ratio requested: %d", mem))
+		return "", errors.Newf("custom memory per CPU not implemented for Azure, memory ratio requested: %d", mem)
 	}
 	switch {
 	case cpus <= 2:
-		return "Standard_D2_v3"
+		return "Standard_D2_v3", nil
 	case cpus <= 4:
-		return "Standard_D4_v3"
+		return "Standard_D4_v3", nil
 	case cpus <= 8:
-		return "Standard_D8_v3"
+		return "Standard_D8_v3", nil
 	case cpus <= 16:
-		return "Standard_D16_v3"
+		return "Standard_D16_v3", nil
 	case cpus <= 36:
-		return "Standard_D32_v3"
+		return "Standard_D32_v3", nil
 	case cpus <= 48:
-		return "Standard_D48_v3"
+		return "Standard_D48_v3", nil
 	case cpus <= 64:
-		return "Standard_D64_v3"
+		return "Standard_D64_v3", nil
 	default:
-		panic(fmt.Sprintf("no azure machine type with %d cpus", cpus))
+		return "", errors.Newf("no azure machine type with %d cpus", cpus)
 	}
 }
