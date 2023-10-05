@@ -112,12 +112,12 @@ func TestBatchingInlineGCer(t *testing.T) {
 	require.Zero(t, m.size)
 }
 
-// TestIntentAgeThresholdSetting verifies that the GC intent resolution
+// TestLockAgeThresholdSetting verifies that the GC lock resolution
 // threshold can be adjusted. It uses short and long threshold to verify that
 // intents or other locks inserted between two thresholds are not considered for
 // resolution when threshold is high (1st attempt) and considered when threshold
 // is low (2nd attempt).
-func TestIntentAgeThresholdSetting(t *testing.T) {
+func TestLockAgeThresholdSetting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
@@ -126,11 +126,11 @@ func TestIntentAgeThresholdSetting(t *testing.T) {
 
 	// Test event timeline.
 	now := 3 * time.Hour
-	intentShortThreshold := 5 * time.Minute
-	intentLongThreshold := 2 * time.Hour
-	intentTs := now - (intentShortThreshold+intentLongThreshold)/2
+	lockShortThreshold := 5 * time.Minute
+	lockLongThreshold := 2 * time.Hour
+	lockTs := now - (lockShortThreshold+lockLongThreshold)/2
 
-	// Prepare test intents in MVCC.
+	// Prepare test locks in MVCC.
 	key := []byte("a")
 	makeKey := func(local bool, str lock.Strength) roachpb.Key {
 		strKey := append(key, byte(str))
@@ -141,7 +141,7 @@ func TestIntentAgeThresholdSetting(t *testing.T) {
 	}
 	value := roachpb.Value{RawBytes: []byte("0123456789")}
 	intentHlc := hlc.Timestamp{
-		WallTime: intentTs.Nanoseconds(),
+		WallTime: lockTs.Nanoseconds(),
 	}
 	makeTxn := func() roachpb.Transaction {
 		return roachpb.MakeTransaction("txn", key, isolation.Serializable, roachpb.NormalUserPriority, intentHlc, 1000, 0, 0)
@@ -174,23 +174,23 @@ func TestIntentAgeThresholdSetting(t *testing.T) {
 	// Test GC desired behavior.
 	info, err := Run(ctx, &desc, snap, nowTs, nowTs,
 		RunOptions{
-			IntentAgeThreshold:  intentLongThreshold,
+			LockAgeThreshold:    lockLongThreshold,
 			TxnCleanupThreshold: txnCleanupThreshold,
 		}, gcTTL, &gcer, gcer.resolveIntents,
 		gcer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
-	require.Zero(t, info.IntentsConsidered,
+	require.Zero(t, info.LocksConsidered,
 		"Expected no locks considered by GC with default threshold")
 	require.Zero(t, len(gcer.locks))
 
 	info, err = Run(ctx, &desc, snap, nowTs, nowTs,
 		RunOptions{
-			IntentAgeThreshold:  intentShortThreshold,
+			LockAgeThreshold:    lockShortThreshold,
 			TxnCleanupThreshold: txnCleanupThreshold,
 		}, gcTTL, &gcer, gcer.resolveIntents,
 		gcer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
-	require.Equal(t, 8, info.IntentsConsidered,
+	require.Equal(t, 8, info.LocksConsidered,
 		"Expected 8 locks considered by GC with short threshold")
 	require.Equal(t, 8, len(gcer.locks))
 }
@@ -204,14 +204,14 @@ func TestIntentCleanupBatching(t *testing.T) {
 
 	intentThreshold := 2 * time.Hour
 	now := 3 * intentThreshold
-	intentTs := now - intentThreshold*2
+	lockTs := now - intentThreshold*2
 
 	// Prepare test locks using various transactions, keys, and lock strengths.
 	txnPrefixes := []byte{'a', 'b', 'c'}
 	objectKeys := []byte{'a', 'b', 'c', 'd', 'e'}
 	value := roachpb.Value{RawBytes: []byte("0123456789")}
 	intentHlc := hlc.Timestamp{
-		WallTime: intentTs.Nanoseconds(),
+		WallTime: lockTs.Nanoseconds(),
 	}
 	for i, prefix := range txnPrefixes {
 		key := []byte{prefix, objectKeys[0]}
@@ -243,11 +243,11 @@ func TestIntentCleanupBatching(t *testing.T) {
 		WallTime: now.Nanoseconds(),
 	}
 
-	// Base GCer will cleanup all intents in one go and its result is used as a baseline
+	// Base GCer will cleanup all locks in one go and its result is used as a baseline
 	// to compare batched runs for checking completeness.
 	baseGCer := makeFakeGCer()
 	_, err := Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{
-		IntentAgeThreshold:  intentAgeThreshold,
+		LockAgeThreshold:    lockAgeThreshold,
 		TxnCleanupThreshold: txnCleanupThreshold,
 	},
 		gcTTL, &baseGCer, baseGCer.resolveIntents,
@@ -261,9 +261,9 @@ func TestIntentCleanupBatching(t *testing.T) {
 	gcer := makeFakeGCer()
 	info, err := Run(ctx, &desc, snap, nowTs, nowTs,
 		RunOptions{
-			IntentAgeThreshold:              intentAgeThreshold,
-			MaxIntentsPerIntentCleanupBatch: batchSize,
-			TxnCleanupThreshold:             txnCleanupThreshold,
+			LockAgeThreshold:              lockAgeThreshold,
+			MaxLocksPerIntentCleanupBatch: batchSize,
+			TxnCleanupThreshold:           txnCleanupThreshold,
 		},
 		gcTTL,
 		&gcer, gcer.resolveIntents, gcer.resolveIntentsAsync)
@@ -304,14 +304,14 @@ func (r *testResolver) assertInvariants(t *testing.T, opts intentBatcherOptions)
 			totalKeyBytes += len(intent.Key)
 		}
 		// Validate that limits are not breached if set.
-		if opts.maxIntentsPerIntentCleanupBatch > 0 {
-			require.LessOrEqual(t, int64(len(batch)), opts.maxIntentsPerIntentCleanupBatch,
+		if opts.maxLocksPerIntentCleanupBatch > 0 {
+			require.LessOrEqual(t, int64(len(batch)), opts.maxLocksPerIntentCleanupBatch,
 				fmt.Sprintf("Batch size exceeded in batch %d/%d", i+1, len(*r)))
 		}
 		// Last key could overspill over limit, but that's ok.
-		if opts.maxIntentKeyBytesPerIntentCleanupBatch > 0 {
+		if opts.maxLockKeyBytesPerIntentCleanupBatch > 0 {
 			require.Less(t, int64(totalKeyBytes-len(batch[len(batch)-1].Key)),
-				opts.maxIntentKeyBytesPerIntentCleanupBatch,
+				opts.maxLockKeyBytesPerIntentCleanupBatch,
 				fmt.Sprintf("Byte limit was exceeded for more than the last key in batch %d/%d", i+1,
 					len(*r)))
 		}
@@ -321,8 +321,8 @@ func (r *testResolver) assertInvariants(t *testing.T, opts intentBatcherOptions)
 		}
 		// Validate that at least one of thresholds reached.
 		require.True(t, i == len(*r)-1 ||
-			int64(len(batch)) == opts.maxIntentsPerIntentCleanupBatch ||
-			int64(totalKeyBytes) >= opts.maxIntentKeyBytesPerIntentCleanupBatch ||
+			int64(len(batch)) == opts.maxLocksPerIntentCleanupBatch ||
+			int64(totalKeyBytes) >= opts.maxLockKeyBytesPerIntentCleanupBatch ||
 			int64(len(txnMap)) == opts.maxTxnsPerIntentCleanupBatch,
 			fmt.Sprintf("None of batch thresholds were reached in batch %d/%d", i+1, len(*r)))
 	}
@@ -396,9 +396,9 @@ func TestGCIntentBatcher(t *testing.T) {
 						txnCount, s.name), func(t *testing.T) {
 						info := Info{}
 						opts := intentBatcherOptions{
-							maxIntentsPerIntentCleanupBatch:        batchSize,
-							maxIntentKeyBytesPerIntentCleanupBatch: byteCount,
-							maxTxnsPerIntentCleanupBatch:           txnCount,
+							maxLocksPerIntentCleanupBatch:        batchSize,
+							maxLockKeyBytesPerIntentCleanupBatch: byteCount,
+							maxTxnsPerIntentCleanupBatch:         txnCount,
 						}
 						resolver := testResolver{}
 
@@ -419,7 +419,7 @@ func TestGCIntentBatcher(t *testing.T) {
 func TestGCIntentBatcherErrorHandling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	opts := intentBatcherOptions{maxIntentsPerIntentCleanupBatch: 1}
+	opts := intentBatcherOptions{maxLocksPerIntentCleanupBatch: 1}
 
 	key1 := []byte("key1")
 	key2 := []byte("key2")
@@ -1108,7 +1108,7 @@ func runTest(t *testing.T, data testRunData, verify gcVerifier) {
 	gcer := makeFakeGCer()
 	_, err := Run(ctx, &desc, snap, now, gcTS,
 		RunOptions{
-			IntentAgeThreshold:      time.Nanosecond * time.Duration(now.WallTime),
+			LockAgeThreshold:        time.Nanosecond * time.Duration(now.WallTime),
 			TxnCleanupThreshold:     txnCleanupThreshold,
 			MaxKeyVersionChunkBytes: data.keyBytesThreshold,
 			ClearRangeMinKeys:       data.deleteRangeThreshold,
