@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -2312,15 +2313,24 @@ func (a Spans) ContainsKey(key Key) bool {
 // SpansOverhead is the overhead of Spans in bytes.
 const SpansOverhead = int64(unsafe.Sizeof(Spans{}))
 
-// MemUsage returns the size of the Spans in bytes for memory accounting
-// purposes.
-func (a Spans) MemUsage() int64 {
-	// Slice the full capacity of a so we can account for the memory
-	// used by spans past the length of a.
-	aCap := a[:cap(a)]
-	size := SpansOverhead
-	for i := range aCap {
-		size += aCap[i].MemUsage()
+// MemUsageUpToLen returns the size of the Spans in bytes for memory accounting
+// purposes. The method assumes that all spans in [len(a), cap(a)] range are
+// empty and will panic in test builds when not.
+func (a Spans) MemUsageUpToLen() int64 {
+	if buildutil.CrdbTestBuild {
+		l := len(a)
+		aCap := a[:cap(a)]
+		for _, s := range aCap[l:] {
+			if len(s.Key) > 0 || len(s.EndKey) > 0 {
+				panic(errors.AssertionFailedf(
+					"spans are not empty past length: %v (len=%d, cap=%d)", aCap, l, cap(a)),
+				)
+			}
+		}
+	}
+	size := SpansOverhead + int64(cap(a)-len(a))*SpanOverhead
+	for i := range a {
+		size += a[i].MemUsage()
 	}
 	return size
 }

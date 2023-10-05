@@ -49,6 +49,7 @@ var (
 	secure                = false
 	virtualClusterName    string
 	sqlInstance           int
+	virtualClusterID      int
 	extraSSHOptions       = ""
 	nodeEnv               []string
 	tag                   string
@@ -216,9 +217,15 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 	startInstanceAsSeparateProcessCmd.Flags().IntVar(&startOpts.SQLInstance,
 		"sql-instance", 0, "specific SQL/HTTP instance to connect to (this is a roachprod abstraction distinct from the internal instance ID)")
 
-	stopCmd.Flags().IntVar(&sig, "sig", sig, "signal to pass to kill")
-	stopCmd.Flags().BoolVar(&waitFlag, "wait", waitFlag, "wait for processes to exit")
-	stopCmd.Flags().IntVar(&maxWait, "max-wait", maxWait, "approx number of seconds to wait for processes to exit")
+	// Flags for processes that stop (kill) processes.
+	for _, stopProcessesCmd := range []*cobra.Command{stopCmd, stopInstanceAsSeparateProcessCmd} {
+		stopProcessesCmd.Flags().IntVar(&sig, "sig", sig, "signal to pass to kill")
+		stopProcessesCmd.Flags().BoolVar(&waitFlag, "wait", waitFlag, "wait for processes to exit")
+		stopProcessesCmd.Flags().IntVar(&maxWait, "max-wait", maxWait, "approx number of seconds to wait for processes to exit")
+	}
+
+	stopInstanceAsSeparateProcessCmd.Flags().IntVarP(&virtualClusterID, "cluster-id", "t", virtualClusterID, "internal ID for the virtual cluster")
+	stopInstanceAsSeparateProcessCmd.Flags().IntVar(&sqlInstance, "sql-instance", 0, "specific SQL/HTTP instance to stop")
 
 	syncCmd.Flags().BoolVar(&listOpts.IncludeVolumes, "include-volumes", false, "Include volumes when syncing")
 
@@ -337,7 +344,7 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 	}
 
 	for _, cmd := range []*cobra.Command{
-		startCmd, statusCmd, stopCmd, runCmd,
+		startCmd, startInstanceAsSeparateProcessCmd, statusCmd, stopCmd, runCmd,
 	} {
 		cmd.Flags().StringVar(&tag, "tag", "", "the process tag")
 	}

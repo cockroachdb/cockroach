@@ -491,7 +491,7 @@ func (f *txnKVFetcher) SetupNextFetch(
 
 	// Account for the memory of the spans that we're taking the ownership of.
 	if f.acc != nil {
-		newSpansAccountedFor := spans.MemUsage()
+		newSpansAccountedFor := spans.MemUsageUpToLen()
 		if err := f.acc.Grow(ctx, newSpansAccountedFor); err != nil {
 			return err
 		}
@@ -846,7 +846,7 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 		// We have some resume spans.
 		f.spans = f.scratchSpans
 		if f.acc != nil {
-			newSpansMemUsage := f.spans.MemUsage()
+			newSpansMemUsage := f.spans.MemUsageUpToLen()
 			if err := f.acc.Resize(ctx, f.spansAccountedFor, newSpansMemUsage); err != nil {
 				return KVBatchFetcherResponse{}, err
 			}

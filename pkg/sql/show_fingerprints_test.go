@@ -15,13 +15,24 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed/schematestutils"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // NB: Most of the SHOW EXPERIMENTAL_FINGERPRINTS tests are in the
@@ -119,4 +130,105 @@ func TestShowFingerprintsDuringSchemaChange(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf(
 		`SELECT * FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE foo] AS OF SYSTEM TIME %s`,
 		ts.AsOfSystemTime()))
+}
+
+// TestShowTenantFingerprintsProtectsTimestamp tests that we actually
+// protect the relevant keyspan by intercepting the relevant
+// ExportRequests and enqueing ranges for GC right before evaluating
+// the request.
+func TestShowTenantFingerprintsProtectsTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	exportStartedClosed := syncutil.AtomicBool(0)
+	exportsStarted := make(chan struct{})
+	exportsResume := make(chan struct{})
+	testingRequestFilter := func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+		for _, req := range ba.Requests {
+			if expReq := req.GetExport(); expReq != nil {
+				if expReq.ExportFingerprint && !exportStartedClosed.Get() {
+					exportStartedClosed.Set(true)
+					close(exportsStarted)
+					<-exportsResume
+				}
+			}
+		}
+		return nil
+	}
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: testingRequestFilter,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	systemSQL := sqlutils.MakeSQLRunner(db)
+	systemSQL.Exec(t, "ALTER VIRTUAL CLUSTER ALL SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs.enabled = true")
+	systemSQL.Exec(t, "ALTER VIRTUAL CLUSTER ALL SET CLUSTER SETTING sql.virtual_cluster.feature_access.manual_range_split.enabled=true")
+	systemSQL.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
+	systemSQL.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval ='100ms'")
+	systemSQL.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval ='100ms'")
+
+	tenantApp, tenantDB, err := s.TenantController().StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
+		TenantName: "testtenant",
+	})
+	require.NoError(t, err)
+
+	tenantSQL := sqlutils.MakeSQLRunner(tenantDB)
+	tenantSQL.Exec(t, "CREATE DATABASE test")
+	tenantSQL.Exec(t, "CREATE TABLE test.foo (k PRIMARY KEY) AS SELECT generate_series(1, 1000)")
+	tenantSQL.Exec(t, "ALTER TABLE test.foo CONFIGURE ZONE USING gc.ttlseconds=1")
+	tenantSQL.Exec(t, "UPDATE test.foo SET k=k+2000")
+
+	refreshPTSReaderCache := func(asOf hlc.Timestamp) {
+		tableID, err := tenantApp.QueryTableID(ctx, username.RootUserName(), "test", "foo")
+		require.NoError(t, err)
+		tableKey := tenantApp.Codec().TablePrefix(uint32(tableID))
+		store, err := s.StorageLayer().GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+		require.NoError(t, err)
+		var repl *kvserver.Replica
+		testutils.SucceedsSoon(t, func() error {
+			repl = store.LookupReplica(roachpb.RKey(tableKey))
+			if repl == nil {
+				return errors.New("could not find replica")
+			}
+			return nil
+		})
+		ptsReader := store.GetStoreConfig().ProtectedTimestampReader
+		t.Logf("udating PTS reader cache to %s", asOf)
+		require.NoError(
+			t,
+			spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, asOf),
+		)
+		require.NoError(t, repl.ReadProtectedTimestampsForTesting(ctx))
+	}
+	gcTestTableRange := func() {
+		row := tenantSQL.QueryRow(t, "SELECT range_id FROM [SHOW RANGES FROM TABLE test.foo]")
+		var rangeID int64
+		row.Scan(&rangeID)
+		refreshPTSReaderCache(tenantApp.Clock().Now())
+		t.Logf("enqueuing range %d for mvccGC", rangeID)
+		systemSQL.Exec(t, `SELECT crdb_internal.kv_enqueue_replica($1, 'mvccGC', true)`, rangeID)
+	}
+
+	errCh := make(chan error)
+	go func() {
+		_, err := db.Exec("SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER testtenant")
+		errCh <- err
+	}()
+	<-exportsStarted
+	// Unsure a better way to syncronize this. The gc.ttlseconds
+	// zone configuration is 1 second, so to ensure that our GC
+	// threshold moves beyond the transaction read timestamp we
+	// need to wait.
+	time.Sleep(2 * time.Second)
+	gcTestTableRange()
+	close(exportsResume)
+	require.NoError(t, <-errCh)
 }

@@ -34,6 +34,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/bitarray",
+        "//pkg/util/buildutil",
         "//pkg/util/duration",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
