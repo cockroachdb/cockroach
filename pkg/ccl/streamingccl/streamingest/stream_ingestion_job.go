@@ -102,11 +102,14 @@ func updateRunningStatusInternal(
 }
 
 func completeIngestion(
-	ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job,
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	ingestionJob *jobs.Job,
+	cutoverTimestamp hlc.Timestamp,
 ) error {
 	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
 	log.Infof(ctx, "activating destination tenant %d", details.DestinationTenantID)
-	if err := activateTenant(ctx, execCtx, details.DestinationTenantID); err != nil {
+	if err := activateTenant(ctx, execCtx, details.DestinationTenantID, cutoverTimestamp); err != nil {
 		return err
 	}
 
@@ -161,13 +164,13 @@ func ingest(
 	ingestionJob := resumer.job
 	// Cutover should be the *first* thing checked upon resumption as it is the
 	// most critical task in disaster recovery.
-	reverted, err := maybeRevertToCutoverTimestamp(ctx, execCtx, ingestionJob)
+	cutoverTimestamp, reverted, err := maybeRevertToCutoverTimestamp(ctx, execCtx, ingestionJob)
 	if err != nil {
 		return err
 	}
 	if reverted {
 		log.Infof(ctx, "job completed cutover on resume")
-		return completeIngestion(ctx, execCtx, ingestionJob)
+		return completeIngestion(ctx, execCtx, ingestionJob, cutoverTimestamp)
 	}
 	if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.BeforeIngestionStart != nil {
 		if err := knobs.BeforeIngestionStart(ctx); err != nil {
@@ -178,13 +181,15 @@ func ingest(
 	// processors shut down gracefully, i.e stopped ingesting any additional
 	// events from the replication stream. At this point it is safe to revert to
 	// the cutoff time to leave the cluster in a consistent state.
-	if err = startDistIngestion(ctx, execCtx, resumer); err != nil {
+	if err := startDistIngestion(ctx, execCtx, resumer); err != nil {
 		return err
 	}
-	if err := revertToCutoverTimestamp(ctx, execCtx, ingestionJob); err != nil {
+
+	cutoverTimestamp, err = revertToCutoverTimestamp(ctx, execCtx, ingestionJob)
+	if err != nil {
 		return err
 	}
-	return completeIngestion(ctx, execCtx, ingestionJob)
+	return completeIngestion(ctx, execCtx, ingestionJob, cutoverTimestamp)
 }
 
 func getRetryPolicy(knobs *sql.StreamingTestingKnobs) retry.Options {
@@ -347,16 +352,16 @@ func (s *streamIngestionResumer) protectDestinationTenant(
 // executed.
 func revertToCutoverTimestamp(
 	ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job,
-) error {
-	reverted, err := maybeRevertToCutoverTimestamp(ctx, execCtx, ingestionJob)
+) (hlc.Timestamp, error) {
+	cutoverTimestamp, reverted, err := maybeRevertToCutoverTimestamp(ctx, execCtx, ingestionJob)
 	if err != nil {
-		return err
+		return hlc.Timestamp{}, err
 	}
 	if !reverted {
-		return errors.Errorf("required cutover was not completed")
+		return hlc.Timestamp{}, errors.Errorf("required cutover was not completed")
 	}
 
-	return nil
+	return cutoverTimestamp, nil
 }
 
 func cutoverTimeIsEligibleForCutover(
@@ -383,7 +388,7 @@ func cutoverTimeIsEligibleForCutover(
 // to a consistent state.
 func maybeRevertToCutoverTimestamp(
 	ctx context.Context, p sql.JobExecContext, ingestionJob *jobs.Job,
-) (bool, error) {
+) (hlc.Timestamp, bool, error) {
 
 	ctx, span := tracing.ChildSpan(ctx, "streamingest.revertToCutoverTimestamp")
 	defer span.Finish()
@@ -429,10 +434,10 @@ func maybeRevertToCutoverTimestamp(
 			}
 			return nil
 		}); err != nil {
-		return false, err
+		return cutoverTimestamp, false, err
 	}
 	if !shouldRevertToCutover {
-		return false, nil
+		return cutoverTimestamp, false, nil
 	}
 	log.Infof(ctx, "reverting to cutover timestamp %s", cutoverTimestamp)
 	if p.ExecCfg().StreamingTestingKnobs != nil && p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted != nil {
@@ -444,7 +449,7 @@ func maybeRevertToCutoverTimestamp(
 	progUpdater, err := newCutoverProgressTracker(ctx, p, originalSpanToRevert, remainingSpansToRevert, ingestionJob,
 		progMetric, minProgressUpdateInterval)
 	if err != nil {
-		return false, err
+		return cutoverTimestamp, false, err
 	}
 
 	batchSize := int64(sql.RevertTableDefaultBatchSize)
@@ -461,12 +466,18 @@ func maybeRevertToCutoverTimestamp(
 		false, /* ignoreGCThreshold */
 		batchSize,
 		progUpdater.onCompletedCallback); err != nil {
-		return false, err
+		return cutoverTimestamp, false, err
 	}
-	return true, nil
+
+	return cutoverTimestamp, true, nil
 }
 
-func activateTenant(ctx context.Context, execCtx interface{}, newTenantID roachpb.TenantID) error {
+func activateTenant(
+	ctx context.Context,
+	execCtx interface{},
+	newTenantID roachpb.TenantID,
+	cutoverTimestamp hlc.Timestamp,
+) error {
 	p := execCtx.(sql.JobExecContext)
 	execCfg := p.ExecCfg()
 	return execCfg.InternalDB.Txn(ctx, func(
@@ -477,8 +488,13 @@ func activateTenant(ctx context.Context, execCtx interface{}, newTenantID roachp
 			return err
 		}
 
+		info.PhysicalReplicationConsumerJobID = 0
+		info.PreviousSourceTenant = &mtinfopb.PreviousSourceTenant{
+			CutoverTimestamp: cutoverTimestamp,
+		}
+
 		info.DataState = mtinfopb.DataStateReady
-		info.TenantReplicationJobID = 0
+
 		return sql.UpdateTenantRecord(ctx, p.ExecCfg().Settings, txn, info)
 	})
 }
@@ -508,7 +524,7 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 			return errors.Wrap(err, "fetch tenant info")
 		}
 
-		tenInfo.TenantReplicationJobID = 0
+		tenInfo.PhysicalReplicationConsumerJobID = 0
 		if err := sql.UpdateTenantRecord(ctx, execCfg.Settings, txn, tenInfo); err != nil {
 			return errors.Wrap(err, "update tenant record")
 		}
