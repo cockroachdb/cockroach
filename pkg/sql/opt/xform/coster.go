@@ -595,7 +595,7 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 
 	case opt.InsertOp:
 		insertExpr, _ := candidate.(*memo.InsertExpr)
-		if len(insertExpr.UniqueChecks) != 0 {
+		if len(insertExpr.FastPathUniqueChecks) != 0 {
 			if len(insertExpr.FastPathUniqueChecks[0].DatumsFromConstraint) != 0 {
 				// Make the cost of insert fast path slightly cheaper than non-fast path
 				// so that the optimizer will pick it. All of the costed operations
