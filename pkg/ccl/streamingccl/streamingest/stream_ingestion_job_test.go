@@ -64,7 +64,7 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 	SrcSysSQL.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 
 	DestSysSQL := sqlutils.MakeSQLRunner(destDB)
-	DestSysSQL.Exec(t, `SET CLUSTER SETTING cross_cluster_replication.enabled = true;`)
+	DestSysSQL.Exec(t, `SET CLUSTER SETTING physical_replication.enabled = true;`)
 
 	// Sink to read data from.
 	srcPgURL, cleanupSink := sqlutils.PGUrl(t, srcServer.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
