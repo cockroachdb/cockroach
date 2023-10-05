@@ -36,17 +36,21 @@ export class Duration extends React.PureComponent<{
 
     if (isRunning(job.status)) {
       const fractionCompleted = job.fraction_completed;
-      if (fractionCompleted > 0) {
-        const duration = modifiedAt.diff(startedAt);
-        const remaining = duration / fractionCompleted - duration;
-        return (
-          <span className={className}>
-            {formatDuration(moment.duration(remaining)) + " remaining"}
-          </span>
-        );
+      if (!startedAt || !modifiedAt || fractionCompleted === 0) {
+        return null;
       }
-      return null;
-    } else if (job.status === JOB_STATUS_SUCCEEDED) {
+      const duration = modifiedAt.diff(startedAt);
+      const remaining = duration / fractionCompleted - duration;
+      return (
+        <span className={className}>
+          {formatDuration(moment.duration(remaining)) + " remaining"}
+        </span>
+      );
+    } else if (
+      job.status === JOB_STATUS_SUCCEEDED &&
+      !!startedAt &&
+      !!finishedAt
+    ) {
       return (
         <span className={className}>
           {"Duration: " +
