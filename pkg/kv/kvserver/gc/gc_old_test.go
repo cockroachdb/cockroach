@@ -58,8 +58,8 @@ func runGCOld(
 	})
 	defer iter.Close()
 
-	// Compute intent expiration (intent age at which we attempt to resolve).
-	intentExp := now.Add(-options.IntentAgeThreshold.Nanoseconds(), 0)
+	// Compute lock expiration (lock age at which we attempt to resolve).
+	lockExp := now.Add(-options.LockAgeThreshold.Nanoseconds(), 0)
 	txnExp := now.Add(-TxnCleanupThreshold.Default().Nanoseconds(), 0)
 
 	gc := makeGarbageCollector(now, gcTTL)
@@ -89,7 +89,7 @@ func runGCOld(
 	intentKeyMap := map[uuid.UUID][]roachpb.Key{}
 
 	// processKeysAndValues is invoked with each key and its set of
-	// values. Intents older than the intent age threshold are sent for
+	// values. Intents older than the lock age threshold are sent for
 	// resolution and values after the MVCC metadata, and possible
 	// intent, are sent for garbage collection.
 	processKeysAndValues := func() {
@@ -105,24 +105,24 @@ func runGCOld(
 				if meta.Txn != nil {
 					// Keep track of intent to resolve if older than the intent
 					// expiration threshold.
-					if meta.Timestamp.ToTimestamp().Less(intentExp) {
+					if meta.Timestamp.ToTimestamp().Less(lockExp) {
 						txnID := meta.Txn.ID
 						if _, ok := txnMap[txnID]; !ok {
 							txnMap[txnID] = &roachpb.Transaction{
 								TxnMeta: *meta.Txn,
 							}
-							// IntentTxns and PushTxn will be equal here, since
+							// LockTxns and PushTxn will be equal here, since
 							// pushes to transactions whose record lies in this
 							// range (but which are not associated to a remaining
 							// intent on it) happen asynchronously and are accounted
 							// for separately. Thus higher up in the stack, we
-							// expect PushTxn > IntentTxns.
-							info.IntentTxns++
+							// expect PushTxn > LockTxns.
+							info.LockTxns++
 							// All transactions in txnMap may be PENDING and
 							// cleanupIntentsFn will push them to finalize them.
 							info.PushTxn++
 						}
-						info.IntentsConsidered++
+						info.LocksConsidered++
 						intentKeyMap[txnID] = append(intentKeyMap[txnID], expBaseKey)
 					}
 					// With an active intent, GC ignores MVCC metadata & intent value.
@@ -238,14 +238,14 @@ func runGCOld(
 
 	log.Eventf(ctx, "GC'ed keys; stats %+v", info)
 
-	// Push transactions (if pending) and resolve intents.
-	var intents []roachpb.Intent
+	// Push transactions (if pending) and resolve locks.
+	var locks []roachpb.Lock
 	for txnID, txn := range txnMap {
-		intents = append(intents, roachpb.AsIntents(&txn.TxnMeta, intentKeyMap[txnID])...)
+		locks = append(locks, roachpb.AsLocks(roachpb.AsIntents(&txn.TxnMeta, intentKeyMap[txnID]))...)
 	}
-	info.ResolveTotal += len(intents)
-	log.Eventf(ctx, "cleanup of %d intents", len(intents))
-	if err := cleanupIntentsFn(ctx, intents); err != nil {
+	info.ResolveTotal += len(locks)
+	log.Eventf(ctx, "cleanup of %d locks", len(locks))
+	if err := cleanupIntentsFn(ctx, locks); err != nil {
 		return Info{}, err
 	}
 

@@ -793,14 +793,14 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 
 	var rangeID roachpb.RangeID
 	gcTTL := 24 * time.Hour
-	intentAgeThreshold := gc.IntentAgeThreshold.Default()
-	intentBatchSize := gc.MaxIntentsPerCleanupBatch.Default()
+	lockAgeThreshold := gc.LockAgeThreshold.Default()
+	lockBatchSize := gc.MaxLocksPerCleanupBatch.Default()
 	txnCleanupThreshold := gc.TxnCleanupThreshold.Default()
 
 	if len(args) > 3 {
 		var err error
-		if intentAgeThreshold, err = parsePositiveDuration(args[3]); err != nil {
-			return errors.Wrapf(err, "unable to parse %v as intent age threshold", args[3])
+		if lockAgeThreshold, err = parsePositiveDuration(args[3]); err != nil {
+			return errors.Wrapf(err, "unable to parse %v as lock age threshold", args[3])
 		}
 	}
 	if len(args) > 2 {
@@ -865,12 +865,12 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 			&desc, snap,
 			now, thresh,
 			gc.RunOptions{
-				IntentAgeThreshold:              intentAgeThreshold,
-				MaxIntentsPerIntentCleanupBatch: intentBatchSize,
-				TxnCleanupThreshold:             txnCleanupThreshold,
+				LockAgeThreshold:              lockAgeThreshold,
+				MaxLocksPerIntentCleanupBatch: lockBatchSize,
+				TxnCleanupThreshold:           txnCleanupThreshold,
 			},
 			gcTTL, gc.NoopGCer{},
-			func(_ context.Context, _ []roachpb.Intent) error { return nil },
+			func(_ context.Context, _ []roachpb.Lock) error { return nil },
 			func(_ context.Context, _ *roachpb.Transaction) error { return nil },
 		)
 		if err != nil {
