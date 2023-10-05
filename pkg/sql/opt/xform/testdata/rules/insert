@@ -36,18 +36,13 @@ insert t
  │    ├── key: ()
  │    ├── fd: ()-->(7-12)
  │    └── (1, 'east', 10, 100, true, false)
- ├── unique-checks
- │    └── unique-checks-item: t(a)
- │         └── values
- │              ├── columns: a:21!null
- │              ├── cardinality: [0 - 0]
- │              ├── key: ()
- │              └── fd: ()-->(21)
- └── fast-path-unique-checks
-      └── fast-path-unique-checks-item: t(a)
+ └── unique-checks
+      └── unique-checks-item: t(a)
            └── values
+                ├── columns: a:21!null
                 ├── cardinality: [0 - 0]
-                └── key: ()
+                ├── key: ()
+                └── fd: ()-->(21)
 
 exec-ddl
 DROP TABLE t
