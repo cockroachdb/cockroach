@@ -62,13 +62,13 @@ func registerFollowerReads(r registry.Registry) {
 				6, /* nodeCount */
 				spec.CPU(4),
 				spec.Geo(),
-				spec.Zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b"),
+				spec.GCEZones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b"),
 			),
-			CompatibleClouds: registry.AllExceptAWS,
+			CompatibleClouds: registry.OnlyGCE,
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Spec().Cloud == spec.GCE && c.Spec().Arch == vm.ArchARM64 {
+				if c.Cloud() == spec.GCE && c.Spec().Arch == vm.ArchARM64 {
 					t.Skip("arm64 in GCE is available only in us-central1")
 				}
 				c.Put(ctx, t.Cockroach(), "./cockroach")

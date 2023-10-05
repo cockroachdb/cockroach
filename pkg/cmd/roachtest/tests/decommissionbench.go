@@ -271,7 +271,7 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 
 	if benchSpec.multiregion {
 		geoZones := []string{regionUsEast, regionUsWest, regionUsCentral}
-		specOptions = append(specOptions, spec.Zones(strings.Join(geoZones, ",")))
+		specOptions = append(specOptions, spec.GCEZones(strings.Join(geoZones, ",")))
 		specOptions = append(specOptions, spec.Geo())
 		extraNameParts = append(extraNameParts, "multi-region")
 	}

@@ -32,20 +32,20 @@ func registerIndexBackfill(r registry.Registry) {
 	clusterSpec := r.MakeClusterSpec(
 		10, /* nodeCount */
 		spec.CPU(8),
-		spec.Zones("us-east1-b"),
 		spec.VolumeSize(500),
 		spec.Cloud(spec.GCE),
+		spec.GCEMinCPUPlatform("Intel Ice Lake"),
+		spec.GCEVolumeType("pd-ssd"),
+		spec.GCEMachineType("n2-standard-8"),
+		spec.GCEZones("us-east1-b"),
 	)
-	clusterSpec.InstanceType = "n2-standard-8"
-	clusterSpec.GCEMinCPUPlatform = "Intel Ice Lake"
-	clusterSpec.GCEVolumeType = "pd-ssd"
 
 	r.Add(registry.TestSpec{
 		Name:             "admission-control/index-backfill",
 		Timeout:          6 * time.Hour,
 		Owner:            registry.OwnerAdmissionControl,
 		Benchmark:        true,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.ManualOnly,
 		Tags:             registry.Tags(`manual`),
 		// TODO(aaditya): Revisit this as part of #111614.

@@ -294,7 +294,7 @@ type dmsetupDiskStaller struct {
 
 var _ diskStaller = (*dmsetupDiskStaller)(nil)
 
-func (s *dmsetupDiskStaller) device() string { return getDevice(s.t, s.c.Spec()) }
+func (s *dmsetupDiskStaller) device() string { return getDevice(s.t, s.c) }
 
 func (s *dmsetupDiskStaller) Setup(ctx context.Context) {
 	dev := s.device()
@@ -363,15 +363,15 @@ func (s *cgroupDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOp
 func (s *cgroupDiskStaller) device() (major, minor int) {
 	// TODO(jackson): Programmatically determine the device major,minor numbers.
 	// eg,:
-	//    deviceName := getDevice(s.t, s.c.Spec())
+	//    deviceName := getDevice(s.t, s.c)
 	//    `cat /proc/partitions` and find `deviceName`
-	switch s.c.Spec().Cloud {
+	switch s.c.Cloud() {
 	case spec.GCE:
 		// ls -l /dev/sdb
 		// brw-rw---- 1 root disk 8, 16 Mar 27 22:08 /dev/sdb
 		return 8, 16
 	default:
-		s.t.Fatalf("unsupported cloud %q", s.c.Spec().Cloud)
+		s.t.Fatalf("unsupported cloud %q", s.c.Cloud())
 		return 0, 0
 	}
 }
@@ -389,14 +389,14 @@ func (s *cgroupDiskStaller) setThroughput(
 	))
 }
 
-func getDevice(t test.Test, s spec.ClusterSpec) string {
-	switch s.Cloud {
+func getDevice(t test.Test, c cluster.Cluster) string {
+	switch c.Cloud() {
 	case spec.GCE:
 		return "/dev/sdb"
 	case spec.AWS:
 		return "/dev/nvme1n1"
 	default:
-		t.Fatalf("unsupported cloud %q", s.Cloud)
+		t.Fatalf("unsupported cloud %q", c.Cloud())
 		return ""
 	}
 }

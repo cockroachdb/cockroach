@@ -28,21 +28,28 @@ import (
 
 func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 	const nodes = 6
-	geoZones := []string{"us-east1-b", "us-west1-b", "europe-west2-b"}
-	if r.MakeClusterSpec(1).Cloud == spec.AWS {
-		geoZones = []string{"us-east-2b", "us-west-1a", "eu-west-1a"}
-	}
-	geoZonesStr := strings.Join(geoZones, ",")
+	gceGeoZones := []string{"us-east1-b", "us-west1-b", "europe-west2-b"}
+	awsGeoZones := []string{"us-east-2b", "us-west-1a", "eu-west-1a"}
 	r.Add(registry.TestSpec{
-		Name:             fmt.Sprintf("indexes/%d/nodes=%d/multi-region", secondaryIndexes, nodes),
-		Owner:            registry.OwnerKV,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(nodes+1, spec.CPU(16), spec.Geo(), spec.Zones(geoZonesStr)),
+		Name:      fmt.Sprintf("indexes/%d/nodes=%d/multi-region", secondaryIndexes, nodes),
+		Owner:     registry.OwnerKV,
+		Benchmark: true,
+		Cluster: r.MakeClusterSpec(
+			nodes+1,
+			spec.CPU(16),
+			spec.Geo(),
+			spec.GCEZones(strings.Join(gceGeoZones, ",")),
+			spec.AWSZones(strings.Join(awsGeoZones, ",")),
+		),
+		// TODO(radu): enable this test on AWS.
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		// Uses CONFIGURE ZONE USING ... COPY FROM PARENT syntax.
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			firstAZ := geoZones[0]
+			firstAZ := gceGeoZones[0]
+			if c.Cloud() == spec.AWS {
+				firstAZ = awsGeoZones[0]
+			}
 			roachNodes := c.Range(1, nodes)
 			gatewayNodes := c.Range(1, nodes/3)
 			loadNode := c.Node(nodes + 1)
