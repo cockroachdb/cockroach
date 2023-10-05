@@ -548,7 +548,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		ba.Header.WholeRowsOfSize = int32(f.indexFetchSpec.MaxKeysPerRow)
 	}
 	ba.AdmissionHeader = f.requestAdmissionHeader
-	ba.Requests = spansToRequests(
+	ba.Requests, _ = spansToRequests(
 		f.spans.Spans, f.scanFormat, f.reverse, f.lockStrength, f.lockDurability, f.reqsScratch,
 	)
 
@@ -898,16 +898,15 @@ func spansToRequests(
 	lockStrength lock.Strength,
 	lockDurability lock.Durability,
 	reqsScratch []kvpb.RequestUnion,
-) []kvpb.RequestUnion {
+) (_ []kvpb.RequestUnion, nGets int) {
 	var reqs []kvpb.RequestUnion
 	if cap(reqsScratch) >= len(spans) {
 		reqs = reqsScratch[:len(spans)]
 	} else {
 		reqs = make([]kvpb.RequestUnion, len(spans))
 	}
-	// Detect the number of gets vs scans, so we can batch allocate all of the
+	// Detect the number of gets vs scans, so we can batch allocate all the
 	// requests precisely.
-	nGets := 0
 	for i := range spans {
 		if spans[i].EndKey == nil {
 			nGets++
@@ -971,7 +970,7 @@ func spansToRequests(
 			reqs[i].Value = &scans[curScan].union
 		}
 	}
-	return reqs
+	return reqs, nGets
 }
 
 // kvBatchFetcherHelper is a small helper that extracts common logic for

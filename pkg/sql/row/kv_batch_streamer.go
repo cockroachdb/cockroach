@@ -31,6 +31,10 @@ type txnKVStreamer struct {
 	lockStrength   lock.Strength
 	lockDurability lock.Durability
 
+	// spans contains the last set of spans provided in SetupNextFetch. The
+	// original span is only needed when handling Get responses, so each span is
+	// nil-ed out when it resulted in a Scan request (i.e. it had both Key and
+	// EndKey set).
 	spans       roachpb.Spans
 	spanIDs     []int
 	reqsScratch []kvpb.RequestUnion
@@ -102,16 +106,36 @@ func (f *txnKVStreamer) SetupNextFetch(
 		reqsScratch[i] = kvpb.RequestUnion{}
 	}
 	// TODO(yuzefovich): consider supporting COL_BATCH_RESPONSE scan format.
-	reqs := spansToRequests(spans, kvpb.BATCH_RESPONSE, false /* reverse */, f.lockStrength, f.lockDurability, reqsScratch)
+	reqs, nGets := spansToRequests(spans, kvpb.BATCH_RESPONSE, false /* reverse */, f.lockStrength, f.lockDurability, reqsScratch)
 	if err := f.streamer.Enqueue(ctx, reqs); err != nil {
 		return err
 	}
+	// At this point, we only need the original spans that resulted in Get
+	// requests (meaning they have empty EndKey), and we can nil out those that
+	// resulted in Scan requests - this will allow for faster GC of the keys.
+	// (Note that we assume all spans past len(spans) were already nil.)
+	if nGets < len(spans) {
+		// Avoid the loop if we only had Get requests.
+		for i := range spans {
+			if len(f.spans[i].EndKey) > 0 {
+				f.spans[i] = roachpb.Span{}
+			}
+		}
+	}
+	// For the spans slice we only need to account for the overhead of
+	// roachpb.Span objects. This is because spans that correspond to
+	// - Scan requests just got nil-ed out,
+	// - Get requests have each key being shared directly (i.e. memory aliased)
+	//   with the Get requests, and the streamer will account for the latter.
+	//   Thus, in order to not double-count memory usage, we do no accounting
+	//   here.
+	spansMemUsage := roachpb.SpanOverhead * int64(cap(spans))
 	f.spans = spans
 	f.spanIDs = spanIDs
 	// Keep the reference to the requests slice in order to reuse in the future.
 	f.reqsScratch = reqs
 	reqsScratchMemUsage := requestUnionOverhead * int64(cap(f.reqsScratch))
-	return f.acc.ResizeTo(ctx, reqsScratchMemUsage)
+	return f.acc.ResizeTo(ctx, spansMemUsage+reqsScratchMemUsage)
 }
 
 func (f *txnKVStreamer) getSpanID(resultPosition int) int {
@@ -217,6 +241,7 @@ func (f *txnKVStreamer) reset(ctx context.Context) {
 func (f *txnKVStreamer) Close(ctx context.Context) {
 	f.reset(ctx)
 	f.streamer.Close(ctx)
+	f.acc.Clear(ctx)
 	// Preserve observability-related fields.
 	*f = txnKVStreamer{kvBatchFetcherHelper: f.kvBatchFetcherHelper}
 }
