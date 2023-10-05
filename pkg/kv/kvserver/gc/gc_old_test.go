@@ -238,14 +238,14 @@ func runGCOld(
 
 	log.Eventf(ctx, "GC'ed keys; stats %+v", info)
 
-	// Push transactions (if pending) and resolve intents.
-	var intents []roachpb.Intent
+	// Push transactions (if pending) and resolve locks.
+	var locks []roachpb.Lock
 	for txnID, txn := range txnMap {
-		intents = append(intents, roachpb.AsIntents(&txn.TxnMeta, intentKeyMap[txnID])...)
+		locks = append(locks, roachpb.AsLocks(roachpb.AsIntents(&txn.TxnMeta, intentKeyMap[txnID]))...)
 	}
-	info.ResolveTotal += len(intents)
-	log.Eventf(ctx, "cleanup of %d intents", len(intents))
-	if err := cleanupIntentsFn(ctx, intents); err != nil {
+	info.ResolveTotal += len(locks)
+	log.Eventf(ctx, "cleanup of %d locks", len(locks))
+	if err := cleanupIntentsFn(ctx, locks); err != nil {
 		return Info{}, err
 	}
 

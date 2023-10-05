@@ -882,7 +882,7 @@ func testMVCCGCQueueProcessImpl(t *testing.T, useEfos bool) {
 			TxnCleanupThreshold: txnCleanupThreshold,
 		},
 			conf.TTL(), gc.NoopGCer{},
-			func(ctx context.Context, intents []roachpb.Intent) error {
+			func(ctx context.Context, locks []roachpb.Lock) error {
 				return nil
 			},
 			func(ctx context.Context, txn *roachpb.Transaction) error {

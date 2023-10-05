@@ -759,7 +759,15 @@ func (mgcq *mvccGCQueue) process(
 			admissionController: mgcq.store.cfg.KVAdmissionController,
 			storeID:             mgcq.store.StoreID(),
 		},
-		func(ctx context.Context, intents []roachpb.Intent) error {
+		func(ctx context.Context, locks []roachpb.Lock) error {
+			// TODO(nvanbenschoten): the IntentResolver current operates on
+			// roachpb.Intent objects, instead of roachpb.Lock objects, even
+			// though it resolves locks with any strength. Fix this.
+			intents := make([]roachpb.Intent, len(locks))
+			for i := range locks {
+				l := &locks[i]
+				intents[i] = roachpb.MakeIntent(&l.Txn, l.Key)
+			}
 			intentCount, err := repl.store.intentResolver.CleanupIntents(
 				ctx, gcAdmissionHeader(repl.store.ClusterSettings()), intents, gcTimestamp, kvpb.PUSH_TOUCH)
 			if err == nil {

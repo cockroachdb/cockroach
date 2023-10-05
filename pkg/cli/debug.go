@@ -870,7 +870,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 				TxnCleanupThreshold:             txnCleanupThreshold,
 			},
 			gcTTL, gc.NoopGCer{},
-			func(_ context.Context, _ []roachpb.Intent) error { return nil },
+			func(_ context.Context, _ []roachpb.Lock) error { return nil },
 			func(_ context.Context, _ *roachpb.Transaction) error { return nil },
 		)
 		if err != nil {
