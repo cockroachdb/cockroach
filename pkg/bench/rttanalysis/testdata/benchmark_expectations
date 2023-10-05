@@ -62,7 +62,7 @@ exp,benchmark
 16,GrantRole/grant_1_role
 21,GrantRole/grant_2_roles
 3,ORMQueries/activerecord_type_introspection_query
-50,ORMQueries/column_descriptions_json_agg
+7,ORMQueries/column_descriptions_json_agg
 4,ORMQueries/django_column_introspection_1_table
 4,ORMQueries/django_column_introspection_4_tables
 4,ORMQueries/django_column_introspection_8_tables
@@ -90,7 +90,7 @@ exp,benchmark
 3,ORMQueries/pg_namespace
 4,ORMQueries/pg_type
 133,ORMQueries/prisma_column_descriptions
-81,ORMQueries/prisma_column_descriptions_updated
+9,ORMQueries/prisma_column_descriptions_updated
 13,Revoke/revoke_all_on_1_table
 17,Revoke/revoke_all_on_2_tables
 21,Revoke/revoke_all_on_3_tables
