@@ -18,16 +18,22 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	bes "github.com/cockroachdb/cockroach/pkg/build/bazel/bes"
+	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost"
+	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	//lint:ignore SA1019
 	gproto "github.com/golang/protobuf/proto"
 	"golang.org/x/net/http2"
@@ -47,10 +53,64 @@ type testResultWithXml struct {
 }
 
 var (
+	branch          = flag.String("branch", "", "currently checked out git branch")
 	eventStreamFile = flag.String("eventsfile", "", "eventstream file produced by bazel build --build_event_binary_file")
-	tlsClientCert   = flag.String("cert", "", "TLS client certificate for accessing EngFlow, probably a .crt file")
-	tlsClientKey    = flag.String("key", "", "TLS client key for accessing EngFlow")
+
+	invocationId  = flag.String("invocation", "", "UUID of the invocation")
+	serverUrl     = flag.String("serverurl", "https://tanzanite.cluster.engflow.com/", "URL of the EngFlow cluster")
+	tlsClientCert = flag.String("cert", "", "TLS client certificate for accessing EngFlow, probably a .crt file")
+	tlsClientKey  = flag.String("key", "", "TLS client key for accessing EngFlow")
 )
+
+func getSha() (string, error) {
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func postOptions(sha string) *issues.Options {
+	return &issues.Options{
+		Token:  os.Getenv("GITHUB_API_TOKEN"),
+		Org:    "cockroachdb",
+		Repo:   "cockroach",
+		SHA:    sha,
+		Branch: *branch,
+		EngFlowOptions: &issues.EngFlowOptions{
+			InvocationID: *invocationId,
+			ServerURL:    *serverUrl,
+		},
+		GetBinaryVersion: build.BinaryVersion,
+	}
+
+}
+
+func failurePoster(res *testResultWithXml, opts *issues.Options) githubpost.FailurePoster {
+	formatter := func(ctx context.Context, failure githubpost.Failure) (issues.IssueFormatter, issues.PostRequest) {
+		fmter, req := githubpost.DefaultFormatter(ctx, failure)
+		// We don't want an artifacts link: there are none on EngFlow.
+		req.Artifacts = ""
+		if req.ExtraParams == nil {
+			req.ExtraParams = make(map[string]string)
+		}
+		if res.run != 0 {
+			req.ExtraParams["run"] = fmt.Sprintf("%d", res.run)
+		}
+		if res.shard != 0 {
+			req.ExtraParams["shard"] = fmt.Sprintf("%d", res.shard)
+		}
+		if res.attempt != 0 {
+			req.ExtraParams["attempt"] = fmt.Sprintf("%d", res.attempt)
+		}
+		return fmter, req
+	}
+	return func(ctx context.Context, failure githubpost.Failure) error {
+		fmter, req := formatter(ctx, failure)
+		return issues.Post(ctx, log.Default(), fmter, req, opts)
+	}
+}
 
 func getHttpClient() (*http.Client, error) {
 	cer, err := tls.LoadX509KeyPair(*tlsClientCert, *tlsClientKey)
@@ -88,14 +148,14 @@ func fetchTestXml(
 	httpClient *http.Client,
 	label string,
 	testResult testResultWithMetadata,
-	ch chan testResultWithXml,
+	ch chan *testResultWithXml,
 	wg *sync.WaitGroup,
 ) {
 	defer wg.Done()
 	for _, output := range testResult.testResult.TestActionOutput {
 		if output.Name == "test.xml" {
 			xml, err := downloadTestXml(httpClient, output.GetUri())
-			ch <- testResultWithXml{
+			ch <- &testResultWithXml{
 				label:      label,
 				run:        testResult.run,
 				shard:      testResult.shard,
@@ -109,6 +169,12 @@ func fetchTestXml(
 }
 
 func process() error {
+	ctx := context.Background()
+	sha, err := getSha()
+	if err != nil {
+		return err
+	}
+	postOpts := postOptions(sha)
 	httpClient, err := getHttpClient()
 	if err != nil {
 		return err
@@ -119,7 +185,7 @@ func process() error {
 	}
 	buf := gproto.NewBuffer(content)
 	testResults := make(map[string][]testResultWithMetadata)
-	fullTestResults := make(map[string][]testResultWithXml)
+	fullTestResults := make(map[string][]*testResultWithXml)
 	for {
 		var event bes.BuildEvent
 		err := buf.DecodeMessage(&event)
@@ -144,7 +210,7 @@ func process() error {
 	}
 
 	// Download test xml's.
-	ch := make(chan testResultWithXml)
+	ch := make(chan *testResultWithXml)
 	var wg sync.WaitGroup
 	for label, results := range testResults {
 		for _, result := range results {
@@ -165,15 +231,44 @@ func process() error {
 		}
 	}
 
-	// TODO: handle results
+	if os.Getenv("GITHUB_API_TOKEN") == "" {
+		fmt.Printf("no GITHUB_API_TOKEN; skipping reporting to GitHub")
+		return nil
+	}
+
+	for _, results := range fullTestResults {
+		for _, res := range results {
+			if res.testXml == "" {
+				// We already logged the download failure above.
+				continue
+			}
+			testXml := strings.NewReader(res.testXml)
+			if err := githubpost.PostFromTestXMLWithFailurePoster(
+				ctx, failurePoster(res, postOpts), testXml); err != nil {
+				fmt.Printf("could not post to GitHub: got error %+v", err)
+			}
+		}
+	}
 
 	return nil
 }
 
 func main() {
 	flag.Parse()
+	if *branch == "" {
+		fmt.Println("must provide -branch")
+		os.Exit(1)
+	}
 	if *eventStreamFile == "" {
 		fmt.Println("must provide -eventsfile")
+		os.Exit(1)
+	}
+	if *invocationId == "" {
+		fmt.Println("must provide -invocation")
+		os.Exit(1)
+	}
+	if *serverUrl == "" {
+		fmt.Println("must provide -serverurl")
 		os.Exit(1)
 	}
 	if *tlsClientCert == "" {

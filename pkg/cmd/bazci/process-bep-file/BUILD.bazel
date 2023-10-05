@@ -6,7 +6,10 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/bazci/process-bep-file",
     visibility = ["//visibility:private"],
     deps = [
+        "//pkg/build",
         "//pkg/build/bazel/bes",
+        "//pkg/cmd/bazci/githubpost",
+        "//pkg/cmd/internal/issues",
         "@com_github_golang_protobuf//proto:go_default_library",
         "@org_golang_x_net//http2",
     ],

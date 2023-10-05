@@ -31,7 +31,7 @@ type githubIssues struct {
 	disable      bool
 	cluster      *clusterImpl
 	vmCreateOpts *vm.CreateOpts
-	issuePoster  func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest) error
+	issuePoster  func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest, *issues.Options) error
 	teamLoader   func() (team.Map, error)
 }
 
@@ -260,11 +260,13 @@ func (g *githubIssues) MaybePost(t *testImpl, l *logger.Logger, message string) 
 	if err != nil {
 		return err
 	}
+	opts := issues.DefaultOptionsFromEnv()
 
 	return g.issuePoster(
 		context.Background(),
 		l,
 		issues.UnitTestFormatter,
 		postRequest,
+		opts,
 	)
 }
