@@ -179,17 +179,18 @@ query T
 SELECT table_name FROM [SHOW TABLES]
 ORDER BY table_name
 ----
-eventlo\gg
-nam😖espace😐
+mig%prations
+privileges
 replication_constraint_stats
 replication_critical_localities
-sql\\xe9liveness
-statement_bundle_chunks
-statement_diagnostics_requests
+s
+t̾atement_diagnostics
+schedulEd_jobs
+statement_execution_insights
+sta͌temenṭ_bundlẻ_chunks
 sta😣tement_statistics
-t"%e8ransaction_activity
-transaCtion_execution_insights
-web_Session😠s
+table_statistics
+tenant_id_seq
 
 # Again, the column names are randomized.
 query TTT
@@ -198,28 +199,26 @@ WHERE table_catalog = 'newdb2' AND table_schema = 'public'
 ORDER BY table_name, column_name
 LIMIT 20
 ----
-"eventlo\gg"  "eve😀ntType"        text
-"eventlo\gg"  info                text
-"eventlo\gg"  "rep ortingID"      bigint
-"eventlo\gg"  rowid               bigint
-"eventlo\gg"  "targetID"          bigint
-"eventlo\gg"  "time\\u7BFCstamp"  timestamp without time zone
-"eventlo\gg"  "uniqueID%p"        bytea
-nam😖espace😐   "i'd"               bigint
-nam😖espace😐   name                text
-nam😖espace😐   "par
-entSchemaID"                  bigint
-nam😖espace😐                   "parentID"        bigint
-nam😖espace😐                   rowid             bigint
-replication_constraint_stats  "c onfig"         text
-replication_constraint_stats  "report_id"            bigint
-replication_constraint_stats  rowid             bigint
-replication_constraint_stats  subzone_id        bigint
-replication_constraint_stats  "t
-ype"           text
-replication_constraint_stats  violating_ranges  bigint
-replication_constraint_stats  violation_start   timestamp with time zone
-replication_constraint_stats  "zone_/id"        bigint
+"mig%prations"                "%qm,inor"          bigint
+"mig%prations"                completed_at        timestamp with time zone
+"mig%prations"                internal            bigint
+"mig%prations"                "major'"            bigint
+"mig%prations"                patch               bigint
+"mig%prations"                rowid               bigint
+privileges                    "gran t_options"    ARRAY
+privileges                    path😀               text
+privileges                    privileges          ARRAY
+privileges                    rowid               bigint
+privileges                    "user%q_%qid"       oid
+privileges                    username            text
+replication_constraint_stats  "  ty*pe"           text
+replication_constraint_stats  config              text
+replication_constraint_stats  report_id           bigint
+replication_constraint_stats  rowid               bigint
+replication_constraint_stats  subzone_id          bigint
+replication_constraint_stats  "viola!tion_start"  timestamp with time zone
+replication_constraint_stats  violating_ranges    bigint
+replication_constraint_stats  zon😂e_id            bigint
 
 subtest templates/different_templates_in_each_db
 

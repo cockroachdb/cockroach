@@ -344,8 +344,11 @@ catalog:
     namespace: (1, 29, "transaction_activity")
   "060":
     descriptor: relation
-    namespace: (1, 29, "transaction_execution_insights")
+    namespace: (1, 29, "mvcc_statistics")
   "061":
+    descriptor: relation
+    namespace: (1, 29, "transaction_execution_insights")
+  "062":
     descriptor: relation
     namespace: (1, 29, "statement_execution_insights")
   "100":
@@ -542,8 +545,10 @@ catalog:
   "059":
     namespace: (1, 29, "transaction_activity")
   "060":
-    namespace: (1, 29, "transaction_execution_insights")
+    namespace: (1, 29, "mvcc_statistics")
   "061":
+    namespace: (1, 29, "transaction_execution_insights")
+  "062":
     namespace: (1, 29, "statement_execution_insights")
   "100":
     comments:
