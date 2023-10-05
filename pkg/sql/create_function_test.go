@@ -417,7 +417,7 @@ COMMIT;
 	require.Contains(t, err.Error(), "transaction committed but schema change aborted")
 	_, err = sqlDB.Exec(`SELECT f()`)
 	require.Error(t, err, "")
-	require.Contains(t, err.Error(), "unknown function: f(): function undefined")
+	require.Contains(t, err.Error(), "unknown function: f()")
 
 	// Make data valid for the unique index so that the job won't fail.
 	tDB.Exec(t, `DELETE FROM t WHERE a = 2`)
