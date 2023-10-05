@@ -22,6 +22,7 @@ import {
 } from "./sqlApi";
 import {
   ContentionDetails,
+  ContentionTypeKey,
   InsightExecEnum,
   InsightNameEnum,
   TxnContentionInsightDetails,
@@ -57,6 +58,7 @@ export type ContentionResponseColumns = {
   table_name: string;
   index_name: string;
   key: string;
+  contention_type: ContentionTypeKey;
 };
 
 export async function getContentionDetailsApi(
@@ -95,7 +97,9 @@ export async function getContentionDetailsApi(
     x.rows.forEach(row => {
       contentionDetails.push({
         blockingExecutionID: row.blocking_txn_id,
-        blockingTxnFingerprintID: row.blocking_txn_fingerprint_id,
+        blockingTxnFingerprintID: FixFingerprintHexValue(
+          row.blocking_txn_fingerprint_id,
+        ),
         blockingTxnQuery: null,
         waitingTxnID: row.waiting_txn_id,
         waitingTxnFingerprintID: row.waiting_txn_fingerprint_id,
@@ -113,6 +117,7 @@ export async function getContentionDetailsApi(
           row.index_name && row.index_name !== ""
             ? row.index_name
             : "index not found",
+        contentionType: row.contention_type,
       });
     });
   });
@@ -190,7 +195,8 @@ function contentionDetailsQuery(filters?: ContentionFilters) {
                     database_name,
                     schema_name,
                     table_name,
-                    index_name
+                    index_name,
+                    contention_type
     FROM
       crdb_internal.transaction_contention_events
       ${whereClause}
