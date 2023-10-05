@@ -851,7 +851,7 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"ALTER TABLE t3 ADD PRIMARY KEY (i);",
 			"COMMIT;",
 			"BEGIN;",
-			"SELECT 1/0;",
+			"SELECT 1/0;  -- move txn into ERROR state",
 			"DROP TABLE IF EXISTS t2;  -- expect to be ignored",
 			"INSERT INTO t2 VALUES (1002, 1003); INSERT INTO t1 VALUES (1001, 1002);  -- expect to be ignored",
 			"ROLLBACK;",
@@ -860,6 +860,10 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"ALTER TABLE t3 DROP CONSTRAINT t3_pkey;",
 			"DELETE FROM t3 WHERE i = 1;  -- expect to result in an error",
 			"ROLLBACK;",
+			"BEGIN; SAVEPOINT cockroach_restart;",
+			"RELEASE SAVEPOINT cockroach_restart;  -- move txn into DONE state",
+			"SELECT 1;  -- expect to be ignored",
+			"COMMIT;",
 
 			// statements that will be altered due to known behavioral differences in LSC vs DSC.
 			"ALTER TABLE t1 ADD COLUMN xyz INT DEFAULT 30, ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i; -- unimplemented in legacy schema changer; expect to skip this line",
