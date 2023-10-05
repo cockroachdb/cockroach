@@ -88,7 +88,11 @@ $$`)
 					defer cleanup()
 					semaCtx := execCtx.SemaCtx()
 					r := newCDCFunctionResolver(semaCtx.FunctionResolver)
-					funcDef, err = r.ResolveFunction(context.Background(), &tc.fnName, semaCtx.SearchPath)
+					funcDef, err = r.ResolveFunction(
+						context.Background(),
+						tree.MakeUnresolvedFunctionName(&tc.fnName),
+						semaCtx.SearchPath,
+					)
 					return err
 				})
 

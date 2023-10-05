@@ -49,7 +49,7 @@ type FunctionReferenceResolver interface {
 	// overloads a bit earlier and decrease the possibility of ambiguous error
 	// on function properties.
 	ResolveFunction(
-		ctx context.Context, name *UnresolvedName, path SearchPath,
+		ctx context.Context, name UnresolvedRoutineName, path SearchPath,
 	) (*ResolvedFunctionDefinition, error)
 
 	// ResolveFunctionByOID looks up a function overload by using a given oid.
@@ -110,7 +110,7 @@ func (ref *ResolvableFunctionReference) Resolve(
 			return fd, nil
 		}
 		// Use the resolver if it is provided.
-		fd, err := resolver.ResolveFunction(ctx, t, path)
+		fd, err := resolver.ResolveFunction(ctx, MakeUnresolvedFunctionName(t), path)
 		if err != nil {
 			return nil, err
 		}

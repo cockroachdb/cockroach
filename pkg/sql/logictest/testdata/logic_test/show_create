@@ -259,8 +259,7 @@ CREATE PROCEDURE sc.r2(s STRING) LANGUAGE SQL AS 'SELECT 1'
 statement error pgcode 42883 pq: unknown function: r2()
 SHOW CREATE FUNCTION r2;
 
-# TODO(mgartner): Fix the error message here.
-statement error pgcode 42883 pq: unknown function: r2()
+statement error pgcode 42883 pq: unknown procedure: r2()
 SHOW CREATE PROCEDURE r2;
 
 statement ok

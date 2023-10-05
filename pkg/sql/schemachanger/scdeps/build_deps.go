@@ -252,7 +252,7 @@ func (d *buildDeps) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T
 
 // ResolveFunction implements the scbuild.CatalogReader interface.
 func (d *buildDeps) ResolveFunction(
-	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+	ctx context.Context, name tree.UnresolvedRoutineName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
 	return d.schemaResolver.ResolveFunction(ctx, name, path)
 }

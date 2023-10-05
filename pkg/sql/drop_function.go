@@ -55,9 +55,13 @@ func (p *planner) DropFunction(ctx context.Context, n *tree.DropRoutine) (ret pl
 		toDrop:       make([]*funcdesc.Mutable, 0, len(n.Routines)),
 		dropBehavior: n.DropBehavior,
 	}
+	routineType := tree.UDFRoutine
+	if n.Procedure {
+		routineType = tree.ProcedureRoutine
+	}
 	fnResolved := intsets.MakeFast()
 	for _, fn := range n.Routines {
-		ol, err := p.matchUDF(ctx, &fn, !n.IfExists)
+		ol, err := p.matchRoutine(ctx, &fn, !n.IfExists, routineType)
 		if err != nil {
 			return nil, err
 		}
@@ -113,16 +117,22 @@ func (n *dropFunctionNode) Next(params runParams) (bool, error) { return false, 
 func (n *dropFunctionNode) Values() tree.Datums                 { return tree.Datums{} }
 func (n *dropFunctionNode) Close(ctx context.Context)           {}
 
-// matchUDF tries to resolve a user-defined function with the given signature
-// from the current search path, only overloads with exactly the same argument
-// types are considered a match. If required is true, an error is returned if
-// the function is not found. An error is also returning if a builtin function
-// is matched.
-func (p *planner) matchUDF(
-	ctx context.Context, routineObj *tree.RoutineObj, required bool,
+// matchRoutine tries to resolve a user-defined function or procedure with the
+// given signature from the current search path, only overloads with exactly the
+// same argument types are considered a match. If required is true, an error is
+// returned if the function is not found. An error is also returning if a
+// builtin function is matched.
+func (p *planner) matchRoutine(
+	ctx context.Context, routineObj *tree.RoutineObj, required bool, routineType tree.RoutineType,
 ) (*tree.QualifiedOverload, error) {
 	path := p.CurrentSearchPath()
-	name := routineObj.FuncName.ToUnresolvedObjectName().ToUnresolvedName()
+	unresolvedName := routineObj.FuncName.ToUnresolvedObjectName().ToUnresolvedName()
+	var name tree.UnresolvedRoutineName
+	if routineType == tree.ProcedureRoutine {
+		name = tree.MakeUnresolvedProcedureName(unresolvedName)
+	} else {
+		name = tree.MakeUnresolvedFunctionName(unresolvedName)
+	}
 	fnDef, err := p.ResolveFunction(ctx, name, &path)
 	if err != nil {
 		if !required && errors.Is(err, tree.ErrRoutineUndefined) {
@@ -135,7 +145,7 @@ func (p *planner) matchUDF(
 	if err != nil {
 		return nil, err
 	}
-	ol, err := fnDef.MatchOverload(paramTypes, routineObj.FuncName.Schema(), &path)
+	ol, err := fnDef.MatchOverload(paramTypes, routineObj.FuncName.Schema(), &path, routineType)
 	if err != nil {
 		if !required && errors.Is(err, tree.ErrRoutineUndefined) {
 			return nil, nil
