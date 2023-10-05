@@ -8,7 +8,7 @@ go_library(
         "errors.go",
         "expr_walker.go",
         "fetcher.go",
-        "fk_spans.go",
+        "fk_uniq_spans.go",
         "helper.go",
         "inserter.go",
         "kv_batch_fetcher.go",
