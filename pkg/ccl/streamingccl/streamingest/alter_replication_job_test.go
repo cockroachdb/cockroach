@@ -114,7 +114,7 @@ func TestAlterTenantPauseResume(t *testing.T) {
 	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
 	require.Equal(t, cutoverTime, cutoverOutput.GoTime())
 	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-	cleanupTenant := c.StartDestTenant(ctx)
+	cleanupTenant := c.StartDestTenant(ctx, nil)
 	defer func() {
 		require.NoError(t, cleanupTenant())
 	}()
