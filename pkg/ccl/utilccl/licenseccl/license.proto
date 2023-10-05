@@ -25,4 +25,16 @@ message License {
     Type type = 3;
 
     string organization_name = 4;
+
+    enum Usage {
+      option (gogoproto.goproto_enum_prefix) = false;
+      option (gogoproto.goproto_enum_stringer) = false;
+
+      Unspecified = 0;
+      Production = 1;
+      PreProduction = 2;
+      Development = 3;
+    }
+
+    Usage usage = 5;
 }
