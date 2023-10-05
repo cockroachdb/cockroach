@@ -535,6 +535,12 @@ func (f *txnKVFetcher) SetupNextFetch(
 
 // fetch retrieves spans from the kv layer.
 func (f *txnKVFetcher) fetch(ctx context.Context) error {
+	// Note that spansToRequests below might modify spans, so we need to log the
+	// spans before that.
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.VEventf(ctx, 2, "Scan %s", f.spans)
+	}
+
 	ba := &kvpb.BatchRequest{}
 	ba.Header.WaitPolicy = f.lockWaitPolicy
 	ba.Header.LockTimeout = f.lockTimeout
@@ -555,10 +561,6 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	}
 	ba.AdmissionHeader = f.requestAdmissionHeader
 	ba.Requests = spansToRequests(f.spans.Spans, f.scanFormat, f.reverse, f.lockStrength, f.reqsScratch)
-
-	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.VEventf(ctx, 2, "Scan %s", f.spans)
-	}
 
 	monitoring := f.acc != nil
 
@@ -889,6 +891,10 @@ const requestUnionOverhead = int64(unsafe.Sizeof(kvpb.RequestUnion{}))
 //
 // The provided reqsScratch is reused if it has enough capacity for all spans,
 // if not, a new slice is allocated.
+//
+// NOTE: any span that results in a Scan or a ReverseScan request is nil-ed out.
+// This is because both callers of this method no longer need the original span
+// unless it resulted in a Get request.
 func spansToRequests(
 	spans roachpb.Spans,
 	scanFormat kvpb.ScanFormat,
@@ -935,6 +941,7 @@ func spansToRequests(
 			}
 			curScan := i - curGet
 			scans[curScan].req.SetSpan(spans[i])
+			spans[i] = roachpb.Span{}
 			scans[curScan].req.ScanFormat = scanFormat
 			scans[curScan].req.KeyLocking = keyLocking
 			scans[curScan].union.ReverseScan = &scans[curScan].req
@@ -958,6 +965,7 @@ func spansToRequests(
 			}
 			curScan := i - curGet
 			scans[curScan].req.SetSpan(spans[i])
+			spans[i] = roachpb.Span{}
 			scans[curScan].req.ScanFormat = scanFormat
 			scans[curScan].req.KeyLocking = keyLocking
 			scans[curScan].union.Scan = &scans[curScan].req
