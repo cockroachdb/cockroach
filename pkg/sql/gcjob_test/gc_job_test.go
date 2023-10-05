@@ -317,10 +317,25 @@ SELECT job_id
   FROM [SHOW JOBS]
  WHERE job_type = 'SCHEMA CHANGE GC' AND description LIKE '%foo%';`,
 	).Scan(&jobID)
-	tdb.CheckQueryResultsRetry(t,
-		"SELECT running_status FROM crdb_internal.jobs WHERE job_id = "+jobID,
-		[][]string{{string(sql.RunningStatusWaitingForMVCCGC)}},
-	)
+
+	const expectedRunningStatus = string(sql.RunningStatusWaitingForMVCCGC)
+	testutils.SucceedsSoon(t, func() error {
+		var status, runningStatus, lastRun, nextRun, numRuns, jobErr string
+		tdb.QueryRow(t, fmt.Sprintf(`
+SELECT status, running_status, error, last_run, next_run, num_runs
+FROM crdb_internal.jobs
+WHERE job_id = %s`, jobID)).Scan(&status, &runningStatus, &jobErr, &lastRun, &nextRun, &numRuns)
+
+		t.Logf(`details about SCHEMA CHANGE GC job: {status: %q, running_status: %q, error: %q, last_run: %q, next_run: %q, num_runs: %q}`,
+			status, runningStatus, jobErr, lastRun, nextRun, numRuns)
+
+		if runningStatus != expectedRunningStatus {
+			return errors.Newf(`running_status %s does not match expected status %s`,
+				runningStatus, expectedRunningStatus)
+		}
+
+		return nil
+	})
 }
 
 // TestGCTenant is lightweight test that tests the branching logic in Resume

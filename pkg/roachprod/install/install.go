@@ -102,7 +102,9 @@ sudo apt-get update;
 sudo apt-get install -y gcc;
 `,
 
-	"go": `sudo apt --yes install golang-go;`,
+	"go": `
+sudo apt-get update;
+sudo apt-get install -y golang-go;`,
 
 	"haproxy": `
 sudo apt-get update;
