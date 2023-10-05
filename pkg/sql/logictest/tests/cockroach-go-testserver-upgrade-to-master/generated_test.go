@@ -127,6 +127,13 @@ func TestLogic_mixed_version_range_tombstones(
 	runLogicTest(t, "mixed_version_range_tombstones")
 }
 
+func TestLogic_mixed_version_refcursor(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_refcursor")
+}
+
 func TestLogic_mixed_version_role_members_user_ids(
 	t *testing.T,
 ) {
@@ -160,4 +167,11 @@ func TestLogic_mixed_version_upgrade_repair_descriptors(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "mixed_version_upgrade_repair_descriptors")
+}
+
+func TestLogic_pg_lsn_mixed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "pg_lsn_mixed")
 }

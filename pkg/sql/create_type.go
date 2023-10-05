@@ -423,6 +423,10 @@ func CreateCompositeTypeDesc(
 		if err != nil {
 			return nil, err
 		}
+		err = tree.CheckUnsupportedType(params.ctx, &params.p.semaCtx, typ)
+		if err != nil {
+			return nil, err
+		}
 		if typ.UserDefined() {
 			return nil, unimplemented.NewWithIssue(91779,
 				"composite types that reference user-defined types not yet supported")

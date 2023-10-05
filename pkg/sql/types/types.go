@@ -327,6 +327,12 @@ var (
 	Name = &T{InternalType: InternalType{
 		Family: StringFamily, Oid: oid.T_name, Locale: &emptyLocale}}
 
+	// RefCursor is the type for a variable representing the name of a cursor in a
+	// PLpgSQL routine. It is equivalent to String, but has a different oid
+	// (T_refcursor), which makes it display differently.
+	RefCursor = &T{InternalType: InternalType{
+		Family: StringFamily, Oid: oid.T_refcursor, Locale: &emptyLocale}}
+
 	// Bytes is the type of a list of raw byte values.
 	Bytes = &T{InternalType: InternalType{
 		Family: BytesFamily, Oid: oid.T_bytea, Locale: &emptyLocale}}
@@ -901,7 +907,7 @@ func MakeChar(width int32) *T {
 // oidCanBeCollatedString returns true if the given oid is can be a CollatedString.
 func oidCanBeCollatedString(o oid.Oid) bool {
 	switch o {
-	case oid.T_text, oid.T_varchar, oid.T_bpchar, oid.T_char, oid.T_name:
+	case oid.T_text, oid.T_varchar, oid.T_bpchar, oid.T_char, oid.T_name, oid.T_refcursor:
 		return true
 	}
 	return false
@@ -1562,6 +1568,8 @@ func (t *T) Name() string {
 			return "varchar"
 		case oid.T_name:
 			return "name"
+		case oid.T_refcursor:
+			return "refcursor"
 		}
 		panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 
@@ -1766,6 +1774,9 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		case oid.T_name:
 			// Type modifiers not allowed for name.
 			return "name"
+		case oid.T_refcursor:
+			// Type modifiers not allowed for refcursor.
+			return "refcursor"
 		default:
 			panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 		}
@@ -2325,6 +2336,10 @@ func (t *T) upgradeType() error {
 			t.InternalType.TimePrecisionIsSet = true
 		}
 	case StringFamily, CollatedStringFamily:
+		if t.InternalType.Oid == oid.T_refcursor {
+			// Support for REFCURSOR was added after InternalType was deprecated.
+			break
+		}
 		// Map string-related visible types to corresponding Oid values.
 		switch t.InternalType.VisibleType {
 		case visibleVARCHAR:
@@ -2489,7 +2504,7 @@ func (t *T) downgradeType() error {
 
 	case StringFamily, CollatedStringFamily:
 		switch t.Oid() {
-		case oid.T_text:
+		case oid.T_text, oid.T_refcursor:
 			// Nothing to do.
 		case oid.T_varchar:
 			t.InternalType.VisibleType = visibleVARCHAR
@@ -2816,6 +2831,8 @@ func (t *T) stringTypeSQL() string {
 		typName = `"char"`
 	case oid.T_name:
 		typName = "NAME"
+	case oid.T_refcursor:
+		typName = "REFCURSOR"
 	}
 
 	// In general, if there is a specified width we want to print it next to the
@@ -2947,7 +2964,6 @@ var postgresPredefinedTypeIssues = map[string]int{
 	"macaddr8":      45813,
 	"money":         41578,
 	"path":          21286,
-	"pg_lsn":        -1,
 	"txid_snapshot": -1,
 	"xml":           43355,
 }
