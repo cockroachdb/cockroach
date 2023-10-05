@@ -537,7 +537,7 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	require.Equal(c.T, cutoverTime, cutoverOutput.GoTime())
 	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
-	cleanUpTenant := c.StartDestTenant(ctx)
+	cleanUpTenant := c.StartDestTenant(ctx, nil)
 	defer func() {
 		require.NoError(t, cleanUpTenant())
 	}()

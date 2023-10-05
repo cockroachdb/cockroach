@@ -131,10 +131,13 @@ func TestDataDriven(t *testing.T) {
 			case "create-replication-clusters":
 				args := replicationtestutils.DefaultTenantStreamingClustersArgs
 				args.NoMetamorphicExternalConnection = d.HasArg("no-external-conn")
+				tempDir, dirCleanup := testutils.TempDir(t)
+				args.ExternalIODir = tempDir
 				var cleanup func()
 				ds.replicationClusters, cleanup = replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 				ds.cleanupFns = append(ds.cleanupFns, func() error {
 					cleanup()
+					dirCleanup()
 					return nil
 				})
 
@@ -151,7 +154,8 @@ func TestDataDriven(t *testing.T) {
 				ds.replicationClusters.WaitUntilReplicatedTime(stringToHLC(t, replicatedTimeTarget),
 					jobspb.JobID(ds.ingestionJobID))
 			case "start-replicated-tenant":
-				cleanupTenant := ds.replicationClusters.StartDestTenant(ctx)
+				testingKnobs := replicationtestutils.DefaultAppTenantTestingKnobs()
+				cleanupTenant := ds.replicationClusters.StartDestTenant(ctx, &testingKnobs)
 				ds.cleanupFns = append(ds.cleanupFns, cleanupTenant)
 			case "let":
 				if len(d.CmdArgs) == 0 {
