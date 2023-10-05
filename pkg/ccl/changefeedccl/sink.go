@@ -456,9 +456,11 @@ func (s errorWrapperSink) EncodeAndEmitRow(
 	updated, mvcc hlc.Timestamp,
 	encodingOpts changefeedbase.EncodingOptions,
 	alloc kvevent.Alloc,
+	partitionID int64,
 ) error {
 	if sinkWithEncoder, ok := s.wrapped.(SinkWithEncoder); ok {
-		return sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, prevRow, topic, updated, mvcc, encodingOpts, alloc)
+		return sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, prevRow, topic, updated, mvcc, encodingOpts, alloc,
+			partitionID)
 	}
 	return errors.AssertionFailedf("Expected a sink with encoder for, found %T", s.wrapped)
 }
@@ -723,6 +725,7 @@ type SinkWithEncoder interface {
 		updated, mvcc hlc.Timestamp,
 		encodingOpts changefeedbase.EncodingOptions,
 		alloc kvevent.Alloc,
+		partitionID int64,
 	) error
 
 	Flush(ctx context.Context) error
@@ -904,6 +907,9 @@ func shouldFlushBatch(bytes int, messages int, config sinkBatchConfig) bool {
 }
 
 func sinkSupportsConcurrentEmits(sink EventSink) bool {
-	_, ok := sink.(*batchingSink)
-	return ok
+	switch sink.(type) {
+	case *batchingSink, SinkWithEncoder:
+		return true
+	}
+	return false
 }
