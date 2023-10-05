@@ -485,7 +485,7 @@ func processTestXmls(testXmls []string) error {
 				postErrors = append(postErrors, fmt.Sprintf("Failed to open %s with the following error: %v", testXml, err))
 				continue
 			}
-			if err := githubpost.PostFromTestXML(githubPostFormatterName, xmlFile); err != nil {
+			if err := githubpost.PostFromTestXMLWithFormatterName(githubPostFormatterName, xmlFile); err != nil {
 				postErrors = append(postErrors, fmt.Sprintf("Failed to process %s with the following error: %+v", testXml, err))
 				continue
 			}
