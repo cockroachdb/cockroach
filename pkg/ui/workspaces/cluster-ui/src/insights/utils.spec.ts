@@ -51,6 +51,7 @@ const blockedContentionMock: ContentionDetails = {
   tableName: "table",
   indexName: "index",
   contentionTimeMs: 500,
+  contentionType: "LOCK_WAIT",
 };
 
 const statementInsightMock: StmtInsightEvent = {
