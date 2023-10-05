@@ -1473,8 +1473,10 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedTSQuery},
 		{code: pgcode.Syntax, condition: pgLSNNotSupported},
 		{code: pgcode.FeatureNotSupported, condition: pgLSNNotSupported},
+		{code: pgcode.UndefinedObject, condition: pgLSNNotSupported},
 		{code: pgcode.Syntax, condition: refCursorNotSupported},
 		{code: pgcode.FeatureNotSupported, condition: refCursorNotSupported},
+		{code: pgcode.UndefinedObject, condition: refCursorNotSupported},
 		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedIdxQueries},
 		{code: pgcode.InvalidTableDefinition, condition: hasUnsupportedIdxQueries},
 	})
