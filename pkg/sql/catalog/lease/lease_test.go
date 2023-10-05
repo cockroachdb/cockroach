@@ -131,6 +131,10 @@ func (t *leaseTest) getLeases(descID descpb.ID) string {
   SELECT version, "nodeID"
     FROM system.lease
    WHERE "descID" = $1 AND "nodeID" > $2
+UNION
+  SELECT version, sql_instance_id as "nodeID"
+    FROM "".crdb_internal.kv_session_based_leases
+   WHERE "desc_id" = $1 AND "sql_instance_id" > $2
 ORDER BY version, "nodeID";
 `
 	rows, err := t.db.Query(sql, descID, baseIDForLeaseTest)
@@ -2998,6 +3002,9 @@ func TestLeaseTxnDeadlineExtension(t *testing.T) {
 	// Set the lease duration such that the next lease acquisition will
 	// require the lease to be reacquired.
 	lease.LeaseDuration.Override(ctx, &params.Settings.SV, 0)
+	// Disable session based leasing, since a zero duration only
+	// applies to the expiry, and not the acquisition length.
+	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &params.Settings.SV, int64(lease.SessionBasedLeasingOff))
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(ctx context.Context, req *kvpb.BatchRequest) *kvpb.Error {
 			filterMu.Lock()
@@ -3326,7 +3333,12 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 	})
 	f.Store(noop)
 	ctx := context.Background()
+	// Session based leases will retry with the same value, which KV will be smart
+	// enough to cancel out on the replica when ambigious results happen. So,
+	// this test breaks on this setting.
+	settings := cluster.MakeTestingClusterSettings()
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: settings,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingResponseFilter: func(ctx context.Context, request *kvpb.BatchRequest, response *kvpb.BatchResponse) *kvpb.Error {
@@ -3337,6 +3349,7 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
+	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &s.ClusterSettings().SV, int64(lease.SessionBasedLeasingOff))
 	codec := s.Codec()
 
 	sqlutils.MakeSQLRunner(sqlDB).Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
@@ -3446,13 +3459,13 @@ func TestDescriptorRemovedFromCacheWhenLeaseRenewalForThisDescriptorFails(t *tes
 	}
 	params.Settings = cluster.MakeTestingClusterSettings()
 
-	// Set lease duration to something small so that the periodical lease refresh is kicked off often where the testing
-	// knob will be invoked, and eventually the logic to remove unfound descriptor from cache will be triggered.
-	lease.LeaseDuration.Override(ctx, &params.Settings.SV, time.Second)
-
 	srv, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
+	// Set lease duration to something small so that the periodical lease refresh is kicked off often where the testing
+	// knob will be invoked, and eventually the logic to remove unfound descriptor from cache will be triggered.
+	lease.LeaseDuration.Override(ctx, &s.ClusterSettings().SV, time.Second)
+	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &s.ClusterSettings().SV, int64(lease.SessionBasedLeasingOff))
 	tdb = sqlutils.MakeSQLRunner(sqlDB)
 
 	sql := `
