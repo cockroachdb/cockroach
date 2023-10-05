@@ -72,7 +72,9 @@ func TestRefreshError(t *testing.T) {
 			if resolveIntent {
 				intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: k})
 				intent.Status = roachpb.COMMITTED
-				if _, _, _, err := storage.MVCCResolveWriteIntent(ctx, db, nil, intent, storage.MVCCResolveWriteIntentOptions{}); err != nil {
+				if _, _, _, _, err := storage.MVCCResolveWriteIntent(
+					ctx, db, nil, intent, storage.MVCCResolveWriteIntentOptions{},
+				); err != nil {
 					t.Fatal(err)
 				}
 			}

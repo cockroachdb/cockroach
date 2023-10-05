@@ -175,7 +175,9 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 	// would not have any timestamp bounds and would be selected for every read.
 	intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: k})
 	intent.Status = roachpb.COMMITTED
-	if _, _, _, err := storage.MVCCResolveWriteIntent(ctx, db, nil, intent, storage.MVCCResolveWriteIntentOptions{}); err != nil {
+	if _, _, _, _, err := storage.MVCCResolveWriteIntent(
+		ctx, db, nil, intent, storage.MVCCResolveWriteIntentOptions{},
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := storage.MVCCPut(ctx, db, roachpb.Key("unused2"), ts1, v, storage.MVCCWriteOptions{}); err != nil {
@@ -278,7 +280,7 @@ func TestRefreshRangeError(t *testing.T) {
 			if resolveIntent {
 				intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: k})
 				intent.Status = roachpb.COMMITTED
-				if _, _, _, err := storage.MVCCResolveWriteIntent(ctx, db, nil, intent, storage.MVCCResolveWriteIntentOptions{}); err != nil {
+				if _, _, _, _, err := storage.MVCCResolveWriteIntent(ctx, db, nil, intent, storage.MVCCResolveWriteIntentOptions{}); err != nil {
 					t.Fatal(err)
 				}
 			}

@@ -135,9 +135,13 @@ var errBackwardScan = pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "cursor 
 
 // FetchCursor implements the FETCH and MOVE statements.
 // See https://www.postgresql.org/docs/current/sql-fetch.html for details.
-func (p *planner) FetchCursor(
-	_ context.Context, s *tree.CursorStmt, isMove bool,
-) (planNode, error) {
+func (p *planner) FetchCursor(_ context.Context, s *tree.CursorStmt) (planNode, error) {
+	return p.newFetchNode(s)
+}
+
+// newFetchNode creates a new fetchNode, which implements FETCH and MOVE
+// statements.
+func (p *planner) newFetchNode(s *tree.CursorStmt) (*fetchNode, error) {
 	cursor := p.sqlCursors.getCursor(s.Name)
 	if cursor == nil {
 		return nil, pgerror.Newf(
@@ -151,7 +155,6 @@ func (p *planner) FetchCursor(
 		n:         s.Count,
 		fetchType: s.FetchType,
 		cursor:    cursor,
-		isMove:    isMove,
 	}
 	if s.FetchType != tree.FetchNormal {
 		node.n = 0
@@ -168,10 +171,6 @@ type fetchNode struct {
 	// mode.
 	offset    int64
 	fetchType tree.FetchType
-	// isMove is true if this is a MOVE statement, which is identical to a FETCH
-	// statement but returns only a statement tag of how many rows would have been
-	// fetched.
-	isMove bool
 
 	seeked bool
 
@@ -180,18 +179,23 @@ type fetchNode struct {
 	origTxnSeqNum enginepb.TxnSeq
 }
 
-func (f *fetchNode) startExec(params runParams) error {
-	// We need to make sure that we're reading at the same read sequence number
-	// that we had when we created the cursor, to preserve the "sensitivity"
-	// semantics of cursors, which demand that data written after the cursor
-	// was declared is not visible to the cursor.
-	f.origTxnSeqNum = f.cursor.txn.GetReadSeqNum()
-	return f.cursor.txn.SetReadSeqNum(f.cursor.readSeqNum)
+func (f *fetchNode) startInternal() error {
+	if !f.cursor.eagerExecution {
+		// We need to make sure that we're reading at the same read sequence number
+		// that we had when we created the cursor, to preserve the "sensitivity"
+		// semantics of cursors, which demand that data written after the cursor
+		// was declared is not visible to the cursor.
+		f.origTxnSeqNum = f.cursor.txn.GetReadSeqNum()
+		return f.cursor.txn.SetReadSeqNum(f.cursor.readSeqNum)
+	}
+	// If eagerExecution is set, the cursor has already been fully read into a row
+	// container, so there is no need to set the read sequence number.
+	return nil
 }
 
-func (f *fetchNode) Next(params runParams) (bool, error) {
+func (f *fetchNode) nextInternal(ctx context.Context) (bool, error) {
 	if f.fetchType == tree.FetchAll {
-		return f.cursor.Next(params.ctx)
+		return f.cursor.Next(ctx)
 	}
 
 	if !f.seeked {
@@ -202,7 +206,7 @@ func (f *fetchNode) Next(params runParams) (bool, error) {
 		case tree.FetchFirst:
 			switch f.cursor.curRow {
 			case 0:
-				_, err := f.cursor.Next(params.ctx)
+				_, err := f.cursor.Next(ctx)
 				return true, err
 			case 1:
 				return true, nil
@@ -215,7 +219,7 @@ func (f *fetchNode) Next(params runParams) (bool, error) {
 				return false, errBackwardScan
 			}
 			for f.cursor.curRow < f.offset {
-				more, err := f.cursor.Next(params.ctx)
+				more, err := f.cursor.Next(ctx)
 				if !more || err != nil {
 					return more, err
 				}
@@ -223,7 +227,7 @@ func (f *fetchNode) Next(params runParams) (bool, error) {
 			return true, nil
 		case tree.FetchRelative:
 			for i := int64(0); i < f.offset; i++ {
-				more, err := f.cursor.Next(params.ctx)
+				more, err := f.cursor.Next(ctx)
 				if !more || err != nil {
 					return more, err
 				}
@@ -235,7 +239,15 @@ func (f *fetchNode) Next(params runParams) (bool, error) {
 		return false, nil
 	}
 	f.n--
-	return f.cursor.Next(params.ctx)
+	return f.cursor.Next(ctx)
+}
+
+func (f *fetchNode) startExec(params runParams) error {
+	return f.startInternal()
+}
+
+func (f *fetchNode) Next(params runParams) (bool, error) {
+	return f.nextInternal(params.ctx)
 }
 
 func (f fetchNode) Values() tree.Datums {
@@ -245,12 +257,13 @@ func (f fetchNode) Values() tree.Datums {
 func (f fetchNode) Close(ctx context.Context) {
 	// We explicitly do not pass through the Close to our Rows, because
 	// running FETCH on a CURSOR does not close it.
-
-	// Reset the transaction's read sequence number to what it was before the
-	// fetch began, so that subsequent reads in the transaction can still see
-	// writes from that transaction.
-	if err := f.cursor.txn.SetReadSeqNum(f.origTxnSeqNum); err != nil {
-		log.Warningf(ctx, "error resetting transaction read seq num after CURSOR operation: %v", err)
+	if !f.cursor.eagerExecution {
+		// Reset the transaction's read sequence number to what it was before the
+		// fetch began, so that subsequent reads in the transaction can still see
+		// writes from that transaction.
+		if err := f.cursor.txn.SetReadSeqNum(f.origTxnSeqNum); err != nil {
+			log.Warningf(ctx, "error resetting transaction read seq num after CURSOR operation: %v", err)
+		}
 	}
 }
 
@@ -278,6 +291,34 @@ func (p *planner) PLpgSQLCloseCursor(cursorName tree.Name) error {
 	return p.sqlCursors.closeCursor(cursorName)
 }
 
+// PLpgSQLFetchCursor returns the next row from the cursor with the given name
+// after seeking past the specified number of rows. It is used to implement the
+// PLpgSQL FETCH and MOVE statements. When there are no rows left to return,
+// PLpgSQLFetchCursor returns nil.
+//
+// Note: when called with the FORWARD ALL option, PLpgSQLFetchCursor will only
+// return the last row. This is compatible with PLpgSQL, as FORWARD ALL can only
+// be used with PLpgSQL MOVE, which ignores all returned rows.
+func (p *planner) PLpgSQLFetchCursor(
+	ctx context.Context, cursorStmt *tree.CursorStmt,
+) (res tree.Datums, err error) {
+	cursor, err := p.newFetchNode(cursorStmt)
+	if err != nil {
+		return nil, err
+	}
+	if err = cursor.startInternal(); err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	var hasNext bool
+	hasNext, err = cursor.nextInternal(ctx)
+	for err == nil && hasNext {
+		res = cursor.Values()
+		hasNext, err = cursor.nextInternal(ctx)
+	}
+	return res, err
+}
+
 type sqlCursor struct {
 	isql.Rows
 	// txn is the transaction object that the internal executor for this cursor
@@ -290,6 +331,10 @@ type sqlCursor struct {
 	created    time.Time
 	curRow     int64
 	withHold   bool
+	// eagerExecution indicates that the cursor's query was executed eagerly and
+	// stored in a row container. If true, there is no need to set the transaction
+	// sequence number, since the query is no longer active.
+	eagerExecution bool
 }
 
 // Next implements the Rows interface.

@@ -4731,7 +4731,9 @@ func MVCCPaginate(
 //
 // Returns whether or not an intent was found to resolve, number of bytes added
 // to the write batch by intent resolution, and the resume span if the max
-// bytes limit was exceeded.
+// bytes limit was exceeded. Additionally, if any replicated locks with strength
+// lock.Shared or lock.Exclusive are released, a boolean indicating as such is
+// also returned.
 //
 // Transaction epochs deserve a bit of explanation. The epoch for a
 // transaction is incremented on transaction retries. A transaction
@@ -4754,15 +4756,15 @@ func MVCCResolveWriteIntent(
 	ms *enginepb.MVCCStats,
 	intent roachpb.LockUpdate,
 	opts MVCCResolveWriteIntentOptions,
-) (ok bool, numBytes int64, resumeSpan *roachpb.Span, err error) {
+) (ok bool, numBytes int64, resumeSpan *roachpb.Span, replLocksReleased bool, err error) {
 	if len(intent.Key) == 0 {
-		return false, 0, nil, emptyKeyError()
+		return false, 0, nil, false, emptyKeyError()
 	}
 	if len(intent.EndKey) > 0 {
-		return false, 0, nil, errors.Errorf("can't resolve range intent as point intent")
+		return false, 0, nil, false, errors.Errorf("can't resolve range intent as point intent")
 	}
 	if opts.TargetBytes < 0 {
-		return false, 0, &roachpb.Span{Key: intent.Key}, nil
+		return false, 0, &roachpb.Span{Key: intent.Key}, false, nil
 	}
 
 	// Production code will use a buffered writer, which makes the numBytes
@@ -4777,7 +4779,7 @@ func MVCCResolveWriteIntent(
 		MatchTxnID: intent.Txn.ID,
 	})
 	if err != nil {
-		return false, 0, nil, err
+		return false, 0, nil, false, err
 	}
 	defer ltIter.Close()
 	buf := newPutBuffer()
@@ -4811,20 +4813,20 @@ func MVCCResolveWriteIntent(
 
 	for valid, err := ltIter.SeekEngineKeyGE(ltSeekKey); ; valid, err = ltIter.NextEngineKey() {
 		if err != nil {
-			return false, 0, nil, errors.Wrap(err, "seeking lock table")
+			return false, 0, nil, false, errors.Wrap(err, "seeking lock table")
 		} else if !valid {
 			break
 		}
 		str, txnID, err := ltIter.LockTableKeyVersion()
 		if err != nil {
-			return false, 0, nil, errors.Wrap(err, "decoding lock table key version")
+			return false, 0, nil, false, errors.Wrap(err, "decoding lock table key version")
 		}
 		if txnID != intent.Txn.ID {
-			return false, 0, nil, errors.AssertionFailedf(
+			return false, 0, nil, false, errors.AssertionFailedf(
 				"unexpected txnID %v != %v while scanning lock table", txnID, intent.Txn.ID)
 		}
 		if err := ltIter.ValueProto(&buf.meta); err != nil {
-			return false, 0, nil, errors.Wrap(err, "unmarshaling lock table value")
+			return false, 0, nil, false, errors.Wrap(err, "unmarshaling lock table value")
 		}
 		var strOk bool
 		if str == lock.Intent {
@@ -4837,21 +4839,22 @@ func MVCCResolveWriteIntent(
 					KeyTypes: IterKeyTypePointsAndRanges,
 				})
 				if err != nil {
-					return false, 0, nil, err
+					return false, 0, nil, false, err
 				}
 				defer iter.Close()
 			}
 			strOk, err = mvccResolveWriteIntent(ctx, rw, iter, ms, intent, &buf.meta, buf)
 		} else {
 			strOk, err = mvccReleaseLockInternal(ctx, rw, ms, intent, str, &buf.meta, buf)
+			replLocksReleased = replLocksReleased || strOk
 		}
 		if err != nil {
-			return false, 0, nil, err
+			return false, 0, nil, false, err
 		}
 		ok = ok || strOk
 	}
 	numBytes = int64(rw.BufferedSize() - beforeBytes)
-	return ok, numBytes, nil, nil
+	return ok, numBytes, nil, replLocksReleased, nil
 }
 
 // With the separated lock table, we are employing a performance optimization:
@@ -5438,14 +5441,22 @@ func mvccMaybeRewriteIntentHistory(
 //
 // Returns the number of intents resolved, number of bytes added to the write
 // batch by intent resolution, the resume span if the max keys or bytes limit
-// was exceeded, and the resume reason.
+// was exceeded, and the resume reason. Additionally, if any replicated locks
+// with strength lock.Shared or lock.Exclusive are released, a boolean
+// indicating as such is also returned.
 func MVCCResolveWriteIntentRange(
 	ctx context.Context,
 	rw ReadWriter,
 	ms *enginepb.MVCCStats,
 	intent roachpb.LockUpdate,
 	opts MVCCResolveWriteIntentRangeOptions,
-) (numKeys, numBytes int64, resumeSpan *roachpb.Span, resumeReason kvpb.ResumeReason, err error) {
+) (
+	numKeys, numBytes int64,
+	resumeSpan *roachpb.Span,
+	resumeReason kvpb.ResumeReason,
+	replLocksReleased bool,
+	err error,
+) {
 	keysExceeded := opts.MaxKeys < 0
 	bytesExceeded := opts.TargetBytes < 0
 	if keysExceeded || bytesExceeded {
@@ -5455,7 +5466,7 @@ func MVCCResolveWriteIntentRange(
 		} else if bytesExceeded {
 			resumeReason = kvpb.RESUME_BYTE_LIMIT
 		}
-		return 0, 0, &resumeSpan, resumeReason, nil
+		return 0, 0, &resumeSpan, resumeReason, false, nil
 	}
 
 	ltStart, _ := keys.LockTableSingleKey(intent.Key, nil)
@@ -5466,7 +5477,7 @@ func MVCCResolveWriteIntentRange(
 		MatchTxnID: intent.Txn.ID,
 	})
 	if err != nil {
-		return 0, 0, nil, 0, err
+		return 0, 0, nil, 0, false, err
 	}
 	defer ltIter.Close()
 	var mvccIter MVCCIterator
@@ -5479,7 +5490,7 @@ func MVCCResolveWriteIntentRange(
 		// Production code should always have consistent iterators.
 		mvccIter, err = rw.NewMVCCIterator(MVCCKeyIterKind, iterOpts)
 		if err != nil {
-			return 0, 0, nil, 0, err
+			return 0, 0, nil, 0, false, err
 		}
 	} else {
 		// For correctness, we need mvccIter to be consistent with engineIter.
@@ -5496,7 +5507,7 @@ func MVCCResolveWriteIntentRange(
 	var lastResolvedKeyOk bool
 	for valid, err := ltIter.SeekEngineKeyGE(EngineKey{Key: ltStart}); ; valid, err = ltIter.NextEngineKey() {
 		if err != nil {
-			return 0, 0, nil, 0, errors.Wrap(err, "seeking lock table")
+			return 0, 0, nil, 0, false, errors.Wrap(err, "seeking lock table")
 		} else if !valid {
 			// No more intents in the given range.
 			break
@@ -5504,11 +5515,11 @@ func MVCCResolveWriteIntentRange(
 
 		ltEngineKey, err := ltIter.EngineKey()
 		if err != nil {
-			return 0, 0, nil, 0, errors.Wrap(err, "retrieving lock table key")
+			return 0, 0, nil, 0, false, errors.Wrap(err, "retrieving lock table key")
 		}
 		ltKey, err := ltEngineKey.ToLockTableKey()
 		if err != nil {
-			return 0, 0, nil, 0, errors.Wrap(err, "decoding lock table key")
+			return 0, 0, nil, 0, false, errors.Wrap(err, "decoding lock table key")
 		}
 		sameLockedKey := lastResolvedKey.Equal(ltKey.Key)
 		if !sameLockedKey {
@@ -5531,7 +5542,7 @@ func MVCCResolveWriteIntentRange(
 				}
 				// We could also compute a tighter nextKey here if we wanted to.
 				resumeSpan := &roachpb.Span{Key: lastResolvedKey.Next(), EndKey: intentEndKey}
-				return numKeys, numBytes, resumeSpan, resumeReason, nil
+				return numKeys, numBytes, resumeSpan, resumeReason, replLocksReleased, nil
 			}
 
 			// Copy the underlying bytes of the unsafe key. This is needed for
@@ -5541,12 +5552,12 @@ func MVCCResolveWriteIntentRange(
 			lastResolvedKeyOk = false
 		}
 		if ltKey.TxnUUID != intent.Txn.ID {
-			return 0, 0, nil, 0, errors.AssertionFailedf(
+			return 0, 0, nil, 0, false, errors.AssertionFailedf(
 				"unexpected txnID %v != %v while scanning lock table", ltKey.TxnUUID, intent.Txn.ID)
 		}
 		intent.Key = ltKey.Key
 		if err := ltIter.ValueProto(&buf.meta); err != nil {
-			return 0, 0, nil, 0, errors.Wrap(err, "unmarshaling lock table value")
+			return 0, 0, nil, 0, false, errors.Wrap(err, "unmarshaling lock table value")
 		}
 		beforeBytes := rw.BufferedSize()
 		var ok bool
@@ -5554,6 +5565,7 @@ func MVCCResolveWriteIntentRange(
 			ok, err = mvccResolveWriteIntent(ctx, rw, mvccIter, ms, intent, &buf.meta, buf)
 		} else {
 			ok, err = mvccReleaseLockInternal(ctx, rw, ms, intent, ltKey.Strength, &buf.meta, buf)
+			replLocksReleased = replLocksReleased || ok
 		}
 		if err != nil {
 			log.Warningf(ctx, "failed to resolve intent for key %q: %+v", lastResolvedKey, err)
@@ -5566,7 +5578,7 @@ func MVCCResolveWriteIntentRange(
 		}
 		numBytes += int64(rw.BufferedSize() - beforeBytes)
 	}
-	return numKeys, numBytes, nil, 0, nil
+	return numKeys, numBytes, nil, 0, replLocksReleased, nil
 }
 
 // MVCCCheckForAcquireLock scans the replicated lock table to determine whether

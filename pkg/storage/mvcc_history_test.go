@@ -1030,8 +1030,9 @@ func cmdResolveIntentRange(e *evalCtx) error {
 
 	return e.withWriter("resolve_intent_range", func(rw storage.ReadWriter) error {
 		opts := storage.MVCCResolveWriteIntentRangeOptions{MaxKeys: maxKeys, TargetBytes: targetBytes}
-		numKeys, numBytes, resumeSpan, resumeReason, err := storage.MVCCResolveWriteIntentRange(
-			e.ctx, rw, e.ms, intent, opts)
+		numKeys, numBytes, resumeSpan, resumeReason, replLocksReleased, err :=
+			storage.MVCCResolveWriteIntentRange(
+				e.ctx, rw, e.ms, intent, opts)
 		if err != nil {
 			return err
 		}
@@ -1045,6 +1046,9 @@ func cmdResolveIntentRange(e *evalCtx) error {
 		e.results.buf.Printf("resolve_intent_range: %v-%v -> resolved %d key(s)%s\n", start, end, numKeys, maybeNumBytes)
 		if resumeSpan != nil {
 			e.results.buf.Printf("resolve_intent_range: resume span [%s,%s) %s\n", resumeSpan.Key, resumeSpan.EndKey, resumeReason)
+		}
+		if replLocksReleased {
+			e.results.buf.Printf("resolve_intent_range: released shared or exclusive locks\n")
 		}
 		return nil
 	})
@@ -1061,8 +1065,9 @@ func (e *evalCtx) resolveIntent(
 	intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key})
 	intent.Status = resolveStatus
 	intent.ClockWhilePending = roachpb.ObservedTimestamp{Timestamp: clockWhilePending}
-	ok, numBytes, resumeSpan, err := storage.MVCCResolveWriteIntent(e.ctx, rw, e.ms, intent,
-		storage.MVCCResolveWriteIntentOptions{TargetBytes: targetBytes})
+	ok, numBytes, resumeSpan, replLocksReleased, err :=
+		storage.MVCCResolveWriteIntent(e.ctx, rw, e.ms, intent,
+			storage.MVCCResolveWriteIntentOptions{TargetBytes: targetBytes})
 	if err != nil {
 		return err
 	}
@@ -1076,6 +1081,9 @@ func (e *evalCtx) resolveIntent(
 	e.results.buf.Printf("resolve_intent: %v -> resolved key = %t%s\n", key, ok, maybeNumBytes)
 	if resumeSpan != nil {
 		e.results.buf.Printf("resolve_intent: resume span [%s,%s)\n", resumeSpan.Key, resumeSpan.EndKey)
+	}
+	if replLocksReleased {
+		e.results.buf.Printf("resolve_intent: released shared or exclusive locks\n")
 	}
 	return nil
 }

@@ -97,8 +97,8 @@ func ResolveIntent(
 		// The observation was from the wrong node. Ignore.
 		update.ClockWhilePending = roachpb.ObservedTimestamp{}
 	}
-	ok, numBytes, resumeSpan, err := storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update,
-		storage.MVCCResolveWriteIntentOptions{TargetBytes: h.TargetBytes})
+	ok, numBytes, resumeSpan, replLocksReleased, err := storage.MVCCResolveWriteIntent(
+		ctx, readWriter, ms, update, storage.MVCCResolveWriteIntentOptions{TargetBytes: h.TargetBytes})
 	if err != nil {
 		return result.Result{}, err
 	}
@@ -113,6 +113,17 @@ func ResolveIntent(
 	var res result.Result
 	res.Local.ResolvedLocks = []roachpb.LockUpdate{update}
 	res.Local.Metrics = resolveToMetricType(args.Status, args.Poison)
+
+	// Handle replicated lock releases.
+	if replLocksReleased && update.Status == roachpb.COMMITTED {
+		// A replicated {shared, exclusive} lock was released for a committed
+		// transaction. Now that the lock is no longer there, we still need to make
+		// sure other transactions can't write underneath the transaction's commit
+		// timestamp to the key. We return the transaction's commit timestamp on the
+		// response and update the timestamp cache a few layers above to ensure
+		// this.
+		reply.ReplicatedLocksReleasedCommitTimestamp = update.Txn.WriteTimestamp
+	}
 
 	if WriteAbortSpanOnResolve(args.Status, args.Poison, ok) {
 		if err := UpdateAbortSpan(ctx, cArgs.EvalCtx, readWriter, ms, args.IntentTxn, args.Poison); err != nil {

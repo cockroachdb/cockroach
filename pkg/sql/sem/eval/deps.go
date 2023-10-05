@@ -420,6 +420,11 @@ type Planner interface {
 	// error if the cursor doesn't exist. It is used to implement the PLpgSQL
 	// CLOSE statement.
 	PLpgSQLCloseCursor(cursorName tree.Name) error
+
+	// PLpgSQLFetchCursor returns the next row from the cursor with the given
+	// name, if any. It returns nil if no such row exists. Used to implement the
+	// PLpgSQL FETCH statement.
+	PLpgSQLFetchCursor(ctx context.Context, cursor *tree.CursorStmt) (res tree.Datums, err error)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

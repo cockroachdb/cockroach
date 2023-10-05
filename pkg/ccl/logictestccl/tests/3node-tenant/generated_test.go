@@ -1465,13 +1465,6 @@ func TestTenantLogic_propagate_input_ordering(
 	runLogicTest(t, "propagate_input_ordering")
 }
 
-func TestTenantLogic_raise(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "raise")
-}
-
 func TestTenantLogic_read_committed(
 	t *testing.T,
 ) {
