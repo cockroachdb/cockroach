@@ -1016,7 +1016,7 @@ CREATE TABLE system.mvcc_statistics (
 	table_id INT8 NOT NULL,
 	index_id INT8 NOT NULL,
 	statistics JSONB NOT NULL,
-	crdb_internal_created_at_database_id_index_id_table_id_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(created_at)), 16:::INT8)) VIRTUAL,
+	crdb_internal_created_at_database_id_index_id_table_id_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(created_at))), 16:::INT8)) VIRTUAL,
 	CONSTRAINT mvcc_statistics_pkey PRIMARY KEY (created_at ASC, database_id ASC, table_id ASC, index_id ASC) USING HASH WITH (bucket_count=16),
 	FAMILY "primary" (
 	    created_at,
@@ -4451,7 +4451,7 @@ var (
 					IsSharded:    true,
 					Name:         "crdb_internal_end_time_start_time_shard_16",
 					ShardBuckets: 16,
-					ColumnNames:  []string{"start_time", "end_time"},
+					ColumnNames:  []string{"end_time", "start_time"},
 				},
 			},
 		),
