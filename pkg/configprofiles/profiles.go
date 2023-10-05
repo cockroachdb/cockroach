@@ -154,7 +154,7 @@ func enableReplication(baseTasks []autoconfigpb.Task) []autoconfigpb.Task {
 		makeTask("enable rangefeeds and replication",
 			/* nonTxnSQL */ []string{
 				"SET CLUSTER SETTING kv.rangefeed.enabled = true",
-				"SET CLUSTER SETTING cross_cluster_replication.enabled = true",
+				"SET CLUSTER SETTING physical_replication.enabled = true",
 			},
 			nil, /* txnSQL */
 		),
