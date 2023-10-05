@@ -94,7 +94,7 @@ func (sdb *schemaDescriptorBuilder) RunPostDeserializationChanges() (err error) 
 	// Set the ModificationTime field before doing anything else.
 	// Other changes may depend on it.
 	mustSetModTime, err := descpb.MustSetModificationTime(
-		sdb.original.ModificationTime, sdb.mvccTimestamp, sdb.original.Version,
+		sdb.original.ModificationTime, sdb.mvccTimestamp, sdb.original.Version, sdb.original.State,
 	)
 	if err != nil {
 		return err
