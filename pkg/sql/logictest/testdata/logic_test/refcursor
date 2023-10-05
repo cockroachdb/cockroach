@@ -28,7 +28,7 @@ statement ok
 ALTER TABLE xy ADD COLUMN curs REFCURSOR;
 
 statement ok
-INSERT INTO xy VALUES (1, 2, 'foo');
+INSERT INTO xy VALUES (1, 2, 'foo'::REFCURSOR);
 
 query IIT
 SELECT * FROM xy;
@@ -38,14 +38,14 @@ SELECT * FROM xy;
 # Alter a column type to REFCURSOR.
 statement ok
 DROP TABLE IF EXISTS xy;
-CREATE TABLE xy (x INT, y INT);
+CREATE TABLE xy (x INT, y TEXT);
 SET enable_experimental_alter_column_type_general=true;
 
 statement ok
 ALTER TABLE xy ALTER COLUMN y TYPE REFCURSOR;
 
 statement ok
-INSERT INTO xy VALUES (1, 'bar');
+INSERT INTO xy VALUES (1, 'bar'::REFCURSOR);
 
 query IT
 SELECT * FROM xy;
@@ -60,10 +60,10 @@ INSERT INTO xy VALUES (3, 4);
 
 # Create a partial index that uses the REFCURSOR type.
 statement ok
-CREATE INDEX part ON xy (x) WHERE y::REFCURSOR < '3';
+CREATE INDEX part ON xy (x) WHERE y::TEXT::REFCURSOR < '3';
 
 query II
-SELECT * FROM xy@part WHERE y::REFCURSOR < '3';
+SELECT * FROM xy@part WHERE y::TEXT::REFCURSOR < '3';
 ----
 1  2
 
@@ -74,7 +74,7 @@ INSERT INTO xy VALUES (1, 2);
 
 # Add a check constraint that uses the REFCURSOR type.
 statement ok
-ALTER TABLE xy ADD CONSTRAINT bar CHECK (y::REFCURSOR < 'baz');
+ALTER TABLE xy ADD CONSTRAINT bar CHECK (y::TEXT::REFCURSOR < 'baz');
 
 query II
 SELECT * FROM xy;
@@ -88,7 +88,7 @@ statement ok
 CREATE TYPE typ AS (x INT, y REFCURSOR);
 
 query T
-SELECT (100, 'bar')::typ;
+SELECT (100, 'bar'::REFCURSOR)::typ;
 ----
 (100,bar)
 
@@ -97,7 +97,7 @@ subtest function
 # Function that returns REFCURSOR.
 statement ok
 CREATE FUNCTION f() RETURNS REFCURSOR AS $$
-  SELECT 'foo';
+  SELECT 'foo'::REFCURSOR;
 $$ LANGUAGE SQL;
 
 query T
@@ -111,7 +111,7 @@ DROP FUNCTION f;
 statement ok
 CREATE FUNCTION f() RETURNS REFCURSOR AS $$
   BEGIN
-    RETURN 'foo';
+    RETURN 'foo'::REFCURSOR;
   END
 $$ LANGUAGE PLpgSQL;
 
@@ -130,7 +130,7 @@ CREATE FUNCTION f(curs REFCURSOR) RETURNS INT AS $$
 $$ LANGUAGE SQL;
 
 query I
-SELECT f('foo');
+SELECT f('foo'::REFCURSOR);
 ----
 0
 
@@ -145,7 +145,7 @@ CREATE FUNCTION f(curs REFCURSOR) RETURNS INT AS $$
 $$ LANGUAGE PLpgSQL;
 
 query I
-SELECT f('foo');
+SELECT f('foo'::REFCURSOR);
 ----
 0
 
@@ -186,7 +186,7 @@ DROP FUNCTION f;
 # Function that returns a composite type with REFCURSOR component.
 statement ok
 CREATE FUNCTION f() RETURNS typ AS $$
-  SELECT (1, 'foo');
+  SELECT (1, 'foo'::REFCURSOR);
 $$ LANGUAGE SQL;
 
 query T
@@ -200,7 +200,7 @@ DROP FUNCTION f;
 statement ok
 CREATE FUNCTION f() RETURNS typ AS $$
   BEGIN
-    RETURN (1, 'foo');
+    RETURN (1, 'foo'::REFCURSOR);
   END
 $$ LANGUAGE PLpgSQL;
 
@@ -220,5 +220,189 @@ foo
 # REFCURSOR does not have a width.
 statement error pgcode 42601 syntax error
 SELECT 'foo'::REFCURSOR(2);
+
+# Testing casts.
+statement ok
+CREATE TABLE implicit_types (
+  a TEXT, b CHAR, c VARCHAR, d NAME, e INT, f FLOAT, g DECIMAL, h BOOL,
+  i INTERVAL, j DATE, k TIMESTAMP, l REFCURSOR
+);
+
+# Only the string types can be explicitly cast to REFCURSOR.
+subtest explicit_cast_to
+
+query T
+SELECT NULL::REFCURSOR;
+----
+NULL
+
+query T
+SELECT 'foo'::TEXT::REFCURSOR;
+----
+foo
+
+query T
+SELECT 'a'::CHAR::REFCURSOR;
+----
+a
+
+query T
+SELECT 'foo'::VARCHAR::REFCURSOR;
+----
+foo
+
+query T
+SELECT 'foo'::NAME::REFCURSOR;
+----
+foo
+
+statement error pgcode 42846 pq: invalid cast: int -> refcursor
+SELECT 1::INT::REFCURSOR;
+
+statement error pgcode 42846 pq: invalid cast: float -> refcursor
+SELECT 1.0::FLOAT::REFCURSOR;
+
+statement error pgcode 42846 pq: invalid cast: decimal -> refcursor
+SELECT 1.0::DECIMAL::REFCURSOR;
+
+statement error pgcode 42846 pq: invalid cast: bool -> refcursor
+SELECT False::REFCURSOR;
+
+statement error pgcode 42846 pq: invalid cast: interval -> refcursor
+SELECT '34h2s'::INTERVAL::REFCURSOR;
+
+statement error pgcode 42846 pq: invalid cast: date -> refcursor
+SELECT '2015-08-30'::DATE::REFCURSOR;
+
+statement error pgcode 42846 pq: invalid cast: timestamp -> refcursor
+SELECT '2015-08-30 03:34:45.34567'::TIMESTAMP::REFCURSOR;
+
+# Only the string types can be explicitly cast from REFCURSOR.
+subtest explicit_cast_from
+
+query T
+SELECT 'foo'::REFCURSOR::TEXT;
+----
+foo
+
+query T
+SELECT 'a'::REFCURSOR::CHAR;
+----
+a
+
+query T
+SELECT 'foo'::REFCURSOR::VARCHAR;
+----
+foo
+
+query T
+SELECT 'foo'::REFCURSOR::NAME;
+----
+foo
+
+statement error pgcode 42846 pq: invalid cast: refcursor -> int
+SELECT '1'::REFCURSOR::INT;
+
+statement error pgcode 42846 pq: invalid cast: refcursor -> float
+SELECT '1.0'::REFCURSOR::FLOAT;
+
+statement error pgcode 42846 pq: invalid cast: refcursor -> decimal
+SELECT '1.0'::REFCURSOR::DECIMAL;
+
+statement error pgcode 42846 pq: invalid cast: refcursor -> bool
+SELECT 'False'::REFCURSOR::BOOL;
+
+statement error pgcode 42846 pq: invalid cast: refcursor -> interval
+SELECT '34h2s'::REFCURSOR::INTERVAL;
+
+statement error pgcode 42846 pq: invalid cast: refcursor -> date
+SELECT '2015-08-30'::REFCURSOR::DATE;
+
+statement error pgcode 42846 pq: invalid cast: refcursor -> timestamp
+SELECT '2015-08-30 03:34:45.34567'::REFCURSOR::TIMESTAMP;
+
+# There are no implicit casts to REFCURSOR.
+subtest implicit_cast_to
+
+statement ok
+INSERT INTO implicit_types(l) VALUES (NULL);
+
+statement error pgcode 42804 pq: value type string doesn't match type refcursor of column \"l\"
+INSERT INTO implicit_types(l) VALUES ('foo'::TEXT);
+
+statement error pgcode 42804 pq: value type char doesn't match type refcursor of column \"l\"
+INSERT INTO implicit_types(l) VALUES ('a'::CHAR);
+
+statement error pgcode 42804 pq: value type varchar doesn't match type refcursor of column \"l\"
+INSERT INTO implicit_types(l) VALUES ('foo'::VARCHAR);
+
+statement error pgcode 42804 pq: value type name doesn't match type refcursor of column \"l\"
+INSERT INTO implicit_types(l) VALUES ('foo'::NAME);
+
+statement error pgcode 42804 pq: value type int doesn't match type refcursor of column \"l\"
+INSERT INTO implicit_types(l) VALUES (1::INT);
+
+statement error pgcode 42804 pq: value type float doesn't match type refcursor of column \"l\"
+INSERT INTO implicit_types(l) VALUES (1.0::FLOAT);
+
+statement error pgcode 42804 pq: value type decimal doesn't match type refcursor of column \"l\"
+INSERT INTO implicit_types(l) VALUES (1.0::DECIMAL);
+
+statement error pgcode 42804 pq: value type bool doesn't match type refcursor of column \"l\"
+INSERT INTO implicit_types(l) VALUES (False::BOOL);
+
+statement error pgcode 42804 pq: value type interval doesn't match type refcursor of column \"l\"
+INSERT INTO implicit_types(l) VALUES ('34h2s'::INTERVAL);
+
+statement error pgcode 42804 pq: value type date doesn't match type refcursor of column \"l\"
+INSERT INTO implicit_types(l) VALUES ('2015-08-30'::DATE);
+
+statement error pgcode 42804 pq: value type timestamp doesn't match type refcursor of column \"l\"
+INSERT INTO implicit_types(l) VALUES ('2015-08-30 03:34:45.34567'::TIMESTAMP);
+
+# Only the strings types can be implicitly casted from refcursor.
+subtest implicit_cast_from
+
+statement ok
+INSERT INTO implicit_types(a) VALUES ('foo'::REFCURSOR);
+
+statement ok
+INSERT INTO implicit_types(b) VALUES ('a'::REFCURSOR);
+
+statement ok
+INSERT INTO implicit_types(c) VALUES ('foo'::REFCURSOR);
+
+statement ok
+INSERT INTO implicit_types(d) VALUES ('foo'::REFCURSOR);
+
+statement error pgcode 42804 pq: value type refcursor doesn't match type int of column \"e\"
+INSERT INTO implicit_types(e) VALUES ('1'::REFCURSOR);
+
+statement error pgcode 42804 pq: value type refcursor doesn't match type float of column \"f\"
+INSERT INTO implicit_types(f) VALUES ('1.0'::REFCURSOR);
+
+statement error pgcode 42804 pq: value type refcursor doesn't match type decimal of column \"g\"
+INSERT INTO implicit_types(g) VALUES ('1.0'::REFCURSOR);
+
+statement error pgcode 42804 pq: value type refcursor doesn't match type bool of column \"h\"
+INSERT INTO implicit_types(h) VALUES ('False'::REFCURSOR);
+
+statement error pgcode 42804 pq: value type refcursor doesn't match type interval of column \"i\"
+INSERT INTO implicit_types(i) VALUES ('34h2s'::REFCURSOR);
+
+statement error pgcode 42804 pq: value type refcursor doesn't match type date of column \"j\"
+INSERT INTO implicit_types(j) VALUES ('2015-08-30'::REFCURSOR);
+
+statement error pgcode 42804 pq: value type refcursor doesn't match type timestamp of column \"k\"
+INSERT INTO implicit_types(k) VALUES ('2015-08-30 03:34:45.34567'::REFCURSOR);
+
+query TTTTIRRBTTTT rowsort
+SELECT * FROM implicit_types;
+----
+NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL
+foo   NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL
+NULL  a     NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL
+NULL  NULL  foo   NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL
+NULL  NULL  NULL  foo   NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL
 
 subtest end
