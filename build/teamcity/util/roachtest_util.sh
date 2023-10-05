@@ -18,7 +18,8 @@ stats_dir="$(date +"%Y%m%d")-${TC_BUILD_ID}"
 
 # Set up a function we'll invoke at the end.
 function upload_stats {
- if tc_release_branch; then
+  # VERY specific hack to test perf upload
+ if tc_release_branch || [[ $TC_BUILD_BRANCH == "111782" ]]; then
       bucket="${ROACHTEST_BUCKET:-cockroach-nightly-${CLOUD}}"
       if [[ "${CLOUD}" == "gce" ]]; then
           # GCE, having been there first, gets an exemption.
