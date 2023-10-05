@@ -147,6 +147,9 @@ func NewTestTenantHelper(
 		ServerArgs: base.TestServerArgs{
 			Knobs:             knobs,
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+
+			// Make tests faster.
+			FastRangefeeds: true,
 		},
 	})
 	server := testCluster.Server(0)

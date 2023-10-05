@@ -691,6 +691,37 @@ func (ts *testServer) Activate(ctx context.Context) error {
 		return err
 	}
 
+	// If the test is indirectly dependent on rangefeed latency, but not
+	// particularly interested in observing the effects of the default
+	// rangefeed configuration, make the test faster.
+	if ts.params.FastRangefeeds {
+		ie := ts.InternalExecutor().(isql.Executor)
+		for _, cs := range []struct {
+			setting string
+			value   time.Duration
+		}{
+			{"kv.closed_timestamp.target_duration", 50 * time.Millisecond},
+			{"kv.closed_timestamp.side_transport_interval", 100 * time.Millisecond},
+			{"kv.rangefeed.closed_timestamp_refresh_interval", 100 * time.Millisecond},
+			{"kv.protectedts.poll_interval", 10 * time.Millisecond},
+			{"kv.protectedts.reconciliation.interval", 1 * time.Millisecond},
+			// Speed up span config reconciliation.
+			{"spanconfig.reconciliation_job.checkpoint_interval", 100 * time.Millisecond},
+		} {
+			factor := 1
+			if util.RaceEnabled {
+				// Race builds run with uniform overhead. Don't amplify their
+				// slowness.
+				factor = 4
+			}
+			_, err := ie.Exec(ctx, "testserver-make-rangefeeds-faster", nil,
+				fmt.Sprintf("SET CLUSTER SETTING %s = '%s'", cs.setting, cs.value*time.Duration(factor)))
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 	maybeRunVersionUpgrade := func(layer serverutils.ApplicationLayerInterface) error {
 		if v := ts.BinaryVersionOverride(); v != (roachpb.Version{}) {
 			ie := layer.InternalExecutor().(isql.Executor)

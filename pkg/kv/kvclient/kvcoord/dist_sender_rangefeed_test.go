@@ -865,6 +865,9 @@ func TestMuxRangeFeedCanCloseStream(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			FastRangefeeds: true,
+		},
 	})
 	defer tc.Stopper().Stop(ctx)
 
@@ -874,7 +877,6 @@ func TestMuxRangeFeedCanCloseStream(t *testing.T) {
 	// Insert 1000 rows, and split them into 10 ranges.
 	sqlDB.ExecMultiple(t,
 		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
-		`SET CLUSTER SETTING kv.closed_timestamp.target_duration='100ms'`,
 		`ALTER DATABASE defaultdb  CONFIGURE ZONE USING num_replicas = 1`,
 		`CREATE TABLE foo (key INT PRIMARY KEY)`,
 		`INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000)`,
@@ -1011,6 +1013,9 @@ func TestMuxRangeFeedDoesNotDeadlockWithLocalStreams(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			FastRangefeeds: true,
+		},
 	})
 	defer tc.Stopper().Stop(ctx)
 
@@ -1020,7 +1025,6 @@ func TestMuxRangeFeedDoesNotDeadlockWithLocalStreams(t *testing.T) {
 	// Insert 1000 rows, and split them into many ranges.
 	sqlDB.ExecMultiple(t,
 		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
-		`SET CLUSTER SETTING kv.closed_timestamp.target_duration='100ms'`,
 		`ALTER DATABASE defaultdb  CONFIGURE ZONE USING num_replicas = 1`,
 		`CREATE TABLE foo (key INT PRIMARY KEY)`,
 	)

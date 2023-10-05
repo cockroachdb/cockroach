@@ -393,22 +393,18 @@ func TestTruncatePreservesSplitPoints(t *testing.T) {
 							DisableMergeQueue: true,
 						},
 					},
+					// This test asserts on KV-internal effects (i.e. range splits
+					// and their boundaries) as a result of configs and manually
+					// installed splits. To ensure it works with the span configs
+					// infrastructure quickly enough, we set a low closed timestamp
+					// target duration.
+					FastRangefeeds: true,
 				},
 			})
 			defer tc.Stopper().Stop(ctx)
 			s := tc.ApplicationLayer(0)
 			tenantSettings := s.ClusterSettings()
 			conn := s.SQLConn(t, "defaultdb")
-
-			{
-				// This test asserts on KV-internal effects (i.e. range splits
-				// and their boundaries) as a result of configs and manually
-				// installed splits. To ensure it works with the span configs
-				// infrastructure quickly enough, we set a low closed timestamp
-				// target duration.
-				sysDB := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t, ""))
-				sysDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
-			}
 
 			var err error
 			_, err = conn.ExecContext(ctx, `

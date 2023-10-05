@@ -106,6 +106,8 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: knobs,
 		},
+		// Make test faster.
+		FastRangefeeds: true,
 	}
 	jobs.PollJobsMetricsInterval.Override(context.Background(), &args.Settings.SV, 250*time.Millisecond)
 	s, db, _ := serverutils.StartServer(t, args)
@@ -113,7 +115,6 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 	th.sqlDB = sqlutils.MakeSQLRunner(db)
 	th.server = s
 	th.sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_buffer_size = '1MiB'`)
-	th.sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`) // speeds up test
 
 	return th, func() {
 		dirCleanupFn()

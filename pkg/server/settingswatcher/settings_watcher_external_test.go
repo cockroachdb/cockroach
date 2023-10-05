@@ -53,6 +53,9 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 	ctx := context.Background()
 	srv, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		// Shorten the closed timestamp duration as a cheeky way to check the
+		// checkpointing code while also speeding up the test.
+		FastRangefeeds: true,
 	})
 	defer srv.Stopper().Stop(ctx)
 	s0 := srv.ApplicationLayer()
@@ -174,11 +177,6 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		return checkSettingsValuesMatch(s0.ClusterSettings(), tenantSettings)
 	})
-	// Shorten the closed timestamp duration as a cheeky way to check the
-	// checkpointing code while also speeding up the test.
-	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10 ms'")
-	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
-	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10 ms'")
 	copySettingsFromSystemToFakeTenant()
 	testutils.SucceedsSoon(t, func() error {
 		return checkStoredValuesMatch(storage.getKVs())
@@ -409,6 +407,9 @@ func TestOverflowRestart(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		// Shorten the closed timestamp duration as a cheeky way to check the
+		// checkpointing code while also speeding up the test.
+		FastRangefeeds: true,
 	})
 	defer s.Stopper().Stop(ctx)
 
@@ -437,11 +438,6 @@ func TestOverflowRestart(t *testing.T) {
 	})
 	require.NoError(t, w.Start(ctx))
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	// Shorten the closed timestamp duration as a cheeky way to check the
-	// checkpointing code while also speeding up the test.
-	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10 ms'")
-	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
-	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10 ms'")
 
 	checkSettings := func() {
 		testutils.SucceedsSoon(t, func() error {

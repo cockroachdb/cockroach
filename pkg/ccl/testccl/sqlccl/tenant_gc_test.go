@@ -163,11 +163,11 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
+		// Make the tests faster.
+		FastRangefeeds: true,
 	}
 	srv, sqlDBRaw, _ := serverutils.StartServer(t, args)
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
-
-	sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
 
 	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
 	jobRegistry := execCfg.JobRegistry

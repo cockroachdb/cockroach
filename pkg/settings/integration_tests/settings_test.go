@@ -326,6 +326,7 @@ func TestSettingsPersistenceEndToEnd(t *testing.T) {
 				Knobs:      base.TestingKnobs{Server: serverKnobs},
 			},
 		},
+		FastRangefeeds: true,
 	}
 
 	tc := serverutils.StartCluster(t, 2, testClusterArgs)
@@ -336,6 +337,8 @@ func TestSettingsPersistenceEndToEnd(t *testing.T) {
 	db.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10 ms'")
 	db.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
 	db.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10 ms'")
+
+	db.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 
 	// We need a custom value for the cluster setting that's guaranteed
 	// to be different from the default. So check that it's not equal to

@@ -169,6 +169,10 @@ type TestServerArgs struct {
 	// AutoConfigProvider provides auto-configuration tasks to apply on
 	// the cluster during server initialization.
 	AutoConfigProvider acprovider.Provider
+
+	// FastRangefeeds, if set, lowers the latency at which rangefeeds
+	// report changes.
+	FastRangefeeds bool
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test

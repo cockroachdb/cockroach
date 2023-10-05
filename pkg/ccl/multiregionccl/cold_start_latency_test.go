@@ -114,6 +114,9 @@ func TestColdStartLatency(t *testing.T) {
 			},
 		}
 		args.Knobs.Server = serverKnobs
+		// Make span configs propagate more rapidly.
+		args.FastRangefeeds = true
+
 		perServerArgs[i] = args
 	}
 	tc := testcluster.NewTestCluster(t, numNodes, base.TestClusterArgs{
@@ -145,10 +148,7 @@ func TestColdStartLatency(t *testing.T) {
 	}
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(1))
 
-	// Shorten the closed timestamp target duration so that span configs
-	// propagate more rapidly.
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '200ms'`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'`)
+	// Make the allocator faster.
 	tdb.Exec(t, "SET CLUSTER SETTING kv.allocator.load_based_rebalancing = off")
 	tdb.Exec(t, "SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '10ms'")
 	// Lengthen the lead time for the global tables to prevent overload from

@@ -68,6 +68,7 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 				},
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speed up schema changes.
 			},
+			FastRangefeeds: true,
 		},
 	})
 	defer tc.Stopper().Stop(context.Background())
@@ -77,9 +78,6 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0 /* idx */))
 	tdb.QueryRow(t, `SELECT max(id) FROM system.descriptor`).Scan(&idBase)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '50ms'`)
 
 	noopCheckpointDuration := 100 * time.Millisecond
 	sqlWatcher := spanconfigsqlwatcher.New(
@@ -294,6 +292,7 @@ func TestSQLWatcherMultiple(t *testing.T) {
 				},
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speed up schema changes.
 			},
+			FastRangefeeds: true,
 		},
 	})
 	ctx := context.Background()
@@ -302,7 +301,6 @@ func TestSQLWatcherMultiple(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0 /* idx */))
 	sdb := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t, ""))
 	sdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	sdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 
 	noopCheckpointDuration := 100 * time.Millisecond
 	sqlWatcher := spanconfigsqlwatcher.New(
@@ -426,6 +424,7 @@ func TestSQLWatcherOnEventError(t *testing.T) {
 				},
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speed up schema changes.
 			},
+			FastRangefeeds: true,
 		},
 	})
 	ctx := context.Background()
@@ -433,7 +432,6 @@ func TestSQLWatcherOnEventError(t *testing.T) {
 	ts := tc.Server(0 /* idx */)
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0 /* idx */))
 	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 
 	sqlWatcher := spanconfigsqlwatcher.New(
 		ts.Codec(),
@@ -476,6 +474,7 @@ func TestSQLWatcherHandlerError(t *testing.T) {
 				},
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speed up schema changes.
 			},
+			FastRangefeeds: true,
 		},
 	})
 	ctx := context.Background()
@@ -483,7 +482,6 @@ func TestSQLWatcherHandlerError(t *testing.T) {
 	ts := tc.Server(0 /* idx */)
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0 /* idx */))
 	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 
 	noopCheckpointDuration := 100 * time.Millisecond
 	sqlWatcher := spanconfigsqlwatcher.New(
@@ -553,6 +551,7 @@ func TestWatcherReceivesNoopCheckpoints(t *testing.T) {
 				},
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speed up schema changes.
 			},
+			FastRangefeeds: true,
 		},
 	})
 	ctx := context.Background()
@@ -560,7 +559,6 @@ func TestWatcherReceivesNoopCheckpoints(t *testing.T) {
 	ts := tc.Server(0 /* idx */)
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0 /* idx */))
 	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 
 	noopCheckpointDuration := 25 * time.Millisecond
 	sqlWatcher := spanconfigsqlwatcher.New(

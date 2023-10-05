@@ -215,7 +215,10 @@ func NewReplicationHelper(
 ) (*ReplicationHelper, func()) {
 	ctx := context.Background()
 
-	// Start server
+	// Speed up the tests.
+	serverArgs.FastRangefeeds = true
+
+	// Start server.
 	srv, db, _ := serverutils.StartServer(t, serverArgs)
 	s := srv.SystemLayer()
 
@@ -226,9 +229,6 @@ func NewReplicationHelper(
 		`SET CLUSTER SETTING physical_replication.enabled = true`,
 
 		// Speeds up the tests a bit.
-		`SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'`,
-		`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'`,
-		`SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms'`,
 		`SET CLUSTER SETTING stream_replication.min_checkpoint_frequency = '10ms'`)
 
 	// Sink to read data from.

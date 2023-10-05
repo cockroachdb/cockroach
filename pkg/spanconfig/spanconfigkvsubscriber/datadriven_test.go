@@ -113,12 +113,13 @@ func TestDataDriven(t *testing.T) {
 		defer cancel()
 		ts, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			// Make the tests faster.
+			FastRangefeeds: true,
 		})
 		defer ts.Stopper().Stop(ctx)
 
 		tdb := sqlutils.MakeSQLRunner(db)
 		tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-		tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 
 		const dummyTableName = "dummy_span_configurations"
 		tdb.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.span_configurations INCLUDING ALL)", dummyTableName))

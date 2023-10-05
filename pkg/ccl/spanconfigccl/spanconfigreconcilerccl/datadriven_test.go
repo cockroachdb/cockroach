@@ -107,6 +107,8 @@ func TestDataDriven(t *testing.T) {
 					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
 					SpanConfig:       scKnobs,
 				},
+				// Make tests faster.
+				FastRangefeeds: true,
 			},
 		})
 		defer tc.Stopper().Stop(ctx)
@@ -114,7 +116,6 @@ func TestDataDriven(t *testing.T) {
 		{
 			tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 			tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-			tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 		}
 
 		spanConfigTestCluster := spanconfigtestcluster.NewHandle(t, tc, scKnobs)
