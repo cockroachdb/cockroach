@@ -121,14 +121,41 @@ func (h *Helper) ExpectDeaths(n int) {
 	h.runner.monitor.ExpectDeaths(n)
 }
 
+// ParseVersion returns a parsed version object for the given version
+// string. Assumes the version string passed is valid, panicking
+// otherwise. Can be used with the version fields of a hook's context,
+// e.g., `h.ParseVersion(h.Context().FromVersion)`.
+func (h *Helper) ParseVersion(v string) *version.Version {
+	if v == clusterupgrade.MainVersion {
+		return h.runner.currentVersion
+	}
+
+	return version.MustParse("v" + v)
+}
+
 // LowestBinaryVersion returns a parsed `version.Version` object
-// corresponding to the lowest binary version used in the current
-// upgrade. The {Major, Minor} information in the version returned
+// corresponding to the lowest binary version used by any node in the
+// cluster. The {Major, Minor} information in the version returned
 // provides a lower bound on the cluster version active when this
 // function is called. Test authors can use this information to
-// determine whether a certain feature is available.
+// determine whether a certain feature is available (for instance, a
+// cluster setting).
+//
+// CAUTION: the version returned by this function is a binary
+// (release) version; if this function returns '22.2', for example,
+// there is no guarantee that the cluster version is also '22.2'+. If
+// the caller wants to check for cluster versions, use
+// `clusterupgrade.ClusterVersion`.
 func (h *Helper) LowestBinaryVersion() *version.Version {
 	tc := h.Context()
+
+	if len(tc.ToVersionNodes) == len(h.runner.crdbNodes) {
+		return h.ParseVersion(tc.ToVersion)
+	}
+
+	if len(tc.FromVersionNodes) == len(h.runner.crdbNodes) {
+		return h.ParseVersion(tc.FromVersion)
+	}
 
 	var lowestVersion string
 	if tc.FromVersion == clusterupgrade.MainVersion {
@@ -136,17 +163,14 @@ func (h *Helper) LowestBinaryVersion() *version.Version {
 	} else if tc.ToVersion == clusterupgrade.MainVersion {
 		lowestVersion = tc.FromVersion
 	} else {
-		fromVersion := version.MustParse("v" + tc.FromVersion)
-		toVersion := version.MustParse("v" + tc.ToVersion)
-
-		if fromVersion.Compare(toVersion) < 0 {
+		if h.ParseVersion(tc.FromVersion).Compare(h.ParseVersion(tc.ToVersion)) < 0 {
 			lowestVersion = tc.FromVersion
 		} else {
 			lowestVersion = tc.ToVersion
 		}
 	}
 
-	return version.MustParse("v" + lowestVersion)
+	return h.ParseVersion(lowestVersion)
 }
 
 // loggerFor creates a logger instance to be used by background

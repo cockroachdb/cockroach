@@ -526,9 +526,7 @@ func (dbb *databaseBackup) TargetTables() []string {
 	return tableNamesWithDB(dbb.db, dbb.tables)
 }
 
-func newClusterBackup(
-	rng *rand.Rand, dbs []string, tables [][]string, lowest *version.Version,
-) *clusterBackup {
+func newClusterBackup(rng *rand.Rand, dbs []string, tables [][]string) *clusterBackup {
 	dbBackups := make([]*databaseBackup, 0, len(dbs))
 	for j, db := range dbs {
 		dbBackups = append(dbBackups, newDatabaseBackup(rng, []string{db}, [][]string{tables[j]}))
@@ -1025,7 +1023,7 @@ func (mvb *mixedVersionBackup) newBackupType(rng *rand.Rand, h *mixedversion.Hel
 	possibleTypes := []backupType{
 		newTableBackup(rng, mvb.dbs, mvb.tables),
 		newDatabaseBackup(rng, mvb.dbs, mvb.tables),
-		newClusterBackup(rng, mvb.dbs, mvb.tables, h.LowestBinaryVersion()),
+		newClusterBackup(rng, mvb.dbs, mvb.tables),
 	}
 
 	return possibleTypes[rng.Intn(len(possibleTypes))]

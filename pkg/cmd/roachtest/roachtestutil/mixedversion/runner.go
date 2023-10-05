@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
 type (
@@ -96,13 +97,14 @@ type (
 	}
 
 	testRunner struct {
-		ctx       context.Context
-		cancel    context.CancelFunc
-		plan      *TestPlan
-		cluster   cluster.Cluster
-		crdbNodes option.NodeListOption
-		seed      int64
-		logger    *logger.Logger
+		ctx            context.Context
+		cancel         context.CancelFunc
+		plan           *TestPlan
+		cluster        cluster.Cluster
+		crdbNodes      option.NodeListOption
+		currentVersion *version.Version
+		seed           int64
+		logger         *logger.Logger
 
 		binaryVersions  atomic.Value
 		clusterVersions atomic.Value
@@ -129,18 +131,20 @@ func newTestRunner(
 	l *logger.Logger,
 	c cluster.Cluster,
 	crdbNodes option.NodeListOption,
+	currentVersion *version.Version,
 	randomSeed int64,
 ) *testRunner {
 	return &testRunner{
-		ctx:        ctx,
-		cancel:     cancel,
-		plan:       plan,
-		logger:     l,
-		cluster:    c,
-		crdbNodes:  crdbNodes,
-		background: newBackgroundRunner(ctx, l),
-		monitor:    newCRDBMonitor(ctx, c, crdbNodes),
-		seed:       randomSeed,
+		ctx:            ctx,
+		cancel:         cancel,
+		plan:           plan,
+		logger:         l,
+		cluster:        c,
+		crdbNodes:      crdbNodes,
+		currentVersion: currentVersion,
+		background:     newBackgroundRunner(ctx, l),
+		monitor:        newCRDBMonitor(ctx, c, crdbNodes),
+		seed:           randomSeed,
 	}
 }
 
