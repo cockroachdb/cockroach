@@ -588,8 +588,18 @@ func (rd *replicationDriver) setupC2C(
 		rd.t.L().Printf("Prom has started")
 	}
 	return func() {
+		rd.fetchDebugZip(ctx, rd.setup.src.nodes, "source_debug.zip")
+		rd.fetchDebugZip(ctx, rd.setup.dst.nodes, "dest_debug.zip")
 		srcDB.Close()
 		destDB.Close()
+	}
+}
+
+func (rd *replicationDriver) fetchDebugZip(
+	ctx context.Context, nodes option.NodeListOption, filename string,
+) {
+	if err := rd.c.FetchDebugZip(ctx, rd.t.L(), filename, nodes); err != nil {
+		rd.t.L().Printf("Failed to download debug zip to %s from node %s", filename, nodes)
 	}
 }
 

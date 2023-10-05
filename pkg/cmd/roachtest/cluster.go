@@ -1334,7 +1334,14 @@ COCKROACH_DEBUG_TS_IMPORT_FILE=tsdump.gob cockroach start-single-node --insecure
 
 // FetchDebugZip downloads the debug zip from the cluster using `roachprod ssh`.
 // The logs will be placed at `dest`, relative to the test's artifacts dir.
-func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger, dest string) error {
+//
+// By default, FetchDebugZip will attempt to download the zip from the first
+// node, and if that fails, it will try subsequent nodes. The caller may pass a
+// list of nodes via opts if they want to target which node(s) to grab the debug
+// zip from.
+func (c *clusterImpl) FetchDebugZip(
+	ctx context.Context, l *logger.Logger, dest string, opts ...option.Option,
+) error {
 	if c.spec.NodeCount == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
 		return nil
@@ -1342,6 +1349,16 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger, dest 
 
 	l.Printf("fetching debug zip\n")
 	c.status("fetching debug zip")
+
+	var nodes option.NodeListOption
+	for _, o := range opts {
+		if s, ok := o.(nodeSelector); ok {
+			nodes = s.Merge(nodes)
+		}
+	}
+	if len(nodes) == 0 {
+		nodes = c.All()
+	}
 
 	// Don't hang forever if we can't fetch the debug zip.
 	return timeutil.RunWithTimeout(ctx, "debug zip", 5*time.Minute, func(ctx context.Context) error {
@@ -1353,7 +1370,7 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger, dest 
 		// Some nodes might be down, so try to find one that works. We make the
 		// assumption that a down node will refuse the connection, so it won't
 		// waste our time.
-		for i := 1; i <= c.spec.NodeCount; i++ {
+		for _, node := range nodes {
 			// `cockroach debug zip` is noisy. Suppress the output unless it fails.
 			//
 			// Ignore the files in the the log directory; we pull the logs separately anyway
@@ -1362,18 +1379,15 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger, dest 
 			cmd := roachtestutil.NewCommand("%s debug zip", test.DefaultCockroachPath).
 				Option("include-range-info").
 				Flag("exclude-files", fmt.Sprintf("'%s'", excludeFiles)).
-				Flag("url", fmt.Sprintf("{pgurl:%d}", i)).
+				Flag("url", fmt.Sprintf("{pgurl:%d}", node)).
 				MaybeFlag(c.IsSecure(), "certs-dir", "certs").
 				Arg(zipName).
 				String()
-			if err := c.RunE(ctx, c.Node(i), cmd); err != nil {
-				l.Printf("%s debug zip failed on node %d: %v", test.DefaultCockroachPath, i, err)
-				if i < c.spec.NodeCount {
-					continue
-				}
-				return err
+			if err := c.RunE(ctx, c.Node(node), cmd); err != nil {
+				l.Printf("%s debug zip failed on node %d: %v", test.DefaultCockroachPath, node, err)
+				continue
 			}
-			return errors.Wrap(c.Get(ctx, c.l, zipName /* src */, path /* dest */, c.Node(i)), "cluster.FetchDebugZip")
+			return errors.Wrap(c.Get(ctx, c.l, zipName /* src */, path /* dest */, c.Node(node)), "cluster.FetchDebugZip")
 		}
 		return nil
 	})
