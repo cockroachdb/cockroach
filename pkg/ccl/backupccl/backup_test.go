@@ -6917,7 +6917,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 				`1`, `true`, `system`,
 				strconv.Itoa(int(mtinfopb.DataStateReady)),
 				strconv.Itoa(int(mtinfopb.ServiceModeShared)),
-				`{"capabilities": {}, "deprecatedId": "1"}`,
+				`{"capabilities": {}, "deprecatedId": "1", "previousSourceTenant": {"cutoverTimestamp": {}}}`,
 			},
 		})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
@@ -6928,13 +6928,13 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`1`, `true`, `system`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
-					`{"capabilities": {}, "deprecatedId": "1"}`,
+					`{"capabilities": {}, "deprecatedId": "1", "previousSourceTenant": {"cutoverTimestamp": {}}}`,
 				},
 				{
 					`10`, `true`, `cluster-10`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
-					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10"}`,
+					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10", "previousSourceTenant": {"cutoverTimestamp": {}}}`,
 				},
 			},
 		)
@@ -6969,13 +6969,13 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`1`, `true`, `system`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
-					`{"capabilities": {}, "deprecatedId": "1"}`,
+					`{"capabilities": {}, "deprecatedId": "1", "previousSourceTenant": {"cutoverTimestamp": {}}}`,
 				},
 				{
 					`10`, `false`, `NULL`,
 					strconv.Itoa(int(mtinfopb.DataStateDrop)),
 					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
-					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedDataState": "DROP", "deprecatedId": "10", "droppedName": "cluster-10"}`,
+					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedDataState": "DROP", "deprecatedId": "10", "droppedName": "cluster-10", "previousSourceTenant": {"cutoverTimestamp": {}}}`,
 				},
 			},
 		)
@@ -7004,13 +7004,13 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`1`, `true`, `system`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
-					`{"capabilities": {}, "deprecatedId": "1"}`,
+					`{"capabilities": {}, "deprecatedId": "1", "previousSourceTenant": {"cutoverTimestamp": {}}}`,
 				},
 				{
 					`10`, `true`, `cluster-10`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
-					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10"}`,
+					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10", "previousSourceTenant": {"cutoverTimestamp": {}}}`,
 				},
 			},
 		)
@@ -7045,7 +7045,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`1`, `true`, `system`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
-					`{"capabilities": {}, "deprecatedId": "1"}`,
+					`{"capabilities": {}, "deprecatedId": "1", "previousSourceTenant": {"cutoverTimestamp": {}}}`,
 				},
 			})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
@@ -7056,13 +7056,13 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`1`, `true`, `system`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
-					`{"capabilities": {}, "deprecatedId": "1"}`,
+					`{"capabilities": {}, "deprecatedId": "1", "previousSourceTenant": {"cutoverTimestamp": {}}}`,
 				},
 				{
 					`10`, `true`, `cluster-10`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
-					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10"}`,
+					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10", "previousSourceTenant": {"cutoverTimestamp": {}}}`,
 				},
 			},
 		)
@@ -7085,7 +7085,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`1`, `true`, `system`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
-					`{"capabilities": {}, "deprecatedId": "1"}`,
+					`{"capabilities": {}, "deprecatedId": "1", "previousSourceTenant": {"cutoverTimestamp": {}}}`,
 				},
 			})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/clusterwide'`)
@@ -7096,13 +7096,13 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`1`, `true`, `system`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
-					`{"capabilities": {}, "deprecatedId": "1"}`,
+					`{"capabilities": {}, "deprecatedId": "1", "previousSourceTenant": {"cutoverTimestamp": {}}}`,
 				},
 				{
 					`10`, `true`, `cluster-10`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
-					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10"}`,
+					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10", "previousSourceTenant": {"cutoverTimestamp": {}}}`,
 				},
 			},
 		)
@@ -7147,7 +7147,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`1`, `true`, `system`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
-					`{"capabilities": {}, "deprecatedId": "1"}`,
+					`{"capabilities": {}, "deprecatedId": "1", "previousSourceTenant": {"cutoverTimestamp": {}}}`,
 				},
 			})
 		restoreDB.Exec(t, `RESTORE FROM 'nodelocal://1/clusterwide' WITH include_all_virtual_clusters`)
@@ -7158,25 +7158,25 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`1`, `true`, `system`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
-					`{"capabilities": {}, "deprecatedId": "1"}`,
+					`{"capabilities": {}, "deprecatedId": "1", "previousSourceTenant": {"cutoverTimestamp": {}}}`,
 				},
 				{
 					`10`, `true`, `cluster-10`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
-					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10"}`,
+					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10", "previousSourceTenant": {"cutoverTimestamp": {}}}`,
 				},
 				{
 					`11`, `true`, `cluster-11`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
-					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "11"}`,
+					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "11", "previousSourceTenant": {"cutoverTimestamp": {}}}`,
 				},
 				{
 					`20`, `true`, `cluster-20`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
-					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "20"}`,
+					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "20", "previousSourceTenant": {"cutoverTimestamp": {}}}`,
 				},
 			},
 		)
