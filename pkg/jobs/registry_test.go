@@ -128,6 +128,7 @@ func TestRegistryGC(t *testing.T) {
 				DontUseJobs:                       true,
 				SkipJobMetricsPollingJobBootstrap: true,
 				SkipAutoConfigRunnerJobBootstrap:  true,
+				SkipMVCCStatisticsJobBootstrap:    true,
 			},
 			KeyVisualizer: &keyvisualizer.TestingKnobs{
 				SkipJobBootstrap: true,
