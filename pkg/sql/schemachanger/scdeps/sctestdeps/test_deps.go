@@ -1237,9 +1237,9 @@ func (s *TestState) AddTableForStatsRefresh(id descpb.ID) {
 
 // ResolveFunction implements the scbuild.CatalogReader interface.
 func (s *TestState) ResolveFunction(
-	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+	ctx context.Context, name tree.UnresolvedRoutineName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
-	fnName, err := name.ToRoutineName()
+	fnName, err := name.UnresolvedName().ToRoutineName()
 	if err != nil {
 		return nil, err
 	}

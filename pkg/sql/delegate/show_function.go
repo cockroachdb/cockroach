@@ -39,7 +39,15 @@ AND %[1]s = %[4]s
 	if d.qualifyDataSourceNamesInAST {
 		fn, err = resolvableFunctionReference.Resolve(d.ctx, searchPath, d.catalog)
 	} else {
-		fn, err = d.catalog.ResolveFunction(d.ctx, un, searchPath)
+		// TODO(mgartner): We can probably make the distinction between the two
+		// types of unresolved routine names at parsing-time (or shortly after),
+		// rather than here. Ideally, the UnresolvedRoutineName interface can be
+		// incorporated with ResolvableFunctionReference.
+		if n.Procedure {
+			fn, err = d.catalog.ResolveFunction(d.ctx, tree.MakeUnresolvedProcedureName(un), searchPath)
+		} else {
+			fn, err = d.catalog.ResolveFunction(d.ctx, tree.MakeUnresolvedFunctionName(un), searchPath)
+		}
 	}
 	if err != nil {
 		return nil, err

@@ -407,7 +407,7 @@ func (c *cdcOptCatalog) ResolveDataSourceByID(
 // ResolveFunction implements cat.Catalog interface.
 // We provide custom implementation to resolve CDC specific functions.
 func (c *cdcOptCatalog) ResolveFunction(
-	ctx context.Context, fnName *tree.UnresolvedName, path tree.SearchPath,
+	ctx context.Context, fnName tree.UnresolvedRoutineName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
 	if c.semaCtx != nil && c.semaCtx.FunctionResolver != nil {
 		fnDef, err := c.semaCtx.FunctionResolver.ResolveFunction(ctx, fnName, path)

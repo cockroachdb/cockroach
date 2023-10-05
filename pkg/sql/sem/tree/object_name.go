@@ -280,3 +280,53 @@ func (u *UnresolvedObjectName) HasExplicitSchema() bool {
 func (u *UnresolvedObjectName) HasExplicitCatalog() bool {
 	return u.NumParts >= 3
 }
+
+// UnresolvedRoutineName is an unresolved function or procedure name. The two
+// implementations of this interface are used to differentiate between the two
+// types of routines for things like error messages.
+type UnresolvedRoutineName interface {
+	UnresolvedName() *UnresolvedName
+	isUnresolvedRoutineName()
+}
+
+// UnresolvedFunctionName is an unresolved function name.
+type UnresolvedFunctionName struct {
+	u *UnresolvedName
+}
+
+// MakeUnresolvedFunctionName returns a new UnresolvedFunctionName containing
+// the give UnresolvedName.
+func MakeUnresolvedFunctionName(u *UnresolvedName) UnresolvedFunctionName {
+	return UnresolvedFunctionName{u: u}
+}
+
+// UnresolvedName implements the UnresolvedRoutineName interface.
+func (u UnresolvedFunctionName) UnresolvedName() *UnresolvedName {
+	return u.u
+}
+
+// isUnresolvedRoutineName implements the UnresolvedRoutineName interface.
+func (u UnresolvedFunctionName) isUnresolvedRoutineName() {}
+
+var _ UnresolvedRoutineName = UnresolvedFunctionName{}
+
+// UnresolvedProcedureName is an unresolved procedure name.
+type UnresolvedProcedureName struct {
+	u *UnresolvedName
+}
+
+// MakeUnresolvedProcedureName returns a new UnresolvedProcedureName containing
+// the give UnresolvedName.
+func MakeUnresolvedProcedureName(u *UnresolvedName) UnresolvedProcedureName {
+	return UnresolvedProcedureName{u: u}
+}
+
+// isUnresolvedRoutineName implements the UnresolvedRoutineName interface.
+func (u UnresolvedProcedureName) isUnresolvedRoutineName() {}
+
+// UnresolvedName implements the UnresolvedRoutineName interface.
+func (u UnresolvedProcedureName) UnresolvedName() *UnresolvedName {
+	return u.u
+}
+
+var _ UnresolvedRoutineName = UnresolvedProcedureName{}

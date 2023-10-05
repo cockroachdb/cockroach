@@ -119,6 +119,10 @@ func TestMatchOverload(t *testing.T) {
 					},
 				},
 			},
+			{
+				Schema:   "sc1",
+				Overload: &tree.Overload{Oid: 6, Type: tree.ProcedureRoutine, Types: tree.ParamTypes{tree.ParamType{Typ: types.Int}}},
+			},
 		},
 	}
 
@@ -127,6 +131,7 @@ func TestMatchOverload(t *testing.T) {
 		argTypes       []*types.T
 		explicitSchema string
 		path           []string
+		routineType    tree.RoutineType
 		expectedOid    oid.Oid
 		expectedErr    string
 	}{
@@ -134,42 +139,56 @@ func TestMatchOverload(t *testing.T) {
 			testName:    "nil arg types implicit pg_catalog in path",
 			argTypes:    nil,
 			path:        []string{"sc1", "sc2"},
+			routineType: tree.UDFRoutine,
 			expectedOid: 1,
+		},
+		{
+			testName:    "match a procedure",
+			argTypes:    nil,
+			path:        []string{"sc1", "sc2"},
+			routineType: tree.ProcedureRoutine,
+			expectedOid: 6,
 		},
 		{
 			testName:    "nil arg types explicit pg_catalog in path",
 			argTypes:    nil,
 			path:        []string{"sc2", "sc1", "pg_catalog"},
+			routineType: tree.UDFRoutine,
 			expectedOid: 4,
 		},
 		{
 			testName:    "nil arg types explicit pg_catalog in path not unique",
 			argTypes:    nil,
 			path:        []string{"sc1", "sc2", "pg_catalog"},
+			routineType: tree.UDFRoutine,
 			expectedErr: `function name "f" is not unique`,
 		},
 		{
 			testName:    "int arg type implicit pg_catalog in path",
 			argTypes:    []*types.T{types.Int},
 			path:        []string{"sc1", "sc2"},
+			routineType: tree.UDFRoutine,
 			expectedOid: 1,
 		},
 		{
 			testName:    "empty arg type implicit pg_catalog in path",
 			argTypes:    []*types.T{},
 			path:        []string{"sc1", "sc2"},
+			routineType: tree.UDFRoutine,
 			expectedOid: 3,
 		},
 		{
 			testName:    "int arg types explicit pg_catalog in path",
 			argTypes:    []*types.T{types.Int},
 			path:        []string{"sc1", "sc2", "pg_catalog"},
+			routineType: tree.UDFRoutine,
 			expectedOid: 2,
 		},
 		{
 			testName:    "int arg types explicit pg_catalog in path schema order matters",
 			argTypes:    []*types.T{types.Int},
 			path:        []string{"sc2", "sc1", "pg_catalog"},
+			routineType: tree.UDFRoutine,
 			expectedOid: 4,
 		},
 		{
@@ -177,6 +196,7 @@ func TestMatchOverload(t *testing.T) {
 			argTypes:       []*types.T{types.Int},
 			explicitSchema: "sc2",
 			path:           []string{"sc2", "sc1", "pg_catalog"},
+			routineType:    tree.UDFRoutine,
 			expectedOid:    4,
 		},
 		{
@@ -184,6 +204,7 @@ func TestMatchOverload(t *testing.T) {
 			argTypes:       []*types.T{types.Int},
 			explicitSchema: "sc2",
 			path:           []string{"sc1", "pg_catalog"},
+			routineType:    tree.UDFRoutine,
 			expectedOid:    4,
 		},
 		{
@@ -191,32 +212,41 @@ func TestMatchOverload(t *testing.T) {
 			argTypes:       []*types.T{types.Int},
 			explicitSchema: "sc3",
 			path:           []string{"s2", "sc1", "pg_catalog"},
+			routineType:    tree.UDFRoutine,
 			expectedErr:    `function f\(int\) does not exist`,
 		},
 		{
 			testName:    "signature not found",
 			argTypes:    []*types.T{types.String},
 			path:        []string{"sc2", "sc1", "pg_catalog"},
+			routineType: tree.UDFRoutine,
 			expectedErr: `function f\(string\) does not exist`,
 		},
 		{
 			testName:    "multiple parameters exact match on same family type",
 			argTypes:    []*types.T{types.Int2, types.Int4},
 			path:        []string{"sc3", "sc3", "pg_catalog"},
+			routineType: tree.UDFRoutine,
 			expectedOid: 5,
 		},
 		{
 			testName:    "multiple parameters exact match on same family type not exists",
 			argTypes:    []*types.T{types.Int, types.Int4},
 			path:        []string{"sc3", "sc3", "pg_catalog"},
-			expectedErr: `function f\(int,int4\) does not exist: function undefined`,
+			routineType: tree.UDFRoutine,
+			expectedErr: `function f\(int,int4\) does not exist`,
 		},
 	}
 
 	for _, tc := range testCase {
 		t.Run(tc.testName, func(t *testing.T) {
 			path := sessiondata.MakeSearchPath(tc.path)
-			ol, err := fd.MatchOverload(tc.argTypes, tc.explicitSchema, &path)
+			ol, err := fd.MatchOverload(
+				tc.argTypes,
+				tc.explicitSchema,
+				&path,
+				tc.routineType,
+			)
 			if tc.expectedErr != "" {
 				require.Regexp(t, tc.expectedErr, err.Error())
 				return

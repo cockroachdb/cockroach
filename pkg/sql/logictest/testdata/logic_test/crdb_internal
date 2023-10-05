@@ -1553,8 +1553,7 @@ ORDER BY function_id;
 statement ok
 DROP FUNCTION f(INT);
 DROP FUNCTION f(STRING, INT);
--- TODO(mgartner): This should use DROP PROCEDURE once it is supported.
-DROP FUNCTION f(BOOL);
+DROP PROCEDURE f(BOOL);
 DROP FUNCTION sc.f2(STRING);
 DROP SCHEMA sc;
 USE test_cross_db;
@@ -1639,16 +1638,14 @@ ORDER BY procedure_id;
                                                     SELECT 1;
                                                   $$
 
-# TODO(mgartner): These should use DROP PROCEDURE statements once it is
-# supported.
 statement ok
-DROP FUNCTION p(INT);
-DROP FUNCTION p(STRING, INT);
+DROP PROCEDURE p(INT);
+DROP PROCEDURE p(STRING, INT);
 DROP FUNCTION p(BOOL);
-DROP FUNCTION sc.p2(STRING);
+DROP PROCEDURE sc.p2(STRING);
 DROP SCHEMA sc;
 USE test_cross_db;
-DROP FUNCTION p_cross_db;
+DROP PROCEDURE p_cross_db;
 USE test;
 DROP DATABASE test_cross_db;
 

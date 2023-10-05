@@ -267,7 +267,10 @@ func (b *Builder) wrapFunction(fnName string) (tree.ResolvableFunctionReference,
 	if b.evalCtx != nil && b.catalog != nil { // Some tests leave those unset.
 		unresolved := tree.MakeUnresolvedName(fnName)
 		fnDef, err := b.catalog.ResolveFunction(
-			context.Background(), &unresolved, &b.evalCtx.SessionData().SearchPath)
+			context.Background(),
+			tree.MakeUnresolvedFunctionName(&unresolved),
+			&b.evalCtx.SessionData().SearchPath,
+		)
 		if err != nil {
 			return tree.ResolvableFunctionReference{}, err
 		}
