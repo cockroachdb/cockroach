@@ -1016,15 +1016,14 @@ CREATE TABLE system.mvcc_statistics (
 	table_id INT8 NOT NULL,
 	index_id INT8 NOT NULL,
 	statistics JSONB NOT NULL,
-	crdb_internal_created_at_database_id_index_id_table_id_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(created_at)), 16:::INT8)) STORED,
+	crdb_internal_created_at_database_id_index_id_table_id_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(created_at)), 16:::INT8)) VIRTUAL,
 	CONSTRAINT mvcc_statistics_pkey PRIMARY KEY (created_at ASC, database_id ASC, table_id ASC, index_id ASC) USING HASH WITH (bucket_count=16),
 	FAMILY "primary" (
 	    created_at,
 	    database_id,
 	    table_id,
 	    index_id,
-	    statistics,
-	    crdb_internal_created_at_database_id_index_id_table_id_shard_16
+	    statistics
 	)
 );`
 
@@ -1052,10 +1051,10 @@ CREATE TABLE system.mvcc_statistics (
 		contention_info                    JSONB,
 		details                            JSONB,
 		created                            TIMESTAMPTZ NOT NULL DEFAULT now(),
-		crdb_internal_end_time_start_time_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(start_time, end_time)), 16:::INT8)) STORED,
+		crdb_internal_end_time_start_time_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(end_time, start_time))), 16:::INT8)) VIRTUAL,
 		CONSTRAINT "primary" PRIMARY KEY (transaction_id),
 		INDEX transaction_fingerprint_id_idx (transaction_fingerprint_id),
-		INDEX time_range_idx (start_time DESC, end_time DESC) USING HASH,
+		INDEX time_range_idx (start_time DESC, end_time DESC) USING HASH WITH (bucket_count=16),
 		FAMILY "primary" (
 			transaction_id,
 			transaction_fingerprint_id,
@@ -1078,8 +1077,7 @@ CREATE TABLE system.mvcc_statistics (
 			contention_time,
 			contention_info,
 			details,
-			created,
-		    crdb_internal_end_time_start_time_shard_16
+			created
 		)
 	);`
 
@@ -1113,7 +1111,7 @@ CREATE TABLE system.mvcc_statistics (
 		contention_info            JSONB,
 		details                    JSONB,
 		created                    TIMESTAMPTZ NOT NULL DEFAULT now(),
-		crdb_internal_end_time_start_time_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(start_time, end_time)), 16 ::: INT8)) STORED,
+		crdb_internal_end_time_start_time_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(end_time, start_time))), 16:::INT8)) VIRTUAL,
 		CONSTRAINT "primary" PRIMARY KEY (statement_id, transaction_id),
 		INDEX transaction_id_idx (transaction_id),
 		INDEX transaction_fingerprint_id_idx (transaction_fingerprint_id, start_time DESC, end_time DESC),
@@ -1147,8 +1145,7 @@ CREATE TABLE system.mvcc_statistics (
 			contention_time,
 			contention_info,
 			details,
-			created,
-		    crdb_internal_end_time_start_time_shard_16
+			created
 		)
 	);`
 )
@@ -1175,7 +1172,7 @@ var (
 	// modify these two expressions as well.
 	sqlStmtHashComputeExpr   = `mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8:::INT8)`
 	sqlTxnHashComputeExpr    = `mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id)), 8:::INT8)`
-	timestampHashComputeExpr = `mod(fnv32(crdb_internal.datums_to_bytes(created_at)), 16:::INT8)`
+	timestampHashComputeExpr = `mod(fnv32(md5(crdb_internal.datums_to_bytes(created_at))), 16:::INT8)`
 )
 
 const (
@@ -4276,6 +4273,7 @@ var (
 					Nullable:    false,
 					ComputeExpr: &timestampHashComputeExpr,
 					Hidden:      true,
+					Virtual:     true,
 				},
 			},
 			[]descpb.ColumnFamilyDescriptor{
@@ -4288,9 +4286,8 @@ var (
 						"table_id",
 						"index_id",
 						"statistics",
-						"crdb_internal_created_at_database_id_index_id_table_id_shard_16",
 					},
-					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5},
 					DefaultColumnID: 5,
 				},
 			},
@@ -4340,7 +4337,7 @@ var (
 		},
 	)
 
-	timeRangeHashComputeExpr = `mod(fnv32(crdb_internal.datums_to_bytes(start_time, end_time)), 16:::INT8)`
+	timeRangeHashComputeExpr = `mod(fnv32(md5(crdb_internal.datums_to_bytes(end_time, start_time))), 16:::INT8)`
 
 	TransactionExecInsightsTable = makeSystemTable(
 		TxnExecutionStatsTableSchema,
@@ -4377,6 +4374,7 @@ var (
 					Nullable:    false,
 					ComputeExpr: &timeRangeHashComputeExpr,
 					Hidden:      true,
+					Virtual:     true,
 				},
 			},
 			[]descpb.ColumnFamilyDescriptor{
@@ -4406,9 +4404,8 @@ var (
 						"contention_info",
 						"details",
 						"created",
-						"crdb_internal_end_time_start_time_shard_16",
 					},
-					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22},
 					DefaultColumnID: 0,
 				},
 			},
@@ -4454,7 +4451,7 @@ var (
 					IsSharded:    true,
 					Name:         "crdb_internal_end_time_start_time_shard_16",
 					ShardBuckets: 16,
-					ColumnNames:  []string{"end_time", "start_time"},
+					ColumnNames:  []string{"start_time", "end_time"},
 				},
 			},
 		),
@@ -4516,6 +4513,7 @@ var (
 					Nullable:    false,
 					ComputeExpr: &timeRangeHashComputeExpr,
 					Hidden:      true,
+					Virtual:     true,
 				},
 			},
 			[]descpb.ColumnFamilyDescriptor{
@@ -4551,9 +4549,8 @@ var (
 						"contention_info",
 						"details",
 						"created",
-						"crdb_internal_end_time_start_time_shard_16",
 					},
-					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28},
 					DefaultColumnID: 0,
 				},
 			},
