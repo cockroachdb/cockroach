@@ -2967,6 +2967,9 @@ func TestLeaseTxnDeadlineExtension(t *testing.T) {
 	// Set the lease duration such that the next lease acquisition will
 	// require the lease to be reacquired.
 	lease.LeaseDuration.Override(ctx, &params.Settings.SV, 0)
+	// Disable session based leasing, since a zero duration only
+	// applies to the expiry, and not the acquisition length.
+	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &params.SV, int64(lease.SessionBasedLeasingOff))
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(ctx context.Context, req *kvpb.BatchRequest) *kvpb.Error {
 			filterMu.Lock()
@@ -3295,7 +3298,13 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 	})
 	f.Store(noop)
 	ctx := context.Background()
+	// Session based leases will retry with the same value, which KV will be smart
+	// enough to cancel out on the replica when ambigious results happen. So,
+	// this test breaks on this setting.
+	settings := cluster.MakeTestingClusterSettings()
+	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &settings.SV, int64(lease.SessionBasedLeasingOff))
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: settings,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingResponseFilter: func(ctx context.Context, request *kvpb.BatchRequest, response *kvpb.BatchResponse) *kvpb.Error {
