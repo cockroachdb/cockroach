@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -88,26 +87,13 @@ func (p *workPool) workRemaining() []testWithCount {
 // If there are no more tests to run, c will be destroyed and the result will
 // have noWork set.
 func (p *workPool) getTestToRun(
-	ctx context.Context,
-	c *clusterImpl,
-	qp *quotapool.IntPool,
-	cr *clusterRegistry,
-	onDestroy func(),
-	l *logger.Logger,
+	ctx context.Context, c *clusterImpl, qp *quotapool.IntPool, cr *clusterRegistry,
 ) (testToRunRes, error) {
 	// If we've been given a cluster, see if we can reuse it.
 	if c != nil {
 		ttr := p.selectTestForCluster(ctx, c.spec, cr)
-		if ttr.noWork {
-			// We failed to find a test that can take advantage of this cluster. So
-			// we're going to release is, which will deallocate its resources, and
-			// then we'll look for a test below.
-			l.PrintfCtx(ctx,
-				"No tests that can reuse cluster %s found (or there are no further tests to run). "+
-					"Destroying.", c)
-			c.Destroy(ctx, closeLogger, l)
-			onDestroy()
-		} else {
+		if !ttr.noWork {
+			// We found a test that can take advantage of this cluster.
 			return ttr, nil
 		}
 	}
@@ -268,7 +254,8 @@ func scoreTestAgainstCluster(tc testWithCount, tag string, cr *clusterRegistry) 
 // findCompatibleTestsLocked returns a list of tests compatible with a cluster spec.
 func (p *workPool) findCompatibleTestsLocked(clusterSpec spec.ClusterSpec) []testWithCount {
 	if _, ok := clusterSpec.ReusePolicy.(spec.ReusePolicyNone); ok {
-		panic("can't search for tests compatible with a ReuseNone policy")
+		// Cluster cannot be reused, so no tests are compatible.
+		return nil
 	}
 	var tests []testWithCount
 	for _, tc := range p.mu.tests {
