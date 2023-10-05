@@ -91,6 +91,7 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 		_, errDeclarative := declarativeSQLDB.Exec(line)
 		requireNoErrOrSameErrCode(t, line, errLegacy, errDeclarative)
 		linesExecutedSoFar = append(linesExecutedSoFar, line)
+		t.Logf("Executing %q", line)
 
 		// Post-execution: Check metadata level identity between two clusters.
 		// Only run when not in a transaction (because legacy schema changer will be
@@ -106,10 +107,12 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 // isInATransaction returns true if connection `db` is currently in a transaction.
 func isInATransaction(t *testing.T, db *gosql.DB) bool {
 	rows, err := db.Query("SHOW transaction_status;")
-	if pgcode.MakeCode(string(getPQErrCode(err))) == pgcode.InFailedSQLTransaction {
-		// Txn is in `ERROR` state.
+	errCode := pgcode.MakeCode(string(getPQErrCode(err)))
+	if errCode == pgcode.InFailedSQLTransaction || errCode == pgcode.InvalidTransactionState {
+		// Txn is in `ERROR` state (25P02) or `DONE` state (25000).
 		return true
 	}
+	require.NoError(t, err) // any other error not allowed
 	res, err := sqlutils.RowsToStrMatrix(rows)
 	require.NoError(t, err)
 	return res[0][0] == `Open` // Txn is in `Open` state.
