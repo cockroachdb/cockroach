@@ -96,7 +96,7 @@ var (
 	smallEngineBlocks = util.ConstantWithMetamorphicTestBool("small-engine-blocks", false)
 )
 
-const intentAgeThreshold = 2 * time.Hour
+const lockAgeThreshold = 2 * time.Hour
 const txnCleanupThreshold = time.Hour
 
 // TestRunNewVsOld exercises the behavior of Run relative to the old
@@ -111,10 +111,10 @@ func TestRunNewVsOld(t *testing.T) {
 			ds: someVersionsMidSizeRowsLotsOfIntents,
 			// Current time in the future enough for intents to get resolved
 			now: hlc.Timestamp{
-				WallTime: (intentAgeThreshold + 100*time.Second).Nanoseconds(),
+				WallTime: (lockAgeThreshold + 100*time.Second).Nanoseconds(),
 			},
 			// GC everything beyond intent resolution threshold
-			ttlSec: int32(intentAgeThreshold.Seconds()),
+			ttlSec: int32(lockAgeThreshold.Seconds()),
 		},
 		{
 			ds: someVersionsMidSizeRows,
@@ -140,7 +140,7 @@ func TestRunNewVsOld(t *testing.T) {
 			newThreshold := CalculateThreshold(tc.now, ttl)
 			gcInfoOld, err := runGCOld(ctx, tc.ds.desc(), snap, tc.now,
 				newThreshold, RunOptions{
-					IntentAgeThreshold:  intentAgeThreshold,
+					LockAgeThreshold:    lockAgeThreshold,
 					TxnCleanupThreshold: txnCleanupThreshold,
 				}, ttl,
 				&oldGCer,
@@ -151,7 +151,7 @@ func TestRunNewVsOld(t *testing.T) {
 			newGCer := makeFakeGCer()
 			gcInfoNew, err := Run(ctx, tc.ds.desc(), snap, tc.now,
 				newThreshold, RunOptions{
-					IntentAgeThreshold:  intentAgeThreshold,
+					LockAgeThreshold:    lockAgeThreshold,
 					TxnCleanupThreshold: txnCleanupThreshold,
 				}, ttl,
 				&newGCer,
@@ -179,13 +179,13 @@ func BenchmarkRun(b *testing.B) {
 		snap := eng.NewSnapshot()
 		defer snap.Close()
 		ttl := time.Duration(spec.ttlSec) * time.Second
-		intentThreshold := intentAgeThreshold
+		intentThreshold := lockAgeThreshold
 		if spec.intentAgeSec > 0 {
 			intentThreshold = time.Duration(spec.intentAgeSec) * time.Second
 		}
 		return runGCFunc(ctx, spec.ds.desc(), snap, spec.now,
 			CalculateThreshold(spec.now, ttl), RunOptions{
-				IntentAgeThreshold:  intentThreshold,
+				LockAgeThreshold:    intentThreshold,
 				TxnCleanupThreshold: txnCleanupThreshold,
 				ClearRangeMinKeys:   defaultClearRangeMinKeys,
 			},
@@ -252,10 +252,10 @@ func TestNewVsInvariants(t *testing.T) {
 			ds: someVersionsMidSizeRowsLotsOfIntents,
 			// Current time in the future enough for intents to get resolved
 			now: hlc.Timestamp{
-				WallTime: (intentAgeThreshold + 100*time.Second).Nanoseconds(),
+				WallTime: (lockAgeThreshold + 100*time.Second).Nanoseconds(),
 			},
 			// GC everything beyond intent resolution threshold
-			ttlSec: int32(intentAgeThreshold.Seconds()),
+			ttlSec: int32(lockAgeThreshold.Seconds()),
 		},
 		{
 			ds: someVersionsMidSizeRows,
@@ -342,12 +342,12 @@ func TestNewVsInvariants(t *testing.T) {
 			// Run GCer over snapshot.
 			ttl := time.Duration(tc.ttlSec) * time.Second
 			gcThreshold := CalculateThreshold(tc.now, ttl)
-			intentThreshold := tc.now.Add(-intentAgeThreshold.Nanoseconds(), 0)
+			intentThreshold := tc.now.Add(-lockAgeThreshold.Nanoseconds(), 0)
 
 			gcer := makeFakeGCer()
 			gcInfoNew, err := Run(ctx, desc, beforeGC, tc.now,
 				gcThreshold, RunOptions{
-					IntentAgeThreshold:  intentAgeThreshold,
+					LockAgeThreshold:    lockAgeThreshold,
 					TxnCleanupThreshold: txnCleanupThreshold,
 					ClearRangeMinKeys:   clearRangeMinKeys,
 				}, ttl,
@@ -615,10 +615,10 @@ func getExpectationsGenerator(
 						"failed to unmarshal txn metadata")
 					if meta.Timestamp.ToTimestamp().Less(intentThreshold) {
 						// This is an old intent. Skip intent with proposed value and continue.
-						expInfo.IntentsConsidered++
+						expInfo.LocksConsidered++
 						// We always use a new transaction for each intent and consider
 						// operations successful in testGCer.
-						expInfo.IntentTxns++
+						expInfo.LockTxns++
 						expInfo.PushTxn++
 						expInfo.ResolveTotal++
 					} else {
