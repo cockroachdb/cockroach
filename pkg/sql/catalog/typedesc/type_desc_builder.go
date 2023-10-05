@@ -95,7 +95,7 @@ func (tdb *typeDescriptorBuilder) RunPostDeserializationChanges() (err error) {
 	// Set the ModificationTime field before doing anything else.
 	// Other changes may depend on it.
 	mustSetModTime, err := descpb.MustSetModificationTime(
-		tdb.original.ModificationTime, tdb.mvccTimestamp, tdb.original.Version,
+		tdb.original.ModificationTime, tdb.mvccTimestamp, tdb.original.Version, tdb.original.State,
 	)
 	if err != nil {
 		return err
