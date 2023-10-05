@@ -66,15 +66,15 @@ const (
 	hlcTimestampSize = 16
 )
 
-// IntentAgeThreshold is the threshold after which an extant intent
+// LockAgeThreshold is the threshold after which an extant locks
 // will be resolved.
-// TODO(nvanbenschoten): rename to LockAgeThreshold.
-var IntentAgeThreshold = settings.RegisterDurationSetting(
+var LockAgeThreshold = settings.RegisterDurationSetting(
 	settings.SystemOnly,
 	"kv.gc.intent_age_threshold",
-	"intents older than this threshold will be resolved when encountered by the MVCC GC queue",
+	"locks older than this threshold will be resolved when encountered by the MVCC GC queue",
 	2*time.Hour,
 	settings.DurationWithMinimum(2*time.Minute),
+	settings.WithName("kv.gc.lock_age_threshold"),
 )
 
 // TxnCleanupThreshold is the threshold after which a transaction is
@@ -92,8 +92,8 @@ var TxnCleanupThreshold = settings.RegisterDurationSetting(
 	time.Hour,
 )
 
-// MaxIntentsPerCleanupBatch is the maximum number of intents that GC will send
-// for intent resolution as a single batch.
+// MaxLocksPerCleanupBatch is the maximum number of locks that GC will send
+// for resolution as a single batch.
 //
 // The setting is also used by foreground requests like QueryResolvedTimestamp
 // that do not need to resolve intents synchronously when they encounter them,
@@ -103,31 +103,33 @@ var TxnCleanupThreshold = settings.RegisterDurationSetting(
 // The default value is set to half of the maximum lock table size at the time
 // of writing. This value is subject to tuning in real environment as we have
 // more data available.
-var MaxIntentsPerCleanupBatch = settings.RegisterIntSetting(
+var MaxLocksPerCleanupBatch = settings.RegisterIntSetting(
 	settings.SystemOnly,
 	"kv.gc.intent_cleanup_batch_size",
-	"if non zero, gc will split found intents into batches of this size when trying to resolve them",
+	"if non zero, gc will split found locks into batches of this size when trying to resolve them",
 	5000,
 	settings.NonNegativeInt,
+	settings.WithName("kv.gc.lock_cleanup_batch_size"),
 )
 
-// MaxIntentKeyBytesPerCleanupBatch is the maximum intent bytes that GC will try
-// to send as a single batch to intent resolution. This number is approximate
-// and only includes size of the intent keys.
+// MaxLockKeyBytesPerCleanupBatch is the maximum lock bytes that GC will try to
+// send as a single batch to resolution. This number is approximate and only
+// includes size of the lock keys.
 //
 // The setting is also used by foreground requests like QueryResolvedTimestamp
 // that do not need to resolve intents synchronously when they encounter them,
 // but do want to perform best-effort asynchronous intent resolution. The
 // setting dictates how many intents these requests will collect at a time.
 //
-// The default value is a conservative limit to prevent pending intent key sizes
+// The default value is a conservative limit to prevent pending lock key sizes
 // from ballooning.
-var MaxIntentKeyBytesPerCleanupBatch = settings.RegisterIntSetting(
+var MaxLockKeyBytesPerCleanupBatch = settings.RegisterIntSetting(
 	settings.SystemOnly,
 	"kv.gc.intent_cleanup_batch_byte_size",
-	"if non zero, gc will split found intents into batches of this size when trying to resolve them",
+	"if non zero, gc will split found locks into batches of this size when trying to resolve them",
 	1e6,
 	settings.NonNegativeInt,
+	settings.WithName("kv.gc.lock_cleanup_batch_byte_size"),
 )
 
 // ClearRangeMinKeys is a minimum number of keys that GC will consider
@@ -217,9 +219,9 @@ type Info struct {
 	// GCTTL is the TTL this garbage collection cycle.
 	GCTTL time.Duration
 	// Stats about the userspace key-values considered, namely the number of
-	// keys with GC'able data, the number of "old" intents and the number of
+	// keys with GC'able data, the number of "old" locks and the number of
 	// associated distinct transactions.
-	NumKeysAffected, NumRangeKeysAffected, IntentsConsidered, IntentTxns int
+	NumKeysAffected, NumRangeKeysAffected, LocksConsidered, LockTxns int
 	// TransactionSpanTotal is the total number of entries in the transaction span.
 	TransactionSpanTotal int
 	// Summary of transactions which were found GCable (assuming that
@@ -270,15 +272,15 @@ type Info struct {
 
 // RunOptions contains collection of limits that GC run applies when performing operations
 type RunOptions struct {
-	// IntentAgeThreshold is the minimum age an intent must have before this GC run
-	// tries to resolve the intent.
-	IntentAgeThreshold time.Duration
-	// MaxIntentsPerIntentCleanupBatch is the maximum number of intent resolution requests passed
+	// LockAgeThreshold is the minimum age a lock must have before this GC run
+	// tries to resolve the lock.
+	LockAgeThreshold time.Duration
+	// MaxLocksPerIntentCleanupBatch is the maximum number of lock resolution requests passed
 	// to the intent resolver in a single batch. Helps reducing memory impact of cleanup operations.
-	MaxIntentsPerIntentCleanupBatch int64
-	// MaxIntentKeyBytesPerIntentCleanupBatch similar to MaxIntentsPerIntentCleanupBatch but counts
-	// number of bytes intent keys occupy.
-	MaxIntentKeyBytesPerIntentCleanupBatch int64
+	MaxLocksPerIntentCleanupBatch int64
+	// MaxLockKeyBytesPerIntentCleanupBatch similar to MaxLocksPerIntentCleanupBatch but counts
+	// number of bytes lock keys occupy.
+	MaxLockKeyBytesPerIntentCleanupBatch int64
 	// MaxTxnsPerIntentCleanupBatch is a maximum number of txns passed to intent resolver to
 	// process in one go. This number should be lower than intent resolver default to
 	// prevent further splitting in resolver.
@@ -351,13 +353,13 @@ func Run(
 	}
 
 	// Process all replicated locks first and resolve any that have been around
-	// for longer than the IntentAgeThreshold.
-	err := processReplicatedLocks(ctx, desc, snap, now, options.IntentAgeThreshold,
+	// for longer than the LockAgeThreshold.
+	err := processReplicatedLocks(ctx, desc, snap, now, options.LockAgeThreshold,
 		intentBatcherOptions{
-			maxIntentsPerIntentCleanupBatch:        options.MaxIntentsPerIntentCleanupBatch,
-			maxIntentKeyBytesPerIntentCleanupBatch: options.MaxIntentKeyBytesPerIntentCleanupBatch,
-			maxTxnsPerIntentCleanupBatch:           options.MaxTxnsPerIntentCleanupBatch,
-			intentCleanupBatchTimeout:              options.IntentCleanupBatchTimeout,
+			maxLocksPerIntentCleanupBatch:        options.MaxLocksPerIntentCleanupBatch,
+			maxLockKeyBytesPerIntentCleanupBatch: options.MaxLockKeyBytesPerIntentCleanupBatch,
+			maxTxnsPerIntentCleanupBatch:         options.MaxTxnsPerIntentCleanupBatch,
+			intentCleanupBatchTimeout:            options.IntentCleanupBatchTimeout,
 		}, cleanupIntentsFn, &info)
 	if err != nil {
 		if errors.Is(err, pebble.ErrSnapshotExcised) {
@@ -531,20 +533,19 @@ func processReplicatedKeyRange(
 }
 
 // processReplicatedLocks identifies extant replicated locks which have been
-// around longer than the supplied intentAgeThreshold and resolves them.
+// around longer than the supplied lockAgeThreshold and resolves them.
 func processReplicatedLocks(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	reader storage.Reader,
 	now hlc.Timestamp,
-	// TODO(arul): rename to lockAgeThreshold
-	intentAgeThreshold time.Duration,
+	lockAgeThreshold time.Duration,
 	options intentBatcherOptions,
 	cleanupIntentsFn CleanupIntentsFunc,
 	info *Info,
 ) error {
-	// Compute intent expiration (intent age at which we attempt to resolve).
-	intentExp := now.Add(-intentAgeThreshold.Nanoseconds(), 0)
+	// Compute lock expiration (lock age at which we attempt to resolve).
+	lockExp := now.Add(-lockAgeThreshold.Nanoseconds(), 0)
 	intentBatcher := newIntentBatcher(cleanupIntentsFn, options, info)
 
 	process := func(ltStartKey, ltEndKey roachpb.Key) error {
@@ -574,8 +575,8 @@ func processReplicatedLocks(
 			}
 			// Keep track of lock to resolve if it is older than the expiration
 			// threshold.
-			if meta.Timestamp.ToTimestamp().Less(intentExp) {
-				info.IntentsConsidered++
+			if meta.Timestamp.ToTimestamp().Less(lockExp) {
+				info.LocksConsidered++
 				key, err := iter.EngineKey()
 				if err != nil {
 					return err
@@ -1019,10 +1020,10 @@ type intentBatcher struct {
 }
 
 type intentBatcherOptions struct {
-	maxIntentsPerIntentCleanupBatch        int64
-	maxIntentKeyBytesPerIntentCleanupBatch int64
-	maxTxnsPerIntentCleanupBatch           int64
-	intentCleanupBatchTimeout              time.Duration
+	maxLocksPerIntentCleanupBatch        int64
+	maxLockKeyBytesPerIntentCleanupBatch int64
+	maxTxnsPerIntentCleanupBatch         int64
+	intentCleanupBatchTimeout            time.Duration
 }
 
 // newIntentBatcher initializes an intentBatcher. Batcher will take ownership of
@@ -1030,11 +1031,11 @@ type intentBatcherOptions struct {
 func newIntentBatcher(
 	cleanupIntentsFunc CleanupIntentsFunc, options intentBatcherOptions, gcStats *Info,
 ) intentBatcher {
-	if options.maxIntentsPerIntentCleanupBatch <= 0 {
-		options.maxIntentsPerIntentCleanupBatch = math.MaxInt64
+	if options.maxLocksPerIntentCleanupBatch <= 0 {
+		options.maxLocksPerIntentCleanupBatch = math.MaxInt64
 	}
-	if options.maxIntentKeyBytesPerIntentCleanupBatch <= 0 {
-		options.maxIntentKeyBytesPerIntentCleanupBatch = math.MaxInt64
+	if options.maxLockKeyBytesPerIntentCleanupBatch <= 0 {
+		options.maxLockKeyBytesPerIntentCleanupBatch = math.MaxInt64
 	}
 	if options.maxTxnsPerIntentCleanupBatch <= 0 {
 		options.maxTxnsPerIntentCleanupBatch = math.MaxInt64
@@ -1062,8 +1063,8 @@ func (b *intentBatcher) addAndMaybeFlushIntents(
 	// Check batching thresholds if we need to flush collected data. Transaction
 	// count is treated specially because we want to check it only when we find
 	// a new transaction.
-	if int64(len(b.pendingLocks)) >= b.options.maxIntentsPerIntentCleanupBatch ||
-		b.collectedIntentBytes >= b.options.maxIntentKeyBytesPerIntentCleanupBatch ||
+	if int64(len(b.pendingLocks)) >= b.options.maxLocksPerIntentCleanupBatch ||
+		b.collectedIntentBytes >= b.options.maxLockKeyBytesPerIntentCleanupBatch ||
 		!existingTransaction && int64(len(b.pendingTxns)) >= b.options.maxTxnsPerIntentCleanupBatch {
 		err = b.maybeFlushPendingIntents(ctx)
 	}
@@ -1099,13 +1100,13 @@ func (b *intentBatcher) maybeFlushPendingIntents(ctx context.Context) error {
 		err = cleanupIntentsFn(ctx)
 	}
 	if err == nil {
-		// IntentTxns and PushTxn will be equal here, since
+		// LockTxns and PushTxn will be equal here, since
 		// pushes to transactions whose record lies in this
 		// range (but which are not associated to a remaining
 		// intent on it) happen asynchronously and are accounted
 		// for separately. Thus higher up in the stack, we
-		// expect PushTxn > IntentTxns.
-		b.gcStats.IntentTxns += len(b.pendingTxns)
+		// expect PushTxn > LockTxns.
+		b.gcStats.LockTxns += len(b.pendingTxns)
 		// All transactions in pendingTxns may be PENDING and
 		// cleanupIntentsFn will push them to finalize them.
 		b.gcStats.PushTxn += len(b.pendingTxns)
