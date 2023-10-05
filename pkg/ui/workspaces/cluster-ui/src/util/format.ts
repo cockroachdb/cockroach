@@ -408,7 +408,7 @@ const breakLinesKeywords: BreakLineReplacement = {
 const LINE_BREAK_LIMIT = 100;
 
 export function FormatQuery(query: string): string {
-  if (query === null) {
+  if (query == null) {
     return "";
   }
   Object.keys(breakLinesKeywords).forEach(key => {
