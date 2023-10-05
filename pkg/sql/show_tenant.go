@@ -137,7 +137,7 @@ func (n *showTenantNode) getTenantValues(
 	}
 
 	// Tenant status + replication status fields.
-	jobId := tenantInfo.TenantReplicationJobID
+	jobId := tenantInfo.PhysicalReplicationConsumerJobID
 	if jobId == 0 {
 		values.dataState = values.tenantInfo.DataState.String()
 	} else {
@@ -233,7 +233,7 @@ func (n *showTenantNode) Values() tree.Datums {
 
 		replicationInfo := v.replicationInfo
 		if replicationInfo != nil {
-			replicationJobId = tree.NewDInt(tree.DInt(tenantInfo.TenantReplicationJobID))
+			replicationJobId = tree.NewDInt(tree.DInt(tenantInfo.PhysicalReplicationConsumerJobID))
 			sourceTenantName = tree.NewDString(string(replicationInfo.IngestionDetails.SourceTenantName))
 			sourceClusterUri = tree.NewDString(replicationInfo.IngestionDetails.StreamAddress)
 			if replicationInfo.ReplicationLagInfo != nil {

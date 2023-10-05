@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -116,6 +118,9 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 
 			switch progress.StreamIngestionStatus {
 			case jobspb.StreamReplicationProgress_FINISHED_SUCCESSFULLY:
+				if err := p.removeJobFromTenantRecord(ctx, execCfg); err != nil {
+					return err
+				}
 				return p.releaseProtectedTimestamp(ctx, execCfg)
 			case jobspb.StreamReplicationProgress_FINISHED_UNSUCCESSFULLY:
 				return errors.New("destination cluster job finished unsuccessfully")
@@ -138,8 +143,46 @@ func (p *producerJobResumer) OnFailOrCancel(
 ) error {
 	jobExec := execCtx.(sql.JobExecContext)
 	execCfg := jobExec.ExecCfg()
-	// Releases the protected timestamp record.
+
+	if err := p.removeJobFromTenantRecord(ctx, execCfg); err != nil {
+		return err
+	}
+
 	return p.releaseProtectedTimestamp(ctx, execCfg)
+}
+
+func (p *producerJobResumer) removeJobFromTenantRecord(
+	ctx context.Context, execCfg *sql.ExecutorConfig,
+) error {
+	tenantID := p.job.Details().(jobspb.StreamReplicationDetails).TenantID
+	jobID := p.job.ID()
+	return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		tenantRecord, err := sql.GetTenantRecordByID(ctx, txn, tenantID, execCfg.Settings)
+		if err != nil {
+			if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
+				// Tenant is already gone. Nothing more to do here.
+				return nil
+			}
+			return err
+		}
+
+		ourIdx := -1
+		for i, jid := range tenantRecord.PhysicalReplicationProducerJobIDs {
+			if jobID == jid {
+				ourIdx = i
+				break
+			}
+		}
+		if ourIdx != -1 {
+			l := len(tenantRecord.PhysicalReplicationProducerJobIDs)
+			tenantRecord.PhysicalReplicationProducerJobIDs[ourIdx] = tenantRecord.PhysicalReplicationProducerJobIDs[l-1]
+			tenantRecord.PhysicalReplicationProducerJobIDs = tenantRecord.PhysicalReplicationProducerJobIDs[:l-1]
+		}
+		if err := sql.UpdateTenantRecord(ctx, execCfg.Settings, txn, tenantRecord); err != nil {
+			return err
+		}
+		return err
+	})
 }
 
 // CollectProfile implements jobs.Resumer interface
