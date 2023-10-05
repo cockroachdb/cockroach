@@ -253,12 +253,16 @@ SELECT database_name,
 		nameCols = "database_name, schema_name, routine_id, routine_signature,"
 		fnResolved := intsets.MakeFast()
 		routines := n.Targets.Functions
+		routineType := tree.UDFRoutine
 		if len(n.Targets.Procedures) > 0 {
 			routines = n.Targets.Procedures
+			routineType = tree.ProcedureRoutine
 		}
 		for _, fn := range routines {
 			un := fn.FuncName.ToUnresolvedObjectName().ToUnresolvedName()
-			fd, err := d.catalog.ResolveFunction(d.ctx, un, &d.evalCtx.SessionData().SearchPath)
+			fd, err := d.catalog.ResolveFunction(
+				d.ctx, tree.MakeUnresolvedFunctionName(un), &d.evalCtx.SessionData().SearchPath,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -266,7 +270,8 @@ SELECT database_name,
 			if err != nil {
 				return nil, err
 			}
-			ol, err := fd.MatchOverload(paramTypes, fn.FuncName.Schema(), &d.evalCtx.SessionData().SearchPath)
+			ol, err := fd.MatchOverload(paramTypes, fn.FuncName.Schema(),
+				&d.evalCtx.SessionData().SearchPath, routineType)
 			if err != nil {
 				return nil, err
 			}

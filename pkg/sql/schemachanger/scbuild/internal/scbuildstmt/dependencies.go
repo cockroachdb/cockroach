@@ -362,7 +362,7 @@ type NameResolver interface {
 	ResolveIndex(relationID catid.DescID, indexName tree.Name, p ResolveParams) ElementResultSet
 
 	// ResolveUDF retrieves a user defined function and returns its elements.
-	ResolveUDF(routineObj *tree.RoutineObj, p ResolveParams) ElementResultSet
+	ResolveRoutine(routineObj *tree.RoutineObj, p ResolveParams, routineType tree.RoutineType) ElementResultSet
 
 	// ResolveIndexByName retrieves a table which contains the target
 	// index and returns its elements. Name of database, schema or table may be

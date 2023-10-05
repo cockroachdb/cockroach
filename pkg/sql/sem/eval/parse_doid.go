@@ -73,7 +73,9 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 		for i := 0; i < len(substrs); i++ {
 			name.Parts[i] = substrs[len(substrs)-1-i]
 		}
-		funcDef, err := evalCtx.Planner.ResolveFunction(ctx, &name, &evalCtx.SessionData().SearchPath)
+		funcDef, err := evalCtx.Planner.ResolveFunction(
+			ctx, tree.MakeUnresolvedFunctionName(&name), &evalCtx.SessionData().SearchPath,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -100,7 +102,9 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 		}
 
 		un := fn.FuncName.ToUnresolvedObjectName().ToUnresolvedName()
-		fd, err := evalCtx.Planner.ResolveFunction(ctx, un, &evalCtx.SessionData().SearchPath)
+		fd, err := evalCtx.Planner.ResolveFunction(
+			ctx, tree.MakeUnresolvedFunctionName(un), &evalCtx.SessionData().SearchPath,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -125,7 +129,8 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 		if err != nil {
 			return nil, err
 		}
-		ol, err := fd.MatchOverload(paramTypes, fn.FuncName.Schema(), &evalCtx.SessionData().SearchPath)
+		ol, err := fd.MatchOverload(paramTypes, fn.FuncName.Schema(),
+			&evalCtx.SessionData().SearchPath, tree.BuiltinRoutine|tree.UDFRoutine)
 		if err != nil {
 			return nil, err
 		}
