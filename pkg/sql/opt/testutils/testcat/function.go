@@ -28,9 +28,10 @@ var _ tree.FunctionReferenceResolver = (*Catalog)(nil)
 
 // ResolveFunction part of the tree.FunctionReferenceResolver interface.
 func (tc *Catalog) ResolveFunction(
-	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+	ctx context.Context, name tree.UnresolvedRoutineName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
-	fn, err := name.ToRoutineName()
+	uname := name.UnresolvedName()
+	fn, err := uname.ToRoutineName()
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +45,7 @@ func (tc *Catalog) ResolveFunction(
 		return def, nil
 	}
 	// Otherwise, try to resolve to a user-defined function.
-	if def, ok := tc.udfs[name.String()]; ok {
+	if def, ok := tc.udfs[uname.String()]; ok {
 		return def, nil
 	}
 	return nil, errors.Mark(

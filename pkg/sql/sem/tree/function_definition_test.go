@@ -216,7 +216,12 @@ func TestMatchOverload(t *testing.T) {
 	for _, tc := range testCase {
 		t.Run(tc.testName, func(t *testing.T) {
 			path := sessiondata.MakeSearchPath(tc.path)
-			ol, err := fd.MatchOverload(tc.argTypes, tc.explicitSchema, &path)
+			ol, err := fd.MatchOverload(
+				tc.argTypes,
+				tc.explicitSchema,
+				&path,
+				false, /* procedure */
+			)
 			if tc.expectedErr != "" {
 				require.Regexp(t, tc.expectedErr, err.Error())
 				return

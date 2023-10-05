@@ -44,9 +44,9 @@ func NewDistSQLFunctionResolver(descs *Collection, txn *kv.Txn) *DistSQLFunction
 // TODO(chengxiong): extract resolution logics in schema_resolver.go into
 // separate package so that it can be reused here.
 func (d *DistSQLFunctionResolver) ResolveFunction(
-	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+	ctx context.Context, name tree.UnresolvedRoutineName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
-	fn, err := name.ToRoutineName()
+	fn, err := name.UnresolvedName().ToRoutineName()
 	if err != nil {
 		return nil, err
 	}
