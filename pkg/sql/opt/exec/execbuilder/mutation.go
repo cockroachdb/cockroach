@@ -142,6 +142,11 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 	if !b.allowInsertFastPath {
 		return execPlan{}, false, nil
 	}
+	// If there are unique checks required, there must be the same number of fast
+	// path unique checks.
+	if len(ins.UniqueChecks) != len(ins.FastPathUniqueChecks) {
+		return execPlan{}, false, nil
+	}
 
 	insInput := ins.Input
 	values, ok := insInput.(*memo.ValuesExpr)
