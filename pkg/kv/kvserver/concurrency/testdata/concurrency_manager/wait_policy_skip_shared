@@ -1,0 +1,158 @@
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=11,1 epoch=0
+----
+
+new-txn name=txn3 ts=12,1 epoch=0
+----
+
+new-txn name=txn4 ts=13,1 epoch=0
+----
+
+# ------------------------------------------------------------------------------
+# Prep: Txn 1 acquires shared locks at key k1 and key k2
+#       Txn 2 acquires shared locks at key k2
+#       Txn 3 acquires exclusive locks at key k3
+# ------------------------------------------------------------------------------
+
+new-request name=req1 txn=txn1 ts=10,0
+  get key=k1 str=shared
+  get key=k2 str=shared
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+on-lock-acquired req=req1 key=k1 str=shared
+----
+[-] acquire lock: txn 00000001 @ ‹k1›
+
+on-lock-acquired req=req1 key=k2 str=shared
+----
+[-] acquire lock: txn 00000001 @ ‹k2›
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+new-request name=req2 txn=txn2 ts=11,1
+  get key=k2 str=shared
+----
+
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+on-lock-acquired req=req2 key=k2 str=shared
+----
+[-] acquire lock: txn 00000002 @ ‹k2›
+
+new-request name=req3 txn=txn3 ts=12,1
+  get key=k3 str=exclusive
+----
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+sequence req=req3
+----
+[3] sequence req3: sequencing request
+[3] sequence req3: acquiring latches
+[3] sequence req3: scanning lock table for conflicting locks
+[3] sequence req3: sequencing complete, returned guard
+
+on-lock-acquired req=req3 key=k3 str=exclusive
+----
+[-] acquire lock: txn 00000003 @ ‹k3›
+
+finish req=req3
+----
+[-] finish req3: finishing request
+
+debug-lock-table
+----
+num=3
+ lock: "k1"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+ lock: "k2"
+  holders: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+ lock: "k3"
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 12.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+# ------------------------------------------------------------------------------
+# Prep: Test skip locked requests with locking strength None, Shared, and
+# Exclusive.
+# ------------------------------------------------------------------------------
+
+new-request name=reqSkipLocked txn=txn4 ts=13,0 wait-policy=skip-locked
+  scan key=k endkey=k5
+----
+
+sequence req=reqSkipLocked
+----
+[4] sequence reqSkipLocked: sequencing request
+[4] sequence reqSkipLocked: acquiring latches
+[4] sequence reqSkipLocked: scanning lock table for conflicting locks
+[4] sequence reqSkipLocked: sequencing complete, returned guard
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k1 strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k2 strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k3 strength=none
+----
+locked: true, holder: 00000003-0000-0000-0000-000000000000
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k4 strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k1 strength=shared
+----
+locked: false
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k2 strength=shared
+----
+locked: false
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k3 strength=shared
+----
+locked: true, holder: 00000003-0000-0000-0000-000000000000
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k4 strength=shared
+----
+locked: false
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k1 strength=exclusive
+----
+locked: true, holder: 00000001-0000-0000-0000-000000000000
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k2 strength=exclusive
+----
+locked: true, holder: 00000001-0000-0000-0000-000000000000
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k3 strength=exclusive
+----
+locked: true, holder: 00000003-0000-0000-0000-000000000000
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k4 strength=exclusive
+----
+locked: false
+
+finish req=reqSkipLocked
+----
+[-] finish reqSkipLocked: finishing request
