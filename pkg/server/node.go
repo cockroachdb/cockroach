@@ -1325,7 +1325,11 @@ func (n *Node) batchInternal(
 		writeBytes.Release()
 	}()
 	var pErr *kvpb.Error
+
+	log.VEvent(ctx, 2, "store send with write bytes")
 	br, writeBytes, pErr = n.stores.SendWithWriteBytes(ctx, args)
+	log.VEvent(ctx, 2, "store receive send with write bytes")
+
 	if pErr != nil {
 		br = &kvpb.BatchResponse{}
 		if pErr.Index != nil && keyvissettings.Enabled.Get(&n.storeCfg.Settings.SV) {
@@ -1456,7 +1460,9 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 		args.GatewayNodeID = n.Descriptor.NodeID
 	}
 
+	log.VEvent(ctx, 2, "send batch internal")
 	br, err := n.batchInternal(ctx, tenantID, args)
+	log.VEvent(ctx, 2, "receive batch internal")
 
 	// We always return errors via BatchResponse.Error so structure is
 	// preserved; plain errors are presumed to be from the RPC

@@ -190,7 +190,9 @@ func (s *Store) SendWithWriteBytes(
 			})
 		}
 
+		log.VEvent(ctx, 2, "replica send with write bytes")
 		br, writeBytes, pErr = repl.SendWithWriteBytes(ctx, ba)
+		log.VEvent(ctx, 2, "replica receive send with write bytes")
 		if pErr == nil {
 			// If any retries occurred, we should include the RangeInfos accumulated
 			// and pass these to the client, to invalidate their cache. This is
