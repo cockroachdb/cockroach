@@ -137,7 +137,7 @@ function getContentionWhereClause(filters?: ContentionFilters): string {
     if (whereClause != defaultWhereClause) {
       whereClause += " and ";
     }
-    whereClause = whereClause + ` waiting_txn_id >= '${filters.waitingTxnID}' `;
+    whereClause = whereClause + ` waiting_txn_id = '${filters.waitingTxnID}' `;
   }
 
   if (filters?.start) {
