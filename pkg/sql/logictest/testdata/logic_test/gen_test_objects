@@ -236,17 +236,15 @@ SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
 FROM "".crdb_internal.tables WHERE database_name ILIKE '%d%b%t%'
 ORDER BY database_name, schema_name, name
 ----
-"d%qbt1"  public  span_configurations
-"d%qbt1"  public  table_statistics
-"d%qbt1"  public  t😤ena̷nts
-"d%qbt2"  public  replication_stats
-"d%qbt2"  public  role_member_s
-"d%qbt2"  public  "sqlliven
-e
-ss"
-dbt3   public  "privileg%qes"
-dbt3   public  re̗plication_stats
-dbt3   public  "transaction_statisti\\u5B5Bcs"
+"d%qbt1"  public  span_stats_samples
+"d%qbt1"  public  "t abLe_statistics"
+"d%qbt1"  public  "transaction_execut%ion_insights"
+"d%qbt2"  public  "r\\x0fegion_liveness"
+"d%qbt2"  public  span_stats_buckets
+"d%qbt2"  public  "transaction_statisTics"
+dbt3      public  "extern'al_connections"
+dbt3      public  "te\\x64nant_i""d_se q"
+dbt3      public  "tenant_setting%vs"
 
 
 statement ok
