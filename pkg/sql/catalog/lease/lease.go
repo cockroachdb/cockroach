@@ -99,7 +99,7 @@ var LeaseEnableSessionBasedLeasing = settings.RegisterEnumSetting(
 	"sql.catalog.experimental_use_session_based_leasing",
 	"enables session based leasing for internal testing.",
 	util.ConstantWithMetamorphicTestChoice("experimental_use_session_based_leasing",
-		"off", "dual_write").(string),
+		"off", "dual_write", "drain", "session").(string),
 	map[int64]string{
 		int64(SessionBasedLeasingOff): "off",
 		int64(SessionBasedDualWrite):  "dual_write",
@@ -724,9 +724,11 @@ func purgeOldVersions(
 					// duration. If the session lifetime had been longer then use
 					// that. We will only expire later into the future, then what
 					// was previously observed, since transactions may have already
-					// picked this time.
-					leaseToExpire.mu.expiration = m.storage.db.KV().Clock().Now().AddDuration(LeaseDuration.Get(&m.storage.settings.SV))
-					if sessionExpiry := leaseToExpire.mu.session.Expiration(); leaseToExpire.mu.expiration.Less(sessionExpiry) {
+					// picked this time. If the lease duration is zero, then we are
+					// looking at instant expiration for testing.
+					leaseDuration := LeaseDuration.Get(&m.storage.settings.SV)
+					leaseToExpire.mu.expiration = m.storage.db.KV().Clock().Now().AddDuration(leaseDuration)
+					if sessionExpiry := leaseToExpire.mu.session.Expiration(); leaseDuration > 0 && leaseToExpire.mu.expiration.Less(sessionExpiry) {
 						leaseToExpire.mu.expiration = sessionExpiry
 					}
 				}
@@ -1373,13 +1375,19 @@ var leaseRefreshLimit = settings.RegisterIntSetting(
 // TODO(vivek): Remove once epoch based table leases are implemented.
 func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 	_ = m.stopper.RunAsyncTask(ctx, "lease-refresher", func(ctx context.Context) {
-		leaseDuration := LeaseDuration.Get(&m.storage.settings.SV)
-		if leaseDuration <= 0 {
-			return
+		refreshTimerDuration := LeaseDuration.Get(&m.storage.settings.SV)
+		renewalsDisabled := false
+		if refreshTimerDuration <= 0 {
+			// Session based leasing still needs a refresh loop to expire
+			// leases, so we will execute that without any renewals.
+			refreshTimerDuration = time.Millisecond * 200
+			renewalsDisabled = true
+		} else {
+			refreshTimerDuration = m.storage.jitteredLeaseDuration()
 		}
 		refreshTimer := timeutil.NewTimer()
 		defer refreshTimer.Stop()
-		refreshTimer.Reset(m.storage.jitteredLeaseDuration() / 2)
+		refreshTimer.Reset(refreshTimerDuration / 2)
 		for {
 			select {
 			case <-m.stopper.ShouldQuiesce():
@@ -1395,7 +1403,8 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 				// Refreshing leases is enabled unless we are past the drain mode,
 				// after which no expiry based leases should be created or updated.
 				// Existing ones can still be queried by schema changes.
-				if !m.sessionBasedLeasingModeAtLeast(SessionBasedDrain) {
+				if !m.sessionBasedLeasingModeAtLeast(SessionBasedDrain) &&
+					!renewalsDisabled {
 					m.refreshSomeLeases(ctx)
 				}
 			}
