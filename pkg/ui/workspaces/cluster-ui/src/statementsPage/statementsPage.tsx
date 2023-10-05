@@ -771,7 +771,7 @@ export class StatementsPage extends React.Component<
             }
           />
           {this.props.statementsResponse.inFlight &&
-            getValidErrorsList(this.props.statementsResponse.error) === null &&
+            getValidErrorsList(this.props.statementsResponse.error) == null &&
             longLoadingMessage}
           <ActivateStatementDiagnosticsModal
             ref={this.activateDiagnosticsRef}
