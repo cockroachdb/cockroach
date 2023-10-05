@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/errors"
 )
 
 // TODO(srosenberg): restore the change in https://github.com/cockroachdb/cockroach/pull/111140 after 23.2 branch cut.
@@ -292,26 +293,26 @@ func SelectGCEMachineTypeNew(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, 
 
 // SelectAzureMachineType selects a machine type given the desired number of CPUs and
 // memory per CPU ratio.
-func SelectAzureMachineType(cpus int, mem MemPerCPU) string {
+func SelectAzureMachineType(cpus int, mem MemPerCPU) (string, error) {
 	if mem != Auto && mem != Standard {
-		panic(fmt.Sprintf("custom memory per CPU not implemented for Azure, memory ratio requested: %d", mem))
+		return "", errors.Newf("custom memory per CPU not implemented for Azure, memory ratio requested: %d", mem)
 	}
 	switch {
 	case cpus <= 2:
-		return "Standard_D2_v3"
+		return "Standard_D2_v3", nil
 	case cpus <= 4:
-		return "Standard_D4_v3"
+		return "Standard_D4_v3", nil
 	case cpus <= 8:
-		return "Standard_D8_v3"
+		return "Standard_D8_v3", nil
 	case cpus <= 16:
-		return "Standard_D16_v3"
+		return "Standard_D16_v3", nil
 	case cpus <= 36:
-		return "Standard_D32_v3"
+		return "Standard_D32_v3", nil
 	case cpus <= 48:
-		return "Standard_D48_v3"
+		return "Standard_D48_v3", nil
 	case cpus <= 64:
-		return "Standard_D64_v3"
+		return "Standard_D64_v3", nil
 	default:
-		panic(fmt.Sprintf("no azure machine type with %d cpus", cpus))
+		return "", errors.Newf("no azure machine type with %d cpus", cpus)
 	}
 }

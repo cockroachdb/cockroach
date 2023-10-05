@@ -295,7 +295,13 @@ func (s *ClusterSpec) RoachprodOpts(
 			case GCE:
 				machineType, selectedArch = SelectGCEMachineType(s.CPUs, s.Mem, arch)
 			case Azure:
-				machineType = SelectAzureMachineType(s.CPUs, s.Mem)
+				// Custom memory per CPU is not yet supported in Azure.
+				mType, err := SelectAzureMachineType(s.CPUs, s.Mem)
+				if err != nil {
+					return vm.CreateOpts{}, nil, err
+				}
+
+				machineType = mType
 			}
 			if selectedArch != "" && selectedArch != arch {
 				// TODO(srosenberg): we need a better way to monitor the rate of this mismatch, i.e.,
