@@ -587,7 +587,7 @@ var VectorizeClusterMode = settings.RegisterEnumSetting(
 	settings.ApplicationLevel,
 	VectorizeClusterSettingName,
 	"default vectorize mode",
-	"on",
+	"off",
 	func() map[int64]string {
 		m := make(map[int64]string, len(sessiondatapb.VectorizeExecMode_name))
 		for k := range sessiondatapb.VectorizeExecMode_name {
