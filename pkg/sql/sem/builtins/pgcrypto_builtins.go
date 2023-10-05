@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	_ "golang.org/x/crypto/bcrypt" // linked to by go:linkname
@@ -58,6 +59,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{{Name: "password", Typ: types.String}, {Name: "salt", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				sqltelemetry.IncBuiltinFunctionCounter(sqltelemetry.CryptoBuiltinFunction, "crypt")
 				password := tree.MustBeDString(args[0])
 				salt := tree.MustBeDString(args[1])
 				hash, err := crypt(string(password), string(salt))
@@ -81,6 +83,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				sqltelemetry.IncBuiltinFunctionCounter(sqltelemetry.CryptoBuiltinFunction, "decrypt")
 				data := []byte(tree.MustBeDBytes(args[0]))
 				key := []byte(tree.MustBeDBytes(args[1]))
 				cipherType := string(tree.MustBeDString(args[2]))
@@ -108,6 +111,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				sqltelemetry.IncBuiltinFunctionCounter(sqltelemetry.CryptoBuiltinFunction, "decrypt_iv")
 				data := []byte(tree.MustBeDBytes(args[0]))
 				key := []byte(tree.MustBeDBytes(args[1]))
 				iv := []byte(tree.MustBeDBytes(args[2]))
@@ -132,6 +136,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{{Name: "data", Typ: types.String}, {Name: "type", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				sqltelemetry.IncBuiltinFunctionCounter(sqltelemetry.CryptoBuiltinFunction, "digest")
 				alg := tree.MustBeDString(args[1])
 				hashFunc, err := getHashFunc(string(alg))
 				if err != nil {
@@ -151,6 +156,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{{Name: "data", Typ: types.Bytes}, {Name: "type", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				sqltelemetry.IncBuiltinFunctionCounter(sqltelemetry.CryptoBuiltinFunction, "digest")
 				alg := tree.MustBeDString(args[1])
 				hashFunc, err := getHashFunc(string(alg))
 				if err != nil {
@@ -178,6 +184,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				sqltelemetry.IncBuiltinFunctionCounter(sqltelemetry.CryptoBuiltinFunction, "encrypt")
 				data := []byte(tree.MustBeDBytes(args[0]))
 				key := []byte(tree.MustBeDBytes(args[1]))
 				cipherType := string(tree.MustBeDString(args[2]))
@@ -205,6 +212,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				sqltelemetry.IncBuiltinFunctionCounter(sqltelemetry.CryptoBuiltinFunction, "encrypt_iv")
 				data := []byte(tree.MustBeDBytes(args[0]))
 				key := []byte(tree.MustBeDBytes(args[1]))
 				iv := []byte(tree.MustBeDBytes(args[2]))
@@ -231,6 +239,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{{Name: "count", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				sqltelemetry.IncBuiltinFunctionCounter(sqltelemetry.CryptoBuiltinFunction, "gen_random_bytes")
 				count := int(tree.MustBeDInt(args[0]))
 				if count < 1 || count > 1024 {
 					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "length %d is outside the range [1, 1024]", count)
@@ -252,6 +261,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{{Name: "type", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				sqltelemetry.IncBuiltinFunctionCounter(sqltelemetry.CryptoBuiltinFunction, "gen_salt")
 				typ := tree.MustBeDString(args[0])
 				salt, err := genSalt(string(typ), 0)
 				if err != nil {
@@ -266,6 +276,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{{Name: "type", Typ: types.String}, {Name: "iter_count", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				sqltelemetry.IncBuiltinFunctionCounter(sqltelemetry.CryptoBuiltinFunction, "gen_salt")
 				typ := tree.MustBeDString(args[0])
 				rounds := tree.MustBeDInt(args[1])
 				salt, err := genSalt(string(typ), int(rounds))
@@ -285,6 +296,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{{Name: "data", Typ: types.String}, {Name: "key", Typ: types.String}, {Name: "type", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				sqltelemetry.IncBuiltinFunctionCounter(sqltelemetry.CryptoBuiltinFunction, "hmac")
 				key := tree.MustBeDString(args[1])
 				alg := tree.MustBeDString(args[2])
 				hashFunc, err := getHashFunc(string(alg))
@@ -304,6 +316,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{{Name: "data", Typ: types.Bytes}, {Name: "key", Typ: types.Bytes}, {Name: "type", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				sqltelemetry.IncBuiltinFunctionCounter(sqltelemetry.CryptoBuiltinFunction, "hmac")
 				key := tree.MustBeDBytes(args[1])
 				alg := tree.MustBeDString(args[2])
 				hashFunc, err := getHashFunc(string(alg))

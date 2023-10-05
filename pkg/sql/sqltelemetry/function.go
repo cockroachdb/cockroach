@@ -30,9 +30,13 @@ type BuiltinFunctionTelemetryType int
 
 const (
 	_ BuiltinFunctionTelemetryType = iota
+	// CryptoBuiltinFunction is used for cryptographic builtin functions.
+	CryptoBuiltinFunction
 )
 
-var builtinFunctionTelemetryNameMap = map[BuiltinFunctionTelemetryType]string{}
+var builtinFunctionTelemetryNameMap = map[BuiltinFunctionTelemetryType]string{
+	CryptoBuiltinFunction: "crypto",
+}
 
 var builtinFunctionTelemetryCounters map[BuiltinFunctionTelemetryType]map[string]telemetry.Counter
 

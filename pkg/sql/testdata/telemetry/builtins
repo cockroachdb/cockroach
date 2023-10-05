@@ -1,0 +1,33 @@
+feature-allowlist
+sql.builtins.*
+----
+
+feature-usage
+SELECT crypt('password', '$1$aRnqRmeP')
+----
+sql.builtins.crypto.crypt
+
+feature-usage
+SELECT digest('hello', 'sha256')
+----
+sql.builtins.crypto.digest
+
+feature-usage
+SELECT gen_random_bytes(64)
+----
+sql.builtins.crypto.gen_random_bytes
+
+feature-usage
+SELECT gen_salt('xdes')
+----
+sql.builtins.crypto.gen_salt
+
+feature-usage
+SELECT gen_salt('xdes', 1)
+----
+sql.builtins.crypto.gen_salt
+
+feature-usage
+SELECT hmac('hello', 'key', 'sha256')
+----
+sql.builtins.crypto.hmac

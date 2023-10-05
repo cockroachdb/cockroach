@@ -1,0 +1,23 @@
+feature-allowlist
+sql.builtins.*
+----
+
+feature-usage
+SELECT encrypt('abc', 'key', 'aes')
+----
+sql.builtins.crypto.encrypt
+
+feature-usage
+SELECT encrypt_iv('abc', 'key', '123', 'aes')
+----
+sql.builtins.crypto.encrypt_iv
+
+feature-usage
+SELECT decrypt('\xdb5f149a7caf0cd275ca18c203a212c9', 'key', 'aes')
+----
+sql.builtins.crypto.decrypt
+
+feature-usage
+SELECT decrypt_iv('\x91b4ef63852013c8da53829da662b871', 'key', '123', 'aes')
+----
+sql.builtins.crypto.decrypt_iv
