@@ -168,7 +168,7 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 
 	//  - there are no self-referencing foreign keys;
 	//  - all FK checks can be performed using direct lookups into unique indexes.
-	fkChecks := make([]exec.InsertFastPathFKCheck, len(ins.FKChecks))
+	fkChecks := make([]exec.InsertFastPathCheck, len(ins.FKChecks))
 	for i := range ins.FKChecks {
 		c := &ins.FKChecks[i]
 		if md.Table(c.ReferencedTable).ID() == md.Table(ins.Table).ID() {
@@ -207,19 +207,20 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 
 		out := &fkChecks[i]
 		out.InsertCols = make([]exec.TableColumnOrdinal, len(lookupJoin.KeyCols))
-		for i, keyCol := range lookupJoin.KeyCols {
+		for j, keyCol := range lookupJoin.KeyCols {
 			// The keyCol comes from the WithScan operator. We must find the matching
 			// column in the mutation input.
-			withColOrd, ok := withScan.OutCols.Find(keyCol)
+			var withColOrd, inputColOrd int
+			withColOrd, ok = withScan.OutCols.Find(keyCol)
 			if !ok {
 				return execPlan{}, false, errors.AssertionFailedf("cannot find column %d", keyCol)
 			}
 			inputCol := withScan.InCols[withColOrd]
-			inputColOrd, ok := ins.InsertCols.Find(inputCol)
+			inputColOrd, ok = ins.InsertCols.Find(inputCol)
 			if !ok {
 				return execPlan{}, false, errors.AssertionFailedf("cannot find column %d", inputCol)
 			}
-			out.InsertCols[i] = exec.TableColumnOrdinal(inputColOrd)
+			out.InsertCols[j] = exec.TableColumnOrdinal(inputColOrd)
 		}
 
 		out.ReferencedTable = md.Table(lookupJoin.Table)
