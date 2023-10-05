@@ -131,18 +131,21 @@ type NonMaskedSetting interface {
 //
 //   - Rules of thumb:
 //
-//     1. if an end-user should be able to modify the setting in
-//     CockroachCloud Serverless, AND different end-users should be
-//     able to use different values, the setting should have class
+//     1. if an end-user may benefit from modifying the setting
+//     through a SQL connection to a secondary tenant / virtual
+//     cluster, AND different virtual clusters should be able to use
+//     different values, the setting should have class
 //     ApplicationLevel.
 //
-//     2. if a setting should only be controlled by SREs in
-//     CockroachCloud Serverless, OR a single value must apply to
-//     multiple tenants (virtual clusters) simultaneously, the setting
-//     must *not* use class ApplicationLevel.
+//     2. if a setting should only be controlled by SREs in a
+//     multi-tenant deployment or in an organization that wishes to
+//     shield DB operations from application development, OR the
+//     behavior of CockroachDB is not well-defined if multiple tenants
+//     (virtual clusters) use different values concurrently, the
+//     setting must *not* use class ApplicationLevel.
 //
 //     3. if and only if a setting relevant to the KV/storage layer
-//     and whose value is shared across all virtual cluster is ever
+//     and whose value is shared across all virtual clusters is ever
 //     accessed by code in the application layer (SQL execution or
 //     HTTP handlers), use SystemVisible.
 //
@@ -159,18 +162,26 @@ const (
 	//   - the setting may be accessed from the shared KV/storage layer;
 	//
 	//   - AND, the setting should only be controllable by SREs (not
-	//     end-users) in CockroachCloud Serverless, AND a single value
-	//     must apply to all virtual clusters simultaneously;
+	//     end-users) in a multi-tenant environment, AND the behavior
+	//     of CockroachDB is not well-defined if different virtual
+	//     clusters were to use different values concurrently.
 	//
 	//     (If this part of the condition does not hold, consider
 	//     ApplicationLevel instead.)
 	//
 	//   - AND, its value is never needed in the application layer (i.e.
 	//     it is not read from SQL code, HTTP handlers or other code
-	//     that would run in SQL pods in CC Serverless).
+	//     that would run in SQL pods in a multi-tenant environment).
 	//
 	//     (If this part of the condition does not hold, consider
 	//     SystemVisible instead.)
+	//
+	//     Note: if a setting is only ever accessed in the SQL code
+	//     after it has ascertained that it was running for the system
+	//     interface; and we do not wish to display this setting in the
+	//     list displayed by `SHOW ALL CLUSTER SETTINGS` in virtual
+	//     clusters, the class SystemOnly is suitable. Hence the emphasis
+	//     on "would run in SQL pods" above.
 	SystemOnly Class = iota
 
 	// SystemVisible settings are specific to the KV/storage layer and
@@ -181,16 +192,16 @@ const (
 	//   - the setting may be accessed from the shared KV/storage layer;
 	//
 	//   - AND the setting should only be controllable by operators of
-	//     the storage cluster (e.g. SREs in the case of Serverless) but
-	//     having the storage cluster's value be observable by virtual
-	//     clusters is desirable.
+	//     the storage cluster (e.g. SREs in the case of a multi-tenant
+	//     environment) but having the storage cluster's value be
+	//     observable by virtual clusters is desirable.
 	//
 	//     (If this part of the condition does not hold, consider
 	//     ApplicationLevel instead.)
 	//
 	//   - AND, its value is sometimes needed in the application layer
 	//     (i.e. it may be read from SQL code, HTTP handlers or other
-	//     code that could run in SQL pods in CC Serverless).
+	//     code that could run in SQL pods in a multi-tenant environment).
 	//
 	//     (If this part of the condition does not hold, consider
 	//     SystemOnly instead.)
@@ -236,8 +247,9 @@ const (
 	//
 	//   - AND, any of the following holds:
 	//
-	//     - end-users should legitimately be able to modify
-	//       the setting in CockroachCloud Serverless;
+	//     - end-users may benefit from modifying the setting
+	//       through a SQL connection to a secondary tenant / virtual
+	//       cluster.
 	//
 	//       (If this part of the condition does not hold, but the other
 	//       part of the condition below does hold, consider still using
