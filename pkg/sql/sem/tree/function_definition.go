@@ -254,10 +254,10 @@ func (fd *ResolvedFunctionDefinition) MergeWith(
 // the most significant schema. If paramTypes is not nil, an error with
 // ErrRoutineUndefined cause is returned if not matched found.
 func (fd *ResolvedFunctionDefinition) MatchOverload(
-	paramTypes []*types.T, explicitSchema string, searchPath SearchPath,
+	paramTypes []*types.T, explicitSchema string, searchPath SearchPath, procedure bool,
 ) (QualifiedOverload, error) {
 	matched := func(ol QualifiedOverload, schema string) bool {
-		if ol.Type == UDFRoutine {
+		if ol.Type == UDFRoutine || ol.Type == ProcedureRoutine {
 			return schema == ol.Schema && (paramTypes == nil || ol.params().MatchIdentical(paramTypes))
 		}
 		return schema == ol.Schema && (paramTypes == nil || ol.params().Match(paramTypes))
@@ -275,6 +275,10 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 
 	findMatches := func(schema string) {
 		for i := range fd.Overloads {
+			if procedure && fd.Overloads[i].Type != ProcedureRoutine ||
+				!procedure && fd.Overloads[i].Type != UDFRoutine {
+				continue
+			}
 			if matched(fd.Overloads[i], schema) {
 				found = true
 				ret = append(ret, fd.Overloads[i])
@@ -293,13 +297,24 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 	}
 
 	if len(ret) == 0 {
-		return QualifiedOverload{}, errors.Mark(
-			pgerror.Newf(pgcode.UndefinedFunction, "function %s(%s) does not exist", fd.Name, typeNames()),
-			ErrRoutineUndefined,
-		)
+		if procedure {
+			return QualifiedOverload{}, errors.Mark(
+				pgerror.Newf(pgcode.UndefinedFunction, "procedure %s(%s) does not exist", fd.Name, typeNames()),
+				ErrRoutineUndefined,
+			)
+		} else {
+			return QualifiedOverload{}, errors.Mark(
+				pgerror.Newf(pgcode.UndefinedFunction, "function %s(%s) does not exist", fd.Name, typeNames()),
+				ErrRoutineUndefined,
+			)
+		}
 	}
 	if len(ret) > 1 {
-		return QualifiedOverload{}, pgerror.Newf(pgcode.AmbiguousFunction, "function name %q is not unique", fd.Name)
+		if procedure {
+			return QualifiedOverload{}, pgerror.Newf(pgcode.AmbiguousFunction, "procedure name %q is not unique", fd.Name)
+		} else {
+			return QualifiedOverload{}, pgerror.Newf(pgcode.AmbiguousFunction, "function name %q is not unique", fd.Name)
+		}
 	}
 	return ret[0], nil
 }

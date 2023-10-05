@@ -253,7 +253,10 @@ func (n *createFunctionNode) getMutableFuncDesc(
 		FuncName: n.cf.Name,
 		Params:   n.cf.Params,
 	}
-	existing, err := params.p.matchUDF(params.ctx, &routineObj, false /* required */)
+	// TODO(mgartner): Add tests for overlapping procedure and function names.
+	// We might need to check for both types of routines here.
+	existing, err := params.p.matchRoutine(params.ctx, &routineObj,
+		false /* required */, false /* procedure */)
 	if err != nil {
 		return nil, false, err
 	}
