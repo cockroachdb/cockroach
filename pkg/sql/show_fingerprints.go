@@ -17,15 +17,21 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -118,6 +124,49 @@ func (n *showFingerprintsNode) startExec(params runParams) error {
 	return nil
 }
 
+// protectTenantSpanWithSession creates a protected timestamp record
+// for the given tenant ID at the read timestamp of the current
+// transaction. The PTS record will be tied to the given sessionID.
+//
+// The caller should call the returned cleanup function to release the
+// PTS record.
+func protectTenantSpanWithSession(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	execCfg *ExecutorConfig,
+	tenantID roachpb.TenantID,
+	sessionID clusterunique.ID,
+) (func(), error) {
+	ptsRecordID := uuid.MakeV4()
+	ptsRecord := sessionprotectedts.MakeRecord(
+		ptsRecordID,
+		// TODO(ssd): The type here seems weird. I think this
+		// is correct in that we use this to compare against
+		// the session_id table which returns the stringified
+		// session ID. But, maybe we can make this clearer.
+		[]byte(sessionID.String()),
+		evalCtx.Txn.ReadTimestamp(),
+		ptpb.MakeTenantsTarget([]roachpb.TenantID{tenantID}),
+	)
+	log.Infof(ctx, "protecting timestamp: %#+v", ptsRecord)
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		pts := execCfg.ProtectedTimestampProvider.WithTxn(txn)
+		return pts.Protect(ctx, ptsRecord)
+	}); err != nil {
+		return nil, err
+	}
+
+	releasePTS := func() {
+		if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			pts := execCfg.ProtectedTimestampProvider.WithTxn(txn)
+			return pts.Release(ctx, ptsRecordID)
+		}); err != nil {
+			log.Warningf(ctx, "failed to release protected timestamp %s: %v", ptsRecordID, err)
+		}
+	}
+	return releasePTS, nil
+}
+
 func (n *showFingerprintsNode) nextTenant(params runParams) (bool, error) {
 	if n.run.rowIdx > 0 {
 		return false, nil
@@ -132,6 +181,18 @@ func (n *showFingerprintsNode) nextTenant(params runParams) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+
+	cleanup, err := protectTenantSpanWithSession(
+		params.ctx,
+		params.p.EvalContext(),
+		params.p.ExecCfg(),
+		tid,
+		params.p.ExtendedEvalContext().SessionID,
+	)
+	if err != nil {
+		return false, err
+	}
+	defer cleanup()
 
 	fingerprint, err := params.p.FingerprintSpan(params.ctx,
 		keys.MakeTenantSpan(tid),

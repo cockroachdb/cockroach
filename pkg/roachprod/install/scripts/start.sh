@@ -20,6 +20,7 @@ BINARY=#{shesc .Binary#}
 KEY_CMD=#{.KeyCmd#}
 MEMORY_MAX=#{.MemoryMax#}
 NUM_FILES_LIMIT=#{.NumFilesLimit#}
+VIRTUAL_CLUSTER_LABEL=#{.VirtualClusterLabel#}
 ARGS=(
 #{range .Args -#}
 #{shesc .#}
@@ -34,7 +35,11 @@ ENV_VARS=(
 # End of templated code.
 
 if [[ -n "${LOCAL}" ]]; then
-  ARGS+=("--background")
+  # Write to an empty pid file. This is referenced by the roachprod
+  # monitor to find the PID of cockroach processes running locally.
+  PID_FILE="${LOG_DIR}/cockroach.pid"
+  rm -f "${PID_FILE}"
+  ARGS+=("--background" "--pid-file" "${PID_FILE}")
 fi
 
 if [[ -n "${LOCAL}" || "${1-}" == "run" ]]; then
@@ -50,7 +55,7 @@ if [[ -n "${LOCAL}" || "${1-}" == "run" ]]; then
     mkdir -p "${BAZEL_COVER_DIR}"
   fi
   CODE=0
-  "${BINARY}" "${ARGS[@]}" >> "${LOG_DIR}/cockroach.stdout.log" 2>> "${LOG_DIR}/cockroach.stderr.log" || CODE="$?"
+  ROACHPROD_VIRTUAL_CLUSTER="${VIRTUAL_CLUSTER_LABEL}" "${BINARY}" "${ARGS[@]}" >> "${LOG_DIR}/cockroach.stdout.log" 2>> "${LOG_DIR}/cockroach.stderr.log" || CODE="$?"
   if [[ -z "${LOCAL}" || "${CODE}" -ne 0 ]]; then
     echo "cockroach exited with code ${CODE}: $(date)" | tee -a "${LOG_DIR}"/{roachprod,cockroach.{exit,std{out,err}}}.log
   fi
@@ -60,31 +65,31 @@ fi
 # Set up systemd unit and start it, which will recursively
 # invoke this script but hit the above conditional.
 
-if systemctl is-active -q cockroach; then
-  echo "cockroach service already active"
-  echo "To get more information: systemctl status cockroach"
+if systemctl is-active -q "${VIRTUAL_CLUSTER_LABEL}"; then
+  echo "${VIRTUAL_CLUSTER_LABEL} service already active"
+  echo "To get more information: systemctl status ${VIRTUAL_CLUSTER_LABEL}"
   exit 1
 fi
 
 # If cockroach failed, the service still exists; we need to clean it up before
 # we can start it again.
-sudo systemctl reset-failed cockroach 2>/dev/null || true
+sudo systemctl reset-failed "${VIRTUAL_CLUSTER_LABEL}" 2>/dev/null || true
 
 # The first time we run, install a small script that shows some helpful
 # information when we ssh in.
 if [ ! -e "${HOME}/.profile-cockroach" ]; then
-  cat > "${HOME}/.profile-cockroach" <<'EOQ'
+  cat > "${HOME}/.profile-${VIRTUAL_CLUSTER_LABEL}" <<EOQ
 echo ""
-if systemctl is-active -q cockroach; then
-  echo "cockroach is running; see: systemctl status cockroach"
-elif systemctl is-failed -q cockroach; then
-  echo "cockroach stopped; see: systemctl status cockroach"
+if systemctl is-active -q ${VIRTUAL_CLUSTER_LABEL}; then
+  echo "${VIRTUAL_CLUSTER_LABEL} is running; see: systemctl status ${VIRTUAL_CLUSTER_LABEL}"
+elif systemctl is-failed -q ${VIRTUAL_CLUSTER_LABEL}; then
+  echo "${VIRTUAL_CLUSTER_LABEL} stopped; see: systemctl status ${VIRTUAL_CLUSTER_LABEL}"
 else
-  echo "cockroach not started"
+  echo "${VIRTUAL_CLUSTER_LABEL} not started"
 fi
 echo ""
 EOQ
-  echo ". ${HOME}/.profile-cockroach" >> "${HOME}/.profile"
+  echo ". ${HOME}/.profile-${VIRTUAL_CLUSTER_LABEL}" >> "${HOME}/.profile"
 fi
 
 # We run this script (with arg "run") as a service unit. We do not use --user
@@ -93,7 +98,7 @@ fi
 # The "notify" service type means that systemd-run waits until cockroach
 # notifies systemd that it is ready; NotifyAccess=all is needed because this
 # notification doesn't come from the main PID (which is bash).
-sudo systemd-run --unit cockroach \
+sudo systemd-run --unit "${VIRTUAL_CLUSTER_LABEL}" \
   --same-dir --uid "$(id -u)" --gid "$(id -g)" \
   --service-type=notify -p NotifyAccess=all \
   -p "MemoryMax=${MEMORY_MAX}" \
