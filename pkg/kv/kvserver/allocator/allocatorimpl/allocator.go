@@ -1697,8 +1697,7 @@ func (a Allocator) RebalanceTarget(
 	)
 	var removalConstraintsChecker constraintsCheckFn
 	var rebalanceConstraintsChecker rebalanceConstraintsCheckFn
-	var replicaSetToRebalance, replicasWithExcludedStores []roachpb.ReplicaDescriptor
-	var otherReplicaSet []roachpb.ReplicaDescriptor
+	var replicaSetToRebalance, otherReplicaSet []roachpb.ReplicaDescriptor
 
 	switch t := targetType; t {
 	case VoterTarget:
@@ -1720,7 +1719,6 @@ func (a Allocator) RebalanceTarget(
 		// already have voting replicas as possible candidates. Voting replicas are
 		// supposed to be rebalanced before non-voting replicas, and they do
 		// consider the non-voters' stores as possible candidates.
-		replicasWithExcludedStores = existingVoters
 		otherReplicaSet = existingVoters
 	default:
 		log.KvDistribution.Fatalf(ctx, "unsupported targetReplicaType: %v", t)
@@ -1732,8 +1730,9 @@ func (a Allocator) RebalanceTarget(
 		sl,
 		removalConstraintsChecker,
 		rebalanceConstraintsChecker,
-		replicaSetToRebalance,
-		replicasWithExcludedStores,
+		existingVoters,
+		existingNonVoters,
+		targetType,
 		storePool.GetLocalitiesByStore(replicaSetForDiversityCalc),
 		storePool.IsStoreReadyForRoutineReplicaTransfer,
 		options,
@@ -1779,6 +1778,21 @@ func (a Allocator) RebalanceTarget(
 			log.KvDistribution.VEventf(ctx, 2, "not rebalancing %s to s%d because there are no existing "+
 				"replicas that can be removed", targetType, target.store.StoreID)
 			return zero, zero, "", false
+		}
+
+		// If the target is a necessary non-voter promotion to satisfy some
+		// constraint, then do not attempt to simulate a remove target. We know
+		// that the target can be promoted, whilst another store is demoted (or
+		// removed) in order to satisfy a voter constraint. When every replica is
+		// necessary to satisfy an all-replica, or voter constraint, the simulated
+		// remove replica will not always be the existingCandidate depending on
+		// whether every voter is considered necessary.
+		if target.voterNecessary {
+			removeReplica = roachpb.ReplicationTarget{
+				NodeID:  existingCandidate.store.Node.NodeID,
+				StoreID: existingCandidate.store.StoreID,
+			}
+			break
 		}
 
 		var removeDetails string

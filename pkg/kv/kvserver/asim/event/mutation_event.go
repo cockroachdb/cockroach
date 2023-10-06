@@ -49,10 +49,18 @@ type SetCapacityOverrideEvent struct {
 	CapacityOverride state.CapacityOverride
 }
 
+// SetNodeLocalityEvent represents a mutation event responsible for updating
+// the locality of a node identified by NodeID.
+type SetNodeLocalityEvent struct {
+	NodeID         state.NodeID
+	LocalityString string
+}
+
 var _ Event = &SetSpanConfigEvent{}
 var _ Event = &AddNodeEvent{}
 var _ Event = &SetNodeLivenessEvent{}
 var _ Event = &SetCapacityOverrideEvent{}
+var _ Event = &SetNodeLocalityEvent{}
 
 func (se SetSpanConfigEvent) Func() EventFunc {
 	return MutationFunc(func(ctx context.Context, s state.State) {
@@ -108,4 +116,21 @@ func (sce SetCapacityOverrideEvent) Func() EventFunc {
 
 func (sce SetCapacityOverrideEvent) String() string {
 	return fmt.Sprintf("set capacity override event with storeID=%d, capacity_override=%v", sce.StoreID, sce.CapacityOverride)
+}
+
+func (sne SetNodeLocalityEvent) Func() EventFunc {
+	return MutationFunc(func(ctx context.Context, s state.State) {
+		log.Infof(ctx, "setting node locality %v", sne.LocalityString)
+		if sne.LocalityString != "" {
+			var locality roachpb.Locality
+			if err := locality.Set(sne.LocalityString); err != nil {
+				panic(fmt.Sprintf("unable to set node locality %s", err.Error()))
+			}
+			s.SetNodeLocality(sne.NodeID, locality)
+		}
+	})
+}
+
+func (sne SetNodeLocalityEvent) String() string {
+	return fmt.Sprintf("set node locality event with nodeID=%d, locality=%v", sne.NodeID, sne.LocalityString)
 }
