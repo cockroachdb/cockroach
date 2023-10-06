@@ -1948,6 +1948,7 @@ func (kl *keyLocks) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 		Durability:   durability,
 		HoldDuration: kl.lockHeldDuration(now),
 		Waiters:      lockWaiters,
+		HoldStrength: kl.maxLockStrength(),
 	}
 }
 
@@ -4383,4 +4384,18 @@ func MarkSkipLockedReplayError(cause error) error {
 		return nil
 	}
 	return errors.Mark(cause, &SkipLockedReplayError{})
+}
+
+// maxLockStrength determines the highest lock strength of amont
+// the lock holders.
+func (kl *keyLocks) maxLockStrength() (lock.Strength) {
+	str := lock.Shared
+	for e := kl.holders.Front(); e != nil; e = e.Next() {
+		tl := e.Value
+		txl_str := tl.getLockMode().Strength
+		if txl_str > str {
+			str = txl_str
+		}
+	}
+	return str
 }

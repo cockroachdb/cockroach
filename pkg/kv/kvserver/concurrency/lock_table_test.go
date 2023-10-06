@@ -2029,3 +2029,54 @@ func TestCanElideWaitingStateUpdateConsidersAllFields(t *testing.T) {
 		typ.Field(i)
 	}
 }
+
+// TestCurLockStrength ensures the function
+// returns correct lock strength.
+func TestMaxLockStrength(t *testing.T) {
+	kl := &keyLocks{
+		id:     1,
+		key:    []byte("KEY"),
+		endKey: []byte("END"),
+	}
+	holder1 := &txnLock{}
+	kl.holders.PushBack(holder1)
+	holder1.txn = &enginepb.TxnMeta{ID: uuid.NamespaceDNS}
+	holder1.unreplicatedInfo.init()
+	holder1.unreplicatedInfo.ts = hlc.Timestamp{WallTime: 123, Logical: 7}
+	holder1.unreplicatedInfo.acquire(lock.Shared, 3)
+	require.Equal(t, kl.maxLockStrength(), lock.Shared)
+
+	holder2 := &txnLock{}
+	kl.holders.PushBack(holder2)
+	holder2.txn = &enginepb.TxnMeta{ID: uuid.NamespaceDNS}
+	holder2.unreplicatedInfo.init()
+	holder2.unreplicatedInfo.ts = hlc.Timestamp{WallTime: 123, Logical: 9}
+	holder2.unreplicatedInfo.acquire(lock.Exclusive, 3)
+	require.Equal(t, kl.maxLockStrength(), lock.Exclusive)
+
+	kl.holders.Init()
+	holder3 := &txnLock{}
+	kl.holders.PushBack(holder3)
+	holder3.txn = &enginepb.TxnMeta{ID: uuid.NamespaceURL}
+	holder3.replicatedInfo.acquire(lock.Intent,hlc.Timestamp{WallTime: 124, Logical: 2})
+	require.Equal(t, kl.maxLockStrength(), lock.Intent)
+
+	holder4 := &txnLock{}
+	kl.holders.PushBack(holder4)
+	holder4.txn = &enginepb.TxnMeta{ID: uuid.NamespaceDNS}
+	holder4.unreplicatedInfo.init()
+	holder4.unreplicatedInfo.ts = hlc.Timestamp{WallTime: 123, Logical: 9}
+	holder4.unreplicatedInfo.acquire(lock.Shared, 3)
+	require.Equal(t, kl.maxLockStrength(), lock.Intent)
+
+	kl.holders.Init()
+	qg := &queuedGuard{
+		guard:  nil,
+		mode:   lock.Mode{
+			Strength: lock.Exclusive,
+		},
+		active: true,
+	}
+	kl.queuedLockingRequests.PushFront(qg)
+	require.Equal(t, kl.maxLockStrength(), lock.Exclusive)
+}
