@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/container/list"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -77,6 +78,7 @@ type command func(t *testing.T, e *env, d *datadriven.TestData)
 var commands = map[string]command{
 	"options":     handleOptions,
 	"put":         handlePutKey,
+	"add-sst":     handleAddSST,
 	"del-range":   handleDelRange,
 	"create-feed": handleCreateFeed,
 }
@@ -141,7 +143,7 @@ func handleCommandBatch(t *testing.T, e *env, d *datadriven.TestData) string {
 		d.Pos = cmdPos
 	}
 
-	output := waitAllFeeds(e)
+	output := waitAllFeeds(t, e)
 
 	return strings.Join(output, "\n")
 }
@@ -149,7 +151,7 @@ func handleCommandBatch(t *testing.T, e *env, d *datadriven.TestData) string {
 // waitAllFeeds checks that rangefeeds get data at least up to now and then
 // dumps captured content. If timeout happens, no dump is produced and events
 // are kept for the next wait attempt.
-func waitAllFeeds(e *env) []string {
+func waitAllFeeds(t *testing.T, e *env) []string {
 	now := e.tc.SystemLayer(0).Clock().Now()
 	timeout := 30 * time.Second
 	var rs []string
@@ -167,12 +169,12 @@ func waitAllFeeds(e *env) []string {
 		select {
 		case <-data.waitCheckpoint(now, data.span):
 			stream := data.takeValues().asSortedData(e.sortByTime)
-			rs = append(rs, dumpKVS(stream, prefix, e.tts, e.startKey)...)
+			rs = append(rs, dumpKVS(t, stream, prefix, e.tts, e.startKey)...)
 		case <-time.After(timeout):
 			rs = append(rs, prefix+"timeout")
 		case <-data.waitError():
 			stream := data.takeValues().asSortedData(e.sortByTime)
-			rs = append(rs, dumpKVS(stream, prefix, e.tts, e.startKey)...)
+			rs = append(rs, dumpKVS(t, stream, prefix, e.tts, e.startKey)...)
 			rs = append(rs, fmt.Sprintf("%s%q", prefix, data.err()))
 		}
 	}
@@ -211,6 +213,80 @@ func handleDelRange(t *testing.T, e *env, d *datadriven.TestData) {
 		"failed to del range")
 }
 
+func handleAddSST(t *testing.T, e *env, d *datadriven.TestData) {
+	var tsName string
+	srv := e.tc.Server(0)
+	d.MaybeScanArgs(t, "ts", &tsName)
+	ts := srv.Clock().Now()
+	if tsName != "" {
+		e.tts.addTs(tsName, ts)
+	}
+	sstKVs := kvs{}
+	readKvs(t, e, d.Input, func(key roachpb.Key, val string, tsName string) {
+		var mvccValue storage.MVCCValue
+		if val != "" {
+			mvccValue = storage.MVCCValue{Value: roachpb.MakeValueFromString(val)}
+		}
+		v, err := storage.EncodeMVCCValue(mvccValue)
+		require.NoError(t, err, "failed to serialize value")
+		sstKVs = append(sstKVs, storage.MVCCKeyValue{
+			Key:   storage.MVCCKey{Key: key, Timestamp: ts},
+			Value: v,
+		})
+	}, func(key roachpb.Key, endKey roachpb.Key, tsName string) {
+		v, err := storage.EncodeMVCCValue(storage.MVCCValue{})
+		require.NoError(t, err, "failed to serialize value")
+		sstKVs = append(sstKVs, storage.MVCCRangeKeyValue{
+			RangeKey: storage.MVCCRangeKey{
+				StartKey:  key,
+				EndKey:    endKey,
+				Timestamp: ts,
+			},
+			Value: v,
+		})
+	})
+	db := srv.DB()
+	sst, sstStart, sstEnd := storageutils.MakeSST(t, srv.ClusterSettings(), sstKVs)
+	_, _, _, pErr := db.AddSSTableAtBatchTimestamp(context.Background(), sstStart, sstEnd, sst,
+		false /* disallowConflicts */, false /* disallowShadowing */, hlc.Timestamp{}, nil, /* stats */
+		false /* ingestAsWrites */, ts)
+	require.NoError(t, pErr)
+}
+
+var keyRe = regexp.MustCompile(`^(\s*)k=(\w+?)\s+v=(\w+?)(\s+ts=(\w+?))?$`)
+var rangeRe = regexp.MustCompile(`^(\s*)start=(\w+?)\s+end=(\w+?)(\s+ts=(\w+))?$`)
+
+func readKvs(
+	t *testing.T,
+	e *env,
+	input string,
+	kv func(key roachpb.Key, val string, tsName string),
+	dr func(key roachpb.Key, endKey roachpb.Key, tsName string),
+) {
+	ls := strings.Split(input, "\n")
+	var submatch []string
+	match := func(l string, r *regexp.Regexp) bool {
+		submatch = r.FindStringSubmatch(l)
+		return submatch != nil
+	}
+	for _, l := range ls {
+		switch {
+		case match(l, keyRe):
+			kk := e.startKey.key(submatch[2])
+			val := submatch[3]
+			tsName := submatch[5]
+			kv(kk, val, tsName)
+		case match(l, rangeRe):
+			kk := e.startKey.key(submatch[2])
+			ekk := e.startKey.key(submatch[3])
+			tsName := submatch[5]
+			dr(kk, ekk, tsName)
+		default:
+			t.Fatalf("failed to parse line: %s", l)
+		}
+	}
+}
+
 func handleCreateFeed(t *testing.T, e *env, d *datadriven.TestData) {
 	var (
 		server               int
@@ -229,6 +305,7 @@ func handleCreateFeed(t *testing.T, e *env, d *datadriven.TestData) {
 	d.MaybeScanArgs(t, "endKey", &endKey)
 	d.MaybeScanArgs(t, "startTs", &startTs)
 	d.MaybeScanArgs(t, "withDiff", &fo.withDiff)
+	d.MaybeScanArgs(t, "readSSTs", &fo.consumeSST)
 	_, ok := e.feeds[feedID]
 	require.False(t, ok, "feed with id '%s' already registered", feedID)
 	k := e.startKey.key(key)
@@ -277,14 +354,18 @@ func createTestFeed(
 		crangefeed.WithOnDeleteRange(fd.onDeleteRange),
 		crangefeed.WithOnInternalError(fd.onInternalError),
 	}
+	if o.consumeSST {
+		opts = append(opts, crangefeed.WithOnSSTable(fd.onSST))
+	}
 	rf, err := rff.RangeFeed(ctx, "nice", []roachpb.Span{span}, o.initialTs, fd.onValue, opts...)
 	require.NoError(t, err, "failed to start rangefeed")
 	return rf, fd
 }
 
 type feedOpts struct {
-	withDiff  bool
-	initialTs hlc.Timestamp
+	withDiff   bool
+	initialTs  hlc.Timestamp
+	consumeSST bool
 }
 
 type feedAndData struct {
@@ -479,6 +560,13 @@ func (d *feedData) onDeleteRange(_ context.Context, dr *kvpb.RangeFeedDeleteRang
 	d.t.Logf("on delete range: %s", dr.Span.String())
 }
 
+func (d *feedData) onSST(_ context.Context, sst *kvpb.RangeFeedSSTable, span roachpb.Span) {
+	d.dataMu.Lock()
+	defer d.dataMu.Unlock()
+	d.dataMu.values = append(d.dataMu.values, testFeedEvent{sst: sst, sstSpan: &span})
+	d.t.Logf("on SST in: %s", span.String())
+}
+
 // NB: frontier update happens after checkpoint update so there's no guarantee
 // that frontier is up to date at the time returned channel is closed.
 func (d *feedData) waitCheckpoint(ts hlc.Timestamp, span roachpb.Span) <-chan interface{} {
@@ -527,6 +615,8 @@ type testFeedEvent struct {
 	v        *kvpb.RangeFeedValue
 	cp       *kvpb.RangeFeedCheckpoint
 	delRange *kvpb.RangeFeedDeleteRange
+	sst      *kvpb.RangeFeedSSTable
+	sstSpan  *roachpb.Span
 }
 
 type eventStream []testFeedEvent
@@ -564,6 +654,21 @@ func (s eventStream) asSortedData(byTimestamp bool) kvs {
 					},
 				},
 			})
+		case e.sst != nil:
+			dataCopy := make([]byte, len(e.sst.Data))
+			copy(dataCopy, e.sst.Data)
+			data = append(data, sorted{
+				MVCCRangeKey: storage.MVCCRangeKey{
+					StartKey:  e.sst.Span.Key,
+					Timestamp: e.sst.WriteTS,
+					EndKey:    e.sst.Span.EndKey,
+				},
+				val: sstInfo{
+					span:    e.sst.Span,
+					writeTs: e.sst.WriteTS,
+					data:    dataCopy,
+				},
+			})
 		}
 	}
 	if byTimestamp {
@@ -581,6 +686,12 @@ func (s eventStream) asSortedData(byTimestamp bool) kvs {
 		prev = s
 	}
 	return result
+}
+
+type sstInfo struct {
+	span    roachpb.Span
+	writeTs hlc.Timestamp
+	data    []byte
 }
 
 // sorted is a helper type that allows test to present and transform data in
@@ -606,6 +717,11 @@ func (s sorted) equals(o sorted) bool {
 	case storage.MVCCRangeKeyValue:
 		if ov, ok := o.val.(storage.MVCCRangeKeyValue); ok {
 			return v.RangeKey.Compare(ov.RangeKey) == 0 && bytes.Equal(v.Value, ov.Value)
+		}
+		return false
+	case sstInfo:
+		if ov, ok := o.val.(sstInfo); ok {
+			return v.span.Equal(ov.span) && v.writeTs.Equal(ov.writeTs) && bytes.Equal(v.data, ov.data)
 		}
 		return false
 	default:
@@ -659,10 +775,17 @@ func (s sortedByTime) Less(i, j int) bool {
 type kvs = []interface{}
 
 // dumpKVS produced human-readable dump of provided slice of data items.
-func dumpKVS(data kvs, indent string, tts timestamps, kk testKey) []string {
+func dumpKVS(t *testing.T, data kvs, indent string, tts timestamps, kk testKey) []string {
 	var ss []string
 	for _, v := range data {
 		switch kv := v.(type) {
+		case storage.MVCCKeyValue:
+			val := fmt.Sprintf("%skey=%s, val=%s", indent, kk.print(kv.Key.Key),
+				stringValue(kv.Value))
+			if tsn, exists := tts.getTsName(kv.Key.Timestamp); exists {
+				val += fmt.Sprintf(", ts=%s", tsn)
+			}
+			ss = append(ss, val)
 		case kvpb.RangeFeedValue:
 			val := fmt.Sprintf("%skey=%s, val=%s", indent, kk.print(kv.Key),
 				stringValue(kv.Value.RawBytes))
@@ -676,6 +799,13 @@ func dumpKVS(data kvs, indent string, tts timestamps, kk testKey) []string {
 		case storage.MVCCRangeKeyValue:
 			ss = append(ss, fmt.Sprintf("%skey=%s, endKey=%s", indent, kk.print(kv.RangeKey.StartKey),
 				kk.print(kv.RangeKey.EndKey)))
+		case sstInfo:
+			tsn, _ := tts.getTsName(kv.writeTs)
+			ss = append(ss,
+				fmt.Sprintf("%ssst span=[%s, %s), ts=%s", indent, kk.print(kv.span.Key),
+					kk.print(kv.span.EndKey),
+					tsn))
+			ss = append(ss, dumpKVS(t, storageutils.ScanSST(t, kv.data), indent+" ", tts, kk)...)
 		default:
 			panic(fmt.Sprintf("unknown data element in dump: %T, %+q", v, v))
 		}
