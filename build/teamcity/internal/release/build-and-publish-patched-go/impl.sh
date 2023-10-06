@@ -3,12 +3,12 @@
 set -xeuo pipefail
 
 # When updating to a new Go version, update all of these variables.
-GOVERS=1.20.8
+GOVERS=1.21.1
 GOLINK=https://go.dev/dl/go$GOVERS.src.tar.gz
-SRCSHASUM=38d71714fa5279f97240451956d8e47e3c1b6a5de7cb84137949d62b5dd3182e
+SRCSHASUM=bfa36bf75e9a1e9cbbdb9abcf9d1707e479bd3a07880a8ae3564caee5711cb99
 # We mirror the upstream freebsd because we don't have a cross-compiler targeting it.
 GOFREEBSDLINK=https://go.dev/dl/go$GOVERS.freebsd-amd64.tar.gz
-FREEBSDSHASUM=ea64e0eb4eb0af7ad59d26b9fb6d3facf32393ad6a29d29c34ba7903523443e6
+FREEBSDSHASUM=2571f10f6047e04d87c1f5986a05e5e8f7b511faf98803ef12b66d563845d2a1
 
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -30,8 +30,8 @@ update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
 curl -fsSL $GOFREEBSDLINK -o /artifacts/go$GOVERS.freebsd-amd64.tar.gz
 echo "$FREEBSDSHASUM  /artifacts/go$GOVERS.freebsd-amd64.tar.gz" | sha256sum -c -
 
-curl -fsSL https://go.dev/dl/go1.20.8.linux-amd64.tar.gz -o golang.tar.gz \
- && echo 'cc97c28d9c252fbf28f91950d830201aa403836cbed702a05932e63f7f0c7bc4  golang.tar.gz' | sha256sum -c - \
+curl -fsSL https://go.dev/dl/go$GOVERS.linux-amd64.tar.gz -o golang.tar.gz \
+ && echo 'b3075ae1ce5dab85f89bc7905d1632de23ca196bd8336afd93fa97434cfa55ae  golang.tar.gz' | sha256sum -c - \
  && rm -rf /usr/local/go && tar -C /usr/local -xzf golang.tar.gz \
  && rm golang.tar.gz
 
