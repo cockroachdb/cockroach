@@ -9,7 +9,7 @@ query T
 EXPLAIN (SHAPE) SELECT b FROM a WHERE a = 5
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   table: a@a_pkey

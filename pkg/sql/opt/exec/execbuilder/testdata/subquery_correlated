@@ -20,7 +20,7 @@ EXPLAIN SELECT
 FROM c ORDER BY c_id
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +c_id

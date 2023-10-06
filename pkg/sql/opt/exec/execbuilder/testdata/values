@@ -5,7 +5,7 @@ query T
 EXPLAIN (VERBOSE) SELECT 1 a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • values
   columns: (a)
@@ -16,7 +16,7 @@ query T
 EXPLAIN (VERBOSE) SELECT 1 + 2 a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • values
   columns: (a)
@@ -27,7 +27,7 @@ query T
 EXPLAIN (VERBOSE) VALUES (1, 2, 3), (4, 5, 6)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • values
   columns: (column1, column2, column3)
@@ -43,7 +43,7 @@ query T
 EXPLAIN (VERBOSE) VALUES (length('a')), (1 + length('a')), (length('abc')), (length('ab') * 2)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • values
   columns: (column1)
@@ -57,7 +57,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a + b AS r FROM (VALUES (1, 2), (3, 4), (5, 6)) AS v(a, b)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)

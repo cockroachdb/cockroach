@@ -61,7 +61,7 @@ query T
 EXPLAIN DELETE FROM unindexed
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • delete range
   from: unindexed
@@ -71,7 +71,7 @@ query T
 EXPLAIN DELETE FROM unindexed WHERE v = 7 ORDER BY v LIMIT 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • delete
 │ from: unindexed
@@ -93,7 +93,7 @@ query T
 EXPLAIN DELETE FROM unindexed WHERE v = 5 LIMIT 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • delete
 │ from: unindexed
@@ -115,7 +115,7 @@ query T
 EXPLAIN DELETE FROM unindexed WHERE k > 0
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • delete range
   from: unindexed
@@ -130,7 +130,7 @@ query T
 EXPLAIN DELETE FROM unindexed WHERE k > 0 LIMIT 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • delete
 │ from: unindexed
@@ -146,7 +146,7 @@ query T
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • delete
 │ from: indexed
@@ -162,7 +162,7 @@ query T
 EXPLAIN DELETE FROM indexed LIMIT 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • delete
 │ from: indexed
@@ -179,7 +179,7 @@ query T
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10 RETURNING id
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • delete
 │ from: indexed
@@ -200,7 +200,7 @@ query T
 EXPLAIN (VERBOSE) DELETE FROM t38799@foo
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • delete
 │ columns: ()
@@ -288,7 +288,7 @@ query T
 EXPLAIN (VERBOSE) DELETE FROM xyz WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000) RETURNING z
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (z)
@@ -315,7 +315,7 @@ query T
 EXPLAIN (VERBOSE) DELETE FROM xyz@{NO_FULL_SCAN} WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000) RETURNING z
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (z)
@@ -347,7 +347,7 @@ query T
 EXPLAIN (TYPES) DELETE FROM a USING b WHERE b > 1 RETURNING a, b, NULL
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (a int, b int, "?column?" unknown)

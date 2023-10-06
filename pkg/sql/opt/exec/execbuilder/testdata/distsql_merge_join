@@ -138,7 +138,7 @@ query T
 EXPLAIN SELECT * FROM parent1 JOIN child1 USING(pid1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join
 │ equality: (pid1) = (pid1)
@@ -159,7 +159,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (pid1, pa1, cid1, ca1)
@@ -190,7 +190,7 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join
 │ equality: (pid1) = (pid1)
@@ -213,7 +213,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM child1 JOIN parent1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (pid1, cid1, ca1, pa1)
@@ -244,7 +244,7 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM child1 JOIN parent1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join
 │ equality: (pid1) = (pid1)
@@ -269,7 +269,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child1 ON parent1.pid1 = child1.pid1 WHERE parent1.pid1 >= 29 AND parent1.pid1 <= 31 ORDER BY parent1.pid1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join (inner)
 │ columns: (pid1, pa1, pid1, cid1, ca1)
@@ -298,7 +298,7 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child1 ON parent1.pid1 = child1.pid1 WHERE parent1.pid1 >= 29 AND parent1.pid1 <= 31 ORDER BY parent1.pid1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join
 │ equality: (pid1) = (pid1)
@@ -327,7 +327,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 >= 12 ORDER BY pid1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (pid1, pa1, cid2, cid3, ca2)
@@ -359,7 +359,7 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 >= 12 ORDER BY pid1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join
 │ equality: (pid1) = (pid1)
@@ -382,7 +382,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 IN (1, 11, 21, 31) ORDER BY pid1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (pid1, pa1, cid2, cid3, ca2)
@@ -415,7 +415,7 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 IN (1, 11, 21, 31) ORDER BY pid1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join
 │ equality: (pid1) = (pid1)
@@ -444,7 +444,7 @@ EXPLAIN (VERBOSE)
     OR pa1 > 0
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (pid1, pa1, cid2, cid3, gcid2, gca2)
@@ -485,7 +485,7 @@ EXPLAIN (DISTSQL)
     OR pa1 > 0
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • merge join
 │ equality: (pid1) = (pid1)
@@ -515,7 +515,7 @@ EXPLAIN (VERBOSE)
     OR pa1 > 0
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (pid1, cid2, cid3, gcid2, gca2, pa1)
@@ -556,7 +556,7 @@ EXPLAIN (DISTSQL)
     OR pa1 > 0
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • merge join
 │ equality: (pid1) = (pid1)
@@ -585,7 +585,7 @@ EXPLAIN SELECT * FROM grandchild2 JOIN parent1 USING(pid1) WHERE
   OR pa1 > 0
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • merge join
 │ equality: (pid1) = (pid1)
@@ -619,7 +619,7 @@ EXPLAIN (DISTSQL)
     OR gcid2 >= 49 AND gcid2 <= 51
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • merge join
 │ equality: (pid1, cid2, cid3) = (pid1, cid2, cid3)
@@ -652,7 +652,7 @@ EXPLAIN
     OR gcid2 >= 49 AND gcid2 <= 51
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • merge join
 │ equality: (pid1, cid2, cid3) = (pid1, cid2, cid3)
@@ -678,7 +678,7 @@ EXPLAIN (DISTSQL)
     pid1 >= 10 AND pid1 <= 39
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • group (scalar)
 │
@@ -771,7 +771,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM outer_p1 FULL OUTER JOIN outer_c1 USING (pid1)
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (pid1, pa1, cid1, cid2, ca1)
@@ -806,7 +806,7 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM outer_p1 FULL OUTER JOIN outer_c1 USING (pid1)
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • render
 │
@@ -830,7 +830,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM outer_gc1 FULL OUTER JOIN outer_c1 USING (pid1, cid1, cid2)
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (pid1, cid1, cid2, gcid1, gca1, ca1)
@@ -866,7 +866,7 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM outer_gc1 FULL OUTER JOIN outer_c1 USING (pid1, cid1, cid2)
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • render
 │
@@ -890,7 +890,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM outer_c1 LEFT OUTER JOIN outer_p1 USING (pid1) WHERE pid1 >= 0 AND pid1 < 40
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (pid1, cid1, cid2, ca1, pa1)
@@ -921,7 +921,7 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM outer_c1 LEFT OUTER JOIN outer_p1 USING (pid1) WHERE pid1 >= 0 AND pid1 < 40
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • merge join (left outer)
 │ equality: (pid1) = (pid1)
@@ -943,7 +943,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM outer_p1 RIGHT OUTER JOIN outer_gc1 USING (pid1) WHERE pid1 >= 1 AND pid1 <= 20
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (pid1, pa1, cid1, cid2, gcid1, gca1)
@@ -974,7 +974,7 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM outer_p1 RIGHT OUTER JOIN outer_gc1 USING (pid1) WHERE pid1 >= 1 AND pid1 <= 20
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • merge join (left outer)
 │ equality: (pid1) = (pid1)
@@ -996,7 +996,7 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM child1 JOIN child2 USING(pid1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join
 │ equality: (pid1) = (pid1)
@@ -1017,7 +1017,7 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN parent2 ON pid1=pid2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join
 │ equality: (pid1) = (pid2)
@@ -1041,7 +1041,7 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child1 ON pa1 = ca1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • hash join
 │ equality: (pa1) = (ca1)
@@ -1062,7 +1062,7 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM child2 JOIN grandchild2 USING(pid1, cid2)
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • merge join
 │ equality: (pid1, cid2) = (pid1, cid2)
@@ -1084,7 +1084,7 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM child2 JOIN grandchild2 USING(pid1, cid3)
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • hash join
 │ equality: (pid1, cid3) = (pid1, cid3)
@@ -1111,7 +1111,7 @@ EXPLAIN (DISTSQL)
 ORDER BY pid1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join
 │ table: parent1@parent1_pkey
@@ -1143,7 +1143,7 @@ EXPLAIN (DISTSQL)
   JOIN grandchild1 USING (pid1, cid1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join
 │ table: parent1@parent1_pkey

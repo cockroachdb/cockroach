@@ -207,7 +207,7 @@ quality of service: regular
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsU81OIzkQvu9TlOoEWgPdzWoPlpCiDdlRmEmCAuIyipBjF40Vt93YbpEI5bHmBebJRu4GhoQ_MZrj-NByVX3-qvx97jsMNwY5ng2-DPrnIPcF_D-djEDCcDweTGE0mH4awMlkOAYFk3ELOAK1P0eG1ikai4oC8q-Y44xh7Z2kEJxPqbsWMFRL5BlDbesmpvSMoXSekN9h1NEQcjwXc0NTEor8QYYMFUWhTUsre_KyXtAKGfadaSobOAhkeFaLtN1Dhp8vIOqKOGTfv4Uuls5GslE7-6zk3W0ARdIpUhyKLjlfRQrgSSgO-b_wX5ctp6d9kMKY8AishfYPwH-Q4eii34cQqQbpGhthh5bxQNu4yyFrr9IBiBavASqxhIoq51cgjHFSxDRX1s4wF1FeUwDXxLqJHBK-nf8hUeBszbCL7rUNUZSEPH9ixvAYebZmv-ZHvumH6qlnfsz_-PGuH8WWH_mrfvy0obHOK_KkNiyYpZPvQV4wdUS-pBOnLfmDYtNUQ1dxp5f_vXvkdXndbZHhJF2plx4ALUk2z-17S6tUCzcGIlU1KB0W0ARR0m-Q8nBLyuIjT3tKoXY20LakL3bKtjrt5UlYUiV1RgXXeEmn3skW24WTlqhNKAqxqxZdMLRtKU8dPInq8c98ypR_gKl4ypRvMxVvMh1uMGWbM80YXhl3e6kVcszu194Ln4eF6YAoQxL77NrdtrTnqzpJdSVMIIYjsaBjiuQrbXWIWiKPvqH1-q8fAQAA__9OjRUr
 
 statement ok
-RESET vectorize; RESET distsql
+SET vectorize = on; RESET distsql
 
 statement ok
 SET tracing=off
@@ -360,7 +360,8 @@ statement ok
 SELECT c.a FROM c JOIN d ON d.b = c.b
 
 statement ok
-RESET vectorize
+SET vectorize = on
+
 
 statement ok
 CREATE TABLE bytes_string(_group INT, _bytes BYTES, _string STRING)

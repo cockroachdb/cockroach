@@ -1,5 +1,8 @@
 # LogicTest: local
 
+statement ok
+SET vectorize = on
+
 # Note that statistics are populated for TPCH Scale Factor 1.
 
 statement ok

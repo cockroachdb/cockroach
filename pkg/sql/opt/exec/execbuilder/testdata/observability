@@ -54,7 +54,7 @@ EXPLAIN (VERBOSE) UPSERT INTO system.public.transaction_activity
                                       agg_interval));
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -166,7 +166,7 @@ EXPLAIN (VERBOSE) UPSERT
                                       index_recommendations));
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -313,7 +313,7 @@ EXPLAIN (VERBOSE) UPSERT
                                       ss.index_recommendations));
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -518,7 +518,7 @@ EXPLAIN (VERBOSE) UPSERT
                                       ts.agg_interval));
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -723,7 +723,7 @@ FROM (SELECT max(ss.aggregated_ts) AS aggregated_ts,
 		 ss.index_recommendations));
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()

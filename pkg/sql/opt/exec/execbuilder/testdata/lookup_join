@@ -45,7 +45,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b, c, d, e, f)
@@ -63,7 +63,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND e = c
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b, c, d, e, f)
@@ -82,7 +82,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a > 1 AND e > 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b, c, d, e, f)
@@ -100,7 +100,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def@desc_idx ON f = b WHERE a > 1 AND e > 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b, c, d, e, f)
@@ -120,7 +120,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a > 1 AND e > 9223372036854775807
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b, c, d, e, f)
@@ -140,7 +140,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal ON f = b WHERE a > 1 AND e > 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b, c, d, e, f)
@@ -160,7 +160,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal@desc_idx ON f = b WHERE a > 1 AND e >= 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b, c, d, e, f)
@@ -180,7 +180,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal@desc_idx ON f = b WHERE a > 1 AND e < 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b, c, d, e, f)
@@ -199,7 +199,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = a WHERE f > 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b, c, d, e, f)
@@ -219,7 +219,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a >= e
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b, c, d, e, f)
@@ -238,7 +238,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def@desc_idx ON f = b WHERE a >= e
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b, c, d, e, f)
@@ -257,7 +257,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND a > e
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b, c, d, e, f)
@@ -276,7 +276,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def@desc_idx ON f = b AND a > e
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b, c, d, e, f)
@@ -295,7 +295,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal ON f = b AND a::DECIMAL >= e
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, c, d, e, f)
@@ -324,7 +324,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal@desc_idx ON f = b AND a::DECIMAL >= e
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, c, d, e, f)
@@ -354,7 +354,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal ON f = b AND a >= e
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b, c, d, e, f)
@@ -375,7 +375,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal@desc_idx ON f = b AND a::DECIMAL > e
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, c, d, e, f)
@@ -447,7 +447,7 @@ FROM (SELECT * FROM data WHERE c = 1) AS l
 NATURAL JOIN (SELECT * FROM data WHERE c > 0) AS r
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, c, d)
@@ -478,7 +478,7 @@ FROM (SELECT * FROM data WHERE c = 1) AS l
 NATURAL JOIN (SELECT * FROM data WHERE c > 0) AS r
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • lookup join
 │ estimated row count: 0
@@ -528,7 +528,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT b1.title FROM books as b1 JOIN books2 as b2 ON b1.title = b2.title WHERE b1.shelf <> b2.shelf
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ columns: (title)
@@ -572,7 +572,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ columns: (name)
@@ -617,7 +617,7 @@ query T
 EXPLAIN (DISTSQL) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ estimated row count: 96
@@ -649,7 +649,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (name)
@@ -679,7 +679,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM books CROSS JOIN books2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • cross join (inner)
 │ columns: (title, edition, shelf, title, edition, shelf)
@@ -701,7 +701,7 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books2 ON books2.edition = 1 WHERE books2.title = authors.book
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join
 │ estimated row count: 99
@@ -764,7 +764,7 @@ query T
 EXPLAIN (VERBOSE) SELECT small.a, large.c FROM small JOIN large ON small.a = large.b
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, c)
@@ -786,7 +786,7 @@ query T
 EXPLAIN (VERBOSE) SELECT small.a, large.d FROM small JOIN large ON small.a = large.b
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, d)
@@ -822,7 +822,7 @@ query T
 EXPLAIN (VERBOSE) SELECT small.b, large.a FROM small LEFT JOIN large ON small.b = large.a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • lookup join (left outer)
 │ columns: (b, a)
@@ -841,7 +841,7 @@ query T
 EXPLAIN (VERBOSE) SELECT t1.a, t2.b FROM small t1 LEFT JOIN large t2 ON t1.a = t2.a AND t2.b % 6 = 0 ORDER BY t1.a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b)
@@ -866,7 +866,7 @@ query T
 EXPLAIN (DISTSQL) SELECT t1.a, t2.b FROM small t1 LEFT JOIN large t2 ON t1.a = t2.a AND t2.b % 6 = 0 ORDER BY t1.a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • lookup join (left outer)
 │ estimated row count: 100
@@ -886,7 +886,7 @@ query T
 EXPLAIN (VERBOSE) SELECT small.c, large.c FROM small LEFT JOIN large ON small.c = large.b
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (c, c)
@@ -908,7 +908,7 @@ query T
 EXPLAIN (VERBOSE) SELECT small.c, large.d FROM small LEFT JOIN large ON small.c = large.b
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (c, d)
@@ -940,7 +940,7 @@ query T
 EXPLAIN (VERBOSE) SELECT small.c, large.c FROM small LEFT JOIN large ON small.c = large.b AND large.c < 20
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (c, c)
@@ -963,7 +963,7 @@ query T
 EXPLAIN (VERBOSE) SELECT small.c, large.d FROM small LEFT JOIN large ON small.c = large.b AND large.d < 30
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (c, d)
@@ -996,7 +996,7 @@ query T
 EXPLAIN (VERBOSE) SELECT small.c FROM small WHERE EXISTS(SELECT 1 FROM large WHERE small.c = large.b AND large.d < 30)
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (c)
@@ -1026,7 +1026,7 @@ query T
 EXPLAIN (VERBOSE) SELECT small.c FROM small WHERE NOT EXISTS(SELECT 1 FROM large WHERE small.c = large.b AND large.d < 30)
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (c)
@@ -1069,7 +1069,7 @@ query T
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a WHERE t.e = 5
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -1102,7 +1102,7 @@ query T
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a WHERE t.e = 5
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -1137,7 +1137,7 @@ query T
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.b = u.b WHERE t.e = 5
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -1170,7 +1170,7 @@ query T
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.b = u.b WHERE t.e = 5
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -1203,7 +1203,7 @@ query T
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.d = u.d WHERE t.e = 5
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -1230,7 +1230,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM def JOIN abc ON a=f ORDER BY a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (d, e, f, a, b, c)
@@ -1251,7 +1251,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM def INNER MERGE JOIN abc ON a=f ORDER BY a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join (inner)
 │ columns: (d, e, f, a, b, c)
@@ -1279,7 +1279,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM def INNER HASH JOIN abc ON a=f ORDER BY a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (d, e, f, a, b, c)
@@ -1309,7 +1309,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (semi)
 │ columns: (a, b, c)
@@ -1327,7 +1327,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (anti)
 │ columns: (a, b, c)
@@ -1345,7 +1345,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND c=e)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (semi)
 │ columns: (a, b, c)
@@ -1364,7 +1364,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND c=e)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (anti)
 │ columns: (a, b, c)
@@ -1383,7 +1383,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (semi)
 │ columns: (a, b, c)
@@ -1402,7 +1402,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (anti)
 │ columns: (a, b, c)
@@ -1422,7 +1422,7 @@ query T
   SELECT a,b from small WHERE EXISTS (SELECT a FROM data WHERE small.a=data.a) ORDER BY a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • lookup join (semi)
 │ estimated row count: 100
@@ -1441,7 +1441,7 @@ query T
   SELECT a,b from small WHERE a+b<20 AND EXISTS (SELECT a FROM data WHERE small.a=data.a AND small.b+data.c>15) ORDER BY a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • lookup join (semi)
 │ estimated row count: 11
@@ -2012,7 +2012,7 @@ ORDER BY numwait DESC, s_name
    LIMIT 100;
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • top-k
 │ estimated row count: 0
@@ -2086,7 +2086,7 @@ EXPLAIN (VERBOSE)
   SELECT pk FROM tab4 WHERE col0 IN (SELECT col3 FROM tab4 WHERE col4 = 495.6) AND (col3 IS NULL)
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (pk)
@@ -2139,7 +2139,7 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1), (2)) AS u(y) LEFT JOIN t59615 t ON u.y = t.y
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (left outer)
 │ table: t59615@t59615_pkey
@@ -2156,7 +2156,7 @@ EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1), (2)) AS u(y) WHERE NOT EXISTS (
 )
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (anti)
 │ table: t59615@t59615_pkey
@@ -2184,7 +2184,7 @@ EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) 
 ON u.w = t.w AND u.x = t.x
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (left outer)
 │ table: lookup_expr@lookup_expr_r_x_y_z_w_idx
@@ -2203,7 +2203,7 @@ EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) 
 )
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (anti)
 │ table: lookup_expr@lookup_expr_r_x_y_z_w_idx
@@ -2257,7 +2257,7 @@ query T
 EXPLAIN SELECT * FROM abc INNER LOOKUP JOIN def_e_decimal ON f = b AND e <= a::DECIMAL ORDER BY a, b, c, d, e, f
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ estimated row count: 33

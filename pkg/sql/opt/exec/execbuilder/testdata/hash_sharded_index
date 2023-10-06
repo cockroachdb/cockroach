@@ -18,7 +18,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO sharded_primary (a) VALUES (1), (2)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • insert
 │ columns: ()
@@ -47,7 +47,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM sharded_primary WHERE (a % 2) = 0 ORDER BY a LIMIT 10;
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • limit
 │ columns: (a)
@@ -297,7 +297,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO sharded_secondary (a) VALUES (1), (2)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • insert
 │ columns: ()
@@ -328,7 +328,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM sharded_secondary WHERE a > 100 ORDER BY a LIMIT 10;
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • limit
 │ columns: (a)
@@ -526,7 +526,7 @@ EXPLAIN (VERBOSE) SELECT * FROM sharded_primary_with_many_column_types WHERE (i2
                          1::VARBIT(1));
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (i2, i4, i8, f4, f8, s, c, b, dc, ival, oid, tstz, ts, da, inet, vb)
@@ -617,7 +617,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • insert fast path
   columns: ()
@@ -634,7 +634,7 @@ query T
 EXPLAIN (VERBOSE) UPDATE t_hash_indexed SET a = 4321 WHERE a = 1234;
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • update
 │ columns: ()
@@ -663,7 +663,7 @@ query T
 EXPLAIN (VERBOSE) UPSERT INTO t_hash_indexed VALUES (4321, 8765);
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -686,7 +686,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765) ON CONFLICT (a) DO UPDATE SET a = 4321
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -743,7 +743,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765) ON CONFLICT DO NOTHING
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • insert
 │ columns: ()
@@ -780,7 +780,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765) ON CONFLICT (a) DO NOTHING
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • insert
 │ columns: ()
@@ -834,7 +834,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • insert fast path
   columns: ()
@@ -851,7 +851,7 @@ query T
 EXPLAIN (VERBOSE) UPDATE t_hash_indexed SET b = 8765 WHERE a = 4321;
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • update
 │ columns: ()
@@ -880,7 +880,7 @@ query T
 EXPLAIN (VERBOSE) UPSERT INTO t_hash_indexed VALUES (4321, 8765);
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -929,7 +929,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765) ON CONFLICT (a) DO UPDATE SET b = 8765
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -991,7 +991,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765) ON CONFLICT (b) DO UPDATE SET b = 8765
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -1053,7 +1053,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (111, 222), (333, 444) ON CONFLICT (b) DO UPDATE SET b = excluded.b
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -1114,7 +1114,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765) ON CONFLICT DO NOTHING
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • insert
 │ columns: ()
@@ -1172,7 +1172,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (111, 222), (333, 444) ON CONFLICT DO NOTHING
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • insert
 │ columns: ()
@@ -1231,7 +1231,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765) ON CONFLICT (b) DO NOTHING
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • insert
 │ columns: ()
@@ -1271,7 +1271,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (111, 222), (333, 444) ON CONFLICT (b) DO NOTHING
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • insert
 │ columns: ()
@@ -1330,7 +1330,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t_child_pk VALUES (123, 321);
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: ()
@@ -1399,7 +1399,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t_child_sec VALUES (123, 321);
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: ()

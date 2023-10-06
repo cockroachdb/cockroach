@@ -41,7 +41,7 @@ EXPLAIN (DISTSQL) SELECT
 FROM data
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • window
 │
@@ -68,7 +68,7 @@ EXPLAIN (DISTSQL) SELECT
 FROM data
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • window
 │

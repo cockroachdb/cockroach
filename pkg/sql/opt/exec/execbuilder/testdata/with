@@ -11,7 +11,7 @@ EXPLAIN (VERBOSE)
   WITH t AS (SELECT a FROM y) SELECT * FROM t JOIN t AS q ON true
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: (a, a)
@@ -50,7 +50,7 @@ EXPLAIN (VERBOSE)
   WITH t AS (SELECT a FROM y) SELECT * FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (a)
@@ -67,7 +67,7 @@ EXPLAIN (VERBOSE)
   WITH t AS (INSERT INTO x VALUES (1) RETURNING a) SELECT * FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: (a)
@@ -115,7 +115,7 @@ EXPLAIN (VERBOSE)
     w, table39010
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • cross join (inner)
 │ columns: (col)
@@ -143,7 +143,7 @@ EXPLAIN (VERBOSE)
   SELECT sum(n) FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • group (scalar)
 │ columns: (sum)
@@ -173,7 +173,7 @@ EXPLAIN (VERBOSE)
   SELECT sum(n) FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • group (scalar)
 │ columns: (sum)
@@ -203,7 +203,7 @@ EXPLAIN
   ) FROM y
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │
@@ -225,7 +225,7 @@ EXPLAIN
     LATERAL (WITH foo AS MATERIALIZED (SELECT a FROM y WHERE y.a <= x) SELECT * FROM foo)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • apply join
 │
@@ -243,7 +243,7 @@ EXPLAIN WITH RECURSIVE
  SELECT * FROM y
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │
@@ -279,7 +279,7 @@ EXPLAIN WITH RECURSIVE
  SELECT * FROM y
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │

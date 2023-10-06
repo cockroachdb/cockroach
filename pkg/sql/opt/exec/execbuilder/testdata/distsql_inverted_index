@@ -86,7 +86,7 @@ EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '[1, 2]' ORDER BY a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • filter
 │ estimated row count: 0
@@ -106,7 +106,7 @@ EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '[1]' AND b @> '[2]' ORDER BY a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • filter
 │ estimated row count: 0
@@ -126,7 +126,7 @@ EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '[[1, 2]]' ORDER BY a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • filter
 │ estimated row count: 0
@@ -191,7 +191,7 @@ EXPLAIN (DISTSQL)
 SELECT a FROM array_tab@foo_inv WHERE b @> '{1, 2}' ORDER BY a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ estimated row count: 0

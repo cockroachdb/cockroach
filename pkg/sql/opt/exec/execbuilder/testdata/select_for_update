@@ -20,7 +20,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -33,7 +33,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR NO KEY UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -48,7 +48,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR SHARE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -66,7 +66,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR SHARE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -79,7 +79,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -92,7 +92,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -105,7 +105,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -118,7 +118,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -131,7 +131,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -147,7 +147,7 @@ query T
 EXPLAIN (VERBOSE) SELECT 1 FROM t FOR UPDATE OF t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: ("?column?")
@@ -164,7 +164,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -177,7 +177,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR NO KEY UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -190,7 +190,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR SHARE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -203,7 +203,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -216,7 +216,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -229,7 +229,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -242,7 +242,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -255,7 +255,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -271,7 +271,7 @@ query T
 EXPLAIN (VERBOSE) SELECT 1 FROM t WHERE a = 1 FOR UPDATE OF t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: ("?column?")
@@ -292,7 +292,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -308,7 +308,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 FOR UPDATE OF t2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -321,7 +321,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id AS t] FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -334,7 +334,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id AS t] FOR UPDATE OF t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -354,7 +354,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM v FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a)
@@ -367,7 +367,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM v FOR UPDATE OF v
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a)
@@ -393,7 +393,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM v AS v2 FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a)
@@ -409,7 +409,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM v AS v2 FOR UPDATE OF v2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a)
@@ -430,7 +430,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t) FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a)
@@ -443,7 +443,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR UPDATE)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a)
@@ -456,7 +456,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR NO KEY UPDATE) FOR KEY SHARE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a)
@@ -469,7 +469,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR KEY SHARE) FOR NO KEY UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a)
@@ -485,7 +485,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR UPDATE OF t)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a)
@@ -498,7 +498,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a)
@@ -511,7 +511,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR UPDATE) AS r
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a)
@@ -527,7 +527,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR UPDATE OF t) AS r
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a)
@@ -540,7 +540,7 @@ query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t) FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: (a)
@@ -569,7 +569,7 @@ query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t FOR UPDATE)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: (a)
@@ -602,7 +602,7 @@ query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t FOR UPDATE OF t)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: (a)
@@ -632,7 +632,7 @@ query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t) AS r FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: (r)
@@ -661,7 +661,7 @@ query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t FOR UPDATE) AS r
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: (r)
@@ -694,7 +694,7 @@ query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t FOR UPDATE OF t) AS r
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: (r)
@@ -724,7 +724,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -737,7 +737,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -749,7 +749,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE OF t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -762,7 +762,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE OF t)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -774,7 +774,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b)
@@ -802,7 +802,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b)
@@ -830,7 +830,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE OF t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b)
@@ -858,7 +858,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE OF t)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b)
@@ -897,7 +897,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [SELECT a FROM t] FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (a)
@@ -913,7 +913,7 @@ query T
 EXPLAIN (VERBOSE) WITH cte AS (SELECT a FROM t) SELECT * FROM cte FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (a)
@@ -929,7 +929,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [SELECT a FROM t FOR UPDATE]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: (a)
@@ -959,7 +959,7 @@ query T
 EXPLAIN (VERBOSE) WITH cte AS (SELECT a FROM t FOR UPDATE) SELECT * FROM cte
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: (a)
@@ -992,7 +992,7 @@ EXPLAIN (VERBOSE) WITH sfu AS (SELECT a FROM t FOR UPDATE)
 SELECT c FROM u
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: (c)
@@ -1027,7 +1027,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, b, c)
@@ -1060,7 +1060,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, b, c)
@@ -1092,7 +1092,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE OF u
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, b, c)
@@ -1124,7 +1124,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t, u
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, b, c)
@@ -1157,7 +1157,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t FOR SHARE OF u
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, b, c)
@@ -1193,7 +1193,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, b, c)
@@ -1226,7 +1226,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, b, c)
@@ -1259,7 +1259,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR NO KEY UPDATE OF t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, b, c)
@@ -1292,7 +1292,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR SHARE FOR NO KEY UPDATE OF t FOR UPDATE OF u
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, b, c)
@@ -1329,7 +1329,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, b, c)
@@ -1371,7 +1371,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, b, c)
@@ -1403,7 +1403,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF u2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, b, c)
@@ -1435,7 +1435,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2, u2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, b, c)
@@ -1472,7 +1472,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, b, c)
@@ -1514,7 +1514,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF j
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, b, c)
@@ -1551,7 +1551,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t, u FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • cross join (inner)
 │ columns: (a, b, a, b, c)
@@ -1575,7 +1575,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t, u FOR UPDATE OF t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • cross join (inner)
 │ columns: (a, b, a, b, c)
@@ -1598,7 +1598,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t, u FOR SHARE OF t FOR UPDATE OF u
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • cross join (inner)
 │ columns: (a, b, a, b, c)
@@ -1622,7 +1622,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • cross join (inner)
 │ columns: (a, b, a, b, c)
@@ -1649,7 +1649,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF sub
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • cross join (inner)
 │ columns: (a, b, a, b, c)
@@ -1684,7 +1684,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM indexed WHERE b = 2 FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b, c)
@@ -1704,7 +1704,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM indexed WHERE b BETWEEN 2 AND 10 FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b, c)
@@ -1728,7 +1728,7 @@ query T
 EXPLAIN (VERBOSE) SELECT c FROM t JOIN u ON t.b = u.a WHERE t.a = 2 FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (c)
@@ -1752,7 +1752,7 @@ query T
 EXPLAIN (VERBOSE) SELECT c FROM t JOIN u ON t.b = u.a WHERE t.a BETWEEN 2 AND 10 FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (c)
@@ -1777,7 +1777,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN indexed ON t.b = indexed.b WHERE t.a = 2 FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b, a, b, c)
@@ -1820,7 +1820,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM inverted WHERE b @> '{1, 2}' FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b, c)
@@ -1849,7 +1849,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM inverted WHERE b <@ '{1, 2}' FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b, c)
@@ -1883,7 +1883,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM inverted@b_inv AS i1, inverted AS i2 WHERE i1.b @> i2.b FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, c, a, b, c)
@@ -1933,7 +1933,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0 FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, c)
@@ -1955,7 +1955,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from zigzag where d @> '{"a": {"b": "c"}, "f": "g"}' FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b, c, d)
@@ -1991,7 +1991,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE NOWAIT
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2005,7 +2005,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR NO KEY UPDATE NOWAIT
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2019,7 +2019,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR SHARE NOWAIT
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2033,7 +2033,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE NOWAIT
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2047,7 +2047,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2061,7 +2061,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2075,7 +2075,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE FOR UPDATE NOWAIT
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2089,7 +2089,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t NOWAIT
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2106,7 +2106,7 @@ query T
 EXPLAIN (VERBOSE) SELECT 1 FROM t FOR UPDATE OF t NOWAIT
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: ("?column?")
@@ -2124,7 +2124,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE NOWAIT
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2138,7 +2138,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR NO KEY UPDATE NOWAIT
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2152,7 +2152,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR SHARE NOWAIT
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2166,7 +2166,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE NOWAIT
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2180,7 +2180,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE NOWAIT
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2194,7 +2194,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE NOWAIT
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2208,7 +2208,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE NOWAIT
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2222,7 +2222,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t NOWAIT
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2239,7 +2239,7 @@ query T
 EXPLAIN (VERBOSE) SELECT 1 FROM t WHERE a = 1 FOR UPDATE OF t NOWAIT
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: ("?column?")
@@ -2261,7 +2261,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE SKIP LOCKED
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2275,7 +2275,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR NO KEY UPDATE SKIP LOCKED
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2289,7 +2289,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR SHARE SKIP LOCKED
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2303,7 +2303,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE SKIP LOCKED
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2317,7 +2317,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2331,7 +2331,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED FOR NO KEY UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2345,7 +2345,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED FOR NO KEY UPDATE FOR UPDATE SKIP LOCKED
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2359,7 +2359,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t SKIP LOCKED
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2376,7 +2376,7 @@ query T
 EXPLAIN (VERBOSE) SELECT 1 FROM t FOR UPDATE OF t SKIP LOCKED
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: ("?column?")
@@ -2394,7 +2394,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE SKIP LOCKED
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2408,7 +2408,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR NO KEY UPDATE SKIP LOCKED
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2422,7 +2422,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR SHARE SKIP LOCKED
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2436,7 +2436,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE SKIP LOCKED
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2450,7 +2450,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE SKIP LOCKED
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2464,7 +2464,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE SKIP LOCKED
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2478,7 +2478,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE SKIP LOCKED
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2492,7 +2492,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t SKIP LOCKED
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2509,7 +2509,7 @@ query T
 EXPLAIN (VERBOSE) SELECT 1 FROM t WHERE a = 1 FOR UPDATE OF t SKIP LOCKED
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: ("?column?")
@@ -2529,7 +2529,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a, b FROM u WHERE b = 2 FOR UPDATE SKIP LOCKED
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2543,7 +2543,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM u WHERE b = 2 FOR UPDATE SKIP LOCKED
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b, c)
@@ -2565,7 +2565,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM u WHERE b = 2 LIMIT 1 FOR UPDATE SKIP LOCKED
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • limit
 │ columns: (a, b, c)

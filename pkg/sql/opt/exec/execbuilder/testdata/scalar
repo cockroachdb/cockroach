@@ -11,7 +11,7 @@ query T
 EXPLAIN (VERBOSE) SELECT 1 + 2 AS r
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • values
   columns: (r)
@@ -22,7 +22,7 @@ query T
 EXPLAIN (VERBOSE) SELECT true AS r
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • values
   columns: (r)
@@ -33,7 +33,7 @@ query T
 EXPLAIN (VERBOSE) SELECT false AS r
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • values
   columns: (r)
@@ -44,7 +44,7 @@ query T
 EXPLAIN (VERBOSE) SELECT (1, 2) AS r
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • values
   columns: (r)
@@ -55,7 +55,7 @@ query T
 EXPLAIN (VERBOSE) SELECT (true, false) AS r
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • values
   columns: (r)
@@ -66,7 +66,7 @@ query T
 EXPLAIN (VERBOSE) SELECT 1 + 2 AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -82,7 +82,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a + 2 AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -98,7 +98,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a >= 5 AND b <= 10 AND c < 4 AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -114,7 +114,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a >= 5 OR b <= 10 OR c < 4 AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -130,7 +130,7 @@ query T
 EXPLAIN (VERBOSE) SELECT NOT (a = 5) AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -146,7 +146,7 @@ query T
 EXPLAIN (VERBOSE) SELECT NOT (a > 5 AND b >= 10) AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -162,7 +162,7 @@ query T
 EXPLAIN (VERBOSE) SELECT (a >= 5 AND b <= 10) OR (a <= 10 AND c > 5) AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -178,7 +178,7 @@ query T
 EXPLAIN (VERBOSE) SELECT NOT (a >= 5 OR b <= 10) AND NOT (c >= 10) AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -194,7 +194,7 @@ query T
 EXPLAIN (VERBOSE) SELECT (a, b) = (1, 2)  AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -210,7 +210,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a IN (1, 2) AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -226,7 +226,7 @@ query T
 EXPLAIN (VERBOSE) SELECT (a, b) IN ((1, 2), (3, 4)) AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -242,7 +242,7 @@ query T
 EXPLAIN (VERBOSE) SELECT (a, b + c, 5 + d * 2) = (b+c, 8, a - c)  AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -258,7 +258,7 @@ query T
 EXPLAIN (VERBOSE) SELECT ((a, b), (c, d)) = ((1, 2), (3, 4))  AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -274,7 +274,7 @@ query T
 EXPLAIN (VERBOSE) SELECT (a, (b, 'a'), (c, 'b', 5)) = (9, (a+c, s), (5, s, a)) AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -290,7 +290,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a IS NULL AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -306,7 +306,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a IS NOT DISTINCT FROM NULL AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -322,7 +322,7 @@ query T
 EXPLAIN (VERBOSE) SELECT (a, b) IS NULL AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -338,7 +338,7 @@ query T
 EXPLAIN (VERBOSE) SELECT (a, b) IS NOT DISTINCT FROM NULL AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -354,7 +354,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a IS NOT DISTINCT FROM b AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -370,7 +370,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a IS NOT NULL AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -386,7 +386,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a IS DISTINCT FROM NULL AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -402,7 +402,7 @@ query T
 EXPLAIN (VERBOSE) SELECT (a, b) IS NOT NULL AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -418,7 +418,7 @@ query T
 EXPLAIN (VERBOSE) SELECT (a, b) IS DISTINCT FROM NULL AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -434,7 +434,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a IS DISTINCT FROM b AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -450,7 +450,7 @@ query T
 EXPLAIN (VERBOSE) SELECT +a + (-b) AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -466,7 +466,7 @@ query T
 EXPLAIN (VERBOSE) SELECT CASE a WHEN 1 THEN 2 WHEN 2 THEN 3 ELSE 4 END AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -482,7 +482,7 @@ query T
 EXPLAIN (VERBOSE) SELECT CASE WHEN a = 2 THEN 1 ELSE 2 END AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -498,7 +498,7 @@ query T
 EXPLAIN (VERBOSE) SELECT CASE a + 3 WHEN 5 * b THEN 1 % b WHEN 6 THEN 2 ELSE -1 END AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -515,7 +515,7 @@ query T
 EXPLAIN (VERBOSE) SELECT CASE WHEN a = 2 THEN 1 END AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -531,7 +531,7 @@ query T
 EXPLAIN (VERBOSE) SELECT CASE a WHEN 2 THEN 1 END AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -557,7 +557,7 @@ query T
 EXPLAIN (VERBOSE) SELECT length(s) FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (length)
@@ -573,7 +573,7 @@ query T
 EXPLAIN (VERBOSE) SELECT j @> '{"a": 1}' AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -589,7 +589,7 @@ query T
 EXPLAIN (VERBOSE) SELECT '{"a": 1}' <@ j AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -605,7 +605,7 @@ query T
 EXPLAIN (VERBOSE) SELECT j->>'a' AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -621,7 +621,7 @@ query T
 EXPLAIN (VERBOSE) SELECT j->'a' AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -637,7 +637,7 @@ query T
 EXPLAIN (VERBOSE) SELECT j ? 'a' AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -653,7 +653,7 @@ query T
 EXPLAIN (VERBOSE) SELECT j ?| ARRAY['a', 'b', 'c'] AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -669,7 +669,7 @@ query T
 EXPLAIN (VERBOSE) SELECT j ?& ARRAY['a', 'b', 'c'] AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -685,7 +685,7 @@ query T
 EXPLAIN (VERBOSE) SELECT j#>ARRAY['a'] AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -701,7 +701,7 @@ query T
 EXPLAIN (VERBOSE) SELECT j#>>ARRAY['a'] AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -718,7 +718,7 @@ query T
 EXPLAIN (VERBOSE) SELECT CAST(a AS string), b::float FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (a, b)
@@ -735,7 +735,7 @@ query T
 EXPLAIN (VERBOSE) SELECT CAST(a + b + c AS string) FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (text)
@@ -751,7 +751,7 @@ query T
 EXPLAIN (VERBOSE) SELECT s::VARCHAR(2) FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (s)
@@ -767,7 +767,7 @@ query T
 EXPLAIN (VERBOSE) SELECT COALESCE(a, b) FROM (VALUES (1, 2), (3, NULL), (NULL, 4), (NULL, NULL)) AS v(a, b)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: ("coalesce")
@@ -789,7 +789,7 @@ query T
 EXPLAIN (VERBOSE) SELECT COALESCE(a, b, c) FROM (VALUES (1, 2, 3), (NULL, 4, 5), (NULL, NULL, 6), (NULL, NULL, NULL)) AS v(a, b, c)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: ("coalesce")
@@ -815,7 +815,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE a BETWEEN b AND d
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -835,7 +835,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE a NOT BETWEEN b AND d
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -855,7 +855,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a BETWEEN SYMMETRIC b AND d AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -871,7 +871,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a NOT BETWEEN SYMMETRIC b AND d AS r FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -887,7 +887,7 @@ query T
 EXPLAIN (VERBOSE) SELECT ARRAY[]:::int[] FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: ("array")
@@ -903,7 +903,7 @@ query T
 EXPLAIN (VERBOSE) SELECT ARRAY[1, 2, 3] FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: ("array")
@@ -919,7 +919,7 @@ query T
 EXPLAIN (VERBOSE) SELECT ARRAY[a + 1, 2, 3] FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: ("array")
@@ -935,7 +935,7 @@ query T
 EXPLAIN (VERBOSE) SELECT 1 > ANY ARRAY[a + 1, 2, 3] FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: ("?column?")
@@ -951,7 +951,7 @@ query T
 EXPLAIN (VERBOSE) SELECT 1 = ANY (1, 2, 3) FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: ("?column?")
@@ -967,7 +967,7 @@ query T
 EXPLAIN (VERBOSE) SELECT 1 = ANY () FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: ("?column?")
@@ -983,7 +983,7 @@ query T
 EXPLAIN (VERBOSE) SELECT least(NULL, greatest(NULL, least(1, NULL), 2, 3), greatest(5, 6), a) FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: ("least")
@@ -1001,7 +1001,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_attribute WHERE attrelid='t'::regclass
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • virtual table
   columns: (attrelid, attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attidentity, attgenerated, attisdropped, attislocal, attinhcount, attcollation, attacl, attoptions, attfdwoptions, atthasmissing, attmissingval)
@@ -1013,7 +1013,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_proc WHERE oid = 1::regproc
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • virtual table
   columns: (oid, proname, pronamespace, proowner, prolang, procost, prorows, provariadic, protransform, proisagg, proiswindow, prosecdef, proleakproof, proisstrict, proretset, provolatile, proparallel, pronargs, pronargdefaults, prorettype, proargtypes, proallargtypes, proargmodes, proargnames, proargdefaults, protrftypes, prosrc, probin, proconfig, proacl, prokind, prosupport)
@@ -1025,7 +1025,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_proc WHERE oid = '12345'::regprocedure
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • virtual table
   columns: (oid, proname, pronamespace, proowner, prolang, procost, prorows, provariadic, protransform, proisagg, proiswindow, prosecdef, proleakproof, proisstrict, proretset, provolatile, proparallel, pronargs, pronargdefaults, prorettype, proargtypes, proallargtypes, proargmodes, proargnames, proargdefaults, protrftypes, prosrc, probin, proconfig, proacl, prokind, prosupport)
@@ -1038,7 +1038,7 @@ query T
 EXPLAIN (VERBOSE) select * from pg_class where oid = 't'::regclass
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • virtual table
   columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
@@ -1050,7 +1050,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_class WHERE oid = '3'::OID
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • virtual table
   columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
@@ -1062,7 +1062,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_class WHERE oid = 't'::regclass::oid
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • virtual table
   columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
@@ -1074,7 +1074,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_class WHERE oid = 101::oid
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • virtual table
   columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
@@ -1089,7 +1089,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_type WHERE oid = 'status'::regtype
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • virtual table
   columns: (oid, typname, typnamespace, typowner, typlen, typbyval, typtype, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze, typalign, typstorage, typnotnull, typbasetype, typtypmod, typndims, typcollation, typdefaultbin, typdefault, typacl)
@@ -1101,7 +1101,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_type WHERE oid = 'bool'::regtype
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • virtual table
   columns: (oid, typname, typnamespace, typowner, typlen, typbyval, typtype, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze, typalign, typstorage, typnotnull, typbasetype, typtypmod, typndims, typcollation, typdefaultbin, typdefault, typacl)
@@ -1113,7 +1113,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_type WHERE oid = 'bool[]'::regtype
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • virtual table
   columns: (oid, typname, typnamespace, typowner, typlen, typbyval, typtype, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze, typalign, typstorage, typnotnull, typbasetype, typtypmod, typndims, typcollation, typdefaultbin, typdefault, typacl)
@@ -1125,7 +1125,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_type WHERE oid = 1::regtype
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • virtual table
   columns: (oid, typname, typnamespace, typowner, typlen, typbyval, typtype, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze, typalign, typstorage, typnotnull, typbasetype, typtypmod, typndims, typcollation, typdefaultbin, typdefault, typacl)
@@ -1137,7 +1137,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_type WHERE oid = 1::regtype::oid
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • virtual table
   columns: (oid, typname, typnamespace, typowner, typlen, typbyval, typtype, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze, typalign, typstorage, typnotnull, typbasetype, typtypmod, typndims, typcollation, typdefaultbin, typdefault, typacl)
@@ -1149,7 +1149,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_namespace WHERE oid = 'public'::regnamespace
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • virtual table
   columns: (oid, nspname, nspowner, nspacl)
@@ -1161,7 +1161,7 @@ query T
 EXPLAIN (VERBOSE) SELECT CASE WHEN current_database() = 'test' THEN 42 ELSE 1/3 END
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • values
   columns: ("case")
@@ -1173,7 +1173,7 @@ query T
 EXPLAIN (VERBOSE) SELECT random(), current_database()
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • values
   columns: (random, current_database)
@@ -1187,7 +1187,7 @@ EXPLAIN (VERBOSE) SELECT 1::FLOAT + length(upper(concat('a', 'b', 'c')))::FLOAT 
                          1::FLOAT + length(upper(concat('a', 'b', s)))::FLOAT AS r2 FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r1, r2)
@@ -1204,7 +1204,7 @@ query T
 EXPLAIN (VERBOSE) SELECT ARRAY(SELECT generate_series(1,10) ORDER BY 1 DESC)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: ("array")
@@ -1237,7 +1237,7 @@ query T
 EXPLAIN (VERBOSE) SELECT ARRAY(SELECT a FROM t ORDER BY b)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: ("array")
@@ -1275,7 +1275,7 @@ query T
 EXPLAIN (VERBOSE) SELECT t0.c0 FROM t0 WHERE t0.c0 BETWEEN t0.c0 AND INTERVAL '-1'::DECIMAL
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (c0)
@@ -1294,7 +1294,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t0 WHERE (CASE WHEN (t0.c0) IN (t0.c0) THEN ARRAY[] ELSE ARRAY[NULL] END) IS NULL
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (c0)
@@ -1313,7 +1313,7 @@ query T
 EXPLAIN SELECT 2-(9223372036854775807+436256318) < (CASE WHEN false THEN -1 END)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • values
   size: 1 column, 1 row
@@ -1322,7 +1322,7 @@ query T
 EXPLAIN SELECT (9223372036854775807+436256318)-2 < (CASE WHEN false THEN -1 END)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • values
   size: 1 column, 1 row
@@ -1331,7 +1331,7 @@ query T
 EXPLAIN SELECT (9223372036854775807+436256318)+2 < (CASE WHEN false THEN -1 END)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • values
   size: 1 column, 1 row

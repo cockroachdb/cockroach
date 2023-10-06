@@ -12,7 +12,7 @@ query T nosort
 EXECUTE change_index
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: b = 10
@@ -29,7 +29,7 @@ query T nosort
 EXECUTE change_index
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -43,7 +43,7 @@ query T nosort
 EXECUTE change_index
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: b = 10
@@ -64,7 +64,7 @@ query T nosort
 EXECUTE change_stats
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join
 │ equality: (a) = (c)
@@ -91,7 +91,7 @@ query T retry,nosort
 EXECUTE change_stats
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join
 │ table: cd@cd_pkey
@@ -133,7 +133,6 @@ quality of service: regular
   KV pairs read: 2
   KV bytes read: 8 B
   KV gRPC calls: 1
-  estimated max memory allocated: 0 B
   estimated row count: 0
   table: ab@ab_pkey
   spans: [/1 - /1]
@@ -161,7 +160,6 @@ quality of service: regular
   KV rows decoded: 0
   KV bytes read: 0 B
   KV gRPC calls: 0
-  estimated max memory allocated: 0 B
   estimated row count: 0
   table: ab@ab_pkey
   spans: [/2 - /2]

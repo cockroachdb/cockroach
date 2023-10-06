@@ -1,6 +1,9 @@
 # LogicTest: local
 
 statement ok
+SET vectorize = on
+
+statement ok
 CREATE TABLE many_types (
     _bool        BOOL,
     _bytes       BYTES,

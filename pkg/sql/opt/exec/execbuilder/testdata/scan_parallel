@@ -1,6 +1,9 @@
 # LogicTest: 5node
 
 statement ok
+SET vectorize = on
+
+statement ok
 CREATE TABLE data (a INT PRIMARY KEY, b INT)
 
 # Split into ten parts.

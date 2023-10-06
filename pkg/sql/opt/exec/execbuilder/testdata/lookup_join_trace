@@ -151,6 +151,9 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
   WHERE operation = 'join reader' AND message NOT LIKE 'querying next range%' AND message NOT LIKE 'key: %, desc: %'
 ----
+Scan /Table/108/1/1/0, /Table/108/1/2/0
+fetched: /metrics/metrics_pkey/1/name -> /'cpu'
+fetched: /metrics/metrics_pkey/2/nullable/name -> /1/'cpu'
 Scan /Table/109/1/{1/2020-01-01T00:00:00.000000001Z-2}, /Table/109/1/{2/2020-01-01T00:00:00.000000001Z-3}
 fetched: /metric_values/metric_values_pkey/1/'2020-01-01 00:00:01+00'/nullable/value -> /1/1
 fetched: /metric_values/metric_values_pkey/2/'2020-01-01 00:00:01+00'/nullable/value -> /2/3
@@ -173,6 +176,9 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
   WHERE operation = 'join reader' AND message NOT LIKE 'querying next range%' AND message NOT LIKE 'key: %, desc: %'
 ----
+Scan /Table/108/1/1/0, /Table/108/1/2/0
+fetched: /metrics/metrics_pkey/1/name -> /'cpu'
+fetched: /metrics/metrics_pkey/2/nullable/name -> /1/'cpu'
 Scan /Table/109/1/1/{!NULL-2020-01-01T00:00:00Z}, /Table/109/1/2/{!NULL-2020-01-01T00:00:00Z}
 
 statement ok
@@ -192,6 +198,9 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
   WHERE operation = 'join reader' AND message NOT LIKE 'querying next range%' AND message NOT LIKE 'key: %, desc: %'
 ----
+Scan /Table/108/1/1/0, /Table/108/1/2/0
+fetched: /metrics/metrics_pkey/1/name -> /'cpu'
+fetched: /metrics/metrics_pkey/2/nullable/name -> /1/'cpu'
 Scan /Table/110/1/1/{1920-01-01T23:59:59.000000999Z-!NULL}, /Table/110/1/2/{1920-01-01T23:59:59.000000999Z-!NULL}
 
 statement ok

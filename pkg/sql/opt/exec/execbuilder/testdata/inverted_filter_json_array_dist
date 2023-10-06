@@ -82,7 +82,7 @@ EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '1' ORDER BY a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +a
@@ -100,7 +100,7 @@ EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '[1, 2]' OR b @> '[3, 4]' ORDER BY a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +a
@@ -122,7 +122,7 @@ EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '{"a": {}}' ORDER BY a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +a
@@ -144,7 +144,7 @@ EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '{"a": []}' ORDER BY a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +a
@@ -166,7 +166,7 @@ EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '[[1, 2]]' OR b @> '[[3, 4]]' ORDER BY a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: (b @> '[[1, 2]]') OR (b @> '[[3, 4]]')
@@ -194,7 +194,7 @@ EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '[1]' OR b @> '[2]' ORDER BY a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +a
@@ -216,7 +216,7 @@ EXPLAIN (DISTSQL)
 SELECT * FROM json_tab WHERE b @> '[3]' OR b @> '[[1, 2]]' ORDER BY a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: (b @> '[3]') OR (b @> '[[1, 2]]')
@@ -246,7 +246,7 @@ WHERE (b @> '[1]'::json OR b @> '[2]'::json) AND (b @> '3'::json OR b @> '"bar"'
 ORDER BY a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +a
@@ -268,7 +268,7 @@ EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '[1]' AND a % 2 = 0 ORDER BY a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +a
@@ -289,7 +289,7 @@ EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '[1]' OR a = 44 ORDER BY a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ distinct on: a
@@ -321,7 +321,7 @@ EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '[1]' OR sqrt(a::decimal) = 2 ORDER BY a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: (b @> '[1]') OR (sqrt(a::DECIMAL) = 2)
@@ -364,7 +364,7 @@ EXPLAIN (DISTSQL)
 SELECT a FROM array_tab WHERE b @> '{}' ORDER BY a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +a
@@ -386,7 +386,7 @@ EXPLAIN (DISTSQL)
 SELECT a FROM array_tab WHERE b @> '{1}' AND a % 2 = 0 ORDER BY a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +a
@@ -407,7 +407,7 @@ EXPLAIN (DISTSQL)
 SELECT a FROM array_tab WHERE b @> '{1}' OR a = 1 ORDER BY a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ distinct on: a
@@ -439,7 +439,7 @@ EXPLAIN (DISTSQL)
 SELECT a FROM array_tab WHERE (b @> '{2}' AND a = 3) OR b[0] = a ORDER BY a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: ((b @> ARRAY[2]) AND (a = 3)) OR (a = b[0])

@@ -1,5 +1,8 @@
 # LogicTest: 5node
 
+statement ok
+SET vectorize = on
+
 # This test file makes sure that experimental DistSQL planning actually plans
 # processors and other components correctly. In order to make the output
 # deterministic we place the data manually.

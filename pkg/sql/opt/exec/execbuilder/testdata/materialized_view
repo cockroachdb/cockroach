@@ -14,7 +14,7 @@ query T
 EXPLAIN SELECT * FROM v
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -29,7 +29,7 @@ query T
 EXPLAIN SELECT * FROM v WHERE y = 3
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ table: v@v_pkey

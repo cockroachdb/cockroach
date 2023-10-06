@@ -10,7 +10,7 @@ query T
 EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • union
 │
@@ -28,7 +28,7 @@ query T
 EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • union all
 │
@@ -47,7 +47,7 @@ query T
 EXPLAIN SELECT node_id FROM crdb_internal.node_build_info UNION VALUES(123)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • union
 │
@@ -64,7 +64,7 @@ query T
 EXPLAIN (VERBOSE) (SELECT a FROM abc ORDER BY b) INTERSECT (SELECT a FROM abc ORDER BY c) ORDER BY a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (a)
@@ -99,7 +99,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM ((SELECT '' AS a , '') EXCEPT ALL (SELECT '', ''))
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -129,7 +129,7 @@ EXPLAIN (VERBOSE) ((SELECT '', '', 'x' WHERE false))
 UNION ALL ((SELECT * FROM (VALUES ('', '', 'x'), ('', '', 'x'))) EXCEPT (VALUES ('', '', 'x')))
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: ("?column?", "?column?", "?column?")

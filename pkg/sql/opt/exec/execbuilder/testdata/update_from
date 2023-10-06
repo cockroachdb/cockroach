@@ -8,7 +8,7 @@ query T
 EXPLAIN UPDATE abc SET b = other.b + 1, c = other.c + 1 FROM abc AS other WHERE abc.a = other.a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • update
 │ table: abc
@@ -33,7 +33,7 @@ query T
 EXPLAIN UPDATE abc SET b = other.b, c = other.c FROM new_abc AS other WHERE abc.a = other.a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • update
 │ table: abc
@@ -70,7 +70,7 @@ RETURNING
   abc.a, abc.b AS new_b, old.b as old_b, abc.c as new_c, old.c as old_c
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • update
 │ table: abc
@@ -92,7 +92,7 @@ query T
 EXPLAIN (VERBOSE) UPDATE abc SET b = old.b + 1, c = old.c + 2 FROM abc AS old WHERE abc.a = old.a RETURNING *
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • update
 │ columns: (a, b, c, a, b, c)
@@ -133,7 +133,7 @@ query T
 EXPLAIN UPDATE abc SET b = other.b, c = other.c FROM (values (1, 2, 3), (2, 3, 4)) as other ("a", "b", "c") WHERE abc.a = other.a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • update
 │ table: abc
@@ -162,7 +162,7 @@ query T
 EXPLAIN UPDATE abc SET b = ab.b, c = ac.c FROM ab, ac WHERE abc.a = ab.a AND abc.a = ac.a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • update
 │ table: abc
@@ -208,7 +208,7 @@ RETURNING
   *
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • update
 │ table: abc

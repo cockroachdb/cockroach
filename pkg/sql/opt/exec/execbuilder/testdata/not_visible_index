@@ -181,7 +181,7 @@ query T
 EXPLAIN SELECT * FROM t1 WHERE v = 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ table: t1@t1_pkey
@@ -202,7 +202,7 @@ query T
 EXPLAIN SELECT v FROM t1 WHERE v = 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: v = 2
@@ -217,7 +217,7 @@ query T
 EXPLAIN SELECT DISTINCT ON (v) t1 FROM t1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ distinct on: v
@@ -234,7 +234,7 @@ query T
 EXPLAIN UPDATE t1 SET k = 1 WHERE v > 0
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • update
 │ table: t1
@@ -256,7 +256,7 @@ query T
 EXPLAIN DELETE FROM t1 WHERE v > 0
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • delete
 │ from: t1
@@ -275,7 +275,7 @@ query T
 EXPLAIN SELECT DISTINCT v FROM t1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ distinct on: v
@@ -290,7 +290,7 @@ query T
 EXPLAIN SELECT v FROM t1 ORDER BY v
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +v
@@ -308,7 +308,7 @@ query T
 EXPLAIN SELECT * FROM t1 WHERE other > 100 ORDER BY other LIMIT 10;
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • top-k
 │ order: +other
@@ -330,7 +330,7 @@ query T
 EXPLAIN SELECT * FROM t1 WHERE (v + other) = 100
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: (v + other) = 100
@@ -354,7 +354,7 @@ query T
 EXPLAIN SELECT v FROM t1@idx_v_invisible WHERE v = 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -372,7 +372,7 @@ query T
 EXPLAIN SELECT * FROM t1 WHERE v > 10;
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: v > 10
@@ -387,7 +387,7 @@ query T
 EXPLAIN SELECT * FROM t1@{FORCE_INDEX=idx_v_invisible} WHERE v > 10;
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ table: t1@t1_pkey
@@ -425,7 +425,7 @@ query T
 EXPLAIN SELECT col1, col2 FROM t1 WHERE col1 = 1 AND col2 = 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: (col1 = 1) AND (col2 = 2)
@@ -455,7 +455,7 @@ query T
 EXPLAIN SELECT t2.col1 FROM t2 JOIN t1 ON t1.col1 = t2.col1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • hash join
 │ equality: (col1) = (col1)
@@ -476,7 +476,7 @@ query T
 EXPLAIN SELECT t2.col1 FROM t2 CROSS MERGE JOIN t1 WHERE t1.col1 = t2.col1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join
 │ equality: (col1) = (col1)
@@ -502,7 +502,7 @@ query T
 EXPLAIN SELECT * FROM t1 JOIN t2 ON t1.col1 = 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • cross join
 │
@@ -524,7 +524,7 @@ query T
 EXPLAIN SELECT * FROM t1, LATERAL (SELECT * FROM t2 WHERE col1 > 0) WHERE t1.col1 > 0;
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • cross join
 │
@@ -568,7 +568,7 @@ query T
 EXPLAIN SELECT * FROM t1 WHERE st_covers(geom, 'LINESTRING ( 0 0, 0 2 )'::geometry)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: st_covers(geom, '0102000000020000000000000000000000000000000000000000000000000000000000000000000040')
@@ -596,7 +596,7 @@ query T
 EXPLAIN SELECT * FROM t1 WHERE st_covers(geom, 'LINESTRING ( 0 0, 0 2 )'::geometry)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: st_covers(geom, '0102000000020000000000000000000000000000000000000000000000000000000000000000000040')
@@ -615,7 +615,7 @@ query T
 EXPLAIN SELECT * FROM t1 WHERE data @> '{"foo": "1"}' AND id > 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: (data @> '{"foo": "1"}') AND (id > 10)
@@ -642,7 +642,7 @@ query T
 EXPLAIN SELECT * FROM t1 INNER INVERTED JOIN t2@idx_geom2_invisible ON st_covers(t1.geom, t2.geom2)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join
 │ table: t2@t2_pkey
@@ -678,7 +678,7 @@ query T
 EXPLAIN SELECT * FROM t1 WHERE v > 0
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: v > 0
@@ -693,7 +693,7 @@ query T
 EXPLAIN INSERT INTO t1 VALUES (1, 2) ON CONFLICT DO NOTHING
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • insert
 │ into: t1(k, v)
@@ -720,7 +720,7 @@ query T
 EXPLAIN INSERT INTO t1 VALUES (1, 2) ON CONFLICT(v) DO UPDATE SET k = t1.v
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ into: t1(k, v)
@@ -745,7 +745,7 @@ query T
 EXPLAIN INSERT INTO t1 (k, v) SELECT * FROM t1 WHERE v IN (1, 2) ON CONFLICT DO NOTHING;
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • insert
 │ into: t1(k, v)
@@ -776,7 +776,7 @@ query T
 EXPLAIN UPSERT INTO t1(k, v) VALUES (1, 2)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ into: t1(k, v)
@@ -819,7 +819,7 @@ query T
 EXPLAIN DELETE FROM child WHERE p = 4
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • delete
 │ from: child
@@ -839,7 +839,7 @@ query T
 EXPLAIN DELETE FROM parent where p = 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │
@@ -871,7 +871,7 @@ query T
 EXPLAIN UPDATE parent SET p = p+1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │
@@ -938,7 +938,7 @@ query T
 EXPLAIN SELECT * FROM parent WHERE other > 0
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: other > 0
@@ -954,7 +954,7 @@ query T
 EXPLAIN INSERT INTO child VALUES (200, 1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • insert fast path
   into: child(c, p)
@@ -968,7 +968,7 @@ query T
 EXPLAIN UPSERT INTO child VALUES (200, 1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │
@@ -1029,7 +1029,7 @@ query T
 EXPLAIN DELETE FROM parent where p = 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │
@@ -1066,7 +1066,7 @@ query T
 EXPLAIN DELETE FROM parent WHERE other > 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │
@@ -1115,7 +1115,7 @@ query T
 EXPLAIN UPDATE parent SET p = p+1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │
@@ -1287,7 +1287,7 @@ query T
 EXPLAIN SELECT * FROM t WHERE other > 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -1311,7 +1311,7 @@ query T
 EXPLAIN SELECT * FROM t WHERE other > 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: other > 2
@@ -1338,7 +1338,7 @@ query T
 EXPLAIN SELECT * FROM t WHERE other > 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -1363,7 +1363,7 @@ query T
 EXPLAIN SELECT * FROM t WHERE v = 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: v = 2
@@ -1390,7 +1390,7 @@ query T
 EXPLAIN SELECT * FROM t WHERE v = 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -1592,7 +1592,7 @@ query T
 EXPLAIN SELECT * FROM t WHERE v = 'foo'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: v = 'foo'
@@ -1609,7 +1609,7 @@ query T
 EXPLAIN SELECT * FROM t WHERE v = 'foo'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ table: t@t_pkey

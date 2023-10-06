@@ -226,7 +226,7 @@ LIMIT 1024
 RETURNING aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
@@ -413,7 +413,7 @@ DELETE FROM system.transaction_statistics
  RETURNING aggregated_ts, fingerprint_id, app_name, node_id
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (aggregated_ts, fingerprint_id, app_name, node_id)
@@ -469,7 +469,7 @@ AND (
  RETURNING aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
@@ -526,7 +526,7 @@ DELETE FROM system.transaction_statistics
      RETURNING aggregated_ts, fingerprint_id, app_name, node_id
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (aggregated_ts, fingerprint_id, app_name, node_id)

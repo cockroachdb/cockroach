@@ -53,7 +53,8 @@ func TestExplainAnalyzeDebugWithTxnRetries(t *testing.T) {
 	r := sqlutils.MakeSQLRunner(godb)
 	r.Exec(t, `CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT UNIQUE);
 CREATE SCHEMA s;
-CREATE TABLE s.a (a INT PRIMARY KEY);`)
+CREATE TABLE s.a (a INT PRIMARY KEY);
+SET vectorize = on;`)
 
 	base := "statement.sql trace.json trace.txt trace-jaeger.json env.sql"
 	plans := "schema.sql opt.txt opt-v.txt opt-vv.txt plan.txt"
@@ -80,7 +81,8 @@ func TestExplainAnalyzeDebug(t *testing.T) {
 	r := sqlutils.MakeSQLRunner(godb)
 	r.Exec(t, `CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT UNIQUE);
 CREATE SCHEMA s;
-CREATE TABLE s.a (a INT PRIMARY KEY);`)
+CREATE TABLE s.a (a INT PRIMARY KEY);
+SET vectorize = on;`)
 
 	base := "statement.sql trace.json trace.txt trace-jaeger.json env.sql"
 	plans := "schema.sql opt.txt opt-v.txt opt-vv.txt plan.txt"

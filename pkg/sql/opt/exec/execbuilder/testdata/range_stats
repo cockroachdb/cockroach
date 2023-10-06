@@ -1,5 +1,8 @@
 # LogicTest: local
-#
+
+statement ok
+SET vectorize = on
+
 # This file tests that we build a specialized vectorized operator for the
 # crdb_internal.range_stats function.
 

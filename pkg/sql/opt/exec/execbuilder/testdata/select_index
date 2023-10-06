@@ -126,8 +126,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/bc/'three'/?/3 -> <undecoded>
-fetched: /t/bc/'two'/?/2 -> <undecoded>
+fetched: /t/bc/'three'/33/3 -> <undecoded>
+fetched: /t/bc/'two'/22/2 -> <undecoded>
 output row: [3 'three']
 output row: [2 'two']
 
@@ -170,9 +170,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/a_desc/3/? -> <undecoded>
-fetched: /t/a_desc/2/? -> <undecoded>
-fetched: /t/a_desc/1/? -> <undecoded>
+fetched: /t/a_desc/3/'three' -> <undecoded>
+fetched: /t/a_desc/2/'two' -> <undecoded>
+fetched: /t/a_desc/1/'one' -> <undecoded>
 output row: [3]
 output row: [2]
 output row: [1]
@@ -186,8 +186,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/a_desc/3/? -> <undecoded>
-fetched: /t/a_desc/2/? -> <undecoded>
+fetched: /t/a_desc/3/'three' -> <undecoded>
+fetched: /t/a_desc/2/'two' -> <undecoded>
 output row: [3]
 output row: [2]
 
@@ -196,7 +196,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t x JOIN t y USING(b) WHERE x.b = '3'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (b, a, c, d, a, c, d)
@@ -275,7 +275,7 @@ query T
 EXPLAIN SELECT * FROM t WHERE a > 1 AND a < 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • norows
 
@@ -444,7 +444,7 @@ query T
 EXPLAIN SELECT * FROM t WHERE a = 1 AND false
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • norows
 
@@ -452,7 +452,7 @@ query T
 EXPLAIN SELECT * FROM t WHERE a = 1 AND NULL
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • norows
 
@@ -460,7 +460,7 @@ query T
 EXPLAIN SELECT * FROM t WHERE a = NULL AND a != NULL
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • norows
 
@@ -483,7 +483,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE c > 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -503,7 +503,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE c < 1 AND b < 5
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -523,7 +523,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE c > 1.0
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -543,7 +543,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE c < 1.0
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -563,7 +563,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE c > 1.0 AND b < 5
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -583,7 +583,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE b < 5.0 AND c < 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -603,7 +603,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE (b, c) = (5, 1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -618,7 +618,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE (b, c) = (5.0, 1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -633,7 +633,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE (b, c) = (5.1, 1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -654,7 +654,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE b IN (5.0, 1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -681,7 +681,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b FROM abcd WHERE (a, b) = (1, 4)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (b)
@@ -696,7 +696,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b FROM abcd WHERE (a, b) IN ((1, 4), (2, 9))
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (b)
@@ -717,7 +717,7 @@ query T
 EXPLAIN (VERBOSE) SELECT i, s FROM ab WHERE (i, s) < (1, 'c')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (i, s)
@@ -737,7 +737,7 @@ query T
 EXPLAIN (VERBOSE) SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (i, s)
@@ -767,7 +767,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM abz ORDER BY a DESC LIMIT 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a)
@@ -780,7 +780,7 @@ query T
 EXPLAIN (VERBOSE) SELECT c FROM abz ORDER BY c DESC LIMIT 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (c)
@@ -802,7 +802,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k FROM tab0 WHERE (a IN (6) AND a > 6) OR b >= 4
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (k)
@@ -837,7 +837,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (id, k, v)
@@ -902,7 +902,7 @@ GROUP BY resource_key
 ORDER BY total DESC
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: -count_rows
@@ -939,7 +939,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL AND b > 5
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b, c, d)
@@ -951,7 +951,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL AND b < 5
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b, c, d)
@@ -963,7 +963,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL ORDER BY b
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b, c, d)
@@ -976,7 +976,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a = 1 AND b IS NULL AND c > 0 AND c < 10 ORDER BY c
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b, c, d)
@@ -994,7 +994,7 @@ query T
 EXPLAIN (VERBOSE) SELECT c FROM abc WHERE c = 1 and a = 3
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (c)
@@ -1014,7 +1014,7 @@ query T
 EXPLAIN (VERBOSE) SELECT f FROM def WHERE f = 1 and d = 3
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (f)
@@ -1042,7 +1042,7 @@ query T
 EXPLAIN (VERBOSE) SELECT f FROM def WHERE f = 1 and d = 3
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (f)
@@ -1063,7 +1063,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a, b FROM abc WHERE (a, b) BETWEEN (1, 2) AND (3, 4)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -1079,7 +1079,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k, v FROM str WHERE v LIKE 'ABC%'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (k, v)
@@ -1091,7 +1091,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k, v FROM str WHERE v LIKE 'ABC%Z'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (k, v)
@@ -1108,7 +1108,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k, v FROM str WHERE v SIMILAR TO 'ABC_*'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (k, v)
@@ -1125,7 +1125,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k, v FROM str WHERE v ~ '^ABC'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (k, v)
@@ -1141,7 +1141,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS NOT DISTINCT FROM NULL
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (x, y)
@@ -1159,7 +1159,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS NOT DISTINCT FROM 4
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (x, y)
@@ -1177,7 +1177,7 @@ query T
 EXPLAIN (VERBOSE) SELECT x FROM xy WHERE y > 0 AND y < 2 ORDER BY y
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (x)
@@ -1198,7 +1198,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM NULL
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (x, y)
@@ -1215,7 +1215,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM 4
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (x, y)
@@ -1239,7 +1239,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE x IN (NULL, 1, 2)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (x, y)
@@ -1251,7 +1251,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE (x, y) IN ((NULL, NULL), (1, NULL), (NULL, 1), (1, 1), (1, 2))
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (x, y)
@@ -1283,7 +1283,7 @@ query T
 EXPLAIN SELECT * FROM noncover WHERE b = 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ table: noncover@noncover_pkey
@@ -1320,7 +1320,7 @@ query T
 EXPLAIN SELECT * FROM noncover WHERE c = 6
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ table: noncover@noncover_pkey
@@ -1349,7 +1349,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM noncover WHERE c > 0 ORDER BY c DESC
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (a, b, c, d)
@@ -1372,7 +1372,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM noncover WHERE c > 0 ORDER BY c
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (a, b, c, d)
@@ -1395,7 +1395,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM noncover WHERE c > 0 AND d = 8
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b, c, d)
@@ -1415,7 +1415,7 @@ query T
 EXPLAIN SELECT * FROM noncover ORDER BY c
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +c
@@ -1429,7 +1429,7 @@ query T
 EXPLAIN SELECT * FROM noncover ORDER BY c LIMIT 5
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ table: noncover@noncover_pkey
@@ -1444,7 +1444,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c OFFSET 5
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • limit
 │ columns: (a, b, c, d)
@@ -1467,7 +1467,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c LIMIT 5 OFFSET 5
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • limit
 │ columns: (a, b, c, d)
@@ -1492,7 +1492,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c LIMIT 1000000
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • top-k
 │ columns: (a, b, c, d)
@@ -1552,7 +1552,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c % 2 = 0
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b, c, s)
@@ -1593,7 +1593,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c != b
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b, c, s)
@@ -1706,7 +1706,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM t2 WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s != 'a') OR (s = 'a')))
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -1724,7 +1724,7 @@ query T
 EXPLAIN (VERBOSE) SELECT w FROM t3 WHERE v > 0 AND v < 10 ORDER BY v
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (w)
@@ -1771,7 +1771,7 @@ query T
 EXPLAIN SELECT c FROM t4 WHERE a = 10 and b = 20
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -1795,7 +1795,7 @@ query T
 EXPLAIN SELECT d FROM t4 WHERE a = 10 and b = 20
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -1820,7 +1820,7 @@ query T
 EXPLAIN SELECT d, e FROM t4 WHERE a = 10 and b = 20
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -1832,7 +1832,7 @@ query T
 EXPLAIN UPDATE t4 SET c = 30 WHERE a = 10 and b = 20
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • update
 │ table: t4
@@ -1852,7 +1852,7 @@ query T
 EXPLAIN DELETE FROM t4 WHERE a = 10 and b = 20
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • delete range
   from: t4
@@ -1864,7 +1864,7 @@ query T
 EXPLAIN SELECT c FROM t4 WHERE a = 10 and b >= 20 and b < 22
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -1876,7 +1876,7 @@ query T
 EXPLAIN SELECT c FROM t4 WHERE a = 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -1889,7 +1889,7 @@ query T
 EXPLAIN SELECT a FROM t4 WHERE a in (1, 5) and b in (1, 5)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats

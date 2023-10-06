@@ -27,7 +27,7 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: (v > 10) AND (v < 50)
@@ -43,7 +43,7 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50 ORDER BY v
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +v
@@ -63,7 +63,7 @@ query T
 EXPLAIN (DISTSQL) SELECT w FROM t WHERE v > 10 AND v < 50 ORDER BY v
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +v
@@ -83,7 +83,7 @@ query T
 EXPLAIN (DISTSQL) SELECT w FROM t WHERE v > 40 AND v < 50 ORDER BY v
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • index join
 │ table: t@t_pkey
@@ -107,7 +107,7 @@ query T
 EXPLAIN SELECT * FROM abc WHERE b between 1 AND 3 ORDER BY c, b LIMIT 2;
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • top-k
 │ order: +c,+b
@@ -129,7 +129,7 @@ query T
 EXPLAIN SELECT * FROM abc WHERE b between 1 AND 3 ORDER BY c, b LIMIT 2;
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • limit
 │ count: 2

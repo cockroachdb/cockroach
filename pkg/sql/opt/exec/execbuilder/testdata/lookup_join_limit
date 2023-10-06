@@ -107,7 +107,6 @@ quality of service: regular
     │   │ KV bytes read: 8 B
     │   │ KV gRPC calls: 1
     │   │ estimated max memory allocated: 0 B
-    │   │ estimated max sql temp disk usage: 0 B
     │   │ table: a@a_pkey
     │   │
     │   └── • scan
@@ -120,7 +119,6 @@ quality of service: regular
     │         KV pairs read: 2
     │         KV bytes read: 8 B
     │         KV gRPC calls: 1
-    │         estimated max memory allocated: 0 B
     │         missing stats
     │         table: a@a_y_idx
     │         spans: [/1 - /1]
@@ -135,7 +133,6 @@ quality of service: regular
         │ KV bytes read: 0 B
         │ KV gRPC calls: 0
         │ estimated max memory allocated: 0 B
-        │ estimated max sql temp disk usage: 0 B
         │ table: a@a_pkey
         │
         └── • scan
@@ -147,7 +144,6 @@ quality of service: regular
               KV rows decoded: 0
               KV bytes read: 0 B
               KV gRPC calls: 0
-              estimated max memory allocated: 0 B
               missing stats
               table: a@a_y_idx
               spans: [/2 - /2]
@@ -357,7 +353,6 @@ quality of service: regular
           KV pairs read: 2
           KV bytes read: 8 B
           KV gRPC calls: 1
-          estimated max memory allocated: 0 B
           estimated row count: 1 (100% of the table; stats collected <hidden> ago)
           table: a@a_y_idx
           spans: FULL SCAN (SOFT LIMIT)
@@ -452,7 +447,6 @@ quality of service: regular
           KV pairs read: 4
           KV bytes read: 16 B
           KV gRPC calls: 2
-          estimated max memory allocated: 0 B
           estimated row count: 1 (100% of the table; stats collected <hidden> ago)
           table: a@a_y_idx
           spans: FULL SCAN (SOFT LIMIT)

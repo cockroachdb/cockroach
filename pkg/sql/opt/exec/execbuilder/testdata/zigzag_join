@@ -12,7 +12,7 @@ query T
 EXPLAIN SELECT count(*) FROM t71093 WHERE a = 0 AND b = 1 AND c = 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • group (scalar)
 │
@@ -29,7 +29,7 @@ query T
 EXPLAIN SELECT count(*) FROM t71093 WHERE a = 0 AND c = 2 AND d = 3
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • group (scalar)
 │
@@ -46,7 +46,7 @@ query T
 EXPLAIN SELECT count(*) FROM t71093 WHERE a = 0 AND b = 1 AND c = 2 AND d = 3
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • group (scalar)
 │
@@ -67,7 +67,7 @@ query T
 EXPLAIN SELECT d FROM t71271 WHERE c = 3 AND d = 4
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • zigzag join
   pred: (c = 3) AND (d = 4)

@@ -8,7 +8,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY w LIMIT 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • top-k
 │ columns: (k, v, w)
@@ -28,7 +28,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY v LIMIT 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (k, v, w)
@@ -50,7 +50,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY w DESC LIMIT 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • top-k
 │ columns: (k, v, w)
@@ -70,7 +70,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v FROM T ORDER BY w LIMIT 2)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (k)
@@ -93,7 +93,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE w >= 1 AND w <= 10 ORDER BY w LIMIT 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • top-k
 │ columns: (k, v, w)
@@ -118,7 +118,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t@v ORDER BY v, w LIMIT 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • top-k
 │ columns: (k, v, w)

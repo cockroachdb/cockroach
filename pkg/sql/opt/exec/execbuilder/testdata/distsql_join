@@ -34,7 +34,7 @@ query T
 EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data) NATURAL JOIN (SELECT a,b FROM data AS data2))
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b)
@@ -124,7 +124,7 @@ query T
 EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY b,a)
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (a, b, c, d)
@@ -153,7 +153,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY b,a)
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +b,+a

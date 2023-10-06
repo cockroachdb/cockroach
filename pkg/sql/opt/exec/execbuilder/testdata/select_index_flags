@@ -16,7 +16,7 @@ query T
 EXPLAIN SELECT * FROM abcd WHERE a >= 20 AND a <= 30
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -28,7 +28,7 @@ query T
 EXPLAIN SELECT * FROM abcd WHERE a >= 20 AND a <= 30 ORDER BY a DESC
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • revscan
   missing stats
@@ -40,7 +40,7 @@ query T
 EXPLAIN SELECT * FROM abcd@abcd_pkey WHERE a >= 20 AND a <= 30
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -52,7 +52,7 @@ query T
 EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=abcd_pkey,DESC} WHERE a >= 20 AND a <= 30
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • revscan
   missing stats
@@ -64,7 +64,7 @@ query T
 EXPLAIN SELECT * FROM abcd@abcd_pkey WHERE a >= 20 AND a <= 30 ORDER BY a DESC
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • revscan
   missing stats
@@ -76,7 +76,7 @@ query T
 EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=abcd_pkey,ASC} WHERE a >= 20 AND a <= 30 ORDER BY a DESC
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: -a
@@ -91,7 +91,7 @@ query T
 EXPLAIN SELECT * FROM abcd@b WHERE a >= 20 AND a <= 30
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: (a >= 20) AND (a <= 30)
@@ -109,7 +109,7 @@ query T
 EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b,DESC} WHERE a >= 20 AND a <= 30
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: (a >= 20) AND (a <= 30)
@@ -127,7 +127,7 @@ query T
 EXPLAIN SELECT * FROM abcd@b ORDER BY b DESC LIMIT 5
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ table: abcd@abcd_pkey
@@ -143,7 +143,7 @@ query T
 EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b,DESC} ORDER BY b DESC LIMIT 5
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ table: abcd@abcd_pkey
@@ -160,7 +160,7 @@ query T
 EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b,ASC} ORDER BY b DESC LIMIT 5
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ table: abcd@abcd_pkey
@@ -179,7 +179,7 @@ query T
 EXPLAIN SELECT * FROM abcd@cd WHERE a >= 20 AND a <= 30
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: (a >= 20) AND (a <= 30)
@@ -197,7 +197,7 @@ query T
 EXPLAIN SELECT * FROM abcd@bcd WHERE a >= 20 AND a <= 30
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: (a >= 20) AND (a <= 30)
@@ -212,7 +212,7 @@ query T
 EXPLAIN SELECT b FROM abcd@b WHERE a >= 20 AND a <= 30
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: (a >= 20) AND (a <= 30)
@@ -227,7 +227,7 @@ query T
 EXPLAIN SELECT b FROM abcd@b WHERE c >= 20 AND c <= 30
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: (c >= 20) AND (c <= 30)
@@ -245,7 +245,7 @@ query T
 EXPLAIN SELECT c, d FROM abcd WHERE c >= 20 AND c < 40
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -257,7 +257,7 @@ query T
 EXPLAIN SELECT c, d FROM abcd@abcd_pkey WHERE c >= 20 AND c < 40
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: (c >= 20) AND (c < 40)
@@ -272,7 +272,7 @@ query T
 EXPLAIN SELECT c, d FROM abcd@b WHERE c >= 20 AND c < 40
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: (c >= 20) AND (c < 40)
@@ -289,7 +289,7 @@ query T
 EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b} WHERE a >= 20 AND a <= 30
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: (a >= 20) AND (a <= 30)
@@ -306,7 +306,7 @@ query T
 EXPLAIN SELECT b, c, d FROM abcd WHERE c = 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ table: abcd@abcd_pkey
@@ -320,7 +320,7 @@ query T
 EXPLAIN SELECT b, c, d FROM abcd@{NO_INDEX_JOIN} WHERE c = 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: c = 10
@@ -334,7 +334,7 @@ query T
 EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=bcd} WHERE c = 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: c = 10
@@ -348,7 +348,7 @@ query T
 EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=abcd_pkey} WHERE c = 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: c = 10

@@ -40,7 +40,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/foo/NULL -> /?
+fetched: /t/foo/NULL -> /1
 output row: [NULL]
 
 statement ok
@@ -96,7 +96,7 @@ query T
 EXPLAIN (VERBOSE) ALTER TABLE s SPLIT AT SELECT k1,k2 FROM s ORDER BY k1 LIMIT 3
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • split
 │ columns: (key, pretty, split_enforced_until)

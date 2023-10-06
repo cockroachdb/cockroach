@@ -12,7 +12,7 @@ query T
 EXPLAIN SELECT a, b FROM t ORDER BY b
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +b
@@ -26,7 +26,7 @@ query T
 EXPLAIN SELECT a, b FROM t ORDER BY b DESC
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: -b
@@ -41,7 +41,7 @@ query T
 EXPLAIN SELECT a, b FROM t ORDER BY b LIMIT 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • top-k
 │ order: +b
@@ -56,7 +56,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT c, b FROM t ORDER BY b LIMIT 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • top-k
 │ columns: (c, b)
@@ -80,7 +80,7 @@ query T
 EXPLAIN SELECT b FROM t ORDER BY a DESC
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • revscan
   missing stats
@@ -92,7 +92,7 @@ query T
 EXPLAIN SELECT b FROM t ORDER BY a LIMIT 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -104,7 +104,7 @@ query T
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b ASC
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • revscan
   missing stats
@@ -115,7 +115,7 @@ query T
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b DESC
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • revscan
   missing stats
@@ -126,7 +126,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, t.*)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (a, b, c)
@@ -144,7 +144,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, a), c
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (a, b, c)
@@ -162,7 +162,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY b, (a, c)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (a, b, c)
@@ -180,7 +180,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, (a, c))
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (a, b, c)
@@ -199,7 +199,7 @@ query T
 EXPLAIN SELECT * FROM t ORDER BY 1+2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -210,7 +210,7 @@ query T
 EXPLAIN SELECT 1, * FROM t ORDER BY 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │
@@ -223,7 +223,7 @@ query T
 EXPLAIN SELECT * FROM t ORDER BY length('abc')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -235,7 +235,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b+2 r FROM t ORDER BY b+2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (r)
@@ -258,7 +258,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b+2 AS y FROM t ORDER BY y
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (y)
@@ -315,8 +315,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /abc/ba/2/1/? -> <undecoded>
-fetched: /abc/ba/5/4/? -> <undecoded>
+fetched: /abc/ba/2/1/3 -> <undecoded>
+fetched: /abc/ba/5/4/6 -> <undecoded>
 output row: [1 2]
 output row: [4 5]
 
@@ -326,7 +326,7 @@ query T
 EXPLAIN SELECT a, b, c FROM abc ORDER BY b, a, c
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -338,7 +338,7 @@ query T
 EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 AND b < 15 ORDER BY b, a, d
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +b,+a,+d
@@ -357,7 +357,7 @@ query T
 EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 ORDER BY b, a, d
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +b,+a,+d
@@ -386,7 +386,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a, b, c, d FROM abc WHERE b > 10 ORDER BY b, a, c, d
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (a, b, c, d)
@@ -409,7 +409,7 @@ query T
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -420,7 +420,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b)
@@ -436,7 +436,7 @@ query T
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -447,7 +447,7 @@ query T
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a DESC
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -462,8 +462,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /abc/bc/2/3 -> /?
-fetched: /abc/bc/5/6 -> /?
+fetched: /abc/bc/2/3 -> /1
+fetched: /abc/bc/5/6 -> /4
 output row: [2 3]
 output row: [5 6]
 
@@ -488,10 +488,10 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /abc/abc_pkey/4/?/? -> <undecoded>
-fetched: /abc/abc_pkey/4/?/? -> <undecoded>
-fetched: /abc/abc_pkey/1/?/? -> <undecoded>
-fetched: /abc/abc_pkey/1/?/? -> <undecoded>
+fetched: /abc/abc_pkey/4/5/6 -> <undecoded>
+fetched: /abc/abc_pkey/4/5/6 -> <undecoded>
+fetched: /abc/abc_pkey/1/2/3 -> <undecoded>
+fetched: /abc/abc_pkey/1/2/3 -> <undecoded>
 output row: [4]
 output row: [1]
 
@@ -499,7 +499,7 @@ query T
 EXPLAIN SELECT a FROM abc ORDER BY a DESC
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • revscan
   missing stats
@@ -510,7 +510,7 @@ query T
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -521,7 +521,7 @@ query T
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • revscan
   missing stats
@@ -533,7 +533,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (b, c)
@@ -553,7 +553,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM bar ORDER BY baz, id
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (id, baz)
@@ -581,7 +581,7 @@ query T
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -592,7 +592,7 @@ query T
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c, b, a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -603,7 +603,7 @@ query T
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, a, c
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -614,7 +614,7 @@ query T
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, c, a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -628,7 +628,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • values
   columns: (x)
@@ -641,7 +641,7 @@ query T
 EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality ASC
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • ordinality
 │ estimated row count: 3
@@ -653,7 +653,7 @@ query T
 EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality DESC
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ estimated row count: 3
@@ -669,7 +669,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x)) WITH ORDINALITY
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • ordinality
 │ columns: (x, "ordinality")
@@ -686,7 +686,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x) WITH ORDINALITY
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • ordinality
 │ columns: (x, "ordinality")
@@ -710,7 +710,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDER BY x RETURNING b
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (b)
@@ -729,7 +729,7 @@ query T
 EXPLAIN (VERBOSE) DELETE FROM t WHERE a = 3 RETURNING b
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (b)
@@ -750,7 +750,7 @@ query T
 EXPLAIN (VERBOSE) UPDATE t SET c = TRUE RETURNING b
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (b)
@@ -794,7 +794,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT y, w, x FROM uvwxyz WHERE y = 1 ORDER BY w) ORDER BY w, x
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (y, w, x)
@@ -823,7 +823,7 @@ query T
 EXPLAIN (VERBOSE) SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER BY block_id, writer_id, block_num LIMIT 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (block_id, writer_id, block_num, block_id)
@@ -846,7 +846,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (b, a)
@@ -874,7 +874,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (b, a)
@@ -911,7 +911,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY a.*
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (x, y)
@@ -929,7 +929,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY (a.*)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (x, y)
@@ -955,7 +955,7 @@ query T
 EXPLAIN (VERBOSE) SELECT v FROM kv ORDER BY PRIMARY KEY kv
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (v)
@@ -971,7 +971,7 @@ query T
 EXPLAIN (VERBOSE) SELECT v FROM kv ORDER BY PRIMARY KEY kv ASC
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (v)
@@ -987,7 +987,7 @@ query T
 EXPLAIN (VERBOSE) SELECT v FROM kv ORDER BY PRIMARY KEY kv DESC
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (v)
@@ -1003,7 +1003,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY v, PRIMARY KEY kv, v-2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (k)
@@ -1024,7 +1024,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (k)
@@ -1040,7 +1040,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo ASC
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (k)
@@ -1056,7 +1056,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo DESC
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (k)
@@ -1072,7 +1072,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo, k
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (k)
@@ -1095,7 +1095,7 @@ EXPLAIN (VERBOSE)
 SELECT k FROM kv JOIN (VALUES (1,2), (3,4)) AS z(a,b) ON kv.k = z.a ORDER BY INDEX kv@foo
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (k)
@@ -1126,7 +1126,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k FROM kv a NATURAL JOIN kv ORDER BY INDEX kv@foo
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (k)
@@ -1166,7 +1166,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM xyz WHERE z=1 AND x=y ORDER BY x;
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (x, y, z)
@@ -1197,7 +1197,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b NULLS FIRST
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (a, b)
@@ -1215,7 +1215,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b NULLS LAST
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b)
@@ -1242,7 +1242,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b DESC NULLS FIRST
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b)
@@ -1269,7 +1269,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b DESC NULLS LAST
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (a, b)
@@ -1287,7 +1287,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b DESC NULLS FIRST, c NULLS LAST
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b)
@@ -1322,7 +1322,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b NULLS LAST
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b)

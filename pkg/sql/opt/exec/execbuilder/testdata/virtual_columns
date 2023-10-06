@@ -80,7 +80,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (a, b, v)
@@ -98,7 +98,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM t_idx WHERE a+b=1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a)
@@ -110,7 +110,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM t_idx WHERE v=1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a)
@@ -123,7 +123,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a, v FROM t_idx WHERE v=1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (a, v)
@@ -147,7 +147,7 @@ query T
 EXPLAIN (VERBOSE) SELECT v, x FROM (VALUES (1), (10), (5)) AS u(x) INNER JOIN t_idx ON u.x = t_idx.v
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (v, x)
@@ -167,7 +167,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a, b, v, x FROM (VALUES (1), (10), (5)) AS u(x) INNER JOIN t_idx ON u.x = t_idx.v
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b, v, x)
@@ -196,7 +196,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • insert fast path
   columns: ()
@@ -212,7 +212,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 1) RETURNING v
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (v)
@@ -231,7 +231,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (1, 1, 1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • insert fast path
   columns: ()
@@ -251,7 +251,7 @@ query T
 EXPLAIN (VERBOSE) DELETE FROM t WHERE a > 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • delete range
   columns: ()
@@ -263,7 +263,7 @@ query T
 EXPLAIN (VERBOSE) DELETE FROM t WHERE a > 1 RETURNING v
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (v)
@@ -289,7 +289,7 @@ query T
 EXPLAIN (VERBOSE) DELETE FROM t WHERE v = 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • delete
 │ columns: ()
@@ -315,7 +315,7 @@ query T
 EXPLAIN (VERBOSE) DELETE FROM t_idx WHERE a > 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • delete
 │ columns: ()
@@ -339,7 +339,7 @@ query T
 EXPLAIN (VERBOSE) DELETE FROM t_idx WHERE a > 1 RETURNING v
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (v)
@@ -366,7 +366,7 @@ query T
 EXPLAIN (VERBOSE) DELETE FROM t_idx WHERE v = 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • delete
 │ columns: ()
@@ -396,7 +396,7 @@ query T
 EXPLAIN (VERBOSE) DELETE FROM t_idx WHERE a + b = 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • delete
 │ columns: ()
@@ -428,7 +428,7 @@ query T
 EXPLAIN (VERBOSE) UPDATE t SET a=a+1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • update
 │ columns: ()
@@ -463,7 +463,7 @@ query T
 EXPLAIN (VERBOSE) UPDATE t SET b=b+1 WHERE v=45 RETURNING a,b,v
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • update
 │ columns: (a, b, v)
@@ -502,7 +502,7 @@ query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET a=a+1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • update
 │ columns: ()
@@ -541,7 +541,7 @@ query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET b=b+1 RETURNING v, w
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (v, w)
@@ -581,7 +581,7 @@ query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET b=b+1 WHERE v=45 RETURNING v, w
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (v, w)
@@ -628,7 +628,7 @@ query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET c=6 WHERE a=2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • update
 │ columns: ()
@@ -656,7 +656,7 @@ query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET a=a+1 RETURNING a,v,w
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • update
 │ columns: (a, v, w)
@@ -695,7 +695,7 @@ query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET b=b+1 RETURNING w
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (w)
@@ -737,7 +737,7 @@ query T
 EXPLAIN (VERBOSE) UPSERT INTO t VALUES (1, 10), (2, 20), (3, 30), (4, 40)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -770,7 +770,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t VALUES (5, 51), (6, 60) ON CONFLICT DO NOTHING RETURNING v
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (v)
@@ -807,7 +807,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t VALUES (4, 100), (6, 100), (7, 100) ON CONFLICT (a) DO UPDATE SET b = t.v
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -867,7 +867,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t VALUES (2, 100), (5, 100), (8, 100) ON CONFLICT (a) DO UPDATE SET b = excluded.v
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -927,7 +927,7 @@ query T
 EXPLAIN (VERBOSE) UPSERT INTO t_idx VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300), (4, 40, 400)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -988,7 +988,7 @@ query T
 EXPLAIN (VERBOSE) UPSERT INTO t_idx VALUES (3, 31, 301), (5, 50, 500) RETURNING a, v, w
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: (a, v, w)
@@ -1057,7 +1057,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (4, 41, 301), (6, 60, 600), (7, 70, 100) ON CONFLICT DO NOTHING RETURNING w
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (w)
@@ -1114,7 +1114,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (4, 10, 100), (6, 10, 100), (7, 70, 700) ON CONFLICT (a) DO UPDATE SET c = 0
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -1183,7 +1183,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (4, 10, 100), (6, 10, 100), (7, 70, 700) ON CONFLICT (a) DO UPDATE SET c = t_idx.w RETURNING a, b, c, v, w
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: (a, b, c, v, w)
@@ -1259,7 +1259,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (8, 80, 800), (10, 100, 700) ON CONFLICT (w) DO UPDATE SET a = excluded.a, c = excluded.v
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -1347,7 +1347,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM checks WHERE b BETWEEN 10 and 15
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -1378,7 +1378,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k FROM inv WHERE jv @> '{"a": "b"}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (k)
@@ -1391,7 +1391,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k FROM inv WHERE i IN (10, 20, 30) AND jv @> '{"a": "b"}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (k)
@@ -1404,7 +1404,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k FROM inv WHERE iv IN (10, 20, 30) AND j @> '{"a": "b"}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (k)
@@ -1420,7 +1420,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k FROM inv WHERE iv IN (10, 20, 30) AND jv @> '{"a": "b"}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (k)
@@ -1444,7 +1444,7 @@ query T
 EXPLAIN SELECT * FROM t65343 WHERE s COLLATE en_US = 'foo' COLLATE en_US
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │
@@ -1460,7 +1460,7 @@ query T
 EXPLAIN SELECT * FROM t65343 WHERE s COLLATE "en_US" = 'foo' COLLATE en_US
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │
@@ -1476,7 +1476,7 @@ query T
 EXPLAIN SELECT * FROM t65343 WHERE s COLLATE "en_us" = 'foo' COLLATE en_US
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │
@@ -1492,7 +1492,7 @@ query T
 EXPLAIN SELECT * FROM t65343 WHERE s COLLATE "en-US" = 'foo' COLLATE en_US
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │

@@ -94,7 +94,10 @@ func TestScanBatchSize(t *testing.T) {
 	// Until we propagate the estimated row count hint in the KV projection
 	// pushdown case, this test is expected to fail if the direct scans are
 	// used (#94850).
-	_, err := conn.ExecContext(ctx, `SET direct_columnar_scans_enabled = false`)
+	_, err := conn.ExecContext(ctx, `SET direct_columnar_scans_enabled = false;`)
+	assert.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `SET vectorize = on;`)
 	assert.NoError(t, err)
 
 	// Disable automatic table stats collection so that we can control whether
@@ -171,6 +174,9 @@ func TestCFetcherLimitsOutputBatch(t *testing.T) {
 	// Lower the distsql_workmem session variable to 128KiB to speed up the
 	// test.
 	_, err = conn.ExecContext(ctx, `SET distsql_workmem='128KiB';`)
+	assert.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `SET vectorize = on;`)
 	assert.NoError(t, err)
 
 	for _, tc := range []struct {

@@ -23,7 +23,7 @@ EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +k
@@ -74,7 +74,7 @@ EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +k
@@ -113,7 +113,7 @@ EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +k
@@ -141,7 +141,7 @@ EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +k
@@ -184,7 +184,7 @@ EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +k
@@ -215,7 +215,7 @@ EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +k
@@ -263,7 +263,7 @@ EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE geom && 'POINT(3.0 3.0)'::geometry
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: geom && '010100000000000000000008400000000000000840'
@@ -287,7 +287,7 @@ EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE 'POINT(3.0 3.0)'::geometry::box2d && geom
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: 'BOX(3 3,3 3)' && geom
@@ -311,7 +311,7 @@ EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry ~ geom
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: '010200000002000000000000000000F03F000000000000F03F00000000000014400000000000001440' ~ geom
@@ -335,7 +335,7 @@ EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE geom ~ 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry::box2d
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: geom ~ 'BOX(1 1,5 5)'

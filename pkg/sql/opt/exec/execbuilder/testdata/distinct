@@ -12,7 +12,7 @@ query T
 EXPLAIN SELECT DISTINCT y, z FROM xyz
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ distinct on: y, z
@@ -27,7 +27,7 @@ query T
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY z
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ distinct on: y, z
@@ -42,7 +42,7 @@ query T
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +y
@@ -60,7 +60,7 @@ query T
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y, z
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +y,+z
@@ -78,7 +78,7 @@ query T
 EXPLAIN SELECT DISTINCT y + z AS r FROM xyz ORDER BY y + z
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ distinct on: r
@@ -98,7 +98,7 @@ query T
 EXPLAIN SELECT DISTINCT y AS w, z FROM xyz ORDER BY z
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ distinct on: y, z
@@ -113,7 +113,7 @@ query T
 EXPLAIN SELECT DISTINCT y AS w FROM xyz ORDER BY y
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +y
@@ -130,7 +130,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT x FROM xyz
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (x)
@@ -142,7 +142,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT x, y, z FROM xyz
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (x, y, z)
@@ -155,7 +155,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT z FROM (SELECT y, z FROM xyz WHERE y > 1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ columns: (z)
@@ -194,7 +194,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT 1 AS z, d, b FROM abcd ORDER BY d, b
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (z, d, b)
@@ -214,7 +214,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT a, b FROM abcd
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ columns: (a, b)
@@ -233,7 +233,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT a, b, c FROM abcd
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b, c)
@@ -245,7 +245,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT a, b, c, d FROM abcd
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b, c, d)
@@ -260,7 +260,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ columns: (v)
@@ -280,7 +280,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv@idx
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ columns: (v)
@@ -300,7 +300,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv@idx WHERE v > 0
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (v)
@@ -316,7 +316,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv2@idx
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (v)

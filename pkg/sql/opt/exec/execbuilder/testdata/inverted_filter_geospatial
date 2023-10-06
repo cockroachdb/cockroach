@@ -15,7 +15,7 @@ query T
 EXPLAIN (DISTSQL) SELECT k FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: st_intersects('010100000000000000000008400000000000000840', geom)
@@ -38,7 +38,7 @@ query T
 EXPLAIN (DISTSQL) SELECT k, k_plus_one FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: st_intersects('010100000000000000000008400000000000000840', geom)
@@ -61,7 +61,7 @@ query T
 EXPLAIN SELECT k, k_plus_one FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: st_intersects('010100000000000000000008400000000000000840', geom)
@@ -82,7 +82,7 @@ query T
 EXPLAIN SELECT k, k_plus_one FROM geo_table2 WHERE ST_DFullyWithin('POINT(3.0 3.0)'::geometry, geom, 1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: st_dfullywithin('010100000000000000000008400000000000000840', geom, 1.0)
@@ -107,7 +107,7 @@ query T
 EXPLAIN SELECT k FROM geo_table2 WHERE geom && 'POINT(3.0 3.0)'::geometry
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: geom && '010100000000000000000008400000000000000840'
@@ -128,7 +128,7 @@ query T
 EXPLAIN SELECT k FROM geo_table2 WHERE 'POINT(3.0 3.0)'::geometry::box2d && geom
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: 'BOX(3 3,3 3)' && geom
@@ -149,7 +149,7 @@ query T
 EXPLAIN SELECT k FROM geo_table2 WHERE 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry ~ geom
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: '010200000002000000000000000000F03F000000000000F03F00000000000014400000000000001440' ~ geom
@@ -170,7 +170,7 @@ query T
 EXPLAIN SELECT k FROM geo_table2 WHERE geom ~ 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry::box2d
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: geom ~ 'BOX(1 1,5 5)'

@@ -12,7 +12,7 @@ query T
 EXPLAIN SELECT * FROM onecolumn JOIN twocolumn USING(x)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • hash join
 │ equality: (x) = (x)
@@ -31,7 +31,7 @@ query T
 EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • hash join
 │ equality: (x) = (y)
@@ -50,7 +50,7 @@ query T
 EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • cross join
 │
@@ -71,7 +71,7 @@ query T
 EXPLAIN SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • hash join
 │ equality: (x) = (y)
@@ -90,7 +90,7 @@ query T
 EXPLAIN SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • hash join
 │ equality: (x) = (y)
@@ -114,7 +114,7 @@ EXPLAIN SELECT * FROM
 LIMIT 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • limit
 │ count: 1
@@ -153,7 +153,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a.x, b.y FROM twocolumn AS a, twocolumn AS b
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • cross join (inner)
 │ columns: (x, y)
@@ -175,7 +175,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x))
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (y)
@@ -201,7 +201,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = b.x)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (y)
@@ -227,7 +227,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b.y)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (x)
@@ -253,7 +253,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT x, 2 two FROM onecolumn) NATURAL FULL JOIN (SELECT x, y+1 plus1 FROM twocolumn)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (x, two, plus1)
@@ -294,7 +294,7 @@ EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u, 
                   INNER JOIN (VALUES (1, 1), (2, 2)) AS b (k, w) USING (k) ORDER BY u
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (k, u, w)
@@ -395,7 +395,7 @@ EXPLAIN (VERBOSE) SELECT
            pos.n
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (pktable_cat, pktable_schem, pktable_name, pkcolumn_name, fktable_cat, fktable_schem, fktable_name, fkcolumn_name, key_seq, update_rule, delete_rule, fk_name, pk_name, deferrability)
@@ -541,7 +541,7 @@ query T
 EXPLAIN SELECT * FROM cards LEFT OUTER JOIN customers ON customers.id = cards.cust
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │
@@ -563,7 +563,7 @@ query T
 EXPLAIN SELECT * FROM pairs, square WHERE pairs.b = square.n
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • hash join
 │ equality: (b) = (n)
@@ -584,7 +584,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, n, sq)
@@ -618,7 +618,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a, b, n, sq FROM (SELECT a, b, a * b / 2 AS div, n, sq FROM pairs, square) WHERE div = sq
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, n, sq)
@@ -657,7 +657,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, n, sq)
@@ -689,7 +689,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq WHERE pairs.b%2 <> square.sq%2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, n, sq)
@@ -731,7 +731,7 @@ SELECT *
  WHERE b > 1 AND (n IS NULL OR n > 1) AND (n IS NULL OR a  < sq)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b, n, sq)
@@ -773,7 +773,7 @@ SELECT *
  WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b, n, sq)
@@ -811,7 +811,7 @@ SELECT *
  WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • hash join (inner)
 │ columns: (a, b, n, sq)
@@ -847,7 +847,7 @@ query T
 EXPLAIN (VERBOSE) SELECT x FROM t1 NATURAL JOIN (SELECT * FROM t2)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (x)
@@ -886,7 +886,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM pkBA AS l JOIN pkBC AS r ON l.a = r.a AND l.b = r.b AND l.c = r.c
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • hash join (inner)
 │ columns: (a, b, c, d, a, b, c, d)
@@ -911,7 +911,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM pkBA NATURAL JOIN pkBAD
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, c, d)
@@ -942,7 +942,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM pkBAC AS l JOIN pkBAC AS r USING(a, b)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, c, d, c, d)
@@ -971,7 +971,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM pkBAC AS l JOIN pkBAD AS r ON l.c = r.d AND l.a = r.a AND l.b = r.b
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join (inner)
 │ columns: (a, b, c, d, a, b, c, d)
@@ -1006,7 +1006,7 @@ query T
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 INNER JOIN str2 USING(s)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (s, s, s)
@@ -1032,7 +1032,7 @@ query T
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 LEFT OUTER JOIN str2 USING(s)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (s, s, s)
@@ -1058,7 +1058,7 @@ query T
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 RIGHT OUTER JOIN str2 USING(s)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (s, s, s)
@@ -1087,7 +1087,7 @@ query T
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 FULL OUTER JOIN str2 USING(s)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (s, s, s)
@@ -1118,7 +1118,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM str1 RIGHT OUTER JOIN str2 USING(a, s)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (a, s)
@@ -1158,7 +1158,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv USING(x, y) WHERE x > 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (x, y, u, v)
@@ -1187,7 +1187,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM xyu LEFT OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (x, y, u, v)
@@ -1216,7 +1216,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (x, y, u, v)
@@ -1245,7 +1245,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM xyu FULL OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (x, y, u, v)
@@ -1284,7 +1284,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y WHERE xyu.x = 1 AND xyu.y < 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join (inner)
 │ columns: (x, y, u, x, y, v)
@@ -1310,7 +1310,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join (inner)
 │ columns: (x, y, u, x, y, v)
@@ -1336,7 +1336,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM xyu LEFT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join (left outer)
 │ columns: (x, y, u, x, y, v)
@@ -1362,7 +1362,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join (left outer)
 │ columns: (x, y, u, x, y, v)
@@ -1391,7 +1391,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (x, y, u, v)
@@ -1420,7 +1420,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (x, y, u, v)
@@ -1449,7 +1449,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu FULL OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (x, y, u, v)
@@ -1487,7 +1487,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join (left outer)
 │ columns: (x, y, u, x, y, v)
@@ -1513,7 +1513,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join (left outer)
 │ columns: (x, y, u, x, y, v)
@@ -1540,7 +1540,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM xyu JOIN xyv USING(x, y) WHERE (x, y, u) > (1, 2, 3)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (x, y, u, v)
@@ -1580,7 +1580,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 3;
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b1, b2)
@@ -1609,7 +1609,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM l LEFT OUTER JOIN r ON l.a = r.a WHERE l.a = 3;
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join (left outer)
 │ columns: (a, b1, a, b2)
@@ -1635,7 +1635,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 3;
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b1, b2)
@@ -1664,7 +1664,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r ON l.a = r.a WHERE r.a = 3;
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join (left outer)
 │ columns: (a, b1, a, b2)
@@ -1710,7 +1710,7 @@ query T
 EXPLAIN SELECT * FROM abcdef join (select * from abg) USING (a,b) WHERE ((a,b)>(1,2) OR ((a,b)=(1,2) AND c < 6) OR ((a,b,c)=(1,2,6) AND d > 8))
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join
 │ equality: (a, b) = (a, b)
@@ -1748,7 +1748,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM foo NATURAL JOIN bar
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, c, d)
@@ -1776,7 +1776,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (b)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (b, a, c, d, a, c, d)
@@ -1803,7 +1803,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (a, b)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, c, d, c, d)
@@ -1831,7 +1831,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (a, b, c)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b, c, d, d)
@@ -1859,7 +1859,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar ON foo.b = bar.b
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • cross join (inner)
 │ columns: (a, b, c, d, a, b, c, d)
@@ -1883,7 +1883,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar ON foo.a = bar.a AND foo.b = bar.b
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • hash join (inner)
 │ columns: (a, b, c, d, a, b, c, d)
@@ -1907,7 +1907,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM foo, bar WHERE foo.b = bar.b
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • cross join (inner)
 │ columns: (a, b, c, d, a, b, c, d)
@@ -1931,7 +1931,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM foo, bar WHERE foo.a = bar.a AND foo.b = bar.b
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • hash join (inner)
 │ columns: (a, b, c, d, a, b, c, d)
@@ -1956,7 +1956,7 @@ query T
 EXPLAIN SELECT * FROM foo JOIN bar USING (a,b) WHERE foo.c = bar.c AND foo.d = bar.d
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • hash join
 │ equality: (a, c) = (a, c)
@@ -1989,7 +1989,7 @@ query T
 EXPLAIN SELECT a,b,c FROM zigzag@{NO_ZIGZAG_JOIN} WHERE b = 5 AND c = 6.0
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: c = 6.0
@@ -2009,7 +2009,7 @@ query T
 EXPLAIN SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: c = 6.0
@@ -2031,7 +2031,7 @@ query T
 EXPLAIN SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • zigzag join
   pred: (b = 5) AND (c = 6.0)
@@ -2048,7 +2048,7 @@ query T
 EXPLAIN SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join
 │ table: zigzag@zigzag_pkey
@@ -2069,7 +2069,7 @@ query T
 EXPLAIN SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0 AND d > 4
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join
 │ table: zigzag@zigzag_pkey
@@ -2104,7 +2104,7 @@ query T
 EXPLAIN SELECT * FROM zigzag2 WHERE a = 1 AND b = 2 AND c IS NULL
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: c IS NULL
@@ -2126,7 +2126,7 @@ query T
 EXPLAIN SELECT * FROM onecolumn INNER MERGE JOIN twocolumn USING(x)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join
 │ equality: (x) = (x)
@@ -2152,7 +2152,7 @@ query T
 EXPLAIN SELECT * FROM onecolumn NATURAL INNER MERGE JOIN twocolumn
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join
 │ equality: (x) = (x)
@@ -2178,7 +2178,7 @@ query T
 EXPLAIN SELECT * FROM onecolumn CROSS MERGE JOIN twocolumn WHERE onecolumn.x = twocolumn.x
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join
 │ equality: (x) = (x)
@@ -2213,7 +2213,7 @@ query T
 EXPLAIN SELECT * FROM cards LEFT OUTER HASH JOIN customers ON customers.id = cards.cust
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │

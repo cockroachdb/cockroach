@@ -9,7 +9,7 @@ query T
 EXPLAIN SELECT x FROM t WHERE x = 'null'::JSONB
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -20,7 +20,7 @@ query T
 EXPLAIN SELECT x FROM t WHERE x = '"a"'::JSONB
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -31,7 +31,7 @@ query T
 EXPLAIN SELECT x FROM t WHERE x = '1'::JSONB
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -42,7 +42,7 @@ query T
 EXPLAIN SELECT x FROM t WHERE x = 'false'::JSONB
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -53,7 +53,7 @@ query T
 EXPLAIN SELECT x FROM t WHERE x = 'true'::JSONB
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -64,7 +64,7 @@ query T
 EXPLAIN SELECT x from t WHERE x = '[1, 2, 3]'::JSONB
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -76,7 +76,7 @@ query T
 EXPLAIN SELECT x from t WHERE x = '{"a": [1, 2, 3], "b": [1, 2]}'::JSONB
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -88,7 +88,7 @@ query T
 EXPLAIN SELECT x FROM t WHERE x < '1'::JSONB
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -99,7 +99,7 @@ query T
 EXPLAIN SELECT x FROM t WHERE x < '"ABCD"'::JSONB
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -110,7 +110,7 @@ query T
 EXPLAIN SELECT x FROM t WHERE x < '[1, 2, 3]'::JSONB
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -121,7 +121,7 @@ query T
 EXPLAIN SELECT x FROM t WHERE x <= '[]'::JSONB
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -132,7 +132,7 @@ query T
 EXPLAIN SELECT x FROM t WHERE x > '{"a": "b"}'::JSONB
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -143,7 +143,7 @@ query T
 EXPLAIN SELECT x FROM t WHERE x > '{"a": "b"}'::JSONB
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -154,7 +154,7 @@ query T
 EXPLAIN SELECT x FROM t WHERE x > '{"a": "b"}'::JSONB AND x < '[1, 2, 3]'::JSONB
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • norows
 
@@ -162,7 +162,7 @@ query T
 EXPLAIN SELECT x FROM t WHERE x <= '{"a": "b"}'::JSONB AND x >= '[1, 2, 3]'::JSONB
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -173,7 +173,7 @@ query T
 EXPLAIN SELECT x FROM t WHERE x <= '"a"'::JSONB OR x >= 'null'::JSONB
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: (x <= '"a"') OR (x >= 'null')
@@ -189,7 +189,7 @@ query T
 EXPLAIN SELECT x FROM t WHERE x IN ('1', '"a"', '[1, 2, 3]', '{"a": "b"}')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -200,7 +200,7 @@ query T
 EXPLAIN SELECT x FROM t WHERE x IN ('null', '{}', '[]', '""')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -217,7 +217,7 @@ query T
 EXPLAIN SELECT x, y, z FROM s WHERE x = 2 AND y < '[1, 2, 3]'::JSONB AND z = 100
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: z = 100
@@ -231,7 +231,7 @@ query T
 EXPLAIN SELECT x, y, z FROM s WHERE y >= '"a"'::JSONB
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: y >= '"a"'
@@ -293,7 +293,7 @@ query T
 EXPLAIN SELECT j from d where j->'a' = '"b"'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ table: d@d_pkey
@@ -308,7 +308,7 @@ query T
 EXPLAIN SELECT j from d where j->'a' = '"b"' OR j->'a' = '"bye"'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ table: d@d_pkey
@@ -323,7 +323,7 @@ query T
 EXPLAIN SELECT j from d where j > '{"a":"b"}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: j > '{"a": "b"}'
@@ -337,7 +337,7 @@ query T
 EXPLAIN SELECT j from d where j->'a' = '1'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ table: d@d_pkey
@@ -351,7 +351,7 @@ query T
 EXPLAIN SELECT j from d where j->'a' = 'null'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ table: d@d_pkey
@@ -376,7 +376,7 @@ query T
 EXPLAIN SELECT j from d where j->'a' = '"forward"' AND j->'json' = '"inverted"'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ table: d@d_pkey
@@ -390,7 +390,7 @@ query T
 EXPLAIN SELECT j from d where j->'a' = '[1, 2, 3]' AND j->'json' = '{}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: (j->'json') = '{}'

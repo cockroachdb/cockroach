@@ -77,7 +77,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id AS num_ref_alias]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (p, d, c)
@@ -89,7 +89,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id(4) AS num_ref_alias]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (c)
@@ -101,7 +101,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id(1,4) AS num_ref_alias]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (p, c)
@@ -113,7 +113,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id(1,3,4) AS num_ref_alias]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (p, d, c)
@@ -125,7 +125,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id(4,3,1) AS num_ref_alias]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (c, d, p)
@@ -137,7 +137,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id(4,3,1) AS num_ref_alias(col1,col2,col3)]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (col1, col2, col3)
@@ -149,7 +149,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id(4,3,1) AS num_ref_alias]@bc
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (c, d, p)
@@ -161,7 +161,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id(4) AS num_ref_alias]@bc
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (c)
@@ -173,7 +173,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id(3) AS num_ref_alias]@bc
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (d)
@@ -185,7 +185,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id(1) AS num_ref_alias]@bc
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (p)
@@ -207,7 +207,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id(1) AS num_ref_alias]@[$num_ref_pkey]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (p)
@@ -219,7 +219,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id(1) AS num_ref_alias]@[$num_ref_bc]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (p)
@@ -231,7 +231,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id(3) AS num_ref_alias]@[$num_ref_pkey]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (d)
@@ -243,7 +243,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id(3) AS num_ref_alias]@[$num_ref_bc]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (d)
@@ -255,7 +255,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id(4) AS num_ref_alias]@[$num_ref_pkey]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (c)
@@ -267,7 +267,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id(4) AS num_ref_alias]@[$num_ref_bc]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (c)
@@ -279,7 +279,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id2(1,3) AS num_ref_alias]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a)
@@ -291,7 +291,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id2(3) AS num_ref_alias]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: ()
@@ -303,7 +303,7 @@ query T
 EXPLAIN (VERBOSE) SELECT rowid FROM [$t_id2(3) AS num_ref_alias]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (rowid)
@@ -342,7 +342,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (x, y)
@@ -354,7 +354,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE y > 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (x, y)
@@ -371,7 +371,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1 AND x < 3
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (x, y)
@@ -383,7 +383,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1 AND y < 30
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (x, y)
@@ -400,7 +400,7 @@ query T
 EXPLAIN (VERBOSE) SELECT x + 1 AS r FROM a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -416,7 +416,7 @@ query T
 EXPLAIN (VERBOSE) SELECT x AS a, x + 1 AS b, y, y + 1 AS c, x + y AS d FROM a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (a, b, y, c, d)
@@ -436,7 +436,7 @@ query T
 EXPLAIN (VERBOSE) SELECT u * v + v AS r FROM (SELECT x + 3, y + 10 FROM a) AS foo(u, v)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (r)
@@ -457,7 +457,7 @@ query T
 EXPLAIN (VERBOSE) SELECT x, x, y, x FROM a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (x, x, y, x)
@@ -472,7 +472,7 @@ query T
 EXPLAIN (VERBOSE) SELECT x + 1 AS a, x + y AS b FROM a WHERE x + y > 20
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (a, b)
@@ -503,7 +503,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM b
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (x, y)
@@ -515,7 +515,7 @@ query T
 EXPLAIN (VERBOSE) SELECT x, y, rowid FROM b WHERE rowid > 0
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (x, y, rowid)
@@ -646,7 +646,7 @@ query T
 EXPLAIN SELECT a FROM t14601 ORDER BY a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -672,7 +672,7 @@ query T
 EXPLAIN SELECT a, b FROM t14601a ORDER BY a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -689,7 +689,7 @@ query T
 EXPLAIN SELECT a, b FROM t14601a ORDER BY a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -709,7 +709,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM c WHERE str >= 'moo'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (n, str)
@@ -730,7 +730,7 @@ query T
 EXPLAIN (VERBOSE) SELECT 1 AS a, * FROM nocols
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (a)
@@ -761,7 +761,7 @@ query T
 EXPLAIN (TYPES) SELECT a, b FROM coll ORDER BY a, b
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a collatedstring{da}, b int)
@@ -774,7 +774,7 @@ query T
 EXPLAIN (TYPES) SELECT b, a FROM coll ORDER BY b, a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (b int, a collatedstring{da})
@@ -801,7 +801,7 @@ query T
 EXPLAIN (TYPES) SELECT b FROM computed ORDER BY b
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (b string)
@@ -856,7 +856,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /dt/dt_b_key/'2015-08-25' -> /?
+fetched: /dt/dt_b_key/'2015-08-25' -> /'2015-08-25 04:45:45.53453'
 output row: ['2015-08-25']
 
 statement ok
@@ -867,8 +867,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /dt/dt_c_key/'02:45:02.234' -> /?
-fetched: /dt/dt_c_key/'34:00:02' -> /?
+fetched: /dt/dt_c_key/'02:45:02.234' -> /'2015-08-25 04:45:45.53453'
+fetched: /dt/dt_c_key/'34:00:02' -> /'2015-08-30 03:34:45.34567'
 output row: ['02:45:02.234']
 output row: ['34:00:02']
 
@@ -885,7 +885,7 @@ query T
 EXPLAIN (TYPES) SELECT * FROM dec WHERE d IS NaN and v IS NaN
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (d decimal, v decimal)
@@ -902,7 +902,7 @@ query T
 EXPLAIN (TYPES) SELECT * FROM decfam WHERE d IS NaN and v IS NaN
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (d decimal, v decimal)
@@ -915,7 +915,7 @@ query T
 EXPLAIN (TYPES) SELECT * FROM dec WHERE d = 'Infinity' and v = 'Infinity'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (d decimal, v decimal)
@@ -927,7 +927,7 @@ query T
 EXPLAIN (TYPES) SELECT * FROM dec WHERE d = '-Infinity' and v = '-Infinity'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (d decimal, v decimal)
@@ -984,7 +984,7 @@ query T
 EXPLAIN (TYPES) SELECT * FROM dec2 WHERE d IS NaN
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (d decimal)
@@ -996,7 +996,7 @@ query T
 EXPLAIN (TYPES) SELECT * FROM dec2 WHERE d = 'NaN'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (d decimal)
@@ -1008,7 +1008,7 @@ query T
 EXPLAIN (TYPES) SELECT * FROM dec2 WHERE isnan(d)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (d decimal)
@@ -1037,7 +1037,7 @@ query T
 EXPLAIN (TYPES) SELECT * FROM flt WHERE f IS NaN
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (f float)
@@ -1049,7 +1049,7 @@ query T
 EXPLAIN (TYPES) SELECT * FROM flt WHERE f = 'NaN'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (f float)
@@ -1061,7 +1061,7 @@ query T
 EXPLAIN (TYPES) SELECT * FROM flt WHERE isnan(f)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (f float)
@@ -1098,7 +1098,7 @@ query T
 EXPLAIN (TYPES) SELECT i FROM num WHERE i = -1:::INT
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (i int)
@@ -1110,7 +1110,7 @@ query T
 EXPLAIN (TYPES) SELECT f FROM num WHERE f = -1:::FLOAT
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (f float)
@@ -1122,7 +1122,7 @@ query T
 EXPLAIN (TYPES) SELECT d FROM num WHERE d = -1:::DECIMAL
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (d decimal)
@@ -1134,7 +1134,7 @@ query T
 EXPLAIN (TYPES) SELECT n FROM num WHERE n = -'1h':::INTERVAL
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (n interval)
@@ -1342,7 +1342,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a + x FROM (SELECT a, b + c AS x FROM abcd) ORDER BY a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: ("?column?")
@@ -1364,7 +1364,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a + x FROM (SELECT a, b, a + b + c AS x FROM abcd) ORDER BY b
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: ("?column?")
@@ -1391,7 +1391,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a + x FROM (SELECT a, b, a + b + c AS x FROM abcd) ORDER BY a DESC, b DESC
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: ("?column?")
@@ -1415,7 +1415,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a > b ORDER BY a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b, c, d)
@@ -1434,7 +1434,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a > b ORDER BY a DESC, b DESC
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b, c, d)
@@ -1453,7 +1453,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a, b FROM abcd LIMIT 10) WHERE a > b ORDER BY a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b)
@@ -1473,7 +1473,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a, a+b+c AS x FROM (SELECT * FROM abcd LIMIT 10)) WHERE x > 100 ORDER BY a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (a, x)
@@ -1503,7 +1503,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyz LIMIT 10) WHERE y = 1 ORDER BY x, y, z
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (x, y, z)
@@ -1533,7 +1533,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE a = 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, item, price)
@@ -1545,7 +1545,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE a = 10 OR a = 20
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, item, price)
@@ -1558,7 +1558,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE a IN (10, 20)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, item, price)
@@ -1572,7 +1572,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE a in (10, 11)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, item, price)
@@ -1585,7 +1585,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE a > 10 AND a < 20
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, item, price)
@@ -1600,7 +1600,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE a > 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, item, price)
@@ -1615,7 +1615,7 @@ query T
 EXPLAIN (VERBOSE) SELECT price FROM a WHERE item IN ('sock', 'ball')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (price)
@@ -1639,7 +1639,7 @@ query T
 EXPLAIN (VERBOSE) SELECT item FROM a WHERE price > 5 AND price < 10 OR price > 20 AND price < 40
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (item)
@@ -1660,7 +1660,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM b WHERE (a = 10 AND b = 10) OR (a = 20 AND b = 20)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b, c, d)
@@ -1675,7 +1675,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM b WHERE a = 10 OR a = 20
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b, c, d)
@@ -1688,7 +1688,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE a = 10 OR a = 20 LIMIT 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, item, price)
@@ -1705,7 +1705,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b FROM b WHERE b = 10 OR b = 20
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (b)
@@ -1722,7 +1722,7 @@ query T
 EXPLAIN (VERBOSE) SELECT c FROM b WHERE c = 10 OR c = 20
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (c)
@@ -1735,7 +1735,7 @@ query T
 EXPLAIN (VERBOSE) SELECT c FROM b WHERE c = 10 OR c < 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (c)
@@ -1752,7 +1752,7 @@ query T
 EXPLAIN (VERBOSE) SELECT d FROM b WHERE d = 10 OR d < 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (d)
@@ -1769,7 +1769,7 @@ query T
 EXPLAIN (VERBOSE) SELECT d FROM b WHERE c = 10 AND d = 10 OR c IS NULL AND d > 0 AND d < 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (d)
@@ -1791,7 +1791,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b FROM b WHERE b = 10 OR b = 20
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (b)
@@ -1811,7 +1811,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE a > 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, item, price)
@@ -1825,7 +1825,7 @@ query T
 EXPLAIN (VERBOSE) SELECT item FROM a WHERE price > 5 AND price < 10 OR price > 20 AND price < 40
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (item)
@@ -1848,7 +1848,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM b WHERE a = 10 OR a = 20
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b, c, d)
@@ -1862,7 +1862,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE a = 10 OR a = 20 LIMIT 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, item, price)
@@ -1876,7 +1876,7 @@ query T
 EXPLAIN (VERBOSE) SELECT c FROM b WHERE c = 10 OR c < 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (c)
@@ -1889,7 +1889,7 @@ query T
 EXPLAIN (VERBOSE) SELECT d FROM b WHERE d = 10 OR d < 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (d)
@@ -1902,7 +1902,7 @@ query T
 EXPLAIN (VERBOSE) SELECT d FROM b WHERE c = 10 AND d = 10 OR c IS NULL AND d > 0 AND d < 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (d)
@@ -1945,8 +1945,6 @@ WHERE message LIKE 'querying next range at /Table/$t_id3/1%' OR
       message = '=== SPAN START: kv.DistSender: sending partial batch ==='
 ----
 querying next range at /Table/127/1/0/0
-querying next range at /Table/127/1/10/0
-querying next range at /Table/127/1/0/0
 === SPAN START: kv.DistSender: sending partial batch ===
 querying next range at /Table/127/1/10/0
 
@@ -1959,7 +1957,7 @@ query T
 EXPLAIN SELECT e.z, s.z, n FROM e, s, generate_series(0, s.z, 1000) as n WHERE e.y = s.y ORDER BY s.z LIMIT 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • top-k
 │ order: +z
@@ -2018,7 +2016,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM nulls WHERE x IS NULL
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (x, y)
@@ -2049,7 +2047,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM tbl_with_no_primary_constraint@primary ORDER BY id
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (id, b)
@@ -2065,7 +2063,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b FROM tbl_with_primary_named_index@primary ORDER BY b
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (b)

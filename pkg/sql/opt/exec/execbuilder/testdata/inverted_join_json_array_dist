@@ -75,7 +75,7 @@ EXPLAIN (DISTSQL)
 SELECT * FROM json_tab@foo_inv AS j1, json_tab AS j2 WHERE j1.b @> j2.b ORDER BY j1.a, j2.a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +a,+a
@@ -104,7 +104,7 @@ SELECT info FROM [EXPLAIN (DISTSQL)
 SELECT * FROM json_tab@json_tab_pkey AS j1, json_tab AS j2 WHERE j1.b @> j2.b ORDER BY j1.a, j2.a
 ] WHERE info NOT LIKE 'distribution:%'
 ----
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +a,+a
@@ -132,7 +132,7 @@ ON j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
 ORDER BY j1.a, j2.a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +a,+a
@@ -161,7 +161,7 @@ WHERE j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
 ORDER BY j1.a, j2.a
 ] WHERE info NOT LIKE 'distribution:%'
 ----
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +a,+a
@@ -192,7 +192,7 @@ ON j1.b @> j2.b AND j1.b @> '{"a": {}}' AND j2.a < 20
 ORDER BY j1.a, j2.a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +a,+a
@@ -224,7 +224,7 @@ SELECT * FROM json_tab AS j2 WHERE EXISTS (
 ORDER BY j2.a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • lookup join (semi)
 │ table: json_tab@json_tab_pkey
@@ -252,7 +252,7 @@ SELECT * FROM json_tab AS j2 WHERE NOT EXISTS (
 ORDER BY j2.a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • lookup join (anti)
 │ table: json_tab@json_tab_pkey
@@ -299,7 +299,7 @@ EXPLAIN (DISTSQL)
 SELECT * FROM array_tab@foo_inv AS a1, array_tab AS a2 WHERE a1.b @> a2.b ORDER BY a1.a, a2.a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +a,+a
@@ -326,7 +326,7 @@ SELECT info FROM [EXPLAIN (DISTSQL)
 SELECT * FROM array_tab@array_tab_pkey AS a1, array_tab AS a2 WHERE a1.b @> a2.b ORDER BY a1.a, a2.a
 ] WHERE info NOT LIKE 'distribution:%'
 ----
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +a,+a
@@ -355,7 +355,7 @@ ON a1.b @> a2.b AND a1.b @> '{1}' AND a2.a < 5
 ORDER BY a1.a, a2.a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +a,+a
@@ -384,7 +384,7 @@ WHERE a1.b @> a2.b AND a1.b @> '{1}' AND a2.a < 5
 ORDER BY a1.a, a2.a
 ] WHERE info NOT LIKE 'distribution:%'
 ----
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +a,+a
@@ -416,7 +416,7 @@ ON a1.b @> a2.b AND a1.b @> '{1}' AND a2.a < 5
 ORDER BY a1.a, a2.a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +a,+a
@@ -448,7 +448,7 @@ SELECT a2.* FROM array_tab@array_tab_pkey AS a2 WHERE EXISTS (
 ORDER BY a2.a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • lookup join (semi)
 │ table: array_tab@array_tab_pkey
@@ -476,7 +476,7 @@ SELECT a2.* FROM array_tab@array_tab_pkey AS a2 WHERE NOT EXISTS (
 ORDER BY a2.a
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • lookup join (anti)
 │ table: array_tab@array_tab_pkey

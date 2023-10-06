@@ -12,7 +12,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM guardrails
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (i)
@@ -25,7 +25,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM guardrails LIMIT 50
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (i)
@@ -38,7 +38,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM guardrails WHERE i = 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (i)
@@ -50,7 +50,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM guardrails WHERE i IN (1, 2)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (i)
@@ -64,7 +64,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM guardrails WHERE i > 0 AND i <= 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (i)
@@ -82,7 +82,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM guardrails
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (i)
@@ -95,7 +95,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM guardrails LIMIT 50
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (i)
@@ -108,7 +108,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM guardrails WHERE i = 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (i)
@@ -120,7 +120,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM guardrails WHERE i > 0 AND i <= 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (i)

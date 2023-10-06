@@ -1,5 +1,8 @@
 # LogicTest: 5node
 
+statement ok
+SET vectorize = on
+
 # Regression test for #39317.
 
 statement ok

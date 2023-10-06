@@ -140,7 +140,7 @@ query T
 EXPLAIN SELECT * FROM e WHERE b @> ARRAY[8]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ table: e@e_pkey
@@ -154,7 +154,7 @@ query T
 EXPLAIN SELECT * FROM e WHERE b = ARRAY[8]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: b = ARRAY[8]
@@ -171,7 +171,7 @@ query T
 EXPLAIN SELECT * FROM e WHERE b @> ARRAY[8]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ table: e@e_pkey
@@ -185,7 +185,7 @@ query T
 EXPLAIN SELECT * FROM e WHERE b = ARRAY[8]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -231,7 +231,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": "b"}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -249,7 +249,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": {"b": [1]}}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -267,7 +267,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": [[2]]}}';
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -285,7 +285,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b":true}}';
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -303,7 +303,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b @>'[1]'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -321,7 +321,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b @>'[{"a": {"b": [1]}}]'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -341,7 +341,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '[]';
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -371,7 +371,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{}';
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -398,7 +398,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b->'a' = '"b"'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -416,7 +416,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d@foo_inv where b->'a'->'c' = '"b"'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -434,7 +434,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b->(NULL::STRING) = '"b"'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • norows
   columns: (a, b)
@@ -443,7 +443,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b->'a' @> '"b"'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -470,7 +470,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d@foo_inv where b->'a'->'c' @> '"b"'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -499,7 +499,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d@foo_inv where b->'a' <@ '"b"'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b)
@@ -531,7 +531,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d@foo_inv where b->'a'->'c' <@ '"b"'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b)
@@ -563,7 +563,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b->'a' @> '[1, 2]'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b)
@@ -590,7 +590,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b->'a' <@ '[1, 2]'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b)
@@ -622,7 +622,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b->'a' @> '{"d": 2}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -640,7 +640,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b->'a' <@ '{"d": 2}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b)
@@ -672,7 +672,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where '"b"' <@ b->'a'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b)
@@ -689,7 +689,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where '[1, 2]' @> b->'a'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b)
@@ -721,7 +721,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where '"b"' = b->'a'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -740,7 +740,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b IS NULL
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b)
@@ -757,7 +757,7 @@ query T
 EXPLAIN SELECT * from d where b @> '{"a": []}' ORDER BY a;
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ table: d@d_pkey
@@ -778,7 +778,7 @@ query T
 EXPLAIN SELECT * from d where b @> '{"a": {}}' ORDER BY a;
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ table: d@d_pkey
@@ -801,7 +801,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b ? 'foo'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -830,7 +830,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d@foo_inv where b ? 'foo' OR b @> '{"a": "b"}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -857,7 +857,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b ? 'foo' AND b->'b' @> '{"a": "b"}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -884,7 +884,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b ?| ARRAY['foo', 'bar']
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -911,7 +911,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b ?& ARRAY['foo', 'bar']
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -940,7 +940,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b)
@@ -966,7 +966,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b)
@@ -993,7 +993,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b)
@@ -1022,7 +1022,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b)
@@ -1048,7 +1048,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b)
@@ -1075,7 +1075,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b)
@@ -1104,7 +1104,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {}, "b": 2}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -1131,7 +1131,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {}, "b": {}}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -1160,7 +1160,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d WHERE b->0 = '[]' ORDER BY a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b)
@@ -1200,7 +1200,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM d WHERE b->0 = '"a"'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b)
@@ -1223,7 +1223,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b FROM d WHERE b->1 = '"d"'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (b)
@@ -1246,7 +1246,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b FROM d@foo_inv WHERE b->1 = '[1, 2]'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (b)
@@ -1276,7 +1276,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b FROM d WHERE b->0 = '{"a": {"b": "c"}}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (b)
@@ -1299,7 +1299,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b FROM d WHERE b->'a'->0 = '1'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (b)
@@ -1322,7 +1322,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b from d WHERE b->'a'->2 = 'null' ORDER BY a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (b)
@@ -1356,7 +1356,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b FROM d WHERE b->0->'a'->0 = '0' ORDER BY A
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (b)
@@ -1390,7 +1390,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b FROM d WHERE b->0->0 = '0' ORDER BY A
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (b)
@@ -1424,7 +1424,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b FROM d WHERE b->0->1 = '[1,2]' ORDER BY a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (b)
@@ -1461,7 +1461,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b FROM d WHERE (b->0 = '[1, 2]') AND (b->1 = '[1]')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (b)
@@ -1493,7 +1493,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b FROM d WHERE b->0 @> '{"b": "c"}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (b)
@@ -1518,7 +1518,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b FROM d WHERE b->0 <@ '{"b": "c"}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (b)
@@ -1550,7 +1550,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b FROM d WHERE b->0 <@ '1'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (b)
@@ -1582,7 +1582,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b FROM d WHERE b->0 @> '1'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (b)
@@ -1614,7 +1614,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b FROM d WHERE b->0 @> '[1, 2]'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (b)
@@ -1644,7 +1644,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b FROM d WHERE b->0 <@ '[1, 2]'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (b)
@@ -1676,7 +1676,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b FROM d WHERE (b->0 @> '[1, 2]') AND (b->1 <@ '[1]')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (b)
@@ -1712,7 +1712,7 @@ query T
 EXPLAIN (VERBOSE) SELECT b FROM d WHERE b->'a' IN (b->0, '"a"')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (b)
@@ -1729,7 +1729,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b->'a' IN ('"a"','"b"')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -1750,7 +1750,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b->'a' IN ('0','1')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -1771,7 +1771,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b->'a' IN ('{"a": "b"}', '[0, 1, 2]')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -1806,7 +1806,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b->'a' IN ('["a", "b"]', '[0, 1]')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -1843,7 +1843,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b->0 IN ('"a"','"b"')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -1878,7 +1878,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b->0 IN ('0','1')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -1913,7 +1913,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b->0 IN ('{"a": "b"}', '[0, 1, 2]')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -1948,7 +1948,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b->0 IN ('["a", "b"]', '[0, 1]')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -1986,7 +1986,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b->0->'a' IN ('["a", "b"]', '[0, 1]')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -2021,7 +2021,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b->'a'->0 IN ('["a", "b"]', '[0, 1]')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -2059,7 +2059,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b = '[[0, 1, 2]]'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -2089,7 +2089,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b = '{"a": "a"}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -2115,7 +2115,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b = '[1]'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -2141,7 +2141,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b = '[1,2]'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -2171,7 +2171,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b = 'null'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -2197,7 +2197,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b = '{}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -2232,7 +2232,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b = '[]'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -2267,7 +2267,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b = '{"b": 2, "a": 1}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -2297,7 +2297,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b = '{"a": {"b": "c"}, "d": "e"}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -2327,7 +2327,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b = '1'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -2353,7 +2353,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b = '"a"'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -2380,7 +2380,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b = '[[0, 1, 2], [0, 1, 2], "s"]'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -2414,7 +2414,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b IN ('"a"', '"b"', '"c"')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -2449,7 +2449,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b IN ('1', '2')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -2485,7 +2485,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b IN ('[1, 2, 3]', '[1]', '[]')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -2520,7 +2520,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b IN ('[1, 2, 3]', '[1]')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -2555,7 +2555,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b IN ('{"a": []}', '{"a": {}}')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -2591,7 +2591,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM d WHERE b IN ('[[0, 1, 2], [0, 1, 2], "s"]')
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a)
@@ -2686,7 +2686,7 @@ query T
 EXPLAIN SELECT a FROM d WHERE b @> '[1, 2]' ORDER BY a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ estimated row count: 1,247
@@ -2713,7 +2713,7 @@ query T
 EXPLAIN SELECT a FROM d WHERE b @> '[1]' AND b @> '[2]' ORDER BY a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ estimated row count: 1,247
@@ -2740,7 +2740,7 @@ query T
 EXPLAIN SELECT a FROM d WHERE b @> '[[1, 2]]' ORDER BY a
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ estimated row count: 1,247
@@ -2769,7 +2769,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -2787,7 +2787,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[]::INT[]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b)
@@ -2805,7 +2805,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[NULL]::INT[]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b)
@@ -2822,7 +2822,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from e where b @> NULL
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • norows
   columns: (a, b)
@@ -2831,7 +2831,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from e where b IS NULL
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b)
@@ -2844,7 +2844,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1,2]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b)
@@ -2870,7 +2870,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1] AND b @> ARRAY[2]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (inner)
 │ columns: (a, b)
@@ -2897,7 +2897,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM e WHERE b <@ ARRAY[]::INT[]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b)
@@ -2920,7 +2920,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM e WHERE b <@ ARRAY[0,1,2]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b)
@@ -2952,7 +2952,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM e WHERE b <@ ARRAY[NULL]::INT[]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b)
@@ -2975,7 +2975,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM e WHERE b <@ ARRAY[0,1,NULL]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b)
@@ -3007,7 +3007,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM d WHERE b <@ '[]'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b)
@@ -3032,7 +3032,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM d WHERE b <@ '[1, 2]'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b)
@@ -3049,7 +3049,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM d WHERE b <@ '{}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b)
@@ -3072,7 +3072,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM d WHERE b <@ '{"a": "b"}'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b)
@@ -3104,7 +3104,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM d WHERE b <@ '[{"a": "b"}, {"c": {"d": ["e"]}}, "f"]'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b)
@@ -3140,7 +3140,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM e WHERE b && ARRAY[]::INT[]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b)
@@ -3157,7 +3157,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM e@bIdx WHERE b && ARRAY[0,1,2]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -3186,7 +3186,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM e WHERE b && ARRAY[NULL]::INT[]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b)
@@ -3203,7 +3203,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM e@bIdx WHERE b && ARRAY[0,1,NULL]
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • index join
 │ columns: (a, b)
@@ -3251,7 +3251,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k FROM geo_table WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (k)
@@ -3330,7 +3330,7 @@ EXPLAIN (VERBOSE) SELECT * FROM geo_table2 JOIN geo_table@geom_index
 ON ST_Intersects(geo_table2.geom, geo_table.geom)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (k, geom, k, geom)
@@ -3363,7 +3363,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k FROM geo_table WHERE _ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (k)

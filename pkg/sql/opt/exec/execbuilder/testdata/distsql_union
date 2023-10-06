@@ -36,7 +36,7 @@ query T
 EXPLAIN (DISTSQL) SELECT x FROM xyz UNION ALL SELECT x FROM xyz ORDER BY x
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • union all
 │
@@ -62,7 +62,7 @@ query T
 EXPLAIN (DISTSQL) SELECT x FROM xyz UNION SELECT x FROM xyz ORDER BY x
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +x
@@ -86,7 +86,7 @@ query T
 EXPLAIN (DISTSQL) SELECT x FROM xyz WHERE x < 3 UNION SELECT x FROM xyz WHERE x >= 3 ORDER BY x
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +x
@@ -116,7 +116,7 @@ query T
 EXPLAIN (DISTSQL) SELECT x FROM xyz WHERE x <= 4 UNION SELECT x FROM xyz WHERE x > 1 ORDER BY x
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +x
@@ -146,7 +146,7 @@ query T
 EXPLAIN (DISTSQL) SELECT x, y FROM xyz UNION ALL SELECT y, x from xyz
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • union all
 │
@@ -167,7 +167,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) UNION ALL (SELECT x FROM xyz ORDER BY z) ORDER BY x
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • union all
 │
@@ -193,7 +193,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) UNION (SELECT x FROM xyz ORDER BY z) ORDER BY x
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +x
@@ -217,7 +217,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) UNION ALL (SELECT x FROM xyz ORDER BY y, z) ORDER BY x
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • union all
 │
@@ -244,7 +244,7 @@ query T
 EXPLAIN (DISTSQL) VALUES (1), (2) UNION VALUES (2), (3)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • union
 │ estimated row count: 4
@@ -264,7 +264,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz) INTERSECT ALL (SELECT y FROM xyz) ORDER BY y
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +y
@@ -287,7 +287,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz) INTERSECT (SELECT y FROM xyz) ORDER BY y
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +y
@@ -311,7 +311,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz ORDER BY y) INTERSECT ALL (SELECT y FROM xyz ORDER BY y)
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • intersect all
 │
@@ -331,7 +331,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz ORDER BY y) INTERSECT (SELECT y FROM xyz ORDER BY y)
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • intersect
 │
@@ -352,7 +352,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz WHERE x < 2) INTERSECT ALL (SELECT x FROM xyz WHERE x >= 2) ORDER BY x
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +x
@@ -381,7 +381,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz WHERE x < 2) INTERSECT (SELECT x FROM xyz WHERE x >= 2) ORDER BY x
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +x
@@ -411,7 +411,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz WHERE x < 3) INTERSECT ALL (SELECT y FROM xyz WHERE x >= 1) ORDER BY y
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +y
@@ -440,7 +440,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz WHERE x < 3) INTERSECT (SELECT y FROM xyz WHERE x >= 1) ORDER BY y
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +y
@@ -470,7 +470,7 @@ query T
 EXPLAIN (DISTSQL) SELECT x, y FROM xyz INTERSECT ALL SELECT y, x from xyz
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • intersect all
 │
@@ -490,7 +490,7 @@ query T
 EXPLAIN (DISTSQL) SELECT x, y FROM xyz INTERSECT SELECT y, x from xyz
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • intersect
 │
@@ -511,7 +511,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) INTERSECT ALL (SELECT x FROM xyz ORDER BY z) ORDER BY x
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +x
@@ -534,7 +534,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) INTERSECT (SELECT x FROM xyz ORDER BY z) ORDER BY x
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +x
@@ -558,7 +558,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) INTERSECT ALL (SELECT x FROM xyz ORDER BY y, z) ORDER BY x
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +x
@@ -581,7 +581,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) INTERSECT (SELECT x FROM xyz ORDER BY y, z) ORDER BY x
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +x
@@ -605,7 +605,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz ORDER BY z) INTERSECT ALL (SELECT y FROM xyz ORDER BY z)
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • intersect all
 │
@@ -625,7 +625,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz ORDER BY z) INTERSECT ALL (SELECT y FROM xyz ORDER BY z)
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • intersect all
 │
@@ -646,7 +646,7 @@ query T
 EXPLAIN (DISTSQL) SELECT x FROM ((SELECT x, y FROM xyz) INTERSECT ALL (SELECT x, y FROM xyz))
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • intersect all
 │
@@ -666,7 +666,7 @@ query T
 EXPLAIN (DISTSQL) SELECT x FROM ((SELECT x, y FROM xyz) INTERSECT (SELECT x, y FROM xyz))
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • intersect
 │
@@ -689,7 +689,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz) EXCEPT ALL (SELECT x AS y FROM xyz) ORDER BY y
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +y
@@ -712,7 +712,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz) EXCEPT (SELECT x AS y FROM xyz) ORDER BY y
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +y
@@ -736,7 +736,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz ORDER BY y) EXCEPT ALL (SELECT y FROM xyz ORDER BY y)
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • except all
 │
@@ -756,7 +756,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz ORDER BY y) EXCEPT (SELECT y FROM xyz ORDER BY y)
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • except
 │
@@ -777,7 +777,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz WHERE x < 2) EXCEPT ALL (SELECT x FROM xyz WHERE x >= 2) ORDER BY x
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +x
@@ -806,7 +806,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz WHERE x < 2) EXCEPT (SELECT x FROM xyz WHERE x >= 2) ORDER BY x
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +x
@@ -836,7 +836,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz WHERE x >= 1) EXCEPT ALL (SELECT y FROM xyz WHERE x < 3) ORDER BY y
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +y
@@ -865,7 +865,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz WHERE x >= 1) EXCEPT (SELECT y FROM xyz WHERE x < 3) ORDER BY y
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +y
@@ -895,7 +895,7 @@ query T
 EXPLAIN (DISTSQL) SELECT x, y FROM xyz EXCEPT ALL SELECT y, x from xyz
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • except all
 │
@@ -915,7 +915,7 @@ query T
 EXPLAIN (DISTSQL) SELECT x, y FROM xyz EXCEPT SELECT y, x from xyz
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • except
 │
@@ -936,7 +936,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) EXCEPT ALL (SELECT y AS x FROM xyz ORDER BY z) ORDER BY x
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +x
@@ -959,7 +959,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) EXCEPT (SELECT y AS x FROM xyz ORDER BY z) ORDER BY x
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +x
@@ -983,7 +983,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) EXCEPT ALL (SELECT x FROM xyz ORDER BY y, z) ORDER BY x
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +x
@@ -1006,7 +1006,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) EXCEPT (SELECT x FROM xyz ORDER BY y, z) ORDER BY x
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +x
@@ -1030,7 +1030,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz ORDER BY z) EXCEPT ALL (SELECT y FROM xyz ORDER BY z)
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • except all
 │
@@ -1050,7 +1050,7 @@ query T
 EXPLAIN (DISTSQL) (SELECT y FROM xyz ORDER BY z) EXCEPT (SELECT y FROM xyz ORDER BY z)
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • except
 │
@@ -1071,7 +1071,7 @@ query T
 EXPLAIN (DISTSQL) SELECT x FROM ((SELECT x, y FROM xyz) EXCEPT ALL (SELECT x, y FROM xyz))
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • except all
 │
@@ -1091,7 +1091,7 @@ query T
 EXPLAIN (DISTSQL) SELECT x FROM ((SELECT x, y FROM xyz) EXCEPT (SELECT x, y FROM xyz))
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • except
 │

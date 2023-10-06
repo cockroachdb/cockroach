@@ -32,7 +32,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO cookies VALUES (1, 1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • insert fast path
   columns: ()
@@ -55,7 +55,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO cookies VALUES (1, 1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • insert fast path
   columns: ()
@@ -78,7 +78,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO cookies VALUES (1, 1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • insert fast path
   columns: ()
@@ -97,7 +97,7 @@ query T
 EXPLAIN (VERBOSE) INSERT INTO cookies VALUES (1, 1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • insert fast path
   columns: ()
@@ -140,7 +140,7 @@ query T
 EXPLAIN (VERBOSE) UPDATE cookies SET j = 2 WHERE c = 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: ()
@@ -215,7 +215,7 @@ query T
 EXPLAIN (VERBOSE) UPDATE jars SET j = j + 4
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: ()
@@ -306,7 +306,7 @@ query T
 EXPLAIN (VERBOSE) DELETE FROM jars WHERE j = 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: ()

@@ -11,7 +11,7 @@ query T
 EXPLAIN (VERBOSE) UPSERT INTO kv TABLE kv ORDER BY v DESC LIMIT 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -40,7 +40,7 @@ query T
 EXPLAIN (VERBOSE) UPSERT INTO kv (k, v) TABLE kv ORDER BY v DESC LIMIT 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -69,7 +69,7 @@ query T
 EXPLAIN (VERBOSE) UPSERT INTO kv (k, v) TABLE kv ORDER BY v DESC LIMIT 2 RETURNING *
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: (k, v)
@@ -98,7 +98,7 @@ query T
 EXPLAIN (VERBOSE) UPSERT INTO kv (k) SELECT k FROM kv ORDER BY v DESC LIMIT 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -144,7 +144,7 @@ query T
 EXPLAIN (VERBOSE) UPSERT INTO indexed VALUES (1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -191,7 +191,7 @@ query T
 EXPLAIN (VERBOSE) UPSERT INTO indexed VALUES (1), (2), (3), (4)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -246,7 +246,7 @@ ON CONFLICT (a)
 DO UPDATE SET b = 2, c = 3
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -314,7 +314,7 @@ query T
 EXPLAIN (VERBOSE) UPSERT INTO indexed VALUES (1) RETURNING *
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: (a, b, c, d)
@@ -394,7 +394,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM [UPSERT INTO xyz SELECT a, b, c FROM abc RETURNING z] ORDER BY z
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: (z)
@@ -490,7 +490,7 @@ query T
 EXPLAIN (VERBOSE) UPSERT INTO table38627 SELECT * FROM table38627 WHERE a=1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -531,7 +531,7 @@ EXPLAIN (VERBOSE)
 INSERT INTO tdup VALUES (2, 2, 2), (3, 2, 2) ON CONFLICT (z, y) DO UPDATE SET z=1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -591,7 +591,7 @@ INSERT INTO target SELECT x, y, z FROM source WHERE (y IS NULL OR y > 0) AND x <
 ON CONFLICT (b, c) DO UPDATE SET b=5
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -691,7 +691,7 @@ query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
-colbatchscan  Scan /Table/120/1/2/0
+table reader  Scan /Table/120/1/2/0
 count         CPut /Table/120/1/2/0 -> /TUPLE/2:2:Int/3
 count         InitPut /Table/120/2/3/0 -> /BYTES/0x8a
 count         fast path completed
@@ -704,7 +704,7 @@ query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
-colbatchscan  Scan /Table/120/1/1/0
+table reader  Scan /Table/120/1/1/0
 count         CPut /Table/120/1/1/0 -> /TUPLE/2:2:Int/2
 count         InitPut /Table/120/2/2/0 -> /BYTES/0x89
 count         fast path completed
@@ -718,8 +718,8 @@ set tracing=off;
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
-colbatchscan  Scan /Table/120/1/2/0
-colbatchscan  fetched: /kv/kv_pkey/2/v -> /3
+table reader  Scan /Table/120/1/2/0
+table reader  fetched: /kv/kv_pkey/2/v -> /3
 count         Put /Table/120/1/2/0 -> /TUPLE/2:2:Int/2
 count         Del /Table/120/2/3/0
 count         CPut /Table/120/2/2/0 -> /BYTES/0x8a (expecting does not exist)

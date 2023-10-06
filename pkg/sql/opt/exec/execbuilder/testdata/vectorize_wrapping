@@ -1,6 +1,9 @@
 # LogicTest: local
 
 statement ok
+SET vectorize = on
+
+statement ok
 CREATE TABLE t85632 (k INT PRIMARY KEY);
 
 statement ok

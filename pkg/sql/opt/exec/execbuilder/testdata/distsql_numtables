@@ -51,7 +51,7 @@ query T
 EXPLAIN (DISTSQL) SELECT 5, 2+y, * FROM NumToStr WHERE y <= 10 ORDER BY str
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │
@@ -70,7 +70,7 @@ query T
 EXPLAIN (DISTSQL) SELECT 5, 2 + y, * FROM NumToStr WHERE y % 1000 = 0 ORDER BY str
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • render
 │
@@ -92,7 +92,7 @@ query T
 EXPLAIN (DISTSQL) SELECT str FROM NumToStr WHERE y < 10 AND str LIKE '%e%' ORDER BY y
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: str LIKE '%e%'
@@ -109,7 +109,7 @@ query T
 EXPLAIN (DISTSQL) SELECT str FROM NumToStr WHERE y % 1000 = 0 AND str LIKE '%i%' ORDER BY y
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: ((y % 1000) = 0) AND (str LIKE '%i%')
@@ -129,7 +129,7 @@ query T
 EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToStr ON y = xsquared
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • hash join
 │ equality: (xsquared) = (y)
@@ -151,7 +151,7 @@ query T
 EXPLAIN (VERBOSE) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (x, str)
@@ -194,7 +194,7 @@ query T
 EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • merge join
 │ equality: (x) = (y)
@@ -228,7 +228,7 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(y) FROM NumToStr
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • group (scalar)
 │
@@ -244,7 +244,7 @@ query T
 EXPLAIN (DISTSQL) SELECT count(*) FROM NumToStr
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • group (scalar)
 │
@@ -260,7 +260,7 @@ query T
 EXPLAIN (DISTSQL) SELECT count(*) FROM NumToStr WHERE str LIKE '%five%'
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • group (scalar)
 │
@@ -282,7 +282,7 @@ query T
 EXPLAIN (DISTSQL) SELECT y FROM NumToStr LIMIT 5
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -296,7 +296,7 @@ query T
 EXPLAIN (DISTSQL) SELECT y FROM NumToStr ORDER BY y LIMIT 5
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -311,7 +311,7 @@ query T
 EXPLAIN (DISTSQL) SELECT y FROM NumToStr WHERE y < 1000 OR y > 9000 ORDER BY y DESC LIMIT 5
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • revscan
   missing stats
@@ -325,7 +325,7 @@ query T
 EXPLAIN (VERBOSE) SELECT x FROM (SELECT x, 2*x, x+1 FROM NumToSquare)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (x)
@@ -339,7 +339,7 @@ query T
 EXPLAIN (DISTSQL) SELECT x FROM (SELECT x, 2*x, x+1 FROM NumToSquare)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   missing stats
@@ -352,7 +352,7 @@ query T
 EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (y, str, res)
@@ -376,7 +376,7 @@ query T
 EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res LIMIT 10
 ----
 distribution: full
-vectorized: true
+vectorized: false
 ·
 • top-k
 │ columns: (y, str, res)
@@ -402,7 +402,7 @@ query T
 EXPLAIN (DISTSQL) SELECT count(*) FROM (SELECT 1 AS one FROM NumToSquare WHERE x > 10 ORDER BY xsquared LIMIT 10)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • group (scalar)
 │

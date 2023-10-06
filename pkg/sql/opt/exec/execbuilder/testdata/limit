@@ -8,7 +8,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE v > 4 AND v < 8 AND w > 30 ORDER BY v LIMIT 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • limit
 │ columns: (k, v, w)
@@ -41,7 +41,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT w FROM (SELECT w FROM t ORDER BY w LIMIT 100) ORDER BY w LIMIT 25
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • limit
 │ columns: (w)
@@ -71,7 +71,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY k LIMIT 5
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (k, v)
@@ -85,7 +85,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY k OFFSET 5
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • limit
 │ columns: (k, v)
@@ -102,7 +102,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY v LIMIT (1+4) OFFSET 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • limit
 │ columns: (k, v)
@@ -120,7 +120,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY v DESC LIMIT (1+4) OFFSET 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • limit
 │ columns: (k, v)
@@ -138,7 +138,7 @@ query T
 EXPLAIN (VERBOSE) SELECT sum(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (sum)
@@ -173,7 +173,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 4)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (k)
@@ -189,7 +189,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v, w FROM t ORDER BY v LIMIT 4)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (k)
@@ -205,7 +205,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k FROM (SELECT k FROM t LIMIT 5) WHERE k != 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (k)
@@ -223,7 +223,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k, w FROM t WHERE v >= 1 AND v <= 100 LIMIT 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (k, w)
@@ -247,7 +247,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k, w FROM t WHERE v >= 1 AND v <= 100 ORDER BY v LIMIT 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (k, w)
@@ -271,7 +271,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k, w FROM (SELECT * FROM t WHERE v >= 1 AND v <= 100 ORDER BY k LIMIT 10) ORDER BY v
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (k, w)
@@ -308,7 +308,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM t_47283 ORDER BY k LIMIT 4) WHERE a > 5 LIMIT 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • limit
 │ columns: (k, a)
@@ -382,7 +382,7 @@ EXPLAIN
     5;
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • limit
 │ count: 5
@@ -460,7 +460,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY v, w LIMIT 5
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • top-k
 │ columns: (k, v, w)
@@ -499,7 +499,7 @@ query T retry
 EXPLAIN SELECT * FROM a INNER LOOKUP JOIN b ON k = j ORDER BY i LIMIT 5;
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • limit
 │ count: 5
@@ -519,7 +519,7 @@ query T
 EXPLAIN SELECT oid, typname FROM pg_type ORDER BY oid LIMIT 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • limit
 │ count: 10
@@ -532,7 +532,7 @@ query T
 EXPLAIN SELECT oid, typname FROM pg_type LIMIT 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • virtual table
   table: pg_type@primary
@@ -544,7 +544,7 @@ query T
 EXPLAIN SELECT oid, typname FROM pg_type WHERE OID BETWEEN 1 AND 1000 ORDER BY oid LIMIT 10
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • limit
 │ count: 10
@@ -559,7 +559,7 @@ query T
 EXPLAIN SELECT * FROM generate_series(1, 10) ORDER BY row_number() OVER () LIMIT 1;
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • top-k
 │ estimated row count: 1

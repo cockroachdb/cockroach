@@ -23,7 +23,7 @@ EXPLAIN (DISTSQL)
 SELECT lk, rk1 FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom1, rtable.geom)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join
 │ table: rtable@rtable_pkey
@@ -46,7 +46,7 @@ EXPLAIN SELECT lk, rk1, rk2, rtable.geom
 FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom1, rtable.geom)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join
 │ table: rtable@rtable_pkey
@@ -67,7 +67,7 @@ EXPLAIN SELECT lk, rk1, rk2, rtable.geom
 FROM ltable JOIN rtable@geom_index ON ST_DWithin(ltable.geom1, rtable.geom, 5)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join
 │ table: rtable@rtable_pkey
@@ -89,7 +89,7 @@ SELECT lk, rk1 FROM ltable JOIN rtable@geom_index
 ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (lk, rk1)
@@ -139,7 +139,7 @@ SELECT lk, rk1 FROM ltable JOIN rtable@geom_index
 ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.geom1, 2) ORDER BY (lk, rk1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (lk, rk1)
@@ -190,7 +190,7 @@ ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_Covers(ltable.geom2, rtable.g
 AND (ST_DFullyWithin(rtable.geom, ltable.geom1, 100) OR ST_Intersects('POINT(1.0 1.0)', rtable.geom))
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (lk, rk1)
@@ -228,7 +228,7 @@ EXPLAIN (VERBOSE)
 SELECT lk FROM ltable WHERE EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (lk)
@@ -265,7 +265,7 @@ EXPLAIN (VERBOSE)
 SELECT lk, rk1 FROM ltable LEFT JOIN rtable ON ST_Intersects(ltable.geom1, rtable.geom)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (lk, rk1)
@@ -308,7 +308,7 @@ SELECT count(*), (SELECT count(*) FROM q) FROM (
 ) GROUP BY lk
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: (count, count)
@@ -394,7 +394,7 @@ EXPLAIN (VERBOSE)
 SELECT lk FROM ltable WHERE NOT EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (lk)
@@ -433,7 +433,7 @@ WHERE NOT EXISTS (
 )
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (lk)
@@ -474,7 +474,7 @@ EXPLAIN (VERBOSE)
 SELECT lk, rk1, rk2 FROM ltable JOIN rtable@geom_index ON ltable.geom1 ~ rtable.geom
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (lk, rk1, rk2)
@@ -510,7 +510,7 @@ EXPLAIN (VERBOSE)
 SELECT lk, rk1, rk2 FROM ltable JOIN rtable@geom_index ON rtable.geom ~ ltable.geom1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (lk, rk1, rk2)
@@ -546,7 +546,7 @@ EXPLAIN (VERBOSE)
 SELECT lk, rk1, rk2 FROM ltable JOIN rtable@geom_index ON rtable.geom && ltable.geom1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (lk, rk1, rk2)
@@ -591,7 +591,7 @@ query T
 EXPLAIN SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@g_pkey AS g2 WHERE ST_Contains(g1.geom, g2.geom) ORDER BY g1.k, g2.k
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +k,+k
@@ -615,7 +615,7 @@ query T
 EXPLAIN SELECT g1.k, g2.k FROM g@g_pkey AS g1, g@g_pkey AS g2 WHERE ST_Contains(g1.geom, g2.geom) ORDER BY g1.k, g2.k
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +k,+k
@@ -642,7 +642,7 @@ WHERE ST_Contains(g1.geom, g2.geom)
 ORDER BY g1.k, g2.k
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +k,+k
@@ -670,7 +670,7 @@ WHERE ST_Contains(g1.geom, g2.geom)
 ORDER BY g1.k, g2.k
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +k,+k

@@ -28,7 +28,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, y, z) x, y, z FROM xyz
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ columns: (x, y, z)
@@ -45,7 +45,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (z, x, y) x FROM xyz
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (x)
@@ -65,7 +65,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (b, c, a) a, c, b FROM abc
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, c, b)
@@ -78,7 +78,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (b, c, a) a FROM abc
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a)
@@ -91,7 +91,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (c, a, b) b FROM abc ORDER BY b
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (b)
@@ -112,7 +112,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, y) y, x FROM xyz
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ columns: (y, x)
@@ -129,7 +129,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (y, x) x FROM xyz
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (x)
@@ -149,7 +149,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (y, x, x, y, x) x, y FROM xyz
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ columns: (x, y)
@@ -166,7 +166,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(pk1, x) pk1, x FROM xyz ORDER BY pk1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ columns: (pk1, x)
@@ -186,7 +186,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a, c) a, b FROM abc
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, b)
@@ -206,7 +206,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (c, a) b, c, a FROM abc
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ columns: (b, c, a)
@@ -228,7 +228,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (pk1) pk1, pk2 FROM xyz
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ columns: (pk1, pk2)
@@ -249,7 +249,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a) a, c FROM abc ORDER BY a, c DESC, b
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (a, c)
@@ -284,7 +284,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) x FROM xyz ORDER BY x DESC
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (x)
@@ -307,7 +307,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, z) y, z, x FROM xyz ORDER BY z
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (y, z, x)
@@ -330,7 +330,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) y, z, x FROM xyz ORDER BY x ASC, z DESC, y DESC
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ columns: (y, z, x)
@@ -359,7 +359,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (max(y)) max(x) FROM xyz
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • group (scalar)
 │ columns: (max)
@@ -376,7 +376,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(min(a), max(b), min(c)) max(a) FROM abc
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • group (scalar)
 │ columns: (max)
@@ -399,7 +399,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(y) min(x) FROM xyz GROUP BY y
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (min)
@@ -420,7 +420,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(min(x)) min(x) FROM xyz GROUP BY y HAVING min(x) = 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (min)
@@ -454,7 +454,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(row_number() OVER()) y FROM xyz
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (y)
@@ -483,7 +483,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (1) x, y, z FROM xyz
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ columns: (x, y, z)
@@ -501,7 +501,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (1,2,3) a, b, c FROM abc
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b, c)
@@ -518,7 +518,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(y) x AS y, y AS x FROM xyz
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ columns: (y, x)
@@ -536,7 +536,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(x) x AS y FROM xyz
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ columns: (y)
@@ -557,7 +557,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(((x)), (x, y)) x, y FROM xyz
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ columns: (x, y)
@@ -579,7 +579,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(pk1, pk2, x, y) x, y, z FROM xyz ORDER BY x, y
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ columns: (x, y, z)
@@ -597,7 +597,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, y, z) pk1 FROM xyz ORDER BY x
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (pk1)
@@ -624,7 +624,7 @@ query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) x, y FROM xyz WHERE x = 1 ORDER BY x, y
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • top-k
 │ columns: (x, y)
@@ -648,7 +648,7 @@ query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM (SELECT DISTINCT ON (x) x, y FROM xyz WHERE x = 1 ORDER BY x, y)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • group (scalar)
 │ columns: (count)

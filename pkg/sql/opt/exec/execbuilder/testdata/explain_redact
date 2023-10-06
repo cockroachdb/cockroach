@@ -176,7 +176,7 @@ query T
 EXPLAIN (REDACT) INSERT INTO a VALUES (1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • insert fast path
   into: a(a, rowid)
@@ -187,7 +187,7 @@ query T
 EXPLAIN (VERBOSE, REDACT) INSERT INTO a VALUES (1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • insert fast path
   columns: ()
@@ -294,7 +294,7 @@ query T
 EXPLAIN (REDACT) INSERT INTO bc SELECT a::float + 1 FROM a ON CONFLICT (b) DO UPDATE SET b = bc.b + 100
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ into: bc(b, c)
@@ -334,7 +334,7 @@ query T
 EXPLAIN (VERBOSE, REDACT) INSERT INTO bc SELECT a::float + 1 FROM a ON CONFLICT (b) DO UPDATE SET b = bc.b + 100
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -889,7 +889,7 @@ query T
 EXPLAIN (REDACT) UPSERT INTO d VALUES (7.7)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ into: d(d)
@@ -902,7 +902,7 @@ query T
 EXPLAIN (VERBOSE, REDACT) UPSERT INTO d VALUES (7.7)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • upsert
 │ columns: ()
@@ -1012,7 +1012,7 @@ query T
 EXPLAIN (REDACT) UPDATE ab SET a = a || 'ab' WHERE a > 'a'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • update
 │ table: ab
@@ -1031,7 +1031,7 @@ query T
 EXPLAIN (VERBOSE, REDACT) UPDATE ab SET a = a || 'ab' WHERE a > 'a'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • update
 │ columns: ()
@@ -1195,7 +1195,7 @@ query T
 EXPLAIN (REDACT) UPDATE e SET e = 'eee' WHERE e > 'a'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • update
 │ table: e
@@ -1216,7 +1216,7 @@ query T
 EXPLAIN (VERBOSE, REDACT) UPDATE e SET e = 'eee' WHERE e > 'a'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • update
 │ columns: ()
@@ -1430,7 +1430,7 @@ query T
 EXPLAIN (REDACT) DELETE FROM f WHERE f = 8.5
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • delete
 │ from: f
@@ -1447,7 +1447,7 @@ query T
 EXPLAIN (VERBOSE, REDACT) DELETE FROM f WHERE f = 8.5
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • delete
 │ columns: ()
@@ -1606,7 +1606,7 @@ query T
 EXPLAIN (REDACT) SELECT * FROM bc WHERE b >= 1.0 AND b < 2.0
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │
@@ -1619,7 +1619,7 @@ query T
 EXPLAIN (VERBOSE, REDACT) SELECT * FROM bc WHERE b >= 1.0 AND b < 2.0
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (b, c)
@@ -1737,7 +1737,7 @@ query T
 EXPLAIN (REDACT) SELECT * FROM g WHERE (g || 'abc') LIKE '%ggg%'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: (g || ‹×›) LIKE ‹×›
@@ -1754,7 +1754,7 @@ query T
 EXPLAIN (VERBOSE, REDACT) SELECT * FROM g WHERE (g || 'abc') LIKE '%ggg%'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (g)
@@ -1894,7 +1894,7 @@ query T
 EXPLAIN (REDACT) SELECT a FROM a WHERE a % 8 > 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: (a % ‹×›) > ‹×›
@@ -1908,7 +1908,7 @@ query T
 EXPLAIN (VERBOSE, REDACT) SELECT a FROM a WHERE a % 8 > 2
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a)
@@ -2008,7 +2008,7 @@ query T
 EXPLAIN (REDACT) SELECT 100, if(e != '', 12.0, 13.0), 'abc', coalesce(e, 'eee'), row(e, e || 'a', now()), 'POINT (1 1)'::GEOMETRY, '[true]'::JSON, false, NULL, e FROM e
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │
@@ -2021,7 +2021,7 @@ query T
 EXPLAIN (VERBOSE, REDACT) SELECT 100, if(e != '', 12.0, 13.0), 'abc', coalesce(e, 'eee'), row(e, e || 'a', now()), 'POINT (1 1)'::GEOMETRY, '[true]'::JSON, false, NULL, e FROM e
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: ("?column?", "if", "?column?", "coalesce", "row", "geometry", jsonb, bool, "?column?", e)
@@ -2207,7 +2207,7 @@ query T
 EXPLAIN (REDACT) SELECT * FROM bc JOIN f ON b = f + 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • hash join
 │ equality: (b) = (column9)
@@ -2231,7 +2231,7 @@ query T
 EXPLAIN (VERBOSE, REDACT) SELECT * FROM bc JOIN f ON b = f + 1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (b, c, f)
@@ -2549,7 +2549,7 @@ query T
 EXPLAIN (REDACT) SELECT f, g FROM f, LATERAL (SELECT count(DISTINCT c + f + 1) * 2 AS g FROM bc WHERE b * f < 10)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │
@@ -2567,7 +2567,7 @@ query T
 EXPLAIN (VERBOSE, REDACT) SELECT f, g FROM f, LATERAL (SELECT count(DISTINCT c + f + 1) * 2 AS g FROM bc WHERE b * f < 10)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (f, g)
@@ -2943,7 +2943,7 @@ query T
 EXPLAIN (REDACT) SELECT * FROM a WHERE a > ALL (SELECT c::int + 2 FROM bc WHERE b > a::float * 3)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • apply join (anti)
 │ pred: (a <= "?column?") IS NOT ‹×›
@@ -2957,7 +2957,7 @@ query T
 EXPLAIN (VERBOSE, REDACT) SELECT * FROM a WHERE a > ALL (SELECT c::int + 2 FROM bc WHERE b > a::float * 3)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • apply join (anti)
 │ columns: (a)
@@ -3182,7 +3182,7 @@ query T
 EXPLAIN (REDACT) SELECT * FROM a WHERE a IN (2, 3, 4)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ filter: a IN ‹(‹×›, ‹×›, ‹×›)›
@@ -3196,7 +3196,7 @@ query T
 EXPLAIN (VERBOSE, REDACT) SELECT * FROM a WHERE a IN (2, 3, 4)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a)
@@ -3297,7 +3297,7 @@ query T
 EXPLAIN (REDACT) SELECT * FROM cd ORDER BY regexp_replace(c, '[0-9]', 'd') LIMIT 3
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • top-k
 │ order: +column6
@@ -3314,7 +3314,7 @@ query T
 EXPLAIN (VERBOSE, REDACT) SELECT * FROM cd ORDER BY regexp_replace(c, '[0-9]', 'd') LIMIT 3
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (c, d)
@@ -3492,7 +3492,7 @@ query T
 EXPLAIN (REDACT) SELECT covar_pop(d, d + 1) FROM d
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • group (scalar)
 │
@@ -3507,7 +3507,7 @@ query T
 EXPLAIN (VERBOSE, REDACT) SELECT covar_pop(d, d + 1) FROM d
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • group (scalar)
 │ columns: (covar_pop)
@@ -3674,7 +3674,7 @@ query T
 EXPLAIN (REDACT) SELECT min(c || 'cccc') OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING EXCLUDE CURRENT ROW) FROM cd
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • window
 │
@@ -3689,7 +3689,7 @@ query T
 EXPLAIN (VERBOSE, REDACT) SELECT min(c || 'cccc') OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING EXCLUDE CURRENT ROW) FROM cd
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (min)

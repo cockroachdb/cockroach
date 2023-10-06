@@ -12,7 +12,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) >= (1, 2, 3) ORDER BY u, v, w
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (u, v, w)
@@ -25,7 +25,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) > (2, 1, 1) ORDER BY u, v, w
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (u, v, w)
@@ -38,7 +38,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) <= (2, 3, 1) ORDER BY u, v, w
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (u, v, w)
@@ -57,7 +57,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) < (2, 2, 2) ORDER BY u, v, w
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (u, v, w)
@@ -76,7 +76,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) != (1, 2, 3) ORDER BY u, v, w
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (u, v, w)
@@ -95,7 +95,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) >= (1, NULL, 3) ORDER BY u, v, w
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (u, v, w)
@@ -108,7 +108,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) < (2, NULL, 3) ORDER BY u, v, w
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (u, v, w)
@@ -128,7 +128,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE (a, b, c) > (1, 2, 3) AND (a,b,c) < (8, 9, 10)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b, c)
@@ -157,7 +157,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE (a, b, c) > (1, 2, 3)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (a, b, c)
@@ -182,7 +182,7 @@ query T
 EXPLAIN (VERBOSE, TYPES) SELECT x FROM (SELECT (row(v,v,v) AS a,b,c) AS x FROM kv)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (x tuple{int AS a, int AS b, int AS c})
@@ -198,7 +198,7 @@ query T
 EXPLAIN (VERBOSE, TYPES) SELECT (x).a, (x).b, (x).c FROM (SELECT (row(v,v,v) AS a,b,c) AS x FROM kv)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (a int, b int, c int)
@@ -223,7 +223,7 @@ FROM (
 )
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • values
   columns: (e int, f string, g bool)

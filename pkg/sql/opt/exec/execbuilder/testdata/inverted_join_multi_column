@@ -30,7 +30,7 @@ FROM j1 INNER INVERTED JOIN j2
 ON i IN (10, 20) AND j2.j @> j1.j
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join
 │ table: j2@j2_pkey
@@ -57,7 +57,7 @@ FROM j1 INNER INVERTED JOIN j2@isj_idx
 ON i = 10 AND s IN ('foo', 'bar') AND j2.j @> j1.j
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join
 │ table: j2@j2_pkey
@@ -86,7 +86,7 @@ FROM j1 INNER INVERTED JOIN j2
 ON i IN (10, 20) AND j2.j <@ j1.j
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join
 │ table: j2@j2_pkey
@@ -113,7 +113,7 @@ FROM j1 INNER INVERTED JOIN j2@isj_idx
 ON i = 10 AND s IN ('foo', 'bar') AND j2.j <@ j1.j
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join
 │ table: j2@j2_pkey

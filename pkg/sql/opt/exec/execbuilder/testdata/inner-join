@@ -14,7 +14,7 @@ query T
 EXPLAIN SELECT a, b, c FROM abc WHERE EXISTS (SELECT * FROM def WHERE a=d OR a=e)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ distinct on: a, b
@@ -61,7 +61,7 @@ query T
 EXPLAIN SELECT c FROM abc WHERE EXISTS (SELECT * FROM def WHERE a=d OR a=e)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ distinct on: a, b
@@ -108,7 +108,7 @@ query T
 EXPLAIN SELECT a, b, c FROM abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=d OR a=e)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • intersect all
 │
@@ -143,7 +143,7 @@ query T
 EXPLAIN SELECT c FROM abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=d OR a=e)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • intersect all
 │
@@ -178,7 +178,7 @@ query T
 EXPLAIN SELECT a, b, c FROM abc, def WHERE a=d OR a=e
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ distinct on: a, b, d, e
@@ -216,7 +216,7 @@ query T
 EXPLAIN SELECT c FROM abc, def WHERE a=d OR a=e
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • distinct
 │ distinct on: a, b, d, e

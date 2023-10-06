@@ -33,7 +33,7 @@ query T
 EXPLAIN (VERBOSE) SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (aisle)
@@ -70,7 +70,7 @@ UPDATE supermarket
   WHERE person = 'michael'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: ()
@@ -136,7 +136,7 @@ WITH s AS
 SELECT aisle + 1 FROM s
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: ("?column?")
@@ -201,7 +201,7 @@ SELECT aisle
   FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: (aisle)
@@ -260,7 +260,7 @@ SELECT aisle
   FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (aisle)
@@ -311,7 +311,7 @@ SELECT aisle
   FOR UPDATE
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (aisle)

@@ -450,7 +450,7 @@ WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::T
 ORDER BY p99_latency DESC LIMIT 500))
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • union
 │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
@@ -686,7 +686,7 @@ WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::T
 ORDER BY p99_latency DESC LIMIT 500))
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • union
 │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
@@ -1180,7 +1180,7 @@ WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::T
 ORDER BY p99_latency DESC LIMIT 500))
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • union
 │ columns: (aggregated_ts, fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)
@@ -1410,7 +1410,7 @@ WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::T
 ORDER BY p99_latency DESC LIMIT 500))
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • union
 │ columns: (aggregated_ts, fingerprint_id, app_name, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, metadata, statistics)

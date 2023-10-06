@@ -11,7 +11,7 @@ query T
 EXPLAIN ALTER TABLE abc SPLIT AT VALUES ((SELECT 42))
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • split
 │ index: abc@abc_pkey
@@ -27,7 +27,7 @@ query T
 EXPLAIN ALTER RANGE RELOCATE FROM 11 TO 22 FOR VALUES ((SELECT 1))
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • relocate range
 │ replicas: VOTERS
@@ -41,7 +41,7 @@ query T
 EXPLAIN ALTER RANGE 22 RELOCATE FROM ((SELECT 1)) TO ((SELECT 2))
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • relocate range
 │ replicas: VOTERS
@@ -55,7 +55,7 @@ query T
 EXPLAIN SELECT EXISTS (SELECT a FROM abc)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │
@@ -79,7 +79,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE a = (SELECT max(a) FROM abc WHERE EXISTS(SELECT * FROM abc WHERE c=a+3))
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: (a, b, c)
@@ -145,7 +145,7 @@ query T
 EXPLAIN (VERBOSE) SELECT a FROM abc WHERE a IN (SELECT a FROM abc2 WHERE b < 0)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join (semi)
 │ columns: (a)
@@ -179,7 +179,7 @@ query T
 EXPLAIN SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS moo (moo1, moo2, moo3) ORDER BY moo2) as foo (foo1) ORDER BY foo1
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ estimated row count: 3
@@ -193,7 +193,7 @@ query T
 EXPLAIN VALUES (1), ((SELECT random()::INT))
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │
@@ -227,7 +227,7 @@ WHERE
     AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (col0)
@@ -259,7 +259,7 @@ EXPLAIN (VERBOSE)
 SELECT * FROM abc WHERE a = (SELECT 1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b, c)
@@ -272,7 +272,7 @@ EXPLAIN (VERBOSE)
 SELECT * FROM abc WHERE a >= (SELECT 1)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • scan
   columns: (a, b, c)
@@ -291,7 +291,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE a.x=b.x)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join (semi)
 │ columns: (x, y)
@@ -319,7 +319,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE b.x-1 = a.x)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • hash join (semi)
 │ columns: (x, y)
@@ -347,7 +347,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM b WHERE b.x = a.x)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • merge join (anti)
 │ columns: (x, y)
@@ -375,7 +375,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * FROM b WHERE NOT EXISTS(SELECT * FROM a WHERE x-1 = b.x)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • hash join (anti)
 │ columns: (x, z)
@@ -403,7 +403,7 @@ query T
 EXPLAIN (VERBOSE) SELECT ARRAY(SELECT x FROM b)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • root
 │ columns: ("array")
@@ -429,7 +429,7 @@ query T
 EXPLAIN (verbose) SELECT * FROM abc WHERE EXISTS(SELECT * FROM (VALUES (a), (b)) WHERE column1=a)
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • apply join (semi)
 │ columns: (a, b, c)
@@ -457,7 +457,7 @@ SELECT * FROM corr
 WHERE CASE WHEN k < 5 THEN k*10 = (SELECT i FROM corr tmp WHERE k = corr.k) END
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (k, i)
@@ -477,7 +477,7 @@ SELECT k, i, CASE WHEN k > 1 THEN (SELECT i FROM corr tmp WHERE k = corr.k-1) EL
 FROM corr
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (k, i, prev_i)
@@ -511,7 +511,7 @@ SELECT * FROM corr
 WHERE CASE WHEN k < 5 THEN EXISTS (SELECT i FROM corr tmp WHERE i = corr.k*10) END
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • filter
 │ columns: (k, i)
@@ -533,7 +533,7 @@ SELECT *,
 FROM corr
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • render
 │ columns: (k, i, "case")

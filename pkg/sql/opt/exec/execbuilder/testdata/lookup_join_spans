@@ -116,7 +116,7 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ estimated row count: 33
@@ -148,7 +148,7 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +value
@@ -178,7 +178,7 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ estimated row count: 33
@@ -210,7 +210,7 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +value
@@ -239,7 +239,7 @@ WHERE
   name='cpu'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join
 │ estimated row count: 33
@@ -266,7 +266,7 @@ WHERE
   name='cpu'
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join
 │ table: metric_values_desc@metric_values_desc_pkey
@@ -293,7 +293,7 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ estimated row count: 33
@@ -325,7 +325,7 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +value
@@ -355,7 +355,7 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ estimated row count: 33
@@ -387,7 +387,7 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +value
@@ -417,7 +417,7 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ estimated row count: 11
@@ -449,7 +449,7 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ order: +value
@@ -479,7 +479,7 @@ AND name='cpu'
 ORDER BY value, id
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ estimated row count: 11
@@ -505,7 +505,7 @@ WHERE EXISTS (SELECT * FROM metric_values mv WHERE mv.metric_id = m.id AND time 
 ORDER BY m.id
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join (semi)
 │ estimated row count: 10
@@ -531,7 +531,7 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ estimated row count: 3
@@ -570,7 +570,7 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join
 │ estimated row count: 0
@@ -611,7 +611,7 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join
 │ estimated row count: 0
@@ -652,7 +652,7 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join
 │ estimated row count: 0
@@ -694,7 +694,7 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join
 │ estimated row count: 0
@@ -735,7 +735,7 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join
 │ estimated row count: 0
@@ -777,7 +777,7 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ estimated row count: 3
@@ -818,7 +818,7 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • lookup join
 │ estimated row count: 0
@@ -861,7 +861,7 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ estimated row count: 33
@@ -900,7 +900,7 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ estimated row count: 33
@@ -939,7 +939,7 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ estimated row count: 33
@@ -979,7 +979,7 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ estimated row count: 33
@@ -1018,7 +1018,7 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • sort
 │ estimated row count: 33
@@ -1077,7 +1077,7 @@ WHERE
   ol_o_id BETWEEN 20 AND 100
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (s_i_id, ol_o_id)
@@ -1105,7 +1105,7 @@ WHERE
   ol_o_id IN (19, 20, 21) AND ol_o_id >= 20
 ----
 distribution: local
-vectorized: true
+vectorized: false
 ·
 • project
 │ columns: (s_i_id, ol_o_id)
