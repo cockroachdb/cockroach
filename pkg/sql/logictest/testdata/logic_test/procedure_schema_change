@@ -196,4 +196,77 @@ CREATE PROCEDURE sc.p(IN INT8)
   SELECT 2;
 $$
 
+statement ok
+DROP PROCEDURE p;
+DROP PROCEDURE sc.p(INT);
+DROP PROCEDURE sc.p;
+
+subtest end
+
+subtest alter_function_owner
+
+statement ok
+CREATE USER u
+
+statement ok
+CREATE PROCEDURE p() LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+query T
+SELECT rolname FROM pg_catalog.pg_proc f
+JOIN pg_catalog.pg_roles r ON f.proowner = r.oid
+WHERE proname = 'p'
+----
+root
+
+statement error pgcode 42883 could not find a procedure named "f"
+ALTER PROCEDURE f OWNER TO u
+
+statement error pgcode 42704 role/user "user_not_exists" does not exist
+ALTER PROCEDURE p OWNER TO user_not_exists
+
+statement ok
+ALTER PROCEDURE p OWNER TO u
+
+query T
+SELECT rolname FROM pg_catalog.pg_proc f
+JOIN pg_catalog.pg_roles r ON f.proowner = r.oid
+WHERE proname = 'p'
+----
+u
+
+statement ok
+REASSIGN OWNED BY u TO root
+
+query T
+SELECT rolname FROM pg_catalog.pg_proc f
+JOIN pg_catalog.pg_roles r ON f.proowner = r.oid
+WHERE proname = 'p'
+----
+root
+
+statement ok
+ALTER PROCEDURE p OWNER TO u
+
+query T
+SELECT rolname FROM pg_catalog.pg_proc f
+JOIN pg_catalog.pg_roles r ON f.proowner = r.oid
+WHERE proname = 'p'
+----
+u
+
+statement error pgcode 2BP01 pq: role u cannot be dropped because some objects depend on it
+DROP USER u
+
+statement ok
+DROP PROCEDURE p
+
+statement ok
+DROP USER u
+
+statement ok
+DROP FUNCTION f
+
 subtest end

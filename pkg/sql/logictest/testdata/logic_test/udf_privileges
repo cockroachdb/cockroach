@@ -729,6 +729,15 @@ DROP FUNCTION f_test_alter_owner;
 statement ok
 DROP USER u_test_owner;
 
+statement ok
+CREATE PROCEDURE p() LANGUAGE SQL AS 'SELECT 1'
+
+statement error pgcode 42883 could not find a function named "p"
+ALTER FUNCTION p OWNER TO root
+
+statement ok
+DROP PROCEDURE p
+
 subtest end
 
 subtest check_privileges
