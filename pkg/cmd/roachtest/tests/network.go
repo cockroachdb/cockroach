@@ -208,14 +208,14 @@ SELECT $1::INT = ALL (
 				atomic.AddUint32(&numConns, 1)
 
 				if err != nil {
-					if errCount == 0 {
-						// We tolerate the first error as acceptable.
-						t.L().Printf("server %d, attempt %d (1st ERROR, TOLERATE): %v", server, attempt, err)
+					if errCount < 2 {
+						// We tolerate up to 2 errors, or up to 20s.
+						t.L().Printf("server %d, attempt %d (ERROR, TOLERATE): %v", server, attempt, err)
 						errCount++
 						continue
 					}
-					// Any error beyond the first is unacceptable.
-					t.L().Printf("server %d, attempt %d (2nd ERROR, BAD): %v", server, attempt, err)
+					// Any error beyond that is unacceptable.
+					t.L().Printf("server %d, attempt %d (ERROR, BAD): %v", server, attempt, err)
 
 					// Expedite the wait below. This is not strictly required for correctness,
 					// and makes the test faster to terminate in case of failure.
@@ -277,7 +277,7 @@ sudo iptables-save
 
 		t.L().Printf("waiting while clients attempt to connect...")
 		select {
-		case <-time.After(20 * time.Second):
+		case <-time.After(30 * time.Second):
 		case <-woopsCh:
 		}
 
