@@ -55,6 +55,9 @@ CREATE FUNCTION f_test_alter_name_same_in(INT) RETURNS INT LANGUAGE SQL AS $$ SE
 statement ok
 CREATE FUNCTION f_test_alter_name_diff_in() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 
+statement ok
+CREATE PROCEDURE p(INT) LANGUAGE SQL AS 'SELECT 1'
+
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_name];
 ----
@@ -73,6 +76,12 @@ ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name
 
 statement error pgcode 42723 pq: function f_test_alter_name_same_in\(IN INT8\) already exists in schema "public"
 ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name_same_in
+
+statement error pgcode 42723 pq: procedure p\(IN INT8\) already exists in schema "public"
+ALTER FUNCTION f_test_alter_name RENAME TO p
+
+statement error pgcode 42883 could not find a procedure named "f_test_alter_name"
+ALTER PROCEDURE f_test_alter_name RENAME TO f_test_alter_name_new
 
 statement ok
 ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name_new
@@ -121,6 +130,8 @@ CREATE FUNCTION public.f_test_alter_name_diff_in(IN INT8)
   SELECT 1;
 $$
 
+statement ok
+DROP PROCEDURE p
 
 subtest end
 
@@ -158,9 +169,9 @@ SELECT oid, proname, prosrc
 FROM pg_catalog.pg_proc WHERE proname IN ('f_test_sc')
 ORDER BY oid
 ----
-100112  f_test_sc  SELECT 1;
-100113  f_test_sc  SELECT 2;
-100115  f_test_sc  SELECT 3;
+100113  f_test_sc  SELECT 1;
+100114  f_test_sc  SELECT 2;
+100116  f_test_sc  SELECT 3;
 
 query TT
   WITH fns AS (
@@ -181,9 +192,9 @@ SELECT fn->>'id' AS id, fn->'parentSchemaId'
   FROM fns
   ORDER BY id;
 ----
-112  105
 113  105
-115  114
+114  105
+116  115
 
 statement error pgcode 0A000 pq: cannot move objects into or out of virtual schemas
 ALTER FUNCTION f_test_sc() SET SCHEMA pg_catalog;
@@ -214,9 +225,9 @@ SELECT fn->>'id' AS id, fn->'parentSchemaId'
   FROM fns
   ORDER BY id;
 ----
-112  105
 113  105
-115  114
+114  105
+116  115
 
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_sc] ORDER BY 1
@@ -264,9 +275,9 @@ SELECT fn->>'id' AS id, fn->'parentSchemaId'
   FROM fns
   ORDER BY id;
 ----
-112  105
-113  114
-115  114
+113  105
+114  115
+116  115
 
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_sc];

@@ -160,6 +160,16 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
+	if !n.n.Procedure && fnDesc.IsProcedure() {
+		return pgerror.Newf(
+			pgcode.UndefinedFunction, "could not find a function named %q", &n.n.Function.FuncName,
+		)
+	}
+	if n.n.Procedure && !fnDesc.IsProcedure() {
+		return pgerror.Newf(
+			pgcode.UndefinedFunction, "could not find a procedure named %q", &n.n.Function.FuncName,
+		)
+	}
 	oldFnName, err := params.p.getQualifiedFunctionName(params.ctx, fnDesc)
 	if err != nil {
 		return err
@@ -173,16 +183,23 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 	maybeExistingFuncObj := fnDesc.ToRoutineObj()
 	maybeExistingFuncObj.FuncName.ObjectName = n.n.NewName
 	existing, err := params.p.matchRoutine(params.ctx, maybeExistingFuncObj,
-		false /* required */, tree.UDFRoutine)
+		false /* required */, tree.UDFRoutine|tree.ProcedureRoutine)
 	if err != nil {
 		return err
 	}
 
 	if existing != nil {
-		return pgerror.Newf(
-			pgcode.DuplicateFunction, "function %s already exists in schema %q",
-			tree.AsString(maybeExistingFuncObj), scDesc.GetName(),
-		)
+		if existing.Type == tree.ProcedureRoutine {
+			return pgerror.Newf(
+				pgcode.DuplicateFunction, "procedure %s already exists in schema %q",
+				tree.AsString(maybeExistingFuncObj), scDesc.GetName(),
+			)
+		} else {
+			return pgerror.Newf(
+				pgcode.DuplicateFunction, "function %s already exists in schema %q",
+				tree.AsString(maybeExistingFuncObj), scDesc.GetName(),
+			)
+		}
 	}
 
 	scDesc.RemoveFunction(fnDesc.GetName(), fnDesc.GetID())
@@ -404,7 +421,7 @@ func (n *alterFunctionDepExtensionNode) Close(ctx context.Context)           {}
 func (p *planner) mustGetMutableFunctionForAlter(
 	ctx context.Context, routineObj *tree.RoutineObj,
 ) (*funcdesc.Mutable, error) {
-	ol, err := p.matchRoutine(ctx, routineObj, true /*required*/, tree.UDFRoutine)
+	ol, err := p.matchRoutine(ctx, routineObj, true /*required*/, tree.UDFRoutine|tree.ProcedureRoutine)
 	if err != nil {
 		return nil, err
 	}
