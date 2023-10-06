@@ -57,7 +57,7 @@ message ProtoInfo {
      (gogoproto.customname) = "PhysicalReplicationConsumerJobID",
      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
 
-  // PhysicalReplicationConsumerJobIDs contains any physical
+  // PhysicalReplicationProducerJobIDs contains any physical
   // replication producer jobs that are using this tenant as a source.
   repeated int64 physical_replication_producer_job_ids = 6 [
      (gogoproto.customname) = "PhysicalReplicationProducerJobIDs",
@@ -69,8 +69,9 @@ message ProtoInfo {
     (gogoproto.nullable) = false
   ];
 
-  // If this tenant was previous a physical replication target that
-  // was promoted. This is the timestamp at which it was promoted.
+  // If this tenant was previously a physical replication target that
+  // was promoted, PreviousSourceTenant holds information about the
+  // source cluster of that replication stream.
   optional PreviousSourceTenant previous_source_tenant = 7 [(gogoproto.nullable) = false];
 
   // Next ID: 8
