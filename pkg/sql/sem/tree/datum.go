@@ -5922,6 +5922,10 @@ func NewDName(d string) Datum {
 // NewDIntVectorFromDArray is a helper routine to create a new *DArray,
 // initialized from an existing *DArray, with the special oid for IntVector.
 func NewDIntVectorFromDArray(d *DArray) Datum {
+	// Sanity: Validate the type of the array, since it should be int2.
+	if d.ParamTyp != types.Int2 {
+		panic(errors.AssertionFailedf("int2vector can only be made from int2 not %v", d.ParamTyp))
+	}
 	ret := new(DArray)
 	*ret = *d
 	ret.customOid = oid.T_int2vector
