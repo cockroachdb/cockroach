@@ -23,11 +23,11 @@ import {
   txnResultIsEmpty,
 } from "./sqlApi";
 import moment from "moment-timezone";
-import { fromHexString, withTimeout } from "./util";
+import { withTimeout } from "./util";
 import { Format, Identifier, Join, SQL } from "./safesql";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { IndexUsageStatistic, recommendDropUnusedIndex } from "../insights";
-import { getLogger, indexUnusedDuration } from "../util";
+import { HexStringToByteArray, getLogger, indexUnusedDuration } from "../util";
 
 const { ZoneConfig } = cockroach.config.zonepb;
 const { ZoneConfigurationLevel } = cockroach.server.serverpb;
@@ -309,7 +309,7 @@ const getTableZoneConfig: TableDetailsQuery<TableZoneConfigRow> = {
       // Try to decode the zone config bytes response.
       try {
         // Parse the bytes from the hex string.
-        const zoneConfigBytes = fromHexString(hexString);
+        const zoneConfigBytes = HexStringToByteArray(hexString);
         // Decode the bytes using ZoneConfig protobuf.
         resp.zoneConfigResp.zone_config = ZoneConfig.decode(
           new Uint8Array(zoneConfigBytes),

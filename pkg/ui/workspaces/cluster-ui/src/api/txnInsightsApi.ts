@@ -23,7 +23,6 @@ import {
 } from "./sqlApi";
 import {
   ContentionDetails,
-  getInsightsFromProblemsAndCauses,
   InsightExecEnum,
   InsightNameEnum,
   TransactionStatus,
@@ -33,13 +32,14 @@ import {
 } from "src/insights";
 import moment from "moment-timezone";
 import { FixFingerprintHexValue } from "../util";
-import {
-  formatStmtInsights,
-  stmtInsightsByTxnExecutionQuery,
-  StmtInsightsResponseRow,
-} from "./stmtInsightsApi";
 import { INTERNAL_APP_NAME_PREFIX } from "src/util/constants";
 import { getContentionDetailsApi } from "./contentionApi";
+import {
+  legacyFormatStmtInsights,
+  legacyGetInsightsFromProblemsAndCauses,
+  legacyStmtInsightsByTxnExecutionQuery,
+  StmtInsightsResponseRow,
+} from "../insights/legacyStmtInsightsUtils";
 
 export const TXN_QUERY_PREVIEW_MAX = 800;
 export const QUERY_MAX = 1500;
@@ -379,7 +379,7 @@ SELECT ${txnColumns} FROM
 function formatTxnInsightsRow(row: TxnInsightsResponseRow): TxnInsightEvent {
   const startTime = moment.utc(row.start_time);
   const endTime = moment.utc(row.end_time);
-  const insights = getInsightsFromProblemsAndCauses(
+  const insights = legacyGetInsightsFromProblemsAndCauses(
     row.problems,
     row.causes,
     InsightExecEnum.TRANSACTION,
@@ -524,7 +524,7 @@ export async function getTxnInsightDetailsApi(
   if (!req.excludeStmts) {
     try {
       const request = makeInsightsSqlRequest([
-        stmtInsightsByTxnExecutionQuery(req.txnExecutionID),
+        legacyStmtInsightsByTxnExecutionQuery(req.txnExecutionID),
       ]);
 
       const result = await executeInternalSql<StmtInsightsResponseRow>(request);
@@ -541,7 +541,7 @@ export async function getTxnInsightDetailsApi(
 
       const stmts = result.execution.txn_results[0];
       if (stmts.rows?.length) {
-        txnInsightDetails.statements = formatStmtInsights(stmts);
+        txnInsightDetails.statements = legacyFormatStmtInsights(stmts);
       }
     } catch (e) {
       errors.statementsErr = e;

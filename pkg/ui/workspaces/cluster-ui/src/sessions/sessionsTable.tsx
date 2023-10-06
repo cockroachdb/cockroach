@@ -16,7 +16,12 @@ import {
   DurationToNumber,
   TimestampToMoment,
 } from "src/util/convert";
-import { BytesWithPrecision, Count, DATE_FORMAT } from "src/util/format";
+import {
+  ByteArrayToUuid,
+  BytesWithPrecision,
+  Count,
+  DATE_FORMAT,
+} from "src/util/format";
 import { Link } from "react-router-dom";
 import React from "react";
 
@@ -54,23 +59,11 @@ export interface SessionInfo {
 
 export class SessionsSortedTable extends SortedTable<SessionInfo> {}
 
-export function byteArrayToUuid(array: Uint8Array): string {
-  const hexDigits: string[] = [];
-  array.forEach(t => hexDigits.push(t.toString(16).padStart(2, "0")));
-  return [
-    hexDigits.slice(0, 4).join(""),
-    hexDigits.slice(4, 6).join(""),
-    hexDigits.slice(6, 8).join(""),
-    hexDigits.slice(8, 10).join(""),
-    hexDigits.slice(10, 16).join(""),
-  ].join("-");
-}
-
 const SessionLink = (props: { session: ISession; onClick?: () => void }) => {
   const { session, onClick } = props;
 
   const base = `/session`;
-  const sessionID = byteArrayToUuid(session.id);
+  const sessionID = ByteArrayToUuid(session.id);
 
   return (
     <div className={cx("sessionLink")}>
