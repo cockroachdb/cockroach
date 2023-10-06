@@ -15,6 +15,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb";
 import "gogoproto/gogo.proto";
 import "kv/kvpb/api.proto";
 import "multitenant/tenantcapabilities/tenantcapabilitiespb/capabilities.proto";
+import "util/hlc/timestamp.proto";
 
 // ProtoInfo represents the metadata for a tenant as
 // stored in the "info" column of the "system.tenants" table.
@@ -49,11 +50,17 @@ message ProtoInfo {
     (gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];
 
-  // TenantReplicationJobID is set if this tenant is the target tenant
+  // PhysicalReplicationConsumerJobID is set if this tenant is the target tenant
   // of a running tenant replication job.
-  optional int64 tenant_replication_job_id = 4 [
+  optional int64 physical_replication_consumer_job_id = 4 [
      (gogoproto.nullable) = false,
-     (gogoproto.customname) = "TenantReplicationJobID",
+     (gogoproto.customname) = "PhysicalReplicationConsumerJobID",
+     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
+
+  // PhysicalReplicationProducerJobIDs contains any physical
+  // replication producer jobs that are using this tenant as a source.
+  repeated int64 physical_replication_producer_job_ids = 6 [
+     (gogoproto.customname) = "PhysicalReplicationProducerJobIDs",
      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
 
   // Capabilities encapsulate a set of capabilities that a specific tenant
@@ -62,8 +69,30 @@ message ProtoInfo {
     (gogoproto.nullable) = false
   ];
 
-  // Next ID: 7
+  // If this tenant was previously a physical replication target that
+  // was promoted, PreviousSourceTenant holds information about the
+  // source cluster of that replication stream.
+  optional PreviousSourceTenant previous_source_tenant = 7;
+
+  // Next ID: 8
 }
+
+message PreviousSourceTenant {
+  option (gogoproto.equal) = true;
+
+  // TODO(ssd): Store something that allows us to confirm the identity
+  // of the cluster later. We could use some combination of the source
+  // host's ClusterID() and tenant ID or the tenant's cluster ID(). I
+  // don't think that would account for backup/restore though.
+
+  // CutoverTimestamp is the time at which we cutover from the source
+  // tenant.
+  optional util.hlc.Timestamp cutover_timestamp = 1 [
+    (gogoproto.nullable) = false
+  ];
+}
+
+
 
 // SQLInfo contain the additional tenant metadata from the other
 // columns in system.tenants not otherwise encoded in ProtoInfo.

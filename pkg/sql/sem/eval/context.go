@@ -885,4 +885,13 @@ type StreamIngestManager interface {
 		ctx context.Context,
 		ingestionJobID jobspb.JobID,
 	) (*streampb.StreamIngestionStats, string, error)
+
+	// RevertTenantToTimestamp reverts the given tenant to the given
+	// timestamp. This is a non-transactional destructive operation that
+	// should be used with care.
+	RevertTenantToTimestamp(
+		ctx context.Context,
+		tenantName roachpb.TenantName,
+		revertTo hlc.Timestamp,
+	) error
 }

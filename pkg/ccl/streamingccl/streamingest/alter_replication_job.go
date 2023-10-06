@@ -169,7 +169,7 @@ func alterReplicationJobHook(
 		if err != nil {
 			return err
 		}
-		if tenInfo.TenantReplicationJobID == 0 {
+		if tenInfo.PhysicalReplicationConsumerJobID == 0 {
 			return errors.Newf("tenant %q (%d) does not have an active replication job",
 				tenInfo.Name, tenInfo.ID)
 		}
@@ -189,11 +189,11 @@ func alterReplicationJobHook(
 		} else {
 			switch alterTenantStmt.Command {
 			case tree.ResumeJob:
-				if err := jobRegistry.Unpause(ctx, p.InternalSQLTxn(), tenInfo.TenantReplicationJobID); err != nil {
+				if err := jobRegistry.Unpause(ctx, p.InternalSQLTxn(), tenInfo.PhysicalReplicationConsumerJobID); err != nil {
 					return err
 				}
 			case tree.PauseJob:
-				if err := jobRegistry.PauseRequested(ctx, p.InternalSQLTxn(), tenInfo.TenantReplicationJobID,
+				if err := jobRegistry.PauseRequested(ctx, p.InternalSQLTxn(), tenInfo.PhysicalReplicationConsumerJobID,
 					"ALTER VIRTUAL CLUSTER PAUSE REPLICATION"); err != nil {
 					return err
 				}
@@ -226,7 +226,7 @@ func alterTenantJobCutover(
 	}
 
 	tenantName := tenInfo.Name
-	job, err := jobRegistry.LoadJobWithTxn(ctx, tenInfo.TenantReplicationJobID, txn)
+	job, err := jobRegistry.LoadJobWithTxn(ctx, tenInfo.PhysicalReplicationConsumerJobID, txn)
 	if err != nil {
 		return hlc.Timestamp{}, err
 	}
@@ -266,7 +266,7 @@ func alterTenantJobCutover(
 				cutoverTime, record.Timestamp)
 		}
 	}
-	if err := applyCutoverTime(ctx, jobRegistry, txn, tenInfo.TenantReplicationJobID, cutoverTime); err != nil {
+	if err := applyCutoverTime(ctx, jobRegistry, txn, tenInfo.PhysicalReplicationConsumerJobID, cutoverTime); err != nil {
 		return hlc.Timestamp{}, err
 	}
 
@@ -280,7 +280,7 @@ func alterTenantOptions(
 	options *resolvedTenantReplicationOptions,
 	tenInfo *mtinfopb.TenantInfo,
 ) error {
-	return jobRegistry.UpdateJobWithTxn(ctx, tenInfo.TenantReplicationJobID, txn, false, /* useReadLock */
+	return jobRegistry.UpdateJobWithTxn(ctx, tenInfo.PhysicalReplicationConsumerJobID, txn, false, /* useReadLock */
 		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			streamIngestionDetails := md.Payload.GetStreamIngestion()
 			if ret, ok := options.GetRetention(); ok {

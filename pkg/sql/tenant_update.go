@@ -98,8 +98,8 @@ WHERE id = $1`
 func validateTenantInfo(
 	ctx context.Context, settings *cluster.Settings, info *mtinfopb.TenantInfo,
 ) error {
-	if info.TenantReplicationJobID != 0 && info.DataState == mtinfopb.DataStateReady {
-		return errors.Newf("tenant in data state %v with replication job ID %d", info.DataState, info.TenantReplicationJobID)
+	if info.PhysicalReplicationConsumerJobID != 0 && info.DataState == mtinfopb.DataStateReady {
+		return errors.Newf("tenant in data state %v with replication job ID %d", info.DataState, info.PhysicalReplicationConsumerJobID)
 	}
 	if info.DroppedName != "" && info.DataState != mtinfopb.DataStateDrop {
 		return errors.Newf("tenant in data state %v with dropped name %q", info.DataState, info.DroppedName)

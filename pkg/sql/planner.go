@@ -920,12 +920,12 @@ func (p *planner) resetPlanner(
 func (p *planner) GetReplicationStreamManager(
 	ctx context.Context,
 ) (eval.ReplicationStreamManager, error) {
-	return repstream.GetReplicationStreamManager(ctx, p.EvalContext(), p.InternalSQLTxn())
+	return repstream.GetReplicationStreamManager(ctx, p.EvalContext(), p.InternalSQLTxn(), p.ExtendedEvalContext().SessionID)
 }
 
 // GetStreamIngestManager returns a StreamIngestManager.
 func (p *planner) GetStreamIngestManager(ctx context.Context) (eval.StreamIngestManager, error) {
-	return repstream.GetStreamIngestManager(ctx, p.EvalContext(), p.InternalSQLTxn())
+	return repstream.GetStreamIngestManager(ctx, p.EvalContext(), p.InternalSQLTxn(), p.ExtendedEvalContext().SessionID)
 }
 
 // SpanStats returns a stats for the given span of keys.

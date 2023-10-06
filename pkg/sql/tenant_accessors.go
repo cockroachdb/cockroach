@@ -286,7 +286,7 @@ func GetTenantTemplate(
 	tmplInfo.DroppedName = ""
 	tmplInfo.DeprecatedID = 0
 	tmplInfo.DeprecatedDataState = 0
-	tmplInfo.TenantReplicationJobID = 0
+	tmplInfo.PhysicalReplicationConsumerJobID = 0
 	if tmplInfo.Usage != nil {
 		tmplInfo.Usage.Consumption = kvpb.TenantConsumption{}
 	}
