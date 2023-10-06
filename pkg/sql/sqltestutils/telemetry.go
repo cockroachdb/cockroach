@@ -366,7 +366,9 @@ func formatSQLStats(stats []appstatspb.CollectedStatementStatistics) string {
 	for i := range stats {
 		s := &stats[i]
 
-		if strings.HasPrefix(s.Key.App, catconstants.InternalAppNamePrefix) {
+		if strings.HasPrefix(s.Key.App,
+			catconstants.InternalAppNamePrefix) || strings.HasPrefix(s.Key.App,
+			catconstants.DelegatedAppNamePrefix) {
 			// Let's ignore all internal queries for this test.
 			continue
 		}
