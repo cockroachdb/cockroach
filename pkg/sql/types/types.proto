@@ -396,6 +396,12 @@ enum Family {
     //   Oid      : T_pg_lsn
     PGLSNFamily = 30;
 
+    // RefCursorFamily is a type family for the refcursor type, which is the
+    // type representing PLpgSQL cursors.
+    //   Canonical: types.RefCursor
+    //   Oid      : T_refcursor
+    RefCursorFamily = 31;
+
     // AnyFamily is a special type family used during static analysis as a
     // wildcard type that matches any other type, including scalar, array, and
     // tuple types. Execution-time values should never have this type. As an

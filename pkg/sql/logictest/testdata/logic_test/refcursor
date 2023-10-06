@@ -52,34 +52,23 @@ SELECT * FROM xy;
 ----
 1  bar
 
-statement ok
-DROP TABLE IF EXISTS xy;
-CREATE TABLE xy (x INT, y INT);
-INSERT INTO xy VALUES (1, 2);
-INSERT INTO xy VALUES (3, 4);
-
 # Create a partial index that uses the REFCURSOR type.
 statement ok
-CREATE INDEX part ON xy (x) WHERE y::TEXT::REFCURSOR < '3';
+CREATE INDEX part ON xy (x) WHERE y::REFCURSOR::TEXT <= 'bar';
 
-query II
-SELECT * FROM xy@part WHERE y::TEXT::REFCURSOR < '3';
+query IT
+SELECT * FROM xy@part WHERE y::REFCURSOR::TEXT <= 'bar';
 ----
-1  2
-
-statement ok
-DROP TABLE IF EXISTS xy;
-CREATE TABLE xy (x INT, y INT);
-INSERT INTO xy VALUES (1, 2);
+1  bar
 
 # Add a check constraint that uses the REFCURSOR type.
 statement ok
-ALTER TABLE xy ADD CONSTRAINT bar CHECK (y::TEXT::REFCURSOR < 'baz');
+ALTER TABLE xy ADD CONSTRAINT bar CHECK (y::REFCURSOR::TEXT <= 'bar');
 
-query II
+query IT
 SELECT * FROM xy;
 ----
-1  2
+1  bar
 
 subtest type
 
@@ -211,11 +200,8 @@ SELECT f();
 
 subtest error
 
-# TODO(drewk): REFCURSOR should not support collation.
-query T
+statement error pgcode 42804 pq: incompatible type for COLLATE: refcursor
 SELECT 'foo'::REFCURSOR COLLATE en;
-----
-foo
 
 # REFCURSOR does not have a width.
 statement error pgcode 42601 syntax error

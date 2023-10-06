@@ -2010,6 +2010,7 @@ func checkResultType(typ *types.T) error {
 	case types.INetFamily:
 	case types.OidFamily:
 	case types.PGLSNFamily:
+	case types.RefCursorFamily:
 	case types.TupleFamily:
 	case types.EnumFamily:
 	case types.VoidFamily:
