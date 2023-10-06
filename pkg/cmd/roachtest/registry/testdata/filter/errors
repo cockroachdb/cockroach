@@ -1,0 +1,88 @@
+# Invalid filters.
+
+filter cloud=badcloud
+----
+error: invalid cloud "badcloud"; valid clouds are local,gce,aws,azure
+
+filter owner=badowner
+----
+error: invalid owner "badowner"
+
+filter suite=badsuite
+----
+error: invalid suite "badsuite"; valid suites are nightly,weekly,release_qualification,orm,driver,tool,smoketest,quick,fixtures,pebble,pebble_nightly_write,pebble_nightly_ycsb,pebble_nightly_ycsb_race,roachtest
+
+filter cloud=badcloud owner=badowner suite=badsuite
+----
+error: invalid cloud "badcloud"; valid clouds are local,gce,aws,azure
+
+# Filters with one field leading to no matches.
+
+filter benchmarks cloud=aws
+component_blargle
+----
+error: no benchmarks match regexp "component_blargle"
+
+filter suite=orm
+----
+error: no tests in suite "orm"
+
+filter owner=replication
+----
+error: no tests with owner "replication"
+
+filter benchmarks
+component_blargle
+----
+error: no benchmarks match regexp "component_blargle"
+
+filter cloud=aws suite=nightly owner=cdc
+component_blargle
+----
+error: no tests match regexp "component_blargle"
+
+filter suite=orm owner=cdc
+foo
+----
+error: no tests in suite "orm"
+
+filter suite=orm owner=cdc benchmarks
+foo
+----
+error: no benchmarks in suite "orm"
+
+filter cloud=gce suite=nightly owner=cdc
+foo-cdc-gce
+----
+error: no tests match regexp "foo-cdc-gce"
+
+filter cloud=gce suite=nightly owner=cdc benchmarks
+foo-cdc-gce
+----
+error: no benchmarks match regexp "foo-cdc-gce"
+
+# Filters with multiple fields leading to no matches.
+
+filter suite=nightly owner=kv
+foo-cdc
+----
+error: no tests with owner "kv" match regexp "foo-cdc"
+
+filter suite=weekly owner=kv
+-nightly-
+----
+error: no tests in suite "weekly" match regexp "-nightly-"
+
+filter cloud=azure suite=weekly owner=kv
+-gce
+----
+error: no tests match criteria; tests which match regex "-gce" and are part of the "weekly" suite and have owner "kv" are not compatible with cloud "azure"
+
+filter cloud=aws suite=weekly owner=kv benchmarks
+----
+error: no benchmarks match criteria; benchmarks which are part of the "weekly" suite and have owner "kv" are not compatible with cloud "aws"
+
+filter suite=weekly owner=cdc
+cdc-nightly- kv-nightly,weekly-
+----
+error: no tests match criteria
