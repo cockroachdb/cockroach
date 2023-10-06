@@ -358,7 +358,7 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	maybeExistingFuncObj.FuncName.SchemaName = tree.Name(targetSc.GetName())
 	maybeExistingFuncObj.FuncName.ExplicitSchema = true
 	existing, err := params.p.matchRoutine(params.ctx, maybeExistingFuncObj,
-		false /* required */, tree.UDFRoutine)
+		false /* required */, tree.UDFRoutine|tree.ProcedureRoutine)
 	if err != nil {
 		return err
 	}
