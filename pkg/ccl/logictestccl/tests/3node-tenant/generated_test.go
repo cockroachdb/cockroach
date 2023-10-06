@@ -1465,6 +1465,13 @@ func TestTenantLogic_procedure_privileges(
 	runLogicTest(t, "procedure_privileges")
 }
 
+func TestTenantLogic_procedure_schema_change(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "procedure_schema_change")
+}
+
 func TestTenantLogic_propagate_input_ordering(
 	t *testing.T,
 ) {
