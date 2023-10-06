@@ -27,4 +27,3 @@ ALTER TABLE t RESET (schema_locked);
 statement error pgcode 0A000 cannot set/reset storage parameter "schema_locked" until the cluster version is at least 23.1
 ALTER TABLE t RESET (schema_locked, exclude_data_from_backup);
 
-

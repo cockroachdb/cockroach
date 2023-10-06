@@ -13,8 +13,10 @@ package schemachanger_test
 import (
 	"context"
 	"encoding/hex"
+	"flag"
 	"fmt"
 	"math/rand"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -36,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/sctest"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -840,7 +843,7 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"SELECT (*) FROM t1; -- expect to be skipped because of the syntax error",
 			"FROM t1 SELECT *; -- ditto",
 
-			// statements with TCL commands or empty content.
+			// Statements with TCL commands or empty content.
 			"",
 			"BEGIN;",
 			"INSERT INTO t2 VALUES (1001, 1002); INSERT INTO t1 VALUES (1000, 1001);",
@@ -851,10 +854,19 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"ALTER TABLE t3 ADD PRIMARY KEY (i);",
 			"COMMIT;",
 			"BEGIN;",
-			"SELECT 1/0;",
-			"DROP TABLE IF EXISTS t2  -- expect to be ignored",
+			"SELECT 1/0;  -- move txn into ERROR state",
+			"DROP TABLE IF EXISTS t2;  -- expect to be ignored",
 			"INSERT INTO t2 VALUES (1002, 1003); INSERT INTO t1 VALUES (1001, 1002);  -- expect to be ignored",
 			"ROLLBACK;",
+			"DROP TABLE IF EXISTS t3; CREATE TABLE t3 (i INT PRIMARY KEY);",
+			"BEGIN;",
+			"ALTER TABLE t3 DROP CONSTRAINT t3_pkey;",
+			"DELETE FROM t3 WHERE i = 1;  -- expect to result in an error",
+			"ROLLBACK;",
+			"BEGIN; SAVEPOINT cockroach_restart;",
+			"RELEASE SAVEPOINT cockroach_restart;  -- move txn into DONE state",
+			"SELECT 1;  -- expect to be ignored",
+			"COMMIT;",
 
 			// statements that will be altered due to known behavioral differences in LSC vs DSC.
 			"ALTER TABLE t1 ADD COLUMN xyz INT DEFAULT 30, ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i; -- unimplemented in legacy schema changer; expect to skip this line",
@@ -875,4 +887,39 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 	}
 
 	sctest.CompareLegacyAndDeclarative(t, ss)
+}
+
+var logictestStmtsCorpusFile = flag.String("logictest-stmt-corpus-path", "", "path to logictest stmts corpus")
+
+func TestComparatorFromLogicTests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	if *logictestStmtsCorpusFile == "" {
+		skip.IgnoreLint(t, "require `--logictest-stmt-corpus-path` to be set")
+	}
+
+	bytes, err := os.ReadFile(*logictestStmtsCorpusFile)
+	require.NoError(t, err)
+	corpus := scpb.LogicTestStmtsCorpus{}
+	err = protoutil.Unmarshal(bytes, &corpus)
+	require.NoError(t, err)
+
+	// Shuffle entries so the order of execution is different each time. It might
+	// speed up finding bugs.
+	rand.Shuffle(len(corpus.Entries), func(i, j int) {
+		corpus.Entries[i], corpus.Entries[j] = corpus.Entries[j], corpus.Entries[i]
+	})
+
+	for _, entry := range corpus.Entries {
+		subtestName := entry.Name
+		subtestStatements := entry.Statements
+		t.Run(entry.Name, func(t *testing.T) {
+			t.Logf("running schema changer comparator testing on statements collected from logic test %q\n", subtestName)
+			ss := &staticSQLStmtLineProvider{
+				stmts: subtestStatements,
+			}
+			sctest.CompareLegacyAndDeclarative(t, ss)
+			t.Logf("schema changer comparator testing succeeded on logic test %q\n", subtestName)
+		})
+	}
 }
