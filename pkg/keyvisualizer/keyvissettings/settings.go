@@ -18,13 +18,13 @@ import (
 
 // Enabled enables the key visualizer job.
 var Enabled = settings.RegisterBoolSetting(
-	settings.SystemOnly,
+	settings.SystemVisible,
 	"keyvisualizer.enabled",
 	"enable the use of the key visualizer", false)
 
 // SampleInterval defines the sample period for key visualizer samples.
 var SampleInterval = settings.RegisterDurationSetting(
-	settings.SystemOnly,
+	settings.SystemVisible,
 	"keyvisualizer.sample_interval",
 	"the frequency at which the key visualizer samples are collected",
 	5*time.Minute,
