@@ -1954,7 +1954,13 @@ func (*ShowFunctions) StatementReturnType() StatementReturnType { return Rows }
 func (*ShowFunctions) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*ShowFunctions) StatementTag() string { return "SHOW FUNCTIONS" }
+func (n *ShowFunctions) StatementTag() string {
+	if n.Procedure {
+		return "SHOW PROCEDURES"
+	} else {
+		return "SHOW FUNCTIONS"
+	}
+}
 
 // StatementReturnType implements the Statement interface
 func (*ShowTransactions) StatementReturnType() StatementReturnType { return Rows }

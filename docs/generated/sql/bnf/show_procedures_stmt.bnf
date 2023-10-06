@@ -1,0 +1,4 @@
+show_procedures_stmt ::=
+	'SHOW' 'PROCEDURES' 'FROM' name '.' name
+	| 'SHOW' 'PROCEDURES' 'FROM' name
+	| 'SHOW' 'PROCEDURES'
