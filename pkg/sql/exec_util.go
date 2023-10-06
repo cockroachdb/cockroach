@@ -91,6 +91,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -3824,4 +3825,20 @@ func requireSystemTenantOrClusterSetting(
 		errors.New("operation is disabled within a virtual cluster"),
 		"Feature was disabled by the system operator."),
 		"Feature flag: %s", setting.Name())
+}
+
+// PossiblyHashAppName returns the provided app name, possibly hashed.
+// If the app name is not an internal query, we want to hash the app name.
+func PossiblyHashAppName(appName string, secret string) string {
+	scrubbedName := appName
+	if !strings.HasPrefix(appName, catconstants.ReportableAppNamePrefix) {
+		if !strings.HasPrefix(appName, catconstants.DelegatedAppNamePrefix) {
+			scrubbedName = HashForReporting(secret, appName)
+		} else if !strings.HasPrefix(appName,
+			catconstants.DelegatedAppNamePrefix+catconstants.ReportableAppNamePrefix) {
+			scrubbedName = catconstants.DelegatedAppNamePrefix + HashForReporting(
+				secret, appName)
+		}
+	}
+	return scrubbedName
 }
