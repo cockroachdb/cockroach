@@ -11,7 +11,9 @@ package streamingest
 import (
 	"context"
 	"math"
+	"strings"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -42,7 +44,8 @@ var alterReplicationCutoverHeader = colinfo.ResultColumns{
 // ResolvedTenantReplicationOptions represents options from an
 // evaluated CREATE VIRTUAL CLUSTER FROM REPLICATION command.
 type resolvedTenantReplicationOptions struct {
-	retention *int32
+	resumeTimestamp hlc.Timestamp
+	retention       *int32
 }
 
 func evalTenantReplicationOptions(
@@ -65,6 +68,33 @@ func evalTenantReplicationOptions(
 		retSeconds := int32(retSeconds64)
 		r.retention = &retSeconds
 	}
+	if options.ResumeTimestamp != nil {
+		// TODO(ssd) 2023-10-05: Letting the user pass this as
+		// a string is a disaster. We need to manage this for
+		// them.
+		resStr, err := eval.String(ctx, options.ResumeTimestamp)
+		if err != nil {
+			return nil, err
+		}
+
+		syn := false
+		if strings.HasSuffix(resStr, "?") {
+			resStr = resStr[:len(resStr)-1]
+			syn = true
+		}
+		// Attempt to parse as a decimal.
+		dec, _, err := apd.NewFromString(resStr)
+		if err != nil {
+			return nil, errors.Wrap(err, "expected to parse as decimal")
+		}
+		ts, err := hlc.DecimalToHLC(dec)
+		if err != nil {
+			return nil, err
+		}
+		ts.Synthetic = syn
+		r.resumeTimestamp = ts
+	}
+
 	return r, nil
 }
 
@@ -85,7 +115,7 @@ func alterReplicationJobTypeCheck(
 	if err := exprutil.TypeCheck(
 		ctx, alterReplicationJobOp, p.SemaCtx(),
 		exprutil.TenantSpec{TenantSpec: alterStmt.TenantSpec},
-		exprutil.Strings{alterStmt.Options.Retention},
+		exprutil.Strings{alterStmt.Options.Retention, alterStmt.Options.Retention},
 	); err != nil {
 		return false, nil, err
 	}

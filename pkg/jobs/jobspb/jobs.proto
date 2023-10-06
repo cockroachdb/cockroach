@@ -125,6 +125,15 @@ message StreamIngestionDetails {
   // source cluster.
   util.hlc.Timestamp replication_start_time = 12 [(gogoproto.nullable) = false];
 
+  roachpb.TenantID source_tenant_id = 13 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "SourceTenantID"];
+
+  bytes source_cluster_id = 14 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.customname) = "SourceClusterID"];
+
   reserved 5, 6;
 }
 

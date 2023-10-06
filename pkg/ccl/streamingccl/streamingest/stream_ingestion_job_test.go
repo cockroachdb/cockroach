@@ -10,6 +10,7 @@ package streamingest
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"net/url"
 	"testing"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -82,6 +84,211 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 	DestSysSQL.ExpectErr(t, "pq: failed to construct External Connection details: failed to connect",
 		fmt.Sprintf(`CREATE EXTERNAL CONNECTION "replication-source-addr" AS "%s"`,
 			badPgURL.String()))
+}
+
+func TestTenantStreamingFailback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	serverA, aDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer serverA.Stopper().Stop(ctx)
+	serverB, bDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer serverB.Stopper().Stop(ctx)
+
+	newTenantConn := func(t *testing.T, srv serverutils.ApplicationLayerInterface, tenantName string) *gosql.DB {
+		var conn *gosql.DB
+		testutils.SucceedsSoon(t, func() error {
+			db, err := srv.SQLConnE(fmt.Sprintf("cluster:%s", tenantName))
+			if err != nil {
+				return err
+			}
+			if err := db.Ping(); err != nil {
+				return err
+			}
+			conn = db
+			return nil
+		})
+		return conn
+	}
+
+	sqlA := sqlutils.MakeSQLRunner(aDB)
+	sqlB := sqlutils.MakeSQLRunner(bDB)
+
+	serverAURL, cleanupURLA := sqlutils.PGUrl(t, serverA.SQLAddr(), t.Name(), url.User(username.RootUser))
+	defer cleanupURLA()
+	serverBURL, cleanupURLB := sqlutils.PGUrl(t, serverB.SQLAddr(), t.Name(), url.User(username.RootUser))
+	defer cleanupURLB()
+
+	for _, s := range []string{
+		"SET CLUSTER SETTING physical_replication.enabled = true",
+		"SET CLUSTER SETTING kv.rangefeed.enabled = true",
+		"SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'",
+		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'",
+		"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'",
+
+		"SET CLUSTER SETTING physical_replication.consumer.heartbeat_frequency = '1s'",
+		"SET CLUSTER SETTING physical_replication.consumer.job_checkpoint_frequency = '100ms'",
+		"SET CLUSTER SETTING physical_replication.consumer.minimum_flush_interval = '10ms'",
+		"SET CLUSTER SETTING physical_replication.consumer.cutover_signal_poll_interval = '100ms'",
+		"SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '100ms'",
+	} {
+		sqlA.Exec(t, s)
+		sqlB.Exec(t, s)
+	}
+	compareAtTimetamp := func(ts string) {
+		fingerprintQueryFmt := "SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT %s] AS OF SYSTEM TIME %s"
+		var fingerprintF int64
+		sqlA.QueryRow(t, fmt.Sprintf(fingerprintQueryFmt, "f", ts)).Scan(&fingerprintF)
+		var fingerprintG int64
+		sqlB.QueryRow(t, fmt.Sprintf(fingerprintQueryFmt, "g", ts)).Scan(&fingerprintG)
+		require.Equal(t, fingerprintF, fingerprintG, "fingerprint mismatch")
+
+	}
+
+	// The overall test plan looks like:
+	//
+	// SETUP
+	//   Create tenant f on severA
+	//   Start service for tenant f
+	//   Write to tenant f
+	//   Replicate tenant f on serverA to tenant g on serverB
+	//
+	// FAILOVER
+	//   Complete replication on tenant g as of ts1
+	//   Fingerprint f and g as of ts1
+	//
+	// SPLIT BRAIN
+	//   Start service for tenant g
+	//   Write to f and g
+	//   Get ts2
+	//
+	// RESET AND RESYNC
+	//   Stop service for tenant f
+	//   Replicate tenant g on serverB to tenant f on serverA as of ts1
+	//   Fingerprint f and g as of ts1
+	//   Fingerprint f and g as of ts2
+	//
+	// FAIL BACK
+	//   Get ts3
+	//   Complete replication on tenant f as of ts3
+	//   Replicate tenant f on serverA to tenant g on serverB
+	//   Fingerprint f and g as of ts1
+	//   Fingerprint f and g as of ts2
+	//   Fingerprint f and g as of ts3
+	//   Confirm rows written to f during split brain have been reverted; rows written to g remain
+
+	// SETUP
+	t.Logf("creating tenant f")
+	sqlA.Exec(t, "CREATE VIRTUAL CLUSTER f")
+	sqlA.Exec(t, "ALTER VIRTUAL CLUSTER f START SERVICE SHARED")
+
+	tenFDB := newTenantConn(t, serverA.SystemLayer(), "f")
+	defer tenFDB.Close()
+	sqlTenF := sqlutils.MakeSQLRunner(tenFDB)
+
+	sqlTenF.Exec(t, "CREATE DATABASE test")
+	sqlTenF.Exec(t, "CREATE TABLE test.t (k PRIMARY KEY) AS SELECT generate_series(1, 100)")
+
+	t.Logf("starting replication f->g")
+	sqlB.Exec(t, "CREATE VIRTUAL CLUSTER g FROM REPLICATION OF f ON $1", serverAURL.String())
+
+	// FAILOVER
+	_, consumerGJobID := replicationtestutils.GetStreamJobIds(t, ctx, sqlB, roachpb.TenantName("g"))
+	var ts1 string
+	sqlA.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&ts1)
+	t.Logf("waiting for g@%s", ts1)
+	replicationtestutils.WaitUntilReplicatedTime(t,
+		replicationtestutils.DecimalTimeToHLC(t, ts1),
+		sqlB,
+		jobspb.JobID(consumerGJobID))
+
+	t.Logf("completing replication on g@%s", ts1)
+	sqlB.Exec(t, fmt.Sprintf("ALTER VIRTUAL CLUSTER g COMPLETE REPLICATION TO SYSTEM TIME '%s'", ts1))
+
+	jobutils.WaitForJobToSucceed(t, sqlB, jobspb.JobID(consumerGJobID))
+	compareAtTimetamp(ts1)
+
+	// SPLIT BRAIN
+	// g is now the "primary"
+	// f is still running unfortunately
+	sqlB.Exec(t, "ALTER VIRTUAL CLUSTER g START SERVICE SHARED")
+	tenGDB := newTenantConn(t, serverB.SystemLayer(), "g")
+	defer tenGDB.Close()
+	sqlTenG := sqlutils.MakeSQLRunner(tenGDB)
+
+	sqlTenF.Exec(t, "INSERT INTO test.t VALUES (777)") // This value should be abandoned
+	sqlTenG.Exec(t, "INSERT INTO test.t VALUES (555)") // This value should be synced later
+	var ts2 string
+	sqlA.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&ts2)
+
+	// RESET AND RESYNC
+	//   Stop service for tenant f
+	//   Replicate tenant g on serverB to tenant f on serverA as of ts1
+	//   Fingerprint f and g as of ts1
+	//   Fingerprint f and g as of ts2
+	sqlA.Exec(t, "ALTER VIRTUAL CLUSTER f STOP SERVICE")
+
+	t.Logf("starting replication g->f")
+	sqlA.Exec(t, fmt.Sprintf("SELECT crdb_internal.unsafe_revert_tenant_to_timestamp('f', %s)", ts1))
+	sqlA.Exec(t, fmt.Sprintf("CREATE VIRTUAL CLUSTER f FROM REPLICATION OF g ON $1 WITH RESUME TIMESTAMP = '%s'", ts1), serverBURL.String())
+	_, consumerFJobID := replicationtestutils.GetStreamJobIds(t, ctx, sqlA, roachpb.TenantName("f"))
+	t.Logf("waiting for f@%s", ts2)
+	replicationtestutils.WaitUntilReplicatedTime(t,
+		replicationtestutils.DecimalTimeToHLC(t, ts2),
+		sqlA,
+		jobspb.JobID(consumerFJobID))
+
+	compareAtTimetamp(ts1)
+	compareAtTimetamp(ts2)
+
+	// FAIL BACK
+	//   Get ts3
+	//   Complete replication on tenant f as of ts3
+	//   Replicate tenant f on serverA to tenant g on serverB
+	//   Fingerprint f and g as of ts1
+	//   Fingerprint f and g as of ts2
+	//   Fingerprint f and g as of ts3
+	//   Confirm rows written to f during split brain have been reverted; rows written to g remain
+	var ts3 string
+	sqlA.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&ts3)
+	t.Logf("completing replication on f@%s", ts3)
+	sqlA.Exec(t, fmt.Sprintf("ALTER VIRTUAL CLUSTER f COMPLETE REPLICATION TO SYSTEM TIME '%s'", ts3))
+	jobutils.WaitForJobToSucceed(t, sqlA, jobspb.JobID(consumerFJobID))
+	sqlA.Exec(t, "ALTER VIRTUAL CLUSTER f START SERVICE SHARED")
+
+	sqlB.Exec(t, "ALTER VIRTUAL CLUSTER g STOP SERVICE")
+
+	t.Logf("starting replication f->g")
+	sqlB.Exec(t, fmt.Sprintf("SELECT crdb_internal.unsafe_revert_tenant_to_timestamp('g', %s)", ts3))
+	sqlB.Exec(t, fmt.Sprintf("CREATE VIRTUAL CLUSTER g FROM REPLICATION OF f ON $1 WITH RESUME TIMESTAMP = '%s'", ts3), serverAURL.String())
+	_, consumerGJobID = replicationtestutils.GetStreamJobIds(t, ctx, sqlB, roachpb.TenantName("g"))
+	t.Logf("waiting for g@%s", ts3)
+	replicationtestutils.WaitUntilReplicatedTime(t,
+		replicationtestutils.DecimalTimeToHLC(t, ts3),
+		sqlB,
+		jobspb.JobID(consumerGJobID))
+
+	// As of now, we are back in our original position, but with
+	// an extra write from when we were failed over.
+	compareAtTimetamp(ts1)
+	compareAtTimetamp(ts2)
+	compareAtTimetamp(ts3)
+
+	tenF2DB := newTenantConn(t, serverA.SystemLayer(), "f")
+	defer tenF2DB.Close()
+	sqlTenF = sqlutils.MakeSQLRunner(tenF2DB)
+	sqlTenF.CheckQueryResults(t, "SELECT max(k) FROM test.t", [][]string{{"555"}})
 }
 
 func TestCutoverBuiltin(t *testing.T) {

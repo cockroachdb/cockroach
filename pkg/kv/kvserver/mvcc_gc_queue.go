@@ -699,6 +699,14 @@ func (mgcq *mvccGCQueue) process(
 		return false, nil
 	}
 	canAdvanceGCThreshold := !newThreshold.Equal(oldThreshold)
+	log.Infof(ctx, "DEBUG DEBUG DEBUG: %v cacheTS: %s gcTimestamp: %v oldThreshold: %v newThreshold: %v",
+		canAdvanceGCThreshold,
+		cacheTimestamp,
+		gcTimestamp,
+		oldThreshold,
+		newThreshold,
+	)
+
 	// We don't recheck ShouldQueue here, since the range may have been enqueued
 	// manually e.g. via the admin server.
 	lastGC, err := repl.getQueueLastProcessed(ctx, mgcq.name)
@@ -707,7 +715,7 @@ func (mgcq *mvccGCQueue) process(
 		log.VErrEventf(ctx, 2, "failed to fetch last processed time: %v", err)
 	}
 	r := makeMVCCGCQueueScore(ctx, repl, gcTimestamp, lastGC, conf.TTL(), canAdvanceGCThreshold)
-	log.VEventf(ctx, 2, "processing replica %s with score %s", repl.String(), r)
+	log.Infof(ctx, "processing replica %s with score %s", repl.String(), r)
 	// Synchronize the new GC threshold decision with concurrent
 	// AdminVerifyProtectedTimestamp requests.
 	if err := repl.markPendingGC(cacheTimestamp, newThreshold); err != nil {

@@ -109,7 +109,7 @@ func completeIngestion(
 ) error {
 	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
 	log.Infof(ctx, "activating destination tenant %d", details.DestinationTenantID)
-	if err := activateTenant(ctx, execCtx, details.DestinationTenantID, cutoverTimestamp); err != nil {
+	if err := activateTenant(ctx, execCtx, details, cutoverTimestamp); err != nil {
 		return err
 	}
 
@@ -271,7 +271,7 @@ func (s *streamIngestionResumer) handleResumeError(
 func (s *streamIngestionResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// Protect the destination tenant's keyspan from garbage collection.
 	jobExecCtx := execCtx.(sql.JobExecContext)
-	err := s.protectDestinationTenant(ctx, execCtx)
+	err := s.protectDestinationTenant(ctx, jobExecCtx)
 	if err != nil {
 		return s.handleResumeError(ctx, jobExecCtx, err)
 	}
@@ -305,7 +305,7 @@ func releaseDestinationTenantProtectedTimestamp(
 // The method persists the ID of the protected timestamp record in the
 // replication job's Payload.
 func (s *streamIngestionResumer) protectDestinationTenant(
-	ctx context.Context, execCtx interface{},
+	ctx context.Context, execCtx sql.JobExecContext,
 ) error {
 	oldDetails := s.job.Details().(jobspb.StreamIngestionDetails)
 
@@ -315,7 +315,7 @@ func (s *streamIngestionResumer) protectDestinationTenant(
 		return nil
 	}
 
-	execCfg := execCtx.(sql.JobExecContext).ExecCfg()
+	execCfg := execCtx.ExecCfg()
 	target := ptpb.MakeTenantsTarget([]roachpb.TenantID{oldDetails.DestinationTenantID})
 	ptsID := uuid.MakeV4()
 
@@ -474,28 +474,29 @@ func maybeRevertToCutoverTimestamp(
 
 func activateTenant(
 	ctx context.Context,
-	execCtx interface{},
-	newTenantID roachpb.TenantID,
+	execCtx sql.JobExecContext,
+	details jobspb.StreamIngestionDetails,
 	cutoverTimestamp hlc.Timestamp,
 ) error {
-	p := execCtx.(sql.JobExecContext)
-	execCfg := p.ExecCfg()
+	execCfg := execCtx.ExecCfg()
+
 	return execCfg.InternalDB.Txn(ctx, func(
 		ctx context.Context, txn isql.Txn,
 	) error {
-		info, err := sql.GetTenantRecordByID(ctx, txn, newTenantID, execCfg.Settings)
+		info, err := sql.GetTenantRecordByID(ctx, txn, details.DestinationTenantID, execCfg.Settings)
 		if err != nil {
 			return err
 		}
 
+		info.DataState = mtinfopb.DataStateReady
 		info.PhysicalReplicationConsumerJobID = 0
 		info.PreviousSourceTenant = &mtinfopb.PreviousSourceTenant{
+			TenantID:         details.SourceTenantID,
+			ClusterID:        details.SourceClusterID,
 			CutoverTimestamp: cutoverTimestamp,
 		}
 
-		info.DataState = mtinfopb.DataStateReady
-
-		return sql.UpdateTenantRecord(ctx, p.ExecCfg().Settings, txn, info)
+		return sql.UpdateTenantRecord(ctx, execCfg.Settings, txn, info)
 	})
 }
 

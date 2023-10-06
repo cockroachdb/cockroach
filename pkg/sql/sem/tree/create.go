@@ -2235,7 +2235,8 @@ type CreateTenantFromReplication struct {
 
 // TenantReplicationOptions  options for the CREATE VIRTUAL CLUSTER FROM REPLICATION command.
 type TenantReplicationOptions struct {
-	Retention Expr
+	Retention       Expr
+	ResumeTimestamp Expr
 }
 
 var _ NodeFormatter = &TenantReplicationOptions{}
@@ -2280,6 +2281,17 @@ func (o *TenantReplicationOptions) Format(ctx *FmtCtx) {
 			ctx.WriteByte('(')
 		}
 		ctx.FormatNode(o.Retention)
+		if !canOmitParentheses {
+			ctx.WriteByte(')')
+		}
+	}
+	if o.ResumeTimestamp != nil {
+		ctx.WriteString("RESUME TIMESTAMP = ")
+		_, canOmitParentheses := o.ResumeTimestamp.(alreadyDelimitedAsSyntacticDExpr)
+		if !canOmitParentheses {
+			ctx.WriteByte('(')
+		}
+		ctx.FormatNode(o.ResumeTimestamp)
 		if !canOmitParentheses {
 			ctx.WriteByte(')')
 		}

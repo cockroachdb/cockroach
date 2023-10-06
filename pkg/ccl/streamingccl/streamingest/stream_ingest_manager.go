@@ -110,12 +110,7 @@ func (r *streamIngestManagerImpl) RevertTenantToTimestamp(
 		}
 
 		// Set the data state to Add during the destructive operation.
-		//
-		// TODO(ssd): We likely also want to record the revert
-		// timestamp in the tenant metadata so that we have a
-		// record of the revert and so that we can use it to
-		// verify other operations that may want to start from
-		// that same timestamp.
+		tenantRecord.LastRevertTenantTimestamp = revertTo
 		tenantRecord.DataState = mtinfopb.DataStateAdd
 		return sql.UpdateTenantRecord(ctx, r.evalCtx.Settings, txn, tenantRecord)
 	}); err != nil {
