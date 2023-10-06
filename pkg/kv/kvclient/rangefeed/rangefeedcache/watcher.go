@@ -57,8 +57,9 @@ import (
 // The expectation is that the caller will use a mutex to update an underlying
 // data structure.
 //
-// NOTE (for emphasis): Update events after the initial scan published at a
-// delay corresponding to kv.closed_timestamp.target_duration (default 3s).
+// NOTE (for emphasis): Update events after the initial scan are published at a
+// delay corresponding to kv.closed_timestamp.target_duration (default 3s) with
+// an interval of kv.rangefeed.closed_timestamp_refresh_interval (default 3s).
 // Users seeking to leverage the Updates which arrive with that delay but also
 // react to the row-level events as they arrive can hijack the translateEvent
 // function to trigger some non-blocking action.
