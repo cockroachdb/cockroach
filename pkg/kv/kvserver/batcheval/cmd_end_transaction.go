@@ -289,7 +289,7 @@ func EndTxn(
 				// The transaction has already been aborted by other.
 				// Do not return TransactionAbortedError since the client anyway
 				// wanted to abort the transaction.
-				resolvedLocks, externalLocks, err := resolveLocalLocks(ctx, readWriter, cArgs.EvalCtx, ms, args, reply.Txn)
+				resolvedLocks, _, externalLocks, err := resolveLocalLocks(ctx, readWriter, cArgs.EvalCtx, ms, args, reply.Txn)
 				if err != nil {
 					return result.Result{}, err
 				}
@@ -436,7 +436,8 @@ func EndTxn(
 	// we position the transaction record next to the first write of a transaction.
 	// This avoids the need for the intentResolver to have to return to this range
 	// to resolve locks for this transaction in the future.
-	resolvedLocks, externalLocks, err := resolveLocalLocks(ctx, readWriter, cArgs.EvalCtx, ms, args, reply.Txn)
+	resolvedLocks, releasedReplLocks, externalLocks, err := resolveLocalLocks(
+		ctx, readWriter, cArgs.EvalCtx, ms, args, reply.Txn)
 	if err != nil {
 		return result.Result{}, err
 	}
@@ -472,8 +473,16 @@ func EndTxn(
 	txnResult.Local.UpdatedTxns = []*roachpb.Transaction{reply.Txn}
 	txnResult.Local.ResolvedLocks = resolvedLocks
 
-	// Run the commit triggers if successfully committed.
 	if reply.Txn.Status == roachpb.COMMITTED {
+		// Return whether replicated {shared, exclusive} locks were released by
+		// the committing transaction. If such locks were released, we still
+		// need to make sure other transactions can't write underneath the
+		// transaction's commit timestamp to the key spans previously protected
+		// by the locks. We return the spans on the response and update the
+		// timestamp cache a few layers above to ensure this.
+		reply.ReplicatedLocksReleasedOnCommit = releasedReplLocks
+
+		// Run the commit triggers if successfully committed.
 		triggerResult, err := RunCommitTrigger(
 			ctx, cArgs.EvalCtx, readWriter.(storage.Batch), ms, args, reply.Txn,
 		)
@@ -539,7 +548,7 @@ func resolveLocalLocks(
 	ms *enginepb.MVCCStats,
 	args *kvpb.EndTxnRequest,
 	txn *roachpb.Transaction,
-) (resolvedLocks []roachpb.LockUpdate, externalLocks []roachpb.Span, _ error) {
+) (resolvedLocks []roachpb.LockUpdate, releasedReplLocks, externalLocks []roachpb.Span, _ error) {
 	var resolveAllowance int64 = lockResolutionBatchSize
 	var targetBytes int64 = lockResolutionBatchByteSize
 	if args.InternalCommitTrigger != nil {
@@ -563,7 +572,7 @@ func resolveLocalLocksWithPagination(
 	txn *roachpb.Transaction,
 	maxKeys int64,
 	targetBytes int64,
-) (resolvedLocks []roachpb.LockUpdate, externalLocks []roachpb.Span, _ error) {
+) (resolvedLocks []roachpb.LockUpdate, releasedReplLocks, externalLocks []roachpb.Span, _ error) {
 	desc := evalCtx.Desc()
 	if mergeTrigger := args.InternalCommitTrigger.GetMergeTrigger(); mergeTrigger != nil {
 		// If this is a merge, then use the post-merge descriptor to determine
@@ -595,7 +604,7 @@ func resolveLocalLocksWithPagination(
 			//
 			// Note that the underlying pebbleIterator will still be reused
 			// since readWriter is a pebbleBatch in the typical case.
-			ok, numBytes, resumeSpan, _, err := storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update,
+			ok, numBytes, resumeSpan, wereReplLocksReleased, err := storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update,
 				storage.MVCCResolveWriteIntentOptions{TargetBytes: targetBytes})
 			if err != nil {
 				return 0, 0, 0, errors.Wrapf(err, "resolving write intent at %s on end transaction [%s]", span, txn.Status)
@@ -621,6 +630,9 @@ func resolveLocalLocksWithPagination(
 					}
 				}
 			}
+			if wereReplLocksReleased {
+				releasedReplLocks = append(releasedReplLocks, update.Span)
+			}
 			return numKeys, numBytes, resumeReason, nil
 		}
 		// For update ranges, cut into parts inside and outside our key
@@ -630,7 +642,7 @@ func resolveLocalLocksWithPagination(
 		externalLocks = append(externalLocks, outSpans...)
 		if inSpan != nil {
 			update.Span = *inSpan
-			numKeys, numBytes, resumeSpan, resumeReason, _, err :=
+			numKeys, numBytes, resumeSpan, resumeReason, wereReplLocksReleased, err :=
 				storage.MVCCResolveWriteIntentRange(ctx, readWriter, ms, update,
 					storage.MVCCResolveWriteIntentRangeOptions{MaxKeys: maxKeys, TargetBytes: targetBytes},
 				)
@@ -655,6 +667,9 @@ func resolveLocalLocksWithPagination(
 						span, txn.Status)
 				}
 			}
+			if wereReplLocksReleased {
+				releasedReplLocks = append(releasedReplLocks, update.Span)
+			}
 			return numKeys, numBytes, resumeReason, nil
 		}
 		return 0, 0, 0, nil
@@ -662,7 +677,7 @@ func resolveLocalLocksWithPagination(
 
 	numKeys, _, _, err := storage.MVCCPaginate(ctx, maxKeys, targetBytes, false /* allowEmpty */, f)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	externalLocks = append(externalLocks, remainingLockSpans...)
@@ -670,10 +685,10 @@ func resolveLocalLocksWithPagination(
 	removedAny := numKeys > 0
 	if WriteAbortSpanOnResolve(txn.Status, args.Poison, removedAny) {
 		if err := UpdateAbortSpan(ctx, evalCtx, readWriter, ms, txn.TxnMeta, args.Poison); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
-	return resolvedLocks, externalLocks, nil
+	return resolvedLocks, releasedReplLocks, externalLocks, nil
 }
 
 // updateStagingTxn persists the STAGING transaction record with updated status
