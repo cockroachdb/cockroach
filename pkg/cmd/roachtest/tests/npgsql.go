@@ -25,6 +25,9 @@ import (
 )
 
 var npgsqlReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
+
+// WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
+// This is used by docs automation to produce a list of supported versions for ORM's.
 var npgsqlSupportedTag = "v7.0.2"
 
 // This test runs npgsql's full test suite against a single cockroach node.

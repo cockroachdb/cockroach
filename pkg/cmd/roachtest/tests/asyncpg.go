@@ -30,6 +30,8 @@ PGPORT=26257 PGHOST=localhost PGUSER=root PGDATABASE=defaultdb python3 setup.py 
 
 var asyncpgReleaseTagRegex = regexp.MustCompile(`^(?P<major>v\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
 
+// WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
+// This is used by docs automation to produce a list of supported versions for ORM's.
 var asyncpgSupportedTag = "v0.24.0"
 
 func registerAsyncpg(r registry.Registry) {
