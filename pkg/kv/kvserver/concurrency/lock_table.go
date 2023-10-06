@@ -3785,6 +3785,9 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) (lockT
 
 	err := g.resumeScan(true /* notify */)
 	if err != nil {
+		// We're not returning the guard on this error path, so we need to
+		// release the guard in case it has already entered any wait-queues.
+		t.Dequeue(g)
 		return nil, kvpb.NewError(err)
 	}
 	if g.notRemovableLock != nil {
