@@ -8380,7 +8380,7 @@ show_tables_stmt:
 show_functions_stmt:
   SHOW FUNCTIONS FROM name '.' name
   {
-    $$.val = &tree.ShowFunctions{ObjectNamePrefix:tree.ObjectNamePrefix{
+    $$.val = &tree.ShowRoutines{ObjectNamePrefix:tree.ObjectNamePrefix{
         CatalogName: tree.Name($4),
         ExplicitCatalog: true,
         SchemaName: tree.Name($6),
@@ -8389,7 +8389,7 @@ show_functions_stmt:
   }
 | SHOW FUNCTIONS FROM name
   {
-    $$.val = &tree.ShowFunctions{ObjectNamePrefix:tree.ObjectNamePrefix{
+    $$.val = &tree.ShowRoutines{ObjectNamePrefix:tree.ObjectNamePrefix{
         // Note: the schema name may be interpreted as database name,
         // see name_resolution.go.
         SchemaName: tree.Name($4),
@@ -8398,7 +8398,7 @@ show_functions_stmt:
   }
 | SHOW FUNCTIONS
   {
-    $$.val = &tree.ShowFunctions{}
+    $$.val = &tree.ShowRoutines{}
   }
 | SHOW FUNCTIONS error // SHOW HELP: SHOW FUNCTIONS
 
@@ -8408,7 +8408,7 @@ show_functions_stmt:
 show_procedures_stmt:
   SHOW PROCEDURES FROM name '.' name
   {
-    $$.val = &tree.ShowFunctions{ObjectNamePrefix:tree.ObjectNamePrefix{
+    $$.val = &tree.ShowRoutines{ObjectNamePrefix:tree.ObjectNamePrefix{
         CatalogName: tree.Name($4),
         ExplicitCatalog: true,
         SchemaName: tree.Name($6),
@@ -8417,7 +8417,7 @@ show_procedures_stmt:
   }
 | SHOW PROCEDURES FROM name
   {
-    $$.val = &tree.ShowFunctions{ObjectNamePrefix:tree.ObjectNamePrefix{
+    $$.val = &tree.ShowRoutines{ObjectNamePrefix:tree.ObjectNamePrefix{
         // Note: the schema name may be interpreted as database name,
         // see name_resolution.go.
         SchemaName: tree.Name($4),
@@ -8426,7 +8426,7 @@ show_procedures_stmt:
   }
 | SHOW PROCEDURES
   {
-    $$.val = &tree.ShowFunctions{Procedure: true}
+    $$.val = &tree.ShowRoutines{Procedure: true}
   }
 | SHOW PROCEDURES error // SHOW HELP: SHOW PROCEDURES
 
