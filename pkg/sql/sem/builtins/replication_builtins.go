@@ -141,10 +141,46 @@ var replicationBuiltins = map[string]builtinDefinition{
 					return nil, err
 				}
 				tenantName := string(tree.MustBeDString(args[0]))
-				replicationProducerSpec, err := mgr.StartReplicationStream(ctx, roachpb.TenantName(tenantName))
+				replicationProducerSpec, err := mgr.StartReplicationStream(ctx, roachpb.TenantName(tenantName), streampb.ReplicationProducerRequest{})
 				if err != nil {
 					return nil, err
 				}
+				rawReplicationProducerSpec, err := protoutil.Marshal(&replicationProducerSpec)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(rawReplicationProducerSpec)), err
+			},
+			Info: "This function can be used on the producer side to start a replication stream for " +
+				"the specified tenant. The returned stream ID uniquely identifies created stream. " +
+				"The caller must periodically invoke crdb_internal.heartbeat_stream() function to " +
+				"notify that the replication is still ongoing.",
+			Volatility: volatility.Volatile,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "tenant_name", Typ: types.String},
+				{Name: "spec", Typ: types.Bytes},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
+				if err != nil {
+					return nil, err
+				}
+				tenantName := string(tree.MustBeDString(args[0]))
+				reqBytes := []byte(tree.MustBeDBytes(args[1]))
+
+				req := streampb.ReplicationProducerRequest{}
+				if err := protoutil.Unmarshal(reqBytes, &req); err != nil {
+					return nil, err
+				}
+
+				replicationProducerSpec, err := mgr.StartReplicationStream(ctx, roachpb.TenantName(tenantName), req)
+				if err != nil {
+					return nil, err
+				}
+
 				rawReplicationProducerSpec, err := protoutil.Marshal(&replicationProducerSpec)
 				if err != nil {
 					return nil, err
