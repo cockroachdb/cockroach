@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/cloudinfo"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
@@ -90,10 +89,6 @@ func TelemetryTest(t *testing.T, serverArgs []base.TestServerArgs, testTenant bo
 		var test telemetryTest
 		test.Start(t, serverArgs)
 		defer test.Close()
-
-		if path == "testdata/telemetry/sql-stats" {
-			skip.WithIssue(t, 107593)
-		}
 
 		// Run test against physical CRDB cluster.
 		t.Run("server", func(t *testing.T) {
