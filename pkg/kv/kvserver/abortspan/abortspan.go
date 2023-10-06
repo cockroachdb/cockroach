@@ -120,7 +120,7 @@ func (sc *AbortSpan) Del(
 	ctx context.Context, reader storage.ReadWriter, ms *enginepb.MVCCStats, txnID uuid.UUID,
 ) error {
 	key := keys.AbortSpanKey(sc.rangeID, txnID)
-	_, err := storage.MVCCDelete(ctx, reader, ms, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil /* txn */)
+	_, err := storage.MVCCDelete(ctx, reader, key, hlc.Timestamp{}, storage.MVCCWriteOptions{Stats: ms})
 	return err
 }
 
@@ -134,7 +134,7 @@ func (sc *AbortSpan) Put(
 ) error {
 	log.VEventf(ctx, 2, "writing abort span entry for %s", txnID.Short())
 	key := keys.AbortSpanKey(sc.rangeID, txnID)
-	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil /* txn */, entry)
+	return storage.MVCCPutProto(ctx, readWriter, key, hlc.Timestamp{}, entry, storage.MVCCWriteOptions{Stats: ms})
 }
 
 // CopyTo copies the abort span entries to the abort span for the range
@@ -178,9 +178,9 @@ func (sc *AbortSpan) CopyTo(
 		if err != nil {
 			return err
 		}
-		return storage.MVCCPutProto(ctx, w, ms,
+		return storage.MVCCPutProto(ctx, w,
 			keys.AbortSpanKey(newRangeID, txnID),
-			hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &entry,
+			hlc.Timestamp{}, &entry, storage.MVCCWriteOptions{Stats: ms},
 		)
 	}); err != nil {
 		return errors.Wrap(err, "AbortSpan.CopyTo")

@@ -32,8 +32,14 @@ func Increment(
 	h := cArgs.Header
 	reply := resp.(*kvpb.IncrementResponse)
 
+	opts := storage.MVCCWriteOptions{
+		Txn:            h.Txn,
+		LocalTimestamp: cArgs.Now,
+		Stats:          cArgs.Stats,
+	}
+
 	newVal, err := storage.MVCCIncrement(
-		ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, cArgs.Now, h.Txn, args.Increment)
+		ctx, readWriter, args.Key, h.Timestamp, opts, args.Increment)
 	reply.NewValue = newVal
 	// NB: even if MVCC returns an error, it may still have written an intent
 	// into the batch. This allows callers to consume errors like WriteTooOld
