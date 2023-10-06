@@ -31,9 +31,11 @@ type ProviderOpts struct {
 	DiskCaching     string
 }
 
+// These default locations support availability zones. At the time of
+// this comment, `westus` did not.
 var defaultLocations = []string{
 	"eastus",
-	"westus",
+	"westus2",
 	"westeurope",
 }
 
