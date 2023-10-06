@@ -7,7 +7,6 @@ go_library(
         "canceler_1_20.go",
         "context.go",
         "doc.go",
-        "link_1_21.go",
         "link_1_21_bazel.go",
         "link_pre_1_21.go",
         "link_shared.go",
