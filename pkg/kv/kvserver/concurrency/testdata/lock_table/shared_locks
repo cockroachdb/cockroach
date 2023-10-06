@@ -1071,6 +1071,76 @@ num=2
     active: true req: 53, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 50
 
+# ------------------------------------------------------------------------------
+# Sub-test for lock promotion. When an initial call to ScanAndEnqueue returns an
+# error, the request is dequeued from any other wait-queues that it may have
+# entered.
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req56 txn=txn1 ts=10 spans=exclusive@a
+----
+
+scan r=req56
+----
+start-waiting: false
+
+acquire r=req56 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+dequeue r=req56
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+new-request r=req57 txn=txn2 ts=10 spans=shared@b
+----
+
+scan r=req57
+----
+start-waiting: false
+
+acquire r=req57 k=b durability=u strength=shared
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+dequeue r=req57
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+# Mark txn1 as aborted so that the next two requests immediately acquire claims
+# on key "a" when scanning.
+pushed-txn-updated txn=txn1 status=aborted
+----
+
+new-request r=req58 txn=txn2 ts=10 spans=exclusive@a,c
+----
+
+scan r=req58
+----
+lock promotion from Shared to Exclusive is not allowed
+
+print
+----
+num=1
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
 # TODO(arul): (non-exhaustive list) of shared lock state transitions that aren't
 # currently supported (and we need to add support for):
 #
