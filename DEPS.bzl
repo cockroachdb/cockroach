@@ -11304,10 +11304,6 @@ def go_deps():
         name = "org_golang_x_tools",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/tools",
-        patch_args = ["-p1"],
-        patches = [
-            "@com_github_cockroachdb_cockroach//build/patches:org_golang_x_tools.patch",
-        ],
         sha256 = "562f25e674aab49f00a23ec1fcb46a57b0a9d27287ea9a885886c994306d9c14",
         strip_prefix = "golang.org/x/tools@v0.10.0",
         urls = [
