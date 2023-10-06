@@ -736,7 +736,13 @@ func (s *Server) getScrubbedStmtStats(
 
 		// Possibly scrub the app name.
 		if !strings.HasPrefix(stat.Key.App, catconstants.ReportableAppNamePrefix) {
-			stat.Key.App = HashForReporting(salt, stat.Key.App)
+			if !strings.HasPrefix(stat.Key.App, catconstants.DelegatedAppNamePrefix) {
+				stat.Key.App = HashForReporting(salt, stat.Key.App)
+			} else if !strings.HasPrefix(stat.Key.App,
+				catconstants.DelegatedAppNamePrefix+catconstants.ReportableAppNamePrefix) {
+				stat.Key.App = catconstants.DelegatedAppNamePrefix + HashForReporting(
+					salt, stat.Key.App)
+			}
 		}
 
 		// Quantize the counts to avoid leaking information that way.
