@@ -109,7 +109,18 @@ type KVBatchFetcherResponse struct {
 
 // KVBatchFetcher abstracts the logic of fetching KVs in batches.
 type KVBatchFetcher interface {
-	// SetupNextFetch prepares the fetch of the next set of spans.
+	// SetupNextFetch prepares the fetch of the next set of spans. Can be called
+	// multiple times.
+	//
+	// The fetcher takes ownership of the spans slice, will perform the memory
+	// accounting for it, and might modify it. The caller is only allowed to
+	// reuse the spans slice after all rows have been fetched (i.e. NextBatch()
+	// returned KVBatchFetcherResponse.MoreKVs=false) or the fetcher has been
+	// closed.
+	//
+	// The fetcher can also modify the spanIDs slice but will **not** perform
+	// memory accounting for it. If spanIDs is non-nil, then it must be of the
+	// same length as spans.
 	//
 	// spansCanOverlap indicates whether spans might be unordered and
 	// overlapping. If true, then spanIDs must be non-nil.
