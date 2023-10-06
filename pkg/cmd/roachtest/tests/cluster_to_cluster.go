@@ -1685,7 +1685,7 @@ func getIngestionJobID(t test.Test, dstSQL *sqlutils.SQLRunner, dstTenantName st
 	dstSQL.QueryRow(t, "SELECT info FROM system.tenants WHERE name=$1",
 		dstTenantName).Scan(&tenantInfoBytes)
 	require.NoError(t, protoutil.Unmarshal(tenantInfoBytes, &tenantInfo))
-	return int(tenantInfo.TenantReplicationJobID)
+	return int(tenantInfo.PhysicalReplicationConsumerJobID)
 }
 
 type streamIngesitonJobInfo struct {

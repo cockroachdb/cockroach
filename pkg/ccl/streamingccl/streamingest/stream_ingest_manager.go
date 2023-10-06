@@ -15,18 +15,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/repstream"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -34,6 +40,7 @@ type streamIngestManagerImpl struct {
 	evalCtx     *eval.Context
 	jobRegistry *jobs.Registry
 	txn         isql.Txn
+	sessionID   clusterunique.ID
 }
 
 // CompleteStreamIngestion implements streaming.StreamIngestManager interface.
@@ -52,14 +59,124 @@ func (r *streamIngestManagerImpl) GetStreamIngestionStats(
 	return replicationutils.GetStreamIngestionStats(ctx, streamIngestionDetails, jobProgress)
 }
 
+// GetReplicationStatsAndStatus implements streaming.StreamIngestManager interface.
 func (r *streamIngestManagerImpl) GetReplicationStatsAndStatus(
 	ctx context.Context, ingestionJobID jobspb.JobID,
 ) (*streampb.StreamIngestionStats, string, error) {
 	return getReplicationStatsAndStatus(ctx, r.jobRegistry, r.txn, ingestionJobID)
 }
 
+// RevertTenantToTimestamp  implements streaming.StreamIngestManager interface.
+func (r *streamIngestManagerImpl) RevertTenantToTimestamp(
+	ctx context.Context, tenantName roachpb.TenantName, revertTo hlc.Timestamp,
+) error {
+	execCfg := r.evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
+
+	// These vars are set in Txn below. This transaction checks
+	// the service state of the tenant record, moves the tenant's
+	// data state to ADD, and installs a PTS for the revert
+	// timestamp.
+	//
+	// NB: We do this using a different txn since we want to be
+	// able to commit the state change during the
+	// non-transactional RevertSpans below.
+	var (
+		originalDataState mtinfopb.TenantDataState
+		tenantID          roachpb.TenantID
+		ptsCleanup        func()
+	)
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		tenantRecord, err := sql.GetTenantRecordByName(ctx, r.evalCtx.Settings, txn, tenantName)
+		if err != nil {
+			return err
+		}
+		if tenantRecord.ServiceMode != mtinfopb.ServiceModeNone {
+			return errors.Newf("cannot revert tenant %q (%d) in service mode %s; service mode must be %s",
+				tenantRecord.Name,
+				tenantRecord.ID,
+				tenantRecord.ServiceMode,
+				mtinfopb.ServiceModeNone,
+			)
+		}
+
+		originalDataState = tenantRecord.DataState
+		tenantID, err = roachpb.MakeTenantID(tenantRecord.ID)
+		if err != nil {
+			return err
+		}
+		ptsCleanup, err = protectTenantSpanWithSession(ctx, r.evalCtx, txn, execCfg, tenantID, r.sessionID, revertTo)
+		if err != nil {
+			return errors.Wrap(err, "protecting revert timestamp")
+		}
+
+		// Set the data state to Add during the destructive operation.
+		//
+		// TODO(ssd): We likely also want to record the revert
+		// timestamp in the tenant metadata so that we have a
+		// record of the revert and so that we can use it to
+		// verify other operations that may want to start from
+		// that same timestamp.
+		tenantRecord.DataState = mtinfopb.DataStateAdd
+		return sql.UpdateTenantRecord(ctx, r.evalCtx.Settings, txn, tenantRecord)
+	}); err != nil {
+		return err
+	}
+	defer ptsCleanup()
+
+	spanToRevert := keys.MakeTenantSpan(tenantID)
+	if err := sql.RevertSpansFanout(ctx, r.evalCtx.Txn.DB(), r.evalCtx.JobExecContext.(sql.RevertSpansContext),
+		[]roachpb.Span{spanToRevert},
+		revertTo,
+		false, /* ignoreGCThreshold */
+		int64(sql.RevertTableDefaultBatchSize),
+		nil /* onCompletedCallback */); err != nil {
+		return err
+	}
+
+	return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		tenantRecord, err := sql.GetTenantRecordByName(ctx, r.evalCtx.Settings, txn, tenantName)
+		if err != nil {
+			return err
+		}
+		tenantRecord.DataState = originalDataState
+		return sql.UpdateTenantRecord(ctx, r.evalCtx.Settings, txn, tenantRecord)
+	})
+}
+
+func protectTenantSpanWithSession(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	txn isql.Txn,
+	execCfg *sql.ExecutorConfig,
+	tenantID roachpb.TenantID,
+	sessionID clusterunique.ID,
+	timestamp hlc.Timestamp,
+) (func(), error) {
+	ptsRecordID := uuid.MakeV4()
+	ptsRecord := sessionprotectedts.MakeRecord(
+		ptsRecordID,
+		[]byte(sessionID.String()),
+		timestamp,
+		ptpb.MakeTenantsTarget([]roachpb.TenantID{tenantID}),
+	)
+	log.Infof(ctx, "protecting timestamp: %#+v", ptsRecord)
+	pts := execCfg.ProtectedTimestampProvider.WithTxn(txn)
+	if err := pts.Protect(ctx, ptsRecord); err != nil {
+		return nil, err
+	}
+	releasePTS := func() {
+		if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			pts := execCfg.ProtectedTimestampProvider.WithTxn(txn)
+			return pts.Release(ctx, ptsRecordID)
+		}); err != nil {
+			log.Warningf(ctx, "failed to release protected timestamp %s: %v", ptsRecordID, err)
+		}
+	}
+	return releasePTS, nil
+}
+
 func newStreamIngestManagerWithPrivilegesCheck(
-	ctx context.Context, evalCtx *eval.Context, txn isql.Txn,
+	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, sessionID clusterunique.ID,
 ) (eval.StreamIngestManager, error) {
 	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(
@@ -85,6 +202,7 @@ func newStreamIngestManagerWithPrivilegesCheck(
 		evalCtx:     evalCtx,
 		txn:         txn,
 		jobRegistry: execCfg.JobRegistry,
+		sessionID:   sessionID,
 	}, nil
 }
 

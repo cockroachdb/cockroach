@@ -394,7 +394,7 @@ func TestCutoverFractionProgressed(t *testing.T) {
 		return nil
 	})
 
-	revert, err := maybeRevertToCutoverTimestamp(ctx, jobExecCtx, replicationJob)
+	_, revert, err := maybeRevertToCutoverTimestamp(ctx, jobExecCtx, replicationJob)
 	require.NoError(t, err)
 	require.True(t, revert)
 

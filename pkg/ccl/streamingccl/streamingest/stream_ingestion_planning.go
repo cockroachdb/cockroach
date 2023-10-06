@@ -175,7 +175,7 @@ func ingestionPlanHook(
 
 		// Create a new tenant for the replication stream.
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
-		tenantInfo.TenantReplicationJobID = jobID
+		tenantInfo.PhysicalReplicationConsumerJobID = jobID
 		// dstTenantID may be zero which will cause auto-allocation.
 		tenantInfo.ID = dstTenantID
 		tenantInfo.DataState = mtinfopb.DataStateAdd

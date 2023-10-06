@@ -80,6 +80,11 @@ func startReplicationProducerJob(
 		return streampb.ReplicationProducerSpec{}, err
 	}
 
+	tenantRecord.PhysicalReplicationProducerJobIDs = append(tenantRecord.PhysicalReplicationProducerJobIDs, jr.JobID)
+	if err := sql.UpdateTenantRecord(ctx, evalCtx.Settings, txn, tenantRecord); err != nil {
+		return streampb.ReplicationProducerSpec{}, err
+	}
+
 	ptp := execConfig.ProtectedTimestampProvider.WithTxn(txn)
 	statementTime := hlc.Timestamp{
 		WallTime: evalCtx.GetStmtTimestamp().UnixNano(),

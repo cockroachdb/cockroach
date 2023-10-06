@@ -2495,6 +2495,7 @@ var builtinOidsArray = []string{
 	2524: `refcursor(oid: oid) -> refcursor`,
 	2525: `refcursor(tuple: tuple) -> refcursor`,
 	2526: `refcursor(geography: geography) -> refcursor`,
+	2527: `crdb_internal.unsafe_revert_tenant_to_timestamp(tenant_name: string, ts: decimal) -> decimal`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

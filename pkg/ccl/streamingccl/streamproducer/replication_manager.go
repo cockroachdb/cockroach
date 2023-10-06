@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -26,8 +27,9 @@ import (
 )
 
 type replicationStreamManagerImpl struct {
-	evalCtx *eval.Context
-	txn     isql.Txn
+	evalCtx   *eval.Context
+	txn       isql.Txn
+	sessionID clusterunique.ID
 }
 
 // StartReplicationStream implements streaming.ReplicationStreamManager interface.
@@ -72,7 +74,7 @@ func (r *replicationStreamManagerImpl) SetupSpanConfigsStream(
 }
 
 func newReplicationStreamManagerWithPrivilegesCheck(
-	ctx context.Context, evalCtx *eval.Context, txn isql.Txn,
+	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, sessionID clusterunique.ID,
 ) (eval.ReplicationStreamManager, error) {
 	hasAdminRole, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 	if err != nil {
@@ -95,7 +97,7 @@ func newReplicationStreamManagerWithPrivilegesCheck(
 			pgcode.InsufficientPrivilege, "physical replication requires an enterprise license on the primary (and secondary) cluster")
 	}
 
-	return &replicationStreamManagerImpl{evalCtx: evalCtx, txn: txn}, nil
+	return &replicationStreamManagerImpl{evalCtx: evalCtx, txn: txn, sessionID: sessionID}, nil
 }
 
 func init() {
