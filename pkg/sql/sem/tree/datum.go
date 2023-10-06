@@ -5727,6 +5727,7 @@ func (d *DOid) Name() string {
 //
 // Types that currently benefit from DOidWrapper are:
 // - DName => DOidWrapper(*DString, oid.T_name)
+// - DRefCursor => DOidWrapper(*DString, oid.T_refcursor)
 type DOidWrapper struct {
 	Wrapped Datum
 	Oid     oid.Oid
@@ -5844,7 +5845,11 @@ func (d *DOidWrapper) AmbiguousFormat() bool {
 
 // Format implements the NodeFormatter interface.
 func (d *DOidWrapper) Format(ctx *FmtCtx) {
-	// Custom formatting based on d.OID could go here.
+	if d.Oid == oid.T_refcursor {
+		wrapped := MustBeDString(d.Wrapped)
+		wrapped.Format(ctx)
+		return
+	}
 	ctx.FormatNode(d.Wrapped)
 }
 
@@ -5917,6 +5922,18 @@ func NewDNameFromDString(d *DString) Datum {
 // initialized from a string.
 func NewDName(d string) Datum {
 	return NewDNameFromDString(NewDString(d))
+}
+
+// NewDRefCursorFromDString is a helper routine to create a *DRefCursor
+// (implemented as a *DOidWrapper) initialized from an existing *DString.
+func NewDRefCursorFromDString(d *DString) Datum {
+	return wrapWithOid(d, oid.T_refcursor)
+}
+
+// NewDRefCursor is a helper routine to create a *DRefCursor (implemented as a
+// *DOidWrapper) initialized from a string.
+func NewDRefCursor(d string) Datum {
+	return NewDRefCursorFromDString(NewDString(d))
 }
 
 // NewDIntVectorFromDArray is a helper routine to create a new *DArray,
@@ -6113,6 +6130,7 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.GeographyFamily:      {unsafe.Sizeof(DGeography{}), variableSize},
 	types.GeometryFamily:       {unsafe.Sizeof(DGeometry{}), variableSize},
 	types.PGLSNFamily:          {unsafe.Sizeof(DPGLSN{}), fixedSize},
+	types.RefCursorFamily:      {unsafe.Sizeof(DString("")), variableSize},
 	types.TimeFamily:           {unsafe.Sizeof(DTime(0)), fixedSize},
 	types.TimeTZFamily:         {unsafe.Sizeof(DTimeTZ{}), fixedSize},
 	types.TimestampFamily:      {unsafe.Sizeof(DTimestamp{}), fixedSize},

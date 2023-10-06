@@ -545,6 +545,7 @@ var (
 		types.PGLSN,
 		types.PGLSNArray,
 		types.RefCursor,
+		types.RefCursorArray,
 		types.TSQuery,
 		types.TSVector,
 		types.VarBit,

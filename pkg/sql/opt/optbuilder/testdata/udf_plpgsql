@@ -4966,7 +4966,7 @@ project
                      │    │    │    ├── key: ()
                      │    │    │    └── tuple [type=tuple]
                      │    │    └── projections
-                     │    │         └── const: 'foo' [as=curs:1, type=string]
+                     │    │         └── const: 'foo' [as=curs:1, type=refcursor]
                      │    └── projections
                      │         └── udf: _gen_cursor_name_5 [as="_gen_cursor_name_5":11, type=int, outer=(1), volatile, udf]
                      │              ├── args
@@ -5262,7 +5262,7 @@ project
                      │    │    │    │    ├── key: ()
                      │    │    │    │    └── tuple [type=tuple]
                      │    │    │    └── projections
-                     │    │    │         └── const: 'foo' [as=curs:1, type=string]
+                     │    │    │         └── const: 'foo' [as=curs:1, type=refcursor]
                      │    │    └── projections
                      │    │         └── cast: INT8 [as=x:2, type=int, immutable]
                      │    │              └── null [type=unknown]

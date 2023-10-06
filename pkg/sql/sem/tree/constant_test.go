@@ -347,7 +347,7 @@ func mustParseDPGLSN(t *testing.T, s string) tree.Datum {
 	return d
 }
 func mustParseDRefCursor(_ *testing.T, s string) tree.Datum {
-	return tree.NewDString(s)
+	return tree.NewDRefCursor(s)
 }
 func mustParseDINet(t *testing.T, s string) tree.Datum {
 	d, err := tree.ParseDIPAddrFromINetString(s)
@@ -421,6 +421,7 @@ var parseFuncs = map[*types.T]func(*testing.T, string) tree.Datum{
 	types.UUIDArray:        mustParseDArrayOfType(types.Uuid),
 	types.DateArray:        mustParseDArrayOfType(types.Date),
 	types.PGLSNArray:       mustParseDArrayOfType(types.PGLSN),
+	types.RefCursorArray:   mustParseDArrayOfType(types.RefCursor),
 	types.TimeArray:        mustParseDArrayOfType(types.Time),
 	types.TimeTZArray:      mustParseDArrayOfType(types.TimeTZ),
 	types.TimestampArray:   mustParseDArrayOfType(types.Timestamp),
@@ -553,6 +554,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				types.TSVector,
 				types.TSQuery,
 				types.RefCursor,
+				types.RefCursorArray,
 			),
 		},
 		{
@@ -568,12 +570,13 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				types.TSVector,
 				types.TSQuery,
 				types.RefCursor,
+				types.RefCursorArray,
 			),
 		},
 		{
 			c: tree.NewStrVal(`{a,b}`),
 			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray,
-				types.TSVector, types.TSQuery, types.RefCursor),
+				types.TSVector, types.TSQuery, types.RefCursor, types.RefCursorArray),
 		},
 		{
 			c:            tree.NewBytesStrVal(string([]byte{0xff, 0xfe, 0xfd})),
@@ -587,23 +590,23 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		{
 			c: tree.NewStrVal(`{18e7b17e-4ead-4e27-bfd5-bb6d11261bb6, 18e7b17e-4ead-4e27-bfd5-bb6d11261bb7}`),
 			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray,
-				types.UUIDArray, types.TSVector, types.RefCursor),
+				types.UUIDArray, types.TSVector, types.RefCursor, types.RefCursorArray),
 		},
 		{
 			c: tree.NewStrVal("{true, false}"),
 			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray,
-				types.BoolArray, types.TSVector, types.RefCursor),
+				types.BoolArray, types.TSVector, types.RefCursor, types.RefCursorArray),
 		},
 		{
 			c: tree.NewStrVal("{2010-09-28, 2010-09-29}"),
 			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray,
 				types.DateArray, types.TimestampArray, types.TimestampTZArray, types.TSVector,
-				types.RefCursor),
+				types.RefCursor, types.RefCursorArray),
 		},
 		{
 			c: tree.NewStrVal("{1A/1,2/2A}"),
 			parseOptions: typeSet(types.String, types.PGLSNArray, types.Bytes, types.BytesArray,
-				types.StringArray, types.TSQuery, types.TSVector, types.RefCursor),
+				types.StringArray, types.TSQuery, types.TSVector, types.RefCursor, types.RefCursorArray),
 		},
 		{
 			c: tree.NewStrVal("{2010-09-28 12:00:00.1, 2010-09-29 12:00:00.1}"),
@@ -617,7 +620,8 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				types.TimestampArray,
 				types.TimestampTZArray,
 				types.DateArray,
-				types.RefCursor),
+				types.RefCursor,
+				types.RefCursorArray),
 		},
 		{
 			c: tree.NewStrVal("{2006-07-08T00:00:00.000000123Z, 2006-07-10T00:00:00.000000123Z}"),
@@ -631,17 +635,18 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				types.TimestampArray,
 				types.TimestampTZArray,
 				types.DateArray,
-				types.RefCursor),
+				types.RefCursor,
+				types.RefCursorArray),
 		},
 		{
 			c: tree.NewStrVal("{PT12H2M, -23:00:00}"),
 			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray,
-				types.IntervalArray, types.RefCursor),
+				types.IntervalArray, types.RefCursor, types.RefCursorArray),
 		},
 		{
 			c: tree.NewStrVal("{192.168.100.128, ::ffff:10.4.3.2}"),
 			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray,
-				types.INetArray, types.RefCursor),
+				types.INetArray, types.RefCursor, types.RefCursorArray),
 		},
 		{
 			c: tree.NewStrVal("{0101, 11}"),
@@ -657,6 +662,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				types.VarBitArray,
 				types.TSVector,
 				types.RefCursor,
+				types.RefCursorArray,
 			),
 		},
 	}

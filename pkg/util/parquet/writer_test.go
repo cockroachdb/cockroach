@@ -493,6 +493,17 @@ func TestBasicDatums(t *testing.T) {
 				}, nil
 			},
 		},
+		{
+			name: "refcursor",
+			sch: &colSchema{
+				columnTypes: []*types.T{types.RefCursor, types.RefCursor, types.RefCursor},
+				columnNames: []string{"a", "b", "c"},
+			},
+			datums: func() ([][]tree.Datum, error) {
+				return [][]tree.Datum{
+					{tree.NewDRefCursor("a"), tree.NewDRefCursor(""), tree.DNull}}, nil
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			datums, err := tc.datums()
