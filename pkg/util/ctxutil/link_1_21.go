@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-//go:build go1.21 && !bazel
+//go:build go1.21
 
 package ctxutil
 
@@ -27,7 +27,12 @@ func context_propagateCancel(parent context.Context, child canceler) {
 		panic("unexpected non-cancelable context")
 	}
 	go func() {
-		<-done
+		select {
+		case <-child.Done():
+			// Avoid leaking the goroutine.
+			return
+		case <-done:
+		}
 		child.(*whenDone).notify()
 	}()
 }
