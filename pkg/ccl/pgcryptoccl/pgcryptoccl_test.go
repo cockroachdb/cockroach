@@ -10,10 +10,12 @@ package pgcryptoccl_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/pgcryptoccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -52,7 +54,8 @@ func TestCipherFunctionEnterpriseLicense(t *testing.T) {
 					require.NoError(t, err)
 					require.NoError(t, rows.Close())
 				} else {
-					require.ErrorContains(t, err, "use of pgcrypto cipher functions requires an enterprise license")
+					require.ErrorContains(t, err, fmt.Sprintf("use of %s requires an enterprise license",
+						pgcryptoccl.EnterpriseLicenseCheckFeatureName))
 				}
 			})
 		})
