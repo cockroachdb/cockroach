@@ -4558,6 +4558,11 @@ replication_options:
   {
     $$.val = &tree.TenantReplicationOptions{Retention: $3.expr()}
   }
+|
+  RESUME TIMESTAMP '=' d_expr
+  {
+    $$.val = &tree.TenantReplicationOptions{ResumeTimestamp: $4.expr()}
+  }
 
 // %Help: CREATE SCHEDULE
 // %Category: Group

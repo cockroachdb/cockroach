@@ -2482,6 +2482,7 @@ var builtinOidsArray = []string{
 	2511: `merge_stats_metadata(arg1: jsonb) -> jsonb`,
 	2512: `merge_statement_stats(arg1: jsonb) -> jsonb`,
 	2513: `merge_transaction_stats(arg1: jsonb) -> jsonb`,
+	2514: `crdb_internal.start_replication_stream(tenant_name: string, spec: bytes) -> bytes`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
