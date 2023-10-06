@@ -107,11 +107,11 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.alterDefaultPrivileges(ctx, n)
 	case *tree.AlterFunctionOptions:
 		return p.AlterFunctionOptions(ctx, n)
-	case *tree.AlterFunctionRename:
+	case *tree.AlterRoutineRename:
 		return p.AlterFunctionRename(ctx, n)
-	case *tree.AlterFunctionSetOwner:
+	case *tree.AlterRoutineSetOwner:
 		return p.AlterFunctionSetOwner(ctx, n)
-	case *tree.AlterFunctionSetSchema:
+	case *tree.AlterRoutineSetSchema:
 		return p.AlterFunctionSetSchema(ctx, n)
 	case *tree.AlterFunctionDepExtension:
 		return p.AlterFunctionDepExtension(ctx, n)
@@ -313,9 +313,9 @@ func init() {
 		&tree.AlterDatabaseSetZoneConfigExtension{},
 		&tree.AlterDefaultPrivileges{},
 		&tree.AlterFunctionOptions{},
-		&tree.AlterFunctionRename{},
-		&tree.AlterFunctionSetOwner{},
-		&tree.AlterFunctionSetSchema{},
+		&tree.AlterRoutineRename{},
+		&tree.AlterRoutineSetOwner{},
+		&tree.AlterRoutineSetSchema{},
 		&tree.AlterFunctionDepExtension{},
 		&tree.AlterIndex{},
 		&tree.AlterIndexVisible{},
