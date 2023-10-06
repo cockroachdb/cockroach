@@ -582,15 +582,17 @@ func (h *uniqueCheckHelper) buildTableScan() (outScope *scope, ordinals []int) {
 	// unique constraint.
 	if h.mb.b.evalCtx.TxnIsoLevel != isolation.Serializable {
 		locking = lockingSpec{
-			&tree.LockingItem{
-				// TODO(michae2): Change this to ForKeyShare when it is supported.
-				Strength:   tree.ForShare,
-				Targets:    []tree.TableName{tree.MakeUnqualifiedTableName(h.mb.tab.Name())},
-				WaitPolicy: tree.LockWaitBlock,
-				// Unique checks must ensure the non-existence of certain rows, so we
-				// use predicate locks instead of record locks to prevent insertion of
-				// new rows into the locked span(s) by other concurrent transactions.
-				Form: tree.LockPredicate,
+			&lockingItem{
+				item: &tree.LockingItem{
+					// TODO(michae2): Change this to ForKeyShare when it is supported.
+					Strength:   tree.ForShare,
+					Targets:    []tree.TableName{tree.MakeUnqualifiedTableName(h.mb.tab.Name())},
+					WaitPolicy: tree.LockWaitBlock,
+					// Unique checks must ensure the non-existence of certain rows, so we
+					// use predicate locks instead of record locks to prevent insertion of
+					// new rows into the locked span(s) by other concurrent transactions.
+					Form: tree.LockPredicate,
+				},
 			},
 		}
 	}
