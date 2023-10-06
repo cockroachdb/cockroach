@@ -1137,10 +1137,7 @@ lock promotion from Shared to Exclusive is not allowed
 
 print
 ----
-num=2
- lock: "a"
-   queued locking requests:
-    active: false req: 58, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+num=1
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
 
