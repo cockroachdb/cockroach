@@ -5039,7 +5039,7 @@ opt_restrict:
 alter_func_rename_stmt:
   ALTER FUNCTION function_with_paramtypes RENAME TO name
   {
-    $$.val = &tree.AlterFunctionRename{
+    $$.val = &tree.AlterRoutineRename{
       Function: $3.functionObj(),
       NewName: tree.Name($6),
     }
@@ -5048,7 +5048,7 @@ alter_func_rename_stmt:
 alter_func_set_schema_stmt:
   ALTER FUNCTION function_with_paramtypes SET SCHEMA schema_name
   {
-    $$.val = &tree.AlterFunctionSetSchema{
+    $$.val = &tree.AlterRoutineSetSchema{
       Function: $3.functionObj(),
       NewSchemaName: tree.Name($6),
     }
@@ -5057,7 +5057,7 @@ alter_func_set_schema_stmt:
 alter_func_owner_stmt:
   ALTER FUNCTION function_with_paramtypes OWNER TO role_spec
   {
-    $$.val = &tree.AlterFunctionSetOwner{
+    $$.val = &tree.AlterRoutineSetOwner{
       Function: $3.functionObj(),
       NewOwner: $6.roleSpec(),
     }
@@ -5076,7 +5076,7 @@ alter_func_dep_extension_stmt:
 alter_proc_rename_stmt:
   ALTER PROCEDURE function_with_paramtypes RENAME TO name
   {
-    $$.val = &tree.AlterFunctionRename{
+    $$.val = &tree.AlterRoutineRename{
       Function: $3.functionObj(),
       NewName: tree.Name($6),
       Procedure: true,
@@ -5086,7 +5086,7 @@ alter_proc_rename_stmt:
 alter_proc_set_schema_stmt:
   ALTER PROCEDURE function_with_paramtypes SET SCHEMA schema_name
   {
-    $$.val = &tree.AlterFunctionSetSchema{
+    $$.val = &tree.AlterRoutineSetSchema{
       Function: $3.functionObj(),
       NewSchemaName: tree.Name($6),
       Procedure: true,
@@ -5096,7 +5096,7 @@ alter_proc_set_schema_stmt:
 alter_proc_owner_stmt:
   ALTER PROCEDURE function_with_paramtypes OWNER TO role_spec
   {
-    $$.val = &tree.AlterFunctionSetOwner{
+    $$.val = &tree.AlterRoutineSetOwner{
       Function: $3.functionObj(),
       NewOwner: $6.roleSpec(),
       Procedure: true,
