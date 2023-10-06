@@ -486,13 +486,18 @@ func (node *AlterFunctionOptions) Format(ctx *FmtCtx) {
 
 // AlterFunctionRename represents a ALTER FUNCTION...RENAME statement.
 type AlterFunctionRename struct {
-	Function RoutineObj
-	NewName  Name
+	Function  RoutineObj
+	NewName   Name
+	Procedure bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AlterFunctionRename) Format(ctx *FmtCtx) {
-	ctx.WriteString("ALTER FUNCTION ")
+	if node.Procedure {
+		ctx.WriteString("ALTER PROCEDURE ")
+	} else {
+		ctx.WriteString("ALTER FUNCTION ")
+	}
 	ctx.FormatNode(&node.Function)
 	ctx.WriteString(" RENAME TO ")
 	ctx.WriteString(string(node.NewName))
@@ -502,11 +507,16 @@ func (node *AlterFunctionRename) Format(ctx *FmtCtx) {
 type AlterFunctionSetSchema struct {
 	Function      RoutineObj
 	NewSchemaName Name
+	Procedure     bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AlterFunctionSetSchema) Format(ctx *FmtCtx) {
-	ctx.WriteString("ALTER FUNCTION ")
+	if node.Procedure {
+		ctx.WriteString("ALTER PROCEDURE ")
+	} else {
+		ctx.WriteString("ALTER FUNCTION ")
+	}
 	ctx.FormatNode(&node.Function)
 	ctx.WriteString(" SET SCHEMA ")
 	ctx.WriteString(string(node.NewSchemaName))
@@ -514,13 +524,18 @@ func (node *AlterFunctionSetSchema) Format(ctx *FmtCtx) {
 
 // AlterFunctionSetOwner represents the ALTER FUNCTION...OWNER TO statement.
 type AlterFunctionSetOwner struct {
-	Function RoutineObj
-	NewOwner RoleSpec
+	Function  RoutineObj
+	NewOwner  RoleSpec
+	Procedure bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AlterFunctionSetOwner) Format(ctx *FmtCtx) {
-	ctx.WriteString("ALTER FUNCTION ")
+	if node.Procedure {
+		ctx.WriteString("ALTER PROCEDURE ")
+	} else {
+		ctx.WriteString("ALTER FUNCTION ")
+	}
 	ctx.FormatNode(&node.Function)
 	ctx.WriteString(" OWNER TO ")
 	ctx.FormatNode(&node.NewOwner)
