@@ -1862,7 +1862,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					// Also fill in indoption for each column to indicate if the index
 					// is ASC/DESC and if nulls appear first/last.
 					collationOids := tree.NewDArray(types.Oid)
-					indoption := tree.NewDArray(types.Int)
+					indoption := tree.NewDArray(types.Int2)
 
 					colIDs := make([]descpb.ColumnID, 0, index.NumKeyColumns())
 					exprs := make([]string, 0, index.NumKeyColumns())
