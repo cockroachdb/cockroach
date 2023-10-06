@@ -24,7 +24,7 @@ import (
 // Privileges: None.
 //
 //	Notes: postgres does not have a SHOW FUNCTIONS statement.
-func (d *delegator) delegateShowFunctions(n *tree.ShowFunctions) (tree.Statement, error) {
+func (d *delegator) delegateShowFunctions(n *tree.ShowRoutines) (tree.Statement, error) {
 	flags := cat.Flags{AvoidDescriptorCaches: true}
 	_, name, err := d.catalog.ResolveSchema(d.ctx, flags, &n.ObjectNamePrefix)
 	if err != nil {

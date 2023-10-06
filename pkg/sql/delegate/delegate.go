@@ -140,7 +140,7 @@ func TryDelegate(
 	case *tree.ShowSyntax:
 		return d.delegateShowSyntax(t)
 
-	case *tree.ShowFunctions:
+	case *tree.ShowRoutines:
 		return d.delegateShowFunctions(t)
 
 	case *tree.ShowTables:
