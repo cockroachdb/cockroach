@@ -131,7 +131,7 @@ export class JobDetails extends React.Component<JobDetailsProps> {
                 label="Creation Time"
                 value={
                   <Timestamp
-                    time={TimestampToMoment(job.created)}
+                    time={TimestampToMoment(job.created, null)}
                     format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
                   />
                 }
@@ -141,7 +141,7 @@ export class JobDetails extends React.Component<JobDetailsProps> {
                   label="Last Modified Time"
                   value={
                     <Timestamp
-                      time={TimestampToMoment(job.modified)}
+                      time={TimestampToMoment(job.modified, null)}
                       format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
                     />
                   }
@@ -152,7 +152,7 @@ export class JobDetails extends React.Component<JobDetailsProps> {
                   label="Completed Time"
                   value={
                     <Timestamp
-                      time={TimestampToMoment(job.finished)}
+                      time={TimestampToMoment(job.finished, null)}
                       format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
                     />
                   }
@@ -162,7 +162,7 @@ export class JobDetails extends React.Component<JobDetailsProps> {
                 label="Last Execution Time"
                 value={
                   <Timestamp
-                    time={TimestampToMoment(job.last_run)}
+                    time={TimestampToMoment(job.last_run, null)}
                     format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
                   />
                 }
