@@ -469,7 +469,6 @@ var LogicTestConfigs = []TestClusterConfig{
 		Localities: multiregion15node5region3azsLocalities,
 	},
 	{
-		// TODO: rename this to something that reflects the versions used. Maybe use MinSupportedVersion instead.
 		Name:                        "local-mixed-23.1-23.2",
 		NumNodes:                    1,
 		OverrideDistSQLMode:         "off",
