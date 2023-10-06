@@ -387,7 +387,7 @@ func (m *RandomStreamClient) Plan(ctx context.Context, _ streampb.StreamID) (Top
 
 // Create implements the Client interface.
 func (m *RandomStreamClient) Create(
-	ctx context.Context, tenantName roachpb.TenantName,
+	ctx context.Context, tenantName roachpb.TenantName, _ streampb.ReplicationProducerRequest,
 ) (streampb.ReplicationProducerSpec, error) {
 	log.Infof(ctx, "creating random stream for tenant %s", tenantName)
 	return streampb.ReplicationProducerSpec{

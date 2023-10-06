@@ -4,7 +4,7 @@ query IBIT colnames
 SELECT id, active, length(info), name FROM system.tenants ORDER BY id
 ----
 id  active  length  name
-1   true    10      system
+1   true    12      system
 
 # Create three tenants.
 
