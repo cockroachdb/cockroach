@@ -245,6 +245,9 @@ ALTER FUNCTION f_test_sc() SET SCHEMA pg_catalog;
 statement error pgcode 42723 pq: function test_alter_sc.f_test_sc\(\) already exists in schema "test_alter_sc"
 ALTER FUNCTION f_test_sc() SET SCHEMA test_alter_sc;
 
+statement error pgcode 42883 could not find a procedure named "f_test_sc"
+ALTER PROCEDURE f_test_sc(INT) SET SCHEMA test_alter_sc;
+
 # Make sure moving to same schema has not effects.
 statement ok
 ALTER FUNCTION f_test_sc(INT) SET SCHEMA public;

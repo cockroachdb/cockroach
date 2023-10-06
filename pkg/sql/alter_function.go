@@ -313,6 +313,16 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
+	if !n.n.Procedure && fnDesc.IsProcedure() {
+		return pgerror.Newf(
+			pgcode.UndefinedFunction, "could not find a function named %q", &n.n.Function.FuncName,
+		)
+	}
+	if n.n.Procedure && !fnDesc.IsProcedure() {
+		return pgerror.Newf(
+			pgcode.UndefinedFunction, "could not find a procedure named %q", &n.n.Function.FuncName,
+		)
+	}
 	oldFnName, err := params.p.getQualifiedFunctionName(params.ctx, fnDesc)
 	if err != nil {
 		return err
@@ -358,7 +368,7 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	maybeExistingFuncObj.FuncName.SchemaName = tree.Name(targetSc.GetName())
 	maybeExistingFuncObj.FuncName.ExplicitSchema = true
 	existing, err := params.p.matchRoutine(params.ctx, maybeExistingFuncObj,
-		false /* required */, tree.UDFRoutine)
+		false /* required */, tree.UDFRoutine|tree.ProcedureRoutine)
 	if err != nil {
 		return err
 	}
