@@ -20,6 +20,6 @@ export const selectStatementFingerprintInsights = createSelector(
     if (!cachedFingerprintInsights) {
       return null;
     }
-    return cachedFingerprintInsights[fingerprintID]?.data?.results;
+    return cachedFingerprintInsights[fingerprintID]?.data;
   },
 );

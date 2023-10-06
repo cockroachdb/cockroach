@@ -14,7 +14,7 @@ import {
   filterTransactionInsights,
   getAppsFromStatementInsights,
   getAppsFromTransactionInsights,
-  getInsightsFromProblemsAndCauses,
+  getInsightsFromProblemAndCauses,
   mergeTxnInsightDetails,
 } from "./utils";
 import {
@@ -23,7 +23,6 @@ import {
   highContentionInsight,
   highRetryCountInsight,
   InsightExecEnum,
-  InsightNameEnum,
   planRegressionInsight,
   slowExecutionInsight,
   StatementStatus,
@@ -33,6 +32,7 @@ import {
   TxnInsightDetails,
   TxnInsightEvent,
 } from "./types";
+import { InsightCause, InsightProblem } from "../api";
 
 const INTERNAL_APP_PREFIX = "$ internal";
 
@@ -449,49 +449,51 @@ describe("test workload insights utils", () => {
     appNames.forEach(app => expect(appsFromStmts.includes(app)).toBeTruthy());
   });
 
-  describe("getInsightsFromProblemsAndCauses", () => {
+  describe("getInsightsFromProblemAndCauses", () => {
     const createTestCases = (execType: InsightExecEnum) => [
       {
-        problem: "FailedExecution",
-        causes: [InsightNameEnum.failedExecution],
+        problem: InsightProblem.FailedExecution,
+        causes: [InsightCause.Unset],
         expectedInsights: [failedExecutionInsight(execType)],
       },
       {
-        problem: "SlowExecution",
-        causes: [InsightNameEnum.failedExecution],
+        problem: InsightProblem.FailedExecution,
+        causes: [],
         expectedInsights: [failedExecutionInsight(execType)],
       },
       {
-        problem: "SlowExecution",
+        problem: InsightProblem.SlowExecution,
         causes: [],
         expectedInsights: [slowExecutionInsight(execType)],
       },
       {
-        problem: "SlowExecution",
+        problem: InsightProblem.SlowExecution,
         causes: [
-          InsightNameEnum.planRegression,
-          InsightNameEnum.suboptimalPlan,
-          InsightNameEnum.highRetryCount,
-          InsightNameEnum.highContention,
+          InsightCause.PlanRegression,
+          InsightCause.SuboptimalPlan,
+          InsightCause.HighContention,
+          InsightCause.HighRetryCount,
+          InsightCause.Unset,
         ],
         expectedInsights: [
           planRegressionInsight(execType),
           suboptimalPlanInsight(execType),
           highRetryCountInsight(execType),
           highContentionInsight(execType),
+          slowExecutionInsight(execType),
         ],
       },
       {
-        problem: "random",
-        causes: [InsightNameEnum.failedExecution],
+        problem: InsightProblem.None,
+        causes: [InsightCause.Unset],
         expectedInsights: [],
       },
     ];
 
     [InsightExecEnum.STATEMENT, InsightExecEnum.TRANSACTION].forEach(type => {
       createTestCases(type).forEach(tc => {
-        const insights = getInsightsFromProblemsAndCauses(
-          [tc.problem],
+        const insights = getInsightsFromProblemAndCauses(
+          tc.problem,
           tc.causes,
           type,
         );

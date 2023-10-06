@@ -12,6 +12,5 @@ export * from "./sessionsPage";
 export { SessionDetails } from "./sessionDetails";
 export * from "./sessionsPageConnected";
 export * from "./sessionDetailsConnected";
-export { byteArrayToUuid } from "./sessionsTable";
 
 export type { SessionDetailsProps } from "./sessionDetails";

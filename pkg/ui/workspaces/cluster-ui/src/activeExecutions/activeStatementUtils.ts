@@ -9,8 +9,7 @@
 // licenses/APL.txt.
 
 import moment from "moment-timezone";
-import { byteArrayToUuid } from "src/sessions";
-import { TimestampToMoment, unset } from "src/util";
+import { byteArrayToUuid, TimestampToMoment, unset } from "src/util";
 import { ActiveTransaction } from ".";
 import {
   SessionsResponse,

@@ -11,11 +11,11 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../../utils";
 import { StmtInsightEvent } from "src/insights";
-import { SqlApiResponse, StmtInsightsReq } from "src/api";
+import { StmtInsightsReq } from "src/api";
 import moment from "moment-timezone";
 
 export type StmtInsightsState = {
-  data: SqlApiResponse<StmtInsightEvent[]>;
+  data: StmtInsightEvent[];
   lastError: Error;
   valid: boolean;
   inFlight: boolean;
@@ -34,10 +34,7 @@ const statementInsightsSlice = createSlice({
   name: `${DOMAIN_NAME}/statementInsightsSlice`,
   initialState,
   reducers: {
-    received: (
-      state,
-      action: PayloadAction<SqlApiResponse<StmtInsightEvent[]>>,
-    ) => {
+    received: (state, action: PayloadAction<StmtInsightEvent[]>) => {
       state.data = action.payload;
       state.valid = true;
       state.lastError = null;
