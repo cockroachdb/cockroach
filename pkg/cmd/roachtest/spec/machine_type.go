@@ -312,6 +312,8 @@ func SelectAzureMachineType(cpus int, mem MemPerCPU) (string, error) {
 		return "Standard_D48_v3", nil
 	case cpus <= 64:
 		return "Standard_D64_v3", nil
+	case cpus <= 96:
+		return "Standard_D96_v5", nil
 	default:
 		return "", errors.Newf("no azure machine type with %d cpus", cpus)
 	}
