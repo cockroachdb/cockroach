@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const CancelCheckInterval = 16
+
 // Constraint specifies the possible set of values that one or more columns
 // will have in the result set. If this is a single column constraint, then
 // that column's value will always be part of one of the spans in this
@@ -344,7 +346,7 @@ func (c *Constraint) findIntersectingSpan(keyCtx *KeyContext, sp *Span) (_ *Span
 //	c:      /a/b: [/1 - /2] [/4 - /4]
 //	other:  /b: [/5 - /5]
 //	result: /a/b: [/1/5 - /2/5] [/4/5 - /4/5]
-func (c *Constraint) Combine(evalCtx *eval.Context, other *Constraint) {
+func (c *Constraint) Combine(evalCtx *eval.Context, other *Constraint, checkCancellation func()) {
 	if !other.Columns.IsStrictSuffixOf(&c.Columns) {
 		// Note: we don't want to let the c and other pointers escape by passing
 		// them directly to Sprintf.
@@ -366,7 +368,15 @@ func (c *Constraint) Combine(evalCtx *eval.Context, other *Constraint) {
 	var resultInitialized bool
 	keyCtx := KeyContext{Columns: c.Columns, EvalCtx: evalCtx}
 
+	numIterations := 0
+	cancelCheck := func() {
+		numIterations++
+		if checkCancellation != nil && (numIterations%CancelCheckInterval) == 0 {
+			checkCancellation()
+		}
+	}
 	for i := 0; i < c.Spans.Count(); i++ {
+		cancelCheck()
 		sp := *c.Spans.Get(i)
 
 		startLen, endLen := sp.start.Length(), sp.end.Length()
@@ -402,6 +412,7 @@ func (c *Constraint) Combine(evalCtx *eval.Context, other *Constraint) {
 				}
 			}
 			for j := 0; j < other.Spans.Count(); j++ {
+				cancelCheck()
 				extSp := other.Spans.Get(j)
 				var newSp Span
 				newSp.Init(
@@ -450,6 +461,7 @@ func (c *Constraint) Combine(evalCtx *eval.Context, other *Constraint) {
 				resultInitialized = true
 				result.Alloc(c.Spans.Count())
 				for j := 0; j < i; j++ {
+					cancelCheck()
 					result.Append(c.Spans.Get(j))
 				}
 			}
