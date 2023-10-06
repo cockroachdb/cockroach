@@ -652,13 +652,6 @@ func TestLogic_drop_owned_by(
 	runLogicTest(t, "drop_owned_by")
 }
 
-func TestLogic_drop_procedure(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "drop_procedure")
-}
-
 func TestLogic_drop_role_with_default_privileges(
 	t *testing.T,
 ) {
@@ -1392,27 +1385,6 @@ func TestLogic_privileges_table(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "privileges_table")
-}
-
-func TestLogic_procedure(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "procedure")
-}
-
-func TestLogic_procedure_plpgsql(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "procedure_plpgsql")
-}
-
-func TestLogic_procedure_privileges(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "procedure_privileges")
 }
 
 func TestLogic_propagate_input_ordering(

@@ -583,8 +583,13 @@ CREATE SCHEMA sc_test_show_grants;
 SET search_path = sc_test_show_grants;
 CREATE FUNCTION f_test_show_grants(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 CREATE FUNCTION f_test_show_grants(INT, string, OID) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
-CREATE PROCEDURE test_priv_p() LANGUAGE SQL AS $$ SELECT 1 $$;
 CREATE USER u_test_show_grants;
+
+skipif config local-mixed-22.2-23.1
+statement ok
+CREATE PROCEDURE test_priv_p() LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
 GRANT EXECUTE ON FUNCTION f_test_show_grants(INT), f_test_show_grants(INT, string, OID) TO u_test_show_grants;
 
 statement error pgcode 42725 pq: function name "f_test_show_grants" is not unique

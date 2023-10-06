@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -37,6 +38,11 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		if string(cf.Name.CatalogName) != b.evalCtx.SessionData().Database {
 			panic(unimplemented.New("CREATE FUNCTION", "cross-db references not supported"))
 		}
+	}
+
+	activeVersion := b.evalCtx.Settings.Version.ActiveVersion(b.ctx)
+	if cf.IsProcedure && !activeVersion.IsActive(clusterversion.V23_2_Procedures) {
+		panic(unimplemented.New("procedures", "procedures are not yet supported"))
 	}
 
 	sch, resName := b.resolveSchemaForCreateFunction(&cf.Name)
