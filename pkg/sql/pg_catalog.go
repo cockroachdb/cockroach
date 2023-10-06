@@ -2592,6 +2592,11 @@ func addPgProcUDFRow(
 		argNames = argNamesArray
 	}
 
+	kind := tree.NewDString("f")
+	if fnDesc.IsProcedure() {
+		kind = tree.NewDString("p")
+	}
+
 	lang := languageInternalOid
 	if fnDesc.GetLanguage() == catpb.Function_PLPGSQL {
 		lang = languagePlpgsqlOid
@@ -2629,7 +2634,7 @@ func addPgProcUDFRow(
 		tree.DNull,                                       // probin
 		tree.DNull,                                       // proconfig
 		tree.DNull,                                       // proacl
-		tree.NewDString("f"),                             // prokind
+		kind,                                             // prokind
 		// These columns were automatically created by pg_catalog_test's missing column generator.
 		tree.DNull, // prosupport
 	)
