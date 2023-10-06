@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//pkg/ccl/pgcryptoccl/pgcryptocipherccl",
         "//pkg/ccl/utilccl",
+        "//pkg/docs",
         "//pkg/sql/sem/builtins/pgcrypto",
         "//pkg/sql/sem/eval",
     ],
@@ -22,6 +23,7 @@ go_test(
     args = ["-test.timeout=295s"],
     tags = ["ccl_test"],
     deps = [
+        ":pgcryptoccl",
         "//pkg/base",
         "//pkg/ccl",
         "//pkg/security/securityassets",
