@@ -235,6 +235,7 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 			SkipJobMetricsPollingJobBootstrap: true,
 			SkipAutoConfigRunnerJobBootstrap:  true,
 			SkipUpdateSQLActivityJobBootstrap: true,
+			SkipMVCCStatisticsJobBootstrap:    true,
 		}
 		args.Knobs.KeyVisualizer = &keyvisualizer.TestingKnobs{SkipJobBootstrap: true}
 

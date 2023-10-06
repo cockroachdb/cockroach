@@ -52,6 +52,7 @@ var (
 	_ Details = AutoConfigEnvRunnerDetails{}
 	_ Details = AutoConfigTaskDetails{}
 	_ Details = AutoUpdateSQLActivityDetails{}
+	_ Details = MVCCStatisticsJobDetails{}
 )
 
 // ProgressDetails is a marker interface for job progress details proto structs.
@@ -76,6 +77,7 @@ var (
 	_ ProgressDetails = AutoConfigEnvRunnerProgress{}
 	_ ProgressDetails = AutoConfigTaskProgress{}
 	_ ProgressDetails = AutoUpdateSQLActivityProgress{}
+	_ ProgressDetails = MVCCStatisticsJobProgress{}
 )
 
 // Type returns the payload's job type and panics if the type is invalid.
@@ -159,6 +161,7 @@ var AutomaticJobTypes = [...]Type{
 	TypeAutoConfigTask,
 	TypeKeyVisualizer,
 	TypeAutoUpdateSQLActivity,
+	TypeMVCCStatisticsUpdate,
 }
 
 // DetailsType returns the type for a payload detail.
@@ -212,6 +215,8 @@ func DetailsType(d isPayload_Details) (Type, error) {
 		return TypeAutoConfigTask, nil
 	case *Payload_AutoUpdateSqlActivities:
 		return TypeAutoUpdateSQLActivity, nil
+	case *Payload_MvccStatisticsDetails:
+		return TypeMVCCStatisticsUpdate, nil
 	default:
 		return TypeUnspecified, errors.Newf("Payload.Type called on a payload with an unknown details type: %T", d)
 	}
@@ -256,6 +261,7 @@ var JobDetailsForEveryJobType = map[Type]Details{
 	TypeAutoConfigEnvRunner:          AutoConfigEnvRunnerDetails{},
 	TypeAutoConfigTask:               AutoConfigTaskDetails{},
 	TypeAutoUpdateSQLActivity:        AutoUpdateSQLActivityDetails{},
+	TypeMVCCStatisticsUpdate:         MVCCStatisticsJobDetails{},
 }
 
 // WrapProgressDetails wraps a ProgressDetails object in the protobuf wrapper
@@ -311,6 +317,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_AutoConfigTask{AutoConfigTask: &d}
 	case AutoUpdateSQLActivityProgress:
 		return &Progress_UpdateSqlActivity{UpdateSqlActivity: &d}
+	case MVCCStatisticsJobProgress:
+		return &Progress_MvccStatisticsProgress{MvccStatisticsProgress: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown progress type %T", d))
 	}
@@ -364,6 +372,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.AutoConfigTask
 	case *Payload_AutoUpdateSqlActivities:
 		return *d.AutoUpdateSqlActivities
+	case *Payload_MvccStatisticsDetails:
+		return *d.MvccStatisticsDetails
 	default:
 		return nil
 	}
@@ -417,6 +427,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.AutoConfigTask
 	case *Progress_UpdateSqlActivity:
 		return *d.UpdateSqlActivity
+	case *Progress_MvccStatisticsProgress:
+		return *d.MvccStatisticsProgress
 	default:
 		return nil
 	}
@@ -494,6 +506,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_AutoConfigTask{AutoConfigTask: &d}
 	case AutoUpdateSQLActivityDetails:
 		return &Payload_AutoUpdateSqlActivities{AutoUpdateSqlActivities: &d}
+	case MVCCStatisticsJobDetails:
+		return &Payload_MvccStatisticsDetails{MvccStatisticsDetails: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -529,7 +543,7 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 24
+const NumJobTypes = 25
 
 // ChangefeedDetailsMarshaler allows for dependency injection of
 // cloud.SanitizeExternalStorageURI to avoid the dependency from this

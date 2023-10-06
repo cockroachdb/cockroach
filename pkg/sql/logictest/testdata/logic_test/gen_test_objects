@@ -179,17 +179,18 @@ query T
 SELECT table_name FROM [SHOW TABLES]
 ORDER BY table_name
 ----
-comments
-join_tok\\x86ens
-lease
-protecte😠d_ts_records
-ra  ngelog
+mig%prations
+privileges
+replication_constraint_stats
 replication_critical_localities
-statement_bundle_chunks
+s
+t̾atement_diagnostics
+schedulEd_jobs
+statement_execution_insights
+sta͌temenṭ_bundlẻ_chunks
 sta😣tement_statistics
 table_statistics
 tenant_id_seq
-🙁role_members
 
 # Again, the column names are randomized.
 query TTT
@@ -198,26 +199,26 @@ WHERE table_catalog = 'newdb2' AND table_schema = 'public'
 ORDER BY table_name, column_name
 LIMIT 20
 ----
-comments               "comm😷eNt"          text
-comments               object_id           bigint
-comments               rowid               bigint
-comments               sub_id              bigint
-comments               "type%q"            bigint
-"join_tok\\x86ens"     " expiration"       timestamp with time zone
-"join_tok\\x86ens"     rowid               bigint
-"join_tok\\x86ens"     "secre%pt%q"        bytea
-"join_tok\\x86ens"     "😺id                "                            uuid
-lease                  "crd%qb_region"     bytea
-lease                  "des\fcID"          bigint
-lease                  "expir(at\\xb6ion"  timestamp without time zone
-lease                  "nodeID̸"           bigint
-lease                  rowid               bigint
-lease                  version             bigint
-protecte😠d_ts_records  _ts                 numeric
-protecte😠d_ts_records  "i'd"               uuid
-protecte😠d_ts_records  "meta_type"        text
-protecte😠d_ts_records  met😹a               bytea
-protecte😠d_ts_records  num_spans           bigint
+"mig%prations"                "%qm,inor"          bigint
+"mig%prations"                completed_at        timestamp with time zone
+"mig%prations"                internal            bigint
+"mig%prations"                "major'"            bigint
+"mig%prations"                patch               bigint
+"mig%prations"                rowid               bigint
+privileges                    "gran t_options"    ARRAY
+privileges                    path😀               text
+privileges                    privileges          ARRAY
+privileges                    rowid               bigint
+privileges                    "user%q_%qid"       oid
+privileges                    username            text
+replication_constraint_stats  "  ty*pe"           text
+replication_constraint_stats  config              text
+replication_constraint_stats  report_id           bigint
+replication_constraint_stats  rowid               bigint
+replication_constraint_stats  subzone_id          bigint
+replication_constraint_stats  "viola!tion_start"  timestamp with time zone
+replication_constraint_stats  violating_ranges    bigint
+replication_constraint_stats  zon😂e_id            bigint
 
 subtest templates/different_templates_in_each_db
 
@@ -235,15 +236,15 @@ SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
 FROM "".crdb_internal.tables WHERE database_name ILIKE '%d%b%t%'
 ORDER BY database_name, schema_name, name
 ----
-"d%qbt1"  public  privileges
-"d%qbt1"  public  replication_stats
-"d%qbt1"  public  "stat ement_diagnostics"
-"d%qbt2"  public  eventlog
-"d%qbt2"  public  "role_option's"
-"d%qbt2"  public  "web_seSsions"
-dbt3      public  "%0eusers"
-dbt3      public  span_configurations
-dbt3      public  "transaction_ac'tivity"
+"d%qbt1"  public  span_stats_samples
+"d%qbt1"  public  "t abLe_statistics"
+"d%qbt1"  public  "transaction_execut%ion_insights"
+"d%qbt2"  public  "r\\x0fegion_liveness"
+"d%qbt2"  public  span_stats_buckets
+"d%qbt2"  public  "transaction_statisTics"
+dbt3      public  "extern'al_connections"
+dbt3      public  "te\\x64nant_i""d_se q"
+dbt3      public  "tenant_setting%vs"
 
 
 statement ok

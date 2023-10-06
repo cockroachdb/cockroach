@@ -128,6 +128,7 @@ func TestRegistryGC(t *testing.T) {
 				DontUseJobs:                       true,
 				SkipJobMetricsPollingJobBootstrap: true,
 				SkipAutoConfigRunnerJobBootstrap:  true,
+				SkipMVCCStatisticsJobBootstrap:    true,
 			},
 			KeyVisualizer: &keyvisualizer.TestingKnobs{
 				SkipJobBootstrap: true,
@@ -282,6 +283,7 @@ func TestRegistryGCPagination(t *testing.T) {
 				SkipJobMetricsPollingJobBootstrap: true,
 				SkipAutoConfigRunnerJobBootstrap:  true,
 				SkipUpdateSQLActivityJobBootstrap: true,
+				SkipMVCCStatisticsJobBootstrap:    true,
 			},
 			KeyVisualizer: &keyvisualizer.TestingKnobs{
 				SkipJobBootstrap: true,
@@ -699,6 +701,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 					SkipJobMetricsPollingJobBootstrap: true,
 					SkipAutoConfigRunnerJobBootstrap:  true,
 					SkipUpdateSQLActivityJobBootstrap: true,
+					SkipMVCCStatisticsJobBootstrap:    true,
 				},
 				KeyVisualizer: &keyvisualizer.TestingKnobs{
 					SkipJobBootstrap: true,
