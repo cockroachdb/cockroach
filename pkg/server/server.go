@@ -776,7 +776,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			clock,
 			rangeFeedFactory,
 			keys.SpanConfigurationsTableID,
-			1<<20, /* 1 MB */
+			4<<20, /* 4 MB */
 			fallbackConf,
 			cfg.Settings,
 			spanconfigstore.NewBoundsReader(tenantCapabilitiesWatcher),

@@ -1281,7 +1281,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		codec,
 		cfg.Settings,
 		cfg.rangeFeedFactory,
-		1<<20, /* 1 MB bufferMemLimit */
+		4<<20, /* 4 MB bufferMemLimit */
 		cfg.stopper,
 		// TODO(irfansharif): What should this no-op cadence be?
 		30*time.Second, /* checkpointNoopsEvery */
