@@ -8448,9 +8448,9 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 	},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{Name: "name", Typ: types.String},
+				{Name: "name", Typ: types.RefCursor},
 			},
-			ReturnType: tree.FixedReturnType(types.String),
+			ReturnType: tree.FixedReturnType(types.RefCursor),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
 					name := evalCtx.Planner.GenUniqueCursorName()
@@ -8468,7 +8468,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 		Undocumented: true,
 	},
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "name", Typ: types.String}},
+			Types:      tree.ParamTypes{{Name: "name", Typ: types.RefCursor}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
@@ -8487,7 +8487,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 	},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{Name: "name", Typ: types.String},
+				{Name: "name", Typ: types.RefCursor},
 				{Name: "direction", Typ: types.Int},
 				{Name: "count", Typ: types.Int},
 				{Name: "resultTypes", Typ: types.Any},
