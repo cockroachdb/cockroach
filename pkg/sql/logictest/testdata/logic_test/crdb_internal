@@ -566,7 +566,7 @@ INSERT INTO system.zones (id, config) VALUES
   ($testdb_foo_id, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
   ($schema_bar_id, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0))
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----
@@ -1282,13 +1282,13 @@ true
 
 user root
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 statement ok
 GRANT SYSTEM MODIFYSQLCLUSTERSETTING TO testuser
 
 user testuser
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 query T
 SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics.reporting.enabled')
 ----
@@ -1299,7 +1299,7 @@ user root
 statement ok
 REVOKE SYSTEM VIEWCLUSTERSETTING FROM testuser
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 statement ok
 REVOKE SYSTEM MODIFYSQLCLUSTERSETTING FROM testuser
 
@@ -1355,19 +1355,19 @@ awaitstatement sleepQuery
 
 user root
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 statement ok
 GRANT SYSTEM MODIFYSQLCLUSTERSETTING TO testuser
 
 user testuser
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 query T
 SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('sql.defaults.zigzag_join.enabled')
 ----
 false
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 query T
 SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics.reporting.enabled')
 ----
@@ -1375,7 +1375,7 @@ SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics
 
 user root
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 statement ok
 REVOKE SYSTEM MODIFYSQLCLUSTERSETTING FROM testuser
 

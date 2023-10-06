@@ -9,7 +9,7 @@ test       root  NULL  NULL  {}  NULL
 # The test expectations are different on tenants because of
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
 skipif config 3node-tenant-default-configs
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 query TTTTT
 SELECT schema_name, table_name, type, owner, locality FROM [SHOW TABLES FROM system] ORDER BY 2
 ----
@@ -127,7 +127,7 @@ public  zones                            table     node  NULL
 # The test expectations are different on tenants because of
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
 skipif config 3node-tenant-default-configs
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 query I rowsort
 SELECT id FROM system.descriptor ORDER BY 1
 ----
@@ -293,7 +293,7 @@ SHOW COLUMNS FROM system.zones
 id      INT8   false  NULL  ·  {primary}  false
 config  BYTES  true   NULL  ·  {primary}  false
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 query TTBTTTB rowsort
 SHOW COLUMNS FROM system.lease
 ----
@@ -303,7 +303,7 @@ nodeID       INT8       false  NULL  ·  {primary}  false
 expiration   TIMESTAMP  false  NULL  ·  {primary}  false
 crdb_region  BYTES      false  NULL  ·  {primary}  false
 
-onlyif config local-mixed-22.2-23.1
+onlyif config local-mixed-23.1-23.2
 query TTBTTTB rowsort
 SHOW COLUMNS FROM system.lease
 ----
@@ -340,7 +340,7 @@ key          STRING     false  NULL  ·  {primary}  false
 value        BYTES      true   NULL  ·  {primary}  false
 lastUpdated  TIMESTAMP  false  NULL  ·  {primary}  false
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 query TTBTTTB rowsort
 SHOW COLUMNS FROM system.jobs
 ----
@@ -357,7 +357,7 @@ num_runs           INT8       true   NULL            ·  {jobs_run_stats_idx,pri
 last_run           TIMESTAMP  true   NULL            ·  {jobs_run_stats_idx,primary}                                                                                   false
 job_type           STRING     true   NULL            ·  {jobs_job_type_idx,primary}                                                                                    false
 
-onlyif config local-mixed-22.2-23.1
+onlyif config local-mixed-23.1-23.2
 query TTBTTTB rowsort
 SHOW COLUMNS FROM system.jobs
 ----
@@ -381,7 +381,7 @@ value        STRING     false  NULL   ·  {primary}  false
 lastUpdated  TIMESTAMP  false  now()  ·  {primary}  false
 valueType    STRING     true   NULL   ·  {primary}  false
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 query TTBTTTB rowsort
 SHOW COLUMNS FROM system.role_members
 ----
@@ -391,7 +391,7 @@ isAdmin    BOOL    false  NULL  ·  {primary}                                   
 role_id    OID     false  NULL  ·  {primary,role_members_role_id_idx,role_members_role_id_member_id_key}                                                                           false
 member_id  OID     false  NULL  ·  {primary,role_members_member_id_idx,role_members_role_id_member_id_key}                                                                         false
 
-onlyif config local-mixed-22.2-23.1
+onlyif config local-mixed-23.1-23.2
 query TTBTTTB rowsort
 SHOW COLUMNS FROM system.role_members
 ----
@@ -409,7 +409,7 @@ system  root   CONNECT  true
 # The test expectations are different on tenants because of
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
 skipif config 3node-tenant-default-configs
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 query TTTTTB rowsort
 SHOW GRANTS ON system.*
 ----
@@ -1326,7 +1326,7 @@ UPSERT INTO system.settings (name, value) VALUES ('somesetting', 'somevalueother
 
 user root
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 query TTBOO
 SELECT * from system.role_members
 ----

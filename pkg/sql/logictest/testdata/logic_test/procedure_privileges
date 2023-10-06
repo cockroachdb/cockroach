@@ -734,7 +734,7 @@ CALL test.p()
 statement ok
 SET ROLE tester
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 statement error pgcode 42501 user tester does not have EXECUTE privilege on procedure p
 CALL test.p()
 

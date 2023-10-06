@@ -77,12 +77,12 @@ CALL p(foo())
 # TODO(mgartner): This should be pgcode 42723 with the message: 'function "p"
 # already exists with the same argument types'.
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 statement error pgcode XXUUU cannot perform schema change on function
 CREATE FUNCTION p() RETURNS VOID LANGUAGE SQL AS ''
 
 onlyif config local-legacy-schema-changer
-onlyif config local-mixed-22.2-23.1
+onlyif config local-mixed-23.1-23.2
 statement error pgcode XXUUU function "p" already exists with same argument types
 CREATE FUNCTION p() RETURNS VOID LANGUAGE SQL AS ''
 

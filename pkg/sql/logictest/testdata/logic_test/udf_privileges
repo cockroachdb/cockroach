@@ -762,11 +762,11 @@ SELECT test.my_add(1,2)
 statement ok
 SET ROLE tester
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 statement error pgcode 42501 user tester does not have EXECUTE privilege on function my_add
 SELECT test.my_add(1,2)
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 statement error pgcode 42501 user tester does not have EXECUTE privilege on function my_add
 SELECT * FROM (VALUES (1), (2)) AS v(i) WHERE i = test.my_add(1,2)
 

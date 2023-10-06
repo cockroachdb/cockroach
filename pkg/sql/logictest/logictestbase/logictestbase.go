@@ -470,7 +470,7 @@ var LogicTestConfigs = []TestClusterConfig{
 	},
 	{
 		// TODO: rename this to something that reflects the versions used. Maybe use MinSupportedVersion instead.
-		Name:                        "local-mixed-22.2-23.1",
+		Name:                        "local-mixed-23.1-23.2",
 		NumNodes:                    1,
 		OverrideDistSQLMode:         "off",
 		BootstrapVersion:            clusterversion.V23_1,
@@ -549,7 +549,7 @@ var (
 		"fakedist",
 		"fakedist-vec-off",
 		"fakedist-disk",
-		"local-mixed-22.2-23.1",
+		"local-mixed-23.1-23.2",
 	}
 	// FiveNodeDefaultConfigName is a special alias for all 5 node configs.
 	FiveNodeDefaultConfigName = "5node-default-configs"

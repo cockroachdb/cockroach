@@ -43,7 +43,7 @@ CREATE VIEW redacted_descriptors AS
 # The legacy and declarative schema changer have slightly different implementation
 # of `ADD COLUMN ... DEFAULT ... CHECK(...)`, resulting in slightly different
 # descriptor. We will skip the config that uses legacy schema changer.
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 skipif config local-legacy-schema-changer
 query T
 SELECT descriptor from redacted_descriptors where id = 'collate_partition'::REGCLASS;
@@ -173,7 +173,7 @@ SELECT descriptor from redacted_descriptors where id = 'collate_partition'::REGC
     }
 }
 
-onlyif config local-mixed-22.2-23.1
+onlyif config local-mixed-23.1-23.2
 query T
 SELECT descriptor from redacted_descriptors where id = 'collate_partition'::REGCLASS;
 ----

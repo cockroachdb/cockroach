@@ -1,4 +1,4 @@
-# LogicTest: local local-mixed-22.2-23.1
+# LogicTest: local local-mixed-23.1-23.2
 
 statement ok
 CREATE DATABASE db
@@ -21,7 +21,7 @@ statement ok
 DROP DATABASE db
 
 # GC jobs in a non-mixed-version cluster, 23.1+ style.
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 query T rowsort
 SELECT description FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE GC'
 ----

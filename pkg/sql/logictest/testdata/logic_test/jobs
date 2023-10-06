@@ -184,18 +184,18 @@ RESUME JOB (SELECT $job_id)
 
 user root
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 statement ok
 GRANT SYSTEM VIEWJOB TO testuser
 
 # TODO: revise this
-# onlyif config local-mixed-22.2-23.1
+# onlyif config local-mixed-23.1-23.2
 # statement error upgrade must be finalized before using VIEWJOB system privilege
 # GRANT SYSTEM VIEWJOB TO testuser
 
 user testuser
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 # testuser should be able to see all jobs
 query TTT
 SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE GC' ORDER BY 1, 2, 3
@@ -208,7 +208,7 @@ SCHEMA CHANGE GC  GC for temporary index used during index backfill  testuser2
 
 user root
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 statement ok
 REVOKE SYSTEM VIEWJOB FROM testuser
 
@@ -225,7 +225,7 @@ user root
 statement ok
 CREATE ROLE jobviewer
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 statement ok
 GRANT SYSTEM VIEWJOB TO jobviewer
 
@@ -234,7 +234,7 @@ GRANT jobviewer TO testuser
 
 user testuser
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 # testuser should be able to see all jobs
 query TTT
 SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE GC' ORDER BY 1, 2, 3
@@ -269,14 +269,14 @@ ORDER BY feature_name DESC
 job.schema_change.successful
 
 # Ensure one POLL JOBS STATS job is running
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 query I
 SELECT count(*) FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'POLL JOBS STATS' AND status = 'running'
 ----
 1
 
 # Ensure one AUTO CONFIG RUNNER job is running
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1-23.2
 query I
 SELECT count(*) FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'AUTO CONFIG RUNNER' AND status = 'running'
 ----
