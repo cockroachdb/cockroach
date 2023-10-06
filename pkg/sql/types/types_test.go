@@ -364,6 +364,10 @@ func TestTypes(t *testing.T) {
 		{Oid, MakeScalar(OidFamily, oid.T_oid, 0, 0, emptyLocale)},
 		{RegClass, MakeScalar(OidFamily, oid.T_regclass, 0, 0, emptyLocale)},
 
+		{RefCursor, &T{InternalType: InternalType{
+			Family: RefCursorFamily, Oid: oid.T_refcursor, Locale: &emptyLocale}}},
+		{RefCursor, MakeScalar(RefCursorFamily, oid.T_refcursor, 0, 0, emptyLocale)},
+
 		// STRING
 		{MakeString(0), String},
 		{MakeString(0), &T{InternalType: InternalType{
@@ -392,10 +396,6 @@ func TestTypes(t *testing.T) {
 		{Name, &T{InternalType: InternalType{
 			Family: StringFamily, Oid: oid.T_name, Locale: &emptyLocale}}},
 		{Name, MakeScalar(StringFamily, oid.T_name, 0, 0, emptyLocale)},
-
-		{RefCursor, &T{InternalType: InternalType{
-			Family: StringFamily, Oid: oid.T_refcursor, Locale: &emptyLocale}}},
-		{RefCursor, MakeScalar(StringFamily, oid.T_refcursor, 0, 0, emptyLocale)},
 
 		// TIME
 		{Time, &T{InternalType: InternalType{
@@ -773,13 +773,15 @@ func TestMarshalCompat(t *testing.T) {
 		{Float, InternalType{Family: FloatFamily, Oid: oid.T_float8, Width: 64}},
 		{Float4, InternalType{Family: FloatFamily, Oid: oid.T_float4, Width: 32, VisibleType: visibleREAL}},
 
+		// REFCURSOR
+		{RefCursor, InternalType{Family: RefCursorFamily, Oid: oid.T_refcursor}},
+
 		// STRING
 		{MakeString(10), InternalType{Family: StringFamily, Oid: oid.T_text, Width: 10}},
 		{VarChar, InternalType{Family: StringFamily, Oid: oid.T_varchar, VisibleType: visibleVARCHAR}},
 		{MakeChar(10), InternalType{Family: StringFamily, Oid: oid.T_bpchar, Width: 10, VisibleType: visibleCHAR}},
 		{QChar, InternalType{Family: StringFamily, Oid: oid.T_char, Width: 1, VisibleType: visibleQCHAR}},
 		{Name, InternalType{Family: name, Oid: oid.T_name}},
-		{RefCursor, InternalType{Family: StringFamily, Oid: oid.T_refcursor}},
 	}
 
 	for _, tc := range testCases {
@@ -837,13 +839,15 @@ func TestUnmarshalCompat(t *testing.T) {
 		{InternalType{Family: IntFamily, Width: 20}, Int},
 		{InternalType{Family: IntFamily}, Int},
 
+		// REFCURSOR
+		{InternalType{Family: RefCursorFamily, Oid: oid.T_refcursor}, RefCursor},
+
 		// STRING
 		{InternalType{Family: StringFamily}, String},
 		{InternalType{Family: StringFamily, VisibleType: visibleVARCHAR}, VarChar},
 		{InternalType{Family: StringFamily, VisibleType: visibleVARCHAR, Width: 20}, MakeVarChar(20)},
 		{InternalType{Family: StringFamily, VisibleType: visibleCHAR}, typeBpChar},
 		{InternalType{Family: StringFamily, VisibleType: visibleQCHAR, Width: 1}, QChar},
-		{InternalType{Family: StringFamily, Oid: oid.T_refcursor}, RefCursor},
 	}
 
 	for _, tc := range testCases {

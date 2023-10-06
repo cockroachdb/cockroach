@@ -8482,7 +8482,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
 					name := evalCtx.Planner.GenUniqueCursorName()
-					return tree.NewDString(string(name)), nil
+					return tree.NewDRefCursor(string(name)), nil
 				}
 				return args[0], nil
 			},

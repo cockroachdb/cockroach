@@ -1999,7 +1999,7 @@ oid     typname                typcategory  typispreferred  typisdefined  typdel
 1562    varbit                 V            false           true          ,         0         0        1563
 1563    _varbit                A            false           true          ,         0         1562     0
 1700    numeric                N            false           true          ,         0         0        1231
-1790    refcursor              S            false           true          ,         0         0        2201
+1790    refcursor              U            false           true          ,         0         0        2201
 2201    _refcursor             A            false           true          ,         0         1790     0
 2202    regprocedure           N            false           true          ,         0         0        2207
 2205    regclass               N            false           true          ,         0         0        2210
@@ -2344,8 +2344,8 @@ oid     typname                typndims  typcollation  typdefaultbin  typdefault
 1562    varbit                 0         0             NULL           NULL        NULL
 1563    _varbit                0         0             NULL           NULL        NULL
 1700    numeric                0         0             NULL           NULL        NULL
-1790    refcursor              0         3403232968    NULL           NULL        NULL
-2201    _refcursor             0         3403232968    NULL           NULL        NULL
+1790    refcursor              0         0             NULL           NULL        NULL
+2201    _refcursor             0         0             NULL           NULL        NULL
 2202    regprocedure           0         0             NULL           NULL        NULL
 2205    regclass               0         0             NULL           NULL        NULL
 2206    regtype                0         0             NULL           NULL        NULL

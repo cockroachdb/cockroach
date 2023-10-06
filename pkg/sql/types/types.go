@@ -327,12 +327,6 @@ var (
 	Name = &T{InternalType: InternalType{
 		Family: StringFamily, Oid: oid.T_name, Locale: &emptyLocale}}
 
-	// RefCursor is the type for a variable representing the name of a cursor in a
-	// PLpgSQL routine. It is equivalent to String, but has a different oid
-	// (T_refcursor), which makes it display differently.
-	RefCursor = &T{InternalType: InternalType{
-		Family: StringFamily, Oid: oid.T_refcursor, Locale: &emptyLocale}}
-
 	// Bytes is the type of a list of raw byte values.
 	Bytes = &T{InternalType: InternalType{
 		Family: BytesFamily, Oid: oid.T_bytea, Locale: &emptyLocale}}
@@ -513,6 +507,16 @@ var (
 		},
 	}
 
+	// RefCursor is the type for a variable representing the name of a cursor in a
+	// PLpgSQL routine. The underlying value is a string.
+	RefCursor = &T{
+		InternalType: InternalType{
+			Family: RefCursorFamily,
+			Oid:    oid.T_refcursor,
+			Locale: &emptyLocale,
+		},
+	}
+
 	// Scalar contains all types that meet this criteria:
 	//
 	//   1. Scalar type (no ArrayFamily or TupleFamily types).
@@ -621,6 +625,10 @@ var (
 	// PGLSNArray is the type of an array value having PGLSN-typed elements.
 	PGLSNArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: PGLSN, Oid: oid.T__pg_lsn, Locale: &emptyLocale}}
+
+	// RefCursorArray is the type of an array value having REFCURSOR-typed elements.
+	RefCursorArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: RefCursor, Oid: oid.T__refcursor, Locale: &emptyLocale}}
 
 	// TimeArray is the type of an array value having Time-typed elements.
 	TimeArray = &T{InternalType: InternalType{
@@ -907,7 +915,7 @@ func MakeChar(width int32) *T {
 // oidCanBeCollatedString returns true if the given oid is can be a CollatedString.
 func oidCanBeCollatedString(o oid.Oid) bool {
 	switch o {
-	case oid.T_text, oid.T_varchar, oid.T_bpchar, oid.T_char, oid.T_name, oid.T_refcursor:
+	case oid.T_text, oid.T_varchar, oid.T_bpchar, oid.T_char, oid.T_name:
 		return true
 	}
 	return false
@@ -1478,6 +1486,7 @@ var familyNames = map[Family]string{
 	JsonFamily:           "jsonb",
 	OidFamily:            "oid",
 	PGLSNFamily:          "pg_lsn",
+	RefCursorFamily:      "refcursor",
 	StringFamily:         "string",
 	TimeFamily:           "time",
 	TimestampFamily:      "timestamp",
@@ -1568,8 +1577,6 @@ func (t *T) Name() string {
 			return "varchar"
 		case oid.T_name:
 			return "name"
-		case oid.T_refcursor:
-			return "refcursor"
 		}
 		panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 
@@ -1756,6 +1763,8 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		}
 	case PGLSNFamily:
 		return "pg_lsn"
+	case RefCursorFamily:
+		return "refcursor"
 	case StringFamily, CollatedStringFamily:
 		switch t.Oid() {
 		case oid.T_text:
@@ -1774,9 +1783,6 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		case oid.T_name:
 			// Type modifiers not allowed for name.
 			return "name"
-		case oid.T_refcursor:
-			// Type modifiers not allowed for refcursor.
-			return "refcursor"
 		default:
 			panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 		}
@@ -1992,7 +1998,7 @@ func (t *T) SQLStringForError() redact.RedactableString {
 		IntervalFamily, StringFamily, BytesFamily, TimestampTZFamily, CollatedStringFamily, OidFamily,
 		UnknownFamily, UuidFamily, INetFamily, TimeFamily, JsonFamily, TimeTZFamily, BitFamily,
 		GeometryFamily, GeographyFamily, Box2DFamily, VoidFamily, EncodedKeyFamily, TSQueryFamily,
-		TSVectorFamily, AnyFamily, PGLSNFamily:
+		TSVectorFamily, AnyFamily, PGLSNFamily, RefCursorFamily:
 		// These types do not contain other types, and do not require redaction.
 		return redact.Sprint(redact.SafeString(t.SQLString()))
 	}
@@ -2336,10 +2342,6 @@ func (t *T) upgradeType() error {
 			t.InternalType.TimePrecisionIsSet = true
 		}
 	case StringFamily, CollatedStringFamily:
-		if t.InternalType.Oid == oid.T_refcursor {
-			// Support for REFCURSOR was added after InternalType was deprecated.
-			break
-		}
 		// Map string-related visible types to corresponding Oid values.
 		switch t.InternalType.VisibleType {
 		case visibleVARCHAR:
@@ -2504,7 +2506,7 @@ func (t *T) downgradeType() error {
 
 	case StringFamily, CollatedStringFamily:
 		switch t.Oid() {
-		case oid.T_text, oid.T_refcursor:
+		case oid.T_text:
 			// Nothing to do.
 		case oid.T_varchar:
 			t.InternalType.VisibleType = visibleVARCHAR
@@ -2831,8 +2833,6 @@ func (t *T) stringTypeSQL() string {
 		typName = `"char"`
 	case oid.T_name:
 		typName = "NAME"
-	case oid.T_refcursor:
-		typName = "REFCURSOR"
 	}
 
 	// In general, if there is a specified width we want to print it next to the
