@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -7911,6 +7910,8 @@ func genClusterLocksGenerator(
 		}
 
 		var curLock *roachpb.LockStateInfo
+		// Used to deduplicate waiter information from shared locks.
+		var prevLock *roachpb.LockStateInfo
 		var fErr error
 		waiterIdx := -1
 		// Flatten response such that both lock holders and lock waiters are each
@@ -7919,8 +7920,14 @@ func genClusterLocksGenerator(
 		// each waiter, prior to moving onto the next lock (or fetching additional
 		// results as necessary).
 		return func() (tree.Datums, error) {
+			lockHasWaitersDeduped := false
 			if curLock == nil || waiterIdx >= len(curLock.Waiters) {
+				prevLock = curLock
 				curLock, fErr = getNextLock()
+				if prevLock != nil && curLock != nil && prevLock.Key.Equal(curLock.Key) {
+					lockHasWaitersDeduped = len(curLock.Waiters) > 0
+					curLock.Waiters = curLock.Waiters[:0]
+				}
 				waiterIdx = -1
 			}
 
@@ -7929,7 +7936,6 @@ func genClusterLocksGenerator(
 			if curLock == nil || fErr != nil {
 				return nil, fErr
 			}
-
 			strengthDatum := tree.DNull
 			txnIDDatum := tree.DNull
 			tsDatum := tree.DNull
@@ -7940,7 +7946,7 @@ func genClusterLocksGenerator(
 				if curLock.LockHolder != nil {
 					txnIDDatum = tree.NewDUuid(tree.DUuid{UUID: curLock.LockHolder.ID})
 					tsDatum = eval.TimestampToInexactDTimestamp(curLock.LockHolder.WriteTimestamp)
-					strengthDatum = tree.NewDString(lock.Exclusive.String())
+					strengthDatum = tree.NewDString(curLock.LockStrength.String())
 					durationDatum = tree.NewDInterval(
 						duration.MakeDuration(curLock.HoldDuration.Nanoseconds(), 0 /* days */, 0 /* months */),
 						types.DefaultIntervalTypeMetadata,
@@ -7973,7 +7979,7 @@ func genClusterLocksGenerator(
 				keyOrRedacted, _, _ = keys.DecodeTenantPrefix(curLock.Key)
 				prettyKeyOrRedacted = keys.PrettyPrint(nil /* valDirs */, keyOrRedacted)
 			}
-
+			contented := lockHasWaitersDeduped || len(curLock.Waiters) > 0
 			return tree.Datums{
 				tree.NewDInt(tree.DInt(curLock.RangeID)),     /* range_id */
 				tree.NewDInt(tree.DInt(tableID)),             /* table_id */
@@ -7988,7 +7994,7 @@ func genClusterLocksGenerator(
 				strengthDatum,                                /* lock_strength */
 				tree.NewDString(curLock.Durability.String()), /* durability */
 				tree.MakeDBool(tree.DBool(granted)),          /* granted */
-				tree.MakeDBool(len(curLock.Waiters) > 0),     /* contended */
+				tree.MakeDBool(tree.DBool(contented)),        /* contended */
 				durationDatum,                                /* duration */
 				tree.NewDString(tree.IsolationLevelFromKVTxnIsolationLevel(curLock.LockHolder.IsoLevel).String()), /* isolation_level */
 			}, nil
