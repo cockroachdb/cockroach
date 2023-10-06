@@ -8,12 +8,12 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
 http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "824f524fed040e3844025a4274ad03523c38aabe1017c52f72e6d721311f07e3",
-    strip_prefix = "cockroachdb-rules_go-310eb8a",
+    sha256 = "7ba72fafdb71abcb48c17520435d968e7bd3fa4a6f99f3e96544a9fa3e411e1c",
+    strip_prefix = "cockroachdb-rules_go-48e8a97",
     urls = [
-        # cockroachdb/rules_go as of 310eb8ab3c7d53c21c8a5805d1ea77e39cf8552b
-        # (upstream release-0.41 plus a few patches).
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-352-g310eb8a.tar.gz",
+        # cockroachdb/rules_go as of 48e8a9727cbf64165ed4c9f895744f3c82d39bc8
+        # (upstream release-0.42 plus a few patches).
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-385-g48e8a97.zip",
     ]
 )
 
@@ -42,9 +42,10 @@ http_archive(
 # repo.
 http_archive(
     name = "bazel_gazelle",
-    sha256 = "5982e5463f171da99e3bdaeff8c0f48283a7a5f396ec5282910b9e8a49c0dd7e",
+    sha256 = "22140e6a7a28df5ec7477f12b286f24dedf8dbef0a12ffbbac10ae80441aa093",
+    strip_prefix = "bazelbuild-bazel-gazelle-061cc37",
     urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel-gazelle-v0.25.0.tar.gz",
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazelbuild-bazel-gazelle-v0.33.0-0-g061cc37.zip",
     ],
 )
 
@@ -311,10 +312,10 @@ load(
 go_repository(
     name = "com_github_bazelbuild_buildtools",
     importpath = "github.com/bazelbuild/buildtools",
-    sha256 = "d71a889e3bc50cc8b9d42c859e15a74f7c8d10b6786f8dd82f08f2bf24e5bdc6",
-    strip_prefix = "bazelbuild-buildtools-b182fc4",
+    sha256 = "7929c8fc174f8ab03361796f1417eb0eb5ae4b2a12707238694bec2954145ce4",
+    strip_prefix = "bazelbuild-buildtools-b163fcf",
     urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/gomod/github.com/bazelbuild/buildtools/v6.1.2-0-gb182fc4/bazelbuild-buildtools-v6.1.2-0-gb182fc4.tar.gz",
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazelbuild-buildtools-v6.3.3-0-gb163fcf.tar.gz",
     ],
 )
 

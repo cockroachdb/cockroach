@@ -279,6 +279,12 @@ go_test(
             "//pkg/util/syncutil",
             "@com_github_stretchr_testify//require",
         ],
+        "@io_bazel_rules_go//go/platform:windows_arm64": [
+            ":grunning",
+            "//pkg/testutils/skip",
+            "//pkg/util/syncutil",
+            "@com_github_stretchr_testify//require",
+        ],
         "//conditions:default": [],
     }),
 )
