@@ -7,6 +7,7 @@ go_library(
         "disk_usage.go",
         "health_checker.go",
         "jaeger.go",
+        "utils.go",
         "validation_check.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil",
