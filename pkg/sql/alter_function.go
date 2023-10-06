@@ -34,15 +34,15 @@ type alterFunctionOptionsNode struct {
 }
 
 type alterFunctionRenameNode struct {
-	n *tree.AlterFunctionRename
+	n *tree.AlterRoutineRename
 }
 
 type alterFunctionSetOwnerNode struct {
-	n *tree.AlterFunctionSetOwner
+	n *tree.AlterRoutineSetOwner
 }
 
 type alterFunctionSetSchemaNode struct {
-	n *tree.AlterFunctionSetSchema
+	n *tree.AlterRoutineSetSchema
 }
 
 type alterFunctionDepExtensionNode struct {
@@ -138,7 +138,7 @@ func (n *alterFunctionOptionsNode) Close(ctx context.Context)           {}
 
 // AlterFunctionRename renames a function.
 func (p *planner) AlterFunctionRename(
-	ctx context.Context, n *tree.AlterFunctionRename,
+	ctx context.Context, n *tree.AlterRoutineRename,
 ) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
@@ -213,7 +213,7 @@ func (n *alterFunctionRenameNode) Close(ctx context.Context)           {}
 
 // AlterFunctionSetOwner sets a function's owner.
 func (p *planner) AlterFunctionSetOwner(
-	ctx context.Context, n *tree.AlterFunctionSetOwner,
+	ctx context.Context, n *tree.AlterRoutineSetOwner,
 ) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
@@ -274,7 +274,7 @@ func (n *alterFunctionSetOwnerNode) Close(ctx context.Context)           {}
 
 // AlterFunctionSetSchema moves a function to another schema.
 func (p *planner) AlterFunctionSetSchema(
-	ctx context.Context, n *tree.AlterFunctionSetSchema,
+	ctx context.Context, n *tree.AlterRoutineSetSchema,
 ) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
