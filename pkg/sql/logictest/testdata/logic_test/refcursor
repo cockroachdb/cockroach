@@ -28,7 +28,7 @@ statement ok
 ALTER TABLE xy ADD COLUMN curs REFCURSOR;
 
 statement ok
-INSERT INTO xy VALUES (1, 2, 'foo'::REFCURSOR);
+INSERT INTO xy VALUES (1, 2, 'foo');
 
 query IIT
 SELECT * FROM xy;
@@ -45,7 +45,7 @@ statement ok
 ALTER TABLE xy ALTER COLUMN y TYPE REFCURSOR;
 
 statement ok
-INSERT INTO xy VALUES (1, 'bar'::REFCURSOR);
+INSERT INTO xy VALUES (1, 'bar');
 
 query IT
 SELECT * FROM xy;
@@ -88,7 +88,7 @@ statement ok
 CREATE TYPE typ AS (x INT, y REFCURSOR);
 
 query T
-SELECT (100, 'bar'::REFCURSOR)::typ;
+SELECT (100, 'bar')::typ;
 ----
 (100,bar)
 
@@ -130,7 +130,7 @@ CREATE FUNCTION f(curs REFCURSOR) RETURNS INT AS $$
 $$ LANGUAGE SQL;
 
 query I
-SELECT f('foo'::REFCURSOR);
+SELECT f('foo');
 ----
 0
 
@@ -145,7 +145,7 @@ CREATE FUNCTION f(curs REFCURSOR) RETURNS INT AS $$
 $$ LANGUAGE PLpgSQL;
 
 query I
-SELECT f('foo'::REFCURSOR);
+SELECT f('foo');
 ----
 0
 
