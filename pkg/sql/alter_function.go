@@ -249,6 +249,16 @@ func (n *alterFunctionSetOwnerNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
+	if !n.n.Procedure && fnDesc.IsProcedure() {
+		return pgerror.Newf(
+			pgcode.UndefinedFunction, "could not find a function named %q", &n.n.Function.FuncName,
+		)
+	}
+	if n.n.Procedure && !fnDesc.IsProcedure() {
+		return pgerror.Newf(
+			pgcode.UndefinedFunction, "could not find a procedure named %q", &n.n.Function.FuncName,
+		)
+	}
 	newOwner, err := decodeusername.FromRoleSpec(
 		params.p.SessionData(), username.PurposeValidation, n.n.NewOwner,
 	)
