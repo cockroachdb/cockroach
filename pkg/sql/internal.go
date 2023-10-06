@@ -351,6 +351,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 			ex.extraTxnState.jobs = ie.extraTxnState.jobs
 			ex.extraTxnState.schemaChangerState = ie.extraTxnState.schemaChangerState
 			ex.extraTxnState.shouldResetSyntheticDescriptors = shouldResetSyntheticDescriptors
+			ex.extraTxnState.roleExistsCache = ie.extraTxnState.roleExistsCache
 			ex.initPlanner(ctx, &ex.planner)
 		}
 	}
@@ -1487,6 +1488,7 @@ type extraTxnState struct {
 	descCollection     *descs.Collection
 	jobs               *txnJobsCollection
 	schemaChangerState *SchemaChangerState
+	roleExistsCache    map[username.SQLUsername]struct{}
 
 	// regionsProvider is populated lazily.
 	regionsProvider *regions.Provider
@@ -1628,6 +1630,7 @@ func (ief *InternalDB) newInternalExecutorWithTxn(
 			descCollection:     descCol,
 			jobs:               newTxnJobsCollection(),
 			schemaChangerState: schemaChangerState,
+			roleExistsCache:    make(map[username.SQLUsername]struct{}),
 		},
 	}
 	populateMinimalSessionData(sd)

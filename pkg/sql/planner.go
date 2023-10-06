@@ -650,6 +650,7 @@ func (p *planner) InternalSQLTxn() descs.Txn {
 			descCollection:     p.Descriptors(),
 			jobs:               p.extendedEvalCtx.jobs,
 			schemaChangerState: p.extendedEvalCtx.SchemaChangerState,
+			roleExistsCache:    p.extendedEvalCtx.RoleExistsCache,
 		}
 		p.internalSQLTxn.init(p.txn, ie)
 	}
