@@ -1114,7 +1114,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 				return errors.Errorf("expected range %s to span %s", repl, expectedRSpan)
 			}
 			// Check range's max bytes settings.
-			if actualMaxBytes := repl.GetMaxBytes(); actualMaxBytes != maxBytes {
+			if actualMaxBytes := repl.GetMaxBytes(ctx); actualMaxBytes != maxBytes {
 				return errors.Errorf("range %s max bytes mismatch, got: %d, expected: %d", repl, actualMaxBytes, maxBytes)
 			}
 			return nil
@@ -1188,9 +1188,9 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 		if newRng.RangeID == origRng.RangeID {
 			return errors.Errorf("expected new range created by split")
 		}
-		if newRng.GetMaxBytes() != maxBytes {
+		if newRng.GetMaxBytes(ctx) != maxBytes {
 			return errors.Errorf("expected %d max bytes for the new range, but got %d",
-				maxBytes, newRng.GetMaxBytes())
+				maxBytes, newRng.GetMaxBytes(ctx))
 		}
 		return nil
 	})
@@ -1296,7 +1296,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 			singleKey := tc.splitImpossible
 			fillRange(t, store, repl.RangeID, splitKey.AsRawKey(), 2*maxBytes+1, singleKey)
 
-			if !repl.ShouldBackpressureWrites() {
+			if !repl.ShouldBackpressureWrites(ctx) {
 				t.Fatal("expected ShouldBackpressureWrites=true, found false")
 			}
 
