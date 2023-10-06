@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import {
-  getTxnInsightsContentionDetailsApi,
   TxnStmtFingerprintsResponseColumns,
   FingerprintStmtsResponseColumns,
 } from "./txnInsightsApi";
@@ -20,7 +19,10 @@ import {
   InsightNameEnum,
   TxnContentionInsightDetails,
 } from "../insights";
-import { ContentionResponseColumns } from "./contentionApi";
+import {
+  ContentionResponseColumns,
+  getTxnInsightsContentionDetailsApi,
+} from "./contentionApi";
 import moment from "moment-timezone";
 
 function mockSqlResponse<T>(rows: T[]): SqlExecutionResponse<T> {
