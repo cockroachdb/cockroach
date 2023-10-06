@@ -602,15 +602,30 @@ message LockStateInfo {
   // The key that this lock controls access to.
   bytes key = 2 [(gogoproto.casttype) = "Key"];
   // The current lock holder, or nil if the lock is not held.
-  storage.enginepb.TxnMeta lock_holder = 3;
+  storage.enginepb.TxnMeta lock_holder = 3 [deprecated=true];
   // The durability that the lock is held at, or Unreplicated if not held.
-  kv.kvserver.concurrency.lock.Durability durability = 4;
+  kv.kvserver.concurrency.lock.Durability durability = 4 [deprecated=true];
   // The wall clock duration since this lock was acquired (or zero, if not held).
   google.protobuf.Duration hold_duration = 5 [(gogoproto.nullable) = false,
-    (gogoproto.stdduration) = true];
+    (gogoproto.stdduration) = true, deprecated=true];
   // The readers and writers currently waiting on the lock.  Stable ordering
   // is not guaranteed.
   repeated kv.kvserver.concurrency.lock.Waiter waiters = 6 [(gogoproto.nullable) = false];
+  // Lock holder metadata.
+  repeated LockHolderInfo lock_holders = 7;
+}
+
+// LockHolderInfo represents the metadata of a lock holder.
+message LockHolderInfo {
+  // The lock holder's transaction meta data.
+  storage.enginepb.TxnMeta txn_meta = 1;
+  // The durability that the lock is held at.
+  kv.kvserver.concurrency.lock.Durability durability = 2;
+  // The wall clock duration since this lock was acquired.
+  google.protobuf.Duration hold_duration = 3 [(gogoproto.nullable) = false,
+    (gogoproto.stdduration) = true];
+  // The lock strength.
+  kv.kvserver.concurrency.lock.Strength lock_strength = 4;
 }
 
 // A SequencedWrite is a point write to a key with a certain sequence number.

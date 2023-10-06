@@ -7908,7 +7908,12 @@ func genClusterLocksGenerator(
 			if curLock == nil || fErr != nil {
 				return nil, fErr
 			}
-
+			var lockStrength lock.Strength
+			for _, holderInfo := range curLock.LockHolders {
+				if holderInfo.LockStrength > lockStrength {
+					lockStrength = holderInfo.LockStrength
+				}
+			}
 			strengthDatum := tree.DNull
 			txnIDDatum := tree.DNull
 			tsDatum := tree.DNull
@@ -7919,7 +7924,7 @@ func genClusterLocksGenerator(
 				if curLock.LockHolder != nil {
 					txnIDDatum = tree.NewDUuid(tree.DUuid{UUID: curLock.LockHolder.ID})
 					tsDatum = eval.TimestampToInexactDTimestamp(curLock.LockHolder.WriteTimestamp)
-					strengthDatum = tree.NewDString(lock.Exclusive.String())
+					strengthDatum = tree.NewDString(lockStrength.String())
 					durationDatum = tree.NewDInterval(
 						duration.MakeDuration(curLock.HoldDuration.Nanoseconds(), 0 /* days */, 0 /* months */),
 						types.DefaultIntervalTypeMetadata,

@@ -1899,19 +1899,6 @@ func (kl *keyLocks) collectLockStateInfo(
 // lockStateInfo converts receiver to the roachpb.LockStateInfo structure.
 // REQUIRES: kl.mu is locked.
 func (kl *keyLocks) lockStateInfo(now time.Time) roachpb.LockStateInfo {
-	var txnHolder *enginepb.TxnMeta
-
-	durability := lock.Unreplicated
-	if kl.isLocked() {
-		// This doesn't work with multiple lock holders. See
-		// https://github.com/cockroachdb/cockroach/issues/109081.
-		tl := kl.holders.Front().Value
-		txnHolder = tl.txn
-		if tl.isHeldReplicated() {
-			durability = lock.Replicated
-		}
-	}
-
 	waiterCount := kl.waitingReaders.Len() + kl.queuedLockingRequests.Len()
 	lockWaiters := make([]lock.Waiter, 0, waiterCount)
 
@@ -1942,12 +1929,24 @@ func (kl *keyLocks) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 		g.mu.Unlock()
 	}
 
+	if !kl.isLocked() {
+		return roachpb.LockStateInfo{
+			Key:          kl.key,
+			LockHolder:   nil,
+			Durability:   lock.Unreplicated,
+			HoldDuration: kl.lockHeldDuration(now),
+			Waiters:      lockWaiters,
+		}
+	}
+
+	lockholders := kl.GetLockHolderInfo(now)
 	return roachpb.LockStateInfo{
 		Key:          kl.key,
-		LockHolder:   txnHolder,
-		Durability:   durability,
+		LockHolder:   lockholders[0].TxnMeta,
+		Durability:   lockholders[0].Durability,
 		HoldDuration: kl.lockHeldDuration(now),
 		Waiters:      lockWaiters,
+		LockHolders:  lockholders,
 	}
 }
 
@@ -2245,6 +2244,27 @@ func (kl *keyLocks) lockHeldDuration(now time.Time) time.Duration {
 		}
 	}
 	return now.Sub(minStartTS)
+}
+
+// Returns the lock holder's meta data.
+func (kl *keyLocks) GetLockHolderInfo(now time.Time) []*roachpb.LockHolderInfo {
+	var lockHolderInfos []*roachpb.LockHolderInfo
+
+	for e := kl.holders.Front(); e != nil; e = e.Next() {
+		tl := e.Value
+		durability := lock.Unreplicated
+		if tl.isHeldReplicated() {
+			durability = lock.Replicated
+		}
+		lhi := roachpb.LockHolderInfo{
+			TxnMeta:      tl.txn,
+			Durability:   durability,
+			HoldDuration: now.Sub(tl.startTime),
+			LockStrength: tl.getLockMode().Strength,
+		}
+		lockHolderInfos = append(lockHolderInfos, &lhi)
+	}
+	return lockHolderInfos
 }
 
 // Returns the total amount of time all active waiters in the queues of
