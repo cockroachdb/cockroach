@@ -11,10 +11,12 @@
 package sysutil
 
 import (
+	"net"
 	"os/exec"
 	"testing"
 
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestExitStatus(t *testing.T) {
@@ -30,4 +32,13 @@ func TestExitStatus(t *testing.T) {
 	if status := ExitStatus(exitErr); status != 42 {
 		t.Fatalf("expected exit status 42, but got %d", status)
 	}
+}
+
+func TestIsAddrInUse(t *testing.T) {
+	ln, err := net.Listen("tcp", ":0")
+	require.NoError(t, err)
+	defer func() { _ = ln.Close() }()
+
+	_, err = net.Listen("tcp", ln.Addr().String())
+	require.True(t, IsAddrInUse(err))
 }
