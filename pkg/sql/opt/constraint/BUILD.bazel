@@ -51,5 +51,7 @@ go_test(
         "//pkg/util/intsets",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )
