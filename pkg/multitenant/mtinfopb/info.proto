@@ -57,7 +57,7 @@ message ProtoInfo {
      (gogoproto.customname) = "PhysicalReplicationConsumerJobID",
      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
 
-  // PhysicalReplicationConsumerJobIDs contains any physical
+  // PhysicalReplicationProducerJobIDs contains any physical
   // replication producer jobs that are using this tenant as a source.
   repeated int64 physical_replication_producer_job_ids = 6 [
      (gogoproto.customname) = "PhysicalReplicationProducerJobIDs",

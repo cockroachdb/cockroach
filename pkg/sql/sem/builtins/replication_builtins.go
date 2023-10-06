@@ -16,6 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -321,5 +323,48 @@ var replicationBuiltins = map[string]builtinDefinition{
 			"Stream span config updates for specified tenant",
 			volatility.Volatile,
 		),
+	),
+	"crdb_internal.unsafe_revert_tenant_to_timestamp": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategoryStreamIngestion,
+			Undocumented:     true,
+			DistsqlBlocklist: true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "tenant_name", Typ: types.String},
+				{Name: "ts", Typ: types.Decimal},
+			},
+			ReturnType: tree.FixedReturnType(types.Decimal),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// NB: GetReplicationStreamManager does a permissions check for ADMIN or MANAGETENANT.
+				if evalCtx.SessionData().SafeUpdates {
+					err := errors.Newf("crdb_internal.unsafe_revert_tenant_to_timestamp causes irreversible data loss")
+					err = errors.WithMessage(err, "rejected (via sql_safe_updates)")
+					err = pgerror.WithCandidateCode(err, pgcode.Warning)
+					return nil, err
+				}
+
+				tenantName := roachpb.TenantName(string(tree.MustBeDString(args[0])))
+
+				tsDec := tree.MustBeDDecimal(args[1])
+				revertTimestamp, err := hlc.DecimalToHLC(&tsDec.Decimal)
+				if err != nil {
+					return nil, err
+				}
+
+				mgr, err := evalCtx.StreamManagerFactory.GetStreamIngestManager(ctx)
+				if err != nil {
+					return nil, err
+				}
+
+				if err := mgr.RevertTenantToTimestamp(ctx, tenantName, revertTimestamp); err != nil {
+					return nil, err
+				}
+				return &tsDec, err
+			},
+			Info:       "This function reverts the given tenant to a particular timestamp.",
+			Volatility: volatility.Volatile,
+		},
 	),
 }
