@@ -74,6 +74,7 @@ go_test(
     embed = [":sysutil"],
     deps = [
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [
             "@com_github_stretchr_testify//assert",
