@@ -9,8 +9,7 @@
 // licenses/APL.txt.
 
 import moment from "moment-timezone";
-import { byteArrayToUuid } from "src/sessions";
-import { TimestampToMoment, unset } from "src/util";
+import { ByteArrayToUuid, TimestampToMoment, unset } from "src/util";
 import { ActiveTransaction } from ".";
 import {
   SessionsResponse,
@@ -107,13 +106,13 @@ export function getActiveExecutionsFromSessions(
         (session.active_txn || session.active_queries?.length !== 0),
     )
     .forEach(session => {
-      const sessionID = byteArrayToUuid(session.id);
+      const sessionID = ByteArrayToUuid(session.id);
 
       let activeStmt: ActiveStatement = null;
       if (session.active_queries.length) {
         // There will only ever be one query in this array.
         const query = session.active_queries[0];
-        const queryTxnID = byteArrayToUuid(query.txn_id);
+        const queryTxnID = ByteArrayToUuid(query.txn_id);
         activeStmt = {
           statementID: query.id,
           stmtNoConstants: query.sql_no_constants,
@@ -142,7 +141,7 @@ export function getActiveExecutionsFromSessions(
       if (!activeTxn) return;
 
       transactions.push({
-        transactionID: byteArrayToUuid(activeTxn.id),
+        transactionID: ByteArrayToUuid(activeTxn.id),
         sessionID,
         query:
           activeStmt?.query ??

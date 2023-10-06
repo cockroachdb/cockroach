@@ -123,7 +123,7 @@ export const StatementInsightDetails: React.FC<
     getStmtInsightsApi({ stmtExecutionID: executionID, start, end })
       .then(res => {
         setInsightDetails({
-          details: res?.results?.length ? res.results[0] : null,
+          details: res?.length ? res[0] : null,
           loaded: true,
         });
       })

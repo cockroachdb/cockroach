@@ -10,6 +10,8 @@
 
 import { Moment } from "moment-timezone";
 import { Filters } from "../queryFilter";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { InsightCause } from "../api";
 
 // This enum corresponds to the string enum for `problems` in `cluster_execution_insights`
 export enum InsightNameEnum {
@@ -252,29 +254,38 @@ export const failedExecutionInsight = (execType: InsightExecEnum): Insight => {
   };
 };
 
-export const getInsightFromCause = (
-  cause: string,
-  execOption: InsightExecEnum,
+/**
+ * getInsightForSlowExecution returns an insight object with labels and descriptions
+ * based on the problem, causes for the problem, and the execution type.
+ * @param cause an enum value dictating a cause for the insight
+ * @param execType execution type
+ * @param latencyThreshold optional parameter used to describe the threshold for slow latencies
+ * @param contentionDuration optional parameter used to describe the amount of contention experienced
+ * @returns an insight object
+ */
+export const getInsightForSlowExecution = (
+  cause: cockroach.sql.insights.Cause,
+  execType: InsightExecEnum,
   latencyThreshold?: number,
   contentionDuration?: number,
 ): Insight => {
   switch (cause) {
-    case InsightNameEnum.highContention:
+    case InsightCause.HighContention:
       return highContentionInsight(
-        execOption,
+        execType,
         latencyThreshold,
         contentionDuration,
       );
-    case InsightNameEnum.failedExecution:
-      return failedExecutionInsight(execOption);
-    case InsightNameEnum.planRegression:
-      return planRegressionInsight(execOption);
-    case InsightNameEnum.suboptimalPlan:
-      return suboptimalPlanInsight(execOption);
-    case InsightNameEnum.highRetryCount:
-      return highRetryCountInsight(execOption);
+    case InsightCause.PlanRegression:
+      return planRegressionInsight(execType);
+    case InsightCause.SuboptimalPlan:
+      return suboptimalPlanInsight(execType);
+    case InsightCause.HighRetryCount:
+      return highRetryCountInsight(execType);
+    case InsightCause.Unset:
+      return slowExecutionInsight(execType, latencyThreshold);
     default:
-      return slowExecutionInsight(execOption, latencyThreshold);
+      return slowExecutionInsight(execType, latencyThreshold);
   }
 };
 

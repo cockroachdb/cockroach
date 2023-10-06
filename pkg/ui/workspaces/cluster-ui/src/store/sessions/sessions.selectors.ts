@@ -14,7 +14,7 @@ import { RouteComponentProps } from "react-router-dom";
 import { SessionsState } from "src/store/sessions";
 import { sessionAttr } from "src/util/constants";
 import { getMatchParamByName } from "src/util/query";
-import { byteArrayToUuid } from "src/sessions/sessionsTable";
+import { ByteArrayToUuid } from "../../util";
 
 export const selectSession = createSelector(
   (state: AppState) => state.adminUI?.sessions,
@@ -26,7 +26,7 @@ export const selectSession = createSelector(
     const sessionID = getMatchParamByName(props.match, sessionAttr);
     return {
       session: state.data.sessions.find(
-        session => byteArrayToUuid(session.id) === sessionID,
+        session => ByteArrayToUuid(session.id) === sessionID,
       ),
     };
   },

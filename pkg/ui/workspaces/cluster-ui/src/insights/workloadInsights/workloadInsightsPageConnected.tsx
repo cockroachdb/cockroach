@@ -34,7 +34,6 @@ import {
   selectStmtInsights,
   selectStmtInsightsError,
   selectStmtInsightsLoading,
-  selectStmtInsightsMaxApiReached,
 } from "src/store/insights/statementInsights";
 import {
   actions as txnInsights,
@@ -43,7 +42,6 @@ import {
   selectFilters,
   selectSortSetting,
   selectTransactionInsightsLoading,
-  selectTransactionInsightsMaxApiReached,
 } from "src/store/insights/transactionInsights";
 import { Dispatch } from "redux";
 import { TimeScale } from "../../timeScaleDropdown";
@@ -65,7 +63,6 @@ const transactionMapStateToProps = (
   sortSetting: selectSortSetting(state),
   timeScale: selectTimeScale(state),
   isLoading: selectTransactionInsightsLoading(state),
-  maxSizeApiReached: selectTransactionInsightsMaxApiReached(state),
 });
 
 const statementMapStateToProps = (
@@ -82,7 +79,6 @@ const statementMapStateToProps = (
   selectedColumnNames: selectColumns(state),
   timeScale: selectTimeScale(state),
   isLoading: selectStmtInsightsLoading(state),
-  maxSizeApiReached: selectStmtInsightsMaxApiReached(state),
   isTenant: selectIsTenant(state),
 });
 

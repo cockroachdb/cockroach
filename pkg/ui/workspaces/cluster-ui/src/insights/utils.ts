@@ -11,18 +11,23 @@
 import { unset } from "src/util";
 import {
   ExecutionDetails,
-  getInsightFromCause,
+  failedExecutionInsight,
+  getInsightForSlowExecution,
   Insight,
   InsightExecEnum,
   InsightNameEnum,
   InsightRecommendation,
   InsightType,
   SchemaInsightEventFilters,
+  slowExecutionInsight,
+  StatementStatus,
   StmtInsightEvent,
   TxnInsightDetails,
   TxnInsightEvent,
   WorkloadInsightEventFilters,
 } from "./types";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { InsightProblem, InsightStatus } from "../api";
 
 export const filterTransactionInsights = (
   transactions: TxnInsightEvent[] | null,
@@ -265,47 +270,47 @@ export function getAppsFromStatementInsights(
 }
 
 /**
- * getInsightsFromProblemsAndCauses returns a list of insight objects with
+ * getInsightsFromProblemAndCauses returns a list of insight objects with
  * labels and descriptions based on the problem, causes for the problem, and
  * the execution type.
- * @param problems the array of problems with the query, should be a InsightNameEnum[]
- * @param causes an array of strings detailing the causes for the problem, if known
+ * @param problem an enum value dictating the type of problem
+ * @param causes an enum value dictating a cause for the insight
  * @param execType execution type
  * @returns list of insight objects
  */
-export function getInsightsFromProblemsAndCauses(
-  problems: string[],
-  causes: string[] | null,
+export function getInsightsFromProblemAndCauses(
+  problem: cockroach.sql.insights.Problem,
+  causes: cockroach.sql.insights.Cause[],
   execType: InsightExecEnum,
 ): Insight[] {
-  // TODO(ericharmeling,todd): Replace these strings when using the insights protos.
   const insights: Insight[] = [];
 
-  problems.forEach(problem => {
-    switch (problem) {
-      case "SlowExecution":
-        causes?.forEach(cause =>
-          insights.push(getInsightFromCause(cause, execType)),
-        );
+  switch (problem) {
+    case InsightProblem.SlowExecution:
+      causes?.forEach(cause =>
+        insights.push(getInsightForSlowExecution(cause, execType)),
+      );
 
-        if (insights.length === 0) {
-          insights.push(
-            getInsightFromCause(InsightNameEnum.slowExecution, execType),
-          );
-        }
-        break;
-
-      case "FailedExecution":
-        insights.push(
-          getInsightFromCause(InsightNameEnum.failedExecution, execType),
-        );
-        break;
-
-      default:
-    }
-  });
+      if (insights.length === 0) {
+        insights.push(slowExecutionInsight(execType));
+      }
+      break;
+    case InsightProblem.FailedExecution:
+      insights.push(failedExecutionInsight(execType));
+      break;
+    default:
+  }
 
   return insights;
+}
+
+export function getStmtInsightStatus(
+  status: cockroach.sql.insights.Statement.Status,
+): StatementStatus {
+  if (status === InsightStatus.Completed) {
+    return StatementStatus.COMPLETED;
+  }
+  return StatementStatus.FAILED;
 }
 
 export function mergeTxnInsightDetails(

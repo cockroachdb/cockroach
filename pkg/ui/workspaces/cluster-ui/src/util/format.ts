@@ -438,3 +438,18 @@ function breakLongLine(line: string, limit: number): string {
     limit,
   )}`;
 }
+
+export function ByteArrayToUuid(array: Uint8Array, separator = "-"): string {
+  const hexDigits: string[] = [];
+  array.forEach(t => hexDigits.push(t.toString(16).padStart(2, "0")));
+  return [
+    hexDigits.slice(0, 4).join(""),
+    hexDigits.slice(4, 6).join(""),
+    hexDigits.slice(6, 8).join(""),
+    hexDigits.slice(8, 10).join(""),
+    hexDigits.slice(10, 16).join(""),
+  ].join(separator);
+}
+
+export const HexStringToByteArray = (hexString: string): Uint8Array =>
+  Uint8Array.from(hexString.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
