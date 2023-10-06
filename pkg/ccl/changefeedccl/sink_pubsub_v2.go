@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"bytes"
 	"context"
+	gojson "encoding/json"
 	"fmt"
 	"net/url"
 	"time"
@@ -49,13 +50,26 @@ func isPubsubSink(u *url.URL) bool {
 	return u.Scheme == GcpScheme
 }
 
+type pubsubAttributes map[string]string
+
+// placeholderAttributeValues is a list of valid placeholders which
+// can be replaced with a value prior to emitting.
+var placeholderAttributeValues = map[string]func(meta BatchBufferMeta) string{
+	"TABLE_NAME": func(meta BatchBufferMeta) string {
+		return meta.TableName
+	},
+}
+
 type pubsubSinkClient struct {
 	ctx       context.Context
 	client    *pubsub.PublisherClient
 	projectID string
 	format    changefeedbase.FormatType
 	batchCfg  sinkBatchConfig
-	mu        struct {
+
+	cfg config
+
+	mu struct {
 		syncutil.RWMutex
 
 		// Topic creation errors may not be an actual issue unless the Publish call
@@ -77,6 +91,7 @@ func makePubsubSinkClient(
 	encodingOpts changefeedbase.EncodingOptions,
 	targets changefeedbase.Targets,
 	batchCfg sinkBatchConfig,
+	cfg config,
 	unordered bool,
 	knobs *TestingKnobs,
 ) (SinkClient, error) {
@@ -126,10 +141,10 @@ func makePubsubSinkClient(
 		format:    formatType,
 		client:    publisherClient,
 		batchCfg:  batchCfg,
+		cfg:       cfg,
 		projectID: projectID,
 	}
 	sinkClient.mu.topicCache = make(map[string]struct{})
-
 	return sinkClient, nil
 }
 
@@ -209,10 +224,14 @@ func (sc *pubsubSinkClient) Flush(ctx context.Context, payload SinkPayload) erro
 
 type pubsubBuffer struct {
 	sc           *pubsubSinkClient
-	topic        string
+	meta         BatchBufferMeta
 	topicEncoded []byte
 	messages     []*pb.PubsubMessage
 	numBytes     int
+
+	// attributes is a static map of attributes which is initialized at runtime
+	// and sent with every message.
+	attributes pubsubAttributes
 }
 
 var _ BatchBuffer = (*pubsubBuffer)(nil)
@@ -237,14 +256,14 @@ func (psb *pubsubBuffer) Append(key []byte, value []byte) {
 		content = value
 	}
 
-	psb.messages = append(psb.messages, &pb.PubsubMessage{Data: content})
+	psb.messages = append(psb.messages, &pb.PubsubMessage{Data: content, Attributes: psb.attributes})
 	psb.numBytes += len(content)
 }
 
 // Close implements the BatchBuffer interface
 func (psb *pubsubBuffer) Close() (SinkPayload, error) {
 	return &pb.PublishRequest{
-		Topic:    psb.sc.gcPubsubTopic(psb.topic),
+		Topic:    psb.sc.gcPubsubTopic(psb.meta.Topic),
 		Messages: psb.messages,
 	}, nil
 }
@@ -255,15 +274,34 @@ func (psb *pubsubBuffer) ShouldFlush() bool {
 }
 
 // MakeBatchBuffer implements the SinkClient interface
-func (sc *pubsubSinkClient) MakeBatchBuffer(topic string) BatchBuffer {
+func (sc *pubsubSinkClient) MakeBatchBuffer(meta BatchBufferMeta) BatchBuffer {
 	var topicBuffer bytes.Buffer
-	json.FromString(topic).Format(&topicBuffer)
+	json.FromString(meta.Topic).Format(&topicBuffer)
 	return &pubsubBuffer{
 		sc:           sc,
-		topic:        topic,
+		meta:         meta,
 		topicEncoded: topicBuffer.Bytes(),
 		messages:     make([]*pb.PubsubMessage, 0, sc.batchCfg.Messages),
+		attributes:   sc.newAttributesForBuffer(meta),
 	}
+}
+
+// newAttributesForBuffer returns pubsubAttributes which should be attached
+// to every kv message. It replaces any placeholders in the raw attributes
+// with real values.
+func (sc *pubsubSinkClient) newAttributesForBuffer(meta BatchBufferMeta) pubsubAttributes {
+	var attributes pubsubAttributes
+	if len(sc.cfg.Attributes) > 0 {
+		attributes = make(map[string]string)
+		for k, v := range sc.cfg.Attributes {
+			if f, ok := placeholderAttributeValues[v]; ok {
+				attributes[k] = f(meta)
+			} else {
+				attributes[k] = v
+			}
+		}
+	}
+	return attributes
 }
 
 // Close implements the SinkClient interface
@@ -390,6 +428,23 @@ func (sc *pubsubSinkClient) gcPubsubTopic(topic string) string {
 	return fmt.Sprintf("projects/%s/topics/%s", sc.projectID, topic)
 }
 
+// config contains the sink specific json config parameters.
+type config struct {
+	// Attributes contains the raw json attributes from the
+	// `CREATE CHANGEFEED` statement which may contain placeholders.
+	// These attributes are immutable.
+	Attributes pubsubAttributes
+}
+
+func unmarshalPubSubConfig(
+	jsonStr changefeedbase.SinkSpecificJSONConfig,
+) (attributes config, err error) {
+	if jsonStr != `` {
+		err = gojson.Unmarshal([]byte(jsonStr), &attributes)
+	}
+	return
+}
+
 func makePubsubSink(
 	ctx context.Context,
 	u *url.URL,
@@ -415,7 +470,12 @@ func makePubsubSink(
 		return nil, err
 	}
 
-	sinkClient, err := makePubsubSinkClient(ctx, u, encodingOpts, targets, batchCfg, unordered, knobs)
+	pubsubCfg, err := unmarshalPubSubConfig(jsonConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	sinkClient, err := makePubsubSinkClient(ctx, u, encodingOpts, targets, batchCfg, pubsubCfg, unordered, knobs)
 	if err != nil {
 		return nil, err
 	}

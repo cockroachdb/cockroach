@@ -8931,3 +8931,69 @@ func TestCloudstorageBufferedBytesMetric(t *testing.T) {
 
 	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
 }
+
+// TestPubsubAttributes tests that the "attributes" field in the
+// `pubsub_sink_config` behaves as expected.
+func TestPubsubAttributes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		ctx := context.Background()
+		PubsubV2Enabled.Override(ctx, &s.Server.ClusterSettings().SV, true)
+		db := sqlutils.MakeSQLRunner(s.DB)
+
+		t.Run("separate tables", func(t *testing.T) {
+			db.Exec(t, "CREATE TABLE one (i int)")
+			db.Exec(t, "CREATE TABLE two (i int)")
+
+			foo, err := f.Feed(`CREATE CHANGEFEED FOR TABLE one, TABLE two with resolved = '10m',` +
+				` pubsub_sink_config='{"attributes": {"table": "TABLE_NAME", "foo": "bar"}}'`)
+			require.NoError(t, err)
+
+			expectAttributes := func(attributes map[string]string) {
+				msg, err := foo.(*pubsubFeed).NextRaw(false)
+				require.NoError(t, err)
+				require.True(t, reflect.DeepEqual(attributes, msg.attributes),
+					"%#v=%#v", attributes, msg.attributes)
+			}
+
+			db.Exec(t, "INSERT INTO one VALUES (1)")
+			expectAttributes(map[string]string{"table": "one", "foo": "bar"})
+
+			db.Exec(t, "INSERT INTO two VALUES (1)")
+			expectAttributes(map[string]string{"table": "two", "foo": "bar"})
+
+			require.NoError(t, foo.Close())
+		})
+
+		t.Run("same table different families", func(t *testing.T) {
+			db.Exec(t, "CREATE TABLE withFams (i int, j int, k int, FAMILY ifam(i), FAMILY jfam(j))")
+			db.Exec(t, "CREATE TABLE withoutFams (i int)")
+
+			foo, err := f.Feed(`CREATE CHANGEFEED FOR TABLE withFams FAMILY ifam, TABLE withFams FAMILY jfam, ` +
+				`TABLE withoutFams with resolved = '10m', pubsub_sink_config='{"attributes": {"table": "TABLE_NAME", "foo": "bar"}}'`)
+			require.NoError(t, err)
+
+			expectAttributes := func(attributes map[string]string) {
+				msg, err := foo.(*pubsubFeed).NextRaw(false)
+				require.NoError(t, err)
+				require.True(t, reflect.DeepEqual(attributes, msg.attributes),
+					"%#v=%#v", attributes, msg.attributes)
+			}
+
+			// We get two messages because the changefeed is targeting two familes.
+			// Each message should reference the same table.
+			db.Exec(t, "INSERT INTO withFams VALUES (1, 2, 3)")
+			expectAttributes(map[string]string{"table": "withfams", "foo": "bar"})
+			expectAttributes(map[string]string{"table": "withfams", "foo": "bar"})
+
+			db.Exec(t, "INSERT INTO withoutFams VALUES (1)")
+			expectAttributes(map[string]string{"table": "withoutfams", "foo": "bar"})
+
+			require.NoError(t, foo.Close())
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("pubsub"))
+}

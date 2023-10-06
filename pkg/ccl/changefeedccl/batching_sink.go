@@ -28,13 +28,20 @@ import (
 // SinkClient is an interface to an external sink, where messages are written
 // into batches as they arrive and once ready are flushed out.
 type SinkClient interface {
-	MakeBatchBuffer(topic string) BatchBuffer
+	MakeBatchBuffer(meta BatchBufferMeta) BatchBuffer
 	// FlushResolvedPayload flushes the resolved payload to the sink. It takes
 	// an iterator over the set of topics in case the client chooses to emit
 	// the payload to multiple topics.
 	FlushResolvedPayload(context.Context, []byte, func(func(topic string) error) error, retry.Options) error
 	Flush(context.Context, SinkPayload) error
 	Close() error
+}
+
+// BatchBufferMeta is immutable metadata common to all messages buffered
+// by this batch buffer.
+type BatchBufferMeta struct {
+	TableName string
+	Topic     string
 }
 
 // BatchBuffer is an interface to aggregate KVs into a payload that can be sent
@@ -181,7 +188,7 @@ func (s *batchingSink) EmitRow(
 	payload.key = key
 	payload.val = value
 	payload.topicDescriptor = topic
-	payload.rowMeta.mvcc = rowMeta.mvcc
+	payload.rowMeta = rowMeta
 	payload.alloc = alloc
 
 	select {
@@ -239,6 +246,7 @@ type sinkBatch struct {
 	keys        intsets.Fast // the set of keys within the batch to provide to parallelIO
 	bufferTime  time.Time    // the earliest time a message was inserted into the batch
 	mvcc        hlc.Timestamp
+	meta        BatchBufferMeta
 
 	alloc  kvevent.Alloc
 	hasher hash.Hash32
@@ -295,10 +303,18 @@ func (s *batchingSink) handleError(err error) {
 	}
 }
 
-func (s *batchingSink) newBatchBuffer(topic string) *sinkBatch {
+func (s *batchingSink) makeBatchBufferMeta(topic, tableName string) BatchBufferMeta {
+	return BatchBufferMeta{
+		Topic:     topic,
+		TableName: tableName,
+	}
+}
+
+func (s *batchingSink) newBatchBuffer(meta BatchBufferMeta) *sinkBatch {
 	batch := newSinkBatch()
-	batch.buffer = s.client.MakeBatchBuffer(topic)
+	batch.buffer = s.client.MakeBatchBuffer(meta)
 	batch.hasher = s.hasher
+	batch.meta = meta
 	return batch
 }
 
@@ -356,7 +372,7 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 		if !ok || batchBuffer.isEmpty() {
 			return nil
 		}
-		topicBatches[topic] = s.newBatchBuffer(topic)
+		topicBatches[topic] = s.newBatchBuffer(batchBuffer.meta)
 
 		if err := batchBuffer.FinalizePayload(); err != nil {
 			return err
@@ -435,7 +451,7 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 
 				batchBuffer, ok := topicBatches[topic]
 				if !ok {
-					batchBuffer = s.newBatchBuffer(topic)
+					batchBuffer = s.newBatchBuffer(s.makeBatchBufferMeta(topic, r.rowMeta.tableName))
 					topicBatches[topic] = batchBuffer
 				}
 
