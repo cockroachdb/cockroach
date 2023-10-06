@@ -129,8 +129,12 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 		if err != nil {
 			return nil, err
 		}
-		ol, err := fd.MatchOverload(paramTypes, fn.FuncName.Schema(),
-			&evalCtx.SessionData().SearchPath, tree.BuiltinRoutine|tree.UDFRoutine)
+		ol, err := fd.MatchOverload(
+			paramTypes,
+			fn.FuncName.Schema(),
+			&evalCtx.SessionData().SearchPath,
+			tree.BuiltinRoutine|tree.UDFRoutine|tree.ProcedureRoutine,
+		)
 		if err != nil {
 			return nil, err
 		}

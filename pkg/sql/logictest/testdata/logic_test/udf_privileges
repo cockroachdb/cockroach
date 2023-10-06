@@ -391,7 +391,7 @@ test           public       100110       test_priv_f1()      admin    ALL       
 test           public       100110       test_priv_f1()      public   EXECUTE         false
 test           public       100110       test_priv_f1()      root     ALL             true
 
-# Add default privilege and make sure new function
+# Add default privilege and make sure it apples only to newly created functions.
 statement ok
 ALTER DEFAULT PRIVILEGES IN SCHEMA public, test_priv_sc1 GRANT EXECUTE ON FUNCTIONS TO udf_test_user WITH GRANT OPTION;
 
