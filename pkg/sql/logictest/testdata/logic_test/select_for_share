@@ -53,7 +53,7 @@ query TTTTTTTBB colnames,retry,rowsort
 SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
 ----
 database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
-test           public       t           /Table/106/1/1/0  Exclusive      Unreplicated  SERIALIZABLE     true     true
+test           public       t           /Table/106/1/1/0  Shared         Unreplicated  SERIALIZABLE     true     true
 test           public       t           /Table/106/1/1/0  Exclusive      Unreplicated  SERIALIZABLE     false    true
 
 # Commit the first transaction and rollback the second.
