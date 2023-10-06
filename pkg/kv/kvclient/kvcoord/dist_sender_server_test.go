@@ -4657,6 +4657,7 @@ func TestRefreshFailureIncludesConflictingTxn(t *testing.T) {
 			} else {
 				require.NotNil(t, tErr.ConflictingTxn)
 				require.Equal(t, txn2.ID(), tErr.ConflictingTxn.ID)
+				require.Regexp(t, tErr.ConflictingTxn.String(), tErr)
 				require.Equal(t, int32(1), tErr.ConflictingTxn.CoordinatorNodeID)
 			}
 		})
