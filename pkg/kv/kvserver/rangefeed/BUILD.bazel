@@ -86,6 +86,7 @@ go_test(
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
+        "//pkg/testutils/storageutils",
         "//pkg/testutils/testcluster",
         "//pkg/util",
         "//pkg/util/container/list",
