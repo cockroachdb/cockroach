@@ -8,12 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import moment from "moment-timezone";
 import {
   executeInternalSql,
   isMaxSizeError,
   sqlApiErrorMessage,
-  SqlApiResponse,
 } from "./sqlApi";
 import { InsightNameEnum, TxnInsightDetails } from "../insights";
 import {
@@ -25,18 +23,22 @@ import {
   formatTxnInsightsRow,
   createTxnInsightsQuery,
   TxnInsightsResponseRow,
+  TransactionExecutionInsightsRequest,
+  TxnInsightsRequest,
+  createTxnInsightsReq,
+  fetchTxnInsights,
 } from "./txnInsightsApi";
 import { makeInsightsSqlRequest } from "./txnInsightsUtils";
 import { getTxnInsightsContentionDetailsApi } from "./contentionApi";
 
-export type TxnInsightDetailsRequest = {
-  txnExecutionID: string;
+export type TxnInsightDetailsRequest = TxnInsightsRequest & {
+  // TODO(thomas): maybe instead - withStatementInsights: boolean;
   excludeStmts?: boolean;
+  // TODO(thomas): remove? deprecate?
   excludeTxn?: boolean;
+  // TODO(thomas): maybe instead - withContentionEvents: boolean;
   excludeContention?: boolean;
   mergeResultWith?: TxnInsightDetails;
-  start?: moment.Moment;
-  end?: moment.Moment;
 };
 
 export type TxnInsightDetailsReqErrs = {
@@ -51,9 +53,10 @@ export type TxnInsightDetailsResponse = {
   errors: TxnInsightDetailsReqErrs;
 };
 
+// TODO(thomas): two
 export async function getTxnInsightDetailsApi(
   req: TxnInsightDetailsRequest,
-): Promise<SqlApiResponse<TxnInsightDetailsResponse>> {
+): Promise<TxnInsightDetailsResponse> {
   // All queries in this request read from virtual tables, which is an
   // expensive operation. To reduce the number of RPC fanouts, we have the
   // caller specify which parts of the txn details we should return, since
@@ -67,6 +70,8 @@ export async function getTxnInsightDetailsApi(
   // should only change when they are re-fetched so that components don't update
   // unnecessarily.
   const txnInsightDetails: TxnInsightDetails = { ...req.mergeResultWith };
+  const response = await fetchTxnInsights(createTxnInsightDetailsReq(req));
+
   const errors: TxnInsightDetailsReqErrs = {
     txnDetailsErr: null,
     contentionErr: null,
@@ -148,11 +153,20 @@ export async function getTxnInsightDetailsApi(
   }
 
   return {
-    maxSizeReached: maxSizeReached,
-    results: {
-      txnExecutionID: req.txnExecutionID,
-      result: txnInsightDetails,
-      errors,
-    },
+    txnExecutionID: req.txnExecutionID,
+    result: txnInsightDetails,
+    errors,
+  };
+}
+
+function createTxnInsightDetailsReq(
+  req?: TxnInsightDetailsRequest,
+): TransactionExecutionInsightsRequest {
+  const baseReq = createTxnInsightsReq(req);
+  return {
+    ...baseReq,
+    // TODO(thomas): will need to update this if we change the request fields
+    with_contention_events: !req.excludeStmts,
+    with_statement_insights: !req.excludeContention,
   };
 }

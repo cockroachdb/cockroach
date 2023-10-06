@@ -11,7 +11,7 @@
 import {
   TxnStmtFingerprintsResponseColumns,
   FingerprintStmtsResponseColumns,
-} from "./txnInsightsApi";
+} from "./contentionApi";
 import * as sqlApi from "./sqlApi";
 import { SqlExecutionResponse } from "./sqlApi";
 import {

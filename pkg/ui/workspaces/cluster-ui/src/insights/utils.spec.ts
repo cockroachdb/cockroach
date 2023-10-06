@@ -14,7 +14,7 @@ import {
   filterTransactionInsights,
   getAppsFromStatementInsights,
   getAppsFromTransactionInsights,
-  getInsightsFromProblemAndCauses,
+  getInsightsFromProblemsAndCauses,
   mergeTxnInsightDetails,
 } from "./utils";
 import {
@@ -492,8 +492,8 @@ describe("test workload insights utils", () => {
 
     [InsightExecEnum.STATEMENT, InsightExecEnum.TRANSACTION].forEach(type => {
       createTestCases(type).forEach(tc => {
-        const insights = getInsightsFromProblemAndCauses(
-          tc.problem,
+        const insights = getInsightsFromProblemsAndCauses(
+          [tc.problem],
           tc.causes,
           type,
         );

@@ -22,12 +22,13 @@ import {
   slowExecutionInsight,
   StatementStatus,
   StmtInsightEvent,
+  TransactionStatus,
   TxnInsightDetails,
   TxnInsightEvent,
   WorkloadInsightEventFilters,
 } from "./types";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { InsightProblem, InsightStatus } from "../api";
+import { InsightProblem, InsightStatus, TxnInsightStatus } from "../api";
 
 export const filterTransactionInsights = (
   transactions: TxnInsightEvent[] | null,
@@ -270,38 +271,49 @@ export function getAppsFromStatementInsights(
 }
 
 /**
- * getInsightsFromProblemAndCauses returns a list of insight objects with
- * labels and descriptions based on the problem, causes for the problem, and
- * the execution type.
- * @param problem an enum value dictating the type of problem
- * @param causes an enum value dictating a cause for the insight
+ * getInsightsFromProblemsAndCauses returns a list of insight objects with
+ * labels and descriptions based on the given problems, causes for the problem,
+ * and the execution type.
+ * @param problems enum values dictating the type of problem
+ * @param causes enum values dictating a cause for the insight
  * @param execType execution type
  * @returns list of insight objects
  */
-export function getInsightsFromProblemAndCauses(
-  problem: cockroach.sql.insights.Problem,
+export function getInsightsFromProblemsAndCauses(
+  problems: cockroach.sql.insights.Problem[],
   causes: cockroach.sql.insights.Cause[],
   execType: InsightExecEnum,
 ): Insight[] {
   const insights: Insight[] = [];
 
-  switch (problem) {
-    case InsightProblem.SlowExecution:
-      causes?.forEach(cause =>
-        insights.push(getInsightForSlowExecution(cause, execType)),
-      );
+  problems.forEach(problem => {
+    switch (problem) {
+      case InsightProblem.SlowExecution:
+        causes?.forEach(cause =>
+          insights.push(getInsightForSlowExecution(cause, execType)),
+        );
 
-      if (insights.length === 0) {
-        insights.push(slowExecutionInsight(execType));
-      }
-      break;
-    case InsightProblem.FailedExecution:
-      insights.push(failedExecutionInsight(execType));
-      break;
-    default:
-  }
+        if (insights.length === 0) {
+          insights.push(slowExecutionInsight(execType));
+        }
+        break;
+      case InsightProblem.FailedExecution:
+        insights.push(failedExecutionInsight(execType));
+        break;
+      default:
+    }
+  });
 
   return insights;
+}
+
+export function getTxnInsightStatus(
+  status: cockroach.sql.insights.Transaction.Status,
+): TransactionStatus {
+  if (status === TxnInsightStatus.Completed) {
+    return TransactionStatus.COMPLETED;
+  }
+  return TransactionStatus.FAILED;
 }
 
 export function getStmtInsightStatus(

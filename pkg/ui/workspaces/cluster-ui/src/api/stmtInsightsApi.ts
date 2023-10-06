@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import {
-  getInsightsFromProblemAndCauses,
+  getInsightsFromProblemsAndCauses,
   getStmtInsightStatus,
   InsightExecEnum,
   StmtInsightEvent,
@@ -83,17 +83,26 @@ const fetchStmtInsights = async (
     req,
     "5M",
   );
-  return formatStmtInsights(response);
+  return formatStmtInsightsResponse(response);
 };
 
-export function formatStmtInsights(
+function formatStmtInsightsResponse(
   response: StatementExecutionInsightsResponse,
 ): StmtInsightEvent[] {
-  if (!response?.statements?.length) {
+  if (!response?.statements) {
+    return [];
+  }
+  return formatStmtInsights(response.statements);
+}
+
+function formatStmtInsights(
+  stmtInsights: StatementExecutionInsight[],
+): StmtInsightEvent[] {
+  if (!stmtInsights.length) {
     return [];
   }
 
-  return response.statements.map((stmtInsight: StatementExecutionInsight) => {
+  return stmtInsights.map((stmtInsight: StatementExecutionInsight) => {
     const start = TimestampToMoment(stmtInsight.start_time).utc();
     const end = TimestampToMoment(stmtInsight.end_time).utc();
 
@@ -126,8 +135,8 @@ export function formatStmtInsights(
         ? DurationToMomentDuration(stmtInsight.contention)
         : null,
       indexRecommendations: stmtInsight.index_recommendations,
-      insights: getInsightsFromProblemAndCauses(
-        stmtInsight.problem,
+      insights: getInsightsFromProblemsAndCauses(
+        [stmtInsight.problem],
         stmtInsight.causes,
         InsightExecEnum.STATEMENT,
       ),

@@ -30,11 +30,6 @@ import moment from "moment-timezone";
 import { FixFingerprintHexValue, getLogger } from "../util";
 import { TxnInsightDetailsRequest } from "./txnInsightDetailsApi";
 import { makeInsightsSqlRequest } from "./txnInsightsUtils";
-import {
-  FingerprintStmtsResponseColumns,
-  TxnStmtFingerprintsResponseColumns,
-  TxnWithStmtFingerprints,
-} from "./txnInsightsApi";
 
 export type ContentionFilters = {
   waitingTxnID?: string;
@@ -57,6 +52,27 @@ export type ContentionResponseColumns = {
   table_name: string;
   index_name: string;
   key: string;
+};
+
+type TxnWithStmtFingerprints = {
+  application: string; // TODO #108051: (xinhaoz) this field seems deprecated.
+  transactionFingerprintID: string;
+  queryIDs: string[]; // Statement fingerprint IDs.
+};
+
+// TODO(thomas): maybe move contention api requests to separate file (contentionApi.spec.ts)
+// Exported for testing.
+export type TxnStmtFingerprintsResponseColumns = {
+  transaction_fingerprint_id: string;
+  query_ids: string[]; // Statement Fingerprint IDs.
+  app_name: string;
+};
+
+// TODO(thomas): maybe move contention api requests to separate file (contentionApi.spec.ts)
+// Exported for testing.
+export type FingerprintStmtsResponseColumns = {
+  statement_fingerprint_id: string;
+  query: string;
 };
 
 export async function getContentionDetailsApi(
