@@ -360,12 +360,13 @@ func decodeValuesIntoDatumsHelper(
 }
 
 func unwrapDatum(d tree.Datum) tree.Datum {
-	switch t := d.(type) {
-	case *tree.DOidWrapper:
-		return unwrapDatum(t.Wrapped)
-	default:
-		return d
+	if wrapper, ok := d.(*tree.DOidWrapper); ok {
+		// REFCURSOR is implemented using DOidWrapper.
+		if wrapper.Oid != oid.T_refcursor {
+			return unwrapDatum(wrapper.Wrapped)
+		}
 	}
+	return d
 }
 
 // ValidateDatum validates that the "contents" of the expected datum matches the
