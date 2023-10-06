@@ -62,6 +62,12 @@ func (pglsnDecoder) decode(v int64) (tree.Datum, error) {
 	return tree.NewDPGLSN(lsn.LSN(v)), nil
 }
 
+type refcursorDecoder struct{}
+
+func (refcursorDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
+	return tree.NewDRefCursor(string(v)), nil
+}
+
 type int64Decoder struct{}
 
 func (int64Decoder) decode(v int64) (tree.Datum, error) {
@@ -288,6 +294,8 @@ func decoderFromFamilyAndType(typOid oid.Oid, family types.Family) (decoder, err
 		return box2DDecoder{}, nil
 	case types.PGLSNFamily:
 		return pglsnDecoder{}, nil
+	case types.RefCursorFamily:
+		return refcursorDecoder{}, nil
 	case types.GeographyFamily:
 		return geographyDecoder{}, nil
 	case types.GeometryFamily:

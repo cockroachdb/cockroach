@@ -174,6 +174,7 @@ var familyToOid = map[Family]oid.Oid{
 	CollatedStringFamily: oid.T_text,
 	OidFamily:            oid.T_oid,
 	PGLSNFamily:          oid.T_pg_lsn,
+	RefCursorFamily:      oid.T_refcursor,
 	UnknownFamily:        oid.T_unknown,
 	UuidFamily:           oid.T_uuid,
 	ArrayFamily:          oid.T_anyarray,
