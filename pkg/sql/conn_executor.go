@@ -55,7 +55,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -733,11 +732,7 @@ func (s *Server) getScrubbedStmtStats(
 		}
 
 		stat.Key.Query = scrubbedQueryStr
-
-		// Possibly scrub the app name.
-		if !strings.HasPrefix(stat.Key.App, catconstants.ReportableAppNamePrefix) {
-			stat.Key.App = HashForReporting(salt, stat.Key.App)
-		}
+		stat.Key.App = MaybeHashAppName(stat.Key.App, salt)
 
 		// Quantize the counts to avoid leaking information that way.
 		quantizeCounts(&stat.Stats)
