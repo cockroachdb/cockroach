@@ -865,6 +865,9 @@ func (e *TransactionRetryError) SafeFormatError(p errors.Printer) (next error) {
 	} else if e.ExtraMsg != "" {
 		msg = redact.Sprintf(" - %s", e.ExtraMsg)
 	}
+	if e.ConflictingTxn != nil {
+		msg = redact.Sprintf(" %s - conflicting txn: meta={%s}", msg, e.ConflictingTxn.String())
+	}
 	p.Printf("TransactionRetryError: retry txn (%s%s)", redact.SafeString(TransactionRetryReason_name[int32(e.Reason)]), msg)
 	return nil
 }
