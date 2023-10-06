@@ -845,11 +845,11 @@ func (c *indexConstraintCtx) makeSpansForAnd(
 			}
 			ofsC.IntersectWith(c.evalCtx, &exprConstraint)
 		}
-		out.Combine(c.evalCtx, &ofsC)
+		out.Combine(c.evalCtx, &ofsC, c.checkCancellation)
 		numIterations++
 		// In case we can't exit this loop, allow the cancel checker to cancel
 		// this query.
-		if (numIterations % 16) == 0 {
+		if (numIterations % constraint.CancelCheckInterval) == 0 {
 			c.checkCancellation()
 		}
 	}
