@@ -1,0 +1,95 @@
+# LogicTest: !local-mixed-22.2-23.1
+
+subtest alter_procedure_name
+
+statement ok
+CREATE PROCEDURE p() LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+CREATE PROCEDURE p2() LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+CREATE PROCEDURE p_int(INT) LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+CREATE FUNCTION p_func() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement error pgcode 42723 pq: procedure p\(\) already exists in schema "public"
+ALTER PROCEDURE p RENAME TO p
+
+statement error pgcode 42723 pq: function p_func\(\) already exists in schema "public"
+ALTER PROCEDURE p RENAME TO p_func
+
+statement error pgcode 42883 pq: could not find a function named "p"
+ALTER FUNCTION p RENAME TO p_new
+
+statement error pgcode 42723 pq: procedure p2\(\) already exists in schema "public"
+ALTER PROCEDURE p RENAME TO p2
+
+statement ok
+ALTER PROCEDURE p RENAME TO p_new
+
+statement error pgcode 42883 pq: unknown procedure: p\(\)
+SELECT create_statement FROM [SHOW CREATE PROCEDURE p];
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE p_new];
+----
+CREATE PROCEDURE public.p_new()
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+# Renaming to p_int is allowed because the signature of the existing p_int is
+# different.
+statement ok
+ALTER PROCEDURE p_new RENAME to p_int
+
+statement error pgcode 42883 pq: unknown procedure: p_new\(\)
+SELECT create_statement FROM [SHOW CREATE PROCEDURE p_new];
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE p_int] ORDER BY 1
+----
+CREATE PROCEDURE public.p_int()
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+CREATE PROCEDURE public.p_int(IN INT8)
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+# Renaming p_int(INT) to p_func is allowed because the signature of the existing
+# p_func is different.
+statement ok
+ALTER PROCEDURE p_int(INT) RENAME to p_func
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE p_int] ORDER BY 1
+----
+CREATE PROCEDURE public.p_int()
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE p_func]
+----
+CREATE PROCEDURE public.p_func(IN INT8)
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+statement ok
+DROP PROCEDURE p_func(INT);
+DROP PROCEDURE p_int();
+DROP PROCEDURE p2();
+DROP FUNCTION p_func();
+
+subtest end
