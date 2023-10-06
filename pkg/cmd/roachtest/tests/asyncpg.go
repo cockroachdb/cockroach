@@ -80,6 +80,12 @@ func registerAsyncpg(r registry.Registry) {
 		}
 
 		if err := repeatRunE(
+			ctx, t, c, node, "update apt-get", `sudo apt-get update`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repeatRunE(
 			ctx,
 			t,
 			c,
