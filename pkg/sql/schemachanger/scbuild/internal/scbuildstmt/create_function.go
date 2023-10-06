@@ -11,6 +11,9 @@
 package scbuildstmt
 
 import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
@@ -29,6 +32,11 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 		panic(scerrors.NotImplementedError(n))
 	}
 	b.IncrementSchemaChangeCreateCounter("function")
+
+	activeVersion := b.EvalCtx().Settings.Version.ActiveVersion(context.TODO())
+	if n.IsProcedure && !activeVersion.IsActive(clusterversion.V23_2_PartiallyVisibleIndexes) {
+		panic(unimplemented.New("procedures", "procedures are not yet supported"))
+	}
 
 	dbElts, scElts := b.ResolveTargetObject(n.Name.ToUnresolvedObjectName(), privilege.CREATE)
 	_, _, sc := scpb.FindSchema(scElts)

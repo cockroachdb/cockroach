@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -49,6 +50,11 @@ func (n *createFunctionNode) ReadingOwnWrites() {}
 func (n *createFunctionNode) startExec(params runParams) error {
 	if n.cf.RoutineBody != nil {
 		return unimplemented.NewWithIssue(85144, "CREATE FUNCTION...sql_body unimplemented")
+	}
+
+	version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
+	if n.cf.IsProcedure && !version.IsActive(clusterversion.V23_2_Procedures) {
+		return unimplemented.New("procedures", "procedures are not yet supported")
 	}
 
 	if err := params.p.canCreateOnSchema(
