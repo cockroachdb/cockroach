@@ -20,8 +20,18 @@ import (
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
+
+func TestIsAddrInUse(t *testing.T) {
+	ln, err := net.Listen("tcp", ":0")
+	require.NoError(t, err)
+	defer func() { _ = ln.Close() }()
+
+	_, err = net.Listen("tcp", ln.Addr().String())
+	require.True(t, IsAddrInUse(err))
+}
 
 func TestIsClosedConnection(t *testing.T) {
 	for _, tc := range []struct {

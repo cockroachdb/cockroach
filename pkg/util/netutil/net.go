@@ -18,6 +18,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/cockroachdb/cmux"
@@ -206,6 +207,14 @@ func IsClosedConnection(err error) bool {
 	}
 	return errors.IsAny(err, cmux.ErrListenerClosed, grpc.ErrServerStopped, io.EOF, net.ErrClosed) ||
 		strings.Contains(err.Error(), "use of closed network connection")
+}
+
+// IsAddrInUse returns true if err is an EADDRINUSE error.
+func IsAddrInUse(err error) bool {
+	if syscallErrno := syscall.Errno(0); errors.As(err, &syscallErrno) {
+		return syscallErrno == syscall.EADDRINUSE
+	}
+	return false
 }
 
 // FatalIfUnexpected calls Log.Fatal(err) unless err is nil, or an error that
