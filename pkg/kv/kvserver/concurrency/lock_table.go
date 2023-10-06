@@ -1870,14 +1870,14 @@ func (kl *keyLocks) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 // includeUncontended is false).
 func (kl *keyLocks) collectLockStateInfo(
 	includeUncontended bool, now time.Time,
-) (bool, roachpb.LockStateInfo) {
+) (bool, []roachpb.LockStateInfo) {
 	kl.mu.Lock()
 	defer kl.mu.Unlock()
 
 	// Don't include locks that have neither lock holders, nor claims, nor
 	// waiting readers/locking requests.
 	if kl.isEmptyLock() {
-		return false, roachpb.LockStateInfo{}
+		return false, []roachpb.LockStateInfo{}
 	}
 
 	// Filter out locks without waiting readers/locking requests unless explicitly
@@ -1890,7 +1890,7 @@ func (kl *keyLocks) collectLockStateInfo(
 	if !includeUncontended && kl.waitingReaders.Len() == 0 &&
 		(kl.queuedLockingRequests.Len() == 0 ||
 			(kl.queuedLockingRequests.Len() == 1 && !kl.queuedLockingRequests.Front().Value.active)) {
-		return false, roachpb.LockStateInfo{}
+		return false, []roachpb.LockStateInfo{}
 	}
 
 	return true, kl.lockStateInfo(now)
@@ -1898,20 +1898,7 @@ func (kl *keyLocks) collectLockStateInfo(
 
 // lockStateInfo converts receiver to the roachpb.LockStateInfo structure.
 // REQUIRES: kl.mu is locked.
-func (kl *keyLocks) lockStateInfo(now time.Time) roachpb.LockStateInfo {
-	var txnHolder *enginepb.TxnMeta
-
-	durability := lock.Unreplicated
-	if kl.isLocked() {
-		// This doesn't work with multiple lock holders. See
-		// https://github.com/cockroachdb/cockroach/issues/109081.
-		tl := kl.holders.Front().Value
-		txnHolder = tl.txn
-		if tl.isHeldReplicated() {
-			durability = lock.Replicated
-		}
-	}
-
+func (kl *keyLocks) lockStateInfo(now time.Time) []roachpb.LockStateInfo {
 	waiterCount := kl.waitingReaders.Len() + kl.queuedLockingRequests.Len()
 	lockWaiters := make([]lock.Waiter, 0, waiterCount)
 
@@ -1942,13 +1929,43 @@ func (kl *keyLocks) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 		g.mu.Unlock()
 	}
 
-	return roachpb.LockStateInfo{
-		Key:          kl.key,
-		LockHolder:   txnHolder,
-		Durability:   durability,
-		HoldDuration: kl.lockHeldDuration(now),
-		Waiters:      lockWaiters,
+	if !kl.isLocked() {
+		return []roachpb.LockStateInfo{
+			{
+				Key:          kl.key,
+				LockHolder:   nil,
+				Durability:   lock.Unreplicated,
+				HoldDuration: kl.lockHeldDuration(now),
+				Waiters:      lockWaiters,
+				LockMode:         nil,
+			},
+		}
 	}
+
+	var lockStateInfos []roachpb.LockStateInfo
+	idx := 0
+	for e := kl.holders.Front(); e != nil; e = e.Next() {
+		tl := e.Value
+		durability := lock.Unreplicated
+		if tl.isHeldReplicated() {
+			durability = lock.Replicated
+		}
+		lockMode := tl.getLockMode()
+		if idx > 0 {
+			lockWaiters = []lock.Waiter
+		}
+		lsi := roachpb.LockStateInfo{
+			Key:          kl.key,
+			LockHolder:   tl.txn,
+			Durability:   durability,
+			HoldDuration: now.Sub(tl.startTime),
+			Waiters:      lockWaiters,
+			LockMode:     &lockMode,
+		}
+		lockStateInfos = append(lockStateInfos, lsi)
+		idx++
+	}
+	return lockStateInfos
 }
 
 // addToMetrics adds the receiver's state to the provided metrics struct.
@@ -4348,24 +4365,26 @@ func (t *lockTableImpl) QueryLockTableState(
 	for iter.FirstOverlap(ltRange); iter.Valid(); iter.NextOverlap(ltRange) {
 		l := iter.Cur()
 
-		if ok, lInfo := l.collectLockStateInfo(opts.IncludeUncontended, now); ok {
-			nextKey = l.key
-			nextByteSize = int64(lInfo.Size())
-			lInfo.RangeID = t.rID
+		if ok, lInfos := l.collectLockStateInfo(opts.IncludeUncontended, now); ok {
+			for _, lInfo := range lInfos {
+				nextKey = l.key
+				nextByteSize = int64(lInfo.Size())
+				lInfo.RangeID = t.rID
 
-			// Check if adding the lock would exceed our byte or count limits,
-			// though we must ensure we return at least one lock.
-			if len(lockTableState) > 0 && opts.TargetBytes > 0 && (numBytes+nextByteSize) > opts.TargetBytes {
-				resumeState.ResumeReason = kvpb.RESUME_BYTE_LIMIT
-				break
-			} else if len(lockTableState) > 0 && opts.MaxLocks > 0 && numLocks >= opts.MaxLocks {
-				resumeState.ResumeReason = kvpb.RESUME_KEY_LIMIT
-				break
+				// Check if adding the lock would exceed our byte or count limits,
+				// though we must ensure we return at least one lock.
+				if len(lockTableState) > 0 && opts.TargetBytes > 0 && (numBytes+nextByteSize) > opts.TargetBytes {
+					resumeState.ResumeReason = kvpb.RESUME_BYTE_LIMIT
+					break
+				} else if len(lockTableState) > 0 && opts.MaxLocks > 0 && numLocks >= opts.MaxLocks {
+					resumeState.ResumeReason = kvpb.RESUME_KEY_LIMIT
+					break
+				}
+
+				lockTableState = append(lockTableState, lInfo)
+				numLocks++
+				numBytes += nextByteSize
 			}
-
-			lockTableState = append(lockTableState, lInfo)
-			numLocks++
-			numBytes += nextByteSize
 		}
 	}
 

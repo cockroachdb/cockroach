@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -7958,7 +7957,6 @@ func genClusterLocksGenerator(
 			if curLock == nil || fErr != nil {
 				return nil, fErr
 			}
-
 			strengthDatum := tree.DNull
 			txnIDDatum := tree.DNull
 			tsDatum := tree.DNull
@@ -7969,7 +7967,7 @@ func genClusterLocksGenerator(
 				if curLock.LockHolder != nil {
 					txnIDDatum = tree.NewDUuid(tree.DUuid{UUID: curLock.LockHolder.ID})
 					tsDatum = eval.TimestampToInexactDTimestamp(curLock.LockHolder.WriteTimestamp)
-					strengthDatum = tree.NewDString(lock.Exclusive.String())
+					strengthDatum = tree.NewDString(curLock.LockMode.Strength.String())
 					durationDatum = tree.NewDInterval(
 						duration.MakeDuration(curLock.HoldDuration.Nanoseconds(), 0 /* days */, 0 /* months */),
 						types.DefaultIntervalTypeMetadata,
