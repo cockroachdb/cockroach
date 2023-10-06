@@ -131,6 +131,29 @@ query I
 ----
 1
 
+# Unlike Postgres, we do not support multiple locking clauses on parenthesized
+# queries.
+
+statement error pgcode 42601 multiple FOR UPDATE clauses not allowed
+(SELECT 1 FOR UPDATE) FOR UPDATE
+
+statement error pgcode 42601 multiple FOR UPDATE clauses not allowed
+((SELECT 1 FOR UPDATE)) FOR UPDATE
+
+statement error pgcode 42601 multiple FOR UPDATE clauses not allowed
+((SELECT 1) FOR UPDATE) FOR UPDATE
+
+# But we do support locking clauses both inside and outside subqueries.
+
+statement ok
+SELECT (SELECT 1 FOR UPDATE) FOR UPDATE
+
+statement ok
+SELECT * FROM (SELECT 1 FOR UPDATE) AS x FOR UPDATE
+
+statement ok
+SELECT * FROM (SELECT 1 FOR UPDATE) AS x WHERE EXISTS (SELECT 1 FOR UPDATE) FOR UPDATE
+
 # FOR READ ONLY is ignored, like in Postgres.
 query I
 SELECT 1 FOR READ ONLY
@@ -140,17 +163,55 @@ SELECT 1 FOR READ ONLY
 # Various operations are not supported when locking clauses are provided.
 # FeatureNotSupported errors are thrown for each of them.
 
+statement ok
+CREATE TABLE i (i PRIMARY KEY) AS SELECT 1
+
 statement error pgcode 0A000 FOR UPDATE is not allowed with UNION/INTERSECT/EXCEPT
 SELECT 1 UNION SELECT 1 FOR UPDATE
 
 statement error pgcode 0A000 FOR UPDATE is not allowed with UNION/INTERSECT/EXCEPT
 SELECT * FROM (SELECT 1 UNION SELECT 1) a FOR UPDATE
 
+statement error pgcode 0A000 FOR UPDATE is not allowed with UNION/INTERSECT/EXCEPT
+SELECT * FROM (SELECT 1 UNION SELECT 1) a, i FOR UPDATE
+
+query II
+SELECT * FROM (SELECT 1 UNION SELECT 1) a, i FOR UPDATE OF i
+----
+1  1
+
 statement error pgcode 0A000 FOR UPDATE is not allowed with VALUES
 VALUES (1) FOR UPDATE
 
 statement error pgcode 0A000 FOR UPDATE is not allowed with VALUES
+(VALUES (1)) FOR UPDATE
+
+# VALUES within a subquery is allowed, like in Postgres.
+
+query I
+SELECT (VALUES (1)) FOR UPDATE
+----
+1
+
+query I
 SELECT * FROM (VALUES (1)) a FOR UPDATE
+----
+1
+
+query II
+SELECT * FROM (VALUES (1)) a, i FOR UPDATE
+----
+1  1
+
+query II
+SELECT * FROM (VALUES (1)) a, i FOR UPDATE OF a
+----
+1  1
+
+query II
+SELECT * FROM (VALUES (1)) a, i FOR UPDATE OF i
+----
+1  1
 
 statement error pgcode 0A000 FOR UPDATE is not allowed with DISTINCT clause
 SELECT DISTINCT 1 FOR UPDATE
@@ -158,11 +219,33 @@ SELECT DISTINCT 1 FOR UPDATE
 statement error pgcode 0A000 FOR UPDATE is not allowed with DISTINCT clause
 SELECT * FROM (SELECT DISTINCT 1) a FOR UPDATE
 
+statement error pgcode 0A000 FOR UPDATE is not allowed with DISTINCT clause
+SELECT * FROM (SELECT DISTINCT 1) a, i FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with DISTINCT clause
+SELECT * FROM (SELECT DISTINCT 1) a, i FOR UPDATE OF a
+
+query II
+SELECT * FROM (SELECT DISTINCT 1) a, i FOR UPDATE OF i
+----
+1  1
+
 statement error pgcode 0A000 FOR UPDATE is not allowed with GROUP BY clause
 SELECT 1 GROUP BY 1 FOR UPDATE
 
 statement error pgcode 0A000 FOR UPDATE is not allowed with GROUP BY clause
 SELECT * FROM (SELECT 1 GROUP BY 1) a FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with GROUP BY clause
+SELECT * FROM (SELECT 1 GROUP BY 1) a, i FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with GROUP BY clause
+SELECT * FROM (SELECT 1 GROUP BY 1) a, i FOR UPDATE OF a
+
+query II
+SELECT * FROM (SELECT 1 GROUP BY 1) a, i FOR UPDATE OF i
+----
+1  1
 
 statement error pgcode 0A000 FOR UPDATE is not allowed with HAVING clause
 SELECT 1 HAVING TRUE FOR UPDATE
@@ -170,11 +253,33 @@ SELECT 1 HAVING TRUE FOR UPDATE
 statement error pgcode 0A000 FOR UPDATE is not allowed with HAVING clause
 SELECT * FROM (SELECT 1 HAVING TRUE) a FOR UPDATE
 
+statement error pgcode 0A000 FOR UPDATE is not allowed with HAVING clause
+SELECT * FROM (SELECT 1 HAVING TRUE) a, i FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with HAVING clause
+SELECT * FROM (SELECT 1 HAVING TRUE) a, i FOR UPDATE OF a
+
+query II
+SELECT * FROM (SELECT 1 HAVING TRUE) a, i FOR UPDATE OF i
+----
+1  1
+
 statement error pgcode 0A000 FOR UPDATE is not allowed with aggregate functions
 SELECT count(1) FOR UPDATE
 
 statement error pgcode 0A000 FOR UPDATE is not allowed with aggregate functions
 SELECT * FROM (SELECT count(1)) a FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with aggregate functions
+SELECT * FROM (SELECT count(1)) a, i FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with aggregate functions
+SELECT * FROM (SELECT count(1)) a, i FOR UPDATE OF a
+
+query II
+SELECT * FROM (SELECT count(1)) a, i FOR UPDATE OF i
+----
+1  1
 
 statement error pgcode 0A000 FOR UPDATE is not allowed with window functions
 SELECT count(1) OVER () FOR UPDATE
@@ -182,11 +287,34 @@ SELECT count(1) OVER () FOR UPDATE
 statement error pgcode 0A000 FOR UPDATE is not allowed with window functions
 SELECT * FROM (SELECT count(1) OVER ()) a FOR UPDATE
 
+statement error pgcode 0A000 FOR UPDATE is not allowed with window functions
+SELECT * FROM (SELECT count(1) OVER ()) a, i FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with window functions
+SELECT * FROM (SELECT count(1) OVER ()) a, i FOR UPDATE OF a
+
+query II
+SELECT * FROM (SELECT count(1) OVER ()) a, i FOR UPDATE OF i
+----
+1  1
+
 statement error pgcode 0A000 FOR UPDATE is not allowed with set-returning functions in the target list
 SELECT generate_series(1, 2) FOR UPDATE
 
 statement error pgcode 0A000 FOR UPDATE is not allowed with set-returning functions in the target list
 SELECT * FROM (SELECT generate_series(1, 2)) a FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with set-returning functions in the target list
+SELECT * FROM (SELECT generate_series(1, 2)) a, i FOR UPDATE
+
+statement error pgcode 0A000 FOR UPDATE is not allowed with set-returning functions in the target list
+SELECT * FROM (SELECT generate_series(1, 2)) a, i FOR UPDATE OF a
+
+query II nosort
+SELECT * FROM (SELECT generate_series(1, 2)) a, i FOR UPDATE OF i
+----
+1  1
+2  1
 
 # Set-returning functions in the from list are allowed.
 query I nosort
@@ -200,6 +328,12 @@ SELECT * FROM (SELECT * FROM generate_series(1, 2)) a FOR UPDATE
 ----
 1
 2
+
+query II nosort
+SELECT * FROM (SELECT * FROM generate_series(1, 2)) a, i FOR UPDATE
+----
+1  1
+2  1
 
 # Use of SELECT FOR UPDATE/SHARE requires SELECT and UPDATE privileges.
 

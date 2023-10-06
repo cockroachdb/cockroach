@@ -648,11 +648,13 @@ func (h *fkCheckHelper) buildOtherTableScan(parent bool) (outScope *scope, tabMe
 	if parent && (h.mb.b.evalCtx.TxnIsoLevel != isolation.Serializable ||
 		h.mb.b.evalCtx.SessionData().ImplicitFKLockingForSerializable) {
 		locking = lockingSpec{
-			&tree.LockingItem{
-				// TODO(michae2): Change this to ForKeyShare when it is supported.
-				Strength:   tree.ForShare,
-				Targets:    []tree.TableName{tree.MakeUnqualifiedTableName(h.otherTab.Name())},
-				WaitPolicy: tree.LockWaitBlock,
+			&lockingItem{
+				item: &tree.LockingItem{
+					// TODO(michae2): Change this to ForKeyShare when it is supported.
+					Strength:   tree.ForShare,
+					Targets:    []tree.TableName{tree.MakeUnqualifiedTableName(h.otherTab.Name())},
+					WaitPolicy: tree.LockWaitBlock,
+				},
 			},
 		}
 	}
