@@ -544,6 +544,7 @@ var (
 		types.Jsonb,
 		types.PGLSN,
 		types.PGLSNArray,
+		types.RefCursor,
 		types.TSQuery,
 		types.TSVector,
 		types.VarBit,
