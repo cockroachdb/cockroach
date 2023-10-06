@@ -55,22 +55,34 @@ test           test_priv_sc1  100109      test_priv_p3()      root     ALL      
 statement error pgcode 42883 procedure test_priv_p2\(string\) does not exist
 SHOW GRANTS ON PROCEDURE test_priv_p2(STRING)
 
-# TODO(mgartner): Uncomment once we support SHOW PROCEDURES.
-# query TTTTTT colnames
-# SELECT * FROM [SHOW PROCEDURES] ORDER BY function_name, result_data_type
-# ----
-#
-# query TTTTTT colnames
-# SELECT * FROM [SHOW PROCEDURES FROM public] ORDER BY function_name, result_data_type
-# ----
-#
-# query TTTTTT colnames
-# SHOW PROCEDURES FROM test_priv_sc1
-# ----
-#
-# query TTTTTT colnames
-# SELECT * FROM [SHOW PROCEDURES FROM test] ORDER BY function_name, result_data_type
-# ----
+query TTT colnames
+SELECT * FROM [SHOW PROCEDURES] ORDER BY procedure_name
+----
+schema_name    procedure_name  argument_data_types
+public         test_priv_p1    ·
+public         test_priv_p2    int8
+test_priv_sc1  test_priv_p3    ·
+
+query TTT colnames
+SELECT * FROM [SHOW PROCEDURES FROM public] ORDER BY procedure_name
+----
+schema_name  procedure_name  argument_data_types
+public       test_priv_p1    ·
+public       test_priv_p2    int8
+
+query TTT colnames
+SHOW PROCEDURES FROM test_priv_sc1
+----
+schema_name    procedure_name  argument_data_types
+test_priv_sc1  test_priv_p3    ·
+
+query TTT colnames
+SELECT * FROM [SHOW PROCEDURES FROM test] ORDER BY procedure_name
+----
+schema_name    procedure_name  argument_data_types
+public         test_priv_p1    ·
+public         test_priv_p2    int8
+test_priv_sc1  test_priv_p3    ·
 
 statement error pgcode 42883 function test_priv_p1\(\) does not exist
 GRANT EXECUTE ON FUNCTION test_priv_p1() TO test_user WITH GRANT OPTION;
