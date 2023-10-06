@@ -1,3 +1,4 @@
+# LogicTest: !local-mixed-22.2-23.1
 statement ok
 CREATE TABLE xy (x INT, y INT);
 INSERT INTO xy VALUES (1, 2), (3, 4);
@@ -10,7 +11,7 @@ INSERT INTO kv VALUES (1, 2), (3, 4);
 statement ok
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
   BEGIN
     OPEN curs FOR SELECT 1;
     RETURN 0;
@@ -34,7 +35,7 @@ statement ok
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
     x INT := 10;
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
   BEGIN
     OPEN curs FOR SELECT x;
     RETURN 0;
@@ -55,7 +56,7 @@ ABORT;
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
     x INT := 10;
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
   BEGIN
     OPEN curs FOR SELECT * FROM xy WHERE xy.x = x;
     RETURN 0;
@@ -75,7 +76,7 @@ ABORT;
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
     i INT := 3;
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
   BEGIN
     OPEN curs FOR SELECT * FROM xy WHERE x = i;
     RETURN 0;
@@ -94,7 +95,7 @@ statement ok
 ABORT;
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
   BEGIN
     OPEN curs NO SCROLL FOR SELECT * FROM (VALUES (1, 2), (3, 4), (5, 6), (7, 8)) v(a, b);
     RETURN 0;
@@ -124,7 +125,7 @@ statement ok
 ABORT;
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
   BEGIN
     OPEN curs NO SCROLL FOR SELECT 1;
     RETURN 0;
@@ -143,9 +144,9 @@ statement ok
 ABORT;
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
-    curs2 STRING := 'bar';
-    curs3 STRING := 'baz';
+    curs REFCURSOR := 'foo';
+    curs2 REFCURSOR := 'bar';
+    curs3 REFCURSOR := 'baz';
   BEGIN
     OPEN curs FOR SELECT 1;
     OPEN curs2 FOR SELECT 2;
@@ -177,9 +178,9 @@ statement ok
 ABORT;
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
-    curs2 STRING := 'bar';
-    curs3 STRING := 'baz';
+    curs REFCURSOR := 'foo';
+    curs2 REFCURSOR := 'bar';
+    curs3 REFCURSOR := 'baz';
   BEGIN
     OPEN curs FOR SELECT * FROM xy WHERE x = 99;
     INSERT INTO xy VALUES (99, 99);
@@ -218,7 +219,7 @@ statement ok
 ABORT;
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := '';
+    curs REFCURSOR := '';
   BEGIN
     OPEN curs FOR SELECT 1;
     RETURN 0;
@@ -237,7 +238,7 @@ statement ok
 ABORT;
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
   BEGIN
     OPEN curs FOR SELECT 1;
     RETURN 0;
@@ -251,7 +252,7 @@ FETCH FORWARD 5 FROM foo;
 statement error pgcode 0A000 pq: unimplemented: DECLARE SCROLL CURSOR
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
   BEGIN
     OPEN curs SCROLL FOR SELECT 1;
     RETURN 0;
@@ -261,7 +262,7 @@ $$ LANGUAGE PLpgSQL;
 statement error pgcode 42P11 pq: cannot open INSERT query as cursor
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
   BEGIN
     OPEN curs FOR INSERT INTO xy VALUES (1, 1);
     RETURN 0;
@@ -272,7 +273,7 @@ statement error pgcode 0A000 pq: unimplemented: CTE usage inside a function defi
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
     i INT := 3;
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
   BEGIN
     OPEN curs FOR WITH foo AS (SELECT * FROM xy WHERE x = i) SELECT 1;
     RETURN 0;
@@ -285,7 +286,7 @@ statement error pgcode 0A000 pq: unimplemented: CTE usage inside a function defi
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
     i INT := 3;
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
   BEGIN
     OPEN curs FOR WITH foo AS (INSERT INTO xy VALUES (1, 1) RETURNING x) SELECT 1;
     RETURN 0;
@@ -305,7 +306,7 @@ $$ LANGUAGE PLpgSQL;
 statement ok
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
   BEGIN
     OPEN curs FOR SELECT 1 // 0;
     RETURN 0;
@@ -321,7 +322,7 @@ statement ok
 ABORT;
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
   BEGIN
     OPEN curs FOR SELECT 1;
     RETURN 0;
@@ -340,8 +341,8 @@ statement ok
 ABORT;
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
-    curs2 STRING := 'foo';
+    curs REFCURSOR := 'foo';
+    curs2 REFCURSOR := 'foo';
   BEGIN
     OPEN curs FOR SELECT 1;
     OPEN curs2 FOR SELECT 2;
@@ -608,7 +609,7 @@ ABORT;
 statement error pgcode 42601 pq: expected \"FOR\" at or near \"OPEN\"\nHINT: no query was specified for cursor \"curs\"
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
   BEGIN
     OPEN curs;
     RETURN 0;
@@ -647,7 +648,7 @@ statement ok
 DROP FUNCTION f();
 CREATE OR REPLACE FUNCTION f() RETURNS STRING AS $$
   DECLARE
-    curs STRING;
+    curs REFCURSOR;
   BEGIN
     OPEN curs FOR SELECT 1;
     RETURN curs;
@@ -771,7 +772,7 @@ statement ok
 ABORT;
 CREATE OR REPLACE FUNCTION f() RETURNS STRING AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
   BEGIN
     OPEN curs FOR SELECT 1;
     RETURN curs;
@@ -798,7 +799,7 @@ foo
 statement ok
 CREATE OR REPLACE FUNCTION f_unnamed() RETURNS STRING AS $$
   DECLARE
-    curs STRING;
+    curs REFCURSOR;
   BEGIN
     OPEN curs FOR SELECT 2;
     RETURN curs;
@@ -851,8 +852,8 @@ ABORT;
 DROP FUNCTION f();
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
-    curs2 STRING := 'bar';
+    curs REFCURSOR := 'foo';
+    curs2 REFCURSOR := 'bar';
   BEGIN
     RAISE NOTICE 'cursors: %', (SELECT count(*) FROM pg_cursors);
     OPEN curs FOR SELECT 1;
@@ -882,7 +883,7 @@ NOTICE: cursors: 0
 
 # Test CLOSE across statement boundaries.
 statement ok
-CREATE OR REPLACE FUNCTION f(curs STRING) RETURNS INT AS $$
+CREATE OR REPLACE FUNCTION f(curs REFCURSOR) RETURNS INT AS $$
   BEGIN
     CLOSE curs;
     RETURN 0;
@@ -1013,8 +1014,8 @@ DECLARE dup CURSOR FOR SELECT 0;
 statement ok
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
-    curs2 STRING := 'dup';
+    curs REFCURSOR := 'foo';
+    curs2 REFCURSOR := 'dup';
   BEGIN
     OPEN curs FOR SELECT 100;
     OPEN curs2 FOR SELECT 200;
@@ -1046,7 +1047,7 @@ statement ok
 ABORT;
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
   BEGIN
     OPEN curs FOR SELECT 1 // 0;
   EXCEPTION
@@ -1070,7 +1071,7 @@ statement ok
 ABORT;
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
   BEGIN
     OPEN curs FOR SELECT 1;
     RETURN 1 // 0;
@@ -1103,8 +1104,8 @@ DECLARE dup CURSOR FOR SELECT 0;
 statement ok
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
-    curs2 STRING := 'dup';
+    curs REFCURSOR := 'foo';
+    curs2 REFCURSOR := 'dup';
   BEGIN
     OPEN curs FOR SELECT 100;
     RETURN 1 // 0;
@@ -1125,7 +1126,7 @@ statement ok
 ABORT;
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
   BEGIN
     OPEN curs FOR SELECT * FROM (VALUES (100), (200), (300));
     RAISE NOTICE 'opened %', (SELECT array_agg(name) FROM pg_cursors)::STRING;
@@ -1168,7 +1169,7 @@ statement ok
 DROP FUNCTION f();
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
     x INT;
     y INT;
   BEGIN
@@ -1188,7 +1189,7 @@ NOTICE: x: 1, y: 2
 statement ok
 CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
     x INT;
     y INT;
     i INT := 0;
@@ -1237,7 +1238,7 @@ NOTICE: i: 3, x: <NULL>, y: <NULL>
 statement ok
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
     x INT;
     i INT := 0;
   BEGIN
@@ -1264,7 +1265,7 @@ NOTICE: i: 4, x: <NULL>
 statement ok
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
     x INT;
     y INT := 1000;
     i INT := 0;
@@ -1290,7 +1291,7 @@ NOTICE: i: 4, x: <NULL>, y: <NULL>
 
 # Fetch and Move interleaved.
 statement ok
-CREATE OR REPLACE FUNCTION f_fetch(curs STRING) RETURNS INT AS $$
+CREATE OR REPLACE FUNCTION f_fetch(curs REFCURSOR) RETURNS INT AS $$
   DECLARE
     x INT;
     y INT;
@@ -1300,7 +1301,7 @@ CREATE OR REPLACE FUNCTION f_fetch(curs STRING) RETURNS INT AS $$
     RETURN 0;
   END
 $$ LANGUAGE PLpgSQL;
-CREATE OR REPLACE FUNCTION f_move(curs STRING) RETURNS INT AS $$
+CREATE OR REPLACE FUNCTION f_move(curs REFCURSOR) RETURNS INT AS $$
   BEGIN
     MOVE curs;
     RETURN 0;
@@ -1346,7 +1347,7 @@ statement ok
 ABORT;
 CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
   DECLARE
-    curs STRING := format('foo%s', n);
+    curs REFCURSOR := format('foo%s', n);
     x INT;
   BEGIN
     OPEN curs FOR SELECT * FROM xy ORDER BY x;
@@ -1401,7 +1402,7 @@ SELECT f(10);
 statement ok
 CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
   DECLARE
-    curs STRING := format('foo%s', n);
+    curs REFCURSOR := format('foo%s', n);
     x INT;
   BEGIN
     OPEN curs FOR SELECT * FROM xy ORDER BY x;
@@ -1467,7 +1468,7 @@ SELECT f(12);
 statement ok
 CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
     x INT;
   BEGIN
     IF n = 0 THEN
@@ -1530,7 +1531,7 @@ ABORT;
 statement ok
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
     x INT;
   BEGIN
     OPEN curs FOR SELECT '1';
@@ -1549,7 +1550,7 @@ statement ok
 DROP FUNCTION f();
 CREATE OR REPLACE FUNCTION f() RETURNS BOOL AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
     x BOOL;
   BEGIN
     OPEN curs FOR SELECT 'f';
@@ -1568,7 +1569,7 @@ statement ok
 DROP FUNCTION f();
 CREATE OR REPLACE FUNCTION f() RETURNS CHAR AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
     x CHAR;
   BEGIN
     OPEN curs FOR SELECT 'a';
@@ -1587,7 +1588,7 @@ statement ok
 DROP FUNCTION f();
 CREATE OR REPLACE FUNCTION f() RETURNS BIT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
     x BIT;
   BEGIN
     OPEN curs FOR SELECT '1';
@@ -1606,7 +1607,7 @@ statement ok
 DROP FUNCTION f();
 CREATE OR REPLACE FUNCTION f() RETURNS FLOAT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
     x FLOAT;
   BEGIN
     OPEN curs FOR SELECT 1;
@@ -1625,7 +1626,7 @@ statement ok
 DROP FUNCTION f();
 CREATE OR REPLACE FUNCTION f() RETURNS DECIMAL AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
     x DECIMAL;
   BEGIN
     OPEN curs FOR SELECT 1;
@@ -1644,7 +1645,7 @@ statement ok
 DROP FUNCTION f();
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
     x INT;
   BEGIN
     OPEN curs FOR SELECT 1.1::FLOAT;
@@ -1663,7 +1664,7 @@ statement ok
 DROP FUNCTION f();
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
     x INT;
   BEGIN
     OPEN curs FOR SELECT 1.1::DECIMAL;
@@ -1682,7 +1683,7 @@ statement ok
 DROP FUNCTION f();
 CREATE OR REPLACE FUNCTION f() RETURNS DECIMAL(10, 4) AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
     x DECIMAL(10, 4);
   BEGIN
     OPEN curs FOR SELECT 1.11::DECIMAL(10, 2);
@@ -1701,7 +1702,7 @@ statement ok
 DROP FUNCTION f();
 CREATE OR REPLACE FUNCTION f() RETURNS DECIMAL(10, 2) AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
     x DECIMAL(10, 2);
   BEGIN
     OPEN curs FOR SELECT 1.1111::DECIMAL(10, 4);
@@ -1719,7 +1720,7 @@ SELECT f();
 statement ok
 CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
     x2 INT2;
     x4 INT4;
     x8 INT8;
@@ -1766,7 +1767,7 @@ NOTICE: x2: <NULL>, x4: <NULL>, x8: 5000000000
 statement error pgcode 0A000 pq: FETCH statement cannot return multiple rows
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
     x INT;
   BEGIN
     OPEN curs FOR SELECT x FROM xy ORDER BY x;
@@ -1778,11 +1779,147 @@ $$ LANGUAGE PLpgSQL;
 statement error pgcode 0A000 pq: FETCH statement cannot return multiple rows
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
-    curs STRING := 'foo';
+    curs REFCURSOR := 'foo';
     x INT;
   BEGIN
     OPEN curs FOR SELECT x FROM xy ORDER BY x;
     FETCH BACKWARD ALL FROM curs INTO x;
     RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# It is possible to open a cursor with a REFCURSOR parameter.
+statement ok
+CREATE OR REPLACE FUNCTION f(curs REFCURSOR) RETURNS INT AS $$
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+SELECT f('foo');
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+100
+
+statement ok
+ABORT;
+
+# Testing invalid cursor variables.
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f(curs STRING) RETURNS INT AS $$
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f(curs NAME) RETURNS INT AS $$
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f(curs CHAR) RETURNS INT AS $$
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f(curs INT) RETURNS INT AS $$
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f(curs BOOL) RETURNS INT AS $$
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING;
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs NAME;
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs CHAR;
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs INT;
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs BOOL;
+  BEGIN
+    OPEN curs FOR SELECT 100;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f(curs STRING) RETURNS INT AS $$
+  BEGIN
+    CLOSE curs;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f(curs STRING) RETURNS INT AS $$
+  DECLARE
+    x INT;
+  BEGIN
+    FETCH curs INTO x;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42804 pq: variable \"curs\" must be of type cursor or refcursor
+CREATE OR REPLACE FUNCTION f(curs STRING) RETURNS INT AS $$
+  BEGIN
+    MOVE curs;
+    RETURN 0;
   END
 $$ LANGUAGE PLpgSQL;

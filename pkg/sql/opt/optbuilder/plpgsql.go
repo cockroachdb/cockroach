@@ -166,9 +166,7 @@ func (b *plpgsqlBuilder) init(
 			b.decls = append(b.decls, *dec)
 		case *ast.CursorDeclaration:
 			// Declaration of a bound cursor declares a variable of type refcursor.
-			// For now, we use String instead of the special refcursor type.
-			// TODO(drewk): add support for refcursor types.
-			b.decls = append(b.decls, ast.Declaration{Var: dec.Name, Typ: types.String})
+			b.decls = append(b.decls, ast.Declaration{Var: dec.Name, Typ: types.RefCursor})
 			b.cursors[dec.Name] = *dec
 		}
 	}
@@ -540,8 +538,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				}
 				panic(err)
 			}
-			// TODO(drewk): this should check REFCURSOR.
-			if !source.(*scopeColumn).typ.Equivalent(types.String) {
+			if !source.(*scopeColumn).typ.Identical(types.RefCursor) {
 				panic(pgerror.Newf(pgcode.DatatypeMismatch,
 					"variable \"%s\" must be of type cursor or refcursor", t.CurVar,
 				))
@@ -595,7 +592,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				}
 				panic(err)
 			}
-			if !source.(*scopeColumn).typ.Equivalent(types.String) {
+			if !source.(*scopeColumn).typ.Identical(types.RefCursor) {
 				panic(pgerror.Newf(pgcode.DatatypeMismatch,
 					"variable \"%s\" must be of type cursor or refcursor", t.CurVar,
 				))
@@ -1103,6 +1100,11 @@ func (b *plpgsqlBuilder) buildFetch(s *scope, fetch *ast.Fetch) *scope {
 			panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", fetch.Cursor.Name))
 		}
 		panic(err)
+	}
+	if !source.(*scopeColumn).typ.Identical(types.RefCursor) {
+		panic(pgerror.Newf(pgcode.DatatypeMismatch,
+			"variable \"%s\" must be of type cursor or refcursor", fetch.Cursor.Name,
+		))
 	}
 	makeConst := func(val tree.Datum, typ *types.T) opt.ScalarExpr {
 		return b.ob.factory.ConstructConstVal(val, typ)
