@@ -580,6 +580,7 @@ func TestContextualHelp(t *testing.T) {
 		{`DROP FUNCTION ??`, `DROP FUNCTION`},
 
 		{`CREATE PROCEDURE ??`, `CREATE PROCEDURE`},
+		{`ALTER PROCEDURE ??`, `ALTER PROCEDURE`},
 		{`DROP PROCEDURE ??`, `DROP PROCEDURE`},
 	}
 

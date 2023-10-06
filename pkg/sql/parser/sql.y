@@ -1069,6 +1069,7 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %type <tree.Statement> alter_schema_stmt
 %type <tree.Statement> alter_unsupported_stmt
 %type <tree.Statement> alter_func_stmt
+%type <tree.Statement> alter_proc_stmt
 
 // ALTER RANGE
 %type <tree.Statement> alter_zone_range_stmt
@@ -1154,6 +1155,11 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %type <tree.Statement> alter_func_set_schema_stmt
 %type <tree.Statement> alter_func_owner_stmt
 %type <tree.Statement> alter_func_dep_extension_stmt
+
+// ALTER PROCEDURE
+%type <tree.Statement> alter_proc_rename_stmt
+%type <tree.Statement> alter_proc_set_schema_stmt
+%type <tree.Statement> alter_proc_owner_stmt
 
 %type <tree.Statement> backup_stmt
 %type <tree.Statement> begin_stmt
@@ -1830,6 +1836,7 @@ alter_ddl_stmt:
 | alter_changefeed_stmt         // EXTEND WITH HELP: ALTER CHANGEFEED
 | alter_backup_stmt             // EXTEND WITH HELP: ALTER BACKUP
 | alter_func_stmt               // EXTEND WITH HELP: ALTER FUNCTION
+| alter_proc_stmt               // EXTEND WITH HELP: ALTER PROCEDURE
 | alter_backup_schedule  // EXTEND WITH HELP: ALTER BACKUP SCHEDULE
 
 // %Help: ALTER TABLE - change the definition of a table
@@ -2023,6 +2030,23 @@ alter_func_stmt:
 | alter_func_set_schema_stmt
 | alter_func_dep_extension_stmt
 | ALTER FUNCTION error // SHOW HELP: ALTER FUNCTION
+
+// %Help: ALTER PROCEDURE - change the definition of a procedure
+// %Category: DDL
+// %Text:
+// ALTER PROCEDURE name [ ( [ [ argmode ] [ argname ] argtype [, ...] ] ) ]
+//    RENAME TO new_name
+// ALTER PROCEDURE name [ ( [ [ argmode ] [ argname ] argtype [, ...] ] ) ]
+//    OWNER TO { new_owner | CURRENT_USER | SESSION_USER }
+// ALTER PROCEDURE name [ ( [ [ argmode ] [ argname ] argtype [, ...] ] ) ]
+//    SET SCHEMA new_schema
+//
+// %SeeAlso: WEBDOCS/alter-procedure.html
+alter_proc_stmt:
+  alter_proc_rename_stmt
+| alter_proc_owner_stmt
+| alter_proc_set_schema_stmt
+| ALTER PROCEDURE error // SHOW HELP: ALTER PROCEDURE
 
 // ALTER DATABASE has its error help token here because the ALTER DATABASE
 // prefix is spread over multiple non-terminals.
@@ -5047,6 +5071,36 @@ alter_func_dep_extension_stmt:
       Function: $3.functionObj(),
       Remove: $4.bool(),
       Extension: tree.Name($8),
+    }
+  }
+
+alter_proc_rename_stmt:
+  ALTER PROCEDURE function_with_paramtypes RENAME TO name
+  {
+    $$.val = &tree.AlterFunctionRename{
+      Function: $3.functionObj(),
+      NewName: tree.Name($6),
+      Procedure: true,
+    }
+  }
+
+alter_proc_set_schema_stmt:
+  ALTER PROCEDURE function_with_paramtypes SET SCHEMA schema_name
+  {
+    $$.val = &tree.AlterFunctionSetSchema{
+      Function: $3.functionObj(),
+      NewSchemaName: tree.Name($6),
+      Procedure: true,
+    }
+  }
+
+alter_proc_owner_stmt:
+  ALTER PROCEDURE function_with_paramtypes OWNER TO role_spec
+  {
+    $$.val = &tree.AlterFunctionSetOwner{
+      Function: $3.functionObj(),
+      NewOwner: $6.roleSpec(),
+      Procedure: true,
     }
   }
 
