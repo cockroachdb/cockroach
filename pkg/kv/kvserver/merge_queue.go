@@ -157,7 +157,7 @@ func (mq *mergeQueue) shouldQueue(
 		return false, 0
 	}
 
-	sizeRatio := float64(repl.GetMVCCStats().Total()) / float64(repl.GetMinBytes())
+	sizeRatio := float64(repl.GetMVCCStats().Total()) / float64(repl.GetMinBytes(ctx))
 	if math.IsNaN(sizeRatio) || sizeRatio >= 1 {
 		// This range is above the minimum size threshold. It does not need to be
 		// merged.
@@ -239,7 +239,7 @@ func (mq *mergeQueue) process(
 
 	lhsDesc := lhsRepl.Desc()
 	lhsStats := lhsRepl.GetMVCCStats()
-	minBytes := lhsRepl.GetMinBytes()
+	minBytes := lhsRepl.GetMinBytes(ctx)
 	if lhsStats.Total() >= minBytes {
 		log.VEventf(ctx, 2, "skipping merge: LHS meets minimum size threshold %d with %d bytes",
 			minBytes, lhsStats.Total())
@@ -286,7 +286,7 @@ func (mq *mergeQueue) process(
 	}
 
 	shouldSplit, _ := shouldSplitRange(ctx, mergedDesc, mergedStats,
-		lhsRepl.GetMaxBytes(), lhsRepl.shouldBackpressureWrites(), confReader)
+		lhsRepl.GetMaxBytes(ctx), lhsRepl.shouldBackpressureWrites(), confReader)
 	if shouldSplit {
 		log.VEventf(ctx, 2,
 			"skipping merge to avoid thrashing: merged range %s may split "+

@@ -202,7 +202,10 @@ func TestRevertTenantToTimestampPTS(t *testing.T) {
 	waitForGCTTL := func(t *testing.T, tablePrefix roachpb.Key) {
 		testutils.SucceedsSoon(t, func() error {
 			_, r := getFirstStoreAndReplica(t, tablePrefix)
-			conf := r.SpanConfig()
+			conf, err := r.LoadSpanConfig(ctx)
+			if err == nil {
+				return err
+			}
 			if conf.GCPolicy.TTLSeconds != 1 {
 				return fmt.Errorf("expected %d, got %d", 1, conf.GCPolicy.TTLSeconds)
 			}
@@ -212,7 +215,10 @@ func TestRevertTenantToTimestampPTS(t *testing.T) {
 	waitForGCProtection := func(t *testing.T, tablePrefix roachpb.Key) {
 		testutils.SucceedsSoon(t, func() error {
 			_, r := getFirstStoreAndReplica(t, tablePrefix)
-			conf := r.SpanConfig()
+			conf, err := r.LoadSpanConfig(ctx)
+			if err == nil {
+				return err
+			}
 			if len(conf.GCPolicy.ProtectionPolicies) == 0 {
 				return fmt.Errorf("expected policies, got %d", len(conf.GCPolicy.ProtectionPolicies))
 			}
