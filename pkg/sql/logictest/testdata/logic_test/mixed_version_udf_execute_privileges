@@ -74,9 +74,19 @@ true
 query B retry
 SELECT crdb_internal.is_at_least_version('23.1-26')
 ----
-false
+true
 
-# Makes sure the user still has the ability to execute f.
+user testuser1 nodeidx=1
+
+# Makes sure the user can execute f on node 1.
+query I
+SELECT f()
+----
+1
+
+user testuser1 nodeidx=2
+
+# Makes sure the user can execute f on node 2.
 query I
 SELECT f()
 ----
