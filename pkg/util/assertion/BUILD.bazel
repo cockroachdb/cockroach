@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "assertion",
+    srcs = ["assertion.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/assertion",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/build",
+        "//pkg/util",
+        "//pkg/util/envutil",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "assertion_test",
+    srcs = ["assertion_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":assertion"],
+    deps = [
+        "//pkg/build",
+        "//pkg/util",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//require",
+    ],
+)

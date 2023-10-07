@@ -11,6 +11,7 @@ go_library(
     deps = [
         "//pkg/build",
         "//pkg/settings",
+        "//pkg/util/assertion",
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/log/severity",
