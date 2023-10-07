@@ -43,9 +43,9 @@ type cipherMethod struct {
 	padding   cipherPadding
 }
 
-func parseCipherMethod(s string) (cipherMethod, error) {
-	cipherMethodRE := regexp.MustCompile("^(?P<algorithm>[[:alpha:]]+)(?:-(?P<mode>[[:alpha:]]+))?(?:/pad:(?P<padding>[[:alpha:]]+))?$")
+var cipherMethodRE = regexp.MustCompile("^(?P<algorithm>[[:alpha:]]+)(?:-(?P<mode>[[:alpha:]]+))?(?:/pad:(?P<padding>[[:alpha:]]+))?$")
 
+func parseCipherMethod(s string) (cipherMethod, error) {
 	submatches := cipherMethodRE.FindStringSubmatch(s)
 	if submatches == nil {
 		return cipherMethod{}, pgerror.Newf(pgcode.InvalidParameterValue, `cipher method has wrong format: "%s"`, s)
