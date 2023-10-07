@@ -646,7 +646,7 @@ DELETE FROM xy WHERE x <> 1 AND x <> 3;
 # Testing unnamed cursors.
 statement ok
 DROP FUNCTION f();
-CREATE OR REPLACE FUNCTION f() RETURNS STRING AS $$
+CREATE OR REPLACE FUNCTION f() RETURNS REFCURSOR AS $$
   DECLARE
     curs REFCURSOR;
   BEGIN
@@ -770,7 +770,7 @@ SELECT name FROM pg_cursors;
 # Do not generate a new name if one was supplied.
 statement ok
 ABORT;
-CREATE OR REPLACE FUNCTION f() RETURNS STRING AS $$
+CREATE OR REPLACE FUNCTION f() RETURNS REFCURSOR AS $$
   DECLARE
     curs REFCURSOR := 'foo';
   BEGIN
@@ -797,7 +797,7 @@ foo
 # The unnamed portal counter shouldn't have incremented for the named cursor,
 # since no name was generated.
 statement ok
-CREATE OR REPLACE FUNCTION f_unnamed() RETURNS STRING AS $$
+CREATE OR REPLACE FUNCTION f_unnamed() RETURNS REFCURSOR AS $$
   DECLARE
     curs REFCURSOR;
   BEGIN
@@ -948,7 +948,7 @@ CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
   DECLARE
     curs CURSOR FOR SELECT 100;
   BEGIN
-    curs := 'foo' || n::STRING;
+    curs := ('foo' || n::STRING)::REFCURSOR;
     OPEN curs;
     RETURN 1 // n;
   EXCEPTION
@@ -1347,7 +1347,7 @@ statement ok
 ABORT;
 CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
   DECLARE
-    curs REFCURSOR := format('foo%s', n);
+    curs REFCURSOR := format('foo%s', n)::REFCURSOR;
     x INT;
   BEGIN
     OPEN curs FOR SELECT * FROM xy ORDER BY x;
@@ -1402,7 +1402,7 @@ SELECT f(10);
 statement ok
 CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
   DECLARE
-    curs REFCURSOR := format('foo%s', n);
+    curs REFCURSOR := format('foo%s', n)::REFCURSOR;
     x INT;
   BEGIN
     OPEN curs FOR SELECT * FROM xy ORDER BY x;

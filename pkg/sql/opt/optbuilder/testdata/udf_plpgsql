@@ -4649,14 +4649,7 @@ project
                      │                        │    ├── values
                      │                        │    │    └── tuple
                      │                        │    └── projections
-                     │                        │         └── case [as=curs:6]
-                     │                        │              ├── true
-                     │                        │              ├── when
-                     │                        │              │    ├── is
-                     │                        │              │    │    ├── variable: curs:5
-                     │                        │              │    │    └── null
-                     │                        │              │    └── function: crdb_internal.plpgsql_gen_cursor_name
-                     │                        │              │         └── variable: curs:5
+                     │                        │         └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:6]
                      │                        │              └── variable: curs:5
                      │                        └── projections
                      │                             └── udf: _stmt_open_1 [as="_stmt_open_1":7]
@@ -4729,14 +4722,7 @@ project
                      │                        │    ├── values
                      │                        │    │    └── tuple
                      │                        │    └── projections
-                     │                        │         └── case [as=curs:13]
-                     │                        │              ├── true
-                     │                        │              ├── when
-                     │                        │              │    ├── is
-                     │                        │              │    │    ├── variable: curs:12
-                     │                        │              │    │    └── null
-                     │                        │              │    └── function: crdb_internal.plpgsql_gen_cursor_name
-                     │                        │              │         └── variable: curs:12
+                     │                        │         └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:13]
                      │                        │              └── variable: curs:12
                      │                        └── projections
                      │                             └── udf: _stmt_open_1 [as="_stmt_open_1":14]
@@ -4822,14 +4808,7 @@ project
                      │                        │    ├── values
                      │                        │    │    └── tuple
                      │                        │    └── projections
-                     │                        │         └── case [as=curs:32]
-                     │                        │              ├── true
-                     │                        │              ├── when
-                     │                        │              │    ├── is
-                     │                        │              │    │    ├── variable: curs:29
-                     │                        │              │    │    └── null
-                     │                        │              │    └── function: crdb_internal.plpgsql_gen_cursor_name
-                     │                        │              │         └── variable: curs:29
+                     │                        │         └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:32]
                      │                        │              └── variable: curs:29
                      │                        └── projections
                      │                             └── udf: _stmt_open_1 [as="_stmt_open_1":33]
@@ -4865,14 +4844,7 @@ project
                      │                                                                │    ├── values
                      │                                                                │    │    └── tuple
                      │                                                                │    └── projections
-                     │                                                                │         └── case [as=curs2:26]
-                     │                                                                │              ├── true
-                     │                                                                │              ├── when
-                     │                                                                │              │    ├── is
-                     │                                                                │              │    │    ├── variable: curs2:24
-                     │                                                                │              │    │    └── null
-                     │                                                                │              │    └── function: crdb_internal.plpgsql_gen_cursor_name
-                     │                                                                │              │         └── variable: curs2:24
+                     │                                                                │         └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs2:26]
                      │                                                                │              └── variable: curs2:24
                      │                                                                └── projections
                      │                                                                     └── udf: _stmt_open_2 [as="_stmt_open_2":27]
@@ -4908,14 +4880,7 @@ project
                      │                                                                                                        │    ├── values
                      │                                                                                                        │    │    └── tuple
                      │                                                                                                        │    └── projections
-                     │                                                                                                        │         └── case [as=curs3:20]
-                     │                                                                                                        │              ├── true
-                     │                                                                                                        │              ├── when
-                     │                                                                                                        │              │    ├── is
-                     │                                                                                                        │              │    │    ├── variable: curs3:19
-                     │                                                                                                        │              │    │    └── null
-                     │                                                                                                        │              │    └── function: crdb_internal.plpgsql_gen_cursor_name
-                     │                                                                                                        │              │         └── variable: curs3:19
+                     │                                                                                                        │         └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs3:20]
                      │                                                                                                        │              └── variable: curs3:19
                      │                                                                                                        └── projections
                      │                                                                                                             └── udf: _stmt_open_3 [as="_stmt_open_3":21]
@@ -5001,7 +4966,7 @@ project
                      │    │    │    ├── key: ()
                      │    │    │    └── tuple [type=tuple]
                      │    │    └── projections
-                     │    │         └── const: 'foo' [as=curs:1, type=string]
+                     │    │         └── const: 'foo' [as=curs:1, type=refcursor]
                      │    └── projections
                      │         └── udf: _gen_cursor_name_5 [as="_gen_cursor_name_5":11, type=int, outer=(1), volatile, udf]
                      │              ├── args
@@ -5017,7 +4982,7 @@ project
                      │                        ├── key: ()
                      │                        ├── fd: ()-->(10)
                      │                        ├── project
-                     │                        │    ├── columns: curs:9(string)
+                     │                        │    ├── columns: curs:9(refcursor)
                      │                        │    ├── outer: (8)
                      │                        │    ├── cardinality: [1 - 1]
                      │                        │    ├── volatile
@@ -5031,19 +4996,12 @@ project
                      │                        │    │    ├── key: ()
                      │                        │    │    └── tuple [type=tuple]
                      │                        │    └── projections
-                     │                        │         └── case [as=curs:9, type=refcursor, outer=(8), volatile]
-                     │                        │              ├── true [type=bool]
-                     │                        │              ├── when [type=string]
-                     │                        │              │    ├── is [type=bool]
-                     │                        │              │    │    ├── variable: curs:8 [type=refcursor]
-                     │                        │              │    │    └── null [type=unknown]
-                     │                        │              │    └── function: crdb_internal.plpgsql_gen_cursor_name [type=string]
-                     │                        │              │         └── variable: curs:8 [type=refcursor]
+                     │                        │         └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:9, type=refcursor, outer=(8), volatile]
                      │                        │              └── variable: curs:8 [type=refcursor]
                      │                        └── projections
                      │                             └── udf: _stmt_open_1 [as="_stmt_open_1":10, type=int, outer=(9), volatile, udf]
                      │                                  ├── args
-                     │                                  │    └── variable: curs:9 [type=string]
+                     │                                  │    └── variable: curs:9 [type=refcursor]
                      │                                  ├── params: curs:2(refcursor)
                      │                                  └── body
                      │                                       ├── open-cursor
@@ -5169,14 +5127,7 @@ project
                      │              │                             │    ├── values
                      │              │                             │    │    └── tuple
                      │              │                             │    └── projections
-                     │              │                             │         └── case [as=curs:15]
-                     │              │                             │              ├── true
-                     │              │                             │              ├── when
-                     │              │                             │              │    ├── is
-                     │              │                             │              │    │    ├── variable: curs:14
-                     │              │                             │              │    │    └── null
-                     │              │                             │              │    └── function: crdb_internal.plpgsql_gen_cursor_name
-                     │              │                             │              │         └── variable: curs:14
+                     │              │                             │         └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:15]
                      │              │                             │              └── variable: curs:14
                      │              │                             └── projections
                      │              │                                  └── udf: _stmt_open_6 [as="_stmt_open_6":16]
@@ -5218,14 +5169,7 @@ project
                      │                                                 │    ├── values
                      │                                                 │    │    └── tuple
                      │                                                 │    └── projections
-                     │                                                 │         └── case [as=curs:7]
-                     │                                                 │              ├── true
-                     │                                                 │              ├── when
-                     │                                                 │              │    ├── is
-                     │                                                 │              │    │    ├── variable: curs:6
-                     │                                                 │              │    │    └── null
-                     │                                                 │              │    └── function: crdb_internal.plpgsql_gen_cursor_name
-                     │                                                 │              │         └── variable: curs:6
+                     │                                                 │         └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:7]
                      │                                                 │              └── variable: curs:6
                      │                                                 └── projections
                      │                                                      └── udf: _stmt_open_2 [as="_stmt_open_2":8]
@@ -5318,7 +5262,7 @@ project
                      │    │    │    │    ├── key: ()
                      │    │    │    │    └── tuple [type=tuple]
                      │    │    │    └── projections
-                     │    │    │         └── const: 'foo' [as=curs:1, type=string]
+                     │    │    │         └── const: 'foo' [as=curs:1, type=refcursor]
                      │    │    └── projections
                      │    │         └── cast: INT8 [as=x:2, type=int, immutable]
                      │    │              └── null [type=unknown]
@@ -5338,7 +5282,7 @@ project
                      │                        ├── key: ()
                      │                        ├── fd: ()-->(22)
                      │                        ├── project
-                     │                        │    ├── columns: curs:21(string)
+                     │                        │    ├── columns: curs:21(refcursor)
                      │                        │    ├── outer: (19)
                      │                        │    ├── cardinality: [1 - 1]
                      │                        │    ├── volatile
@@ -5352,19 +5296,12 @@ project
                      │                        │    │    ├── key: ()
                      │                        │    │    └── tuple [type=tuple]
                      │                        │    └── projections
-                     │                        │         └── case [as=curs:21, type=refcursor, outer=(19), volatile]
-                     │                        │              ├── true [type=bool]
-                     │                        │              ├── when [type=string]
-                     │                        │              │    ├── is [type=bool]
-                     │                        │              │    │    ├── variable: curs:19 [type=refcursor]
-                     │                        │              │    │    └── null [type=unknown]
-                     │                        │              │    └── function: crdb_internal.plpgsql_gen_cursor_name [type=string]
-                     │                        │              │         └── variable: curs:19 [type=refcursor]
+                     │                        │         └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:21, type=refcursor, outer=(19), volatile]
                      │                        │              └── variable: curs:19 [type=refcursor]
                      │                        └── projections
                      │                             └── udf: _stmt_open_1 [as="_stmt_open_1":22, type=int, outer=(20,21), volatile, udf]
                      │                                  ├── args
-                     │                                  │    ├── variable: curs:21 [type=string]
+                     │                                  │    ├── variable: curs:21 [type=refcursor]
                      │                                  │    └── variable: x:20 [type=int]
                      │                                  ├── params: curs:3(refcursor) x:4(int)
                      │                                  └── body
@@ -5507,14 +5444,7 @@ project
                      │                        │    ├── values
                      │                        │    │    └── tuple
                      │                        │    └── projections
-                     │                        │         └── case [as=curs:13]
-                     │                        │              ├── true
-                     │                        │              ├── when
-                     │                        │              │    ├── is
-                     │                        │              │    │    ├── variable: curs:12
-                     │                        │              │    │    └── null
-                     │                        │              │    └── function: crdb_internal.plpgsql_gen_cursor_name
-                     │                        │              │         └── variable: curs:12
+                     │                        │         └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:13]
                      │                        │              └── variable: curs:12
                      │                        └── projections
                      │                             └── udf: _stmt_open_1 [as="_stmt_open_1":14]
