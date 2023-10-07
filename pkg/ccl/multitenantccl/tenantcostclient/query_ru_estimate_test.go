@@ -138,11 +138,11 @@ func TestEstimateQueryRUConsumption(t *testing.T) {
 	}
 
 	var err error
-	var tenantEstimatedRUs int
+	var tenantEstimatedRUs float64
 	for _, tc := range testCases {
 		for i := 0; i < tc.count; i++ {
 			output := tdb.QueryStr(t, "EXPLAIN ANALYZE "+tc.sql)
-			var estimatedRU int
+			var estimatedRU float64
 			for _, row := range output {
 				if len(row) != 1 {
 					t.Fatalf("expected one column")
@@ -152,7 +152,7 @@ func TestEstimateQueryRUConsumption(t *testing.T) {
 					substr := strings.Split(val, " ")
 					require.Equalf(t, 4, len(substr), "expected RU consumption message to have four words")
 					ruCountStr := strings.Replace(strings.TrimSpace(substr[3]), ",", "", -1)
-					estimatedRU, err = strconv.Atoi(ruCountStr)
+					estimatedRU, err = strconv.ParseFloat(ruCountStr, 64)
 					require.NoError(t, err, "failed to retrieve estimated RUs")
 					break
 				}

@@ -390,11 +390,11 @@ func (ob *OutputBuilder) AddCPUTime(cpuTime time.Duration) {
 
 // AddRUEstimate adds a top-level field for the estimated number of RUs consumed
 // by the query.
-func (ob *OutputBuilder) AddRUEstimate(ru int64) {
+func (ob *OutputBuilder) AddRUEstimate(ru float64) {
 	ob.AddFlakyTopLevelField(
 		DeflakeVolatile,
 		"estimated RUs consumed",
-		string(humanizeutil.Count(uint64(ru))),
+		string(humanizeutil.Countf(ru)),
 	)
 }
 
