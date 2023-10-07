@@ -578,7 +578,7 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 			maxSize:              defaultQueueMaxSize,
 			needsLease:           true,
 			needsSpanConfigs:     true,
-			acceptsUnsplitRanges: store.TestingKnobs().ReplicateQueueAcceptsUnsplit,
+			acceptsUnsplitRanges: false,
 			// The processing of the replicate queue often needs to send snapshots
 			// so we use the raftSnapshotQueueTimeoutFunc. This function sets a
 			// timeout based on the range size and the sending rate in addition
