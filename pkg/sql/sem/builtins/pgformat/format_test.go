@@ -61,8 +61,7 @@ func TestFormat(t *testing.T) {
 			}
 		}
 		if typ.Oid() == oid.T_refcursor {
-			// TODO(drewk): this case is temporarily skipped until we split REFCURSOR
-			// into its own family.
+			// REFCURSOR doesn't support comparison operators.
 			return true
 		}
 		return !randgen.IsLegalColumnType(typ)

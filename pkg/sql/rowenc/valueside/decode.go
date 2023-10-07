@@ -122,6 +122,12 @@ func DecodeUntaggedDatum(
 			return nil, b, err
 		}
 		return a.NewDPGLSN(tree.DPGLSN{LSN: lsn.LSN(data)}), b, nil
+	case types.RefCursorFamily:
+		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDRefCursor(tree.DString(data)), b, nil
 	case types.Box2DFamily:
 		b, data, err := encoding.DecodeUntaggedBox2DValue(buf)
 		if err != nil {

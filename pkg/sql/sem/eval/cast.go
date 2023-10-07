@@ -416,13 +416,6 @@ func performCastWithoutPrecisionTruncation(
 	case types.StringFamily, types.CollatedStringFamily:
 		var s string
 		typ := t
-		if typ.Oid() == oid.T_refcursor {
-			if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_2) {
-				return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-					"refcursor not supported until version 23.2",
-				)
-			}
-		}
 		switch t := d.(type) {
 		case *tree.DBitArray:
 			s = t.BitArray.String()
@@ -611,6 +604,19 @@ func performCastWithoutPrecisionTruncation(
 			return tree.ParseDPGLSN(d.Contents)
 		case *tree.DPGLSN:
 			return d, nil
+		}
+
+	case types.RefCursorFamily:
+		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_2) {
+			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+				"version %v must be finalized to use refcursor",
+				clusterversion.ByKey(clusterversion.V23_2))
+		}
+		switch d := d.(type) {
+		case *tree.DString:
+			return tree.NewDRefCursor(string(*d)), nil
+		case *tree.DCollatedString:
+			return tree.NewDRefCursor(d.Contents), nil
 		}
 
 	case types.GeographyFamily:

@@ -1087,22 +1087,22 @@ func TestParquetEncoder(t *testing.T) {
 		for _, test := range tests {
 			t.Run(test.name, func(t *testing.T) {
 				sqlDB := sqlutils.MakeSQLRunner(s.DB)
-				sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x STRING, y INT, z FLOAT NOT NULL, a BOOL, c INT[])`)
+				sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x STRING, y INT, z FLOAT NOT NULL, a BOOL, c INT[], d REFCURSOR)`)
 				defer sqlDB.Exec(t, `DROP TABLE FOO`)
-				sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Alice', 3, 0.5032135844230652, true,  ARRAY[]), (2, 'Bob',
-	2, CAST('nan' AS FLOAT),false, NULL),(3, NULL, NULL, 4.5, NULL,  ARRAY[1,NULL,3])`)
+				sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Alice', 3, 0.5032135844230652, true,  ARRAY[], 'foo'), (2, 'Bob',
+	2, CAST('nan' AS FLOAT),false, NULL, 'bar'),(3, NULL, NULL, 4.5, NULL,  ARRAY[1,NULL,3], NULL)`)
 				foo := feed(t, f, test.changefeedStmt)
 				defer closeFeed(t, foo)
 
 				assertPayloads(t, foo, []string{
-					`foo: [1]->{"after": {"a": true, "c": [], "i": 1, "x": "Alice", "y": 3, "z": 0.5032135844230652}}`,
-					`foo: [2]->{"after": {"a": false, "c": null, "i": 2, "x": "Bob", "y": 2, "z": "NaN"}}`,
-					`foo: [3]->{"after": {"a": null, "c": [1, null, 3], "i": 3, "x": null, "y": null, "z": 4.5}}`,
+					`foo: [1]->{"after": {"a": true, "c": [], "d": "foo", "i": 1, "x": "Alice", "y": 3, "z": 0.5032135844230652}}`,
+					`foo: [2]->{"after": {"a": false, "c": null, "d": "bar", "i": 2, "x": "Bob", "y": 2, "z": "NaN"}}`,
+					`foo: [3]->{"after": {"a": null, "c": [1, null, 3], "d": null, "i": 3, "x": null, "y": null, "z": 4.5}}`,
 				})
 
 				sqlDB.Exec(t, `UPDATE foo SET x='wonderland' where i=1`)
 				assertPayloads(t, foo, []string{
-					`foo: [1]->{"after": {"a": true, "c": [], "i": 1, "x": "wonderland", "y": 3, "z": 0.5032135844230652}}`,
+					`foo: [1]->{"after": {"a": true, "c": [], "d": "foo", "i": 1, "x": "wonderland", "y": 3, "z": 0.5032135844230652}}`,
 				})
 
 				sqlDB.Exec(t, `DELETE from foo where i=1`)
@@ -1151,7 +1151,7 @@ func TestJsonRountrip(t *testing.T) {
 			switch typ {
 			case types.Jsonb:
 				// Unsupported by sql/catalog/colinfo
-			case types.TSQuery, types.TSVector, types.PGLSN:
+			case types.TSQuery, types.TSVector:
 				// Unsupported by pkg/sql/parser
 			default:
 				if arrayTyp.InternalType.ArrayContents == typ {

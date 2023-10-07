@@ -128,6 +128,12 @@ func RandDatumWithNullChance(
 		return tree.NewDBox2D(*b)
 	case types.PGLSNFamily:
 		return tree.NewDPGLSN(lsn.LSN(rng.Uint64()))
+	case types.RefCursorFamily:
+		p := make([]byte, rng.Intn(10))
+		for i := range p {
+			p[i] = byte(1 + rng.Intn(127))
+		}
+		return tree.NewDRefCursor(string(p))
 	case types.GeographyFamily:
 		gm, err := typ.GeoMetadata()
 		if err != nil {
@@ -719,6 +725,14 @@ var (
 			tree.NewDPGLSN(math.MaxInt64 + 1),
 			tree.NewDPGLSN(math.MaxUint64),
 		},
+		types.RefCursorFamily: {
+			tree.NewDRefCursor(""),
+			tree.NewDRefCursor("X"),
+			tree.NewDRefCursor(`"`),
+			tree.NewDRefCursor(`'`),
+			tree.NewDRefCursor("\x00"),
+			tree.NewDRefCursor("\u2603"), // unicode snowman
+		},
 		types.JsonFamily: func() []tree.Datum {
 			var res []tree.Datum
 			for _, s := range []string{
@@ -887,6 +901,26 @@ var (
 		}(),
 		types.PGLSNFamily: {
 			tree.NewDPGLSN(0x1000),
+		},
+		types.RefCursorFamily: {
+			tree.NewDRefCursor("a"),
+			tree.NewDRefCursor("a\n"),
+			tree.NewDRefCursor("aa"),
+			tree.NewDRefCursor(`Aa`),
+			tree.NewDRefCursor(`aab`),
+			tree.NewDRefCursor(`aaaaaa`),
+			tree.NewDRefCursor("a "),
+			tree.NewDRefCursor(" a"),
+			tree.NewDRefCursor("	a"),
+			tree.NewDRefCursor("a	"),
+			tree.NewDRefCursor("a	"),
+			tree.NewDRefCursor("\u0001"),
+			tree.NewDRefCursor("\ufffd"),
+			tree.NewDRefCursor("\u00e1"),
+			tree.NewDRefCursor("À"),
+			tree.NewDRefCursor("à"),
+			tree.NewDRefCursor("àá"),
+			tree.NewDRefCursor("À1                à\n"),
 		},
 		types.IntervalFamily: func() []tree.Datum {
 			var res []tree.Datum

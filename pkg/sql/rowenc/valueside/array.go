@@ -210,7 +210,8 @@ func DatumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 		return encoding.Geo, nil
 	case types.DecimalFamily:
 		return encoding.Decimal, nil
-	case types.BytesFamily, types.StringFamily, types.CollatedStringFamily, types.EnumFamily:
+	case types.BytesFamily, types.StringFamily, types.CollatedStringFamily,
+		types.EnumFamily, types.RefCursorFamily:
 		return encoding.Bytes, nil
 	case types.TimestampFamily, types.TimestampTZFamily:
 		return encoding.Time, nil
