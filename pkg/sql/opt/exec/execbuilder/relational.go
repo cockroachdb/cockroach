@@ -2911,7 +2911,7 @@ func (b *Builder) buildLocking(locking opt.Locking) (opt.Locking, error) {
 		// Raise error if row-level locking is part of a read-only transaction.
 		if b.evalCtx.TxnReadOnly {
 			return opt.Locking{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
-				"cannot execute %s in a read-only transaction", locking.Strength.String(),
+				"cannot execute SELECT %s in a read-only transaction", locking.Strength.String(),
 			)
 		}
 		if locking.Form == tree.LockPredicate {
