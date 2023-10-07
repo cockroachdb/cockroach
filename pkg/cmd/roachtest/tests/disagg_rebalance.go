@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
 )
 
@@ -86,6 +87,22 @@ func registerDisaggRebalance(r registry.Registry) {
 			t.Status("verify rebalance")
 
 			db := c.Conn(ctx, t.L(), 4)
+
+			// Wait for the new node to get at least one replica before calling
+			// waitForRebalance.
+			testutils.SucceedsSoon(t, func() error {
+				var count int
+				if err := db.QueryRow(
+					"SELECT count(*) FROM crdb_internal.ranges WHERE array_position(replicas, $1) IS NOT NULL",
+					4,
+				).Scan(&count); err != nil {
+					t.Fatal(err)
+				}
+				if count <= 0 {
+					return errors.New("newly added node n4 has zero replicas")
+				}
+				return nil
+			})
 			defer func() {
 				_ = db.Close()
 			}()
@@ -96,7 +113,7 @@ func registerDisaggRebalance(r registry.Registry) {
 
 			var count int
 			if err := db.QueryRow(
-				// Check if the down node has any replicas.
+				// Check if the new node has any replicas.
 				"SELECT count(*) FROM crdb_internal.ranges WHERE array_position(replicas, $1) IS NOT NULL",
 				4,
 			).Scan(&count); err != nil {
