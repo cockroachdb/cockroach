@@ -719,6 +719,9 @@ func (opc *optPlanningCtx) runExecBuilder(
 	if bld.ContainsNonDefaultKeyLocking {
 		planTop.flags.Set(planFlagContainsNonDefaultLocking)
 	}
+	if bld.CheckContainsNonDefaultKeyLocking {
+		planTop.flags.Set(planFlagCheckContainsNonDefaultLocking)
+	}
 	planTop.mem = mem
 	planTop.catalog = opc.catalog
 	return nil
