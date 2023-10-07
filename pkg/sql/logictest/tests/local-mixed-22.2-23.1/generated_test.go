@@ -1387,13 +1387,6 @@ func TestLogic_procedure(
 	runLogicTest(t, "procedure")
 }
 
-func TestLogic_procedure_plpgsql(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "procedure_plpgsql")
-}
-
 func TestLogic_procedure_privileges(
 	t *testing.T,
 ) {
@@ -2120,13 +2113,6 @@ func TestLogic_udf_options(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_options")
-}
-
-func TestLogic_udf_plpgsql(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "udf_plpgsql")
 }
 
 func TestLogic_udf_prepare(

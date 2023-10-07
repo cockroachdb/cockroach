@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -117,6 +118,11 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	}
 	if !languageFound {
 		panic(pgerror.New(pgcode.InvalidFunctionDefinition, "no language specified"))
+	}
+	if language == tree.RoutineLangPLpgSQL {
+		if !b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V23_2_PLpgSQL) {
+			panic(unimplemented.New("PLpgSQL", "PLpgSQL is not supported until version 23.2"))
+		}
 	}
 
 	// Track the dependencies in the arguments, return type, and statements in
