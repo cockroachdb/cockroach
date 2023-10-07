@@ -697,14 +697,19 @@ func (node *ShowTables) Format(ctx *FmtCtx) {
 	}
 }
 
-// ShowFunctions represents a SHOW FUNCTIONS statement.
-type ShowFunctions struct {
+// ShowRoutines represents a SHOW FUNCTIONS or SHOW PROCEDURES statement.
+type ShowRoutines struct {
 	ObjectNamePrefix
+	Procedure bool
 }
 
 // Format implements the NodeFormatter interface.
-func (node *ShowFunctions) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW FUNCTIONS")
+func (node *ShowRoutines) Format(ctx *FmtCtx) {
+	if node.Procedure {
+		ctx.WriteString("SHOW PROCEDURES")
+	} else {
+		ctx.WriteString("SHOW FUNCTIONS")
+	}
 	if node.ExplicitSchema {
 		ctx.WriteString(" FROM ")
 		ctx.FormatNode(&node.ObjectNamePrefix)

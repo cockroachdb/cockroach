@@ -19,12 +19,52 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// delegateShowFunctions implements SHOW FUNCTIONS which returns all the
-// user-defined functions.
+const (
+	getFunctionsQuery = `
+SELECT n.nspname as schema_name,
+  p.proname as function_name,
+  p.prorettype::REGTYPE::TEXT as result_data_type,
+  COALESCE((SELECT trim('{}' FROM replace((SELECT array_agg(unnested::REGTYPE::TEXT) FROM unnest(proargtypes) AS unnested)::TEXT, ',', ', '))), '')
+    AS argument_data_types,
+  CASE p.prokind
+	  WHEN 'a' THEN 'agg'
+	  WHEN 'w' THEN 'window'
+	  WHEN 'p' THEN 'proc'
+    ELSE 'func'
+  END as function_type,
+  CASE
+    WHEN p.provolatile = 'i' THEN 'immutable'
+    WHEN p.provolatile = 's' THEN 'stable'
+    WHEN p.provolatile = 'v' THEN 'volatile'
+  END as volatility
+FROM %[1]s.pg_catalog.pg_proc p
+LEFT JOIN %[1]s.pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+WHERE p.prokind != 'p'
+%[2]s
+GROUP BY 1, 2, 3, proargtypes, 5, 6
+ORDER BY 1, 2, 4;
+`
+
+	getProceduresQuery = `
+SELECT n.nspname as schema_name,
+  p.proname as procedure_name,
+  COALESCE((SELECT trim('{}' FROM replace((SELECT array_agg(unnested::REGTYPE::TEXT) FROM unnest(proargtypes) AS unnested)::TEXT, ',', ', '))), '')
+    AS argument_data_types
+FROM %[1]s.pg_catalog.pg_proc p
+LEFT JOIN %[1]s.pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+WHERE p.prokind = 'p'
+%[2]s
+GROUP BY 1, 2, 3, proargtypes
+ORDER BY 1, 2, 3;
+`
+)
+
+// delegateShowFunctions implements SHOW FUNCTIONS and SHOW PROCEDURES which
+// return all the user-defined functions or procedures, respectively.
 // Privileges: None.
 //
-//	Notes: postgres does not have a SHOW FUNCTIONS statement.
-func (d *delegator) delegateShowFunctions(n *tree.ShowFunctions) (tree.Statement, error) {
+//	Notes: postgres does not have a SHOW FUNCTIONS or SHOW PROCEDURES statement.
+func (d *delegator) delegateShowFunctions(n *tree.ShowRoutines) (tree.Statement, error) {
 	flags := cat.Flags{AvoidDescriptorCaches: true}
 	_, name, err := d.catalog.ResolveSchema(d.ctx, flags, &n.ObjectNamePrefix)
 	if err != nil {
@@ -52,33 +92,19 @@ func (d *delegator) delegateShowFunctions(n *tree.ShowFunctions) (tree.Statement
 		schemaClause = "AND n.nspname NOT IN ('information_schema', 'pg_catalog', 'crdb_internal', 'pg_extension')"
 	}
 
-	const getFunctionsQuery = `
-SELECT n.nspname as schema_name,
-  p.proname as function_name,
-  p.prorettype::REGTYPE::TEXT as result_data_type,
-	COALESCE((SELECT trim('{}' FROM replace((SELECT array_agg(unnested::REGTYPE::TEXT) FROM unnest(proargtypes) AS unnested)::TEXT, ',', ', '))), '') as argument_data_types,
-  CASE p.prokind
-	  WHEN 'a' THEN 'agg'
-	  WHEN 'w' THEN 'window'
-	  WHEN 'p' THEN 'proc'
-    ELSE 'func'
-  END as function_type,
-  CASE
-    WHEN p.provolatile = 'i' THEN 'immutable'
-    WHEN p.provolatile = 's' THEN 'stable'
-    WHEN p.provolatile = 'v' THEN 'volatile'
-  END as volatility
-FROM %[1]s.pg_catalog.pg_proc p
-LEFT JOIN %[1]s.pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-WHERE true
-%[2]s
-GROUP BY 1, 2, 3, proargtypes, 5, 6
-ORDER BY 1, 2, 4;
-`
-	query := fmt.Sprintf(
-		getFunctionsQuery,
-		&name.CatalogName,
-		schemaClause,
-	)
+	var query string
+	if n.Procedure {
+		query = fmt.Sprintf(
+			getProceduresQuery,
+			&name.CatalogName,
+			schemaClause,
+		)
+	} else {
+		query = fmt.Sprintf(
+			getFunctionsQuery,
+			&name.CatalogName,
+			schemaClause,
+		)
+	}
 	return d.parse(query)
 }

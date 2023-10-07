@@ -1282,6 +1282,7 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %type <tree.Statement> show_enums_stmt
 %type <tree.Statement> show_fingerprints_stmt
 %type <tree.Statement> show_functions_stmt
+%type <tree.Statement> show_procedures_stmt
 %type <tree.Statement> show_grants_stmt
 %type <tree.Statement> show_histogram_stmt
 %type <tree.Statement> show_indexes_stmt
@@ -7237,6 +7238,7 @@ show_stmt:
 | show_types_stmt            // EXTEND WITH HELP: SHOW TYPES
 | show_fingerprints_stmt
 | show_functions_stmt        // EXTEND WITH HELP: SHOW FUNCTIONS
+| show_procedures_stmt       // EXTEND WITH HELP: SHOW PROCEDURES
 | show_grants_stmt           // EXTEND WITH HELP: SHOW GRANTS
 | show_histogram_stmt        // EXTEND WITH HELP: SHOW HISTOGRAM
 | show_indexes_stmt          // EXTEND WITH HELP: SHOW INDEXES
@@ -8378,7 +8380,7 @@ show_tables_stmt:
 show_functions_stmt:
   SHOW FUNCTIONS FROM name '.' name
   {
-    $$.val = &tree.ShowFunctions{ObjectNamePrefix:tree.ObjectNamePrefix{
+    $$.val = &tree.ShowRoutines{ObjectNamePrefix:tree.ObjectNamePrefix{
         CatalogName: tree.Name($4),
         ExplicitCatalog: true,
         SchemaName: tree.Name($6),
@@ -8387,7 +8389,7 @@ show_functions_stmt:
   }
 | SHOW FUNCTIONS FROM name
   {
-    $$.val = &tree.ShowFunctions{ObjectNamePrefix:tree.ObjectNamePrefix{
+    $$.val = &tree.ShowRoutines{ObjectNamePrefix:tree.ObjectNamePrefix{
         // Note: the schema name may be interpreted as database name,
         // see name_resolution.go.
         SchemaName: tree.Name($4),
@@ -8396,9 +8398,37 @@ show_functions_stmt:
   }
 | SHOW FUNCTIONS
   {
-    $$.val = &tree.ShowFunctions{}
+    $$.val = &tree.ShowRoutines{}
   }
 | SHOW FUNCTIONS error // SHOW HELP: SHOW FUNCTIONS
+
+// %Help: SHOW PROCEDURES - list procedures
+// %Category: DDL
+// %Text: SHOW PROCEDURES [FROM <databasename> [ . <schemaname> ] ]
+show_procedures_stmt:
+  SHOW PROCEDURES FROM name '.' name
+  {
+    $$.val = &tree.ShowRoutines{ObjectNamePrefix:tree.ObjectNamePrefix{
+        CatalogName: tree.Name($4),
+        ExplicitCatalog: true,
+        SchemaName: tree.Name($6),
+        ExplicitSchema: true,
+    }, Procedure: true}
+  }
+| SHOW PROCEDURES FROM name
+  {
+    $$.val = &tree.ShowRoutines{ObjectNamePrefix:tree.ObjectNamePrefix{
+        // Note: the schema name may be interpreted as database name,
+        // see name_resolution.go.
+        SchemaName: tree.Name($4),
+        ExplicitSchema: true,
+    }, Procedure: true}
+  }
+| SHOW PROCEDURES
+  {
+    $$.val = &tree.ShowRoutines{Procedure: true}
+  }
+| SHOW PROCEDURES error // SHOW HELP: SHOW PROCEDURES
 
 // %Help: SHOW TRANSACTIONS - list open client transactions across the cluster
 // %Category: Misc
