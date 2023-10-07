@@ -2108,13 +2108,6 @@ func TestLogic_udf_options(
 	runLogicTest(t, "udf_options")
 }
 
-func TestLogic_udf_plpgsql(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "udf_plpgsql")
-}
-
 func TestLogic_udf_prepare(
 	t *testing.T,
 ) {
