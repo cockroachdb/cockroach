@@ -1948,13 +1948,19 @@ func (*ShowTenant) StatementType() StatementType { return TypeDML }
 func (*ShowTenant) StatementTag() string { return "SHOW VIRTUAL CLUSTER" }
 
 // StatementReturnType implements the Statement interface.
-func (*ShowFunctions) StatementReturnType() StatementReturnType { return Rows }
+func (*ShowRoutines) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowFunctions) StatementType() StatementType { return TypeDML }
+func (*ShowRoutines) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*ShowFunctions) StatementTag() string { return "SHOW FUNCTIONS" }
+func (n *ShowRoutines) StatementTag() string {
+	if n.Procedure {
+		return "SHOW PROCEDURES"
+	} else {
+		return "SHOW FUNCTIONS"
+	}
+}
 
 // StatementReturnType implements the Statement interface
 func (*ShowTransactions) StatementReturnType() StatementReturnType { return Rows }
@@ -2340,7 +2346,7 @@ func (n *ShowEnums) String() string                           { return AsString(
 func (n *ShowFullTableScans) String() string                  { return AsString(n) }
 func (n *ShowCreateRoutine) String() string                   { return AsString(n) }
 func (n *ShowCreateExternalConnections) String() string       { return AsString(n) }
-func (n *ShowFunctions) String() string                       { return AsString(n) }
+func (n *ShowRoutines) String() string                        { return AsString(n) }
 func (n *ShowGrants) String() string                          { return AsString(n) }
 func (n *ShowHistogram) String() string                       { return AsString(n) }
 func (n *ShowSchedules) String() string                       { return AsString(n) }

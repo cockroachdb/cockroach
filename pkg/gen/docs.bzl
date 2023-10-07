@@ -247,6 +247,7 @@ DOCS_SRCS = [
     "//docs/generated/sql/bnf:show_locality.bnf",
     "//docs/generated/sql/bnf:show_locality_stmt.bnf",
     "//docs/generated/sql/bnf:show_partitions_stmt.bnf",
+    "//docs/generated/sql/bnf:show_procedures_stmt.bnf",
     "//docs/generated/sql/bnf:show_range_for_row_stmt.bnf",
     "//docs/generated/sql/bnf:show_ranges_stmt.bnf",
     "//docs/generated/sql/bnf:show_regions.bnf",
