@@ -1217,13 +1217,23 @@ func (b *builderState) ResolveConstraint(
 	})
 }
 
-func (b *builderState) ResolveUDF(
-	routineObj *tree.RoutineObj, p scbuildstmt.ResolveParams,
+func (b *builderState) ResolveRoutine(
+	routineObj *tree.RoutineObj, p scbuildstmt.ResolveParams, routineType tree.RoutineType,
 ) scbuildstmt.ElementResultSet {
 	name := routineObj.FuncName.ToUnresolvedObjectName().ToUnresolvedName()
-	fd, err := b.cr.ResolveFunction(b.ctx, name, b.semaCtx.SearchPath)
+	// TODO(mgartner): We can probably make the distinction between the two
+	// types of unresolved routine names at parsing-time (or shortly after),
+	// rather than here. Ideally, the UnresolvedRoutineName interface can be
+	// incorporated with ResolvableFunctionReference.
+	var routineName tree.UnresolvedRoutineName
+	if routineType == tree.ProcedureRoutine {
+		routineName = tree.MakeUnresolvedProcedureName(name)
+	} else {
+		routineName = tree.MakeUnresolvedFunctionName(name)
+	}
+	fd, err := b.cr.ResolveFunction(b.ctx, routineName, b.semaCtx.SearchPath)
 	if err != nil {
-		if p.IsExistenceOptional && errors.Is(err, tree.ErrFunctionUndefined) {
+		if p.IsExistenceOptional && errors.Is(err, tree.ErrRoutineUndefined) {
 			return nil
 		}
 		panic(err)
@@ -1233,17 +1243,18 @@ func (b *builderState) ResolveUDF(
 	if err != nil {
 		return nil
 	}
-	ol, err := fd.MatchOverload(paramTypes, routineObj.FuncName.Schema(), b.semaCtx.SearchPath)
+	ol, err := fd.MatchOverload(paramTypes, routineObj.FuncName.Schema(),
+		b.semaCtx.SearchPath, routineType)
 	if err != nil {
-		if p.IsExistenceOptional && errors.Is(err, tree.ErrFunctionUndefined) {
+		if p.IsExistenceOptional && errors.Is(err, tree.ErrRoutineUndefined) {
 			return nil
 		}
 		panic(err)
 	}
 
-	// ResolveUDF is not concerned with builtin functions that are defined using
+	// ResolveRoutine is not concerned with builtin functions that are defined using
 	// a SQL string, so we don't check ol.HasSQLBody() here.
-	if ol.Type != tree.UDFRoutine {
+	if ol.Type == tree.BuiltinRoutine {
 		panic(
 			errors.Errorf(
 				"cannot perform schema change on function %s%s because it is required by the database system",

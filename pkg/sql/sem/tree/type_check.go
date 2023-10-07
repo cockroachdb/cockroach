@@ -1126,7 +1126,7 @@ func (expr *FuncExpr) TypeCheck(
 
 	def, err := expr.Func.Resolve(ctx, searchPath, resolver)
 	if err != nil {
-		if errors.Is(err, ErrFunctionUndefined) {
+		if errors.Is(err, ErrRoutineUndefined) {
 			if procErr := procedureDoesNotExistErr(expr.Func.String(), semaCtx); procErr != nil {
 				return nil, procErr
 			}

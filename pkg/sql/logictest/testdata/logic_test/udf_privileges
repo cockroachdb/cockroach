@@ -81,16 +81,18 @@ public         test_priv_f1   int8              ·                    func      
 public         test_priv_f2   int8              int8                 func           volatile
 test_priv_sc1  test_priv_f3   int8              ·                    func           volatile
 
-statement error pgcode 42809 "test_priv_f1" is not a procedure
-GRANT EXECUTE ON PROCEDURE test_priv_f1() TO udf_test_user WITH GRANT OPTION;
+# TODO(mgartner): This error message should ideally mention that test_priv_f1 is
+# not a procedure.
+statement error pgcode 42883 procedure test_priv_f1\(\) does not exist
+GRANT EXECUTE ON PROCEDURE test_priv_f1() TO udf_test_user WITH GRANT OPTION
 
 statement ok
-GRANT EXECUTE ON FUNCTION test_priv_f1(), test_priv_f2(int), test_priv_sc1.test_priv_f3 TO udf_test_user WITH GRANT OPTION;
+GRANT EXECUTE ON FUNCTION test_priv_f1(), test_priv_f2(int), test_priv_sc1.test_priv_f3 TO udf_test_user WITH GRANT OPTION
 
 query TTTTTTTTTT colnames
 SELECT * FROM information_schema.role_routine_grants
 WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
-ORDER BY grantee, routine_name;
+ORDER BY grantee, routine_name
 ----
 grantor  grantee        specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
 NULL     admin          test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
@@ -165,16 +167,18 @@ test           test_priv_sc1  100109       test_priv_f3()      public         EX
 test           test_priv_sc1  100109       test_priv_f3()      root           ALL             true
 test           test_priv_sc1  100109       test_priv_f3()      udf_test_user  EXECUTE         false
 
-statement error pgcode 42809 "test_priv_f1" is not a procedure
-REVOKE EXECUTE ON PROCEDURE test_priv_f1() FROM udf_test_user;
+# TODO(mgartner): This error message should ideally mention that test_priv_f1 is
+# not a procedure.
+statement error pgcode 42883 procedure test_priv_f1\(\) does not exist
+REVOKE EXECUTE ON PROCEDURE test_priv_f1() FROM udf_test_user
 
 statement ok
-REVOKE EXECUTE ON FUNCTION test_priv_f1(), test_priv_f2(int), test_priv_sc1.test_priv_f3 FROM udf_test_user;
+REVOKE EXECUTE ON FUNCTION test_priv_f1(), test_priv_f2(int), test_priv_sc1.test_priv_f3 FROM udf_test_user
 
 query TTTTTTTTTT colnames
 SELECT * FROM information_schema.role_routine_grants
 WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
-ORDER BY grantee, routine_name;
+ORDER BY grantee, routine_name
 ----
 grantor  grantee  specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
 NULL     admin    test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
@@ -601,7 +605,7 @@ test           sc_test_show_grants  100117      f_test_show_grants(int8, text, o
 test           sc_test_show_grants  100117      f_test_show_grants(int8, text, oid)  root                ALL             true
 test           sc_test_show_grants  100117      f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
 
-statement error pgcode 42883 pq: function f_test_show_grants\(string\) does not exist: function undefined
+statement error pgcode 42883 pq: function f_test_show_grants\(string\) does not exist
 SHOW GRANTS ON FUNCTION f_test_show_grants(string);
 
 query TTTTTTB colnames
@@ -622,7 +626,7 @@ test           sc_test_show_grants  100117      f_test_show_grants(int8, text, o
 test           sc_test_show_grants  100117      f_test_show_grants(int8, text, oid)  root                ALL             true
 test           sc_test_show_grants  100117      f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
 
-statement error pgcode 42883 pq: unknown function: f_not_existing\(\): function undefined
+statement error pgcode 42883 pq: unknown function: f_not_existing\(\)
 SHOW GRANTS ON FUNCTION f_not_existing;
 
 query TTTTTTB colnames

@@ -349,9 +349,11 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 	if targets.Functions != nil || targets.Procedures != nil {
 		targetRoutines := targets.Functions
 		isFuncs := true
+		routineType := tree.UDFRoutine
 		if targets.Functions == nil {
 			targetRoutines = targets.Procedures
 			isFuncs = false
+			routineType = tree.ProcedureRoutine
 		}
 		if len(targetRoutines) == 0 {
 			return nil, errNoFunction
@@ -359,7 +361,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 		descs := make([]DescriptorWithObjectType, 0, len(targetRoutines))
 		fnResolved := catalog.DescriptorIDSet{}
 		for _, f := range targetRoutines {
-			overload, err := p.matchUDF(ctx, &f, true /* required */)
+			overload, err := p.matchRoutine(ctx, &f, true /* required */, routineType)
 			if err != nil {
 				return nil, err
 			}

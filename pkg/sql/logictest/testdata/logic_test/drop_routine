@@ -1,0 +1,332 @@
+subtest drop_function
+
+statement ok
+CREATE FUNCTION f_test_drop() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE FUNCTION f_test_drop(int) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE SCHEMA sc1
+
+statement ok
+CREATE FUNCTION sc1.f_test_drop(int) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+SET search_path = public,sc1
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_drop] ORDER BY 1
+----
+CREATE FUNCTION public.f_test_drop()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+CREATE FUNCTION public.f_test_drop(IN INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
+----
+CREATE FUNCTION sc1.f_test_drop(IN INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+statement error pgcode 42883 procedure f_test_drop\(\) does not exist
+DROP PROCEDURE f_test_drop;
+
+statement error pgcode 42725 pq: function name \"f_test_drop\" is not unique
+DROP FUNCTION f_test_drop;
+
+statement ok
+DROP FUNCTION IF EXISTS f_not_existing;
+
+statement error pgcode 42883 pq: unknown function: f_not_existing\(\)
+DROP FUNCTION f_not_existing;
+
+# drop a function twice should fail.
+statement error pgcode 42883 pq: function f_test_drop\(\) does not exist
+BEGIN;
+DROP FUNCTION f_test_drop();
+DROP FUNCTION f_test_drop();
+COMMIT;
+
+statement ok
+ROLLBACK;
+
+statement ok
+DROP FUNCTION f_test_drop();
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_drop];
+----
+CREATE FUNCTION public.f_test_drop(IN INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
+----
+CREATE FUNCTION sc1.f_test_drop(IN INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+# Drop with two identical function signatures should be ok. And only first match
+# in path should be drop.
+statement ok
+DROP FUNCTION f_test_drop(INT), f_test_drop(INT);
+
+statement error pgcode 42883 pq: unknown function: public.f_test_drop\(\)
+SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_drop];
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
+----
+CREATE FUNCTION sc1.f_test_drop(IN INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+statement ok
+DROP FUNCTION f_test_drop(INT);
+
+statement error pgcode 42883 pq: unknown function: sc1.f_test_drop\(\)
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
+
+# If there are identical function signatures in different schemas, multiple drop
+# statements should drop them all. This matches postgres behavior.
+statement ok
+CREATE FUNCTION public.f_test_drop() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE FUNCTION sc1.f_test_drop() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_drop];
+----
+CREATE FUNCTION public.f_test_drop()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
+----
+CREATE FUNCTION sc1.f_test_drop()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+statement ok;
+BEGIN;
+DROP FUNCTION f_test_drop();
+DROP FUNCTION f_test_drop();
+COMMIT;
+
+statement error pgcode 42883 pq: unknown function: public.f_test_drop\(\)
+SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_drop];
+
+statement error pgcode 42883 pq: unknown function: sc1.f_test_drop\(\)
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
+
+statement ok
+SET search_path = public
+
+statement ok
+DROP SCHEMA sc1;
+
+subtest end
+
+
+subtest drop_procedure
+
+statement ok
+CREATE PROCEDURE p_test_drop() LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+CREATE PROCEDURE p_test_drop(int) LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+CREATE SCHEMA sc1
+
+statement ok
+CREATE PROCEDURE sc1.p_test_drop(int) LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+SET search_path = public,sc1
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE public.p_test_drop] ORDER BY 1
+----
+CREATE PROCEDURE public.p_test_drop()
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+CREATE PROCEDURE public.p_test_drop(IN INT8)
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p_test_drop]
+----
+CREATE PROCEDURE sc1.p_test_drop(IN INT8)
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+statement error pgcode 42883 function p_test_drop\(\) does not exist
+DROP FUNCTION p_test_drop
+
+statement error pgcode 42725 pq: procedure name \"p_test_drop\" is not unique
+DROP PROCEDURE p_test_drop
+
+statement ok
+DROP PROCEDURE IF EXISTS p_not_existing
+
+statement error pgcode 42883 pq: unknown procedure: p_not_existing\(\)
+DROP PROCEDURE p_not_existing
+
+# Dropping a procedure twice should fail.
+statement error pgcode 42883 pq: procedure p_test_drop\(\) does not exist
+BEGIN;
+DROP PROCEDURE p_test_drop();
+DROP PROCEDURE p_test_drop();
+COMMIT;
+
+statement ok
+ROLLBACK
+
+statement ok
+DROP PROCEDURE p_test_drop()
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE public.p_test_drop]
+----
+CREATE PROCEDURE public.p_test_drop(IN INT8)
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p_test_drop]
+----
+CREATE PROCEDURE sc1.p_test_drop(IN INT8)
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+# Drop with two identical procedure signatures should be ok. And only first
+# match in path should be drop.
+statement ok
+DROP PROCEDURE p_test_drop(INT), p_test_drop(INT)
+
+statement error pgcode 42883 pq: unknown procedure: public.p_test_drop\(\)
+SELECT create_statement FROM [SHOW CREATE PROCEDURE public.p_test_drop]
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p_test_drop]
+----
+CREATE PROCEDURE sc1.p_test_drop(IN INT8)
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+statement ok
+DROP PROCEDURE p_test_drop(INT)
+
+statement error pgcode 42883 pq: unknown procedure: sc1.p_test_drop\(\)
+SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p_test_drop]
+
+# If there are identical procedure signatures in different schemas, multiple
+# drop statements should drop them all. This matches postgres behavior.
+statement ok
+CREATE PROCEDURE public.p_test_drop() LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE PROCEDURE sc1.p_test_drop() LANGUAGE SQL AS $$ SELECT 1 $$;
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE public.p_test_drop]
+----
+CREATE PROCEDURE public.p_test_drop()
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p_test_drop]
+----
+CREATE PROCEDURE sc1.p_test_drop()
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+statement ok
+BEGIN;
+DROP PROCEDURE p_test_drop();
+DROP PROCEDURE p_test_drop();
+COMMIT;
+
+statement error pgcode 42883 pq: unknown procedure: public.p_test_drop\(\)
+SELECT create_statement FROM [SHOW CREATE PROCEDURE public.p_test_drop]
+
+statement error pgcode 42883 pq: unknown procedure: sc1.p_test_drop\(\)
+SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p_test_drop]
+
+statement ok
+SET search_path = public
+
+statement ok
+DROP SCHEMA sc1
+
+subtest end

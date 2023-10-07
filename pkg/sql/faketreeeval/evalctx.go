@@ -476,7 +476,7 @@ func (ep *DummyEvalPlanner) IsActive(_ context.Context, _ clusterversion.Key) bo
 
 // ResolveFunction implements FunctionReferenceResolver interface.
 func (ep *DummyEvalPlanner) ResolveFunction(
-	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+	ctx context.Context, name tree.UnresolvedRoutineName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
 	return nil, errors.AssertionFailedf("ResolveFunction unimplemented")
 }

@@ -1028,7 +1028,7 @@ func performIntToOidCast(
 		}
 		name, _, err := res.ResolveFunctionByOID(ctx, oid.Oid(v))
 		if err != nil {
-			if errors.Is(err, tree.ErrFunctionUndefined) {
+			if errors.Is(err, tree.ErrRoutineUndefined) {
 				return tree.NewDOidWithType(o, t), nil //nolint:returnerrcheck
 			}
 			return nil, err

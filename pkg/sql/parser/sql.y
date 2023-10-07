@@ -859,7 +859,7 @@ func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
 func (u *sqlSymUnion) functionObj() tree.RoutineObj {
     return u.val.(tree.RoutineObj)
 }
-func (u *sqlSymUnion) functionObjs() tree.RoutineObjs {
+func (u *sqlSymUnion) routineObjs() tree.RoutineObjs {
     return u.val.(tree.RoutineObjs)
 }
 func (u *sqlSymUnion) tenantReplicationOptions() *tree.TenantReplicationOptions {
@@ -1221,6 +1221,7 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %type <tree.Statement> drop_view_stmt
 %type <tree.Statement> drop_sequence_stmt
 %type <tree.Statement> drop_func_stmt
+%type <tree.Statement> drop_proc_stmt
 %type <tree.Statement> drop_virtual_cluster_stmt
 %type <bool>           opt_immediate
 
@@ -4902,20 +4903,46 @@ opt_link_sym:
 drop_func_stmt:
   DROP FUNCTION function_with_paramtypes_list opt_drop_behavior
   {
-    $$.val = &tree.DropFunction{
-      Functions: $3.functionObjs(),
+    $$.val = &tree.DropRoutine{
+      Routines: $3.routineObjs(),
       DropBehavior: $4.dropBehavior(),
     }
   }
 | DROP FUNCTION IF EXISTS function_with_paramtypes_list opt_drop_behavior
   {
-    $$.val = &tree.DropFunction{
+    $$.val = &tree.DropRoutine{
       IfExists: true,
-      Functions: $5.functionObjs(),
+      Routines: $5.routineObjs(),
       DropBehavior: $6.dropBehavior(),
     }
   }
 | DROP FUNCTION error // SHOW HELP: DROP FUNCTION
+
+// %Help: DROP PROCEDURE - remove a procedure
+// %Category: DDL
+// %Text:
+// DROP PROCEDURE [ IF EXISTS ] name [ ( [ [ argmode ] [ argname ] argtype [, ...] ] ) ] [, ...]
+//    [ CASCADE | RESTRICT ]
+// %SeeAlso: WEBDOCS/drop-procedure.html
+drop_proc_stmt:
+  DROP PROCEDURE function_with_paramtypes_list opt_drop_behavior
+  {
+    $$.val = &tree.DropRoutine{
+      Procedure: true,
+      Routines: $3.routineObjs(),
+      DropBehavior: $4.dropBehavior(),
+    }
+  }
+| DROP PROCEDURE IF EXISTS function_with_paramtypes_list opt_drop_behavior
+  {
+    $$.val = &tree.DropRoutine{
+      IfExists: true,
+      Procedure: true,
+      Routines: $5.routineObjs(),
+      DropBehavior: $6.dropBehavior(),
+    }
+  }
+| DROP PROCEDURE error // SHOW HELP: DROP PROCEDURE
 
 function_with_paramtypes_list:
   function_with_paramtypes
@@ -4924,7 +4951,7 @@ function_with_paramtypes_list:
   }
   | function_with_paramtypes_list ',' function_with_paramtypes
   {
-    $$.val = append($1.functionObjs(), $3.functionObj())
+    $$.val = append($1.routineObjs(), $3.functionObj())
   }
 
 function_with_paramtypes:
@@ -5477,6 +5504,7 @@ drop_ddl_stmt:
 | drop_schema_stmt   // EXTEND WITH HELP: DROP SCHEMA
 | drop_type_stmt     // EXTEND WITH HELP: DROP TYPE
 | drop_func_stmt     // EXTEND WITH HELP: DROP FUNCTION
+| drop_proc_stmt     // EXTEND WITH HELP: DROP FUNCTION
 
 // %Help: DROP VIEW - remove a view
 // %Category: DDL
@@ -9131,11 +9159,11 @@ grant_targets:
   }
 | FUNCTION function_with_paramtypes_list
   {
-    $$.val = tree.GrantTargetList{Functions: $2.functionObjs()}
+    $$.val = tree.GrantTargetList{Functions: $2.routineObjs()}
   }
 | PROCEDURE function_with_paramtypes_list
   {
-    $$.val = tree.GrantTargetList{Procedures: $2.functionObjs()}
+    $$.val = tree.GrantTargetList{Procedures: $2.routineObjs()}
   }
 
 // backup_targets is similar to grant_targets but used by backup and restore, and thus

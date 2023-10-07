@@ -77,7 +77,7 @@ ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name_same_in
 statement ok
 ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name_new
 
-statement error pgcode 42883 pq: unknown function: f_test_alter_name\(\): function undefined
+statement error pgcode 42883 pq: unknown function: f_test_alter_name\(\)
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_name];
 
 query T
@@ -96,7 +96,7 @@ $$
 statement ok
 ALTER FUNCTION f_test_alter_name_new RENAME to f_test_alter_name_diff_in
 
-statement error pgcode 42883 pq: unknown function: f_test_alter_name_new\(\): function undefined
+statement error pgcode 42883 pq: unknown function: f_test_alter_name_new\(\)
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_name_new];
 
 query T
