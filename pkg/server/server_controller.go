@@ -16,6 +16,7 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -79,9 +80,12 @@ type serverController struct {
 	// draining is set when the surrounding server starts draining, and
 	// prevents further creation of new tenant servers.
 	draining syncutil.AtomicBool
+	drainCh  chan struct{}
 
 	// orchestrator is the orchestration method to use.
 	orchestrator serverOrchestrator
+
+	watcher *tenantcapabilitieswatcher.Watcher
 
 	mu struct {
 		syncutil.Mutex
@@ -112,6 +116,7 @@ func newServerController(
 	systemServer onDemandServer,
 	systemTenantNameContainer *roachpb.TenantNameContainer,
 	sendSQLRoutingError func(ctx context.Context, conn net.Conn, tenantName roachpb.TenantName),
+	watcher *tenantcapabilitieswatcher.Watcher,
 ) *serverController {
 	c := &serverController{
 		AmbientContext:      ambientCtx,
@@ -121,6 +126,8 @@ func newServerController(
 		stopper:             parentStopper,
 		tenantServerCreator: tenantServerCreator,
 		sendSQLRoutingError: sendSQLRoutingError,
+		watcher:             watcher,
+		drainCh:             make(chan struct{}),
 	}
 	c.orchestrator = newServerOrchestrator(parentStopper, c)
 	c.mu.servers = map[roachpb.TenantName]serverState{
@@ -129,6 +136,13 @@ func newServerController(
 	c.mu.testArgs = make(map[roachpb.TenantName]base.TestSharedProcessTenantArgs)
 	parentStopper.AddCloser(c)
 	return c
+}
+
+func (s *serverController) SetDraining() {
+	if !s.draining.Get() {
+		s.draining.Set(true)
+		close(s.drainCh)
+	}
 }
 
 // tenantServerWrapper implements the onDemandServer interface for SQLServerWrapper.
