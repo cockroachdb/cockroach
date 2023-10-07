@@ -731,25 +731,13 @@ func (b *plpgsqlBuilder) buildCursorNameGen(nameCon *continuation, nameVar ast.V
 		memo.ScalarListExpr{b.ob.factory.ConstructVariable(source.(*scopeColumn).id)},
 		&memo.FunctionPrivate{
 			Name:       nameFnName,
-			Typ:        types.String,
+			Typ:        types.RefCursor,
 			Properties: props,
 			Overload:   &overloads[0],
 		},
 	)
-	// Build an expression that calls the builtin function if the name is unset.
-	scalar := b.ob.factory.ConstructCase(memo.TrueSingleton,
-		memo.ScalarListExpr{
-			b.ob.factory.ConstructWhen(
-				b.ob.factory.ConstructIs(
-					b.ob.factory.ConstructVariable(source.(*scopeColumn).id), memo.NullSingleton,
-				),
-				nameCall,
-			),
-		},
-		b.ob.factory.ConstructVariable(source.(*scopeColumn).id),
-	)
 	nameScope := nameCon.s.push()
-	b.ob.synthesizeColumn(nameScope, scopeColName(nameVar), types.String, nil /* expr */, scalar)
+	b.ob.synthesizeColumn(nameScope, scopeColName(nameVar), types.RefCursor, nil /* expr */, nameCall)
 	b.ob.constructProjectForScope(nameCon.s, nameScope)
 	return nameScope
 }
