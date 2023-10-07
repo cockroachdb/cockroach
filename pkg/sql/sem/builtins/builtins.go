@@ -7263,7 +7263,35 @@ table's zone configuration this will return NULL.`,
 				}
 				return tree.MakeDBool(true), nil
 			},
-			Info:       `This function is used to clear the {statement|transaction} activity system tables.`,
+			Info:       `This function is used to clear the statement and transaction activity system tables.`,
+			Volatility: volatility.Volatile,
+		},
+	),
+	"crdb_internal.reset_insights_tables": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, errors.New("crdb_internal.reset_insights_tables() requires admin privilege")
+				}
+				if evalCtx.SQLStatsController == nil {
+					return nil, errors.AssertionFailedf("sql stats controller not set")
+				}
+				if err := evalCtx.SQLStatsController.ResetInsightsTables(ctx); err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(true), nil
+			},
+			Info:       `This function is used to clear the statement and transaction insights statistics.`,
 			Volatility: volatility.Volatile,
 		},
 	),

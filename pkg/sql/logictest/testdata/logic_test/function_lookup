@@ -34,5 +34,5 @@ bigint
 
 # CockroachDB is case-preserving for quoted identifiers like pg, and
 # function names only exist in lowercase.
-query error unknown function: PG_TYPEOF\(\): function undefined\nHINT: lower-case alternative pg_typeof exists
+query error unknown function: PG_TYPEOF\(\)\nHINT: lower-case alternative pg_typeof exists
 SELECT "PG_TYPEOF"(123)

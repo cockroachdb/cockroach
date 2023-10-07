@@ -424,12 +424,14 @@ func (md *Metadata) CheckDependencies(
 		if names, ok := md.objectRefsByName[id]; ok {
 			for _, name := range names {
 				definition, err := optCatalog.ResolveFunction(
-					ctx, name.ToUnresolvedName(), &evalCtx.SessionData().SearchPath,
+					ctx, tree.MakeUnresolvedFunctionName(name.ToUnresolvedName()),
+					&evalCtx.SessionData().SearchPath,
 				)
 				if err != nil {
 					return false, maybeSwallowMetadataResolveErr(err)
 				}
-				toCheck, err := definition.MatchOverload(overload.Types.Types(), name.Schema(), &evalCtx.SessionData().SearchPath)
+				toCheck, err := definition.MatchOverload(overload.Types.Types(), name.Schema(),
+					&evalCtx.SessionData().SearchPath, tree.UDFRoutine)
 				if err != nil || toCheck.Oid != overload.Oid || toCheck.Version != overload.Version {
 					return false, err
 				}
@@ -454,7 +456,7 @@ func (md *Metadata) CheckDependencies(
 	// with the same signature (e.g. after changes to the search path).
 	for name := range md.builtinRefsByName {
 		definition, err := optCatalog.ResolveFunction(
-			ctx, &name, &evalCtx.SessionData().SearchPath,
+			ctx, tree.MakeUnresolvedFunctionName(&name), &evalCtx.SessionData().SearchPath,
 		)
 		if err != nil {
 			return false, maybeSwallowMetadataResolveErr(err)

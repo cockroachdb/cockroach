@@ -135,7 +135,7 @@ type RoutineType uint8
 
 const (
 	// BuiltinRoutine is a builtin function.
-	BuiltinRoutine RoutineType = iota
+	BuiltinRoutine RoutineType = 1 << iota
 	// UDFRoutine is a user-defined function.
 	UDFRoutine
 	// ProcedureRoutine is a user-defined procedure.

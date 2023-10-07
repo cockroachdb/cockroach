@@ -64,7 +64,7 @@ CALL no_exist()
 
 # The error message for a non-existent function within a procedure call should
 # still mention "function".
-statement error pgcode 42883 unknown function: foo\(\): function undefined
+statement error pgcode 42883 unknown function: foo\(\)
 CALL p(foo())
 
 statement ok
@@ -74,16 +74,14 @@ CREATE FUNCTION foo(i INT) RETURNS VOID LANGUAGE SQL AS ''
 statement error pgcode 42883 unknown signature: public.foo\(\) \(desired <int>\)
 CALL p(foo())
 
-# TODO(mgartner): This should be pgcode 42723 with the message: 'function "p"
-# already exists with the same argument types'.
 skipif config local-legacy-schema-changer
 skipif config local-mixed-22.2-23.1
-statement error pgcode XXUUU cannot perform schema change on function
+statement error pgcode 42723 function "p" already exists with same argument types
 CREATE FUNCTION p() RETURNS VOID LANGUAGE SQL AS ''
 
 onlyif config local-legacy-schema-changer
 onlyif config local-mixed-22.2-23.1
-statement error pgcode XXUUU function "p" already exists with same argument types
+statement error pgcode 42723 function "p" already exists with same argument types
 CREATE FUNCTION p() RETURNS VOID LANGUAGE SQL AS ''
 
 # TODO(mgartner): The error should state "procedure definition" too.

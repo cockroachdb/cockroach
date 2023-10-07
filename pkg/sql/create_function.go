@@ -253,7 +253,8 @@ func (n *createFunctionNode) getMutableFuncDesc(
 		FuncName: n.cf.Name,
 		Params:   n.cf.Params,
 	}
-	existing, err := params.p.matchUDF(params.ctx, &routineObj, false /* required */)
+	existing, err := params.p.matchRoutine(params.ctx, &routineObj,
+		false /* required */, tree.UDFRoutine|tree.ProcedureRoutine)
 	if err != nil {
 		return nil, false, err
 	}

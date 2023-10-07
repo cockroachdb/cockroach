@@ -384,4 +384,4 @@ SELECT d->'schema'->>'functions'::string FROM to_json;
 query-sql
 SELECT f()
 ----
-pq: unknown function: f(): function undefined
+pq: unknown function: f()

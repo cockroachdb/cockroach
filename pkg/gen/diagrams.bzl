@@ -124,6 +124,7 @@ DIAGRAMS_SRCS = [
     "//docs/generated/sql/bnf:drop_func.html",
     "//docs/generated/sql/bnf:drop_index.html",
     "//docs/generated/sql/bnf:drop_owned_by.html",
+    "//docs/generated/sql/bnf:drop_proc.html",
     "//docs/generated/sql/bnf:drop_role.html",
     "//docs/generated/sql/bnf:drop_schedule.html",
     "//docs/generated/sql/bnf:drop_schema.html",

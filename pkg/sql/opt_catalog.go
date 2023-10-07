@@ -359,7 +359,7 @@ func (oc *optCatalog) ResolveType(
 
 // ResolveFunction is part of the cat.Catalog interface.
 func (oc *optCatalog) ResolveFunction(
-	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+	ctx context.Context, name tree.UnresolvedRoutineName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
 	return oc.planner.ResolveFunction(ctx, name, path)
 }

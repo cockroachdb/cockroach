@@ -91,7 +91,11 @@ CREATE FUNCTION f(INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$ SELECT a FROM t $
 		fname := tree.UnresolvedName{NumParts: 1, Star: false}
 		fname.Parts[0] = "f"
 		path := sessiondata.MakeSearchPath(searchPathArray)
-		funcDef, err := funcResolver.ResolveFunction(ctx, &fname, &path)
+		funcDef, err := funcResolver.ResolveFunction(
+			ctx,
+			tree.MakeUnresolvedFunctionName(&fname),
+			&path,
+		)
 		require.NoError(t, err)
 		require.Equal(t, 3, len(funcDef.Overloads))
 
@@ -269,7 +273,11 @@ CREATE FUNCTION sc1.lower() RETURNS INT VOLATILE LANGUAGE SQL AS $$ SELECT 3 $$;
 		for _, tc := range testCases {
 			t.Run(tc.testName, func(t *testing.T) {
 				path := sessiondata.MakeSearchPath(tc.searchPath)
-				funcDef, err := funcResolver.ResolveFunction(ctx, &tc.funName, &path)
+				funcDef, err := funcResolver.ResolveFunction(
+					ctx,
+					tree.MakeUnresolvedFunctionName(&tc.funName),
+					&path,
+				)
 				if tc.expectedErr != "" {
 					require.Regexp(t, tc.expectedErr, err.Error())
 					return

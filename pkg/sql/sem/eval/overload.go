@@ -100,10 +100,10 @@ func (wo WindowOverload) Window() {}
 // Sanity check all builtin overloads.
 func init() {
 	builtinsregistry.AddSubscription(func(name string, _ *tree.FunctionProperties, overloads []tree.Overload) {
-		for _, fn := range overloads {
-			if fn.Type != tree.BuiltinRoutine {
-				panic(errors.AssertionFailedf("%s: built-in routine type must be used for builtins: %v", name, fn))
-			}
+		for i := range overloads {
+			fn := &overloads[i]
+			// Set the routine type for each overload.
+			fn.Type = tree.BuiltinRoutine
 			var numSet int
 			if fn.AggregateFunc != nil {
 				numSet++

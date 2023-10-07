@@ -192,7 +192,7 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.Discard(ctx, n)
 	case *tree.DropDatabase:
 		return p.DropDatabase(ctx, n)
-	case *tree.DropFunction:
+	case *tree.DropRoutine:
 		return p.DropFunction(ctx, n)
 	case *tree.DropIndex:
 		return p.DropIndex(ctx, n)
@@ -354,7 +354,7 @@ func init() {
 		&tree.Discard{},
 		&tree.DropDatabase{},
 		&tree.DropExternalConnection{},
-		&tree.DropFunction{},
+		&tree.DropRoutine{},
 		&tree.DropIndex{},
 		&tree.DropOwnedBy{},
 		&tree.DropRole{},

@@ -41,7 +41,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 
 	validateParameters(n)
 
-	existingFn := b.ResolveUDF(
+	existingFn := b.ResolveRoutine(
 		&tree.RoutineObj{
 			FuncName: n.Name,
 			Params:   n.Params,
@@ -50,6 +50,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 			IsExistenceOptional: true,
 			RequireOwnership:    true,
 		},
+		tree.UDFRoutine|tree.ProcedureRoutine,
 	)
 	if existingFn != nil {
 		panic(pgerror.Newf(

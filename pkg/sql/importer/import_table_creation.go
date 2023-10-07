@@ -432,7 +432,7 @@ func (r fkResolver) GetQualifiedFunctionNameByID(
 
 // ResolveFunction implements the resolver.SchemaResolver interface.
 func (r fkResolver) ResolveFunction(
-	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+	ctx context.Context, name tree.UnresolvedRoutineName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
 	return nil, errSchemaResolver
 }

@@ -1,0 +1,63 @@
+parse
+DROP PROCEDURE f
+----
+DROP PROCEDURE f
+DROP PROCEDURE f -- fully parenthesized
+DROP PROCEDURE f -- literals removed
+DROP PROCEDURE _ -- identifiers removed
+
+parse
+DROP PROCEDURE IF EXISTS f
+----
+DROP PROCEDURE IF EXISTS f
+DROP PROCEDURE IF EXISTS f -- fully parenthesized
+DROP PROCEDURE IF EXISTS f -- literals removed
+DROP PROCEDURE IF EXISTS _ -- identifiers removed
+
+parse
+DROP PROCEDURE f CASCADE
+----
+DROP PROCEDURE f CASCADE
+DROP PROCEDURE f CASCADE -- fully parenthesized
+DROP PROCEDURE f CASCADE -- literals removed
+DROP PROCEDURE _ CASCADE -- identifiers removed
+
+parse
+DROP PROCEDURE f, g
+----
+DROP PROCEDURE f, g
+DROP PROCEDURE f, g -- fully parenthesized
+DROP PROCEDURE f, g -- literals removed
+DROP PROCEDURE _, _ -- identifiers removed
+
+parse
+DROP PROCEDURE f(int)
+----
+DROP PROCEDURE f(IN INT8) -- normalized!
+DROP PROCEDURE f(IN INT8) -- fully parenthesized
+DROP PROCEDURE f(IN INT8) -- literals removed
+DROP PROCEDURE _(IN INT8) -- identifiers removed
+
+parse
+DROP PROCEDURE f(a int)
+----
+DROP PROCEDURE f(IN a INT8) -- normalized!
+DROP PROCEDURE f(IN a INT8) -- fully parenthesized
+DROP PROCEDURE f(IN a INT8) -- literals removed
+DROP PROCEDURE _(IN _ INT8) -- identifiers removed
+
+parse
+DROP PROCEDURE f(a IN int)
+----
+DROP PROCEDURE f(IN a INT8) -- normalized!
+DROP PROCEDURE f(IN a INT8) -- fully parenthesized
+DROP PROCEDURE f(IN a INT8) -- literals removed
+DROP PROCEDURE _(IN _ INT8) -- identifiers removed
+
+parse
+DROP PROCEDURE f(a int, b string)
+----
+DROP PROCEDURE f(IN a INT8, IN b STRING) -- normalized!
+DROP PROCEDURE f(IN a INT8, IN b STRING) -- fully parenthesized
+DROP PROCEDURE f(IN a INT8, IN b STRING) -- literals removed
+DROP PROCEDURE _(IN _ INT8, IN _ STRING) -- identifiers removed
