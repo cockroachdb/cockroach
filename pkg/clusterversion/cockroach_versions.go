@@ -514,6 +514,9 @@ const (
 	// {statement|transaction}_execution_insights system tables.
 	V23_2_AddSystemExecInsightsTable
 
+	// V23_2_Procedures is the version where procedures are enabled.
+	V23_2_Procedures
+
 	// *************************************************
 	// Step (1) Add new versions here.
 	// Do not add new versions to a patch release.
@@ -855,10 +858,13 @@ var rawVersionsSingleton = keyedVersions{
 		Key:     V23_2_MVCCStatisticsTable,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 30},
 	},
-
 	{
 		Key:     V23_2_AddSystemExecInsightsTable,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 32},
+	},
+	{
+		Key:     V23_2_Procedures,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 34},
 	},
 
 	// *************************************************

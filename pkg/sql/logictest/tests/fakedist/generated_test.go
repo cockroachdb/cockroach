@@ -638,6 +638,13 @@ func TestLogic_drop_database(
 	runLogicTest(t, "drop_database")
 }
 
+func TestLogic_drop_function(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "drop_function")
+}
+
 func TestLogic_drop_index(
 	t *testing.T,
 ) {
@@ -652,6 +659,13 @@ func TestLogic_drop_owned_by(
 	runLogicTest(t, "drop_owned_by")
 }
 
+func TestLogic_drop_procedure(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "drop_procedure")
+}
+
 func TestLogic_drop_role_with_default_privileges(
 	t *testing.T,
 ) {
@@ -664,13 +678,6 @@ func TestLogic_drop_role_with_default_privileges_in_schema(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "drop_role_with_default_privileges_in_schema")
-}
-
-func TestLogic_drop_routine(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "drop_routine")
 }
 
 func TestLogic_drop_schema(
