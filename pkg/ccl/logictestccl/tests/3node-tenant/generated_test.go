@@ -667,6 +667,13 @@ func TestTenantLogic_drop_database(
 	runLogicTest(t, "drop_database")
 }
 
+func TestTenantLogic_drop_function(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "drop_function")
+}
+
 func TestTenantLogic_drop_index(
 	t *testing.T,
 ) {
@@ -681,6 +688,13 @@ func TestTenantLogic_drop_owned_by(
 	runLogicTest(t, "drop_owned_by")
 }
 
+func TestTenantLogic_drop_procedure(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "drop_procedure")
+}
+
 func TestTenantLogic_drop_role_with_default_privileges(
 	t *testing.T,
 ) {
@@ -693,13 +707,6 @@ func TestTenantLogic_drop_role_with_default_privileges_in_schema(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "drop_role_with_default_privileges_in_schema")
-}
-
-func TestTenantLogic_drop_routine(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "drop_routine")
 }
 
 func TestTenantLogic_drop_schema(
