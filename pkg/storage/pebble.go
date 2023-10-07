@@ -1216,7 +1216,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		opts.Experimental.RemoteStorage = remote.MakeSimpleFactory(map[remote.Locator]remote.Storage{
 			"": esWrapper,
 		})
-		opts.Experimental.CreateOnShared = true
+		opts.Experimental.CreateOnShared = remote.CreateOnSharedLower
 		opts.Experimental.CreateOnSharedLocator = ""
 	} else {
 		if cfg.RemoteStorageFactory != nil {
