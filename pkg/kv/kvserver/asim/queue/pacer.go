@@ -27,7 +27,7 @@ type ReplicaPacer interface {
 // replicas at a rate sufficient to complete iteration in the specified scan
 // loop interval.
 type ReplicaScanner struct {
-	// TOOD(kvoli): make this a function which returns the store's current
+	// TODO(kvoli): make this a function which returns the store's current
 	// replicas in state.
 	nextReplsFn  func() []state.Replica
 	repls        []state.Replica
