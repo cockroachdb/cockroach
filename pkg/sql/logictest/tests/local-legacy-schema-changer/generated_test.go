@@ -638,6 +638,13 @@ func TestLogic_drop_index(
 	runLogicTest(t, "drop_index")
 }
 
+func TestLogic_drop_procedure(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "drop_procedure")
+}
+
 func TestLogic_drop_role_with_default_privileges(
 	t *testing.T,
 ) {
