@@ -1371,7 +1371,8 @@ func makeClosureTxn(
 		var allowed []opGen
 		g.registerClientOps(&allowed, txnClientOps)
 		g.registerBatchOps(&allowed, txnBatchOps)
-		numOps := rng.Intn(4)
+		const maxOps = 5
+		numOps := rng.Intn(maxOps + 1)
 		ops := make([]Operation, numOps)
 		for i := range ops {
 			ops[i] = g.selectOp(rng, allowed)
