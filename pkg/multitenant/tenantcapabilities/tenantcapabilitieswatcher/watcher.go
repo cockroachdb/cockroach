@@ -48,6 +48,9 @@ type Watcher struct {
 
 		store  map[roachpb.TenantID]*watcherEntry
 		byName map[roachpb.TenantName]roachpb.TenantID
+
+		onUpdateIdx       int
+		onUpdateCallbacks map[int]onUpdateCallback
 	}
 
 	// startCh is closed once the rangefeed starts.
@@ -67,6 +70,8 @@ type Watcher struct {
 		ch   chan struct{}
 	}
 }
+
+type onUpdateCallback func([]tenantcapabilities.Entry)
 
 type watcherEntry struct {
 	// Entry is the actual tenant metadata.
@@ -105,6 +110,7 @@ func New(
 	w.initialScan.ch = make(chan struct{})
 	w.mu.store = make(map[roachpb.TenantID]*watcherEntry)
 	w.mu.byName = make(map[roachpb.TenantName]roachpb.TenantID)
+	w.mu.onUpdateCallbacks = make(map[int]onUpdateCallback)
 	return w
 }
 
@@ -156,6 +162,23 @@ func (w *Watcher) GetCapabilities(
 		return cp.TenantCapabilities, true
 	}
 	return nil, false
+}
+
+// OnUpdate is called after a tenant state update is received. The
+// provided function must take care to avoid blocking for too long.
+func (w *Watcher) OnUpdate(cb onUpdateCallback) func() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.mu.onUpdateIdx++
+	idx := w.mu.onUpdateIdx
+	w.mu.onUpdateCallbacks[idx] = cb
+
+	return func() {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		delete(w.mu.onUpdateCallbacks, idx)
+	}
 }
 
 // GetGlobalCapabilityState implements the tenantcapabilities.Reader interface.
@@ -277,6 +300,21 @@ func (w *Watcher) handleUpdate(ctx context.Context, u rangefeedcache.Update) {
 	default:
 		err := errors.AssertionFailedf("unknown update type: %v", u.Type)
 		logcrash.ReportOrPanic(ctx, &w.st.SV, "%w", err)
+	}
+
+	if len(updates) > 0 {
+		w.mu.RLock()
+		defer w.mu.RUnlock()
+
+		entries := make([]tenantcapabilities.Entry, 0, len(w.mu.store))
+		for _, v := range w.mu.store {
+			if v.Entry != nil {
+				entries = append(entries, *v.Entry)
+			}
+		}
+		for _, cb := range w.mu.onUpdateCallbacks {
+			cb(entries)
+		}
 	}
 }
 
