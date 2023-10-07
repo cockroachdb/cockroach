@@ -2119,10 +2119,12 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 		return false
 	}
 
-	// We'll run the checks in parallel if the parallelization is enabled, we
-	// have multiple checks to run, and we're likely to have quota to do so.
+	// We'll run the checks in parallel if the parallelization is enabled, we have
+	// multiple checks to run, none of the checks have non-default locking, and
+	// we're likely to have quota to do so.
 	runParallelChecks := parallelizeChecks.Get(&dsp.st.SV) &&
 		len(plan.checkPlans) > 1 &&
+		!planner.curPlan.flags.IsSet(planFlagCheckContainsNonDefaultLocking) &&
 		dsp.parallelChecksSem.ApproximateQuota() > 0
 	if runParallelChecks {
 		// At the moment, we rely on not using the newer DistSQL spec factory to

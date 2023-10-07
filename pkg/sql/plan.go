@@ -625,6 +625,10 @@ const (
 	// planFlagContainsNonDefaultLocking is set if the plan has a node with
 	// non-default key locking strength.
 	planFlagContainsNonDefaultLocking
+
+	// planFlagCheckContainsNonDefaultLocking is set if at least one check plan
+	// has a node with non-default key locking strength.
+	planFlagCheckContainsNonDefaultLocking
 )
 
 func (pf planFlags) IsSet(flag planFlags) bool {
