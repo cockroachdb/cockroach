@@ -1,0 +1,11 @@
+echo
+----
+db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+  txn.SetIsoLevel(isolation.Snapshot)
+  txn.Put(ctx, tk(1), sv(1)) // <nil>
+  txn.Put(ctx, tk(2), sv(2)) // <nil>
+  return nil
+}) // @0.000000002,0 <nil>
+/Table/100/"0000000000000001"/0.000000001,0 @ s1 v1
+/Table/100/"0000000000000002"/0.000000002,0 @ s2 v2
+committed snapshot txn non-atomic timestamps: [w]/Table/100/"0000000000000001":0.000000001,0->v1@s1 [w]/Table/100/"0000000000000002":0.000000002,0->v2@s2
