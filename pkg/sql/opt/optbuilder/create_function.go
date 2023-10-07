@@ -124,6 +124,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	if !languageFound {
 		panic(pgerror.New(pgcode.InvalidFunctionDefinition, "no language specified"))
 	}
+	if language == tree.RoutineLangPLpgSQL && !activeVersion.IsActive(clusterversion.V23_2_PLpgSQL) {
+		panic(unimplemented.New("PLpgSQL", "PLpgSQL is not supported until version 23.2"))
+	}
 
 	// Track the dependencies in the arguments, return type, and statements in
 	// the function body.
