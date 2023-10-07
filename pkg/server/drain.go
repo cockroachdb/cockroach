@@ -336,7 +336,7 @@ func (s *drainServer) drainInner(
 		// We are on a KV node, with a server controller.
 		//
 		// First tell the controller to stop starting new servers.
-		s.serverCtl.draining.Set(true)
+		s.serverCtl.SetDraining()
 
 		// Then shut down tenant servers orchestrated from
 		// this node.
