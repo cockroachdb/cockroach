@@ -67,23 +67,23 @@ function createStmtInsightReq(
   };
 }
 
-export const getStmtInsightsApi = (
+export async function getStmtInsightsApi(
   req: StmtInsightsReq,
-): Promise<StmtInsightEvent[]> => {
-  return fetchStmtInsights(createStmtInsightReq(req));
-};
+): Promise<StmtInsightEvent[]> {
+  const response = await fetchStmtInsights(createStmtInsightReq(req));
+  return formatStmtInsightsResponse(response);
+}
 
-const fetchStmtInsights = async (
+const fetchStmtInsights = (
   req: StatementExecutionInsightsRequest,
-): Promise<StmtInsightEvent[]> => {
-  const response = await fetchData(
+): Promise<StatementExecutionInsightsResponse> => {
+  return fetchData(
     cockroach.server.serverpb.StatementExecutionInsightsResponse,
     STMT_EXEC_INSIGHTS_PATH,
     cockroach.server.serverpb.StatementExecutionInsightsRequest,
     req,
     "5M",
   );
-  return formatStmtInsightsResponse(response);
 };
 
 function formatStmtInsightsResponse(
@@ -95,7 +95,7 @@ function formatStmtInsightsResponse(
   return formatStmtInsights(response.statements);
 }
 
-function formatStmtInsights(
+export function formatStmtInsights(
   stmtInsights: StatementExecutionInsight[],
 ): StmtInsightEvent[] {
   if (!stmtInsights.length) {
@@ -143,7 +143,8 @@ function formatStmtInsights(
       planGist: stmtInsight.plan_gist,
       cpuSQLNanos: FixLong(stmtInsight.cpu_sql_nanos ?? 0).toNumber(),
       errorCode: stmtInsight.error_code,
-      errorMsg: stmtInsight.last_error_msg,
+      // TODO(thomas): add this stmtInsight.last_error_msg when merged
+      errorMsg: "",
       status: getStmtInsightStatus(stmtInsight.status),
     };
   });

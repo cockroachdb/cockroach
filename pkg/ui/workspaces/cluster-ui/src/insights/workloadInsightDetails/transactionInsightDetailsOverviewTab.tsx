@@ -42,7 +42,6 @@ import { TransactionDetailsLink } from "../workloadInsights/util";
 import { TimeScale } from "../../timeScaleDropdown";
 import { getTxnInsightRecommendations } from "../utils";
 import { SortSetting } from "../../sortedtable";
-import { TxnInsightDetailsReqErrs } from "src/api";
 import { Loading } from "src/loading";
 
 import insightTableStyles from "src/insightsTable/insightsTable.module.scss";
@@ -59,13 +58,12 @@ type Props = {
   contentionDetails?: ContentionDetails[];
   setTimeScale: (ts: TimeScale) => void;
   hasAdminRole: boolean;
-  errors: TxnInsightDetailsReqErrs | null;
+  error: Error;
   maxRequestsReached: boolean;
-  maxApiSizeReached: boolean;
 };
 
 export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
-  errors,
+  error,
   contentionDetails,
   txnDetails,
   statements,
@@ -127,8 +125,8 @@ the maximum number of statements was reached in the console.`;
         <Loading
           loading={!maxRequestsReached && txnDetails == null}
           page="Transaction Details"
-          error={errors?.txnDetailsErr}
-          renderError={() => InsightsError(errors?.txnDetailsErr?.message)}
+          error={error}
+          renderError={() => InsightsError(error?.message)}
         >
           <Row gutter={24}>
             <Col span={24}>
@@ -237,8 +235,8 @@ the maximum number of statements was reached in the console.`;
         <Loading
           loading={!maxRequestsReached && contentionDetails == null}
           page="Transaction Details"
-          error={errors?.contentionErr}
-          renderError={() => InsightsError(errors?.contentionErr?.message)}
+          error={error}
+          renderError={() => InsightsError(error?.message)}
         >
           <section className={tableCx("section")}>
             <Row gutter={24}>

@@ -24,7 +24,7 @@ const selectTxnContentionInsightsDetails = createSelector(
 );
 
 const selectTxnInsightFromExecInsight = createSelector(
-  (state: AppState) => state.adminUI?.txnInsights?.data?.results,
+  (state: AppState) => state.adminUI?.txnInsights?.data,
   selectID,
   (execInsights, execID): TxnInsightEvent => {
     return execInsights?.find(txn => txn.transactionExecutionID === execID);
@@ -45,10 +45,5 @@ export const selectTransactionInsightDetails = createSelector(
 
 export const selectTransactionInsightDetailsError = createSelector(
   selectTxnContentionInsightsDetails,
-  state => state?.errors,
-);
-
-export const selectTransactionInsightDetailsMaxSizeReached = createSelector(
-  selectTxnContentionInsightsDetails,
-  state => state?.maxSizeReached,
+  state => state?.lastError,
 );

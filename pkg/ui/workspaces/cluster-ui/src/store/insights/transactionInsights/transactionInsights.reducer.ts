@@ -12,10 +12,10 @@ import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../../utils";
 import { TxnInsightEvent } from "src/insights";
 import moment, { Moment } from "moment-timezone";
-import { SqlApiResponse, TxnInsightsRequest } from "src/api";
+import { TxnInsightsRequest } from "src/api";
 
 export type TxnInsightsState = {
-  data: SqlApiResponse<TxnInsightEvent[]>;
+  data: TxnInsightEvent[];
   lastError: Error;
   valid: boolean;
   inFlight: boolean;
@@ -35,8 +35,8 @@ const txnInsightsSlice = createSlice({
   initialState,
   reducers: {
     received: (
-      state,
-      action: PayloadAction<SqlApiResponse<TxnInsightEvent[]>>,
+      state: TxnInsightsState,
+      action: PayloadAction<TxnInsightEvent[]>,
     ) => {
       state.data = action.payload;
       state.valid = true;
@@ -44,7 +44,7 @@ const txnInsightsSlice = createSlice({
       state.inFlight = false;
       state.lastUpdated = moment.utc();
     },
-    failed: (state, action: PayloadAction<Error>) => {
+    failed: (state: TxnInsightsState, action: PayloadAction<Error>) => {
       state.valid = false;
       state.lastError = action.payload;
       state.inFlight = false;
@@ -52,7 +52,10 @@ const txnInsightsSlice = createSlice({
     invalidated: state => {
       state.valid = false;
     },
-    refresh: (state, _action: PayloadAction<TxnInsightsRequest>) => {
+    refresh: (
+      state: TxnInsightsState,
+      _action: PayloadAction<TxnInsightsRequest>,
+    ) => {
       state.inFlight = true;
     },
     request: (state, _action: PayloadAction<TxnInsightsRequest>) => {

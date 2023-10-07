@@ -17,7 +17,7 @@ import "antd/lib/row/style";
 import "antd/lib/tabs/style";
 import { Button } from "src/button";
 import { getMatchParamByName } from "src/util/query";
-import { TxnInsightDetailsRequest, TxnInsightDetailsReqErrs } from "src/api";
+import { TxnInsightDetailsRequest } from "src/api";
 import { InsightNameEnum, TxnInsightDetails } from "../types";
 
 import { commonStyles } from "src/common";
@@ -32,10 +32,9 @@ import { Anchor } from "src/anchor";
 
 export interface TransactionInsightDetailsStateProps {
   insightDetails: TxnInsightDetails;
-  insightError: TxnInsightDetailsReqErrs | null;
+  insightError: Error;
   timeScale?: TimeScale;
   hasAdminRole: boolean;
-  maxSizeApiReached?: boolean;
 }
 
 export interface TransactionInsightDetailsDispatchProps {
@@ -68,7 +67,6 @@ export const TransactionInsightDetails: React.FC<
   match,
   hasAdminRole,
   refreshUserSQLRoles,
-  maxSizeApiReached,
 }) => {
   const fetches = useRef<number>(0);
   const executionID = getMatchParamByName(match, idAttr);
@@ -107,9 +105,8 @@ export const TransactionInsightDetails: React.FC<
         start: execReq.start,
         end: execReq.end,
         txnExecutionID: executionID,
-        excludeTxn: txnDetails != null,
-        excludeStmts: stmtsComplete,
-        excludeContention: contentionComplete,
+        withStatementInsights: !stmtsComplete,
+        withContentionEvents: !contentionComplete,
       };
       refreshTransactionInsightDetails(req);
       fetches.current += 1;
@@ -151,13 +148,12 @@ export const TransactionInsightDetails: React.FC<
           <Tabs.TabPane tab="Overview" key={TabKeysEnum.OVERVIEW}>
             <TransactionInsightDetailsOverviewTab
               maxRequestsReached={fetches.current === MAX_REQ_ATTEMPTS}
-              errors={insightError}
+              error={insightError}
               statements={insightDetails.statements}
               txnDetails={insightDetails.txnDetails}
               contentionDetails={insightDetails.blockingContentionDetails}
               setTimeScale={setTimeScale}
               hasAdminRole={hasAdminRole}
-              maxApiSizeReached={maxSizeApiReached}
             />
           </Tabs.TabPane>
           {(insightDetails.txnDetails?.stmtExecutionIDs?.length ||
@@ -171,23 +167,9 @@ export const TransactionInsightDetails: React.FC<
                   insightDetails.statements == null &&
                   fetches.current < MAX_REQ_ATTEMPTS
                 }
-                error={insightError?.statementsErr}
+                error={insightError}
                 statements={insightDetails?.statements}
               />
-              {maxSizeApiReached && (
-                <InlineAlert
-                  intent="info"
-                  title={
-                    <>
-                      Not all statements are displayed because the maximum
-                      number of statements was reached in the console.&nbsp;
-                      <Anchor href={insights} target="_blank">
-                        Learn more
-                      </Anchor>
-                    </>
-                  }
-                />
-              )}
             </Tabs.TabPane>
           )}
         </Tabs>

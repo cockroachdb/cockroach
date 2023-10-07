@@ -16,7 +16,7 @@ import { selectTransactionFingerprintID } from "src/selectors/common";
 import { FixFingerprintHexValue } from "../../../util";
 
 export const selectTransactionInsights = (state: AppState): TxnInsightEvent[] =>
-  state.adminUI?.txnInsights?.data?.results;
+  state.adminUI?.txnInsights?.data;
 
 export const selectTransactionInsightsError = (state: AppState): Error | null =>
   state.adminUI?.txnInsights?.lastError;

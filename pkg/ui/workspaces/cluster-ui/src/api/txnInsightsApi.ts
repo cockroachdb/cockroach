@@ -20,13 +20,12 @@ import {
   DurationToMomentDuration,
   FixFingerprintHexValue,
   FixLong,
-  HexStringToByteArray,
-  makeTimestamp,
   TimestampToMoment,
 } from "../util";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { fetchData } from "./fetchData";
 import { StatementExecutionInsight } from "./stmtInsightsApi";
+import { createTxnInsightsReq } from "./txnInsightsUtils";
 
 const TXN_EXEC_INSIGHTS_PATH = "_status/insights/transactions";
 
@@ -38,8 +37,6 @@ export type TransactionExecutionInsight =
   cockroach.server.serverpb.TransactionExecutionInsightsResponse.ITransaction;
 export const TxnInsightStatus = cockroach.sql.insights.Transaction.Status;
 
-// TODO(thomas): populate "withContentionEvents" and "withStatementInsights" where necessary
-//  - I think this is only for details
 export type TxnInsightsRequest = {
   txnExecutionID?: string;
   txnFingerprintID?: string;
@@ -47,53 +44,24 @@ export type TxnInsightsRequest = {
   end?: moment.Moment;
 };
 
-// TODO(thomas): maybe move to txnInsightsUtils.ts
-export function createTxnInsightsReq(
-  req?: TxnInsightsRequest,
-): TransactionExecutionInsightsRequest {
-  const fingerprintID = req.txnExecutionID
-    ? fromString(req.txnExecutionID)
-    : fromNumber(0);
-  const execID = req.txnExecutionID
-    ? HexStringToByteArray(req.txnExecutionID)
-    : null;
-  const start = req.start ? makeTimestamp(req.start.unix()) : null;
-  const end = req.end ? makeTimestamp(req.end.unix()) : null;
-
-  return {
-    txn_fingerprint_id: fingerprintID,
-    transaction_id: execID,
-    start_time: start,
-    end_time: end,
-    with_contention_events: false,
-    with_statement_insights: false,
-  };
-}
-
 export async function getTxnInsightsApi(
   req?: TxnInsightsRequest,
 ): Promise<TxnInsightEvent[]> {
-  return fetchTxnInsights(createTxnInsightsReq(req));
+  const response = await fetchTxnInsights(createTxnInsightsReq(req));
+  return formatTxnInsightsResponse(response);
 }
 
-export async function fetchTxnInsights(
+export function fetchTxnInsights(
   req: TransactionExecutionInsightsRequest,
-): Promise<TxnInsightEvent[]> {
-  const response = await fetchData(
+): Promise<TransactionExecutionInsightsResponse> {
+  return fetchData(
     cockroach.server.serverpb.TransactionExecutionInsightsResponse,
     TXN_EXEC_INSIGHTS_PATH,
     cockroach.server.serverpb.TransactionExecutionInsightsRequest,
     req,
     "5M",
   );
-  return formatTxnInsightsResponse(response);
 }
-
-// TODO(thomas): we can probably move these "formatting" functions to txnInsightsUtils.ts
-//  - for stmtInsights as well
-//  - we can probably also generalize them, instead of writing one for txn insights and
-//  one for stmt insights, we can probably write a single function with a formatter
-//  callback. This can be used for everything, not just these functions/use cases.
 
 function formatTxnInsightsResponse(
   response: TransactionExecutionInsightsResponse,
@@ -104,7 +72,7 @@ function formatTxnInsightsResponse(
   return formatTxnInsights(response.transactions);
 }
 
-function formatTxnInsights(
+export function formatTxnInsights(
   txnInsights: TransactionExecutionInsight[],
 ): TxnInsightEvent[] {
   if (!txnInsights.length) {
@@ -121,7 +89,11 @@ function formatTxnInsights(
     );
     return {
       sessionID: ByteArrayToUuid(txnInsight.session_id, ""),
-      transactionExecutionID: ByteArrayToUuid(txnInsight.id),
+      // Note: that we're changing the txn exec id here, it no
+      //  longer contains hyphens. The reason for this is that manually adding
+      //  hyphens add bytes to the string that make it exceed the number of
+      //  bytes for a UUID (16).
+      transactionExecutionID: ByteArrayToUuid(txnInsight.id, ""),
       transactionFingerprintID: FixFingerprintHexValue(
         txnInsight.fingerprint_id.toString(16),
       ),
@@ -135,7 +107,7 @@ function formatTxnInsights(
       rowsRead: FixLong(txnInsight.rows_read ?? 0).toNumber(),
       rowsWritten: FixLong(txnInsight.rows_written ?? 0).toNumber(),
       priority: txnInsight.user_priority,
-      retries: FixLong(txnInsight.retries ?? 0).toNumber(),
+      retries: FixLong(txnInsight.retry_count ?? 0).toNumber(),
       lastRetryReason: txnInsight.auto_retry_reason,
       contentionTime: txnInsight.contention
         ? DurationToMomentDuration(txnInsight.contention)

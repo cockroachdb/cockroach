@@ -8,61 +8,55 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { ContentionDetails, TxnInsightDetails } from "../insights";
+import { formatStmtInsights } from "./stmtInsightsApi";
 import {
-  executeInternalSql,
-  isMaxSizeError,
-  sqlApiErrorMessage,
-} from "./sqlApi";
-import { InsightNameEnum, TxnInsightDetails } from "../insights";
-import {
-  formatStmtInsights,
-  stmtInsightsByTxnExecutionQuery,
-  StmtInsightsResponseRow,
-} from "./stmtInsightsApi";
-import {
-  formatTxnInsightsRow,
-  createTxnInsightsQuery,
-  TxnInsightsResponseRow,
   TransactionExecutionInsightsRequest,
   TxnInsightsRequest,
-  createTxnInsightsReq,
   fetchTxnInsights,
+  formatTxnInsights,
+  TransactionExecutionInsightsResponse,
 } from "./txnInsightsApi";
-import { makeInsightsSqlRequest } from "./txnInsightsUtils";
-import { getTxnInsightsContentionDetailsApi } from "./contentionApi";
+import {
+  ByteArrayToUuid,
+  DurationToMomentDuration,
+  FixFingerprintHexValue,
+  TimestampToMoment,
+} from "../util";
+import { createTxnInsightsReq } from "./txnInsightsUtils";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
+type ContentionEvent = cockroach.server.serverpb.IContentionEvent;
+
+// To reduce the number of RPC fanouts, we have the caller
+// specify which parts of the txn details we should return, since
+// some parts may be available in the cache or are unnecessary to
+// fetch (e.g. when there is no high contention to report).
 export type TxnInsightDetailsRequest = TxnInsightsRequest & {
-  // TODO(thomas): maybe instead - withStatementInsights: boolean;
-  excludeStmts?: boolean;
-  // TODO(thomas): remove? deprecate?
-  excludeTxn?: boolean;
-  // TODO(thomas): maybe instead - withContentionEvents: boolean;
-  excludeContention?: boolean;
+  withStatementInsights?: boolean;
+  withContentionEvents?: boolean;
   mergeResultWith?: TxnInsightDetails;
-};
-
-export type TxnInsightDetailsReqErrs = {
-  txnDetailsErr: Error | null;
-  contentionErr: Error | null;
-  statementsErr: Error | null;
 };
 
 export type TxnInsightDetailsResponse = {
   txnExecutionID: string;
   result: TxnInsightDetails;
-  errors: TxnInsightDetailsReqErrs;
 };
 
-// TODO(thomas): two
+function createTxnInsightDetailsReq(
+  req?: TxnInsightDetailsRequest,
+): TransactionExecutionInsightsRequest {
+  const baseReq = createTxnInsightsReq(req);
+  return {
+    ...baseReq,
+    with_contention_events: req.withStatementInsights,
+    with_statement_insights: req.withContentionEvents,
+  };
+}
+
 export async function getTxnInsightDetailsApi(
   req: TxnInsightDetailsRequest,
 ): Promise<TxnInsightDetailsResponse> {
-  // All queries in this request read from virtual tables, which is an
-  // expensive operation. To reduce the number of RPC fanouts, we have the
-  // caller specify which parts of the txn details we should return, since
-  // some parts may be available in the cache or are unnecessary to fetch
-  // (e.g. when there is no high contention to report).
-  //
   // Note the way we construct the object below is important. We spread the
   // existing object fields into a new object in order to ensure a new
   // reference is returned so that components will be notified that there
@@ -72,101 +66,69 @@ export async function getTxnInsightDetailsApi(
   const txnInsightDetails: TxnInsightDetails = { ...req.mergeResultWith };
   const response = await fetchTxnInsights(createTxnInsightDetailsReq(req));
 
-  const errors: TxnInsightDetailsReqErrs = {
-    txnDetailsErr: null,
-    contentionErr: null,
-    statementsErr: null,
-  };
-
-  let maxSizeReached = false;
-  if (!req.excludeTxn) {
-    const request = makeInsightsSqlRequest([
-      createTxnInsightsQuery({
-        execID: req?.txnExecutionID,
-        start: req?.start,
-        end: req?.end,
-      }),
-    ]);
-
-    try {
-      const result = await executeInternalSql<TxnInsightsResponseRow>(request);
-      maxSizeReached = isMaxSizeError(result.error?.message);
-
-      if (result.error && !maxSizeReached) {
-        throw new Error(
-          `Error while retrieving insights information: ${sqlApiErrorMessage(
-            result.error.message,
-          )}`,
-        );
-      }
-
-      const txnDetailsRes = result.execution.txn_results[0];
-      if (txnDetailsRes.rows?.length) {
-        txnInsightDetails.txnDetails = formatTxnInsightsRow(
-          txnDetailsRes.rows[0],
-        );
-      }
-    } catch (e) {
-      errors.txnDetailsErr = e;
-    }
+  if (response?.transactions?.length > 1) {
+    throw new Error(
+      `Expected 1 result from txn insight details request, got ${response?.transactions?.length}.`,
+    );
   }
 
-  if (!req.excludeStmts) {
-    try {
-      const request = makeInsightsSqlRequest([
-        stmtInsightsByTxnExecutionQuery(req.txnExecutionID),
-      ]);
-
-      const result = await executeInternalSql<StmtInsightsResponseRow>(request);
-      const maxSizeStmtReached = isMaxSizeError(result.error?.message);
-
-      if (result.error && !maxSizeStmtReached) {
-        throw new Error(
-          `Error while retrieving insights information: ${sqlApiErrorMessage(
-            result.error.message,
-          )}`,
-        );
-      }
-      maxSizeReached = maxSizeReached || maxSizeStmtReached;
-
-      const stmts = result.execution.txn_results[0];
-      if (stmts.rows?.length) {
-        txnInsightDetails.statements = formatStmtInsights(stmts);
-      }
-    } catch (e) {
-      errors.statementsErr = e;
-    }
-  }
-
-  const highContention = txnInsightDetails.txnDetails?.insights?.some(
-    insight => insight.name === InsightNameEnum.highContention,
+  return formatTxnInsightDetailsResponse(
+    req.txnExecutionID,
+    response,
+    txnInsightDetails,
   );
+}
 
-  try {
-    if (!req.excludeContention && highContention) {
-      const contentionInfo = await getTxnInsightsContentionDetailsApi(req);
-      txnInsightDetails.blockingContentionDetails =
-        contentionInfo?.blockingContentionDetails;
-    }
-  } catch (e) {
-    errors.contentionErr = e;
-  }
-
+function formatTxnInsightDetailsResponse(
+  txnExecID: string,
+  response: TransactionExecutionInsightsResponse,
+  txnInsightDetails: TxnInsightDetails,
+): TxnInsightDetailsResponse {
+  const txnDetails = response?.transactions[0];
+  txnInsightDetails.txnDetails = formatTxnInsights([txnDetails])[0];
+  txnInsightDetails.statements = formatStmtInsights(txnDetails?.statements);
+  txnInsightDetails.blockingContentionDetails = formatContentionEvents(
+    txnDetails?.contention_events,
+  );
   return {
-    txnExecutionID: req.txnExecutionID,
+    txnExecutionID: txnExecID,
     result: txnInsightDetails,
-    errors,
   };
 }
 
-function createTxnInsightDetailsReq(
-  req?: TxnInsightDetailsRequest,
-): TransactionExecutionInsightsRequest {
-  const baseReq = createTxnInsightsReq(req);
-  return {
-    ...baseReq,
-    // TODO(thomas): will need to update this if we change the request fields
-    with_contention_events: !req.excludeStmts,
-    with_statement_insights: !req.excludeContention,
-  };
+function formatContentionEvents(
+  events: ContentionEvent[],
+): ContentionDetails[] {
+  if (!events.length) {
+    return [];
+  }
+
+  // TODO(thomas): check for undefined vals? proto definition doesn't think so
+  return events.map(event => {
+    return {
+      blockingExecutionID: ByteArrayToUuid(event.id),
+      blockingTxnFingerprintID: FixFingerprintHexValue(
+        event.blocking_txn_fingerprint_id.toString(16),
+      ),
+      blockingTxnQuery: null,
+      waitingTxnID: ByteArrayToUuid(event.waiting_txn_id),
+      waitingTxnFingerprintID: FixFingerprintHexValue(
+        event.waiting_txn_fingerprint_id.toString(16),
+      ),
+      waitingStmtID: ByteArrayToUuid(event.waiting_stmt_id),
+      waitingStmtFingerprintID: FixFingerprintHexValue(
+        event.waiting_stmt_fingerprint_id.toString(16),
+      ),
+      collectionTimeStamp: TimestampToMoment(event.collection_ts).utc(),
+      contendedKey: event.pretty_key,
+      contentionTimeMs: DurationToMomentDuration(event.duration).milliseconds(),
+      databaseName: event.database_name,
+      schemaName: event.schema_name,
+      tableName: event.table_name,
+      indexName:
+        event.index_name && event.index_name !== ""
+          ? event.index_name
+          : "index not found",
+    };
+  });
 }

@@ -19,7 +19,6 @@ import {
   selectTransactionInsightDetails,
   selectTransactionInsightDetailsError,
   actions,
-  selectTransactionInsightDetailsMaxSizeReached,
 } from "src/store/insightDetails/transactionInsightDetails";
 import { TimeScale } from "../../timeScaleDropdown";
 import { actions as sqlStatsActions } from "../../store/sqlStats";
@@ -40,10 +39,6 @@ const mapStateToProps = (
     insightError: insightError,
     timeScale: selectTimeScale(state),
     hasAdminRole: selectHasAdminRole(state),
-    maxSizeApiReached: selectTransactionInsightDetailsMaxSizeReached(
-      state,
-      props,
-    ),
   };
 };
 

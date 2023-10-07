@@ -18,21 +18,10 @@ export const InsightsError = (errMsg?: string): React.ReactElement => {
   const message = errMsg
     ? errMsg
     : "This page had an unexpected error while loading insights.";
-  const showReload = !message.toLowerCase().includes("size exceeded");
   return (
     <div className={cx("row")}>
       <span>{message}</span>
       &nbsp;
-      {showReload && (
-        <a
-          className={cx("action")}
-          onClick={() => {
-            window.location.reload();
-          }}
-        >
-          Reload this page
-        </a>
-      )}
     </div>
   );
 };

@@ -59,7 +59,6 @@ const transactionMapStateToProps = (
   sortSetting: sortSettingLocalSetting.selector(state),
   timeScale: selectTimeScale(state),
   isLoading: selectTransactionInsightsLoading(state),
-  maxSizeApiReached: selectTxnInsightsMaxApiReached(state),
 });
 
 const statementMapStateToProps = (

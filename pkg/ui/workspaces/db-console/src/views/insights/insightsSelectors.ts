@@ -45,37 +45,30 @@ export const sortSettingLocalSetting = new LocalSetting<
 
 export const selectTransactionInsightsLoading = (state: AdminUIState) =>
   state.cachedData.txnInsights?.inFlight &&
-  (!state.cachedData.txnInsights?.valid ||
-    !state.cachedData.txnInsights?.data?.results);
+  (!state.cachedData.txnInsights?.valid || !state.cachedData.txnInsights?.data);
 
 export const selectTransactionInsights = (state: AdminUIState) =>
   state.cachedData.txnInsights?.valid
-    ? state.cachedData.txnInsights?.data?.results
+    ? state.cachedData.txnInsights?.data
     : null;
 
 const selectCachedTxnInsightDetails = createSelector(
   [(state: AdminUIState) => state.cachedData.txnInsightDetails, selectID],
-  (insight, insightId): TxnInsightDetails => {
-    if (!insight) {
+  (insights, insightId): TxnInsightDetails => {
+    if (!insights) {
       return null;
     }
-    return insight[insightId]?.data?.results.result;
+    return insights[insightId]?.data?.result;
   },
 );
 
 const selectTxnInsight = createSelector(
-  (state: AdminUIState) => state.cachedData.txnInsights?.data?.results,
+  (state: AdminUIState) => state.cachedData.txnInsights?.data,
   selectID,
   (insights, execID) => {
     return insights?.find(txn => txn.transactionExecutionID === execID);
   },
 );
-
-export const selectTxnInsightsMaxApiReached = (
-  state: AdminUIState,
-): boolean => {
-  return !!state.cachedData.txnInsights?.data?.maxSizeReached;
-};
 
 export const selectStmtInsights = (state: AdminUIState) => {
   return state.cachedData.stmtInsights?.data;
@@ -91,28 +84,12 @@ export const selectTxnInsightDetails = createSelector(
 export const selectTransactionInsightDetailsError = createSelector(
   (state: AdminUIState) => state.cachedData.txnInsightDetails,
   selectID,
-  (insights, insightId: string): api.TxnInsightDetailsReqErrs | null => {
+  (insights, insightId: string): Error => {
     if (!insights) {
       return null;
     }
-    const reqErrors = insights[insightId]?.data?.results.errors;
-    if (insights[insightId]?.lastError) {
-      Object.keys(reqErrors).forEach(
-        (key: keyof api.TxnInsightDetailsReqErrs) => {
-          reqErrors[key] = insights[insightId].lastError;
-        },
-      );
-    }
-
-    return insights[insightId]?.data?.results.errors;
+    return insights[insightId]?.lastError;
   },
-);
-
-export const selectTransactionInsightDetailsMaxSizeReached = createSelector(
-  (state: AdminUIState) => state.cachedData.txnInsightDetails,
-  selectID,
-  (insights, insightId: string): boolean =>
-    insights[insightId]?.data?.maxSizeReached,
 );
 
 // Data is showed as loading when the request is in flight AND we have

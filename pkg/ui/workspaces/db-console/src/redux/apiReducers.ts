@@ -603,12 +603,8 @@ export interface APIReducersState {
     clusterUiApi.SqlApiResponse<clusterUiApi.ClusterLocksResponse>
   >;
   stmtInsights: CachedDataReducerState<clusterUiApi.StmtInsightEvent[]>;
-  txnInsightDetails: KeyedCachedDataReducerState<
-    clusterUiApi.SqlApiResponse<clusterUiApi.TxnInsightDetailsResponse>
-  >;
-  txnInsights: CachedDataReducerState<
-    clusterUiApi.SqlApiResponse<TxnInsightEvent[]>
-  >;
+  txnInsightDetails: KeyedCachedDataReducerState<clusterUiApi.TxnInsightDetailsResponse>;
+  txnInsights: CachedDataReducerState<clusterUiApi.TxnInsightEvent[]>;
   schemaInsights: CachedDataReducerState<
     clusterUiApi.SqlApiResponse<clusterUiApi.InsightRecommendation[]>
   >;

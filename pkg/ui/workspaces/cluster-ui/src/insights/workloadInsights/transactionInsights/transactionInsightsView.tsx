@@ -70,7 +70,6 @@ export type TransactionInsightsViewStateProps = {
   isLoading?: boolean;
   dropDownSelect?: React.ReactElement;
   timeScale?: TimeScale;
-  maxSizeApiReached?: boolean;
 };
 
 export type TransactionInsightsViewDispatchProps = {
@@ -104,7 +103,6 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
     onSortChange,
     setTimeScale,
     dropDownSelect,
-    maxSizeApiReached,
   } = props;
 
   const [pagination, setPagination] = useState<ISortedTablePagination>({
@@ -307,20 +305,6 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
               total={filteredTransactions?.length}
               onChange={onChangePage}
             />
-            {maxSizeApiReached && (
-              <InlineAlert
-                intent="info"
-                title={
-                  <>
-                    Not all insights are displayed because the maximum number of
-                    insights was reached in the console.&nbsp;
-                    <Anchor href={insights} target="_blank">
-                      Learn more
-                    </Anchor>
-                  </>
-                }
-              />
-            )}
           </div>
         </Loading>
       </div>

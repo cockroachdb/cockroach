@@ -8,13 +8,32 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { LARGE_RESULT_SIZE, LONG_TIMEOUT, SqlExecutionRequest } from "./sqlApi";
+import { HexStringToByteArray, makeTimestamp } from "../util";
+import {
+  TransactionExecutionInsightsRequest,
+  TxnInsightsRequest,
+} from "./txnInsightsApi";
+import { fromNumber, fromString } from "long";
 
-export const makeInsightsSqlRequest = (
-  queries: Array<string | null>,
-): SqlExecutionRequest => ({
-  statements: queries.filter(q => q).map(query => ({ sql: query })),
-  execute: true,
-  max_result_size: LARGE_RESULT_SIZE,
-  timeout: LONG_TIMEOUT,
-});
+export function createTxnInsightsReq(
+  req?: TxnInsightsRequest,
+): TransactionExecutionInsightsRequest {
+  const fingerprintID = req.txnFingerprintID
+    ? fromString(req.txnFingerprintID)
+    : fromNumber(0);
+  const execID = req.txnExecutionID
+    ? HexStringToByteArray(req.txnExecutionID)
+    : null;
+  const start = req.start ? makeTimestamp(req.start.unix()) : null;
+  const end = req.end ? makeTimestamp(req.end.unix()) : null;
+
+  return {
+    txn_fingerprint_id: fingerprintID,
+    transaction_id: execID,
+    start_time: start,
+    end_time: end,
+    with_contention_events: false,
+    // Set to true so we can retrieve the transaction query on the overview page.
+    with_statement_insights: true,
+  };
+}
