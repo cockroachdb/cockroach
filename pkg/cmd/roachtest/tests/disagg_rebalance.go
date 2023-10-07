@@ -86,6 +86,10 @@ func registerDisaggRebalance(r registry.Registry) {
 			t.Status("verify rebalance")
 
 			db := c.Conn(ctx, t.L(), 4)
+			var throwaway int
+			if err := db.QueryRow("SELECT count(*) FROM tpcc.warehouse").Scan(&throwaway); err != nil {
+				t.Fatal(err)
+			}
 			defer func() {
 				_ = db.Close()
 			}()
