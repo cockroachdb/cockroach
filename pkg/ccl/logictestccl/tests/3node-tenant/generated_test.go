@@ -681,6 +681,13 @@ func TestTenantLogic_drop_owned_by(
 	runLogicTest(t, "drop_owned_by")
 }
 
+func TestTenantLogic_drop_procedure(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "drop_procedure")
+}
+
 func TestTenantLogic_drop_role_with_default_privileges(
 	t *testing.T,
 ) {
