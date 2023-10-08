@@ -236,7 +236,9 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 
 		db.Exec(t, "SET SESSION application_name=$1", "randomIgnore")
 
+		db.Exec(t, "set cluster setting sql.stats.flush.enabled  = true;")
 		srv.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+		db.Exec(t, "set cluster setting sql.stats.flush.enabled  = false;")
 
 		// The max number of queries is number of top columns * max number of
 		// queries per a column (6*3=18 for this test, 6*500=3000 default). Most of
