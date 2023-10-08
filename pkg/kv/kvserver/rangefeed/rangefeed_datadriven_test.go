@@ -80,6 +80,7 @@ var commands = map[string]command{
 	"put":         handlePutKey,
 	"add-sst":     handleAddSST,
 	"del-range":   handleDelRange,
+	"split-range": handleSplitRange,
 	"create-feed": handleCreateFeed,
 }
 
@@ -285,6 +286,13 @@ func readKvs(
 			t.Fatalf("failed to parse line: %s", l)
 		}
 	}
+}
+
+func handleSplitRange(t *testing.T, e *env, d *datadriven.TestData) {
+	var splitKey string
+	d.ScanArgs(t, "key", &splitKey)
+	k := e.startKey.key(splitKey)
+	e.tc.SplitRangeOrFatal(t, k)
 }
 
 func handleCreateFeed(t *testing.T, e *env, d *datadriven.TestData) {
