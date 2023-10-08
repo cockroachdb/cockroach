@@ -750,7 +750,7 @@ func TestToHex(t *testing.T) {
 	// hex fields are always in the end of the row and they don't contain spaces.
 	hexFiles := map[string][]hexField{
 		"debug/system.descriptor.txt": {
-			{idx: 2, msg: &descpb.Descriptor{}},
+			{idx: 1, msg: &descpb.Descriptor{}},
 		},
 	}
 
@@ -785,7 +785,8 @@ func TestToHex(t *testing.T) {
 			if i < 0 {
 				i = len(fields) + i
 			}
-			bts, err := enc_hex.DecodeString(fields[i])
+			// [2:] to skip \x
+			bts, err := enc_hex.DecodeString(fields[i][2:])
 			if err != nil {
 				t.Fatal(err)
 			}

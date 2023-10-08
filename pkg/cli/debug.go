@@ -711,8 +711,8 @@ The default value for --schema is 'cockroach.sql.sqlbase.Descriptor'.
 For example:
 
 $ cat debug/system.descriptor.txt | cockroach debug decode-proto
-id	descriptor	hex_descriptor
-1	\022!\012\006system\020\001\032\025\012\011\012\005admin\0200\012\010\012\004root\0200	{"database": {"id": 1, "modificationTime": {}, "name": "system", "privileges": {"users": [{"privileges": 48, "user": "admin"}, {"privileges": 48, "user": "root"}]}}}
+id	descriptor
+1	{"database": {"id": 1, "modificationTime": {}, "name": "system", "privileges": {"users": [{"privileges": 48, "user": "admin"}, {"privileges": 48, "user": "root"}]}}}
 ...
 
 decode-proto can be used to decode protos as captured by Chrome Dev
