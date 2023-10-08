@@ -69,6 +69,7 @@ go_test(
         "//pkg/base",
         "//pkg/clusterversion",
         "//pkg/keys",
+        "//pkg/kv",
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
