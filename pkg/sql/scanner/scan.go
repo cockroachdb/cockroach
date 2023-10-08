@@ -720,6 +720,13 @@ func (s *Scanner) scanNumber(lval ScanSymType, ch int) {
 		break
 	}
 
+	// Disallow identifier after numerical constants e.g. "124foo".
+	if lexbase.IsIdentStart(s.peek()) {
+		lval.SetID(lexbase.ERROR)
+		lval.SetStr(fmt.Sprintf("trailing junk after numeric literal at or near %q", s.in[start:s.pos+1]))
+		return
+	}
+
 	lval.SetStr(s.in[start:s.pos])
 	if hasDecimal || hasExponent {
 		lval.SetID(lexbase.FCONST)
