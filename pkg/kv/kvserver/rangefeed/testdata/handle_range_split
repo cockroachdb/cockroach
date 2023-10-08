@@ -1,0 +1,15 @@
+# Handle split verifies that when range is split after rangefeed is created
+# client will receive all data.
+create-feed startKey=a endKey=z
+----
+
+split-range key=h
+put k=a v=1
+put k=b v=2
+put k=x v=3
+put k=a v=4
+----
+key=a, val=1, ts=ts1
+key=a, val=4, ts=ts4
+key=b, val=2, ts=ts2
+key=x, val=3, ts=ts3
