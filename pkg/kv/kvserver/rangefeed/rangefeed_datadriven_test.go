@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	crangefeed "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -80,6 +81,7 @@ var commands = map[string]command{
 	"put":         handlePutKey,
 	"add-sst":     handleAddSST,
 	"del-range":   handleDelRange,
+	"clear-range": handleClearRange,
 	"split-range": handleSplitRange,
 	"create-feed": handleCreateFeed,
 }
@@ -286,6 +288,21 @@ func readKvs(
 			t.Fatalf("failed to parse line: %s", l)
 		}
 	}
+}
+
+func handleClearRange(t *testing.T, e *env, d *datadriven.TestData) {
+	var key, endKey string
+	d.ScanArgs(t, "startKey", &key)
+	d.ScanArgs(t, "endKey", &endKey)
+	var b kv.Batch
+	b.AddRawRequest(&kvpb.ClearRangeRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:    e.startKey.key(key),
+			EndKey: e.startKey.key(endKey),
+		},
+	})
+	err := e.tc.Server(0).DB().Run(context.Background(), &b)
+	require.NoError(t, err, "failed to clear range")
 }
 
 func handleSplitRange(t *testing.T, e *env, d *datadriven.TestData) {

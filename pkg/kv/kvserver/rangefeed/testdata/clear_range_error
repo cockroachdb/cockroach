@@ -1,0 +1,10 @@
+# Test verifies that mvcc destroying operations terminate range feed with an error.
+create-feed startKey=a endKey=z
+----
+
+put k=a v=1
+clear-range startKey=a endKey=z
+put k=b v=4
+----
+key=a, val=1, ts=ts1
+"unexpected MVCC history mutation in span \xfa{a-z}"
