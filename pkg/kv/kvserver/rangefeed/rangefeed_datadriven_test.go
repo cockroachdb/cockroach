@@ -79,6 +79,7 @@ type command func(t *testing.T, e *env, d *datadriven.TestData)
 var commands = map[string]command{
 	"options":     handleOptions,
 	"put":         handlePutKey,
+	"commit":      handleCommit,
 	"add-sst":     handleAddSST,
 	"del-range":   handleDelRange,
 	"clear-range": handleClearRange,
@@ -156,7 +157,6 @@ func handleCommandBatch(t *testing.T, e *env, d *datadriven.TestData) string {
 // are kept for the next wait attempt.
 func waitAllFeeds(t *testing.T, e *env) []string {
 	now := e.tc.SystemLayer(0).Clock().Now()
-	timeout := 30 * time.Second
 	var rs []string
 	ids := make([]string, 0, len(e.feeds))
 	for i := range e.feeds {
@@ -173,7 +173,7 @@ func waitAllFeeds(t *testing.T, e *env) []string {
 		case <-data.waitCheckpoint(now, data.span):
 			stream := data.takeValues().asSortedData(e.sortByTime)
 			rs = append(rs, dumpKVS(t, stream, prefix, e.tts, e.startKey)...)
-		case <-time.After(timeout):
+		case <-time.After(e.checkpointTimeout):
 			rs = append(rs, prefix+"timeout")
 		case <-data.waitError():
 			stream := data.takeValues().asSortedData(e.sortByTime)
@@ -186,23 +186,60 @@ func waitAllFeeds(t *testing.T, e *env) []string {
 
 func handleOptions(t *testing.T, e *env, d *datadriven.TestData) {
 	e.sortByTime = d.HasArg("sortByTime")
+	var timeoutStr string
+	d.MaybeScanArgs(t, "timeout", &timeoutStr)
+	if timeoutStr != "" {
+		var err error
+		e.checkpointTimeout, err = time.ParseDuration(timeoutStr)
+		require.NoError(t, err, "invalid duration value '%s'", timeoutStr)
+	}
 }
 
 func handlePutKey(t *testing.T, e *env, d *datadriven.TestData) {
 	db := e.tc.SystemLayer(0).DB()
-	var key, val, tsName string
+	var key, val, tsName, txnName string
 	d.ScanArgs(t, "k", &key)
 	d.ScanArgs(t, "v", &val)
 	d.MaybeScanArgs(t, "ts", &tsName)
+	d.MaybeScanArgs(t, "txn", &txnName)
 	kk := e.startKey.key(key)
-	require.NoError(t, db.Put(context.Background(), kk, val), "failed to put value")
-	kv, err := db.Get(context.Background(), kk)
-	require.NoError(t, err, "failed to read written value")
-	if tsName != "" {
-		e.tts.addTs(tsName, kv.Value.Timestamp)
-	} else {
-		e.tts.addNextTs(kv.Value.Timestamp)
+	put := db.Put
+	if txnName != "" {
+		require.Empty(t, tsName, "can't use transactional put and capture timestamp")
+		txn, ok := e.txns[txnName]
+		if !ok {
+			txn = db.NewTxn(context.Background(), tsName)
+			e.txns[txnName] = txn
+		}
+		put = txn.Put
 	}
+	require.NoError(t, put(context.Background(), kk, val), "failed to put value")
+	if txnName == "" {
+		kv, err := db.Get(context.Background(), kk)
+		require.NoError(t, err, "failed to read written value")
+		if tsName != "" {
+			e.tts.addTs(tsName, kv.Value.Timestamp)
+		} else {
+			e.tts.addNextTs(kv.Value.Timestamp)
+		}
+	}
+}
+
+func handleCommit(t *testing.T, e *env, d *datadriven.TestData) {
+	var txnName, tsName string
+	d.MaybeScanArgs(t, "txn", &txnName)
+	d.MaybeScanArgs(t, "ts", &tsName)
+	txn, ok := e.txns[txnName]
+	require.True(t, ok, "failed to commit non existing transaction %s", txnName)
+	require.NoError(t, txn.Commit(context.Background()), "failed to commit txn")
+	ts, err := txn.CommitTimestamp()
+	require.NoError(t, err, "failed to read transaction timestamp")
+	if tsName != "" {
+		e.tts.addTs(tsName, ts)
+	} else {
+		e.tts.addNextTs(ts)
+	}
+	delete(e.txns, txnName)
 }
 
 func handleDelRange(t *testing.T, e *env, d *datadriven.TestData) {
@@ -407,13 +444,15 @@ type env struct {
 	feeds      map[string]feedAndData
 
 	// named timestamps
-	tts timestamps
+	tts  timestamps
+	txns map[string]*kv.Txn
 
 	// work keys
 	startKey testKey
 
 	// runtime configurable output options
-	sortByTime bool
+	sortByTime        bool
+	checkpointTimeout time.Duration
 }
 
 func newEnv(t *testing.T) *env {
@@ -450,6 +489,7 @@ func newEnv(t *testing.T) *env {
 			nameToTs: make(map[string]hlc.Timestamp),
 			tsToName: make(map[hlc.Timestamp]string),
 		},
+		txns:     make(map[string]*kv.Txn),
 		startKey: testKey(sr),
 	}
 }
@@ -463,6 +503,7 @@ func (e *env) close() {
 
 func (e *env) setDefaultStepOptions() {
 	e.sortByTime = false
+	e.checkpointTimeout = 30 * time.Second
 }
 
 type timestamps struct {
@@ -546,7 +587,7 @@ func (d *feedData) onValue(_ context.Context, v *kvpb.RangeFeedValue) {
 	d.dataMu.Lock()
 	defer d.dataMu.Unlock()
 	d.dataMu.values = append(d.dataMu.values, testFeedEvent{v: v})
-	d.t.Logf("on Value: %s/%s", v.Key.String(), v.Value.String())
+	d.t.Logf("on Value: %s/'%s'", v.Key.String(), stringValue(v.Value.RawBytes))
 }
 
 func (d *feedData) onCheckpoint(_ context.Context, cp *kvpb.RangeFeedCheckpoint) {
