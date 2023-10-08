@@ -846,6 +846,9 @@ message AggregatorSpec {
     FINAL_CORR = 59;
     FINAL_SQRDIFF = 60;
     ARRAY_CAT_AGG = 61;
+    MERGE_STATS_METADATA = 62;
+    MERGE_STATEMENT_STATS = 63;
+    MERGE_TRANSACTION_STATS = 64;
   }
 
   enum Type {
