@@ -667,8 +667,10 @@ func (b *BatchEncoder) initFamily(familyIndex, familyID int) {
 		// keys up to end of PK prefix and then appending family id.
 		keyBuf := make([]byte, b.count*b.keyBufSize)
 		for row := 0; row < b.count; row++ {
-			// Elided partial index keys will be nil.
-			if b.keys[row] == nil {
+			// Elided partial index keys will be nil but since the putter can and
+			// will sort kys we need to check savedPrefixes.
+			if b.savedPrefixes[row] == nil {
+				kys[row] = nil
 				continue
 			}
 			offset := row * b.keyBufSize
