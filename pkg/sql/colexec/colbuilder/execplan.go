@@ -311,7 +311,6 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, core *execinfrapb.ProcessorCo
 	case core.InvertedJoiner != nil:
 	case core.BackupData != nil:
 		return errBackupDataWrap
-	case core.SplitAndScatter != nil:
 	case core.RestoreData != nil:
 	case core.Filterer != nil:
 	case core.StreamIngestionData != nil:

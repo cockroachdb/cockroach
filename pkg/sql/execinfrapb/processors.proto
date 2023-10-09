@@ -114,7 +114,6 @@ message ProcessorCoreUnion {
   optional InvertedFiltererSpec invertedFilterer = 29;
   optional InvertedJoinerSpec invertedJoiner = 30;
   optional BackupDataSpec backupData = 31;
-  optional SplitAndScatterSpec splitAndScatter = 32;
   optional RestoreDataSpec restoreData = 33;
   optional FiltererSpec filterer = 34;
   optional StreamIngestionDataSpec streamIngestionData = 35;
@@ -128,7 +127,7 @@ message ProcessorCoreUnion {
   optional InsertSpec insert = 43;
   optional IngestStoppedSpec ingestStopped = 44;
 
-  reserved 6, 12, 14, 17, 18, 19, 20;
+  reserved 6, 12, 14, 17, 18, 19, 20, 32;
   // NEXT ID: 45.
 }
 

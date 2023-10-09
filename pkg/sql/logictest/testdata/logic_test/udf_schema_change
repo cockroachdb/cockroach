@@ -55,6 +55,10 @@ CREATE FUNCTION f_test_alter_name_same_in(INT) RETURNS INT LANGUAGE SQL AS $$ SE
 statement ok
 CREATE FUNCTION f_test_alter_name_diff_in() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 
+skipif config local-mixed-22.2-23.1
+statement ok
+CREATE PROCEDURE p(INT) LANGUAGE SQL AS 'SELECT 1'
+
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_name];
 ----
@@ -73,6 +77,13 @@ ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name
 
 statement error pgcode 42723 pq: function f_test_alter_name_same_in\(IN INT8\) already exists in schema "public"
 ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name_same_in
+
+skipif config local-mixed-22.2-23.1
+statement error pgcode 42723 pq: procedure p\(IN INT8\) already exists in schema "public"
+ALTER FUNCTION f_test_alter_name RENAME TO p
+
+statement error pgcode 42883 could not find a procedure named "f_test_alter_name"
+ALTER PROCEDURE f_test_alter_name RENAME TO f_test_alter_name_new
 
 statement ok
 ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name_new
@@ -121,6 +132,9 @@ CREATE FUNCTION public.f_test_alter_name_diff_in(IN INT8)
   SELECT 1;
 $$
 
+skipif config local-mixed-22.2-23.1
+statement ok
+DROP PROCEDURE p
 
 subtest end
 
@@ -153,6 +167,19 @@ SELECT get_function_id('public', 'f_test_sc', ARRAY['i']);
 let $test_alter_sc_f_test_sc
 SELECT get_function_id('test_alter_sc', 'f_test_sc', ARRAY[]:::STRING[]);
 
+skipif config local-mixed-22.2-23.1
+query TTT
+SELECT oid, proname, prosrc
+FROM pg_catalog.pg_proc WHERE proname IN ('f_test_sc')
+ORDER BY oid
+----
+100113  f_test_sc  SELECT 1;
+100114  f_test_sc  SELECT 2;
+100116  f_test_sc  SELECT 3;
+
+# TODO(mgartner): Remove this test when when this mixed version configuration is
+# removed.
+onlyif config local-mixed-22.2-23.1
 query TTT
 SELECT oid, proname, prosrc
 FROM pg_catalog.pg_proc WHERE proname IN ('f_test_sc')
@@ -162,6 +189,33 @@ ORDER BY oid
 100113  f_test_sc  SELECT 2;
 100115  f_test_sc  SELECT 3;
 
+skipif config local-mixed-22.2-23.1
+query TT
+  WITH fns AS (
+            SELECT crdb_internal.pb_to_json(
+                    'cockroach.sql.sqlbase.Descriptor',
+                    descriptor,
+                    false
+                   )->'function' AS fn
+              FROM system.descriptor
+             WHERE id
+                   IN (
+                        $public_f_test_sc,
+                        $public_f_test_sc_int,
+                        $test_alter_sc_f_test_sc
+                    )
+           )
+SELECT fn->>'id' AS id, fn->'parentSchemaId'
+  FROM fns
+  ORDER BY id;
+----
+113  105
+114  105
+116  115
+
+# TODO(mgartner): Remove this test when when this mixed version configuration is
+# removed.
+onlyif config local-mixed-22.2-23.1
 query TT
   WITH fns AS (
             SELECT crdb_internal.pb_to_json(
@@ -191,10 +245,40 @@ ALTER FUNCTION f_test_sc() SET SCHEMA pg_catalog;
 statement error pgcode 42723 pq: function test_alter_sc.f_test_sc\(\) already exists in schema "test_alter_sc"
 ALTER FUNCTION f_test_sc() SET SCHEMA test_alter_sc;
 
+statement error pgcode 42883 could not find a procedure named "f_test_sc"
+ALTER PROCEDURE f_test_sc(INT) SET SCHEMA test_alter_sc;
+
 # Make sure moving to same schema has not effects.
 statement ok
 ALTER FUNCTION f_test_sc(INT) SET SCHEMA public;
 
+skipif config local-mixed-22.2-23.1
+query TT
+  WITH fns AS (
+            SELECT crdb_internal.pb_to_json(
+                    'cockroach.sql.sqlbase.Descriptor',
+                    descriptor,
+                    false
+                   )->'function' AS fn
+              FROM system.descriptor
+             WHERE id
+                   IN (
+                        $public_f_test_sc,
+                        $public_f_test_sc_int,
+                        $test_alter_sc_f_test_sc
+                    )
+           )
+SELECT fn->>'id' AS id, fn->'parentSchemaId'
+  FROM fns
+  ORDER BY id;
+----
+113  105
+114  105
+116  115
+
+# TODO(mgartner): Remove this test when when this mixed version configuration is
+# removed.
+onlyif config local-mixed-22.2-23.1
 query TT
   WITH fns AS (
             SELECT crdb_internal.pb_to_json(
@@ -245,6 +329,33 @@ $$
 statement ok
 ALTER FUNCTION f_test_sc(INT) SET SCHEMA test_alter_sc;
 
+skip config local-mixed-22.2-23.1
+query TT
+  WITH fns AS (
+            SELECT crdb_internal.pb_to_json(
+                    'cockroach.sql.sqlbase.Descriptor',
+                    descriptor,
+                    false
+                   )->'function' AS fn
+              FROM system.descriptor
+             WHERE id
+                   IN (
+                        $public_f_test_sc,
+                        $public_f_test_sc_int,
+                        $test_alter_sc_f_test_sc
+                    )
+           )
+SELECT fn->>'id' AS id, fn->'parentSchemaId'
+  FROM fns
+  ORDER BY id;
+----
+113  105
+114  115
+116  115
+
+# TODO(mgartner): Remove this test when when this mixed version configuration is
+# removed.
+onlyif config local-mixed-22.2-23.1
 query TT
   WITH fns AS (
             SELECT crdb_internal.pb_to_json(
@@ -265,7 +376,7 @@ SELECT fn->>'id' AS id, fn->'parentSchemaId'
   ORDER BY id;
 ----
 112  105
-113  114
+113  115
 115  114
 
 query T

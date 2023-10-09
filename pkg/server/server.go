@@ -1221,6 +1221,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		&systemServerWrapper{server: lateBoundServer},
 		systemTenantNameContainer,
 		pgPreServer.SendRoutingError,
+		tenantCapabilitiesWatcher,
 	)
 	drain.serverCtl = sc
 

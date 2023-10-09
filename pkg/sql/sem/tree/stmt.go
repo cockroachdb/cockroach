@@ -2151,31 +2151,49 @@ func (*AlterFunctionOptions) StatementType() StatementType { return TypeDDL }
 func (*AlterFunctionOptions) StatementTag() string { return "ALTER FUNCTION" }
 
 // StatementReturnType implements the Statement interface.
-func (*AlterFunctionRename) StatementReturnType() StatementReturnType { return DDL }
+func (*AlterRoutineRename) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*AlterFunctionRename) StatementType() StatementType { return TypeDDL }
+func (*AlterRoutineRename) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterFunctionRename) StatementTag() string { return "ALTER FUNCTION" }
+func (n *AlterRoutineRename) StatementTag() string {
+	if n.Procedure {
+		return "ALTER PROCEDURE"
+	} else {
+		return "ALTER FUNCTION"
+	}
+}
 
 // StatementReturnType implements the Statement interface.
-func (*AlterFunctionSetSchema) StatementReturnType() StatementReturnType { return DDL }
+func (*AlterRoutineSetSchema) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*AlterFunctionSetSchema) StatementType() StatementType { return TypeDDL }
+func (*AlterRoutineSetSchema) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterFunctionSetSchema) StatementTag() string { return "ALTER FUNCTION" }
+func (n *AlterRoutineSetSchema) StatementTag() string {
+	if n.Procedure {
+		return "ALTER PROCEDURE"
+	} else {
+		return "ALTER FUNCTION"
+	}
+}
 
 // StatementReturnType implements the Statement interface.
-func (*AlterFunctionSetOwner) StatementReturnType() StatementReturnType { return DDL }
+func (*AlterRoutineSetOwner) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*AlterFunctionSetOwner) StatementType() StatementType { return TypeDDL }
+func (*AlterRoutineSetOwner) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterFunctionSetOwner) StatementTag() string { return "ALTER FUNCTION" }
+func (n *AlterRoutineSetOwner) StatementTag() string {
+	if n.Procedure {
+		return "ALTER PROCEDURE"
+	} else {
+		return "ALTER FUNCTION"
+	}
+}
 
 // StatementReturnType implements the Statement interface.
 func (*AlterFunctionDepExtension) StatementReturnType() StatementReturnType { return DDL }
@@ -2207,9 +2225,9 @@ func (n *AlterDatabaseDropSecondaryRegion) String() string    { return AsString(
 func (n *AlterDatabaseSetZoneConfigExtension) String() string { return AsString(n) }
 func (n *AlterDefaultPrivileges) String() string              { return AsString(n) }
 func (n *AlterFunctionOptions) String() string                { return AsString(n) }
-func (n *AlterFunctionRename) String() string                 { return AsString(n) }
-func (n *AlterFunctionSetSchema) String() string              { return AsString(n) }
-func (n *AlterFunctionSetOwner) String() string               { return AsString(n) }
+func (n *AlterRoutineRename) String() string                  { return AsString(n) }
+func (n *AlterRoutineSetSchema) String() string               { return AsString(n) }
+func (n *AlterRoutineSetOwner) String() string                { return AsString(n) }
 func (n *AlterFunctionDepExtension) String() string           { return AsString(n) }
 func (n *AlterSchema) String() string                         { return AsString(n) }
 func (n *AlterTable) String() string                          { return AsString(n) }

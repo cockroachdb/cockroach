@@ -12,6 +12,7 @@ package gcjob_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"strconv"
 	"sync/atomic"
@@ -320,18 +321,22 @@ SELECT job_id
 
 	const expectedRunningStatus = string(sql.RunningStatusWaitingForMVCCGC)
 	testutils.SucceedsSoon(t, func() error {
-		var status, runningStatus, lastRun, nextRun, numRuns, jobErr string
+		var status, runningStatus, lastRun, nextRun, numRuns, jobErr gosql.NullString
 		tdb.QueryRow(t, fmt.Sprintf(`
 SELECT status, running_status, error, last_run, next_run, num_runs
 FROM crdb_internal.jobs
 WHERE job_id = %s`, jobID)).Scan(&status, &runningStatus, &jobErr, &lastRun, &nextRun, &numRuns)
 
-		t.Logf(`details about SCHEMA CHANGE GC job: {status: %q, running_status: %q, error: %q, last_run: %q, next_run: %q, num_runs: %q}`,
+		t.Logf(`details about SCHEMA CHANGE GC job: {status: %#v, running_status: %#v, error: %#v, last_run: %#v, next_run: %#v, num_runs: %#v}`,
 			status, runningStatus, jobErr, lastRun, nextRun, numRuns)
 
-		if runningStatus != expectedRunningStatus {
-			return errors.Newf(`running_status %s does not match expected status %s`,
-				runningStatus, expectedRunningStatus)
+		if !runningStatus.Valid {
+			return errors.Newf(`running_status is NULL but expected %q`, expectedRunningStatus)
+		}
+
+		if actualRunningStatus := runningStatus.String; actualRunningStatus != expectedRunningStatus {
+			return errors.Newf(`running_status %q does not match expected status %q`,
+				actualRunningStatus, expectedRunningStatus)
 		}
 
 		return nil

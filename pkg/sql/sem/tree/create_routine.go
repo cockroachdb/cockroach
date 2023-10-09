@@ -484,43 +484,61 @@ func (node *AlterFunctionOptions) Format(ctx *FmtCtx) {
 	}
 }
 
-// AlterFunctionRename represents a ALTER FUNCTION...RENAME statement.
-type AlterFunctionRename struct {
-	Function RoutineObj
-	NewName  Name
+// AlterRoutineRename represents a ALTER FUNCTION...RENAME or
+// ALTER PROCEDURE...RENAME statement.
+type AlterRoutineRename struct {
+	Function  RoutineObj
+	NewName   Name
+	Procedure bool
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AlterFunctionRename) Format(ctx *FmtCtx) {
-	ctx.WriteString("ALTER FUNCTION ")
+func (node *AlterRoutineRename) Format(ctx *FmtCtx) {
+	if node.Procedure {
+		ctx.WriteString("ALTER PROCEDURE ")
+	} else {
+		ctx.WriteString("ALTER FUNCTION ")
+	}
 	ctx.FormatNode(&node.Function)
 	ctx.WriteString(" RENAME TO ")
 	ctx.WriteString(string(node.NewName))
 }
 
-// AlterFunctionSetSchema represents a ALTER FUNCTION...SET SCHEMA statement.
-type AlterFunctionSetSchema struct {
+// AlterRoutineSetSchema represents a ALTER FUNCTION...SET SCHEMA or
+// ALTER PROCEDURE...SET SCHEMA statement.
+type AlterRoutineSetSchema struct {
 	Function      RoutineObj
 	NewSchemaName Name
+	Procedure     bool
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AlterFunctionSetSchema) Format(ctx *FmtCtx) {
-	ctx.WriteString("ALTER FUNCTION ")
+func (node *AlterRoutineSetSchema) Format(ctx *FmtCtx) {
+	if node.Procedure {
+		ctx.WriteString("ALTER PROCEDURE ")
+	} else {
+		ctx.WriteString("ALTER FUNCTION ")
+	}
 	ctx.FormatNode(&node.Function)
 	ctx.WriteString(" SET SCHEMA ")
 	ctx.WriteString(string(node.NewSchemaName))
 }
 
-// AlterFunctionSetOwner represents the ALTER FUNCTION...OWNER TO statement.
-type AlterFunctionSetOwner struct {
-	Function RoutineObj
-	NewOwner RoleSpec
+// AlterRoutineSetOwner represents the ALTER FUNCTION...OWNER TO or
+// ALTER PROCEDURE...OWNER TO statement.
+type AlterRoutineSetOwner struct {
+	Function  RoutineObj
+	NewOwner  RoleSpec
+	Procedure bool
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AlterFunctionSetOwner) Format(ctx *FmtCtx) {
-	ctx.WriteString("ALTER FUNCTION ")
+func (node *AlterRoutineSetOwner) Format(ctx *FmtCtx) {
+	if node.Procedure {
+		ctx.WriteString("ALTER PROCEDURE ")
+	} else {
+		ctx.WriteString("ALTER FUNCTION ")
+	}
 	ctx.FormatNode(&node.Function)
 	ctx.WriteString(" OWNER TO ")
 	ctx.FormatNode(&node.NewOwner)

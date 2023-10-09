@@ -1,0 +1,303 @@
+# LogicTest: !local-mixed-22.2-23.1
+
+subtest alter_procedure_name
+
+statement ok
+CREATE PROCEDURE p() LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+CREATE PROCEDURE p2() LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+CREATE PROCEDURE p_int(INT) LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+CREATE FUNCTION p_func() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement error pgcode 42723 pq: procedure p\(\) already exists in schema "public"
+ALTER PROCEDURE p RENAME TO p
+
+statement error pgcode 42723 pq: function p_func\(\) already exists in schema "public"
+ALTER PROCEDURE p RENAME TO p_func
+
+statement error pgcode 42883 pq: could not find a function named "p"
+ALTER FUNCTION p RENAME TO p_new
+
+statement error pgcode 42723 pq: procedure p2\(\) already exists in schema "public"
+ALTER PROCEDURE p RENAME TO p2
+
+statement ok
+ALTER PROCEDURE p RENAME TO p_new
+
+statement error pgcode 42883 pq: unknown procedure: p\(\)
+SELECT create_statement FROM [SHOW CREATE PROCEDURE p];
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE p_new];
+----
+CREATE PROCEDURE public.p_new()
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+# Renaming to p_int is allowed because the signature of the existing p_int is
+# different.
+statement ok
+ALTER PROCEDURE p_new RENAME to p_int
+
+statement error pgcode 42883 pq: unknown procedure: p_new\(\)
+SELECT create_statement FROM [SHOW CREATE PROCEDURE p_new];
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE p_int] ORDER BY 1
+----
+CREATE PROCEDURE public.p_int()
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+CREATE PROCEDURE public.p_int(IN INT8)
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+# Renaming p_int(INT) to p_func is allowed because the signature of the existing
+# p_func is different.
+statement ok
+ALTER PROCEDURE p_int(INT) RENAME to p_func
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE p_int] ORDER BY 1
+----
+CREATE PROCEDURE public.p_int()
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE p_func]
+----
+CREATE PROCEDURE public.p_func(IN INT8)
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+statement ok
+DROP PROCEDURE p_func(INT);
+DROP PROCEDURE p_int();
+DROP PROCEDURE p2();
+DROP FUNCTION p_func();
+
+subtest end
+
+
+subtest alter_procedure_set_schema
+
+statement ok
+CREATE PROCEDURE p() LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+CREATE PROCEDURE p(INT) LANGUAGE SQL AS 'SELECT 2'
+
+statement ok
+CREATE SCHEMA sc
+
+statement ok
+CREATE PROCEDURE sc.p() LANGUAGE SQL AS 'SELECT 3'
+
+# Create a helper function to use in tests below.
+statement ok
+CREATE FUNCTION get_function_id(namespace STRING, name STRING, argmodes STRING[]) RETURNS INT AS $$
+  SELECT oid::INT8 - 100000 FROM pg_proc
+  WHERE proname = name
+    AND pronamespace = namespace::REGNAMESPACE
+    AND proargmodes = argmodes
+$$ LANGUAGE SQL
+
+let $public_p
+SELECT get_function_id('public', 'p', ARRAY[]:::STRING[])
+
+let $public_p_int
+SELECT get_function_id('public', 'p', ARRAY['i'])
+
+let $sc_p
+SELECT get_function_id('sc', 'p', ARRAY[]:::STRING[])
+
+query TTT
+SELECT oid, proname, prosrc
+FROM pg_catalog.pg_proc WHERE proname IN ('p')
+ORDER BY oid
+----
+100110  p  SELECT 1;
+100111  p  SELECT 2;
+100113  p  SELECT 3;
+
+query TT
+WITH procs AS (
+  SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'function' AS proc
+  FROM system.descriptor
+  WHERE id IN ($public_p, $public_p_int, $sc_p)
+)
+SELECT proc->>'id' AS id, proc->'parentSchemaId' FROM procs ORDER BY id
+----
+110  105
+111  105
+113  112
+
+statement error pgcode 0A000 pq: cannot move objects into or out of virtual schemas
+ALTER PROCEDURE p() SET SCHEMA pg_catalog
+
+statement error pgcode 42723 pq: function sc.p\(\) already exists in schema "sc"
+ALTER PROCEDURE p() SET SCHEMA sc
+
+statement error pgcode 42883 could not find a function named "p"
+ALTER FUNCTION p(INT) SET SCHEMA sc;
+
+# Make sure moving to same schema has not effects.
+statement ok
+ALTER PROCEDURE p(INT) SET SCHEMA public
+
+query TT
+WITH procs AS (
+  SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'function' AS proc
+  FROM system.descriptor
+  WHERE id IN ($public_p, $public_p_int, $sc_p)
+)
+SELECT proc->>'id' AS id, proc->'parentSchemaId' FROM procs ORDER BY id
+----
+110  105
+111  105
+113  112
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE public.p] ORDER BY 1
+----
+CREATE PROCEDURE public.p()
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+CREATE PROCEDURE public.p(IN INT8)
+  LANGUAGE SQL
+  AS $$
+  SELECT 2;
+$$
+
+# Make sure moving to another schema changes function's parentSchemaId and
+# schema's function list.
+statement ok
+ALTER PROCEDURE p(INT) SET SCHEMA sc;
+
+query TT
+WITH procs AS (
+  SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'function' AS proc
+  FROM system.descriptor
+  WHERE id IN ($public_p, $public_p_int, $sc_p)
+)
+SELECT proc->>'id' AS id, proc->'parentSchemaId' FROM procs ORDER BY id
+----
+110  105
+111  112
+113  112
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE public.p];
+----
+CREATE PROCEDURE public.p()
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
+query T
+SELECT create_statement FROM [SHOW CREATE PROCEDURE sc.p] ORDER BY 1
+----
+CREATE PROCEDURE sc.p()
+  LANGUAGE SQL
+  AS $$
+  SELECT 3;
+$$
+CREATE PROCEDURE sc.p(IN INT8)
+  LANGUAGE SQL
+  AS $$
+  SELECT 2;
+$$
+
+statement ok
+DROP PROCEDURE p;
+DROP PROCEDURE sc.p(INT);
+DROP PROCEDURE sc.p;
+
+subtest end
+
+subtest alter_function_owner
+
+statement ok
+CREATE USER u
+
+statement ok
+CREATE PROCEDURE p() LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+query T
+SELECT rolname FROM pg_catalog.pg_proc f
+JOIN pg_catalog.pg_roles r ON f.proowner = r.oid
+WHERE proname = 'p'
+----
+root
+
+statement error pgcode 42883 could not find a procedure named "f"
+ALTER PROCEDURE f OWNER TO u
+
+statement error pgcode 42704 role/user "user_not_exists" does not exist
+ALTER PROCEDURE p OWNER TO user_not_exists
+
+statement ok
+ALTER PROCEDURE p OWNER TO u
+
+query T
+SELECT rolname FROM pg_catalog.pg_proc f
+JOIN pg_catalog.pg_roles r ON f.proowner = r.oid
+WHERE proname = 'p'
+----
+u
+
+statement ok
+REASSIGN OWNED BY u TO root
+
+query T
+SELECT rolname FROM pg_catalog.pg_proc f
+JOIN pg_catalog.pg_roles r ON f.proowner = r.oid
+WHERE proname = 'p'
+----
+root
+
+statement ok
+ALTER PROCEDURE p OWNER TO u
+
+query T
+SELECT rolname FROM pg_catalog.pg_proc f
+JOIN pg_catalog.pg_roles r ON f.proowner = r.oid
+WHERE proname = 'p'
+----
+u
+
+statement error pgcode 2BP01 pq: role u cannot be dropped because some objects depend on it
+DROP USER u
+
+statement ok
+DROP PROCEDURE p
+
+statement ok
+DROP USER u
+
+statement ok
+DROP FUNCTION f
+
+subtest end

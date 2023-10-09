@@ -525,6 +525,7 @@ alter_ddl_stmt ::=
 	| alter_changefeed_stmt
 	| alter_backup_stmt
 	| alter_func_stmt
+	| alter_proc_stmt
 	| alter_backup_schedule
 
 alter_role_stmt ::=
@@ -1700,6 +1701,11 @@ alter_func_stmt ::=
 	| alter_func_set_schema_stmt
 	| alter_func_dep_extension_stmt
 
+alter_proc_stmt ::=
+	alter_proc_rename_stmt
+	| alter_proc_owner_stmt
+	| alter_proc_set_schema_stmt
+
 alter_backup_schedule ::=
 	'ALTER' 'BACKUP' 'SCHEDULE' iconst64 alter_backup_schedule_cmds
 
@@ -2322,6 +2328,15 @@ alter_func_set_schema_stmt ::=
 
 alter_func_dep_extension_stmt ::=
 	'ALTER' 'FUNCTION' function_with_paramtypes opt_no 'DEPENDS' 'ON' 'EXTENSION' name
+
+alter_proc_rename_stmt ::=
+	'ALTER' 'PROCEDURE' function_with_paramtypes 'RENAME' 'TO' name
+
+alter_proc_owner_stmt ::=
+	'ALTER' 'PROCEDURE' function_with_paramtypes 'OWNER' 'TO' role_spec
+
+alter_proc_set_schema_stmt ::=
+	'ALTER' 'PROCEDURE' function_with_paramtypes 'SET' 'SCHEMA' schema_name
 
 iconst64 ::=
 	'ICONST'

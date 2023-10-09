@@ -704,65 +704,6 @@ user root
 
 subtest end
 
-# TODO(mgartner): Add ALTER PROCEDURE tests. These tests have been
-# copied from udf_privileges as a starting place.
-# subtest alter_function_owner
-#
-# statement ok
-# CREATE USER u_test_owner;
-# CREATE FUNCTION f_test_alter_owner() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
-#
-# query T
-# SELECT rolname FROM pg_catalog.pg_proc f
-# JOIN pg_catalog.pg_roles r ON f.proowner = r.oid
-# WHERE proname = 'f_test_alter_owner';
-# ----
-# root
-#
-# statement error pgcode 42704 pq: role/user "user_not_exists" does not exist
-# ALTER FUNCTION f_test_alter_owner OWNER TO user_not_exists
-#
-# statement ok
-# ALTER FUNCTION f_test_alter_owner OWNER TO u_test_owner;
-#
-# query T
-# SELECT rolname FROM pg_catalog.pg_proc f
-# JOIN pg_catalog.pg_roles r ON f.proowner = r.oid
-# WHERE proname = 'f_test_alter_owner';
-# ----
-# u_test_owner
-#
-# statement ok
-# REASSIGN OWNED BY u_test_owner TO root;
-#
-# query T
-# SELECT rolname FROM pg_catalog.pg_proc f
-# JOIN pg_catalog.pg_roles r ON f.proowner = r.oid
-# WHERE proname = 'f_test_alter_owner';
-# ----
-# root
-#
-# statement ok
-# ALTER FUNCTION f_test_alter_owner OWNER TO u_test_owner;
-#
-# query T
-# SELECT rolname FROM pg_catalog.pg_proc f
-# JOIN pg_catalog.pg_roles r ON f.proowner = r.oid
-# WHERE proname = 'f_test_alter_owner';
-# ----
-# u_test_owner
-#
-# statement error pgcode 2BP01 pq: role u_test_owner cannot be dropped because some objects depend on it
-# DROP USER u_test_owner;
-#
-# statement ok
-# DROP FUNCTION f_test_alter_owner;
-#
-# statement ok
-# DROP USER u_test_owner;
-
-subtest end
-
 subtest check_privileges
 
 statement ok
