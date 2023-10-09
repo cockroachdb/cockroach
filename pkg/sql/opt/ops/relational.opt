@@ -1221,6 +1221,26 @@ define OrdinalityPrivate {
 
     # ColID holds the id of the column introduced by this operator.
     ColID ColumnID
+
+    # ForDuplicateRemoval is `true` when the Ordinality is built as part of a
+    # query rewrite in order to remove duplicate entries, and the value returned
+    # by the Ordinality operation does not matter, as long as it's unique. It is
+    # `false` if this is built from a WITH ORDINALITY clause, where the value
+    # returned does matter. For example, in the following case, pushing the `x=3`
+    # filter into the Ordinality would yield a value for the `ordinality` column
+    # of `1`, while the correct result is `3`:
+    #
+    # SELECT * FROM UNNEST(ARRAY[1, 2, 3]) WITH ORDINALITY AS foo(x) WHERE x = 3;
+    #   x | ordinality
+    # ----+-------------
+    #   3 |          3
+    #
+    # The `ForDuplicateRemoval` flag can be examined to avoid pushing the
+    # filter in such cases.
+    # TODO(msirek): The internally-generated unique tagging of rows for
+    # duplicate removal could be separated off into a new operator, such as
+    # `UniqueKey`, in the future.
+    ForDuplicateRemoval bool
 }
 
 # ProjectSet represents a relational operator which zips through a list of

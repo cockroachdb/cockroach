@@ -348,6 +348,45 @@ func (n *insertFastPathNode) runFKChecks(params runParams) error {
 	return nil
 }
 
+// runFKUniqChecks combines the fkBatch and uniqBatch into a single batch and
+// then sends the combined batch, so that the requests may be processed in
+// parallel. Responses are processed to generate appropriate errors, similar to
+// what's done in runFKChecks and runUniqChecks. It is expected that both
+// `n.run.uniqBatch.Requests` and `n.run.fkBatch.Requests` hold requests when
+// this function is called.
+func (n *insertFastPathNode) runFKUniqChecks(params runParams) error {
+	defer n.run.uniqBatch.Reset()
+	defer n.run.fkBatch.Reset()
+
+	n.run.uniqBatch.Requests = append(n.run.uniqBatch.Requests, n.run.fkBatch.Requests...)
+
+	// Run the combined uniqueness and FK checks batch.
+	ba := n.run.uniqBatch.ShallowCopy()
+	br, err := params.p.txn.Send(params.ctx, ba)
+	if err != nil {
+		return err.GoError()
+	}
+
+	for i := range br.Responses {
+		resp := br.Responses[i].GetInner().(*kvpb.ScanResponse)
+		if i < len(n.run.uniqSpanInfo) {
+			if len(resp.Rows) > 0 {
+				// Found results for lookup; generate the uniqueness violation error.
+				info := n.run.uniqSpanInfo[i]
+				return info.check.errorForRow(n.run.inputRow(info.rowIdx))
+			}
+		} else {
+			if len(resp.Rows) == 0 {
+				// No results for lookup; generate the FK violation error.
+				info := n.run.fkSpanInfo[i-len(n.run.uniqSpanInfo)]
+				return info.check.errorForRow(n.run.inputRow(info.rowIdx))
+			}
+		}
+	}
+
+	return nil
+}
+
 func (n *insertFastPathNode) startExec(params runParams) error {
 	// Cache traceKV during execution, to avoid re-evaluating it for every row.
 	n.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
@@ -447,18 +486,24 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 		}
 	}
 
-	// Perform the uniqueness checks.
-	if err := n.runUniqChecks(params); err != nil {
-		return false, err
-	}
+	if len(n.run.fkBatch.Requests) > 0 && len(n.run.uniqBatch.Requests) > 0 {
+		// Perform the foreign key and uniqueness checks in a single batch.
+		if err := n.runFKUniqChecks(params); err != nil {
+			return false, err
+		}
+	} else {
+		// Perform the uniqueness checks.
+		if err := n.runUniqChecks(params); err != nil {
+			return false, err
+		}
 
-	// Perform the FK checks.
-	// TODO(radu): we could run the FK batch in parallel with the main batch (if
-	// we aren't auto-committing).
-	if err := n.runFKChecks(params); err != nil {
-		return false, err
+		// Perform the FK checks.
+		// TODO(radu): we could run the FK batch in parallel with the main batch (if
+		// we aren't auto-committing).
+		if err := n.runFKChecks(params); err != nil {
+			return false, err
+		}
 	}
-
 	n.run.ti.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
 	if err := n.run.ti.finalize(params.ctx); err != nil {
 		return false, err

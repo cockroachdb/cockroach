@@ -13,6 +13,7 @@ package constraint
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -22,6 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConstraintUnion(t *testing.T) {
@@ -452,10 +456,92 @@ func TestConstraintCombine(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			a := ParseConstraint(&evalCtx, tc.a)
 			b := ParseConstraint(&evalCtx, tc.b)
-			a.Combine(&evalCtx, &b)
+			a.Combine(&evalCtx, &b, nil /* checkCancellation */)
 			if res := a.String(); res != tc.e {
 				t.Errorf("expected\n  %s; got\n  %s", tc.e, res)
 			}
+		})
+	}
+}
+
+// TestCancelLargeConstraintCombine tests that combining constraints can be
+// successfully cancelled with a cancel function.
+func TestCancelLargeConstraintCombine(t *testing.T) {
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := eval.MakeTestingEvalContext(st)
+
+	testData := []struct {
+		a, b, c, d, e, f, g, h, j, k, l, m, n, o, p, q string
+	}{
+		{
+			a: "/1/2/3/4/5/6/7/8/9/10/11/12/13/14/15/16: [/10 - /10] [/20 - /20] [/30 - /30] [/40 - /40] [/50 - /50] [/60 - /60] [/70 - /70] [/80 - /80] [/90 - /90]",
+			b: "/2/3/4/5/6/7/8/9/10/11/12/13/14/15/16: [/10 - /10] [/20 - /20] [/30 - /30] [/40 - /40] [/50 - /50] [/60 - /60] [/70 - /70] [/80 - /80] [/90 - /90]",
+			c: "/3/4/5/6/7/8/9/10/11/12/13/14/15/16: [/10 - /10] [/20 - /20] [/30 - /30] [/40 - /40] [/50 - /50] [/60 - /60] [/70 - /70] [/80 - /80] [/90 - /90]",
+			d: "/4/5/6/7/8/9/10/11/12/13/14/15/16: [/10 - /10] [/20 - /20] [/30 - /30] [/40 - /40] [/50 - /50] [/60 - /60] [/70 - /70] [/80 - /80] [/90 - /90]",
+			e: "/5/6/7/8/9/10/11/12/13/14/15/16: [/10 - /10] [/20 - /20] [/30 - /30] [/40 - /40] [/50 - /50] [/60 - /60] [/70 - /70] [/80 - /80] [/90 - /90]",
+			f: "/6/7/8/9/10/11/12/13/14/15/16: [/10 - /10] [/20 - /20] [/30 - /30] [/40 - /40] [/50 - /50] [/60 - /60] [/70 - /70] [/80 - /80] [/90 - /90]",
+			g: "/7/8/9/10/11/12/13/14/15/16: [/10 - /10] [/20 - /20] [/30 - /30] [/40 - /40] [/50 - /50] [/60 - /60] [/70 - /70] [/80 - /80] [/90 - /90]",
+			h: "/8/9/10/11/12/13/14/15/16: [/10 - /10] [/20 - /20] [/30 - /30] [/40 - /40] [/50 - /50] [/60 - /60] [/70 - /70] [/80 - /80] [/90 - /90]",
+			j: "/9/10/11/12/13/14/15/16: [/10 - /10] [/20 - /20] [/30 - /30] [/40 - /40] [/50 - /50] [/60 - /60] [/70 - /70] [/80 - /80] [/90 - /90]",
+			k: "/10/11/12/13/14/15/16: [/10 - /10] [/20 - /20] [/30 - /30] [/40 - /40] [/50 - /50] [/60 - /60] [/70 - /70] [/80 - /80] [/90 - /90]",
+			l: "/11/12/13/14/15/16: [/10 - /10] [/20 - /20] [/30 - /30] [/40 - /40] [/50 - /50] [/60 - /60] [/70 - /70] [/80 - /80] [/90 - /90]",
+			m: "/12/13/14/15/16: [/10 - /10] [/20 - /20] [/30 - /30] [/40 - /40] [/50 - /50] [/60 - /60] [/70 - /70] [/80 - /80] [/90 - /90]",
+			n: "/13/14/15/16: [/10 - /10] [/20 - /20] [/30 - /30] [/40 - /40] [/50 - /50] [/60 - /60] [/70 - /70] [/80 - /80] [/90 - /90]",
+			o: "/14/15/16: [/10 - /10] [/20 - /20] [/30 - /30] [/40 - /40] [/50 - /50] [/60 - /60] [/70 - /70] [/80 - /80] [/90 - /90]",
+			p: "/15/16: [/10 - /10] [/20 - /20] [/30 - /30] [/40 - /40] [/50 - /50] [/60 - /60] [/70 - /70] [/80 - /80] [/90 - /90]",
+			q: "/16: [/10 - /10] [/20 - /20] [/30 - /30] [/40 - /40] [/50 - /50] [/60 - /60] [/70 - /70] [/80 - /80] [/90 - /90]",
+		},
+	}
+
+	for i, tc := range testData {
+		iterations := 0
+		cancelFunc := func() {
+			iterations++
+			if iterations > 2000 {
+				panic(errors.AssertionFailedf("We successfully cancelled the operation!"))
+			}
+		}
+		testFunc := func(constraint1, constraint2 *Constraint) {
+			ts := timeutil.Now()
+			constraint1.Combine(&evalCtx, constraint2, cancelFunc)
+			if d := timeutil.Since(ts); d > time.Second {
+				t.Errorf("expected cancellation to occur in under 1 second, but took %v", d)
+			}
+		}
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			a := ParseConstraint(&evalCtx, tc.a)
+			b := ParseConstraint(&evalCtx, tc.b)
+			c := ParseConstraint(&evalCtx, tc.c)
+			d := ParseConstraint(&evalCtx, tc.d)
+			e := ParseConstraint(&evalCtx, tc.e)
+			f := ParseConstraint(&evalCtx, tc.f)
+			g := ParseConstraint(&evalCtx, tc.g)
+			h := ParseConstraint(&evalCtx, tc.h)
+			j := ParseConstraint(&evalCtx, tc.j)
+			k := ParseConstraint(&evalCtx, tc.k)
+			l := ParseConstraint(&evalCtx, tc.l)
+			m := ParseConstraint(&evalCtx, tc.m)
+			n := ParseConstraint(&evalCtx, tc.n)
+			o := ParseConstraint(&evalCtx, tc.o)
+			p := ParseConstraint(&evalCtx, tc.p)
+			q := ParseConstraint(&evalCtx, tc.q)
+			testFunc(&a, &b)
+			testFunc(&c, &d)
+			testFunc(&e, &f)
+			testFunc(&g, &h)
+			testFunc(&j, &k)
+			testFunc(&l, &m)
+			testFunc(&n, &o)
+			testFunc(&p, &q)
+			testFunc(&a, &c)
+			testFunc(&e, &g)
+			testFunc(&j, &l)
+			testFunc(&n, &p)
+			// The next Combine call will panic within a second or two.
+			require.Panics(t, func() { testFunc(&a, &e) })
+			// This Combine call panics right away since the iterations target has
+			// already been reached.
+			require.Panics(t, func() { testFunc(&j, &n) })
 		})
 	}
 }
