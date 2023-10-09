@@ -243,7 +243,7 @@ func runWarningForConnWait(ctx context.Context, t test.Test, c cluster.Cluster) 
 
 	prepareCluster(ctx, t, c, drainWaitDuration, connectionWaitDuration, queryWaitDuration)
 
-	pgURL, err := c.ExternalPGUrl(ctx, t.L(), c.Node(nodeToDrain), "" /* tenant */)
+	pgURL, err := c.ExternalPGUrl(ctx, t.L(), c.Node(nodeToDrain), "" /* tenant */, 0 /* sqlInstance */)
 	require.NoError(t, err)
 	connNoTxn, err := pgx.Connect(ctx, pgURL[0])
 	require.NoError(t, err)

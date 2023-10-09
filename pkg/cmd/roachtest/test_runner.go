@@ -556,114 +556,72 @@ func (r *testRunner) runWorker(
 			}
 		}
 
-		if c != nil {
-			if _, ok := c.spec.ReusePolicy.(spec.ReusePolicyNone); ok {
-				wStatus.SetStatus("destroying cluster")
-				// We use a context that can't be canceled for the Destroy().
-				c.Destroy(context.Background(), closeLogger, l)
-				c = nil
-			}
-		}
-		var testToRun testToRunRes
-		var err error
-
 		wStatus.SetTest(nil /* test */, testToRunRes{})
-		wStatus.SetStatus("getting work")
-		testToRun, err = r.getWork(
-			ctx, work, qp, c, interrupt, l,
-			getWorkCallbacks{
-				onDestroy: func() {
-					wStatus.SetCluster(nil)
-				},
-			})
+		testToRun, err := r.getWork(ctx, work, qp, c, interrupt, l)
 		if err != nil {
 			// Problem selecting a test, bail out.
 			return err
 		}
-		if testToRun.noWork {
-			shout(ctx, l, stdout, "no work remaining; runWorker is bailing out...")
-			return nil
-		}
-		// Attempt to reuse existing cluster.
-		if c != nil && testToRun.canReuseCluster {
-			err = func() error {
-				l.PrintfCtx(ctx, "Using existing cluster: %s (arch=%q). Wiping", c.name, c.arch)
-				if err := c.WipeE(ctx, l, false /* preserveCerts */); err != nil {
-					return err
-				}
-				if err := c.RunE(ctx, c.All(), fmt.Sprintf("rm -rf %s %s", perfArtifactsDir, goCoverArtifactsDir)); err != nil {
-					return errors.Wrapf(err, "failed to remove perf/gocover artifacts dirs")
-				}
-				if c.localCertsDir != "" {
-					if err := os.RemoveAll(c.localCertsDir); err != nil {
-						return errors.Wrapf(err,
-							"failed to remove local certs in %s", c.localCertsDir)
-					}
-					c.localCertsDir = ""
-				}
-				// Overwrite the spec of the cluster with the one coming from the test. In
-				// particular, this overwrites the reuse policy to reflect what the test
-				// intends to do with it.
-				c.spec = testToRun.spec.Cluster
-				return nil
-			}()
+
+		// If we are reusing a cluster, wipe it.
+		if testToRun.canReuseCluster {
+			err := c.WipeForReuse(ctx, l, testToRun.spec.Cluster)
 			if err != nil {
 				shout(ctx, l, stdout, "Unable to reuse cluster: %s due to: %s. Will attempt to create a fresh one",
 					c.Name(), err)
 				// N.B. we do not count reuse attempt error toward clusterCreateErr.
-				// Let's attempt to create a fresh one.
+				// Let's attempt to create a fresh cluster.
 				testToRun.canReuseCluster = false
-				// Destroy the cluster since we're unable to reuse it.
-				// NB: This is a hack. If we destroy the cluster, the allocation quota will get released back into the pool.
-				// Thus, we can't immediately create a fresh cluster since another worker might grab the quota before us.
-				// Instead, we transfer the allocation quota to the new cluster and pretend the old one didn't have any.
-				testToRun.alloc = c.destroyState.alloc
-				c.destroyState.alloc = nil
-				c.Destroy(context.Background(), closeLogger, l)
-				c = nil
+			}
+		}
+
+		// If we are not reusing a cluster (this includes the noWork case), destroy it.
+		if c != nil && !testToRun.canReuseCluster {
+			wStatus.SetStatus("destroying cluster")
+			// We failed to find a test that can take advantage of this cluster. So
+			// we're going to release it, which will deallocate its resources.
+			if testToRun.noWork {
+				l.PrintfCtx(ctx, "No more tests. Destroying %s.", c)
 			} else {
-				// Reuse is possible, let's do a sanity check.
-				if c.spec.Cloud != spec.Local && c.spec.Arch != "" && c.arch != c.spec.Arch {
-					return errors.Newf("cluster arch %q does not match specified arch %q on cloud: %q", c.arch, c.spec.Arch, c.spec.Cloud)
-				}
+				l.PrintfCtx(ctx, "No tests that can reuse cluster %s found. Destroying.", c)
 			}
+			// We use a context that can't be canceled for the Destroy().
+			c.Destroy(context.Background(), closeLogger, l)
+			wStatus.SetCluster(nil)
+			c = nil
 		}
-		arch := testToRun.spec.Cluster.Arch
-		// N.B. local cluster can mix different CPU architectures via emulation; e.g., mac silicon running x86.
-		if testToRun.canReuseCluster && c != nil && c.spec.Cloud != spec.Local {
-			// We're reusing a non-local cluster, so we must use the same arch.
+
+		if testToRun.noWork {
+			shout(ctx, l, stdout, "no work remaining; runWorker is bailing out...")
+			return nil
+		}
+
+		// From this point onward, c != nil iff we are reusing the cluster.
+
+		var arch vm.CPUArch
+		if c != nil && !c.IsLocal() {
+			// We are reusing a non-local cluster. We have already determined that its
+			// architecture is acceptable for the test (from the fact that the
+			// previous cluster spec had the same arch).
+			//
+			// Note that we treat local clusters differently because (in the case of
+			// Apple M1/M2) it can run multiple architectures.
+			// TODO(radu): this is not true of Intel and/or linux hosts, we should
+			// somehow determine the capabilities at runtime.
 			arch = c.arch
-		}
-		if arch == "" {
-			// CPU architecture is unspecified, choose one according to the probability distribution.
-			arch = vm.ArchAMD64
-			if prng.Float64() < arm64Probability {
-				arch = vm.ArchARM64
-			} else if prng.Float64() < fipsProbability {
-				// N.B. branch is taken with probability (1 - arm64Probability) * fipsProbability which is P(fips | amd64).
-				// N.B. FIPS is only supported on 'amd64' at this time.
-				arch = vm.ArchFIPS
-			}
-			if testToRun.spec.Benchmark && testToRun.spec.Cluster.Cloud != spec.Local {
-				// TODO(srosenberg): enable after https://github.com/cockroachdb/cockroach/issues/104213
-				l.PrintfCtx(ctx, "Disabling randomly chosen arch=%q, %s", arch, testToRun.spec.Name)
-				arch = vm.ArchAMD64
-			}
-			l.PrintfCtx(ctx, "Using randomly chosen arch=%q, %s", arch, testToRun.spec.Name)
 		} else {
-			l.PrintfCtx(ctx, "Using specified arch=%q, %s", arch, testToRun.spec.Name)
-		}
-		// N.B. if canReuseCluster is false, then the previous cluster has been destroyed; new one will be created below.
-		if testToRun.canReuseCluster && c != nil && c.arch != arch {
-			// Non-local cluster that's being reused must have the same architecture as was ensured above.
-			if c.spec.Cloud != spec.Local {
-				return errors.Newf("infeasible path: non-local cluster arch=%q differs from selected arch=%q", c.arch, arch)
+			arch = archForTest(ctx, l, testToRun.spec)
+			if c != nil {
+				// Switch architecture of local cluster (see above).
+				c.arch = arch
 			}
-			// Local cluster is now reused to emulate a different CPU architecture.
-			c.arch = arch
 		}
 
 		// Verify that required native libraries are available.
+		//
+		// TODO(radu): the arch is not guaranteed and another arch can be selected
+		// (in RoachprodOpts). All the code below using arch is incorrect in this
+		// case.
 		if err = VerifyLibraries(testToRun.spec.NativeLibs, arch); err != nil {
 			shout(ctx, l, stdout, "Library verification failed: %s", err)
 			return err
@@ -672,7 +630,7 @@ func (r *testRunner) runWorker(
 		var clusterCreateErr error
 		var vmCreateOpts *vm.CreateOpts
 
-		if !testToRun.canReuseCluster {
+		if c == nil {
 			// Create a new cluster if can't reuse or reuse attempt failed.
 			// N.B. non-reusable cluster would have been destroyed above.
 			wStatus.SetTest(nil /* test */, testToRun)
@@ -1464,10 +1422,6 @@ func (r *testRunner) generateReport() string {
 	return msg
 }
 
-type getWorkCallbacks struct {
-	onDestroy func()
-}
-
 // getWork selects the next test to run and creates a suitable cluster for it if
 // need be. If a new cluster needs to be created, the method blocks until there
 // are enough resources available to run it.
@@ -1481,7 +1435,6 @@ func (r *testRunner) getWork(
 	c *clusterImpl,
 	interrupt <-chan struct{},
 	l *logger.Logger,
-	callbacks getWorkCallbacks,
 ) (testToRunRes, error) {
 
 	select {
@@ -1490,15 +1443,12 @@ func (r *testRunner) getWork(
 	default:
 	}
 
-	testToRun, err := work.getTestToRun(ctx, c, qp, r.cr, callbacks.onDestroy, l)
+	testToRun, err := work.getTestToRun(ctx, c, qp, r.cr)
 	if err != nil {
 		return testToRunRes{}, err
 	}
 	if !testToRun.noWork {
 		l.PrintfCtx(ctx, "Selected test: %s run: %d.", testToRun.spec.Name, testToRun.runNum)
-	} else {
-		// We're done--there are no remaining tests.
-		return testToRun, nil
 	}
 	return testToRun, nil
 }

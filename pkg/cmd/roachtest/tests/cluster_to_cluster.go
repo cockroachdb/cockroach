@@ -515,7 +515,7 @@ func (rd *replicationDriver) setupC2C(
 	srcNode := srcCluster.SeededRandNode(rd.rng)
 	destNode := dstCluster.SeededRandNode(rd.rng)
 
-	addr, err := c.ExternalPGUrl(ctx, t.L(), srcNode, "")
+	addr, err := c.ExternalPGUrl(ctx, t.L(), srcNode, "" /* tenant */, 0 /* sqlInstance */)
 	t.L().Printf("Randomly chosen src node %d for gateway with address %s", srcNode, addr)
 	t.L().Printf("Randomly chosen dst node %d for gateway", destNode)
 
