@@ -131,6 +131,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 
 	initialTimestamp := s.spec.InitialScanTimestamp
 	if s.spec.PreviousReplicatedTimestamp.IsEmpty() {
+		log.Infof(ctx, "starting event stream with initial scan at %s", initialTimestamp)
 		opts = append(opts,
 			rangefeed.WithInitialScan(func(ctx context.Context) {}),
 			rangefeed.WithScanRetryBehavior(rangefeed.ScanRetryRemaining),
@@ -149,6 +150,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 	} else {
 		initialTimestamp = s.spec.PreviousReplicatedTimestamp
 		// When resuming from cursor, advance frontier to the cursor position.
+		log.Infof(ctx, "resuming event stream (no initial scan) from %s", initialTimestamp)
 		for _, sp := range s.spec.Spans {
 			if _, err := frontier.Forward(sp, s.spec.PreviousReplicatedTimestamp); err != nil {
 				return err

@@ -14,6 +14,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb";
 
 import "gogoproto/gogo.proto";
 import "kv/kvpb/api.proto";
+import "roachpb/data.proto";
 import "multitenant/tenantcapabilities/tenantcapabilitiespb/capabilities.proto";
 import "util/hlc/timestamp.proto";
 
@@ -74,22 +75,37 @@ message ProtoInfo {
   // source cluster of that replication stream.
   optional PreviousSourceTenant previous_source_tenant = 7;
 
-  // Next ID: 8
+  // LastReverTenantTimestamp is the timestamp at which we last called
+  // RevertRange in preparation for a stream resumption into this
+  // tenant.
+  //
+  // This is cleared on ALTER VIRTUAL CLUSTER START SERVICE and CREATE
+  // VIRTUAL CLUSTER FROM REPLICATION STREAM.
+  optional util.hlc.Timestamp last_revert_tenant_timestamp = 8 [(gogoproto.nullable) = false];
+
+  // Next ID: 9
 }
 
 message PreviousSourceTenant {
   option (gogoproto.equal) = true;
 
-  // TODO(ssd): Store something that allows us to confirm the identity
-  // of the cluster later. We could use some combination of the source
-  // host's ClusterID() and tenant ID or the tenant's cluster ID(). I
-  // don't think that would account for backup/restore though.
+  // TODO(ssd): It would be nice to store something here that
+  // identified a particular MVCC history so that we could also use
+  // this to compare against things like restored tenants.
+  optional bytes cluster_id = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "ClusterID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+
+  optional roachpb.TenantID tenant_id = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "TenantID"
+  ];
 
   // CutoverTimestamp is the time at which we cutover from the source
   // tenant.
-  optional util.hlc.Timestamp cutover_timestamp = 1 [
-    (gogoproto.nullable) = false
-  ];
+  optional util.hlc.Timestamp cutover_timestamp = 3 [(gogoproto.nullable) = false];
 }
 
 

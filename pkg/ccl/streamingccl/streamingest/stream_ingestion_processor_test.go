@@ -70,7 +70,7 @@ var _ streamclient.Client = &mockStreamClient{}
 
 // Create implements the Client interface.
 func (m *mockStreamClient) Create(
-	_ context.Context, _ roachpb.TenantName,
+	_ context.Context, _ roachpb.TenantName, _ streampb.ReplicationProducerRequest,
 ) (streampb.ReplicationProducerSpec, error) {
 	panic("unimplemented")
 }
@@ -682,7 +682,7 @@ func TestRandomClientGeneration(t *testing.T) {
 
 	randomStreamClient, ok := streamClient.(*streamclient.RandomStreamClient)
 	require.True(t, ok)
-	rps, err := randomStreamClient.Create(ctx, tenantName)
+	rps, err := randomStreamClient.Create(ctx, tenantName, streampb.ReplicationProducerRequest{})
 	require.NoError(t, err)
 
 	topo, err := randomStreamClient.Plan(ctx, rps.StreamID)

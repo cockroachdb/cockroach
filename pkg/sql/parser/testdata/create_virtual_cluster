@@ -95,6 +95,14 @@ CREATE VIRTUAL CLUSTER "destination-hyphen" FROM REPLICATION OF "source-hyphen" 
 CREATE VIRTUAL CLUSTER _ FROM REPLICATION OF _ ON 'pgurl' WITH RETENTION = '36h' -- identifiers removed
 
 parse
+CREATE VIRTUAL CLUSTER "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON 'pgurl' WITH RESUME TIMESTAMP = '132412341234.000000'
+----
+CREATE VIRTUAL CLUSTER "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON 'pgurl' WITH RESUME TIMESTAMP = '132412341234.000000'
+CREATE VIRTUAL CLUSTER ("destination-hyphen") FROM REPLICATION OF ("source-hyphen") ON ('pgurl') WITH RESUME TIMESTAMP = ('132412341234.000000') -- fully parenthesized
+CREATE VIRTUAL CLUSTER "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON '_' WITH RESUME TIMESTAMP = '_' -- literals removed
+CREATE VIRTUAL CLUSTER _ FROM REPLICATION OF _ ON 'pgurl' WITH RESUME TIMESTAMP = '132412341234.000000' -- identifiers removed
+
+parse
 CREATE VIRTUAL CLUSTER "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON 'pgurl' WITH OPTIONS (RETENTION = '36h')
 ----
 CREATE VIRTUAL CLUSTER "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON 'pgurl' WITH RETENTION = '36h' -- normalized!

@@ -35,6 +35,46 @@ message ReplicationProducerSpec {
   // through the lifetime of a replication stream. This will be the timestamp as
   // of which each partition will perform its initial rangefeed scan.
   util.hlc.Timestamp replication_start_time = 2 [(gogoproto.nullable) = false];
+
+  bytes source_cluster_id = 3 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "SourceClusterID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+
+  roachpb.TenantID source_tenant_id = 4 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "SourceTenantID"
+  ];
+}
+
+// ReplicationProducerRequest is sent by the consuming cluster when
+// starting a replication stream on an existing tenant.
+message ReplicationProducerRequest {
+  // ReplicationStartTime is the initial timestamp from which the replication
+  // producer job will begin streaming MVCC revisions. This timestamp is picked
+  // once when the replication producer job is created, and is never updated
+  // through the lifetime of a replication stream. This will be the timestamp as
+  // of which each partition will perform its initial rangefeed scan.
+  util.hlc.Timestamp replication_start_time = 1 [(gogoproto.nullable) = false];
+
+
+  // ClusterID identifies the requesting cluster. If set, this is
+  // compared to the ClusterID in the tenant record's
+  // PreviousSourceTenant.
+  bytes cluster_id = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "ClusterID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+
+  // TenantID identifies the requesting cluster's destination
+  // tenant. If set, this is compared to the TenantID in the tenant
+  // record's PreviousSourceTenant.
+  roachpb.TenantID tenant_id = 3 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "TenantID"
+  ];
 }
 
 // StreamPartitionSpec is the stream partition specification.

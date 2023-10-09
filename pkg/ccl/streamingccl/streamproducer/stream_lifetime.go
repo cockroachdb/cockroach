@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -57,7 +58,11 @@ func jobIsNotRunningError(id jobspb.JobID, status jobs.Status, op string) error 
 // 1. Tracks the liveness of the replication stream consumption.
 // 2. Updates the protected timestamp for spans being replicated.
 func startReplicationProducerJob(
-	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, tenantName roachpb.TenantName,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	txn isql.Txn,
+	tenantName roachpb.TenantName,
+	req streampb.ReplicationProducerRequest,
 ) (streampb.ReplicationProducerSpec, error) {
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 
@@ -69,7 +74,36 @@ func startReplicationProducerJob(
 	if err != nil {
 		return streampb.ReplicationProducerSpec{}, err
 	}
-	tenantID := tenantRecord.ID
+	tenantID, err := roachpb.MakeTenantID(tenantRecord.ID)
+	if err != nil {
+		return streampb.ReplicationProducerSpec{}, err
+	}
+
+	var replicationStartTime hlc.Timestamp
+	if !req.ReplicationStartTime.IsEmpty() {
+		if tenantRecord.PreviousSourceTenant != nil {
+			cid := tenantRecord.PreviousSourceTenant.ClusterID
+			if !req.ClusterID.Equal(uuid.UUID{}) && !cid.Equal(uuid.UUID{}) {
+				if !req.ClusterID.Equal(cid) {
+					return streampb.ReplicationProducerSpec{}, errors.Errorf("requesting cluster ID %s does not match previous source cluster ID %s",
+						req.ClusterID, cid)
+				}
+			}
+
+			tid := tenantRecord.PreviousSourceTenant.TenantID
+			if !req.TenantID.Equal(roachpb.TenantID{}) && !tid.Equal(roachpb.TenantID{}) {
+				if !req.TenantID.Equal(tid) {
+					return streampb.ReplicationProducerSpec{}, errors.Errorf("requesting tenant ID %s does not match previous source tenant ID %s",
+						req.TenantID, tid)
+				}
+			}
+		}
+		replicationStartTime = req.ReplicationStartTime
+	} else {
+		replicationStartTime = hlc.Timestamp{
+			WallTime: evalCtx.GetStmtTimestamp().UnixNano(),
+		}
+	}
 
 	registry := execConfig.JobRegistry
 	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
@@ -86,20 +120,20 @@ func startReplicationProducerJob(
 	}
 
 	ptp := execConfig.ProtectedTimestampProvider.WithTxn(txn)
-	statementTime := hlc.Timestamp{
-		WallTime: evalCtx.GetStmtTimestamp().UnixNano(),
-	}
-	deprecatedSpansToProtect := roachpb.Spans{makeTenantSpan(tenantID)}
-	targetToProtect := ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MustMakeTenantID(tenantID)})
-	pts := jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), statementTime,
+	deprecatedSpansToProtect := roachpb.Spans{keys.MakeTenantSpan(tenantID)}
+	targetToProtect := ptpb.MakeTenantsTarget([]roachpb.TenantID{tenantID})
+	pts := jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), replicationStartTime,
 		deprecatedSpansToProtect, jobsprotectedts.Jobs, targetToProtect)
 
 	if err := ptp.Protect(ctx, pts); err != nil {
 		return streampb.ReplicationProducerSpec{}, err
 	}
+
 	return streampb.ReplicationProducerSpec{
 		StreamID:             streampb.StreamID(jr.JobID),
-		ReplicationStartTime: statementTime,
+		SourceTenantID:       tenantID,
+		SourceClusterID:      evalCtx.ClusterID,
+		ReplicationStartTime: replicationStartTime,
 	}, nil
 }
 
