@@ -477,6 +477,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.InsertOp, opt.UpdateOp, opt.UpsertOp, opt.DeleteOp:
 		return sb.colStatMutation(colSet, e)
 
+	case opt.LockOp:
+		return sb.colStatLock(colSet, e.(*LockExpr))
+
 	case opt.SequenceSelectOp:
 		return sb.colStatSequenceSelect(colSet, e.(*SequenceSelectExpr))
 
@@ -2649,6 +2652,37 @@ func (sb *statisticsBuilder) colStatMutation(
 	inColStat := sb.colStatFromChild(inColSet, mutation, 0 /* childIdx */)
 
 	// Construct mutation colstat using the corresponding input stats.
+	colStat, _ := s.ColStats.Add(colSet)
+	colStat.DistinctCount = inColStat.DistinctCount
+	colStat.NullCount = inColStat.NullCount
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
+	return colStat
+}
+
+// +------+
+// | Lock |
+// +------+
+
+func (sb *statisticsBuilder) buildLock(lock *LockExpr, relProps *props.Relational) {
+	s := relProps.Statistics()
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
+	s.Available = sb.availabilityFromInput(lock)
+
+	inputStats := lock.Input.Relational().Statistics()
+
+	s.RowCount = inputStats.RowCount
+	sb.finalizeFromCardinality(relProps)
+}
+
+func (sb *statisticsBuilder) colStatLock(colSet opt.ColSet, lock *LockExpr) *props.ColumnStatistic {
+	s := lock.Relational().Statistics()
+
+	inColStat := sb.colStatFromChild(colSet, lock, 0 /* childIdx */)
+
+	// Construct colstat using the corresponding input stats.
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = inColStat.DistinctCount
 	colStat.NullCount = inColStat.NullCount
