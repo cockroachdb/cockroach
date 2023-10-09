@@ -3820,7 +3820,7 @@ NULL
 query T
 SELECT crdb_internal.redactable_sql_constants('')
 ----
-‹›
+·
 
 query T
 SELECT crdb_internal.redactable_sql_constants('SELECT 1, 2, 3')
@@ -3853,7 +3853,7 @@ SELECT crdb_internal.redactable_sql_constants(ARRAY[]::string[])
 query T
 SELECT crdb_internal.redactable_sql_constants(ARRAY[''])
 ----
-{‹›}
+{""}
 
 query T
 SELECT crdb_internal.redactable_sql_constants(ARRAY[NULL])
@@ -3868,7 +3868,7 @@ SELECT crdb_internal.redactable_sql_constants(ARRAY['banana'])
 query T
 SELECT crdb_internal.redactable_sql_constants(ARRAY['SELECT 1', NULL, 'SELECT ''hello''', ''])
 ----
-{"SELECT ‹1›",NULL,"SELECT ‹'hello'›",‹›}
+{"SELECT ‹1›",NULL,"SELECT ‹'hello'›",""}
 
 query T
 SELECT crdb_internal.redactable_sql_constants('SELECT ''yes'' IN (''no'', ''maybe'', ''yes'')')
@@ -3982,7 +3982,7 @@ SELECT ‹×›, ‹×›, ‹×›
 query T
 SELECT crdb_internal.redact(crdb_internal.redactable_sql_constants(ARRAY['SELECT 1', NULL, 'SELECT ''hello''', '']))
 ----
-{"SELECT ‹×›",NULL,"SELECT ‹×›",‹×›}
+{"SELECT ‹×›",NULL,"SELECT ‹×›",""}
 
 subtest check_consistency
 

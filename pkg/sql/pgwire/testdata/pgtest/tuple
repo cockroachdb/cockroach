@@ -198,7 +198,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: insufficient bytes reading element OID for binary format. elementIdx=0 bufferLength=4 bufferStartIdx=4 bufferEndIdx=8"}
+{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: insufficient bytes reading element OID for binary format.  elementIdx=0 bufferLength=4 bufferStartIdx=4 bufferEndIdx=8"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # element OID not found
@@ -224,7 +224,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: element type not found for OID 0. elementIdx=0 bufferLength=8 bufferStartIdx=4 bufferEndIdx=8"}
+{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: element type not found for OID 0.  elementIdx=0 bufferLength=8 bufferStartIdx=4 bufferEndIdx=8"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # not enough bytes for element size
@@ -250,7 +250,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: insufficient bytes reading element size for binary format. elementIdx=0 bufferLength=8 bufferStartIdx=8 bufferEndIdx=12"}
+{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: insufficient bytes reading element size for binary format.  elementIdx=0 bufferLength=8 bufferStartIdx=8 bufferEndIdx=12"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # null element
@@ -324,7 +324,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: insufficient bytes reading element for binary format. elementIdx=0 bufferLength=12 bufferStartIdx=12 bufferEndIdx=13"}
+{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: insufficient bytes reading element for binary format.  elementIdx=0 bufferLength=12 bufferStartIdx=12 bufferEndIdx=13"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Test binary encoding of a generic tuple result.

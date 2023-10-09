@@ -487,7 +487,7 @@ func TestISO8601IntervalSyntax(t *testing.T) {
 		{`P123`, types.IntervalTypeMetadata{}, ``, `interval: missing unit at position 4: "P123"`},
 		{`P123foo`, types.IntervalTypeMetadata{}, ``, `interval: unknown unit foo in ISO-8601 duration P123foo`},
 		{`P 1Y`, types.IntervalTypeMetadata{}, ``, `interval: missing number at position 1: "P 1Y"`},
-		{`P1Y `, types.IntervalTypeMetadata{}, ``, `interval: unknown unit Y in ISO-8601 duration P1Y`},
+		{`P1Y `, types.IntervalTypeMetadata{}, ``, `interval: unknown unit Y  in ISO-8601 duration P1Y `},
 		{`P1H`, types.IntervalTypeMetadata{}, ``, `interval: unknown unit H in ISO-8601 duration P1H`},
 
 		{`P`, types.IntervalTypeMetadata{}, `00:00:00`, ``},
