@@ -28,25 +28,37 @@ func TestSupportedStatements(t *testing.T) {
 	noTags := strings.Builder{}
 	first := true
 	for typ, stmt := range supportedStatements {
-		require.Greaterf(t, len(stmt.statementTag), 0, "statement tag is missing %v %v", typ, stmt)
-		// Validate tags matches the statement tag
-		typTag, found := typ.MethodByName("StatementTag")
-		require.True(t, found, "unable to find stmt: %v %v", typ, stmt)
-		ret := typTag.Func.Call([]reflect.Value{reflect.New(typ.Elem())})
-		require.Equal(t, ret[0].String(), stmt.statementTag, "statement tag is different in AST")
-		// Validate all tags are supported.
-		require.NoError(t, forceDeclarativeStatements.Validate(sv, "+"+stmt.statementTag))
-		require.NoError(t, forceDeclarativeStatements.Validate(sv, "!"+stmt.statementTag))
-		// Validate all of them can be specified at once.
-		if !first {
-			allTags.WriteString(",")
-			noTags.WriteString(",")
+		for i, tag := range stmt.statementTags {
+			require.Greaterf(t, len(stmt.statementTags), 0, "statement tag is missing %v %v", typ, stmt)
+
+			// Validate tags matches the statement tag.
+			var expectedTag string
+			if stmt.altStatements != nil {
+				// Use the provided concrete statement if one was provided.
+				expectedTag = stmt.altStatements[i].StatementTag()
+			} else {
+				// Otherwise, build a zero-value statement.
+				typTag, found := typ.MethodByName("StatementTag")
+				require.True(t, found, "unable to find stmt: %v %v", typ, stmt)
+				ret := typTag.Func.Call([]reflect.Value{reflect.New(typ.Elem())})
+				expectedTag = ret[0].String()
+			}
+			require.Equal(t, expectedTag, tag, "statement tag is different in AST")
+
+			// Validate all tags are supported.
+			require.NoError(t, forceDeclarativeStatements.Validate(sv, "+"+tag))
+			require.NoError(t, forceDeclarativeStatements.Validate(sv, "!"+tag))
+			// Validate all of them can be specified at once.
+			if !first {
+				allTags.WriteString(",")
+				noTags.WriteString(",")
+			}
+			first = false
+			allTags.WriteString("+")
+			allTags.WriteString(tag)
+			noTags.WriteString("!")
+			noTags.WriteString(tag)
 		}
-		first = false
-		allTags.WriteString("+")
-		allTags.WriteString(stmt.statementTag)
-		noTags.WriteString("!")
-		noTags.WriteString(stmt.statementTag)
 	}
 	require.NoError(t, forceDeclarativeStatements.Validate(sv, allTags.String()))
 	require.NoError(t, forceDeclarativeStatements.Validate(sv, noTags.String()))

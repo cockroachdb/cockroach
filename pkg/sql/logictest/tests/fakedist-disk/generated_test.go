@@ -1576,6 +1576,13 @@ func TestLogic_returning(
 	runLogicTest(t, "returning")
 }
 
+func TestLogic_routine_schema_change(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "routine_schema_change")
+}
+
 func TestLogic_row_level_ttl(
 	t *testing.T,
 ) {

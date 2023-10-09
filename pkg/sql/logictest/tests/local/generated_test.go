@@ -1737,6 +1737,13 @@ func TestLogic_role(
 	runLogicTest(t, "role")
 }
 
+func TestLogic_routine_schema_change(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "routine_schema_change")
+}
+
 func TestLogic_row_level_ttl(
 	t *testing.T,
 ) {
