@@ -95,7 +95,7 @@ WITH unsafe_restore_incompatible_version;
 		// We additionally open fresh connections for each query.
 		setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", timeout)
 		firstNode := c.Node(1)
-		urls, err := c.ExternalPGUrl(ctx, t.L(), firstNode, "")
+		urls, err := c.ExternalPGUrl(ctx, t.L(), firstNode, "" /* tenant */, 0 /* sqlInstance */)
 		if err != nil {
 			t.Fatal(err)
 		}
