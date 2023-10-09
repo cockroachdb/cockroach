@@ -502,6 +502,11 @@ type DistSender struct {
 	// nodeDescs provides information on the KV nodes that DistSender may
 	// consider routing requests to.
 	nodeDescs NodeDescStore
+	// nodeIDGetter provides access to the local KV node ID if it's available
+	// (0 otherwise). The default implementation uses the Gossip network if it's
+	// available, but custom implementation can be provided via
+	// DistSenderConfig.NodeIDGetter.
+	nodeIDGetter func() roachpb.NodeID
 	// metrics stored DistSender-related metrics.
 	metrics DistSenderMetrics
 	// rangeCache caches replica metadata for key ranges.
@@ -568,6 +573,10 @@ type DistSenderConfig struct {
 	Settings  *cluster.Settings
 	Clock     *hlc.Clock
 	NodeDescs NodeDescStore
+	// NodeIDGetter, if set, provides non-gossip based implementation for
+	// obtaining the local KV node ID. The DistSender uses the node ID to
+	// preferentially route requests to a local replica (if one exists).
+	NodeIDGetter func() roachpb.NodeID
 	// nodeDescriptor, if provided, is used to describe which node the
 	// DistSender lives on, for instance when deciding where to send RPCs.
 	// Usually it is filled in from the Gossip network on demand.
@@ -611,10 +620,22 @@ type DistSenderConfig struct {
 // DistSenderContext or the fields within is optional. For omitted values, sane
 // defaults will be used.
 func NewDistSender(cfg DistSenderConfig) *DistSender {
+	nodeIDGetter := cfg.NodeIDGetter
+	if nodeIDGetter == nil {
+		// Fallback to gossip-based implementation if other is not provided.
+		nodeIDGetter = func() roachpb.NodeID {
+			g, ok := cfg.NodeDescs.(*gossip.Gossip)
+			if !ok {
+				return 0
+			}
+			return g.NodeID.Get()
+		}
+	}
 	ds := &DistSender{
 		st:            cfg.Settings,
 		clock:         cfg.Clock,
 		nodeDescs:     cfg.NodeDescs,
+		nodeIDGetter:  nodeIDGetter,
 		metrics:       makeDistSenderMetrics(),
 		kvInterceptor: cfg.KVInterceptor,
 		locality:      cfg.Locality,
@@ -778,22 +799,6 @@ func (ds *DistSender) FirstRange() (*roachpb.RangeDescriptor, error) {
 	return ds.firstRangeProvider.GetFirstRangeDescriptor()
 }
 
-// getNodeID attempts to return the local node ID. It returns 0 if the DistSender
-// does not have access to the Gossip network.
-func (ds *DistSender) getNodeID() roachpb.NodeID {
-	// Today, secondary tenants don't run in process with KV instances, so they
-	// don't have access to the Gossip network. The DistSender uses the node ID to
-	// preferentially route requests to a local replica (if one exists). Not
-	// knowing the node ID, and thus not being able to take advantage of this
-	// optimization is okay, given tenants not running in-process with KV
-	// instances have no such optimization to take advantage of to begin with.
-	g, ok := ds.nodeDescs.(*gossip.Gossip)
-	if !ok {
-		return 0
-	}
-	return g.NodeID.Get()
-}
-
 // CountRanges returns the number of ranges that encompass the given key span.
 func (ds *DistSender) CountRanges(ctx context.Context, rs roachpb.RSpan) (int64, error) {
 	var count int64
@@ -859,7 +864,7 @@ func (ds *DistSender) getRoutingInfo(
 func (ds *DistSender) initAndVerifyBatch(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 	// Attach the local node ID to each request.
 	if ba.GatewayNodeID == 0 {
-		ba.GatewayNodeID = ds.getNodeID()
+		ba.GatewayNodeID = ds.nodeIDGetter()
 	}
 
 	// Attach a clock reading from the local node to help stabilize HLCs across
@@ -2235,7 +2240,7 @@ func (ds *DistSender) sendToReplicas(
 		// First order by latency, then move the leaseholder to the front of the
 		// list, if it is known.
 		if !ds.dontReorderReplicas {
-			replicas.OptimizeReplicaOrder(ds.getNodeID(), ds.latencyFunc, ds.locality)
+			replicas.OptimizeReplicaOrder(ds.nodeIDGetter(), ds.latencyFunc, ds.locality)
 		}
 
 		idx := -1
@@ -2254,7 +2259,7 @@ func (ds *DistSender) sendToReplicas(
 	case kvpb.RoutingPolicy_NEAREST:
 		// Order by latency.
 		log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not required")
-		replicas.OptimizeReplicaOrder(ds.getNodeID(), ds.latencyFunc, ds.locality)
+		replicas.OptimizeReplicaOrder(ds.nodeIDGetter(), ds.latencyFunc, ds.locality)
 
 	default:
 		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
@@ -2374,7 +2379,7 @@ func (ds *DistSender) sendToReplicas(
 				(desc.Generation == 0 && routing.LeaseSeq() == 0),
 		}
 
-		comparisonResult := ds.getLocalityComparison(ctx, ds.getNodeID(), ba.Replica.NodeID)
+		comparisonResult := ds.getLocalityComparison(ctx, ds.nodeIDGetter(), ba.Replica.NodeID)
 		ds.metrics.updateCrossLocalityMetricsOnReplicaAddressedBatchRequest(comparisonResult, int64(ba.Size()))
 
 		br, err = transport.SendNext(ctx, ba)

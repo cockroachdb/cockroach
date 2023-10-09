@@ -359,65 +359,18 @@ EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id) VALUES (4321);
 distribution: local
 vectorized: true
 ·
-• root
-│ columns: ()
-│
-├── • insert
-│   │ columns: ()
-│   │ estimated row count: 0 (missing stats)
-│   │ into: t_unique_hash_pk(crdb_internal_id_shard_16, id, crdb_region)
-│   │
-│   └── • values
-│         columns: (crdb_internal_id_shard_16_comp, column1, crdb_region_default, check1, check2)
-│         size: 5 columns, 1 row
-│         row 0, expr 0: 4321
-│         row 0, expr 1: 'ap-southeast-2'
-│         row 0, expr 2: 11
-│         row 0, expr 3: true
-│         row 0, expr 4: true
-│
-└── • constraint-check
-    │
-    └── • error if rows
-        │ columns: ()
-        │
-        └── • project
-            │ columns: (id)
-            │
-            └── • cross join (inner)
-                │ columns: (id, crdb_internal_id_shard_16, id, crdb_region)
-                │ estimated row count: 1 (missing stats)
-                │
-                ├── • values
-                │     columns: (id)
-                │     size: 1 column, 1 row
-                │     row 0, expr 0: 4321
-                │
-                └── • limit
-                    │ columns: (crdb_internal_id_shard_16, id, crdb_region)
-                    │ count: 1
-                    │
-                    └── • filter
-                        │ columns: (crdb_internal_id_shard_16, id, crdb_region)
-                        │ estimated row count: 6 (missing stats)
-                        │ filter: (crdb_internal_id_shard_16 != 11) OR (crdb_region != 'ap-southeast-2')
-                        │
-                        └── • union all
-                            │ columns: (crdb_internal_id_shard_16, id, crdb_region)
-                            │ estimated row count: 1 (missing stats)
-                            │ limit: 3
-                            │
-                            ├── • scan
-                            │     columns: (crdb_internal_id_shard_16, id, crdb_region)
-                            │     estimated row count: 1 (missing stats)
-                            │     table: t_unique_hash_pk@t_unique_hash_pk_pkey
-                            │     spans: /"@"/11/4321/0
-                            │
-                            └── • scan
-                                  columns: (crdb_internal_id_shard_16, id, crdb_region)
-                                  estimated row count: 1 (missing stats)
-                                  table: t_unique_hash_pk@t_unique_hash_pk_pkey
-                                  spans: /"\x80"/11/4321/0 /"\xc0"/11/4321/0
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: t_unique_hash_pk(crdb_internal_id_shard_16, id, crdb_region)
+  auto commit
+  uniqueness check: t_unique_hash_pk@t_unique_hash_pk_pkey
+  size: 5 columns, 1 row
+  row 0, expr 0: 11
+  row 0, expr 1: 4321
+  row 0, expr 2: 'ap-southeast-2'
+  row 0, expr 3: true
+  row 0, expr 4: true
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id) VALUES (4321) ON CONFLICT DO NOTHING;
@@ -1024,106 +977,20 @@ EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email) VALUES (4321, 's
 distribution: local
 vectorized: true
 ·
-• root
-│ columns: ()
-│
-├── • insert
-│   │ columns: ()
-│   │ estimated row count: 0 (missing stats)
-│   │ into: t_unique_hash_sec_key(id, email, crdb_region, crdb_internal_email_shard_16)
-│   │
-│   └── • values
-│         columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, check1, check2)
-│         size: 6 columns, 1 row
-│         row 0, expr 0: 4321
-│         row 0, expr 1: 'some_email'
-│         row 0, expr 2: 'ap-southeast-2'
-│         row 0, expr 3: 1
-│         row 0, expr 4: true
-│         row 0, expr 5: true
-│
-├── • constraint-check
-│   │
-│   └── • error if rows
-│       │ columns: ()
-│       │
-│       └── • project
-│           │ columns: (id)
-│           │
-│           └── • cross join (inner)
-│               │ columns: (id, id, crdb_region)
-│               │ estimated row count: 1 (missing stats)
-│               │
-│               ├── • values
-│               │     columns: (id)
-│               │     size: 1 column, 1 row
-│               │     row 0, expr 0: 4321
-│               │
-│               └── • scan
-│                     columns: (id, crdb_region)
-│                     estimated row count: 1 (missing stats)
-│                     table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
-│                     spans: /"\x80"/4321/0 /"\xc0"/4321/0
-│                     limit: 1
-│
-└── • constraint-check
-    │
-    └── • error if rows
-        │ columns: ()
-        │
-        └── • project
-            │ columns: (email)
-            │
-            └── • cross join (inner)
-                │ columns: (email, id, email, crdb_region)
-                │ estimated row count: 1 (missing stats)
-                │
-                ├── • values
-                │     columns: (email)
-                │     size: 1 column, 1 row
-                │     row 0, expr 0: 'some_email'
-                │
-                └── • limit
-                    │ columns: (id, email, crdb_region)
-                    │ count: 1
-                    │
-                    └── • distinct
-                        │ columns: (id, email, crdb_region)
-                        │ estimated row count: 6 (missing stats)
-                        │ distinct on: id, crdb_region
-                        │
-                        └── • union all
-                            │ columns: (id, email, crdb_region)
-                            │ estimated row count: 2 (missing stats)
-                            │
-                            ├── • filter
-                            │   │ columns: (id, email, crdb_region)
-                            │   │ estimated row count: 1 (missing stats)
-                            │   │ filter: id != 4321
-                            │   │
-                            │   └── • union all
-                            │       │ columns: (id, email, crdb_region)
-                            │       │ estimated row count: 1 (missing stats)
-                            │       │ limit: 1
-                            │       │
-                            │       ├── • scan
-                            │       │     columns: (id, email, crdb_region)
-                            │       │     estimated row count: 1 (missing stats)
-                            │       │     table: t_unique_hash_sec_key@idx_uniq_hash_email
-                            │       │     spans: /"@"/1/"some_email"/0
-                            │       │
-                            │       └── • scan
-                            │             columns: (id, email, crdb_region)
-                            │             estimated row count: 1 (missing stats)
-                            │             table: t_unique_hash_sec_key@idx_uniq_hash_email
-                            │             spans: /"\x80"/1/"some_email"/0 /"\xc0"/1/"some_email"/0
-                            │             parallel
-                            │
-                            └── • scan
-                                  columns: (id, email, crdb_region)
-                                  estimated row count: 1 (missing stats)
-                                  table: t_unique_hash_sec_key@idx_uniq_hash_email
-                                  spans: /"\x80"/1/"some_email"/0 /"\xc0"/1/"some_email"/0
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: t_unique_hash_sec_key(id, email, crdb_region, crdb_internal_email_shard_16)
+  auto commit
+  uniqueness check: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
+  uniqueness check: t_unique_hash_sec_key@idx_uniq_hash_email
+  size: 6 columns, 1 row
+  row 0, expr 0: 4321
+  row 0, expr 1: 'some_email'
+  row 0, expr 2: 'ap-southeast-2'
+  row 0, expr 3: 1
+  row 0, expr 4: true
+  row 0, expr 5: true
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email) VALUES (4321, 'some_email') ON CONFLICT DO NOTHING;

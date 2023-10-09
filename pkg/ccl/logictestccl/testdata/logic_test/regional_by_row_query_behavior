@@ -1526,8 +1526,7 @@ LIMIT 1] OFFSET 2
 statement ok
 ALTER TABLE regional_by_row_table ADD CONSTRAINT unique_b_a UNIQUE(b, a)
 
-# We should plan uniqueness checks for all unique indexes in
-# REGIONAL BY ROW tables.
+# The unique partial index disallows fast path insert.
 query T retry
 SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES (1, 1, 1, 1)] OFFSET 2
 ----
@@ -1900,41 +1899,11 @@ query T retry
 SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
 ----
 ·
-• root
-│
-├── • insert
-│   │ into: regional_by_row_table_as(pk, a, b, crdb_region_col)
-│   │
-│   └── • values
-│         size: 5 columns, 1 row
-│
-└── • constraint-check
-    │
-    └── • error if rows
-        │
-        └── • cross join
-            │
-            ├── • values
-            │     size: 1 column, 1 row
-            │
-            └── • limit
-                │ count: 1
-                │
-                └── • filter
-                    │ filter: (pk != 1) OR (crdb_region_col != 'us-east-1')
-                    │
-                    └── • union all
-                        │ limit: 3
-                        │
-                        ├── • scan
-                        │     missing stats
-                        │     table: regional_by_row_table_as@regional_by_row_table_as_b_key
-                        │     spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1]
-                        │
-                        └── • scan
-                              missing stats
-                              table: regional_by_row_table_as@regional_by_row_table_as_b_key
-                              spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+• insert fast path
+  into: regional_by_row_table_as(pk, a, b, crdb_region_col)
+  auto commit
+  uniqueness check: regional_by_row_table_as@regional_by_row_table_as_b_key
+  size: 5 columns, 1 row
 
 statement error pq: duplicate key value violates unique constraint "regional_by_row_table_as_pkey"\nDETAIL: Key \(pk\)=\(1\) already exists\.
 INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (1, 1, 1)
@@ -2947,29 +2916,11 @@ VALUES ('Craig Roacher', 'craig@cockroachlabs.com')
 distribution: local
 vectorized: true
 ·
-• root
-│
-├── • insert
-│   │ into: users(id, name, email, crdb_region)
-│   │
-│   └── • buffer
-│       │ label: buffer 1
-│       │
-│       └── • values
-│             size: 5 columns, 1 row
-│
-└── • constraint-check
-    │
-    └── • error if rows
-        │
-        └── • lookup join (semi)
-            │ table: users@users_email_key
-            │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (column2 = email)
-            │ pred: (id_default != id) OR (crdb_region_default != crdb_region)
-            │
-            └── • scan buffer
-                  estimated row count: 1
-                  label: buffer 1
+• insert fast path
+  into: users(id, name, email, crdb_region)
+  auto commit
+  uniqueness check: users@users_email_key
+  size: 5 columns, 1 row
 
 statement ok
 SET index_recommendations_enabled = false;
@@ -2985,7 +2936,8 @@ CREATE TABLE users (
     id         UUID   PRIMARY KEY DEFAULT gen_random_uuid(),
     id2        INT,
     username   STRING NOT NULL,
-    UNIQUE INDEX id2_idx(id2)
+    UNIQUE INDEX id2_idx(id2),
+    FAMILY (id, id2, username)
 ) LOCALITY REGIONAL BY ROW;
 
 statement ok
@@ -3758,3 +3710,543 @@ project
       └── filters
            ├── a.created_at:3 = b.created_at:18 [outer=(3,18), constraints=(/3: (/NULL - ]; /18: (/NULL - ]), fd=(3)==(18), (18)==(3)]
            └── a.updated_at:4 = b.updated_at:19 [outer=(4,19), constraints=(/4: (/NULL - ]; /19: (/NULL - ]), fd=(4)==(19), (19)==(4)]
+
+subtest insertFastPathUnique
+
+statement ok
+SET database = multi_region_test_db
+
+statement ok
+CREATE TABLE users2 (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name STRING NOT NULL,
+  email STRING NOT NULL UNIQUE,
+  INDEX (name),
+  FAMILY (id, name, email)
+) LOCALITY REGIONAL BY ROW
+
+
+# Single-row insert fast path which needs no special handling.
+query T
+EXPLAIN INSERT INTO users2 (crdb_region, name, email)
+VALUES ('ap-southeast-2', 'Craig Roacher', 'craig@cockroachlabs.com')
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  into: users2(id, name, email, crdb_region)
+  auto commit
+  uniqueness check: users2@users2_email_key
+  size: 5 columns, 1 row
+
+# Multi-row insert fast path uniqueness checks not currently supported.
+query T
+EXPLAIN INSERT INTO users2 (name, email)
+VALUES ('Bill Roacher', 'bill@cockroachlabs.com'), ('Jill Roacher', 'jill@cockroachlabs.com')
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: users2(id, name, email, crdb_region)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • values
+│                 size: 2 columns, 2 rows
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: users2@users2_email_key
+            │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (column2 = email)
+            │ pred: (id_default != id) OR (crdb_region_default != crdb_region)
+            │
+            └── • scan buffer
+                  estimated row count: 2
+                  label: buffer 1
+
+# Multi-row insert fast path uniqueness checks as a prepared statement not
+# currently supported.
+statement ok
+PREPARE e1 AS EXPLAIN INSERT INTO users2 (name, email)
+VALUES ($1, $2), ($3, $4)
+
+query T nosort
+EXECUTE e1 ('Bill Roacher', 'bill@cockroachlabs.com', 'Jo Roacher', 'jo@cockroachlabs.com')
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: users2(id, name, email, crdb_region)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • values
+│                 size: 2 columns, 2 rows
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: users2@users2_email_key
+            │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (column2 = email)
+            │ pred: (id_default != id) OR (crdb_region_default != crdb_region)
+            │
+            └── • scan buffer
+                  estimated row count: 2
+                  label: buffer 1
+
+statement ok
+SET experimental_enable_unique_without_index_constraints = true
+
+statement ok
+CREATE TABLE users3 (
+  id UUID DEFAULT gen_random_uuid(),
+  name STRING NOT NULL,
+  email STRING NOT NULL,
+  UNIQUE WITHOUT INDEX (email) WHERE email != name,
+  INDEX (name),
+  PRIMARY KEY (email, id),
+  FAMILY (id, name, email)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+RESET experimental_enable_unique_without_index_constraints
+
+# Verify a partial UNIQUE WITHOUT INDEX with a predicate similar to the PK
+# values check created in `buildInsertionCheck` to prevent rows from matching
+# themselves doesn't mistakenly allow insert fast path.
+query T
+EXPLAIN INSERT INTO users3 (crdb_region, name, email)
+VALUES ('ap-southeast-2', 'craig@cockroachlabs.com', 'craig@cockroachlabs.com')
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: users3(id, name, email, crdb_region)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 5 columns, 1 row
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: users3@users3_pkey
+            │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (column3 = email)
+            │ pred: ((id_default != id) OR (column1 != crdb_region)) AND (email != name)
+            │
+            └── • filter
+                │ estimated row count: 0
+                │ filter: column3 != column2
+                │
+                └── • scan buffer
+                      estimated row count: 1
+                      label: buffer 1
+
+query T
+EXPLAIN INSERT INTO multi_region_test_db.regional_by_row_table (pk, pk2, a, b) VALUES
+(1, 1, 1, -5)
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  into: regional_by_row_table(pk, pk2, a, b, j, crdb_region)
+  auto commit
+  uniqueness check: regional_by_row_table@regional_by_row_table_pkey
+  uniqueness check: regional_by_row_table@regional_by_row_table_b_key
+  size: 7 columns, 1 row
+
+statement ok
+INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES
+  (1, 1, 1, -5)
+
+statement error pq: duplicate key value violates unique constraint "regional_by_row_table_b_key"\nDETAIL: Key \(b\)=\(-5\) already exists\.
+INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES
+  (16, 16, 15, -5)
+
+statement ok
+PREPARE s1 AS EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES ($1, $2, $3, $4);
+
+query T nosort
+EXECUTE s1 (1, 1, 1, -5)
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  into: regional_by_row_table(pk, pk2, a, b, j, crdb_region)
+  auto commit
+  uniqueness check: regional_by_row_table@regional_by_row_table_pkey
+  uniqueness check: regional_by_row_table@regional_by_row_table_b_key
+  size: 7 columns, 1 row
+
+statement ok
+PREPARE s2 AS INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES ($1, $2, $3, $4);
+
+statement error pq: duplicate key value violates unique constraint "regional_by_row_table_b_key"\nDETAIL: Key \(b\)=\(-5\) already exists\.
+EXECUTE s2 (6, 7, 8, -5)
+
+statement ok
+PREPARE s3 AS EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES ($1, $2, $3, $4), ($5, $6, $7, $8);
+
+# Multi-row insert fast path uniqueness checks not yet supported.
+query T nosort
+EXECUTE s3 (7, 7, 7, 7, 6, 7, 8, -5)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: regional_by_row_table(pk, pk2, a, b, j, crdb_region)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • values
+│                 size: 4 columns, 2 rows
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table@regional_by_row_table_pkey
+│           │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (column1 = pk)
+│           │ pred: crdb_region_default != crdb_region
+│           │
+│           └── • scan buffer
+│                 estimated row count: 2
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: regional_by_row_table@regional_by_row_table_b_key
+            │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (column4 = b)
+            │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
+            │
+            └── • scan buffer
+                  estimated row count: 2
+                  label: buffer 1
+
+statement ok
+PREPARE s4 AS INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES ($1, $2, $3, $4), ($5, $6, $7, $8);
+
+statement error pq: duplicate key value violates unique constraint "regional_by_row_table_b_key"\nDETAIL: Key \(b\)=\(-5\) already exists\.
+EXECUTE s4 (7, 7, 7, 7, 6, 7, 8, -5)
+
+statement ok
+CREATE TABLE user_settings2 (
+    id      UUID   PRIMARY KEY DEFAULT gen_random_uuid(),
+    id2     INT,
+    user_id UUID   NOT NULL,
+    value   STRING NOT NULL,
+    INDEX(user_id),
+    UNIQUE INDEX id2_idx(id2),
+    FOREIGN KEY (user_id, crdb_region) REFERENCES users (id, crdb_region),
+    FAMILY (id, id2, user_id, value)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE TABLE user_settings3 (
+    id      UUID   PRIMARY KEY DEFAULT gen_random_uuid(),
+    id2     INT,
+    user_id UUID   NOT NULL,
+    value   STRING NOT NULL,
+    INDEX(user_id),
+    UNIQUE INDEX id2_idx(id2),
+    FOREIGN KEY (user_id) REFERENCES users (id),
+    FAMILY (id, id2, user_id, value)
+) LOCALITY REGIONAL BY ROW;
+
+# An insert with FK constraint requiring a WithScan should still allow
+# insert fast path.
+query T
+EXPLAIN INSERT INTO user_settings2 (id2, user_id, value) VALUES (2, '5ebfedee-0dcf-41e6-a315-5fa0b51b9882', 'foo')
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  into: user_settings2(id, id2, user_id, value, crdb_region)
+  auto commit
+  FK check: users@users_pkey
+  uniqueness check: user_settings2@id2_idx
+  size: 6 columns, 1 row
+
+# An insert with FK constraint and uniqueness check inserting multiple rows
+# is not supported by insert fast path.
+query T
+EXPLAIN
+INSERT INTO user_settings2 (id2, user_id, value)
+VALUES (2, '5ebfedee-0dcf-41e6-a315-5fa0b51b9882', 'foo'),
+       (2, '5ebfedee-0dcf-41e6-a315-5fa0b51b9882', 'foo');
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: user_settings2(id, id2, user_id, value, crdb_region)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • values
+│                 size: 3 columns, 2 rows
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: user_settings2@id2_idx
+│           │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (column1 = id2)
+│           │ pred: (id_default != id) OR (crdb_region_default != crdb_region)
+│           │
+│           └── • scan buffer
+│                 estimated row count: 2
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: users@users_pkey
+            │ equality: (crdb_region_default, column2) = (crdb_region,id)
+            │ equality cols are key
+            │
+            └── • scan buffer
+                  estimated row count: 2
+                  label: buffer 1
+
+# Hash-sharded RBR table.
+statement ok
+CREATE TABLE hash_sharded_rbr_computed (
+  region_id STRING(10) NOT NULL,
+  my_uuid UUID NOT NULL,
+  my_uuid2 UUID NOT NULL,
+  another_id INT NOT NULL,
+  row_ts TIMESTAMP NULL,
+  crdb_region_col crdb_internal_region NOT VISIBLE NOT NULL AS (CASE WHEN substring(region_id, 1:::INT8, 4:::INT8) = 'east':::STRING THEN 'us-east-1':::crdb_internal_region WHEN substring(region_id, 1:::INT8, 2:::INT8) = 'ap':::STRING THEN 'ap-southeast-2':::crdb_internal_region ELSE 'ca-central-1':::crdb_internal_region END) STORED,
+  CONSTRAINT "primary" PRIMARY KEY (region_id ASC) USING HASH,
+  FAMILY (region_id, my_uuid, my_uuid2, another_id, row_ts, crdb_region_col)
+) LOCALITY REGIONAL BY ROW AS crdb_region_col;
+
+statement ok
+CREATE UNIQUE INDEX idx_date ON hash_sharded_rbr_computed (row_ts ASC, another_id ASC) USING HASH
+
+# Hash-sharded RBR table with unique hash-sharded index supports fast path.
+query T retry
+EXPLAIN INSERT
+INTO
+  hash_sharded_rbr_computed (region_id, my_uuid, my_uuid2, another_id, row_ts)
+VALUES
+  ('east1234', gen_random_uuid(), gen_random_uuid(), 1, TIMESTAMP '2016-01-25 10:10:10.555555')
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  into: hash_sharded_rbr_computed(region_id, my_uuid, my_uuid2, another_id, row_ts, crdb_region_col, crdb_internal_region_id_shard_16, crdb_internal_another_id_row_ts_shard_16)
+  auto commit
+  uniqueness check: hash_sharded_rbr_computed@idx_date
+  size: 11 columns, 1 row
+
+# With an additional check constraint on the crdb_region column, insert fast
+# path is still picked.
+statement ok
+CREATE TABLE hash_sharded_rbr_computed_check (
+region_based_id STRING(10) NOT NULL,
+my_uuid UUID NOT NULL,
+my_uuid2 UUID NOT NULL,
+another_id INT NOT NULL,
+row_ts TIMESTAMP NULL,
+geo_zone STRING NOT NULL,
+crdb_region_col crdb_internal_region NOT VISIBLE NOT NULL AS (CASE WHEN substring(geo_zone, 1:::INT8, 4:::INT8) = 'east':::STRING THEN 'us-east-1':::crdb_internal_region WHEN substring(region_based_id, 1:::INT8, 2:::INT8) = 'ap':::STRING THEN 'ap-southeast-2':::crdb_internal_region ELSE 'ca-central-1':::crdb_internal_region END) STORED,
+CONSTRAINT "primary" PRIMARY KEY (region_based_id ASC) USING HASH WITH (bucket_count=16),
+CONSTRAINT c1 CHECK (crdb_region_col IN ('us-east-1':::crdb_internal_region, 'ap-southeast-2':::crdb_internal_region)),
+FAMILY (region_based_id, my_uuid, my_uuid2, another_id, row_ts, geo_zone, crdb_region_col)
+) LOCALITY REGIONAL BY ROW AS crdb_region_col;
+
+statement ok
+CREATE UNIQUE INDEX idx_date ON hash_sharded_rbr_computed_check (row_ts ASC, another_id ASC) USING HASH WITH (bucket_count=16)
+
+# Hash-sharded RBR table with check constraint and unique hash-sharded index
+# supports fast path.
+query T
+EXPLAIN INSERT
+INTO
+  hash_sharded_rbr_computed_check (region_based_id, geo_zone, my_uuid, my_uuid2, another_id, row_ts)
+VALUES
+  ('east1234', 'east1234', gen_random_uuid(), gen_random_uuid(), 1, TIMESTAMP '2016-01-25 10:10:10.555555')
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  into: hash_sharded_rbr_computed_check(region_based_id, my_uuid, my_uuid2, another_id, row_ts, geo_zone, crdb_region_col, crdb_internal_region_based_id_shard_16, crdb_internal_another_id_row_ts_shard_16)
+  auto commit
+  uniqueness check: hash_sharded_rbr_computed_check@primary
+  uniqueness check: hash_sharded_rbr_computed_check@idx_date
+  size: 13 columns, 1 row
+
+# Hash-sharded RBR table with a unique hash-sharded index does not currently
+# support multi-row insert fast path.
+query T
+EXPLAIN INSERT
+INTO
+  hash_sharded_rbr_computed_check (region_based_id, geo_zone, my_uuid, my_uuid2, another_id, row_ts)
+VALUES
+  ('east1234', 'east1234', gen_random_uuid(), gen_random_uuid(), 1, TIMESTAMP '2016-01-25 10:10:10.555555'),
+  ('east1235', 'east1234', gen_random_uuid(), gen_random_uuid(), 1, TIMESTAMP '2016-01-25 10:10:10.555555')
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: hash_sharded_rbr_computed_check(region_based_id, my_uuid, my_uuid2, another_id, row_ts, geo_zone, crdb_region_col, crdb_internal_region_based_id_shard_16, crdb_internal_another_id_row_ts_shard_16)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • render
+│               │
+│               └── • values
+│                     size: 6 columns, 2 rows
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: hash_sharded_rbr_computed_check@primary
+│           │ lookup condition: ((crdb_region_col IN ('ap-southeast-2', 'us-east-1')) AND (crdb_internal_region_based_id_shard_16_eq = crdb_internal_region_based_id_shard_16)) AND (region_based_id = region_based_id)
+│           │ pred: (crdb_region_col != crdb_region_col) OR (crdb_internal_region_based_id_shard_16 != crdb_internal_region_based_id_shard_16)
+│           │
+│           └── • render
+│               │
+│               └── • scan buffer
+│                     estimated row count: 2
+│                     label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: hash_sharded_rbr_computed_check@idx_date
+            │ lookup condition: (((crdb_region_col IN ('ap-southeast-2', 'us-east-1')) AND (crdb_internal_another_id_row_ts_shard_16_eq = crdb_internal_another_id_row_ts_shard_16)) AND (row_ts = row_ts)) AND (another_id = another_id)
+            │ pred: ((region_based_id != region_based_id) OR (crdb_region_col != crdb_region_col)) OR (crdb_internal_region_based_id_shard_16 != crdb_internal_region_based_id_shard_16)
+            │
+            └── • render
+                │
+                └── • scan buffer
+                      estimated row count: 2
+                      label: buffer 1
+
+# This case doesn't currently use insert fast path, but could.
+# TODO(msirek): Support insert fast path for this case.
+query T
+EXPLAIN INSERT INTO user_settings3 (id2, user_id, value) VALUES (2, '5ebfedee-0dcf-41e6-a315-5fa0b51b9882', 'foo')
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: user_settings3(id, id2, user_id, value, crdb_region)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 6 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: user_settings3@id2_idx
+│           │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (column1 = id2)
+│           │ pred: (id_default != id) OR (crdb_region_default != crdb_region)
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: users@users_pkey
+            │ equality cols are key
+            │ lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (column2 = id)
+            │
+            └── • lookup join (anti)
+                │ table: users@users_pkey
+                │ equality cols are key
+                │ lookup condition: (crdb_region = 'ap-southeast-2') AND (column2 = id)
+                │
+                └── • scan buffer
+                      estimated row count: 1
+                      label: buffer 1
+
+statement ok
+CREATE UNIQUE INDEX ON regional_by_row_table (b, a) USING HASH
+
+# After adding a hash sharded unique index, fast path is still legal.
+query T
+SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES (1, 1, 1, 1)] OFFSET 2
+----
+·
+• insert fast path
+  into: regional_by_row_table(pk, pk2, a, b, j, crdb_region, crdb_internal_a_b_shard_16)
+  auto commit
+  uniqueness check: regional_by_row_table@regional_by_row_table_pkey
+  uniqueness check: regional_by_row_table@regional_by_row_table_b_key
+  uniqueness check: regional_by_row_table@regional_by_row_table_b_a_key
+  size: 9 columns, 1 row
+

@@ -593,6 +593,17 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	case opt.ProjectSetOp:
 		cost = c.computeProjectSetCost(candidate.(*memo.ProjectSetExpr))
 
+	case opt.InsertOp:
+		insertExpr, _ := candidate.(*memo.InsertExpr)
+		if len(insertExpr.FastPathUniqueChecks) != 0 {
+			if len(insertExpr.FastPathUniqueChecks[0].DatumsFromConstraint) != 0 {
+				// Make the cost of insert fast path slightly cheaper than non-fast path
+				// so that the optimizer will pick it. All of the costed operations
+				// should have identical costs between the two inserts.
+				cost -= cpuCostFactor
+			}
+		}
+
 	case opt.ExplainOp:
 		// Technically, the cost of an Explain operation is independent of the cost
 		// of the underlying plan. However, we want to explain the plan we would get

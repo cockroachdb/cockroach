@@ -61,10 +61,12 @@ type TestServerArgs struct {
 	// DisableTLSForHTTP if set, disables TLS for the HTTP interface.
 	DisableTLSForHTTP bool
 
-	// SecondaryTenantPortOffset if non-zero forces the network addresses
-	// generated for servers started by the serverController to be offset
-	// from the base addressed by the specified amount.
-	SecondaryTenantPortOffset int
+	// ApplicationInternalRPCPortMin/PortMax define the range of TCP ports
+	// used to start the internal RPC service for application-level
+	// servers. This service is used for node-to-node RPC traffic and to
+	// serve data for 'debug zip'.
+	ApplicationInternalRPCPortMin int
+	ApplicationInternalRPCPortMax int
 
 	// JoinAddr is the address of a node we are joining.
 	//

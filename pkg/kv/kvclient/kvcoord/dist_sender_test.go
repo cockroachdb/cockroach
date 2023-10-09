@@ -617,7 +617,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 
 	txn := roachpb.MakeTransaction(
 		"test", nil /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority,
-		clock.Now(), clock.MaxOffset().Nanoseconds(), int32(ds.getNodeID()), 0,
+		clock.Now(), clock.MaxOffset().Nanoseconds(), int32(ds.nodeIDGetter()), 0,
 	)
 	origTxnTs := txn.WriteTimestamp
 

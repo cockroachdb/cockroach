@@ -464,10 +464,13 @@ define Insert {
 #    insert is not processed through side-effecting expressions.
 #  - there are no self-referencing foreign keys;
 #  - all FK checks can be performed using direct lookups into unique indexes.
+#  - all uniqueness checks can be performed using direct lookups
+#    into an index (could be a key prefix and not the entire key).
 #
-# In this case, the foreign-key checks can run before (or even concurrently
-# with) the insert. If they are run before, the insert is allowed to
-# auto-commit.
+# In this case, the foreign-key and uniqueness checks can run before the insert.
+# Foreign-key checks could potentially be run concurrently with the insert since
+# they are scanning from a different index than is being mutated. If the checks
+# are run before, the insert is allowed to auto-commit.
 define InsertFastPath {
     Rows [][]tree.TypedExpr
     Table cat.Table
@@ -475,6 +478,7 @@ define InsertFastPath {
     ReturnCols exec.TableColumnOrdinalSet
     CheckCols exec.CheckOrdinalSet
     FkChecks []exec.InsertFastPathCheck
+    UniqChecks []exec.InsertFastPathCheck
 
     # If set, the operator will commit the transaction as part of its execution.
     # This is false when executing inside an explicit transaction.

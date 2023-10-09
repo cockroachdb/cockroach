@@ -5,7 +5,7 @@ CREATE FUNCTION f(b INT) RETURNS INT LANGUAGE SQL AS $$ SELECT b + 1 $$;
 /* test */
 EXPLAIN (DDL) ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
 ----
-Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹check_b› CHECK (f(‹b›) > ‹1›);
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹check_b› CHECK (‹f›(‹b›) > ‹1›);
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 2 elements transitioning toward PUBLIC

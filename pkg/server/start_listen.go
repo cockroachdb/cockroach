@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+type RPCListenerFactory func(ctx context.Context, addr, advertiseAddr *string, connName string) (net.Listener, error)
+
 // startListenRPCAndSQL starts the RPC and SQL listeners. It returns:
 //   - The listener for pgwire connections coming over the network. This will be used
 //     to start the SQL server when initialization has completed.
@@ -39,6 +41,7 @@ func startListenRPCAndSQL(
 	cfg BaseConfig,
 	stopper *stop.Stopper,
 	grpc *grpcServer,
+	rpcListenerFactory RPCListenerFactory,
 	enableSQLListener bool,
 ) (
 	sqlListener net.Listener,
@@ -58,7 +61,7 @@ func startListenRPCAndSQL(
 	}
 	if ln == nil {
 		var err error
-		ln, err = ListenAndUpdateAddrs(ctx, &cfg.Addr, &cfg.AdvertiseAddr, rpcChanName)
+		ln, err = rpcListenerFactory(ctx, &cfg.Addr, &cfg.AdvertiseAddr, rpcChanName)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}

@@ -267,6 +267,12 @@ type BaseConfig struct {
 	// AutoConfigProvider provides auto-configuration tasks to apply on
 	// the cluster during server initialization.
 	AutoConfigProvider acprovider.Provider
+
+	// RPCListenerFactory provides an alternate implementation of
+	// ListenAndUpdateAddrs for use when creating gPRC
+	// listeners. This is set by in-memory tenants if the user has
+	// specified port range preferences.
+	RPCListenerFactory RPCListenerFactory
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.

@@ -305,7 +305,7 @@ func (b *Builder) build(e opt.Expr) (_ execPlan, err error) {
 		)
 	}
 
-	canAutoCommit := b.canAutoCommit(rel)
+	canAutoCommit := memo.CanAutoCommit(rel)
 	b.allowAutoCommit = b.allowAutoCommit && canAutoCommit
 
 	// First condition from ConstructFastPathInsert:
