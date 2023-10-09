@@ -1,0 +1,2 @@
+alter_proc_set_schema_stmt ::=
+	'ALTER' 'PROCEDURE' function_with_paramtypes 'SET' 'SCHEMA' schema_name

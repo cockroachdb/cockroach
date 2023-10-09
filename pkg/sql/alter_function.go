@@ -34,15 +34,15 @@ type alterFunctionOptionsNode struct {
 }
 
 type alterFunctionRenameNode struct {
-	n *tree.AlterFunctionRename
+	n *tree.AlterRoutineRename
 }
 
 type alterFunctionSetOwnerNode struct {
-	n *tree.AlterFunctionSetOwner
+	n *tree.AlterRoutineSetOwner
 }
 
 type alterFunctionSetSchemaNode struct {
-	n *tree.AlterFunctionSetSchema
+	n *tree.AlterRoutineSetSchema
 }
 
 type alterFunctionDepExtensionNode struct {
@@ -138,7 +138,7 @@ func (n *alterFunctionOptionsNode) Close(ctx context.Context)           {}
 
 // AlterFunctionRename renames a function.
 func (p *planner) AlterFunctionRename(
-	ctx context.Context, n *tree.AlterFunctionRename,
+	ctx context.Context, n *tree.AlterRoutineRename,
 ) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
@@ -160,6 +160,16 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
+	if !n.n.Procedure && fnDesc.IsProcedure() {
+		return pgerror.Newf(
+			pgcode.UndefinedFunction, "could not find a function named %q", &n.n.Function.FuncName,
+		)
+	}
+	if n.n.Procedure && !fnDesc.IsProcedure() {
+		return pgerror.Newf(
+			pgcode.UndefinedFunction, "could not find a procedure named %q", &n.n.Function.FuncName,
+		)
+	}
 	oldFnName, err := params.p.getQualifiedFunctionName(params.ctx, fnDesc)
 	if err != nil {
 		return err
@@ -173,16 +183,23 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 	maybeExistingFuncObj := fnDesc.ToRoutineObj()
 	maybeExistingFuncObj.FuncName.ObjectName = n.n.NewName
 	existing, err := params.p.matchRoutine(params.ctx, maybeExistingFuncObj,
-		false /* required */, tree.UDFRoutine)
+		false /* required */, tree.UDFRoutine|tree.ProcedureRoutine)
 	if err != nil {
 		return err
 	}
 
 	if existing != nil {
-		return pgerror.Newf(
-			pgcode.DuplicateFunction, "function %s already exists in schema %q",
-			tree.AsString(maybeExistingFuncObj), scDesc.GetName(),
-		)
+		if existing.Type == tree.ProcedureRoutine {
+			return pgerror.Newf(
+				pgcode.DuplicateFunction, "procedure %s already exists in schema %q",
+				tree.AsString(maybeExistingFuncObj), scDesc.GetName(),
+			)
+		} else {
+			return pgerror.Newf(
+				pgcode.DuplicateFunction, "function %s already exists in schema %q",
+				tree.AsString(maybeExistingFuncObj), scDesc.GetName(),
+			)
+		}
 	}
 
 	scDesc.RemoveFunction(fnDesc.GetName(), fnDesc.GetID())
@@ -213,7 +230,7 @@ func (n *alterFunctionRenameNode) Close(ctx context.Context)           {}
 
 // AlterFunctionSetOwner sets a function's owner.
 func (p *planner) AlterFunctionSetOwner(
-	ctx context.Context, n *tree.AlterFunctionSetOwner,
+	ctx context.Context, n *tree.AlterRoutineSetOwner,
 ) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
@@ -231,6 +248,16 @@ func (n *alterFunctionSetOwnerNode) startExec(params runParams) error {
 	fnDesc, err := params.p.mustGetMutableFunctionForAlter(params.ctx, &n.n.Function)
 	if err != nil {
 		return err
+	}
+	if !n.n.Procedure && fnDesc.IsProcedure() {
+		return pgerror.Newf(
+			pgcode.UndefinedFunction, "could not find a function named %q", &n.n.Function.FuncName,
+		)
+	}
+	if n.n.Procedure && !fnDesc.IsProcedure() {
+		return pgerror.Newf(
+			pgcode.UndefinedFunction, "could not find a procedure named %q", &n.n.Function.FuncName,
+		)
 	}
 	newOwner, err := decodeusername.FromRoleSpec(
 		params.p.SessionData(), username.PurposeValidation, n.n.NewOwner,
@@ -274,7 +301,7 @@ func (n *alterFunctionSetOwnerNode) Close(ctx context.Context)           {}
 
 // AlterFunctionSetSchema moves a function to another schema.
 func (p *planner) AlterFunctionSetSchema(
-	ctx context.Context, n *tree.AlterFunctionSetSchema,
+	ctx context.Context, n *tree.AlterRoutineSetSchema,
 ) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
@@ -295,6 +322,16 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	fnDesc, err := params.p.mustGetMutableFunctionForAlter(params.ctx, &n.n.Function)
 	if err != nil {
 		return err
+	}
+	if !n.n.Procedure && fnDesc.IsProcedure() {
+		return pgerror.Newf(
+			pgcode.UndefinedFunction, "could not find a function named %q", &n.n.Function.FuncName,
+		)
+	}
+	if n.n.Procedure && !fnDesc.IsProcedure() {
+		return pgerror.Newf(
+			pgcode.UndefinedFunction, "could not find a procedure named %q", &n.n.Function.FuncName,
+		)
 	}
 	oldFnName, err := params.p.getQualifiedFunctionName(params.ctx, fnDesc)
 	if err != nil {
@@ -341,7 +378,7 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	maybeExistingFuncObj.FuncName.SchemaName = tree.Name(targetSc.GetName())
 	maybeExistingFuncObj.FuncName.ExplicitSchema = true
 	existing, err := params.p.matchRoutine(params.ctx, maybeExistingFuncObj,
-		false /* required */, tree.UDFRoutine)
+		false /* required */, tree.UDFRoutine|tree.ProcedureRoutine)
 	if err != nil {
 		return err
 	}
@@ -404,7 +441,7 @@ func (n *alterFunctionDepExtensionNode) Close(ctx context.Context)           {}
 func (p *planner) mustGetMutableFunctionForAlter(
 	ctx context.Context, routineObj *tree.RoutineObj,
 ) (*funcdesc.Mutable, error) {
-	ol, err := p.matchRoutine(ctx, routineObj, true /*required*/, tree.UDFRoutine)
+	ol, err := p.matchRoutine(ctx, routineObj, true /*required*/, tree.UDFRoutine|tree.ProcedureRoutine)
 	if err != nil {
 		return nil, err
 	}

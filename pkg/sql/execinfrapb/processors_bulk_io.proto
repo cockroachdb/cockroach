@@ -369,24 +369,6 @@ message RestoreDataSpec {
   // NEXT ID: 10.
 }
 
-message SplitAndScatterSpec {
-  // TODO(lidor): job_id is not needed when interoperability with 22.2 is
-  // dropped, the new way to send the job tag is using 'job_tag' in the
-  // SetupFlowRequest message.
-  optional int64 job_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
-  message RestoreEntryChunk {
-    repeated RestoreSpanEntry entries = 1 [(gogoproto.nullable) = false];
-  }
-
-  repeated RestoreEntryChunk chunks = 1 [(gogoproto.nullable) = false];
-  repeated TableRekey table_rekeys = 2 [(gogoproto.nullable) = false];
-  repeated TenantRekey tenant_rekeys = 3 [(gogoproto.nullable) = false];
-  reserved 5;
-  optional bool validate_only = 6 [(gogoproto.nullable) = false];
-
-  // NEXTID: 7.
-}
-
 // ExporterSpec is the specification for a processor that consumes rows and
 // writes them to Parquet or CSV files at uri. It outputs a row per file written with
 // the file name, row count and byte size.

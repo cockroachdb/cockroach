@@ -48,6 +48,10 @@ type Watcher struct {
 
 		store  map[roachpb.TenantID]*watcherEntry
 		byName map[roachpb.TenantName]roachpb.TenantID
+
+		// anyChangeChs is closed on any change to the set of
+		// tenants.
+		anyChangeCh chan struct{}
 	}
 
 	// startCh is closed once the rangefeed starts.
@@ -105,6 +109,7 @@ func New(
 	w.initialScan.ch = make(chan struct{})
 	w.mu.store = make(map[roachpb.TenantID]*watcherEntry)
 	w.mu.byName = make(map[roachpb.TenantName]roachpb.TenantID)
+	w.mu.anyChangeCh = make(chan struct{})
 	return w
 }
 
@@ -156,6 +161,23 @@ func (w *Watcher) GetCapabilities(
 		return cp.TenantCapabilities, true
 	}
 	return nil, false
+}
+
+// GetAllTenants returns all known tenant entries and a channel that
+// is closed if any of the tenants change or any tenants are added or
+// removed.
+func (w *Watcher) GetAllTenants() ([]tenantcapabilities.Entry, <-chan struct{}) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	entries := make([]tenantcapabilities.Entry, 0, len(w.mu.store))
+	for _, v := range w.mu.store {
+		if v.Entry != nil {
+			entries = append(entries, *v.Entry)
+		}
+	}
+
+	return entries, w.mu.anyChangeCh
 }
 
 // GetGlobalCapabilityState implements the tenantcapabilities.Reader interface.
@@ -278,6 +300,17 @@ func (w *Watcher) handleUpdate(ctx context.Context, u rangefeedcache.Update) {
 		err := errors.AssertionFailedf("unknown update type: %v", u.Type)
 		logcrash.ReportOrPanic(ctx, &w.st.SV, "%w", err)
 	}
+
+	if len(updates) > 0 {
+		w.closeAnyChangeCh()
+	}
+}
+
+func (w *Watcher) closeAnyChangeCh() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	close(w.mu.anyChangeCh)
+	w.mu.anyChangeCh = make(chan struct{})
 }
 
 func (w *Watcher) handleCompleteUpdate(ctx context.Context, updates []tenantcapabilities.Update) {
