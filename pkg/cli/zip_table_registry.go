@@ -576,6 +576,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"waiting_txn_fingerprint_id",
 			"contention_duration",
 			"IF(crdb_internal.is_system_table_key(contending_key), crdb_internal.pretty_key(contending_key, 0) ,'redacted') as contending_pretty_key",
+			"contention_type",
 		},
 	},
 	"crdb_internal.zones": {

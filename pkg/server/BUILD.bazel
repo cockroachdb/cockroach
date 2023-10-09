@@ -67,6 +67,7 @@ go_library(
         "span_stats_server.go",
         "sql_stats.go",
         "start_listen.go",
+        "statement_details.go",
         "statement_diagnostics_requests.go",
         "statements.go",
         "status.go",

@@ -35,8 +35,8 @@ var StoreCapacity = settings.RegisterByteSizeSetting(
 	64*1024*1024, // 64 MB per node.
 	settings.WithPublic)
 
-// DurationThreshold is the cluster setting for the threshold of
-// contention durations. Only the contention events whose duration exceeds the
+// DurationThreshold is the cluster setting for the threshold of LOCK_WAIT
+// contention event durations. Only the contention events whose duration exceeds the
 // threshold will be collected into crdb_internal.transaction_contention_events.
 var DurationThreshold = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
@@ -45,3 +45,12 @@ var DurationThreshold = settings.RegisterDurationSetting(
 		"into crdb_internal.transaction_contention_events",
 	0,
 	settings.WithPublic)
+
+// EnableSerializationConflictEvents is the cluster setting to enable recording
+// SERIALIZATION_CONFLICT contention events to the event store.
+var EnableSerializationConflictEvents = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.contention.record_serialization_conflicts.enabled",
+	"enables recording 40001 errors with conflicting txn meta as SERIALIZATION_CONFLICT"+
+		"contention events into crdb_internal.transaction_contention_events",
+	false)
