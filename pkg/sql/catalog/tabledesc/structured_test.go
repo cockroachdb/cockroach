@@ -642,6 +642,7 @@ func TestUnvalidateConstraints(t *testing.T) {
 	ctx := context.Background()
 
 	desc := NewBuilder(&descpb.TableDescriptor{
+		ID:               2,
 		Name:             "test",
 		ParentID:         descpb.ID(1),
 		NextConstraintID: 2,
@@ -654,10 +655,13 @@ func TestUnvalidateConstraints(t *testing.T) {
 		Privileges:    catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),
 		OutboundFKs: []descpb.ForeignKeyConstraint{
 			{
-				Name:              "fk",
-				ReferencedTableID: descpb.ID(1),
-				Validity:          descpb.ConstraintValidity_Validated,
-				ConstraintID:      1,
+				Name:                "fk",
+				ReferencedTableID:   descpb.ID(1),
+				Validity:            descpb.ConstraintValidity_Validated,
+				ConstraintID:        1,
+				OriginTableID:       2,
+				OriginColumnIDs:     []descpb.ColumnID{1},
+				ReferencedColumnIDs: []descpb.ColumnID{1},
 			},
 		},
 	}).BuildCreatedMutableTable()
