@@ -495,7 +495,7 @@ func (node *AlterFunctionRename) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER FUNCTION ")
 	ctx.FormatNode(&node.Function)
 	ctx.WriteString(" RENAME TO ")
-	ctx.WriteString(string(node.NewName))
+	ctx.FormatNode(&node.NewName)
 }
 
 // AlterFunctionSetSchema represents a ALTER FUNCTION...SET SCHEMA statement.
@@ -509,7 +509,7 @@ func (node *AlterFunctionSetSchema) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER FUNCTION ")
 	ctx.FormatNode(&node.Function)
 	ctx.WriteString(" SET SCHEMA ")
-	ctx.WriteString(string(node.NewSchemaName))
+	ctx.FormatNode(&node.NewSchemaName)
 }
 
 // AlterFunctionSetOwner represents the ALTER FUNCTION...OWNER TO statement.
