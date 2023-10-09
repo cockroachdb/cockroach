@@ -11,7 +11,11 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -68,6 +72,31 @@ type lockingItem struct {
 
 	// targetsFound is used to validate that we matched all of the lock targets.
 	targetsFound intsets.Fast
+
+	// builders has one lockBuilder for each data source that matched this
+	// item. Each lockBuilder here will become one Lock operator in the plan.
+	builders []*lockBuilder
+}
+
+// lockBuilder is a helper for building Lock operators for a single data
+// source. It keeps track of the PK columns of the table. The same lockBuilder
+// may be referenced by multiple lockingItems.
+type lockBuilder struct {
+	table   opt.TableID
+	keyCols opt.ColList
+}
+
+// newLockBuilder constructs a lockBuilder for the passed table.
+func newLockBuilder(tabMeta *opt.TableMeta) *lockBuilder {
+	primaryIndex := tabMeta.Table.Index(cat.PrimaryIndex)
+	lb := &lockBuilder{
+		table:   tabMeta.MetaID,
+		keyCols: make(opt.ColList, primaryIndex.KeyColumnCount()),
+	}
+	for i := range lb.keyCols {
+		lb.keyCols[i] = lb.table.IndexColumnID(primaryIndex, i)
+	}
+	return lb
 }
 
 // lockingSpec maintains a collection of FOR [KEY] UPDATE/SHARE items that apply
@@ -202,6 +231,49 @@ func (lockCtx *lockingContext) withoutTargets() {
 // > clause within the WITH query.
 func (lm lockingSpec) ignoreLockingForCTE() {}
 
+// analyzeLockArgs analyzes all locking clauses currently in scope and adds the
+// PK columns needed for those clauses to lockScope.
+func (b *Builder) analyzeLockArgs(
+	lockCtx lockingContext, inScope, projectionsScope *scope,
+) (lockScope *scope) {
+	if !b.shouldBuildLockOp() {
+		return nil
+	}
+
+	// Get all the PK cols of all lockBuilders in scope.
+	var pkCols opt.ColSet
+	for _, item := range lockCtx.lockScope {
+		for _, lb := range item.builders {
+			for _, col := range lb.keyCols {
+				pkCols.Add(col)
+			}
+		}
+	}
+
+	if pkCols.Empty() {
+		return nil
+	}
+
+	lockScope = inScope.push()
+	lockScope.cols = make([]scopeColumn, 0, pkCols.Len())
+
+	for i := range inScope.cols {
+		if pkCols.Contains(inScope.cols[i].id) {
+			lockScope.appendColumn(&inScope.cols[i])
+		}
+	}
+	return lockScope
+}
+
+// buildLockArgs adds the PK columns needed for all locking clauses currently in
+// scope to the projectionsScope.
+func (b *Builder) buildLockArgs(inScope, projectionsScope, lockScope *scope) {
+	if lockScope == nil {
+		return
+	}
+	projectionsScope.addExtraColumns(lockScope.cols)
+}
+
 // validate checks that the locking item is well-formed, and that all of its
 // targets matched a data source in the FROM clause.
 func (item *lockingItem) validate() {
@@ -267,6 +339,65 @@ func (item *lockingItem) validate() {
 			))
 		}
 	}
+}
+
+// shouldUseGuaranteedDurability returns whether we should use
+// guaranteed-durable locking for SELECT FOR UPDATE, SELECT FOR SHARE, or
+// constraint checks.
+func (b *Builder) shouldUseGuaranteedDurability() bool {
+	return b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V23_2) &&
+		(b.evalCtx.TxnIsoLevel != isolation.Serializable ||
+			b.evalCtx.SessionData().DurableLockingForSerializable)
+}
+
+// shouldBuildLockOp returns whether we should use the Lock operator for SELECT
+// FOR UPDATE or SELECT FOR SHARE.
+func (b *Builder) shouldBuildLockOp() bool {
+	return b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V23_2) &&
+		(b.evalCtx.TxnIsoLevel != isolation.Serializable ||
+			b.evalCtx.SessionData().OptimizerUseLockOpForSerializable)
+}
+
+// buildLocking constructs one Lock operator for each data source that this
+// lockingItem applied to.
+func (b *Builder) buildLocking(item *lockingItem, inScope *scope) {
+	locking := lockingSpec{item}.get()
+	// Under weaker isolation levels we use fully-durable locks for SELECT FOR
+	// UPDATE.
+	if b.shouldUseGuaranteedDurability() {
+		locking.Durability = tree.LockDurabilityGuaranteed
+	}
+	for i := range item.builders {
+		b.buildLock(item.builders[i], locking, inScope)
+	}
+}
+
+// buildLock constructs a Lock operator for a single data source at a single
+// locking strength.
+func (b *Builder) buildLock(lb *lockBuilder, locking opt.Locking, inScope *scope) {
+	md := b.factory.Metadata()
+	tab := md.Table(lb.table)
+	private := &memo.LockPrivate{
+		Table:   lb.table,
+		Locking: locking,
+		KeyCols: lb.keyCols,
+		Cols:    inScope.colSetWithExtraCols(),
+	}
+	// Validate that all of the PK cols are found within the input scope.
+	scopeCols := private.Cols
+	for _, keyCol := range private.KeyCols {
+		if !scopeCols.Contains(keyCol) {
+			panic(errors.AssertionFailedf("cols missing key column %d", keyCol))
+		}
+	}
+	if private.Locking.WaitPolicy == tree.LockWaitSkipLocked && tab.FamilyCount() > 1 {
+		// TODO(rytaft): We may be able to support this if enough columns are
+		// pruned that only a single family is scanned.
+		panic(pgerror.Newf(pgcode.FeatureNotSupported,
+			"SKIP LOCKED cannot be used for tables with multiple column families",
+		))
+	}
+	inScope.expr = b.factory.ConstructLock(inScope.expr, private)
 }
 
 // lockingSpecForClause converts a lockingClause to a lockingSpec.

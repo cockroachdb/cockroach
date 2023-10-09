@@ -1134,3 +1134,26 @@ func unwrapProjectExprs(input memo.RelExpr) memo.RelExpr {
 	}
 	return input
 }
+
+func (b *Builder) buildLock(lock *memo.LockExpr) (execPlan, error) {
+	// Don't bother creating the lookup join if we don't need it.
+	locking, err := b.buildLocking(lock.Locking)
+	if err != nil {
+		return execPlan{}, err
+	}
+	if !locking.IsLocking() {
+		return b.buildRelational(lock.Input)
+	}
+
+	private := &memo.LookupJoinPrivate{
+		JoinType:              opt.SemiJoinOp,
+		Table:                 lock.Table,
+		Index:                 cat.PrimaryIndex,
+		KeyCols:               lock.KeyCols,
+		Cols:                  lock.Cols,
+		LookupColsAreTableKey: true,
+		Locking:               locking,
+	}
+	join := lock.Memo().MemoizeLookupJoin(lock.Input, nil /* on */, private)
+	return b.buildLookupJoin(join.(*memo.LookupJoinExpr))
+}

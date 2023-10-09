@@ -346,3 +346,50 @@ define UniqueChecksItemPrivate {
     # in the error message.
     KeyCols ColList
 }
+
+# Lock evaluates a relational input expression, and locks rows in the given
+# table based on primary key columns provided by the input expression. Lock is
+# produced by FOR UPDATE and FOR SHARE clauses on SELECT statements:
+#
+#   SELECT * FROM ab WHERE a > 0 ORDER BY b LIMIT 10 FOR UPDATE
+#
+# The locking strength, wait policy, form, and durability are specified by the
+# operator, meaning that a single Lock operator represents locking one table at
+# one strength. A single statement using FOR UPDATE or FOR SHARE may require
+# multiple Lock operators in order to lock multiple tables, or even to lock the
+# same table at multiple different strengths.
+#
+# The input expression is prohibited from using certain operations such as outer
+# joins and aggregations in order to clarify the semantics of which rows are
+# locked. Outside of these prohibitions the input can be arbitrary, including
+# inner joins and subqueries, but must provide the primary key columns of the
+# table being locked.
+#
+# The Lock operator does not necessarily have to be at the top of a plan. It
+# could appear within a subtree of the plan, and in this case acts as an
+# optimization barrier to ensure the correct rows are locked.
+[Relational, Mutation]
+define Lock {
+    Input RelExpr
+    _ LockPrivate
+}
+
+[Private]
+define LockPrivate {
+    # Table identifies the table to lock. Currently only the primary index of
+    # the table is locked.
+    Table TableID
+
+    # Locking represents the row-level locking mode to use when locking the
+    # primary index.
+    Locking Locking
+
+    # KeyCols are the primary key columns produced by the input, used to lookup
+    # into the primary index of the table. They must be in the same order as the
+    # primary key columns of the table.
+    KeyCols ColList
+
+    # Cols is the set of columns from the input expression returned by the Lock
+    # operator. Cols contains all of the KeyCols.
+    Cols ColSet
+}
