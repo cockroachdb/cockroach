@@ -37,7 +37,7 @@ ALTER FUNCTION f(int) RENAME TO g
 ALTER FUNCTION f(IN INT8) RENAME TO g -- normalized!
 ALTER FUNCTION f(IN INT8) RENAME TO g -- fully parenthesized
 ALTER FUNCTION f(IN INT8) RENAME TO g -- literals removed
-ALTER FUNCTION _(IN INT8) RENAME TO g -- identifiers removed
+ALTER FUNCTION _(IN INT8) RENAME TO _ -- identifiers removed
 
 parse
 ALTER FUNCTION f(int) OWNER TO CURRENT_USER
@@ -53,7 +53,7 @@ ALTER FUNCTION f(int) SET SCHEMA test_sc
 ALTER FUNCTION f(IN INT8) SET SCHEMA test_sc -- normalized!
 ALTER FUNCTION f(IN INT8) SET SCHEMA test_sc -- fully parenthesized
 ALTER FUNCTION f(IN INT8) SET SCHEMA test_sc -- literals removed
-ALTER FUNCTION _(IN INT8) SET SCHEMA test_sc -- identifiers removed
+ALTER FUNCTION _(IN INT8) SET SCHEMA _ -- identifiers removed
 
 parse
 ALTER FUNCTION f(int) DEPENDS ON EXTENSION postgis
