@@ -4130,9 +4130,14 @@ func MVCCDeleteRangeUsingTombstone(
 	return nil
 }
 
+type iteratorWithStats interface {
+	// Stats returns statistics about the iterator.
+	Stats() IteratorStats
+}
+
 // recordIteratorStats updates the provided ScanStats (which is assumed to be
 // non-nil) with the MVCC stats from iter.
-func recordIteratorStats(iter MVCCIterator, scanStats *kvpb.ScanStats) {
+func recordIteratorStats(iter iteratorWithStats, scanStats *kvpb.ScanStats) {
 	iteratorStats := iter.Stats()
 	stats := &iteratorStats.Stats
 	steps := stats.ReverseStepCount[pebble.InterfaceCall] + stats.ForwardStepCount[pebble.InterfaceCall]
@@ -7318,7 +7323,23 @@ func mvccExportToWriter(
 	if err != nil {
 		return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, err
 	}
-	defer iter.Close()
+	defer func() {
+		if opts.ScanStats != nil {
+			recordIteratorStats(iter, opts.ScanStats)
+			opts.ScanStats.NumScans = 1
+		}
+		// ExportRequests can sometimes be slow and exceed the deadline.
+		// Explicitly log the iterator stats if canceled.
+		if log.V(1) {
+			select {
+			case <-ctx.Done():
+				stats := iter.Stats()
+				log.Errorf(ctx, "export exceeded deadline, stats: %v", stats.Stats)
+			default:
+			}
+		}
+		iter.Close()
+	}()
 
 	paginated := opts.TargetSize > 0
 	hasElasticCPULimiter := elasticCPUHandle != nil
@@ -7681,6 +7702,10 @@ type MVCCExportOptions struct {
 	// FingerprintOptions controls how fingerprints are generated
 	// when using MVCCExportFingerprint.
 	FingerprintOptions MVCCExportFingerprintOptions
+	// ScanStats contains stats about the read/scan performed. Only the iterator
+	// stats are populated, i.e., {NumGets,NumReverseScans} are not populated,
+	// and NumScans is hard-coded to 1.
+	ScanStats *kvpb.ScanStats
 }
 
 type MVCCExportFingerprintOptions struct {
