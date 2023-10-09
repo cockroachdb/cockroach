@@ -24,10 +24,10 @@ SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
 query T
 EXPLAIN (OPT) SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE
 ----
-project
+lock supermarket
+ ├── locking: for-update,durability-guaranteed
  └── scan supermarket
-      ├── constraint: /1: [/'matilda' - /'matilda']
-      └── locking: for-update,durability-guaranteed
+      └── constraint: /1: [/'matilda' - /'matilda']
 
 query T
 EXPLAIN (VERBOSE) SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE
@@ -38,13 +38,20 @@ vectorized: true
 • project
 │ columns: (aisle)
 │
-└── • scan
-      columns: (person, aisle)
-      estimated row count: 1 (missing stats)
-      table: supermarket@supermarket_pkey
-      spans: /"matilda"/0
-      locking strength: for update
-      locking durability: guaranteed
+└── • lookup join (semi)
+    │ columns: (person, aisle)
+    │ estimated row count: 1 (missing stats)
+    │ table: supermarket@supermarket_pkey
+    │ equality: (person) = (person)
+    │ equality cols are key
+    │ locking strength: for update
+    │ locking durability: guaranteed
+    │
+    └── • scan
+          columns: (person, aisle)
+          estimated row count: 1 (missing stats)
+          table: supermarket@supermarket_pkey
+          spans: /"matilda"/0
 
 query T
 EXPLAIN (OPT)
@@ -59,9 +66,10 @@ update supermarket
       └── projections
            └── subquery
                 └── project
-                     └── scan supermarket
-                          ├── constraint: /13: [/'matilda' - /'matilda']
-                          └── locking: for-update,durability-guaranteed
+                     └── lock supermarket
+                          ├── locking: for-update,durability-guaranteed
+                          └── scan supermarket
+                               └── constraint: /13: [/'matilda' - /'matilda']
 
 query T
 EXPLAIN (VERBOSE)
@@ -80,7 +88,6 @@ vectorized: true
 │   │ estimated row count: 0 (missing stats)
 │   │ table: supermarket
 │   │ set: aisle
-│   │ auto commit
 │   │
 │   └── • render
 │       │ columns: (person, aisle, starts_with, ends_with, aisle_new)
@@ -105,13 +112,21 @@ vectorized: true
     └── • project
         │ columns: (aisle)
         │
-        └── • scan
-              columns: (person, aisle)
-              estimated row count: 1 (missing stats)
-              table: supermarket@supermarket_pkey
-              spans: /"matilda"/0
-              locking strength: for update
-              locking durability: guaranteed
+        └── • lookup join (semi)
+            │ columns: (person, aisle)
+            │ estimated row count: 1 (missing stats)
+            │ table: supermarket@supermarket_pkey
+            │ equality: (person) = (person)
+            │ equality cols are key
+            │ locking strength: for update
+            │ locking durability: guaranteed
+            │
+            └── • scan
+                  columns: (person, aisle)
+                  estimated row count: 1 (missing stats)
+                  table: supermarket@supermarket_pkey
+                  spans: /"matilda"/0
+                  locking strength: for update
 
 query T
 EXPLAIN (OPT)
@@ -121,9 +136,10 @@ SELECT aisle + 1 FROM s
 ----
 with &1 (s)
  ├── project
- │    └── scan supermarket
- │         ├── constraint: /1: [/'matilda' - /'matilda']
- │         └── locking: for-update,durability-guaranteed
+ │    └── lock supermarket
+ │         ├── locking: for-update,durability-guaranteed
+ │         └── scan supermarket
+ │              └── constraint: /1: [/'matilda' - /'matilda']
  └── project
       ├── with-scan &1 (s)
       └── projections
@@ -162,13 +178,20 @@ vectorized: true
         └── • project
             │ columns: (aisle)
             │
-            └── • scan
-                  columns: (person, aisle)
-                  estimated row count: 1 (missing stats)
-                  table: supermarket@supermarket_pkey
-                  spans: /"matilda"/0
-                  locking strength: for update
-                  locking durability: guaranteed
+            └── • lookup join (semi)
+                │ columns: (person, aisle)
+                │ estimated row count: 1 (missing stats)
+                │ table: supermarket@supermarket_pkey
+                │ equality: (person) = (person)
+                │ equality cols are key
+                │ locking strength: for update
+                │ locking durability: guaranteed
+                │
+                └── • scan
+                      columns: (person, aisle)
+                      estimated row count: 1 (missing stats)
+                      table: supermarket@supermarket_pkey
+                      spans: /"matilda"/0
 
 query T
 EXPLAIN (OPT)
@@ -183,13 +206,14 @@ with &1 (names)
  ├── materialized
  ├── values
  │    └── ('matilda',)
- └── project
-      └── inner-join (lookup supermarket)
-           ├── flags: force lookup join (into right side)
-           ├── lookup columns are key
-           ├── locking: for-update,durability-guaranteed
-           ├── with-scan &1 (names)
-           └── filters (true)
+ └── lock supermarket
+      ├── locking: for-update,durability-guaranteed
+      └── project
+           └── inner-join (lookup supermarket)
+                ├── flags: force lookup join (into right side)
+                ├── lookup columns are key
+                ├── with-scan &1 (names)
+                └── filters (true)
 
 query T
 EXPLAIN (VERBOSE)
@@ -209,8 +233,8 @@ vectorized: true
 ├── • project
 │   │ columns: (aisle)
 │   │
-│   └── • lookup join (inner)
-│       │ columns: (person, person, aisle)
+│   └── • lookup join (semi)
+│       │ columns: (person, aisle)
 │       │ estimated row count: 1 (missing stats)
 │       │ table: supermarket@supermarket_pkey
 │       │ equality: (person) = (person)
@@ -218,10 +242,20 @@ vectorized: true
 │       │ locking strength: for update
 │       │ locking durability: guaranteed
 │       │
-│       └── • scan buffer
-│             columns: (person)
-│             estimated row count: 1
-│             label: buffer 1 (names)
+│       └── • project
+│           │ columns: (person, aisle)
+│           │
+│           └── • lookup join (inner)
+│               │ columns: (person, person, aisle)
+│               │ estimated row count: 1 (missing stats)
+│               │ table: supermarket@supermarket_pkey
+│               │ equality: (person) = (person)
+│               │ equality cols are key
+│               │
+│               └── • scan buffer
+│                     columns: (person)
+│                     estimated row count: 1
+│                     label: buffer 1 (names)
 │
 └── • subquery
     │ id: @S1
@@ -244,13 +278,13 @@ SELECT aisle
   WHERE starts_with = 'm'
   FOR UPDATE
 ----
-project
- └── index-join supermarket
-      ├── locking: for-update,durability-guaranteed
-      └── scan supermarket@supermarket_starts_with_idx
-           ├── constraint: /3/1: [/'m' - /'m']
-           ├── flags: force-index=supermarket_starts_with_idx
-           └── locking: for-update,durability-guaranteed
+lock supermarket
+ ├── locking: for-update,durability-guaranteed
+ └── project
+      └── index-join supermarket
+           └── scan supermarket@supermarket_starts_with_idx
+                ├── constraint: /3/1: [/'m' - /'m']
+                └── flags: force-index=supermarket_starts_with_idx
 
 query T
 EXPLAIN (VERBOSE)
@@ -265,21 +299,29 @@ vectorized: true
 • project
 │ columns: (aisle)
 │
-└── • index join
-    │ columns: (aisle, starts_with)
+└── • lookup join (semi)
+    │ columns: (person, aisle)
     │ estimated row count: 10 (missing stats)
     │ table: supermarket@supermarket_pkey
-    │ key columns: person
+    │ equality: (person) = (person)
+    │ equality cols are key
     │ locking strength: for update
     │ locking durability: guaranteed
     │
-    └── • scan
-          columns: (person, starts_with)
-          estimated row count: 10 (missing stats)
-          table: supermarket@supermarket_starts_with_idx
-          spans: /"m"-/"m"/PrefixEnd
-          locking strength: for update
-          locking durability: guaranteed
+    └── • project
+        │ columns: (person, aisle)
+        │
+        └── • index join
+            │ columns: (person, aisle, starts_with)
+            │ estimated row count: 10 (missing stats)
+            │ table: supermarket@supermarket_pkey
+            │ key columns: person
+            │
+            └── • scan
+                  columns: (person, starts_with)
+                  estimated row count: 10 (missing stats)
+                  table: supermarket@supermarket_starts_with_idx
+                  spans: /"m"-/"m"/PrefixEnd
 
 statement ok
 SET enable_zigzag_join = true
@@ -291,17 +333,16 @@ SELECT aisle
   WHERE starts_with = 'm' AND ends_with = 'lda'
   FOR UPDATE
 ----
-project
- └── inner-join (lookup supermarket)
-      ├── lookup columns are key
-      ├── locking: for-update,durability-guaranteed
-      ├── inner-join (zigzag supermarket@supermarket_starts_with_idx supermarket@supermarket_ends_with_idx)
-      │    ├── left locking: for-update,durability-guaranteed
-      │    ├── right locking: for-update,durability-guaranteed
-      │    └── filters
-      │         ├── starts_with = 'm'
-      │         └── ends_with = 'lda'
-      └── filters (true)
+lock supermarket
+ ├── locking: for-update,durability-guaranteed
+ └── project
+      └── inner-join (lookup supermarket)
+           ├── lookup columns are key
+           ├── inner-join (zigzag supermarket@supermarket_starts_with_idx supermarket@supermarket_ends_with_idx)
+           │    └── filters
+           │         ├── starts_with = 'm'
+           │         └── ends_with = 'lda'
+           └── filters (true)
 
 query T
 EXPLAIN (VERBOSE)
@@ -316,35 +357,38 @@ vectorized: true
 • project
 │ columns: (aisle)
 │
-└── • project
-    │ columns: (aisle, starts_with, ends_with)
+└── • lookup join (semi)
+    │ columns: (person, aisle)
+    │ estimated row count: 1 (missing stats)
+    │ table: supermarket@supermarket_pkey
+    │ equality: (person) = (person)
+    │ equality cols are key
+    │ locking strength: for update
+    │ locking durability: guaranteed
     │
-    └── • lookup join (inner)
-        │ columns: (person, starts_with, ends_with, aisle)
-        │ estimated row count: 1 (missing stats)
-        │ table: supermarket@supermarket_pkey
-        │ equality: (person) = (person)
-        │ equality cols are key
-        │ locking strength: for update
-        │ locking durability: guaranteed
+    └── • project
+        │ columns: (person, aisle)
         │
-        └── • project
-            │ columns: (person, starts_with, ends_with)
+        └── • lookup join (inner)
+            │ columns: (person, starts_with, ends_with, aisle)
+            │ estimated row count: 1 (missing stats)
+            │ table: supermarket@supermarket_pkey
+            │ equality: (person) = (person)
+            │ equality cols are key
             │
-            └── • zigzag join
-                  columns: (person, starts_with, person, ends_with)
-                  estimated row count: 1 (missing stats)
-                  pred: (starts_with = 'm') AND (ends_with = 'lda')
-                  left table: supermarket@supermarket_starts_with_idx
-                  left columns: (person, starts_with)
-                  left fixed values: 1 column
-                  left locking strength: for update
-                  left locking durability: guaranteed
-                  right table: supermarket@supermarket_ends_with_idx
-                  right columns: (person, ends_with)
-                  right fixed values: 1 column
-                  right locking strength: for update
-                  right locking durability: guaranteed
+            └── • project
+                │ columns: (person, starts_with, ends_with)
+                │
+                └── • zigzag join
+                      columns: (person, starts_with, person, ends_with)
+                      estimated row count: 1 (missing stats)
+                      pred: (starts_with = 'm') AND (ends_with = 'lda')
+                      left table: supermarket@supermarket_starts_with_idx
+                      left columns: (person, starts_with)
+                      left fixed values: 1 column
+                      right table: supermarket@supermarket_ends_with_idx
+                      right columns: (person, ends_with)
+                      right fixed values: 1 column
 
 statement ok
 RESET enable_zigzag_join
