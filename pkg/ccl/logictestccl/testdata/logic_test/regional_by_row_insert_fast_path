@@ -186,3 +186,18 @@ INTO
   hash_sharded_rbr_computed (region_id, my_uuid, my_uuid2, another_id, row_ts)
 VALUES
   ('ap1234', gen_random_uuid(), gen_random_uuid(), 1, TIMESTAMP '2016-01-25 10:10:10.555555')
+
+statement ok
+INSERT INTO users (crdb_region, id, id2, username)
+VALUES ('ap-southeast-2', '5ebfedee-0dcf-41e6-a315-5fa0b51b9992', 9, 'Craig Roacher')
+
+statement ok
+SET tracing = on,kv,results; INSERT INTO user_settings2 (id2, user_id, value)
+VALUES (9, '5ebfedee-0dcf-41e6-a315-5fa0b51b9992', 'foo'); SET tracing = off
+
+# The FK and uniqueness checks should be bundled in a single batch of scans.
+query T rowsort
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%batch%' AND message LIKE '%Scan%'
+----
+r67: sending batch 4 Scan to (n1,s1):1
