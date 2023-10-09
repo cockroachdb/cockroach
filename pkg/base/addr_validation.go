@@ -83,11 +83,6 @@ func (cfg *Config) ValidateAddrs(ctx context.Context) error {
 	}
 	cfg.HTTPAddr = net.JoinHostPort(httpHost, httpPort)
 
-	// Validate secondary tenant port configuration.
-	if cfg.SecondaryTenantPortOffset > 0 && cfg.ApplicationInternalRPCPortMin > 0 {
-		return errors.Newf("cannot specify both %s and %s", cliflags.ApplicationInternalRPCPortRange.Name, cliflags.SecondaryTenantPortOffset.Name)
-	}
-
 	return nil
 }
 

@@ -144,11 +144,6 @@ accept requests.`,
 
 	// TODO(knz): Remove this once https://github.com/cockroachdb/cockroach/issues/84604
 	// is addressed.
-	SecondaryTenantPortOffset = FlagInfo{
-		Name:        "secondary-tenant-port-offset",
-		Description: "TCP port number offset to use for the secondary in-memory tenant.",
-	}
-
 	ApplicationInternalRPCPortRange = FlagInfo{
 		Name: "internal-rpc-port-range",
 		Description: `
