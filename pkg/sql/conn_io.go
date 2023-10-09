@@ -765,8 +765,8 @@ type CommandResult interface {
 // query execution error.
 type CommandResultErrBase interface {
 	// SetError accumulates an execution error that needs to be reported to the
-	// client. No further calls other than SetError(), Close() and Discard() are
-	// allowed.
+	// client. Further calls to any methods are allowed but most of them are
+	// noops.
 	//
 	// Calling SetError() a second time overwrites the previously set error.
 	SetError(error)
@@ -832,17 +832,25 @@ type RestrictedCommandResult interface {
 	// ClientComm.createStatementResult.
 	ResetStmtType(stmt tree.Statement)
 
-	// AddRow accumulates a result row.
+	// AddRow writes a result row. The returned error is a "communication error"
+	// which should result in closing the connection.
 	//
 	// The implementation cannot hold on to the row slice; it needs to make a
 	// shallow copy if it needs to.
+	//
+	// If an error has been previously set, this method is a noop, and that
+	// error is not returned on this call.
 	AddRow(ctx context.Context, row tree.Datums) error
 
-	// AddBatch accumulates a result batch.
+	// AddBatch accumulates a result batch. The returned error is a
+	// "communication error" which should result in closing the connection.
 	//
 	// The implementation cannot hold on to the contents of the batch without
 	// deeply copying them. The memory in the input batch is safe to modify as
 	// soon as AddBatch returns.
+	//
+	// If an error has been previously set, this method is a noop, and that
+	// error is not returned on this call.
 	AddBatch(ctx context.Context, batch coldata.Batch) error
 
 	// BufferedResultsLen returns the length of the results buffer.

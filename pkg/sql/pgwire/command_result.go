@@ -62,6 +62,10 @@ type commandResult struct {
 		paramStatusUpdates []paramStatusUpdate
 	}
 
+	// err, if set, is a "regular" query error (i.e. it's not a "communication"
+	// error that would trigger closing the connection). It is set via
+	// SetError() and is not communicated immediately to the client since it can
+	// be updated later.
 	err error
 	// errExpected, if set, enforces that an error had been set when Close is
 	// called.
@@ -216,29 +220,28 @@ func (r *commandResult) SetError(err error) {
 	r.err = err
 }
 
-// beforeAdd should be called before rows are buffered.
-func (r *commandResult) beforeAdd() error {
-	r.assertNotReleased()
-	if r.err != nil {
-		panic(errors.NewAssertionErrorWithWrappedErrf(r.err, "can't call AddRow after having set error"))
-	}
-	r.conn.writerState.fi.registerCmd(r.pos)
-	if err := r.conn.GetErr(); err != nil {
-		return err
-	}
-	if r.err != nil {
-		panic("can't send row after error")
-	}
-	return nil
-}
-
 // JobIdColIdx is based on jobs.BulkJobExecutionResultHeader and
 // jobs.DetachedJobExecutionResultHeader.
 var JobIdColIdx int
 
 // AddRow is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
-	if err := r.beforeAdd(); err != nil {
+	r.assertNotReleased()
+	// TODO(yuzefovich): there is a possibility of a race on r.err between the
+	// main goroutine calling AddRow and the remote flows canceller goroutine
+	// calling DistSQLReceiver.SetError since the former doesn't happen under
+	// the mutex.
+	if r.err != nil {
+		// Since an error was already set, this is a noop.
+		//
+		// Note that we don't return r.err from this function because it's not a
+		// "communication" error (if it were, then it would've been encountered
+		// on a previous AddRow call, and this AddRow call wouldn't have
+		// happened).
+		return nil
+	}
+	r.conn.writerState.fi.registerCmd(r.pos)
+	if err := r.conn.GetErr(); err != nil {
 		return err
 	}
 	switch r.cmdCompleteTag {
@@ -252,7 +255,22 @@ func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 
 // AddBatch is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) AddBatch(ctx context.Context, batch coldata.Batch) error {
-	if err := r.beforeAdd(); err != nil {
+	r.assertNotReleased()
+	// TODO(yuzefovich): there is a possibility of a race on r.err between the
+	// main goroutine calling AddBatch and the remote flows canceller goroutine
+	// calling DistSQLReceiver.SetError since the former doesn't happen under
+	// the mutex.
+	if r.err != nil {
+		// Since an error was already set, this is a noop.
+		//
+		// Note that we don't return r.err from this function because it's not a
+		// "communication" error (if it were, then it would've been encountered
+		// on a previous AddBatch call, and this AddBatch call wouldn't have
+		// happened).
+		return nil
+	}
+	r.conn.writerState.fi.registerCmd(r.pos)
+	if err := r.conn.GetErr(); err != nil {
 		return err
 	}
 	switch r.cmdCompleteTag {
@@ -371,7 +389,12 @@ func (r *commandResult) SendCopyOut(
 
 // SendCopyData is part of the sql.CopyOutResult interface.
 func (r *commandResult) SendCopyData(ctx context.Context, copyData []byte, isHeader bool) error {
-	if err := r.beforeAdd(); err != nil {
+	r.assertNotReleased()
+	if r.err != nil {
+		return r.err
+	}
+	r.conn.writerState.fi.registerCmd(r.pos)
+	if err := r.conn.GetErr(); err != nil {
 		return err
 	}
 	if err := r.conn.bufferCopyData(copyData, r); err != nil {
