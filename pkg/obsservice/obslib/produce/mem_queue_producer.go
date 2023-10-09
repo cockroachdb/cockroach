@@ -23,6 +23,8 @@ type MemQueueProducer[T any] struct {
 	queue *queue.MemoryQueue[T]
 }
 
+var _ EventProducer[any] = (*MemQueueProducer[any])(nil)
+
 // NewMemQueueProducer instantiates and returns a new *MemQueueProducer.
 // The underlying queue.MemoryQueue is injected as a dependency, so that it
 // can also be injected into its corresponding consumer.
