@@ -127,7 +127,7 @@ func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int
 			t.Fatal(err)
 		}
 	}
-	urls, err := c.InternalPGUrl(ctx, t.L(), c.Node(1), "")
+	urls, err := c.InternalPGUrl(ctx, t.L(), c.Node(1), "" /* tenant */, 0 /* sqlInstance */)
 	require.NoError(t, err)
 	m := c.NewMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {
