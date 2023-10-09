@@ -77,6 +77,13 @@ type externalResource interface {
 	getConcreteType() sinkType
 }
 
+// RowMeta is a struct containing metadata fields related to a row
+// which the sink may choose to emit along with the row.
+type RowMeta struct {
+	updated, mvcc hlc.Timestamp
+	tableName     string
+}
+
 // EventSink is the interface used when emitting changefeed events
 // and ensuring they were received.
 type EventSink interface {
@@ -84,13 +91,7 @@ type EventSink interface {
 
 	// EmitRow enqueues a row message for asynchronous delivery on the sink. An
 	// error may be returned if a previously enqueued message has failed.
-	EmitRow(
-		ctx context.Context,
-		topic TopicDescriptor,
-		key, value []byte,
-		updated, mvcc hlc.Timestamp,
-		alloc kvevent.Alloc,
-	) error
+	EmitRow(ctx context.Context, topic TopicDescriptor, key, value []byte, rowMeta RowMeta, alloc kvevent.Alloc) error
 
 	// Flush blocks until every message enqueued by EmitRow
 	// has been acknowledged by the sink. If an error is
@@ -412,10 +413,10 @@ func (s errorWrapperSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
-	updated, mvcc hlc.Timestamp,
+	rowMeta RowMeta,
 	alloc kvevent.Alloc,
 ) error {
-	if err := s.wrapped.(EventSink).EmitRow(ctx, topic, key, value, updated, mvcc, alloc); err != nil {
+	if err := s.wrapped.(EventSink).EmitRow(ctx, topic, key, value, rowMeta, alloc); err != nil {
 		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil
@@ -500,14 +501,10 @@ func (s *bufferSink) getConcreteType() sinkType {
 
 // EmitRow implements the Sink interface.
 func (s *bufferSink) EmitRow(
-	ctx context.Context,
-	topic TopicDescriptor,
-	key, value []byte,
-	updated, mvcc hlc.Timestamp,
-	r kvevent.Alloc,
+	ctx context.Context, topic TopicDescriptor, key, value []byte, rowMeta RowMeta, r kvevent.Alloc,
 ) error {
 	defer r.Release(ctx)
-	defer s.metrics.recordOneMessage()(mvcc, len(key)+len(value), sinkDoesNotCompress)
+	defer s.metrics.recordOneMessage()(rowMeta.mvcc, len(key)+len(value), sinkDoesNotCompress)
 
 	if s.closed {
 		return errors.New(`cannot EmitRow on a closed sink`)
@@ -611,19 +608,15 @@ func (n *nullSink) pace(ctx context.Context) error {
 
 // EmitRow implements Sink interface.
 func (n *nullSink) EmitRow(
-	ctx context.Context,
-	topic TopicDescriptor,
-	key, value []byte,
-	updated, mvcc hlc.Timestamp,
-	r kvevent.Alloc,
+	ctx context.Context, topic TopicDescriptor, key, value []byte, rowMeta RowMeta, r kvevent.Alloc,
 ) error {
 	defer r.Release(ctx)
-	defer n.metrics.recordOneMessage()(mvcc, len(key)+len(value), sinkDoesNotCompress)
+	defer n.metrics.recordOneMessage()(rowMeta.mvcc, len(key)+len(value), sinkDoesNotCompress)
 	if err := n.pace(ctx); err != nil {
 		return err
 	}
 	if log.V(2) {
-		log.Infof(ctx, "emitting row %s@%s", key, updated.String())
+		log.Infof(ctx, "emitting row %s@%s", key, rowMeta.updated.String())
 	}
 	return nil
 }
@@ -692,12 +685,12 @@ func (s *safeSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
-	updated, mvcc hlc.Timestamp,
+	rowMeta RowMeta,
 	alloc kvevent.Alloc,
 ) error {
 	s.Lock()
 	defer s.Unlock()
-	return s.wrapped.EmitRow(ctx, topic, key, value, updated, mvcc, alloc)
+	return s.wrapped.EmitRow(ctx, topic, key, value, rowMeta, alloc)
 }
 
 func (s *safeSink) Flush(ctx context.Context) error {

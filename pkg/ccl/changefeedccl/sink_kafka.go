@@ -347,7 +347,7 @@ func (s *kafkaSink) EmitRow(
 	ctx context.Context,
 	topicDescr TopicDescriptor,
 	key, value []byte,
-	updated, mvcc hlc.Timestamp,
+	rowMeta RowMeta,
 	alloc kvevent.Alloc,
 ) error {
 	topic, err := s.topics.Name(topicDescr)
@@ -359,7 +359,7 @@ func (s *kafkaSink) EmitRow(
 		Topic:    topic,
 		Key:      sarama.ByteEncoder(key),
 		Value:    sarama.ByteEncoder(value),
-		Metadata: messageMetadata{alloc: alloc, mvcc: mvcc, updateMetrics: s.metrics.recordOneMessage()},
+		Metadata: messageMetadata{alloc: alloc, mvcc: rowMeta.mvcc, updateMetrics: s.metrics.recordOneMessage()},
 	}
 	s.stats.startMessage(int64(msg.Key.Length() + msg.Value.Length()))
 	return s.emitMessage(ctx, msg)

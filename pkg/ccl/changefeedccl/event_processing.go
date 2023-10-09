@@ -454,7 +454,8 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 	alloc.AdjustBytesToTarget(ctx, int64(len(keyCopy)+len(valueCopy)))
 
 	if err := c.sink.EmitRow(
-		ctx, topic, keyCopy, valueCopy, schemaTS, updatedRow.MvccTimestamp, alloc,
+		ctx, topic, keyCopy, valueCopy,
+		RowMeta{updated: schemaTS, mvcc: updatedRow.MvccTimestamp, tableName: updatedRow.TableName}, alloc,
 	); err != nil {
 		return err
 	}

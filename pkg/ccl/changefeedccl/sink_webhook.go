@@ -632,7 +632,7 @@ func (s *deprecatedWebhookSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
-	updated, mvcc hlc.Timestamp,
+	rowMeta RowMeta,
 	alloc kvevent.Alloc,
 ) error {
 	select {
@@ -651,7 +651,7 @@ func (s *deprecatedWebhookSink) EmitRow(
 			val:      value,
 			alloc:    alloc,
 			emitTime: timeutil.Now(),
-			mvcc:     mvcc,
+			mvcc:     rowMeta.mvcc,
 		}}:
 		s.metrics.recordMessageSize(int64(len(key) + len(value)))
 	}

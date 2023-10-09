@@ -548,7 +548,7 @@ func (s *cloudStorageSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
-	updated, mvcc hlc.Timestamp,
+	rowMeta RowMeta,
 	alloc kvevent.Alloc,
 ) (retErr error) {
 	if s.files == nil {
@@ -573,7 +573,7 @@ func (s *cloudStorageSink) EmitRow(
 	}()
 
 	s.metrics.recordMessageSize(int64(len(key) + len(value)))
-	file, err := s.getOrCreateFile(topic, mvcc)
+	file, err := s.getOrCreateFile(topic, rowMeta.mvcc)
 	if err != nil {
 		return err
 	}

@@ -126,11 +126,11 @@ func (s *sqlSink) EmitRow(
 	ctx context.Context,
 	topicDescr TopicDescriptor,
 	key, value []byte,
-	updated, mvcc hlc.Timestamp,
+	rowMeta RowMeta,
 	alloc kvevent.Alloc,
 ) error {
 	defer alloc.Release(ctx)
-	defer s.metrics.recordOneMessage()(mvcc, len(key)+len(value), sinkDoesNotCompress)
+	defer s.metrics.recordOneMessage()(rowMeta.mvcc, len(key)+len(value), sinkDoesNotCompress)
 
 	topic, err := s.topicNamer.Name(topicDescr)
 	if err != nil {

@@ -196,8 +196,7 @@ func (p *deprecatedPubsubSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
-	updated hlc.Timestamp,
-	mvcc hlc.Timestamp,
+	rowMeta RowMeta,
 	alloc kvevent.Alloc,
 ) error {
 	p.metrics.recordMessageSize(int64(len(key) + len(value)))
@@ -207,7 +206,7 @@ func (p *deprecatedPubsubSink) EmitRow(
 		return err
 	}
 	m := pubsubMessage{
-		alloc: alloc, isFlush: false, mvcc: mvcc, message: payload{
+		alloc: alloc, isFlush: false, mvcc: rowMeta.mvcc, message: payload{
 			Key:   key,
 			Value: value,
 			Topic: topicName,

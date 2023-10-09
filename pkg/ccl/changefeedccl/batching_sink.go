@@ -97,8 +97,9 @@ type rowEvent struct {
 	val             []byte
 	topicDescriptor TopicDescriptor
 
+	rowMeta RowMeta
+
 	alloc kvevent.Alloc
-	mvcc  hlc.Timestamp
 }
 
 // Flush implements the Sink interface, returning the first error that has
@@ -171,7 +172,7 @@ func (s *batchingSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
-	updated, mvcc hlc.Timestamp,
+	rowMeta RowMeta,
 	alloc kvevent.Alloc,
 ) error {
 	s.metrics.recordMessageSize(int64(len(key) + len(value)))
@@ -180,7 +181,7 @@ func (s *batchingSink) EmitRow(
 	payload.key = key
 	payload.val = value
 	payload.topicDescriptor = topic
-	payload.mvcc = mvcc
+	payload.rowMeta.mvcc = rowMeta.mvcc
 	payload.alloc = alloc
 
 	select {
@@ -281,8 +282,8 @@ func (sb *sinkBatch) Append(e *rowEvent) {
 	sb.numMessages += 1
 	sb.numKVBytes += len(e.key) + len(e.val)
 
-	if sb.mvcc.IsEmpty() || e.mvcc.Less(sb.mvcc) {
-		sb.mvcc = e.mvcc
+	if sb.mvcc.IsEmpty() || e.rowMeta.mvcc.Less(sb.mvcc) {
+		sb.mvcc = e.rowMeta.mvcc
 	}
 
 	sb.alloc.Merge(&e.alloc)
