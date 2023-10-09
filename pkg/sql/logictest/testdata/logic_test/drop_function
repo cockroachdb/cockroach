@@ -70,8 +70,20 @@ COMMIT;
 statement ok
 ROLLBACK;
 
+statement error pgcode 42883 procedure f_test_drop\(\) does not exist
+DROP PROCEDURE f_test_drop
+
 statement ok
-DROP FUNCTION f_test_drop();
+DROP PROCEDURE IF EXISTS f_test_drop
+
+statement error pgcode 42809 f_test_drop\(\) is not a procedure
+DROP PROCEDURE f_test_drop()
+
+statement error pgcode 42809 f_test_drop\(\) is not a procedure
+DROP PROCEDURE IF EXISTS f_test_drop()
+
+statement ok
+DROP FUNCTION f_test_drop()
 
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_drop];
