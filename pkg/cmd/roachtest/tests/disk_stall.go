@@ -301,8 +301,14 @@ func (s *dmsetupDiskStaller) Setup(ctx context.Context) {
 	dev := s.device()
 	s.c.Run(ctx, s.c.All(), `sudo umount -f /mnt/data1 || true`)
 	s.c.Run(ctx, s.c.All(), `sudo dmsetup remove_all`)
-	s.c.Run(ctx, s.c.All(), `echo "0 $(sudo blockdev --getsz `+dev+`) linear `+dev+` 0" | `+
+	err := s.c.RunE(ctx, s.c.All(), `echo "0 $(sudo blockdev --getsz `+dev+`) linear `+dev+` 0" | `+
 		`sudo dmsetup create data1`)
+	if err != nil {
+		// This has occasionally been seen to fail with "Device or resource busy",
+		// with no clear explanation. Try to find out who it is.
+		s.c.Run(ctx, s.c.All(), "sudo bash -c 'ps aux; dmsetup status; mount; lsof'")
+		s.t.Fatal(err)
+	}
 	s.c.Run(ctx, s.c.All(), `sudo mount /dev/mapper/data1 /mnt/data1`)
 }
 
