@@ -213,20 +213,16 @@ var validationMap = []struct {
 	{
 		obj: descpb.ForeignKeyConstraint{},
 		fieldMap: map[string]validationStatusInfo{
-			"OriginTableID": {status: iSolemnlySwearThisFieldIsValidated},
-			"OriginColumnIDs": {
-				status: todoIAmKnowinglyAddingTechDebt,
-				reason: "initial import: TODO(schema): add validation"},
-			"ReferencedColumnIDs": {
-				status: todoIAmKnowinglyAddingTechDebt,
-				reason: "initial import: TODO(schema): add validation"},
-			"ReferencedTableID": {status: iSolemnlySwearThisFieldIsValidated},
-			"Name":              {status: thisFieldReferencesNoObjects},
-			"Validity":          {status: thisFieldReferencesNoObjects},
-			"OnDelete":          {status: thisFieldReferencesNoObjects},
-			"OnUpdate":          {status: thisFieldReferencesNoObjects},
-			"Match":             {status: thisFieldReferencesNoObjects},
-			"ConstraintID":      {status: iSolemnlySwearThisFieldIsValidated},
+			"OriginTableID":       {status: iSolemnlySwearThisFieldIsValidated},
+			"OriginColumnIDs":     {status: iSolemnlySwearThisFieldIsValidated},
+			"ReferencedColumnIDs": {status: iSolemnlySwearThisFieldIsValidated},
+			"ReferencedTableID":   {status: iSolemnlySwearThisFieldIsValidated},
+			"Name":                {status: thisFieldReferencesNoObjects},
+			"Validity":            {status: thisFieldReferencesNoObjects},
+			"OnDelete":            {status: thisFieldReferencesNoObjects},
+			"OnUpdate":            {status: thisFieldReferencesNoObjects},
+			"Match":               {status: thisFieldReferencesNoObjects},
+			"ConstraintID":        {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 	{
@@ -336,6 +332,60 @@ var validationMap = []struct {
 type validationStatusInfo struct {
 	status validateStatus
 	reason string
+}
+
+// ModifyDescriptor is a helper function that invokes the provided closure with
+// a predefined, valid, TableDescriptor and then returns the modified result.
+// Usage:
+//
+//	testCaseInvalidDecField: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
+//		desc.InboundFKs = nil  // Clear InbounFKs to cause an error.
+//	})
+func ModifyDescriptor(fn func(*descpb.TableDescriptor)) descpb.TableDescriptor {
+	validDesc := descpb.TableDescriptor{
+		ID:            4,
+		ParentID:      1,
+		Name:          "bar",
+		FormatVersion: descpb.InterleavedFormatVersion,
+		Columns: []descpb.ColumnDescriptor{
+			{ID: 1, Name: "bar", Type: types.String},
+		},
+		Families: []descpb.ColumnFamilyDescriptor{
+			{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"bar"}},
+		},
+		PrimaryIndex: descpb.IndexDescriptor{ID: 1, Name: "bar", ConstraintID: 1,
+			KeyColumnIDs: []descpb.ColumnID{1}, KeyColumnNames: []string{"bar"},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+			EncodingType:        catenumpb.PrimaryIndexEncoding,
+			Version:             descpb.LatestIndexDescriptorVersion,
+		},
+		OutboundFKs: []descpb.ForeignKeyConstraint{
+			{
+				ConstraintID:        2,
+				Name:                "to_this_table",
+				OriginTableID:       4,
+				OriginColumnIDs:     []descpb.ColumnID{1},
+				ReferencedTableID:   25,
+				ReferencedColumnIDs: []descpb.ColumnID{2},
+			},
+		},
+		InboundFKs: []descpb.ForeignKeyConstraint{
+			{
+				ConstraintID:        2,
+				Name:                "from_this_table",
+				OriginTableID:       36,
+				OriginColumnIDs:     []descpb.ColumnID{3},
+				ReferencedTableID:   4,
+				ReferencedColumnIDs: []descpb.ColumnID{1},
+			},
+		},
+		NextColumnID:     2,
+		NextFamilyID:     1,
+		NextIndexID:      3,
+		NextConstraintID: 3,
+	}
+	fn(&validDesc)
+	return validDesc
 }
 
 // Hello! If you're seeing this test fail, you probably just added a new
@@ -2839,7 +2889,40 @@ func TestValidateTableDesc(t *testing.T) {
 				NextIndexID:      3,
 				NextConstraintID: 2,
 			}},
+		{err: `invalid outbound foreign key "to_this_table": origin table ID should be 4. got 99`,
+			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
+				desc.OutboundFKs[0].OriginTableID = 99
+			})},
+		{err: `invalid outbound foreign key "to_this_table": no origin columns`,
+			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
+				desc.OutboundFKs[0].OriginColumnIDs = nil
+			})},
+		{err: `invalid outbound foreign key "to_this_table": mismatched number of referenced and origin columns`,
+			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
+				desc.OutboundFKs[0].ReferencedColumnIDs = []descpb.ColumnID{1, 2, 3}
+			})},
+		{err: `invalid outbound foreign key "to_this_table" from table "bar" (4): missing origin column=13`,
+			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
+				desc.OutboundFKs[0].OriginColumnIDs = []descpb.ColumnID{13}
+			})},
+		{err: `invalid inbound foreign key "from_this_table": referenced table ID should be 4. got 99`,
+			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
+				desc.InboundFKs[0].ReferencedTableID = 99
+			})},
+		{err: `invalid inbound foreign key "from_this_table": no referenced columns`,
+			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
+				desc.InboundFKs[0].ReferencedColumnIDs = nil
+			})},
+		{err: `invalid inbound foreign key "from_this_table": mismatched number of referenced and origin columns`,
+			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
+				desc.InboundFKs[0].OriginColumnIDs = []descpb.ColumnID{1, 2, 3}
+			})},
+		{err: `invalid inbound foreign key "from_this_table" to table "bar" (4): missing referenced column=13`,
+			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
+				desc.InboundFKs[0].ReferencedColumnIDs = []descpb.ColumnID{13}
+			})},
 	}
+
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {
 			d.desc.Privileges = catpb.NewBasePrivilegeDescriptor(username.RootUserName())
@@ -2907,6 +2990,9 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				ParentID:                1,
 				UnexposedParentSchemaID: keys.PublicSchemaID,
 				FormatVersion:           descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "foo_1", Type: types.String},
+				},
 				OutboundFKs: []descpb.ForeignKeyConstraint{
 					{
 						Name:                "fk",
@@ -2923,6 +3009,9 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				ParentID:                1,
 				UnexposedParentSchemaID: keys.PublicSchemaID,
 				FormatVersion:           descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "baz_1", Type: types.String},
+				},
 			}},
 		},
 		{ // 2
@@ -2956,6 +3045,9 @@ func TestValidateCrossTableReferences(t *testing.T) {
 					ID:   1,
 					Name: "bar",
 				},
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Type: types.String, Name: "foo_1"},
+				},
 				InboundFKs: []descpb.ForeignKeyConstraint{
 					{
 						Name:                "fk",
@@ -2972,6 +3064,9 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				ParentID:                1,
 				UnexposedParentSchemaID: keys.PublicSchemaID,
 				FormatVersion:           descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Type: types.String, Name: "baz_1"},
+				},
 			}},
 		},
 		{ // 4
@@ -2996,8 +3091,86 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 		},
-		// Add some expressions with invalid type references.
 		{ // 5
+			err: `invalid foreign key backreference from table "baz" (52): missing origin column=2`,
+			desc: descpb.TableDescriptor{
+				ID:                      51,
+				Name:                    "foo",
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				FormatVersion:           descpb.InterleavedFormatVersion,
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:   1,
+					Name: "bar",
+				},
+				InboundFKs: []descpb.ForeignKeyConstraint{
+					{
+						Name:                "fk",
+						ReferencedTableID:   51,
+						ReferencedColumnIDs: []descpb.ColumnID{1},
+						OriginTableID:       52,
+						OriginColumnIDs:     []descpb.ColumnID{2},
+					},
+				},
+			},
+			otherDescs: []descpb.TableDescriptor{{
+				ID:                      52,
+				Name:                    "baz",
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				FormatVersion:           descpb.InterleavedFormatVersion,
+				OutboundFKs: []descpb.ForeignKeyConstraint{
+					{
+						Name:                "fk",
+						ReferencedTableID:   51,
+						ReferencedColumnIDs: []descpb.ColumnID{1},
+						OriginTableID:       52,
+						OriginColumnIDs:     []descpb.ColumnID{2},
+					},
+				},
+			}},
+		},
+		{ // 6
+			err: `invalid outbound foreign key backreference from table "baz" (52): missing referenced column=2`,
+			desc: descpb.TableDescriptor{
+				ID:                      51,
+				Name:                    "foo",
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				FormatVersion:           descpb.InterleavedFormatVersion,
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:   1,
+					Name: "bar",
+				},
+				OutboundFKs: []descpb.ForeignKeyConstraint{
+					{
+						Name:                "fk",
+						ReferencedTableID:   52,
+						ReferencedColumnIDs: []descpb.ColumnID{2},
+						OriginTableID:       51,
+						OriginColumnIDs:     []descpb.ColumnID{1},
+					},
+				},
+			},
+			otherDescs: []descpb.TableDescriptor{{
+				ID:                      52,
+				Name:                    "baz",
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				FormatVersion:           descpb.InterleavedFormatVersion,
+				InboundFKs: []descpb.ForeignKeyConstraint{
+					{
+						Name:                "fk",
+						ReferencedTableID:   52,
+						ReferencedColumnIDs: []descpb.ColumnID{2},
+						OriginTableID:       51,
+						OriginColumnIDs:     []descpb.ColumnID{1},
+					},
+				},
+			}},
+		},
+		// Add some expressions with invalid type references.
+		{ // 7
 			err: `referenced type ID 500: referenced descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -3020,7 +3193,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 6
+		{ // 8
 			err: `referenced type ID 500: referenced descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -3043,7 +3216,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 7
+		{ // 9
 			err: `referenced type ID 500: referenced descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -3057,7 +3230,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 8
+		{ // 10
 			err: `referenced type ID 500: referenced descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -3081,7 +3254,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			},
 		},
 		// Temporary tables.
-		{ // 9
+		{ // 11
 			err: "",
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -3093,7 +3266,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			},
 		},
 		// Views.
-		{ // 10
+		{ // 12
 			err: ``,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -3125,7 +3298,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			}},
 		},
-		{ // 11
+		{ // 13
 			err: `depended-on-by view "bar" (52) has no corresponding depends-on forward reference`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -3156,7 +3329,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			}},
 		},
-		{ // 12
+		{ // 14
 			err: `depends-on relation "bar" (52) has no corresponding depended-on-by back reference`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -3187,7 +3360,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			}},
 		},
 		// Sequences.
-		{ // 13
+		{ // 15
 			err: `depended-on-by relation "bar" (52) does not have a column with ID 123`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -3217,7 +3390,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			}},
 		},
-		{ // 14
+		{ // 16
 			// This case deals with a bug in version 21.1 and prior when
 			// ALTER TABLE ... ADD COLUMN ... DEFAULT nextval(...) would set the
 			// backreference ID to be 0 because it set up the backreference before
@@ -3251,7 +3424,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				DependsOn: []descpb.ID{51},
 			}},
 		},
-		{ // 15
+		{ // 17
 			err: `invalid depended-on-by relation back reference: referenced descriptor ID 100: referenced descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -3263,7 +3436,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 16
+		{ // 18
 			err: `depended-on-by function "f" (100) has no corresponding depends-on forward reference`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -3278,7 +3451,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				{ID: 100, Name: "f"},
 			},
 		},
-		{ // 17
+		{ // 19
 			err: `depends-on function "f" (100) has no corresponding depended-on-by back reference`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -3292,7 +3465,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				{ID: 100, Name: "f"},
 			},
 		},
-		{ // 18
+		{ // 20
 			err: `invalid depends-on function back reference: referenced function ID 100: referenced descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -3308,7 +3481,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 19
+		{ // 21
 			err: `depends-on function "f" (100) has no corresponding depended-on-by back reference`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -3327,7 +3500,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				{ID: 100, Name: "f"},
 			},
 		},
-		{ // 20
+		{ // 22
 			err: `depends-on function "f" (100) has no corresponding depended-on-by back reference`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -3352,7 +3525,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 21
+		{ // 23
 			err: ``,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -3378,7 +3551,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			},
 		},
 		// Composite types.
-		{ // 22
+		{ // 24
 			err: `referenced type ID 500: referenced descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -3400,7 +3573,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 23
+		{ // 25
 			err: `invalid depends-on function back reference: referenced function ID 100: referenced descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -3416,7 +3589,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 24
+		{ // 26
 			err: `depends-on function "f" (100) has no corresponding depended-on-by back reference`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -3438,7 +3611,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 25
+		{ // 27
 			err: `depends-on function "f" (100) has no corresponding depended-on-by back reference`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
