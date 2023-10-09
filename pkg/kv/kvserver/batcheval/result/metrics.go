@@ -21,6 +21,7 @@ type Metrics struct {
 	ResolveAbort         int // non-poisoning intent abort evaluated successfully
 	ResolvePoison        int // poisoning intent abort evaluated successfully
 	AddSSTableAsWrites   int // AddSSTable requests with IngestAsWrites set
+	ExportRequestBytes   int // Bytes read by export request
 }
 
 // Add absorbs the supplied Metrics into the receiver.
