@@ -12,6 +12,7 @@ package server
 
 import (
 	"context"
+	"runtime/pprof"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -325,6 +326,11 @@ func (o *channelOrchestrator) startControlledServer(
 		// RunAsyncTask, because this stopper will be assigned its own
 		// different tracer.
 		ctx := tenantCtx
+
+		defer pprof.SetGoroutineLabels(ctx)
+		ctx = pprof.WithLabels(ctx, pprof.Labels("tenant", string(tenantName)))
+		pprof.SetGoroutineLabels(ctx)
+
 		// We want a context that gets cancelled when the server is
 		// shutting down, for the possible few cases in
 		// newServerInternal/preStart/acceptClients which are not looking at the
