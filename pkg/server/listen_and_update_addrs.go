@@ -44,9 +44,7 @@ const secondaryTenantPortOffsetMaxPorts = 1024
 // configuration. If the configuration does not specify any secondary
 // tenant port configuration, no factory is returned.
 func ListenerFactoryForConfig(cfg *BaseConfig, portStartHint int) (RPCListenerFactory, error) {
-	// TODO:(ssd): We use != here because demo uses a negative
-	// port offset. But, demo could now just pass a min/max.
-	if cfg.Config.SecondaryTenantPortOffset != 0 {
+	if cfg.Config.SecondaryTenantPortOffset > 0 {
 		_, port, err := addr.SplitHostPort(cfg.Addr, "0")
 		if err != nil {
 			return nil, err

@@ -61,10 +61,11 @@ type TestServerArgs struct {
 	// DisableTLSForHTTP if set, disables TLS for the HTTP interface.
 	DisableTLSForHTTP bool
 
-	// SecondaryTenantPortOffset if non-zero forces the network addresses
-	// generated for servers started by the serverController to be offset
-	// from the base addressed by the specified amount.
-	SecondaryTenantPortOffset int
+	// SecondaryTenantPortMin and Max forces the gPRC listen
+	// addresses generated for servers started by the
+	// serverController to be in the specified range.
+	SecondaryTenantPortMin int
+	SecondaryTenantPortMax int
 
 	// JoinAddr is the address of a node we are joining.
 	//
