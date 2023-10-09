@@ -45,19 +45,14 @@ func registerDiskStalledDetection(r registry.Registry) {
 			return &cgroupDiskStaller{t: t, c: c, readOrWrite: []string{"write"}, logsToo: true}
 		},
 	}
-	makeSpec := func() spec.ClusterSpec {
-		s := r.MakeClusterSpec(4, spec.ReuseNone())
-		// Use PDs in an attempt to work around flakes encountered when using SSDs.
-		// See #97968.
-		s.PreferLocalSSD = false
-		return s
-	}
 	for name, makeStaller := range stallers {
 		name, makeStaller := name, makeStaller
 		r.Add(registry.TestSpec{
-			Name:                fmt.Sprintf("disk-stalled/%s", name),
-			Owner:               registry.OwnerStorage,
-			Cluster:             makeSpec(),
+			Name:  fmt.Sprintf("disk-stalled/%s", name),
+			Owner: registry.OwnerStorage,
+			// Use PDs in an attempt to work around flakes encountered when using SSDs.
+			// See #97968.
+			Cluster:             r.MakeClusterSpec(4, spec.ReuseNone(), spec.DisableLocalSSD()),
 			CompatibleClouds:    registry.AllExceptAWS,
 			Suites:              registry.Suites(registry.Nightly),
 			Timeout:             30 * time.Minute,
