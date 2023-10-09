@@ -196,3 +196,67 @@ DROP PROCEDURE insert_into_anon_args(STRING, INT);
 DROP TABLE anon_args;
 
 subtest end
+
+subtest replace
+
+statement ok
+CREATE TABLE replace(k INT PRIMARY KEY, v STRING)
+
+statement ok
+CREATE PROCEDURE insert_into_replace(k_new INT, v_new STRING) LANGUAGE SQL AS $$
+  INSERT INTO replace(k, v) VALUES (k_new, v_new)
+$$
+
+statement ok
+CALL insert_into_replace(1, 'a')
+
+statement error pgcode 42809 cannot change routine kind\nDETAIL: "insert_into_replace" is a procedure
+CREATE OR REPLACE FUNCTION insert_into_replace(k_new INT, v_new STRING) RETURNS VOID LANGUAGE SQL AS ''
+
+statement ok
+CREATE OR REPLACE PROCEDURE insert_into_replace(k_new INT, v_new STRING) LANGUAGE SQL AS $$
+  INSERT INTO replace(k, v) VALUES (k_new+100, v_new)
+$$
+
+statement ok
+CALL insert_into_replace(1, 'a')
+
+query IT rowsort
+SELECT * FROM replace
+----
+1    a
+101  a
+
+# The procedure should not be replaced if the signature is different.
+statement ok
+CREATE OR REPLACE PROCEDURE insert_into_replace(k_new INT) LANGUAGE SQL AS $$
+  INSERT INTO replace(k, v) VALUES (k_new, 'overload')
+$$
+
+# The procedure should not be replaced if the name is different.
+statement ok
+CREATE OR REPLACE PROCEDURE insert_into_replace_v2(k_new INT, v_new STRING) LANGUAGE SQL AS $$
+  INSERT INTO replace(k, v) VALUES (k_new, v_new||'_v2')
+$$
+
+statement ok
+CALL insert_into_replace(2, 'b');
+CALL insert_into_replace(3);
+CALL insert_into_replace_v2(4, 'b');
+
+query IT rowsort
+SELECT * FROM replace
+----
+1    a
+101  a
+102  b
+3    overload
+4    b_v2
+
+statement ok
+DROP PROCEDURE insert_into_replace(INT, STRING);
+DROP PROCEDURE insert_into_replace(INT);
+DROP PROCEDURE insert_into_replace_v2;
+DROP TABLE replace;
+
+subtest end

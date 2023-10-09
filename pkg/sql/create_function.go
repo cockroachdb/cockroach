@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/errors"
 )
 
 type createFunctionNode struct {
@@ -162,6 +163,22 @@ func (n *createFunctionNode) createNewFunction(
 func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params runParams) error {
 	// TODO(chengxiong): add validation that the function is not referenced. This
 	// is needed when we start allowing function references from other objects.
+
+	if n.cf.IsProcedure && !udfDesc.IsProcedure() {
+		return errors.WithDetailf(
+			pgerror.Newf(pgcode.WrongObjectType, "cannot change routine kind"),
+			"%q is a function",
+			udfDesc.Name,
+		)
+	}
+
+	if !n.cf.IsProcedure && udfDesc.IsProcedure() {
+		return errors.WithDetailf(
+			pgerror.Newf(pgcode.WrongObjectType, "cannot change routine kind"),
+			"%q is a procedure",
+			udfDesc.Name,
+		)
+	}
 
 	// Make sure parameter names are not changed.
 	for i := range n.cf.Params {
