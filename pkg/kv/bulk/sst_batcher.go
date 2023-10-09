@@ -259,12 +259,19 @@ func MakeStreamSSTBatcher(
 		ingestAll: true,
 		mem:       mem,
 		limiter:   sendLimiter,
-		// We use NormalPri since anything lower than normal
-		// priority is assumed to be able to handle reduced
-		// throughput. We are OK witht his for now since the
-		// consuming cluster of a replication stream does not
-		// have a latency sensitive workload running against
-		// it.
+		// disableScatters is set to true to disable scattering as-we-fill. The
+		// replication job already pre-splits and pre-scatters its target ranges to
+		// distribute the ingestion load.
+		//
+		// If the batcher knows that it is about to overfill a range, it always
+		// makes sense to split it before adding to it, rather than overfill it. It
+		// does not however make sense to scatter that range as the RHS maybe
+		// non-empty.
+		disableScatters: true,
+		// We use NormalPri since anything lower than normal priority is assumed to
+		// be able to handle reduced throughput. We are OK with his for now since
+		// the consuming cluster of a replication stream does not have a latency
+		// sensitive workload running against it.
 		priority: admissionpb.NormalPri,
 	}
 	b.mu.lastFlush = timeutil.Now()
