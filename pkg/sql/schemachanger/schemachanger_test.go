@@ -913,13 +913,16 @@ func TestComparatorFromLogicTests(t *testing.T) {
 	for _, entry := range corpus.Entries {
 		subtestName := entry.Name
 		subtestStatements := entry.Statements
-		t.Run(entry.Name, func(t *testing.T) {
+
+		if !t.Run(entry.Name, func(t *testing.T) {
 			t.Logf("running schema changer comparator testing on statements collected from logic test %q\n", subtestName)
 			ss := &staticSQLStmtLineProvider{
 				stmts: subtestStatements,
 			}
 			sctest.CompareLegacyAndDeclarative(t, ss)
 			t.Logf("schema changer comparator testing succeeded on logic test %q\n", subtestName)
-		})
+		}) {
+			t.Logf("test failed on %q\n", subtestName)
+		}
 	}
 }
