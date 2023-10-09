@@ -1,0 +1,23 @@
+# Test verifies that no keys prior to start ts are delivered to rangefeed
+# and that timestamp is exclusive.
+put-keys
+ key=a, val=1
+ key=b, val=2
+ key=a, val=3, ts=lastTs
+ key=c, val=4
+ key=a, val=5
+----
+ok
+
+create-feed startKey=a endKey=z startTs=lastTs
+----
+ok
+
+wait-feed
+----
+ok
+
+dump-feed
+----
+key=a, val=5
+key=c, val=4
