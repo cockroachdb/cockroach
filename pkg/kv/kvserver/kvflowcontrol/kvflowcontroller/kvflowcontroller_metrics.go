@@ -264,14 +264,14 @@ func newMetrics(c *Controller) *metrics {
 						}
 						if streamStatsCount <= streamStatsCountCap {
 							var b strings.Builder
-							fmt.Fprintf(&b, "stream %s was blocked: durations: ", stream.String())
+							fmt.Fprintf(&b, "stream %s was blocked: durations:", stream.String())
 							if regularStats.noTokenDuration > 0 {
-								fmt.Fprintf(&b, "regular %s", regularStats.noTokenDuration.String())
+								fmt.Fprintf(&b, " regular %s", regularStats.noTokenDuration.String())
 							}
 							if elasticStats.noTokenDuration > 0 {
-								fmt.Fprintf(&b, "elastic %s", elasticStats.noTokenDuration.String())
+								fmt.Fprintf(&b, " elastic %s", elasticStats.noTokenDuration.String())
 							}
-							fmt.Fprintf(&b, "tokens deducted: regular %s elastic %s",
+							fmt.Fprintf(&b, " tokens deducted: regular %s elastic %s",
 								humanize.Bytes(uint64(regularStats.tokensDeducted)),
 								humanize.Bytes(uint64(elasticStats.tokensDeducted)))
 							log.Infof(context.Background(), "%s", redact.SafeString(b.String()))

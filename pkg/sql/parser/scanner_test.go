@@ -356,6 +356,9 @@ func TestScanError(t *testing.T) {
 		{`$0`, "placeholder index must be between 1 and 65536"},
 		{`$9223372036854775809`, "placeholder index must be between 1 and 65536"},
 		{`B'123'`, `"2" is not a valid binary digit`},
+		{`123foo`, "trailing junk after numeric literal at or near \"123f\""},
+		{`1.23foo`, "trailing junk after numeric literal at or near \"1.23f\""},
+		{`0x0afoo`, "trailing junk after numeric literal at or near \"0x0afo\""},
 	}
 	for _, d := range testData {
 		s := makeSQLScanner(d.sql)
