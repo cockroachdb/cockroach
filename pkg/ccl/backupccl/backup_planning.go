@@ -197,6 +197,7 @@ func resolveOptionsForBackupJobDescription(
 
 	newOpts := tree.BackupOptions{
 		CaptureRevisionHistory:          opts.CaptureRevisionHistory,
+		IncludeAllSecondaryTenants:      opts.IncludeAllSecondaryTenants,
 		Detached:                        opts.Detached,
 		ExecutionLocality:               opts.ExecutionLocality,
 		UpdatesClusterMonitoringMetrics: opts.UpdatesClusterMonitoringMetrics,
