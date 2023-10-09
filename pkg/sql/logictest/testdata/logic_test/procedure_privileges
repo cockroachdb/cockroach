@@ -86,8 +86,8 @@ public         test_priv_p1    ·
 public         test_priv_p2    int8
 test_priv_sc1  test_priv_p3    ·
 
-statement error pgcode 42883 function test_priv_p1\(\) does not exist
-GRANT EXECUTE ON FUNCTION test_priv_p1() TO test_user WITH GRANT OPTION;
+statement error pgcode 42809 test_priv_p1\(\) is not a function
+GRANT EXECUTE ON FUNCTION test_priv_p1() TO test_user WITH GRANT OPTION
 
 statement ok
 GRANT EXECUTE ON PROCEDURE test_priv_p1(), test_priv_p2(int), test_priv_sc1.test_priv_p3 TO test_user WITH GRANT OPTION;
@@ -131,8 +131,8 @@ test           test_priv_sc1  100109      test_priv_p3()      test_user  EXECUTE
 statement error pgcode 2BP01 pq: cannot drop role/user test_user: grants still exist on.*
 DROP USER test_user;
 
-statement error pgcode 42883 function test_priv_p1\(\) does not exist
-REVOKE GRANT OPTION FOR EXECUTE ON FUNCTION test_priv_p1() FROM test_user;
+statement error pgcode 42809 test_priv_p1\(\) is not a function
+REVOKE GRANT OPTION FOR EXECUTE ON FUNCTION test_priv_p1() FROM test_user
 
 statement ok
 REVOKE GRANT OPTION FOR EXECUTE ON PROCEDURE test_priv_p1(), test_priv_p2(int), test_priv_sc1.test_priv_p3 FROM test_user;

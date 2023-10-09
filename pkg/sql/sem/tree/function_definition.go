@@ -280,11 +280,6 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 
 	findMatches := func(schema string) {
 		for i := range fd.Overloads {
-			if fd.Overloads[i].Type&routineType == 0 {
-				// Skip overloads that don't match the types of routines we are
-				// looking for.
-				continue
-			}
 			if matched(fd.Overloads[i], schema) {
 				found = true
 				ret = append(ret, fd.Overloads[i])
@@ -302,6 +297,31 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 		}
 	}
 
+	if len(ret) == 1 && ret[0].Type&routineType == 0 {
+		if routineType == ProcedureRoutine {
+			return QualifiedOverload{}, pgerror.Newf(
+				pgcode.WrongObjectType, "%s(%s) is not a procedure", fd.Name, typeNames())
+		} else {
+			return QualifiedOverload{}, pgerror.Newf(
+				pgcode.WrongObjectType, "%s(%s) is not a function", fd.Name, typeNames())
+		}
+	}
+
+	// Filter out overloads that don't match the requested type.
+	i := 0
+	for _, o := range ret {
+		if ret[i].Type&routineType != 0 {
+			ret[i] = o
+			i++
+		}
+	}
+	// Clear non-matching overloads.
+	for j := i; j < len(ret); j++ {
+		ret[j] = QualifiedOverload{}
+	}
+	// Truncate the slice.
+	ret = ret[:i]
+
 	if len(ret) == 0 {
 		if routineType == ProcedureRoutine {
 			return QualifiedOverload{}, errors.Mark(
@@ -315,6 +335,7 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 			)
 		}
 	}
+
 	if len(ret) > 1 {
 		if routineType == ProcedureRoutine {
 			return QualifiedOverload{}, pgerror.Newf(pgcode.AmbiguousFunction, "procedure name %q is not unique", fd.Name)

@@ -120,8 +120,11 @@ func TestMatchOverload(t *testing.T) {
 				},
 			},
 			{
-				Schema:   "sc1",
-				Overload: &tree.Overload{Oid: 6, Type: tree.ProcedureRoutine, Types: tree.ParamTypes{tree.ParamType{Typ: types.Int}}},
+				Schema: "sc1",
+				Overload: &tree.Overload{Oid: 6, Type: tree.ProcedureRoutine,
+					Types: tree.ParamTypes{
+						tree.ParamType{Typ: types.Bool}},
+				},
 			},
 		},
 	}
@@ -144,7 +147,7 @@ func TestMatchOverload(t *testing.T) {
 		},
 		{
 			testName:    "match a procedure",
-			argTypes:    nil,
+			argTypes:    []*types.T{types.Bool},
 			path:        []string{"sc1", "sc2"},
 			routineType: tree.ProcedureRoutine,
 			expectedOid: 6,
