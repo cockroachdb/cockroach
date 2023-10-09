@@ -36,19 +36,11 @@ placeholder-scan kv
  └── span
       └── $1
 
+# Fast path not available when using FOR UPDATE or FOR SHARE.
 placeholder-fast-path
 SELECT * FROM kv WHERE k = $1 FOR UPDATE
 ----
-placeholder-scan kv
- ├── columns: k:1!null v:2
- ├── locking: for-update,durability-guaranteed
- ├── cardinality: [0 - 1]
- ├── volatile, has-placeholder
- ├── stats: [rows=1, distinct(1)=1, null(1)=0]
- ├── key: ()
- ├── fd: ()-->(1,2)
- └── span
-      └── $1
+no fast path
 
 placeholder-fast-path
 SELECT k FROM kv WHERE k = $1

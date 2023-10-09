@@ -149,16 +149,20 @@ EXPLAIN (VERBOSE) SELECT 1 FROM t FOR UPDATE OF t
 distribution: local
 vectorized: true
 ·
-• render
+• project
 │ columns: ("?column?")
-│ render ?column?: 1
 │
-└── • scan
-      columns: ()
-      estimated row count: 1,000 (missing stats)
-      table: t@t_pkey
-      spans: FULL SCAN
-      locking strength: for update
+└── • render
+    │ columns: ("?column?", a)
+    │ render ?column?: 1
+    │ render a: a
+    │
+    └── • scan
+          columns: (a)
+          estimated row count: 1,000 (missing stats)
+          table: t@t_pkey
+          spans: FULL SCAN
+          locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE
@@ -273,16 +277,20 @@ EXPLAIN (VERBOSE) SELECT 1 FROM t WHERE a = 1 FOR UPDATE OF t
 distribution: local
 vectorized: true
 ·
-• render
+• project
 │ columns: ("?column?")
-│ render ?column?: 1
 │
-└── • scan
-      columns: (a)
-      estimated row count: 1 (missing stats)
-      table: t@t_pkey
-      spans: /1/0
-      locking strength: for update
+└── • render
+    │ columns: ("?column?", a)
+    │ render ?column?: 1
+    │ render a: a
+    │
+    └── • scan
+          columns: (a)
+          estimated row count: 1 (missing stats)
+          table: t@t_pkey
+          spans: /1/0
+          locking strength: for update
 
 # ------------------------------------------------------------------------------
 # Tests with table aliases.
@@ -739,11 +747,25 @@ EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE)
 distribution: local
 vectorized: true
 ·
-• scan
-  columns: (a, b)
-  estimated row count: 1,000 (missing stats)
-  table: t@t_pkey
-  spans: FULL SCAN
+• hash join (semi)
+│ columns: (a, b)
+│ estimated row count: 1,000 (missing stats)
+│ equality: (a) = (a)
+│ left cols are key
+│ right cols are key
+│
+├── • scan
+│     columns: (a, b)
+│     estimated row count: 1,000 (missing stats)
+│     table: t@t_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (a)
+      estimated row count: 1,000 (missing stats)
+      table: t@t_pkey
+      spans: FULL SCAN
+      locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE OF t
@@ -764,11 +786,25 @@ EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE OF t)
 distribution: local
 vectorized: true
 ·
-• scan
-  columns: (a, b)
-  estimated row count: 1,000 (missing stats)
-  table: t@t_pkey
-  spans: FULL SCAN
+• hash join (semi)
+│ columns: (a, b)
+│ estimated row count: 1,000 (missing stats)
+│ equality: (a) = (a)
+│ left cols are key
+│ right cols are key
+│
+├── • scan
+│     columns: (a, b)
+│     estimated row count: 1,000 (missing stats)
+│     table: t@t_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (a)
+      estimated row count: 1,000 (missing stats)
+      table: t@t_pkey
+      spans: FULL SCAN
+      locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE
@@ -819,12 +855,15 @@ vectorized: true
         │ estimated row count: 100 (missing stats)
         │ distinct on: b
         │
-        └── • scan
-              columns: (b)
-              estimated row count: 1,000 (missing stats)
-              table: t@t_pkey
-              spans: FULL SCAN
-              locking strength: for update
+        └── • project
+            │ columns: (b)
+            │
+            └── • scan
+                  columns: (a, b)
+                  estimated row count: 1,000 (missing stats)
+                  table: t@t_pkey
+                  spans: FULL SCAN
+                  locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE OF t
@@ -875,12 +914,15 @@ vectorized: true
         │ estimated row count: 100 (missing stats)
         │ distinct on: b
         │
-        └── • scan
-              columns: (b)
-              estimated row count: 1,000 (missing stats)
-              table: t@t_pkey
-              spans: FULL SCAN
-              locking strength: for update
+        └── • project
+            │ columns: (b)
+            │
+            └── • scan
+                  columns: (a, b)
+                  estimated row count: 1,000 (missing stats)
+                  table: t@t_pkey
+                  spans: FULL SCAN
+                  locking strength: for update
 
 # ------------------------------------------------------------------------------
 # Tests with common-table expressions.
@@ -1733,20 +1775,23 @@ vectorized: true
 • project
 │ columns: (c)
 │
-└── • lookup join (inner)
-    │ columns: (a, b, a, c)
-    │ estimated row count: 1 (missing stats)
-    │ table: u@u_pkey
-    │ equality: (b) = (a)
-    │ equality cols are key
-    │ locking strength: for update
+└── • project
+    │ columns: (a, a, c)
     │
-    └── • scan
-          columns: (a, b)
-          estimated row count: 1 (missing stats)
-          table: t@t_pkey
-          spans: /2/0
-          locking strength: for update
+    └── • lookup join (inner)
+        │ columns: (a, b, a, c)
+        │ estimated row count: 1 (missing stats)
+        │ table: u@u_pkey
+        │ equality: (b) = (a)
+        │ equality cols are key
+        │ locking strength: for update
+        │
+        └── • scan
+              columns: (a, b)
+              estimated row count: 1 (missing stats)
+              table: t@t_pkey
+              spans: /2/0
+              locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) SELECT c FROM t JOIN u ON t.b = u.a WHERE t.a BETWEEN 2 AND 10 FOR UPDATE
@@ -1757,21 +1802,24 @@ vectorized: true
 • project
 │ columns: (c)
 │
-└── • lookup join (inner)
-    │ columns: (a, b, a, c)
-    │ estimated row count: 9 (missing stats)
-    │ table: u@u_pkey
-    │ equality: (b) = (a)
-    │ equality cols are key
-    │ locking strength: for update
+└── • project
+    │ columns: (a, a, c)
     │
-    └── • scan
-          columns: (a, b)
-          estimated row count: 9 (missing stats)
-          table: t@t_pkey
-          spans: /2-/11
-          parallel
-          locking strength: for update
+    └── • lookup join (inner)
+        │ columns: (a, b, a, c)
+        │ estimated row count: 9 (missing stats)
+        │ table: u@u_pkey
+        │ equality: (b) = (a)
+        │ equality cols are key
+        │ locking strength: for update
+        │
+        └── • scan
+              columns: (a, b)
+              estimated row count: 9 (missing stats)
+              table: t@t_pkey
+              spans: /2-/11
+              parallel
+              locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN indexed ON t.b = indexed.b WHERE t.a = 2 FOR UPDATE
@@ -2108,17 +2156,21 @@ EXPLAIN (VERBOSE) SELECT 1 FROM t FOR UPDATE OF t NOWAIT
 distribution: local
 vectorized: true
 ·
-• render
+• project
 │ columns: ("?column?")
-│ render ?column?: 1
 │
-└── • scan
-      columns: ()
-      estimated row count: 1,000 (missing stats)
-      table: t@t_pkey
-      spans: FULL SCAN
-      locking strength: for update
-      locking wait policy: nowait
+└── • render
+    │ columns: ("?column?", a)
+    │ render ?column?: 1
+    │ render a: a
+    │
+    └── • scan
+          columns: (a)
+          estimated row count: 1,000 (missing stats)
+          table: t@t_pkey
+          spans: FULL SCAN
+          locking strength: for update
+          locking wait policy: nowait
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE NOWAIT
@@ -2241,17 +2293,21 @@ EXPLAIN (VERBOSE) SELECT 1 FROM t WHERE a = 1 FOR UPDATE OF t NOWAIT
 distribution: local
 vectorized: true
 ·
-• render
+• project
 │ columns: ("?column?")
-│ render ?column?: 1
 │
-└── • scan
-      columns: (a)
-      estimated row count: 1 (missing stats)
-      table: t@t_pkey
-      spans: /1/0
-      locking strength: for update
-      locking wait policy: nowait
+└── • render
+    │ columns: ("?column?", a)
+    │ render ?column?: 1
+    │ render a: a
+    │
+    └── • scan
+          columns: (a)
+          estimated row count: 1 (missing stats)
+          table: t@t_pkey
+          spans: /1/0
+          locking strength: for update
+          locking wait policy: nowait
 
 # ------------------------------------------------------------------------------
 # Tests with the SKIP LOCKED lock wait policy.
@@ -2378,17 +2434,21 @@ EXPLAIN (VERBOSE) SELECT 1 FROM t FOR UPDATE OF t SKIP LOCKED
 distribution: local
 vectorized: true
 ·
-• render
+• project
 │ columns: ("?column?")
-│ render ?column?: 1
 │
-└── • scan
-      columns: ()
-      estimated row count: 1,000 (missing stats)
-      table: t@t_pkey
-      spans: FULL SCAN
-      locking strength: for update
-      locking wait policy: skip locked
+└── • render
+    │ columns: ("?column?", a)
+    │ render ?column?: 1
+    │ render a: a
+    │
+    └── • scan
+          columns: (a)
+          estimated row count: 1,000 (missing stats)
+          table: t@t_pkey
+          spans: FULL SCAN
+          locking strength: for update
+          locking wait policy: skip locked
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE SKIP LOCKED
@@ -2511,17 +2571,21 @@ EXPLAIN (VERBOSE) SELECT 1 FROM t WHERE a = 1 FOR UPDATE OF t SKIP LOCKED
 distribution: local
 vectorized: true
 ·
-• render
+• project
 │ columns: ("?column?")
-│ render ?column?: 1
 │
-└── • scan
-      columns: (a)
-      estimated row count: 1 (missing stats)
-      table: t@t_pkey
-      spans: /1/0
-      locking strength: for update
-      locking wait policy: skip locked
+└── • render
+    │ columns: ("?column?", a)
+    │ render ?column?: 1
+    │ render a: a
+    │
+    └── • scan
+          columns: (a)
+          estimated row count: 1 (missing stats)
+          table: t@t_pkey
+          spans: /1/0
+          locking strength: for update
+          locking wait policy: skip locked
 
 # Tests with a secondary index.
 
@@ -2599,50 +2663,78 @@ SET enable_durable_locking_for_serializable = true
 query T
 EXPLAIN (OPT) SELECT * FROM t FOR UPDATE
 ----
-scan t
- └── locking: for-update,durability-guaranteed
+lock t
+ ├── locking: for-update,durability-guaranteed
+ └── scan t
+      └── locking: for-update,durability-guaranteed
 
 query T
 EXPLAIN (OPT) SELECT * FROM t FOR NO KEY UPDATE
 ----
-scan t
- └── locking: for-no-key-update,durability-guaranteed
+lock t
+ ├── locking: for-no-key-update,durability-guaranteed
+ └── scan t
+      └── locking: for-no-key-update,durability-guaranteed
 
 query T
 EXPLAIN (OPT) SELECT * FROM t FOR SHARE
 ----
-scan t
- └── locking: for-share,durability-guaranteed
+lock t
+ ├── locking: for-share,durability-guaranteed
+ └── scan t
+      └── locking: for-share,durability-guaranteed
 
 query T
 EXPLAIN (OPT) SELECT * FROM t FOR KEY SHARE
 ----
-scan t
- └── locking: for-key-share,durability-guaranteed
+lock t
+ ├── locking: for-key-share,durability-guaranteed
+ └── scan t
+      └── locking: for-key-share,durability-guaranteed
 
 query T
 EXPLAIN (OPT) SELECT * FROM t FOR KEY SHARE FOR SHARE
 ----
-scan t
- └── locking: for-share,durability-guaranteed
+lock t
+ ├── locking: for-share,durability-guaranteed
+ └── lock t
+      ├── locking: for-key-share,durability-guaranteed
+      └── scan t
+           └── locking: for-share,durability-guaranteed
 
 query T
 EXPLAIN (OPT) SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
 ----
-scan t
- └── locking: for-no-key-update,durability-guaranteed
+lock t
+ ├── locking: for-no-key-update,durability-guaranteed
+ └── lock t
+      ├── locking: for-share,durability-guaranteed
+      └── lock t
+           ├── locking: for-key-share,durability-guaranteed
+           └── scan t
+                └── locking: for-no-key-update,durability-guaranteed
 
 query T
 EXPLAIN (OPT) SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
 ----
-scan t
- └── locking: for-update,durability-guaranteed
+lock t
+ ├── locking: for-update,durability-guaranteed
+ └── lock t
+      ├── locking: for-no-key-update,durability-guaranteed
+      └── lock t
+           ├── locking: for-share,durability-guaranteed
+           └── lock t
+                ├── locking: for-key-share,durability-guaranteed
+                └── scan t
+                     └── locking: for-update,durability-guaranteed
 
 query T
 EXPLAIN (OPT) SELECT * FROM t FOR UPDATE OF t
 ----
-scan t
- └── locking: for-update,durability-guaranteed
+lock t
+ ├── locking: for-update,durability-guaranteed
+ └── scan t
+      └── locking: for-update,durability-guaranteed
 
 query T
 EXPLAIN (OPT) SELECT (SELECT a FROM t FOR UPDATE OF t)
@@ -2651,8 +2743,10 @@ values
  └── tuple
       └── subquery
            └── max1-row
-                └── scan t
-                     └── locking: for-update,durability-guaranteed
+                └── lock t
+                     ├── locking: for-update,durability-guaranteed
+                     └── scan t
+                          └── locking: for-update,durability-guaranteed
 
 query T
 EXPLAIN (OPT) SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE)
@@ -2661,8 +2755,10 @@ project
  └── inner-join (lookup t)
       ├── lookup columns are key
       ├── distinct-on
-      │    └── scan t
-      │         └── locking: for-update,durability-guaranteed
+      │    └── lock t
+      │         ├── locking: for-update,durability-guaranteed
+      │         └── scan t
+      │              └── locking: for-update,durability-guaranteed
       └── filters (true)
 
 statement ok

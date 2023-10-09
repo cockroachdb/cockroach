@@ -146,7 +146,7 @@ func (b *Builder) buildDataSource(
 		switch t := ds.(type) {
 		case cat.Table:
 			tabMeta := b.addTable(t, &resName)
-			return b.buildScan(
+			outScope = b.buildScan(
 				tabMeta,
 				tableOrdinals(t, columnKinds{
 					includeMutations: false,
@@ -156,6 +156,14 @@ func (b *Builder) buildDataSource(
 				indexFlags, lockCtx.locking, inScope,
 				false, /* disableNotVisibleIndex */
 			)
+
+			if lockCtx.locking.isSet() {
+				lb := newLockBuilder(tabMeta)
+				for _, item := range lockCtx.locking {
+					item.builders = append(item.builders, lb)
+				}
+			}
+			return outScope
 
 		case cat.Sequence:
 			return b.buildSequenceSelect(t, &resName, inScope)
@@ -460,9 +468,17 @@ func (b *Builder) buildScanFromTableRef(
 	tn := tree.MakeUnqualifiedTableName(tab.Name())
 	tabMeta := b.addTable(tab, &tn)
 
-	return b.buildScan(
+	outScope = b.buildScan(
 		tabMeta, ordinals, indexFlags, locking, inScope, false, /* disableNotVisibleIndex */
 	)
+
+	if locking.isSet() {
+		lb := newLockBuilder(tabMeta)
+		for _, item := range locking {
+			item.builders = append(item.builders, lb)
+		}
+	}
+	return outScope
 }
 
 // addTable adds a table to the metadata and returns the TableMeta. The table
@@ -1150,11 +1166,13 @@ func (b *Builder) buildSelectStmtWithoutParens(
 		b.buildLimit(limit, inScope, outScope)
 	}
 
-	// Remove locking items from scope, and validate that they were found within
-	// the FROM clause.
+	// Remove locking items from scope, validate that they were found within the
+	// FROM clause, and build them.
 	for range lockingClause {
 		item := lockCtx.pop()
 		item.validate()
+		// TODO(michae2): Combine multiple buildLock calls for the same table.
+		b.buildLocking(item, outScope)
 	}
 
 	// TODO(rytaft): Support FILTER expression.
@@ -1195,6 +1213,7 @@ func (b *Builder) buildSelectClause(
 	orderByScope := b.analyzeOrderBy(orderBy, fromScope, projectionsScope,
 		exprKindOrderBy, tree.RejectGenerators)
 	distinctOnScope := b.analyzeDistinctOnArgs(sel.DistinctOn, fromScope, projectionsScope)
+	lockScope := b.analyzeLockArgs(lockCtx, fromScope, projectionsScope)
 
 	var having opt.ScalarExpr
 	needsAgg := b.needsAggregation(sel, fromScope)
@@ -1209,6 +1228,7 @@ func (b *Builder) buildSelectClause(
 	b.buildProjectionList(fromScope, projectionsScope)
 	b.buildOrderBy(fromScope, projectionsScope, orderByScope)
 	b.buildDistinctOnArgs(fromScope, projectionsScope, distinctOnScope)
+	b.buildLockArgs(fromScope, projectionsScope, lockScope)
 	b.buildProjectSet(fromScope)
 
 	if needsAgg {

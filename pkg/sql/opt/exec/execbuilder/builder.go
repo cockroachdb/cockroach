@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -95,6 +96,12 @@ type Builder struct {
 	initialAllowAutoCommit bool
 
 	allowInsertFastPath bool
+
+	// onlyForcedLocking is passed through to factory methods for operators that
+	// use locking. When set to true, it silences all locking that is not
+	// forced. This is used to ignore initial-row-fetch locking in favor of the
+	// Lock operator when running under read committed isolation.
+	onlyForcedLocking bool
 
 	// forceForUpdateLocking is conditionally passed through to factory methods
 	// for scan operators that serve as the input for mutation operators. When
@@ -313,6 +320,9 @@ func (b *Builder) build(e opt.Expr) (_ execPlan, err error) {
 	//    insert is not processed through side-effecting expressions (i.e. we can
 	//    auto-commit).
 	b.allowInsertFastPath = b.allowInsertFastPath && canAutoCommit
+
+	b.onlyForcedLocking = b.evalCtx.TxnIsoLevel != isolation.Serializable ||
+		b.evalCtx.SessionData().OptimizerUseLockOpForSerializable
 
 	return b.buildRelational(rel)
 }

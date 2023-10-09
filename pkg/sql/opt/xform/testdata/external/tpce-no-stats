@@ -3534,41 +3534,48 @@ INNER JOIN trade_type      ON tt_id = t_tt_id
      WHERE t_id = 0
 FOR UPDATE OF trade;
 ----
-project
- ├── columns: t_ca_id:9!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_chrg:29!null t_lifo:15!null t_is_cash:5!null tt_name:19!null tt_is_sell:20!null tt_is_mrkt:21!null coalesce:30
+lock trade
+ ├── columns: t_ca_id:9!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_chrg:29!null t_lifo:15!null t_is_cash:5!null tt_name:19!null tt_is_sell:20!null tt_is_mrkt:21!null coalesce:30  [hidden: t_id:1!null]
+ ├── locking: for-update,durability-guaranteed
  ├── cardinality: [0 - 1]
- ├── volatile
+ ├── volatile, mutations
  ├── key: ()
- ├── fd: ()-->(4-7,9,15,19-21,29,30)
- ├── left-join (lookup holding_summary)
- │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null trade.t_chrg:12!null t_lifo:15!null tt_id:18!null tt_name:19!null tt_is_sell:20!null tt_is_mrkt:21!null hs_ca_id:24 hs_s_symb:25 hs_qty:26
- │    ├── key columns: [9 6] = [24 25]
- │    ├── lookup columns are key
- │    ├── cardinality: [0 - 1]
- │    ├── volatile
- │    ├── key: ()
- │    ├── fd: ()-->(1,4-7,9,12,15,18-21,24-26), (4)==(18), (18)==(4)
- │    ├── inner-join (lookup trade_type)
- │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null trade.t_chrg:12!null t_lifo:15!null tt_id:18!null tt_name:19!null tt_is_sell:20!null tt_is_mrkt:21!null
- │    │    ├── key columns: [4] = [18]
- │    │    ├── lookup columns are key
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── volatile
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(1,4-7,9,12,15,18-21), (18)==(4), (4)==(18)
- │    │    ├── scan trade
- │    │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null trade.t_chrg:12!null t_lifo:15!null
- │    │    │    ├── constraint: /1: [/0 - /0]
- │    │    │    ├── locking: for-update,durability-guaranteed
- │    │    │    ├── cardinality: [0 - 1]
- │    │    │    ├── volatile
- │    │    │    ├── key: ()
- │    │    │    └── fd: ()-->(1,4-7,9,12,15)
- │    │    └── filters (true)
- │    └── filters (true)
- └── projections
-      ├── trade.t_chrg:12::FLOAT8 [as=t_chrg:29, outer=(12), immutable]
-      └── COALESCE(hs_qty:26, 0) [as=coalesce:30, outer=(26)]
+ ├── fd: ()-->(1,4-7,9,15,19-21,29,30)
+ └── project
+      ├── columns: t_chrg:29!null coalesce:30 t_id:1!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_lifo:15!null tt_name:19!null tt_is_sell:20!null tt_is_mrkt:21!null
+      ├── cardinality: [0 - 1]
+      ├── volatile
+      ├── key: ()
+      ├── fd: ()-->(1,4-7,9,15,19-21,29,30)
+      ├── left-join (lookup holding_summary)
+      │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null trade.t_chrg:12!null t_lifo:15!null tt_id:18!null tt_name:19!null tt_is_sell:20!null tt_is_mrkt:21!null hs_ca_id:24 hs_s_symb:25 hs_qty:26
+      │    ├── key columns: [9 6] = [24 25]
+      │    ├── lookup columns are key
+      │    ├── cardinality: [0 - 1]
+      │    ├── volatile
+      │    ├── key: ()
+      │    ├── fd: ()-->(1,4-7,9,12,15,18-21,24-26), (4)==(18), (18)==(4)
+      │    ├── inner-join (lookup trade_type)
+      │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null trade.t_chrg:12!null t_lifo:15!null tt_id:18!null tt_name:19!null tt_is_sell:20!null tt_is_mrkt:21!null
+      │    │    ├── key columns: [4] = [18]
+      │    │    ├── lookup columns are key
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── volatile
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(1,4-7,9,12,15,18-21), (18)==(4), (4)==(18)
+      │    │    ├── scan trade
+      │    │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null trade.t_chrg:12!null t_lifo:15!null
+      │    │    │    ├── constraint: /1: [/0 - /0]
+      │    │    │    ├── locking: for-update,durability-guaranteed
+      │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    ├── volatile
+      │    │    │    ├── key: ()
+      │    │    │    └── fd: ()-->(1,4-7,9,12,15)
+      │    │    └── filters (true)
+      │    └── filters (true)
+      └── projections
+           ├── trade.t_chrg:12::FLOAT8 [as=t_chrg:29, outer=(12), immutable]
+           └── COALESCE(hs_qty:26, 0) [as=coalesce:30, outer=(26)]
 
 # Q1 (With Hints)
 opt
@@ -3589,43 +3596,50 @@ INNER LOOKUP JOIN trade_type      ON tt_id = t_tt_id
             WHERE t_id = 0
        FOR UPDATE OF trade;
 ----
-project
- ├── columns: t_ca_id:9!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_chrg:29!null t_lifo:15!null t_is_cash:5!null tt_name:19!null tt_is_sell:20!null tt_is_mrkt:21!null coalesce:30
+lock trade
+ ├── columns: t_ca_id:9!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_chrg:29!null t_lifo:15!null t_is_cash:5!null tt_name:19!null tt_is_sell:20!null tt_is_mrkt:21!null coalesce:30  [hidden: t_id:1!null]
+ ├── locking: for-update,durability-guaranteed
  ├── cardinality: [0 - 1]
- ├── volatile
+ ├── volatile, mutations
  ├── key: ()
- ├── fd: ()-->(4-7,9,15,19-21,29,30)
- ├── left-join (lookup holding_summary)
- │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null trade.t_chrg:12!null t_lifo:15!null tt_id:18!null tt_name:19!null tt_is_sell:20!null tt_is_mrkt:21!null hs_ca_id:24 hs_s_symb:25 hs_qty:26
- │    ├── flags: force lookup join (into right side)
- │    ├── key columns: [9 6] = [24 25]
- │    ├── lookup columns are key
- │    ├── cardinality: [0 - 1]
- │    ├── volatile
- │    ├── key: ()
- │    ├── fd: ()-->(1,4-7,9,12,15,18-21,24-26), (4)==(18), (18)==(4)
- │    ├── inner-join (lookup trade_type)
- │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null trade.t_chrg:12!null t_lifo:15!null tt_id:18!null tt_name:19!null tt_is_sell:20!null tt_is_mrkt:21!null
- │    │    ├── flags: force lookup join (into right side)
- │    │    ├── key columns: [4] = [18]
- │    │    ├── lookup columns are key
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── volatile
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(1,4-7,9,12,15,18-21), (18)==(4), (4)==(18)
- │    │    ├── scan trade
- │    │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null trade.t_chrg:12!null t_lifo:15!null
- │    │    │    ├── constraint: /1: [/0 - /0]
- │    │    │    ├── locking: for-update,durability-guaranteed
- │    │    │    ├── cardinality: [0 - 1]
- │    │    │    ├── volatile
- │    │    │    ├── key: ()
- │    │    │    └── fd: ()-->(1,4-7,9,12,15)
- │    │    └── filters (true)
- │    └── filters (true)
- └── projections
-      ├── trade.t_chrg:12::FLOAT8 [as=t_chrg:29, outer=(12), immutable]
-      └── COALESCE(hs_qty:26, 0) [as=coalesce:30, outer=(26)]
+ ├── fd: ()-->(1,4-7,9,15,19-21,29,30)
+ └── project
+      ├── columns: t_chrg:29!null coalesce:30 t_id:1!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_lifo:15!null tt_name:19!null tt_is_sell:20!null tt_is_mrkt:21!null
+      ├── cardinality: [0 - 1]
+      ├── volatile
+      ├── key: ()
+      ├── fd: ()-->(1,4-7,9,15,19-21,29,30)
+      ├── left-join (lookup holding_summary)
+      │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null trade.t_chrg:12!null t_lifo:15!null tt_id:18!null tt_name:19!null tt_is_sell:20!null tt_is_mrkt:21!null hs_ca_id:24 hs_s_symb:25 hs_qty:26
+      │    ├── flags: force lookup join (into right side)
+      │    ├── key columns: [9 6] = [24 25]
+      │    ├── lookup columns are key
+      │    ├── cardinality: [0 - 1]
+      │    ├── volatile
+      │    ├── key: ()
+      │    ├── fd: ()-->(1,4-7,9,12,15,18-21,24-26), (4)==(18), (18)==(4)
+      │    ├── inner-join (lookup trade_type)
+      │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null trade.t_chrg:12!null t_lifo:15!null tt_id:18!null tt_name:19!null tt_is_sell:20!null tt_is_mrkt:21!null
+      │    │    ├── flags: force lookup join (into right side)
+      │    │    ├── key columns: [4] = [18]
+      │    │    ├── lookup columns are key
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── volatile
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(1,4-7,9,12,15,18-21), (18)==(4), (4)==(18)
+      │    │    ├── scan trade
+      │    │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null trade.t_chrg:12!null t_lifo:15!null
+      │    │    │    ├── constraint: /1: [/0 - /0]
+      │    │    │    ├── locking: for-update,durability-guaranteed
+      │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    ├── volatile
+      │    │    │    ├── key: ()
+      │    │    │    └── fd: ()-->(1,4-7,9,12,15)
+      │    │    └── filters (true)
+      │    └── filters (true)
+      └── projections
+           ├── trade.t_chrg:12::FLOAT8 [as=t_chrg:29, outer=(12), immutable]
+           └── COALESCE(hs_qty:26, 0) [as=coalesce:30, outer=(26)]
 
 # Q2
 opt

@@ -252,26 +252,40 @@ memo (optimized, ~9KB, required=[presentation: s:4])
 opt
 SELECT * FROM a LIMIT 1 FOR UPDATE
 ----
-scan a
+lock a
  ├── columns: k:1!null i:2 f:3 s:4 j:5
- ├── limit: 1
  ├── locking: for-update,durability-guaranteed
- ├── volatile
+ ├── cardinality: [0 - 1]
+ ├── volatile, mutations
  ├── key: ()
- └── fd: ()-->(1-5)
+ ├── fd: ()-->(1-5)
+ └── scan a
+      ├── columns: k:1!null i:2 f:3 s:4 j:5
+      ├── limit: 1
+      ├── locking: for-update,durability-guaranteed
+      ├── volatile
+      ├── key: ()
+      └── fd: ()-->(1-5)
 
 # PushLimitIntoFilteredScan propagates row-level locking information.
 opt
 SELECT s FROM a WHERE s='foo' LIMIT 1 FOR UPDATE
 ----
-scan a@s_idx
- ├── columns: s:4!null
- ├── constraint: /4/1: [/'foo' - /'foo']
- ├── limit: 1
+lock a
+ ├── columns: s:4!null  [hidden: k:1!null]
  ├── locking: for-update,durability-guaranteed
- ├── volatile
+ ├── cardinality: [0 - 1]
+ ├── volatile, mutations
  ├── key: ()
- └── fd: ()-->(4)
+ ├── fd: ()-->(1,4)
+ └── scan a@s_idx
+      ├── columns: k:1!null s:4!null
+      ├── constraint: /4/1: [/'foo' - /'foo']
+      ├── limit: 1
+      ├── locking: for-update,durability-guaranteed
+      ├── volatile
+      ├── key: ()
+      └── fd: ()-->(1,4)
 
 # --------------------------------------------------
 # PushLimitIntoIndexJoin
@@ -343,30 +357,45 @@ top-k
 opt expect-not=PushLimitIntoIndexJoin
 SELECT * FROM kuv WHERE k = 1 ORDER BY u LIMIT 5 FOR UPDATE SKIP LOCKED
 ----
-limit
- ├── columns: k:1!null u:2 v:3
- ├── internal-ordering: +2 opt(1)
+sort
+ ├── columns: k:1!null u:2 v:3  [hidden: rowid:4!null]
  ├── cardinality: [0 - 5]
- ├── volatile
- ├── fd: ()-->(1)
+ ├── volatile, mutations
+ ├── key: (4)
+ ├── fd: ()-->(1), (4)-->(2,3)
  ├── ordering: +2 opt(1) [actual: +2]
- ├── index-join kuv
- │    ├── columns: k:1!null u:2 v:3
- │    ├── locking: for-update,skip-locked,durability-guaranteed
- │    ├── volatile
- │    ├── fd: ()-->(1)
- │    ├── ordering: +2 opt(1) [actual: +2]
- │    ├── limit hint: 5.00
- │    └── scan kuv@kuv_k_u_idx
- │         ├── columns: k:1!null u:2 rowid:4!null
- │         ├── constraint: /1/2/4: [/1 - /1]
- │         ├── locking: for-update,skip-locked,durability-guaranteed
- │         ├── volatile
- │         ├── key: (4)
- │         ├── fd: ()-->(1), (4)-->(2)
- │         ├── ordering: +2 opt(1) [actual: +2]
- │         └── limit hint: 5.00
- └── 5
+ └── lock kuv
+      ├── columns: k:1!null u:2 v:3 rowid:4!null
+      ├── locking: for-update,skip-locked,durability-guaranteed
+      ├── cardinality: [0 - 5]
+      ├── volatile, mutations
+      ├── key: (4)
+      ├── fd: ()-->(1), (4)-->(2,3)
+      └── limit
+           ├── columns: k:1!null u:2 v:3 rowid:4!null
+           ├── internal-ordering: +2 opt(1)
+           ├── cardinality: [0 - 5]
+           ├── volatile
+           ├── key: (4)
+           ├── fd: ()-->(1), (4)-->(2,3)
+           ├── index-join kuv
+           │    ├── columns: k:1!null u:2 v:3 rowid:4!null
+           │    ├── locking: for-update,skip-locked,durability-guaranteed
+           │    ├── volatile
+           │    ├── key: (4)
+           │    ├── fd: ()-->(1), (4)-->(2,3)
+           │    ├── ordering: +2 opt(1) [actual: +2]
+           │    ├── limit hint: 5.00
+           │    └── scan kuv@kuv_k_u_idx
+           │         ├── columns: k:1!null u:2 rowid:4!null
+           │         ├── constraint: /1/2/4: [/1 - /1]
+           │         ├── locking: for-update,skip-locked,durability-guaranteed
+           │         ├── volatile
+           │         ├── key: (4)
+           │         ├── fd: ()-->(1), (4)-->(2)
+           │         ├── ordering: +2 opt(1) [actual: +2]
+           │         └── limit hint: 5.00
+           └── 5
 
 exec-ddl
 CREATE TABLE abcd (
@@ -875,17 +904,34 @@ offset
 opt
 SELECT * FROM kuv ORDER BY u LIMIT 5 FOR UPDATE
 ----
-top-k
- ├── columns: k:1 u:2 v:3
- ├── internal-ordering: +2
- ├── k: 5
+sort
+ ├── columns: k:1 u:2 v:3  [hidden: rowid:4!null]
  ├── cardinality: [0 - 5]
- ├── volatile
+ ├── volatile, mutations
+ ├── key: (4)
+ ├── fd: (4)-->(1-3)
  ├── ordering: +2
- └── scan kuv
-      ├── columns: k:1 u:2 v:3
+ └── lock kuv
+      ├── columns: k:1 u:2 v:3 rowid:4!null
       ├── locking: for-update,durability-guaranteed
-      └── volatile
+      ├── cardinality: [0 - 5]
+      ├── volatile, mutations
+      ├── key: (4)
+      ├── fd: (4)-->(1-3)
+      └── top-k
+           ├── columns: k:1 u:2 v:3 rowid:4!null
+           ├── internal-ordering: +2
+           ├── k: 5
+           ├── cardinality: [0 - 5]
+           ├── volatile
+           ├── key: (4)
+           ├── fd: (4)-->(1-3)
+           └── scan kuv
+                ├── columns: k:1 u:2 v:3 rowid:4!null
+                ├── locking: for-update,durability-guaranteed
+                ├── volatile
+                ├── key: (4)
+                └── fd: (4)-->(1-3)
 
 # -------------------------
 # SplitLimitedScanIntoUnionScans

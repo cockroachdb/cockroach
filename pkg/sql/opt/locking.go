@@ -67,6 +67,11 @@ type Locking struct {
 	// the durability of intents for correctness, rather than the durability of
 	// locks.
 	Durability tree.LockingDurability
+
+	// Forced is true if this locking should still be used when initial-row-fetch
+	// locking is disabled under weaker isolation levels. It is used to
+	// distinguish Lock-operator locking from initial-row-fetch locking.
+	Forced bool
 }
 
 // Max returns a new set of locking properties where each property is the max of
@@ -77,6 +82,7 @@ func (l Locking) Max(l2 Locking) Locking {
 		WaitPolicy: l.WaitPolicy.Max(l2.WaitPolicy),
 		Form:       l.Form.Max(l2.Form),
 		Durability: l.Durability.Max(l2.Durability),
+		Forced:     l.Forced || l2.Forced,
 	}
 }
 

@@ -14,6 +14,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -154,6 +156,11 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 	// than the max mutation batch size are disallowed.
 	if !ok || !memo.ValuesLegalForInsertFastPath(values) {
 		return execPlan{}, false, nil
+	}
+
+	if b.onlyForcedLocking {
+		b.onlyForcedLocking = false
+		defer func() { b.onlyForcedLocking = true }()
 	}
 
 	md := b.mem.Metadata()
@@ -763,6 +770,10 @@ func (b *Builder) checkContainsLocking(mainContainsLocking bool) {
 func (b *Builder) buildUniqueChecks(checks memo.UniqueChecksExpr) error {
 	defer b.checkContainsLocking(b.ContainsNonDefaultKeyLocking)
 	b.ContainsNonDefaultKeyLocking = false
+	if b.onlyForcedLocking {
+		b.onlyForcedLocking = false
+		defer func() { b.onlyForcedLocking = true }()
+	}
 	md := b.mem.Metadata()
 	for i := range checks {
 		c := &checks[i]
@@ -795,6 +806,10 @@ func (b *Builder) buildUniqueChecks(checks memo.UniqueChecksExpr) error {
 func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
 	defer b.checkContainsLocking(b.ContainsNonDefaultKeyLocking)
 	b.ContainsNonDefaultKeyLocking = false
+	if b.onlyForcedLocking {
+		b.onlyForcedLocking = false
+		defer func() { b.onlyForcedLocking = true }()
+	}
 	md := b.mem.Metadata()
 	for i := range checks {
 		c := &checks[i]
@@ -1133,4 +1148,36 @@ func unwrapProjectExprs(input memo.RelExpr) memo.RelExpr {
 		return unwrapProjectExprs(proj.Input)
 	}
 	return input
+}
+
+func (b *Builder) buildLock(lock *memo.LockExpr) (execPlan, error) {
+	locking := lock.Locking
+	locking.Forced = true
+
+	// Don't bother creating the lookup join if we don't need it.
+	if !locking.IsLocking() ||
+		!b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V23_2) ||
+		(b.evalCtx.TxnIsoLevel == isolation.Serializable &&
+			!b.evalCtx.SessionData().OptimizerUseLockOpForSerializable) ||
+		((locking.Strength == tree.ForShare || locking.Strength == tree.ForKeyShare) &&
+			b.evalCtx.TxnIsoLevel == isolation.Serializable &&
+			!b.evalCtx.SessionData().SharedLockingForSerializable) {
+		return b.buildRelational(lock.Input)
+	}
+
+	join := &memo.LookupJoinExpr{
+		Input: lock.Input,
+		LookupJoinPrivate: memo.LookupJoinPrivate{
+			JoinType:              opt.SemiJoinOp,
+			Table:                 lock.Table,
+			Index:                 cat.PrimaryIndex,
+			KeyCols:               lock.KeyCols,
+			Cols:                  lock.Cols,
+			LookupColsAreTableKey: true,
+			Locking:               locking,
+		},
+	}
+	memo.CopyLockGroupIntoLookupJoin(lock, join)
+
+	return b.buildLookupJoin(join)
 }
