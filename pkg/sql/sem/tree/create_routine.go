@@ -501,7 +501,7 @@ func (node *AlterRoutineRename) Format(ctx *FmtCtx) {
 	}
 	ctx.FormatNode(&node.Function)
 	ctx.WriteString(" RENAME TO ")
-	ctx.WriteString(string(node.NewName))
+	ctx.FormatNode(&node.NewName)
 }
 
 // AlterRoutineSetSchema represents a ALTER FUNCTION...SET SCHEMA or
@@ -521,7 +521,7 @@ func (node *AlterRoutineSetSchema) Format(ctx *FmtCtx) {
 	}
 	ctx.FormatNode(&node.Function)
 	ctx.WriteString(" SET SCHEMA ")
-	ctx.WriteString(string(node.NewSchemaName))
+	ctx.FormatNode(&node.NewSchemaName)
 }
 
 // AlterRoutineSetOwner represents the ALTER FUNCTION...OWNER TO or
