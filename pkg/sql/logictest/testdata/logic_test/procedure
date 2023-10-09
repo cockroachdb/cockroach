@@ -157,3 +157,42 @@ CREATE FUNCTION t_update(a STRING, b STRING) RETURNS SETOF INT LANGUAGE SQL AS '
 # has been resolved to a specific overload.
 statement error ambiguous function class on t_update
 CALL t_update(1, 0)
+
+subtest anonymous_args
+
+statement ok
+CREATE TABLE anon_args(k INT PRIMARY KEY, v STRING)
+
+statement ok
+CREATE PROCEDURE insert_into_anon_args(INT, STRING) LANGUAGE SQL AS $$
+  INSERT INTO anon_args(k, v) VALUES ($1, $2)
+$$
+
+statement ok
+CALL insert_into_anon_args(1, 'a')
+
+query IT
+SELECT * FROM anon_args
+----
+1  a
+
+statement ok
+CREATE PROCEDURE insert_into_anon_args(STRING, INT) LANGUAGE SQL AS $$
+  INSERT INTO anon_args(k, v) VALUES ($2, $1)
+$$
+
+statement ok
+CALL insert_into_anon_args('b', 2)
+
+query IT rowsort
+SELECT * FROM anon_args
+----
+1  a
+2  b
+
+statement ok
+DROP PROCEDURE insert_into_anon_args(INT, STRING);
+DROP PROCEDURE insert_into_anon_args(STRING, INT);
+DROP TABLE anon_args;
+
+subtest end
