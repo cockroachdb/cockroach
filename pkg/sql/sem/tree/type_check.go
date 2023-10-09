@@ -941,14 +941,6 @@ func (expr *ComparisonExpr) TypeCheck(
 		return nil, err
 	}
 
-	// REFCURSOR does not support comparisons.
-	leftType, rightType := leftTyped.ResolvedType(), rightTyped.ResolvedType()
-	if leftType.Family() == types.RefCursorFamily || rightType.Family() == types.RefCursorFamily {
-		return nil, pgerror.Newf(pgcode.UndefinedFunction,
-			"unsupported comparison operator: <%s> %s <%s>", leftType, cmpOp, rightType,
-		)
-	}
-
 	if alwaysNull {
 		return DNull, nil
 	}
@@ -1471,12 +1463,6 @@ func (expr *IsNullExpr) TypeCheck(
 	if err != nil {
 		return nil, err
 	}
-	// REFCURSOR does not support comparisons.
-	if exprTyped.ResolvedType().Family() == types.RefCursorFamily {
-		return nil, pgerror.New(pgcode.UndefinedFunction,
-			"unsupported comparison operator: refcursor IS unknown",
-		)
-	}
 	expr.Expr = exprTyped
 	expr.typ = types.Bool
 	return expr, nil
@@ -1489,12 +1475,6 @@ func (expr *IsNotNullExpr) TypeCheck(
 	exprTyped, err := expr.Expr.TypeCheck(ctx, semaCtx, types.Any)
 	if err != nil {
 		return nil, err
-	}
-	// REFCURSOR does not support comparisons.
-	if exprTyped.ResolvedType().Family() == types.RefCursorFamily {
-		return nil, pgerror.New(pgcode.UndefinedFunction,
-			"unsupported comparison operator: refcursor IS NOT unknown",
-		)
 	}
 	expr.Expr = exprTyped
 	expr.typ = types.Bool

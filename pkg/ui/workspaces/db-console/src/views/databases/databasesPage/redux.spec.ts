@@ -144,10 +144,14 @@ describe("Databases Page", function () {
       queryError: undefined,
       databases: [
         {
-          loading: false,
-          loaded: false,
-          requestError: undefined,
-          queryError: undefined,
+          detailsLoading: false,
+          detailsLoaded: false,
+          spanStatsLoading: false,
+          spanStatsLoaded: false,
+          detailsRequestError: undefined,
+          spanStatsRequestError: undefined,
+          detailsQueryError: undefined,
+          spanStatsQueryError: undefined,
           name: "system",
           nodes: [],
           spanStats: undefined,
@@ -156,10 +160,14 @@ describe("Databases Page", function () {
           numIndexRecommendations: 0,
         },
         {
-          loading: false,
-          loaded: false,
-          requestError: undefined,
-          queryError: undefined,
+          detailsLoading: false,
+          detailsLoaded: false,
+          spanStatsLoading: false,
+          spanStatsLoaded: false,
+          detailsRequestError: undefined,
+          spanStatsRequestError: undefined,
+          detailsQueryError: undefined,
+          spanStatsQueryError: undefined,
           name: "test",
           nodes: [],
           spanStats: undefined,
@@ -274,17 +282,6 @@ describe("Databases Page", function () {
         {
           rows: [],
         },
-        // Span Stats
-        {
-          rows: [
-            {
-              approximate_disk_bytes: 100,
-              live_bytes: 200,
-              total_bytes: 300,
-              range_count: 400,
-            },
-          ],
-        },
       ],
     );
 
@@ -293,18 +290,17 @@ describe("Databases Page", function () {
     await driver.refreshDatabaseDetails("test", indexUnusedDuration);
 
     driver.assertDatabaseProperties("test", {
-      loading: false,
-      loaded: true,
-      requestError: null,
-      queryError: undefined,
+      detailsLoading: false,
+      detailsLoaded: true,
+      spanStatsLoading: false,
+      spanStatsLoaded: false,
+      detailsRequestError: null,
+      spanStatsRequestError: undefined,
+      detailsQueryError: undefined,
+      spanStatsQueryError: undefined,
       name: "test",
       nodes: [1, 2, 3],
-      spanStats: {
-        approximate_disk_bytes: 100,
-        live_bytes: 200,
-        total_bytes: 300,
-        range_count: 400,
-      },
+      spanStats: undefined,
       tables: {
         tables: [`"public"."foo"`, `"public"."bar"`],
       },

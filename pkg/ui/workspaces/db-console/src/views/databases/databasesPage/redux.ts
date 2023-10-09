@@ -22,6 +22,7 @@ import {
   refreshDatabaseDetails,
   refreshNodes,
   refreshSettings,
+  refreshDatabaseDetailsSpanStats,
 } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import {
@@ -73,6 +74,7 @@ const searchLocalSetting = new LocalSetting(
 export const mapStateToProps = (state: AdminUIState): DatabasesPageData => {
   const dbListResp = state?.cachedData.databases.data;
   const databaseDetails = state?.cachedData.databaseDetails;
+  const spanStats = state?.cachedData.databaseDetailsSpanStats;
   const nodeRegions = nodeRegionsByIDSelector(state);
   return {
     loading: selectLoading(state),
@@ -82,6 +84,7 @@ export const mapStateToProps = (state: AdminUIState): DatabasesPageData => {
     databases: deriveDatabaseDetailsMemoized({
       dbListResp,
       databaseDetails,
+      spanStats,
       nodeRegions,
       isTenant,
     }),
@@ -106,6 +109,9 @@ export const mapDispatchToProps = {
       database,
       csIndexUnusedDuration,
     });
+  },
+  refreshDatabaseSpanStats: (database: string) => {
+    return refreshDatabaseDetailsSpanStats({ database });
   },
   refreshNodes,
   onSortingChange: (

@@ -30,7 +30,13 @@ import { selectIsTenant } from "../store/uiConfig";
 import { Dispatch } from "redux";
 import { actions as clusterSettingsActions } from "../store/clusterSettings";
 import { actions as databasesListActions } from "../store/databasesList";
-import { actions as databaseDetailsActions } from "../store/databaseDetails";
+import {
+  databaseDetailsReducer,
+  databaseDetailsSpanStatsReducer,
+} from "../store/databaseDetails";
+const databaseDetailsActions = databaseDetailsReducer.actions;
+const databaseDetailsSpanStatsActions = databaseDetailsSpanStatsReducer.actions;
+
 import {
   actions as localStorageActions,
   LocalStorageKeys,
@@ -56,6 +62,7 @@ const mapStateToProps = (state: AppState): DatabasesPageData => {
     databases: deriveDatabaseDetailsMemoized({
       dbListResp: databasesListState?.data,
       databaseDetails: state.adminUI?.databaseDetails,
+      spanStats: state.adminUI?.databaseDetailsSpanStats,
       nodeRegions,
       isTenant,
     }),
@@ -81,6 +88,9 @@ const mapDispatchToProps = (dispatch: Dispatch): DatabasesPageActions => ({
     dispatch(
       databaseDetailsActions.refresh({ database, csIndexUnusedDuration }),
     );
+  },
+  refreshDatabaseSpanStats: (database: string) => {
+    dispatch(databaseDetailsSpanStatsActions.refresh({ database }));
   },
   refreshSettings: () => {
     dispatch(clusterSettingsActions.refresh());
