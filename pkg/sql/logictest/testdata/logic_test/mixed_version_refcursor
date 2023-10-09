@@ -134,25 +134,11 @@ CREATE OR REPLACE FUNCTION f() RETURNS REFCURSOR AS $$
   SELECT 'foo';
 $$ LANGUAGE SQL;
 
-statement error pgcode 0A000 pq: refcursor not supported until version 23.2
-CREATE OR REPLACE FUNCTION f() RETURNS REFCURSOR AS $$
-  BEGIN
-    RETURN 'foo';
-  END
-$$ LANGUAGE PLpgSQL;
-
 # Function that takes REFCURSOR argument.
 statement error pgcode 0A000 pq: refcursor not supported until version 23.2
 CREATE OR REPLACE FUNCTION f(curs REFCURSOR) RETURNS INT AS $$
   SELECT 0;
 $$ LANGUAGE SQL;
-
-statement error pgcode 0A000 pq: refcursor not supported until version 23.2
-CREATE OR REPLACE FUNCTION f(curs REFCURSOR) RETURNS INT AS $$
-  BEGIN
-    RETURN 0;
-  END
-$$ LANGUAGE PLpgSQL;
 
 # Function that references REFCURSOR internally.
 statement error pgcode 0A000 pq: refcursor not supported until version 23.2
@@ -161,25 +147,10 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   SELECT 0;
 $$ LANGUAGE SQL;
 
-statement error pgcode 0A000 pq: refcursor not supported until version 23.2
-CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
-  BEGIN
-    SELECT 'foo'::REFCURSOR;
-    RETURN 0;
-  END
-$$ LANGUAGE PLpgSQL;
-
 # Function that returns a composite type with REFCURSOR component.
 statement error pgcode 0A000 pq: refcursor not supported until version 23.2
 CREATE FUNCTION f() RETURNS RECORD AS $$
   SELECT (1, 'foo'::REFCURSOR, true);
 $$ LANGUAGE SQL;
-
-statement error pgcode 0A000 pq: refcursor not supported until version 23.2
-CREATE FUNCTION f() RETURNS RECORD AS $$
-  BEGIN
-    RETURN (1, 'foo'::REFCURSOR, true);
-  END
-$$ LANGUAGE PLpgSQL;
 
 subtest end

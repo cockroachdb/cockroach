@@ -120,6 +120,13 @@ func TestLogic_mixed_version_partially_visible_index(
 	runLogicTest(t, "mixed_version_partially_visible_index")
 }
 
+func TestLogic_mixed_version_plpgsql(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_plpgsql")
+}
+
 func TestLogic_mixed_version_procedure(
 	t *testing.T,
 ) {

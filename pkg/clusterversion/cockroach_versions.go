@@ -517,6 +517,10 @@ const (
 	// V23_2_Procedures is the version where procedures are enabled.
 	V23_2_Procedures
 
+	// V23_2_PLpgSQL is the version at which Cockroach supports routines using
+	// PLpgSQL language.
+	V23_2_PLpgSQL
+
 	// *************************************************
 	// Step (1) Add new versions here.
 	// Do not add new versions to a patch release.
@@ -865,6 +869,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_2_Procedures,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 34},
+	},
+	{
+		Key:     V23_2_PLpgSQL,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 36},
 	},
 
 	// *************************************************
