@@ -44,6 +44,7 @@ func (mb *mutationBuilder) buildUniqueChecksForInsert() {
 
 	h := &mb.uniqueCheckHelper
 
+	buildFastPathCheck := true
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
 		// If this constraint is already enforced by an index, we don't need to plan
 		// a check.
@@ -58,9 +59,16 @@ func (mb *mutationBuilder) buildUniqueChecksForInsert() {
 			continue
 		}
 		if h.init(mb, i) {
-			uniqueChecksItem, fastPathUniqueChecksItem := h.buildInsertionCheck(true /* buildFastPathCheck */)
+			uniqueChecksItem, fastPathUniqueChecksItem := h.buildInsertionCheck(buildFastPathCheck)
+			if fastPathUniqueChecksItem == nil {
+				// If we can't build one fast path check, don't build any of them into
+				// the expression tree.
+				buildFastPathCheck = false
+				mb.fastPathUniqueChecks = nil
+			} else {
+				mb.fastPathUniqueChecks = append(mb.fastPathUniqueChecks, *fastPathUniqueChecksItem)
+			}
 			mb.uniqueChecks = append(mb.uniqueChecks, uniqueChecksItem)
-			mb.fastPathUniqueChecks = append(mb.fastPathUniqueChecks, fastPathUniqueChecksItem)
 		}
 	}
 	telemetry.Inc(sqltelemetry.UniqueChecksUseCounter)
@@ -396,12 +404,18 @@ func (h *uniqueCheckHelper) buildFiltersForFastPathCheck(
 			// This is currently not supported.
 			return nil
 		}
-		scanFilters = append(scanFilters, f.ConstructFiltersItem(
+		filtersItem := f.ConstructFiltersItem(
 			f.ConstructEq(
 				f.ConstructVariable(h.scanScope.cols[i].id),
 				tupleScalarExpression,
 			),
-		))
+		)
+		// Volatile expressions may return a different value on each evaluation,
+		// so must be disabled for this check as the actual insert value may differ.
+		if filtersItem.ScalarProps().VolatilitySet.HasVolatile() {
+			return nil
+		}
+		scanFilters = append(scanFilters, filtersItem)
 	}
 	return scanFilters
 }
@@ -409,10 +423,12 @@ func (h *uniqueCheckHelper) buildFiltersForFastPathCheck(
 // buildInsertionCheck creates a unique check for rows which are added to a
 // table. The input to the insertion check will be produced from the input to
 // the mutation operator. If buildFastPathCheck is true, a fast-path unique
-// check for the insert is also built.
+// check for the insert is also built. A `UniqueChecksItem` can always be built,
+// but if it is not possible to build a `FastPathUniqueChecksItem`, the second
+// return value is nil.
 func (h *uniqueCheckHelper) buildInsertionCheck(
 	buildFastPathCheck bool,
-) (memo.UniqueChecksItem, memo.FastPathUniqueChecksItem) {
+) (memo.UniqueChecksItem, *memo.FastPathUniqueChecksItem) {
 	f := h.mb.b.factory
 
 	// Build a self semi-join, with the new values on the left and the
@@ -531,6 +547,14 @@ func (h *uniqueCheckHelper) buildInsertionCheck(
 	// violation error.
 	project := f.ConstructProject(semiJoin, nil /* projections */, keyCols.ToSet())
 
+	uniqueChecks := f.ConstructUniqueChecksItem(project, &memo.UniqueChecksItemPrivate{
+		Table:        h.mb.tabID,
+		CheckOrdinal: h.uniqueOrdinal,
+		KeyCols:      keyCols,
+	})
+	if !buildFastPathCheck {
+		return uniqueChecks, nil
+	}
 	// Build a SelectExpr which can be optimized in the explore phase and used
 	// to build information needed to perform the fast path uniqueness check.
 	// The goal is for the Select to be rewritten into a constrained scan on
@@ -539,6 +563,8 @@ func (h *uniqueCheckHelper) buildInsertionCheck(
 	if foundScan && len(scanFilters) != 0 {
 		newScanScope, _ := h.buildTableScan()
 		newPossibleScan := newScanScope.expr
+		// Hash-sharded REGIONAL BY ROW tables may include a projection which can
+		// be skipped over to find the applicable Scan.
 		if skipProjectExpr, ok := newPossibleScan.(*memo.ProjectExpr); ok {
 			newPossibleScan = skipProjectExpr.Input
 		}
@@ -547,24 +573,16 @@ func (h *uniqueCheckHelper) buildInsertionCheck(
 			newFilters := f.CustomFuncs().RemapScanColsInFilter(scanFilters, &scanExpr.ScanPrivate, newScanPrivate)
 			uniqueFastPathCheck = f.ConstructSelect(newScanExpr, newFilters)
 		} else {
-			uniqueFastPathCheck = f.CustomFuncs().ConstructEmptyValues(opt.ColSet{})
+			// Don't build a fast-path check if we failed to create a new ScanExpr.
+			return uniqueChecks, nil
 		}
 	} else if buildFastPathCheck {
-		// Things blow up if a RelExpr is nil, so construct a minimal dummy relation
-		// that will not be used.
-		uniqueFastPathCheck = f.CustomFuncs().ConstructEmptyValues(opt.ColSet{})
-	}
-
-	uniqueChecks := f.ConstructUniqueChecksItem(project, &memo.UniqueChecksItemPrivate{
-		Table:        h.mb.tabID,
-		CheckOrdinal: h.uniqueOrdinal,
-		KeyCols:      keyCols,
-	})
-	if !buildFastPathCheck {
-		return uniqueChecks, memo.FastPathUniqueChecksItem{}
+		// Don't build a fast-path check if we failed to build a ScanExpr with
+		// filters on all unique check columns.
+		return uniqueChecks, nil
 	}
 	fastPathChecks := f.ConstructFastPathUniqueChecksItem(uniqueFastPathCheck, &memo.FastPathUniqueChecksItemPrivate{ReferencedTableID: h.mb.tabID, CheckOrdinal: h.uniqueOrdinal})
-	return uniqueChecks, fastPathChecks
+	return uniqueChecks, &fastPathChecks
 }
 
 // buildTableScan builds a Scan of the table. The ordinals of the columns

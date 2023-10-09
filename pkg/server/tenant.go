@@ -175,6 +175,7 @@ func (s *SQLServerWrapper) Drain(
 // process tenant.
 type tenantServerDeps struct {
 	instanceIDContainer *base.SQLIDContainer
+	nodeIDGetter        func() roachpb.NodeID
 
 	// The following should eventually be connected to tenant
 	// capabilities.
@@ -199,7 +200,14 @@ func NewSeparateProcessTenantServer(
 	tenantNameContainer *roachpb.TenantNameContainer,
 ) (*SQLServerWrapper, error) {
 	deps := tenantServerDeps{
-		instanceIDContainer:   baseCfg.IDContainer.SwitchToSQLIDContainerForStandaloneSQLInstance(),
+		instanceIDContainer: baseCfg.IDContainer.SwitchToSQLIDContainerForStandaloneSQLInstance(),
+		// The kvcoord.DistSender uses the node ID to preferentially route
+		// requests to a local replica (if one exists). In separate-process
+		// mode, not knowing the node ID, and thus not being able to take
+		// advantage of this optimization is okay, given tenants not running
+		// in-process with KV instances have no such optimization to take
+		// advantage of to begin with.
+		nodeIDGetter:          nil,
 		costControllerFactory: NewTenantSideCostController,
 		spanLimiterFactory: func(ie isql.Executor, st *cluster.Settings, knobs *spanconfig.TestingKnobs) spanconfig.Limiter {
 			return spanconfiglimiter.New(ie, st, knobs)
@@ -228,6 +236,10 @@ func newSharedProcessTenantServer(
 
 	deps := tenantServerDeps{
 		instanceIDContainer: base.NewSQLIDContainerForNode(baseCfg.IDContainer),
+		// The kvcoord.DistSender uses the node ID to preferentially route
+		// requests to a local replica (if one exists). In shared-process mode
+		// we can easily provide that without accessing the gossip.
+		nodeIDGetter: baseCfg.IDContainer.Get,
 		// TODO(ssd): The cost controller should instead be able to
 		// read from the capability system and return immediately if
 		// the tenant is exempt. For now we are turning off the
@@ -562,7 +574,12 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	// The SQL listener is returned, to start the SQL server later
 	// below when the server has initialized.
 	enableSQLListener := !s.sqlServer.cfg.DisableSQLListener
-	pgL, loopbackPgL, rpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(ctx, workersCtx, *s.sqlServer.cfg, s.stopper, s.grpc, enableSQLListener)
+	lf := ListenAndUpdateAddrs
+	if s.sqlServer.cfg.RPCListenerFactory != nil {
+		lf = s.sqlServer.cfg.RPCListenerFactory
+	}
+
+	pgL, loopbackPgL, rpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(ctx, workersCtx, *s.sqlServer.cfg, s.stopper, s.grpc, lf, enableSQLListener)
 	if err != nil {
 		return err
 	}
@@ -1140,6 +1157,7 @@ func makeTenantSQLServerArgs(
 		Settings:          st,
 		Clock:             clock,
 		NodeDescs:         tenantConnect,
+		NodeIDGetter:      deps.nodeIDGetter,
 		RPCRetryOptions:   &rpcRetryOptions,
 		RPCContext:        rpcContext,
 		NodeDialer:        kvNodeDialer,

@@ -236,8 +236,11 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.SQLAdvertiseAddr = util.IsolatedTestAddr.String()
 		cfg.HTTPAddr = util.IsolatedTestAddr.String()
 	}
-	if params.SecondaryTenantPortOffset != 0 {
-		cfg.SecondaryTenantPortOffset = params.SecondaryTenantPortOffset
+	if params.ApplicationInternalRPCPortMin != 0 {
+		cfg.ApplicationInternalRPCPortMin = params.ApplicationInternalRPCPortMin
+	}
+	if params.ApplicationInternalRPCPortMax != 0 {
+		cfg.ApplicationInternalRPCPortMax = params.ApplicationInternalRPCPortMax
 	}
 	if params.Addr != "" {
 		cfg.Addr = params.Addr

@@ -12,7 +12,7 @@ SELECT nothing(nothing + 1) AS nothing
 SELECT nothing(nothing + 1) AS nothing
 SELECT (nothing(((nothing) + (1)))) AS nothing -- fully parenthesized
 SELECT nothing(nothing + _) AS nothing -- literals removed
-SELECT nothing(_ + 1) AS _ -- identifiers removed
+SELECT _(_ + 1) AS _ -- identifiers removed
 
 parse
 SET a = nothing
@@ -94,7 +94,7 @@ SELECT index(index), index(index), index.index(index)
 SELECT index(index), index(index), index.index(index)
 SELECT (index((index))), (index((index))), (index.index((index))) -- fully parenthesized
 SELECT index(index), index(index), index.index(index) -- literals removed
-SELECT index(_), index(_), index.index(_) -- identifiers removed
+SELECT _(_), _(_), _._(_) -- identifiers removed
 
 parse
 SELECT index index FROM a

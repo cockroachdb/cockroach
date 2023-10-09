@@ -110,7 +110,7 @@ SELECT~~+~++~bd(*)
 SELECT ~(~(~(~bd(*)))) -- normalized!
 SELECT (~((~((~((~(bd((*)))))))))) -- fully parenthesized
 SELECT ~(~(~(~bd(*)))) -- literals removed
-SELECT ~(~(~(~bd(*)))) -- identifiers removed
+SELECT ~(~(~(~_(*)))) -- identifiers removed
 
 parse
 SELECT true AND false
@@ -198,7 +198,7 @@ SELECT FAMILY (x)
 SELECT family(x) -- normalized!
 SELECT (family((x))) -- fully parenthesized
 SELECT family(x) -- literals removed
-SELECT family(_) -- identifiers removed
+SELECT _(_) -- identifiers removed
 
 parse
 SELECT 1 IN (b)
@@ -1937,7 +1937,7 @@ TIMESTAMP '2000-01-01 01:30:00');
 SELECT overlaps(TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2000-01-01 01:00:00', TIMESTAMP '2000-01-01 00:30:00', TIMESTAMP '2000-01-01 01:30:00') -- normalized!
 SELECT (overlaps((TIMESTAMP ('2000-01-01 00:00:00')), (TIMESTAMP ('2000-01-01 01:00:00')), (TIMESTAMP ('2000-01-01 00:30:00')), (TIMESTAMP ('2000-01-01 01:30:00')))) -- fully parenthesized
 SELECT overlaps(TIMESTAMP '_', TIMESTAMP '_', TIMESTAMP '_', TIMESTAMP '_') -- literals removed
-SELECT overlaps(TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2000-01-01 01:00:00', TIMESTAMP '2000-01-01 00:30:00', TIMESTAMP '2000-01-01 01:30:00') -- identifiers removed
+SELECT _(TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2000-01-01 01:00:00', TIMESTAMP '2000-01-01 00:30:00', TIMESTAMP '2000-01-01 01:30:00') -- identifiers removed
 
 parse
 SELECT
@@ -2045,4 +2045,4 @@ SELECT my_func('a', 1, true)
 SELECT my_func('a', 1, true)
 SELECT (my_func(('a'), (1), (true))) -- fully parenthesized
 SELECT my_func('_', _, _) -- literals removed
-SELECT my_func('a', 1, true) -- identifiers removed
+SELECT _('a', 1, true) -- identifiers removed
