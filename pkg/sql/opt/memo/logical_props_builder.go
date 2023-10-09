@@ -1516,6 +1516,28 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 	}
 }
 
+func (b *logicalPropsBuilder) buildLockProps(lock *LockExpr, rel *props.Relational) {
+	BuildSharedProps(lock, &rel.Shared, b.evalCtx)
+
+	private := lock.Private().(*LockPrivate)
+	inputProps := lock.Child(0).(RelExpr).Relational()
+
+	rel.OutputCols = inputProps.OutputCols.Copy()
+	rel.OutputCols.IntersectionWith(lock.Cols)
+	rel.NotNullCols = inputProps.NotNullCols.Copy()
+	rel.NotNullCols.IntersectionWith(lock.Cols)
+	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
+	rel.FuncDeps.ProjectCols(rel.OutputCols)
+	rel.Cardinality = inputProps.Cardinality
+	if private.Locking.WaitPolicy == tree.LockWaitSkipLocked {
+		// SKIP LOCKED can act like a filter.
+		rel.Cardinality = rel.Cardinality.AsLowAs(0)
+	}
+	if !b.disableStats {
+		b.sb.buildLock(lock, rel)
+	}
+}
+
 func (b *logicalPropsBuilder) buildCreateTableProps(ct *CreateTableExpr, rel *props.Relational) {
 	BuildSharedProps(ct, &rel.Shared, b.evalCtx)
 }
