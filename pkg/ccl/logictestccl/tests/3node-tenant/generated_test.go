@@ -1724,6 +1724,13 @@ func TestTenantLogic_select_for_update(
 	runLogicTest(t, "select_for_update")
 }
 
+func TestTenantLogic_select_for_update_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "select_for_update_read_committed")
+}
+
 func TestTenantLogic_select_index(
 	t *testing.T,
 ) {

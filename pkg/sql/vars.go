@@ -2947,6 +2947,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(_ *settings.Values) string { return "" },
 	},
+
+	// CockroachDB extension.
+	`optimizer_use_lock_op_for_serializable`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_lock_op_for_serializable`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_lock_op_for_serializable", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUseLockOpForSerializable(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseLockOpForSerializable), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {
