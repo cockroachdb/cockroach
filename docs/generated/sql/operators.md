@@ -447,6 +447,7 @@
 <tr><td>oid <code>IS NOT DISTINCT FROM</code> <a href="int.html">int</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>oid <code>IS NOT DISTINCT FROM</code> oid</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>pg_lsn <code>IS NOT DISTINCT FROM</code> pg_lsn</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>refcursor <code>IS NOT DISTINCT FROM</code> unknown</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>IS NOT DISTINCT FROM</code> <a href="string.html">string</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string[]</a> <code>IS NOT DISTINCT FROM</code> <a href="string.html">string[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="time.html">time</a> <code>IS NOT DISTINCT FROM</code> <a href="time.html">time</a></td><td><a href="bool.html">bool</a></td></tr>
