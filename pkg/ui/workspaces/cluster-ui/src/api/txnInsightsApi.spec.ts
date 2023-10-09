@@ -67,6 +67,7 @@ describe("test txn insights api functions", () => {
     blocking_txn_fingerprint_id: "4329ab5f4493f82d",
     waiting_txn_id: waitingTxnID,
     waiting_txn_fingerprint_id: "1831d909096f992c",
+    contention_type: "LOCK_WAIT",
   };
 
   afterEach(() => {
@@ -111,6 +112,7 @@ describe("test txn insights api functions", () => {
             waitingTxnFingerprintID:
               contentionDetailsMock.waiting_txn_fingerprint_id,
             waitingTxnID: contentionDetailsMock.waiting_txn_id,
+            contentionType: "LOCK_WAIT",
           },
         ],
         execType: InsightExecEnum.TRANSACTION,
@@ -157,6 +159,7 @@ describe("test txn insights api functions", () => {
             waitingTxnFingerprintID:
               contentionDetailsMock.waiting_txn_fingerprint_id,
             waitingTxnID: contentionDetailsMock.waiting_txn_id,
+            contentionType: "LOCK_WAIT",
           },
         ],
         execType: InsightExecEnum.TRANSACTION,
@@ -212,6 +215,7 @@ describe("test txn insights api functions", () => {
             waitingTxnFingerprintID:
               contentionDetailsMock.waiting_txn_fingerprint_id,
             waitingTxnID: contentionDetailsMock.waiting_txn_id,
+            contentionType: "LOCK_WAIT",
           },
         ],
         execType: InsightExecEnum.TRANSACTION,

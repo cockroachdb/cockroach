@@ -15,7 +15,11 @@ import {
   sqlApiErrorMessage,
   SqlApiResponse,
 } from "./sqlApi";
-import { InsightNameEnum, TxnInsightDetails } from "../insights";
+import {
+  InsightNameEnum,
+  StmtFailureCodesStr,
+  TxnInsightDetails,
+} from "../insights";
 import {
   formatStmtInsights,
   stmtInsightsByTxnExecutionQuery,
@@ -137,8 +141,15 @@ export async function getTxnInsightDetailsApi(
     insight => insight.name === InsightNameEnum.highContention,
   );
 
+  const isRetrySerializableFailure =
+    txnInsightDetails.txnDetails?.errorCode ===
+    StmtFailureCodesStr.RETRY_SERIALIZABLE;
+
   try {
-    if (!req.excludeContention && highContention) {
+    if (
+      !req.excludeContention &&
+      (highContention || isRetrySerializableFailure)
+    ) {
       const contentionInfo = await getTxnInsightsContentionDetailsApi(req);
       txnInsightDetails.blockingContentionDetails =
         contentionInfo?.blockingContentionDetails;

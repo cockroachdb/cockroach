@@ -18,7 +18,11 @@ import "antd/lib/tabs/style";
 import { Button } from "src/button";
 import { getMatchParamByName } from "src/util/query";
 import { TxnInsightDetailsRequest, TxnInsightDetailsReqErrs } from "src/api";
-import { InsightNameEnum, TxnInsightDetails } from "../types";
+import {
+  InsightNameEnum,
+  StmtFailureCodesStr,
+  TxnInsightDetails,
+} from "../types";
 
 import { commonStyles } from "src/common";
 import { TimeScale } from "../../timeScaleDropdown";
@@ -94,7 +98,8 @@ export const TransactionInsightDetails: React.FC<
       (txnDetails != null &&
         txnDetails.insights.find(
           i => i.name === InsightNameEnum.highContention,
-        ) == null);
+        ) == null &&
+        txnDetails.errorCode !== StmtFailureCodesStr.RETRY_SERIALIZABLE);
 
     if (!stmtsComplete || !contentionComplete || txnDetails == null) {
       // Only fetch if we are missing some information.
