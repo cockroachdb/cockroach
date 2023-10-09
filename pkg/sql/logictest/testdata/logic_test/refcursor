@@ -440,13 +440,6 @@ SELECT 'foo'::REFCURSOR >= 'foo'::TEXT;
 statement error pgcode 22023 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR >= NULL;
 
-# TODO(drewk): Postgres allows this case.
-statement error pgcode 42883 pq: unsupported comparison operator
-SELECT 'foo'::REFCURSOR IS NULL;
-
-statement error pgcode 42883 pq: unsupported comparison operator
-SELECT 'foo'::REFCURSOR IS NOT NULL;
-
 statement error pgcode 22023 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR IS DISTINCT FROM 'foo'::REFCURSOR;
 
@@ -454,15 +447,110 @@ statement error pgcode 22023 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR IS DISTINCT FROM 'foo'::TEXT;
 
 statement error pgcode 22023 pq: unsupported comparison operator
-SELECT 'foo'::REFCURSOR IS DISTINCT FROM NULL;
-
-statement error pgcode 22023 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM 'foo'::REFCURSOR;
 
 statement error pgcode 22023 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM 'foo'::TEXT;
 
-statement error pgcode 22023 pq: unsupported comparison operator
+# Regression test for #112010 - REFCURSOR should allow IS NULL and
+# IS NOT NULL comparisons.
+subtest is_null
+
+query B
+SELECT 'foo'::REFCURSOR IS NULL;
+----
+false
+
+query B
+SELECT 'foo'::REFCURSOR IS NOT NULL;
+----
+true
+
+query B
+SELECT 'foo'::REFCURSOR IS DISTINCT FROM NULL;
+----
+true
+
+query B
 SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM NULL;
+----
+false
+
+# REFCURSOR columns are allowed.
+query B rowsort
+SELECT l IS NULL FROM implicit_types;
+----
+true
+true
+true
+true
+true
+
+query B rowsort
+SELECT l IS NOT NULL FROM implicit_types;
+----
+false
+false
+false
+false
+false
+
+query B rowsort
+SELECT l IS DISTINCT FROM NULL FROM implicit_types;
+----
+false
+false
+false
+false
+false
+
+query B rowsort
+SELECT l IS NOT DISTINCT FROM NULL FROM implicit_types;
+----
+true
+true
+true
+true
+true
+
+# Comparison with column is not allowed.
+statement error pgcode 22023 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR IS DISTINCT FROM l FROM implicit_types;
+
+statement error pgcode 22023 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM l FROM implicit_types;
+
+# Comparison with typed NULL is not allowed.
+statement error pgcode 22023 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR IS DISTINCT FROM (NULL::REFCURSOR);
+
+statement error pgcode 22023 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM (NULL::REFCURSOR);
+
+# Comparison with CASE expression is not allowed.
+statement error pgcode 22023 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR IS DISTINCT FROM (CASE WHEN true THEN NULL ELSE 1 END);
+
+statement error pgcode 22023 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM (CASE WHEN true THEN NULL ELSE 1 END);
+
+# The CASE operator is folded into an untyped NULL, so it's allowed.
+# TODO(drewk): Postgres doesn't allow this case.
+query B
+SELECT 'foo'::REFCURSOR IS DISTINCT FROM (CASE WHEN true THEN NULL ELSE NULL END);
+----
+true
+
+query B
+SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM (CASE WHEN true THEN NULL ELSE NULL END);
+----
+false
+
+# The CASE operator is folded into a typed NULL, so it's not allowed.
+statement error pgcode 22023 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR IS DISTINCT FROM (CASE WHEN true THEN NULL ELSE NULL::REFCURSOR END);
+
+statement error pgcode 22023 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM (CASE WHEN true THEN NULL ELSE NULL::REFCURSOR END);
 
 subtest end

@@ -1775,6 +1775,10 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeIsFn(types.Void, types.Unknown, volatility.Leakproof),
 		makeIsFn(types.Unknown, types.Void, volatility.Leakproof),
 
+		// REFCURSOR cannot be compared with itself, but as a special case, it can
+		// be compared with NULL using IS NOT DISTINCT FROM.
+		makeIsFn(types.RefCursor, types.Unknown, volatility.Leakproof),
+
 		// Tuple comparison.
 		{
 			LeftType:          types.AnyTuple,

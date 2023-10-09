@@ -105,6 +105,39 @@ describe("rest api", function () {
     });
   });
 
+  describe("database span stats request", () => {
+    const database = "test";
+    afterEach(fetchMock.restore);
+    beforeEach(fetchMock.restore);
+    it("correctly requests span stats", () => {
+      // Mock out the fetch query
+      stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
+        clusterUiApi.createDatabaseDetailsSpanStatsReq({
+          database,
+        }),
+        [
+          {
+            rows: [
+              {
+                approximate_disk_bytes: 100,
+                live_bytes: 200,
+                total_bytes: 300,
+                range_count: 400,
+              },
+            ],
+          },
+        ],
+      );
+
+      clusterUiApi.getDatabaseDetailsSpanStats({ database }).then(res => {
+        expect(res.results.spanStats.approximate_disk_bytes).toEqual(100);
+        expect(res.results.spanStats.live_bytes).toEqual(200);
+        expect(res.results.spanStats.total_bytes).toEqual(300);
+        expect(res.results.spanStats.range_count).toEqual(400);
+      });
+    });
+  });
+
   describe("database details request", function () {
     const database = "test";
     const mockOldDate = new Date(2023, 2, 3);
@@ -125,7 +158,7 @@ describe("rest api", function () {
 
     afterEach(fetchMock.restore);
 
-    it("correctly requests info about a specific database", function () {
+    it("correctly requests details for a specific database", function () {
       // Mock out the fetch query
       stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
         clusterUiApi.createDatabaseDetailsReq({
@@ -179,17 +212,6 @@ describe("rest api", function () {
               },
             ],
           },
-          // Database span stats query
-          {
-            rows: [
-              {
-                approximate_disk_bytes: 100,
-                live_bytes: 200,
-                total_bytes: 300,
-                range_count: 400,
-              },
-            ],
-          },
         ],
       );
 
@@ -212,12 +234,6 @@ describe("rest api", function () {
           expect(result.results.zoneConfigResp.zone_config_level).toBe(
             ZoneConfigurationLevel.DATABASE,
           );
-          expect(result.results.stats.spanStats.approximate_disk_bytes).toBe(
-            100,
-          );
-          expect(result.results.stats.spanStats.live_bytes).toBe(200);
-          expect(result.results.stats.spanStats.total_bytes).toBe(300);
-          expect(result.results.stats.spanStats.range_count).toBe(400);
         });
     });
 
@@ -260,6 +276,7 @@ describe("rest api", function () {
         database,
         csIndexUnusedDuration: indexUnusedDuration,
       });
+      fetchMock.reset();
       fetchMock.mock({
         matcher: clusterUiApi.SQL_API_PATH,
         method: "POST",
