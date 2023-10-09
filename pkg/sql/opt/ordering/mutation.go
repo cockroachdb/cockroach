@@ -57,3 +57,22 @@ func mutationBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) op
 	// Ensure that provided ordering only uses projected columns.
 	return remapProvided(provided, &fdset, expr.Relational().OutputCols)
 }
+
+func lockCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
+	// The lock operator can always pass through ordering to its input.
+	return true
+}
+
+func lockBuildChildReqOrdering(
+	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
+) props.OrderingChoice {
+	if childIdx != 0 {
+		return props.OrderingChoice{}
+	}
+	return *required
+}
+
+func lockBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
+	lock := expr.(*memo.LockExpr)
+	return lock.Input.ProvidedPhysical().Ordering
+}

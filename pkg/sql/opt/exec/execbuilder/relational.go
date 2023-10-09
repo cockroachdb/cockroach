@@ -292,6 +292,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.DeleteExpr:
 		ep, err = b.buildDelete(t)
 
+	case *memo.LockExpr:
+		ep, err = b.buildLock(t)
+
 	case *memo.CreateTableExpr:
 		ep, err = b.buildCreateTable(t)
 
@@ -3626,7 +3629,8 @@ func (b *Builder) statementTag(expr memo.RelExpr) string {
 	switch expr.Op() {
 	case opt.OpaqueRelOp, opt.OpaqueMutationOp, opt.OpaqueDDLOp:
 		return expr.Private().(*memo.OpaqueRelPrivate).Metadata.String()
-
+	case opt.LockOp:
+		return "SELECT " + expr.Private().(*memo.LockPrivate).Locking.Strength.String()
 	default:
 		return expr.Op().SyntaxTag()
 	}

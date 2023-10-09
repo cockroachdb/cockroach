@@ -14,8 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -148,6 +146,16 @@ func (b *Builder) buildDataSource(
 		switch t := ds.(type) {
 		case cat.Table:
 			tabMeta := b.addTable(t, &resName)
+			locking := lockCtx.locking
+			if locking.isSet() {
+				lb := newLockBuilder(tabMeta)
+				for _, item := range locking {
+					item.builders = append(item.builders, lb)
+				}
+			}
+			if b.shouldBuildLockOp() {
+				locking = nil
+			}
 			return b.buildScan(
 				tabMeta,
 				tableOrdinals(t, columnKinds{
@@ -155,7 +163,7 @@ func (b *Builder) buildDataSource(
 					includeSystem:    true,
 					includeInverted:  false,
 				}),
-				indexFlags, lockCtx.locking, inScope,
+				indexFlags, locking, inScope,
 				false, /* disableNotVisibleIndex */
 			)
 
@@ -461,7 +469,15 @@ func (b *Builder) buildScanFromTableRef(
 
 	tn := tree.MakeUnqualifiedTableName(tab.Name())
 	tabMeta := b.addTable(tab, &tn)
-
+	if locking.isSet() {
+		lb := newLockBuilder(tabMeta)
+		for _, item := range locking {
+			item.builders = append(item.builders, lb)
+		}
+	}
+	if b.shouldBuildLockOp() {
+		locking = nil
+	}
 	return b.buildScan(
 		tabMeta, ordinals, indexFlags, locking, inScope, false, /* disableNotVisibleIndex */
 	)
@@ -702,9 +718,7 @@ func (b *Builder) buildScan(
 	}
 	if locking.isSet() {
 		private.Locking = locking.get()
-		if b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V23_2) &&
-			(b.evalCtx.TxnIsoLevel != isolation.Serializable ||
-				b.evalCtx.SessionData().DurableLockingForSerializable) {
+		if b.shouldUseGuaranteedDurability() {
 			// Under weaker isolation levels we use fully-durable locks for SELECT FOR
 			// UPDATE statements, SELECT FOR SHARE statements, and constraint checks
 			// (e.g. FK checks), regardless of locking strength and wait policy.
@@ -1158,11 +1172,15 @@ func (b *Builder) buildSelectStmtWithoutParens(
 		b.buildLimit(limit, inScope, outScope)
 	}
 
-	// Remove locking items from scope, and validate that they were found within
-	// the FROM clause.
+	// Remove locking items from scope, validate that they were found within the
+	// FROM clause, and build them.
 	for range lockingClause {
 		item := lockCtx.pop()
 		item.validate()
+		if b.shouldBuildLockOp() {
+			// TODO(michae2): Combine multiple buildLock calls for the same table.
+			b.buildLocking(item, outScope)
+		}
 	}
 
 	// TODO(rytaft): Support FILTER expression.
@@ -1203,6 +1221,7 @@ func (b *Builder) buildSelectClause(
 	orderByScope := b.analyzeOrderBy(orderBy, fromScope, projectionsScope,
 		exprKindOrderBy, tree.RejectGenerators)
 	distinctOnScope := b.analyzeDistinctOnArgs(sel.DistinctOn, fromScope, projectionsScope)
+	lockScope := b.analyzeLockArgs(lockCtx, fromScope, projectionsScope)
 
 	var having opt.ScalarExpr
 	needsAgg := b.needsAggregation(sel, fromScope)
@@ -1217,6 +1236,7 @@ func (b *Builder) buildSelectClause(
 	b.buildProjectionList(fromScope, projectionsScope)
 	b.buildOrderBy(fromScope, projectionsScope, orderByScope)
 	b.buildDistinctOnArgs(fromScope, projectionsScope, distinctOnScope)
+	b.buildLockArgs(fromScope, projectionsScope, lockScope)
 	b.buildProjectSet(fromScope)
 
 	if needsAgg {

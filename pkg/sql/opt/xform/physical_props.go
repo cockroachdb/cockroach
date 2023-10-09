@@ -108,7 +108,7 @@ func BuildChildPhysicalProps(
 			}
 		}
 
-	case opt.IndexJoinOp:
+	case opt.IndexJoinOp, opt.LockOp:
 		// For an index join, every input row results in exactly one output row.
 		childProps.LimitHint = parentProps.LimitHint
 
