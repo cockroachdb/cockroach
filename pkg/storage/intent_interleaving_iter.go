@@ -1339,13 +1339,7 @@ func (i *intentInterleavingIter) FindSplitKey(
 func (i *intentInterleavingIter) Stats() IteratorStats {
 	stats := i.iter.Stats()
 	intentStats := i.intentIter.Stats()
-	for i := pebble.IteratorStatsKind(0); i < pebble.NumStatsKind; i++ {
-		stats.Stats.ForwardSeekCount[i] += intentStats.Stats.ForwardSeekCount[i]
-		stats.Stats.ReverseSeekCount[i] += intentStats.Stats.ReverseSeekCount[i]
-		stats.Stats.ForwardStepCount[i] += intentStats.Stats.ForwardStepCount[i]
-		stats.Stats.ReverseStepCount[i] += intentStats.Stats.ReverseStepCount[i]
-	}
-	stats.Stats.InternalStats.Merge(intentStats.Stats.InternalStats)
+	stats.Stats.Merge(intentStats.Stats)
 	return stats
 }
 
