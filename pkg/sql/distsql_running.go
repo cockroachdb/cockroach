@@ -1004,8 +1004,12 @@ func (r *DistSQLReceiver) setStatus(s execinfra.ConsumerStatus) {
 // rowResultWriter is a subset of CommandResult to be used with the
 // DistSQLReceiver. It's implemented by RowResultWriter.
 type rowResultWriter interface {
-	// AddRow writes a result row.
+	// AddRow writes a result row. The returned error is a "communication error"
+	// which should result in closing the connection.
+	//
 	// Note that the caller owns the row slice and might reuse it.
+	//
+	// If an error has been previously set, this method is a noop.
 	AddRow(ctx context.Context, row tree.Datums) error
 	SetRowsAffected(ctx context.Context, n int)
 	SetError(error)
@@ -1015,6 +1019,10 @@ type rowResultWriter interface {
 // batchResultWriter is a subset of CommandResult to be used with the
 // DistSQLReceiver when the consumer can operate on columnar batches directly.
 type batchResultWriter interface {
+	// AddBatch writes a result batch. The returned error is a "communication
+	// error" which should result in closing the connection.
+	//
+	// If an error has been previously set, this method is a noop.
 	AddBatch(context.Context, coldata.Batch) error
 }
 

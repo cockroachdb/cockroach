@@ -765,8 +765,8 @@ type CommandResult interface {
 // query execution error.
 type CommandResultErrBase interface {
 	// SetError accumulates an execution error that needs to be reported to the
-	// client. No further calls other than SetError(), Close() and Discard() are
-	// allowed.
+	// client. Further calls to any methods are allowed but most of them are
+	// noops.
 	//
 	// Calling SetError() a second time overwrites the previously set error.
 	SetError(error)
