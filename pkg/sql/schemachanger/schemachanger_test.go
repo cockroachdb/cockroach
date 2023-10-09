@@ -914,6 +914,10 @@ func TestComparatorFromLogicTests(t *testing.T) {
 		subtestName := entry.Name
 		subtestStatements := entry.Statements
 
+		if shouldSkipLogicTestCorpusEntry(subtestName) {
+			continue
+		}
+
 		if !t.Run(entry.Name, func(t *testing.T) {
 			t.Logf("running schema changer comparator testing on statements collected from logic test %q\n", subtestName)
 			ss := &staticSQLStmtLineProvider{
@@ -925,4 +929,17 @@ func TestComparatorFromLogicTests(t *testing.T) {
 			t.Logf("test failed on %q\n", subtestName)
 		}
 	}
+}
+
+// shouldSkipLogicTestCorpusEntry is the place where we blacklist entries in the
+// logictest stmts corpus. Each blacklisted entry should be justified with
+// comments.
+func shouldSkipLogicTestCorpusEntry(entryName string) bool {
+	if entryName == "crdb_internal" {
+		// `crdb_internal` contains stmts like `SELECT crdb_internal.force_panic('foo')`
+		// that will cause the framework to crash. Also, in general, we don't care about
+		// crdb_internal functions for purpose of schema changer comparator testing.
+		return true
+	}
+	return false
 }
