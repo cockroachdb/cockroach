@@ -1631,6 +1631,7 @@ type ExecutorTestingKnobs struct {
 		sessionData *sessiondata.SessionData,
 		txnID uuid.UUID,
 		txnFingerprintID appstatspb.TransactionFingerprintID,
+		txErr error,
 	)
 
 	// AfterBackupChunk is called after each chunk of a backup is completed.

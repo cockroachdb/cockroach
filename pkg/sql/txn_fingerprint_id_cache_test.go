@@ -114,6 +114,7 @@ func TestTxnFingerprintIDCache(t *testing.T) {
 			sessionData *sessiondata.SessionData,
 			_ uuid.UUID,
 			txnFingerprintID appstatspb.TransactionFingerprintID,
+			_ error,
 		) {
 			if !sessionData.Internal {
 				// Record every query we issue through our sql connection.
