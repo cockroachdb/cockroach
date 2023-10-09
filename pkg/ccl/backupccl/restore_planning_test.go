@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -36,6 +37,66 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/slices"
 )
+
+// TestRestoreResolveOptionsForJobDescription tests that
+// resolveOptionsForRestoreJobDescription handles every field in the
+// RestoreOptions struct.
+func TestRestoreResolveOptionsForJobDescription(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// The input struct must have a non-zero value for every
+	// element of the struct.
+	input := tree.RestoreOptions{
+		SkipMissingFKs:                   true,
+		SkipMissingSequences:             true,
+		SkipMissingSequenceOwners:        true,
+		SkipMissingViews:                 true,
+		SkipMissingUDFs:                  true,
+		Detached:                         true,
+		SkipLocalitiesCheck:              true,
+		DebugPauseOn:                     tree.NewDString("test expr"),
+		IncludeAllSecondaryTenants:       tree.DBoolTrue,
+		AsTenant:                         tree.NewDString("test expr"),
+		ForceTenantID:                    tree.NewDInt(42),
+		SchemaOnly:                       true,
+		VerifyData:                       true,
+		UnsafeRestoreIncompatibleVersion: true,
+		ExecutionLocality:                tree.NewDString("test expr"),
+		ExperimentalOnline:               true,
+		RemoveRegions:                    true,
+
+		IntoDB:               tree.NewDString("test expr"),
+		NewDBName:            tree.NewDString("test expr"),
+		IncrementalStorage:   []tree.Expr{tree.NewDString("http://example.com")},
+		DecryptionKMSURI:     []tree.Expr{tree.NewDString("http://example.com")},
+		EncryptionPassphrase: tree.NewDString("test expr"),
+	}
+
+	ensureAllStructFieldsSet := func(s tree.RestoreOptions, name string) {
+		structType := reflect.TypeOf(s)
+		require.Equal(t, reflect.Struct, structType.Kind())
+
+		sv := reflect.ValueOf(s)
+		for i := 0; i < sv.NumField(); i++ {
+			field := sv.Field(i)
+			fieldName := structType.Field(i).Name
+			require.True(t, field.IsValid(), "RestoreOptions field %s in %s is not valid", fieldName, name)
+			require.False(t, field.IsZero(), "RestoreOptions field %s in %s is not non-zero", fieldName, name)
+		}
+	}
+
+	ensureAllStructFieldsSet(input, "input")
+	output, err := resolveOptionsForRestoreJobDescription(
+		context.Background(),
+		input,
+		"into_db",
+		"newDBName",
+		[]string{"http://example.com"},
+		[]string{"http://example.com"})
+	require.NoError(t, err)
+	ensureAllStructFieldsSet(output, "output")
+
+}
 
 func TestBackupManifestVersionCompatibility(t *testing.T) {
 	defer leaktest.AfterTest(t)()
