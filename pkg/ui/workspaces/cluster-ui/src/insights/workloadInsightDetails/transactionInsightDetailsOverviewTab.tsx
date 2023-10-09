@@ -49,6 +49,7 @@ import insightTableStyles from "src/insightsTable/insightsTable.module.scss";
 import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
 import { InsightsError } from "../insightsErrorComponent";
 import { Timestamp } from "../../timestamp";
+import { FailedInsightDetailsPanel } from "./failedInsightDetailsPanel";
 
 const cx = classNames.bind(insightsDetailsStyles);
 const tableCx = classNames.bind(insightTableStyles);
@@ -93,8 +94,9 @@ the maximum number of statements was reached in the console.`;
     true,
   );
 
-  const blockingExecutions: ContentionEvent[] = contentionDetails?.map(
-    event => {
+  const blockingExecutions: ContentionEvent[] = contentionDetails
+    ?.filter(e => e.contentionType === "LOCK_WAIT")
+    .map(event => {
       const stmtInsight = statements.find(
         stmt => stmt.statementExecutionID === event.waitingStmtID,
       );
@@ -113,7 +115,12 @@ the maximum number of statements was reached in the console.`;
         indexName: event.indexName,
         stmtInsightEvent: stmtInsight,
       };
-    },
+    });
+
+  // We only expect up to 1 serialization conflict since only 1 can be recorded
+  // per execution.
+  const serializationConflict = contentionDetails?.find(
+    e => e.contentionType === "SERIALIZATION_CONFLICT",
   );
 
   const insightRecs = getTxnInsightRecommendations(txnDetails);
@@ -233,6 +240,9 @@ the maximum number of statements was reached in the console.`;
           )}
         </Loading>
       </section>
+      {serializationConflict && (
+        <FailedInsightDetailsPanel conflictDetails={serializationConflict} />
+      )}
       {hasContentionInsights && (
         <Loading
           loading={!maxRequestsReached && contentionDetails == null}
