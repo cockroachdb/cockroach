@@ -734,3 +734,28 @@ COPY thash FROM STDIN WITH CSV
 1,2,3
 ----
 1
+
+exec-ddl
+CREATE TABLE copy_bug (
+      id INT8 NOT NULL,
+      status STRING NOT NULL,
+      claim_instance_id INT8 NULL,
+      CONSTRAINT "primary" PRIMARY KEY (id ASC),
+      INDEX jobs_run_stats_idx (status ASC) STORING (claim_instance_id) WHERE status IN ('running':::STRING),
+      FAMILY fam_0_id_status (id, status),
+      FAMILY claim (claim_instance_id)
+)
+----
+
+copy-from-kvtrace
+COPY copy_bug FROM STDIN WITH CSV HEADER NULL 'NULL' DELIMITER E'\t'
+id	status	claim_instance_id
+1	running	3
+2	succeed	1
+----
+CPut /Table/<>/1/1/0 -> /TUPLE/2:2:Bytes/running
+CPut /Table/<>/1/1/1/1 -> /INT/3
+CPut /Table/<>/1/2/0 -> /TUPLE/2:2:Bytes/succeed
+CPut /Table/<>/1/2/1/1 -> /INT/1
+InitPut /Table/<>/2/"running"/1/0 -> /BYTES/
+InitPut /Table/<>/2/"running"/1/1/1 -> /TUPLE/3:3:Int/3
