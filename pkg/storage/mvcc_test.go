@@ -6625,7 +6625,7 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 			defer engine.Close()
 
 			require.NoError(t, fillInData(ctx, engine, data))
-
+			ss := kvpb.ScanStats{}
 			_, _, err := MVCCExportToSST(ctx, st, engine, MVCCExportOptions{
 				StartKey:           MVCCKey{Key: key(10)},
 				EndKey:             key(20000),
@@ -6636,6 +6636,7 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 				MaxSize:            0,
 				MaxLockConflicts:   uint64(MaxConflictsPerLockConflictError.Default()),
 				StopMidKey:         false,
+				ScanStats:          &ss,
 			}, &bytes.Buffer{})
 			if len(expectedIntentIndices) == 0 {
 				require.NoError(t, err)
@@ -6650,6 +6651,9 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 					require.Equal(t, data[dataIdx].txn.ID, e.Locks[i].Txn.ID)
 				}
 			}
+			// Check some stats to ensure they are being populated.
+			require.Less(t, uint64(MaxConflictsPerLockConflictError.Default()), ss.NumInterfaceSteps)
+			require.Equal(t, uint64(1), ss.NumScans)
 		}
 	}
 
@@ -6764,6 +6768,38 @@ func TestMVCCExportToSSTSErrorsOnLargeKV(t *testing.T) {
 	require.Equal(t, int64(0), summary.DataSize)
 	expectedErr := &ExceedMaxSizeError{}
 	require.ErrorAs(t, err, &expectedErr)
+}
+
+func TestMVCCExportDeadlineExceeded(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	st := cluster.MakeTestingClusterSettings()
+
+	engine := createTestPebbleEngine()
+	defer engine.Close()
+	var testData = []testValue{value(key(1), "value1", ts(1000))}
+	require.NoError(t, fillInData(ctx, engine, testData))
+	ss := kvpb.ScanStats{}
+	cancelFunc()
+	_, _, err := MVCCExportToSST(
+		ctx, st, engine, MVCCExportOptions{
+			StartKey:           MVCCKey{Key: key(1)},
+			EndKey:             key(3).Next(),
+			StartTS:            hlc.Timestamp{},
+			EndTS:              hlc.Timestamp{WallTime: 9999},
+			ExportAllRevisions: false,
+			TargetSize:         1,
+			ScanStats:          &ss,
+		}, &bytes.Buffer{})
+	// Stats are not completely deterministic, so we assert lower bounds.
+	require.LessOrEqual(t, uint64(1), ss.NumInterfaceSeeks)
+	require.LessOrEqual(t, uint64(1), ss.NumInterfaceSteps)
+	require.LessOrEqual(t, uint64(1), ss.PointCount)
+	require.LessOrEqual(t, uint64(10), ss.KeyBytes)
+	require.LessOrEqual(t, uint64(10), ss.ValueBytes)
+	require.Equal(t, uint64(1), ss.NumScans)
+	require.NoError(t, err)
 }
 
 // TestMVCCExportFingerprint verifies that MVCCExportFingerprint correctly
