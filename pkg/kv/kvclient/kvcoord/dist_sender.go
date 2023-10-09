@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -2375,6 +2376,9 @@ func (ds *DistSender) sendToReplicas(
 		}
 
 		comparisonResult := ds.getLocalityComparison(ctx, ds.getNodeID(), ba.Replica.NodeID)
+		if comparisonResult == roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE {
+			log.VEvent(ctx, 2, kvbase.RoutingRequestToSameRegionAndZoneMsg)
+		}
 		ds.metrics.updateCrossLocalityMetricsOnReplicaAddressedBatchRequest(comparisonResult, int64(ba.Size()))
 
 		br, err = transport.SendNext(ctx, ba)
@@ -2641,9 +2645,11 @@ func (ds *DistSender) getLocalityComparison(
 	ctx context.Context, fromNodeID roachpb.NodeID, toNodeID roachpb.NodeID,
 ) roachpb.LocalityComparisonType {
 	gatewayNodeDesc, err := ds.nodeDescs.GetNodeDescriptor(fromNodeID)
+	useDSLocality := false
 	if err != nil {
-		log.VEventf(ctx, 5, "failed to perform look up for node descriptor %v", err)
-		return roachpb.LocalityComparisonType_UNDEFINED
+		log.VEventf(ctx, 5, "failed to perform look up for node descriptor %v, using ds locality instead", err)
+		useDSLocality = true
+		//		return roachpb.LocalityComparisonType_UNDEFINED
 	}
 	destinationNodeDesc, err := ds.nodeDescs.GetNodeDescriptor(toNodeID)
 	if err != nil {
@@ -2651,7 +2657,14 @@ func (ds *DistSender) getLocalityComparison(
 		return roachpb.LocalityComparisonType_UNDEFINED
 	}
 
-	comparisonResult, regionErr, zoneErr := gatewayNodeDesc.Locality.CompareWithLocality(destinationNodeDesc.Locality)
+	// FIXME: should we be using the ds locality unconditionally?
+	l := ds.locality
+	if !useDSLocality {
+		l = gatewayNodeDesc.Locality
+	}
+
+	//	comparisonResult, regionErr, zoneErr := gatewayNodeDesc.Locality.CompareWithLocality(destinationNodeDesc.Locality)
+	comparisonResult, regionErr, zoneErr := l.CompareWithLocality(destinationNodeDesc.Locality)
 	if regionErr != nil {
 		log.VInfof(ctx, 5, "unable to determine if the given nodes are cross region %v", regionErr)
 	}
