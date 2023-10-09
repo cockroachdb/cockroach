@@ -84,10 +84,10 @@ func TestFilter(t *testing.T) {
 	numbers := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
 	evens := Filter(numbers, func(i int) bool {
 		return i%2 == 0
-	})
+	}, nil)
 	odds := Filter(numbers, func(i int) bool {
 		return i%2 == 1
-	})
+	}, make([]int, 0, len(numbers)/2))
 
 	// Assert filtering works.
 	require.Equal(t, []int{1, 3, 5, 7, 9}, odds)
@@ -95,23 +95,50 @@ func TestFilter(t *testing.T) {
 
 	// Assert/demonstrate that filtering does not mutate the original slice.
 	require.Equal(t, []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, numbers)
-
-	// The filtered slices' capacity is correctly set and the original slice's
-	// capacity is unmodified.
-	require.Equal(t, len(odds), cap(odds))
-	require.Equal(t, len(evens), cap(evens))
 	require.Equal(t, len(numbers), cap(numbers))
+
+	// For the nil case, cap == the len of the input slice.
+	require.Equal(t, len(numbers), cap(evens))
+	// We guessed correctly here, so cap == len of input / 2.
+	require.Equal(t, len(numbers)/2, cap(odds))
+
+	// Finally, assert that in place filtering works as expected.
+	numbers = Filter(numbers, func(i int) bool {
+		return i > 5
+	}, numbers[:0])
+	require.Equal(t, []int{6, 7, 8, 9}, numbers)
+	require.Equal(t, 10, cap(numbers))
 
 	// And some weird cases.
 	require.Equal(t, []int{}, Filter(nil, func(i int) bool {
 		return true
-	}))
+	}, nil))
 	require.Equal(t, []int{}, Filter([]int{}, func(i int) bool {
 		return true
-	}))
-	require.Equal(t, []int{}, Filter(numbers, func(i int) bool {
+	}, []int{}))
+	require.Equal(t, []int{0, 0, 0, 0}, Filter(numbers, func(i int) bool {
 		return false
-	}))
+	}, make([]int, 4)))
+
+	// Assert that we can control allocations by varying the input to out.
+	nilAllocs := testing.AllocsPerRun(1000, func() {
+		numbers := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
+
+		_ = Filter(numbers, func(i int) bool {
+			return i%2 == 0
+		}, nil)
+	})
+
+	inplaceAllocs := testing.AllocsPerRun(1000, func() {
+		numbers := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
+
+		_ = Filter(numbers, func(i int) bool {
+			return i%2 == 0
+		}, numbers[:0])
+	})
+
+	require.Equal(t, float64(1), nilAllocs)
+	require.Equal(t, float64(0), inplaceAllocs)
 }
 
 func TestMap(t *testing.T) {
