@@ -46,7 +46,15 @@ for zipfile in `find input/roachtests -name gocover.zip`; do
   # Remove _gocover.zip suffix.
   name=${name%_gocover.zip}
 
-  echo Generating "roachtests/$name.lcov..."
+  # Check for empty zip file (so we don't error out below).
+  if ! unzip -l "$zipfile" > "$tmpdir/unzip.log" 2>&1; then
+    if grep -q "zipfile is empty" "$tmpdir/unzip.log"; then
+      echo "No coverage data for roachtests/$name"
+      continue
+    fi
+  fi
+
+  echo "Generating roachtests/$name.lcov..."
 
   rm -rf "$tmpdir"/*
   unzip -q "$zipfile" -d "$tmpdir"
