@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -287,6 +288,8 @@ func (rf *Fetcher) Close(ctx context.Context) {
 	}
 }
 
+const defaultTraceKVSampleFrequency = 1 * time.Second
+
 // FetcherInitArgs contains arguments for Fetcher.Init.
 type FetcherInitArgs struct {
 	// StreamingKVFetcher, if non-nil, contains the KVFetcher that uses the
@@ -321,7 +324,10 @@ type FetcherInitArgs struct {
 	MemMonitor *mon.BytesMonitor
 	Spec       *fetchpb.IndexFetchSpec
 	// TraceKV indicates whether or not session tracing is enabled.
-	TraceKV                    bool
+	TraceKV bool
+	// TraceKVEvery controls how often KVs are sampled for logging with traceKV
+	// enabled.
+	TraceKVEvery               *util.EveryN
 	ForceProductionKVBatchSize bool
 	// SpansCanOverlap indicates whether the spans in a given batch can overlap
 	// with one another. If it is true, spans that correspond to the same row must
@@ -344,6 +350,10 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 		rf.mon.StartNoReserved(ctx, args.MemMonitor)
 		memAcc := rf.mon.MakeBoundAccount()
 		rf.kvFetcherMemAcc = &memAcc
+	}
+
+	if args.TraceKV && args.TraceKVEvery == nil {
+		args.TraceKVEvery = &util.EveryN{N: defaultTraceKVSampleFrequency}
 	}
 
 	table := &rf.table
@@ -1129,7 +1139,9 @@ func (rf *Fetcher) NextRow(ctx context.Context) (row rowenc.EncDatumRow, spanID 
 		if err != nil {
 			return nil, 0, err
 		}
-		if rf.args.TraceKV {
+		// NB: TraceKVEvery is a util.EveryN and not a log.EveryN because
+		// log.EveryN will always print under verbosity level 2.
+		if rf.args.TraceKV && rf.args.TraceKVEvery.ShouldProcess(timeutil.Now()) {
 			log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
 		}
 
