@@ -16,9 +16,10 @@ import (
 )
 
 type ConnOption struct {
-	User       string
-	TenantName string
-	Options    map[string]string
+	User        string
+	TenantName  string
+	SQLInstance int
+	Options     map[string]string
 }
 
 func User(user string) func(*ConnOption) {
