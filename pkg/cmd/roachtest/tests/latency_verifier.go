@@ -148,7 +148,9 @@ func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
 	}
 }
 
-func (lv *latencyVerifier) pollLatency(
+// pollLatencyUntilJobSucceeds polls the changefeed latency until it is
+// signalled to stop or the job completes.
+func (lv *latencyVerifier) pollLatencyUntilJobSucceeds(
 	ctx context.Context, db *gosql.DB, jobID int, interval time.Duration, stopper chan struct{},
 ) error {
 	for {
@@ -171,6 +173,8 @@ func (lv *latencyVerifier) pollLatency(
 		status := info.GetStatus()
 		if status == "succeeded" {
 			lv.noteHighwater(info.GetFinishedTime())
+			lv.logger.Printf("latency poller shutting down due to changefeed completion")
+			return nil
 		} else if status == "running" {
 			lv.noteHighwater(info.GetHighWater())
 		} else {
