@@ -495,7 +495,15 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 	return cj
 }
 
-func (ct *cdcTester) runFeedLatencyVerifier(cj changefeedJob, targets latencyTargets) {
+// runFeedLatencyVerifier runs a goroutine which polls the various latencies
+// for a changefeed job (initial scan latency, etc) and asserts that they
+// are below the specified targets.
+//
+// It returns a function which blocks until the job succeeds and verification
+// on the succeeded job completes.
+func (ct *cdcTester) runFeedLatencyVerifier(
+	cj changefeedJob, targets latencyTargets,
+) (waitForCompletion func()) {
 	info, err := getChangefeedInfo(ct.DB(), cj.jobID)
 	if err != nil {
 		ct.t.Fatalf("failed to get changefeed info: %s", err.Error())
@@ -512,8 +520,12 @@ func (ct *cdcTester) runFeedLatencyVerifier(cj changefeedJob, targets latencyTar
 	)
 	verifier.statementTime = info.statementTime
 
+	finished := make(chan struct{})
 	ct.mon.Go(func(ctx context.Context) error {
-		err := verifier.pollLatency(ctx, ct.DB(), cj.jobID, time.Second, ct.doneCh)
+		defer func() {
+			finished <- struct{}{}
+		}()
+		err := verifier.pollLatencyUntilJobSucceeds(ctx, ct.DB(), cj.jobID, time.Second, ct.doneCh)
 		if err != nil {
 			return err
 		}
@@ -522,6 +534,13 @@ func (ct *cdcTester) runFeedLatencyVerifier(cj changefeedJob, targets latencyTar
 		verifier.maybeLogLatencyHist()
 		return nil
 	})
+
+	return func() {
+		select {
+		case <-ct.ctx.Done():
+		case <-finished:
+		}
+	}
 }
 
 func (cj *changefeedJob) runFeedPoller(
@@ -1025,10 +1044,11 @@ func registerCDC(r registry.Registry) {
 				targets:  allTpccTargets,
 				opts:     map[string]string{"initial_scan": "'only'"},
 			})
-			ct.runFeedLatencyVerifier(feed, latencyTargets{
+			waitForCompletion := ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 30 * time.Minute,
 			})
-			feed.waitForCompletion()
+			waitForCompletion()
+
 			exportStatsFile()
 		},
 	})
@@ -1083,10 +1103,11 @@ func registerCDC(r registry.Registry) {
 				targets:  allTpccTargets,
 				opts:     map[string]string{"initial_scan": "'only'", "format": "'parquet'"},
 			})
-			ct.runFeedLatencyVerifier(feed, latencyTargets{
+			waitForCompletion := ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 30 * time.Minute,
 			})
-			feed.waitForCompletion()
+			waitForCompletion()
+
 		},
 	})
 	r.Add(registry.TestSpec{
