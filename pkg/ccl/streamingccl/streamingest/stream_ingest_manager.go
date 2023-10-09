@@ -90,6 +90,15 @@ func (r *streamIngestManagerImpl) RevertTenantToTimestamp(
 		if err != nil {
 			return err
 		}
+		tenantID, err = roachpb.MakeTenantID(tenantRecord.ID)
+		if err != nil {
+			return err
+		}
+
+		if tenantID.Equal(roachpb.SystemTenantID) {
+			return errors.New("cannot revert the system tenant")
+		}
+
 		if tenantRecord.ServiceMode != mtinfopb.ServiceModeNone {
 			return errors.Newf("cannot revert tenant %q (%d) in service mode %s; service mode must be %s",
 				tenantRecord.Name,
@@ -100,10 +109,7 @@ func (r *streamIngestManagerImpl) RevertTenantToTimestamp(
 		}
 
 		originalDataState = tenantRecord.DataState
-		tenantID, err = roachpb.MakeTenantID(tenantRecord.ID)
-		if err != nil {
-			return err
-		}
+
 		ptsCleanup, err = protectTenantSpanWithSession(ctx, r.evalCtx, txn, execCfg, tenantID, r.sessionID, revertTo)
 		if err != nil {
 			return errors.Wrap(err, "protecting revert timestamp")
