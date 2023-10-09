@@ -93,7 +93,7 @@ const (
 	AlterTableTag          = "ALTER TABLE"
 	BackupTag              = "BACKUP"
 	CreateIndexTag         = "CREATE INDEX"
-	CreateRoutineTag       = "CREATE FUNCTION"
+	CreateRoutineTag       = "CREATE ROUTINE"
 	CreateSchemaTag        = "CREATE SCHEMA"
 	CreateSequenceTag      = "CREATE SEQUENCE"
 	CommentOnColumnTag     = "COMMENT ON COLUMN"
@@ -103,7 +103,7 @@ const (
 	CommentOnSchemaTag     = "COMMENT ON SCHEMA"
 	CommentOnTableTag      = "COMMENT ON TABLE"
 	DropDatabaseTag        = "DROP DATABASE"
-	DropFunctionTag        = "DROP FUNCTION"
+	DropRoutineTag         = "DROP ROUTINE"
 	DropIndexTag           = "DROP INDEX"
 	DropOwnedByTag         = "DROP OWNED BY"
 	DropSchemaTag          = "DROP SCHEMA"
@@ -1957,9 +1957,8 @@ func (*ShowRoutines) StatementType() StatementType { return TypeDML }
 func (n *ShowRoutines) StatementTag() string {
 	if n.Procedure {
 		return "SHOW PROCEDURES"
-	} else {
-		return "SHOW FUNCTIONS"
 	}
+	return "SHOW FUNCTIONS"
 }
 
 // StatementReturnType implements the Statement interface
@@ -2121,7 +2120,12 @@ func (*CreateRoutine) StatementReturnType() StatementReturnType { return DDL }
 func (*CreateRoutine) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*CreateRoutine) StatementTag() string { return CreateRoutineTag }
+func (n *CreateRoutine) StatementTag() string {
+	if n.IsProcedure {
+		return "CREATE PROCEDURE"
+	}
+	return "CREATE FUNCTION"
+}
 
 // StatementReturnType implements the Statement interface.
 func (*RoutineReturn) StatementReturnType() StatementReturnType { return Rows }
@@ -2139,7 +2143,12 @@ func (*DropRoutine) StatementReturnType() StatementReturnType { return DDL }
 func (*DropRoutine) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*DropRoutine) StatementTag() string { return DropFunctionTag }
+func (n *DropRoutine) StatementTag() string {
+	if n.Procedure {
+		return "DROP PROCEDURE"
+	}
+	return "DROP FUNCTION"
+}
 
 // StatementReturnType implements the Statement interface.
 func (*AlterFunctionOptions) StatementReturnType() StatementReturnType { return DDL }
