@@ -35,6 +35,11 @@ func (l *ListenError) Error() string { return l.cause.Error() }
 // Unwrap is because ListenError is a wrapper.
 func (l *ListenError) Unwrap() error { return l.cause }
 
+// secondaryTenantPortOffsetMaxPorts is used to calculate the maximum
+// range of the ports allocated to RPC listeners when
+// SecondaryTenantPortOffset is used.
+const secondaryTenantPortOffsetMaxPorts = 1024
+
 // ListenerFactoryForConfig return an RPCListenerFactory for the given
 // configuration. If the configuration does not specify any secondary
 // tenant port configuration, no factory is returned.
@@ -65,7 +70,7 @@ func ListenerFactoryForConfig(cfg *BaseConfig, portStartHint int) (RPCListenerFa
 		rlf := &rangeListenerFactory{
 			startHint:  portStartHint,
 			lowerBound: lowerBound,
-			upperBound: cfg.Config.SecondaryTenantPortMax,
+			upperBound: lowerBound + secondaryTenantPortOffsetMaxPorts,
 		}
 		return rlf.ListenAndUpdateAddrs, nil
 	}
@@ -99,17 +104,17 @@ func (rlf *rangeListenerFactory) ListenAndUpdateAddrs(
 	if err != nil {
 		return nil, err
 	}
-	if rlf.upperBound > 0 && rlf.lowerBound > rlf.upperBound {
-		return nil, errors.AssertionFailedf("lower bound %d larger than upper bound %d", rlf.lowerBound, rlf.upperBound)
+
+	if rlf.lowerBound > rlf.upperBound {
+		return nil, errors.AssertionFailedf("lower bound %d greater than upper bound %d", rlf.lowerBound, rlf.upperBound)
 	}
 
-	nextPort := rlf.lowerBound + rlf.startHint
-	if rlf.upperBound > 0 && nextPort > rlf.lowerBound {
-		nextPort = rlf.lowerBound
-	}
+	numCandidates := (rlf.upperBound - rlf.lowerBound) + 1
+	nextPort := rlf.lowerBound + (rlf.startHint % numCandidates)
 
 	var ln net.Listener
-	for rlf.upperBound == 0 || nextPort <= rlf.upperBound {
+	for numAttempts := 0; numAttempts < numCandidates; numCandidates++ {
+		nextPort = nextPort + (numAttempts % numCandidates)
 		nextAddr := net.JoinHostPort(h, strconv.Itoa(nextPort))
 		ln, err = net.Listen("tcp", nextAddr)
 		if err == nil {
@@ -118,16 +123,9 @@ func (rlf *rangeListenerFactory) ListenAndUpdateAddrs(
 			}
 			return ln, nil
 		}
-		// If we have no upper bound, we just try once.
-		if rlf.upperBound == 0 {
-			return nil, err
-		}
-
 		if !sysutil.IsAddrInUse(err) {
 			return nil, err
 		}
-
-		nextPort++
 	}
 	return nil, errors.Wrapf(err, "port range (%d, %d) exhausted", rlf.lowerBound, rlf.upperBound)
 }

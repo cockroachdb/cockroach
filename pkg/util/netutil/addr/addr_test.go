@@ -27,12 +27,13 @@ func TestPortRangeSetter(t *testing.T) {
 		errStr string
 	}{
 		{"5-10", 5, 10, "5-10", ""},
-		{"5-", 5, 0, "5-", ""},
-		{"5", 5, 0, "5-", ""},
-		{"10-5", 0, 0, "", "lower bound (10) > upper bound (5)"},
+		{"5-", 5, 0, "", "too few parts"},
+		{"5", 5, 0, "", "too few parts"},
+		{"5-8-10", 0, 0, "", "too many parts"},
 		{"a-5", 0, 0, "", "invalid syntax"},
 		{"5-b", 0, 0, "", "invalid syntax"},
-		{"5-8-10", 0, 0, "", "too many parts"},
+		{"10-5", 0, 0, "", "lower bound (10) >= upper bound (5)"},
+		{"10-10", 0, 0, "", "lower bound (10) >= upper bound (10)"},
 	}
 	for _, tc := range testData {
 		t.Run(tc.v, func(t *testing.T) {

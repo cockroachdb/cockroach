@@ -110,14 +110,11 @@ func NewPortRangeSetter(lower, upper *int) pflag.Value {
 
 // String implements the pflag.Value interface.
 func (a portRangeSetter) String() string {
-	if *a.upper == 0 {
-		return fmt.Sprintf("%d-", *a.lower)
-	}
 	return fmt.Sprintf("%d-%d", *a.lower, *a.upper)
 }
 
 // Type implements the pflag.Value interface.
-func (a portRangeSetter) Type() string { return "<lower>[-<upper>]" }
+func (a portRangeSetter) Type() string { return "<lower>-<upper>" }
 
 // Set implements the pflag.Value interface.
 func (a portRangeSetter) Set(v string) error {
@@ -126,26 +123,25 @@ func (a portRangeSetter) Set(v string) error {
 		return errors.New("invalid port range: too many parts")
 	}
 
+	if len(parts) < 2 || parts[1] == "" {
+		return errors.New("invalid port range: too few parts")
+	}
+
 	lower, err := strconv.Atoi(parts[0])
 	if err != nil {
 		return errors.Wrap(err, "invalid port range")
-	}
-	*a.lower = lower
-	if len(parts) < 2 {
-		return nil
-	}
-
-	if parts[1] == "" {
-		return nil
 	}
 
 	upper, err := strconv.Atoi(parts[1])
 	if err != nil {
 		return errors.Wrap(err, "invalid port range")
 	}
+
 	if lower > upper {
 		return errors.Newf("invalid port range: lower bound (%d) > upper bound (%d)", lower, upper)
 	}
+	*a.lower = lower
 	*a.upper = upper
+
 	return nil
 }
