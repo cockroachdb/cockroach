@@ -76,13 +76,6 @@ CREATE FUNCTION foo(i INT) RETURNS VOID LANGUAGE SQL AS ''
 statement error pgcode 42883 unknown signature: public.foo\(\) \(desired <int>\)
 CALL p(foo())
 
-skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
-statement error pgcode 42723 function "p" already exists with same argument types
-CREATE FUNCTION p() RETURNS VOID LANGUAGE SQL AS ''
-
-onlyif config local-legacy-schema-changer
-onlyif config local-mixed-22.2-23.1
 statement error pgcode 42723 function "p" already exists with same argument types
 CREATE FUNCTION p() RETURNS VOID LANGUAGE SQL AS ''
 
@@ -258,5 +251,38 @@ DROP PROCEDURE insert_into_replace(INT, STRING);
 DROP PROCEDURE insert_into_replace(INT);
 DROP PROCEDURE insert_into_replace_v2;
 DROP TABLE replace;
+
+subtest end
+
+subtest replace_func_with_proc
+
+statement ok
+CREATE PROCEDURE rfp(i INT) LANGUAGE SQL AS 'SELECT 0'
+
+statement error pgcode 42809 rfp\(i: int\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT rfp(1)
+
+statement ok
+DROP PROCEDURE rfp
+
+statement ok
+CREATE FUNCTION rfp(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT 100+i'
+
+query I
+SELECT rfp(1)
+----
+101
+
+statement ok
+DROP FUNCTION rfp;
+CREATE PROCEDURE rfp(i INT) LANGUAGE SQL AS 'SELECT 0'
+
+# There error should be the same as the error above before the functionw was
+# created.
+statement error pgcode 42809 rfp\(i: int\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT rfp(1)
+
+statement ok
+DROP PROCEDURE rfp
 
 subtest end

@@ -431,7 +431,7 @@ func (md *Metadata) CheckDependencies(
 					return false, maybeSwallowMetadataResolveErr(err)
 				}
 				toCheck, err := definition.MatchOverload(overload.Types.Types(), name.Schema(),
-					&evalCtx.SessionData().SearchPath, tree.UDFRoutine)
+					&evalCtx.SessionData().SearchPath, tree.UDFRoutine|tree.BuiltinRoutine|tree.ProcedureRoutine)
 				if err != nil || toCheck.Oid != overload.Oid || toCheck.Version != overload.Version {
 					return false, err
 				}
