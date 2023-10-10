@@ -12,6 +12,7 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"os"
 
@@ -69,8 +70,13 @@ func registerYCSB(r registry.Registry) {
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings, c.Range(1, nodes))
-		err := WaitFor3XReplication(ctx, t, c.Conn(ctx, t.L(), 1))
+
+		db := c.Conn(ctx, t.L(), 1)
+		err := enableIsolationLevels(ctx, t, db)
 		require.NoError(t, err)
+		err = WaitFor3XReplication(ctx, t, db)
+		require.NoError(t, err)
+		require.NoError(t, db.Close())
 
 		t.Status("running workload")
 		m := c.NewMonitor(ctx, c.Range(1, nodes))
@@ -162,4 +168,16 @@ func registerYCSB(r registry.Registry) {
 			}
 		}
 	}
+}
+
+func enableIsolationLevels(ctx context.Context, t test.Test, db *gosql.DB) error {
+	for _, cmd := range []string{
+		`SET CLUSTER SETTING sql.txn.snapshot_isolation_syntax.enabled = 'true';`,
+		`SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = 'true';`,
+	} {
+		if _, err := db.ExecContext(ctx, cmd); err != nil {
+			return err
+		}
+	}
+	return nil
 }
