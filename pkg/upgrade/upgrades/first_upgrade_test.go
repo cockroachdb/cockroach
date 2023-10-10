@@ -75,7 +75,8 @@ func TestFirstUpgrade(t *testing.T) {
 		"CREATE TABLE foo (i INT PRIMARY KEY, j INT, INDEX idx(j))",
 	)
 
-	// Corrupt the table descriptor in an unrecoverable manner.
+	// Corrupt the table descriptor in an unrecoverable manner. We are not able to automatically repair this
+	// descriptor.
 	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "foo")
 	descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tbl.GetID())
 	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -117,7 +118,8 @@ func TestFirstUpgrade(t *testing.T) {
 		return b.BuildImmutable()
 	}
 	require.False(t, readDescFromStorage().GetModificationTime().IsEmpty())
-	require.True(t, readDescFromStorage().GetPostDeserializationChanges().HasChanges())
+	changes := readDescFromStorage().GetPostDeserializationChanges()
+	require.True(t, changes.HasChanges())
 
 	// Wait long enough for precondition check to see the unbroken table descriptor.
 	execStmts(t, "CREATE DATABASE test3")
@@ -128,7 +130,8 @@ func TestFirstUpgrade(t *testing.T) {
 
 	// The table descriptor protobuf should have the modification time set.
 	require.False(t, readDescFromStorage().GetModificationTime().IsEmpty())
-	require.False(t, readDescFromStorage().GetPostDeserializationChanges().HasChanges())
+	changes = readDescFromStorage().GetPostDeserializationChanges()
+	require.False(t, changes.HasChanges())
 }
 
 // TestFirstUpgradeRepair tests the correct repair behavior of upgrade
@@ -166,22 +169,35 @@ func TestFirstUpgradeRepair(t *testing.T) {
 		}
 	}
 
-	// Create a table and a function for this test.
 	execStmts(t,
 		"CREATE DATABASE test",
 		"USE test",
+		// Create a table and function that we will corrupt for this test.
 		"CREATE TABLE foo (i INT PRIMARY KEY, j INT, INDEX idx(j))",
 		"INSERT INTO foo VALUES (1, 2)",
 		"CREATE FUNCTION test.public.f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$",
+		// Create the following to cover more descriptor types - ensure that said descriptors do not get repaired.
+		"CREATE TABLE bar (i INT PRIMARY KEY, j INT, INDEX idx(j))",
+		"CREATE SCHEMA bar",
+		"CREATE TYPE bar.bar AS ENUM ('hello')",
+		"CREATE FUNCTION bar.bar(a INT) RETURNS INT AS 'SELECT a*a' LANGUAGE SQL",
 	)
 
-	// Corrupt FK back references in the test table descriptor.
+	dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "test")
+	tblDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "bar")
+	schemaDesc := desctestutils.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), "bar")
+	typDesc := desctestutils.TestingGetTypeDescriptor(kvDB, keys.SystemSQLCodec, "test", "bar", "bar")
+	fnDesc := desctestutils.TestingGetFunctionDescriptor(kvDB, keys.SystemSQLCodec, "test", "bar", "bar")
+	nonCorruptDescs := []catalog.Descriptor{dbDesc, tblDesc, schemaDesc, typDesc, fnDesc}
+
+	// Corrupt FK back references in the test table descriptor, foo.
 	codec := keys.SystemSQLCodec
-	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "test", "foo")
-	fn := desctestutils.TestingGetFunctionDescriptor(kvDB, codec, "test", "public", "f")
+	fooTbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "test", "foo")
+	fooFn := desctestutils.TestingGetFunctionDescriptor(kvDB, codec, "test", "public", "f")
+	corruptDescs := []catalog.Descriptor{fooTbl, fooFn}
 	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
-		tbl := tabledesc.NewBuilder(tbl.TableDesc()).BuildExistingMutableTable()
+		tbl := tabledesc.NewBuilder(fooTbl.TableDesc()).BuildExistingMutableTable()
 		tbl.InboundFKs = []descpb.ForeignKeyConstraint{{
 			OriginTableID:       123456789,
 			OriginColumnIDs:     tbl.PublicColumnIDs(), // Used such that len(OriginColumnIDs) == len(PublicColumnIDs)
@@ -193,7 +209,7 @@ func TestFirstUpgradeRepair(t *testing.T) {
 		}}
 		tbl.NextConstraintID++
 		b.Put(catalogkeys.MakeDescMetadataKey(codec, tbl.GetID()), tbl.DescriptorProto())
-		fn := funcdesc.NewBuilder(fn.FuncDesc()).BuildExistingMutableFunction()
+		fn := funcdesc.NewBuilder(fooFn.FuncDesc()).BuildExistingMutableFunction()
 		fn.DependedOnBy = []descpb.FunctionDescriptor_Reference{{
 			ID:        123456789,
 			ColumnIDs: []descpb.ColumnID{1},
@@ -201,6 +217,27 @@ func TestFirstUpgradeRepair(t *testing.T) {
 		b.Put(catalogkeys.MakeDescMetadataKey(codec, fn.GetID()), fn.DescriptorProto())
 		return txn.Run(ctx, b)
 	}))
+
+	readDescFromStorage := func(descID descpb.ID) catalog.Descriptor {
+		descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descID)
+		var b catalog.DescriptorBuilder
+		require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			v, err := txn.Get(ctx, descKey)
+			if err != nil {
+				return err
+			}
+			b, err = descbuilder.FromSerializedValue(v.Value)
+			return err
+		}))
+		return b.BuildImmutable()
+	}
+
+	descOldVersionMap := make(map[descpb.ID]descpb.DescriptorVersion)
+
+	for _, desc := range append(nonCorruptDescs, corruptDescs...) {
+		descId := desc.GetID()
+		descOldVersionMap[descId] = readDescFromStorage(descId).GetVersion()
+	}
 
 	// The corruption should remain undetected for DML queries.
 	tdb.CheckQueryResults(t, "SELECT * FROM test.public.foo", [][]string{{"1", "2"}})
@@ -232,7 +269,19 @@ func TestFirstUpgradeRepair(t *testing.T) {
 	tdb.CheckQueryResults(t, qDetectCorruption, [][]string{{"0"}})
 	tdb.CheckQueryResults(t, qDetectRepairableCorruption, [][]string{{"0"}})
 
-	// Check that the table and function are OK.
+	// Assert that a version upgrade is reflected for repaired descriptors.
+	for _, desc := range corruptDescs {
+		descId := desc.GetID()
+		require.True(t, descOldVersionMap[descId] < readDescFromStorage(descId).GetVersion())
+	}
+
+	// Assert that no version upgrade is reflected for non-repaired descriptors.
+	for _, desc := range nonCorruptDescs {
+		descId := desc.GetID()
+		require.Equalf(t, descOldVersionMap[descId], readDescFromStorage(descId).GetVersion(), readDescFromStorage(descId).GetName())
+	}
+
+	// Check that the repaired table and function are OK.
 	tdb.CheckQueryResults(t, "SELECT * FROM test.public.foo", [][]string{{"1", "2"}})
 	tdb.Exec(t, "ALTER TABLE test.foo ADD COLUMN k INT DEFAULT 42")
 	tdb.CheckQueryResults(t, "SELECT * FROM test.public.foo", [][]string{{"1", "2", "42"}})
