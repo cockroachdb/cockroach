@@ -1301,7 +1301,7 @@ PREPARE a1 AS SELECT * FROM t3 FOR UPDATE
 statement ok
 BEGIN READ ONLY
 
-statement error cannot execute FOR UPDATE in a read-only transaction
+statement error cannot execute SELECT FOR UPDATE in a read-only transaction
 EXECUTE a1
 
 statement ok
@@ -1316,7 +1316,7 @@ PREPARE a1 AS SELECT * FROM t3 FOR NO KEY UPDATE
 statement ok
 BEGIN READ ONLY
 
-statement error cannot execute FOR NO KEY UPDATE in a read-only transaction
+statement error cannot execute SELECT FOR NO KEY UPDATE in a read-only transaction
 EXECUTE a1
 
 statement ok
@@ -1331,7 +1331,7 @@ PREPARE a1 AS SELECT * FROM t3 FOR SHARE
 statement ok
 BEGIN READ ONLY
 
-statement error cannot execute FOR SHARE in a read-only transaction
+statement error cannot execute SELECT FOR SHARE in a read-only transaction
 EXECUTE a1
 
 statement ok
@@ -1346,7 +1346,7 @@ PREPARE a1 AS SELECT * FROM t3 FOR KEY SHARE
 statement ok
 BEGIN READ ONLY
 
-statement error cannot execute FOR KEY SHARE in a read-only transaction
+statement error cannot execute SELECT FOR KEY SHARE in a read-only transaction
 EXECUTE a1
 
 statement ok
