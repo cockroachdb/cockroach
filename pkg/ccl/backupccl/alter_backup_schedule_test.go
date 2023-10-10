@@ -108,12 +108,12 @@ INSERT INTO t1 values (1), (10), (100);
 
 	var scheduleID int64
 	var unusedStr string
-	var unusedTS *time.Time
+	var nextRun *time.Time
 	rowCount := 0
 	for rows.Next() {
 		// We just need to retrieve one of the schedule IDs, don't care whether
 		// it's the incremental or full.
-		require.NoError(t, rows.Scan(&scheduleID, &unusedStr, &unusedStr, &unusedTS, &unusedStr, &unusedStr))
+		require.NoError(t, rows.Scan(&scheduleID, &unusedStr, &unusedStr, &nextRun, &unusedStr, &unusedStr))
 		rowCount++
 	}
 	require.Equal(t, 2, rowCount)
@@ -124,7 +124,8 @@ INSERT INTO t1 values (1), (10), (100);
 		fmt.Sprintf(`ALTER BACKUP SCHEDULE %d SET FULL BACKUP '@weekly';`, scheduleID))
 	require.NoError(t, rows.Err())
 	for rows.Next() {
-		require.NoError(t, rows.Scan(&scheduleID, &unusedStr, &status, &unusedTS, &schedule, &backupStmt))
+		t.Log(rows)
+		require.NoError(t, rows.Scan(&scheduleID, &unusedStr, &status, &nextRun, &schedule, &backupStmt))
 		statuses = append(statuses, status)
 		schedules = append(schedules, schedule)
 		backupStmts = append(backupStmts, backupStmt)
@@ -138,5 +139,19 @@ INSERT INTO t1 values (1), (10), (100);
 		"BACKUP TABLE mydb.public.t1 INTO 'nodelocal://1/backup/alter-schedule' WITH OPTIONS (detached)",
 	},
 		backupStmts)
+
+	rows = th.sqlDB.Query(t,
+		fmt.Sprintf(`ALTER BACKUP SCHEDULE %d EXECUTE FULL IMMEDIATELY;`, scheduleID))
+
+	require.NoError(t, rows.Err())
+	require.True(t, rows.Next())
+	require.NoError(t, rows.Scan(&scheduleID, &unusedStr, &status, &nextRun, &schedule, &backupStmt))
+
+	require.True(t, rows.Next())
+	require.NoError(t, rows.Scan(&scheduleID, &unusedStr, &status, &nextRun, &schedule, &backupStmt))
+
+	require.True(t, nextRun != nil)
+	t.Log(nextRun)
+	require.True(t, th.env.Now().Equal(*nextRun))
 
 }
