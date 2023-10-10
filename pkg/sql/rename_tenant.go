@@ -29,7 +29,7 @@ func (p *planner) alterRenameTenant(
 	// Even though the call to renameTenant in startExec also
 	// performs this check, we need to do this early because otherwise
 	// the lookup of the ID from the name will fail.
-	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "rename"); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "rename", p.execCfg.Settings); err != nil {
 		return nil, err
 	}
 
