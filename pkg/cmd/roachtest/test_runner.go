@@ -618,10 +618,9 @@ func (r *testRunner) runWorker(
 				// N.B. we do not count reuse attempt error toward clusterCreateErr.
 				// Let's attempt to create a fresh one.
 				testToRun.canReuseCluster = false
-				// Destroy the cluster since we're unable to reuse it.
-				// NB: This is a hack. If we destroy the cluster, the allocation quota will get released back into the pool.
-				// Thus, we can't immediately create a fresh cluster since another worker might grab the quota before us.
-				// Instead, we transfer the allocation quota to the new cluster and pretend the old one didn't have any.
+				// We need an allocation quota to start a new cluster; steal it from the
+				// old cluster before we destroy it (we know the cluster configurations
+				// will be identical).
 				testToRun.alloc = c.destroyState.alloc
 				c.destroyState.alloc = nil
 				c.Destroy(context.Background(), closeLogger, l)
