@@ -85,7 +85,11 @@ func TestDataDriven(t *testing.T) {
 
 		tdb := sqlutils.MakeSQLRunner(db)
 		tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-		tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+		// Make test faster.
+		// TODO(knz): Remove this after #111753 is merged.
+		tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'`)
+		tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms'`)
+		tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10ms'`)
 
 		const dummyTableName = "dummy_system_tenants"
 		tdb.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.tenants INCLUDING ALL)", dummyTableName))
