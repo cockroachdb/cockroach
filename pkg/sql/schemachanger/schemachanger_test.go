@@ -883,6 +883,9 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"ALTER TABLE t6 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i; -- ditto",
 			"ALTER TABLE t6 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k; -- ditto",
 			"ALTER TABLE t6 ADD COLUMN p INT DEFAULT 30, DROP COLUMN p; -- ditto",
+			"SET experimental_enable_temp_tables = true;",
+			"CREATE TEMPORARY TABLE t7 (i INT);  -- expect to skip this line",
+			"CREATE TEMP TABLE t7 (i INT);  -- ditto",
 		},
 	}
 
