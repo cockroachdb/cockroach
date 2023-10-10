@@ -36,12 +36,12 @@ import (
 
 const (
 	// Table sources.
-	crdbInternalStmtStatsCombined  = "crdb_internal.statement_statistics"
-	crdbInternalStmtStatsPersisted = "crdb_internal.statement_statistics_persisted"
-	crdbInternalStmtStatsCached    = "crdb_internal.statement_activity"
-	crdbInternalTxnStatsCombined   = "crdb_internal.transaction_statistics"
-	crdbInternalTxnStatsPersisted  = "crdb_internal.transaction_statistics_persisted"
-	crdbInternalTxnStatsCached     = "crdb_internal.transaction_activity"
+	CrdbInternalStmtStatsCombined  = "crdb_internal.statement_statistics"
+	CrdbInternalStmtStatsPersisted = "crdb_internal.statement_statistics_persisted"
+	CrdbInternalStmtStatsCached    = "crdb_internal.statement_activity"
+	CrdbInternalTxnStatsCombined   = "crdb_internal.transaction_statistics"
+	CrdbInternalTxnStatsPersisted  = "crdb_internal.transaction_statistics_persisted"
+	CrdbInternalTxnStatsCached     = "crdb_internal.transaction_activity"
 
 	// Sorts
 	sortSvcLatDesc         = `(statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT DESC`
@@ -424,7 +424,7 @@ FROM %s %s`, table, whereClause)
 	// since statements are also returned for transactions only mode.
 	stmtsRuntime = 0
 	if activityTableHasAllData {
-		stmtSourceTable = crdbInternalStmtStatsCached
+		stmtSourceTable = CrdbInternalStmtStatsCached
 		stmtsRuntime, err = getRuntime(stmtSourceTable, createActivityTableQuery)
 		if err != nil {
 			return 0, 0, nil, stmtSourceTable, "", err
@@ -436,7 +436,7 @@ FROM %s %s`, table, whereClause)
 	}
 	// If there are no results from the activity table, retrieve the data from the persisted table.
 	if stmtsRuntime == 0 {
-		stmtSourceTable = crdbInternalStmtStatsPersisted + tableSuffix
+		stmtSourceTable = CrdbInternalStmtStatsPersisted + tableSuffix
 		stmtsRuntime, err = getRuntime(stmtSourceTable, createStatsTableQuery)
 		if err != nil {
 			return 0, 0, nil, stmtSourceTable, "", err
@@ -449,7 +449,7 @@ FROM %s %s`, table, whereClause)
 	// If there are no results from the persisted table, retrieve the data from the combined view
 	// with data in-memory.
 	if stmtsRuntime == 0 {
-		stmtSourceTable = crdbInternalStmtStatsCombined
+		stmtSourceTable = CrdbInternalStmtStatsCombined
 		stmtsRuntime, err = getRuntime(stmtSourceTable, createStatsTableQuery)
 		if err != nil {
 			return 0, 0, nil, stmtSourceTable, "", err
@@ -463,7 +463,7 @@ FROM %s %s`, table, whereClause)
 	txnsRuntime = 0
 	if req.FetchMode == nil || req.FetchMode.StatsType != serverpb.CombinedStatementsStatsRequest_StmtStatsOnly {
 		if activityTableHasAllData {
-			txnSourceTable = crdbInternalTxnStatsCached
+			txnSourceTable = CrdbInternalTxnStatsCached
 			txnsRuntime, err = getRuntime(txnSourceTable, createActivityTableQuery)
 			if err != nil {
 				return 0, 0, nil, stmtSourceTable, txnSourceTable, err
@@ -471,7 +471,7 @@ FROM %s %s`, table, whereClause)
 		}
 		// If there are no results from the activity table, retrieve the data from the persisted table.
 		if txnsRuntime == 0 {
-			txnSourceTable = crdbInternalTxnStatsPersisted + tableSuffix
+			txnSourceTable = CrdbInternalTxnStatsPersisted + tableSuffix
 			txnsRuntime, err = getRuntime(txnSourceTable, createStatsTableQuery)
 			if err != nil {
 				return 0, 0, nil, stmtSourceTable, txnSourceTable, err
@@ -480,7 +480,7 @@ FROM %s %s`, table, whereClause)
 		// If there are no results from the persisted table, retrieve the data from the combined view
 		// with data in-memory.
 		if txnsRuntime == 0 {
-			txnSourceTable = crdbInternalTxnStatsCombined
+			txnSourceTable = CrdbInternalTxnStatsCombined
 			txnsRuntime, err = getRuntime(txnSourceTable, createStatsTableQuery)
 			if err != nil {
 				return 0, 0, nil, stmtSourceTable, txnSourceTable, err
@@ -730,7 +730,7 @@ FROM (SELECT fingerprint_id,
           fingerprint_id,
           app_name) %s
 %s`,
-			crdbInternalStmtStatsCached,
+			CrdbInternalStmtStatsCached,
 			"combined-stmts-activity-by-interval",
 			whereClause,
 			args,
@@ -750,7 +750,7 @@ FROM (SELECT fingerprint_id,
 			ctx,
 			ie,
 			queryFormat,
-			crdbInternalStmtStatsPersisted+tableSuffix,
+			CrdbInternalStmtStatsPersisted+tableSuffix,
 			"combined-stmts-persisted-by-interval",
 			whereClause,
 			args,
@@ -769,7 +769,7 @@ FROM (SELECT fingerprint_id,
 			ctx,
 			ie,
 			queryFormat,
-			crdbInternalStmtStatsCombined,
+			CrdbInternalStmtStatsCombined,
 			"combined-stmts-with-memory-by-interval",
 			whereClause,
 			args,
@@ -906,7 +906,7 @@ FROM (SELECT app_name,
 			ctx,
 			ie,
 			queryFormat,
-			crdbInternalTxnStatsCached,
+			CrdbInternalTxnStatsCached,
 			"combined-txns-activity-by-interval",
 			whereClause,
 			args,
@@ -930,7 +930,7 @@ FROM (SELECT app_name,
 			ctx,
 			ie,
 			queryFormat,
-			crdbInternalTxnStatsPersisted+tableSuffix,
+			CrdbInternalTxnStatsPersisted+tableSuffix,
 			"combined-txns-persisted-by-interval",
 			whereClause,
 			args,
@@ -949,7 +949,7 @@ FROM (SELECT app_name,
 			ctx,
 			ie,
 			queryFormat,
-			crdbInternalTxnStatsCombined,
+			CrdbInternalTxnStatsCombined,
 			"combined-txns-with-memory-by-interval",
 			whereClause,
 			args,
@@ -1044,7 +1044,7 @@ GROUP BY
 
 	query := fmt.Sprintf(
 		queryFormat,
-		crdbInternalStmtStatsPersisted+tableSuffix,
+		CrdbInternalStmtStatsPersisted+tableSuffix,
 		whereClause)
 	it, err = ie.QueryIteratorEx(ctx, "console-combined-stmts-persisted-for-txn", nil,
 		sessiondata.NodeUserSessionDataOverride, query, args...)
@@ -1060,7 +1060,7 @@ GROUP BY
 		if err != nil {
 			return nil, srverrors.ServerError(ctx, err)
 		}
-		query = fmt.Sprintf(queryFormat, crdbInternalStmtStatsCombined, whereClause)
+		query = fmt.Sprintf(queryFormat, CrdbInternalStmtStatsCombined, whereClause)
 
 		it, err = ie.QueryIteratorEx(ctx, "console-combined-stmts-with-memory-for-txn", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
