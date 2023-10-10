@@ -24,14 +24,14 @@ SELECT * FROM indexed WHERE b = 2 FOR UPDATE
 ----
 index-join indexed
  ├── columns: a:1!null b:2!null c:3
- ├── locking: for-update,durability-guaranteed
+ ├── locking: for-update
  ├── volatile
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3)
  └── scan indexed@b_idx
       ├── columns: a:1!null b:2!null
       ├── constraint: /2/1: [/2 - /2]
-      ├── locking: for-update,durability-guaranteed
+      ├── locking: for-update
       ├── volatile
       ├── key: (1)
       └── fd: ()-->(2)
@@ -41,14 +41,14 @@ SELECT * FROM indexed WHERE b BETWEEN 2 AND 10 FOR UPDATE
 ----
 index-join indexed
  ├── columns: a:1!null b:2!null c:3
- ├── locking: for-update,durability-guaranteed
+ ├── locking: for-update
  ├── volatile
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  └── scan indexed@b_idx
       ├── columns: a:1!null b:2!null
       ├── constraint: /2/1: [/2 - /10]
-      ├── locking: for-update,durability-guaranteed
+      ├── locking: for-update
       ├── volatile
       ├── key: (1)
       └── fd: (1)-->(2)
@@ -70,7 +70,7 @@ project
       ├── columns: t.a:1!null b:2!null u.a:5!null c:6
       ├── key columns: [2] = [5]
       ├── lookup columns are key
-      ├── locking: for-update,durability-guaranteed
+      ├── locking: for-update
       ├── cardinality: [0 - 1]
       ├── volatile
       ├── key: ()
@@ -78,7 +78,7 @@ project
       ├── scan t
       │    ├── columns: t.a:1!null b:2
       │    ├── constraint: /1: [/2 - /2]
-      │    ├── locking: for-update,durability-guaranteed
+      │    ├── locking: for-update
       │    ├── cardinality: [0 - 1]
       │    ├── volatile
       │    ├── key: ()
@@ -96,7 +96,7 @@ project
       ├── columns: t.a:1!null b:2!null u.a:5!null c:6
       ├── key columns: [2] = [5]
       ├── lookup columns are key
-      ├── locking: for-update,durability-guaranteed
+      ├── locking: for-update
       ├── cardinality: [0 - 9]
       ├── volatile
       ├── key: (1)
@@ -104,7 +104,7 @@ project
       ├── scan t
       │    ├── columns: t.a:1!null b:2
       │    ├── constraint: /1: [/2 - /10]
-      │    ├── locking: for-update,durability-guaranteed
+      │    ├── locking: for-update
       │    ├── cardinality: [0 - 9]
       │    ├── volatile
       │    ├── key: (1)
@@ -118,21 +118,21 @@ inner-join (lookup indexed)
  ├── columns: a:1!null b:2!null a:5!null b:6!null c:7
  ├── key columns: [5] = [5]
  ├── lookup columns are key
- ├── locking: for-update,durability-guaranteed
+ ├── locking: for-update
  ├── volatile
  ├── key: (5)
  ├── fd: ()-->(1,2,6), (5)-->(7), (2)==(6), (6)==(2)
  ├── inner-join (lookup indexed@b_idx)
  │    ├── columns: t.a:1!null t.b:2!null indexed.a:5!null indexed.b:6!null
  │    ├── key columns: [2] = [6]
- │    ├── locking: for-update,durability-guaranteed
+ │    ├── locking: for-update
  │    ├── volatile
  │    ├── key: (5)
  │    ├── fd: ()-->(1,2,6), (2)==(6), (6)==(2)
  │    ├── scan t
  │    │    ├── columns: t.a:1!null t.b:2
  │    │    ├── constraint: /1: [/2 - /2]
- │    │    ├── locking: for-update,durability-guaranteed
+ │    │    ├── locking: for-update
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── volatile
  │    │    ├── key: ()
@@ -160,7 +160,7 @@ inner-join (lookup inverted)
  ├── columns: a:1!null b:2!null c:3
  ├── key columns: [1] = [1]
  ├── lookup columns are key
- ├── locking: for-update,durability-guaranteed
+ ├── locking: for-update
  ├── volatile
  ├── key: (1)
  ├── fd: (1)-->(2,3)
@@ -169,8 +169,8 @@ inner-join (lookup inverted)
  │    ├── eq columns: [1] = [1]
  │    ├── left fixed columns: [6] = ['\x89']
  │    ├── right fixed columns: [6] = ['\x8a']
- │    ├── left locking: for-update,durability-guaranteed
- │    ├── right locking: for-update,durability-guaranteed
+ │    ├── left locking: for-update
+ │    ├── right locking: for-update
  │    └── filters (true)
  └── filters (true)
 
@@ -184,7 +184,7 @@ select
  ├── fd: (1)-->(2,3)
  ├── index-join inverted
  │    ├── columns: a:1!null b:2 c:3
- │    ├── locking: for-update,durability-guaranteed
+ │    ├── locking: for-update
  │    ├── volatile
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
@@ -203,7 +203,7 @@ select
  │              │    └── spans
  │              │         ├── ["C", "C"]
  │              │         └── ["\x89", "\x8b")
- │              ├── locking: for-update,durability-guaranteed
+ │              ├── locking: for-update
  │              ├── volatile
  │              ├── key: (1)
  │              └── fd: (1)-->(6)
@@ -217,7 +217,7 @@ inner-join (lookup inverted [as=i1])
  ├── columns: a:1!null b:2 c:3 a:7!null b:8 c:9
  ├── key columns: [19] = [1]
  ├── lookup columns are key
- ├── locking: for-update,durability-guaranteed
+ ├── locking: for-update
  ├── volatile
  ├── key: (1,7)
  ├── fd: (1)-->(2,3), (7)-->(8,9)
@@ -225,13 +225,13 @@ inner-join (lookup inverted [as=i1])
  │    ├── columns: i2.a:7!null i2.b:8 i2.c:9 i1.a:19!null
  │    ├── inverted-expr
  │    │    └── i1.b:20 @> i2.b:8
- │    ├── locking: for-update,durability-guaranteed
+ │    ├── locking: for-update
  │    ├── volatile
  │    ├── key: (7,19)
  │    ├── fd: (7)-->(8,9)
  │    ├── scan inverted [as=i2]
  │    │    ├── columns: i2.a:7!null i2.b:8 i2.c:9
- │    │    ├── locking: for-update,durability-guaranteed
+ │    │    ├── locking: for-update
  │    │    ├── volatile
  │    │    ├── key: (7)
  │    │    └── fd: (7)-->(8,9)
@@ -263,8 +263,8 @@ inner-join (zigzag zigzag@b_idx zigzag@c_idx)
  ├── eq columns: [1] = [1]
  ├── left fixed columns: [2] = [5]
  ├── right fixed columns: [3] = [6.0]
- ├── left locking: for-update,durability-guaranteed
- ├── right locking: for-update,durability-guaranteed
+ ├── left locking: for-update
+ ├── right locking: for-update
  ├── volatile
  ├── key: (1)
  ├── fd: ()-->(2,3)
@@ -279,7 +279,7 @@ inner-join (lookup zigzag)
  ├── columns: a:1!null b:2 c:3 d:4!null
  ├── key columns: [1] = [1]
  ├── lookup columns are key
- ├── locking: for-update,durability-guaranteed
+ ├── locking: for-update
  ├── volatile
  ├── key: (1)
  ├── fd: (1)-->(2-4)
@@ -288,7 +288,7 @@ inner-join (lookup zigzag)
  │    ├── eq columns: [1] = [1]
  │    ├── left fixed columns: [7] = ['\x3761000262000112630001']
  │    ├── right fixed columns: [7] = ['\x3766000112670001']
- │    ├── left locking: for-update,durability-guaranteed
- │    ├── right locking: for-update,durability-guaranteed
+ │    ├── left locking: for-update
+ │    ├── right locking: for-update
  │    └── filters (true)
  └── filters (true)
