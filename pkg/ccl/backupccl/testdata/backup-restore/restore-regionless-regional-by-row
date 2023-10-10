@@ -60,6 +60,11 @@ subtest end
 new-cluster name=s2 share-io-dir=s1 allow-implicit-access localities=us-east-1
 ----
 
+# enable remove_regions option
+exec-sql
+SET CLUSTER SETTING sql.restore.remove_regions.enabled = 'true';
+----
+
 exec-sql
 RESTORE FROM LATEST IN 'nodelocal://1/rbr_cluster_backup/' WITH remove_regions;
 ----

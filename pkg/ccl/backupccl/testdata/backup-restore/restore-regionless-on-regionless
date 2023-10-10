@@ -55,6 +55,16 @@ defaultdb root <nil> <nil> {} <nil>
 postgres root <nil> <nil> {} <nil>
 system node <nil> <nil> {} <nil>
 
+# user will need to set a cluster setting to enable the use of remove_regions
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://1/cluster_backup/' WITH remove_regions;
+----
+pq: to use the remove_regions option, ensure that all nodes are running the same patch version of 23.1; then, enable cluster setting sql.restore.remove_regions.enable
+
+exec-sql
+SET CLUSTER SETTING sql.restore.remove_regions.enabled = 'true';
+----
+
 exec-sql
 RESTORE FROM LATEST IN 'nodelocal://1/cluster_backup/' WITH remove_regions;
 ----

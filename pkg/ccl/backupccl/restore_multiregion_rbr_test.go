@@ -76,6 +76,7 @@ func TestMultiRegionRegionlessRestoreNoLicense(t *testing.T) {
 	defer sqlTC.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(sqlTC.Conns[0])
 
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.restore.remove_regions.enabled = 'true';`)
 	if err := backuptestutils.VerifyBackupRestoreStatementResult(t, sqlDB, `RESTORE DATABASE d FROM LATEST IN $1 WITH remove_regions`, localFoo); err != nil {
 		t.Fatal(err)
 	}

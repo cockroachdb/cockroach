@@ -97,6 +97,13 @@ var featureRestoreEnabled = settings.RegisterBoolSetting(
 	featureflag.FeatureFlagEnabledDefault,
 ).WithPublic()
 
+var optionRemoveRegionsEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.restore.remove_regions.enabled",
+	"set true to enable RESTORE option remove_regions, false to disable; default is false",
+	false,
+)
+
 // maybeFilterMissingViews filters the set of tables to restore to exclude views
 // whose dependencies are either missing or are themselves unrestorable due to
 // missing dependencies, and returns the resulting set of tables. If the
@@ -1067,6 +1074,11 @@ func restorePlanHook(
 		!p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2Start) {
 		return nil, nil, nil, false,
 			errors.New("cannot run RESTORE with schema_only until cluster has fully upgraded to 22.2")
+	}
+	if restoreStmt.Options.RemoveRegions && !optionRemoveRegionsEnabled.Get(&p.ExecCfg().Settings.SV) {
+		return nil, nil, nil, false,
+			errors.New("to use the remove_regions option, ensure that all nodes are running the same patch " +
+				"version of 23.1; then, enable cluster setting sql.restore.remove_regions.enable")
 	}
 	if !restoreStmt.Options.SchemaOnly && restoreStmt.Options.VerifyData {
 		return nil, nil, nil, false,
