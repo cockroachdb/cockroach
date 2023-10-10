@@ -962,8 +962,8 @@ func TestKeyEncodeDecodeBitArrayRand(t *testing.T) {
 				buf = EncodeBitArrayAscending(nil, test)
 				remainder, x, err = DecodeBitArrayAscending(buf)
 			} else {
-				buf = EncodeBitArrayAscending(nil, test)
-				remainder, x, err = DecodeBitArrayAscending(buf)
+				buf = EncodeBitArrayDescending(nil, test)
+				remainder, x, err = DecodeBitArrayDescending(buf)
 			}
 			if err != nil {
 				t.Fatalf("%+v", err)
