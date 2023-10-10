@@ -24,7 +24,6 @@ ok
 
 updates
 ----
-Incremental Update
 update: ten=10 name=foo state=add service=shared cap={can_admin_unsplit:true}
 update: ten=11 name=bar state=add service=none cap={default}
 update: ten=12 name=baz state=ready service=none cap={default}
@@ -81,13 +80,15 @@ ok
 # it is able to restart.
 updates
 ----
-Complete Update
 update: ten=11 name=bar state=add service=none cap={default}
 update: ten=12 name=bli state=add service=none cap={can_admin_unsplit:true}
 update: ten=50 name=blax state=add service=none cap={default}
 
+# The previous entry for ten=10 remains, because we keep the map
+# across rangefeed restarts.
 flush-state
 ----
+ten=10 name=foo state=add service=shared cap={can_admin_unsplit:true}
 ten=11 name=bar state=add service=none cap={default}
 ten=12 name=bli state=add service=none cap={can_admin_unsplit:true}
 ten=50 name=blax state=add service=none cap={default}
@@ -102,4 +103,4 @@ ten=12 name=bli state=add service=none cap={can_admin_unsplit:true}
 
 get-capabilities ten=10
 ----
-not-found
+ten=10 name=foo state=add service=shared cap={can_admin_unsplit:true}
