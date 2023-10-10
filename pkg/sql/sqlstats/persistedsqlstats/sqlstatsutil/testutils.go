@@ -20,21 +20,9 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
-
-// GetRandomizedCollectedStatementStatisticsForTest returns a
-// appstatspb.CollectedStatementStatistics with its fields randomly filled.
-func GetRandomizedCollectedStatementStatisticsForTest(
-	t *testing.T,
-) (result appstatspb.CollectedStatementStatistics) {
-	data := genRandomData()
-	fillObject(t, reflect.ValueOf(&result), &data)
-
-	return result
-}
 
 type randomData struct {
 	Bool        bool
@@ -48,7 +36,7 @@ type randomData struct {
 
 var alphabet = []rune("abcdefghijklmkopqrstuvwxyz")
 
-func genRandomData() randomData {
+func GenRandomData() randomData {
 	r := randomData{}
 	r.Bool = rand.Float64() > 0.5
 
@@ -134,7 +122,7 @@ var fieldBlacklist = map[string]struct{}{
 	"AggregationInterval":     {},
 }
 
-func fillObject(t *testing.T, val reflect.Value, data *randomData) {
+func FillObject(t *testing.T, val reflect.Value, data *randomData) {
 	// Do not set the fields that are not being encoded as json.
 	if val.Kind() != reflect.Ptr {
 		t.Fatal("not a pointer type")
@@ -179,7 +167,7 @@ func fillObject(t *testing.T, val reflect.Value, data *randomData) {
 					continue
 				}
 
-				fillObject(t, fieldAddr, data)
+				FillObject(t, fieldAddr, data)
 			}
 		}
 	default:
