@@ -103,7 +103,7 @@ func newLeaseTest(tb testing.TB, params base.TestClusterArgs) *leaseTest {
 		TB:      tb,
 		cluster: c,
 		server:  s,
-		db:      s.SQLConn(tb, ""),
+		db:      s.SQLConn(tb, serverutils.DBName("")),
 		kvDB:    s.DB(),
 		nodes:   map[uint32]*lease.Manager{},
 	}
@@ -2021,7 +2021,7 @@ func TestTableCreationPushesTxnsInRecentPast(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(context.Background())
-	sqlDB := tc.ApplicationLayer(0).SQLConn(t, "")
+	sqlDB := tc.ApplicationLayer(0).SQLConn(t)
 
 	if _, err := sqlDB.Exec(`
  CREATE DATABASE t;
@@ -2038,7 +2038,7 @@ func TestTableCreationPushesTxnsInRecentPast(t *testing.T) {
 
 	// Create a transaction before the table is created. Use a different
 	// node so that clock uncertainty is presumed and it gets pushed.
-	tx1, err := tc.ApplicationLayer(1).SQLConn(t, "t").Begin()
+	tx1, err := tc.ApplicationLayer(1).SQLConn(t, serverutils.DBName("t")).Begin()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3221,8 +3221,8 @@ ALTER TABLE t1 SPLIT AT VALUES (1);
 	t.Run("validate-lease-txn-deadline-ext-update", func(t *testing.T) {
 		updateCompleted := atomic.Value{}
 		updateCompleted.Store(false)
-		conn := s.SQLConn(t, "")
-		updateConn := s.SQLConn(t, "")
+		conn := s.SQLConn(t)
+		updateConn := s.SQLConn(t)
 		resultChan := make(chan error)
 		_, err = conn.ExecContext(ctx, `
 INSERT INTO t1 select a from generate_series(1, 100) g(a);

@@ -36,7 +36,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 
 	// speeds up test
 	{
-		sysDB := sqlutils.MakeSQLRunner(s.SystemLayer().SQLConn(t, ""))
+		sysDB := sqlutils.MakeSQLRunner(s.SystemLayer().SQLConn(t))
 		sysDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 	}
 

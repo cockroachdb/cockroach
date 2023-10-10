@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "api.go",
         "conditional_wrap.go",
+        "options.go",
         "test_cluster_shim.go",
         "test_cluster_utils.go",
         "test_server_shim.go",

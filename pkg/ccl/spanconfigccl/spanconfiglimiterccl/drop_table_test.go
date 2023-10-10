@@ -56,7 +56,7 @@ func TestDropTableLowersSpanCount(t *testing.T) {
 	zoneConfig.GC.TTLSeconds = 1
 	config.TestingSetupZoneConfigHook(tc.Stopper())
 
-	tenantSQLDB := tenant.SQLConn(t, "")
+	tenantSQLDB := tenant.SQLConn(t)
 	tenantDB := sqlutils.MakeSQLRunner(tenantSQLDB)
 
 	tenantDB.Exec(t, `CREATE TABLE t(k INT PRIMARY KEY)`)

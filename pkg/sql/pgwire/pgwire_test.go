@@ -1305,7 +1305,7 @@ func TestPGPrepareNameQual(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	db2 := s.ApplicationLayer().SQLConn(t, "testing")
+	db2 := s.ApplicationLayer().SQLConn(t, serverutils.DBName("testing"))
 
 	statements := []string{
 		`CREATE TABLE IF NOT EXISTS f (v INT)`,

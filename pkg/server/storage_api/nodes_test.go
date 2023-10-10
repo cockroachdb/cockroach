@@ -95,7 +95,7 @@ func TestNodeStatusResponse(t *testing.T) {
 
 	if srv.TenantController().StartedDefaultTestTenant() {
 		// Enable access to the nodes endpoint for the test tenant.
-		_, err := srv.SystemLayer().SQLConn(t, "").Exec(
+		_, err := srv.SystemLayer().SQLConn(t).Exec(
 			`ALTER TENANT [$1] GRANT CAPABILITY can_view_node_info=true`, serverutils.TestTenantID().ToUint64())
 		require.NoError(t, err)
 
@@ -212,7 +212,7 @@ func TestNodesGRPCResponse(t *testing.T) {
 
 	if srv.TenantController().StartedDefaultTestTenant() {
 		// Enable access to the nodes endpoint for the test tenant.
-		_, err := srv.SystemLayer().SQLConn(t, "").Exec(
+		_, err := srv.SystemLayer().SQLConn(t).Exec(
 			`ALTER TENANT [$1] GRANT CAPABILITY can_view_node_info=true`, serverutils.TestTenantID().ToUint64())
 		require.NoError(t, err)
 

@@ -53,7 +53,7 @@ func TestAuthenticateWithSessionRevivalToken(t *testing.T) {
 
 	var token string
 	t.Run("generate token", func(t *testing.T) {
-		conn := tenant.SQLConnForUser(t, username.TestUser, "")
+		conn := tenant.SQLConn(t, serverutils.User(username.TestUser))
 		err := conn.QueryRowContext(ctx, "SELECT encode(crdb_internal.create_session_revival_token(), 'base64')").Scan(&token)
 		require.NoError(t, err)
 	})

@@ -179,7 +179,7 @@ func runCircuitBreakerTestForKey(
 	require.NoError(t, tc.WaitFor5NodeReplication(), "failed to succeed 5x replication")
 
 	tc.ToggleReplicateQueues(false)
-	c := tc.Server(0).SystemLayer().SQLConn(t, "")
+	c := tc.Server(0).SystemLayer().SQLConn(t)
 	_, err := c.ExecContext(ctx, "set cluster setting kv.allocator.load_based_rebalancing='off'")
 	require.NoError(t, err, "failed to disable load rebalancer")
 	_, err = c.ExecContext(ctx,

@@ -83,7 +83,7 @@ func TestBackupSharedProcessTenantNodeDown(t *testing.T) {
 	for i := 1; i < multiNode; i++ {
 		testutils.SucceedsSoon(t, func() error {
 			t.Logf("waiting for server %d", i)
-			db, err := tc.Server(i).SystemLayer().SQLConnE("cluster:test/defaultdb")
+			db, err := tc.Server(i).SystemLayer().SQLConnE(serverutils.DBName("cluster:test/defaultdb"))
 			if err != nil {
 				return err
 			}

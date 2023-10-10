@@ -102,7 +102,7 @@ ALTER TENANT application START SERVICE SHARED`)
 				continue
 			}
 
-			db, err := tc.Server(i).SystemLayer().SQLConnE("cluster:application")
+			db, err := tc.Server(i).SystemLayer().SQLConnE(serverutils.DBName("cluster:application"))
 			if err != nil {
 				return err
 			}
@@ -166,7 +166,7 @@ func TestServerControllerHTTP(t *testing.T) {
 	t.Logf("connecting to the test tenant")
 
 	// Get a SQL connection to the test tenant.
-	db2, err := s.SystemLayer().SQLConnE("cluster:hello/defaultdb")
+	db2, err := s.SystemLayer().SQLConnE(serverutils.DBName("cluster:hello/defaultdb"))
 	// Expect no error yet: the connection is opened lazily; an
 	// error here means the parameters were incorrect.
 	require.NoError(t, err)
@@ -414,7 +414,7 @@ func TestServerControllerMultiNodeTenantStartup(t *testing.T) {
 	sqlAddr := tc.Server(serverIdx).AdvSQLAddr()
 	t.Logf("attempting to use tenant server on node %d (%s)", serverIdx, sqlAddr)
 	testutils.SucceedsSoon(t, func() error {
-		tenantDB, err := tc.Server(serverIdx).SystemLayer().SQLConnE("cluster:hello")
+		tenantDB, err := tc.Server(serverIdx).SystemLayer().SQLConnE(serverutils.DBName("cluster:hello"))
 		if err != nil {
 			t.Logf("error connecting to tenant server (will retry): %v", err)
 			return err
@@ -462,7 +462,7 @@ func TestServerStartStop(t *testing.T) {
 
 	// Check the liveness.
 	testutils.SucceedsSoon(t, func() error {
-		db2, err := s.SystemLayer().SQLConnE("cluster:hello/defaultdb")
+		db2, err := s.SystemLayer().SQLConnE(serverutils.DBName("cluster:hello/defaultdb"))
 		// Expect no error yet: the connection is opened lazily; an
 		// error here means the parameters were incorrect.
 		require.NoError(t, err)
@@ -486,7 +486,7 @@ func TestServerStartStop(t *testing.T) {
 
 	// Verify that the service is indeed stopped.
 	testutils.SucceedsSoon(t, func() error {
-		db2, err := s.SystemLayer().SQLConnE("cluster:hello/defaultdb")
+		db2, err := s.SystemLayer().SQLConnE(serverutils.DBName("cluster:hello/defaultdb"))
 		// Expect no error yet: the connection is opened lazily; an
 		// error here means the parameters were incorrect.
 		require.NoError(t, err)

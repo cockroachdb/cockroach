@@ -71,7 +71,7 @@ func TestDataDriven(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s := tc.layer
 
-			sqlDB := s.SQLConn(t, "")
+			sqlDB := s.SQLConn(t)
 			tdb := sqlutils.MakeSQLRunner(sqlDB)
 			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 			v := execCfg.Settings.Version.ActiveVersion(ctx)

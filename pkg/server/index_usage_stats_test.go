@@ -80,7 +80,7 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 		LastRead:       timeutil.Now(),
 	}
 
-	firstServerSQLConn := firstServer.SQLConn(t, "")
+	firstServerSQLConn := firstServer.SQLConn(t)
 
 	// Create table on the first node.
 	_, err := firstServerSQLConn.Exec("CREATE TABLE t (k INT PRIMARY KEY, a INT, b INT, c INT, INDEX(a), INDEX(b))")
@@ -124,7 +124,7 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	secondServer := testCluster.Server(1 /* idx */)
 	secondLocalStatsReader := secondServer.SQLServer().(*sql.Server).GetLocalIndexStatistics()
 
-	secondServerSQLConn := secondServer.SQLConn(t, "")
+	secondServerSQLConn := secondServer.SQLConn(t)
 
 	// Records a non-full scan over t_a_idx.
 	_, err = secondServerSQLConn.Exec("SELECT k, a FROM t WHERE a = 0")
@@ -146,7 +146,7 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	fourthServer := testCluster.Server(3 /* idx */)
 	fourthLocalStatsReader := fourthServer.SQLServer().(*sql.Server).GetLocalIndexStatistics()
 
-	fourthServerSQLConn := fourthServer.SQLConn(t, "")
+	fourthServerSQLConn := fourthServer.SQLConn(t)
 
 	// Test that total_reads / last_read was not populated by an explicit CREATE INDEX query.
 	_, err = fourthServerSQLConn.Exec("CREATE TABLE test(num INT PRIMARY KEY, letter CHAR)")

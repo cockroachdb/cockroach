@@ -179,7 +179,7 @@ func (c *TenantStreamingClusters) StartDestTenant(
 		require.NoError(c.T, err)
 	} else {
 		c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 START SERVICE SHARED`, c.Args.DestTenantName)
-		c.DestTenantConn = c.DestCluster.Server(0).SystemLayer().SQLConn(c.T, "cluster:"+string(c.Args.DestTenantName)+"/defaultdb")
+		c.DestTenantConn = c.DestCluster.Server(0).SystemLayer().SQLConn(c.T, serverutils.DBName("cluster:"+string(c.Args.DestTenantName)+"/defaultdb"))
 	}
 
 	c.DestTenantSQL = sqlutils.MakeSQLRunner(c.DestTenantConn)

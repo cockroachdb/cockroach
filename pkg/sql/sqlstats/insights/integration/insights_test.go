@@ -207,7 +207,7 @@ func TestFailedInsights(t *testing.T) {
 	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
 	tc := testcluster.StartTestCluster(t, 1, args)
 	defer tc.Stopper().Stop(ctx)
-	rootConn := sqlutils.MakeSQLRunner(tc.ApplicationLayer(0).SQLConn(t, ""))
+	rootConn := sqlutils.MakeSQLRunner(tc.ApplicationLayer(0).SQLConn(t))
 
 	// Enable detection by setting a latencyThreshold > 0.
 	latencyThreshold := 100 * time.Millisecond
@@ -218,9 +218,9 @@ func TestFailedInsights(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "with_redaction", func(t *testing.T, testRedacted bool) {
 		rootConn.Exec(t, `select crdb_internal.reset_sql_stats()`)
-		conn := tc.ApplicationLayer(0).SQLConn(t, "")
+		conn := tc.ApplicationLayer(0).SQLConn(t)
 		if testRedacted {
-			conn = tc.ApplicationLayer(0).SQLConnForUser(t, "testuser", "")
+			conn = tc.ApplicationLayer(0).SQLConn(t, serverutils.User("testuser"))
 		}
 
 		_, err := conn.Exec("SET SESSION application_name=$1", appName)
@@ -433,8 +433,8 @@ func TestTransactionInsightsFailOnCommit(t *testing.T) {
 
 	connDefault := sqlutils.MakeSQLRunner(db)
 	// Connections specifically to run our conflicting txns.
-	conn1 := sqlutils.MakeSQLRunner(srv.ApplicationLayer().SQLConn(t, ""))
-	conn2 := sqlutils.MakeSQLRunner(srv.ApplicationLayer().SQLConn(t, ""))
+	conn1 := sqlutils.MakeSQLRunner(srv.ApplicationLayer().SQLConn(t))
+	conn2 := sqlutils.MakeSQLRunner(srv.ApplicationLayer().SQLConn(t))
 
 	connDefault.Exec(t, "SET CLUSTER SETTING sql.contention.event_store.resolution_interval = '100ms'")
 
