@@ -150,7 +150,7 @@ func ValidateColumnDefType(ctx context.Context, version clusterversion.Handle, t
 
 // ColumnTypeIsIndexable returns whether the type t is valid as an indexed column.
 func ColumnTypeIsIndexable(t *types.T) bool {
-	if t.IsAmbiguous() || t.Family() == types.TupleFamily {
+	if t.IsAmbiguous() || t.Family() == types.TupleFamily || t.Family() == types.RefCursorFamily {
 		return false
 	}
 	// Some inverted index types also have a key encoding, but we don't
