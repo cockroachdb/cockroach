@@ -155,7 +155,7 @@ func modifyBlacklistedStmt(
 	if modify {
 		t.Logf("Comparator testing framework modifies line %q to %q", line, parsedLine.String())
 	}
-	return parsedLine.String()
+	return parsedLine.StringWithFlags(tree.FmtSimple | tree.FmtTagDollarQuotes)
 }
 
 // modifySetDeclarativeSchemaChangerMode skips stmts that attempt to alter

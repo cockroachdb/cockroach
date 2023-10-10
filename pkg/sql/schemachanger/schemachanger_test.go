@@ -845,6 +845,8 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"sdfsd  -- ditto",
 			"CREATE VIEW v AS (SELECT (*,1) FROM t);  -- ditto",
 			"CREATE MATERIALIZED VIEW v AS (xlsd);  -- ditto",
+			"CREATE FUNCTION f1() RETURNS INT LANGUAGE SQL AS $$ SELECT $$vsd $$;  -- ditto",
+			"CREATE FUNCTION f1() RETURNS INT LANGUAGE SQL AS $funcTag$ SELECT $$vsd $funcTag$;  -- ditto",
 
 			// Statements with TCL commands or empty content.
 			"",
