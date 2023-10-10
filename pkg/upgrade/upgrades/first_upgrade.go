@@ -56,6 +56,9 @@ func FirstUpgradeFromRelease(
 	var batch catalog.DescriptorIDSet
 	const batchSize = 1000
 	if err := all.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		if desc.GetName() == "foo" {
+			fmt.Println("we want to start debugging here")
+		}
 		if !desc.GetPostDeserializationChanges().HasChanges() {
 			return nil
 		}

@@ -131,6 +131,76 @@ func TestFirstUpgrade(t *testing.T) {
 	require.False(t, readDescFromStorage().GetPostDeserializationChanges().HasChanges())
 }
 
+// TestUpgradeNoCorruption ensures that we do not try to repair an unbroken descriptor.
+func TestUpgradeNoCorruption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var (
+		v0 = clusterversion.TestingBinaryMinSupportedVersion
+		v1 = clusterversion.ByKey(clusterversion.BinaryVersionKey)
+	)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettingsWithVersions(v1, v0, false /* initializeVersion */)
+	require.NoError(t, clusterversion.Initialize(ctx, v0, &settings.SV))
+	testServer, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: settings,
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				DisableAutomaticVersionUpgrade: make(chan struct{}),
+				BinaryVersionOverride:          v0,
+			},
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer testServer.Stopper().Stop(ctx)
+
+	// Set up the test cluster schema.
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	execStmts := func(t *testing.T, stmts ...string) {
+		for _, stmt := range stmts {
+			tdb.Exec(t, stmt)
+		}
+	}
+	execStmts(t,
+		"CREATE DATABASE test",
+		"USE test",
+		"CREATE TABLE foo (i INT PRIMARY KEY, j INT, INDEX idx(j))",
+	)
+
+	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "foo")
+	descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tbl.GetID())
+
+	readDescFromStorage := func() catalog.Descriptor {
+		var b catalog.DescriptorBuilder
+		require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			v, err := txn.Get(ctx, descKey)
+			if err != nil {
+				return err
+			}
+			b, err = descbuilder.FromSerializedValue(v.Value)
+			return err
+		}))
+		return b.BuildImmutable()
+	}
+	// TODO (commenting for draft PR): left this here for now to illustrate what I was saying in PR comment
+	require.True(t, readDescFromStorage().GetPostDeserializationChanges().HasChanges())
+
+	// Ensure that we detect no corrupted descriptors.
+	const qDetectCorruption = `SELECT count(*) FROM "".crdb_internal.invalid_objects`
+	tdb.CheckQueryResults(t, qDetectCorruption, [][]string{{"0"}})
+
+	// Wait long enough for precondition check to be effective.
+	execStmts(t, "CREATE DATABASE test2")
+	const qWaitForAOST = "SELECT count(*) FROM [SHOW DATABASES] AS OF SYSTEM TIME '-10s'"
+	tdb.CheckQueryResultsRetry(t, qWaitForAOST, [][]string{{"5"}})
+
+	// Try upgrading the cluster version, precondition check should pass.
+	const qUpgrade = "SET CLUSTER SETTING version = crdb_internal.node_executable_version()"
+	tdb.Exec(t, qUpgrade)
+}
+
 // TestFirstUpgradeRepair tests the correct repair behavior of upgrade
 // steps which are implicitly defined for each V[0-9]+_[0-9]+Start cluster
 // version key.
