@@ -673,7 +673,7 @@ func TestShowBackupPrivileges(t *testing.T) {
 	sqlDB.Exec(t, `CREATE USER testuser`)
 	sqlDB.Exec(t, `CREATE TABLE privs (a INT)`)
 
-	testuser := srv.ApplicationLayer().SQLConnForUser(t, "testuser", "")
+	testuser := srv.ApplicationLayer().SQLConn(t, serverutils.User("testuser"))
 
 	// Make an initial backup.
 	const full = localFoo + "/full"

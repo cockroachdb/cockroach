@@ -95,7 +95,7 @@ func TestStatusVarsTxnMetrics(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 
 	testFn := func(s serverutils.ApplicationLayerInterface, expectedLabel string) {
-		db := s.SQLConn(t, "")
+		db := s.SQLConn(t)
 
 		if _, err := db.Exec("BEGIN;" +
 			"SAVEPOINT cockroach_restart;" +

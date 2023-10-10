@@ -294,7 +294,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 				fmt.Sprintf("GRANT SELECT,UPDATE,DELETE ON %s.%s TO app", escDBName, tblName),
 				fmt.Sprintf("CREATE STATISTICS test_stats FROM %s.%s", escDBName, tblName),
 			}
-			db := ts.SQLConn(t, tc.dbName)
+			db := ts.SQLConn(t, serverutils.DBName(tc.dbName))
 			for _, q := range setupQueries {
 				t.Logf("executing: %v", q)
 				if _, err := db.Exec(q); err != nil {
@@ -428,7 +428,7 @@ func TestAdminAPIDatabaseDetails(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
 
-	db := tc.ApplicationLayer(0).SQLConn(t, "")
+	db := tc.ApplicationLayer(0).SQLConn(t)
 
 	_, err := db.Exec("CREATE DATABASE test")
 	require.NoError(t, err)
@@ -497,7 +497,7 @@ func TestAdminAPITableStats(t *testing.T) {
 	server0 := tc.Server(0).ApplicationLayer()
 
 	// Create clients (SQL, HTTP) connected to server 0.
-	db := server0.SQLConn(t, "")
+	db := server0.SQLConn(t)
 
 	client, err := server0.GetAdminHTTPClient()
 	if err != nil {

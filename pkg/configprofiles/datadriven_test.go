@@ -72,7 +72,7 @@ func TestDataDriven(t *testing.T) {
 				// We need to force the connection to the system tenant,
 				// because at least one of the config profiles changes the
 				// default tenant.
-				sysTenantDB := s.SystemLayer().SQLConn(t, "defaultdb")
+				sysTenantDB := s.SystemLayer().SQLConn(t, serverutils.DBName("defaultdb"))
 				db = sqlutils.MakeSQLRunner(sysTenantDB)
 				res.WriteString("server started\n")
 
@@ -113,7 +113,7 @@ AND   status = 'succeeded'`).Scan(&numTasksCompleted)
 					t.Fatalf("%s: must use profile before sql", d.Pos)
 				}
 				testutils.SucceedsSoon(t, func() error {
-					goDB := s.SystemLayer().SQLConn(t, "cluster:"+d.Input+"/defaultdb")
+					goDB := s.SystemLayer().SQLConn(t, serverutils.DBName("cluster:"+d.Input+"/defaultdb"))
 					return goDB.Ping()
 				})
 				return "ok"
