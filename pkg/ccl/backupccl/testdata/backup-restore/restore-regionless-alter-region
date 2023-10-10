@@ -42,7 +42,7 @@ BACKUP INTO 'nodelocal://1/cluster_backup/';
 subtest end
 
 # create cluster with a single region
-new-cluster name=s2 share-io-dir=s1 allow-implicit-access localities=us-east-1
+new-cluster name=s2 share-io-dir=s1 allow-implicit-access localities=us-east-1 disable-tenant
 ----
 
 # test cluster restore with remove_regions
@@ -56,7 +56,15 @@ postgres root <nil> <nil> {} <nil>
 system node <nil> <nil> {} <nil>
 
 exec-sql
+SET CLUSTER SETTING bulkio.restore.remove_regions.enabled = 'true';
+----
+
+exec-sql
 RESTORE FROM LATEST IN 'nodelocal://1/cluster_backup/' WITH remove_regions;
+----
+
+exec-sql
+SET CLUSTER SETTING bulkio.restore.remove_regions.enabled = 'true';
 ----
 
 # check cluster's regions
