@@ -46,7 +46,7 @@ func createSessionAndProtect(
 	t.Helper()
 
 	// Start the first SQL session that will lay down a PTS record.
-	targetDB := s0.SQLConn(t, "defaultdb")
+	targetDB := s0.SQLConn(t, serverutils.DBName("defaultdb"))
 	targetRunner := sqlutils.MakeSQLRunner(targetDB)
 	targetRunner.Exec(t, `SELECT 1`)
 
@@ -70,7 +70,7 @@ func TestSessionProtectedTimestampReconciler(t *testing.T) {
 	defer testCluster.Stopper().Stop(ctx)
 	s0 := testCluster.Server(0).ApplicationLayer()
 
-	sqlDB := sqlutils.MakeSQLRunner(s0.SQLConn(t, "defaultdb"))
+	sqlDB := sqlutils.MakeSQLRunner(s0.SQLConn(t, serverutils.DBName("defaultdb")))
 
 	insqlDB := s0.InternalDB().(isql.DB)
 	ptp := s0.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider

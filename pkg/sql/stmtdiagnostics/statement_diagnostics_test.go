@@ -543,8 +543,8 @@ func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 	s0 := tc.ApplicationLayer(0)
-	db0 := s0.SQLConn(t, "")
-	db1 := tc.ApplicationLayer(1).SQLConn(t, "")
+	db0 := s0.SQLConn(t)
+	db1 := tc.ApplicationLayer(1).SQLConn(t)
 	_, err := db0.Exec("CREATE TABLE test (x int PRIMARY KEY)")
 	require.NoError(t, err)
 

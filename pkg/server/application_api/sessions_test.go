@@ -243,7 +243,7 @@ func TestStatusCancelSessionGatewayMetadataPropagation(t *testing.T) {
 	s1 := testCluster.Server(1).ApplicationLayer()
 
 	// Start a SQL session as admin on node 1.
-	sql0 := sqlutils.MakeSQLRunner(s0.SQLConn(t, ""))
+	sql0 := sqlutils.MakeSQLRunner(s0.SQLConn(t))
 	results := sql0.QueryStr(t, "SELECT session_id FROM [SHOW SESSIONS] LIMIT 1")
 	sessionID, err := hex.DecodeString(results[0][0])
 	require.NoError(t, err)
@@ -267,7 +267,7 @@ func TestStatusAPIListSessions(t *testing.T) {
 	defer testCluster.Stopper().Stop(ctx)
 
 	s0 := testCluster.Server(0).ApplicationLayer()
-	serverSQL := sqlutils.MakeSQLRunner(s0.SQLConn(t, ""))
+	serverSQL := sqlutils.MakeSQLRunner(s0.SQLConn(t))
 
 	appName := "test_sessions_api"
 	serverSQL.Exec(t, fmt.Sprintf(`SET application_name = "%s"`, appName))

@@ -231,7 +231,7 @@ func StartServer(
 	t TestFataler, params base.TestServerArgs,
 ) (TestServerInterface, *gosql.DB, *kv.DB) {
 	s := StartServerOnly(t, params)
-	goDB := s.ApplicationLayer().SQLConn(t, params.UseDatabase)
+	goDB := s.ApplicationLayer().SQLConn(t, DBName(params.UseDatabase))
 	kvDB := s.ApplicationLayer().DB()
 	return s, goDB, kvDB
 }
@@ -310,7 +310,7 @@ func StartTenant(
 		t.Fatalf("%+v", err)
 	}
 
-	goDB := tenant.SQLConn(t, params.UseDatabase)
+	goDB := tenant.SQLConn(t, DBName(params.UseDatabase))
 	return tenant, goDB
 }
 
