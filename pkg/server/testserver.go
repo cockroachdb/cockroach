@@ -474,15 +474,10 @@ func (ts *testServer) TsDB() interface{} {
 }
 
 // SQLConn is part of the serverutils.ApplicationLayerInterface.
-func (ts *testServer) SQLConn(test serverutils.TestFataler, dbName string) *gosql.DB {
-	return ts.SQLConnForUser(test, username.RootUser, dbName)
-}
-
-// SQLConnForUser is part of the serverutils.ApplicationLayerInterface.
-func (ts *testServer) SQLConnForUser(
-	test serverutils.TestFataler, userName, dbName string,
+func (ts *testServer) SQLConn(
+	test serverutils.TestFataler, opts ...serverutils.SQLConnOption,
 ) *gosql.DB {
-	db, err := ts.SQLConnForUserE(userName, dbName)
+	db, err := ts.SQLConnE(opts...)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -490,18 +485,20 @@ func (ts *testServer) SQLConnForUser(
 }
 
 // SQLConnE is part of the serverutils.ApplicationLayerInterface.
-func (ts *testServer) SQLConnE(dbName string) (*gosql.DB, error) {
-	return ts.SQLConnForUserE(username.RootUser, dbName)
-}
-
-// SQLConnForUserE is part of the serverutils.ApplicationLayerInterface.
-func (ts *testServer) SQLConnForUserE(userName string, dbName string) (*gosql.DB, error) {
+func (ts *testServer) SQLConnE(opts ...serverutils.SQLConnOption) (*gosql.DB, error) {
+	options := serverutils.DefaultSQLConnOptions()
+	for _, opt := range opts {
+		opt(options)
+	}
 	return openTestSQLConn(
-		userName, dbName, catconstants.SystemTenantName,
+		options.DBName,
+		options.User,
+		catconstants.SystemTenantName,
 		ts.Stopper(),
 		ts.topLevelServer.loopbackPgL,
 		ts.cfg.SQLAdvertiseAddr,
 		ts.cfg.Insecure,
+		options.ClientCerts,
 	)
 }
 
@@ -822,15 +819,10 @@ func (t *testTenant) RPCAddr() string {
 }
 
 // SQLConn is part of the serverutils.ApplicationLayerInterface.
-func (t *testTenant) SQLConn(test serverutils.TestFataler, dbName string) *gosql.DB {
-	return t.SQLConnForUser(test, username.RootUser, dbName)
-}
-
-// SQLConnForUser is part of the serverutils.ApplicationLayerInterface.
-func (t *testTenant) SQLConnForUser(
-	test serverutils.TestFataler, userName, dbName string,
+func (t *testTenant) SQLConn(
+	test serverutils.TestFataler, opts ...serverutils.SQLConnOption,
 ) *gosql.DB {
-	db, err := t.SQLConnForUserE(userName, dbName)
+	db, err := t.SQLConnE(opts...)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -838,12 +830,11 @@ func (t *testTenant) SQLConnForUser(
 }
 
 // SQLConnE is part of the serverutils.ApplicationLayerInterface.
-func (t *testTenant) SQLConnE(dbName string) (*gosql.DB, error) {
-	return t.SQLConnForUserE(username.RootUser, dbName)
-}
-
-// SQLConnForUserE is part of the serverutils.ApplicationLayerInterface.
-func (t *testTenant) SQLConnForUserE(userName string, dbName string) (*gosql.DB, error) {
+func (t *testTenant) SQLConnE(opts ...serverutils.SQLConnOption) (*gosql.DB, error) {
+	options := serverutils.DefaultSQLConnOptions()
+	for _, opt := range opts {
+		opt(options)
+	}
 	tenantName := t.t.tenantName
 	if !t.Cfg.DisableSQLListener {
 		// This tenant server has its own SQL listener. It will not accept
@@ -851,11 +842,14 @@ func (t *testTenant) SQLConnForUserE(userName string, dbName string) (*gosql.DB,
 		tenantName = ""
 	}
 	return openTestSQLConn(
-		userName, dbName, tenantName,
+		options.DBName,
+		options.User,
+		tenantName,
 		t.AppStopper(),
 		t.pgL,
 		t.Cfg.SQLAdvertiseAddr,
 		t.Cfg.Insecure,
+		options.ClientCerts,
 	)
 }
 
@@ -871,9 +865,9 @@ func (t *testTenant) PGServer() interface{} {
 
 // PGPreServer exposes the pgwire.PreServeConnHandler instance used by
 // the testServer.
-func (ts *testTenant) PGPreServer() interface{} {
-	if ts != nil {
-		return ts.pgPreServer
+func (t *testTenant) PGPreServer() interface{} {
+	if t != nil {
+		return t.pgPreServer
 	}
 	return nil
 }
@@ -1249,7 +1243,7 @@ func (ts *testServer) StartSharedProcessTenant(
 		drain:          sqlServerWrapper.drainServer,
 	}
 
-	sqlDB, err := ts.SQLConnE("cluster:" + string(args.TenantName) + "/" + args.UseDatabase)
+	sqlDB, err := ts.SQLConnE(serverutils.DBName("cluster:" + string(args.TenantName) + "/" + args.UseDatabase))
 	if err != nil {
 		return nil, nil, err
 	}

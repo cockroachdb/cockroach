@@ -43,7 +43,7 @@ func TestSharedProcessTenantNoSpanLimit(t *testing.T) {
 	var tenantDB *gosql.DB
 	testutils.SucceedsSoon(t, func() error {
 		var err error
-		tenantDB, err = tc.Server(0).SystemLayer().SQLConnE("cluster:hello")
+		tenantDB, err = tc.Server(0).SystemLayer().SQLConnE(serverutils.DBName("cluster:hello"))
 		if err != nil {
 			return err
 		}

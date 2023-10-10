@@ -39,7 +39,7 @@ func TestFakeSpanResolver(t *testing.T) {
 	ts := tc.ApplicationLayer(0)
 
 	sqlutils.CreateTable(
-		t, ts.SQLConn(t, ""), "t",
+		t, ts.SQLConn(t), "t",
 		"k INT PRIMARY KEY, v INT",
 		100,
 		func(row int) []tree.Datum {

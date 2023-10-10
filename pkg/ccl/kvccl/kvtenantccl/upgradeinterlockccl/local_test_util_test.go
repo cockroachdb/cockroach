@@ -161,7 +161,7 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 		}
 		tenant, err := tc.Server(0).TenantController().StartTenant(ctx, tenantArgs)
 		require.NoError(t, err)
-		return tenant.SQLConn(t, ""), func() { tenant.AppStopper().Stop(ctx) }
+		return tenant.SQLConn(t), func() { tenant.AppStopper().Stop(ctx) }
 	}
 
 	logf("creating an initial tenant server")
@@ -293,7 +293,7 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 		otherServerStopper.Stop(ctx)
 	} else if otherServerStartError == nil {
 		defer otherServer.AppStopper().Stop(ctx)
-		otherTenant := otherServer.SQLConn(t, "")
+		otherTenant := otherServer.SQLConn(t)
 		otherTenantRunner = sqlutils.MakeSQLRunner(otherTenant)
 		numTenantsStr = "2"
 	}

@@ -1294,7 +1294,7 @@ func TestExecutionInsights(t *testing.T) {
 				}()
 
 				// Connect to the cluster as the test user.
-				tdb := s.SQLConnForUser(t, "testuser", "")
+				tdb := s.SQLConn(t, serverutils.User("testuser"))
 
 				// Try to read the virtual table, and see that we can or cannot as expected.
 				rows, err := tdb.Query(fmt.Sprintf("SELECT count(*) FROM crdb_internal.%s", table))
