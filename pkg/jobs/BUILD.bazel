@@ -41,7 +41,6 @@ go_library(
         "//pkg/scheduledjobs",
         "//pkg/security/username",
         "//pkg/server/telemetry",
-        "//pkg/server/tracedumper",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",

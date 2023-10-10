@@ -188,5 +188,12 @@ func (zc *debugZipContext) collectClusterData(
 		}
 	}
 
+	if zipCtx.includeRunningJobTraces {
+		zc.clusterPrinter.info("collecting the inflight traces for jobs")
+		if err := zc.dumpTraceableJobTraces(); err != nil {
+			return &serverpb.NodesListResponse{}, nil, err
+		}
+	}
+
 	return nodesList, livenessByNodeID, nil
 }

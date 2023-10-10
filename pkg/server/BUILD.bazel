@@ -201,7 +201,6 @@ go_library(
         "//pkg/server/systemconfigwatcher",
         "//pkg/server/telemetry",
         "//pkg/server/tenantsettingswatcher",
-        "//pkg/server/tracedumper",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
