@@ -13,6 +13,7 @@ package ttljob_test
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"testing"
@@ -28,6 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/stretchr/testify/require"
 )
 
@@ -341,6 +345,7 @@ func TestSelectQueryBuilder(t *testing.T) {
 					AOSTDuration:    0,
 					SelectBatchSize: 2,
 					TTLExpr:         ttlColName,
+					SelectDuration:  aggmetric.MakeBuilder().Histogram(metric.HistogramOptions{}).AddChild(),
 				},
 				cutoff,
 			)
@@ -453,6 +458,12 @@ func TestDeleteQueryBuilder(t *testing.T) {
 					PKColNames:      pkColNames,
 					DeleteBatchSize: 2,
 					TTLExpr:         ttlColName,
+					DeleteDuration:  aggmetric.MakeBuilder().Histogram(metric.HistogramOptions{}).AddChild(),
+					DeleteRateLimiter: quotapool.NewRateLimiter(
+						"",
+						quotapool.Inf(),
+						math.MaxInt64,
+					),
 				},
 				cutoff,
 			)
