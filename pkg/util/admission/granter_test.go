@@ -398,7 +398,7 @@ func (tr *testRequester) hasWaitingRequests() bool {
 
 func (tr *testRequester) granted(grantChainID grantChainID) int64 {
 	fmt.Fprintf(tr.buf, "%s%s: granted in chain %d, and returning %d\n",
-		workKindString(tr.workKind), tr.additionalID,
+		tr.workKind, tr.additionalID,
 		grantChainID, tr.returnValueFromGranted)
 	tr.grantChainID = grantChainID
 	return tr.returnValueFromGranted
@@ -408,24 +408,24 @@ func (tr *testRequester) close() {}
 
 func (tr *testRequester) tryGet(count int64) {
 	rv := tr.granter.tryGet(count)
-	fmt.Fprintf(tr.buf, "%s%s: tryGet(%d) returned %t\n", workKindString(tr.workKind),
+	fmt.Fprintf(tr.buf, "%s%s: tryGet(%d) returned %t\n", tr.workKind,
 		tr.additionalID, count, rv)
 }
 
 func (tr *testRequester) returnGrant(count int64) {
-	fmt.Fprintf(tr.buf, "%s%s: returnGrant(%d)\n", workKindString(tr.workKind), tr.additionalID,
+	fmt.Fprintf(tr.buf, "%s%s: returnGrant(%d)\n", tr.workKind, tr.additionalID,
 		count)
 	tr.granter.returnGrant(count)
 }
 
 func (tr *testRequester) tookWithoutPermission(count int64) {
-	fmt.Fprintf(tr.buf, "%s%s: tookWithoutPermission(%d)\n", workKindString(tr.workKind),
+	fmt.Fprintf(tr.buf, "%s%s: tookWithoutPermission(%d)\n", tr.workKind,
 		tr.additionalID, count)
 	tr.granter.tookWithoutPermission(count)
 }
 
 func (tr *testRequester) continueGrantChain() {
-	fmt.Fprintf(tr.buf, "%s%s: continueGrantChain\n", workKindString(tr.workKind),
+	fmt.Fprintf(tr.buf, "%s%s: continueGrantChain\n", tr.workKind,
 		tr.additionalID)
 	tr.granter.continueGrantChain(tr.grantChainID)
 }
