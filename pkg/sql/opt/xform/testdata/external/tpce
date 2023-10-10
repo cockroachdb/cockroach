@@ -3529,7 +3529,7 @@ project
  │    │    ├── scan trade
  │    │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null trade.t_chrg:12!null t_lifo:15!null
  │    │    │    ├── constraint: /1: [/0 - /0]
- │    │    │    ├── locking: for-update,durability-guaranteed
+ │    │    │    ├── locking: for-update
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── volatile
  │    │    │    ├── key: ()
@@ -3586,7 +3586,7 @@ project
  │    │    ├── scan trade
  │    │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null trade.t_chrg:12!null t_lifo:15!null
  │    │    │    ├── constraint: /1: [/0 - /0]
- │    │    │    ├── locking: for-update,durability-guaranteed
+ │    │    │    ├── locking: for-update
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── volatile
  │    │    │    ├── key: ()

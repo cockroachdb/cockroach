@@ -255,7 +255,7 @@ SELECT * FROM a LIMIT 1 FOR UPDATE
 scan a
  ├── columns: k:1!null i:2 f:3 s:4 j:5
  ├── limit: 1
- ├── locking: for-update,durability-guaranteed
+ ├── locking: for-update
  ├── volatile
  ├── key: ()
  └── fd: ()-->(1-5)
@@ -268,7 +268,7 @@ scan a@s_idx
  ├── columns: s:4!null
  ├── constraint: /4/1: [/'foo' - /'foo']
  ├── limit: 1
- ├── locking: for-update,durability-guaranteed
+ ├── locking: for-update
  ├── volatile
  ├── key: ()
  └── fd: ()-->(4)
@@ -352,7 +352,7 @@ limit
  ├── ordering: +2 opt(1) [actual: +2]
  ├── index-join kuv
  │    ├── columns: k:1!null u:2 v:3
- │    ├── locking: for-update,skip-locked,durability-guaranteed
+ │    ├── locking: for-update,skip-locked
  │    ├── volatile
  │    ├── fd: ()-->(1)
  │    ├── ordering: +2 opt(1) [actual: +2]
@@ -360,7 +360,7 @@ limit
  │    └── scan kuv@kuv_k_u_idx
  │         ├── columns: k:1!null u:2 rowid:4!null
  │         ├── constraint: /1/2/4: [/1 - /1]
- │         ├── locking: for-update,skip-locked,durability-guaranteed
+ │         ├── locking: for-update,skip-locked
  │         ├── volatile
  │         ├── key: (4)
  │         ├── fd: ()-->(1), (4)-->(2)
@@ -884,7 +884,7 @@ top-k
  ├── ordering: +2
  └── scan kuv
       ├── columns: k:1 u:2 v:3
-      ├── locking: for-update,durability-guaranteed
+      ├── locking: for-update
       └── volatile
 
 # -------------------------
