@@ -231,7 +231,7 @@ func listExecutionDetails(
 	client, err := s.GetAdminHTTPClient()
 	require.NoError(t, err)
 
-	url := s.AdminURL().String() + fmt.Sprintf("/_status/list_job_profiler_execution_details/%d", jobID)
+	url := s.AdminURL().WithPath(fmt.Sprintf("/_status/list_job_profiler_execution_details/%d", jobID)).String()
 	req, err := http.NewRequest("GET", url, nil)
 	require.NoError(t, err)
 
@@ -261,7 +261,7 @@ func checkExecutionDetails(
 		return nil, err
 	}
 
-	url := s.AdminURL().String() + fmt.Sprintf("/_status/job_profiler_execution_details/%d?%s", jobID, filename)
+	url := s.AdminURL().WithPath(fmt.Sprintf("/_status/job_profiler_execution_details/%d?%s", jobID, filename)).String()
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
