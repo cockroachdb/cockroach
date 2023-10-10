@@ -35,50 +35,19 @@ func (l *ListenError) Error() string { return l.cause.Error() }
 // Unwrap is because ListenError is a wrapper.
 func (l *ListenError) Unwrap() error { return l.cause }
 
-// secondaryTenantPortOffsetMaxPorts is used to calculate the maximum
-// range of the ports allocated to RPC listeners when
-// SecondaryTenantPortOffset is used.
-const secondaryTenantPortOffsetMaxPorts = 1024
-
 // ListenerFactoryForConfig return an RPCListenerFactory for the given
 // configuration. If the configuration does not specify any secondary
 // tenant port configuration, no factory is returned.
-func ListenerFactoryForConfig(cfg *BaseConfig, portStartHint int) (RPCListenerFactory, error) {
-	if cfg.Config.SecondaryTenantPortOffset > 0 {
-		_, port, err := addr.SplitHostPort(cfg.Addr, "0")
-		if err != nil {
-			return nil, err
-		}
-		var pnum int
-		if port != "" {
-			pnum, err = strconv.Atoi(port)
-			if err != nil {
-				return nil, err
-			}
-		}
-		if pnum == 0 {
-			return nil, errors.Newf("no base port available for computation in %q", cfg.Addr)
-		}
-
-		lowerBound := pnum + cfg.Config.SecondaryTenantPortOffset
-		rlf := &rangeListenerFactory{
-			startHint:  portStartHint,
-			lowerBound: lowerBound,
-			upperBound: lowerBound + secondaryTenantPortOffsetMaxPorts,
-		}
-		return rlf.ListenAndUpdateAddrs, nil
-	}
-
+func ListenerFactoryForConfig(cfg *BaseConfig, portStartHint int) RPCListenerFactory {
 	if cfg.Config.ApplicationInternalRPCPortMin > 0 {
 		rlf := &rangeListenerFactory{
 			startHint:  portStartHint,
 			lowerBound: cfg.Config.ApplicationInternalRPCPortMin,
 			upperBound: cfg.Config.ApplicationInternalRPCPortMax,
 		}
-		return rlf.ListenAndUpdateAddrs, nil
+		return rlf.ListenAndUpdateAddrs
 	}
-
-	return nil, nil
+	return nil
 }
 
 // The rangeListenerFactory tries to listen on a port between
