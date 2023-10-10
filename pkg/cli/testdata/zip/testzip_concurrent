@@ -1,5 +1,6 @@
 zip
 ----
+[cluster] collecting the inflight traces for jobs
 [cluster] creating output file /dev/null...
 [cluster] creating output file /dev/null: done
 [cluster] discovering virtual clusters...

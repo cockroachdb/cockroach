@@ -82,6 +82,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [cluster] requesting tenant ranges... received response...
 [cluster] requesting tenant ranges: last request failed: rpc error: ...
 [cluster] requesting tenant ranges: creating error output: debug/tenant_ranges.err.txt... done
+[cluster] collecting the inflight traces for jobs
 [cluster] requesting CPU profiles
 [cluster] profiles generated
 [cluster] profile for node 1... writing binary output: debug/nodes/1/cpu.pprof... done
