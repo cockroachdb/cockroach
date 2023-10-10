@@ -252,10 +252,8 @@ func makeSharedProcessTenantServerConfig(
 	//
 	// TODO(knz): use a single network interface for all tenant servers.
 	// See: https://github.com/cockroachdb/cockroach/issues/92524
-	baseCfg.RPCListenerFactory, err = ListenerFactoryForConfig(&kvServerCfg.BaseConfig, portStartHint)
-	if err != nil {
-		return BaseConfig{}, SQLConfig{}, err
-	}
+	baseCfg.RPCListenerFactory = ListenerFactoryForConfig(&kvServerCfg.BaseConfig, portStartHint)
+
 	// We reset the port of the KV Addr configuration to 0. If we
 	// don't have a customized listener factory, this will force
 	// the operating system to choose a port by default.
