@@ -254,7 +254,7 @@ LIMIT 1`, whereClause), args...)
 			sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf(
 				queryFormat,
-				crdbInternalStmtStatsPersisted+tableSuffix,
+				CrdbInternalStmtStatsPersisted+tableSuffix,
 				whereClause), args...)
 		if err != nil {
 			return statement, srverrors.ServerError(ctx, err)
@@ -266,7 +266,7 @@ LIMIT 1`, whereClause), args...)
 	if row.Len() == 0 {
 		row, err = ie.QueryRowEx(ctx, "combined-stmts-details-total-with-memory", nil,
 			sessiondata.NodeUserSessionDataOverride,
-			fmt.Sprintf(queryFormat, crdbInternalStmtStatsCombined, whereClause), args...)
+			fmt.Sprintf(queryFormat, CrdbInternalStmtStatsCombined, whereClause), args...)
 		if err != nil {
 			return statement, srverrors.ServerError(ctx, err)
 		}
@@ -368,7 +368,7 @@ LIMIT $%d`, whereClause, len(args)),
 		}
 		query = fmt.Sprintf(
 			queryFormat,
-			crdbInternalStmtStatsPersisted+tableSuffix,
+			CrdbInternalStmtStatsPersisted+tableSuffix,
 			whereClause,
 			len(args))
 
@@ -384,7 +384,7 @@ LIMIT $%d`, whereClause, len(args)),
 	// with data in-memory.
 	if !it.HasResults() {
 		err = closeIterator(it, err)
-		query = fmt.Sprintf(queryFormat, crdbInternalStmtStatsCombined, whereClause, len(args))
+		query = fmt.Sprintf(queryFormat, CrdbInternalStmtStatsCombined, whereClause, len(args))
 		it, err = ie.QueryIteratorEx(ctx, "console-combined-stmts-details-by-aggregated-timestamp-with-memory", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
 		if err != nil {
@@ -580,7 +580,7 @@ LIMIT $%d`, whereClause, len(args)), args...)
 	// with data in-memory.
 	if !it.HasResults() {
 		err = closeIterator(it, err)
-		query = fmt.Sprintf(queryFormat, crdbInternalStmtStatsCombined, whereClause, len(args))
+		query = fmt.Sprintf(queryFormat, CrdbInternalStmtStatsCombined, whereClause, len(args))
 		it, iterErr = ie.QueryIteratorEx(ctx, "console-combined-stmts-details-by-plan-hash-with-memory", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
 		if iterErr != nil {
