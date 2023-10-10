@@ -51,7 +51,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	rowRanges, _ := setupRanges(
-		tc.ApplicationLayer(0).SQLConn(t, "t"),
+		tc.ApplicationLayer(0).SQLConn(t, serverutils.DBName("t")),
 		tc.ApplicationLayer(0),
 		tc.StorageLayer(0),
 		t)
@@ -139,7 +139,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 	// with the default test tenant (#108763).
 	numExpectedRows := len(rowRanges)
 	var numRows int
-	err = s3.SQLConn(t, "t").QueryRow(`SELECT count(1) FROM test`).Scan(&numRows)
+	err = s3.SQLConn(t, serverutils.DBName("t")).QueryRow(`SELECT count(1) FROM test`).Scan(&numRows)
 	if err != nil {
 		t.Fatal(err)
 	}

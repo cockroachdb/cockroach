@@ -91,7 +91,7 @@ func TestDataDriven(t *testing.T) {
 		testTenantInterface, err := tc.Server(0).TenantController().StartTenant(ctx, tenantArgs)
 		require.NoError(t, err)
 
-		tenantSQLDB := testTenantInterface.SQLConn(t, "")
+		tenantSQLDB := testTenantInterface.SQLConn(t)
 
 		lastUpdateTS := tc.Server(0).Clock().Now() // ensure watcher isn't starting out empty
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {

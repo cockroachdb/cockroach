@@ -52,7 +52,7 @@ func TestShowTransferState(t *testing.T) {
 	_, err = tenantDB.Exec("GRANT SELECT ON tab TO testuser")
 	require.NoError(t, err)
 
-	testUserConn := tenant.SQLConnForUser(t, username.TestUser, "")
+	testUserConn := tenant.SQLConn(t, serverutils.User(username.TestUser))
 
 	t.Run("without_transfer_key", func(t *testing.T) {
 		conn := testUserConn

@@ -49,8 +49,8 @@ func TestStatusAPIContentionEvents(t *testing.T) {
 	s0 := testCluster.Server(0).ApplicationLayer()
 	s1 := testCluster.Server(1).ApplicationLayer()
 	s2 := testCluster.Server(2).ApplicationLayer()
-	server1Conn := sqlutils.MakeSQLRunner(s0.SQLConn(t, ""))
-	server2Conn := sqlutils.MakeSQLRunner(s1.SQLConn(t, ""))
+	server1Conn := sqlutils.MakeSQLRunner(s0.SQLConn(t))
+	server2Conn := sqlutils.MakeSQLRunner(s1.SQLConn(t))
 
 	contentionCountBefore := s1.SQLServer().(*sql.Server).Metrics.EngineMetrics.SQLContendedTxns.Count()
 
@@ -157,7 +157,7 @@ func TestTransactionContentionEvents(t *testing.T) {
 		sqlutils.ToRowFn(sqlutils.RowIdxFn),
 	)
 
-	conn2 := s.SQLConn(t, "")
+	conn2 := s.SQLConn(t)
 	defer func() {
 		require.NoError(t, conn2.Close())
 	}()

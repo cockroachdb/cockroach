@@ -644,7 +644,7 @@ func TestNotifyCalledUponReadOnlySettingChanges(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	sysDB := sqlutils.MakeSQLRunner(s.SystemLayer().SQLConn(t, ""))
+	sysDB := sqlutils.MakeSQLRunner(s.SystemLayer().SQLConn(t))
 
 	ts := s.ApplicationLayer()
 	st := ts.ClusterSettings()

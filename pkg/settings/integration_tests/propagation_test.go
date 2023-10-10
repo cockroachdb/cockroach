@@ -88,7 +88,7 @@ func runSettingDefaultPropagationTest(
 	})
 	defer s.Stopper().Stop(ctx)
 
-	sysDB := sqlutils.MakeSQLRunner(s.SystemLayer().SQLConn(t, ""))
+	sysDB := sqlutils.MakeSQLRunner(s.SystemLayer().SQLConn(t))
 	sysDB.Exec(t, "SELECT crdb_internal.create_tenant($1, 'test')", serverutils.TestTenantID().ToUint64())
 	// Speed up the tests.
 	sysDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'")

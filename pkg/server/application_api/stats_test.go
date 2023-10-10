@@ -311,7 +311,7 @@ func TestClusterResetSQLStats(t *testing.T) {
 			gateway := testCluster.Server(1 /* idx */).ApplicationLayer()
 			status := gateway.StatusServer().(serverpb.SQLStatusServer)
 
-			sqlDB := gateway.SQLConn(t, "")
+			sqlDB := gateway.SQLConn(t)
 
 			populateStats(t, sqlDB)
 			if flushed {

@@ -293,7 +293,7 @@ func TestTenantUpgrade(t *testing.T) {
 		},
 	})
 	defer ts.Stopper().Stop(ctx)
-	sysDB := sqlutils.MakeSQLRunner(ts.SQLConn(t, ""))
+	sysDB := sqlutils.MakeSQLRunner(ts.SQLConn(t))
 
 	expectedInitialTenantVersion, _, _ := v0v1v2()
 	startAndConnectToTenant := func(t *testing.T, id uint64) (tenant serverutils.ApplicationLayerInterface, tenantDB *gosql.DB) {
@@ -318,7 +318,7 @@ func TestTenantUpgrade(t *testing.T) {
 		}
 		tenant, err := ts.TenantController().StartTenant(ctx, tenantArgs)
 		require.NoError(t, err)
-		return tenant, tenant.SQLConn(t, "")
+		return tenant, tenant.SQLConn(t)
 	}
 
 	t.Run("upgrade tenant", func(t *testing.T) {
@@ -357,7 +357,7 @@ func TestTenantUpgrade(t *testing.T) {
 			TenantID: roachpb.MustMakeTenantID(initialTenantID),
 		})
 		require.NoError(t, err)
-		conn = tenantServer.SQLConn(t, "")
+		conn = tenantServer.SQLConn(t)
 		db = sqlutils.MakeSQLRunner(conn)
 
 		t.Log("ensure that the version is still at v2")
@@ -381,7 +381,7 @@ func TestTenantUpgrade(t *testing.T) {
 			TenantID: roachpb.MustMakeTenantID(postUpgradeTenantID),
 		})
 		require.NoError(t, err)
-		conn = tenant.SQLConn(t, "")
+		conn = tenant.SQLConn(t)
 
 		t.Log("verify it still is at v2")
 		sqlutils.MakeSQLRunner(conn).CheckQueryResults(t,
@@ -442,7 +442,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 		},
 	})
 	defer ts.Stopper().Stop(ctx)
-	sysDB := sqlutils.MakeSQLRunner(ts.SQLConn(t, ""))
+	sysDB := sqlutils.MakeSQLRunner(ts.SQLConn(t))
 
 	// Channel for stopping a tenant.
 	tenantStopperChannel := make(chan struct{})
@@ -521,7 +521,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 		}
 		tenant, err := ts.TenantController().StartTenant(ctx, tenantArgs)
 		require.NoError(t, err)
-		tenantDB := tenant.SQLConn(t, "")
+		tenantDB := tenant.SQLConn(t)
 		return tenant, tenantDB
 	}
 

@@ -48,7 +48,7 @@ func NewHandle(
 		tc:      tc,
 		ts:      make(map[roachpb.TenantID]*Tenant),
 		scKnobs: scKnobs,
-		sysDB:   sqlutils.MakeSQLRunner(tc.Server(0).SystemLayer().SQLConn(t, "")),
+		sysDB:   sqlutils.MakeSQLRunner(tc.Server(0).SystemLayer().SQLConn(t)),
 	}
 }
 
@@ -79,7 +79,7 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 		tenantState.ApplicationLayerInterface, err = testServer.TenantController().StartTenant(ctx, tenantArgs)
 		require.NoError(h.t, err)
 
-		tenantSQLDB := tenantState.SQLConn(h.t, "")
+		tenantSQLDB := tenantState.SQLConn(h.t)
 
 		tenantState.db = sqlutils.MakeSQLRunner(tenantSQLDB)
 		tenantState.cleanup = func() {}

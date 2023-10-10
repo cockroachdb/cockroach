@@ -233,7 +233,7 @@ func TestClusterInflightTraces(t *testing.T) {
 			}
 			systemDBs := make([]*gosql.DB, len(tc.Servers))
 			for i, s := range tc.Servers {
-				systemDBs[i] = s.SQLConn(t, "")
+				systemDBs[i] = s.SQLConn(t)
 			}
 
 			type testCase struct {
@@ -282,7 +282,7 @@ func TestClusterInflightTraces(t *testing.T) {
 					tenant, err := tc.Servers[i].TenantController().StartTenant(ctx, base.TestTenantArgs{TenantID: tenantID})
 					require.NoError(t, err)
 					tenants[i] = tenant
-					dbs[i] = tenant.SQLConn(t, "")
+					dbs[i] = tenant.SQLConn(t)
 				}
 				testCases = []testCase{
 					{

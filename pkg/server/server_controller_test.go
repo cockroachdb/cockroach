@@ -80,7 +80,7 @@ func TestSQLErrorUponInvalidTenant(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	db, err := s.SystemLayer().SQLConnE("cluster:nonexistent")
+	db, err := s.SystemLayer().SQLConnE(serverutils.DBName("cluster:nonexistent"))
 	// Expect no error yet: the connection is opened lazily; an
 	// error here means the parameters were incorrect.
 	require.NoError(t, err)
@@ -163,7 +163,7 @@ func TestServerSQLConn(t *testing.T) {
 				Exec(ctx, "create-table", nil, "CREATE TABLE defaultdb."+tc.tbName+" (i INT)")
 			require.NoError(t, err)
 
-			conn := tc.sqlInterface.SQLConn(t, "defaultdb")
+			conn := tc.sqlInterface.SQLConn(t, serverutils.DBName("defaultdb"))
 			var unused int
 			assert.NoError(t, conn.QueryRowContext(ctx, "SELECT count(*) FROM "+tc.tbName).Scan(&unused))
 		})

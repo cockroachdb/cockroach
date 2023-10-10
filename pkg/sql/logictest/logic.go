@@ -1565,7 +1565,7 @@ func (t *logicTest) newCluster(
 
 		// Open a connection to a tenant to set any cluster settings specified
 		// by the test config.
-		db := t.tenantApps[0].SQLConn(t.rootT, "")
+		db := t.tenantApps[0].SQLConn(t.rootT)
 		connsForClusterSettingChanges = append(connsForClusterSettingChanges, db)
 
 		// Increase tenant rate limits for faster tests.
@@ -1587,7 +1587,7 @@ func (t *logicTest) newCluster(
 	// behavior.
 	if cfg.UseSecondaryTenant == logictestbase.Always || t.cluster.StartedDefaultTestTenant() {
 		tenantID := serverutils.TestTenantID()
-		conn := t.cluster.SystemLayer(0).SQLConn(t.rootT, "")
+		conn := t.cluster.SystemLayer(0).SQLConn(t.rootT)
 
 		clusterSettings := toa.clusterSettings
 		if len(clusterSettings) > 0 {
@@ -1789,7 +1789,7 @@ func (t *logicTest) waitForSystemVisibleClusterSettingToTakeEffectOrFatal(
 	// Wait until all tenant servers are aware of the setting override.
 	dbs := make([]*gosql.DB, len(t.tenantApps))
 	for i := range dbs {
-		dbs[i] = t.tenantApps[i].SQLConn(t.rootT, "")
+		dbs[i] = t.tenantApps[i].SQLConn(t.rootT)
 	}
 	testutils.SucceedsSoon(t.rootT, func() error {
 		for i := 0; i < len(t.tenantApps); i++ {

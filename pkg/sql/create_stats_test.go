@@ -73,7 +73,7 @@ SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
 		defer wg.Done()
 
 		// Open a separate connection to the database.
-		db2 := s.SQLConn(t, "")
+		db2 := s.SQLConn(t)
 
 		_, err := db2.Exec("USE test")
 		if err != nil {

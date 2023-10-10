@@ -252,7 +252,7 @@ func (tc testCase) runTest(
 
 	testServer := testCluster.Server(0)
 
-	systemDB := testServer.SystemLayer().SQLConn(t, "")
+	systemDB := testServer.SystemLayer().SQLConn(t)
 
 	createSecondaryDB := func(
 		tenantID roachpb.TenantID,

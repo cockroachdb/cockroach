@@ -307,7 +307,7 @@ func TestSpanStatsFanOutFaultTolerance(t *testing.T) {
 			tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{ServerArgs: serverArgs})
 			defer tc.Stopper().Stop(ctx)
 
-			sqlDB := tc.Server(0).SQLConn(t, "defaultdb")
+			sqlDB := tc.Server(0).SQLConn(t, serverutils.DBName("defaultdb"))
 			_, err := sqlDB.Exec("SET CLUSTER SETTING server.span_stats.node.timeout = '3s'")
 			require.NoError(t, err)
 
