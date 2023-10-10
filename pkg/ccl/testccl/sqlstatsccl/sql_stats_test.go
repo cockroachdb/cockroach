@@ -173,7 +173,7 @@ func TestSQLStatsRegions(t *testing.T) {
 						require.NoError(t, err)
 						lhID, err := strconv.Atoi(row[1])
 						require.NoError(t, err)
-						systemSqlDb := host.SystemLayer(lhID-1).SQLConn(t, tc.dbName)
+						systemSqlDb := host.SystemLayer(lhID-1).SQLConn(t, serverutils.DBName(tc.dbName))
 						// ignore errors of enqueued splits to make sure it doesn't affect test execution.
 						_, _ = systemSqlDb.Exec(`SELECT crdb_internal.kv_enqueue_replica($1, 'split', true)`, rangeID)
 					}

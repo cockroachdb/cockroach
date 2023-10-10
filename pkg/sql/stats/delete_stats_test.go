@@ -682,7 +682,7 @@ func TestStatsAreDeletedForDroppedTables(t *testing.T) {
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 
 	// Poll for MVCC GC more frequently.
-	systemDB := sqlutils.MakeSQLRunner(s.SystemLayer().SQLConn(t, ""))
+	systemDB := sqlutils.MakeSQLRunner(s.SystemLayer().SQLConn(t))
 	systemDB.Exec(t, "SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1s';")
 
 	// Disable auto stats so that it doesn't interfere.

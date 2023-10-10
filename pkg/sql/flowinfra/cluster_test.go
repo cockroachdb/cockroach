@@ -270,7 +270,7 @@ func TestClusterFlow(t *testing.T) {
 	for i := 0; i < numNodes; i++ {
 		s := tc.Server(i).ApplicationLayer()
 		servers[i] = s
-		conns[i] = s.SQLConn(t, "")
+		conns[i] = s.SQLConn(t)
 		conn := s.RPCClientConn(t, username.RootUserName())
 		clients[i] = execinfrapb.NewDistSQLClient(conn)
 	}
@@ -597,7 +597,7 @@ func TestEvalCtxTxnOnRemoteNodes(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	if srv := tc.Server(0); srv.TenantController().StartedDefaultTestTenant() {
-		systemSqlDB := srv.SystemLayer().SQLConn(t, "system")
+		systemSqlDB := srv.SystemLayer().SQLConn(t, serverutils.DBName("system"))
 		_, err := systemSqlDB.Exec(`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
 		require.NoError(t, err)
 		serverutils.WaitForTenantCapabilities(t, srv, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{

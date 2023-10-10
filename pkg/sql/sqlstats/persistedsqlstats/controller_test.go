@@ -41,8 +41,8 @@ func TestPersistedSQLStatsReset(t *testing.T) {
 
 	// Open two connections so that we can run statements without messing up
 	// the SQL stats.
-	testConn := server.SQLConn(t, "")
-	observerConn := cluster.Server(1).ApplicationLayer().SQLConn(t, "")
+	testConn := server.SQLConn(t)
+	observerConn := cluster.Server(1).ApplicationLayer().SQLConn(t)
 
 	sqlDB := sqlutils.MakeSQLRunner(testConn)
 	observer := sqlutils.MakeSQLRunner(observerConn)

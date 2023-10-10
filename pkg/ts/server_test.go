@@ -310,7 +310,7 @@ func TestServerQueryTenant(t *testing.T) {
 	})
 	defer s.Stopper().Stop(context.Background())
 
-	systemDB := s.SystemLayer().SQLConn(t, "")
+	systemDB := s.SystemLayer().SQLConn(t)
 
 	// Populate data directly.
 	tsdb := s.TsDB().(*ts.DB)

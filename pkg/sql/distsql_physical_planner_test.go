@@ -76,7 +76,7 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 	s := tc.Server(0)
 	ts := s.ApplicationLayer()
 	cdb := ts.DB()
-	db := ts.SQLConn(t, "test")
+	db := ts.SQLConn(t, serverutils.DBName("test"))
 
 	sqlutils.CreateTable(
 		t, db, "t", "x INT PRIMARY KEY, xsquared INT",
@@ -143,7 +143,7 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 			defer wg.Done()
 
 			// Create a gosql.DB for this worker.
-			goDB := ts.SQLConn(t, "test")
+			goDB := ts.SQLConn(t, serverutils.DBName("test"))
 
 			// Limit to 1 connection because we set a session variable.
 			goDB.SetMaxOpenConns(1)

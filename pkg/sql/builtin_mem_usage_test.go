@@ -95,7 +95,7 @@ CREATE TABLE d.t (a STRING)
 	for _, statement := range statements {
 		errCh := make(chan error)
 		go func(statement string) {
-			dbConn, err := s.ApplicationLayer().SQLConnE("")
+			dbConn, err := s.ApplicationLayer().SQLConnE()
 			if err != nil {
 				errCh <- err
 				return

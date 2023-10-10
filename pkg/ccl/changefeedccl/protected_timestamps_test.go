@@ -56,7 +56,7 @@ func TestChangefeedUpdateProtectedTimestamp(t *testing.T) {
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
 
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t, ""))
+		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
 		sysDB.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'")
 		sysDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'") // speeds up the test
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
@@ -233,7 +233,7 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 
 	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t, ""))
+		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
 		sysDB.Exec(t, `SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'`)
 		sysDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 		sqlDB.Exec(t, `ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 100`)
@@ -402,7 +402,7 @@ func TestChangefeedCanceledWhenPTSIsOld(t *testing.T) {
 
 	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t, ""))
+		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
 		sysDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 		sqlDB.Exec(t, `SET CLUSTER SETTING jobs.metrics.interval.poll = '100ms'`) // speed up metrics poller
 		// Create the data table; it will only contain a

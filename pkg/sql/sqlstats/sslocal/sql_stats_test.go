@@ -317,7 +317,7 @@ func TestNodeLocalInMemoryViewDoesNotReturnPersistedStats(t *testing.T) {
 
 	// Open two connections so that we can run statements without messing up
 	// the SQL stats.
-	testConn := server.SQLConn(t, "")
+	testConn := server.SQLConn(t)
 	sqlDB := sqlutils.MakeSQLRunner(testConn)
 	sqlDB.Exec(t, "SET application_name = 'app1'")
 	sqlDB.Exec(t, "SELECT 1 WHERE true")
@@ -1275,7 +1275,7 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 			// Note that we're not using pgx here because it *always* prepares
 			// statements, and we want to test our client latency measurements
 			// both with and without prepared statements.
-			opsDB := s.SQLConn(t, "")
+			opsDB := s.SQLConn(t)
 
 			// Set a unique application name for our session, so we can find our
 			// stats easily.

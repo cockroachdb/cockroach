@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/stretchr/testify/require"
@@ -58,7 +59,7 @@ func (h *Handle) SetSQLDBForUser(tenantID roachpb.TenantID, user string) func() 
 		return resetToRootUser
 	}
 
-	userSQLDB := tenantState.ApplicationLayerInterface.SQLConnForUser(h.t, user, "")
+	userSQLDB := tenantState.ApplicationLayerInterface.SQLConn(h.t, serverutils.User(user))
 	tenantState.curDB = sqlutils.MakeSQLRunner(userSQLDB)
 	tenantState.userToDB[user] = tenantState.curDB
 
@@ -72,7 +73,7 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) {
 	tenantState := &Tenant{t: h.t, userToDB: make(map[string]*sqlutils.SQLRunner)}
 	if tenID == roachpb.SystemTenantID {
 		tenantState.ApplicationLayerInterface = testServer.SystemLayer()
-		userSQLDB := tenantState.ApplicationLayerInterface.SQLConn(h.t, "")
+		userSQLDB := tenantState.ApplicationLayerInterface.SQLConn(h.t)
 		tenantState.curDB = sqlutils.MakeSQLRunner(userSQLDB)
 		tenantState.userToDB[username.RootUserName().Normalized()] = tenantState.curDB
 	} else {
@@ -83,7 +84,7 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) {
 		tenantState.ApplicationLayerInterface, err = testServer.TenantController().StartTenant(ctx, tenantArgs)
 		require.NoError(h.t, err)
 
-		tenantSQLDB := tenantState.ApplicationLayerInterface.SQLConn(h.t, "")
+		tenantSQLDB := tenantState.ApplicationLayerInterface.SQLConn(h.t)
 		tenantState.curDB = sqlutils.MakeSQLRunner(tenantSQLDB)
 		tenantState.userToDB[username.RootUserName().Normalized()] = tenantState.curDB
 	}
