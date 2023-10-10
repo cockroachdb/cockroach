@@ -130,12 +130,67 @@ func checkPrivilegesForSetting(
 func (p *planner) SetClusterSetting(
 	ctx context.Context, n *tree.SetClusterSetting,
 ) (planNode, error) {
+	forSystemTenant := p.ExecCfg().Codec.ForSystemTenant()
+	tipSystemInterface := !forSystemTenant && TipUserAboutSystemInterface.Get(&p.ExecCfg().Settings.SV)
 	name := settings.SettingName(strings.ToLower(n.Name))
-	st := p.EvalContext().Settings
-	setting, ok, nameStatus := settings.LookupForLocalAccess(name, p.ExecCfg().Codec.ForSystemTenant())
-	if !ok {
-		return nil, errors.Errorf("unknown cluster setting '%s'", name)
+
+	friendlyIgnore := func() {
+		p.BufferClientNotice(ctx, errors.WithHintf(pgnotice.Newf("ignoring attempt to modify %q", name),
+			"The setting is only modifiable by the operator.\n"+
+				"Normally, an error would be reported, but the operation is silently accepted here as configured by %q.",
+			TipUserAboutSystemInterface.Name()))
 	}
+
+	st := p.EvalContext().Settings
+	setting, ok, nameStatus := settings.LookupForLocalAccess(name, forSystemTenant)
+	if !ok {
+		// Uh-oh.
+		unknownSettingError := pgerror.Newf(pgcode.UndefinedParameter, "unknown cluster setting '%s'", name)
+
+		// There's 3 cases here.
+		//
+		// - the setting does not exist. We'll fall back to a "unknown
+		//   setting" error below.
+		//
+		// - the setting exists and was previously application. In this case,
+		//   either report "unknown setting" in the common case, or, if
+		//   the "tip" flag is enabled, _make the operation succeed
+		//   as a no-op_ with a simple NOTICE.
+		//
+		// - the setting exists and has always been non-application. Either
+		//   tell the user "unknown setting" in the common case, or, if the
+		//   "tip" flag is enabled, tell the user "nope, connect to system
+		//   interface instead".
+		//
+		//
+
+		// Check if the setting exists at all, perhaps as a system setting.
+		actualSetting, settingExists, _ := settings.LookupForLocalAccess(name, true /* forSystemTenant */)
+		if !settingExists {
+			return nil, unknownSettingError
+		}
+
+		// Did the setting previously have ApplicationLevel?
+		if settings.SettingPreviouslyHadApplicationClass(actualSetting.InternalKey()) {
+			if !tipSystemInterface {
+				return nil, unknownSettingError
+			}
+
+			friendlyIgnore()
+			return &zeroNode{}, nil
+		}
+
+		// This is a system setting.
+
+		if !tipSystemInterface {
+			return nil, unknownSettingError
+		}
+
+		return nil, p.maybeAddSystemInterfaceHint(
+			pgerror.Newf(pgcode.InsufficientPrivilege, "cannot modify storage-level setting from virtual cluster"),
+			"modify the cluster setting")
+	}
+
 	if nameStatus != settings.NameActive {
 		p.BufferClientNotice(ctx, settingNameDeprecationNotice(name, setting.Name()))
 		name = setting.Name()
@@ -145,14 +200,32 @@ func (p *planner) SetClusterSetting(
 		return nil, err
 	}
 
-	if !p.execCfg.Codec.ForSystemTenant() {
+	if !forSystemTenant {
 		switch setting.Class() {
 		case settings.SystemOnly:
 			// The Lookup call above should never return SystemOnly settings if this
 			// is a tenant.
 			return nil, errors.AssertionFailedf("looked up system-only setting")
+
 		case settings.SystemVisible:
-			return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "setting %s is only settable by the operator", name)
+			// Did the setting previously have ApplicationLevel?
+			if settings.SettingPreviouslyHadApplicationClass(setting.InternalKey()) && tipSystemInterface {
+				friendlyIgnore()
+				return &zeroNode{}, nil
+			}
+
+			return nil, p.maybeAddSystemInterfaceHint(
+				pgerror.Newf(pgcode.InsufficientPrivilege, "setting %s is only settable by the operator", name),
+				"modify the cluster setting")
+		}
+	} else {
+		switch setting.Class() {
+		case settings.ApplicationLevel:
+			if err := p.shouldRestrictAccessToSystemInterface(ctx,
+				"update to application-level cluster setting", /* operation */
+				"changing the setting" /* alternate action */); err != nil {
+				return nil, err
+			}
 		}
 	}
 

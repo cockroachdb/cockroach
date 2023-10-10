@@ -34,14 +34,18 @@ import (
 // rejectIfCantCoordinateMultiTenancy returns an error if the current tenant is
 // disallowed from coordinating tenant management operations on behalf of a
 // multi-tenant cluster. Only the system tenant has permissions to do so.
-func rejectIfCantCoordinateMultiTenancy(codec keys.SQLCodec, op string) error {
+func rejectIfCantCoordinateMultiTenancy(
+	codec keys.SQLCodec, op string, st *cluster.Settings,
+) error {
+	var err error
 	// NOTE: even if we got this wrong, the rest of the function would fail for
 	// a non-system tenant because they would be missing a system.tenants table.
 	if !codec.ForSystemTenant() {
-		return pgerror.Newf(pgcode.InsufficientPrivilege,
+		err = pgerror.Newf(pgcode.InsufficientPrivilege,
 			"only the system tenant can %s other tenants", op)
 	}
-	return nil
+	err = maybeAddSystemInterfaceHint(err, "manage tenants", codec, st)
+	return err
 }
 
 // rejectIfSystemTenant returns an error if the provided tenant ID is the system
@@ -138,7 +142,7 @@ func (p *planner) LookupTenantID(
 		return tid, err
 	}
 
-	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, op); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, op, p.execCfg.Settings); err != nil {
 		return tid, err
 	}
 

@@ -142,6 +142,13 @@ func TestTenantLogic_tenant_from_tenant(
 	runLogicTest(t, "tenant_from_tenant")
 }
 
+func TestTenantLogic_tenant_from_tenant_hint(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "tenant_from_tenant_hint")
+}
+
 func TestTenantLogicCCL_multi_region_system_database(
 	t *testing.T,
 ) {

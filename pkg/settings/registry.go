@@ -66,6 +66,32 @@ func TestingSaveRegistry() func() {
 	}
 }
 
+// When a setting class changes from ApplicationLevel to System, it should
+// be added to this list so that we can offer graceful degradation to
+// users of previous versions.
+var systemSettingsWithPreviousApplicationClass = map[InternalKey]struct{}{
+	// Changed in v23.2.
+	"cluster.organization":                        {},
+	"enterprise.license":                          {},
+	"kv.bulk_io_write.concurrent_export_requests": {},
+	"kv.closed_timestamp.propagation_slack":       {},
+	"kv.closed_timestamp.side_transport_interval": {},
+	"kv.closed_timestamp.target_duration":         {},
+	"kv.raft.command.max_size":                    {},
+	"kv.rangefeed.enabled":                        {},
+	"server.rangelog.ttl":                         {},
+	"timeseries.storage.enabled":                  {},
+	"timeseries.storage.resolution_10s.ttl":       {},
+	"timeseries.storage.resolution_30m.ttl":       {},
+}
+
+// SettingPreviouslyHadApplicationClass returns true if the setting
+// used to have the ApplicationLevel class.
+func SettingPreviouslyHadApplicationClass(key InternalKey) bool {
+	_, ok := systemSettingsWithPreviousApplicationClass[key]
+	return ok
+}
+
 // When a setting is removed, it should be added to this list so that we cannot
 // accidentally reuse its name, potentially mis-handling older values.
 var retiredSettings = map[InternalKey]struct{}{
@@ -446,4 +472,9 @@ func RedactedValue(key InternalKey, values *Values, forSystemTenant bool) string
 		return setting.String(values)
 	}
 	return "<unknown>"
+}
+
+// TestingListPrevAppSettings is exported for testing only.
+func TestingListPrevAppSettings() map[InternalKey]struct{} {
+	return systemSettingsWithPreviousApplicationClass
 }
