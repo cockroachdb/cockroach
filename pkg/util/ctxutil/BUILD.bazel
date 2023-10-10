@@ -5,18 +5,15 @@ go_library(
     srcs = [
         "canceler_1_19.go",
         "canceler_1_20.go",
+        "canceler_1_21_bazel.go",
         "context.go",
         "doc.go",
-        "link_1_21_bazel.go",
-        "link_pre_1_21.go",
-        "link_shared.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/ctxutil",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/buildutil",
         "//pkg/util/log",
-        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
