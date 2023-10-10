@@ -28,17 +28,24 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -46,6 +53,7 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestZipContainsAllInternalTables verifies that we don't add new internal tables
@@ -869,4 +877,107 @@ func TestNodeRangeSelection(t *testing.T) {
 			assert.False(t, zipCtx.nodes.isIncluded(roachpb.NodeID(wantExcluded)))
 		}
 	}
+}
+
+func TestZipJobTrace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer jobs.ResetConstructors()()
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Insecure: true,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+	blockCh := make(chan struct{})
+	jobs.RegisterConstructor(jobspb.TypeImport,
+		func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+			return jobstest.FakeResumer{
+				OnResume: func(ctx context.Context) error {
+					<-blockCh
+					return nil
+				},
+			}
+		}, jobs.UsesTenantCostControl)
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+	zipName := filepath.Join(dir, "test.zip")
+
+	// Run a backup that completes, we should not see a trace for this job.
+	runner.Exec(t, `CREATE TABLE foo (id INT)`)
+	runner.Exec(t, `BACKUP TABLE foo INTO 'userfile:///completes'`)
+
+	// Run a restore that completes, we should not see a trace for this job.
+	runner.Exec(t, `CREATE DATABASE test`)
+	runner.Exec(t, `RESTORE TABLE foo FROM LATEST IN 'userfile:///completes' WITH into_db = 'test'`)
+
+	triggerJobAndWaitForRun := func(jobQuery string) jobspb.JobID {
+		var jobID jobspb.JobID
+		runner.QueryRow(t, jobQuery).Scan(&jobID)
+		jobutils.WaitForJobToRun(t, runner, jobID)
+		return jobID
+	}
+
+	sqlURL := url.URL{
+		Scheme:   "postgres",
+		User:     url.User(username.RootUser),
+		Host:     s.AdvSQLAddr(),
+		RawQuery: "sslmode=disable",
+	}
+	sqlConn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, sqlURL.String())
+	defer func() {
+		if err := sqlConn.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	var expectedFilesList strings.Builder
+	var importJobID jobspb.JobID
+	var importJobID2 jobspb.JobID
+	func() {
+		out, err := os.Create(zipName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		z := newZipper(out)
+		defer func() {
+			if err := z.close(); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		runner.Exec(t, `CREATE TABLE x (id INT PRIMARY KEY, n INT, s STRING)`)
+		importJobID = triggerJobAndWaitForRun(`IMPORT INTO x CSV DATA ('workload:///csv/bank/bank?rows=100&version=1.0.0') WITH detached`)
+		importJobID2 = triggerJobAndWaitForRun(`IMPORT INTO x CSV DATA ('workload:///csv/bank/bank?rows=100&version=1.0.0') WITH detached`)
+		expectedFilesList.WriteString(fmt.Sprintf("/jobs/%d/.*/trace.zip\n", importJobID))
+		expectedFilesList.WriteString(fmt.Sprintf("/jobs/%d/.*/trace.zip\n", importJobID2))
+
+		zr := zipCtx.newZipReporter("test")
+		zc := debugZipContext{
+			z:                z,
+			clusterPrinter:   zr,
+			timeout:          3 * time.Second,
+			firstNodeSQLConn: sqlConn,
+		}
+		if err := zc.dumpTraceableJobTraces(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	r, err := zip.OpenReader(zipName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = r.Close() }()
+	var fileList strings.Builder
+	for _, f := range r.File {
+		fmt.Fprintln(&fileList, f.Name)
+	}
+	require.Regexp(t, expectedFilesList.String(), fileList.String())
+	close(blockCh)
+	jobutils.WaitForJobToSucceed(t, runner, importJobID)
+	jobutils.WaitForJobToSucceed(t, runner, importJobID2)
 }

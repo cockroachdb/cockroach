@@ -12,6 +12,7 @@ package cli
 
 import (
 	"context"
+	"database/sql/driver"
 	"fmt"
 	"io"
 	"net"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/profiler"
@@ -31,7 +33,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	tracezipper "github.com/cockroachdb/cockroach/pkg/util/tracing/zipper"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgconn"
 	"github.com/marusama/semaphore"
@@ -253,7 +259,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			sqlConn, err := makeTenantSQLClient(ctx, "cockroach zip", useSystemDb, tenant.TenantName)
 			// The zip output is sent directly into a text file, so the results should
 			// be scanned into strings.
-			sqlConn.SetAlwaysInferResultTypes(false)
+			_ = sqlConn.SetAlwaysInferResultTypes(false)
 			if err != nil {
 				_ = s.fail(errors.Wrap(err, "unable to open a SQL session. Debug information will be incomplete"))
 			} else {
@@ -344,6 +350,12 @@ done
 		}
 	}
 
+	if !zipCtx.includeRunningJobTraces {
+		zr.info("NOTE: Omitted traces of running jobs from this debug zip bundle." +
+			" Use the --" + cliflags.ZipIncludeRunningJobTraces.Name + " flag to enable the fetching of this" +
+			" data.")
+	}
+
 	if !zipCtx.includeStacks {
 		zr.info("NOTE: Omitted node-level goroutine stack dumps from this debug zip bundle." +
 			" Use the --" + cliflags.ZipIncludeGoroutineStacks.Name + " flag to enable the fetching of this" +
@@ -375,6 +387,97 @@ func maybeAddProfileSuffix(name string) string {
 		name += profiler.JemallocFileNameSuffix
 	}
 	return name
+}
+
+type jobTrace struct {
+	jobID   jobspb.JobID
+	traceID tracingpb.TraceID
+}
+
+// dumpTraceableJobTraces collects the traces for some "traceable" jobs that are
+// in a running state. The job types in this list are the ones that have
+// explicitly implemented the TraceableJob interface.
+func (zc *debugZipContext) dumpTraceableJobTraces() error {
+	ctx := context.Background()
+	rows, err := zc.firstNodeSQLConn.Query(ctx,
+		`WITH
+latestprogress AS (
+  SELECT job_id, value
+  FROM system.job_info AS progress
+  WHERE info_key = 'legacy_progress'
+  ORDER BY written desc
+),
+jobpage AS (
+  SELECT id
+  FROM system.jobs@jobs_status_created_idx
+  WHERE (job_type IN ($1, $2, $3, $4)) AND (status IN ($5, $6))
+  ORDER BY id
+)
+SELECT distinct (id), latestprogress.value AS progress
+FROM jobpage AS j
+INNER JOIN latestprogress ON j.id = latestprogress.job_id;`,
+		jobspb.TypeBackup.String(),
+		jobspb.TypeRestore.String(),
+		jobspb.TypeImport.String(),
+		jobspb.TypeReplicationStreamIngestion.String(),
+		"running",
+		"reverting",
+	)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if rows != nil {
+			if err := rows.Close(); err != nil {
+				log.Warningf(ctx, "failed to close with error: %v", err)
+			}
+		}
+	}()
+	vals := make([]driver.Value, 2)
+	jobTraces := make([]jobTrace, 0)
+	for err = rows.Next(vals); err == nil; err = rows.Next(vals) {
+		jobID, ok := vals[0].(int64)
+		if !ok {
+			return errors.New("failed to parse jobID")
+		}
+		progressBytes, ok := vals[1].([]byte)
+		if !ok {
+			return errors.New("failed to parse progress bytes")
+		}
+		progress := &jobspb.Progress{}
+		if err := protoutil.Unmarshal(progressBytes, progress); err != nil {
+			return err
+		}
+		jobTraces = append(jobTraces, jobTrace{jobID: jobspb.JobID(jobID), traceID: progress.TraceID})
+	}
+
+	func() {
+		// Debug zip collection sets this to false since results from the query are
+		// all dumped into txt files. In our case we parse the results of the query
+		// with their respective types and pre-process the information before
+		// dumping into a zip file.
+		reset := zc.firstNodeSQLConn.SetAlwaysInferResultTypes(true)
+		defer reset()
+		for _, jobTrace := range jobTraces {
+			inflightTraceZipper := tracezipper.MakeSQLConnInflightTraceZipper(zc.firstNodeSQLConn.GetDriverConn())
+			jobZip, err := inflightTraceZipper.Zip(ctx, int64(jobTrace.traceID))
+			if err != nil {
+				log.Warningf(ctx, "failed to collect inflight trace zip for job %d: %v", jobTrace.jobID, err)
+				continue
+			}
+
+			ts := timeutil.Now().Format(`20060102150405`)
+			name := fmt.Sprintf("%s/jobs/%d/%s/trace.zip", zc.prefix, jobTrace.jobID, ts)
+			s := zc.clusterPrinter.start("requesting traces for job %d", jobTrace.jobID)
+			if err := zc.z.createRaw(s, name, jobZip); err != nil {
+				log.Warningf(ctx, "failed to write inflight trace zip for job %d to file %s: %v",
+					jobTrace.jobID, name, err)
+				continue
+			}
+		}
+	}()
+
+	return nil
 }
 
 // dumpTableDataForZip runs the specified SQL query and stores the

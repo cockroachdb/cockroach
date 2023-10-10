@@ -164,8 +164,12 @@ func (c *sqlConn) SetMissingPassword(missing bool) {
 }
 
 // SetAlwaysInferResultTypes implements the Conn interface.
-func (c *sqlConn) SetAlwaysInferResultTypes(b bool) {
+func (c *sqlConn) SetAlwaysInferResultTypes(b bool) func() {
+	oldVal := c.alwaysInferResultTypes
 	c.alwaysInferResultTypes = b
+	return func() {
+		c.alwaysInferResultTypes = oldVal
+	}
 }
 
 // EnsureConn (re-)establishes the connection to the server.
