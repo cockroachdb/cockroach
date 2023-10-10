@@ -332,9 +332,6 @@ func TestAWSMachineTypeNew(t *testing.T) {
 
 	_, _, err2 := spec.SelectAWSMachineTypeNew(16, spec.Low, false, vm.ArchAMD64)
 	require.Error(t, err2)
-
-	_, err3 := spec.SelectAzureMachineType(4, spec.High)
-	require.Error(t, err3)
 }
 
 // TODO(srosenberg): restore the change in https://github.com/cockroachdb/cockroach/pull/111140 after 23.2 branch cut.
@@ -427,6 +424,19 @@ func TestGCEMachineTypeNew(t *testing.T) {
 			require.Equal(t, tc.expectedArch, selectedArch)
 		})
 	}
+}
+
+func TestAzureMachineType(t *testing.T) {
+	m, err := spec.SelectAzureMachineType(8, spec.Auto, true)
+	require.NoError(t, err)
+	require.Equal(t, "Standard_D8_v3", m)
+
+	m, err2 := spec.SelectAzureMachineType(96, spec.Auto, false)
+	require.NoError(t, err2)
+	require.Equal(t, "Standard_D96s_v5", m)
+
+	_, err3 := spec.SelectAzureMachineType(4, spec.High, true)
+	require.Error(t, err3)
 }
 
 func TestCmdLogFileName(t *testing.T) {
