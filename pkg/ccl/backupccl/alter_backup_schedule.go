@@ -180,6 +180,10 @@ func doAlterBackupSchedules(
 		return err
 	}
 
+	if err := processNextRunNow(p, spec, s); err != nil {
+		return err
+	}
+
 	// Run full backup in dry-run mode.  This will do all of the sanity checks
 	// and validation we need to make in order to ensure the schedule is sane.
 	if _, err = dryRunBackup(ctx, p, s.fullStmt); err != nil {
@@ -580,6 +584,34 @@ func processInto(p sql.PlanHookState, spec *alterBackupScheduleSpec, s scheduleD
 	return nil
 }
 
+func processNextRunNow(
+	p sql.PlanHookState, spec *alterBackupScheduleSpec, s scheduleDetails,
+) error {
+	if !spec.nextRunNow {
+		return nil
+	}
+
+	env := sql.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
+
+	// Trigger the full schedule, unless there is an inc schedule and the user did
+	// not explicitly specify the full.
+	schedule := s.fullJob
+	if s.incJob != nil && !spec.fullNextRunNow {
+		schedule = s.incJob
+	}
+
+	// A paused schedule is indicated by having no next_run time. If we triggered
+	// a run of a schedule which was previously paused by setting next_run to now,
+	// we would be resuming it. This could be surprising, so instead just tell the
+	// user to use RESUME explicitly, so they're clear that they need to pause it
+	// again later if they don't want it to keep running.
+	if schedule.IsPaused() {
+		return errors.Newf("cannot execute a paused schedule; use RESUME SCHEDULE instead")
+	}
+	schedule.SetNextRun(env.Now())
+	return nil
+}
+
 type alterBackupScheduleSpec struct {
 	// Schedule specific properties that get evaluated.
 	scheduleID           uint64
@@ -591,6 +623,8 @@ type alterBackupScheduleSpec struct {
 	into                 []string
 	backupOptions        tree.BackupOptions
 	scheduleOptions      map[string]string
+	nextRunNow           bool
+	fullNextRunNow       bool
 }
 
 // makeAlterBackupScheduleSpec construct alterBackupScheduleSpec struct to assist
@@ -650,6 +684,9 @@ func makeAlterBackupScheduleSpec(
 			}
 		case *tree.AlterBackupScheduleSetScheduleOption:
 			scheduleOptions = append(scheduleOptions, typedCmd.Option)
+		case *tree.AlterBackupScheduleNextRun:
+			spec.nextRunNow = true
+			spec.fullNextRunNow = typedCmd.Full
 		default:
 			return nil, errors.Newf("not yet implemented: %v", tree.AsString(typedCmd))
 		}
@@ -705,6 +742,9 @@ func alterBackupScheduleTypeCheck(
 
 		case *tree.AlterBackupScheduleSetScheduleOption:
 			opts = append(opts, typedCmd.Option)
+		case *tree.AlterBackupScheduleNextRun:
+			// no parameters to this cmd so nothing to do here.
+
 		}
 	}
 	if err := exprutil.TypeCheck(
