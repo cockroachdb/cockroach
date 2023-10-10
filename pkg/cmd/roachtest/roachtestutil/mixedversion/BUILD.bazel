@@ -33,6 +33,7 @@ go_library(
 go_test(
     name = "mixedversion_test",
     srcs = [
+        "helper_test.go",
         "mixedversion_test.go",
         "planner_test.go",
         "runner_test.go",
@@ -44,6 +45,7 @@ go_test(
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/roachtestutil",
         "//pkg/cmd/roachtest/roachtestutil/clusterupgrade",
+        "//pkg/roachpb",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
         "//pkg/util/version",
