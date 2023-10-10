@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-//go:build go1.21 && bazel
+//go:build go1.21 && neverbuild
 
 package ctxutil
 
@@ -21,6 +21,8 @@ import (
 
 // Linkage definition for go1.21 or higher built with ./dev toolchain --
 // that is, a toolchain that applies cockroach runtime patches.
+
+// TODO(knz): Remove this during #112089.
 
 // Gross hack to access internal context function.  Sometimes, go makes things
 // SO much more difficult than it needs to.
