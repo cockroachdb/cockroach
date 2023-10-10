@@ -65,7 +65,7 @@ var maxSyncDurationDefault = envutil.EnvOrDefaultDuration("COCKROACH_ENGINE_MAX_
 
 // Default maximum wait time before an EventuallyFileOnlySnapshot transitions
 // to a file-only snapshot.
-var maxEfosWait = envutil.EnvOrDefaultDuration("COCKROACH_EFOS_MAX_WAIT", 3*time.Second)
+var MaxEFOSWait = envutil.EnvOrDefaultDuration("COCKROACH_EFOS_MAX_WAIT", 3*time.Second)
 
 // MaxSyncDuration is the threshold above which an observed engine sync duration
 // triggers either a warning or a fatal error.
@@ -2947,7 +2947,7 @@ func (p *pebbleEFOS) MVCCIterate(
 
 // WaitForFileOnly implements the EventuallyFileOnlyReader interface.
 func (p *pebbleEFOS) WaitForFileOnly(ctx context.Context) error {
-	return p.efos.WaitForFileOnlySnapshot(ctx, maxEfosWait)
+	return p.efos.WaitForFileOnlySnapshot(ctx, MaxEFOSWait)
 }
 
 // NewMVCCIterator implements the Reader interface.
