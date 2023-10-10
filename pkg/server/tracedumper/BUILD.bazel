@@ -10,11 +10,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/server/dumpstore",
-        "//pkg/settings",
-        "//pkg/settings/cluster",
         "//pkg/sql/isql",
         "//pkg/util/log",
-        "//pkg/util/timeutil",
         "//pkg/util/tracing/zipper",
         "@com_github_cockroachdb_errors//:errors",
     ],

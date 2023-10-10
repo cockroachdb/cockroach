@@ -1,5 +1,6 @@
 zip
 ----
+[cluster] NOTE: Omitted traces of running jobs from this debug zip bundle. Use the --include-running-job-traces flag to enable the fetching of this data.
 [cluster] creating output file /dev/null...
 [cluster] creating output file /dev/null: done
 [cluster] discovering virtual clusters...
