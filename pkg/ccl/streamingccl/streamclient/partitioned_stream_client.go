@@ -28,6 +28,7 @@ import (
 type partitionedStreamClient struct {
 	urlPlaceholder url.URL
 	pgxConfig      *pgx.ConnConfig
+	opts           *options
 
 	mu struct {
 		syncutil.Mutex
@@ -53,6 +54,7 @@ func NewPartitionedStreamClient(
 	client := partitionedStreamClient{
 		urlPlaceholder: *remote,
 		pgxConfig:      config,
+		opts:           options,
 	}
 	client.mu.activeSubscriptions = make(map[*partitionedStreamSubscription]struct{})
 	client.mu.srcConn = conn
@@ -104,15 +106,34 @@ func (p *partitionedStreamClient) Dial(ctx context.Context) error {
 
 // Heartbeat implements Client interface.
 func (p *partitionedStreamClient) Heartbeat(
-	ctx context.Context, streamID streampb.StreamID, consumed hlc.Timestamp,
+	ctx context.Context,
+	streamID streampb.StreamID,
+	consumed hlc.Timestamp,
+	req streampb.ReplicationHeartbeatRequest,
 ) (streampb.StreamReplicationStatus, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.Heartbeat")
 	defer sp.Finish()
 
+	if (req != streampb.ReplicationHeartbeatRequest{}) && !p.opts.allowExtendedHeartbeat {
+		return streampb.StreamReplicationStatus{}, errors.Newf("non-empty request given but client is not configured to send extended heartbeats")
+	}
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	row := p.mu.srcConn.QueryRow(ctx,
-		`SELECT crdb_internal.replication_stream_progress($1, $2)`, streamID, consumed.String())
+
+	var row pgx.Row
+	if p.opts.allowExtendedHeartbeat {
+		reqBytes, err := protoutil.Marshal(&req)
+		if err != nil {
+			return streampb.StreamReplicationStatus{}, err
+		}
+		row = p.mu.srcConn.QueryRow(ctx,
+			`SELECT crdb_internal.replication_stream_progress($1, $2, $3)`, streamID, consumed.String(), reqBytes)
+	} else {
+		row = p.mu.srcConn.QueryRow(ctx,
+			`SELECT crdb_internal.replication_stream_progress($1, $2)`, streamID, consumed.String())
+	}
+
 	var rawStatus []byte
 	if err := row.Scan(&rawStatus); err != nil {
 		return streampb.StreamReplicationStatus{},

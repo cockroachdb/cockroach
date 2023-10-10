@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
@@ -731,6 +732,7 @@ func constructStreamIngestionPlanSpecs(
 		StreamAddresses:         topology.StreamAddresses(),
 		SubscribingSQLInstances: subscribingSQLInstances,
 		Checkpoint:              checkpoint,
+		CanSendVersionInfo:      topology.SourceHostClusterVersion.AtLeast(clusterversion.ByKey(clusterversion.V23_2Start)),
 	}
 
 	return streamIngestionSpecs, streamIngestionFrontierSpec, nil
@@ -755,7 +757,7 @@ func waitUntilProducerActive(
 	var status streampb.StreamReplicationStatus
 	var err error
 	for r := retry.Start(ro); r.Next(); {
-		status, err = client.Heartbeat(ctx, streamID, heartbeatTimestamp)
+		status, err = client.Heartbeat(ctx, streamID, heartbeatTimestamp, streampb.ReplicationHeartbeatRequest{})
 		if err != nil {
 			return errors.Wrapf(err, "failed to resume ingestion job %d due to producer job %d error",
 				ingestionJobID, streamID)

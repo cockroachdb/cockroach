@@ -838,6 +838,7 @@ type ReplicationStreamManager interface {
 		ctx context.Context,
 		streamID streampb.StreamID,
 		frontier hlc.Timestamp,
+		req streampb.ReplicationHeartbeatRequest,
 	) (streampb.StreamReplicationStatus, error)
 
 	// StreamPartition starts streaming replication on the producer side for the partition specified

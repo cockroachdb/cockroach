@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -156,7 +157,9 @@ type heartbeatSender struct {
 	streamID        streampb.StreamID
 	frontierUpdates chan hlc.Timestamp
 	frontier        hlc.Timestamp
-	sv              *settings.Values
+	settings        *cluster.Settings
+	clusterID       uuid.UUID
+
 	// cg runs the heartbeatSender thread.
 	cg ctxgroup.Group
 	// cancel stops heartbeat sender.
@@ -170,14 +173,22 @@ func newHeartbeatSender(
 ) (*heartbeatSender, error) {
 
 	streamID := streampb.StreamID(spec.StreamID)
-	streamClient, err := streamclient.GetFirstActiveClient(ctx, spec.StreamAddresses, flowCtx.Cfg.DB, streamclient.WithStreamID(streamID))
+	opts := []streamclient.Option{
+		streamclient.WithStreamID(streamID),
+	}
+	if spec.CanSendVersionInfo {
+		opts = append(opts, streamclient.WithExtendedHeartbeat())
+	}
+
+	streamClient, err := streamclient.GetFirstActiveClient(ctx, spec.StreamAddresses, flowCtx.Cfg.DB, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return &heartbeatSender{
 		client:          streamClient,
 		streamID:        streamID,
-		sv:              &flowCtx.EvalCtx.Settings.SV,
+		settings:        flowCtx.EvalCtx.Settings,
+		clusterID:       flowCtx.EvalCtx.ClusterID,
 		frontierUpdates: make(chan hlc.Timestamp),
 		cancel:          func() {},
 		stoppedChan:     make(chan struct{}),
@@ -194,7 +205,11 @@ func (h *heartbeatSender) maybeHeartbeat(
 		return false, streampb.StreamReplicationStatus{}, nil
 	}
 	h.lastSent = ts.Now()
-	s, err := h.client.Heartbeat(ctx, h.streamID, frontier)
+	req := streampb.ReplicationHeartbeatRequest{
+		HostClusterVersion: h.settings.Version.ActiveVersion(ctx).Version,
+	}
+
+	s, err := h.client.Heartbeat(ctx, h.streamID, frontier, req)
 	return true, s, err
 }
 
@@ -208,7 +223,7 @@ func (h *heartbeatSender) startHeartbeatLoop(ctx context.Context, ts timeutil.Ti
 			// and it has been a while since last time we sent it, or when we need
 			// to heartbeat to keep the stream alive even if the frontier has no update.
 			timer := ts.NewTimer()
-			timer.Reset(streamingccl.StreamReplicationConsumerHeartbeatFrequency.Get(h.sv))
+			timer.Reset(streamingccl.StreamReplicationConsumerHeartbeatFrequency.Get(&h.settings.SV))
 			defer timer.Stop()
 			unknownStreamStatusRetryErr := log.Every(1 * time.Minute)
 			for {
@@ -217,11 +232,11 @@ func (h *heartbeatSender) startHeartbeatLoop(ctx context.Context, ts timeutil.Ti
 					return ctx.Err()
 				case <-timer.Ch():
 					timer.MarkRead()
-					timer.Reset(streamingccl.StreamReplicationConsumerHeartbeatFrequency.Get(h.sv))
+					timer.Reset(streamingccl.StreamReplicationConsumerHeartbeatFrequency.Get(&h.settings.SV))
 				case frontier := <-h.frontierUpdates:
 					h.frontier.Forward(frontier)
 				}
-				heartbeatFrequency := streamingccl.StreamReplicationConsumerHeartbeatFrequency.Get(h.sv)
+				heartbeatFrequency := streamingccl.StreamReplicationConsumerHeartbeatFrequency.Get(&h.settings.SV)
 				sent, streamStatus, err := h.maybeHeartbeat(ctx, ts, h.frontier, heartbeatFrequency)
 				if err != nil {
 					log.Errorf(ctx, "replication stream %d received an error from the producer job: %v", h.streamID, err)
