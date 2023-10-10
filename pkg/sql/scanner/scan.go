@@ -771,6 +771,14 @@ func (s *Scanner) scanPlaceholder(lval ScanSymType) {
 	for lexbase.IsDigit(s.peek()) {
 		s.pos++
 	}
+
+	// Disallow identifier after placeholders e.g. "$1a".
+	if lexbase.IsIdentStart(s.peek()) {
+		lval.SetID(lexbase.ERROR)
+		lval.SetStr(fmt.Sprintf("trailing junk after parameter at or near %q", "$" + s.in[start:s.pos+1]))
+		return
+	}
+
 	lval.SetStr(s.in[start:s.pos])
 
 	placeholder, err := NewPlaceholderFn(lval.Str())
