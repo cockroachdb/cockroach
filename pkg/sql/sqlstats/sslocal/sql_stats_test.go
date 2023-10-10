@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -62,7 +62,7 @@ func TestStmtStatsBulkIngestWithRandomMetadata(t *testing.T) {
 
 	for i := 0; i < 50; i++ {
 		var stats serverpb.StatementsResponse_CollectedStatementStatistics
-		randomData := sqlstatsutil.GetRandomizedCollectedStatementStatisticsForTest(t)
+		randomData := sqlstatstestutil.GetRandomizedCollectedStatementStatisticsForTest(t)
 		stats.Key.KeyData = randomData.Key
 		testData = append(testData, stats)
 	}
