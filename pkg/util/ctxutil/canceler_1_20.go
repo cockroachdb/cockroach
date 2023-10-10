@@ -8,9 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-//go:build go1.20
+//go:build go1.20 && !go1.21
 
 package ctxutil
+
+import (
+	"context"
+	// Must import unsafe to enable linkname below.
+	_ "unsafe"
+)
 
 // A canceler is a context type that can be canceled directly. The
 // implementations are *cancelCtx and *timerCtx.
@@ -26,3 +32,19 @@ func (c *whenDone) cancel(removeFromParent bool, err, cause error) {
 	}
 	c.notify()
 }
+
+type whenDone struct {
+	context.Context
+	notify WhenDoneFunc
+}
+
+func makeWhenDone(parent context.Context, done WhenDoneFunc) {
+	c := &whenDone{Context: parent, notify: done}
+	context_propagateCancel(parent, c)
+}
+
+//go:linkname context_removeChild context.removeChild
+func context_removeChild(parent context.Context, child canceler)
+
+//go:linkname context_propagateCancel context.propagateCancel
+func context_propagateCancel(parent context.Context, child canceler)
