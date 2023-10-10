@@ -397,7 +397,6 @@ var npgsqlBlocklist = blocklist{
 	`Npgsql.Tests.StoredProcedureTests.DeriveParameters_procedure_no_params`:                                                                      "unknown",
 	`Npgsql.Tests.StoredProcedureTests.DeriveParameters_procedure_with_case_sensitive_name`:                                                       "unknown",
 	`Npgsql.Tests.StoredProcedureTests.DeriveParameters_quote_characters_in_function_name`:                                                        "unknown",
-	`Npgsql.Tests.StoredProcedureTests.DeriveParameters_throws_for_existing_procedure_that_is_not_in_search_path`:                                 "unknown",
 	`Npgsql.Tests.StoredProcedureTests.DeriveParameters_throws_for_multiple_procedures_name_hits_in_search_path`:                                  "unknown",
 	`Npgsql.Tests.StoredProcedureTests.With_input_output_parameters(False,True)`:                                                                  "unknown",
 	`Npgsql.Tests.StoredProcedureTests.With_input_output_parameters(True,False)`:                                                                  "unknown",
