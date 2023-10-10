@@ -74,6 +74,7 @@ type Client interface {
 		ctx context.Context,
 		streamID streampb.StreamID,
 		consumed hlc.Timestamp,
+		req streampb.ReplicationHeartbeatRequest,
 	) (streampb.StreamReplicationStatus, error)
 
 	// Plan returns a Topology for this stream.
@@ -99,6 +100,10 @@ type Client interface {
 type Topology struct {
 	Partitions     []PartitionInfo
 	SourceTenantID roachpb.TenantID
+
+	// SourceHostClusterVersion is the version of the system tenant on
+	// the host cluster.
+	SourceHostClusterVersion roachpb.Version
 }
 
 // StreamAddresses returns the list of source addresses in a topology
@@ -238,7 +243,8 @@ func getFirstDialer(
 }
 
 type options struct {
-	streamID streampb.StreamID
+	streamID               streampb.StreamID
+	allowExtendedHeartbeat bool
 }
 
 func (o *options) appName() string {
@@ -258,6 +264,12 @@ type Option func(*options)
 func WithStreamID(id streampb.StreamID) Option {
 	return func(o *options) {
 		o.streamID = id
+	}
+}
+
+func WithExtendedHeartbeat() Option {
+	return func(o *options) {
+		o.allowExtendedHeartbeat = true
 	}
 }
 

@@ -13,8 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,6 +36,7 @@ func TestHeartbeatSender(t *testing.T) {
 
 	mt := timeutil.NewManualTime(timeutil.Now())
 	hbs := &heartbeatSender{
+		settings: cluster.MakeTestingClusterSettings(),
 		lastSent: timeutil.Now().Add(-2 * time.Second),
 		client:   &mockStreamClient{},
 	}
@@ -128,12 +130,14 @@ func TestHeartbeatLoop(t *testing.T) {
 				return streampb.StreamReplicationStatus{StreamStatus: tc.status}, tc.err
 			}
 		}
+		settings := cluster.MakeTestingClusterSettings()
+		streamingccl.StreamReplicationConsumerHeartbeatFrequency.Override(ctx, &settings.SV, 0)
 		mt := timeutil.NewManualTime(timeutil.Now())
 		hbs := &heartbeatSender{
 			lastSent:    timeutil.Now().Add(-2 * time.Second),
 			client:      &mockStreamClient{},
 			streamID:    7,
-			sv:          &settings.Values{},
+			settings:    settings,
 			stoppedChan: make(chan struct{}),
 		}
 

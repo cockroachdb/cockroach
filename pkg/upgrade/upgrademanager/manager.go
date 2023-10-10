@@ -23,12 +23,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/repstream"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
@@ -40,12 +43,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradejob"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
+)
+
+var physicalReplicationGuardrails = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"cluster.upgrades.physical_replication_upgrade_ordering_guardrails.enabled",
+	"enables upgrade checks that check for the ordering of upgrade operations between source and destination clusters",
+	false,
 )
 
 // Manager is the instance responsible for executing upgrades across the
@@ -155,6 +166,136 @@ func safeToUpgradeTenant(
 	log.Infof(ctx, "safe to upgrade tenant: storage cluster at version %v, tenant at version"+
 		" %v", storageClusterVersion, tenantClusterVersion)
 	return true, nil
+}
+
+func safeToUpgradeIfPhysicalReplicationJobsExist(
+	ctx context.Context,
+	settings *cluster.Settings,
+	codec keys.SQLCodec,
+	selfClusterID uuid.UUID,
+	db descs.DB,
+	from, to clusterversion.ClusterVersion,
+) error {
+	if !repstream.PhysicalReplicationEnabled.Get(&settings.SV) {
+		return nil
+	}
+
+	if !physicalReplicationGuardrails.Get(&settings.SV) {
+		return nil
+	}
+
+	if !codec.ForSystemTenant() {
+		return nil
+	}
+
+	targetClusters, err := getPhysicalReplicationTargetClusters(ctx, db)
+	if err != nil {
+		return err
+	}
+	var clustersBlockingUpgrades []replicationTargetCluster
+	for _, c := range targetClusters {
+		// Ignore this job if the desination cluster is our
+		// own cluster ID.
+		if c.clusterID.Equal(selfClusterID) {
+			continue
+		}
+
+		// If we've already blown past the target cluster,
+		// then there is nothing we can do.
+		if c.version.Less(from.Version) {
+			continue
+		}
+
+		// If the destination cluster version is less than our
+		// target, block the upgrade until the destination is
+		// upgraded.
+		if c.version.Less(to.Version) {
+			clustersBlockingUpgrades = append(clustersBlockingUpgrades, c)
+		}
+	}
+
+	if len(clustersBlockingUpgrades) > 0 {
+		badClusterMsg := &redact.StringBuilder{}
+		for i, bc := range clustersBlockingUpgrades {
+			var sep string
+			if i > 0 {
+				sep = "; "
+			}
+			fmt.Fprintf(badClusterMsg, "%scluster streaming from tenant %q (job %d) at version %s", sep, bc.sourceTenantName, bc.jobID, bc.version)
+		}
+
+		return errors.Newf("cannot upgrade to %s because of physical replication streams: %s", to, badClusterMsg.String())
+	}
+
+	return nil
+}
+
+type replicationTargetCluster struct {
+	jobID            jobspb.JobID
+	clusterID        uuid.UUID
+	version          roachpb.Version
+	sourceTenantName roachpb.TenantName
+}
+
+func getPhysicalReplicationTargetClusters(
+	ctx context.Context, db descs.DB,
+) ([]replicationTargetCluster, error) {
+	var ret []replicationTargetCluster
+	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) (txErr error) {
+		query := `SELECT name, (job_id->>0)::int AS job_id FROM (SELECT name, json_array_elements(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'physicalReplicationProducerJobIds') as job_id from system.tenants)`
+		rows, err := txn.QueryIterator(ctx, "list-tenants-with-physical-rep-jobs", txn.KV(), query)
+		if err != nil {
+			return err
+		}
+		defer func() { txErr = errors.CombineErrors(txErr, rows.Close()) }()
+
+		var ok bool
+		clusters := make([]replicationTargetCluster, 0)
+		for ok, err = rows.Next(ctx); ok; ok, err = rows.Next(ctx) {
+			row := rows.Cur()
+
+			tenantName := roachpb.TenantName(tree.MustBeDString(row[0]))
+			jobID := jobspb.JobID(tree.MustBeDInt(row[1]))
+
+			info := jobs.InfoStorageForJob(txn, jobID)
+			progressBytes, found, err := info.GetLegacyProgress(ctx)
+			if err != nil {
+				log.Warningf(ctx, "failed to lookup progress for physical replication job %d (from tenant %q)", jobID, tenantName)
+				continue
+			}
+			if !found {
+				log.Warningf(ctx, "no progress found for physical replication job %d", jobID)
+				continue
+			}
+
+			var progress jobspb.Progress
+			if err := protoutil.Unmarshal(progressBytes, &progress); err != nil {
+				log.Warningf(ctx, "could not parse progress for physical replication job %d", jobID)
+				continue
+			}
+
+			repProg := progress.GetStreamReplication()
+			if repProg == nil {
+				log.Warningf(ctx, "job %d does not appear to be a physical replication job", jobID)
+				continue
+			}
+
+			clusters = append(clusters, replicationTargetCluster{
+				jobID:            jobID,
+				sourceTenantName: tenantName,
+				clusterID:        repProg.DestinationClusterID,
+				version:          repProg.DestinationClusterVersion,
+			})
+		}
+		if err != nil {
+			return err
+		}
+		ret = clusters
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return ret, nil
 }
 
 // RunPermanentUpgrades runs all the upgrades associated with cluster versions
@@ -386,6 +527,12 @@ func (m *Manager) Migrate(
 	}
 	skipValidation := func(ctx context.Context, txn *kv.Txn) error {
 		return nil
+	}
+
+	// Determine whether any of the physical replication jobs are
+	// replicating to a cluster that needs to be upgraded first.
+	if err := safeToUpgradeIfPhysicalReplicationJobsExist(ctx, m.settings, m.codec, m.clusterID, m.deps.DB, from, to); err != nil {
+		return err
 	}
 
 	// Determine whether it's safe to perform the upgrade for secondary tenants.

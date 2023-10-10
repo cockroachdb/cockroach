@@ -107,7 +107,7 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 			require.ErrorContains(t, err, expectedErr)
 		})
 		t.Run("heartbeat returns STREAM_INACTIVE", func(t *testing.T) {
-			status, err := client.Heartbeat(ctx, targetStreamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			status, err := client.Heartbeat(ctx, targetStreamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}, streampb.ReplicationHeartbeatRequest{})
 			require.NoError(t, err)
 			require.Equal(t, streampb.StreamReplicationStatus_STREAM_INACTIVE, status.StreamStatus)
 		})
@@ -132,7 +132,7 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 			require.ErrorContains(t, err, "not a replication stream job")
 		})
 		t.Run("heartbeat fails", func(t *testing.T) {
-			_, err := client.Heartbeat(ctx, targetStreamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			_, err := client.Heartbeat(ctx, targetStreamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}, streampb.ReplicationHeartbeatRequest{})
 			require.ErrorContains(t, err, "not a replication stream job")
 		})
 		t.Run("subscribe fails", func(t *testing.T) {
@@ -157,7 +157,7 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 			require.ErrorContains(t, err, "must be running")
 		})
 		t.Run("heartbeat returns STREAM_PAUSED", func(t *testing.T) {
-			status, err := client.Heartbeat(ctx, targetStreamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			status, err := client.Heartbeat(ctx, targetStreamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}, streampb.ReplicationHeartbeatRequest{})
 			require.NoError(t, err)
 			require.Equal(t, streampb.StreamReplicationStatus_STREAM_PAUSED, status.StreamStatus)
 		})
@@ -185,7 +185,7 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 		t.Run("heartbeat returns STREAM_INACTIVE", func(t *testing.T) {
 			// Heartbeat early exits but with a nil error if the job
 			// isn't running or paused.
-			status, err := client.Heartbeat(ctx, targetStreamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			status, err := client.Heartbeat(ctx, targetStreamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}, streampb.ReplicationHeartbeatRequest{})
 			require.NoError(t, err)
 			require.Equal(t, streampb.StreamReplicationStatus_STREAM_INACTIVE, status.StreamStatus)
 		})
@@ -262,7 +262,7 @@ INSERT INTO d.t2 VALUES (2);
 	require.NoError(t, err)
 	require.Equal(t, 1, len(top.Partitions))
 
-	status, err := client.Heartbeat(ctx, streamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+	status, err := client.Heartbeat(ctx, streamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}, streampb.ReplicationHeartbeatRequest{})
 	require.NoError(t, err)
 	require.Equal(t, streampb.StreamReplicationStatus_STREAM_ACTIVE, status.StreamStatus)
 

@@ -215,7 +215,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			require.NoError(t, insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				status, err = updateReplicationStreamProgress(
 					ctx, timeutil.Now(), ptp, registry, streampb.StreamID(jr.JobID),
-					hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}, txn)
+					hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}, txn, streampb.ReplicationHeartbeatRequest{})
 				return err
 			}))
 			require.Equal(t, streampb.StreamReplicationStatus_STREAM_INACTIVE, status.StreamStatus)
@@ -253,7 +253,8 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			expire := expirationTime(jr).Add(10 * time.Millisecond)
 			require.NoError(t, insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				streamStatus, err = updateReplicationStreamProgress(
-					ctx, expire, ptp, registry, streampb.StreamID(jr.JobID), updatedFrontier, txn)
+					ctx, expire, ptp, registry, streampb.StreamID(jr.JobID), updatedFrontier, txn,
+					streampb.ReplicationHeartbeatRequest{})
 				return err
 			}))
 			require.Equal(t, streampb.StreamReplicationStatus_STREAM_ACTIVE, streamStatus.StreamStatus)

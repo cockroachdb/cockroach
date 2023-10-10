@@ -21,7 +21,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -29,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
@@ -48,8 +52,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -934,4 +940,56 @@ func TestMigrationFailure(t *testing.T) {
 	require.NoError(t, err)
 	checkActiveVersion(t, endVersion)
 	checkSettingVersion(t, endVersion)
+}
+
+func TestMigrationPhysicalClusterConstraints(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer utilccl.TestingEnableEnterprise()()
+
+	ctx := context.Background()
+
+	startVersionKey := clusterversion.BinaryMinSupportedVersionKey
+	startVersion := clusterversion.ByKey(startVersionKey)
+	endVersionKey := clusterversion.BinaryVersionKey
+	endVersion := clusterversion.ByKey(endVersionKey)
+
+	s, goDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				DisableAutomaticVersionUpgrade: make(chan struct{}),
+				BootstrapVersionKeyOverride:    startVersionKey,
+				BinaryVersionOverride:          startVersion,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	sysSQL := sqlutils.MakeSQLRunner(goDB)
+
+	sysSQL.Exec(t, "SET CLUSTER SETTING version = $1", clusterversion.ByKey(clusterversion.V23_2Start).String())
+	sysSQL.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled=true")
+	sysSQL.Exec(t, "SET CLUSTER SETTING physical_replication.enabled=true")
+	sysSQL.Exec(t, "SET CLUSTER SETTING cluster.upgrades.physical_replication_upgrade_ordering_guardrails.enabled=true")
+	sysSQL.Exec(t, "CREATE TENANT foo")
+
+	var streamSpec []byte
+	sysSQL.QueryRow(t, "SELECT crdb_internal.start_replication_stream('foo')").Scan(&streamSpec)
+	var spec streampb.ReplicationProducerSpec
+	require.NoError(t, protoutil.Unmarshal(streamSpec, &spec))
+
+	cid, err := uuid.NewV4()
+	require.NoError(t, err)
+	req := streampb.ReplicationHeartbeatRequest{
+		HostClusterID:      cid,
+		HostClusterVersion: clusterversion.ByKey(clusterversion.V23_2Start),
+	}
+	reqBytes, err := protoutil.Marshal(&req)
+	require.NoError(t, err)
+
+	sysSQL.Exec(t, "SELECT crdb_internal.replication_stream_progress($1, $2, $3)", spec.StreamID, spec.ReplicationStartTime.AsOfSystemTime(), reqBytes)
+
+	_, err = goDB.Exec(`SET CLUSTER SETTING version = $1`, endVersion.String())
+	require.ErrorContains(t, err, "because of physical replication streams")
 }
