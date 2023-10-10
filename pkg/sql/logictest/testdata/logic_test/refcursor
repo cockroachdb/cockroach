@@ -553,4 +553,54 @@ SELECT 'foo'::REFCURSOR IS DISTINCT FROM (CASE WHEN true THEN NULL ELSE NULL::RE
 statement error pgcode 22023 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM (CASE WHEN true THEN NULL ELSE NULL::REFCURSOR END);
 
+# Regression test for #112099 - REFCURSOR is not valid as an index column.
+subtest refcursor_index
+
+statement ok
+CREATE TABLE t112099_no_index (x INT NOT NULL, y TEXT NOT NULL, r REFCURSOR NOT NULL);
+
+# REFCURSOR is not allowed in a primary key.
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+CREATE TABLE t112099 (r REFCURSOR PRIMARY KEY);
+
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+CREATE TABLE t112099 (x INT, y TEXT, r REFCURSOR, PRIMARY KEY (x, r, y));
+
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+ALTER TABLE t112099_no_index ADD PRIMARY KEY (r);
+
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+ALTER TABLE t112099_no_index ADD PRIMARY KEY (x, r, y);
+
+# REFCURSOR is not allowed in a secondary index.
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+CREATE TABLE t112099 (r REFCURSOR, INDEX (r));
+
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+CREATE TABLE t112099 (x INT, y TEXT, r REFCURSOR, INDEX (x, r, y));
+
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+CREATE INDEX ON t112099_no_index (r);
+
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
+CREATE INDEX ON t112099_no_index (x, r, y);
+
+# REFCURSOR is allowed as a STORING column.
+statement ok
+CREATE TABLE t112099 (x INT, r REFCURSOR, INDEX (x) STORING (r));
+DROP TABLE t112099;
+
+statement ok
+CREATE TABLE t112099 (x INT, y TEXT, r REFCURSOR, INDEX (x) STORING (y, r));
+DROP TABLE t112099;
+
+statement ok
+CREATE INDEX ON t112099_no_index (x) STORING (r);
+
+statement ok
+CREATE INDEX ON t112099_no_index (x) STORING (y, r);
+
+statement ok
+DROP TABLE t112099_no_index;
+
 subtest end
