@@ -293,25 +293,32 @@ func SelectGCEMachineTypeNew(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, 
 
 // SelectAzureMachineType selects a machine type given the desired number of CPUs and
 // memory per CPU ratio.
-func SelectAzureMachineType(cpus int, mem MemPerCPU) (string, error) {
+func SelectAzureMachineType(cpus int, mem MemPerCPU, ssd bool) (string, error) {
 	if mem != Auto && mem != Standard {
 		return "", errors.Newf("custom memory per CPU not implemented for Azure, memory ratio requested: %d", mem)
 	}
+	var premiumStorage string
+	// If not using Local SSD, the machine type must support premium/ultra storage.
+	if !ssd {
+		premiumStorage = "s"
+	}
 	switch {
 	case cpus <= 2:
-		return "Standard_D2_v3", nil
+		return fmt.Sprintf("Standard_D2%s_v3", premiumStorage), nil
 	case cpus <= 4:
-		return "Standard_D4_v3", nil
+		return fmt.Sprintf("Standard_D4%s_v3", premiumStorage), nil
 	case cpus <= 8:
-		return "Standard_D8_v3", nil
+		return fmt.Sprintf("Standard_D8%s_v3", premiumStorage), nil
 	case cpus <= 16:
-		return "Standard_D16_v3", nil
+		return fmt.Sprintf("Standard_D16%s_v3", premiumStorage), nil
 	case cpus <= 36:
-		return "Standard_D32_v3", nil
+		return fmt.Sprintf("Standard_D32%s_v3", premiumStorage), nil
 	case cpus <= 48:
-		return "Standard_D48_v3", nil
+		return fmt.Sprintf("Standard_D48%s_v3", premiumStorage), nil
 	case cpus <= 64:
-		return "Standard_D64_v3", nil
+		return fmt.Sprintf("Standard_D64%s_v3", premiumStorage), nil
+	case cpus <= 96:
+		return fmt.Sprintf("Standard_D96%s_v5", premiumStorage), nil
 	default:
 		return "", errors.Newf("no azure machine type with %d cpus", cpus)
 	}
