@@ -23,6 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -55,6 +58,7 @@ type SelectQueryParams struct {
 	AOSTDuration    time.Duration
 	SelectBatchSize int64
 	TTLExpr         catpb.Expression
+	SelectDuration  *aggmetric.Histogram
 }
 
 // SelectQueryBuilder is responsible for maintaining state around the SELECT
@@ -129,6 +133,7 @@ func (b *SelectQueryBuilder) Run(
 		query = b.cachedQuery
 	}
 
+	start := timeutil.Now()
 	// Use a nil txn so that the AOST clause is handled correctly. Currently,
 	// the internal executor will treat a passed-in txn as an explicit txn, so
 	// the AOST clause on the SELECT query would not be interpreted correctly.
@@ -146,6 +151,7 @@ func (b *SelectQueryBuilder) Run(
 	if err != nil {
 		return nil, false, err
 	}
+	b.SelectDuration.RecordValue(int64(timeutil.Since(start)))
 
 	numRows := int64(len(rows))
 	if numRows > 0 {
@@ -165,10 +171,12 @@ func (b *SelectQueryBuilder) Run(
 }
 
 type DeleteQueryParams struct {
-	RelationName    string
-	PKColNames      []string
-	DeleteBatchSize int64
-	TTLExpr         catpb.Expression
+	RelationName      string
+	PKColNames        []string
+	DeleteBatchSize   int64
+	TTLExpr           catpb.Expression
+	DeleteDuration    *aggmetric.Histogram
+	DeleteRateLimiter *quotapool.RateLimiter
 }
 
 // DeleteQueryBuilder is responsible for maintaining state around the DELETE
@@ -228,6 +236,12 @@ func (b *DeleteQueryBuilder) Run(
 		}
 	}
 
+	tokens, err := b.DeleteRateLimiter.Acquire(ctx, int64(numRows))
+	if err != nil {
+		return 0, err
+	}
+	defer tokens.Consume()
+	start := timeutil.Now()
 	rowCount, err := txn.ExecEx(
 		ctx,
 		b.deleteOpName,
@@ -239,5 +253,9 @@ func (b *DeleteQueryBuilder) Run(
 		query,
 		deleteArgs...,
 	)
-	return int64(rowCount), err
+	if err != nil {
+		return 0, err
+	}
+	b.DeleteDuration.RecordValue(int64(timeutil.Since(start)))
+	return int64(rowCount), nil
 }
