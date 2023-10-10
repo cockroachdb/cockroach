@@ -36,7 +36,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	t.Run("statement_statistics", func(t *testing.T) {
-		data := genRandomData()
+		data := sqlstatstestutil.genRandomData()
 		input := appstatspb.CollectedStatementStatistics{}
 
 		expectedMetadataStrTemplate := `
@@ -198,9 +198,9 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
      }
 		 `
 
-		expectedMetadataStr := fillTemplate(t, expectedMetadataStrTemplate, data)
-		expectedStatisticsStr := fillTemplate(t, expectedStatisticsStrTemplate, data)
-		fillObject(t, reflect.ValueOf(&input), &data)
+		expectedMetadataStr := sqlstatstestutil.fillTemplate(t, expectedMetadataStrTemplate, data)
+		expectedStatisticsStr := sqlstatstestutil.fillTemplate(t, expectedStatisticsStrTemplate, data)
+		sqlstatstestutil.fillObject(t, reflect.ValueOf(&input), &data)
 
 		actualMetadataJSON, err := BuildStmtMetadataJSON(&input)
 		require.NoError(t, err)
@@ -228,7 +228,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 	// new parameter, so this test is to confirm that all other parameters will be set and
 	// the new one will be empty, without breaking the decoding process.
 	t.Run("statement_statistics with new parameter", func(t *testing.T) {
-		data := genRandomData()
+		data := sqlstatstestutil.genRandomData()
 		expectedStatistics := appstatspb.CollectedStatementStatistics{}
 
 		expectedMetadataStrTemplate := `
@@ -383,9 +383,9 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
      }
 		 `
 
-		fillTemplate(t, expectedMetadataStrTemplate, data)
-		fillTemplate(t, expectedStatisticsStrTemplate, data)
-		fillObject(t, reflect.ValueOf(&expectedStatistics), &data)
+		sqlstatstestutil.fillTemplate(t, expectedMetadataStrTemplate, data)
+		sqlstatstestutil.fillTemplate(t, expectedStatisticsStrTemplate, data)
+		sqlstatstestutil.fillObject(t, reflect.ValueOf(&expectedStatistics), &data)
 
 		actualMetadataJSON, err := BuildStmtMetadataJSON(&expectedStatistics)
 		require.NoError(t, err)
@@ -412,7 +412,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 	})
 
 	t.Run("transaction_statistics", func(t *testing.T) {
-		data := genRandomData()
+		data := sqlstatstestutil.genRandomData()
 
 		input := appstatspb.CollectedTransactionStatistics{
 			StatementFingerprintIDs: []appstatspb.StmtFingerprintID{
@@ -551,8 +551,8 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
   }
 }
 		 `
-		expectedStatisticsStr := fillTemplate(t, expectedStatisticsStrTemplate, data)
-		fillObject(t, reflect.ValueOf(&input), &data)
+		expectedStatisticsStr := sqlstatstestutil.fillTemplate(t, expectedStatisticsStrTemplate, data)
+		sqlstatstestutil.fillObject(t, reflect.ValueOf(&input), &data)
 
 		actualMetadataJSON, err := BuildTxnMetadataJSON(&input)
 		require.NoError(t, err)
@@ -574,7 +574,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 	})
 
 	t.Run("statement aggregated metadata", func(t *testing.T) {
-		data := genRandomData()
+		data := sqlstatstestutil.genRandomData()
 
 		input := appstatspb.AggregatedStatementMetadata{}
 
@@ -595,8 +595,8 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
   "fingerprintID": "{{.String}}"
 }
 		 `
-		expectedAggregatedMetadataStr := fillTemplate(t, expectedAggregatedMetadataStrTemplate, data)
-		fillObject(t, reflect.ValueOf(&input), &data)
+		expectedAggregatedMetadataStr := sqlstatstestutil.fillTemplate(t, expectedAggregatedMetadataStrTemplate, data)
+		sqlstatstestutil.fillObject(t, reflect.ValueOf(&input), &data)
 
 		actualMetadataJSON, err := BuildStmtDetailsMetadataJSON(&input)
 		require.NoError(t, err)
