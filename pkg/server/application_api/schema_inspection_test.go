@@ -530,7 +530,7 @@ func TestAdminAPITableStats(t *testing.T) {
 		}
 	}
 
-	url := server0.AdminURL().String() + "/_admin/v1/databases/test test/tables/foo foo/stats"
+	url := server0.AdminURL().WithPath("/_admin/v1/databases/test test/tables/foo foo/stats").String()
 	var tsResponse serverpb.TableStatsResponse
 
 	// The new SQL table may not yet have split into its own range. Wait for
