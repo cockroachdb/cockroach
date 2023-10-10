@@ -139,7 +139,12 @@ func modifyBlacklistedStmt(
 	require.NoError(t, err)
 
 	var modify bool
-	for _, lm := range []sqlLineModifier{modifyExprsReferencingSequencesWithTrue, modifyAlterPKWithRowIDCol, modifySetDeclarativeSchemaChangerMode} {
+	for _, lm := range []sqlLineModifier{
+		modifyExprsReferencingSequencesWithTrue,
+		modifyAlterPKWithRowIDCol,
+		modifySetDeclarativeSchemaChangerMode,
+		modifyCreateTempTable,
+	} {
 		var m bool
 		parsedLine, m = lm(ctx, t, parsedLine, legacyConn)
 		modify = modify || m
@@ -302,6 +307,23 @@ func modifyExprsReferencingSequencesWithTrue(
 		newParsedStmts = append(newParsedStmts, parsedStmt)
 	}
 
+	return newParsedStmts, modified
+}
+
+// modifyCreateTempTable skips `CREATE TEMP TABLE` statement because its parent schema name,
+// constructed from sessionID, is naturally going to be different between the two clusters.
+// In short of a more clever way to bake this difference into the metadata identity check,
+// we decided to just skip those statements, for now.
+func modifyCreateTempTable(
+	_ context.Context, t *testing.T, parsedStmts statements.Statements, _ *gosql.Conn,
+) (newParsedStmts statements.Statements, modified bool) {
+	for _, parsedStmt := range parsedStmts {
+		if ast, ok := parsedStmt.AST.(*tree.CreateTable); ok && ast.Persistence.IsTemporary() {
+			modified = true
+			continue
+		}
+		newParsedStmts = append(newParsedStmts, parsedStmt)
+	}
 	return newParsedStmts, modified
 }
 
