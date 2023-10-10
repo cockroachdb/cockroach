@@ -146,6 +146,7 @@ type oidcAuthenticationConf struct {
 	principalRegex  *regexp.Regexp
 	buttonText      string
 	autoLogin       bool
+	successPath     string
 
 	generateJWTAuthTokenEnabled  bool
 	generateJWTAuthTokenUseToken tokenToUse
@@ -166,6 +167,10 @@ func (s *oidcAuthenticationServer) GetOIDCConf() ui.OIDCUIConf {
 	}
 }
 
+func (s *oidcAuthenticationServer) GetBasePathForTest() string {
+	return s.conf.successPath
+}
+
 func reloadConfig(
 	ctx context.Context,
 	server *oidcAuthenticationServer,
@@ -179,7 +184,7 @@ func reloadConfig(
 
 func reloadConfigLocked(
 	ctx context.Context,
-	server *oidcAuthenticationServer,
+	oidcAuthServer *oidcAuthenticationServer,
 	locality roachpb.Locality,
 	st *cluster.Settings,
 ) {
@@ -195,6 +200,7 @@ func reloadConfigLocked(
 		principalRegex: regexp.MustCompile(OIDCPrincipalRegex.Get(&st.SV)),
 		buttonText:     OIDCButtonText.Get(&st.SV),
 		autoLogin:      OIDCAutoLogin.Get(&st.SV),
+		successPath:    server.ServerHTTPBasePath.Get(&st.SV),
 
 		generateJWTAuthTokenEnabled:  OIDCGenerateClusterSSOTokenEnabled.Get(&st.SV),
 		generateJWTAuthTokenUseToken: tokenToUse(OIDCGenerateClusterSSOTokenUseToken.Get(&st.SV)),
@@ -202,26 +208,26 @@ func reloadConfigLocked(
 		generateJWTAuthTokenSQLPort:  OIDCGenerateClusterSSOTokenSQLPort.Get(&st.SV),
 	}
 
-	if !server.conf.enabled && conf.enabled {
+	if !oidcAuthServer.conf.enabled && conf.enabled {
 		telemetry.Inc(enableUseCounter)
 	}
 
-	server.initialized = false
-	server.conf = conf
-	if server.conf.enabled {
+	oidcAuthServer.initialized = false
+	oidcAuthServer.conf = conf
+	if oidcAuthServer.conf.enabled {
 		// `enabled` stores the configuration state and records the operator's _intent_ that the feature
 		// be enabled. Since the call to `NewProvider` below makes an HTTP request and could fail for
 		// many reasons, we record the successful configuration of a provider using the `initialized`
 		// flag which is set at the bottom of this function.
 		// If `enabled` is true and `initialized` is false, the HTTP handlers for OIDC will attempt
 		// to initialize the OIDC provider.
-		server.enabled = true
+		oidcAuthServer.enabled = true
 	} else {
-		server.enabled = false
+		oidcAuthServer.enabled = false
 		return
 	}
 
-	provider, err := oidc.NewProvider(ctx, server.conf.providerURL)
+	provider, err := oidc.NewProvider(ctx, oidcAuthServer.conf.providerURL)
 	if err != nil {
 		log.Warningf(ctx, "unable to initialize OIDC server, disabling OIDC: %v", err)
 		if log.V(1) {
@@ -231,9 +237,9 @@ func reloadConfigLocked(
 	}
 
 	// Validation of the scope setting will require that we have the `openid` scope.
-	scopesForOauth := strings.Split(server.conf.scopes, " ")
+	scopesForOauth := strings.Split(oidcAuthServer.conf.scopes, " ")
 
-	redirectURL, err := getRegionSpecificRedirectURL(locality, server.conf.redirectURLConf)
+	redirectURL, err := getRegionSpecificRedirectURL(locality, oidcAuthServer.conf.redirectURLConf)
 	if err != nil {
 		log.Warningf(ctx, "unable to initialize OIDC server, disabling OIDC: %v", err)
 		if log.V(1) {
@@ -242,17 +248,17 @@ func reloadConfigLocked(
 		return
 	}
 
-	server.oauth2Config = oauth2.Config{
-		ClientID:     server.conf.clientID,
-		ClientSecret: server.conf.clientSecret,
+	oidcAuthServer.oauth2Config = oauth2.Config{
+		ClientID:     oidcAuthServer.conf.clientID,
+		ClientSecret: oidcAuthServer.conf.clientSecret,
 		RedirectURL:  redirectURL,
 
 		Endpoint: provider.Endpoint(),
 		Scopes:   scopesForOauth,
 	}
 
-	server.verifier = provider.Verifier(&oidc.Config{ClientID: server.conf.clientID})
-	server.initialized = true
+	oidcAuthServer.verifier = provider.Verifier(&oidc.Config{ClientID: oidcAuthServer.conf.clientID})
+	oidcAuthServer.initialized = true
 	log.Infof(ctx, "initialized OIDC server")
 }
 
@@ -422,7 +428,7 @@ var ConfigureOIDC = func(
 		}
 
 		http.SetCookie(w, cookie)
-		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, oidcAuthentication.conf.successPath, http.StatusTemporaryRedirect)
 
 		telemetry.Inc(loginSuccessUseCounter)
 	}))
@@ -700,6 +706,9 @@ var ConfigureOIDC = func(
 		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
 	OIDCAutoLogin.SetOnChange(&st.SV, func(ctx context.Context) {
+		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
+	})
+	server.ServerHTTPBasePath.SetOnChange(&st.SV, func(ctx context.Context) {
 		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
 	OIDCGenerateClusterSSOTokenEnabled.SetOnChange(&st.SV, func(ctx context.Context) {

@@ -37,7 +37,20 @@ type httpServer struct {
 	// gzMux is an HTTP handler that gzip-compresses mux.
 	gzMux http.Handler
 	proxy *nodeProxy
+
+	// OidcVisibleForTestDoNotUse is here to allow for test inspection of settings.
+	oidcVisibleForTestDoNotUse OIDC
 }
+
+func (s *httpServer) GetOidcVisibleForTest() OIDC {
+	return s.oidcVisibleForTestDoNotUse
+}
+
+type OidcVisibleForTest interface {
+	GetOidcVisibleForTest() OIDC
+}
+
+var _ OidcVisibleForTest = &httpServer{}
 
 func newHTTPServer(
 	cfg BaseConfig,
@@ -57,6 +70,16 @@ func newHTTPServer(
 	server.gzMux = gziphandler.GzipHandler(http.HandlerFunc(server.mux.ServeHTTP))
 	return server
 }
+
+// ServerHTTPBasePath is a cluster setting that contains the path to
+// route the user to after successful login. It is intended to be
+// overridden in cases where DB Console is being proxied.
+var ServerHTTPBasePath = settings.RegisterStringSetting(
+	settings.TenantWritable,
+	"server.http.base_path",
+	"path to redirect the user to upon succcessful login",
+	"/",
+).WithPublic()
 
 // HSTSEnabled is a boolean that enables HSTS headers on the HTTP
 // server. These instruct a valid user agent to use HTTPS *only*
@@ -106,6 +129,9 @@ func (s *httpServer) setupRoutes(
 	if err != nil {
 		return err
 	}
+
+	// This is here for tests to inspect. Not for usage.
+	s.oidcVisibleForTestDoNotUse = oidc
 
 	// Define the http.Handler for UI assets.
 	assetHandler := ui.Handler(ui.Config{

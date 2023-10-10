@@ -282,6 +282,9 @@ type TestServerInterface interface {
 	// BinaryVersionOverride returns the value of an override if set using
 	// TestingKnobs.
 	BinaryVersionOverride() roachpb.Version
+
+	// HttpServer returns the embedded httpServer instance.
+	HttpServer() interface{}
 }
 
 // TestServerFactory encompasses the actual implementation of the shim

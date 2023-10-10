@@ -59,6 +59,7 @@ server.eventlog.ttl	duration	2160h0m0s	if nonzero, entries in system.eventlog ol
 server.host_based_authentication.configuration	string		host-based authentication configuration to use during connection authentication
 server.hot_ranges_request.node.timeout	duration	5m0s	the duration allowed for a single node to return hot range data before the request is cancelled; if set to 0, there is no timeout
 server.hsts.enabled	boolean	false	if true, HSTS headers will be sent along with all HTTP requests. The headers will contain a max-age setting of one year. Browsers honoring the header will always use HTTPS to access the DB Console. Ensure that TLS is correctly configured prior to enabling.
+server.http.base_path	string	/	path to redirect the user to upon succcessful login
 server.identity_map.configuration	string		system-identity to database-username mappings
 server.log_gc.max_deletions_per_cycle	integer	1000	the maximum number of entries to delete on each purge of log-like system tables
 server.log_gc.period	duration	1h0m0s	the period at which log-like system tables are checked for old entries
