@@ -362,7 +362,7 @@ FROM system.job_info WHERE job_id = $1 AND info_key = 'legacy_payload')`, jobID)
 			Settings: settingsForUpgrade(),
 		})
 		require.NoError(t, err)
-		tenantSQLDB := tenant.SQLConn(t, "")
+		tenantSQLDB := tenant.SQLConn(t)
 		runTestForDB(t, tenantSQLDB)
 	})
 }

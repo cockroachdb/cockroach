@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -31,7 +32,7 @@ func TestClusterID(t *testing.T) {
 	expected := tc.ApplicationLayer(0).RPCContext().LogicalClusterID.Get()
 
 	for i := 0; i < 3; i++ {
-		conn := tc.ApplicationLayer(i).SQLConn(t, "system")
+		conn := tc.ApplicationLayer(i).SQLConn(t, serverutils.DBName("system"))
 		db := sqlutils.MakeSQLRunner(conn)
 		var clusterID uuid.UUID
 		db.QueryRow(t, "SELECT crdb_internal.cluster_id()").Scan(&clusterID)

@@ -103,7 +103,7 @@ func TestEndToEndGC(t *testing.T) {
 				defer s.Stopper().Stop(ctx)
 
 				statusServer := s.SystemLayer().StatusServer().(serverpb.StatusServer)
-				systemSqlDb := s.SystemLayer().SQLConn(t, "system")
+				systemSqlDb := s.SystemLayer().SQLConn(t, serverutils.DBName("system"))
 
 				execOrFatal := func(t *testing.T, db *gosql.DB, stmt string, args ...interface{}) {
 					t.Helper()

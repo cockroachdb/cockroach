@@ -478,7 +478,7 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 			tc.Stopper().Stop(ctx)
 			t.Fatal(err)
 		}
-		dbConn, err := s.ApplicationLayer().SQLConnE(tc.serverArgs[idx].UseDatabase)
+		dbConn, err := s.ApplicationLayer().SQLConnE(serverutils.DBName(tc.serverArgs[idx].UseDatabase))
 		if err != nil {
 			tc.Stopper().Stop(ctx)
 			t.Fatal(err)
@@ -623,7 +623,7 @@ func (tc *TestCluster) startServer(idx int, serverArgs base.TestServerArgs) erro
 		return err
 	}
 
-	dbConn, err := server.ApplicationLayer().SQLConnE(serverArgs.UseDatabase)
+	dbConn, err := server.ApplicationLayer().SQLConnE(serverutils.DBName(serverArgs.UseDatabase))
 	if err != nil {
 		return err
 	}
@@ -1757,7 +1757,7 @@ func (tc *TestCluster) RestartServerWithInspect(
 			return err
 		}
 
-		dbConn, err := s.ApplicationLayer().SQLConnE(serverArgs.UseDatabase)
+		dbConn, err := s.ApplicationLayer().SQLConnE(serverutils.DBName(serverArgs.UseDatabase))
 		if err != nil {
 			return err
 		}

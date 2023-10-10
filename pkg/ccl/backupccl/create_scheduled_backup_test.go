@@ -985,7 +985,7 @@ func TestCreateBackupScheduleRequiresAdminRole(t *testing.T) {
 	defer cleanup()
 
 	th.sqlDB.Exec(t, `CREATE USER testuser`)
-	testuser := th.server.ApplicationLayer().SQLConnForUser(t, "testuser", "")
+	testuser := th.server.ApplicationLayer().SQLConn(t, serverutils.User("testuser"))
 
 	_, err := testuser.Exec("CREATE SCHEDULE FOR BACKUP INTO 'somewhere' RECURRING '@daily'")
 	require.Error(t, err)

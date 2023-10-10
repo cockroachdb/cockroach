@@ -446,7 +446,7 @@ func TestCacheAutoRefresh(t *testing.T) {
 	)
 	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory)))
 
-	sr0 := sqlutils.MakeSQLRunner(s.SQLConn(t, ""))
+	sr0 := sqlutils.MakeSQLRunner(s.SQLConn(t))
 	sr0.Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
 	sr0.Exec(t, "CREATE DATABASE test")
 	sr0.Exec(t, "CREATE TABLE test.t (k INT PRIMARY KEY, v INT)")
@@ -468,14 +468,14 @@ func TestCacheAutoRefresh(t *testing.T) {
 	if err := expectNStats(0); err != nil {
 		t.Fatal(err)
 	}
-	sr1 := sqlutils.MakeSQLRunner(tc.ApplicationLayer(1).SQLConn(t, ""))
+	sr1 := sqlutils.MakeSQLRunner(tc.ApplicationLayer(1).SQLConn(t))
 	sr1.Exec(t, "CREATE STATISTICS k ON k FROM test.t")
 
 	testutils.SucceedsSoon(t, func() error {
 		return expectNStats(1)
 	})
 
-	sr2 := sqlutils.MakeSQLRunner(tc.ApplicationLayer(2).SQLConn(t, ""))
+	sr2 := sqlutils.MakeSQLRunner(tc.ApplicationLayer(2).SQLConn(t))
 	sr2.Exec(t, "CREATE STATISTICS v ON v FROM test.t")
 
 	testutils.SucceedsSoon(t, func() error {

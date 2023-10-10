@@ -91,10 +91,10 @@ func TestSQLStatsFlush(t *testing.T) {
 	firstServer := testCluster.Server(0 /* idx */).ApplicationLayer()
 	secondServer := testCluster.Server(1 /* idx */).ApplicationLayer()
 
-	pgFirstSQLConn := firstServer.SQLConn(t, "")
+	pgFirstSQLConn := firstServer.SQLConn(t)
 	firstSQLConn := sqlutils.MakeSQLRunner(pgFirstSQLConn)
 
-	pgSecondSQLConn := secondServer.SQLConn(t, "")
+	pgSecondSQLConn := secondServer.SQLConn(t)
 	secondSQLConn := sqlutils.MakeSQLRunner(pgSecondSQLConn)
 
 	firstServerSQLStats := firstServer.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
@@ -394,7 +394,7 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
-	observer := s.SQLConn(t, "")
+	observer := s.SQLConn(t)
 
 	sqlConn := sqlutils.MakeSQLRunner(conn)
 	sqlConn.Exec(t,

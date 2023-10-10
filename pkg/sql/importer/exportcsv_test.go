@@ -70,7 +70,7 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 	)
 	s := tc.ApplicationLayer(0)
 	tenantSettings := s.ClusterSettings()
-	conn := s.SQLConn(t, "defaultdb")
+	conn := s.SQLConn(t, serverutils.DBName("defaultdb"))
 	db := sqlutils.MakeSQLRunner(conn)
 
 	wk := bank.FromRows(rows)
@@ -471,7 +471,7 @@ func TestExportPrivileges(t *testing.T) {
 	sqlDB.Exec(t, `CREATE USER testuser`)
 	sqlDB.Exec(t, `CREATE TABLE privs (a INT)`)
 
-	testuser := srv.ApplicationLayer().SQLConnForUser(t, "testuser", "")
+	testuser := srv.ApplicationLayer().SQLConn(t, serverutils.User("testuser"))
 	_, err := testuser.Exec(`EXPORT INTO CSV 'nodelocal://1/privs' FROM TABLE privs`)
 	require.True(t, testutils.IsError(err, "testuser does not have SELECT privilege"))
 
@@ -485,7 +485,7 @@ func TestExportPrivileges(t *testing.T) {
 	// Grant SELECT privilege.
 	sqlDB.Exec(t, `GRANT SELECT ON TABLE privs TO testuser`)
 
-	testuser = srv.ApplicationLayer().SQLConnForUser(t, "testuser", "")
+	testuser = srv.ApplicationLayer().SQLConn(t, serverutils.User("testuser"))
 
 	_, err = testuser.Exec(`EXPORT INTO CSV 'nodelocal://1/privs' FROM TABLE privs`)
 	require.True(t, testutils.IsError(err,
@@ -664,7 +664,7 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	if tc.StartedDefaultTestTenant() {
-		systemSqlDB := tc.Server(0).SystemLayer().SQLConn(t, "system")
+		systemSqlDB := tc.Server(0).SystemLayer().SQLConn(t, serverutils.DBName("system"))
 		_, err := systemSqlDB.Exec(`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
 		require.NoError(t, err)
 		serverutils.WaitForTenantCapabilities(t, tc.Server(0), serverutils.TestTenantID(), map[tenantcapabilities.ID]string{

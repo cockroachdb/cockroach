@@ -76,13 +76,6 @@ CREATE FUNCTION foo(i INT) RETURNS VOID LANGUAGE SQL AS ''
 statement error pgcode 42883 unknown signature: public.foo\(\) \(desired <int>\)
 CALL p(foo())
 
-skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
-statement error pgcode 42723 function "p" already exists with same argument types
-CREATE FUNCTION p() RETURNS VOID LANGUAGE SQL AS ''
-
-onlyif config local-legacy-schema-changer
-onlyif config local-mixed-22.2-23.1
 statement error pgcode 42723 function "p" already exists with same argument types
 CREATE FUNCTION p() RETURNS VOID LANGUAGE SQL AS ''
 
@@ -157,3 +150,139 @@ CREATE FUNCTION t_update(a STRING, b STRING) RETURNS SETOF INT LANGUAGE SQL AS '
 # has been resolved to a specific overload.
 statement error ambiguous function class on t_update
 CALL t_update(1, 0)
+
+subtest anonymous_args
+
+statement ok
+CREATE TABLE anon_args(k INT PRIMARY KEY, v STRING)
+
+statement ok
+CREATE PROCEDURE insert_into_anon_args(INT, STRING) LANGUAGE SQL AS $$
+  INSERT INTO anon_args(k, v) VALUES ($1, $2)
+$$
+
+statement ok
+CALL insert_into_anon_args(1, 'a')
+
+query IT
+SELECT * FROM anon_args
+----
+1  a
+
+statement ok
+CREATE PROCEDURE insert_into_anon_args(STRING, INT) LANGUAGE SQL AS $$
+  INSERT INTO anon_args(k, v) VALUES ($2, $1)
+$$
+
+statement ok
+CALL insert_into_anon_args('b', 2)
+
+query IT rowsort
+SELECT * FROM anon_args
+----
+1  a
+2  b
+
+statement ok
+DROP PROCEDURE insert_into_anon_args(INT, STRING);
+DROP PROCEDURE insert_into_anon_args(STRING, INT);
+DROP TABLE anon_args;
+
+subtest end
+
+subtest replace
+
+statement ok
+CREATE TABLE replace(k INT PRIMARY KEY, v STRING)
+
+statement ok
+CREATE PROCEDURE insert_into_replace(k_new INT, v_new STRING) LANGUAGE SQL AS $$
+  INSERT INTO replace(k, v) VALUES (k_new, v_new)
+$$
+
+statement ok
+CALL insert_into_replace(1, 'a')
+
+statement error pgcode 42809 cannot change routine kind\nDETAIL: "insert_into_replace" is a procedure
+CREATE OR REPLACE FUNCTION insert_into_replace(k_new INT, v_new STRING) RETURNS VOID LANGUAGE SQL AS ''
+
+statement ok
+CREATE OR REPLACE PROCEDURE insert_into_replace(k_new INT, v_new STRING) LANGUAGE SQL AS $$
+  INSERT INTO replace(k, v) VALUES (k_new+100, v_new)
+$$
+
+statement ok
+CALL insert_into_replace(1, 'a')
+
+query IT rowsort
+SELECT * FROM replace
+----
+1    a
+101  a
+
+# The procedure should not be replaced if the signature is different.
+statement ok
+CREATE OR REPLACE PROCEDURE insert_into_replace(k_new INT) LANGUAGE SQL AS $$
+  INSERT INTO replace(k, v) VALUES (k_new, 'overload')
+$$
+
+# The procedure should not be replaced if the name is different.
+statement ok
+CREATE OR REPLACE PROCEDURE insert_into_replace_v2(k_new INT, v_new STRING) LANGUAGE SQL AS $$
+  INSERT INTO replace(k, v) VALUES (k_new, v_new||'_v2')
+$$
+
+statement ok
+CALL insert_into_replace(2, 'b');
+CALL insert_into_replace(3);
+CALL insert_into_replace_v2(4, 'b');
+
+query IT rowsort
+SELECT * FROM replace
+----
+1    a
+101  a
+102  b
+3    overload
+4    b_v2
+
+statement ok
+DROP PROCEDURE insert_into_replace(INT, STRING);
+DROP PROCEDURE insert_into_replace(INT);
+DROP PROCEDURE insert_into_replace_v2;
+DROP TABLE replace;
+
+subtest end
+
+subtest replace_func_with_proc
+
+statement ok
+CREATE PROCEDURE rfp(i INT) LANGUAGE SQL AS 'SELECT 0'
+
+statement error pgcode 42809 rfp\(i: int\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT rfp(1)
+
+statement ok
+DROP PROCEDURE rfp
+
+statement ok
+CREATE FUNCTION rfp(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT 100+i'
+
+query I
+SELECT rfp(1)
+----
+101
+
+statement ok
+DROP FUNCTION rfp;
+CREATE PROCEDURE rfp(i INT) LANGUAGE SQL AS 'SELECT 0'
+
+# There error should be the same as the error above before the function was
+# created.
+statement error pgcode 42809 rfp\(i: int\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT rfp(1)
+
+statement ok
+DROP PROCEDURE rfp
+
+subtest end

@@ -114,7 +114,7 @@ func TestLivenessAPI(t *testing.T) {
 	// The liveness endpoint needs a special tenant capability.
 	if tc.Server(0).TenantController().StartedDefaultTestTenant() {
 		// Enable access to the nodes endpoint for the test tenant.
-		_, err := tc.SystemLayer(0).SQLConn(t, "").Exec(
+		_, err := tc.SystemLayer(0).SQLConn(t).Exec(
 			`ALTER TENANT [$1] GRANT CAPABILITY can_view_node_info=true`, serverutils.TestTenantID().ToUint64())
 		require.NoError(t, err)
 

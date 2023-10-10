@@ -75,7 +75,7 @@ func TestValidationWithProtectedTS(t *testing.T) {
 	protectedts.PollInterval.Override(ctx, &tenantSettings.SV, time.Millisecond)
 	r := sqlutils.MakeSQLRunner(db)
 
-	systemSqlDb := s.SystemLayer().SQLConn(t, "system")
+	systemSqlDb := s.SystemLayer().SQLConn(t, serverutils.DBName("system"))
 	rSys := sqlutils.MakeSQLRunner(systemSqlDb)
 
 	// Refreshes the in-memory protected timestamp state to asOf.

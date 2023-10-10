@@ -211,7 +211,7 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 	{
 		// TODO(irfansharif): The data-distribution page and underyling APIs don't
 		// know how to deal with coalesced ranges. See #97942.
-		sysDB := sqlutils.MakeSQLRunner(tc.Server(0).SystemLayer().SQLConn(t, ""))
+		sysDB := sqlutils.MakeSQLRunner(tc.Server(0).SystemLayer().SQLConn(t))
 		sysDB.Exec(t, `SET CLUSTER SETTING spanconfig.range_coalescing.system.enabled = false`)
 		sysDB.Exec(t, `SET CLUSTER SETTING spanconfig.range_coalescing.application.enabled = false`)
 		// Make sure extra secondary tenants don't cause the endpoint to error.

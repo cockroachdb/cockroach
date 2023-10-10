@@ -83,7 +83,7 @@ func TestRevertTenantToTimestamp(t *testing.T) {
 	newConn := func(t *testing.T) *gosql.DB {
 		var conn *gosql.DB
 		testutils.SucceedsSoon(t, func() error {
-			db, err := srv.SystemLayer().SQLConnE("cluster:target")
+			db, err := srv.SystemLayer().SQLConnE(serverutils.DBName("cluster:target"))
 			if err != nil {
 				return err
 			}
@@ -229,7 +229,7 @@ func TestRevertTenantToTimestampPTS(t *testing.T) {
 	newConn := func(t *testing.T) *gosql.DB {
 		var conn *gosql.DB
 		testutils.SucceedsSoon(t, func() error {
-			db, err := srv.SystemLayer().SQLConnE("cluster:target")
+			db, err := srv.SystemLayer().SQLConnE(serverutils.DBName("cluster:target"))
 			if err != nil {
 				return err
 			}

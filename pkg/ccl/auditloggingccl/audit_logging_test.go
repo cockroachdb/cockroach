@@ -119,7 +119,7 @@ func TestSingleRoleAuditLogging(t *testing.T) {
 	rootRunner := sqlutils.MakeSQLRunner(sqlDB)
 	defer s.Stopper().Stop(context.Background())
 
-	testUserDb := s.ApplicationLayer().SQLConnForUser(t, username.TestUser, "")
+	testUserDb := s.ApplicationLayer().SQLConn(t, serverutils.User(username.TestUser))
 	testRunner := sqlutils.MakeSQLRunner(testUserDb)
 
 	// Dummy table/user used by tests.
@@ -261,7 +261,7 @@ func TestMultiRoleAuditLogging(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	rootRunner := sqlutils.MakeSQLRunner(sqlDB)
 
-	testUserDb := s.ApplicationLayer().SQLConnForUser(t, username.TestUser, "")
+	testUserDb := s.ApplicationLayer().SQLConn(t, serverutils.User(username.TestUser))
 	testRunner := sqlutils.MakeSQLRunner(testUserDb)
 
 	// Dummy table/user used by tests.
@@ -376,7 +376,7 @@ func TestReducedAuditConfig(t *testing.T) {
 		return nil
 	})
 
-	testUserDb := s.ApplicationLayer().SQLConnForUser(t, username.TestUser, "")
+	testUserDb := s.ApplicationLayer().SQLConn(t, serverutils.User(username.TestUser))
 	testRunner := sqlutils.MakeSQLRunner(testUserDb)
 
 	// Set a cluster configuration.
@@ -432,7 +432,7 @@ func TestReducedAuditConfig(t *testing.T) {
 	}
 
 	// Open 2nd connection for the test user.
-	testUserDb2 := s.ApplicationLayer().SQLConnForUser(t, username.TestUser, "")
+	testUserDb2 := s.ApplicationLayer().SQLConn(t, serverutils.User(username.TestUser))
 	testRunner2 := sqlutils.MakeSQLRunner(testUserDb2)
 
 	// Run a query on the new connection. The new connection will cause the reduced audit config to be re-computed.

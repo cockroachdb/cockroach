@@ -430,8 +430,17 @@ func (md *Metadata) CheckDependencies(
 				if err != nil {
 					return false, maybeSwallowMetadataResolveErr(err)
 				}
-				toCheck, err := definition.MatchOverload(overload.Types.Types(), name.Schema(),
-					&evalCtx.SessionData().SearchPath, tree.UDFRoutine)
+				// NOTE: We match for all types of routines here, including
+				// procedures so that if a function has been dropped and a
+				// procedure is created with the same signature, we do not get a
+				// "<func> is not a function" error here. Instead, we'll return
+				// false and attempt to rebuild the statement.
+				toCheck, err := definition.MatchOverload(
+					overload.Types.Types(),
+					name.Schema(),
+					&evalCtx.SessionData().SearchPath,
+					tree.UDFRoutine|tree.BuiltinRoutine|tree.ProcedureRoutine,
+				)
 				if err != nil || toCheck.Oid != overload.Oid || toCheck.Version != overload.Version {
 					return false, err
 				}

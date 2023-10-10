@@ -447,7 +447,7 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 		{stmt: `SELECT * FROM posts_nt`},
 	}
 
-	sqlDB = systemLayer.SQLConn(t, "")
+	sqlDB = systemLayer.SQLConn(t)
 
 	for _, stmt := range testCaseNonTenant {
 		_, err = sqlDB.Exec(stmt.stmt)

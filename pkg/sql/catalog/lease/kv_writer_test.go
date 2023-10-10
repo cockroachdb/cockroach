@@ -62,7 +62,7 @@ func TestKVWriterMatchesIEWriter(t *testing.T) {
 	s := srv.ApplicationLayer()
 
 	// Otherwise, we wouldn't get complete SSTs in our export under stress.
-	sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t, "")).Exec(
+	sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t)).Exec(
 		t, "SET CLUSTER SETTING admission.elastic_cpu.enabled = false",
 	)
 

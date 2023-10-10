@@ -121,7 +121,7 @@ func newRowLevelTTLTestJobTestHelper(
 		th.sqlDB = sqlutils.MakeSQLRunner(db)
 		th.server = tenantServer
 	} else {
-		db := ts.SystemLayer().SQLConn(t, "")
+		db := ts.SystemLayer().SQLConn(t)
 		th.sqlDB = sqlutils.MakeSQLRunner(db)
 		th.server = ts
 	}

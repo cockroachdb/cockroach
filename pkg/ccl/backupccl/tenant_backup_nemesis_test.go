@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -78,7 +79,7 @@ func TestTenantBackupWithCanceledImport(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	tenant10Conn := tenant10.SQLConn(t, "defaultdb")
+	tenant10Conn := tenant10.SQLConn(t, serverutils.DBName("defaultdb"))
 	tenant10DB := sqlutils.MakeSQLRunner(tenant10Conn)
 
 	tenant10DB.Exec(t, "CREATE DATABASE bank")
@@ -106,7 +107,7 @@ func TestTenantBackupWithCanceledImport(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tenant11Conn := tenant11.SQLConn(t, "bank")
+	tenant11Conn := tenant11.SQLConn(t, serverutils.DBName("bank"))
 	tenant11DB := sqlutils.MakeSQLRunner(tenant11Conn)
 	countQuery := fmt.Sprintf(`SELECT count(1) FROM bank."%s"`, tableName)
 	assertEqualQueries(t, tenant10DB, tenant11DB, countQuery)
@@ -150,7 +151,7 @@ func TestTenantBackupNemesis(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	tenant10Conn := tenant10.SQLConn(t, "defaultdb")
+	tenant10Conn := tenant10.SQLConn(t, serverutils.DBName("defaultdb"))
 	_, err = tenant10Conn.Exec("CREATE DATABASE bank")
 	require.NoError(t, err)
 	_, err = tenant10Conn.Exec("USE bank")
@@ -250,7 +251,7 @@ func TestTenantBackupNemesis(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tenant11Conn := tenant11.SQLConn(t, "bank")
+	tenant11Conn := tenant11.SQLConn(t, serverutils.DBName("bank"))
 
 	tenant10SQLDB := sqlutils.MakeSQLRunner(tenant10Conn)
 	tenant11SQLDB := sqlutils.MakeSQLRunner(tenant11Conn)

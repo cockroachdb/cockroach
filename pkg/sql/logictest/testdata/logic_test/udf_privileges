@@ -81,9 +81,7 @@ public         test_priv_f1   int8              ·                    func      
 public         test_priv_f2   int8              int8                 func           volatile
 test_priv_sc1  test_priv_f3   int8              ·                    func           volatile
 
-# TODO(mgartner): This error message should ideally mention that test_priv_f1 is
-# not a procedure.
-statement error pgcode 42883 procedure test_priv_f1\(\) does not exist
+statement error pgcode 42809 test_priv_f1\(\) is not a procedure
 GRANT EXECUTE ON PROCEDURE test_priv_f1() TO udf_test_user WITH GRANT OPTION
 
 statement ok
@@ -167,9 +165,7 @@ test           test_priv_sc1  100109       test_priv_f3()      public         EX
 test           test_priv_sc1  100109       test_priv_f3()      root           ALL             true
 test           test_priv_sc1  100109       test_priv_f3()      udf_test_user  EXECUTE         false
 
-# TODO(mgartner): This error message should ideally mention that test_priv_f1 is
-# not a procedure.
-statement error pgcode 42883 procedure test_priv_f1\(\) does not exist
+statement error pgcode 42809 test_priv_f1\(\) is not a procedure
 REVOKE EXECUTE ON PROCEDURE test_priv_f1() FROM udf_test_user
 
 statement ok

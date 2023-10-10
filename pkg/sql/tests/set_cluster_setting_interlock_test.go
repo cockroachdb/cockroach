@@ -46,7 +46,7 @@ func TestSetUnsafeClusterSettingInterlock(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	ts := s.ApplicationLayer()
 
-	firstSession := ts.SQLConn(t, "")
+	firstSession := ts.SQLConn(t)
 
 	// RESET on unsafe settings never get an error.
 	_, err := firstSession.Exec(fmt.Sprintf("RESET CLUSTER SETTING %s", unsafeSettingName))
@@ -75,7 +75,7 @@ func TestSetUnsafeClusterSettingInterlock(t *testing.T) {
 	_, err = firstSession.Exec(fmt.Sprintf("SET CLUSTER SETTING %s = true", unsafeSettingName))
 	require.NoError(t, err)
 
-	otherSession := ts.SQLConn(t, "")
+	otherSession := ts.SQLConn(t)
 
 	// The first key produced in each session is different from other sessions.
 	_, err = otherSession.Exec(fmt.Sprintf("SET CLUSTER SETTING %s = true", unsafeSettingName))

@@ -1024,7 +1024,7 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 						Locality:     localities[i],
 						TestingKnobs: knobs,
 					})
-					dbs[i] = tenants[i].SQLConn(t, "")
+					dbs[i] = tenants[i].SQLConn(t)
 				}
 				require.NoError(t, err)
 			}
