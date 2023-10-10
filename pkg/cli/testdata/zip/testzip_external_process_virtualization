@@ -161,3 +161,4 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [cluster] pprof summary script... writing binary output: debug/pprof-summary.sh... done
 [cluster] hot range summary script... writing binary output: debug/hot-ranges.sh... done
 [cluster] tenant hot range summary script... writing binary output: debug/hot-ranges-tenant.sh... done
+[cluster] NOTE: Omitted traces of running jobs from this debug zip bundle. Use the --include-running-job-traces flag to enable the fetching of this data.

@@ -339,7 +339,7 @@ func TestCopyFromTransaction(t *testing.T) {
 				tconn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
 				tc.testf(tconn, func(tconn clisqlclient.Conn) {
 					// Without this everything comes back as strings
-					tconn.SetAlwaysInferResultTypes(true)
+					_ = tconn.SetAlwaysInferResultTypes(true)
 					// Put each test in its own db so they can be parallelized.
 					err := tconn.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s; USE %s", tc.name, tc.name))
 					require.NoError(t, err)

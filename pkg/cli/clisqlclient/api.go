@@ -70,8 +70,9 @@ type Conn interface {
 
 	// SetAlwaysInferResultTypes configures the alwaysInferResultTypes flag, which
 	// determines if the client should use the underlying driver to infer result
-	// types.
-	SetAlwaysInferResultTypes(b bool)
+	// types. It returns a method that can be used to reset the configuration to
+	// its previous value.
+	SetAlwaysInferResultTypes(b bool) func()
 
 	// GetServerMetadata returns details about the CockroachDB node
 	// this connection is connected to.

@@ -363,6 +363,10 @@ type zipContext struct {
 	// latency.
 	includeStacks bool
 
+	// includeRunningJobTraces includes the active traces of each running
+	// Traceable job in individual jobs/*/ranges/trace.zip files.
+	includeRunningJobTraces bool
+
 	// The log/heap/etc files to include.
 	files fileSelection
 }
@@ -381,6 +385,9 @@ func setZipContextDefaults() {
 	// Goroutine stack dumps require a "stop the world" operation on the server side,
 	// which impacts performance and SQL service latency.
 	zipCtx.includeStacks = true
+	// Job traces for running Traceable jobs involves fetching cluster wide traces
+	// for each job.
+	zipCtx.includeRunningJobTraces = false
 	zipCtx.cpuProfDuration = 5 * time.Second
 	zipCtx.concurrency = 15
 
