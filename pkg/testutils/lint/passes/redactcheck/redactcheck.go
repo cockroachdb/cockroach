@@ -103,6 +103,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb": {
 						"SnapshotRequest_Type": {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb": {
+						"MembershipStatus": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset": {
 						"SpanAccess": {},
 						"SpanScope":  {},
@@ -183,10 +186,16 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"TxnEpoch":       {},
 						"TxnSeq":         {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/util/admission": {
+						"WorkKind": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/util/hlc": {
 						"ClockTimestamp":  {},
 						"LegacyTimestamp": {},
 						"Timestamp":       {},
+					},
+					"github.com/cockroachdb/pebble": {
+						"FormatMajorVersion": {},
 					},
 					"github.com/cockroachdb/pebble/internal/humanize": {
 						"FormattedString": {},

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -67,11 +68,16 @@ func (l Liveness) Compare(o Liveness) int {
 }
 
 func (l Liveness) String() string {
-	var extra string
+	return redact.StringWithoutMarkers(l)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (l Liveness) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.Printf("liveness(nid:%d epo:%d exp:%s", l.NodeID, l.Epoch, l.Expiration)
 	if l.Draining || l.Membership.Decommissioning() || l.Membership.Decommissioned() {
-		extra = fmt.Sprintf(" drain:%t membership:%s", l.Draining, l.Membership.String())
+		s.Printf(" drain:%t membership:%s", l.Draining, l.Membership)
 	}
-	return fmt.Sprintf("liveness(nid:%d epo:%d exp:%s%s)", l.NodeID, l.Epoch, l.Expiration, extra)
+	s.Printf(")")
 }
 
 // Decommissioning is a shorthand to check if the membership status is DECOMMISSIONING.
@@ -82,6 +88,9 @@ func (c MembershipStatus) Decommissioned() bool { return c == MembershipStatus_D
 
 // Active is a shorthand to check if the membership status is ACTIVE.
 func (c MembershipStatus) Active() bool { return c == MembershipStatus_ACTIVE }
+
+// SafeValue implements the redact.SafeValue interface.
+func (MembershipStatus) SafeValue() {}
 
 func (c MembershipStatus) String() string {
 	// NB: These strings must not be changed, since the CLI matches on them.
