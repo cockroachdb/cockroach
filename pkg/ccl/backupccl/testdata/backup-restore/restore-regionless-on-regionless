@@ -42,7 +42,7 @@ BACKUP INTO 'nodelocal://1/cluster_backup/';
 subtest end
 
 # create a regionless cluster
-new-cluster name=s2 share-io-dir=s1 allow-implicit-access
+new-cluster name=s2 share-io-dir=s1 allow-implicit-access disable-tenant
 ----
 
 # test cluster restore with remove_regions
@@ -55,8 +55,22 @@ defaultdb root <nil> <nil> {} <nil>
 postgres root <nil> <nil> {} <nil>
 system node <nil> <nil> {} <nil>
 
+# user will need to set a cluster setting to enable the use of remove_regions
+exec-sql expect-error-regex=(ensure that all nodes are running version .* or greater)
+RESTORE FROM LATEST IN 'nodelocal://1/cluster_backup/' WITH remove_regions;
+----
+regex matches error
+
+exec-sql
+SET CLUSTER SETTING bulkio.restore.remove_regions.enabled = 'true';
+----
+
 exec-sql
 RESTORE FROM LATEST IN 'nodelocal://1/cluster_backup/' WITH remove_regions;
+----
+
+exec-sql
+SET CLUSTER SETTING bulkio.restore.remove_regions.enabled = 'true';
 ----
 
 # check cluster's regions

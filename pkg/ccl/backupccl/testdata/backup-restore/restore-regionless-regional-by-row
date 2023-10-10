@@ -57,7 +57,12 @@ subtest end
 
 # ensure restoring a cluster/db/table with a table that has regional by row on a single region cluster
 # fails fast
-new-cluster name=s2 share-io-dir=s1 allow-implicit-access localities=us-east-1
+new-cluster name=s2 share-io-dir=s1 allow-implicit-access localities=us-east-1 disable-tenant
+----
+
+# enable remove_regions option
+exec-sql
+SET CLUSTER SETTING bulkio.restore.remove_regions.enabled = 'true';
 ----
 
 exec-sql
