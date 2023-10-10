@@ -54,6 +54,11 @@ func TestRevertTenantToTimestamp(t *testing.T) {
 		require.ErrorContains(t, err, "does not exist")
 		require.Error(t, err)
 	})
+	t.Run("errors if tenant is the system tenant", func(t *testing.T) {
+		_, err := systemDB.Exec("SELECT crdb_internal.unsafe_revert_tenant_to_timestamp('system', cluster_logical_timestamp())")
+		require.ErrorContains(t, err, "cannot revert the system tenant")
+		require.Error(t, err)
+	})
 	t.Run("requires the MANAGETENANT permission", func(t *testing.T) {
 		systemSQL.Exec(t, "CREATE ROLE otheruser LOGIN")
 		systemSQL.Exec(t, "SET role=otheruser")
