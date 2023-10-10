@@ -259,22 +259,26 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 	}
 
 	selectBuilder := MakeSelectQueryBuilder(
+		SelectQueryParams{
+			RelationName:    relationName,
+			PKColNames:      pkColNames,
+			PKColDirs:       pkColDirs,
+			Bounds:          bounds,
+			AOSTDuration:    ttlSpec.AOSTDuration,
+			SelectBatchSize: selectBatchSize,
+			TTLExpr:         ttlExpr,
+		},
 		cutoff,
-		pkColNames,
-		pkColDirs,
-		relationName,
-		bounds,
-		aostDuration,
-		selectBatchSize,
-		ttlExpr,
 	)
 	deleteBatchSize := ttlSpec.DeleteBatchSize
 	deleteBuilder := MakeDeleteQueryBuilder(
+		DeleteQueryParams{
+			RelationName:    relationName,
+			PKColNames:      pkColNames,
+			DeleteBatchSize: deleteBatchSize,
+			TTLExpr:         ttlExpr,
+		},
 		cutoff,
-		pkColNames,
-		relationName,
-		deleteBatchSize,
-		ttlExpr,
 	)
 
 	preSelectStatement := ttlSpec.PreSelectStatement
