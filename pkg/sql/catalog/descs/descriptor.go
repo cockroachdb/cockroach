@@ -423,7 +423,13 @@ func getDescriptorByName(
 			return nil, err
 		}
 		// In all other cases, having an ID should imply having a descriptor.
-		return nil, errors.WithAssertionFailure(err)
+		return nil, errors.Wrapf(
+			err,
+			"resolved %s to %d but found no descriptor with id %d",
+			name,
+			id,
+			id,
+		)
 	}
 	return nil, err
 }
