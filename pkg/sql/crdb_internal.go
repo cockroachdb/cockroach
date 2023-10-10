@@ -70,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -3583,15 +3584,30 @@ func createRoutinePopulate(
 			}
 			for i := range treeNode.Options {
 				if body, ok := treeNode.Options[i].(tree.RoutineBodyStr); ok {
-					typeReplacedBody, err := formatFunctionQueryTypesForDisplay(ctx, &p.semaCtx, p.SessionData(), string(body))
-					if err != nil {
-						return err
+					bodyStr := string(body)
+					switch fnDesc.GetLanguage() {
+					case catpb.Function_SQL:
+						bodyStr, err = formatFunctionQueryTypesForDisplay(ctx, &p.semaCtx, p.SessionData(), bodyStr)
+						if err != nil {
+							return err
+						}
+						bodyStr, err = formatQuerySequencesForDisplay(ctx, &p.semaCtx, bodyStr, true /* multiStmt */)
+						if err != nil {
+							return err
+						}
+					case catpb.Function_PLPGSQL:
+						// TODO(drewk): integrate this with the SQL case above.
+						plpgsqlStmt, err := plpgsql.Parse(bodyStr)
+						if err != nil {
+							return err
+						}
+						fmtCtx := tree.NewFmtCtx(tree.FmtParsable)
+						fmtCtx.FormatNode(plpgsqlStmt.AST)
+						bodyStr = fmtCtx.CloseAndGetString()
+					default:
+						return errors.AssertionFailedf("unexpected function language: %s", fnDesc.GetLanguage())
 					}
-					seqReplacedBody, err := formatQuerySequencesForDisplay(ctx, &p.semaCtx, typeReplacedBody, true /* multiStmt */)
-					if err != nil {
-						return err
-					}
-					stmtStrs := strings.Split(seqReplacedBody, "\n")
+					stmtStrs := strings.Split(bodyStr, "\n")
 					for i := range stmtStrs {
 						stmtStrs[i] = "\t" + stmtStrs[i]
 					}
