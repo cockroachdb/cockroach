@@ -435,7 +435,6 @@ message LocalOnlySessionData {
   // automatic retries to perform for statements in explicit READ COMMITTED
   // transactions that see a transaction retry error.
   int32 max_retries_for_read_committed = 110;
-
   // StrictDDLAtomicity causes errors when the client attempts DDL
   // operations inside an explicit txn and CockroachDB cannot
   // guarantee the DDL to be performed atomically.
@@ -448,10 +447,17 @@ message LocalOnlySessionData {
   // not occur any more (at the expense of disabling certain
   // forms of DDL inside explicit txns).
   bool strict_ddl_atomicity = 111 [(gogoproto.customname) = "StrictDDLAtomicity"];
-
   // UnsafeSettingInterlockKey needs to be set to a special string
   // before SET CLUSTER SETTING is allowed on an unsafe setting.
   string unsafe_setting_interlock_key = 113;
+  // OptimizerUseLockOpForSerializable, when true, instructs the optimizer to
+  // implement SELECT FOR UPDATE and SELECT FOR SHARE statements using the Lock
+  // operator under serializable isolation.
+  //
+  // For correctness, under weaker isolation levels the optimizer always
+  // implements SELECT FOR UPDATE and SELECT FOR SHARE using the Lock operator,
+  // regardless of this setting.
+  bool optimizer_use_lock_op_for_serializable = 114;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

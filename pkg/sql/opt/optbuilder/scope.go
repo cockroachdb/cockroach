@@ -72,8 +72,9 @@ type scope struct {
 	// distinctOnCols records the DISTINCT ON columns by ID.
 	distinctOnCols opt.ColSet
 
-	// extraCols contains columns specified by the ORDER BY or DISTINCT ON clauses
-	// which don't appear in cols.
+	// extraCols contains columns specified by the ORDER BY or DISTINCT ON
+	// clauses, or needed by FOR UPDATE or FOR SHARE clauses, which don't appear
+	// in cols.
 	extraCols []scopeColumn
 
 	// expr is the SQL node built with this scope.
@@ -569,7 +570,8 @@ func (s *scope) hasSameColumns(other *scope) bool {
 }
 
 // removeHiddenCols removes hidden columns from the scope (and moves them to
-// extraCols, in case they are referenced by ORDER BY or DISTINCT ON).
+// extraCols, in case they are referenced by ORDER BY or DISTINCT ON or needed
+// by FOR UPDATE or FOR SHARE).
 func (s *scope) removeHiddenCols() {
 	n := 0
 	for i := range s.cols {

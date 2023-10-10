@@ -1716,6 +1716,13 @@ func TestLogic_select_for_update(
 	runLogicTest(t, "select_for_update")
 }
 
+func TestLogic_select_for_update_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "select_for_update_read_committed")
+}
+
 func TestLogic_select_index(
 	t *testing.T,
 ) {

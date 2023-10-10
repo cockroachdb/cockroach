@@ -409,7 +409,7 @@ user root
 statement ok
 BEGIN READ ONLY
 
-statement error cannot execute FOR UPDATE in a read-only transaction
+statement error cannot execute SELECT FOR UPDATE in a read-only transaction
 SELECT * FROM t FOR UPDATE
 
 statement ok
@@ -418,7 +418,7 @@ ROLLBACK
 statement ok
 BEGIN READ ONLY
 
-statement error cannot execute FOR NO KEY UPDATE in a read-only transaction
+statement error cannot execute SELECT FOR NO KEY UPDATE in a read-only transaction
 SELECT * FROM t FOR NO KEY UPDATE
 
 statement ok
@@ -428,7 +428,7 @@ statement ok
 BEGIN READ ONLY
 
 skipif config local-mixed-22.2-23.1
-statement error cannot execute FOR SHARE in a read-only transaction
+statement error cannot execute SELECT FOR SHARE in a read-only transaction
 SELECT * FROM t FOR SHARE
 
 statement ok
@@ -438,7 +438,7 @@ statement ok
 BEGIN READ ONLY
 
 skipif config local-mixed-22.2-23.1
-statement error cannot execute FOR KEY SHARE in a read-only transaction
+statement error cannot execute SELECT FOR KEY SHARE in a read-only transaction
 SELECT * FROM t FOR KEY SHARE
 
 statement ok
