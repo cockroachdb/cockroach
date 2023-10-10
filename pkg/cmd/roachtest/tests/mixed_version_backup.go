@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -45,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -88,14 +88,14 @@ var (
 		MaxRetries:     80,
 	}
 
-	v231 = version.MustParse("v23.1.0")
-	v222 = version.MustParse("v22.2.0")
+	v231CV = "23.1"
+	v222CV = "22.2"
 
 	// minActivelySupportedVersion is the minimum cluster version that
 	// should be active for this test to perform any backups or
 	// restores. We are only interested in releases where we are still
 	// actively fixing bugs in patch releases.
-	minActivelySupportedVersion = v222
+	minActivelySupportedVersion = v222CV
 
 	// systemTablesInFullClusterBackup includes all system tables that
 	// are included as part of a full cluster backup. It should include
@@ -188,11 +188,20 @@ func sanitizeVersionForBackup(v string) string {
 }
 
 // hasInternalSystemJobs returns true if the cluster is expected to
-// have the `crdb_internal.system_jobs` vtable in the mixed-version
-// context passed. If so, it should be used instead of `system.jobs`
-// when querying job status.
-func hasInternalSystemJobs(h *mixedversion.Helper) bool {
-	return h.LowestBinaryVersion().AtLeast(v231)
+// have the `crdb_internal.system_jobs` vtable. If so, it should be
+// used instead of `system.jobs` when querying job status.
+func hasInternalSystemJobs(ctx context.Context, rng *rand.Rand, db *gosql.DB) (bool, error) {
+	cv, err := clusterupgrade.ClusterVersion(ctx, db)
+	if err != nil {
+		return false, fmt.Errorf("failed to query cluster version: %w", err)
+	}
+
+	internalSystemJobsCV, err := roachpb.ParseVersion(v231CV)
+	if err != nil {
+		return false, err
+	}
+
+	return cv.AtLeast(internalSystemJobsCV), nil
 }
 
 func aostFor(timestamp string) string {
@@ -1314,16 +1323,22 @@ func (u *CommonTestUtils) setClusterSettings(
 // the releases are already past their non-security support
 // window. Crucially, this also stops this test from hitting bugs
 // already fixed in later releases.
-func (mvb *mixedVersionBackup) skipBackups(l *logger.Logger, h *mixedversion.Helper) bool {
-	if lv := h.LowestBinaryVersion(); !lv.AtLeast(minActivelySupportedVersion) {
-		l.Printf(
-			"skipping step because %s is lower than minimum actively supported version %s",
-			lv, minActivelySupportedVersion,
-		)
-		return true
+func (mvb *mixedVersionBackup) skipBackups(
+	l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
+) (bool, error) {
+	supported, err := h.ClusterVersionAtLeast(rng, minActivelySupportedVersion)
+	if err != nil {
+		return false, err
 	}
 
-	return false
+	if !supported {
+		l.Printf(
+			"skipping step because cluster version is behind minimum actively supported version %s",
+			minActivelySupportedVersion,
+		)
+	}
+
+	return !supported, nil
 }
 
 func (mvb *mixedVersionBackup) setShortJobIntervals(
@@ -1388,7 +1403,12 @@ func (mvb *mixedVersionBackup) maybeTakePreviousVersionBackup(
 		return err
 	}
 
-	if mvb.skipBackups(l, h) {
+	shouldSkip, err := mvb.skipBackups(l, rng, h)
+	if err != nil {
+		return fmt.Errorf("error checking if we should skip backups: %w", err)
+	}
+
+	if shouldSkip {
 		return nil
 	}
 
@@ -1738,7 +1758,12 @@ func (mvb *mixedVersionBackup) createBackupCollection(
 		label = labelOverride
 	}
 	backupNamePrefix := mvb.backupNamePrefix(h, label)
-	internalSystemJobs := hasInternalSystemJobs(h)
+	n, db := h.RandomDB(rng, mvb.roachNodes)
+	l.Printf("checking existence of crdb_internal.system_jobs via node %d", n)
+	internalSystemJobs, err := hasInternalSystemJobs(ctx, rng, db)
+	if err != nil {
+		return err
+	}
 
 	collection, err := mvb.backupRestoreTestDriver.createBackupCollection(ctx, l, rng, fullBackupSpec, incBackupSpec, backupNamePrefix, internalSystemJobs)
 	if err != nil {
@@ -1898,7 +1923,12 @@ func (u *CommonTestUtils) enableJobAdoption(
 func (mvb *mixedVersionBackup) planAndRunBackups(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
 ) error {
-	if mvb.skipBackups(l, h) {
+	shouldSkip, err := mvb.skipBackups(l, rng, h)
+	if err != nil {
+		return fmt.Errorf("error checking if we should skip backups: %w", err)
+	}
+
+	if shouldSkip {
 		// If this function is called while an unsupported version is
 		// running, we sleep for a few minutes to let the workloads run in
 		// this older version.
@@ -1999,8 +2029,8 @@ func (u *CommonTestUtils) checkFiles(
 	return u.Exec(ctx, rng, checkFilesStmt)
 }
 
-func supportsCheckFiles(h *mixedversion.Helper) bool {
-	return h.LowestBinaryVersion().AtLeast(v231)
+func supportsCheckFiles(rng *rand.Rand, h *mixedversion.Helper) (bool, error) {
+	return h.ClusterVersionAtLeast(rng, v231CV)
 }
 
 // collectFailureArtifacts fetches cockroach logs and a debug.zip and
@@ -2155,12 +2185,20 @@ func (mvb *mixedVersionBackup) verifySomeBackups(
 	}
 
 	l.Printf("verifying %d out of %d backups in mixed version", len(toBeRestored), len(mvb.collections))
-	checkFiles := supportsCheckFiles(h)
+	checkFiles, err := supportsCheckFiles(rng, h)
+	if err != nil {
+		return err
+	}
 	if !checkFiles {
 		l.Printf("skipping check_files as it is not supported")
 	}
 
-	internalSystemJobs := hasInternalSystemJobs(h)
+	n, db := h.RandomDB(rng, mvb.roachNodes)
+	l.Printf("checking existence of crdb_internal.system_jobs via node %d", n)
+	internalSystemJobs, err := hasInternalSystemJobs(ctx, rng, db)
+	if err != nil {
+		return err
+	}
 
 	for _, collection := range toBeRestored {
 		l.Printf("mixed-version: verifying %s", collection.name)
@@ -2194,11 +2232,21 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 		v := clusterupgrade.VersionMsg(version)
 		l.Printf("%s: verifying %d collections created during this test", v, len(mvb.collections))
 
-		checkFiles := supportsCheckFiles(h)
+		checkFiles, err := supportsCheckFiles(rng, h)
+		if err != nil {
+			restoreErrors = append(restoreErrors, fmt.Errorf("error checking for check_files support: %w", err))
+			return
+		}
 		if !checkFiles {
 			l.Printf("skipping check_files as it is not supported")
 		}
-		internalSystemJobs := hasInternalSystemJobs(h)
+		n, db := h.RandomDB(rng, mvb.roachNodes)
+		l.Printf("checking existence of crdb_internal.system_jobs via node %d", n)
+		internalSystemJobs, err := hasInternalSystemJobs(ctx, rng, db)
+		if err != nil {
+			restoreErrors = append(restoreErrors, fmt.Errorf("error checking for internal system jobs: %w", err))
+			return
+		}
 
 		for _, collection := range mvb.collections {
 			if version != clusterupgrade.MainVersion && strings.Contains(collection.name, finalizingLabel) {

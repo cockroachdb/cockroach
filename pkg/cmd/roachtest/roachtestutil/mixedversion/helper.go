@@ -21,8 +21,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
 func (h *Helper) RandomNode(prng *rand.Rand, nodes option.NodeListOption) int {
@@ -121,32 +121,45 @@ func (h *Helper) ExpectDeaths(n int) {
 	h.runner.monitor.ExpectDeaths(n)
 }
 
-// LowestBinaryVersion returns a parsed `version.Version` object
-// corresponding to the lowest binary version used in the current
-// upgrade. The {Major, Minor} information in the version returned
-// provides a lower bound on the cluster version active when this
-// function is called. Test authors can use this information to
-// determine whether a certain feature is available.
-func (h *Helper) LowestBinaryVersion() *version.Version {
-	tc := h.Context()
-
-	var lowestVersion string
-	if tc.FromVersion == clusterupgrade.MainVersion {
-		lowestVersion = tc.ToVersion
-	} else if tc.ToVersion == clusterupgrade.MainVersion {
-		lowestVersion = tc.FromVersion
-	} else {
-		fromVersion := version.MustParse("v" + tc.FromVersion)
-		toVersion := version.MustParse("v" + tc.ToVersion)
-
-		if fromVersion.Compare(toVersion) < 0 {
-			lowestVersion = tc.FromVersion
-		} else {
-			lowestVersion = tc.ToVersion
+// ClusterVersion returns the currently active cluster version. Avoids
+// querying the database if we are not running migrations, since the
+// test runner has cached version of the cluster versions.
+//
+// WARNING: since this function uses the cached cluster version, it is
+// NOT safe to be called by tests that cause the cluster version to
+// change by means other than an upgrade (e.g., a cluster wipe). Use
+// `clusterupgrade.ClusterVersion` in that case.
+func (h *Helper) ClusterVersion(rng *rand.Rand) (roachpb.Version, error) {
+	if h.Context().Finalizing {
+		n, db := h.RandomDB(rng, h.runner.crdbNodes)
+		h.stepLogger.Printf("querying cluster version through node %d", n)
+		cv, err := clusterupgrade.ClusterVersion(h.ctx, db)
+		if err != nil {
+			return roachpb.Version{}, fmt.Errorf("failed to query cluster version: %w", err)
 		}
+
+		return cv, nil
 	}
 
-	return version.MustParse("v" + lowestVersion)
+	return loadAtomicVersions(h.runner.clusterVersions)[0], nil
+}
+
+// ClusterVersionAtLeast checks whether the cluster version is at
+// least the cluster version string passed.
+//
+// The warning in (*Helper).ClusterVersion() applies here too.
+func (h *Helper) ClusterVersionAtLeast(rng *rand.Rand, v string) (bool, error) {
+	minVersion, err := roachpb.ParseVersion(v)
+	if err != nil {
+		return false, err
+	}
+
+	currentVersion, err := h.ClusterVersion(rng)
+	if err != nil {
+		return false, err
+	}
+
+	return currentVersion.AtLeast(minVersion), nil
 }
 
 // loggerFor creates a logger instance to be used by background
