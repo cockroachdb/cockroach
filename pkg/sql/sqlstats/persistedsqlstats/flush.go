@@ -190,7 +190,7 @@ func (s *PersistedSQLStats) exportStatementStats(
 	if err != nil {
 		return err
 	}
-	s.eventsExporter.SendEvent(ctx, obspb.StatementStatEvent, otel_logs_pb.LogRecord{
+	s.eventsExporter.SendEvent(ctx, obspb.StatementStatEvent, &otel_logs_pb.LogRecord{
 		TimeUnixNano: uint64(t.UnixNano()),
 		Body:         &v1.AnyValue{Value: &v1.AnyValue_BytesValue{BytesValue: statBytes}},
 	})
