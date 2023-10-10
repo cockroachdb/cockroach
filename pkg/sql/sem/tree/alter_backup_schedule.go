@@ -59,6 +59,7 @@ func (*AlterBackupScheduleSetWith) alterBackupScheduleCmd()           {}
 func (*AlterBackupScheduleSetRecurring) alterBackupScheduleCmd()      {}
 func (*AlterBackupScheduleSetFullBackup) alterBackupScheduleCmd()     {}
 func (*AlterBackupScheduleSetScheduleOption) alterBackupScheduleCmd() {}
+func (*AlterBackupScheduleNextRun) alterBackupScheduleCmd()           {}
 
 var _ AlterBackupScheduleCmd = &AlterBackupScheduleSetLabel{}
 var _ AlterBackupScheduleCmd = &AlterBackupScheduleSetInto{}
@@ -66,6 +67,7 @@ var _ AlterBackupScheduleCmd = &AlterBackupScheduleSetWith{}
 var _ AlterBackupScheduleCmd = &AlterBackupScheduleSetRecurring{}
 var _ AlterBackupScheduleCmd = &AlterBackupScheduleSetFullBackup{}
 var _ AlterBackupScheduleCmd = &AlterBackupScheduleSetScheduleOption{}
+var _ AlterBackupScheduleCmd = &AlterBackupScheduleNextRun{}
 
 // AlterBackupScheduleSetLabel represents an ADD <label> command
 type AlterBackupScheduleSetLabel struct {
@@ -148,5 +150,19 @@ func (node *AlterBackupScheduleSetScheduleOption) Format(ctx *FmtCtx) {
 	if o.Value != nil {
 		ctx.WriteString(` = `)
 		ctx.FormatNode(o.Value)
+	}
+}
+
+// AlterBackupScheduleRunNow represents a RUN NOW command.
+type AlterBackupScheduleNextRun struct {
+	Full bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterBackupScheduleNextRun) Format(ctx *FmtCtx) {
+	if node.Full {
+		ctx.WriteString("EXECUTE FULL IMMEDIATELY")
+	} else {
+		ctx.WriteString("EXECUTE IMMEDIATELY")
 	}
 }
