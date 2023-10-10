@@ -18,7 +18,8 @@ stats_dir="$(date +"%Y%m%d")-${TC_BUILD_ID}"
 
 # Set up a function we'll invoke at the end.
 function upload_stats {
- if tc_release_branch; then
+  # VERY specific hack to test perf upload
+ if tc_release_branch || [[ $TC_BUILD_BRANCH == "111782" ]]; then
       bucket="${ROACHTEST_BUCKET:-cockroach-nightly-${CLOUD}}"
       if [[ "${CLOUD}" == "gce" ]]; then
           # GCE, having been there first, gets an exemption.
@@ -63,7 +64,7 @@ CPUQUOTA=1024
 TESTS="${TESTS-}"
 FILTER="${FILTER-}"
 case "${CLOUD}" in
-  gce)
+  gce | azure)
       # Confusing due to how we've handled tags in the past where it has been assumed that all tests should
       # be run on GCE. Now with refactoring of how tags are handled, we need:
       # - "default" to ensure we select tests that don't have any user specified tags (preserve old behavior)
@@ -75,12 +76,6 @@ case "${CLOUD}" in
   aws)
     if [ -z "${FILTER}" ]; then
       FILTER="tag:aws"
-    fi
-    ;;
-  azure)
-    if [ -z "${FILTER}" ]; then
-      # Soon to go away with Radu's tag changes.
-      FILTER="tag:azure"
     fi
     ;;
   *)
