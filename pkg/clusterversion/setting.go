@@ -306,3 +306,13 @@ func MakeMetricsAndRegisterOnVersionChangeCallback(sv *settings.Values) Metrics 
 		PreserveDowngradeLastUpdated: gauge,
 	}
 }
+
+// AutoUpgradeEnabled is used to enable and disable automatic upgrade.
+var AutoUpgradeEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"cluster.auto_upgrade.enabled",
+	"disable automatic cluster version upgrade until reset",
+	true,
+	settings.WithReportable(true),
+	settings.WithPublic,
+)
