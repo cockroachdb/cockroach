@@ -2121,6 +2121,7 @@ GO_TARGETS = [
     "//pkg/sql/sqlstats/insights/integration:integration_test",
     "//pkg/sql/sqlstats/insights:insights",
     "//pkg/sql/sqlstats/insights:insights_test",
+    "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil/sqlstatstestutil:sqlstatstestutil",
     "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil:sqlstatsutil",
     "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil:sqlstatsutil_test",
     "//pkg/sql/sqlstats/persistedsqlstats:persistedsqlstats",
