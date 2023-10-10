@@ -63,6 +63,10 @@ ROLLBACK
 statement ok
 DROP PROCEDURE p_test_drop()
 
+# TODO(mgartner): This error message could be improved.
+statement error pgcode 42883 unknown signature: p_test_drop\(\)
+CALL p_test_drop()
+
 query T
 SELECT create_statement FROM [SHOW CREATE PROCEDURE public.p_test_drop]
 ----
@@ -86,6 +90,9 @@ $$
 statement ok
 DROP PROCEDURE p_test_drop(INT), p_test_drop(INT)
 
+statement error pgcode 42883 procedure public.p_test_drop does not exist
+CALL public.p_test_drop(1)
+
 statement error pgcode 42883 pq: unknown procedure: public.p_test_drop\(\)
 SELECT create_statement FROM [SHOW CREATE PROCEDURE public.p_test_drop]
 
@@ -100,6 +107,9 @@ $$
 
 statement ok
 DROP PROCEDURE p_test_drop(INT)
+
+statement error pgcode 42883 procedure p_test_drop does not exist
+CALL p_test_drop(1)
 
 statement error pgcode 42883 pq: unknown procedure: sc1.p_test_drop\(\)
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p_test_drop]
