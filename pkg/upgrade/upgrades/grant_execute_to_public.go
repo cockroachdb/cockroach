@@ -80,6 +80,9 @@ func grantExecuteToPublicOnAllFunctions(
 			}
 			kvBatch := txn.KV().NewBatch()
 			for _, desc := range descs {
+				if desc.GetPrivileges().CheckPrivilege(username.PublicRoleName(), privilege.EXECUTE) {
+					continue
+				}
 				desc.GetPrivileges().Grant(
 					username.PublicRoleName(),
 					privilege.List{privilege.EXECUTE},
