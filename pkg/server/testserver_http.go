@@ -111,7 +111,7 @@ func (ts *httpTestServer) GetAuthenticatedHTTPClient(
 	return httpClient, err
 }
 
-// GetAuthenticatedHTTPClient implements the TestServerInterface.
+// GetAuthSession implements the TestServerInterface.
 func (ts *httpTestServer) GetAuthSession(isAdmin bool) (*serverpb.SessionCookie, error) {
 	authUser := apiconstants.TestingUserName()
 	if !isAdmin {

@@ -244,8 +244,7 @@ func TestTenantProcessDebugging(t *testing.T) {
 		require.NoError(t, err)
 		defer httpClient.CloseIdleConnections()
 
-		url := s.AdminURL().URL
-		url.Path = url.Path + "/debug/pprof/goroutine"
+		url := s.AdminURL().WithPath("/debug/pprof/goroutine")
 		q := url.Query()
 		q.Add("debug", "2")
 		url.RawQuery = q.Encode()
@@ -265,8 +264,7 @@ func TestTenantProcessDebugging(t *testing.T) {
 		require.NoError(t, err)
 		defer httpClient.CloseIdleConnections()
 
-		url := tenant.AdminURL().URL
-		url.Path = url.Path + "/debug/pprof/"
+		url := tenant.AdminURL().WithPath("/debug/pprof/")
 		q := url.Query()
 		q.Add("debug", "2")
 		url.RawQuery = q.Encode()
@@ -307,8 +305,7 @@ func TestTenantProcessDebugging(t *testing.T) {
 		require.NoError(t, err)
 		defer httpClient.CloseIdleConnections()
 
-		url := tenant.AdminURL().URL
-		url.Path = url.Path + "/debug/vmodule"
+		url := tenant.AdminURL().WithPath("/debug/vmodule")
 		q := url.Query()
 		q.Add("duration", "-1s")
 		q.Add("vmodule", "exec_log=3")
