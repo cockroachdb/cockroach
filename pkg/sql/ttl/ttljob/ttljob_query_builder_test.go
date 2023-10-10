@@ -298,7 +298,7 @@ func TestSelectQueryBuilder(t *testing.T) {
 			testServer := testCluster.Server(0)
 			ie := testServer.InternalExecutor().(*sql.InternalExecutor)
 
-			// Generate pkColNames.
+			// Generate PKColNames.
 			pkColDirs := tc.pkColDirs
 			numPKCols := len(pkColDirs)
 			pkColNames := ttlbase.GenPKColNames(numPKCols)
@@ -333,14 +333,16 @@ func TestSelectQueryBuilder(t *testing.T) {
 
 			// Setup SelectQueryBuilder.
 			queryBuilder := ttljob.MakeSelectQueryBuilder(
+				ttljob.SelectQueryParams{
+					RelationName:    relationName,
+					PKColNames:      pkColNames,
+					PKColDirs:       pkColDirs,
+					Bounds:          tc.bounds,
+					AOSTDuration:    0,
+					SelectBatchSize: 2,
+					TTLExpr:         ttlColName,
+				},
 				cutoff,
-				pkColNames,
-				pkColDirs,
-				relationName,
-				tc.bounds,
-				0,
-				2,
-				ttlColName,
 			)
 
 			// Verify queryBuilder iterations.
@@ -418,7 +420,7 @@ func TestDeleteQueryBuilder(t *testing.T) {
 			ie := testServer.InternalExecutor().(*sql.InternalExecutor)
 			db := testServer.InternalDB().(*sql.InternalDB)
 
-			// Generate pkColNames.
+			// Generate PKColNames.
 			numPKCols := tc.numPKCols
 			pkColNames := ttlbase.GenPKColNames(numPKCols)
 
@@ -446,11 +448,13 @@ func TestDeleteQueryBuilder(t *testing.T) {
 
 			// Setup DeleteQueryBuilder.
 			queryBuilder := ttljob.MakeDeleteQueryBuilder(
+				ttljob.DeleteQueryParams{
+					RelationName:    relationName,
+					PKColNames:      pkColNames,
+					DeleteBatchSize: 2,
+					TTLExpr:         ttlColName,
+				},
 				cutoff,
-				pkColNames,
-				relationName,
-				2, /* deleteBatchSize */
-				ttlColName,
 			)
 
 			// Verify rows are deleted.
