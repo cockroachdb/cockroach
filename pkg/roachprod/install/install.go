@@ -119,7 +119,6 @@ sudo apt-get install -y \
 `,
 
 	"sysbench": `
-curl -s https://packagecloud.io/install/repositories/akopytov/sysbench/script.deb.sh | sudo bash;
 sudo apt-get update;
 sudo apt-get install -y sysbench;
 `,
