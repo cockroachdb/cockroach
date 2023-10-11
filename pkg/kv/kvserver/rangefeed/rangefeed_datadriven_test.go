@@ -85,6 +85,7 @@ var commands = map[string]command{
 	"clear-range": handleClearRange,
 	"split-range": handleSplitRange,
 	"create-feed": handleCreateFeed,
+	"close-feed":  handleCloseFeed,
 }
 
 var linePosRe = regexp.MustCompile(`^(.*:)(\d+)$`)
@@ -169,16 +170,21 @@ func waitAllFeeds(t *testing.T, e *env) []string {
 		if len(e.feeds) > 1 {
 			prefix = fmt.Sprintf("feed %s: ", id)
 		}
-		select {
-		case <-data.waitCheckpoint(now, data.span):
+		if e.feeds[id].feed == nil {
 			stream := data.takeValues().asSortedData(e.sortByTime)
 			rs = append(rs, dumpKVS(t, stream, prefix, e.tts, e.startKey)...)
-		case <-time.After(e.checkpointTimeout):
-			rs = append(rs, prefix+"timeout")
-		case <-data.waitError():
-			stream := data.takeValues().asSortedData(e.sortByTime)
-			rs = append(rs, dumpKVS(t, stream, prefix, e.tts, e.startKey)...)
-			rs = append(rs, fmt.Sprintf("%s%q", prefix, data.err()))
+		} else {
+			select {
+			case <-data.waitCheckpoint(now, data.span):
+				stream := data.takeValues().asSortedData(e.sortByTime)
+				rs = append(rs, dumpKVS(t, stream, prefix, e.tts, e.startKey)...)
+			case <-time.After(e.checkpointTimeout):
+				rs = append(rs, prefix+"timeout")
+			case <-data.waitError():
+				stream := data.takeValues().asSortedData(e.sortByTime)
+				rs = append(rs, dumpKVS(t, stream, prefix, e.tts, e.startKey)...)
+				rs = append(rs, fmt.Sprintf("%s%q", prefix, data.err()))
+			}
 		}
 	}
 	return rs
@@ -388,7 +394,23 @@ func handleCreateFeed(t *testing.T, e *env, d *datadriven.TestData) {
 	}
 	rf, cd := createTestFeed(t, context.Background(), e.tc.SystemLayer(server),
 		e.tc.Server(0).Stopper(), roachpb.Span{Key: k, EndKey: ek}, fo)
-	e.feeds[feedID] = feedAndData{feed: rf, capture: cd}
+	e.feeds[feedID] = &feedAndData{feed: rf, capture: cd}
+}
+
+func handleCloseFeed(t *testing.T, e *env, d *datadriven.TestData) {
+	var feedID string
+	d.MaybeScanArgs(t, "id", &feedID)
+	if feedID == "" {
+		require.Equal(t, 1, len(e.feeds), "close must provide feed id when running >1 feeds")
+		for s := range e.feeds {
+			feedID = s
+			break
+		}
+	}
+	feed, ok := e.feeds[feedID]
+	require.True(t, ok, "failed to find feed %s", feedID)
+	feed.feed.Close()
+	e.feeds[feedID].feed = nil
 }
 
 func createTestFeed(
@@ -441,7 +463,7 @@ type env struct {
 
 	// range feeds
 	nextFeedId byte
-	feeds      map[string]feedAndData
+	feeds      map[string]*feedAndData
 
 	// named timestamps
 	tts  timestamps
@@ -484,7 +506,7 @@ func newEnv(t *testing.T) *env {
 	return &env{
 		tc:         tc,
 		nextFeedId: 'A',
-		feeds:      make(map[string]feedAndData),
+		feeds:      make(map[string]*feedAndData),
 		tts: timestamps{
 			nameToTs: make(map[string]hlc.Timestamp),
 			tsToName: make(map[hlc.Timestamp]string),
@@ -496,7 +518,9 @@ func newEnv(t *testing.T) *env {
 
 func (e *env) close() {
 	for _, f := range e.feeds {
-		f.feed.Close()
+		if f.feed != nil {
+			f.feed.Close()
+		}
 	}
 	e.tc.Stopper().Stop(context.Background())
 }
