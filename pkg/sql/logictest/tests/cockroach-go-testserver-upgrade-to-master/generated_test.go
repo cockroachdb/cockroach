@@ -78,6 +78,13 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 }
 
+func TestLogic_mixed_version_bootstrap_tenant(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_bootstrap_tenant")
+}
+
 func TestLogic_mixed_version_can_login(
 	t *testing.T,
 ) {
@@ -106,13 +113,6 @@ func TestLogic_mixed_version_insights_queries(
 	runLogicTest(t, "mixed_version_insights_queries")
 }
 
-func TestLogic_mixed_version_new_system_privileges(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "mixed_version_new_system_privileges")
-}
-
 func TestLogic_mixed_version_partially_visible_index(
 	t *testing.T,
 ) {
@@ -132,13 +132,6 @@ func TestLogic_mixed_version_procedure(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "mixed_version_procedure")
-}
-
-func TestLogic_mixed_version_range_tombstones(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "mixed_version_range_tombstones")
 }
 
 func TestLogic_mixed_version_refcursor(
