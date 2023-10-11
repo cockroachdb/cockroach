@@ -138,6 +138,7 @@ go_test(
     srcs = [
         "conditional_wrap_internal_test.go",
         "conditional_wrap_test.go",
+        "test_url_test.go",
     ],
     args = ["-test.timeout=295s"],
     embed = [":serverutils"],
