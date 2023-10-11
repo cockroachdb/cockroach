@@ -17,17 +17,16 @@ import "context"
 // Linkage definition for go1.21 or higher built outside ./dev toolchain --
 // that is, a toolchain that did not apply cockroach runtime patches.
 
-// context_propagateCancel propagates cancellation from parent to child.
 // Since this code was built outside ./dev (i.e. "!bazel" tag defined),
 // we cannot use patched context implementation.
 // Instead, fallback to spinning up goroutine to detect parent cancellation.
-func context_propagateCancel(parent context.Context, child canceler) {
+func propagateCancel(parent context.Context, notify WhenDoneFunc) {
 	done := parent.Done()
 	if done == nil {
 		panic("unexpected non-cancelable context")
 	}
 	go func() {
 		<-done
-		child.(*whenDone).notify()
+		notify()
 	}()
 }

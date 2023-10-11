@@ -15,6 +15,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+var errEmptyGetFirst = errors.AssertionFailedf("getting first from empty minMaxQueue")
+
 func newMinMaxQueue(maxLength int) minMaxQueue {
 	return minMaxQueue{maxLength: maxLength, empty: true}
 }
@@ -66,7 +68,7 @@ func (q *minMaxQueue) get(pos int) uint32 {
 // gcassert:inline
 func (q *minMaxQueue) getFirst() uint32 {
 	if q.empty {
-		colexecerror.InternalError(errors.AssertionFailedf("getting first from empty minMaxQueue"))
+		colexecerror.InternalError(errEmptyGetFirst)
 	}
 	return q.buffer[q.head]
 }
