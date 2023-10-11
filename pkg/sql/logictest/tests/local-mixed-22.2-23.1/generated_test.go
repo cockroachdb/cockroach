@@ -2066,27 +2066,6 @@ func TestLogic_udf(
 	runLogicTest(t, "udf")
 }
 
-func TestLogic_udf_delete(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "udf_delete")
-}
-
-func TestLogic_udf_fk(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "udf_fk")
-}
-
-func TestLogic_udf_insert(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "udf_insert")
-}
-
 func TestLogic_udf_observability(
 	t *testing.T,
 ) {
@@ -2169,20 +2148,6 @@ func TestLogic_udf_unsupported(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_unsupported")
-}
-
-func TestLogic_udf_update(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "udf_update")
-}
-
-func TestLogic_udf_upsert(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "udf_upsert")
 }
 
 func TestLogic_udf_volatility_check(
