@@ -85,6 +85,10 @@ process" below):
 
 ## Basic Process
 
+NOTE: This describes how to update the old-fashioned `make`-based builder
+image. This is no longer maintained. Wherever it's used, you should stop
+using it.
+
 - Edit `build/builder/Dockerfile` as desired.
 - Run `build/builder.sh init` to test -- this will build the image locally.
   The result of `init` is a docker image version which you can subsequently
@@ -107,9 +111,7 @@ Please copy this checklist (based on [Basic Process](#basic-process)) into the r
 back to this document and perform these steps:
 
 * [ ] Adjust the Pebble tests to run in new version.
-* [ ] Adjust version in Docker image ([source](./builder/Dockerfile)).
 * [ ] Adjust version in the TeamCity agent image ([setup script](./packer/teamcity-agent.sh))
-* [ ] Rebuild and push the Docker image (following [Basic Process](#basic-process))
 * [ ] Update `build/teamcity/internal/release/build-and-publish-patched-go/impl.sh` with the new version and adjust SHA256 sums as necessary.
 * [ ] Adjust `GO_VERSION` and `GO_FIPS_COMMIT` for the FIPS Go toolchain ([source](./teamcity/internal/release/build-and-publish-patched-go/impl-fips.sh)).
 * [ ] Run the `Internal / Cockroach / Build / Toolchains / Publish Patched Go for Mac` build configuration in TeamCity with your latest version of the script above. Note the job depends on another job `Build and Publish Patched Go`. That job prints out the SHA256 of all tarballs, which you will need to copy-paste into `WORKSPACE` (see below). `Publish Patched Go for Mac` is an extra step that publishes the *signed* `go` binaries for macOS. That job also prints out the SHA256 of the Mac tarballs in particular.
@@ -117,12 +119,9 @@ back to this document and perform these steps:
 * [ ] Bump the version in `WORKSPACE` under `go_download_sdk`. You may need to bump [rules_go](https://github.com/bazelbuild/rules_go/releases). Also edit the filenames listed in `sdks` and update all the hashes to match what you built in the step above.
 * [ ] Bump the version in `WORKSPACE` under `go_download_sdk` for the FIPS version of Go (`go_sdk_fips`).
 * [ ] Run `./dev generate bazel` to refresh `distdir_files.bzl`, then `bazel fetch @distdir//:archives` to ensure you've updated all hashes to the correct value.
-* [ ] Bump the version in `builder.sh` accordingly ([source](./builder.sh#L6)).
-* [ ] Bump the version in `go-version-check.sh` ([source](./go-version-check.sh)), unless bumping to a new patch release.
 * [ ] Bump the go version in `go.mod`.
 * [ ] Bump the default installed version of Go in `bootstrap-debian.sh` ([source](./bootstrap/bootstrap-debian.sh)).
 * [ ] Replace other mentions of the older version of go (grep for `golang:<old_version>` and `go<old_version>`).
-* [ ] Update the `builder.dockerImage` parameter in the TeamCity [`Cockroach`](https://teamcity.cockroachdb.com/admin/editProject.html?projectId=Cockroach&tab=projectParams) and [`Internal`](https://teamcity.cockroachdb.com/admin/editProject.html?projectId=Internal&tab=projectParams) projects.
 * [ ] Ask the Developer Infrastructure team to deploy new TeamCity agent images according to [packer/README.md](./packer/README.md)
 
 You can test the new builder image in TeamCity by using the custom parameters
