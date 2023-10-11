@@ -66,10 +66,16 @@ func init() {
 	}
 }
 
-// isReservedKeyword returns true if the keyword is reserved, or needs
-// one extra token of lookahead.
-func isReservedKeyword(s string) bool {
+// IsReservedOrLookaheadKeyword returns true if the keyword is reserved, or
+// needs one extra token of lookahead.
+func IsReservedOrLookaheadKeyword(s string) bool {
 	_, ok := reservedOrLookaheadKeywords[s]
+	return ok
+}
+
+// IsReservedKeyword returns true if the keyword is reserved.
+func IsReservedKeyword(s string) bool {
+	_, ok := reservedKeywords[s]
 	return ok
 }
 

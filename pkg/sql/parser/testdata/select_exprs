@@ -1451,6 +1451,20 @@ SELECT (ANNOTATE_TYPE((1), STRING)) -- fully parenthesized
 SELECT ANNOTATE_TYPE(_, STRING) -- literals removed
 SELECT ANNOTATE_TYPE(1, STRING) -- identifiers removed
 
+
+# Regression test for https://github.com/cockroachdb/cockroach/issues/111326.
+# `NOT index IN ()` previously would not round trip, since when it gets
+# formatted as `NOT (INDEX IN ())` the parser's special lookahead rules used to
+# incorrectly change the "index" identifier into the special
+# INDEX_BEFORE_NAME_THEN_PAREN token.
+parse
+SELECT NOT index IN ( ) FROM t
+----
+SELECT NOT (index IN ()) FROM t -- normalized!
+SELECT (NOT (((index) IN (())))) FROM t -- fully parenthesized
+SELECT NOT (index IN ()) FROM t -- literals removed
+SELECT NOT (_ IN ()) FROM _ -- identifiers removed
+
 parse
 SELECT (1 + 2).*
 ----

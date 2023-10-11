@@ -57,7 +57,7 @@ const (
 // contains special characters, or the identifier is a reserved SQL
 // keyword.
 func EncodeRestrictedSQLIdent(buf *bytes.Buffer, s string, flags EncodeFlags) {
-	if flags.HasFlags(EncBareIdentifiers) || (!isReservedKeyword(s) && IsBareIdentifier(s)) {
+	if flags.HasFlags(EncBareIdentifiers) || (!IsReservedOrLookaheadKeyword(s) && IsBareIdentifier(s)) {
 		buf.WriteString(s)
 		return
 	}

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -135,8 +136,10 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 			pprevID = l.tokens[l.lastPos-2].id
 		}
 		var nextID, secondID int32
+		var nextIsReserved bool
 		if l.lastPos+1 < len(l.tokens) {
 			nextID = l.tokens[l.lastPos+1].id
+			nextIsReserved = lexbase.IsReservedKeyword(l.tokens[l.lastPos+1].str)
 		}
 		if l.lastPos+2 < len(l.tokens) {
 			secondID = l.tokens[l.lastPos+2].id
@@ -145,7 +148,7 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 		afterCommaOrOPTIONS := prevID == ',' || prevID == OPTIONS
 		afterCommaOrParenThenINVERTED := prevID == INVERTED && (pprevID == ',' || pprevID == '(')
 		followedByParen := nextID == '('
-		followedByNonPunctThenParen := nextID > 255 /* non-punctuation */ && secondID == '('
+		followedByNonPunctThenParen := (nextID > 255 && !nextIsReserved) /* non-punctuation */ && secondID == '('
 		if //
 		// CREATE ... (INDEX (
 		// CREATE ... (x INT, y INT, INDEX (

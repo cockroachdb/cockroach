@@ -119,3 +119,13 @@ SET a = index
 SET a = (index) -- fully parenthesized
 SET a = index -- literals removed
 SET a = _ -- identifiers removed
+
+# Test that "of" is allowed as an index name. "of" is not a reserved keyword,
+# but it is a lookahead keyword.
+parse
+CREATE TABLE t (a INT, INDEX of (a))
+----
+CREATE TABLE t (a INT8, INDEX "of" (a)) -- normalized!
+CREATE TABLE t (a INT8, INDEX "of" (a)) -- fully parenthesized
+CREATE TABLE t (a INT8, INDEX "of" (a)) -- literals removed
+CREATE TABLE _ (_ INT8, INDEX _ (_)) -- identifiers removed
