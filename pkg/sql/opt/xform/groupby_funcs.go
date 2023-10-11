@@ -153,13 +153,17 @@ func (c *CustomFuncs) TwoOrMoreMinOrMax(aggs memo.AggregationsExpr) bool {
 // input expression is expected to return zero or one rows, and the aggregate
 // functions are expected to always pass through their values in that case.
 func (c *CustomFuncs) MakeProjectFromPassthroughAggs(
-	grp memo.RelExpr, required *physical.Required, input memo.RelExpr, aggs memo.AggregationsExpr,
+	grp memo.RelExpr,
+	required *physical.Required,
+	input memo.RelExpr,
+	aggs memo.AggregationsExpr,
+	groupingCols opt.ColSet,
 ) {
 	if !input.Relational().Cardinality.IsZeroOrOne() {
 		panic(errors.AssertionFailedf("input expression cannot have more than one row: %v", input))
 	}
 
-	var passthrough opt.ColSet
+	passthrough := groupingCols.Copy()
 	projections := make(memo.ProjectionsExpr, 0, len(aggs))
 	for i := range aggs {
 		// If aggregate remaps the column ID, need to synthesize projection item;
