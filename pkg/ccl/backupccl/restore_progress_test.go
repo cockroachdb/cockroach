@@ -36,7 +36,7 @@ func TestProgressTracker(t *testing.T) {
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
 	c := makeCoverUtils(ctx, t, &execCfg)
 
 	requiredSpans := []roachpb.Span{c.sp("a", "e"), c.sp("f", "i")}
