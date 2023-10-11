@@ -76,7 +76,7 @@ func MakeStatusFunc(jr *jobs.Registry, metaType MetaType) ptreconcile.StatusFunc
 				return false, err
 			}
 			_, err = jobs.ScheduledJobTxn(txn).
-				Load(ctx, scheduledjobs.ProdJobSchedulerEnv, scheduleID)
+				Load(ctx, scheduledjobs.ProdJobSchedulerEnv, jobspb.ScheduleID(scheduleID))
 			if jobs.HasScheduledJobNotFoundError(err) {
 				return true, nil
 			}

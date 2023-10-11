@@ -179,8 +179,8 @@ message RowLevelTTL {
   optional int64 delete_batch_size = 3 [(gogoproto.nullable)=false];
   // DeletionCron signifies how often the TTL deletion job runs in a cron format.
   optional string deletion_cron = 4 [(gogoproto.nullable)=false];
-  // ScheduleID is the ID of the row-level TTL job schedules.
-  optional int64 schedule_id = 5 [(gogoproto.customname)="ScheduleID",(gogoproto.nullable)=false];
+  // ScheduleID is the ID of the row-level TTL job schedule.
+  optional int64 schedule_id = 5 [(gogoproto.customname)="ScheduleID",(gogoproto.nullable)=false, (gogoproto.casttype)="ScheduleID"];
   // RangeConcurrency is based on the number of spans and is no longer configurable.
   reserved 6;
   // DeleteRateLimit is the maximum amount of rows to delete per second.

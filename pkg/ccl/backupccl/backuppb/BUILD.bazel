@@ -46,6 +46,7 @@ go_library(
     deps = [
         "//pkg/cloud",
         "//pkg/jobs",
+        "//pkg/jobs/jobspb",
         "//pkg/multitenant/mtinfopb",
         "//pkg/sql/parser",
         "//pkg/sql/protoreflect",

@@ -234,7 +234,7 @@ func testSchedulesProtectedTimestamp(
 			require.NoError(t, schedules.Create(ctx, sj))
 			deprecatedSpansToProtect := roachpb.Spans{{Key: keys.MinKey, EndKey: keys.MaxKey}}
 			targetToProtect := ptpb.MakeClusterTarget()
-			rec = jobsprotectedts.MakeRecord(uuid.MakeV4(), sj.ScheduleID(), ts,
+			rec = jobsprotectedts.MakeRecord(uuid.MakeV4(), int64(sj.ScheduleID()), ts,
 				deprecatedSpansToProtect, jobsprotectedts.Schedules, targetToProtect)
 			return ptp.WithTxn(txn).Protect(ctx, rec)
 		}))
