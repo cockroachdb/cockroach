@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,6 +35,7 @@ import (
 // the external SSTs of a backup manifest.
 func TestManifestHandlingIteratorOperations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numFiles = 10
 	const numDescriptors = 10
@@ -106,6 +108,7 @@ func TestManifestHandlingIteratorOperations(t *testing.T) {
 // manifest SST iterator.
 func TestManifestHandlingEmptyIterators(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
