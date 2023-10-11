@@ -3766,28 +3766,58 @@ value if you rely on the HLC for accuracy.`,
 		}
 	})),
 
-	"array_position": setProps(arrayProps(), arrayBuiltin(func(typ *types.T) tree.Overload {
-		return tree.Overload{
-			Types:      tree.ParamTypes{{Name: "array", Typ: types.MakeArray(typ)}, {Name: "elem", Typ: typ}},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if args[0] == tree.DNull {
+	"array_position": setProps(arrayProps(), arrayVariadicBuiltin(func(typ *types.T) []tree.Overload {
+		return []tree.Overload{
+			{
+				Types:      tree.ParamTypes{{Name: "array", Typ: types.MakeArray(typ)}, {Name: "elem", Typ: typ}},
+				ReturnType: tree.FixedReturnType(types.Int),
+				Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+					if args[0] == tree.DNull {
+						return tree.DNull, nil
+					}
+					for i, e := range tree.MustBeDArray(args[0]).Array {
+						cmp, err := e.CompareError(evalCtx, args[1])
+						if err != nil {
+							return nil, err
+						}
+						if cmp == 0 {
+							return tree.NewDInt(tree.DInt(i + 1)), nil
+						}
+					}
 					return tree.DNull, nil
-				}
-				for i, e := range tree.MustBeDArray(args[0]).Array {
-					cmp, err := e.CompareError(evalCtx, args[1])
-					if err != nil {
-						return nil, err
-					}
-					if cmp == 0 {
-						return tree.NewDInt(tree.DInt(i + 1)), nil
-					}
-				}
-				return tree.DNull, nil
+				},
+				Info:              "Return the index of the first occurrence of `elem` in `array`.",
+				Volatility:        volatility.Immutable,
+				CalledOnNullInput: true,
 			},
-			Info:              "Return the index of the first occurrence of `elem` in `array`.",
-			Volatility:        volatility.Immutable,
-			CalledOnNullInput: true,
+			{
+				Types:      tree.ParamTypes{{Name: "array", Typ: types.MakeArray(typ)}, {Name: "elem", Typ: typ}, {Name: "start", Typ: types.Int}},
+				ReturnType: tree.FixedReturnType(types.Int),
+				Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+					if args[0] == tree.DNull {
+						return tree.DNull, nil
+					}
+					start := int(tree.MustBeDInt(args[2])) - 1
+					darray := tree.MustBeDArray(args[0]).Array
+					if start > len(darray) || start < 1 {
+						return tree.DNull, nil
+					}
+					darray = darray[start:]
+					for i, e := range darray {
+						cmp, err := e.CompareError(evalCtx, args[1])
+						if err != nil {
+							return nil, err
+						}
+						if cmp == 0 {
+							return tree.NewDInt(tree.DInt(i + start + 1)), nil
+						}
+					}
+					return tree.DNull, nil
+				},
+				Info:              "Return the index of the first occurrence of `elem` in `array`, with the search begins at `start` index.",
+				Volatility:        volatility.Immutable,
+				CalledOnNullInput: true,
+			},
 		}
 	})),
 
@@ -9665,6 +9695,25 @@ func arrayBuiltin(impl func(*types.T) tree.Overload) builtinDefinition {
 	tupleOverload := impl(types.AnyTuple)
 	tupleOverload.DistsqlBlocklist = true
 	overloads = append(overloads, tupleOverload)
+	return makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryArray},
+		overloads...,
+	)
+}
+
+func arrayVariadicBuiltin(impls func(*types.T) []tree.Overload) builtinDefinition {
+	overloads := make([]tree.Overload, 0, len(types.Scalar)+2)
+	for _, typ := range append(types.Scalar, types.AnyEnum) {
+		if ok, _ := types.IsValidArrayElementType(typ); ok {
+			overloads = append(overloads, impls(typ)...)
+		}
+	}
+	// Prevent usage in DistSQL because it cannot handle arrays of untyped tuples.
+	tupleOverload := impls(types.AnyTuple)
+	for _, t := range tupleOverload {
+		t.DistsqlBlocklist = true
+	}
+	overloads = append(overloads, tupleOverload...)
 	return makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryArray},
 		overloads...,
