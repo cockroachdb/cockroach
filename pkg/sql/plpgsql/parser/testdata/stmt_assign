@@ -25,6 +25,38 @@ END
 parse
 DECLARE
 BEGIN
+  a :=;
+END
+----
+at or near ":": syntax error: missing expression
+
+parse
+DECLARE
+BEGIN
+johnny := (NULL;
+END
+----
+at or near "EOF": syntax error: mismatched parentheses
+
+parse
+DECLARE
+BEGIN
+johnny := NULL);
+END
+----
+at or near "null": syntax error: mismatched parentheses
+
+parse
+DECLARE
+BEGIN
+johnny := (1 + (2);
+END
+----
+at or near "EOF": syntax error: mismatched parentheses
+
+parse
+DECLARE
+BEGIN
   a := 1, 'string';
 END
 ----
