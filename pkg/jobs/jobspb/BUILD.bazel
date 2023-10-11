@@ -6,6 +6,7 @@ go_library(
     name = "jobspb",
     srcs = [
         "jobs.go",
+        "schedule.go",
         "wrap.go",
     ],
     embed = [":jobspb_go_proto"],

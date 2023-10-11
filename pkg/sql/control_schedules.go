@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -94,7 +95,7 @@ func loadSchedule(params runParams, scheduleID tree.Datum) (*jobs.ScheduledJob, 
 
 // DeleteSchedule deletes specified schedule.
 func DeleteSchedule(
-	ctx context.Context, execCfg *ExecutorConfig, txn isql.Txn, scheduleID int64,
+	ctx context.Context, execCfg *ExecutorConfig, txn isql.Txn, scheduleID jobspb.ScheduleID,
 ) error {
 	env := JobSchedulerEnv(execCfg.JobsKnobs())
 	_, err := txn.ExecEx(

@@ -1619,7 +1619,7 @@ func decodeMetaFieldsForSchedules(
 	decodedMeta = tree.NewDJSON(decodedMetaJSON)
 
 	schedEnv := scheduledjobs.ProdJobSchedulerEnv
-	sched, err := jobs.ScheduledJobTxn(p.InternalSQLTxn()).Load(ctx, schedEnv, schedID)
+	sched, err := jobs.ScheduledJobTxn(p.InternalSQLTxn()).Load(ctx, schedEnv, jobspb.ScheduleID(schedID))
 	if err != nil {
 		return nil, nil, err
 	}

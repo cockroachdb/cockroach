@@ -130,7 +130,8 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"ConnectionClass": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb": {
-						"JobID": {},
+						"JobID":      {},
+						"ScheduleID": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb": {
 						"ConstraintValidity":           {},

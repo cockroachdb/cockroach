@@ -58,7 +58,7 @@ func TestScheduleControl(t *testing.T) {
 	var recurringNever string
 
 	schedules := ScheduledJobDB(th.cfg.DB)
-	makeSchedule := func(name string, cron string) int64 {
+	makeSchedule := func(name string, cron string) jobspb.ScheduleID {
 		schedule := th.newScheduledJob(t, name, "sql")
 		if cron != "" {
 			require.NoError(t, schedule.SetSchedule(cron))
@@ -116,7 +116,7 @@ func TestScheduleControl(t *testing.T) {
 	})
 
 	t.Run("pause-resume-and-drop-many-schedules", func(t *testing.T) {
-		var scheduleIDs []int64
+		var scheduleIDs []jobspb.ScheduleID
 		for i := 0; i < 10; i++ {
 			scheduleIDs = append(
 				scheduleIDs,
