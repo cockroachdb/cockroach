@@ -49,3 +49,11 @@ OPEN curs2 SCROLL FOR EXECUTE SELECT $1, $2 FROM foo WHERE key = mykey USING hel
 END
 ----
 at or near "execute": syntax error: unimplemented: this syntax
+
+parse
+DECLARE
+BEGIN
+OPEN curs1 FOR;
+END
+----
+at or near "for": syntax error: missing SQL statement
