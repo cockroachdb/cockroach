@@ -60,7 +60,7 @@ const allSchedules = 0
 type execSchedulesFn = func(ctx context.Context, maxSchedules int64) error
 type testHelper struct {
 	iodir            string
-	server           serverutils.TestServerInterface
+	server           serverutils.ApplicationLayerInterface
 	env              *jobstest.JobSchedulerTestEnv
 	cfg              *scheduledjobs.JobExecutionConfig
 	sqlDB            *sqlutils.SQLRunner
@@ -111,7 +111,7 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 	s, db, _ := serverutils.StartServer(t, args)
 	require.NotNil(t, th.cfg)
 	th.sqlDB = sqlutils.MakeSQLRunner(db)
-	th.server = s
+	th.server = s.ApplicationLayer()
 	th.sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_buffer_size = '1MiB'`)
 	th.sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`) // speeds up test
 
@@ -985,7 +985,7 @@ func TestCreateBackupScheduleRequiresAdminRole(t *testing.T) {
 	defer cleanup()
 
 	th.sqlDB.Exec(t, `CREATE USER testuser`)
-	testuser := th.server.ApplicationLayer().SQLConn(t, serverutils.User("testuser"))
+	testuser := th.server.SQLConn(t, serverutils.User("testuser"))
 
 	_, err := testuser.Exec("CREATE SCHEDULE FOR BACKUP INTO 'somewhere' RECURRING '@daily'")
 	require.Error(t, err)

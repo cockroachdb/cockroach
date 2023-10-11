@@ -42,7 +42,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 	defer cleanupFn()
 
 	ctx := context.Background()
-	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := tc.Server(0).ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
 	emptyReader := bytes.NewReader([]byte{})
 
 	externalStorageFromURI := execCfg.DistSQLSrv.ExternalStorageFromURI

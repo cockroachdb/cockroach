@@ -46,7 +46,7 @@ func TestShowBackup(t *testing.T) {
 
 	const numAccounts = 11
 	tc, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
-	kvDB := tc.Server(0).DB()
+	kvDB := tc.Server(0).ApplicationLayer().DB()
 	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()

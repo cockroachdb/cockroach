@@ -60,7 +60,7 @@ func TestBackupSharedProcessTenantNodeDown(t *testing.T) {
 	hostDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING server.sqlliveness.heartbeat='250ms'")
 
 	testTenantID := roachpb.MustMakeTenantID(11)
-	tenantApp, tenantDB, err := tc.Server(0).StartSharedProcessTenant(ctx,
+	tenantApp, tenantDB, err := tc.Server(0).TenantController().StartSharedProcessTenant(ctx,
 		base.TestSharedProcessTenantArgs{
 			TenantID:   testTenantID,
 			TenantName: "test",

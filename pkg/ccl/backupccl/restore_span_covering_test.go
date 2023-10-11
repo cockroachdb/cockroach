@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	spanUtils "github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -367,6 +368,7 @@ func (c coverutils) paths(names ...string) []execinfrapb.RestoreFileSpec {
 }
 func TestRestoreEntryCoverExample(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
 	ctx := context.Background()
@@ -375,7 +377,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 		InitManualReplication)
 	defer cleanupFn()
 
-	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := tc.Server(0).ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
 	c := makeCoverUtils(ctx, t, &execCfg)
 
 	// Setup and test the example in the comment of makeSimpleImportSpans.
@@ -533,9 +535,12 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 
 func TestFileSpanStartKeyIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	c := makeCoverUtils(ctx, t, &execCfg)
@@ -646,11 +651,13 @@ func TestFileSpanStartKeyIterator(t *testing.T) {
 // a required span into remaining toDo spans.
 func TestCheckpointFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
 	c := makeCoverUtils(ctx, t, &execCfg)
 
 	requiredSpan := c.sp("b", "e")
@@ -765,11 +772,12 @@ func createMockManifest(
 //     own span.
 func TestRestoreEntryCoverReIntroducedSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
 	defer cleanupFn()
-	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig)
 
 	testCases := []struct {
 		name string
@@ -961,7 +969,7 @@ func runTestRestoreEntryCover(t *testing.T, numBackups int) {
 	ctx := context.Background()
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
 	defer cleanupFn()
-	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig)
 
 	// getRandomCompletedSpans randomly gets up to maxNumSpans completed
 	// spans from the cover. A completed span can cover 1 or more
@@ -1087,11 +1095,12 @@ func runTestRestoreEntryCover(t *testing.T, numBackups int) {
 // in the presence of files that have zero sized spans.
 func TestRestoreEntryCoverZeroSizeFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
 	defer cleanupFn()
-	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig)
 	c := makeCoverUtils(ctx, t, &execCfg)
 
 	emptySpanFrontier, err := spanUtils.MakeFrontierAt(completedSpanTime)
