@@ -344,9 +344,12 @@ func TestGetActiveNodes(t *testing.T) {
 	require.Equal(t, []roachpb.NodeID{1, 2, 3, 4, 5}, getActiveNodes(nl1))
 
 	// Mark n5 as decommissioning, which should reduce node count.
-	chg, err := nl1.SetMembershipStatus(ctx, 5, livenesspb.MembershipStatus_DECOMMISSIONING)
+	_, err := nl1.SetMembershipStatus(ctx, 5, livenesspb.MembershipStatus_DECOMMISSIONING)
 	require.NoError(t, err)
-	require.True(t, chg)
+	// Since we are already checking the expected membership status below, there
+	// is no benefit to additionally checking the returned statusChanged flag, as
+	// it can be inaccurate if the write experiences an AmbiguousResultError.
+	// Checking for nil error and the expected status is sufficient.
 	testutils.SucceedsSoon(t, func() error {
 		l, ok := nl1.GetLiveness(5)
 		if !ok || !l.Membership.Decommissioning() {
@@ -358,9 +361,8 @@ func TestGetActiveNodes(t *testing.T) {
 	require.Equal(t, []roachpb.NodeID{1, 2, 3, 4}, getActiveNodes(nl1))
 
 	// Mark n5 as decommissioning -> decommissioned, which should not change node count.
-	chg, err = nl1.SetMembershipStatus(ctx, 5, livenesspb.MembershipStatus_DECOMMISSIONED)
+	_, err = nl1.SetMembershipStatus(ctx, 5, livenesspb.MembershipStatus_DECOMMISSIONED)
 	require.NoError(t, err)
-	require.True(t, chg)
 	testutils.SucceedsSoon(t, func() error {
 		l, ok := nl1.GetLiveness(5)
 		if !ok || !l.Membership.Decommissioned() {
