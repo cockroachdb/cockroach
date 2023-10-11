@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -180,11 +179,8 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 
 	ctx := context.Background()
 	opName := "allocate-descriptor-rewrites"
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-	})
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 
 	var defaultDB *dbdesc.Mutable
 	var db1 *dbdesc.Mutable
@@ -202,10 +198,12 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 
 	var planner sql.PlanHookState
 
+	srv := s.ApplicationLayer()
+	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
 	setupPlanner := func() {
 		plannerAsInterface, cleanup := sql.NewInternalPlanner(
 			opName,
-			kv.NewTxn(ctx, kvDB, s.NodeID()),
+			srv.DB().NewTxn(ctx, "test-allocate-descriptor-rewrite"),
 			username.RootUserName(),
 			&sql.MemoryMetrics{},
 			&execCfg,
@@ -243,7 +241,7 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 
 		txn := planner.InternalSQLTxn()
 		col := txn.Descriptors()
-		cat, err := col.GetAll(ctx, kv.NewTxn(ctx, kvDB, s.NodeID()))
+		cat, err := col.GetAll(ctx, kvDB.NewTxn(ctx, "test-get-all"))
 		require.NoError(t, err)
 		sqlDescs := cat.OrderedDescriptors()
 

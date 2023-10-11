@@ -920,7 +920,7 @@ func handleKVRequest(
 			},
 			UseRangeTombstone: true,
 		}
-		if _, err := kv.SendWrapped(ctx, ds.firstNode[cluster].DistSenderI().(*kvcoord.DistSender), &dr); err != nil {
+		if _, err := kv.SendWrapped(ctx, ds.firstNode[cluster].SystemLayer().DistSenderI().(*kvcoord.DistSender), &dr); err != nil {
 			t.Fatal(err)
 		}
 	} else {
