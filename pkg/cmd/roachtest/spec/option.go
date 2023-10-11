@@ -253,3 +253,10 @@ func AWSZones(zones string) Option {
 		spec.AWS.Zones = zones
 	}
 }
+
+// UbuntuVersion controls what Ubuntu Version is used to create the cluster.
+func UbuntuVersion(version vm.UbuntuVersion) Option {
+	return func(spec *ClusterSpec) {
+		spec.UbuntuVersion = version
+	}
+}

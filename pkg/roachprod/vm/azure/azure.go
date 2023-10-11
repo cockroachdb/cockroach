@@ -641,13 +641,18 @@ func (p *Provider) createVM(
 		lun := 42
 		startupArgs.AttachedDiskLun = &lun
 	}
+
+	// In the future, when all tests are run on Ubuntu 22.04, we can remove this
+	// check and always enable RSA SHA1 and create a tcpdump symlink.
+	startupArgs.IsUbuntu22 = !opts.UbuntuVersion.IsOverridden()
+
 	startupScript, err := evalStartupTemplate(startupArgs)
 	if err != nil {
 		return vm, err
 	}
 	sub, err := p.getSubscription(ctx)
 	if err != nil {
-		return
+		return compute.VirtualMachine{}, err
 	}
 
 	client := compute.NewVirtualMachinesClient(sub)
@@ -658,11 +663,11 @@ func (p *Provider) createVM(
 	// We first need to allocate a NIC to give the VM network access
 	ip, err := p.createIP(l, ctx, group, name, providerOpts)
 	if err != nil {
-		return
+		return compute.VirtualMachine{}, err
 	}
 	nic, err := p.createNIC(l, ctx, group, ip, subnet)
 	if err != nil {
-		return
+		return compute.VirtualMachine{}, err
 	}
 
 	tags := make(map[string]*string)
@@ -693,14 +698,14 @@ func (p *Provider) createVM(
 				// From https://discourse.ubuntu.com/t/find-ubuntu-images-on-microsoft-azure/18918
 				// You can find available versions by running the following command:
 				// az vm image list --all --publisher Canonical
-				// To get the latest 20.04 version:
+				// To get the latest 22.04 version:
 				// az vm image list --all --publisher Canonical | \
-				// jq '[.[] | select(.sku=="20_04-lts")] | max_by(.version)'
+				// jq '[.[] | select(.sku=="22_04-lts")] | max_by(.version)'
 				ImageReference: &compute.ImageReference{
 					Publisher: to.StringPtr("Canonical"),
-					Offer:     to.StringPtr("0001-com-ubuntu-server-focal"),
-					Sku:       to.StringPtr("20_04-lts"),
-					Version:   to.StringPtr("20.04.202109080"),
+					Offer:     to.StringPtr("0001-com-ubuntu-server-jammy"),
+					Sku:       to.StringPtr("22_04-lts"),
+					Version:   to.StringPtr("22.04.202309190"),
 				},
 				OsDisk: &compute.OSDisk{
 					CreateOption: compute.DiskCreateOptionTypesFromImage,
@@ -739,6 +744,20 @@ func (p *Provider) createVM(
 			},
 		},
 	}
+	if opts.UbuntuVersion.IsOverridden() {
+		var image []string
+		image, err = getUbuntuImage(opts.UbuntuVersion)
+		if err != nil {
+			return compute.VirtualMachine{}, err
+		}
+		vm.VirtualMachineProperties.StorageProfile.ImageReference = &compute.ImageReference{
+			Publisher: to.StringPtr("Canonical"),
+			Offer:     to.StringPtr(image[0]),
+			Sku:       to.StringPtr(image[1]),
+			Version:   to.StringPtr(image[2]),
+		}
+		l.Printf("Overriding default Ubuntu image with %s", image)
+	}
 	if !opts.SSDOpts.UseLocalSSD {
 		caching := compute.CachingTypesNone
 
@@ -751,7 +770,7 @@ func (p *Provider) createVM(
 			caching = compute.CachingTypesNone
 		default:
 			err = errors.Newf("unsupported caching behavior: %s", providerOpts.DiskCaching)
-			return
+			return compute.VirtualMachine{}, err
 		}
 		dataDisks := []compute.DataDisk{
 			{
@@ -766,7 +785,7 @@ func (p *Provider) createVM(
 			var ultraDisk compute.Disk
 			ultraDisk, err = p.createUltraDisk(l, ctx, group, name+"-ultra-disk", providerOpts)
 			if err != nil {
-				return
+				return compute.VirtualMachine{}, err
 			}
 			// UltraSSD specific disk configurations.
 			dataDisks[0].CreateOption = compute.DiskCreateOptionTypesAttach
@@ -788,7 +807,7 @@ func (p *Provider) createVM(
 			}
 		default:
 			err = errors.Newf("unsupported network disk type: %s", providerOpts.NetworkDiskType)
-			return
+			return compute.VirtualMachine{}, err
 		}
 
 		vm.StorageProfile.DataDisks = &dataDisks
@@ -1487,4 +1506,25 @@ func (p *Provider) getResourcesAndSecurityGroupByName(
 		sGroup = p.mu.securityGroups[sName]
 	}
 	return rGroup, sGroup
+}
+
+var (
+	// We define the actual image here because it's different for every provider.
+	focalFossa = vm.UbuntuImages{
+		DefaultImage: "0001-com-ubuntu-server-focal;20_04-lts;20.04.202109080",
+	}
+
+	azUbuntuImages = map[vm.UbuntuVersion]vm.UbuntuImages{
+		vm.FocalFossa: focalFossa,
+	}
+)
+
+// getUbuntuImage returns the correct Ubuntu image for the specified Ubuntu version.
+func getUbuntuImage(version vm.UbuntuVersion) ([]string, error) {
+	image, ok := azUbuntuImages[version]
+	if ok {
+		return strings.Split(image.DefaultImage, ";"), nil
+	}
+
+	return nil, errors.Errorf("Unknown Ubuntu version specified.")
 }

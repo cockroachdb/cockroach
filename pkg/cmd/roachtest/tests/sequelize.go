@@ -87,7 +87,7 @@ func registerSequelize(r registry.Registry) {
 			c,
 			node,
 			"install dependencies",
-			`sudo apt-get -qq install make python3 libpq-dev python-dev gcc g++ `+
+			`sudo apt-get -qq install make python3 libpq-dev gcc g++ `+
 				`software-properties-common build-essential`,
 		); err != nil {
 			t.Fatal(err)

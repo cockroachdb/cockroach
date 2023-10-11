@@ -114,11 +114,11 @@ func registerActiveRecord(r registry.Registry) {
 			t,
 			c,
 			node,
-			"install ruby 2.7",
+			"install ruby 3.1",
 			`mkdir -p ruby-install && \
-        curl -fsSL https://github.com/postmodern/ruby-install/archive/v0.6.1.tar.gz | tar --strip-components=1 -C ruby-install -xz && \
+        curl -fsSL https://github.com/postmodern/ruby-install/archive/v0.9.1.tar.gz | tar --strip-components=1 -C ruby-install -xz && \
         sudo make -C ruby-install install && \
-        sudo ruby-install --system ruby 2.7.1 && \
+        sudo ruby-install --system ruby 3.1.4 && \
         sudo gem update --system`,
 		); err != nil {
 			t.Fatal(err)

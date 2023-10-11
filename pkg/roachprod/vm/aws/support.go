@@ -134,11 +134,25 @@ sudo sh -c 'echo "MaxStartups 64:30:128" >> /etc/ssh/sshd_config'
 # Crank up the logging for issues such as:
 # https://github.com/cockroachdb/cockroach/issues/36929
 sudo sed -i'' 's/LogLevel.*$/LogLevel DEBUG3/' /etc/ssh/sshd_config
+# N.B. RSA SHA1 is no longer supported in the latest versions of OpenSSH. Existing tooling, e.g.,
+# jepsen still relies on it for authentication, so we need to enable it.
+# FIPS is still on Ubuntu 20.04 however, so don't enable if using FIPS.
+{{ if not .EnableFIPS }}
+sudo sh -c 'echo "PubkeyAcceptedAlgorithms +ssh-rsa" >> /etc/ssh/sshd_config'
+{{ end }}
 sudo service sshd restart
 # increase the default maximum number of open file descriptors for
 # root and non-root users. Load generators running a lot of concurrent
 # workers bump into this often.
 sudo sh -c 'echo "root - nofile 1048576\n* - nofile 1048576" > /etc/security/limits.d/10-roachprod-nofiles.conf'
+
+# N.B. Ubuntu 22.04 changed the location of tcpdump to /usr/bin. Since existing tooling, e.g.,
+# jepsen uses /usr/sbin, we create a symlink.
+# See https://ubuntu.pkgs.org/22.04/ubuntu-main-amd64/tcpdump_4.99.1-3build2_amd64.deb.html
+# FIPS is still on Ubuntu 20.04 however, so don't enable if using FIPS.
+{{ if not .EnableFIPS }}
+sudo ln -s /usr/bin/tcpdump /usr/sbin/tcpdump
+{{ end }}
 
 # Enable core dumps
 cat <<EOF > /etc/security/limits.d/core_unlimited.conf

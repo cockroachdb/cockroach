@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -46,7 +47,10 @@ func registerDiskStalledDetection(r registry.Registry) {
 		},
 	}
 	makeSpec := func() spec.ClusterSpec {
-		s := r.MakeClusterSpec(4, spec.ReuseNone())
+		// TODO(DarrylWong): This test currently fails on Ubuntu 22.04 so we run it on 20.04.
+		// See: https://github.com/cockroachdb/cockroach/issues/112111.
+		// Once this issue is fixed we should remove this Ubuntu Version override.
+		s := r.MakeClusterSpec(4, spec.ReuseNone(), spec.UbuntuVersion(vm.FocalFossa))
 		// Use PDs in an attempt to work around flakes encountered when using SSDs.
 		// See #97968.
 		s.PreferLocalSSD = false
