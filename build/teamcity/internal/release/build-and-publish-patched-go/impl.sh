@@ -3,12 +3,16 @@
 set -xeuo pipefail
 
 # When updating to a new Go version, update all of these variables.
-GOVERS=1.20.10
+GOVERS=1.21.3
 GOLINK=https://go.dev/dl/go$GOVERS.src.tar.gz
-SRCSHASUM=72d2f51805c47150066c103754c75fddb2c19d48c9219fa33d1e46696c841dbb
+SRCSHASUM=186f2b6f8c8b704e696821b09ab2041a5c1ee13dcbc3156a13adcf75931ee488
 # We mirror the upstream freebsd because we don't have a cross-compiler targeting it.
 GOFREEBSDLINK=https://go.dev/dl/go$GOVERS.freebsd-amd64.tar.gz
-FREEBSDSHASUM=e337b8e645e37f52d04e5f91352b929e05fd74d960b2a1c8e78977e4777c4ffa
+FREEBSDSHASUM=6e74f65f586e93d1f3947894766f69e9b2ebda488592a09df61f36f06bfe58a8
+# We use this for bootstrapping (this is NOT re-published). Note the version
+# matches the version we're publishing, although it doesn't technically have to.
+GOLINUXLINK=https://go.dev/dl/go$GOVERS.linux-amd64.tar.gz
+LINUXSHASUM=1241381b2843fae5a9707eec1f8fb2ef94d827990582c7c7c32f5bdfbfd420c8
 
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -30,8 +34,8 @@ update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
 curl -fsSL $GOFREEBSDLINK -o /artifacts/go$GOVERS.freebsd-amd64.tar.gz
 echo "$FREEBSDSHASUM  /artifacts/go$GOVERS.freebsd-amd64.tar.gz" | sha256sum -c -
 
-curl -fsSL https://go.dev/dl/go1.20.8.linux-amd64.tar.gz -o golang.tar.gz \
- && echo 'cc97c28d9c252fbf28f91950d830201aa403836cbed702a05932e63f7f0c7bc4  golang.tar.gz' | sha256sum -c - \
+curl -fsSL $GOLINUXLINK -o golang.tar.gz \
+ && echo "$LINUXSHASUM  golang.tar.gz" | sha256sum -c - \
  && rm -rf /usr/local/go && tar -C /usr/local -xzf golang.tar.gz \
  && rm golang.tar.gz
 

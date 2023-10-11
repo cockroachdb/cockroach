@@ -57,8 +57,7 @@ func WhenDone(parent context.Context, done WhenDoneFunc) bool {
 		log.Fatalf(parent, "expected context that supports direct cancellation detection, found %T", parent)
 	}
 
-	c := &whenDone{Context: parent, notify: done}
-	context_propagateCancel(parent, c)
+	propagateCancel(parent, done)
 	return true
 }
 
@@ -79,11 +78,6 @@ func CanDirectlyDetectCancellation(parent context.Context) bool {
 	// getting access to internal cancelCtxKey.
 	cancellable, ok := parent.Value(&context_cancelCtxKey).(context.Context)
 	return ok && cancellable.Done() == parent.Done()
-}
-
-type whenDone struct {
-	context.Context
-	notify WhenDoneFunc
 }
 
 //go:linkname context_cancelCtxKey context.cancelCtxKey
