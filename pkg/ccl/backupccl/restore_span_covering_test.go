@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	spanUtils "github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -367,6 +368,7 @@ func (c coverutils) paths(names ...string) []execinfrapb.RestoreFileSpec {
 }
 func TestRestoreEntryCoverExample(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
 	ctx := context.Background()
@@ -533,6 +535,8 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 
 func TestFileSpanStartKeyIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
@@ -646,6 +650,8 @@ func TestFileSpanStartKeyIterator(t *testing.T) {
 // a required span into remaining toDo spans.
 func TestCheckpointFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
@@ -765,6 +771,7 @@ func createMockManifest(
 //     own span.
 func TestRestoreEntryCoverReIntroducedSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
@@ -1087,6 +1094,7 @@ func runTestRestoreEntryCover(t *testing.T, numBackups int) {
 // in the presence of files that have zero sized spans.
 func TestRestoreEntryCoverZeroSizeFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
