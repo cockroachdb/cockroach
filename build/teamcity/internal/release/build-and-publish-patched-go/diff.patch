@@ -108,8 +108,9 @@ index 9ce0a3afcd..bfb5d6e33e 100644
 +		{runtime.G{}, 248, 400},   // g, but exported for testing
  		{runtime.Sudog{}, 56, 88}, // sudog, but exported for testing
  	}
---- /opt/homebrew/Cellar/go/1.21.0/libexec/src/context/context.go	2023-08-30 12:04:49
-+++ src/context/context.go	2023-10-11 15:40:06
+diff -ru a/src/context/context.go b/src/context/context.go
+--- a/src/context/context.go
++++ b/src/context/context.go
 @@ -472,17 +472,7 @@
  
  	if p, ok := parentCancelCtx(parent); ok {
