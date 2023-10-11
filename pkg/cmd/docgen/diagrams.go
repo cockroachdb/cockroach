@@ -570,6 +570,14 @@ var specs = []stmtSpec{
 		unlink:  []string{"view_name", "view_new_name"},
 	},
 	{
+		name:   "alter_virtual_cluster_replication",
+		stmt:   "alter_virtual_cluster_replication_stmt",
+		inline: []string{"virtual_cluster", "virtual_cluster_spec", "replication_options_list", "replication_options"},
+		//replace: map[string]string{"relation_expr": "view_name", "'RENAME' 'TO' view_name": "'RENAME' 'TO' view_new_name"},
+		//unlink:  []string{"view_name", "view_new_name"},
+	},
+
+	{
 		name:    "alter_zone_database_stmt",
 		inline:  []string{"set_zone_config", "var_set_list"},
 		replace: map[string]string{"var_name": "variable", "var_value": "value"},

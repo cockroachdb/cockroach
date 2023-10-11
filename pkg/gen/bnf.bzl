@@ -64,6 +64,7 @@ BNF_SRCS = [
     "//docs/generated/sql/bnf:alter_view.bnf",
     "//docs/generated/sql/bnf:alter_view_owner_stmt.bnf",
     "//docs/generated/sql/bnf:alter_view_set_schema_stmt.bnf",
+    "//docs/generated/sql/bnf:alter_virtual_cluster_replication.bnf",
     "//docs/generated/sql/bnf:alter_zone_database_stmt.bnf",
     "//docs/generated/sql/bnf:alter_zone_index_stmt.bnf",
     "//docs/generated/sql/bnf:alter_zone_partition_stmt.bnf",
