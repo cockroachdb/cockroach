@@ -14,7 +14,6 @@ package ctxutil
 
 import (
 	"context"
-	_ "unsafe" // Must import unsafe to enable gross hack below.
 
 	"github.com/cockroachdb/errors"
 )
@@ -22,16 +21,12 @@ import (
 // Linkage definition for go1.21 or higher built with ./dev toolchain --
 // that is, a toolchain that applies cockroach runtime patches.
 
-// Gross hack to access internal context function.  Sometimes, go makes things
-// SO much more difficult than it needs to.
-
-// context_propagateCancel propagates cancellation from parent to child.
+// propagateCancel invokes notify when parent context completes.
 // Since this code was built with ./dev, use patched context.Context to access
 // needed functionality.
-func context_propagateCancel(parent context.Context, child canceler) {
-	if !context.PropagateCancel(parent, child) {
-		// This shouldn't happen since WhenDone checks to make sure
-		// parent is cancellable.
+func propagateCancel(parent context.Context, notify WhenDoneFunc) {
+	if !context.PropagateCancel(parent, notify) {
+		// This shouldn't happen since WhenDone checks to make sure parent is cancellable.
 		panic(errors.Newf("parent context expected to be cancellable, found %T", parent))
 	}
 }
