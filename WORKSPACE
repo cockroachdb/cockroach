@@ -163,14 +163,14 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.20.10.darwin-amd64.tar.gz", "9f554a97818568cdcb58b8860ebdc0d25cbe7a6441e7f8fc9612c00330d3f145"),
-        "darwin_arm64": ("go1.20.10.darwin-arm64.tar.gz", "4920629c1e65cf28f4fb8c74d7b2f90a1bb6333df60d2fd7e756a3436209f004"),
-        "linux_amd64": ("go1.20.10.linux-amd64.tar.gz", "cb95ca59edf9d15d6e7949395756f78542383b612abced2565ad2349213a36e3"),
-        "linux_arm64": ("go1.20.10.linux-arm64.tar.gz", "5fa30f7c4f39c96d31756d7eab6c560ac129caf0462512c9f1fc2afa00570778"),
-        "windows_amd64": ("go1.20.10.windows-amd64.tar.gz", "d84f04cf636033073c114ac5c51f38d948bf21bb53b3aa9442d362e970f94b32"),
+        "darwin_amd64": ("go1.21.3.darwin-amd64.tar.gz", "253d8d4b32a1d7731dff1245f009362858a0c685af8f52b671dd906b2c67d78d"),
+        "darwin_arm64": ("go1.21.3.darwin-arm64.tar.gz", "877543c11149341e4954cb2e625deb7974e94c3c77f5f71a24d35e54cb54fb05"),
+        "linux_amd64": ("go1.21.3.linux-amd64.tar.gz", "3b0307b4e91d6b34870ed1d29366aba77cb864dc93b7098cdfb5d4619cb58566"),
+        "linux_arm64": ("go1.21.3.linux-arm64.tar.gz", "c0d2da5e1b9ff93d0e4262189e59586cc0c17c207578429f716de2d5799ba36a"),
+        "windows_amd64": ("go1.21.3.windows-amd64.tar.gz", "c0e2957014e72056ed1c2c080d772d7c8e96a3143f228f6b511231fc31c07593"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231011-170949/{}"],
-    version = "1.20.10",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231019-214851/{}"],
+    version = "1.21.3",
 )
 
 # To point to a local SDK path, use the following instead. We'll call the
@@ -608,8 +608,8 @@ distdir_repositories()
 go_download_sdk(
     name = "go_sdk_fips",
     sdks = {
-        "linux_amd64": ("go1.20.7fips.linux-amd64.tar.gz", "e153224976a6cc17cc24128609ef9eaf9fc94b33744ff00646ba36a6f448a074"),
+        "linux_amd64": ("go1.21.3fips.linux-amd64.tar.gz", "216acc2939bf16748ec240ffe1752b442ec098bd9ac5e12ecd44db4ff77e0ab9"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231011-170949/{}"],
-    version = "1.20.7fips",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231019-214851/{}"],
+    version = "1.21.3fips",
 )
