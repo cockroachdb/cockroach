@@ -131,3 +131,27 @@ SELECT max(x) FROM xy INTO i;
 INSERT INTO xy VALUES (10, 10) RETURNING x INTO i;
 RETURN i;
 END
+
+parse
+DECLARE
+BEGIN
+  INSERT INTO t1 VALUES 1,2);
+END
+----
+at or near "2": syntax error: mismatched parentheses
+
+parse
+DECLARE
+BEGIN
+  INSERT INTO t1 VALUES (1,2;
+END
+----
+at or near "EOF": syntax error: mismatched parentheses
+
+parse
+DECLARE
+BEGIN
+  INSERT INTO t1 (VALUES (1,2);
+END
+----
+at or near "EOF": syntax error: mismatched parentheses
