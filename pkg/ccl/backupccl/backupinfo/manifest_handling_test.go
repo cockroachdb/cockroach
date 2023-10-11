@@ -45,12 +45,13 @@ func TestManifestHandlingIteratorOperations(t *testing.T) {
 	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
+	s := tc.Server(0).ApplicationLayer()
 	store, err := cloud.ExternalStorageFromURI(ctx, "userfile:///foo",
 		base.ExternalIODirConfig{},
-		tc.Server(0).ClusterSettings(),
+		s.ClusterSettings(),
 		blobs.TestEmptyBlobClientFactory,
 		username.RootUserName(),
-		tc.Server(0).InternalDB().(isql.DB),
+		s.InternalDB().(isql.DB),
 		nil, /* limiters */
 		cloud.NilMetrics,
 	)
@@ -114,12 +115,13 @@ func TestManifestHandlingEmptyIterators(t *testing.T) {
 	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
+	s := tc.Server(0).ApplicationLayer()
 	store, err := cloud.ExternalStorageFromURI(ctx, "userfile:///foo",
 		base.ExternalIODirConfig{},
-		tc.Server(0).ClusterSettings(),
+		s.ClusterSettings(),
 		blobs.TestEmptyBlobClientFactory,
 		username.RootUserName(),
-		tc.Server(0).InternalDB().(isql.DB),
+		s.InternalDB().(isql.DB),
 		nil, /* limiters */
 		cloud.NilMetrics,
 	)

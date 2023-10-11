@@ -322,7 +322,7 @@ func getFirstStoreReplica(
 	t *testing.T, s serverutils.TestServerInterface, key roachpb.Key,
 ) (*kvserver.Store, *kvserver.Replica) {
 	t.Helper()
-	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+	store, err := s.StorageLayer().GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 	var repl *kvserver.Replica
 	testutils.SucceedsSoon(t, func() error {

@@ -285,7 +285,7 @@ DROP SCHEMA bar;
 	tdb.CheckQueryResults(t, query, [][]string{{restoredDBName}})
 
 	// Read descriptor without validation.
-	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
 	hasSameNameSchema := func(dbName string) (exists bool) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			// Using this method to avoid validation.

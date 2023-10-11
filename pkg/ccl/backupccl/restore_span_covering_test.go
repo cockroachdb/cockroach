@@ -377,7 +377,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 		InitManualReplication)
 	defer cleanupFn()
 
-	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := tc.Server(0).ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
 	c := makeCoverUtils(ctx, t, &execCfg)
 
 	// Setup and test the example in the comment of makeSimpleImportSpans.
@@ -538,8 +538,9 @@ func TestFileSpanStartKeyIterator(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	c := makeCoverUtils(ctx, t, &execCfg)
@@ -656,7 +657,7 @@ func TestCheckpointFilter(t *testing.T) {
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
 	c := makeCoverUtils(ctx, t, &execCfg)
 
 	requiredSpan := c.sp("b", "e")
@@ -776,7 +777,7 @@ func TestRestoreEntryCoverReIntroducedSpans(t *testing.T) {
 	ctx := context.Background()
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
 	defer cleanupFn()
-	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig)
 
 	testCases := []struct {
 		name string
@@ -968,7 +969,7 @@ func runTestRestoreEntryCover(t *testing.T, numBackups int) {
 	ctx := context.Background()
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
 	defer cleanupFn()
-	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig)
 
 	// getRandomCompletedSpans randomly gets up to maxNumSpans completed
 	// spans from the cover. A completed span can cover 1 or more
@@ -1099,7 +1100,7 @@ func TestRestoreEntryCoverZeroSizeFiles(t *testing.T) {
 	ctx := context.Background()
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
 	defer cleanupFn()
-	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig)
 	c := makeCoverUtils(ctx, t, &execCfg)
 
 	emptySpanFrontier, err := spanUtils.MakeFrontierAt(completedSpanTime)
