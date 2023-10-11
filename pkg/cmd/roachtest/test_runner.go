@@ -572,6 +572,11 @@ func (r *testRunner) runWorker(
 				// N.B. we do not count reuse attempt error toward clusterCreateErr.
 				// Let's attempt to create a fresh cluster.
 				testToRun.canReuseCluster = false
+				// We need an allocation quota to start a new cluster; steal it from the
+				// old cluster before we destroy it (we know the cluster configurations
+				// will be identical).
+				testToRun.alloc = c.destroyState.alloc
+				c.destroyState.alloc = nil
 			}
 		}
 
