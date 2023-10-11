@@ -658,8 +658,8 @@ func backupPlanHook(
 			ExecutionLocality:               executionLocality,
 			UpdatesClusterMonitoringMetrics: updatesClusterMonitoringMetrics,
 		}
-		if backupStmt.CreatedByInfo != nil && backupStmt.CreatedByInfo.Name == jobs.CreatedByScheduledJobs {
-			initialDetails.ScheduleID = backupStmt.CreatedByInfo.ID
+		if backupStmt.CreatedByInfo != nil {
+			initialDetails.ScheduleID = backupStmt.CreatedByInfo.ScheduleID()
 		}
 
 		// For backups of specific targets, those targets were resolved with this

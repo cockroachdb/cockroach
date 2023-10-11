@@ -16,18 +16,11 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
 )
-
-// JobID is the ID of a job.
-type JobID = catpb.JobID
-
-// InvalidJobID is the zero value for JobID corresponding to no job.
-const InvalidJobID = catpb.InvalidJobID
 
 // Details is a marker interface for job details proto structs.
 type Details interface{}

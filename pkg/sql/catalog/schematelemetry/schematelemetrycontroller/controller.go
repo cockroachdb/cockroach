@@ -257,7 +257,9 @@ func CreateSchemaTelemetrySchedule(
 
 // GetSchemaTelemetryScheduleID returns the ID of the schema telemetry schedule
 // if it exists, 0 if it does not exist yet.
-func GetSchemaTelemetryScheduleID(ctx context.Context, txn isql.Txn) (id int64, _ error) {
+func GetSchemaTelemetryScheduleID(
+	ctx context.Context, txn isql.Txn,
+) (id jobspb.ScheduleID, _ error) {
 	row, err := txn.QueryRowEx(
 		ctx,
 		"check-existing-schema-telemetry-schedule",
@@ -277,5 +279,5 @@ func GetSchemaTelemetryScheduleID(ctx context.Context, txn isql.Txn) (id int64, 
 	if !ok {
 		return 0, errors.AssertionFailedf("unexpectedly received non-integer value %v", row[0])
 	}
-	return int64(v), nil
+	return jobspb.ScheduleID(v), nil
 }

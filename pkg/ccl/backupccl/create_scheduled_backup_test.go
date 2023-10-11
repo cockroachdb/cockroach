@@ -132,7 +132,7 @@ func (h *testHelper) setOverrideAsOfClauseKnob(t *testing.T) {
 	}
 }
 
-func (h *testHelper) loadSchedule(t *testing.T, scheduleID int64) *jobs.ScheduledJob {
+func (h *testHelper) loadSchedule(t *testing.T, scheduleID jobspb.ScheduleID) *jobs.ScheduledJob {
 	t.Helper()
 
 	loaded, err := jobs.ScheduledJobDB(h.internalDB()).
@@ -146,7 +146,7 @@ func (h *testHelper) clearSchedules(t *testing.T) {
 	h.sqlDB.Exec(t, "DELETE FROM system.scheduled_jobs WHERE true")
 }
 
-func (h *testHelper) waitForSuccessfulScheduledJob(t *testing.T, scheduleID int64) {
+func (h *testHelper) waitForSuccessfulScheduledJob(t *testing.T, scheduleID jobspb.ScheduleID) {
 	query := "SELECT id FROM " + h.env.SystemJobsTableName() +
 		" WHERE status=$1 AND created_by_type=$2 AND created_by_id=$3"
 
@@ -160,7 +160,7 @@ func (h *testHelper) waitForSuccessfulScheduledJob(t *testing.T, scheduleID int6
 }
 
 func (h *testHelper) waitForSuccessfulScheduledJobCount(
-	t *testing.T, scheduleID int64, expectedCount int,
+	t *testing.T, scheduleID jobspb.ScheduleID, expectedCount int,
 ) {
 	query := "SELECT count(*) FROM " + h.env.SystemJobsTableName() +
 		" WHERE status=$1 AND created_by_type=$2 AND created_by_id=$3"
@@ -750,7 +750,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 				if expectedSchedule.shownStmt != "" {
 					expectedShown = fmt.Sprintf("%q", expectedSchedule.shownStmt)
 				}
-				require.Equal(t, expectedShown, shownByID[s.ScheduleID()])
+				require.Equal(t, expectedShown, shownByID[int64(s.ScheduleID())])
 
 				frequency, err := s.Frequency()
 				require.NoError(t, err)
@@ -1093,7 +1093,7 @@ CREATE TABLE t(a int);
 INSERT INTO t values (1), (10), (100);
 `)
 
-	advanceNextRun := func(t *testing.T, id int64, delta time.Duration) {
+	advanceNextRun := func(t *testing.T, id jobspb.ScheduleID, delta time.Duration) {
 		// Adjust next run by the specified delta (which maybe negative).
 		s := th.loadSchedule(t, id)
 		s.SetNextRun(th.env.Now().Add(delta))
@@ -1113,7 +1113,7 @@ INSERT INTO t values (1), (10), (100);
 
 	// Create backup schedules for this test.
 	// Returns schedule IDs for full and incremental schedules, plus a cleanup function.
-	createSchedules := func(t *testing.T, name string) (int64, int64, func()) {
+	createSchedules := func(t *testing.T, name string) (jobspb.ScheduleID, jobspb.ScheduleID, func()) {
 		schedules, err := th.createBackupSchedule(t,
 			"CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '*/5 * * * *'",
 			"nodelocal://1/backup/"+name)
@@ -1151,10 +1151,10 @@ INSERT INTO t values (1), (10), (100);
 
 	markOldAndSetSchedulesPolicy := func(
 		t *testing.T,
-		fullID, incID int64,
+		fullID, incID jobspb.ScheduleID,
 		onError jobspb.ScheduleDetails_ErrorHandlingBehavior,
 	) {
-		for _, id := range []int64{fullID, incID} {
+		for _, id := range []jobspb.ScheduleID{fullID, incID} {
 			// Pretend we were down for a year.
 			s := th.loadSchedule(t, id)
 			s.SetNextRun(s.NextRun().Add(-365 * 24 * time.Hour))
@@ -1177,7 +1177,7 @@ INSERT INTO t values (1), (10), (100);
 
 		// AOST way in the past causes backup planning to fail.  We don't need
 		// to wait for any jobs, and the schedules should now be paused.
-		for _, id := range []int64{fullID, incID} {
+		for _, id := range []jobspb.ScheduleID{fullID, incID} {
 			require.True(t, th.loadSchedule(t, id).IsPaused())
 		}
 	})
@@ -1200,7 +1200,7 @@ INSERT INTO t values (1), (10), (100);
 		// AOST way in the past causes backup planning to fail.  We don't need
 		// to wait for any jobs, and the schedule nextRun should be advanced
 		// a bit in the future.
-		for _, id := range []int64{fullID, incID} {
+		for _, id := range []jobspb.ScheduleID{fullID, incID} {
 			require.True(t, th.loadSchedule(t, id).NextRun().Sub(th.env.Now()) > 0)
 		}
 
@@ -1231,7 +1231,7 @@ INSERT INTO t values (1), (10), (100);
 		// AOST way in the past causes backup planning to fail.  We don't need
 		// to wait for any jobs, and the schedule nextRun should be advanced
 		// to the next scheduled recurrence.
-		for _, id := range []int64{fullID, incID} {
+		for _, id := range []jobspb.ScheduleID{fullID, incID} {
 			s := th.loadSchedule(t, id)
 			e, err := cron.ParseStandard(s.ScheduleExpr())
 			require.NoError(t, err)
@@ -1529,7 +1529,7 @@ func TestPauseScheduledBackupOnNewClusterID(t *testing.T) {
 	hostClusterID := full.ScheduleDetails().ClusterID
 	require.NotZero(t, hostClusterID)
 
-	updateClusterIDAndExecute := func(clusterID uuid.UUID, scheduleID int64) {
+	updateClusterIDAndExecute := func(clusterID uuid.UUID, scheduleID jobspb.ScheduleID) {
 		schedule := th.loadSchedule(t, scheduleID)
 		details := schedule.ScheduleDetails()
 		details.ClusterID = clusterID

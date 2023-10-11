@@ -1165,7 +1165,7 @@ func getScheduledBackupExecutionArgsFromSchedule(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
 	storage jobs.ScheduledJobStorage,
-	scheduleID int64,
+	scheduleID jobspb.ScheduleID,
 ) (*jobs.ScheduledJob, *backuppb.ScheduledBackupExecutionArgs, error) {
 	// Load the schedule that has spawned this job.
 	sj, err := storage.Load(ctx, env, scheduleID)
@@ -1203,7 +1203,7 @@ func planSchedulePTSChaining(
 	}
 
 	_, args, err := getScheduledBackupExecutionArgsFromSchedule(
-		ctx, env, jobs.ScheduledJobTxn(txn), createdBy.ID,
+		ctx, env, jobs.ScheduledJobTxn(txn), createdBy.ScheduleID(),
 	)
 	if err != nil {
 		return err
@@ -2028,7 +2028,7 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 			return nil
 		}
 
-		scheduleID := int64(tree.MustBeDInt(datums[0]))
+		scheduleID := jobspb.ScheduleID(tree.MustBeDInt(datums[0]))
 		if err := jobs.NotifyJobTermination(ctx, txn, env, b.job.ID(), jobStatus, b.job.Details(), scheduleID); err != nil {
 			return errors.Wrapf(err,
 				"failed to notify schedule %d of completion of job %d", scheduleID, b.job.ID())

@@ -173,14 +173,14 @@ message ScheduledBackupExecutionArgs {
   }
   BackupType backup_type = 1;
   string backup_statement = 2;
-  int64 unpause_on_success = 3;
+  int64 unpause_on_success = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb.ScheduleID"];
   bool updates_last_backup_metric = 4;
   // If the schedule is one of the two  that were created when setting up a
   // full+incremental schedule backup, then DependentScheduleID will be set to
   // the schedule ID of the other "dependent" schedule.
   // i.e. the full schedule will have the inc schedules ID and vice versa.
   // A value of 0 indicates that there is no dependent schedule.
-  int64 dependent_schedule_id = 6 [(gogoproto.customname) = "DependentScheduleID"];
+  int64 dependent_schedule_id = 6 [(gogoproto.customname) = "DependentScheduleID", (gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/jobs/jobspb.ScheduleID"];
 
   // ChainProtectedTimestampRecords indicates that chaining of protected
   // timestamp records is enabled for this schedule. The chaining scheme works

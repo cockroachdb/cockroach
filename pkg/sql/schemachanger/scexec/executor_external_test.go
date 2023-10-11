@@ -519,7 +519,7 @@ func (noopMetadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID 
 }
 
 // DeleteScheduleID implements scexec.DescriptorMetadataUpdater.
-func (noopMetadataUpdater) DeleteSchedule(ctx context.Context, scheduleID int64) error {
+func (noopMetadataUpdater) DeleteSchedule(ctx context.Context, scheduleID jobspb.ScheduleID) error {
 	return nil
 }
 

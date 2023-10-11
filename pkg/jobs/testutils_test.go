@@ -134,7 +134,7 @@ func (h *testHelper) newScheduledJobForExecutor(
 }
 
 // loadSchedule loads  all columns for the specified scheduled job.
-func (h *testHelper) loadSchedule(t *testing.T, id int64) *ScheduledJob {
+func (h *testHelper) loadSchedule(t *testing.T, id jobspb.ScheduleID) *ScheduledJob {
 	j := NewScheduledJob(h.env)
 	row, cols, err := h.cfg.DB.Executor().QueryRowExWithCols(
 		context.Background(), "sched-load", nil,
@@ -168,7 +168,7 @@ func registerScopedScheduledJobExecutor(name string, ex ScheduledJobExecutor) fu
 // addFakeJob adds a fake job associated with the specified scheduleID.
 // Returns the id of the newly created job.
 func addFakeJob(
-	t *testing.T, h *testHelper, scheduleID int64, status Status, txn isql.Txn,
+	t *testing.T, h *testHelper, scheduleID jobspb.ScheduleID, status Status, txn isql.Txn,
 ) jobspb.JobID {
 	payload := []byte("fake payload")
 	datums, err := txn.QueryRowEx(context.Background(), "fake-job", txn.KV(),

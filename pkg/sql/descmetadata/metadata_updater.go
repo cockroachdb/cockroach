@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -85,7 +86,7 @@ func (mu metadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID d
 }
 
 // DeleteSchedule implement scexec.DescriptorMetadataUpdater.
-func (mu metadataUpdater) DeleteSchedule(ctx context.Context, scheduleID int64) error {
+func (mu metadataUpdater) DeleteSchedule(ctx context.Context, scheduleID jobspb.ScheduleID) error {
 	_, err := mu.txn.ExecEx(
 		ctx,
 		"delete-schedule",

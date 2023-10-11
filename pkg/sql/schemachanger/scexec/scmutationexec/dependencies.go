@@ -121,7 +121,7 @@ type DeferredMutationStateUpdater interface {
 	) error
 
 	// DeleteSchedule deletes a scheduled job.
-	DeleteSchedule(scheduleID int64)
+	DeleteSchedule(scheduleID jobspb.ScheduleID)
 
 	// RefreshStats refresh stats for a given descriptor.
 	RefreshStats(id descpb.ID)

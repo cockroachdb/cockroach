@@ -317,7 +317,7 @@ func doCreateBackupSchedules(
 		return err
 	}
 
-	unpauseOnSuccessID := jobs.InvalidScheduleID
+	unpauseOnSuccessID := jobspb.InvalidScheduleID
 
 	var chainProtectedTimestampRecords bool
 	// If needed, create an incremental schedule.
@@ -425,7 +425,7 @@ func setDependentSchedule(
 	storage jobs.ScheduledJobStorage,
 	scheduleExecutionArgs *backuppb.ScheduledBackupExecutionArgs,
 	schedule *jobs.ScheduledJob,
-	dependentID int64,
+	dependentID jobspb.ScheduleID,
 ) error {
 	scheduleExecutionArgs.DependentScheduleID = dependentID
 	any, err := pbtypes.MarshalAny(scheduleExecutionArgs)
@@ -480,7 +480,7 @@ func makeBackupSchedule(
 	label string,
 	recurrence *schedulebase.ScheduleRecurrence,
 	details jobspb.ScheduleDetails,
-	unpauseOnSuccess int64,
+	unpauseOnSuccess jobspb.ScheduleID,
 	updateLastMetricOnSuccess bool,
 	backupNode *tree.Backup,
 	chainProtectedTimestampRecords bool,
