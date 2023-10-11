@@ -70,7 +70,7 @@ BEGIN
 FETCH emp_cur INTO;
 END
 ----
-at or near "into": syntax error: expected INTO target
+at or near "into": syntax error: missing expression
 
 parse
 DECLARE
