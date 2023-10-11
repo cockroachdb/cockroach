@@ -2232,22 +2232,6 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 		v := clusterupgrade.VersionMsg(version)
 		l.Printf("%s: verifying %d collections created during this test", v, len(mvb.collections))
 
-		checkFiles, err := supportsCheckFiles(rng, h)
-		if err != nil {
-			restoreErrors = append(restoreErrors, fmt.Errorf("error checking for check_files support: %w", err))
-			return
-		}
-		if !checkFiles {
-			l.Printf("skipping check_files as it is not supported")
-		}
-		n, db := h.RandomDB(rng, mvb.roachNodes)
-		l.Printf("checking existence of crdb_internal.system_jobs via node %d", n)
-		internalSystemJobs, err := hasInternalSystemJobs(ctx, rng, db)
-		if err != nil {
-			restoreErrors = append(restoreErrors, fmt.Errorf("error checking for internal system jobs: %w", err))
-			return
-		}
-
 		for _, collection := range mvb.collections {
 			if version != clusterupgrade.MainVersion && strings.Contains(collection.name, finalizingLabel) {
 				// Do not attempt to restore, in the previous version, a
@@ -2265,6 +2249,23 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 					restoreErrors = append(restoreErrors, err)
 					continue
 				}
+			}
+
+			checkFiles, err := supportsCheckFiles(rng, h)
+			if err != nil {
+				restoreErrors = append(restoreErrors, fmt.Errorf("error checking for check_files support: %w", err))
+				return
+			}
+			if !checkFiles {
+				l.Printf("skipping check_files as it is not supported")
+			}
+
+			n, db := h.RandomDB(rng, mvb.roachNodes)
+			l.Printf("checking existence of crdb_internal.system_jobs via node %d", n)
+			internalSystemJobs, err := hasInternalSystemJobs(ctx, rng, db)
+			if err != nil {
+				restoreErrors = append(restoreErrors, fmt.Errorf("error checking for internal system jobs: %w", err))
+				return
 			}
 
 			if err := collection.verifyBackupCollection(ctx, l, rng, mvb.backupRestoreTestDriver, checkFiles, internalSystemJobs); err != nil {
