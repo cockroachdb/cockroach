@@ -176,6 +176,13 @@ func TestLogic_mixed_version_udf_execute_privileges(
 	runLogicTest(t, "mixed_version_udf_execute_privileges")
 }
 
+func TestLogic_mixed_version_udf_mutations(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_udf_mutations")
+}
+
 func TestLogic_mixed_version_upgrade_repair_descriptors(
 	t *testing.T,
 ) {
