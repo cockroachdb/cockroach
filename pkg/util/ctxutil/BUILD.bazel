@@ -3,13 +3,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "ctxutil",
     srcs = [
-        "canceler_1_19.go",
         "canceler_1_20.go",
+        "canceler_1_21_bazel.go",
         "context.go",
         "doc.go",
-        "link_1_21_bazel.go",
-        "link_pre_1_21.go",
-        "link_shared.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/ctxutil",
     visibility = ["//visibility:public"],
