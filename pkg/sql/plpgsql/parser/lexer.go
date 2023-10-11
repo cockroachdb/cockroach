@@ -463,5 +463,14 @@ func (l *lexer) GetTypeFromValidSQLSyntax(sqlStr string) (tree.ResolvableTypeRef
 }
 
 func (l *lexer) ParseExpr(sqlStr string) (plpgsqltree.Expr, error) {
-	return parser.ParseExpr(sqlStr)
+	// Use ParseExprs instead of ParseExpr in order to correctly handle the case
+	// when multiple expressions are incorrectly passed.
+	exprs, err := parser.ParseExprs([]string{sqlStr})
+	if err != nil {
+		return nil, err
+	}
+	if len(exprs) != 1 {
+		return nil, pgerror.Newf(pgcode.Syntax, "query returned %d columns", len(exprs))
+	}
+	return exprs[0], nil
 }
