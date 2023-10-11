@@ -212,9 +212,6 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
-	// TODO(erikgrinaker): temporary workaround for
-	// https://github.com/cockroachdb/cockroach/issues/105274
-	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
 
 	m := c.NewMonitor(ctx, c.Range(1, 9))
 
@@ -397,9 +394,6 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
-	// TODO(erikgrinaker): temporary workaround for
-	// https://github.com/cockroachdb/cockroach/issues/105274
-	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
 
 	m := c.NewMonitor(ctx, c.Range(1, 7))
 
@@ -537,9 +531,6 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
-	// TODO(erikgrinaker): temporary workaround for
-	// https://github.com/cockroachdb/cockroach/issues/105274
-	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
 
 	m := c.NewMonitor(ctx, c.Range(1, 6))
 
@@ -677,9 +668,6 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
-	// TODO(erikgrinaker): temporary workaround for
-	// https://github.com/cockroachdb/cockroach/issues/105274
-	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
 
 	m := c.NewMonitor(ctx, c.Range(1, 7))
 
@@ -799,9 +787,6 @@ func runFailoverNonSystem(
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
-	// TODO(erikgrinaker): temporary workaround for
-	// https://github.com/cockroachdb/cockroach/issues/105274
-	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
 
 	m := c.NewMonitor(ctx, c.Range(1, 6))
 
@@ -912,9 +897,6 @@ func runFailoverLiveness(
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
-	// TODO(erikgrinaker): temporary workaround for
-	// https://github.com/cockroachdb/cockroach/issues/105274
-	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
 
 	m := c.NewMonitor(ctx, c.Range(1, 4))
 
@@ -1031,9 +1013,6 @@ func runFailoverSystemNonLiveness(
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
-	// TODO(erikgrinaker): temporary workaround for
-	// https://github.com/cockroachdb/cockroach/issues/105274
-	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
 
 	m := c.NewMonitor(ctx, c.Range(1, 6))
 
