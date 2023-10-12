@@ -1140,7 +1140,7 @@ func registerClusterToCluster(r registry.Registry) {
 			// Write ~50GB total (~12.5GB per node).
 			workload:           replicateKV{readPercent: 0, initRows: 50000000, maxBlockBytes: 2048},
 			timeout:            1 * time.Hour,
-			additionalDuration: 1 * time.Minute,
+			additionalDuration: 5 * time.Minute,
 			cutover:            0,
 			clouds:             registry.AllExceptAWS,
 			suites:             registry.Suites("nightly"),
