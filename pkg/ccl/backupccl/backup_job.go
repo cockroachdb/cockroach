@@ -555,6 +555,10 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
+	if err := b.ensureClusterIDMatches(ctx, p.ExecCfg().NodeInfo.LogicalClusterID()); err != nil {
+		return err
+	}
+
 	kmsEnv := backupencryption.MakeBackupKMSEnv(
 		p.ExecCfg().Settings,
 		&p.ExecCfg().ExternalIODirConfig,
@@ -930,6 +934,28 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	return b.maybeNotifyScheduledJobCompletion(
 		ctx, jobs.StatusSucceeded, p.ExecCfg().JobsKnobs(), p.ExecCfg().InternalDB,
 	)
+}
+
+// ensureClusterIDMatches verifies that this job record matches
+// the cluster ID of this cluster.
+// This check ensures that if the backup job has been restored from a
+// backup of a tenant, or from streaming replication, then we will fail
+// this backup since resuming the backup may overwrite backup metadata created by a different cluster.
+func (b *backupResumer) ensureClusterIDMatches(ctx context.Context, clusterID uuid.UUID) error {
+	if createdBy := b.job.Payload().CreationClusterID; createdBy == uuid.Nil {
+		// This cluster was upgraded from a version that did not set a clusterID
+		// in the job record -- rectify this issue.
+		if err := b.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			md.Payload.CreationClusterID = clusterID
+			ju.UpdatePayload(md.Payload)
+			return nil
+		}); err != nil {
+			return jobs.MarkAsRetryJobError(err)
+		}
+	} else if clusterID != createdBy {
+		return errors.Newf("cannot resume backup started on another cluster (%s != %s)", createdBy, clusterID)
+	}
+	return nil
 }
 
 // ReportResults implements JobResultsReporter interface.
