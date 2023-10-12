@@ -117,7 +117,7 @@ func registerSQLSmith(r registry.Registry) {
 		t.L().Printf("setup:\n%s", strings.Join(setup, "\n"))
 		for _, stmt := range setup {
 			if _, err := conn.Exec(stmt); err != nil {
-				t.Fatal(err)
+				t.Fatalf("error: %s\nstatement: %s", err.Error(), stmt)
 			} else {
 				logStmt(stmt)
 			}
