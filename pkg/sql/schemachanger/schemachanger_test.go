@@ -840,8 +840,13 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"ALTER TABLE t1 DROP COLUMN xyz; -- expect a rejected (sql_safe_updates = true) warning",
 			"ALTER TABLE t1 DROP COLUMN xyz; -- expect a UndefinedColumn error",
 			"ALTER TABLE txyz ADD COLUMN i INT DEFAULT 30; -- expect a UndefinedTable error",
-			"SELECT (*) FROM t1; -- expect to be skipped because of the syntax error",
+			"SELECT (*) FROM t1; -- expect a Syntax error",
 			"FROM t1 SELECT *; -- ditto",
+			"sdfsd  -- ditto",
+			"CREATE VIEW v AS (SELECT (*,1) FROM t);  -- ditto",
+			"CREATE MATERIALIZED VIEW v AS (xlsd);  -- ditto",
+			"CREATE FUNCTION f1() RETURNS INT LANGUAGE SQL AS $$ SELECT $$vsd $$;  -- ditto",
+			"CREATE FUNCTION f1() RETURNS INT LANGUAGE SQL AS $funcTag$ SELECT $$vsd $funcTag$;  -- ditto",
 
 			// Statements with TCL commands or empty content.
 			"",
@@ -883,6 +888,9 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"ALTER TABLE t6 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i; -- ditto",
 			"ALTER TABLE t6 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k; -- ditto",
 			"ALTER TABLE t6 ADD COLUMN p INT DEFAULT 30, DROP COLUMN p; -- ditto",
+			"SET experimental_enable_temp_tables = true;",
+			"CREATE TEMPORARY TABLE t7 (i INT);  -- expect to skip this line",
+			"CREATE TEMP TABLE t7 (i INT);  -- ditto",
 		},
 	}
 
