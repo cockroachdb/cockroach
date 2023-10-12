@@ -71,18 +71,16 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 
 	for ss.HasNextLine() {
 		line := ss.NextLine()
-		if _, err = parser.Parse(line); err != nil {
-			// Skip lines with syntax error.
-			continue
-		}
 
+		syntaxError := hasSyntaxError(line)
 		inTxn := isInATransaction(ctx, t, legacyConn)
+
 		// Pre-execution: modify `line` so that executing it produces the same
 		// state. This step is to account for the known behavior difference between
 		// the two schema changers.
 		// Only run when not in a transaction (otherwise certain DDL combo can make
 		// sql queries issued during modification break; see commit message).
-		if !inTxn {
+		if !inTxn && !syntaxError {
 			line = modifyBlacklistedStmt(ctx, t, line, legacyConn)
 		}
 
@@ -100,12 +98,17 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 		// Post-execution: Check metadata level identity between two clusters.
 		// Only run when not in a transaction (because legacy schema changer will be
 		// used in both clusters).
-		if !inTxn {
+		if !inTxn && !syntaxError {
 			if containsStmtOfType(t, line, tree.TypeDDL) {
 				metaDataIdentityCheck(ctx, t, legacyConn, declarativeConn, linesExecutedSoFar)
 			}
 		}
 	}
+}
+
+func hasSyntaxError(line string) bool {
+	_, err := parser.Parse(line)
+	return err != nil
 }
 
 // isInATransaction returns true if connection `db` is currently in a transaction.
@@ -139,7 +142,12 @@ func modifyBlacklistedStmt(
 	require.NoError(t, err)
 
 	var modify bool
-	for _, lm := range []sqlLineModifier{modifyExprsReferencingSequencesWithTrue, modifyAlterPKWithRowIDCol, modifySetDeclarativeSchemaChangerMode} {
+	for _, lm := range []sqlLineModifier{
+		modifyExprsReferencingSequencesWithTrue,
+		modifyAlterPKWithRowIDCol,
+		modifySetDeclarativeSchemaChangerMode,
+		modifyCreateTempTable,
+	} {
 		var m bool
 		parsedLine, m = lm(ctx, t, parsedLine, legacyConn)
 		modify = modify || m
@@ -147,7 +155,7 @@ func modifyBlacklistedStmt(
 	if modify {
 		t.Logf("Comparator testing framework modifies line %q to %q", line, parsedLine.String())
 	}
-	return parsedLine.String()
+	return parsedLine.StringWithFlags(tree.FmtSimple | tree.FmtTagDollarQuotes)
 }
 
 // modifySetDeclarativeSchemaChangerMode skips stmts that attempt to alter
@@ -302,6 +310,23 @@ func modifyExprsReferencingSequencesWithTrue(
 		newParsedStmts = append(newParsedStmts, parsedStmt)
 	}
 
+	return newParsedStmts, modified
+}
+
+// modifyCreateTempTable skips `CREATE TEMP TABLE` statement because its parent schema name,
+// constructed from sessionID, is naturally going to be different between the two clusters.
+// In short of a more clever way to bake this difference into the metadata identity check,
+// we decided to just skip those statements, for now.
+func modifyCreateTempTable(
+	_ context.Context, t *testing.T, parsedStmts statements.Statements, _ *gosql.Conn,
+) (newParsedStmts statements.Statements, modified bool) {
+	for _, parsedStmt := range parsedStmts {
+		if ast, ok := parsedStmt.AST.(*tree.CreateTable); ok && ast.Persistence.IsTemporary() {
+			modified = true
+			continue
+		}
+		newParsedStmts = append(newParsedStmts, parsedStmt)
+	}
 	return newParsedStmts, modified
 }
 
