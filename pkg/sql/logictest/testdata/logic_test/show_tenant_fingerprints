@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant-default-configs !local-mixed-22.2-23.1 !fakedist !fakedist-vec-off !fakedist-disk
+# LogicTest: !3node-tenant-default-configs !fakedist !fakedist-vec-off !fakedist-disk
 
 # Because tenant initialization includes data tied to particular
 # timestamps, we can't easily make an assertion about the "correct"

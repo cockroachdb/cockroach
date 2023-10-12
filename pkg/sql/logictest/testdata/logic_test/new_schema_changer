@@ -781,7 +781,6 @@ DROP DATABASE db1 CASCADE
 statement ok
 DROP SCHEMA sc2 CASCADE
 
-skipif config local-mixed-22.2-23.1
 # No comments should be left after.
 query T
 SELECT comment FROM system.comments ORDER BY comment ASC
@@ -967,7 +966,6 @@ CREATE TABLE privs (a INT PRIMARY KEY, b INT)
 user testuser
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
 statement error  must be owner of table privs or have CREATE privilege on table privs
 CREATE INDEX foo ON privs (b)
 
@@ -1406,12 +1404,7 @@ SET use_declarative_schema_changer = 'unsafe'
 statement error pgcode 2BP01 cannot drop index "idx" because view "child" depends on it
 DROP INDEX parent@idx
 
-skipif config local-mixed-22.2-23.1
 statement ok
-EXPLAIN (DDL) DROP INDEX parent@idx CASCADE;
-
-onlyif config local-mixed-22.2-23.1
-statement error cannot explain a statement which is not supported by the declarative schema change
 EXPLAIN (DDL) DROP INDEX parent@idx CASCADE;
 
 statement ok
@@ -1470,11 +1463,11 @@ subtest create-schema
 statement ok
 BEGIN
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement ok
 CREATE SCHEMA sc
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query TT rowsort
 SHOW SCHEMAS
 ----
@@ -1485,11 +1478,11 @@ pg_extension        node
 public              admin
 sc                  root
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement ok
 DROP SCHEMA sc
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query TT rowsort
 SHOW SCHEMAS
 ----
@@ -1528,7 +1521,7 @@ EXPLAIN (DDL) CREATE SEQUENCE sq2
 statement ok
 SET CLUSTER SETTING sql.schema.force_declarative_statements='+CREATE SEQUENCE'
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement ok
 EXPLAIN (DDL) CREATE SEQUENCE sq2
 
@@ -1565,69 +1558,57 @@ statement ok
 EXPLAIN (DDL) ALTER TABLE t_108870 ALTER PRIMARY KEY USING COLUMNS (j);
 
 # Ensure ALTER TABLE with multiple ADD COLUMN, DROP COLUMN, and/or ALTER PK cannot use declarative schema changer.
-skipif config local-mixed-22.2-23.1
 statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
 EXPLAIN (DDL) ALTER TABLE t_108870 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i;
 
-skipif config local-mixed-22.2-23.1
 statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
 EXPLAIN (DDL) ALTER TABLE t_108870 DROP COLUMN j, ADD COLUMN k INT DEFAULT 30;
 
-skipif config local-mixed-22.2-23.1
 statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
 EXPLAIN (DDL) ALTER TABLE t_108870 ADD COLUMN k INT DEFAULT 30, ALTER PRIMARY KEY USING COLUMNS (j);
 
-skipif config local-mixed-22.2-23.1
 statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
 EXPLAIN (DDL) ALTER TABLE t_108870 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i, ADD COLUMN k INT DEFAULT 30;
 
 # Ensure we can enable it in declarative schema changer with cluster setting
 # sql.schema.force_declarative_statements.
-skipif config local-mixed-22.2-23.1
 statement ok
 SET CLUSTER SETTING sql.schema.force_declarative_statements='+ALTER TABLE';
 
 statement ok
 SET use_declarative_schema_changer = 'on';
 
-skipif config local-mixed-22.2-23.1
 statement ok
 EXPLAIN (DDL) ALTER TABLE t_108870 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i;
 
-skipif config local-mixed-22.2-23.1
 statement ok
 EXPLAIN (DDL) ALTER TABLE t_108870 DROP COLUMN j, ADD COLUMN k INT DEFAULT 30;
 
-skipif config local-mixed-22.2-23.1
 statement ok
 EXPLAIN (DDL) ALTER TABLE t_108870 ADD COLUMN k INT DEFAULT 30, ALTER PRIMARY KEY USING COLUMNS (j);
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement ok
 EXPLAIN (DDL) ALTER TABLE t_108870 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i, ADD COLUMN k INT DEFAULT 30;
 
 # Ensure we can also enable it in declarative schema changer with session variable
 # use_declarative_schema_changer.
-skipif config local-mixed-22.2-23.1
 statement ok
 SET CLUSTER SETTING sql.schema.force_declarative_statements='';
 
 statement ok
 SET use_declarative_schema_changer = 'unsafe_always';
 
-skipif config local-mixed-22.2-23.1
 statement ok
 EXPLAIN (DDL) ALTER TABLE t_108870 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i;
 
-skipif config local-mixed-22.2-23.1
 statement ok
 EXPLAIN (DDL) ALTER TABLE t_108870 DROP COLUMN j, ADD COLUMN k INT DEFAULT 30;
 
-skipif config local-mixed-22.2-23.1
 statement ok
 EXPLAIN (DDL) ALTER TABLE t_108870 ADD COLUMN k INT DEFAULT 30, ALTER PRIMARY KEY USING COLUMNS (j);
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement ok
 EXPLAIN (DDL) ALTER TABLE t_108870 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i, ADD COLUMN k INT DEFAULT 30;
 
