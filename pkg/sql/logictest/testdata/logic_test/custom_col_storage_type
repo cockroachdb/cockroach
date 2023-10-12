@@ -1,0 +1,65 @@
+# Create a table with a STRING virtual column, a, that is computed from a hidden
+# INT stored computed column, a_internal.
+#
+# The expression for a describes how the stored INT, a_internal, is converted to
+# the user-facing STRING. The expression for a_internal describes how the
+# user-facing STRING value is converted to the stored INT.
+#
+# NOTE: I don't love this syntax, but it made it easy to get something working.
+# An option I'd like to explore would be to specify a single column and both an
+# input and output expression for it. One rough idea would be something like:
+#
+#   a STRING AS INT IN (substring(external.a, 3)::INT) OUT ('a_' || internal.a)
+#
+# In this example, a has the form 'a_<integer>', but only the integer portion is
+# stored, and it is stored as an integer and not as a string.
+statement ok
+CREATE TABLE t_test (
+  k INT PRIMARY KEY,
+  a_internal INT NOT VISIBLE AS (substring(a, 3)::INT) STORED,
+  a STRING AS ('a_' || a_internal) VIRTUAL
+)
+
+# Insert a row into the table. Notice that the integer 123456789 is written, but
+# the string is not.
+query T kvtrace
+INSERT INTO t_test VALUES (1, 'a_123456789')
+----
+CPut /Table/106/1/1/0 -> /TUPLE/2:2:Int/123456789
+
+# When we perform a read, the integer value is conveted back into a STRING.
+query IT
+SELECT k, a FROM t_test
+----
+1  a_123456789
+
+# The query plan shows how the expression for a, ('a_' || a_internal), is
+# projected in order to produce to user-facing STRING value, 'a_123456789'.
+query T
+EXPLAIN (OPT, VERBOSE)
+SELECT k, a FROM t_test
+----
+project
+ ├── columns: k:1 a:3
+ ├── immutable
+ ├── stats: [rows=1000]
+ ├── cost: 1128.84
+ ├── key: (1)
+ ├── fd: (1)-->(3)
+ ├── distribution: test
+ ├── prune: (1,3)
+ ├── scan t_test
+ │    ├── columns: k:1 a_internal:2
+ │    ├── computed column expressions
+ │    │    ├── a_internal:2
+ │    │    │    └── substring(a:3, 3)::INT8
+ │    │    └── a:3
+ │    │         └── 'a_' || a_internal:2
+ │    ├── stats: [rows=1000]
+ │    ├── cost: 1108.82
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── distribution: test
+ │    └── prune: (1,2)
+ └── projections
+      └── 'a_' || a_internal:2 [as=a:3, outer=(2), immutable]

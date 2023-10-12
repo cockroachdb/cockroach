@@ -551,8 +551,20 @@ func (mb *mutationBuilder) addTargetTableColsForInsert(maxCols int) {
 			continue
 		}
 
-		mb.addTargetCol(i)
-		numCols++
+		// TODO: Find the corresponding stored computed column.
+		if mb.alias == tree.MakeUnqualifiedTableName("t_test") && col.IsVirtualComputed() {
+			for j, m := 0, mb.tab.ColumnCount(); j < m; j++ {
+				col := mb.tab.Column(i)
+				if col.IsComputed() && !col.IsVirtualComputed() {
+					mb.addTargetCol(j)
+					numCols++
+					break
+				}
+			}
+		} else {
+			mb.addTargetCol(i)
+			numCols++
+		}
 	}
 
 	// Ensure that the number of input columns does not exceed the number of

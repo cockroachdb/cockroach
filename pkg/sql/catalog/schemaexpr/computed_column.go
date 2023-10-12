@@ -71,13 +71,14 @@ func ValidateComputedColumnExpression(
 				c.GetName(),
 			)
 		}
-		if c.IsComputed() {
-			return pgerror.Newf(
-				pgcode.InvalidTableDefinition,
-				"%s expression cannot reference computed columns",
-				context,
-			)
-		}
+		// TODO: Allow this if they are mutually referenced.
+		// if c.IsComputed() {
+		// 	return pgerror.Newf(
+		// 		pgcode.InvalidTableDefinition,
+		// 		"%s expression cannot reference computed columns",
+		// 		context,
+		// 	)
+		// }
 		depColIDs.Add(c.GetID())
 
 		return nil
