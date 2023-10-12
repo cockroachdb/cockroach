@@ -361,7 +361,7 @@ go_test(
     }),
     data = glob(["testdata/**"]),
     embed = [":kvserver"],
-    exec_properties = {"Pool": "large"},
+    exec_properties = {"Pool": "long_running"},
     shard_count = 48,
     tags = ["cpu:2"],
     deps = [
