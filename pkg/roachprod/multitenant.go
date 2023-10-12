@@ -80,16 +80,16 @@ func StartServiceForVirtualCluster(
 
 // StopServiceForVirtualCluster stops SQL instance processes on the virtualCluster given.
 func StopServiceForVirtualCluster(
-	ctx context.Context, l *logger.Logger, virtualCluster string, stopOpts StopOpts,
+	ctx context.Context, l *logger.Logger, clusterName string, stopOpts StopOpts,
 ) error {
-	tc, err := newCluster(l, virtualCluster)
+	c, err := newCluster(l, clusterName)
 	if err != nil {
 		return err
 	}
 
 	stopOpts.VirtualClusterName = defaultVirtualClusterName(stopOpts.VirtualClusterID)
-	vc := install.VirtualClusterLabel(stopOpts.VirtualClusterName, stopOpts.SQLInstance)
-	return tc.Stop(ctx, l, stopOpts.Sig, stopOpts.Wait, stopOpts.MaxWait, vc)
+	label := install.VirtualClusterLabel(stopOpts.VirtualClusterName, stopOpts.SQLInstance)
+	return c.Stop(ctx, l, stopOpts.Sig, stopOpts.Wait, stopOpts.MaxWait, label)
 }
 
 // defaultVirtualClusterName returns the virtual cluster name used for
