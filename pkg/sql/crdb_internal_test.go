@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -40,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -1406,47 +1404,6 @@ func TestInternalSystemJobsTableMirrorsSystemJobsTable(t *testing.T) {
 	)
 
 	// TODO(adityamaru): add checks for payload and progress
-}
-
-// TestInternalSystemJobsTableWorksWithVersionPreV23_1BackfillTypeColumnInJobsTable
-// tests that crdb_internal.system_jobs and crdb_internal.jobs work when
-// the server has a version pre-V23_1AddTypeColumnToJobsTable. In this version,
-// the job_type column was added to the system.jobs table.
-func TestInternalSystemJobsTableWorksWithVersionPreV23_1BackfillTypeColumnInJobsTable(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			Server: &server.TestingKnobs{
-				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride: clusterversion.ByKey(
-					clusterversion.V23_1BackfillTypeColumnInJobsTable - 1),
-			},
-		},
-	})
-	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-	tdb := sqlutils.MakeSQLRunner(db)
-
-	tdb.Exec(t,
-		"SELECT * FROM crdb_internal.jobs",
-	)
-	tdb.Exec(t,
-		"SELECT * FROM crdb_internal.system_jobs",
-	)
-	// Exercise indexes.
-	tdb.Exec(t,
-		"SELECT * FROM crdb_internal.system_jobs WHERE job_type = 'CHANGEFEED'",
-	)
-	tdb.Exec(t,
-		"SELECT * FROM crdb_internal.system_jobs WHERE id = 0",
-	)
-	tdb.Exec(t,
-		"SELECT * FROM crdb_internal.system_jobs WHERE status = 'running'",
-	)
 }
 
 // TestCorruptPayloadError asserts that we can an error

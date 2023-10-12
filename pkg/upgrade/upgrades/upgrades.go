@@ -97,7 +97,6 @@ var upgrades = []upgradebase.Upgrade{
 		ensureSQLSchemaTelemetrySchedule,
 		"add default SQL schema telemetry schedule",
 	),
-	firstUpgradeTowardsV23_1,
 	upgrade.NewTenantUpgrade("add columns to system.tenants and populate a system tenant entry",
 		toCV(clusterversion.V23_1TenantNamesStateAndServiceMode),
 		upgrade.NoPrecondition,
@@ -337,13 +336,6 @@ var upgrades = []upgradebase.Upgrade{
 }
 
 var (
-	firstUpgradeTowardsV23_1 = upgrade.NewTenantUpgrade(
-		"prepare upgrade to v23.1 release",
-		toCV(clusterversion.V23_1Start),
-		FirstUpgradeFromReleasePrecondition,
-		NoTenantUpgradeFunc,
-	)
-
 	firstUpgradeTowardsV23_2 = upgrade.NewTenantUpgrade(
 		"prepare upgrade to v23.2 release",
 		toCV(clusterversion.V23_2Start),
@@ -353,11 +345,8 @@ var (
 
 	// This slice must contain all upgrades bound to V??_?Start cluster
 	// version keys. These should have FirstUpgradeFromReleasePrecondition as a
-	// precondition and FirstUpgradeFromRelease as the upgrade function itself,
-	// except for V23_1Start which remains a no-op, due to this functionality
-	// having been added in the 23.2 release cycle.
+	// precondition and FirstUpgradeFromRelease as the upgrade function.
 	firstUpgradesAfterPreExistingReleases = []upgradebase.Upgrade{
-		firstUpgradeTowardsV23_1,
 		firstUpgradeTowardsV23_2,
 	}
 )
