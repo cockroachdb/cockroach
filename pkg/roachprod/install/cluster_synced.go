@@ -396,17 +396,18 @@ func (c *SyncedCluster) newSession(
 	return newRemoteSession(l, command)
 }
 
-// Stop is used to stop cockroach on all nodes in the cluster.
+// Stop is used to stop processes or virtual clusters.
 //
-// It sends a signal to all processes that have been started with ROACHPROD env
-// var and optionally waits until the processes stop. If the virtualClusterLabel
-// is not empty, then only sql processes with a matching label are stopped.
+// It sends a signal to all processes that have been started with
+// ROACHPROD env var and optionally waits until the processes stop. If
+// the virtualClusterLabel is not empty, then only the corresponding
+// virtual cluster is stopped (stopping the corresponding sql server
+// process for separate process deployments, or stopping the service
+// for shared-process configurations.)
 //
-// When running roachprod stop without other flags, the signal is 9 (SIGKILL)
-// and wait is true.
-//
-// If maxWait is non-zero, Stop stops waiting after that approximate
-// number of seconds.
+// When Stop needs to kill a process without other flags, the signal
+// is 9 (SIGKILL) and wait is true. If maxWait is non-zero, Stop stops
+// waiting after that approximate number of seconds.
 func (c *SyncedCluster) Stop(
 	ctx context.Context,
 	l *logger.Logger,
@@ -415,20 +416,58 @@ func (c *SyncedCluster) Stop(
 	maxWait int,
 	virtualClusterLabel string,
 ) error {
+	// virtualClusterDisplay includes information about the virtual
+	// cluster associated with OS processes being stopped in this
+	// function.
 	var virtualClusterDisplay string
+	// virtualClusterName is the virtualClusterName associated with the
+	// label passed, if any.
+	var virtualClusterName string
+	// killProcesses indicates whether processed need to be stopped.
+	killProcesses := true
+
 	if virtualClusterLabel != "" {
-		virtualClusterName, sqlInstance, err := VirtualClusterInfoFromLabel(virtualClusterLabel)
+		name, sqlInstance, err := VirtualClusterInfoFromLabel(virtualClusterLabel)
 		if err != nil {
 			return err
 		}
 
-		virtualClusterDisplay = fmt.Sprintf(" virtual cluster %q, instance %d", virtualClusterName, sqlInstance)
+		services, err := c.DiscoverServices(ctx, name, ServiceTypeSQL)
+		if err != nil {
+			return err
+		}
+
+		if len(services) == 0 {
+			return fmt.Errorf("no service for virtual cluster %q", virtualClusterName)
+		}
+
+		virtualClusterName = name
+		if services[0].ServiceMode == ServiceModeShared {
+			// For shared process virtual clusters, we just stop the service
+			// via SQL.
+			killProcesses = false
+		} else {
+			virtualClusterDisplay = fmt.Sprintf(" virtual cluster %q, instance %d", virtualClusterName, sqlInstance)
+		}
+
 	}
-	display := fmt.Sprintf("%s: stopping%s", c.Name, virtualClusterDisplay)
-	if wait {
-		display += " and waiting"
+
+	if killProcesses {
+		display := fmt.Sprintf("%s: stopping%s", c.Name, virtualClusterDisplay)
+		if wait {
+			display += " and waiting"
+		}
+		return c.kill(ctx, l, "stop", display, sig, wait, maxWait, virtualClusterLabel)
+	} else {
+		res, err := c.ExecSQL(ctx, l, c.Nodes[:1], "", 0, []string{
+			"-e", fmt.Sprintf("ALTER TENANT '%s' STOP SERVICE", virtualClusterName),
+		})
+		if err != nil || res[0].Err != nil {
+			return err
+		}
 	}
-	return c.kill(ctx, l, "stop", display, sig, wait, maxWait, virtualClusterLabel)
+
+	return nil
 }
 
 // Signal sends a signal to the CockroachDB process.

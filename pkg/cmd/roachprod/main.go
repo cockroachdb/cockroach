@@ -591,22 +591,19 @@ environment variables to the cockroach process.
 	}),
 }
 
-var stopInstanceAsSeparateProcessCmd = &cobra.Command{
-	Use:   "stop-sql <virtual-cluster> --tenant-id <id> --sql-instance <instance> [--sig] [--wait]",
+var stopInstanceCmd = &cobra.Command{
+	Use:   "stop-sql <cluster> --cluster-id <id> --sql-instance <instance> [--sig] [--wait]",
 	Short: "stop sql instances on a cluster",
 	Long: `Stop sql instances on a cluster.
 
-Stop roachprod created sql instances running on the nodes in a cluster. Every
-process started by roachprod is tagged with a ROACHPROD environment variable
-which is used by "stop-sql" to locate the processes and terminate them. By default,
-processes are killed with signal 9 (SIGKILL) giving them no chance for a graceful
-exit.
+Stop roachprod created virtual clusters (shared or separate process). By default,
+separate processes are killed with signal 9 (SIGKILL) giving them no chance for a
+graceful exit.
 
 The --sig flag will pass a signal to kill to allow us finer control over how we
 shutdown processes. The --wait flag causes stop to loop waiting for all
-processes with the right ROACHPROD environment variable to exit. Note that stop
-will wait forever if you specify --wait with a non-terminating signal (e.g.
-SIGHUP), unless you also configure --max-wait.
+processes to exit. Note that stop will wait forever if you specify --wait with a
+non-terminating signal (e.g. SIGHUP), unless you also configure --max-wait.
 
 --wait defaults to true for signal 9 (SIGKILL) and false for all other signals.
 `,
@@ -623,8 +620,8 @@ SIGHUP), unless you also configure --max-wait.
 			VirtualClusterID: virtualClusterID,
 			SQLInstance:      sqlInstance,
 		}
-		virtualCluster := args[0]
-		return roachprod.StopServiceForVirtualCluster(context.Background(), config.Logger, virtualCluster, stopOpts)
+		clusterName := args[0]
+		return roachprod.StopServiceForVirtualCluster(context.Background(), config.Logger, clusterName, stopOpts)
 	}),
 }
 
@@ -1418,7 +1415,7 @@ func main() {
 		startCmd,
 		stopCmd,
 		startInstanceCmd,
-		stopInstanceAsSeparateProcessCmd,
+		stopInstanceCmd,
 		initCmd,
 		runCmd,
 		signalCmd,
