@@ -868,6 +868,8 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"ALTER TABLE t3 DROP CONSTRAINT t3_pkey;",
 			"DELETE FROM t3 WHERE i = 1;  -- expect to result in an error",
 			"ROLLBACK;",
+			"BEGIN; ALTER TABLE t3 ADD COLUMN j INT CREATE FAMILY;",
+			"ROLLBACK;",
 			"BEGIN; SAVEPOINT cockroach_restart;",
 			"RELEASE SAVEPOINT cockroach_restart;  -- move txn into DONE state",
 			"SELECT 1;  -- expect to be ignored",

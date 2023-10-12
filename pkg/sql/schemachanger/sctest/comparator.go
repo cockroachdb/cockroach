@@ -71,16 +71,14 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 
 	for ss.HasNextLine() {
 		line := ss.NextLine()
-
 		syntaxError := hasSyntaxError(line)
-		inTxn := isInATransaction(ctx, t, legacyConn)
 
 		// Pre-execution: modify `line` so that executing it produces the same
 		// state. This step is to account for the known behavior difference between
 		// the two schema changers.
 		// Only run when not in a transaction (otherwise certain DDL combo can make
 		// sql queries issued during modification break; see commit message).
-		if !inTxn && !syntaxError {
+		if !isInATransaction(ctx, t, legacyConn) && !syntaxError {
 			line = modifyBlacklistedStmt(ctx, t, line, legacyConn)
 		}
 
@@ -98,7 +96,7 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 		// Post-execution: Check metadata level identity between two clusters.
 		// Only run when not in a transaction (because legacy schema changer will be
 		// used in both clusters).
-		if !inTxn && !syntaxError {
+		if !isInATransaction(ctx, t, legacyConn) && !syntaxError {
 			if containsStmtOfType(t, line, tree.TypeDDL) {
 				metaDataIdentityCheck(ctx, t, legacyConn, declarativeConn, linesExecutedSoFar)
 			}
