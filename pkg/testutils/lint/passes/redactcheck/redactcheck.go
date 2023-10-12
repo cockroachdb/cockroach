@@ -188,6 +188,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"LegacyTimestamp": {},
 						"Timestamp":       {},
 					},
+					"github.com/cockroachdb/pebble": {
+						"FormatMajorVersion": {},
+					},
 					"github.com/cockroachdb/pebble/internal/humanize": {
 						"FormattedString": {},
 					},
