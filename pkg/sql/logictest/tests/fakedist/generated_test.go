@@ -1240,6 +1240,13 @@ func TestLogic_numeric_references(
 	runLogicTest(t, "numeric_references")
 }
 
+func TestLogic_obs_db_hidden(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "obs_db_hidden")
+}
+
 func TestLogic_on_update(
 	t *testing.T,
 ) {

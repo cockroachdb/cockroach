@@ -587,6 +587,10 @@ CREATE TABLE crdb_internal.tables (
 				// this virtual table before the dropped table descriptors are
 				// effectively deleted.
 				dbName = fmt.Sprintf("[%d]", table.GetParentID())
+			} else {
+				if p.isDBHidden(dbName, db) {
+					continue
+				}
 			}
 			schemaName := scNames[table.GetParentSchemaID()]
 			if schemaName == "" {

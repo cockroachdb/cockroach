@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/constants"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
@@ -2436,6 +2437,9 @@ func forEachSchema(
 		if err != nil {
 			return err
 		}
+		if p.isDBHidden(db.GetName(), dbContext) {
+			return nil
+		}
 		return forEachDatabase(db)
 	})
 }
@@ -2477,6 +2481,9 @@ func forEachDatabaseDesc(
 			}
 			canSeeDescriptor = hasPriv || p.CurrentDatabase() == dbDesc.GetName()
 		}
+		if p.isDBHidden(dbDesc.GetName(), dbContext) {
+			canSeeDescriptor = false
+		}
 		if canSeeDescriptor {
 			if err := fn(dbDesc); err != nil {
 				return err
@@ -2485,6 +2492,23 @@ func forEachDatabaseDesc(
 	}
 
 	return nil
+}
+
+func (p *planner) isDBHidden(dbName string, dbContext catalog.DatabaseDescriptor) bool {
+	if dbContext != nil && dbContext.GetName() == dbName {
+		// If the user is targeting the obs db explicitly in an introspection query,
+		// include it.
+		return false
+	}
+	if p.CurrentDatabase() == dbName {
+		// It would be poor UX to hide the obs db if it is currently selected as current DB.
+		return false
+	}
+	// Hide the observability database unless the session vars says it should show up.
+	if dbName == constants.ObservabilityDatabaseName && !p.SessionData().ExposeObservabilitySchema {
+		return true
+	}
+	return false
 }
 
 // forEachTypeDesc calls a function for each TypeDescriptor. If dbContext is
@@ -2674,6 +2698,10 @@ func forEachTypeDescWithTableLookupInternalFromDescriptors(
 		if err != nil {
 			return err
 		}
+		if p.isDBHidden(dbDesc.GetName(), dbContext) {
+			continue
+		}
+
 		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, typDesc, dbDesc, allowAdding)
 		if err != nil {
 			return err
@@ -2729,6 +2757,10 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 		case virtualMany:
 			for _, dbID := range lCtx.dbIDs {
 				dbDesc := lCtx.dbDescs[dbID]
+				// If the database is hidden and it is not current, skip it.
+				if p.isDBHidden(dbDesc.GetName(), dbContext) {
+					continue
+				}
 				if err := iterate(dbDesc); err != nil {
 					return err
 				}
@@ -2740,6 +2772,12 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 	for _, tbID := range lCtx.tbIDs {
 		table := lCtx.tbDescs[tbID]
 		dbDesc, parentExists := lCtx.dbDescs[table.GetParentID()]
+
+		// If the database is hidden and it is not current, skip it.
+		if parentExists && p.isDBHidden(dbDesc.GetName(), dbContext) {
+			continue
+		}
+
 		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, table, dbDesc, allowAdding)
 		if err != nil {
 			return err

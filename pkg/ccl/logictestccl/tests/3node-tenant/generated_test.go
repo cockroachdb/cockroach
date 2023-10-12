@@ -1255,6 +1255,13 @@ func TestTenantLogic_numeric_references(
 	runLogicTest(t, "numeric_references")
 }
 
+func TestTenantLogic_obs_db_hidden(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "obs_db_hidden")
+}
+
 func TestTenantLogic_on_update(
 	t *testing.T,
 ) {

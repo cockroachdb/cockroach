@@ -112,6 +112,9 @@ message SessionData {
   // that is used for builtins like to_tsvector and to_tsquery if no
   // text search configuration is explicitly passed in.
   string default_text_search_config = 26;
+  // ExposeObservabilitySchema determines whether the obs schema shows up
+  // in schema introspection.
+  bool expose_observability_schema = 27;
 }
 
 // DataConversionConfig contains the parameters that influence the output

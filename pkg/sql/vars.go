@@ -518,6 +518,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`expose_observability_schema`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`expose_obsevability_schema`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`expose_observability_schema`, s)
+			if err != nil {
+				return err
+			}
+			m.SetExposeObservabilitySchema(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().ExposeObservabilitySchema), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
 	`disable_plan_gists`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`disable_plan_gists`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {

@@ -2125,6 +2125,7 @@ GO_TARGETS = [
     "//pkg/sql/sqlliveness/sqllivenesstestutils:sqllivenesstestutils",
     "//pkg/sql/sqlliveness:sqlliveness",
     "//pkg/sql/sqlnoccltest:sqlnoccltest_test",
+    "//pkg/sql/sqlstats/constants:constants",
     "//pkg/sql/sqlstats/insights/integration:integration_test",
     "//pkg/sql/sqlstats/insights:insights",
     "//pkg/sql/sqlstats/insights:insights_test",

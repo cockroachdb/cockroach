@@ -1,0 +1,143 @@
+# This file asserts that a DB with the special obs db name is
+# hidden by default.
+
+subtest default_config
+
+statement ok
+CREATE DATABASE "$OBS"; CREATE TABLE "$OBS".obs_unused(unused INT);
+
+query T rowsort
+SELECT database_name FROM [SHOW DATABASES]
+----
+defaultdb
+postgres
+system
+test
+
+query T rowsort
+SELECT name FROM crdb_internal.databases
+----
+defaultdb
+postgres
+system
+test
+
+query T rowsort
+SELECT datname FROM pg_catalog.pg_database WHERE datname = '$OBS'
+----
+
+query T rowsort
+SELECT name FROM "".crdb_internal.tables WHERE database_name='$OBS'
+----
+
+query TT rowsort
+SELECT catalog_name, schema_name FROM "".information_schema.schemata WHERE catalog_name='$OBS'
+----
+
+# It shows up if the db prefix was explicitely selected.
+query T rowsort
+SELECT name FROM "$OBS".crdb_internal.tables WHERE name = 'obs_unused'
+----
+obs_unused
+
+query TT rowsort
+SELECT catalog_name, schema_name FROM "$OBS".information_schema.schemata WHERE catalog_name='$OBS'
+----
+$OBS  crdb_internal
+$OBS  information_schema
+$OBS  pg_catalog
+$OBS  pg_extension
+$OBS  public
+
+subtest with_session_var
+
+statement ok
+SET expose_observability_schema = true
+
+query T rowsort
+SELECT database_name FROM [SHOW DATABASES]
+----
+$OBS
+defaultdb
+postgres
+system
+test
+
+query T rowsort
+SELECT name FROM "".crdb_internal.databases
+----
+$OBS
+defaultdb
+postgres
+system
+test
+
+query T rowsort
+SELECT datname FROM pg_catalog.pg_database WHERE datname = '$OBS'
+----
+$OBS
+
+query TT rowsort
+SELECT catalog_name, schema_name FROM "".information_schema.schemata WHERE catalog_name='$OBS'
+----
+$OBS  crdb_internal
+$OBS  information_schema
+$OBS  pg_catalog
+$OBS  pg_extension
+$OBS  public
+
+query T rowsort
+SELECT name FROM "".crdb_internal.tables WHERE name = 'obs_unused'
+----
+obs_unused
+
+statement ok
+RESET expose_observability_schema;
+
+
+subtest obs_currently_selected
+
+statement ok
+SET database = "$OBS"
+
+query T rowsort
+SELECT database_name FROM [SHOW DATABASES]
+----
+$OBS
+defaultdb
+postgres
+system
+test
+
+query T rowsort
+SELECT name FROM crdb_internal.databases
+----
+$OBS
+defaultdb
+postgres
+system
+test
+
+query T rowsort
+SELECT datname FROM pg_catalog.pg_database WHERE datname = '$OBS'
+----
+$OBS
+
+query TT rowsort
+SELECT catalog_name, schema_name FROM "".information_schema.schemata WHERE catalog_name='$OBS'
+----
+$OBS  crdb_internal
+$OBS  information_schema
+$OBS  pg_catalog
+$OBS  pg_extension
+$OBS  public
+
+query T rowsort
+SELECT name FROM "".crdb_internal.tables WHERE database_name='$OBS'
+----
+obs_unused
+
+query T rowsort
+SELECT table_name FROM [SHOW TABLES] WHERE table_name = 'obs_unused'
+----
+obs_unused
