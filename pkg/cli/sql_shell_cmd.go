@@ -53,7 +53,8 @@ func runTerm(cmd *cobra.Command, args []string) (resErr error) {
 		fmt.Print(welcomeMessage)
 	}
 
-	conn, err := makeSQLClient(catconstants.InternalSQLAppName, useDefaultDb)
+	ctx := context.Background()
+	conn, err := makeSQLClient(ctx, catconstants.InternalSQLAppName, useDefaultDb)
 	if err != nil {
 		return err
 	}
@@ -61,5 +62,5 @@ func runTerm(cmd *cobra.Command, args []string) (resErr error) {
 
 	sqlCtx.ShellCtx.CertsDir = baseCfg.SSLCertsDir
 	sqlCtx.ShellCtx.ParseURL = clienturl.MakeURLParserFn(cmd, cliCtx.clientOpts)
-	return sqlCtx.Run(context.Background(), conn)
+	return sqlCtx.Run(ctx, conn)
 }
