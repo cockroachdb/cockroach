@@ -110,8 +110,16 @@ func (p *workPool) getTestToRun(
 		} else {
 			return ttr, nil
 		}
+		// We failed to find a test that can reuse this cluster. A fresh cluster will need to be allocated.
+		// The existing cluster will be destroyed _before_ a fresh one is created.
+		// N.B. we must release the allocation quota before invoking 'selectTest' below, otherwise a deadlock may occur.
+		qp.Release(ttr.alloc)
+		// N.B. we transferred the allocation quota from the existing cluster in order to try to allocate a fresh one, so
+		// when the cluster is destroyed, don't release it again.
+		c.destroyState.alloc = nil
+		ttr.alloc = nil
 	}
-
+	// invariant: testToRunRes.noWork || !testToRunRes.canReuseCluster
 	return p.selectTest(ctx, qp)
 }
 
