@@ -216,7 +216,7 @@ BEGIN TRANSACTION
 statement ok
 UPDATE kv SET v = 'b' WHERE k in ('a')
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement error pgcode 25001 cannot change the isolation level of a running transaction
 SET TRANSACTION ISOLATION LEVEL READ COMMITTED
 
@@ -229,7 +229,7 @@ BEGIN TRANSACTION
 statement ok
 SELECT * FROM kv LIMIT 1
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement error pgcode 25001 cannot change the isolation level of a running transaction
 SET transaction_isolation = 'READ COMMITTED'
 
@@ -319,25 +319,25 @@ BEGIN
 statement ok
 SET TRANSACTION ISOLATION LEVEL SNAPSHOT
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 snapshot
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query T
 SHOW transaction_isolation
 ----
 snapshot
 
-onlyif config local-mixed-22.2-23.1
+onlyif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 serializable
 
-onlyif config local-mixed-22.2-23.1
+onlyif config local-mixed-23.1
 query T
 SHOW transaction_isolation
 ----
@@ -355,13 +355,13 @@ SET transaction_isolation = 'this is made up'
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 snapshot
 
-onlyif config local-mixed-22.2-23.1
+onlyif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -387,13 +387,13 @@ SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 read committed
 
-onlyif config local-mixed-22.2-23.1
+onlyif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -411,25 +411,25 @@ serializable
 statement ok
 SET transaction_isolation = 'READ COMMITTED'
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 read committed
 
-onlyif config local-mixed-22.2-23.1
+onlyif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 serializable
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query T
 SHOW transaction_isolation
 ----
 read committed
 
-onlyif config local-mixed-22.2-23.1
+onlyif config local-mixed-23.1
 query T
 SHOW transaction_isolation
 ----
@@ -732,7 +732,7 @@ SET CLUSTER SETTING sql.txn.snapshot_isolation_syntax.enabled = true
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT, PRIORITY LOW
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -811,7 +811,7 @@ SHOW DEFAULT_TRANSACTION_ISOLATION
 read committed
 
 # SHOW without a transaction should create an auto-transaction with the new default level
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -901,7 +901,7 @@ COMMIT
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -1581,7 +1581,7 @@ ROLLBACK
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement error pq: cluster_logical_timestamp\(\): unsupported in READ COMMITTED isolation
 SELECT cluster_logical_timestamp();
 

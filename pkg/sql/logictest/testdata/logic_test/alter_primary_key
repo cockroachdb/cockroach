@@ -1061,7 +1061,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x) USING HASH WITH (bucket_count=
 
 # old shard column isn't removed by legacy schema changer.
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
 query TT
 SHOW CREATE t
 ----

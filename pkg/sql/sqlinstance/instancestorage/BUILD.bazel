@@ -64,7 +64,6 @@ go_test(
     embed = [":instancestorage"],
     deps = [
         "//pkg/base",
-        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvtenant",
@@ -75,7 +74,6 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/server/settingswatcher",
-        "//pkg/settings/cluster",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/catalog/systemschema",

@@ -1,4 +1,4 @@
-# LogicTest: default-configs !local-mixed-22.2-23.1
+# LogicTest: default-configs !local-mixed-23.1
 
 # Add JSON columns as primary index.
 statement ok

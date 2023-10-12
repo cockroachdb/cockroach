@@ -239,7 +239,7 @@ CREATE FUNCTION f_test_cor(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF STRICT 
 statement error pgcode 42723 pq: function "f_test_cor" already exists with same argument types
 CREATE FUNCTION f_test_cor(a INT, b INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement error pgcode 42809 cannot change routine kind\nDETAIL: "f_test_cor" is a function
 CREATE OR REPLACE PROCEDURE f_test_cor(a INT, b INT) LANGUAGE SQL AS $$ SELECT 2 $$;
 

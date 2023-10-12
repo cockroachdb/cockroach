@@ -158,13 +158,13 @@ func TestList(t *testing.T) {
 000004.log:
   env type: Data, AES128_CTR
   keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
-  nonce: 31 d3 cd 5a 69 e2 13 64 21 53 57 64
-  counter: 3952287331
+  nonce: d1 05 79 53 68 35 a0 f1 44 01 22 79
+  counter: 1497766936
 000005.sst:
   env type: Data, AES128_CTR
   keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
-  nonce: 23 d9 b2 e1 39 b0 87 ed f9 6d 49 20
-  counter: 3481614039
+  nonce: d0 b1 31 4b 08 b9 f6 08 7e e6 af 40
+  counter: 2167389540
 COCKROACHDB_DATA_KEYS_000001_monolith:
   env type: Store, AES128_CTR
   keyID: f594229216d81add7811c4360212eb7629b578ef4eab6e5d05679b3c5de48867
@@ -190,11 +190,11 @@ marker.datakeys.000001.COCKROACHDB_DATA_KEYS_000001_monolith:
   keyID: f594229216d81add7811c4360212eb7629b578ef4eab6e5d05679b3c5de48867
   nonce: 55 d7 d4 27 6c 97 9b dd f1 5d 40 c8
   counter: 467030050
-marker.format-version.000009.010:
+marker.format-version.000012.013:
   env type: Data, AES128_CTR
   keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
-  nonce: 6e 34 f4 3c 11 43 1a f5 69 ce 33 f1
-  counter: 2398097086
+  nonce: 86 a7 78 ad 4b da 62 56 d5 e2 d1 70
+  counter: 798955289
 marker.manifest.000001.MANIFEST-000001:
   env type: Data, AES128_CTR
   keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef

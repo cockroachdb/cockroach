@@ -165,7 +165,6 @@ DROP SEQUENCE t_not_valid_sq CASCADE;
 # Also the destination descriptor should be valid after the FK clean up. Note:
 # skip on older configs since this is an existing bug, not a new regression
 # (see #97871).
-skipif config local-mixed-22.2-23.1
 skipif config local-legacy-schema-changer
 statement ok
 INSERT INTO t_not_valid_dst VALUES(5,5,5);

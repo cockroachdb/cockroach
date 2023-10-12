@@ -1,16 +1,19 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
-    name = "local-mixed-22_2-23_1_test",
+    name = "local-mixed-23_1_test",
     size = "enormous",
     srcs = ["generated_test.go"],
-    args = ["-test.timeout=7195s"],
+    args = select({
+        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
+        "//conditions:default": ["-test.timeout=3595s"],
+    }),
     data = [
         "//c-deps:libgeos",  # keep
-        "@com_github_cockroachdb_sqllogictest//:testfiles",  # keep
+        "//pkg/sql/opt/exec/execbuilder:testdata",  # keep
     ],
     exec_properties = {"Pool": "large"},
-    shard_count = 48,
+    shard_count = 1,
     tags = [
         "cpu:1",
     ],
@@ -20,8 +23,8 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/sql",
         "//pkg/sql/logictest",
-        "//pkg/sql/sqlitelogictest",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/testcluster",

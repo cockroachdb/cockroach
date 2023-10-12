@@ -47,7 +47,7 @@ import (
 )
 
 const (
-	tenantCreationMinSupportedVersionKey = clusterversion.V22_2
+	tenantCreationMinSupportedVersionKey = clusterversion.BinaryMinSupportedVersionKey
 )
 
 // CreateTenant implements the tree.TenantOperator interface.

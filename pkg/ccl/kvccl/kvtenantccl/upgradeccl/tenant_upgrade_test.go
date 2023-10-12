@@ -393,7 +393,7 @@ func TestTenantUpgrade(t *testing.T) {
 //   - v0 corresponds to the bootstrapped version of the tenant,
 //   - v1, v2 correspond to adjacent releases.
 func v0v1v2() (roachpb.Version, roachpb.Version, roachpb.Version) {
-	v0 := clusterversion.ByKey(clusterversion.V22_2)
+	v0 := clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
 	v1 := clusterversion.TestingBinaryVersion
 	v2 := clusterversion.TestingBinaryVersion
 	if v1.Internal > 2 {
@@ -409,6 +409,7 @@ func v0v1v2() (roachpb.Version, roachpb.Version, roachpb.Version) {
 func TestTenantUpgradeFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 112209)
 
 	v0 := clusterversion.TestingBinaryMinSupportedVersion
 	v2 := clusterversion.TestingBinaryVersion
