@@ -84,7 +84,7 @@ func (s scheduledJobStorageTxn) loadCandidateScheduleForExecution(
 	row, cols, err := s.txn.QueryRowExWithCols(
 		ctx, "find-scheduled-jobs-exec",
 		s.txn.KV(),
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		lookupStmt)
 	if err != nil {
 		return nil, err
@@ -114,7 +114,7 @@ func lookupNumRunningJobs(
 	row, err := txn.QueryRowEx(
 		ctx, "lookup-num-running",
 		txn.KV(),
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		lookupStmt)
 	if err != nil {
 		return 0, err
@@ -326,7 +326,7 @@ func (s *jobScheduler) executeSchedules(ctx context.Context, maxSchedules int64)
 	it, err := s.DB.Executor().QueryIteratorEx(
 		ctx, "find-scheduled-jobs",
 		/*txn=*/ nil,
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		findSchedulesStmt)
 
 	if err != nil {

@@ -938,7 +938,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			}
 			_, err := txn.ExecEx(
 				ctx, "expire-sessions", txn.KV(),
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NodeUserSessionDataOverride,
 				removeClaimsForDeadSessionsQuery,
 				s.ID().UnsafeBytes(),
 				cancellationsUpdateLimitSetting.Get(&r.settings.SV),
@@ -988,7 +988,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			}
 			_, err := txn.ExecEx(
 				ctx, "remove-claims-for-session", txn.KV(),
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NodeUserSessionDataOverride,
 				removeClaimsForSessionQuery, s.ID().UnsafeBytes(),
 			)
 			return err
