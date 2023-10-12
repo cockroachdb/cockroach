@@ -28,6 +28,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -1420,18 +1421,53 @@ func Create(
 	return SetupSSH(ctx, l, clusterName)
 }
 
-// GC garbage-collects expired clusters and unused SSH keypairs in AWS.
+// GC garbage-collects expired clusters, unused SSH key pairs in AWS, and unused
+// DNS records.
 func GC(l *logger.Logger, dryrun bool) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
-	cld, err := cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true})
-	if err == nil {
-		// GCClusters depends on ListCloud so only call it if ListCloud runs without errors
-		err = cloud.GCClusters(l, cld, dryrun)
+
+	// Use the `addOpFn` helper to run GC operations concurrently and collect
+	// errors.
+	errorsChan := make(chan error, 8)
+	var wg sync.WaitGroup
+	addOpFn := func(fn func() error) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errorsChan <- fn()
+		}()
 	}
-	otherErr := cloud.GCAWSKeyPairs(l, dryrun)
-	return errors.CombineErrors(err, otherErr)
+
+	// GCAwsKeyPairs has no dependencies and can start immediately.
+	addOpFn(func() error {
+		return cloud.GCAWSKeyPairs(l, dryrun)
+	})
+
+	// The operations below depend on ListCloud so only call it if ListCloud runs
+	// without errors.
+	cld, listErr := cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true})
+	errorsChan <- listErr
+	if listErr == nil {
+		addOpFn(func() error {
+			return cloud.GCClusters(l, cld, dryrun)
+		})
+		addOpFn(func() error {
+			return cloud.GCDNS(l, cld, dryrun)
+		})
+	}
+
+	// Wait for all operations to finish and combine all errors.
+	go func() {
+		wg.Wait()
+		close(errorsChan)
+	}()
+	var combinedErrors error
+	for err := range errorsChan {
+		combinedErrors = errors.CombineErrors(combinedErrors, err)
+	}
+	return combinedErrors
 }
 
 // LogsOpts TODO
