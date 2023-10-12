@@ -588,8 +588,15 @@ func (rd *replicationDriver) setupC2C(
 		rd.t.L().Printf("Prom has started")
 	}
 	return func() {
-		rd.fetchDebugZip(ctx, rd.setup.src.nodes, "source_debug.zip")
-		rd.fetchDebugZip(ctx, rd.setup.dst.nodes, "dest_debug.zip")
+		backgroundCtx := context.Background()
+		if t.Failed() {
+			// Use a new context to grab the debug zips, as the parent context may
+			// have already been cancelled by the roachtest test infra.
+			debugCtx, cancel := context.WithTimeout(backgroundCtx, time.Minute*5)
+			defer cancel()
+			rd.fetchDebugZip(debugCtx, rd.setup.src.nodes, "source_debug.zip")
+			rd.fetchDebugZip(debugCtx, rd.setup.dst.nodes, "dest_debug.zip")
+		}
 		srcDB.Close()
 		destDB.Close()
 	}
