@@ -257,10 +257,6 @@ type StoreTestingKnobs struct {
 	DisableProcessRaft func(roachpb.StoreID) bool
 	// DisableLastProcessedCheck disables checking on replica queue last processed times.
 	DisableLastProcessedCheck bool
-	// ReplicateQueueAcceptsUnsplit allows the replication queue to
-	// process ranges that need to be split, for use in tests that use
-	// the replication queue but disable the split queue.
-	ReplicateQueueAcceptsUnsplit bool
 	// SplitQueuePurgatoryChan allows a test to control the channel used to
 	// trigger split queue purgatory processing.
 	SplitQueuePurgatoryChan <-chan time.Time
