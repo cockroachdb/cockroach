@@ -61,7 +61,7 @@ type engineWithLocation struct {
 }
 
 // TODO(jackson): Tie this to the mapping in SetMinVersion.
-var latestReleaseFormatMajorVersion = pebble.FormatPrePebblev1Marked // v22.2
+var latestReleaseFormatMajorVersion = pebble.FormatFlushableIngest // 23.1
 
 var latestReleaseFormatMajorVersionOpt ConfigOption = func(cfg *engineConfig) error {
 	cfg.PebbleConfig.Opts.FormatMajorVersion = latestReleaseFormatMajorVersion

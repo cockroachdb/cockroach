@@ -427,7 +427,6 @@ ROLLBACK
 statement ok
 BEGIN READ ONLY
 
-skipif config local-mixed-22.2-23.1
 statement error cannot execute SELECT FOR SHARE in a read-only transaction
 SELECT * FROM t FOR SHARE
 
@@ -437,7 +436,6 @@ ROLLBACK
 statement ok
 BEGIN READ ONLY
 
-skipif config local-mixed-22.2-23.1
 statement error cannot execute SELECT FOR KEY SHARE in a read-only transaction
 SELECT * FROM t FOR KEY SHARE
 
@@ -496,30 +494,30 @@ user testuser
 statement ok
 SET enable_shared_locking_for_serializable = true
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@t_pkey
 SELECT v, v2 FROM t JOIN t2 USING (k) FOR SHARE FOR SHARE OF t NOWAIT
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@t_pkey
 SELECT v, v2 FROM t JOIN t2 USING (k) FOR SHARE OF t2 FOR SHARE OF t NOWAIT
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@t_pkey
 SELECT v, v2 FROM t JOIN t2 USING (k) FOR SHARE NOWAIT FOR SHARE OF t
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@t_pkey
 SELECT v, v2 FROM t JOIN t2 USING (k) FOR SHARE NOWAIT FOR SHARE OF t2
 
 statement ok
 SET statement_timeout = '10ms'
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query error pgcode 57014 query execution canceled due to statement timeout
 SELECT v, v2 FROM t JOIN t2 USING (k) FOR SHARE FOR SHARE OF t2 NOWAIT
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query error pgcode 57014 query execution canceled due to statement timeout
 SELECT v, v2 FROM t JOIN t2 USING (k) FOR SHARE OF t FOR SHARE OF t2 NOWAIT
 

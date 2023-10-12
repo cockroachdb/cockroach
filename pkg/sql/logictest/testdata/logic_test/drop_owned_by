@@ -645,14 +645,8 @@ CREATE FUNCTION f_drop_udf() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 statement ok
 ALTER FUNCTION f_drop_udf OWNER TO u_drop_udf;
 
-# TODO(chengxiong): DROP function was only enabled in 23.1. This skip can be
-# removed in 23.2.
-skipif config local-mixed-22.2-23.1
 statement ok
 DROP OWNED BY u_drop_udf;
 
-# TODO(chengxiong): DROP function was only enabled in 23.1. This skip can be
-# removed in 23.2.
-skipif config local-mixed-22.2-23.1
 statement error pq: unknown function: f_drop_udf\(\)
 SHOW CREATE FUNCTION f_drop_udf;

@@ -1,4 +1,4 @@
-# LogicTest: !local-mixed-22.2-23.1
+# LogicTest: !local-mixed-23.1
 
 subtest grant_revoke
 
@@ -739,7 +739,6 @@ CALL test.p()
 statement ok
 SET ROLE tester
 
-skipif config local-mixed-22.2-23.1
 statement error pgcode 42501 user tester does not have EXECUTE privilege on procedure p
 CALL test.p()
 

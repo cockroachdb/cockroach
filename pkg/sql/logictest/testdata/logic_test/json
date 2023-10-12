@@ -182,7 +182,7 @@ SELECT bar FROM foo WHERE bar->'a' = '"b"'::JSON
 statement ok
 SELECT bar FROM foo ORDER BY bar
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement ok
 CREATE TABLE pk (k JSON PRIMARY KEY)
 

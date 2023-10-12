@@ -267,6 +267,8 @@ var multiregion15node5region3azsLocalities = map[int]roachpb.Locality{
 // If no configs are indicated in a test file, the default configs are used.
 // See DefaultConfigNames for the list of default configs.
 //
+// Note: If you add a new config, you should run `./dev gen testlogic`.
+//
 // Note: If you add a new config, it will not automatically run in CI for any
 // test files. It must either be included in the list of default configs or name
 // explicitly in a file-level "LogicTest:" comment.
@@ -469,10 +471,12 @@ var LogicTestConfigs = []TestClusterConfig{
 		Localities: multiregion15node5region3azsLocalities,
 	},
 	{
-		Name:                        "local-mixed-22.2-23.1",
+		// This config runs tests using 23.1 cluster version, simulating a node that
+		// is operating in a mixed-version cluster.
+		Name:                        "local-mixed-23.1",
 		NumNodes:                    1,
 		OverrideDistSQLMode:         "off",
-		BootstrapVersion:            clusterversion.V22_2,
+		BootstrapVersion:            clusterversion.V23_1,
 		DisableUpgrade:              true,
 		DeclarativeCorpusCollection: true,
 	},
@@ -548,7 +552,7 @@ var (
 		"fakedist",
 		"fakedist-vec-off",
 		"fakedist-disk",
-		"local-mixed-22.2-23.1",
+		"local-mixed-23.1",
 	}
 	// FiveNodeDefaultConfigName is a special alias for all 5 node configs.
 	FiveNodeDefaultConfigName = "5node-default-configs"

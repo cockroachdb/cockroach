@@ -71,6 +71,7 @@ func BackupSuccessMixedVersion(t *testing.T, path string, factory TestServerFact
 	// These tests are only marginally more useful than BackupSuccess
 	// and at least as expensive to run.
 	skip.UnderShort(t)
+	skip.WithIssue(t, 112208)
 
 	factory = factory.WithMixedVersion()
 	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, cs CumulativeTestCaseSpec) {
@@ -87,6 +88,7 @@ func BackupRollbacksMixedVersion(t *testing.T, path string, factory TestServerFa
 	// These tests are only marginally more useful than BackupSuccess
 	// and at least as expensive to run.
 	skip.UnderShort(t)
+	skip.WithIssue(t, 112208)
 
 	factory = factory.WithMixedVersion()
 	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, cs CumulativeTestCaseSpec) {

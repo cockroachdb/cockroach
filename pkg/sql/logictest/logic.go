@@ -1347,7 +1347,7 @@ func (t *logicTest) newCluster(
 		if forSystemTenant {
 			// System tenants use the constructor that doesn't initialize the
 			// cluster version (see makeTestConfigFromParams). This is needed
-			// for local-mixed-22.2-23.1 config.
+			// for local-mixed configs.
 			st = cluster.MakeClusterSettings()
 		} else {
 			// Regular tenants use the constructor that initializes the cluster

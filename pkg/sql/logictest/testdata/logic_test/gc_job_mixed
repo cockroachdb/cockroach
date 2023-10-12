@@ -1,4 +1,4 @@
-# LogicTest: local local-mixed-22.2-23.1
+# LogicTest: local local-mixed-23.1
 
 statement ok
 CREATE DATABASE db
@@ -20,23 +20,10 @@ DROP TABLE db.kv
 statement ok
 DROP DATABASE db
 
-# GC jobs in a non-mixed-version cluster, 23.1+ style.
-skipif config local-mixed-22.2-23.1
 query T rowsort
 SELECT description FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE GC'
 ----
 GC for ALTER TABLE db.public.kv ALTER PRIMARY KEY USING COLUMNS (k)
-GC for DROP TABLE db.public.kv
-GC for DROP DATABASE db
-
-# GC jobs in a mixed-version cluster, pre-23.1 style.
-skipif config local
-query T rowsort
-SELECT description FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE GC'
-----
-GC for removed temporary index; ALTER TABLE db.public.kv ALTER PRIMARY KEY USING COLUMNS (k)
-GC for removed primary index; ALTER TABLE db.public.kv ALTER PRIMARY KEY USING COLUMNS (k)
-GC for removed primary index; ALTER TABLE db.public.kv ALTER PRIMARY KEY USING COLUMNS (k)
 GC for DROP TABLE db.public.kv
 GC for DROP DATABASE db
 

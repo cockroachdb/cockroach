@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant-default-configs !local-mixed-22.2-23.1
+# LogicTest: !3node-tenant-default-configs !local-mixed-23.1
 
 # Test formatting of keys in output of SPLIT AT
 
