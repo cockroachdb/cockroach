@@ -250,7 +250,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 
 			zr.sqlOutputFilenameExtension = computeSQLOutputFilenameExtension(sqlExecCtx.TableDisplayFormat)
 
-			sqlConn, err := makeTenantSQLClient("cockroach zip", useSystemDb, tenant.TenantName)
+			sqlConn, err := makeTenantSQLClient(ctx, "cockroach zip", useSystemDb, tenant.TenantName)
 			// The zip output is sent directly into a text file, so the results should
 			// be scanned into strings.
 			sqlConn.SetAlwaysInferResultTypes(false)
