@@ -94,7 +94,8 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 	outScope := inScope.push()
 
 	// Type-check the procedure.
-	defer b.semaCtx.Properties.Ancestors.PopTo(b.semaCtx.Properties.Ancestors)
+	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
+	b.semaCtx.Properties.Require("CALL argument", tree.RejectSubqueries)
 	b.semaCtx.Properties.Ancestors.Push(tree.CallAncestor)
 	typedExpr, err := tree.TypeCheck(b.ctx, c.Proc, b.semaCtx, types.Any)
 	if err != nil {
