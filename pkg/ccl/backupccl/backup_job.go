@@ -988,6 +988,39 @@ func maybeRelocateJobExecution(
 	return nil
 }
 
+// checkForExistingManifestDifferentClusterID returns an error if it finds a backup
+// manifest checkpoint file for this backup job, created by a different
+// cluster.
+//
+// TODO(msbutler): deduplicate this method with b.readManifestOnResume(). This method
+// is kept separate to minimize the backport impact to address
+// https://github.com/cockroachdb/cockroach/issues/112114
+func checkForExistingManifestWithDifferentClusterID(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	mem *mon.BoundAccount,
+	details jobspb.BackupDetails,
+	kmsEnv cloud.KMSEnv,
+	user username.SQLUsername,
+) error {
+	defaultConf, err := cloud.ExternalStorageConfFromURI(details.URI, user)
+	if err != nil {
+		return errors.Wrapf(err, "export configuration")
+	}
+	defaultStore, err := execCfg.DistSQLSrv.ExternalStorage(ctx, defaultConf)
+	if err != nil {
+		return err
+	}
+	manifest, memsize, err := backupinfo.ReadBackupCheckpointManifest(ctx, mem, defaultStore, backupinfo.BackupManifestCheckpointName, details.EncryptionOptions, kmsEnv)
+	defer mem.Shrink(ctx, memsize)
+	if errors.Is(err, cloud.ErrFileDoesNotExist) {
+		return nil
+	}
+	if !manifest.ClusterID.Equal(execCfg.NodeInfo.LogicalClusterID()) {
+		return errors.Newf("cannot resume backup started on another cluster (%s != %s)", manifest.ClusterID, execCfg.NodeInfo.LogicalClusterID())
+	}
+	return nil
+}
 func getBackupDetailAndManifest(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
@@ -1109,7 +1142,9 @@ func getBackupDetailAndManifest(
 	if err != nil {
 		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
 	}
-
+	if err := checkForExistingManifestWithDifferentClusterID(ctx, execCfg, &mem, updatedDetails, &kmsEnv, user); err != nil {
+		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
+	}
 	backupManifest, err := createBackupManifest(
 		ctx,
 		execCfg,
