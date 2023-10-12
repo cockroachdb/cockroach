@@ -12,7 +12,7 @@ go_test(
         "//c-deps:libgeos",  # keep
         "//pkg/sql/logictest:testdata",  # keep
     ],
-    exec_properties = {"Pool": "large"},
+    exec_properties = {"Pool": "long_running"},
     shard_count = 48,
     tags = [
         "cpu:1",
