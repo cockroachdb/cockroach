@@ -14,6 +14,7 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
@@ -324,7 +325,12 @@ func (b *Builder) buildStmt(
 	// An allowlist of statements supported for user defined function.
 	if b.insideFuncDef {
 		switch stmt := stmt.(type) {
-		case *tree.Select, tree.SelectStatement, *tree.Insert, *tree.Update, *tree.Delete:
+		case *tree.Select, tree.SelectStatement:
+		case *tree.Insert, *tree.Update, *tree.Delete:
+			activeVersion := b.evalCtx.Settings.Version.ActiveVersion(b.ctx)
+			if !activeVersion.IsActive(clusterversion.V23_2_UDFMutations) {
+				panic(unimplemented.Newf("user-defined functions", "%s usage inside a function definition is not supported until version 23.2", stmt.StatementTag()))
+			}
 		default:
 			panic(unimplemented.Newf("user-defined functions", "%s usage inside a function definition", stmt.StatementTag()))
 		}

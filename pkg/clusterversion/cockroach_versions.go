@@ -521,6 +521,9 @@ const (
 	// PLpgSQL language.
 	V23_2_PLpgSQL
 
+	// V23_2_UDFMutations is the version where UDFs with mutations are enabled.
+	V23_2_UDFMutations
+
 	// *************************************************
 	// Step (1) Add new versions here.
 	// Do not add new versions to a patch release.
@@ -873,6 +876,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_2_PLpgSQL,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 36},
+	},
+	{
+		Key:     V23_2_UDFMutations,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 38},
 	},
 
 	// *************************************************
