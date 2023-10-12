@@ -221,14 +221,14 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 	startInstanceCmd.Flags().StringVar(&externalProcessNodes, "external-cluster", externalProcessNodes, "start service in external mode, as a separate process in the given nodes")
 
 	// Flags for processes that stop (kill) processes.
-	for _, stopProcessesCmd := range []*cobra.Command{stopCmd, stopInstanceAsSeparateProcessCmd} {
+	for _, stopProcessesCmd := range []*cobra.Command{stopCmd, stopInstanceCmd} {
 		stopProcessesCmd.Flags().IntVar(&sig, "sig", sig, "signal to pass to kill")
 		stopProcessesCmd.Flags().BoolVar(&waitFlag, "wait", waitFlag, "wait for processes to exit")
 		stopProcessesCmd.Flags().IntVar(&maxWait, "max-wait", maxWait, "approx number of seconds to wait for processes to exit")
 	}
 
-	stopInstanceAsSeparateProcessCmd.Flags().IntVarP(&virtualClusterID, "cluster-id", "t", virtualClusterID, "internal ID for the virtual cluster")
-	stopInstanceAsSeparateProcessCmd.Flags().IntVar(&sqlInstance, "sql-instance", 0, "specific SQL/HTTP instance to stop")
+	stopInstanceCmd.Flags().IntVarP(&virtualClusterID, "cluster-id", "t", virtualClusterID, "internal ID for the virtual cluster")
+	stopInstanceCmd.Flags().IntVar(&sqlInstance, "sql-instance", 0, "specific SQL/HTTP instance to stop")
 
 	syncCmd.Flags().BoolVar(&listOpts.IncludeVolumes, "include-volumes", false, "Include volumes when syncing")
 
