@@ -3378,6 +3378,52 @@ func TestBackupTenantsWithRevisionHistory(t *testing.T) {
 	require.Contains(t, fmt.Sprint(err), msg)
 }
 
+// TestBackupJobFailsInRestoredTenant asserts that a backup job in a restored
+// tenant fails on resume, even if the backup job details are not fully
+// populated. This test specifically addresses the bug described in
+// https://github.com/cockroachdb/cockroach/issues/112114
+func TestBackupJobFailsInRestoredTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	ctx := context.Background()
+	tc, systemDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	t10, err := tc.Servers[0].TenantController().StartTenant(ctx, base.TestTenantArgs{
+		TenantID: roachpb.MustMakeTenantID(10),
+		TestingKnobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+	})
+	require.NoError(t, err)
+	t10Sql := sqlutils.MakeSQLRunner(t10.SQLConn(t))
+	potentialPausePoints := []string{
+		"backup.after.write_first_checkpoint",
+		"backup.after.details_has_checkpoint",
+	}
+	rng, _ := randutil.NewTestRand()
+	pausePoint := potentialPausePoints[rng.Intn(2)]
+	t10Sql.Exec(t, fmt.Sprintf("SET CLUSTER SETTING jobs.debug.pausepoints = '%s'", pausePoint))
+	t10Sql.ExpectErr(t, pausePoint, "BACKUP INTO 'nodelocal://1/example-schedule'")
+	var backupJobID int
+	t10Sql.QueryRow(t, "WITH jobs AS (SHOW JOBS) SELECT job_id FROM jobs WHERE job_type='BACKUP';").Scan(&backupJobID)
+	jobutils.WaitForJobToPause(t, t10Sql, jobspb.JobID(backupJobID))
+
+	systemDB.Exec(t, `BACKUP TENANT 10 INTO 'nodelocal://1/foo'`)
+
+	systemDB.Exec(t, `RESTORE TENANT 10 FROM LATEST IN 'nodelocal://1/foo' WITH virtual_cluster = '20',virtual_cluster_name = 'cluster-20'`)
+	t20, err := tc.Servers[0].TenantController().StartTenant(ctx, base.TestTenantArgs{
+		TenantID: roachpb.MustMakeTenantID(20),
+		TestingKnobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+	})
+	require.NoError(t, err)
+	t20Sql := sqlutils.MakeSQLRunner(t20.SQLConn(t))
+	t20Sql.Exec(t, `RESUME JOB $1`, backupJobID)
+	jobutils.WaitForJobToFail(t, t20Sql, jobspb.JobID(backupJobID))
+}
+
 func TestBackupAsOfSystemTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
