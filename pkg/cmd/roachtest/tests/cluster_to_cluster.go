@@ -588,8 +588,9 @@ func (rd *replicationDriver) setupC2C(
 		rd.t.L().Printf("Prom has started")
 	}
 	return func() {
-		rd.fetchDebugZip(ctx, rd.setup.src.nodes, "source_debug.zip")
-		rd.fetchDebugZip(ctx, rd.setup.dst.nodes, "dest_debug.zip")
+		debugCtx := context.Background()
+		rd.fetchDebugZip(debugCtx, rd.setup.src.nodes, "source_debug.zip")
+		rd.fetchDebugZip(debugCtx, rd.setup.dst.nodes, "dest_debug.zip")
 		srcDB.Close()
 		destDB.Close()
 	}
