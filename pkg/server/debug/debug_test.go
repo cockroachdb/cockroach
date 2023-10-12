@@ -180,6 +180,10 @@ func TestAdminDebugAuth(t *testing.T) {
 // TestAdminDebugRedirect verifies that the /debug/ endpoint is redirected to on
 // incorrect /debug/ paths.
 func TestAdminDebugRedirect(t *testing.T) {
+	// TODO(herko): BROKEN_TEST this test is actually broken for shared processes
+	// The redirect does not pass back the query parameters onto the redirect
+	// Make an issue11
+
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})

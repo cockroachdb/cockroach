@@ -499,3 +499,24 @@ func TestStartTenantWithStaleInstance(t *testing.T) {
 	_, err := db.Exec("SELECT count(*) FROM system.sqlliveness")
 	require.NoError(t, err)
 }
+
+// TODO(herko): Remove this temporary testing code
+func TestSharedProcess(t *testing.T) {
+	// REF: TestSingleRoleAuditLogging
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	rootRunner := sqlutils.MakeSQLRunner(sqlDB)
+	defer s.Stopper().Stop(context.Background())
+
+	//testUserDb := s.ApplicationLayer().SQLConnForUser(t, username.TestUser, "")
+	//testRunner := sqlutils.MakeSQLRunner(testUserDb)
+
+	rootRunner.Exec(t, `CREATE TABLE u(x int)`)
+	rootRunner.Exec(t, `CREATE USER testuser`)
+
+	rootRunner.Exec(t, `GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser`)
+	rootRunner.Exec(t, `GRANT ALL ON * TO testuser WITH GRANT OPTION`)
+}

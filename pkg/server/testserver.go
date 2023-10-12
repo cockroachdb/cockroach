@@ -566,30 +566,7 @@ func (ts *testServer) TestTenant() serverutils.ApplicationLayerInterface {
 	return ts.testTenants[0]
 }
 
-// maybeStartDefaultTestTenant might start a test tenant. This can then be used
-// for multi-tenant testing, where the default SQL connection will be made to
-// this tenant instead of to the system tenant. Note that we will
-// currently only attempt to start a test tenant if we're running in an
-// enterprise enabled build. This is due to licensing restrictions on the MT
-// capabilities.
-func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
-	if !(ts.params.DefaultTestTenant.TestTenantAlwaysDisabled() ||
-		ts.params.DefaultTestTenant.TestTenantAlwaysEnabled()) {
-		return errors.WithHint(
-			errors.AssertionFailedf("programming error: no decision taken about the default test tenant"),
-			"Maybe add the missing call to serverutils.ShouldStartDefaultTestTenant()?")
-	}
-
-	// If the flag has been set to disable the default test tenant, don't start
-	// it here.
-	if ts.params.DefaultTestTenant.TestTenantAlwaysDisabled() {
-		return nil
-	}
-
-	if ts.params.DisableSQLServer {
-		return serverutils.PreventDisableSQLForTenantError()
-	}
-
+func (ts *testServer) startDefaultTestTenant(ctx context.Context) (serverutils.ApplicationLayerInterface, error) {
 	tenantSettings := cluster.MakeTestingClusterSettings()
 	if st := ts.params.Settings; st != nil {
 		// Copy overrides and other test-specific configuration,
@@ -634,6 +611,76 @@ func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 	if ts.params.Knobs.Server != nil {
 		params.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs = ts.params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
 	}
+	return ts.StartTenant(ctx, params)
+}
+
+func (ts *testServer) startSharedProcessDefaultTestTenant(ctx context.Context) (serverutils.ApplicationLayerInterface, error) {
+	params := base.TestSharedProcessTenantArgs{
+		TenantName:  "tenant-10", // TODO(herko): fix this
+		TenantID:    serverutils.TestTenantID(),
+		Knobs:       ts.params.Knobs,
+		UseDatabase: ts.params.UseDatabase,
+	}
+	// See comment above on separate process tenant regarding the testing knobs.
+	params.Knobs.Server = &TestingKnobs{}
+	if ts.params.Knobs.Server != nil {
+		params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs = ts.params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
+	}
+	/*for _, setting := range []settings.Setting{
+		sql.SecondaryTenantScatterEnabled,
+		sql.SecondaryTenantSplitAtEnabled,
+		sql.SecondaryTenantZoneConfigsEnabled,
+		sql.SecondaryTenantsMultiRegionAbstractionsEnabled,
+	} {
+		// Update the override for this setting. We need to do this
+		// instead of calling .Override() on the setting directly: certain
+		// tests expect to be able to change the value afterwards using
+		// another ALTER VC SET CLUSTER SETTING statement, which is not
+		// possible with regular overrides.
+		ie := ts.InternalExecutor().(*sql.InternalExecutor)
+		_, err := ie.Exec(ctx, "testserver-alter-tenant-cap", nil,
+			fmt.Sprintf("ALTER VIRTUAL CLUSTER [$1] SET CLUSTER SETTING %s = true", setting.Name()), params2.TenantID.ToUint64())
+		if err != nil {
+			return err
+		}
+	}*/
+
+	tenant, _, err := ts.StartSharedProcessTenant(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO(herko): clean this up
+	if err := ts.grantDefaultSharedProcessCapabilities(ctx, params.TenantID); err != nil {
+		return nil, err
+	}
+
+	return tenant, err
+}
+
+// maybeStartDefaultTestTenant might start a test tenant. This can then be used
+// for multi-tenant testing, where the default SQL connection will be made to
+// this tenant instead of to the system tenant. Note that we will
+// currently only attempt to start a test tenant if we're running in an
+// enterprise enabled build. This is due to licensing restrictions on the MT
+// capabilities.
+func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
+	if !(ts.params.DefaultTestTenant.TestTenantAlwaysDisabled() ||
+		ts.params.DefaultTestTenant.TestTenantAlwaysEnabled()) {
+		return errors.WithHint(
+			errors.AssertionFailedf("programming error: no decision taken about the default test tenant"),
+			"Maybe add the missing call to serverutils.ShouldStartDefaultTestTenant()?")
+	}
+
+	// If the flag has been set to disable the default test tenant, don't start
+	// it here.
+	if ts.params.DefaultTestTenant.TestTenantAlwaysDisabled() {
+		return nil
+	}
+
+	if ts.params.DisableSQLServer {
+		return serverutils.PreventDisableSQLForTenantError()
+	}
 
 	// Temporarily disable the error that is returned if a tenant should not be started manually,
 	// so that we can start the default test tenant internally here.
@@ -647,7 +694,13 @@ func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 		}
 	}()
 
-	tenant, err := ts.StartTenant(ctx, params)
+	var startTenantFn func(context.Context) (serverutils.ApplicationLayerInterface, error)
+	startTenantFn = ts.startDefaultTestTenant
+	if ts.params.DefaultTestTenant.SharedProcessMode() {
+		startTenantFn = ts.startSharedProcessDefaultTestTenant
+	}
+
+	tenant, err := startTenantFn(ctx)
 	if err != nil {
 		return err
 	}
@@ -664,6 +717,27 @@ func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 		// test tenants, in which case, you should evaluate what to do about
 		// returning a default SQL address in AdvSQLAddr().
 		return errors.AssertionFailedf("invalid number of test SQL servers %d", len(ts.testTenants))
+	}
+	return nil
+}
+
+// TODO(herko): Clean this up
+func (ts *testServer) grantDefaultSharedProcessCapabilities(ctx context.Context, tenID roachpb.TenantID) error {
+	ie := ts.InternalExecutor().(*sql.InternalExecutor)
+	execSQL := func(opName, stmt string, qargs ...interface{}) error {
+		_, err := ie.ExecEx(ctx, opName, nil /* txn */, sessiondata.NodeUserSessionDataOverride, stmt, qargs...)
+		return err
+	}
+	err := execSQL("set-tenant-capability", `ALTER TENANT [$1] GRANT CAPABILITY can_debug_process=true,can_use_nodelocal_storage=true`, tenID.ToUint64())
+	if err != nil {
+		return err
+	}
+	if err := ts.WaitForTenantCapabilities(ctx, tenID, map[tenantcapabilities.ID]string{
+		tenantcapabilities.CanDebugProcess:        "true",
+		tenantcapabilities.CanUseNodelocalStorage: "true",
+		tenantcapabilities.CanAdminSplit:          "true",
+	}, ""); err != nil {
+		return err
 	}
 	return nil
 }
@@ -1138,7 +1212,12 @@ func (ts *testServer) StartSharedProcessTenant(
 	if err := args.TenantName.IsValid(); err != nil {
 		return nil, nil, err
 	}
-
+	// Helper function to execute SQL statements.
+	ie := ts.InternalExecutor().(*sql.InternalExecutor)
+	execSQL := func(opName, stmt string, qargs ...interface{}) error {
+		_, err := ie.ExecEx(ctx, opName, nil /* txn */, sessiondata.NodeUserSessionDataOverride, stmt, qargs...)
+		return err
+	}
 	// Save the args for use if the server needs to be created.
 	func() {
 		ts.topLevelServer.serverController.mu.Lock()
@@ -1146,7 +1225,7 @@ func (ts *testServer) StartSharedProcessTenant(
 		ts.topLevelServer.serverController.mu.testArgs[args.TenantName] = args
 	}()
 
-	tenantRow, err := ts.InternalExecutor().(*sql.InternalExecutor).QueryRow(
+	tenantRow, err := ie.QueryRow(
 		ctx, "testserver-check-tenant-active", nil, /* txn */
 		"SELECT id FROM system.tenants WHERE name=$1 AND active=true",
 		args.TenantName,
@@ -1170,13 +1249,8 @@ func (ts *testServer) StartSharedProcessTenant(
 		// The tenant doesn't exist; let's create it.
 		if args.TenantID.IsSet() {
 			// Create with name and ID.
-			_, err := ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
-				ctx,
-				"create-tenant",
-				nil, /* txn */
-				sessiondata.NodeUserSessionDataOverride,
-				"SELECT crdb_internal.create_tenant($1,$2)",
-				args.TenantID.ToUint64(), args.TenantName,
+			err := execSQL(
+				"create-tenant", "SELECT crdb_internal.create_tenant($1,$2)", args.TenantID.ToUint64(), args.TenantName,
 			)
 			if err != nil {
 				return nil, nil, err
@@ -1184,7 +1258,7 @@ func (ts *testServer) StartSharedProcessTenant(
 			tenantID = args.TenantID
 		} else {
 			// Create with name alone; allocate an ID automatically.
-			row, err := ts.InternalExecutor().(*sql.InternalExecutor).QueryRowEx(
+			row, err := ie.QueryRowEx(
 				ctx,
 				"create-tenant",
 				nil, /* txn */
@@ -1201,11 +1275,8 @@ func (ts *testServer) StartSharedProcessTenant(
 	}
 
 	// Also mark it for shared-process execution.
-	_, err = ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
-		ctx,
+	err = execSQL(
 		"start-tenant-shared-service",
-		nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
 		"ALTER TENANT $1 START SERVICE SHARED",
 		args.TenantName,
 	)
@@ -1213,9 +1284,34 @@ func (ts *testServer) StartSharedProcessTenant(
 		return nil, nil, err
 	}
 
+	/*err = execSQL("set-tenant-capability", `ALTER TENANT $1 GRANT CAPABILITY can_debug_process=true,can_admin_split=true,can_view_tsdb_metrics=true`, args.TenantName)
+	if err != nil {
+		return nil, nil, err
+	}*/
+
 	// Wait for the rangefeed to catch up.
 	if err := ts.WaitForTenantReadiness(ctx, tenantID); err != nil {
 		return nil, nil, err
+	}
+
+	// TODO(herko): Combine StartTenant / StartSharedProcessTenant to some degree?
+	for _, setting := range []settings.Setting{
+		sql.SecondaryTenantScatterEnabled,
+		sql.SecondaryTenantSplitAtEnabled,
+		sql.SecondaryTenantZoneConfigsEnabled,
+		sql.SecondaryTenantsMultiRegionAbstractionsEnabled,
+	} {
+		// Update the override for this setting. We need to do this
+		// instead of calling .Override() on the setting directly: certain
+		// tests expect to be able to change the value afterwards using
+		// another ALTER VC SET CLUSTER SETTING statement, which is not
+		// possible with regular overrides.
+		_, err := ie.Exec(ctx, "testserver-alter-tenant-cap", nil,
+			fmt.Sprintf("ALTER VIRTUAL CLUSTER [$1] SET CLUSTER SETTING %s = true", setting.Name()), tenantID.ToUint64())
+		if err != nil {
+			log.Infof(ctx, "ignoring error changing setting because SkipTenantCheck is true: %v", err)
+			return nil, nil, err
+		}
 	}
 
 	// Instantiate the tenant server.

@@ -203,9 +203,6 @@ func TestStatusAPITransactions(t *testing.T) {
 	defer testCluster.Stopper().Stop(ctx)
 
 	thirdServer := testCluster.Server(2)
-	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, thirdServer.AdvSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
-	defer cleanupGoDB()
 	firstServerProto := testCluster.Server(0)
 
 	type testCase struct {
@@ -250,9 +247,9 @@ func TestStatusAPITransactions(t *testing.T) {
 		appName := fmt.Sprintf("app%d", i)
 		appNameToTestCase[appName] = tc
 
-		// Create a brand new connection for each app, so that we don't pollute
+		// Create a brand-new connection for each app, so that we don't pollute
 		// transaction stats collection with `SET application_name` queries.
-		sqlDB, err := gosql.Open("postgres", pgURL.String())
+		sqlDB, err := thirdServer.ApplicationLayer().SQLConnE()
 		if err != nil {
 			t.Fatal(err)
 		}

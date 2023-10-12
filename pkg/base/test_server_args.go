@@ -222,6 +222,11 @@ type DefaultTestTenantOptions struct {
 	// additional virtual clusters. (Default is to block.)
 	allowAdditionalTenants bool
 
+	// vcMode specifies the service modes available to use for the secondary
+	// virtual cluster. Forcing a single mode should have a specific reason for
+	// doing so.
+	vcMode vcMode
+
 	// Whether implicit uses of the ApplicationLayerInterface or
 	// StorageLayerInterface result in warnings/notices.
 	//
@@ -240,6 +245,14 @@ const (
 	ttProb testBehavior = iota
 	ttEnabled
 	ttDisabled
+)
+
+type vcMode int8
+
+const (
+	vcProb vcMode = iota
+	vcExternal
+	vcShared
 )
 
 var (
@@ -309,9 +322,13 @@ func (do DefaultTestTenantOptions) TestTenantAlwaysDisabled() bool {
 	return do.testBehavior == ttDisabled
 }
 
+func (do DefaultTestTenantOptions) SharedProcessMode() bool {
+	return do.vcMode == vcShared
+}
+
 // WarnImplicitInterfaces indicates whether to warn when the test code
 // uses ApplicationLayerInterface or StorageLayerInterface
-// implicitely.
+// implicitly.
 func (do DefaultTestTenantOptions) WarnImplicitInterfaces() bool {
 	return !do.noWarnImplicitInterfaces
 }
@@ -353,16 +370,67 @@ func TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(
 	}
 }
 
+func TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
+	baseOptions DefaultTestTenantOptions, issueNumber int,
+) DefaultTestTenantOptions {
+	if baseOptions.testBehavior == ttDisabled {
+		panic("test behavior cannot be disabled, please refer to one of the other options to disable secondary virtual clusters with a reason")
+	}
+	return DefaultTestTenantOptions{
+		testBehavior:           baseOptions.testBehavior,
+		allowAdditionalTenants: baseOptions.allowAdditionalTenants,
+		issueNum:               issueNumber,
+		label:                  "C-test-failure",
+	}
+}
+
+/*
+// DefaultVirtualClusterModeOptions specifies the mode in which a default test
+// virtual cluster (secondary tenant) will be started.
+type DefaultVirtualClusterModeOptions struct {
+	// vcMode specifies the service modes available to use for the secondary
+	// virtual cluster. Forcing a single mode should have a specific reason for
+	// doing so.
+	vcMode vcMode
+
+	// If set, the virtual cluster will be started with the same
+	// capabilities as the system tenant.
+	grantAllCapabilities bool
+
+	// If a specific mode is not supported, issue and label to link in log
+	// message.
+	issueNum int
+	label    string
+}
+
+type vcMode int8
+
+const (
+	vcProb vcMode = iota
+	vcExternal
+	vcShared
+)
+
+func (o DefaultVirtualClusterModeOptions) SharedProcess() bool {
+	return o.vcMode == vcShared
+}
+*/
+
 // InternalNonDefaultDecision builds a sentinel value used inside a
 // mechanism in serverutils. Should not be used by tests directly.
 func InternalNonDefaultDecision(
-	baseArg DefaultTestTenantOptions, enable bool,
+	baseArg DefaultTestTenantOptions, enable bool, shared bool,
 ) DefaultTestTenantOptions {
 	mode := ttDisabled
 	if enable {
 		mode = ttEnabled
 	}
 	baseArg.testBehavior = mode
+	// TOOD(herko): add comments here, and note.
+	baseArg.vcMode = vcExternal
+	if shared {
+		baseArg.vcMode = vcShared
+	}
 	return baseArg
 }
 
