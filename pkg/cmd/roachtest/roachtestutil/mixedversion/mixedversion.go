@@ -255,6 +255,25 @@ type (
 
 	predecessorFunc func(*rand.Rand, *version.Version, int) ([]string, error)
 
+	// metamorphicSetting specifies a metamorphic setting that's randomly set
+	// when the cluster is started and after each upgrade is finalized.
+	//
+	// There is a 50% chance for the setting to be set, and if so, the value is
+	// chosen randomly from the given values with equal probability.
+	metamorphicSetting struct {
+		// name specifies the name of the setting.
+		name string
+		// values is a list of randomly chosen values for the setting.
+		values []string
+		// minVersion is the minimum version where the setting is supported.
+		minVersion string
+		// maxVersion is the maximum version where the setting is supported.
+		maxVersion string
+		// repeat will metamorphically change the setting after every upgrade. When
+		// false, the setting is only set once (or not at all).
+		repeat bool
+	}
+
 	// Test is the main struct callers of this package interact with.
 	Test struct {
 		ctx       context.Context
@@ -405,6 +424,75 @@ func NewTest(
 		hooks:           &testHooks{prng: prng, crdbNodes: crdbNodes},
 		predecessorFunc: opts.predecessorFunc,
 	}
+
+	// Metamorphically modify settings.
+	pendingSettings := []metamorphicSetting{
+		{
+			name:       "kv.expiration_leases_only.enabled",
+			values:     []string{"false", "true"},
+			minVersion: "v23.1.0",
+		},
+	}
+
+	setMetamorphic := func(ctx context.Context, l *logger.Logger, v version.Version, rng *rand.Rand, h *Helper) error {
+		if len(pendingSettings) == 0 {
+			return nil
+		}
+		_, db := h.RandomDB(rng, h.runner.crdbNodes)
+
+		remove := map[int]bool{}
+		for i, setting := range pendingSettings {
+			// Check if the setting can be used with this version.
+			if min := setting.minVersion; min != "" && !v.AtLeast(version.MustParse(min)) {
+				continue
+			}
+			if max := setting.maxVersion; max != "" && v.Compare(version.MustParse(max)) > 0 {
+				// TODO: This will exclude e.g. v23.2.1 when maxVersion is v23.2, it shouldn't.
+				continue
+			}
+			// At this point, we'll consider flipping the setting, and schedule it for
+			// removal unless it should be repeated.
+			if !setting.repeat {
+				remove[i] = true
+			}
+			// Randomly choose to modify the setting.
+			if rng.Float64() < 0.5 {
+				continue
+			}
+			// Allright, let's flip it.
+			value := setting.values[rng.Intn(len(setting.values))]
+			l.Printf("metamorphic setting %q = %q", setting.name, value)
+			_, err := db.ExecContext(ctx, "SET CLUSTER SETTING "+setting.name+" = $1", value)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Remove processed settings from the pending list.
+		var j int
+		for i, setting := range pendingSettings {
+			if !remove[i] {
+				pendingSettings[j] = setting
+				j++
+			}
+		}
+		pendingSettings = pendingSettings[:j]
+		return nil
+	}
+
+	const name = "metamorphic cluster settings"
+	test.hooks.AddStartup(versionUpgradeHook{
+		name: name,
+		fn: func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
+			return setMetamorphic(ctx, l, *version.MustParse("v" + h.testContext.FromVersion), rng, h)
+		},
+	})
+	test.hooks.AddAfterUpgradeFinalized(versionUpgradeHook{
+		name: name,
+		fn: func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
+			return setMetamorphic(ctx, l, *version.MustParse("v" + h.testContext.ToVersion), rng, h)
+		},
+	})
 
 	assertValidTest(test, t.Fatal)
 	return test

@@ -13,6 +13,7 @@ go_library(
     deps = [
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/option",
+        "//pkg/cmd/roachtest/registry",
         "//pkg/cmd/roachtest/roachtestutil",
         "//pkg/cmd/roachtest/roachtestutil/clusterupgrade",
         "//pkg/cmd/roachtest/test",
