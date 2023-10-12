@@ -1,6 +1,6 @@
-# Legacy schema changer is also skipped because mutation IDs throughout log
+# Legacy schema changer is skipped because mutation IDs throughout log
 # entries will differ. "event_log_legacy" file is for the legacy schema changer.
-# LogicTest: !local-legacy-schema-changer !local-mixed-22.2-23.1
+# LogicTest: !local-legacy-schema-changer
 # knob-opt: sync-event-log
 
 # For some reason, some of the queries produce non-deterministic results if

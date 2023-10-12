@@ -1,5 +1,3 @@
-# LogicTest: !local-mixed-22.2-23.1
-
 ## Tests for span construction/manipulation builtins
 
 subtest tenant_span_0_arg

@@ -581,7 +581,7 @@ CREATE FUNCTION f_test_show_grants(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 
 CREATE FUNCTION f_test_show_grants(INT, string, OID) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 CREATE USER u_test_show_grants;
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement ok
 CREATE PROCEDURE test_priv_p() LANGUAGE SQL AS $$ SELECT 1 $$;
 
@@ -730,15 +730,15 @@ DROP FUNCTION f_test_alter_owner;
 statement ok
 DROP USER u_test_owner;
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement ok
 CREATE PROCEDURE p() LANGUAGE SQL AS 'SELECT 1'
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement error pgcode 42883 could not find a function named "p"
 ALTER FUNCTION p OWNER TO root
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement ok
 DROP PROCEDURE p
 
@@ -779,11 +779,11 @@ SELECT test.my_add(1,2)
 statement ok
 SET ROLE tester
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement error pgcode 42501 user tester does not have EXECUTE privilege on function my_add
 SELECT test.my_add(1,2)
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement error pgcode 42501 user tester does not have EXECUTE privilege on function my_add
 SELECT * FROM (VALUES (1), (2)) AS v(i) WHERE i = test.my_add(1,2)
 
