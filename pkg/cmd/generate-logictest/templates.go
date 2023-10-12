@@ -275,7 +275,7 @@ go_test(
         "//pkg/sql/logictest:testdata",  # keep{{ end }}{{ if .ExecBuildLogicTest }}
         "//pkg/sql/opt/exec/execbuilder:testdata",  # keep{{ end }}
     ],
-    exec_properties = {"Pool": "large"},
+    exec_properties = {"Pool": "{{ .Pool }}"},
     shard_count = {{ if gt .TestCount 48 }}48{{ else }}{{ .TestCount }}{{end}},
     tags = [{{ if .Ccl }}
         "ccl_test",{{ end }}

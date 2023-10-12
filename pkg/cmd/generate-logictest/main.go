@@ -33,6 +33,7 @@ type testFileTemplateConfig struct {
 	Ccl                           bool
 	ForceProductionValues         bool
 	Package, TestRuleName, RelDir string
+	Pool                          string
 	ConfigIdx                     int
 	TestCount                     int
 	NumCPU                        int
@@ -172,6 +173,12 @@ func (t *testdir) dump() error {
 		tplCfg.TestRuleName = strings.ReplaceAll(cfg.Name, ".", "_")
 		tplCfg.Package = strings.ReplaceAll(strings.ReplaceAll(cfg.Name, "-", "_"), ".", "")
 		tplCfg.RelDir = t.relPathToParent
+		tplCfg.Pool = "large"
+		if strings.Contains(t.dir, "pkg/sql/logictest/tests") &&
+			(cfg.Name == "local" || cfg.Name == "local-legacy-schema-changer" ||
+				cfg.Name == "fakedist-disk") {
+			tplCfg.Pool = "long_running"
+		}
 		tplCfg.TestCount = testCount
 		tplCfg.CockroachGoTestserverTest = cfg.UseCockroachGoTestserver
 		// The NumCPU calculation is a guess pulled out of thin air to
