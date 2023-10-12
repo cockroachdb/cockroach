@@ -100,14 +100,14 @@ func TestSetMinVersion(t *testing.T) {
 	p, err := Open(context.Background(), InMemory(), cluster.MakeClusterSettings(), CacheSize(0))
 	require.NoError(t, err)
 	defer p.Close()
-	require.Equal(t, pebble.FormatPrePebblev1Marked, p.db.FormatMajorVersion())
+	require.Equal(t, pebble.FormatFlushableIngest, p.db.FormatMajorVersion())
 
 	ValueBlocksEnabled.Override(context.Background(), &st.SV, true)
-	// Advancing the store cluster version to one that supports value blocks
+	// Advancing the store cluster version to one that supports a new feature
 	// should also advance the store's format major version.
-	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.V23_1EnablePebbleFormatSSTableValueBlocks))
+	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.V23_2_PebbleFormatDeleteSizedAndObsolete))
 	require.NoError(t, err)
-	require.Equal(t, pebble.FormatSSTableValueBlocks, p.db.FormatMajorVersion())
+	require.Equal(t, pebble.FormatDeleteSizedAndObsolete, p.db.FormatMajorVersion())
 }
 
 func TestMinVersion_IsNotEncrypted(t *testing.T) {

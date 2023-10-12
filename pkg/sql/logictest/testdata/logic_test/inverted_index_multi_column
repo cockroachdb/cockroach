@@ -323,7 +323,7 @@ SELECT * FROM backfill_d@idx WHERE i IN (1, 2, 3, 4) AND s = 'bar' AND j @> '7':
 
 # Test selecting, inserting, updating, and deleting on a table with a
 # multi-column JSON inverted index.
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement ok
 CREATE TABLE d (
   id INT PRIMARY KEY,
@@ -332,9 +332,9 @@ CREATE TABLE d (
   INVERTED INDEX idx (foo, bar)
 );
 
-# On 22.2 these inverted indexes could not be created, so skip this
+# Before 23.2 these inverted indexes could not be created, so skip this
 # test by making a normal index
-onlyif config local-mixed-22.2-23.1
+onlyif config local-mixed-23.1
 statement ok
 CREATE TABLE d (
   id INT PRIMARY KEY,
@@ -406,18 +406,18 @@ INSERT into d VALUES
     (8, '"backfilling"', '[[0], [1], [2], []]')
 
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement ok
 CREATE INVERTED INDEX idx on d (foo, bar)
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query ITT
 SELECT id, foo, bar FROM d@idx where foo = '"backfilling"' AND bar->2 @> '2' ORDER BY id
 ----
 6  "backfilling"  [[0], [1], 2, 3]
 8  "backfilling"  [[0], [1], [2], []]
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query ITT
 SELECT id, foo, bar FROM d@idx where foo = '"foo"' AND bar->0 = '7' ORDER BY id
 ----

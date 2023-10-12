@@ -566,7 +566,6 @@ INSERT INTO system.zones (id, config) VALUES
   ($testdb_foo_id, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
   ($schema_bar_id, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0))
 
-skipif config local-mixed-22.2-23.1
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----
@@ -1282,13 +1281,11 @@ true
 
 user root
 
-skipif config local-mixed-22.2-23.1
 statement ok
 GRANT SYSTEM MODIFYSQLCLUSTERSETTING TO testuser
 
 user testuser
 
-skipif config local-mixed-22.2-23.1
 query T
 SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics.reporting.enabled')
 ----
@@ -1299,7 +1296,6 @@ user root
 statement ok
 REVOKE SYSTEM VIEWCLUSTERSETTING FROM testuser
 
-skipif config local-mixed-22.2-23.1
 statement ok
 REVOKE SYSTEM MODIFYSQLCLUSTERSETTING FROM testuser
 
@@ -1355,19 +1351,16 @@ awaitstatement sleepQuery
 
 user root
 
-skipif config local-mixed-22.2-23.1
 statement ok
 GRANT SYSTEM MODIFYSQLCLUSTERSETTING TO testuser
 
 user testuser
 
-skipif config local-mixed-22.2-23.1
 query T
 SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('sql.defaults.zigzag_join.enabled')
 ----
 false
 
-skipif config local-mixed-22.2-23.1
 query T
 SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics.reporting.enabled')
 ----
@@ -1375,7 +1368,6 @@ SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics
 
 user root
 
-skipif config local-mixed-22.2-23.1
 statement ok
 REVOKE SYSTEM MODIFYSQLCLUSTERSETTING FROM testuser
 
@@ -1458,7 +1450,7 @@ CREATE FUNCTION f(STRING, b INT) RETURNS STRING STRICT IMMUTABLE LEAKPROOF LANGU
 
 # Add a procedure to ensure that it doesn't show up in the
 # create_function_statements table.
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement ok
 CREATE PROCEDURE f(BOOL) LANGUAGE SQL AS $$ SELECT 1 $$;
 
@@ -1551,7 +1543,7 @@ test_cross_db  public  f_cross_db  CREATE FUNCTION public.f_cross_db()
                                      SELECT 1;
                                    $$
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement ok
 DROP PROCEDURE f(BOOL);
 
@@ -1570,29 +1562,29 @@ subtest end
 
 subtest create_procedure_statements
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement ok
 CREATE PROCEDURE p(INT) LANGUAGE SQL AS $$ SELECT 1 $$;
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement ok
 CREATE PROCEDURE p(STRING, b INT) LANGUAGE SQL AS $$ SELECT 'hello' $$;
 
 # Add a function to ensure that it doesn't show up in the
 # create_procedure_statements table.
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement ok
 CREATE FUNCTION p(BOOL) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement ok
 CREATE SCHEMA sc;
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement
 CREATE PROCEDURE sc.p2(STRING) LANGUAGE SQL AS $$ SELECT 'hello' $$;
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query ITITITT
 SELECT database_id, database_name, schema_id, schema_name, procedure_id, procedure_name, create_statement
 FROM crdb_internal.create_procedure_statements
@@ -1615,14 +1607,14 @@ ORDER BY procedure_id;
                                    SELECT 'hello';
                                  $$
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement ok
 CREATE DATABASE test_cross_db;
 USE test_cross_db;
 CREATE PROCEDURE p_cross_db() LANGUAGE SQL AS $$ SELECT 1 $$;
 USE test;
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 query ITITITT
 SELECT database_id, database_name, schema_id, schema_name, procedure_id, procedure_name, create_statement
 FROM "".crdb_internal.create_procedure_statements
@@ -1650,7 +1642,7 @@ ORDER BY procedure_id;
                                                     SELECT 1;
                                                   $$
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-23.1
 statement ok
 DROP PROCEDURE p(INT);
 DROP PROCEDURE p(STRING, INT);

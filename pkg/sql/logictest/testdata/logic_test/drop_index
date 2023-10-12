@@ -100,7 +100,6 @@ users       users_pkey  false       3             title        title       N/A  
 user testuser
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
 statement error must be owner of table users or have CREATE privilege on table users
 DROP INDEX users@bar
 
