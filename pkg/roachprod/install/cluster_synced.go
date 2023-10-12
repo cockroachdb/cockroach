@@ -432,13 +432,13 @@ func (c *SyncedCluster) Stop(
 			return err
 		}
 
-		services, err := c.DiscoverServices(ctx, name, ServiceTypeSQL)
+		services, err := c.DiscoverServices(ctx, name, ServiceTypeSQL, ServiceInstancePredicate(sqlInstance))
 		if err != nil {
 			return err
 		}
 
 		if len(services) == 0 {
-			return fmt.Errorf("no service for virtual cluster %q", virtualClusterName)
+			return fmt.Errorf("no SQL services for virtual cluster %q, instance %d", name, sqlInstance)
 		}
 
 		virtualClusterName = name

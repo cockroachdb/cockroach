@@ -20,7 +20,6 @@ import (
 	"text/template"
 
 	"github.com/alessio/shellescape"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -219,30 +218,14 @@ func (c *SyncedCluster) DiscoverService(
 		}
 	}
 
-	// Finally, fall back to the default ports if no services are found. This is
-	// useful for backwards compatibility with clusters that were created before
-	// the introduction of service discovery, or without a DNS provider.
-	// TODO(Herko): Remove this once DNS support is fully functional.
 	if len(services) == 0 {
-		var port int
-		switch serviceType {
-		case ServiceTypeSQL:
-			port = config.DefaultSQLPort
-		case ServiceTypeUI:
-			port = config.DefaultAdminUIPort
-		default:
-			return ServiceDesc{}, errors.Newf("invalid service type: %s", serviceType)
-		}
-		return ServiceDesc{
-			ServiceType:        serviceType,
-			ServiceMode:        ServiceModeShared,
-			VirtualClusterName: virtualClusterName,
-			Node:               node,
-			Port:               port,
-			Instance:           0,
-		}, nil
+		return ServiceDesc{}, fmt.Errorf(
+			"name:%q, type:%s, instance:%d, node:%d: no such service",
+			virtualClusterName, serviceType, sqlInstance, node,
+		)
 	}
-	return services[0], err
+
+	return services[0], nil
 }
 
 // MapServices discovers all service types for a given virtual cluster
