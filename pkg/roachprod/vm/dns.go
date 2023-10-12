@@ -48,9 +48,20 @@ type DNSRecord struct {
 // DNSProvider is an optional capability for a Provider that provides DNS
 // management services.
 type DNSProvider interface {
+	// CreateRecords creates DNS records.
 	CreateRecords(ctx context.Context, records ...DNSRecord) error
+	// LookupSRVRecords looks up SRV records for the given service, proto, and
+	// subdomain. The protocol is usually "tcp" and the subdomain is usually the
+	// cluster name. The service is a combination of the virtual cluster name and
+	// type of service.
 	LookupSRVRecords(ctx context.Context, service, proto, subdomain string) ([]DNSRecord, error)
-	DeleteRecordsBySubdomain(subdomain string) error
+	// ListRecords lists all DNS records managed for the zone.
+	ListRecords(ctx context.Context) ([]DNSRecord, error)
+	// DeleteRecordsBySubdomain deletes all DNS records with the given subdomain.
+	DeleteRecordsBySubdomain(ctx context.Context, subdomain string) error
+	// DeleteRecordsByName deletes all DNS records with the given name.
+	DeleteRecordsByName(ctx context.Context, names ...string) error
+	// Domain returns the domain name (zone) of the DNS provider.
 	Domain() string
 }
 
