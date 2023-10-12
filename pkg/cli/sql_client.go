@@ -14,13 +14,18 @@ import (
 	"context"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
 )
 
 // sqlConnTimeout is the default SQL connect timeout. This can also be
@@ -42,10 +47,13 @@ const (
 	useDefaultDb
 )
 
-// makeSQLClient calls makeTenantSQLClient but with System Tenant as the
-// default.
-func makeSQLClient(appName string, defaultMode defaultSQLDb) (clisqlclient.Conn, error) {
-	return makeTenantSQLClient(appName, defaultMode, catconstants.SystemTenantName)
+const userDefaultTenant = ""
+
+// makeSQLClient calls makeTenantSQLClient with the user default tenant as the default.
+func makeSQLClient(
+	ctx context.Context, appName string, defaultMode defaultSQLDb,
+) (clisqlclient.Conn, error) {
+	return makeTenantSQLClient(ctx, appName, defaultMode, userDefaultTenant)
 }
 
 // makeTenantSQLClient connects to the database using the connection
@@ -60,15 +68,15 @@ func makeSQLClient(appName string, defaultMode defaultSQLDb) (clisqlclient.Conn,
 // specified, but only if the URL didn't already specify
 // application_name. It is prefixed with '$ ' to mark it as internal.
 func makeTenantSQLClient(
-	appName string, defaultMode defaultSQLDb, tenantName string,
+	ctx context.Context, appName string, defaultMode defaultSQLDb, tenantName string,
 ) (clisqlclient.Conn, error) {
 	baseURL, err := cliCtx.makeClientConnURL()
 	if err != nil {
 		return nil, err
 	}
 
-	// Some servers don't expect options to be set. Only set if a non-system tenant is desired.
-	if tenantName != catconstants.SystemTenantName {
+	cclusterOptionRequired := tenantName != userDefaultTenant
+	if cclusterOptionRequired {
 		err = baseURL.AddOptions(url.Values{
 			"options": []string{"-ccluster=" + tenantName},
 		})
@@ -76,8 +84,32 @@ func makeTenantSQLClient(
 			return nil, err
 		}
 	}
+	conn, err := makeSQLClientForBaseURL(appName, defaultMode, baseURL)
+	if err != nil && shouldTryWithoutTenantName(tenantName, err) {
+		return makeTenantSQLClient(ctx, appName, defaultMode, userDefaultTenant)
+	} else if err != nil {
+		return nil, err
+	}
 
+	if cclusterOptionRequired {
+		// If we've specified the ccluster option, we we don't know if
+		// it is supported until we actually try to make a connection.
+		if err := conn.EnsureConn(ctx); err != nil && shouldTryWithoutTenantName(tenantName, err) {
+			if err := conn.Close(); err != nil {
+				log.VInfof(ctx, 2, "close err: %v", err)
+			}
+			return makeTenantSQLClient(ctx, appName, defaultMode, userDefaultTenant)
+		}
+	}
+
+	return conn, nil
+}
+
+func makeSQLClientForBaseURL(
+	appName string, defaultMode defaultSQLDb, baseURL *pgurl.URL,
+) (clisqlclient.Conn, error) {
 	// Set a connection timeout if none is provided already.
+	var err error
 	sqlCtx.ConnectTimeout, err = strconv.Atoi(sqlConnTimeout)
 	if err != nil {
 		return nil, err
@@ -113,4 +145,25 @@ func makeTenantSQLClient(
 	}
 
 	return sqlCtx.MakeConn(sqlURL)
+}
+
+// shouldTryWithoutTenantName returns true if the error may be the
+// result of specifying the ccluster option when that option is not
+// supported.
+//
+// We only expect to hit this when we are trying to explicitly use the system
+// tenant but are talking to a standalone tenant process.
+func shouldTryWithoutTenantName(tenantName string, err error) bool {
+	// We only want to retry if the SystemTenant was requested.
+	if tenantName != catconstants.SystemTenantName {
+		return false
+	}
+
+	if strings.Contains(err.Error(), "tenant selection is not available on this server") {
+		return true
+	}
+	if pgErr := (*pgconn.PgError)(nil); errors.As(err, &pgErr) {
+		return pgErr.Code == pgcode.InvalidParameterValue.String()
+	}
+	return pgerror.GetPGCode(err) == pgcode.InvalidParameterValue
 }

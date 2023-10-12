@@ -165,6 +165,7 @@ go_library(
         "//pkg/sql/parser",
         "//pkg/sql/parser/statements",
         "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/protoreflect",
         "//pkg/sql/row",
         "//pkg/sql/rowenc",
