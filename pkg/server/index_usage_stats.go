@@ -74,13 +74,7 @@ func (s *statusServer) IndexUsageStatistics(
 		return statusClient.IndexUsageStatistics(ctx, localReq)
 	}
 
-	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
-		client, err := s.dialNode(ctx, nodeID)
-		return client, err
-	}
-
-	fetchIndexUsageStats := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
-		statusClient := client.(serverpb.StatusClient)
+	fetchIndexUsageStats := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
 		return statusClient.IndexUsageStatistics(ctx, localReq)
 	}
 
@@ -101,7 +95,7 @@ func (s *statusServer) IndexUsageStatistics(
 	if err := s.iterateNodes(ctx,
 		"requesting index usage stats",
 		noTimeout,
-		dialFn, fetchIndexUsageStats, aggFn, errFn); err != nil {
+		fetchIndexUsageStats, aggFn, errFn); err != nil {
 		return nil, err
 	}
 
@@ -176,13 +170,7 @@ func (s *statusServer) ResetIndexUsageStats(
 		return statusClient.ResetIndexUsageStats(ctx, localReq)
 	}
 
-	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
-		client, err := s.dialNode(ctx, nodeID)
-		return client, err
-	}
-
-	resetIndexUsageStats := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
-		statusClient := client.(serverpb.StatusClient)
+	resetIndexUsageStats := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
 		return statusClient.ResetIndexUsageStats(ctx, localReq)
 	}
 
@@ -198,7 +186,7 @@ func (s *statusServer) ResetIndexUsageStats(
 	if err := s.iterateNodes(ctx,
 		"Resetting index usage stats",
 		noTimeout,
-		dialFn, resetIndexUsageStats, aggFn, errFn); err != nil {
+		resetIndexUsageStats, aggFn, errFn); err != nil {
 		return nil, err
 	}
 
