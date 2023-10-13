@@ -87,6 +87,8 @@ upgrade 1
 
 upgrade 2
 
+upgrade 3
+
 query B retry
 SELECT crdb_internal.is_at_least_version('23.1-38')
 ----

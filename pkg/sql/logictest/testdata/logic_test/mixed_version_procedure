@@ -37,6 +37,8 @@ upgrade 1
 
 upgrade 2
 
+upgrade 3
+
 # Makes sure the upgrade job has finished, and the cluster version gate is
 # passed.
 query B retry

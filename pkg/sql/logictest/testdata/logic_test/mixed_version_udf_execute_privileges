@@ -52,6 +52,8 @@ upgrade 1
 
 upgrade 2
 
+upgrade 3
+
 # Verify that all nodes are now running 23.2 binaries.
 
 query B nodeidx=0
