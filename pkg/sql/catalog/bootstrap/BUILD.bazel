@@ -9,6 +9,12 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap",
     visibility = ["//visibility:public"],
+    embedsrcs = [
+        "data/23_1_system.keys",
+        "data/23_1_system.sha256",
+        "data/23_1_tenant.keys",
+        "data/23_1_tenant.sha256",
+    ],
     deps = [
         "//pkg/clusterversion",
         "//pkg/config/zonepb",
