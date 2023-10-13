@@ -124,6 +124,19 @@ func registerRebalanceLoad(r registry.Registry) {
 		t.Status(fmt.Sprintf("setting rebalance mode to %s", rebalanceMode))
 		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.allocator.load_based_rebalancing=$1::string`, rebalanceMode)
 		require.NoError(t, err)
+		// Enable collecting CPU profiles when the CPU utilization exceeds 90%.
+		// This helps debug failures which occur as a result of mismatches
+		// between allocation (QPS/replica CPU) and hardware signals e.g. see
+		// #111900.
+		//
+		// TODO(kvoli): Remove this setup once CPU profiling is enabled by default
+		// on perf roachtests #97699.
+		_, err = db.ExecContext(ctx, `SET CLUSTER SETTING server.cpu_profile.duration = '2s'`)
+		require.NoError(t, err)
+		_, err = db.ExecContext(ctx, `SET CLUSTER SETTING server.cpu_profile.interval = '2m'`)
+		require.NoError(t, err)
+		_, err = db.ExecContext(ctx, `SET CLUSTER SETTING server.cpu_profile.cpu_usage_combined_threshold = 90`)
+		require.NoError(t, err)
 
 		var m *errgroup.Group // see comment in version.go
 		m, ctx = errgroup.WithContext(ctx)
