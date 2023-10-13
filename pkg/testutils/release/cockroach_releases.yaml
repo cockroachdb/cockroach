@@ -18,5 +18,5 @@
   withdrawn:
   - 23.1.0
   predecessor: "22.2"
-"23.2":
+"24.1":
   predecessor: "23.1"
