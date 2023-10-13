@@ -1285,6 +1285,54 @@ func (u *CommonTestUtils) loadTablesForDBs(
 	return allTables, nil
 }
 
+// setMaxRangeSizeAndDependentSettings may lower the max range size for the
+// passed in databases. In addition, this function also ensures that the
+// `systemSettingValuesBoundOnRangeSize` are lower than this max range size.
+// With some probability, these settings will be get set to the maximum value in
+// the `systemSettingsValuesBoundOnRangeSize[setting]` set below the max range
+// size, or to some random value in the set below the max range size.
+func (u *CommonTestUtils) setMaxRangeSizeAndDependentSettings(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, dbs []string,
+) error {
+	const defaultRangeSizeProbability = 0.5
+	const defaultAltSettingProbability = 0.5
+
+	rangeSize := 512 << 20
+	if rng.Float64() < defaultRangeSizeProbability {
+		rangeSize = maxRangeSizeBytes[rng.Intn(len(maxRangeSizeBytes))]
+		l.Printf("Set max range rangeSize to %d MB", rangeSize>>20)
+		for _, dbName := range dbs {
+			query := fmt.Sprintf("ALTER DATABASE %s CONFIGURE ZONE USING range_max_bytes=%d, range_min_bytes=1024",
+				dbName, rangeSize)
+			if err := u.Exec(ctx, rng, query); err != nil {
+				return err
+			}
+		}
+	}
+
+	for setting, values := range systemSettingsValuesBoundOnRangeSize {
+		boundedValues := make([]int, 0)
+		for _, value := range values {
+			if value <= rangeSize {
+				boundedValues = append(boundedValues, value)
+			}
+		}
+		if len(boundedValues) == 0 {
+			return errors.Newf("Could not find a value below range size %d for setting %s", rangeSize, setting)
+		}
+		chosenValue := boundedValues[len(boundedValues)-1]
+		if rng.Float64() > defaultAltSettingProbability {
+			chosenValue = boundedValues[rng.Intn(len(boundedValues))]
+		}
+		l.Printf("setting cluster setting %q to %q", setting, chosenValue)
+		stmt := fmt.Sprintf("SET CLUSTER SETTING %s = '%s'", setting, chosenValue)
+		if err := u.Exec(ctx, rng, stmt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // setClusterSettings may set up to numCustomSettings cluster settings
 // as defined in `systemSettingValues`. The system settings changed
 // are logged. This function should be called *before* the upgrade

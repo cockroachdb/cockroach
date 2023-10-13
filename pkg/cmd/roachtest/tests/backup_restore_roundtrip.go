@@ -30,6 +30,19 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+var (
+	// maxRangeSizeBytes defines the possible non default (default is 512 MB) maximum range
+	// sizes that may get set for all user databases.
+	maxRangeSizeBytes = []int{1 << 18 /* 256 KB */, 4 << 20 /* 4 MB*/, 32 << 20 /* 32 MB */}
+
+	// SystemSettingsValuesBoundOnRangeSize defines the set of possible cluster
+	// setting values, set after the default max range size. The value chosen will
+	// never be larger than the max range size.
+	systemSettingsValuesBoundOnRangeSize = map[string][]int{
+		"backup.restore_span.target_size": {0, 1 << 17, 3 << 20, 24 << 20, 384 << 20},
+	}
+)
+
 func registerBackupRestoreRoundTrip(r registry.Registry) {
 	// backup-restore/round-trip tests that a round trip of creating a backup and
 	// restoring the created backup create the same objects.
@@ -94,10 +107,12 @@ func backupRestoreRoundTrip(ctx context.Context, t test.Test, c cluster.Cluster)
 		if err := testUtils.setShortJobIntervals(ctx, testRNG); err != nil {
 			return err
 		}
+		if err := testUtils.setMaxRangeSizeAndDependentSettings(ctx, t.L(), testRNG, dbs); err != nil {
+			return err
+		}
 		if err := testUtils.setClusterSettings(ctx, t.L(), testRNG); err != nil {
 			return err
 		}
-
 		for i := 0; i < 10; i++ {
 			allNodes := labeledNodes{Nodes: roachNodes, Version: clusterupgrade.MainVersion}
 			bspec := backupSpec{
