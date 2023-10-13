@@ -33,7 +33,10 @@ func registerRustPostgres(r registry.Registry) {
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 
-		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
+		// Most other ORM tests use an in-memory cluster. However, for this test, we
+		// need to restart the cluster with a different port, so we need disk
+		// storage.
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 		db := c.Conn(ctx, t.L(), 1)
 		_, err := db.Exec("create user postgres with createdb createlogin createrole cancelquery")
 		if err != nil {
