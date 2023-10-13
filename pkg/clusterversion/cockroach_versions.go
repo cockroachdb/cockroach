@@ -530,6 +530,11 @@ const (
 	// *************************************************
 )
 
+// VCurrent_Start is an alias for last Start version key (i.e the first internal
+// version of the release in development). Tests should use this constant so
+// they don't need to be updated when the versions change.
+const VCurrent_Start = V23_2Start
+
 func (k Key) String() string {
 	return ByKey(k).String()
 }
@@ -959,7 +964,7 @@ var versionsSingleton = func() keyedVersions {
 var V23_2 = versionsSingleton[len(versionsSingleton)-1].Key
 
 const (
-	BinaryMinSupportedVersionKey = V22_2
+	BinaryMinSupportedVersionKey = V23_1
 )
 
 // TODO(irfansharif): clusterversion.binary{,MinimumSupported}Version

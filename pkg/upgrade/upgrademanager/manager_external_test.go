@@ -66,12 +66,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs was chosen
-	// specifically so that all the migrations that introduce and backfill the new
-	// `system.job_info` have run by this point. In the future this startCV should
-	// be changed to V23_2Start and updated to the next Start key everytime the
-	// compatability window moves forward.
-	startCV := clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs
+	startCV := clusterversion.VCurrent_Start
 	endCV := startCV + 1
 
 	ch := make(chan chan error)
@@ -251,7 +246,7 @@ func TestPostJobInfoTableQueryDuplicateJobInfo(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	targetCV := clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs + 1
+	targetCV := clusterversion.V23_2Start + 1
 	targetCVJSON, err := protoreflect.MessageToJSON(&clusterversion.ClusterVersion{Version: clusterversion.ByKey(targetCV)},
 		protoreflect.FmtFlags{EmitDefaults: false})
 	require.NoError(t, err)
@@ -372,7 +367,7 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// We're going to be migrating from startCV to endCV.
-	startCVKey := clusterversion.V22_2
+	startCVKey := clusterversion.V23_1
 	startCV := clusterversion.ByKey(startCVKey)
 	endCVKey := startCVKey + 1
 	endCV := clusterversion.ByKey(endCVKey)
@@ -561,12 +556,7 @@ func TestPauseMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs was chosen
-	// specifically so that all the migrations that introduce and backfill the new
-	// `system.job_info` have run by this point. In the future this startCV should
-	// be changed to V23_2Start and updated to the next Start key everytime the
-	// compatability window moves forward.
-	startCV := clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs
+	startCV := clusterversion.VCurrent_Start
 	endCV := startCV + 1
 
 	type migrationEvent struct {

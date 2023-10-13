@@ -16,46 +16,26 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+// TestSQLStatsTTLChange is testing the permanent upgrade associated with
+// Permanent_V23_1ChangeSQLStatsTTL. We no longer support versions this old, but
+// we still need to test that the upgrade happens as expected when creating a
+// new cluster.
 func TestSQLStatsTTLChange(t *testing.T) {
 	skip.UnderStressRace(t)
 	defer leaktest.AfterTest(t)()
+
 	ctx := context.Background()
-
-	clusterArgs := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride: clusterversion.ByKey(
-						clusterversion.Permanent_V23_1ChangeSQLStatsTTL - 1),
-				},
-			},
-		},
-	}
-
-	tc := testcluster.StartTestCluster(t, 1, clusterArgs)
-
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 	db := tc.ServerConn(0)
 	defer db.Close()
-
-	upgrades.Upgrade(
-		t,
-		db,
-		clusterversion.Permanent_V23_1ChangeSQLStatsTTL,
-		nil,
-		false,
-	)
 
 	tables := []string{
 		"system.public.statement_statistics",

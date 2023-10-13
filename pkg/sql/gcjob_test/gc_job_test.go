@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -30,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -703,81 +701,5 @@ SELECT descriptor_id, index_id
 		testutils.RunTrueAndFalse(t, "drop index", func(t *testing.T, dropIndex bool) {
 			runTest(t, dropIndex, beforeDelRange)
 		})
-	})
-}
-
-func TestLegacyIndexGCSucceedsWithMissingDescriptor(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	var params base.TestServerArgs
-	// Override binary version to be older.
-	params.Knobs.Server = &server.TestingKnobs{
-		DisableAutomaticVersionUpgrade: make(chan struct{}),
-		// Need to disable MVCC since this test is testing the legacy GC path.
-		BinaryVersionOverride: clusterversion.ByKey(clusterversion.V23_1_MVCCRangeTombstonesUnconditionallyEnabled - 1),
-	}
-	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
-
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
-	tDB := sqlutils.MakeSQLRunner(sqlDB)
-
-	tDB.Exec(t, `SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = false`)
-	tDB.Exec(t, `CREATE TABLE t(a INT)`)
-	tDB.Exec(t, `INSERT INTO t VALUES (1), (2)`)
-	tDB.Exec(t, `TRUNCATE TABLE t`)
-
-	var truncateJobID string
-	testutils.SucceedsSoon(t, func() error {
-		rslt := tDB.QueryStr(t, `SELECT job_id, status, running_status FROM [SHOW JOBS] WHERE description = 'GC for TRUNCATE TABLE defaultdb.public.t'`)
-		if len(rslt) != 1 {
-			t.Fatalf("expect only 1 truncate job, found %d", len(rslt))
-		}
-		if rslt[0][1] != "running" {
-			return errors.New("job not running yet")
-		}
-		if rslt[0][2] != "waiting for GC TTL" {
-			return errors.New("not waiting for gc yet")
-		}
-		truncateJobID = rslt[0][0]
-		return nil
-	})
-
-	tDB.Exec(t, `PAUSE JOB `+truncateJobID)
-	testutils.SucceedsSoon(t, func() error {
-		rslt := tDB.QueryStr(t, `SELECT status FROM [SHOW JOBS] WHERE job_id = `+truncateJobID)
-		if len(rslt) != 1 {
-			t.Fatalf("expect only 1 truncate job, found %d", len(rslt))
-		}
-		if rslt[0][0] != "paused" {
-			return errors.New("job not paused yet")
-		}
-		return nil
-	})
-
-	tDB.Exec(t, `ALTER TABLE t CONFIGURE ZONE USING gc.ttlseconds = 1;`)
-	tDB.Exec(t, `DROP TABLE t`)
-	testutils.SucceedsSoon(t, func() error {
-		rslt := tDB.QueryStr(t, `SELECT status FROM [SHOW JOBS] WHERE description = 'GC for DROP TABLE defaultdb.public.t'`)
-		if len(rslt) != 1 {
-			t.Fatalf("expect only 1 truncate job, found %d", len(rslt))
-		}
-		if rslt[0][0] != "succeeded" {
-			return errors.New("job not running yet")
-		}
-		return nil
-	})
-
-	tDB.Exec(t, `RESUME JOB `+truncateJobID)
-	testutils.SucceedsSoon(t, func() error {
-		rslt := tDB.QueryStr(t, `SELECT status FROM [SHOW JOBS] WHERE job_id = `+truncateJobID)
-		if len(rslt) != 1 {
-			t.Fatalf("expect only 1 truncate job, found %d", len(rslt))
-		}
-		if rslt[0][0] != "succeeded" {
-			return errors.New("job not running")
-		}
-		return nil
 	})
 }

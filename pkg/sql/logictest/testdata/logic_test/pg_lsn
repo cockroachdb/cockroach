@@ -1,4 +1,4 @@
-# LogicTest: !local-mixed-22.2-23.1
+# LogicTest: !local-mixed-23.1
 query T
 SELECT 'A01F0/1AAA'::pg_lsn
 ----
