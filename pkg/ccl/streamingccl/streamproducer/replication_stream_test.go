@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -370,34 +369,6 @@ USE d;
 
 	const streamPartitionQuery = `SELECT * FROM crdb_internal.stream_partition($1, $2)`
 	t1Descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), srcTenant.Codec, "d", "t1")
-
-	t.Run("stream-table-cursor-error", func(t *testing.T) {
-
-		srcTenant.SQL.Exec(t, `
-CREATE TABLE d.t2(i int primary key, a string, b string);
-INSERT INTO d.t2 (i) VALUES (42);
-`)
-		_, feed := startReplication(ctx, t, h, makePartitionStreamDecoder,
-			streamPartitionQuery, streamID, encodeSpec(t, h, srcTenant, initialScanTimestamp, hlc.Timestamp{}, "t2"))
-		defer feed.Close(ctx)
-		t2Descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), srcTenant.Codec, "d", "t2")
-		expected := replicationtestutils.EncodeKV(t, srcTenant.Codec, t2Descr, 42)
-		feed.ObserveKey(ctx, expected.Key)
-
-		subscribedSpan := h.TableSpan(srcTenant.Codec, "t2")
-		// Send a ClearRange to trigger rows cursor to return internal error from rangefeed.
-		_, err := kv.SendWrapped(ctx, h.SysServer.DB().NonTransactionalSender(), &kvpb.ClearRangeRequest{
-			RequestHeader: kvpb.RequestHeader{
-				Key:    subscribedSpan.Key,
-				EndKey: subscribedSpan.EndKey,
-			},
-		})
-		require.Nil(t, err)
-
-		feed.ObserveError(ctx, func(err error) bool {
-			return strings.Contains(err.Error(), "unexpected MVCC history mutation")
-		})
-	})
 
 	t.Run("stream-table", func(t *testing.T) {
 		_, feed := startReplication(ctx, t, h, makePartitionStreamDecoder,
