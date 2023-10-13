@@ -41,10 +41,10 @@ send_eof
 eexpect eof
 end_test
 
-start_test "Check that demo insecure, env var, says hello properly"
+start_test "Check that demo insecure, env var, says hello properly, multitenant"
 # With env var.
 set ::env(COCKROACH_INSECURE) "true"
-spawn $argv demo --no-line-editor --no-example-database --log-dir=logs
+spawn $argv demo --no-line-editor --no-example-database --log-dir=logs --multitenant=true
 eexpect "Welcome"
 eexpect "defaultdb>"
 end_test
@@ -98,12 +98,33 @@ send_eof
 eexpect eof
 
 end_test
-
-start_test "Check that demo secure says hello properly"
+start_test "Check that demo secure says hello properly, singletenant"
 
 # With env var.
 set ::env(COCKROACH_INSECURE) "false"
-spawn $argv demo --no-line-editor --no-example-database --log-dir=logs
+spawn $argv demo --no-line-editor --no-example-database --log-dir=logs --multitenant=false
+eexpect "Welcome"
+
+eexpect "(webui)"
+eexpect "http://127.0.0.1:8080/demologin"
+eexpect "(sql)"
+eexpect "postgresql://demo:"
+eexpect "sslmode=require"
+eexpect "Username: \"demo\", password"
+eexpect "Directory with certificate files"
+
+eexpect "defaultdb>"
+
+send_eof
+eexpect eof
+
+end_test
+
+start_test "Check that demo secure says hello properly, multitenant"
+
+# With env var.
+set ::env(COCKROACH_INSECURE) "false"
+spawn $argv demo --no-line-editor --no-example-database --log-dir=logs --multitenant=true
 eexpect "Welcome"
 
 eexpect "(webui)"
@@ -266,7 +287,7 @@ eexpect "defaultdb>"
 send_eof
 eexpect eof
 
-spawn $argv demo --no-line-editor --no-example-database --nodes 3 --sql-port 23000 --log-dir=logs
+spawn $argv demo --no-line-editor --no-example-database --nodes 3 --sql-port 23000 --log-dir=logs --multitenant=true
 eexpect "Welcome"
 eexpect "defaultdb>"
 
