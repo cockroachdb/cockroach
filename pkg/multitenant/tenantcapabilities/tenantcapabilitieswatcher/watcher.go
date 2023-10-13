@@ -46,10 +46,11 @@ type Watcher struct {
 	mu struct {
 		syncutil.RWMutex
 
-		store  map[roachpb.TenantID]*watcherEntry
-		byName map[roachpb.TenantName]roachpb.TenantID
+		store      map[roachpb.TenantID]*watcherEntry
+		byName     map[roachpb.TenantName]roachpb.TenantID
+		allTenants []tenantcapabilities.Entry
 
-		// anyChangeChs is closed on any change to the set of
+		// anyChangeCh is closed on any change to the set of
 		// tenants.
 		anyChangeCh chan struct{}
 	}
@@ -166,18 +167,18 @@ func (w *Watcher) GetCapabilities(
 // GetAllTenants returns all known tenant entries and a channel that
 // is closed if any of the tenants change or any tenants are added or
 // removed.
+//
+// TODO(ssd): Memory ownership could be a bit cleaner here. To avoid
+// needlessly allocating the returned slice every time this is called,
+// we return the same slice to all callers and assume they don't do
+// anything problematic with it. At the moment, there is only one
+// caller of this function so this isn't particularly problematic, but
+// it could be if we add more callers.
 func (w *Watcher) GetAllTenants() ([]tenantcapabilities.Entry, <-chan struct{}) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
-	entries := make([]tenantcapabilities.Entry, 0, len(w.mu.store))
-	for _, v := range w.mu.store {
-		if v.Entry != nil {
-			entries = append(entries, *v.Entry)
-		}
-	}
-
-	return entries, w.mu.anyChangeCh
+	return w.mu.allTenants, w.mu.anyChangeCh
 }
 
 // GetGlobalCapabilityState implements the tenantcapabilities.Reader interface.
@@ -302,13 +303,22 @@ func (w *Watcher) handleUpdate(ctx context.Context, u rangefeedcache.Update) {
 	}
 
 	if len(updates) > 0 {
-		w.closeAnyChangeCh()
+		w.onAnyChange()
 	}
 }
 
-func (w *Watcher) closeAnyChangeCh() {
+func (w *Watcher) onAnyChange() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+
+	entries := make([]tenantcapabilities.Entry, 0, len(w.mu.store))
+	for _, v := range w.mu.store {
+		if v.Entry != nil {
+			entries = append(entries, *v.Entry)
+		}
+	}
+	w.mu.allTenants = entries
+
 	close(w.mu.anyChangeCh)
 	w.mu.anyChangeCh = make(chan struct{})
 }

@@ -740,6 +740,7 @@ func waitUntilTenantServerStopped(
 		if err != nil {
 			return err
 		}
+		defer func() { _ = db.Close() }()
 		if err := db.Ping(); err == nil {
 			t.Logf("tenant %q is still accepting connections", tenantName)
 			return errors.Newf("tenant %q still accepting connections")

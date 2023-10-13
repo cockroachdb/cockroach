@@ -19,9 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -67,6 +70,58 @@ func TestServerController(t *testing.T) {
 	// tenant constructor was called.
 	require.Error(t, err, "tenant connector requires a CCL binary")
 	// TODO(knz): test something about d.
+}
+
+// TestServerControllerStopStart is, when run under stress, a
+// regression test for #112077, a bug in which we would fail to
+// respond to a service start request that occured while a server was
+// shutting down.
+func TestServerControllerStopStart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	sqlRunner := sqlutils.MakeSQLRunner(db)
+	// Speed up the tenant capabilities watcher to increase chance of hitting race.
+	sqlRunner.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
+	sqlRunner.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval ='100ms'")
+	sqlRunner.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval ='100ms'")
+
+	tryConnect := func() error {
+		conn, err := s.SystemLayer().SQLConnE(serverutils.DBName("cluster:hello"))
+		if err != nil {
+			return err
+		}
+		defer func() { _ = conn.Close() }()
+		return conn.Ping()
+	}
+
+	shouldConnectSoon := func() {
+		testutils.SucceedsSoon(t, tryConnect)
+	}
+
+	shouldFailToConnectSoon := func() {
+		testutils.SucceedsSoon(t, func() error {
+			if err := tryConnect(); err == nil {
+				return errors.Newf("still accepting connections")
+			}
+			return nil
+		})
+	}
+
+	sqlRunner.Exec(t, "CREATE TENANT hello")
+	sqlRunner.Exec(t, "ALTER VIRTUAL CLUSTER hello START SERVICE SHARED")
+	shouldConnectSoon()
+	sqlRunner.Exec(t, "ALTER VIRTUAL CLUSTER hello STOP SERVICE")
+	shouldFailToConnectSoon()
+	sqlRunner.Exec(t, "ALTER VIRTUAL CLUSTER hello START SERVICE SHARED")
+	shouldConnectSoon()
 }
 
 func TestSQLErrorUponInvalidTenant(t *testing.T) {
