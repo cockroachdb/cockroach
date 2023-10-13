@@ -3905,7 +3905,7 @@ func (s *statusServer) TransactionContentionEvents(
 		return statusClient.TransactionContentionEvents(ctx, req)
 	}
 
-	rpcCallFn := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
+	rpcCallFn := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) (*serverpb.TransactionContentionEventsResponse, error) {
 		return statusClient.TransactionContentionEvents(ctx, &serverpb.TransactionContentionEventsRequest{
 			NodeID: "local",
 		})
@@ -3919,9 +3919,8 @@ func (s *statusServer) TransactionContentionEvents(
 		noTimeout,
 		s.dialNode,
 		rpcCallFn,
-		func(nodeID roachpb.NodeID, nodeResp interface{}) {
-			txnContentionEvents := nodeResp.(*serverpb.TransactionContentionEventsResponse)
-			resp.Events = append(resp.Events, txnContentionEvents.Events...)
+		func(nodeID roachpb.NodeID, nodeResp *serverpb.TransactionContentionEventsResponse) {
+			resp.Events = append(resp.Events, nodeResp.Events...)
 		},
 		func(nodeID roachpb.NodeID, nodeFnError error) {
 		},
