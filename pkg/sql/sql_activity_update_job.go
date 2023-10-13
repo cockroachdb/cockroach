@@ -65,7 +65,8 @@ var sqlStatsActivityMaxPersistedRows = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 	settings.WithPublic)
 
-const numberOfTopColumns = 6
+const numberOfStmtTopColumns = 6
+const numberOfTxnTopColumns = 5
 
 // sqlActivityUpdateJob is responsible for translating the data in the
 // statement/txn statistics tables into the statement/txn _activity_
@@ -212,7 +213,7 @@ func (u *sqlActivityUpdater) TransferStatsToActivity(ctx context.Context) error 
 	// There are fewer rows than filtered top would return.
 	// Just transfer all the stats to avoid overhead of getting
 	// the tops.
-	if stmtRowCount < (topLimit*numberOfTopColumns) && txnRowCount < (topLimit*numberOfTopColumns) {
+	if stmtRowCount < (topLimit*numberOfStmtTopColumns) && txnRowCount < (topLimit*numberOfTxnTopColumns) {
 		return u.transferAllStats(ctx, aggTs, totalEstimatedStmtClusterExecSeconds, totalEstimatedTxnClusterExecSeconds)
 	}
 
@@ -242,33 +243,32 @@ func (u *sqlActivityUpdater) transferAllStats(
  statistics, query, execution_count, execution_total_seconds,
  execution_total_cluster_seconds, contention_time_avg_seconds, 
  cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds)
-    (SELECT aggregated_ts,
+    (SELECT max_aggregated_ts,
             fingerprint_id,
             app_name,
-            agg_interval,
+            max_agg_interval,
             metadata,
             statistics,
             '' AS query,
-            (statistics->'execution_statistics'->>'cnt')::int,
-            ((statistics->'execution_statistics'->>'cnt')::float)*((statistics->'statistics'->'svcLat'->>'mean')::float),
+            (statistics->'statistics'->>'cnt')::int,
+            ((statistics->'statistics'->>'cnt')::float)*((statistics->'statistics'->'svcLat'->>'mean')::float),
             $1 AS execution_total_cluster_seconds,
             COALESCE((statistics->'execution_statistics'->'contentionTime'->>'mean')::float,0),
-            COALESCE((statistics->'execution_statistics'->'cpu_sql_nanos'->>'mean')::float,0),
+            COALESCE((statistics->'execution_statistics'->'cpuSQLNanos'->>'mean')::float,0),
             (statistics->'statistics'->'svcLat'->>'mean')::float,
-            COALESCE((statistics->'statistics'->'latencyInfo'->>'p99')::float, 0)
+            0 as service_latency_p99_seconds
      FROM (SELECT
-                  max(aggregated_ts) AS aggregated_ts,
+                  max(aggregated_ts) AS max_aggregated_ts,
                   app_name,
                   fingerprint_id,
-                  agg_interval,
+                  max(agg_interval) as max_agg_interval,
                   max(metadata) as metadata,
                   merge_transaction_stats(statistics) AS statistics
            FROM system.public.transaction_statistics
            WHERE aggregated_ts = $2
              and app_name not like '$ internal%'
            GROUP BY app_name,
-                    fingerprint_id,
-                    agg_interval));
+                    fingerprint_id));
 `,
 		totalEstimatedTxnClusterExecSeconds,
 		aggTs,
@@ -293,42 +293,36 @@ INTO system.public.statement_activity (aggregated_ts, fingerprint_id, transactio
                                        service_latency_avg_seconds, service_latency_p99_seconds)
     (SELECT aggregated_ts,
             fingerprint_id,
-            transaction_fingerprint_id,
+            '0x0000000000000000'::bytes,
             plan_hash,
             app_name,
-            agg_interval,
-            metadata,
-            statistics,
-            plan,
-            index_recommendations,
-            (statistics -> 'execution_statistics' ->> 'cnt')::int,
-            ((statistics -> 'execution_statistics' ->> 'cnt')::float) *
-            ((statistics -> 'statistics' -> 'svcLat' ->> 'mean')::float),
+            max_agg_interval,
+            merged_metadata,
+            merged_stats,
+            max_plan,
+            jsonb_array_to_string_array(merged_stats -> 'index_recommendations') as idx_rec,
+            (merged_stats -> 'statistics' ->> 'cnt')::int,
+            ((merged_stats -> 'statistics' ->> 'cnt')::float) *
+            ((merged_stats -> 'statistics' -> 'svcLat' ->> 'mean')::float),
             $1 AS execution_total_cluster_seconds,
-            COALESCE((statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::float, 0),
-            COALESCE((statistics -> 'execution_statistics' -> 'cpu_sql_nanos' ->> 'mean')::float, 0),
-            (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::float,
-            COALESCE((statistics -> 'statistics' -> 'latencyInfo' ->> 'p99')::float, 0)
+            COALESCE((merged_stats -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::float, 0),
+            COALESCE((merged_stats -> 'execution_statistics' -> 'cpuSQLNanos' ->> 'mean')::float, 0),
+            (merged_stats -> 'statistics' -> 'svcLat' ->> 'mean')::float,
+            COALESCE((merged_stats -> 'statistics' -> 'latencyInfo' ->> 'p99')::float, 0)
      FROM (SELECT max(aggregated_ts)                                           AS aggregated_ts,
                   fingerprint_id,
-                  transaction_fingerprint_id,
                   plan_hash,
                   app_name,
-                  agg_interval,
-                  merge_stats_metadata(metadata)    AS metadata,
-                  merge_statement_stats(statistics) AS statistics,
-                  plan,
-                  index_recommendations
+                  max(agg_interval) as max_agg_interval,
+                  merge_stats_metadata(metadata)    AS merged_metadata,
+                  merge_statement_stats(statistics) AS merged_stats,
+                  max(plan) AS max_plan
            FROM system.public.statement_statistics
            WHERE aggregated_ts = $2
              and app_name not like '$ internal%'
            GROUP BY app_name,
                     fingerprint_id,
-                    transaction_fingerprint_id,
-                    plan_hash,
-                    agg_interval,
-                    plan,
-                    index_recommendations));
+                    plan_hash));
 `,
 		totalEstimatedStmtClusterExecSeconds,
 		aggTs,
@@ -370,9 +364,9 @@ func (u *sqlActivityUpdater) transferTopStats(
 		}
 
 		// Select the top 500 (controlled by sql.stats.activity.top.max) for
-		// each of execution_count, total execution time, service_latency,cpu_sql_nanos,
-		// contention_time, p99_latency and insert into transaction_activity table.
-		// Up to 3000 rows (sql.stats.activity.top.max * 6) may be added to
+		// each of execution_count, total execution time, service_latency, cpu_sql_nanos,
+		// contention_time and insert into transaction_activity table.
+		// Up to 2500 rows (sql.stats.activity.top.max * 5) may be added to
 		// transaction_activity.
 		// Any change should update cockroach/pkg/sql/opt/exec/execbuilder/testdata/observability
 		_, err = txn.ExecEx(ctx,
@@ -380,8 +374,7 @@ func (u *sqlActivityUpdater) transferTopStats(
 			txn.KV(), /* txn */
 			sessiondata.NodeUserSessionDataOverride,
 			`
-UPSERT
-INTO system.public.transaction_activity
+UPSERT INTO system.public.transaction_activity
 (aggregated_ts, fingerprint_id, app_name, agg_interval, metadata,
  statistics, query, execution_count, execution_total_seconds,
  execution_total_cluster_seconds, contention_time_avg_seconds,
@@ -391,60 +384,54 @@ INTO system.public.transaction_activity
             app_name,
             agg_interval,
             metadata,
-            statistics,
+            merge_stats,
             ''  AS query,
-            (statistics -> 'execution_statistics' ->> 'cnt')::int,
-            ((statistics -> 'execution_statistics' ->> 'cnt')::float) *
-            ((statistics -> 'statistics' -> 'svcLat' ->> 'mean')::float),
+            (merge_stats -> 'statistics' ->> 'cnt')::int,
+            ((merge_stats -> 'statistics' ->> 'cnt')::float) *
+            ((merge_stats -> 'statistics' -> 'svcLat' ->> 'mean')::float),
             $1 AS execution_total_cluster_seconds,
-            COALESCE((statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::float, 0),
-            COALESCE((statistics -> 'execution_statistics' -> 'cpu_sql_nanos' ->> 'mean')::float, 0),
-            (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::float,
-            COALESCE((statistics -> 'statistics' -> 'latencyInfo' ->> 'p99')::float, 0)
-     FROM (SELECT max(ts.aggregated_ts)                                        AS aggregated_ts,
+            COALESCE ((merge_stats -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::float, 0),
+            COALESCE ((merge_stats -> 'execution_statistics' -> 'cpuSQLNanos' ->> 'mean')::float, 0),
+            (merge_stats -> 'statistics' -> 'svcLat' ->> 'mean')::float,
+            0 as service_latency_p99_seconds
+     FROM (SELECT ts.aggregated_ts                                       AS aggregated_ts,
                   ts.app_name,
                   ts.fingerprint_id,
-                  ts.agg_interval,
+                  max(ts.agg_interval) as agg_interval,
                   max(ts.metadata) AS metadata,
-                  merge_transaction_stats(statistics) AS statistics
+                  merge_transaction_stats(statistics) AS merge_stats
            FROM system.public.transaction_statistics ts
-                    inner join (SELECT fingerprint_id, app_name, agg_interval
-                                FROM (SELECT fingerprint_id, app_name, agg_interval,
-                                             row_number()
-                                             OVER (ORDER BY (statistics -> 'execution_statistics' ->> 'cnt')::int desc)        AS ePos,
-                                             row_number()
-                                             OVER (ORDER BY (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::float desc)   AS sPos,
-                                             row_number()
-                                             OVER (ORDER BY ((statistics -> 'execution_statistics' ->> 'cnt')::float) *
-                                                            ((statistics -> 'statistics' -> 'svcLat' ->> 'mean')::float) desc) AS tPos,
-                                             row_number() OVER (ORDER BY COALESCE(
-                                                     (statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::float,
-                                                     0) desc)                                                                  AS cPos,
-                                             row_number() OVER (ORDER BY COALESCE(
-                                                     (statistics -> 'execution_statistics' -> 'cpu_sql_nanos' ->> 'mean')::float,
-                                                     0) desc)                                                                  AS uPos,
-                                             row_number() OVER (ORDER BY COALESCE(
-                                                     (statistics -> 'statistics' -> 'latencyInfo' ->> 'p99')::float,
-                                                     0) desc)                                                                  AS lPos
-                                      FROM (SELECT fingerprint_id, app_name, agg_interval,
-                                                   merge_transaction_stats(statistics) AS statistics
-                                            FROM system.public.transaction_statistics
-                                            WHERE aggregated_ts = $2 and
-                                                  app_name not like '$ internal%'
-                                            GROUP BY app_name,
-                                                     fingerprint_id,
-																										agg_interval))
+                    inner join (SELECT fingerprint_id, app_name
+                                FROM (SELECT fingerprint_id, app_name,
+                                           contentionTime, cpuTime,
+                                            row_number() OVER (ORDER BY (merge_stats -> 'statistics' ->> 'cnt')::int desc) AS ePos,
+                                            row_number() OVER (ORDER BY (merge_stats -> 'statistics' -> 'svcLat' ->> 'mean')::float desc) AS sPos,
+                                            row_number() OVER (ORDER BY ((merge_stats -> 'statistics' ->> 'cnt')::float) *
+                                                ((merge_stats -> 'statistics' -> 'svcLat' ->> 'mean')::float) desc) AS tPos,
+                                            row_number() OVER (ORDER BY COALESCE((merge_stats -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::float, 0) desc) AS cPos,
+                                            row_number() OVER (ORDER BY COALESCE((merge_stats -> 'execution_statistics' -> 'cpuSQLNanos' ->> 'mean')::float, 0) desc) AS uPos
+                                      FROM (SELECT fingerprint_id, app_name, merge_stats,
+                                            (merge_stats -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::float as contentionTime,
+                                            (merge_stats -> 'execution_statistics' -> 'cpuSQLNanos' ->> 'mean')::float as cpuTime
+                                            FROM (SELECT fingerprint_id, app_name,
+                                                   merge_transaction_stats(statistics) AS merge_stats
+                                            			FROM system.public.transaction_statistics
+                                            			WHERE aggregated_ts = $2 and
+                                                  	app_name not like '$ internal%'
+                                            			GROUP BY app_name, fingerprint_id
+																						)
+																			)
+																)
                                 WHERE ePos < $3
                                    or sPos < $3
                                    or tPos < $3
-                                   or cPos < $3
-                                   or uPos < $3
-                                   or lPos < $3) agg
-                               on agg.app_name = ts.app_name and agg.fingerprint_id = ts.fingerprint_id and
-                                  agg.agg_interval = ts.agg_interval
-           GROUP BY ts.app_name,
-                    ts.fingerprint_id,
-                    ts.agg_interval));
+                                   or (cPos < $3 AND contentionTime > 0)
+                                   or (uPos < $3 AND cpuTime > 0)) agg
+                               on agg.app_name = ts.app_name and agg.fingerprint_id = ts.fingerprint_id
+           WHERE aggregated_ts = $2
+           GROUP BY ts.aggregated_ts,
+                    ts.app_name,
+                    ts.fingerprint_id));;
 `,
 			totalEstimatedTxnClusterExecSeconds,
 			aggTs,
@@ -487,83 +474,74 @@ INTO system.public.transaction_activity
 			txn.KV(), /* txn */
 			sessiondata.NodeUserSessionDataOverride,
 			`
-UPSERT
-INTO system.public.statement_activity
+WITH agg_stmt_stats AS (SELECT aggregated_ts,
+                               fingerprint_id,
+                               app_name,
+                               merge_statement_stats(statistics) AS merged_stats
+                        FROM system.public.statement_statistics
+                        WHERE aggregated_ts = $2
+                          and app_name not like '$ internal%'
+                        GROUP BY aggregated_ts,
+                                 app_name,
+                                 fingerprint_id),
+     limit_stmt_stats AS (SELECT aggregated_ts,
+                                 fingerprint_id,
+                                 app_name
+                          FROM (SELECT aggregated_ts,
+                                       fingerprint_id,
+                                       app_name,
+                                       merged_stats,
+                                       row_number() OVER (ORDER BY (merged_stats -> 'statistics' ->> 'cnt')::int desc)                AS ePos,
+                                       row_number() OVER (ORDER BY (merged_stats -> 'statistics' -> 'svcLat' ->> 'mean')::float desc) AS sPos,
+                                       row_number() OVER (ORDER BY
+                                               ((merged_stats -> 'statistics' ->> 'cnt')::float) *
+                                               ((merged_stats -> 'statistics' -> 'svcLat' ->> 'mean')::float) desc)      AS tPos,
+                                       row_number() OVER (ORDER BY COALESCE((merged_stats -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::float, 0) desc) AS cPos,
+                                       row_number() OVER (ORDER BY COALESCE((merged_stats -> 'execution_statistics' -> 'cpuSQLNanos' ->> 'mean')::float, 0) desc) AS uPos,
+                                       row_number() OVER (ORDER BY COALESCE((merged_stats -> 'statistics' -> 'latencyInfo' ->> 'p99')::float, 0) desc) AS lPos
+                                FROM agg_stmt_stats)
+                          WHERE ePos < $3
+                             or sPos < $3
+                             or tPos < $3
+														 or (cPos < $3 AND ((merged_stats -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::float > 0))
+														 or (uPos < $3 AND  ((merged_stats -> 'execution_statistics' -> 'cpuSQLNanos' ->> 'mean')::float > 0))
+														 or (lPos < $3 AND ((merged_stats -> 'statistics' -> 'latencyInfo' ->> 'p99')::float > 0)))
+UPSERT INTO system.public.statement_activity
 (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name,
  agg_interval, metadata, statistics, plan, index_recommendations, execution_count,
  execution_total_seconds, execution_total_cluster_seconds,
  contention_time_avg_seconds,
  cpu_sql_avg_nanos,
- service_latency_avg_seconds, service_latency_p99_seconds)
-    (SELECT aggregated_ts,
-            fingerprint_id,
-            transaction_fingerprint_id,
-            plan_hash,
-            app_name,
-            agg_interval,
-            metadata,
-            statistics,
-            plan,
-            index_recommendations,
-            (statistics -> 'execution_statistics' ->> 'cnt')::int,
-            ((statistics -> 'execution_statistics' ->> 'cnt')::float) *
-            ((statistics -> 'statistics' -> 'svcLat' ->> 'mean')::float),
-            $1 AS execution_total_cluster_seconds,
-            COALESCE((statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::float, 0),
-            COALESCE((statistics -> 'execution_statistics' -> 'cpu_sql_nanos' ->> 'mean')::float, 0),
-            (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::float,
-            COALESCE((statistics -> 'statistics' -> 'latencyInfo' ->> 'p99')::float, 0)
-     FROM (SELECT max(ss.aggregated_ts)                                           AS aggregated_ts,
-                  ss.fingerprint_id,
-                  ss.transaction_fingerprint_id,
-                  ss.plan_hash,
-                  ss.app_name,
-                  ss.agg_interval,
-                  merge_stats_metadata(ss.metadata)    AS metadata,
-                  merge_statement_stats(ss.statistics) AS statistics,
-                  ss.plan,
-                  ss.index_recommendations
-           FROM system.public.statement_statistics ss
-           inner join (SELECT fingerprint_id, app_name
-                                    FROM (SELECT fingerprint_id, app_name,
-                                                 row_number()
-                                                 OVER (ORDER BY (statistics -> 'execution_statistics' ->> 'cnt')::int desc)      AS ePos,
-                                                 row_number()
-                                                 OVER (ORDER BY (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::float desc) AS sPos,
-                                                 row_number() OVER (ORDER BY
-                                                         ((statistics -> 'execution_statistics' ->> 'cnt')::float) *
-                                                         ((statistics -> 'statistics' -> 'svcLat' ->> 'mean')::float) desc)      AS tPos,
-                                                 row_number() OVER (ORDER BY COALESCE(
-                                                         (statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::float,
-                                                         0) desc)                                                                AS cPos,
-                                                 row_number() OVER (ORDER BY COALESCE(
-                                                         (statistics -> 'execution_statistics' -> 'cpu_sql_nanos' ->> 'mean')::float,
-                                                         0) desc)                                                                AS uPos,
-                                                 row_number() OVER (ORDER BY COALESCE(
-                                                         (statistics -> 'statistics' -> 'latencyInfo' ->> 'p99')::float,
-                                                         0) desc)                                                                AS lPos
-                                          FROM (SELECT fingerprint_id,
-                                                       app_name,
-                                                       merge_statement_stats(statistics) AS statistics
-                                                FROM system.public.statement_statistics
-                                                WHERE aggregated_ts = $2 and
-                                                      app_name not like '$ internal%'
-                                                GROUP BY app_name,
-                                                         fingerprint_id))
-                                    WHERE ePos < $3
-                                       or sPos < $3
-                                       or tPos < $3
-                                       or cPos < $3
-                                       or uPos < $3
-                                       or lPos < $3) agg on agg.app_name = ss.app_name and agg.fingerprint_id = ss.fingerprint_id
-           WHERE aggregated_ts = $2
-           GROUP BY ss.app_name,
-                    ss.fingerprint_id,
-                    ss.transaction_fingerprint_id,
-                    ss.plan_hash,
-                    ss.agg_interval,
-                    ss.plan,
-                    ss.index_recommendations));
+ service_latency_avg_seconds, service_latency_p99_seconds)(
+SELECT aggregated_ts,
+       fingerprint_id,
+       '0x0000000000000000'::bytes,
+       plan_hash,
+       app_name,
+       max_agg_interval,
+       metadata,
+       merged_stats,
+       max_plan,
+       jsonb_array_to_string_array(merged_stats -> 'index_recommendations') as idx_rec,
+       (merged_stats -> 'statistics' ->> 'cnt')::int,
+       ((merged_stats -> 'statistics' ->> 'cnt')::float) *
+       ((merged_stats -> 'statistics' -> 'svcLat' ->> 'mean')::float),
+       $1 AS execution_total_cluster_seconds,
+       COALESCE((merged_stats -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::float, 0),
+       COALESCE((merged_stats -> 'execution_statistics' -> 'cpuSQLNanos' ->> 'mean')::float, 0),
+       (merged_stats -> 'statistics' -> 'svcLat' ->> 'mean')::float,
+       COALESCE((merged_stats -> 'statistics' -> 'latencyInfo' ->> 'p99')::float, 0)
+FROM (SELECT ss.aggregated_ts AS aggregated_ts,
+             ss.fingerprint_id,
+             ss.plan_hash,
+             ss.app_name,
+             max(ss.agg_interval) AS max_agg_interval,
+             max(ss.plan) AS max_plan,
+             merge_stats_metadata(ss.metadata) AS metadata,
+             merge_statement_stats(ss.statistics) AS merged_stats
+      FROM system.statement_statistics ss
+      INNER JOIN limit_stmt_stats using (aggregated_ts, fingerprint_id, app_name)
+      GROUP BY aggregated_ts, fingerprint_id, plan_hash, app_name));
 `,
 			totalEstimatedStmtClusterExecSeconds,
 			aggTs,
@@ -573,89 +551,7 @@ INTO system.public.statement_activity
 		return err
 	})
 
-	if errTxn != nil {
-		return errTxn
-	}
-
-	// Ensure that if the transaction is in the transaction_activity table that
-	// all the stmts for that transaction are in the statement_activity table.
-	// This is necessary for the UI on the transaction details page to show
-	// the necessary information.
-	// The previous statement update only includes the top 500 by the top columns.
-	// This might not include all the statements that are in the transaction
-	// activity table. This query figure out if any statement fingerprint ids
-	// listed in the transaction activity table are missing from the
-	// statement_activity table and adds them if necessary.
-	// Any change should update cockroach/pkg/sql/opt/exec/execbuilder/testdata/observability
-	_, err := u.db.Executor().ExecEx(ctx,
-		"activity-flush-check-all-txn-stmts-captured",
-		nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
-		`WITH missed_stmt_ids_from_txn_activity AS (SELECT ta.fingerprint_id, ta.app_name
-                                     FROM (SELECT ta_sub.aggregated_ts,
-                                                  decode(jsonb_array_elements_text(ta_sub.metadata -> 'stmtFingerprintIDs'), 'hex')::bytes AS fingerprint_id,
-                                                  ta_sub.fingerprint_id                                                     AS transaction_fingerprint_id,
-                                                  ta_sub.app_name
-                                           FROM system.transaction_activity ta_sub WHERE ta_sub.aggregated_ts = $2) ta
-                                        	 LEFT OUTER JOIN (select fingerprint_id,
-                                                                      app_name,
-                                                                      aggregated_ts
-                                                               FROM system.statement_activity WHERE aggregated_ts = $2) sa
-                                                              ON sa.fingerprint_id = ta.fingerprint_id AND
-                                                                 sa.app_name = ta.app_name AND
-                                                                 ta.aggregated_ts = sa.aggregated_ts
-                                     WHERE sa.fingerprint_id is null
-																		 GROUP BY ta.fingerprint_id, ta.app_name)
-UPSERT INTO system.public.statement_activity
-(aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name,
- agg_interval, metadata, statistics, plan, index_recommendations, execution_count,
- execution_total_seconds, execution_total_cluster_seconds,
- contention_time_avg_seconds,
- cpu_sql_avg_nanos,
- service_latency_avg_seconds, service_latency_p99_seconds)
-(SELECT aggregated_ts,
-    fingerprint_id,
-    transaction_fingerprint_id,
-    plan_hash,
-    app_name,
-    agg_interval,
-    metadata,
-    statistics,
-    plan,
-    index_recommendations,
-    (statistics -> 'execution_statistics' ->> 'cnt')::int,
-    ((statistics -> 'execution_statistics' ->> 'cnt')::float) *
-    ((statistics -> 'statistics' -> 'svcLat' ->> 'mean')::float),
-    $1 AS execution_total_cluster_seconds,
-    COALESCE ((statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::float, 0),
-    COALESCE ((statistics -> 'execution_statistics' -> 'cpu_sql_nanos' ->> 'mean')::float, 0),
-    (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::float,
-    COALESCE ((statistics -> 'statistics' -> 'latencyInfo' ->> 'p99')::float, 0)
-FROM (SELECT max(ss.aggregated_ts) AS aggregated_ts,
-    ss.fingerprint_id,
-    ss.transaction_fingerprint_id,
-    ss.plan_hash,
-    ss.app_name,
-    ss.agg_interval,
-    merge_stats_metadata(ss.metadata) AS metadata,
-    merge_statement_stats(ss.statistics) AS statistics,
-    ss.plan,
-    ss.index_recommendations
-    FROM system.public.statement_statistics ss
-    INNER JOIN missed_stmt_ids_from_txn_activity ON missed_stmt_ids_from_txn_activity.app_name = ss.app_name AND missed_stmt_ids_from_txn_activity.fingerprint_id = ss.fingerprint_id
-    WHERE aggregated_ts = $2
-		GROUP BY ss.app_name,
-		 ss.fingerprint_id,
-		 ss.transaction_fingerprint_id,
-		 ss.plan_hash,
-		 ss.agg_interval,
-		 ss.plan,
-		 ss.index_recommendations));
-`,
-		totalEstimatedStmtClusterExecSeconds,
-		aggTs)
-
-	return err
+	return errTxn
 }
 
 // getAostRowCountAndTotalClusterExecSeconds is used to get the row counts of
