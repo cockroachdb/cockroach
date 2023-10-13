@@ -2967,12 +2967,11 @@ func (s *statusServer) Range(
 		RangeIDs: []roachpb.RangeID{roachpb.RangeID(req.RangeId)},
 	}
 
-	nodeFn := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
+	nodeFn := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (*serverpb.RangesResponse, error) {
 		return status.Ranges(ctx, rangesRequest)
 	}
 	nowNanos := timeutil.Now().UnixNano()
-	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
-		rangesResp := resp.(*serverpb.RangesResponse)
+	responseFn := func(nodeID roachpb.NodeID, rangesResp *serverpb.RangesResponse) {
 		// Age the MVCCStats to a consistent current timestamp. An age that is
 		// not up to date is less useful.
 		for i := range rangesResp.Ranges {
