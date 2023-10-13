@@ -785,6 +785,16 @@ func (i *MVCCIncrementalIterator) TryGetIntentError() error {
 	}
 }
 
+// Stats returns statistics about the iterator.
+func (i *MVCCIncrementalIterator) Stats() IteratorStats {
+	stats := i.iter.Stats()
+	if i.timeBoundIter != nil {
+		tbStats := i.timeBoundIter.Stats()
+		stats.Stats.Merge(tbStats.Stats)
+	}
+	return stats
+}
+
 // assertInvariants asserts iterator invariants. The iterator must be valid.
 func (i *MVCCIncrementalIterator) assertInvariants() error {
 	// Check general SimpleMVCCIterator API invariants.
