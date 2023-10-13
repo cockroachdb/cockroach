@@ -3490,7 +3490,7 @@ func (s *statusServer) ListDistSQLFlows(
 	}
 
 	var response serverpb.ListDistSQLFlowsResponse
-	nodeFn := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
+	nodeFn := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) (*serverpb.ListDistSQLFlowsResponse, error) {
 		resp, err := statusClient.ListLocalDistSQLFlows(ctx, request)
 		if err != nil {
 			return nil, err
@@ -3500,11 +3500,11 @@ func (s *statusServer) ListDistSQLFlows(
 		}
 		return resp, nil
 	}
-	responseFn := func(_ roachpb.NodeID, nodeResp interface{}) {
+	responseFn := func(_ roachpb.NodeID, nodeResp *serverpb.ListDistSQLFlowsResponse) {
 		if nodeResp == nil {
 			return
 		}
-		flows := nodeResp.(*serverpb.ListDistSQLFlowsResponse).Flows
+		flows := nodeResp.Flows
 		response.Flows = mergeDistSQLRemoteFlows(response.Flows, flows)
 	}
 	errorFn := func(nodeID roachpb.NodeID, err error) {
