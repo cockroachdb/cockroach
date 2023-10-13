@@ -190,6 +190,7 @@ func evalExport(
 			MaxSize:            maxSize,
 			MaxLockConflicts:   maxLockConflicts,
 			StopMidKey:         args.SplitMidKey,
+			ScanStats:          cArgs.ScanStats,
 		}
 		var summary kvpb.BulkOpSummary
 		var resumeInfo storage.ExportRequestResumeInfo
