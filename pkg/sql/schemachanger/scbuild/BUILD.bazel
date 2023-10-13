@@ -69,7 +69,6 @@ go_test(
     ],
     args = ["-test.timeout=895s"],
     data = glob(["testdata/**"]),
-    exec_properties = {"Pool": "long_running"},
     deps = [
         ":scbuild",
         "//pkg/base",
