@@ -3551,19 +3551,18 @@ func (s *statusServer) ListExecutionInsights(
 
 	var response serverpb.ListExecutionInsightsResponse
 
-	nodeFn := func(ctx context.Context, statusClient serverpb.StatusClient, nodeID roachpb.NodeID) (interface{}, error) {
+	nodeFn := func(ctx context.Context, statusClient serverpb.StatusClient, nodeID roachpb.NodeID) (*serverpb.ListExecutionInsightsResponse, error) {
 		resp, err := statusClient.ListExecutionInsights(ctx, &localRequest)
 		if err != nil {
 			return nil, err
 		}
 		return resp, nil
 	}
-	responseFn := func(nodeID roachpb.NodeID, nodeResponse interface{}) {
-		if nodeResponse == nil {
+	responseFn := func(nodeID roachpb.NodeID, resp *serverpb.ListExecutionInsightsResponse) {
+		if resp == nil {
 			return
 		}
-		insightsResponse := nodeResponse.(*serverpb.ListExecutionInsightsResponse)
-		response.Insights = append(response.Insights, insightsResponse.Insights...)
+		response.Insights = append(response.Insights, resp.Insights...)
 	}
 	errorFn := func(nodeID roachpb.NodeID, err error) {
 		response.Errors = append(response.Errors, errors.EncodeError(ctx, err))
