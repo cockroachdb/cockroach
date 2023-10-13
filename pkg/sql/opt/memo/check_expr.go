@@ -306,6 +306,12 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		m.checkColListLen(t.UpdateCols, tab.ColumnCount(), "UpdateCols")
 		m.checkMutationExpr(t, &t.MutationPrivate)
 
+	case *LockExpr:
+		tab := m.Metadata().Table(t.Table)
+		m.checkColListLen(
+			opt.OptionalColList(t.KeyCols), tab.Index(cat.PrimaryIndex).KeyColumnCount(), "KeyCols",
+		)
+
 	case *ZigzagJoinExpr:
 		if len(t.LeftEqCols) != len(t.RightEqCols) {
 			panic(errors.AssertionFailedf("zigzag join with mismatching eq columns"))

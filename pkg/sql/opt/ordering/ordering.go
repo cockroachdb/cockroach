@@ -266,6 +266,11 @@ func init() {
 		buildChildReqOrdering: mutationBuildChildReqOrdering,
 		buildProvidedOrdering: mutationBuildProvided,
 	}
+	funcMap[opt.LockOp] = funcs{
+		canProvideOrdering:    lockCanProvideOrdering,
+		buildChildReqOrdering: lockBuildChildReqOrdering,
+		buildProvidedOrdering: lockBuildProvided,
+	}
 	funcMap[opt.ExplainOp] = funcs{
 		canProvideOrdering:    canNeverProvideOrdering,
 		buildChildReqOrdering: explainBuildChildReqOrdering,

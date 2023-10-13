@@ -33,6 +33,8 @@ import (
 func (b *Builder) buildJoin(
 	join *tree.JoinTableExpr, lockCtx lockingContext, inScope *scope,
 ) (outScope *scope) {
+	// TODO(michae2, 97434): Poison the lockCtx for the null-extended side(s) if
+	// this is an outer join.
 	leftScope := b.buildDataSource(join.Left, nil /* indexFlags */, lockCtx, inScope)
 
 	inScopeRight := inScope
