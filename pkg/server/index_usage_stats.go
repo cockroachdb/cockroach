@@ -92,9 +92,11 @@ func (s *statusServer) IndexUsageStatistics(
 	// It's unfortunate that we cannot use paginatedIterateNodes here because we
 	// need to aggregate all stats before returning. Returning a partial result
 	// yields an incorrect result.
-	if err := s.iterateNodes(ctx,
+	if err := iterateNodes(ctx,
+		s.serverIterator, s.stopper,
 		"requesting index usage stats",
 		noTimeout,
+		s.dialNode,
 		fetchIndexUsageStats, aggFn, errFn); err != nil {
 		return nil, err
 	}
@@ -183,9 +185,11 @@ func (s *statusServer) ResetIndexUsageStats(
 		combinedError = errors.CombineErrors(combinedError, nodeFnError)
 	}
 
-	if err := s.iterateNodes(ctx,
+	if err := iterateNodes(ctx,
+		s.serverIterator, s.stopper,
 		"Resetting index usage stats",
 		noTimeout,
+		s.dialNode,
 		resetIndexUsageStats, aggFn, errFn); err != nil {
 		return nil, err
 	}
