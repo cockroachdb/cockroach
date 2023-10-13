@@ -2628,11 +2628,10 @@ func (s *systemStatusServer) HotRanges(
 
 	// Hot ranges from all nodes.
 	remoteRequest := serverpb.HotRangesRequest{NodeID: "local"}
-	nodeFn := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
+	nodeFn := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (*serverpb.HotRangesResponse, error) {
 		return status.HotRanges(ctx, &remoteRequest)
 	}
-	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
-		hotRangesResp := resp.(*serverpb.HotRangesResponse)
+	responseFn := func(nodeID roachpb.NodeID, hotRangesResp *serverpb.HotRangesResponse) {
 		response.HotRangesByNodeID[nodeID] = hotRangesResp.HotRangesByNodeID[nodeID]
 	}
 	errorFn := func(nodeID roachpb.NodeID, err error) {
