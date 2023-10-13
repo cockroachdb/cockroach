@@ -288,20 +288,7 @@ func generateTestsTimeouts() {
 	}
 	for size, defaultTimeout := range testSizeToDefaultTimeout {
 		if size == "enormous" {
-			enormousTargets := targets[size]
-			var largePoolTargets, longRunningPoolTargets []string
-			for _, target := range enormousTargets {
-				if strings.Contains(target, "pkg/sql/logictest/tests/local:local_test") ||
-					strings.Contains(target, "pkg/sql/logictest/tests/local-legacy-schema-changer:local-legacy-schema-changer_test") ||
-					strings.Contains(target, "pkg/sql/logictest/tests/fakedist-disk:fakedist-disk_test") ||
-					strings.Contains(target, "pkg/kv/kvserver:kvserver_test") {
-					longRunningPoolTargets = append(longRunningPoolTargets, target)
-				} else {
-					largePoolTargets = append(largePoolTargets, target)
-				}
-			}
-			runBuildozer(append([]string{`dict_set exec_properties Pool:large`}, largePoolTargets...))
-			runBuildozer(append([]string{`dict_set exec_properties Pool:long_running`}, longRunningPoolTargets...))
+			runBuildozer(append([]string{`dict_set exec_properties Pool:large`}, targets[size]...))
 			// Exclude really enormous targets since they have a custom timeout that
 			// exceeds the default 1h.
 			targets[size] = excludeReallyEnormousTargets(targets[size])
