@@ -79,8 +79,9 @@ func (s *statusServer) Statements(
 		return status.Statements(ctx, localReq)
 	}
 
-	if err := s.iterateNodes(ctx, "statement statistics",
+	if err := iterateNodes(ctx, s.serverIterator, s.stopper, "statement statistics",
 		noTimeout,
+		s.dialNode,
 		nodeStatement,
 		func(nodeID roachpb.NodeID, resp interface{}) {
 			statementsResp := resp.(*serverpb.StatementsResponse)

@@ -1645,8 +1645,8 @@ func (s *statusServer) fetchProfileFromAllNodes(
 	errorFn := func(nodeID roachpb.NodeID, err error) {
 		response.profDataByNodeID[nodeID] = &profData{err: err}
 	}
-	if err := s.iterateNodes(
-		ctx, opName, noTimeout, nodeFn, responseFn, errorFn,
+	if err := iterateNodes(
+		ctx, s.serverIterator, s.stopper, opName, noTimeout, s.dialNode, nodeFn, responseFn, errorFn,
 	); err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
@@ -2061,8 +2061,9 @@ func (s *systemStatusServer) NetworkConnectivity(
 		response.ErrorsByNodeID[nodeID] = err.Error()
 	}
 
-	if err := s.iterateNodes(ctx, "network connectivity",
+	if err := iterateNodes(ctx, s.serverIterator, s.stopper, "network connectivity",
 		noTimeout,
+		s.dialNode,
 		nodeFn,
 		responseFn,
 		errorFn,
@@ -2642,8 +2643,9 @@ func (s *systemStatusServer) HotRanges(
 		}
 	}
 
-	if err := s.iterateNodes(ctx, "hot ranges",
+	if err := iterateNodes(ctx, s.serverIterator, s.stopper, "hot ranges",
 		noTimeout,
+		s.dialNode,
 		nodeFn,
 		responseFn,
 		errorFn,
@@ -2990,9 +2992,9 @@ func (s *statusServer) Range(
 		}
 	}
 
-	if err := s.iterateNodes(
-		ctx, fmt.Sprintf("details about range %d", req.RangeId), noTimeout,
-		nodeFn, responseFn, errorFn,
+	if err := iterateNodes(
+		ctx, s.serverIterator, s.stopper, fmt.Sprintf("details about range %d", req.RangeId), noTimeout,
+		s.dialNode, nodeFn, responseFn, errorFn,
 	); err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
@@ -3018,29 +3020,15 @@ func (s *statusServer) ListLocalSessions(
 // iterateNodes iterates nodeFn over all non-removed nodes concurrently.
 // It then calls nodeResponse for every valid result of nodeFn, and
 // nodeError on every error result.
-func (s *statusServer) iterateNodes(
-	ctx context.Context,
-	errorCtx string,
-	nodeFnTimeout time.Duration,
-	nodeFn func(ctx context.Context, client serverpb.StatusClient, nodeID roachpb.NodeID) (interface{}, error),
-	responseFn func(nodeID roachpb.NodeID, resp interface{}),
-	errorFn func(nodeID roachpb.NodeID, nodeFnError error),
-) error {
-	return iterateNodes(ctx, s.serverIterator, s.stopper, errorCtx, nodeFnTimeout, s.dialNode, nodeFn, responseFn, errorFn)
-}
-
-// iterateNodes iterates nodeFn over all non-removed nodes concurrently.
-// It then calls nodeResponse for every valid result of nodeFn, and
-// nodeError on every error result.
-func iterateNodes[Client any](
+func iterateNodes[Client, Result any](
 	ctx context.Context,
 	iter ServerIterator,
 	stopper *stop.Stopper,
 	errorCtx string,
 	nodeFnTimeout time.Duration,
 	dialFn func(ctx context.Context, nodeID roachpb.NodeID) (Client, error),
-	nodeFn func(ctx context.Context, client Client, nodeID roachpb.NodeID) (interface{}, error),
-	responseFn func(nodeID roachpb.NodeID, resp interface{}),
+	nodeFn func(ctx context.Context, client Client, nodeID roachpb.NodeID) (Result, error),
+	responseFn func(nodeID roachpb.NodeID, resp Result),
 	errorFn func(nodeID roachpb.NodeID, nodeFnError error),
 ) error {
 	nodeStatuses, err := iter.getAllNodes(ctx)
@@ -3051,7 +3039,7 @@ func iterateNodes[Client any](
 	// channels for responses and errors.
 	type nodeResponse struct {
 		nodeID   roachpb.NodeID
-		response interface{}
+		response Result
 		err      error
 	}
 
@@ -3072,7 +3060,7 @@ func iterateNodes[Client any](
 			return
 		}
 
-		var res interface{}
+		var res Result
 		if nodeFnTimeout == noTimeout {
 			res, err = nodeFn(ctx, client, nodeID)
 		} else {
@@ -3145,8 +3133,8 @@ func (s *statusServer) paginatedIterateNodes(
 	errorFn func(nodeID roachpb.NodeID, nodeFnError error),
 ) (next paginationState, err error) {
 	if limit == 0 {
-		return paginationState{}, s.iterateNodes(ctx, errorCtx, noTimeout,
-			nodeFn, responseFn, errorFn)
+		return paginationState{}, iterateNodes(ctx, s.serverIterator, s.stopper, errorCtx, noTimeout,
+			s.dialNode, nodeFn, responseFn, errorFn)
 	}
 	nodeStatuses, err := s.serverIterator.getAllNodes(ctx)
 	if err != nil {
@@ -3482,7 +3470,8 @@ func (s *statusServer) ListContentionEvents(
 		response.Errors = append(response.Errors, errResponse)
 	}
 
-	if err := s.iterateNodes(ctx, "contention events list", noTimeout,
+	if err := iterateNodes(ctx, s.serverIterator, s.stopper, "contention events list", noTimeout,
+		s.dialNode,
 		nodeFn,
 		responseFn, errorFn); err != nil {
 		return nil, srverrors.ServerError(ctx, err)
@@ -3526,8 +3515,8 @@ func (s *statusServer) ListDistSQLFlows(
 		response.Errors = append(response.Errors, errResponse)
 	}
 
-	if err := s.iterateNodes(ctx, "distsql flows list", noTimeout,
-		nodeFn,
+	if err := iterateNodes(ctx, s.serverIterator, s.stopper, "distsql flows list", noTimeout,
+		s.dialNode, nodeFn,
 		responseFn, errorFn); err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
@@ -3584,8 +3573,8 @@ func (s *statusServer) ListExecutionInsights(
 		response.Errors = append(response.Errors, errors.EncodeError(ctx, err))
 	}
 
-	if err := s.iterateNodes(ctx, "execution insights list", noTimeout,
-		nodeFn,
+	if err := iterateNodes(ctx, s.serverIterator, s.stopper, "execution insights list", noTimeout,
+		s.dialNode, nodeFn,
 		responseFn, errorFn); err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
@@ -3931,8 +3920,9 @@ func (s *statusServer) TransactionContentionEvents(
 		Events: make([]contentionpb.ExtendedContentionEvent, 0),
 	}
 
-	if err := s.iterateNodes(ctx, "txn contention events for node",
+	if err := iterateNodes(ctx, s.serverIterator, s.stopper, "txn contention events for node",
 		noTimeout,
+		s.dialNode,
 		rpcCallFn,
 		func(nodeID roachpb.NodeID, nodeResp interface{}) {
 			txnContentionEvents := nodeResp.(*serverpb.TransactionContentionEventsResponse)

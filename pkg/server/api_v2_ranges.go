@@ -241,10 +241,13 @@ func (a *apiV2Server) listRange(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := a.status.iterateNodes(
+	if err := iterateNodes(
 		ctx,
+		a.status.serverIterator,
+		a.status.stopper,
 		fmt.Sprintf("details about range %d", rangeID),
 		noTimeout,
+		a.status.dialNode,
 		nodeFn,
 		responseFn, errorFn,
 	); err != nil {
