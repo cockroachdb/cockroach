@@ -1619,7 +1619,7 @@ func (s *statusServer) fetchProfileFromAllNodes(
 	senderServerVersion := resp.Desc.ServerVersion
 
 	opName := fmt.Sprintf("fetch cluster-wide %s profile", req.Type)
-	nodeFn := func(ctx context.Context, statusClient serverpb.StatusClient, nodeID roachpb.NodeID) (interface{}, error) {
+	nodeFn := func(ctx context.Context, statusClient serverpb.StatusClient, nodeID roachpb.NodeID) (*profData, error) {
 		var pd *profData
 		err := timeutil.RunWithTimeout(ctx, opName, 1*time.Minute, func(ctx context.Context) error {
 			resp, err := statusClient.Profile(ctx, &serverpb.ProfileRequest{
@@ -1638,8 +1638,7 @@ func (s *statusServer) fetchProfileFromAllNodes(
 		})
 		return pd, err
 	}
-	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
-		profResp := resp.(*profData)
+	responseFn := func(nodeID roachpb.NodeID, profResp *profData) {
 		response.profDataByNodeID[nodeID] = profResp
 	}
 	errorFn := func(nodeID roachpb.NodeID, err error) {
