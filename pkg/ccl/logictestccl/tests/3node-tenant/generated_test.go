@@ -1605,6 +1605,13 @@ func TestTenantLogic_role(
 	runLogicTest(t, "role")
 }
 
+func TestTenantLogic_routine_schema_change(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "routine_schema_change")
+}
+
 func TestTenantLogic_row_level_ttl(
 	t *testing.T,
 ) {

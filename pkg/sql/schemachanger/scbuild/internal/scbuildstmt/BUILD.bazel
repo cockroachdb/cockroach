@@ -88,6 +88,7 @@ go_test(
     embed = [":scbuildstmt"],
     deps = [
         "//pkg/settings",
+        "//pkg/sql/sem/tree",
         "@com_github_stretchr_testify//require",
     ],
 )
