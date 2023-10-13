@@ -2373,7 +2373,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 			// which can make the backups take much longer to finish.
 			const numWarehouses = 100
 			bankInit, bankRun := bankWorkloadCmd(testRNG, roachNodes)
-			tpccInit, tpccRun := tpccWorkloadCmd(numWarehouses, roachNodes)
+			tpccInit, tpccRun := tpccWorkloadCmd(testRNG, numWarehouses, roachNodes)
 
 			mvt.OnStartup("set short job interval", backupTest.setShortJobIntervals)
 			mvt.OnStartup("take backup in previous version", backupTest.maybeTakePreviousVersionBackup)
@@ -2406,9 +2406,10 @@ func registerBackupMixedVersion(r registry.Registry) {
 }
 
 func tpccWorkloadCmd(
-	numWarehouses int, roachNodes option.NodeListOption,
+	testRNG *rand.Rand, numWarehouses int, roachNodes option.NodeListOption,
 ) (init *roachtestutil.Command, run *roachtestutil.Command) {
 	init = roachtestutil.NewCommand("./cockroach workload init tpcc").
+		MaybeOption(testRNG.Intn(2) == 0, "families").
 		Arg("{pgurl%s}", roachNodes).
 		Flag("warehouses", numWarehouses)
 	run = roachtestutil.NewCommand("./cockroach workload run tpcc").

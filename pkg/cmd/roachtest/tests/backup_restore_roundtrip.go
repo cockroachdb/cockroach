@@ -168,7 +168,7 @@ func startBackgroundWorkloads(
 	// for the cluster used in this test without overloading it,
 	// which can make the backups take much longer to finish.
 	const numWarehouses = 100
-	tpccInit, tpccRun := tpccWorkloadCmd(numWarehouses, roachNodes)
+	tpccInit, tpccRun := tpccWorkloadCmd(testRNG, numWarehouses, roachNodes)
 	bankInit, bankRun := bankWorkloadCmd(testRNG, roachNodes)
 
 	err := c.RunE(ctx, workloadNode, bankInit.String())
