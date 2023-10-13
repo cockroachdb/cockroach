@@ -1864,9 +1864,7 @@ func getNodeStatuses(
 
 	var rows []kv.KeyValue
 	if len(b.Results[0].Rows) > 0 {
-		var rowsInterface interface{}
-		rowsInterface, next = simplePaginate(b.Results[0].Rows, limit, offset)
-		rows = rowsInterface.([]kv.KeyValue)
+		rows, next = simplePaginate(b.Results[0].Rows, limit, offset)
 	}
 
 	statuses = make([]statuspb.NodeStatus, len(rows))
@@ -2248,12 +2246,11 @@ func (s *systemStatusServer) rangesHelper(
 			return nil, 0, err
 		}
 		resp, err := status.Ranges(ctx, req)
+		var next int
 		if resp != nil && len(resp.Ranges) > 0 {
-			resultInterface, next := simplePaginate(resp.Ranges, limit, offset)
-			resp.Ranges = resultInterface.([]serverpb.RangeInfo)
-			return resp, next, err
+			resp.Ranges, next = simplePaginate(resp.Ranges, limit, offset)
 		}
-		return resp, 0, err
+		return resp, next, err
 	}
 
 	output := serverpb.RangesResponse{
@@ -2422,9 +2419,7 @@ func (s *systemStatusServer) rangesHelper(
 	}
 	var next int
 	if limit > 0 {
-		var outputInterface interface{}
-		outputInterface, next = simplePaginate(output.Ranges, limit, offset)
-		output.Ranges = outputInterface.([]serverpb.RangeInfo)
+		output.Ranges, next = simplePaginate(output.Ranges, limit, offset)
 	}
 	return &output, next, nil
 }

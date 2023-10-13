@@ -57,7 +57,7 @@ func TestSimplePaginate(t *testing.T) {
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "simple_paginate"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "paginate":
-			var input interface{}
+			var input []int
 			if len(d.CmdArgs) != 2 {
 				return "expected 2 args: paginate <limit> <offset>"
 			}

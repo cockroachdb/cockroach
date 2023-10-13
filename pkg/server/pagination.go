@@ -40,26 +40,25 @@ import (
 // in cases where input has been exhausted, helps when it's being returned
 // back to the client as a `json:omitempty` field, as the JSON mashal code will
 // simply ignore the field if it's a zero value.
-func simplePaginate(input interface{}, limit, offset int) (result interface{}, next int) {
-	val := reflect.ValueOf(input)
-	if limit <= 0 || val.Kind() != reflect.Slice {
+func simplePaginate[T any](input []T, limit, offset int) (result []T, next int) {
+	if limit <= 0 {
 		return input, 0
 	} else if offset < 0 {
 		offset = 0
 	}
 	startIdx := offset
 	endIdx := offset + limit
-	if startIdx > val.Len() {
-		startIdx = val.Len()
+	if startIdx > len(input) {
+		startIdx = len(input)
 	}
-	if endIdx > val.Len() {
-		endIdx = val.Len()
+	if endIdx > len(input) {
+		endIdx = len(input)
 	}
 	next = endIdx
-	if endIdx == val.Len() {
+	if endIdx == len(input) {
 		next = 0
 	}
-	return val.Slice(startIdx, endIdx).Interface(), next
+	return input[startIdx:endIdx], next
 }
 
 // paginationState represents the current state of pagination through the result
