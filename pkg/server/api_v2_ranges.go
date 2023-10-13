@@ -525,7 +525,7 @@ func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 	}
 
 	remoteRequest := serverpb.HotRangesRequest{NodeID: "local"}
-	nodeFn := func(ctx context.Context, status serverpb.StatusClient, nodeID roachpb.NodeID) (interface{}, error) {
+	nodeFn := func(ctx context.Context, status serverpb.StatusClient, nodeID roachpb.NodeID) ([]hotRangeInfo, error) {
 		resp, err := status.HotRangesV2(ctx, &remoteRequest)
 		if err != nil || resp == nil {
 			return nil, err
@@ -553,8 +553,8 @@ func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 		}
 		return hotRangeInfos, nil
 	}
-	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
-		response.Ranges = append(response.Ranges, resp.([]hotRangeInfo)...)
+	responseFn := func(nodeID roachpb.NodeID, resp []hotRangeInfo) {
+		response.Ranges = append(response.Ranges, resp...)
 	}
 	errorFn := func(nodeID roachpb.NodeID, err error) {
 		response.Errors = append(response.Errors, responseError{
@@ -564,8 +564,8 @@ func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 	}
 
 	timeout := HotRangesRequestNodeTimeout.Get(&a.status.st.SV)
-	next, err := a.status.paginatedIterateNodes(
-		ctx, "hot ranges", limit, start, requestedNodes, timeout,
+	next, err := paginatedIterateNodes(
+		ctx, a.status, "hot ranges", limit, start, requestedNodes, timeout,
 		nodeFn, responseFn, errorFn)
 
 	if err != nil {

@@ -2804,18 +2804,17 @@ func (s *systemStatusServer) HotRangesV2(
 	}
 
 	remoteRequest := serverpb.HotRangesRequest{NodeID: "local", TenantID: req.TenantID}
-	nodeFn := func(ctx context.Context, status serverpb.StatusClient, nodeID roachpb.NodeID) (interface{}, error) {
+	nodeFn := func(ctx context.Context, status serverpb.StatusClient, nodeID roachpb.NodeID) ([]*serverpb.HotRangesResponseV2_HotRange, error) {
 		nodeResp, err := status.HotRangesV2(ctx, &remoteRequest)
 		if err != nil {
 			return nil, err
 		}
 		return nodeResp.Ranges, nil
 	}
-	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
-		if resp == nil {
+	responseFn := func(nodeID roachpb.NodeID, hotRanges []*serverpb.HotRangesResponseV2_HotRange) {
+		if len(hotRanges) == 0 {
 			return
 		}
-		hotRanges := resp.([]*serverpb.HotRangesResponseV2_HotRange)
 		response.Ranges = append(response.Ranges, hotRanges...)
 	}
 	errorFn := func(nodeID roachpb.NodeID, err error) {
@@ -2823,8 +2822,8 @@ func (s *systemStatusServer) HotRangesV2(
 	}
 
 	timeout := HotRangesRequestNodeTimeout.Get(&s.st.SV)
-	next, err := s.paginatedIterateNodes(
-		ctx, "hotRanges", size, start, requestedNodes, timeout,
+	next, err := paginatedIterateNodes(
+		ctx, s.statusServer, "hotRanges", size, start, requestedNodes, timeout,
 		nodeFn, responseFn, errorFn)
 
 	if err != nil {
@@ -3112,15 +3111,16 @@ func iterateNodes[Client, Result any](
 // after `start`. If `requestedNodes` is specified and non-empty, iteration is
 // only done on that subset of nodes in addition to any nodes already in pagState.
 // If non-zero, nodeFn will run with a timeout specified by nodeFnTimeout.
-func (s *statusServer) paginatedIterateNodes(
+func paginatedIterateNodes[Result any](
 	ctx context.Context,
+	s *statusServer,
 	errorCtx string,
 	limit int,
 	pagState paginationState,
 	requestedNodes []roachpb.NodeID,
 	nodeFnTimeout time.Duration,
-	nodeFn func(ctx context.Context, client serverpb.StatusClient, nodeID roachpb.NodeID) (interface{}, error),
-	responseFn func(nodeID roachpb.NodeID, resp interface{}),
+	nodeFn func(ctx context.Context, client serverpb.StatusClient, nodeID roachpb.NodeID) ([]Result, error),
+	responseFn func(nodeID roachpb.NodeID, resp []Result),
 	errorFn func(nodeID roachpb.NodeID, nodeFnError error),
 ) (next paginationState, err error) {
 	if limit == 0 {
@@ -3153,7 +3153,7 @@ func (s *statusServer) paginatedIterateNodes(
 	}
 	nodeIDs = append(nodeIDs, pagState.nodesToQuery...)
 
-	paginator := &rpcNodePaginator[serverpb.StatusClient]{
+	paginator := &rpcNodePaginator[serverpb.StatusClient, Result]{
 		limit:        limit,
 		numNodes:     len(nodeIDs),
 		errorCtx:     errorCtx,
@@ -3200,7 +3200,7 @@ func (s *statusServer) listSessionsHelper(
 		InternalAppNamePrefix: catconstants.InternalAppNamePrefix,
 	}
 
-	nodeFn := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
+	nodeFn := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) ([]serverpb.Session, error) {
 		resp, err := statusClient.ListLocalSessions(ctx, req)
 		if resp != nil && err == nil {
 			if len(resp.Errors) > 0 {
@@ -3213,11 +3213,10 @@ func (s *statusServer) listSessionsHelper(
 		}
 		return nil, err
 	}
-	responseFn := func(_ roachpb.NodeID, nodeResp interface{}) {
-		if nodeResp == nil {
+	responseFn := func(_ roachpb.NodeID, sessions []serverpb.Session) {
+		if len(sessions) == 0 {
 			return
 		}
-		sessions := nodeResp.([]serverpb.Session)
 		response.Sessions = append(response.Sessions, sessions...)
 		sort.Slice(response.Sessions, func(i, j int) bool {
 			return response.Sessions[i].Start.Before(response.Sessions[j].Start)
@@ -3230,8 +3229,8 @@ func (s *statusServer) listSessionsHelper(
 
 	var err error
 	var pagState paginationState
-	if pagState, err = s.paginatedIterateNodes(
-		ctx, "session list", limit, start, nil, noTimeout, nodeFn, responseFn, errorFn); err != nil {
+	if pagState, err = paginatedIterateNodes(
+		ctx, s, "session list", limit, start, nil, noTimeout, nodeFn, responseFn, errorFn); err != nil {
 		err := serverpb.ListSessionsError{Message: err.Error()}
 		response.Errors = append(response.Errors, err)
 	}
