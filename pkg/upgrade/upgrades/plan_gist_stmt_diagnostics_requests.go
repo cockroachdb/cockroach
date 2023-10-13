@@ -35,7 +35,7 @@ ALTER TABLE system.statement_diagnostics_requests
 CREATE INDEX completed_idx_v2 ON system.statement_diagnostics_requests (completed, ID)
   STORING (statement_fingerprint, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist)`
 
-	dropCompletedIdx = `DROP INDEX system.statement_diagnostics_requests@completed_idx`
+	dropCompletedIdx = `DROP INDEX IF EXISTS system.statement_diagnostics_requests@completed_idx`
 )
 
 // stmtDiagForPlanGistMigration changes the schema of the

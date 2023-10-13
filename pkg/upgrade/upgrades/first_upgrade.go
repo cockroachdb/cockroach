@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -201,4 +202,19 @@ WHERE
 		return nil
 	}
 	return errors.AssertionFailedf("\"\".crdb_internal.invalid_objects is not empty")
+}
+
+// newFirstUpgrade creates a TenantUpgrade that corresponds to the first
+// (Vxy_zStart) internal version of a release.
+func newFirstUpgrade(v roachpb.Version) *upgrade.TenantUpgrade {
+	if v.Internal != 2 {
+		panic("not the first internal release")
+	}
+	return upgrade.NewTenantUpgrade(
+		firstUpgradeDescription(v), v, FirstUpgradeFromReleasePrecondition, FirstUpgradeFromRelease,
+	)
+}
+
+func firstUpgradeDescription(v roachpb.Version) string {
+	return fmt.Sprintf("prepare upgrade to v%d.%d release", v.Major, v.Minor)
 }

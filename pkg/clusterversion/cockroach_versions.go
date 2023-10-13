@@ -524,6 +524,13 @@ const (
 	// V23_2_UDFMutations is the version where UDFs with mutations are enabled.
 	V23_2_UDFMutations
 
+	// V23_2 is CockroachDB v23.2. It's used for all v23.2.x patch releases.
+	V23_2
+
+	// V24_1Start demarcates the start of cluster versions stepped through during
+	// the process of upgrading from previous supported releases to 24.1.
+	V24_1Start
+
 	// *************************************************
 	// Step (1) Add new versions here.
 	// Do not add new versions to a patch release.
@@ -533,7 +540,7 @@ const (
 // VCurrent_Start is an alias for last Start version key (i.e the first internal
 // version of the release in development). Tests should use this constant so
 // they don't need to be updated when the versions change.
-const VCurrent_Start = V23_2Start
+const VCurrent_Start = V24_1Start
 
 func (k Key) String() string {
 	return ByKey(k).String()
@@ -887,6 +894,16 @@ var rawVersionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 38},
 	},
 
+	{
+		Key:     V23_2,
+		Version: roachpb.Version{Major: 23, Minor: 2, Internal: 0},
+	},
+
+	{
+		Key:     V24_1Start,
+		Version: roachpb.Version{Major: 23, Minor: 2, Internal: 2},
+	},
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -955,13 +972,13 @@ var versionsSingleton = func() keyedVersions {
 	return rawVersionsSingleton
 }()
 
-// V23_2 is a placeholder that will eventually be replaced by the actual 23.2
+// V24_1 is a placeholder that will eventually be replaced by the actual 24.1
 // version Key, but in the meantime it points to the latest Key. The placeholder
 // is defined so that it can be referenced in code that simply wants to check if
-// a cluster is running 23.2 and has completed all associated migrations; most
+// a cluster is running 24.1 and has completed all associated migrations; most
 // version gates can use this instead of defining their own version key if all
-// simply need to check is that the cluster has upgraded to 23.2.
-var V23_2 = versionsSingleton[len(versionsSingleton)-1].Key
+// simply need to check is that the cluster has upgraded to 24.1.
+var V24_1 = versionsSingleton[len(versionsSingleton)-1].Key
 
 const (
 	BinaryMinSupportedVersionKey = V23_1
@@ -978,7 +995,7 @@ var (
 	// comment).
 	binaryMinSupportedVersion = ByKey(BinaryMinSupportedVersionKey)
 
-	BinaryVersionKey = V23_2
+	BinaryVersionKey = V24_1
 	// binaryVersion is the version of this binary.
 	//
 	// This is the version that a new cluster will use when created.
