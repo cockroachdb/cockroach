@@ -88,12 +88,6 @@ func backupRestoreRoundTrip(ctx context.Context, t test.Test, c cluster.Cluster)
 		if err != nil {
 			return err
 		}
-
-		stopBackgroundCommands, err := runBackgroundWorkload()
-		if err != nil {
-			return err
-		}
-
 		tables, err := testUtils.loadTablesForDBs(ctx, t.L(), testRNG, dbs...)
 		if err != nil {
 			return err
@@ -111,6 +105,10 @@ func backupRestoreRoundTrip(ctx context.Context, t test.Test, c cluster.Cluster)
 			return err
 		}
 		if err := testUtils.setClusterSettings(ctx, t.L(), testRNG); err != nil {
+			return err
+		}
+		stopBackgroundCommands, err := runBackgroundWorkload()
+		if err != nil {
 			return err
 		}
 		for i := 0; i < 10; i++ {

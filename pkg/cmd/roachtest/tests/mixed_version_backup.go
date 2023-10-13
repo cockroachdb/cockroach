@@ -1325,7 +1325,7 @@ func (u *CommonTestUtils) setMaxRangeSizeAndDependentSettings(
 			chosenValue = boundedValues[rng.Intn(len(boundedValues))]
 		}
 		l.Printf("setting cluster setting %q to %q", setting, chosenValue)
-		stmt := fmt.Sprintf("SET CLUSTER SETTING %s = '%s'", setting, chosenValue)
+		stmt := fmt.Sprintf("SET CLUSTER SETTING %s = '%d'", setting, chosenValue)
 		if err := u.Exec(ctx, rng, stmt); err != nil {
 			return err
 		}
