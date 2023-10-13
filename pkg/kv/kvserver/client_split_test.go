@@ -2821,6 +2821,10 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				Settings: st,
+				RaftConfig: base.RaftConfig{
+					// Don't expire leases, even when manually adjusting clocks.
+					RangeLeaseDuration: time.Hour,
+				},
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						WallClock: manualClock,
@@ -2861,19 +2865,22 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 		t.Errorf("expected all writes-per-replica percentiles to be identical, got %+v", wpr1)
 	}
 
-	// Increment the manual clock and do a write to increase the qps above zero.
+  // Increment the manual clock and perform a write. We want to make sure we
+  // can read the value through raft, so we know the stats are updated.
 	manualClock.Increment(int64(replicastats.MinStatsDuration))
-	pArgs := incrementArgs(key, 10)
-	if _, pErr := kv.SendWrapped(ctx, s.TestSender(), pArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
-	// We want to make sure we can read the value through raft, so we know
-	// the stats are updated.
+	const keyInc = 10
+	keyIncCount := 0
 	testutils.SucceedsSoon(t, func() error {
+		pArgs := incrementArgs(key, keyInc)
+		if _, pErr := kv.SendWrapped(ctx, s.TestSender(), pArgs); pErr != nil {
+			return errors.Errorf("failed to increment key: %v (args=%v), err: %v",
+				key, pArgs, pErr)
+		}
+		keyIncCount++
 		getArgs := getArgs(key)
 		if reply, err := kv.SendWrapped(ctx, s.TestSender(), getArgs); err != nil {
 			return errors.Errorf("failed to read data: %s", err)
-		} else if e, v := int64(10), mustGetInt(reply.(*kvpb.GetResponse).Value); v != e {
+		} else if e, v := int64(keyIncCount*keyInc), mustGetInt(reply.(*kvpb.GetResponse).Value); v != e {
 			return errors.Errorf("failed to read correct data: expected %d, got %d", e, v)
 		}
 		return nil
