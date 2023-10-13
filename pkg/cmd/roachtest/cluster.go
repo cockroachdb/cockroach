@@ -2201,7 +2201,11 @@ func (c *clusterImpl) RunE(ctx context.Context, nodes option.NodeListOption, arg
 		}
 
 		l.Printf("> result: %s", err)
-		createFailedFile(l.File.Name())
+		var logFileName string
+		if l.File != nil {
+			logFileName = l.File.Name()
+		}
+		createFailedFile(logFileName)
 		return errors.Wrapf(err, "full command output in %s.log", logFile)
 	}
 	l.Printf("> result: <ok>")
@@ -2248,7 +2252,10 @@ func (c *clusterImpl) RunWithDetails(
 	l.Printf("> %s", cmd)
 	results, err := roachprod.RunWithDetails(ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "" /* processTag */, c.IsSecure(), args)
 
-	logFileFull := l.File.Name()
+	var logFileFull string
+	if l.File != nil {
+		logFileFull = l.File.Name()
+	}
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			l.Printf("(note: incoming context was canceled: %s)", err)
