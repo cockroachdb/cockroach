@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -84,21 +86,7 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 	row.Scan(&count)
 	require.Equal(t, 0, count, "jobs: expect:0, actual:%d", count)
 
-	row = db.QueryRow(t, "SELECT count_rows() FROM system.public.transaction_statistics")
-	row.Scan(&count)
-	require.Equal(t, 0, count, "system.transaction_statistics: expect:0, actual:%d", count)
-
-	row = db.QueryRow(t, "SELECT count_rows() FROM system.public.statement_statistics")
-	row.Scan(&count)
-	require.Equal(t, 0, count, "system.statement_statistics: expect:0, actual:%d", count)
-
-	row = db.QueryRow(t, "SELECT count_rows() FROM crdb_internal.transaction_activity")
-	row.Scan(&count)
-	require.Equal(t, 0, count, "crdb_internal.transaction_activity: expect:0, actual:%d", count)
-
-	row = db.QueryRow(t, "SELECT count_rows() FROM crdb_internal.statement_activity")
-	row.Scan(&count)
-	require.Equal(t, 0, count, "crdb_internal.statement_activity: expect:0, actual:%d", count)
+	verifyActivityTablesAreEmpty(t, db)
 
 	execCfg := srv.ExecutorConfig().(ExecutorConfig)
 	st := cluster.MakeTestingClusterSettings()
@@ -106,15 +94,12 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 
 	require.NoError(t, updater.TransferStatsToActivity(ctx))
 
-	row = db.QueryRow(t, "SELECT count_rows() FROM system.public.transaction_activity")
-	row.Scan(&count)
-	require.Equal(t, 0, count, "system.transaction_activity: expect:0, actual:%d", count)
+	verifyActivityTablesAreEmpty(t, db)
 
-	row = db.QueryRow(t, "SELECT count_rows() FROM system.public.statement_activity")
-	row.Scan(&count)
-	require.Equal(t, 0, count, "system.statement_activity: expect:0, actual:%d", count)
+	// Use random name to keep isolated during stress tests.
+	rng, _ := randutil.NewTestRand()
+	appName := fmt.Sprintf("TestSqlActivityUpdateJob-%d", rng.Int())
 
-	appName := "TestSqlActivityUpdateJob"
 	db.Exec(t, "SET SESSION application_name=$1", appName)
 	db.Exec(t, "SELECT 1;")
 
@@ -127,40 +112,7 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 	// being a few rows.
 	require.NoError(t, updater.TransferStatsToActivity(ctx))
 
-	row = db.QueryRow(t, "SELECT count_rows() FROM system.public.transaction_activity WHERE app_name = $1", appName)
-	row.Scan(&count)
-	require.Equal(t, count, 1, "system.transaction_activity after transfer: expect:1, actual:%d", count)
-
-	row = db.QueryRow(t, "SELECT count_rows() FROM system.public.statement_activity WHERE app_name = $1", appName)
-	row.Scan(&count)
-	require.Equal(t, count, 1, "system.statement_activity after transfer: expect:1, actual:%d", count)
-
-	row = db.QueryRow(t, "SELECT count_rows() FROM crdb_internal.transaction_activity WHERE app_name = $1", appName)
-	row.Scan(&count)
-	require.Equal(t, count, 1, "crdb_internal.transaction_activity after transfer: expect:1, actual:%d", count)
-
-	row = db.QueryRow(t, "SELECT count_rows() FROM crdb_internal.statement_activity WHERE app_name = $1", appName)
-	row.Scan(&count)
-	require.Equal(t, count, 1, "crdb_internal.statement_activity after transfer: expect:1, actual:%d", count)
-
-	// Reset the stats and verify all sql stats tables are empty.
-	db.Exec(t, "SELECT crdb_internal.reset_sql_stats()")
-
-	row = db.QueryRow(t, "SELECT count_rows() FROM system.public.transaction_activity")
-	row.Scan(&count)
-	require.Zero(t, count, "system.transaction_activity after transfer: expect:0, actual:%d", count)
-
-	row = db.QueryRow(t, "SELECT count_rows() FROM system.public.statement_activity")
-	row.Scan(&count)
-	require.Zero(t, count, "system.statement_activity after transfer: expect:0, actual:%d", count)
-
-	row = db.QueryRow(t, "SELECT count_rows() FROM crdb_internal.transaction_activity")
-	row.Scan(&count)
-	require.Zero(t, count, "crdb_internal.transaction_activity after transfer: expect:0, actual:%d", count)
-
-	row = db.QueryRow(t, "SELECT count_rows() FROM crdb_internal.statement_activity")
-	row.Scan(&count)
-	require.Zero(t, count, "crdb_internal.statement_activity after transfer: expect:0, actual:%d", count)
+	verifyActivityTableContentHelper(t, db, appName)
 }
 
 // TestMergeFunctionLogic verifies the merge functions used in the
@@ -300,6 +252,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
 	})
+
 	defer srv.Stopper().Stop(context.Background())
 	defer sqlDB.Close()
 
@@ -314,6 +267,8 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 	db.Exec(t, "DELETE FROM system.public.statement_activity")
 	db.Exec(t, "DELETE FROM system.public.transaction_statistics")
 	db.Exec(t, "DELETE FROM system.public.statement_statistics")
+
+	verifyActivityTablesAreEmpty(t, db)
 
 	execCfg := srv.ExecutorConfig().(ExecutorConfig)
 	st := cluster.MakeTestingClusterSettings()
@@ -331,7 +286,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 
 	db.Exec(t, "set cluster setting sql.txn_stats.sample_rate  = 1;")
 
-	const appNamePrefix = "TestSqlActivityUpdateJobLoop"
+	const appNamePrefix = "TestSqlActivityUpdateTopLimitJob"
 	getAppName := func(count int) string {
 		return fmt.Sprintf("%s%d", appNamePrefix, count)
 	}
@@ -359,9 +314,17 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 
 		db.Exec(t, "SET SESSION application_name=$1", "randomIgnore")
 
-		db.Exec(t, "set cluster setting sql.stats.flush.enabled  = true;")
+		db.Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled  = true;")
 		srv.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
-		db.Exec(t, "set cluster setting sql.stats.flush.enabled  = false;")
+		db.Exec(t, "SET CLUSTER SETTING sql.stats.flush.enabled  = false;")
+
+		// Run the updater to add rows to the activity tables.
+		// This will use the transfer all scenarios with there only
+		// being a few rows.
+		err = updater.TransferStatsToActivity(ctx)
+		require.NoError(t, err)
+
+		verifyTopActivityTableContentHelper(t, db, 500)
 
 		// The max number of queries is number of top columns * max number of
 		// queries per a column (6*3=18 for this test, 6*500=3000 default). Most of
@@ -375,7 +338,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 		for j := 0; j < topLimit; j++ {
 			updateStatsCount++
 			db.Exec(t, `UPDATE system.public.statement_statistics
-			SET statistics =  jsonb_set(jsonb_set(statistics, '{execution_statistics, cnt}', to_jsonb($1::INT)),
+			SET statistics =  jsonb_set(jsonb_set(statistics, '{statistics, cnt}', to_jsonb($1::INT)),
 			    '{statistics, svcLat, mean}', to_jsonb($2::FLOAT))
 			    WHERE app_name = $3;`, 10000+updateStatsCount, 0.0000001, getAppName(updateStatsCount))
 		}
@@ -384,7 +347,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 		for j := 0; j < topLimit; j++ {
 			updateStatsCount++
 			db.Exec(t, `UPDATE system.public.statement_statistics
-			SET statistics =  jsonb_set(jsonb_set(statistics, '{execution_statistics, cnt}', to_jsonb($1::INT)),
+			SET statistics =  jsonb_set(jsonb_set(statistics, '{statistics, cnt}', to_jsonb($1::INT)),
 			    '{statistics, svcLat, mean}', to_jsonb($2::FLOAT))
 			    WHERE app_name = $3;`, 1, 1000+updateStatsCount, getAppName(updateStatsCount))
 		}
@@ -394,7 +357,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 		for j := 0; j < topLimit; j++ {
 			updateStatsCount++
 			db.Exec(t, `UPDATE system.public.statement_statistics
-			SET statistics =  jsonb_set(jsonb_set(statistics, '{execution_statistics, cnt}', to_jsonb($1::INT)),
+			SET statistics =  jsonb_set(jsonb_set(statistics, '{statistics, cnt}', to_jsonb($1::INT)),
 			    '{statistics, svcLat, mean}', to_jsonb($2::FLOAT))
 			    WHERE app_name = $3;`, 500+updateStatsCount, 500+updateStatsCount, getAppName(updateStatsCount))
 		}
@@ -412,9 +375,12 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 
 		// Update the transaction stats
 		db.Exec(t, `UPDATE system.public.transaction_statistics
-			SET statistics =  jsonb_set(jsonb_set(statistics, '{execution_statistics, cnt}', to_jsonb($1::INT)),
+			SET statistics =  jsonb_set(jsonb_set(statistics, '{statistics, cnt}', to_jsonb($1::INT)),
 			    '{statistics, svcLat, mean}', to_jsonb($2::FLOAT))
 			    WHERE app_name = $3;`, 10000, 1, "topTransaction")
+
+		// Help check for primary key conflicts.
+		duplicateRowHelper(t, db, getAppName(0))
 
 		// Run the updater to add rows to the activity tables.
 		// This will use the transfer all scenarios with there only
@@ -427,18 +393,18 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 		// Hit query endpoint.
 		urlPath := fmt.Sprintf("/_status/combinedstmts?start=%d", stubTime.Unix())
 		require.NoError(t, serverutils.GetJSONProtoWithAdminOption(srv, urlPath, &httpStmtsResp, false))
-		require.Equal(t, httpStmtsResp.StmtsSourceTable, "crdb_internal.statement_activity")
-		require.Equal(t, httpStmtsResp.TxnsSourceTable, "crdb_internal.transaction_activity")
+		require.Equal(t, "crdb_internal.statement_activity", httpStmtsResp.StmtsSourceTable)
+		require.Equal(t, "crdb_internal.transaction_activity", httpStmtsResp.TxnsSourceTable)
 
 		maxRows := topLimit * 6 // Number of top columns to select from.
 		row := db.QueryRow(t,
-			`SELECT count_rows() FROM system.public.transaction_activity WHERE app_name LIKE 'TestSqlActivityUpdateJobLoop%'`)
+			`SELECT count_rows() FROM system.public.transaction_activity WHERE app_name LIKE 'TestSqlActivityUpdateTopLimitJob%'`)
 		var count int
 		row.Scan(&count)
 		require.LessOrEqual(t, count, maxRows, "transaction_activity after transfer: actual:%d, max:%d", count, maxRows)
 
 		row = db.QueryRow(t,
-			`SELECT count_rows() FROM system.public.statement_activity WHERE app_name LIKE 'TestSqlActivityUpdateJobLoop%'`)
+			`SELECT count_rows() FROM system.public.statement_activity WHERE app_name LIKE 'TestSqlActivityUpdateTopLimitJob%'`)
 		row.Scan(&count)
 		require.LessOrEqual(t, count, maxRows, "statement_activity after transfer: actual:%d, max:%d", count, maxRows)
 
@@ -461,13 +427,8 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 		}
 
 		require.Equal(t, 2, stmtIdCnt, "transaction_activity should have 2 stmts ids: actual:%d", stmtIdCnt)
-		for _, stmtToFind := range stmtIDs {
-			row = db.QueryRow(t, `SELECT count_rows() FROM system.public.statement_activity 
-                    WHERE encode(fingerprint_id, 'hex') = $1`, stmtToFind)
-			row.Scan(&count)
-			require.Equal(t, 1, count, "missing fingerprint from statement_activity:%s", stmtToFind)
-
-		}
+		// Don't check if the statements are on statements_activity
+		// because we no longer force them to be there.
 
 		var txnTotalClusterExecutionSeconds float64
 		row = db.QueryRow(t, `SELECT sum(
@@ -774,6 +735,173 @@ func TestActivityStatusCombineAPI(t *testing.T) {
 	require.NotEmpty(t, resp.Statements)
 	require.Greater(t, resp.StmtsTotalRuntimeSecs, float32(0))
 	require.Greater(t, resp.TxnsTotalRuntimeSecs, float32(0))
+}
+
+// duplicateRowHelper duplicates a single row in each statistics table, but slightly
+// changes non-primary key fields to make sure it doesn't cause a conflict that
+// breaks upsert because multiple rows have same primary key.
+func duplicateRowHelper(t *testing.T, db *sqlutils.SQLRunner, appName string) {
+	// primary key for activity table: aggregated_ts, fingerprint_id, app_name
+	db.Exec(t, `INSERT INTO system.transaction_statistics (aggregated_ts, fingerprint_id, app_name, node_id, agg_interval, metadata, statistics)
+			 (SELECT aggregated_ts, fingerprint_id, app_name, 42, '00:00:01'::INTERVAL, metadata,  statistics FROM system.transaction_statistics where app_name = $1 limit 1)
+		`, appName)
+
+	// primary key for activity table: aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name
+	db.Exec(t, `INSERT INTO system.statement_statistics (aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, node_id, agg_interval, plan_hash, metadata, statistics)
+			 (SELECT aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, 42, '00:00:01'::INTERVAL, plan_hash, metadata, jsonb_set(statistics, '{index_recommendations}', to_jsonb('["creation : dummy value"]'))  FROM system.statement_statistics where app_name = $1 limit 1)
+		`, appName)
+}
+
+func verifyActivityTablesAreEmpty(t *testing.T, db *sqlutils.SQLRunner) {
+	var count int
+	row := db.QueryRow(t, "SELECT count_rows() FROM system.public.transaction_activity")
+	row.Scan(&count)
+	require.Zero(t, count, "system.transaction_activity after transfer: expect:0, actual:%d", count)
+
+	row = db.QueryRow(t, "SELECT count_rows() FROM system.public.statement_activity")
+	row.Scan(&count)
+	require.Zero(t, count, "system.statement_activity after transfer: expect:0, actual:%d", count)
+
+	row = db.QueryRow(t, "SELECT count_rows() FROM crdb_internal.transaction_activity")
+	row.Scan(&count)
+	require.Zero(t, count, "crdb_internal.transaction_activity after transfer: expect:0, actual:%d", count)
+
+	row = db.QueryRow(t, "SELECT count_rows() FROM crdb_internal.statement_activity")
+	row.Scan(&count)
+	require.Zero(t, count, "crdb_internal.statement_activity after transfer: expect:0, actual:%d", count)
+}
+
+func verifyActivityTableContentHelper(t *testing.T, db *sqlutils.SQLRunner, appName string) {
+	txnTables := []string{"system.public.transaction_activity", "crdb_internal.transaction_activity"}
+	for _, table := range txnTables {
+		query := fmt.Sprintf(`SELECT count_rows() 
+		FROM system.public.transaction_statistics ts
+		INNER JOIN	(SELECT * FROM %s) ta using (fingerprint_id, app_name)
+		WHERE app_name = $1 AND
+			ta.execution_count = ts.execution_count AND
+			ta.execution_total_seconds = ts.total_estimated_execution_time AND
+			ta.contention_time_avg_seconds  = ts.contention_time AND
+			ta.cpu_sql_avg_nanos = ts.cpu_sql_nanos AND      
+			ta.service_latency_avg_seconds = ts.service_latency AND
+			ta.statistics = ts.statistics AND
+			ta.metadata = ts.metadata`, table)
+		row := db.QueryRow(t, query, appName)
+		var count int
+		row.Scan(&count)
+		require.Equal(t, 1, count, "%s after transfer: expect:1, actual:%d, query: %s", table, count, query)
+	}
+
+	stmtTables := []string{"system.public.statement_activity", "crdb_internal.statement_activity"}
+	for _, table := range stmtTables {
+		query := fmt.Sprintf(`SELECT count_rows() 
+		FROM system.public.statement_statistics ss
+		INNER JOIN	(SELECT * FROM %s) sa using (fingerprint_id, app_name)
+		WHERE app_name = $1 AND
+			sa.execution_count = ss.execution_count AND
+			sa.execution_total_seconds = ss.total_estimated_execution_time AND
+			sa.contention_time_avg_seconds  = ss.contention_time AND
+			sa.cpu_sql_avg_nanos = ss.cpu_sql_nanos AND      
+			sa.service_latency_avg_seconds = ss.service_latency AND
+			sa.service_latency_p99_seconds = ss.p99_latency AND
+			sa.statistics = ss.statistics`, table)
+		row := db.QueryRow(t, query, appName)
+		var count int
+		row.Scan(&count)
+		require.Equal(t, 1, count, "%s after transfer: expect:1, actual:%d, query: %s", table, count, query)
+
+		// Metadata objects are changed because it's an aggregate.
+		query = fmt.Sprintf(`SELECT count_rows() 
+		FROM (select fingerprint_id, app_name, crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata FROM system.public.statement_statistics GROUP BY fingerprint_id, app_name) ss
+		INNER JOIN	(SELECT * FROM %s) sa using (fingerprint_id, app_name)
+		WHERE app_name = $1 AND
+		      sa.metadata = ss.metadata`, table)
+		row = db.QueryRow(t, query, appName)
+		row.Scan(&count)
+		require.Equal(t, 1, count, "%s after transfer metadata: expect:1, actual:%d, query: %s", table, count, query)
+	}
+}
+
+func verifyTopActivityTableContentHelper(t *testing.T, db *sqlutils.SQLRunner, limitCnt int) {
+	txnTables := []string{"system.public.transaction_activity", "crdb_internal.transaction_activity"}
+	for _, table := range txnTables {
+		topColumnNames := []string{" (statistics->'statistics'->>'cnt')::int ",
+			" ((statistics->'statistics'->>'cnt')::float)*((statistics->'statistics'->'svcLat'->>'mean')::float) ",
+			" COALESCE((statistics->'execution_statistics'->'contentionTime'->>'mean')::float,0) ",
+			" COALESCE((statistics->'execution_statistics'->'cpuSQLNanos'->>'mean')::float,0) ",
+			" (statistics->'statistics'->'svcLat'->>'mean')::float "}
+		for _, column := range topColumnNames {
+			query := fmt.Sprintf(`SELECT count_rows()
+		FROM 
+		    (select * from (select 
+		                        aggregated_ts,
+		                        fingerprint_id,
+		                        app_name,
+		                        max(metadata) AS max_metadata,
+		                        crdb_internal.merge_transaction_stats(array_agg(statistics)) as statistics
+					from system.public.transaction_statistics 
+						where app_name not like '$ internal%%' and app_name != 'randomIgnore'
+						group by aggregated_ts, fingerprint_id, app_name)
+				order by %s limit %d) ts
+		LEFT JOIN	(SELECT * FROM %s ) ta using (aggregated_ts, fingerprint_id, app_name)
+		WHERE ta.fingerprint_id != ts.fingerprint_id OR
+			ta.statistics != ts.statistics`, column, limitCnt, table)
+			row := db.QueryRow(t, query)
+
+			var count int
+			row.Scan(&count)
+			require.Zero(t, count, "%s after transfer: expect:0, actual:%d, query: %s", table, count, query)
+
+			if strings.Contains(column, "'statistics'") {
+				query = fmt.Sprintf(`SELECT sum(%s :: float) FROM  %s`, column, table)
+				row = db.QueryRow(t, query)
+				var totalColumnValue float64
+				row.Scan(&totalColumnValue)
+				require.Greater(t, totalColumnValue, float64(0), "%s after transfer: expect:1, actual:%d, query: %s", table, totalColumnValue, query)
+			}
+		}
+	}
+
+	stmtTables := []string{"system.public.statement_activity", "crdb_internal.statement_activity"}
+	for _, table := range stmtTables {
+		topColumnNames := []string{" (statistics->'statistics'->>'cnt')::int ",
+			" ((statistics->'statistics'->>'cnt')::float)*((statistics->'statistics'->'svcLat'->>'mean')::float) ",
+			" COALESCE((statistics->'execution_statistics'->'contentionTime'->>'mean')::float,0) ",
+			" COALESCE((statistics->'execution_statistics'->'cpuSQLNanos'->>'mean')::float,0) ",
+			" (statistics->'statistics'->'svcLat'->>'mean')::float ",
+			" COALESCE((statistics -> 'statistics' -> 'latencyInfo' ->> 'p99')::float, 0)"}
+
+		for _, column := range topColumnNames {
+			query := fmt.Sprintf(`SELECT count_rows()
+		FROM 
+		    (select * from (select 
+		                        aggregated_ts,
+		                        fingerprint_id,
+		                        app_name,
+		                        crdb_internal.merge_stats_metadata(array_agg(metadata))    AS merged_metadata,
+		                        crdb_internal.merge_statement_stats(array_agg(statistics)) as statistics
+					from system.public.statement_statistics 
+						where app_name not like '$ internal%%' and app_name != 'randomIgnore'
+						group by aggregated_ts, fingerprint_id, app_name)
+				order by %s limit %d) ts
+		LEFT JOIN	(SELECT * FROM %s ) ta using (aggregated_ts, fingerprint_id, app_name)
+		WHERE ta.fingerprint_id != ts.fingerprint_id OR
+			ta.statistics != ts.statistics OR
+		  ta.metadata != ts.merged_metadata `, column, limitCnt, table)
+			row := db.QueryRow(t, query)
+
+			var count int
+			row.Scan(&count)
+			require.Zero(t, count, "%s after transfer: expect:0, actual:%d, query: %s", table, count, query)
+
+			if strings.Contains(column, "'statistics'") && !strings.Contains(column, "'p99'") {
+				query = fmt.Sprintf(`SELECT sum(%s :: float) FROM  %s`, column, table)
+				row = db.QueryRow(t, query)
+				var totalColumnValue float64
+				row.Scan(&totalColumnValue)
+				require.Greater(t, totalColumnValue, float64(0), "%s after transfer: expect:1, actual:%d, query: %s", table, totalColumnValue, query)
+			}
+		}
+	}
 }
 
 func getTxnAppNameCnt(resp serverpb.StatementsResponse, appName string) int {
