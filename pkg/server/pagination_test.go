@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -375,7 +376,7 @@ func TestRPCPaginator(t *testing.T) {
 					for {
 						nodesToQuery := []roachpb.NodeID{pagState.inProgress}
 						nodesToQuery = append(nodesToQuery, pagState.nodesToQuery...)
-						paginator := rpcNodePaginator{
+						paginator := rpcNodePaginator[interface{}]{
 							limit:        limit,
 							numNodes:     len(nodesToQuery),
 							errorCtx:     "test",
@@ -424,11 +425,7 @@ func TestRPCPaginatorWithTimeout(t *testing.T) {
 
 	s := server.StatusServer().(*systemStatusServer)
 
-	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
-		client, err := s.dialNode(ctx, nodeID)
-		return client, err
-	}
-	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
+	nodeFn := func(ctx context.Context, client serverpb.StatusClient, nodeID roachpb.NodeID) (interface{}, error) {
 		select {
 		case <-time.After(time.Second * 10):
 		case <-ctx.Done():
@@ -457,7 +454,6 @@ func TestRPCPaginatorWithTimeout(t *testing.T) {
 		pagState,
 		[]roachpb.NodeID{},
 		time.Second*2,
-		dialFn,
 		nodeFn,
 		responseFn,
 		errorFn,

@@ -132,8 +132,10 @@ func (s *systemStatusServer) spanStatsFanOut(
 	}
 
 	timeout := roachpb.SpanStatsNodeTimeout.Get(&s.st.SV)
-	if err := s.statusServer.iterateNodes(
+	if err := iterateNodes(
 		ctx,
+		s.serverIterator,
+		s.stopper,
 		"iterating nodes for span stats",
 		timeout,
 		smartDial,

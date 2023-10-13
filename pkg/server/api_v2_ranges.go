@@ -221,12 +221,7 @@ func (a *apiV2Server) listRange(w http.ResponseWriter, r *http.Request) {
 		RangeIDs: []roachpb.RangeID{roachpb.RangeID(rangeID)},
 	}
 
-	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
-		client, err := a.status.dialNode(ctx, nodeID)
-		return client, err
-	}
-	nodeFn := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
-		status := client.(serverpb.StatusClient)
+	nodeFn := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
 		return status.Ranges(ctx, rangesRequest)
 	}
 	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
@@ -250,7 +245,7 @@ func (a *apiV2Server) listRange(w http.ResponseWriter, r *http.Request) {
 		ctx,
 		fmt.Sprintf("details about range %d", rangeID),
 		noTimeout,
-		dialFn, nodeFn,
+		nodeFn,
 		responseFn, errorFn,
 	); err != nil {
 		srverrors.APIV2InternalError(ctx, err, w)
@@ -526,13 +521,8 @@ func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 		requestedNodes = []roachpb.NodeID{requestedNodeID}
 	}
 
-	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
-		client, err := a.status.dialNode(ctx, nodeID)
-		return client, err
-	}
 	remoteRequest := serverpb.HotRangesRequest{NodeID: "local"}
-	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
-		status := client.(serverpb.StatusClient)
+	nodeFn := func(ctx context.Context, status serverpb.StatusClient, nodeID roachpb.NodeID) (interface{}, error) {
 		resp, err := status.HotRangesV2(ctx, &remoteRequest)
 		if err != nil || resp == nil {
 			return nil, err
@@ -572,7 +562,7 @@ func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 
 	timeout := HotRangesRequestNodeTimeout.Get(&a.status.st.SV)
 	next, err := a.status.paginatedIterateNodes(
-		ctx, "hot ranges", limit, start, requestedNodes, timeout, dialFn,
+		ctx, "hot ranges", limit, start, requestedNodes, timeout,
 		nodeFn, responseFn, errorFn)
 
 	if err != nil {

@@ -293,7 +293,7 @@ type paginatedNodeResponse struct {
 // Nodes already queried on past calls from the same user (according to
 // pagState) are not ignored. The goroutine that calls processResponses handles
 // slice truncation and response ordering.
-type rpcNodePaginator struct {
+type rpcNodePaginator[Client any] struct {
 	limit        int
 	numNodes     int
 	errorCtx     string
@@ -301,8 +301,8 @@ type rpcNodePaginator struct {
 	responseChan chan paginatedNodeResponse
 	nodeStatuses map[serverID]livenesspb.NodeLivenessStatus
 
-	dialFn     func(ctx context.Context, id roachpb.NodeID) (client interface{}, err error)
-	nodeFn     func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (res interface{}, err error)
+	dialFn     func(ctx context.Context, id roachpb.NodeID) (client Client, err error)
+	nodeFn     func(ctx context.Context, client Client, nodeID roachpb.NodeID) (res interface{}, err error)
 	responseFn func(nodeID roachpb.NodeID, resp interface{})
 	errorFn    func(nodeID roachpb.NodeID, nodeFnError error)
 
@@ -319,7 +319,7 @@ type rpcNodePaginator struct {
 	done int32
 }
 
-func (r *rpcNodePaginator) init() {
+func (r *rpcNodePaginator[Client]) init() {
 	r.mu.turnCond.L = &r.mu
 	r.responseChan = make(chan paginatedNodeResponse, r.numNodes)
 }
@@ -329,14 +329,14 @@ const noTimeout time.Duration = 0
 // queryNode queries the given node, and sends the responses back through responseChan
 // in order of idx (i.e. when all nodes with a lower idx have already sent theirs).
 // Safe for concurrent use.
-func (r *rpcNodePaginator) queryNode(
+func (r *rpcNodePaginator[Client]) queryNode(
 	ctx context.Context, nodeID roachpb.NodeID, idx int, timeout time.Duration,
 ) {
 	if atomic.LoadInt32(&r.done) != 0 {
 		// There are more values than we need. currentLen >= limit.
 		return
 	}
-	var client interface{}
+	var client Client
 	addNodeResp := func(resp paginatedNodeResponse) {
 		r.mu.Lock()
 		defer r.mu.Unlock()
@@ -413,7 +413,7 @@ func (r *rpcNodePaginator) queryNode(
 
 // processResponses processes the responses returned into responseChan. Must only
 // be called once.
-func (r *rpcNodePaginator) processResponses(ctx context.Context) (next paginationState, err error) {
+func (r *rpcNodePaginator[Client]) processResponses(ctx context.Context) (next paginationState, err error) {
 	// Copy r.pagState, as concurrent invocations of queryNode expect it to not
 	// change.
 	next = r.pagState
