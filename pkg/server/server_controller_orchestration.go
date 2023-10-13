@@ -12,10 +12,12 @@ package server
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -25,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -41,28 +44,33 @@ func (c *serverController) start(ctx context.Context, ie isql.Executor) error {
 
 	// Run the detection of which servers should be started or stopped.
 	return c.stopper.RunAsyncTask(ctx, "mark-tenant-services", func(ctx context.Context) {
+		// We receieve updates from the tenantcapabilities
+		// watcher, but we also refresh our state at a fixed
+		// interval to account for:
+		//
+		//  - A rapid stop & start in which the start is
+		//    initially ignored because the server is still
+		//    stopping.
+		//
+		//  - Startup failures that we want to retry.
+		const watchInterval = 1 * time.Second
 		ctx, cancel := c.stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
+		timer := timeutil.NewTimer()
+		defer timer.Stop()
+
 		for {
 			allTenants, updateCh := c.watcher.GetAllTenants()
-			tenantsToStart := make([]roachpb.TenantName, 0, len(allTenants))
-			for _, e := range allTenants {
-				if e.Name == "" {
-					continue
-				}
-
-				if e.DataState == mtinfopb.DataStateReady && e.ServiceMode == mtinfopb.ServiceModeShared {
-					tenantsToStart = append(tenantsToStart, e.Name)
-				}
-			}
-
-			if err := c.startMissingServers(ctx, tenantsToStart); err != nil {
+			if err := c.startMissingServers(ctx, allTenants); err != nil {
 				log.Warningf(ctx, "cannot update running tenant services: %v", err)
 			}
 
+			timer.Reset(watchInterval)
 			select {
 			case <-updateCh:
+			case <-timer.C:
+				timer.Read = true
 			case <-c.stopper.ShouldQuiesce():
 				// Expedited server shutdown of outer server.
 				return
@@ -103,11 +111,24 @@ func (c *serverController) startInitialSecondaryTenantServers(
 }
 
 func (c *serverController) startMissingServers(
-	ctx context.Context, tenants []roachpb.TenantName,
+	ctx context.Context, tenants []tenantcapabilities.Entry,
 ) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for _, name := range tenants {
+	for _, t := range tenants {
+		if t.Name == "" {
+			continue
+		}
+
+		if t.DataState != mtinfopb.DataStateReady {
+			continue
+		}
+
+		if t.ServiceMode != mtinfopb.ServiceModeShared {
+			continue
+		}
+
+		name := t.Name
 		if _, ok := c.mu.servers[name]; !ok {
 			log.Infof(ctx, "tenant %q has changed service mode, should now start", name)
 			// Mark the server for async creation.
