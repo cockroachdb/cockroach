@@ -66,13 +66,7 @@ func (s *statusServer) ResetSQLStats(
 		return status.ResetSQLStats(ctx, localReq)
 	}
 
-	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
-		client, err := s.dialNode(ctx, nodeID)
-		return client, err
-	}
-
-	resetSQLStats := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
-		status := client.(serverpb.StatusClient)
+	resetSQLStats := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
 		return status.ResetSQLStats(ctx, localReq)
 	}
 
@@ -80,7 +74,6 @@ func (s *statusServer) ResetSQLStats(
 
 	if err := s.iterateNodes(ctx, "reset SQL statistics",
 		noTimeout,
-		dialFn,
 		resetSQLStats,
 		func(nodeID roachpb.NodeID, resp interface{}) {
 			// Nothing to do here.
