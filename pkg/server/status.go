@@ -2049,11 +2049,10 @@ func (s *systemStatusServer) NetworkConnectivity(
 
 	// No NodeID parameter specified, so fan-out to all nodes and collect results.
 	remoteRequest := serverpb.NetworkConnectivityRequest{NodeID: "local"}
-	nodeFn := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
+	nodeFn := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) (*serverpb.NetworkConnectivityResponse, error) {
 		return statusClient.NetworkConnectivity(ctx, &remoteRequest)
 	}
-	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
-		r := resp.(*serverpb.NetworkConnectivityResponse)
+	responseFn := func(nodeID roachpb.NodeID, r *serverpb.NetworkConnectivityResponse) {
 		response.Connections[nodeID] = r.Connections[nodeID]
 	}
 	errorFn := func(nodeID roachpb.NodeID, err error) {
