@@ -748,7 +748,7 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 		query,
 		COALESCE(insight.contention, 0::INTERVAL)::FLOAT,
 		COALESCE(sum(txn_contention.contention_duration), 0::INTERVAL)::FLOAT AS durationMs,
-		txn_contention.schema_name,
+		COALESCE(txn_contention.schema_name, ''::STRING)::STRING AS schema_name,
 		txn_contention.database_name,
 		txn_contention.table_name,
 		txn_contention.index_name,
