@@ -16,7 +16,7 @@ import (
 	"github.com/kr/pretty"
 )
 
-func TestVersionLess(t *testing.T) {
+func TestVersionCmp(t *testing.T) {
 	v := func(major, minor, patch, internal int32) Version {
 		return Version{
 			Major:    major,
@@ -50,6 +50,12 @@ func TestVersionLess(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			if a, e := test.v1.Less(test.v2), test.less; a != e {
 				t.Errorf("expected %s < %s? %t; got %t", pretty.Sprint(test.v1), pretty.Sprint(test.v2), e, a)
+			}
+			if a, e := test.v1.Equal(test.v2), test.v1 == test.v2; a != e {
+				t.Errorf("expected %s = %s? %t; got %t", pretty.Sprint(test.v1), pretty.Sprint(test.v2), e, a)
+			}
+			if a, e := test.v1.AtLeast(test.v2), test.v1 == test.v2 || !test.less; a != e {
+				t.Errorf("expected %s >= %s? %t; got %t", pretty.Sprint(test.v1), pretty.Sprint(test.v2), e, a)
 			}
 		})
 	}
