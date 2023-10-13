@@ -654,9 +654,6 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 				// If the poller errored first, that's the
 				// interesting one, so overwrite `err`.
 				if kvFeedErr := ca.checkKVFeedErr(); kvFeedErr != nil {
-					if log.V(1) {
-						log.Infof(ca.Ctx(), "overwriting error %s", err)
-					}
 					err = kvFeedErr
 				}
 			}
@@ -1389,9 +1386,6 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 		return err
 	}
 
-	if log.V(1) {
-		log.Infof(cf.Ctx(), "forwarding frontier. changed: %t, resolved: %s", frontierChanged, resolved)
-	}
 	cf.maybeLogBehindSpan(frontierChanged)
 
 	// If frontier changed, we emit resolved timestamp.
@@ -1478,21 +1472,12 @@ func (cf *changeFrontier) maybeCheckpointJob(
 		checkpoint.Spans, checkpoint.Timestamp = cf.frontier.getCheckpointSpans(maxBytes)
 	}
 
-	if log.V(1) {
-		log.Infof(cf.Ctx(), "maybe checkpointing job. updateCheckpoint: %t, updateHighWater: %t",
-			updateCheckpoint, updateHighWater)
-	}
-
 	if updateCheckpoint || updateHighWater {
 		if cf.knobs.ShouldCheckpointToJobRecord != nil && !cf.knobs.ShouldCheckpointToJobRecord(cf.frontier.Frontier()) {
 			return false, nil
 		}
 		checkpointStart := timeutil.Now()
 		updated, err := cf.checkpointJobProgress(cf.frontier.Frontier(), checkpoint)
-		if log.V(1) {
-			log.Infof(cf.Ctx(), "checkpointed job progress: updated: %t, highwater: %s, err: %v",
-				updated, cf.frontier.Frontier(), err)
-		}
 		if err != nil {
 			return false, err
 		}
