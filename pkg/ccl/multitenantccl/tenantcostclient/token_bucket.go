@@ -75,6 +75,10 @@ type tokenBucket struct {
 	// Protected by the AbstractPool's lock. All changes should happen either
 	// inside a Request.Acquire() method or under AbstractPool.Update().
 
+	// limit is the maximum number of tokens that can be present in the bucket.
+	// Tokens beyond this limit are discarded. If limit = 0, then no limit is
+	// enforced.
+	limit tenantcostmodel.RU
 	// rate that tokens fill the bucket, in RU/s.
 	rate tenantcostmodel.RU
 	// available is the number of currently available RUs in the bucket. This can
@@ -111,17 +115,22 @@ func (tb *tokenBucket) update(now time.Time) {
 	tb.available += tb.rate * tenantcostmodel.RU(sinceSeconds)
 
 	// Subtract some portion of waiting debt, if there is any.
-	if tb.waitingDebt == 0 {
-		// Fast path.
-		return
+	if tb.waitingDebt != 0 {
+		debt := tb.waitingDebtRate * tenantcostmodel.RU(sinceSeconds)
+		if debt > tb.waitingDebt {
+			debt = tb.waitingDebt
+		}
+		tb.waitingDebt -= debt
+		tb.available -= debt
 	}
 
-	debt := tb.waitingDebtRate * tenantcostmodel.RU(sinceSeconds)
-	if debt > tb.waitingDebt {
-		debt = tb.waitingDebt
+	tb.clampToLimit()
+}
+
+func (tb *tokenBucket) clampToLimit() {
+	if tb.limit != 0 && tb.available > tb.limit {
+		tb.available = tb.limit
 	}
-	tb.waitingDebt -= debt
-	tb.available -= debt
 }
 
 func (tb *tokenBucket) calculateDebtRate() {
@@ -163,6 +172,11 @@ type tokenBucketReconfigureArgs struct {
 
 	// NewRate is the new token fill rate for the bucket.
 	NewRate tenantcostmodel.RU
+
+	// MaxTokens is the maximum number of tokens that can be present in the
+	// bucket. Tokens beyond this limit are discarded. If MaxTokens = 0, then
+	// no limit is enforced.
+	MaxTokens tenantcostmodel.RU
 }
 
 // Reconfigure changes the rate, optionally adjusts the available tokens and
@@ -170,6 +184,7 @@ type tokenBucketReconfigureArgs struct {
 func (tb *tokenBucket) Reconfigure(now time.Time, args tokenBucketReconfigureArgs) {
 	tb.update(now)
 	tb.rate = args.NewRate
+	tb.limit = args.MaxTokens
 	tb.addTokens(args.NewTokens)
 }
 
@@ -186,6 +201,7 @@ func (tb *tokenBucket) addTokens(amount tenantcostmodel.RU) {
 		tb.available += amount
 	}
 	tb.calculateDebtRate()
+	tb.clampToLimit()
 }
 
 // maxTryAgainAfterSeconds is the maximum value that can be returned from
@@ -202,6 +218,15 @@ func (tb *tokenBucket) TryToFulfill(
 	// Fast path.
 	if amount <= tb.available {
 		tb.available -= amount
+		return true, 0
+	}
+
+	// Handle edge case where amount > limit, since no amount of waiting will ever
+	// allow the request to be fulfilled. Go into debt to fulfill the request.
+	// NOTE: This case is never expected to happen, but we handle it anyway just
+	// to be sure.
+	if tb.limit != 0 && amount > tb.limit && tb.available >= tb.limit {
+		tb.RemoveTokens(now, amount)
 		return true, 0
 	}
 

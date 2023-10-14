@@ -141,6 +141,11 @@ type limiterReconfigureArgs struct {
 	// NewRate is the new token fill rate for the bucket.
 	NewRate tenantcostmodel.RU
 
+	// MaxTokens is the maximum number of tokens that can be present in the
+	// bucket. Tokens beyond this limit are discarded. If MaxTokens = 0, then
+	// no limit is enforced.
+	MaxTokens tenantcostmodel.RU
+
 	// NotifyThreshold is the AvailableRU level below which a low RU notification
 	// will be sent.
 	NotifyThreshold tenantcostmodel.RU
@@ -159,6 +164,7 @@ func (l *limiter) Reconfigure(now time.Time, cfg limiterReconfigureArgs) {
 		l.qp.tb.Reconfigure(now, tokenBucketReconfigureArgs{
 			NewTokens: cfg.NewTokens,
 			NewRate:   cfg.NewRate,
+			MaxTokens: cfg.MaxTokens,
 		})
 		l.maybeNotifyLocked(now)
 

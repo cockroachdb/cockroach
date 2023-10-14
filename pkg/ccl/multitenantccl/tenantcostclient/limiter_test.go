@@ -163,4 +163,13 @@ func TestLimiterNotify(t *testing.T) {
 	}
 	checkNotification()
 	check("0.00 RU filling @ 0.00 RU/s")
+
+	// Ensure that MaxTokens is enforced.
+	args = limiterReconfigureArgs{
+		NewTokens: 100,
+		MaxTokens: 50,
+	}
+	lim.Reconfigure(ts.Now(), args)
+	checkNoNotification()
+	check("50.00 RU filling @ 0.00 RU/s")
 }
