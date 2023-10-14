@@ -485,28 +485,24 @@ func bootstrapCluster(
 		// not create the range, just its data. Only do this if this is the
 		// first store.
 		if i == 0 {
-			initialValuesOpts := bootstrap.InitialValuesOpts{
+      initialValuesOpts := bootstrap.InitialValuesOpts{
 				DefaultZoneConfig:       &initCfg.defaultZoneConfig,
 				DefaultSystemZoneConfig: &initCfg.defaultSystemZoneConfig,
 				Codec:                   keys.SystemSQLCodec,
 			}
-			if initCfg.testingKnobs.Server != nil {
-				knobs := initCfg.testingKnobs.Server.(*TestingKnobs)
-				// If BinaryVersionOverride is set, and our `binaryMinSupportedVersion`
-				// is at its default value, we must populate the cluster with initial
-				// data from the `binaryMinSupportedVersion`. This cluster will then run
-				// the necessary upgrades until `BinaryVersionOverride` before being
-				// ready to use in the test.
-				if knobs.BinaryVersionOverride != (roachpb.Version{}) {
-					if initCfg.binaryMinSupportedVersion.Equal(
-						clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)) {
-						initialValuesOpts.OverrideKey = clusterversion.BinaryMinSupportedVersionKey
-					}
-				}
-				if knobs.BootstrapVersionKeyOverride != 0 {
-					initialValuesOpts.OverrideKey = initCfg.testingKnobs.Server.(*TestingKnobs).BootstrapVersionKeyOverride
+
+			// We are bootstrapping the cluster at initial version bootstrapVersion.
+			// The initial values must match this version.
+			for key := clusterversion.BinaryMinSupportedVersionKey; key <= clusterversion.BinaryVersionKey; key++ {
+				if bootstrapVersion.Version == clusterversion.ByKey(key) {
+					initialValuesOpts.OverrideKey = key
+					break
 				}
 			}
+			if initialValuesOpts.OverrideKey == 0 {
+				return nil, errors.AssertionFailedf("invalid bootstrapVersion %v", bootstrapVersion)
+			}
+
 			initialValues, tableSplits, err := initialValuesOpts.GenerateInitialValues()
 			if err != nil {
 				return nil, err

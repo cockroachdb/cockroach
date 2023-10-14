@@ -84,7 +84,6 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				Server: &server.TestingKnobs{
-					BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
 					BinaryVersionOverride:          clusterversion.ByKey(startCV),
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
@@ -385,7 +384,6 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
 					BinaryVersionOverride:          startCV,
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
@@ -578,7 +576,6 @@ func TestPauseMigration(t *testing.T) {
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				Server: &server.TestingKnobs{
 					BinaryVersionOverride:          clusterversion.ByKey(startCV),
-					BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 				UpgradeManager: &upgradebase.TestingKnobs{
@@ -864,7 +861,6 @@ func TestMigrationFailure(t *testing.T) {
 		TestingKnobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BootstrapVersionKeyOverride:    startVersionKey,
 				BinaryVersionOverride:          startVersion,
 			},
 			UpgradeManager: &upgradebase.TestingKnobs{
