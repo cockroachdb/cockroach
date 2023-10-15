@@ -621,7 +621,7 @@ func (r *testRunner) runWorker(
 				c.arch = arch
 			}
 		}
-		if testToRun.spec.Benchmark && testToRun.spec.Cluster.Cloud != spec.Local {
+		if testToRun.spec.Cluster.Cloud != spec.Local {
 			testToRun.spec.Cluster.UseSpot = true
 		}
 		// Verify that required native libraries are available.
