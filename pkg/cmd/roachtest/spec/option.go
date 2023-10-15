@@ -80,13 +80,6 @@ func Geo() Option {
 	}
 }
 
-// DefaultZones sets the default zones (set with the --zones flag).
-func DefaultZones(zones string) Option {
-	return func(spec *ClusterSpec) {
-		spec.defaultZones = zones
-	}
-}
-
 func nodeLifetime(lifetime time.Duration) Option {
 	return func(spec *ClusterSpec) {
 		spec.Lifetime = lifetime
