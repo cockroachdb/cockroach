@@ -30,7 +30,7 @@ func init() {
 }
 
 func makeRegistry(names ...string) testRegistryImpl {
-	r := makeTestRegistry(spec.GCE, "", false /* preferSSD */)
+	r := makeTestRegistry(spec.GCE, false /* preferSSD */)
 	dummyRun := func(context.Context, test.Test, cluster.Cluster) {}
 
 	for _, name := range names {

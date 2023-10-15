@@ -26,7 +26,6 @@ import (
 type testRegistryImpl struct {
 	m                map[string]*registry.TestSpec
 	cloud            string
-	zones            string
 	preferSSD        bool
 
 	promRegistry *prometheus.Registry
@@ -35,15 +34,12 @@ type testRegistryImpl struct {
 var _ registry.Registry = (*testRegistryImpl)(nil)
 
 // makeTestRegistry constructs a testRegistryImpl and configures it with opts.
-func makeTestRegistry(
-	cloud string, zones string, preferSSD bool,
-) testRegistryImpl {
+func makeTestRegistry(cloud string, preferSSD bool) testRegistryImpl {
 	return testRegistryImpl{
-		cloud:        cloud,
-		zones:        zones,
-		preferSSD:    preferSSD,
-		m:            make(map[string]*registry.TestSpec),
-		promRegistry: prometheus.NewRegistry(),
+		cloud:            cloud,
+		preferSSD:        preferSSD,
+		m:                make(map[string]*registry.TestSpec),
+		promRegistry:     prometheus.NewRegistry(),
 	}
 }
 
@@ -66,13 +62,10 @@ func (r *testRegistryImpl) Add(spec registry.TestSpec) {
 // because this method also adds options baked into the registry.
 func (r *testRegistryImpl) MakeClusterSpec(nodeCount int, opts ...spec.Option) spec.ClusterSpec {
 	// NB: we need to make sure that `opts` is appended at the end, so that it
-	// overrides the SSD and zones settings from the registry.
+	// overrides the SSD setting from the registry.
 	var finalOpts []spec.Option
 	if r.preferSSD {
 		finalOpts = append(finalOpts, spec.PreferLocalSSD(true))
-	}
-	if r.zones != "" {
-		finalOpts = append(finalOpts, spec.DefaultZones(r.zones))
 	}
 	finalOpts = append(finalOpts, opts...)
 	return spec.MakeClusterSpec(r.cloud, nodeCount, finalOpts...)

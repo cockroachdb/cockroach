@@ -930,6 +930,7 @@ func (f *clusterFactory) newCluster(
 		PreferredArch:          cfg.arch,
 	}
 	params.Defaults.MachineType = instanceType
+	params.Defaults.Zones = zonesF
 
 	// The ClusterName is set below in the retry loop to ensure
 	// that each create attempt gets a unique cluster name.

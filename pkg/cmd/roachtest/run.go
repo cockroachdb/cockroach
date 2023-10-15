@@ -185,7 +185,7 @@ func addBenchFlags(benchCmd *cobra.Command) {
 // runTests is the main function for the run and bench commands.
 // Assumes initRunFlagsBinariesAndLibraries was called.
 func runTests(register func(registry.Registry), filter *registry.TestFilter) error {
-	r := makeTestRegistry(cloud, zonesF, localSSDArg)
+	r := makeTestRegistry(cloud, localSSDArg)
 	rand.Seed(globalSeed)
 
 	// actual registering of tests

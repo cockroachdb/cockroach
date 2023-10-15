@@ -66,10 +66,6 @@ type ClusterSpec struct {
 	// their compatible clouds.
 	Cloud string
 
-	// TODO(radu): defaultZones is the default zones specification (unless
-	// overridden by GCE.Zones or AWS.Zones); it does not belong in the spec.
-	defaultZones string
-
 	Arch      vm.CPUArch // CPU architecture; auto-chosen if left empty
 	NodeCount int
 	// CPUs is the number of CPUs per node.
@@ -238,11 +234,15 @@ type RoachprodClusterConfig struct {
 	// does not specify the corresponding option.
 	Defaults struct {
 		// MachineType, if set, is the default machine type (used unless the
-		// ClusterSpec overrides it for the current cloud).
+		// ClusterSpec specifies a machine type for the current cloud).
 		//
-		// If it is not set (and the ClusterSpec doesn't specify a machine type for
-		// the current cloud), a machine type is determined automatically.
+		// If it is not set (and the ClusterSpec doesn't specify one either), a
+		// machine type is determined automatically.
 		MachineType string
+
+		// Zones, if set, is the default zone configuration (unless the test
+		// specifies a zone configuration for the current cloud).
+		Zones string
 	}
 }
 
@@ -355,7 +355,7 @@ func (s *ClusterSpec) RoachprodOpts(
 		}
 	}
 
-	zonesStr := s.defaultZones
+	zonesStr := params.Defaults.Zones
 	switch s.Cloud {
 	case AWS:
 		if s.AWS.Zones != "" {
