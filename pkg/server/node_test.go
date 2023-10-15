@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -68,7 +67,6 @@ func TestBootstrapCluster(t *testing.T) {
 	ctx := context.Background()
 	e := storage.NewDefaultInMemForTesting()
 	defer e.Close()
-	require.NoError(t, kvstorage.WriteClusterVersion(ctx, e, clusterversion.TestingClusterVersion))
 
 	initCfg := initServerCfg{
 		binaryMinSupportedVersion: clusterversion.TestingBinaryMinSupportedVersion,
@@ -253,8 +251,6 @@ func TestCorruptedClusterID(t *testing.T) {
 	defer e.Close()
 
 	cv := clusterversion.TestingClusterVersion
-	require.NoError(t, kvstorage.WriteClusterVersion(ctx, e, cv))
-
 	initCfg := initServerCfg{
 		binaryMinSupportedVersion: clusterversion.TestingBinaryMinSupportedVersion,
 		binaryVersion:             clusterversion.TestingBinaryVersion,
