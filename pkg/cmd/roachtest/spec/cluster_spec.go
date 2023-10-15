@@ -59,6 +59,24 @@ func (m MemPerCPU) String() string {
 	return "unknown"
 }
 
+// LocalSSDSetting controls whether test cluster nodes use an instance-local SSD
+// as storage.
+type LocalSSDSetting int
+
+const (
+	// LocalSSDDefault is the default mode, when the test does not have any
+	// preference. A local SSD may or may not be used, depending on --local-ssd
+	// flag and machine type.
+	LocalSSDDefault LocalSSDSetting = iota
+
+	// LocalSSDDisable means that we will never use a local SSD.
+	LocalSSDDisable
+
+	// LocalSSDPreferOn means that we prefer to use a local SSD. It is not a
+	// guarantee (depending on other constraints on machine type).
+	LocalSSDPreferOn
+)
+
 // ClusterSpec represents a test's description of what its cluster needs to
 // look like. It becomes part of a clusterConfig when the cluster is created.
 type ClusterSpec struct {
@@ -74,7 +92,7 @@ type ClusterSpec struct {
 	SSDs                 int
 	RAID0                bool
 	VolumeSize           int
-	PreferLocalSSD       bool
+	LocalSSD             LocalSSDSetting
 	Geo                  bool
 	Lifetime             time.Duration
 	ReusePolicy          clusterReusePolicy
@@ -243,6 +261,11 @@ type RoachprodClusterConfig struct {
 		// Zones, if set, is the default zone configuration (unless the test
 		// specifies a zone configuration for the current cloud).
 		Zones string
+
+		// PreferLocalSSD is the default local SSD mode (unless the test specifies a
+		// preference). If true, we try to use a local SSD if allowed by the machine
+		// type. If false, we never use a local SSD.
+		PreferLocalSSD bool
 	}
 }
 
@@ -253,6 +276,14 @@ func (s *ClusterSpec) RoachprodOpts(
 ) (vm.CreateOpts, vm.ProviderOpts, error) {
 	useIOBarrier := params.UseIOBarrierOnLocalSSD
 	arch := params.PreferredArch
+
+	preferLocalSSD := params.Defaults.PreferLocalSSD
+	switch s.LocalSSD {
+	case LocalSSDDisable:
+		preferLocalSSD = false
+	case LocalSSDPreferOn:
+		preferLocalSSD = true
+	}
 
 	createVMOpts := vm.DefaultCreateOpts()
 	// N.B. We set "usage=roachtest" as the default, custom label for billing tracking.
@@ -309,7 +340,7 @@ func (s *ClusterSpec) RoachprodOpts(
 			// based on the cloud and CPU count.
 			switch s.Cloud {
 			case AWS:
-				machineType, selectedArch = SelectAWSMachineType(s.CPUs, s.Mem, s.PreferLocalSSD && s.VolumeSize == 0, arch)
+				machineType, selectedArch = SelectAWSMachineType(s.CPUs, s.Mem, preferLocalSSD && s.VolumeSize == 0, arch)
 			case GCE:
 				machineType, selectedArch = SelectGCEMachineType(s.CPUs, s.Mem, arch)
 			case Azure:
@@ -328,7 +359,7 @@ func (s *ClusterSpec) RoachprodOpts(
 		// - if no particular volume size is requested, and,
 		// - on AWS, if the machine type supports it.
 		// - on GCE, if the machine type is not ARM64.
-		if s.PreferLocalSSD && s.VolumeSize == 0 && (s.Cloud != AWS || awsMachineSupportsSSD(machineType)) &&
+		if preferLocalSSD && s.VolumeSize == 0 && (s.Cloud != AWS || awsMachineSupportsSSD(machineType)) &&
 			(s.Cloud != GCE || selectedArch != vm.ArchARM64) {
 			// Ensure SSD count is at least 1 if UseLocalSSD is true.
 			if ssdCount == 0 {

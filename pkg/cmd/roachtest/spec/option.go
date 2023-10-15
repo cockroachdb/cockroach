@@ -157,10 +157,24 @@ func ReuseTagged(tag string) Option {
 	}
 }
 
-// PreferLocalSSD specifies whether to prefer using local SSD, when possible.
-func PreferLocalSSD(prefer bool) Option {
+// PreferLocalSSD specifies that we use instance-local SSDs whenever possible
+// (depending on other constraints on machine type).
+//
+// By default, a test cluster may or may not use a local SSD depending on
+// --local-ssd flag and machine type.
+func PreferLocalSSD() Option {
 	return func(spec *ClusterSpec) {
-		spec.PreferLocalSSD = prefer
+		spec.LocalSSD = LocalSSDPreferOn
+	}
+}
+
+// DisableLocalSSD specifies that we never use instance-local SSDs.
+//
+// By default, a test cluster may or may not use a local SSD depending on
+// --local-ssd flag and machine type.
+func DisableLocalSSD() Option {
+	return func(spec *ClusterSpec) {
+		spec.LocalSSD = LocalSSDDisable
 	}
 }
 

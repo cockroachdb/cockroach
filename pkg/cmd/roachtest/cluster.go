@@ -931,6 +931,7 @@ func (f *clusterFactory) newCluster(
 	}
 	params.Defaults.MachineType = instanceType
 	params.Defaults.Zones = zonesF
+	params.Defaults.PreferLocalSSD = localSSDArg
 
 	// The ClusterName is set below in the retry loop to ensure
 	// that each create attempt gets a unique cluster name.
