@@ -924,9 +924,13 @@ func (f *clusterFactory) newCluster(
 	defer setStatus("idle")
 
 	providerOptsContainer := vm.CreateProviderOptionsContainer()
+	params := spec.RoachprodClusterConfig{
+		UseIOBarrierOnLocalSSD: cfg.useIOBarrier,
+		PreferredArch:          cfg.arch,
+	}
 	// The ClusterName is set below in the retry loop to ensure
 	// that each create attempt gets a unique cluster name.
-	createVMOpts, providerOpts, err := cfg.spec.RoachprodOpts("", cfg.useIOBarrier, cfg.arch)
+	createVMOpts, providerOpts, err := cfg.spec.RoachprodOpts(params)
 	if err != nil {
 		// We must release the allocation because cluster creation is not possible at this point.
 		cfg.alloc.Release()

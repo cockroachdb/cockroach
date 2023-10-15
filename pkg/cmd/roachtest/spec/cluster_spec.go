@@ -227,16 +227,31 @@ func getAzureOpts(machineType string, zones []string) vm.ProviderOpts {
 	return opts
 }
 
+// RoachprodClusterConfig contains general roachprod cluster configuration that
+// does not depend on the test. It is used in conjunction with ClusterSpec to
+// determine the final configuration.
+type RoachprodClusterConfig struct {
+	// UseIOBarrierOnLocalSSD is set if we don't want to mount local SSDs with the
+	// `-o nobarrier` flag.
+	UseIOBarrierOnLocalSSD bool
+
+	// PreferredArch is the preferred CPU architecture; it is not guaranteed
+	// (depending on cloud and on other requirements on machine type).
+	PreferredArch vm.CPUArch
+}
+
 // RoachprodOpts returns the opts to use when calling `roachprod.Create()`
 // in order to create the cluster described in the spec.
 func (s *ClusterSpec) RoachprodOpts(
-	clusterName string, useIOBarrier bool, arch vm.CPUArch,
+	params RoachprodClusterConfig,
 ) (vm.CreateOpts, vm.ProviderOpts, error) {
+	useIOBarrier := params.UseIOBarrierOnLocalSSD
+	arch := params.PreferredArch
 
 	createVMOpts := vm.DefaultCreateOpts()
 	// N.B. We set "usage=roachtest" as the default, custom label for billing tracking.
 	createVMOpts.CustomLabels = map[string]string{"usage": "roachtest"}
-	createVMOpts.ClusterName = clusterName
+	createVMOpts.ClusterName = "" // Will be set later.
 	if s.Lifetime != 0 {
 		createVMOpts.Lifetime = s.Lifetime
 	}
