@@ -43,7 +43,7 @@ const defaultParallelism = 10
 
 func mkReg(t *testing.T) testRegistryImpl {
 	t.Helper()
-	return makeTestRegistry(spec.GCE, false /* preferSSD */)
+	return makeTestRegistry(spec.GCE)
 }
 
 func nilLogger() *logger.Logger {
@@ -377,7 +377,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			r := makeTestRegistry(spec.GCE, false /* preferSSD */)
+			r := makeTestRegistry(spec.GCE)
 			err := r.prepareSpec(&c.spec)
 			if !testutils.IsError(err, c.expectedErr) {
 				t.Fatalf("expected %q, but found %q", c.expectedErr, err.Error())
