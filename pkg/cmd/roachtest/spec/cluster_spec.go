@@ -59,21 +59,30 @@ func (m MemPerCPU) String() string {
 	return "unknown"
 }
 
+// LocalSSDSetting controls whether test cluster nodes use an instance-local SSD
+// as storage.
+type LocalSSDSetting int
+
+const (
+	// LocalSSDDefault is the default mode, when the test does not have any
+	// preference. A local SSD may or may not be used, depending on --local-ssd
+	// flag and machine type.
+	LocalSSDDefault LocalSSDSetting = iota
+
+	// LocalSSDDisable means that we will never use a local SSD.
+	LocalSSDDisable
+
+	// LocalSSDPreferOn means that we prefer to use a local SSD. It is not a
+	// guarantee (depending on other constraints on machine type).
+	LocalSSDPreferOn
+)
+
 // ClusterSpec represents a test's description of what its cluster needs to
 // look like. It becomes part of a clusterConfig when the cluster is created.
 type ClusterSpec struct {
 	// TODO(#104029): We should remove the Cloud field; the tests now specify
 	// their compatible clouds.
 	Cloud string
-
-	// TODO(radu): defaultInstanceType is the default machine type used (unless
-	// overridden by GCE.MachineType or AWS.MachineType); it does not belong in
-	// the spec.
-	defaultInstanceType string
-
-	// TODO(radu): defaultZones is the default zones specification (unless
-	// overridden by GCE.Zones or AWS.Zones); it does not belong in the spec.
-	defaultZones string
 
 	Arch      vm.CPUArch // CPU architecture; auto-chosen if left empty
 	NodeCount int
@@ -83,7 +92,7 @@ type ClusterSpec struct {
 	SSDs                 int
 	RAID0                bool
 	VolumeSize           int
-	PreferLocalSSD       bool
+	LocalSSD             LocalSSDSetting
 	Geo                  bool
 	Lifetime             time.Duration
 	ReusePolicy          clusterReusePolicy
@@ -116,8 +125,8 @@ type ClusterSpec struct {
 }
 
 // MakeClusterSpec makes a ClusterSpec.
-func MakeClusterSpec(cloud string, instanceType string, nodeCount int, opts ...Option) ClusterSpec {
-	spec := ClusterSpec{Cloud: cloud, defaultInstanceType: instanceType, NodeCount: nodeCount}
+func MakeClusterSpec(cloud string, nodeCount int, opts ...Option) ClusterSpec {
+	spec := ClusterSpec{Cloud: cloud, NodeCount: nodeCount}
 	defaultOpts := []Option{CPU(4), nodeLifetime(12 * time.Hour), ReuseAny()}
 	for _, o := range append(defaultOpts, opts...) {
 		o(&spec)
@@ -231,16 +240,59 @@ func getAzureOpts(machineType string, zones []string) vm.ProviderOpts {
 	return opts
 }
 
+// RoachprodClusterConfig contains general roachprod cluster configuration that
+// does not depend on the test. It is used in conjunction with ClusterSpec to
+// determine the final configuration.
+type RoachprodClusterConfig struct {
+	// UseIOBarrierOnLocalSSD is set if we don't want to mount local SSDs with the
+	// `-o nobarrier` flag.
+	UseIOBarrierOnLocalSSD bool
+
+	// PreferredArch is the preferred CPU architecture; it is not guaranteed
+	// (depending on cloud and on other requirements on machine type).
+	PreferredArch vm.CPUArch
+
+	// Defaults contains configuration values that are used when the ClusterSpec
+	// does not specify the corresponding option.
+	Defaults struct {
+		// MachineType, if set, is the default machine type (used unless the
+		// ClusterSpec specifies a machine type for the current cloud).
+		//
+		// If it is not set (and the ClusterSpec doesn't specify one either), a
+		// machine type is determined automatically.
+		MachineType string
+
+		// Zones, if set, is the default zone configuration (unless the test
+		// specifies a zone configuration for the current cloud).
+		Zones string
+
+		// PreferLocalSSD is the default local SSD mode (unless the test specifies a
+		// preference). If true, we try to use a local SSD if allowed by the machine
+		// type. If false, we never use a local SSD.
+		PreferLocalSSD bool
+	}
+}
+
 // RoachprodOpts returns the opts to use when calling `roachprod.Create()`
 // in order to create the cluster described in the spec.
 func (s *ClusterSpec) RoachprodOpts(
-	clusterName string, useIOBarrier bool, arch vm.CPUArch,
+	params RoachprodClusterConfig,
 ) (vm.CreateOpts, vm.ProviderOpts, error) {
+	useIOBarrier := params.UseIOBarrierOnLocalSSD
+	arch := params.PreferredArch
+
+	preferLocalSSD := params.Defaults.PreferLocalSSD
+	switch s.LocalSSD {
+	case LocalSSDDisable:
+		preferLocalSSD = false
+	case LocalSSDPreferOn:
+		preferLocalSSD = true
+	}
 
 	createVMOpts := vm.DefaultCreateOpts()
 	// N.B. We set "usage=roachtest" as the default, custom label for billing tracking.
 	createVMOpts.CustomLabels = map[string]string{"usage": "roachtest"}
-	createVMOpts.ClusterName = clusterName
+	createVMOpts.ClusterName = "" // Will be set later.
 	if s.Lifetime != 0 {
 		createVMOpts.Lifetime = s.Lifetime
 	}
@@ -270,7 +322,7 @@ func (s *ClusterSpec) RoachprodOpts(
 	createVMOpts.Arch = string(arch)
 	ssdCount := s.SSDs
 
-	machineType := s.defaultInstanceType
+	machineType := params.Defaults.MachineType
 	switch s.Cloud {
 	case AWS:
 		if s.AWS.MachineType != "" {
@@ -293,11 +345,11 @@ func (s *ClusterSpec) RoachprodOpts(
 			var err error
 			switch s.Cloud {
 			case AWS:
-				machineType, selectedArch, err = SelectAWSMachineType(s.CPUs, s.Mem, s.PreferLocalSSD && s.VolumeSize == 0, arch)
+				machineType, selectedArch, err = SelectAWSMachineType(s.CPUs, s.Mem, preferLocalSSD && s.VolumeSize == 0, arch)
 			case GCE:
 				machineType, selectedArch = SelectGCEMachineType(s.CPUs, s.Mem, arch)
 			case Azure:
-				machineType, err = SelectAzureMachineType(s.CPUs, s.Mem, s.PreferLocalSSD)
+				machineType, err = SelectAzureMachineType(s.CPUs, s.Mem, preferLocalSSD)
 			}
 
 			if err != nil {
@@ -316,7 +368,7 @@ func (s *ClusterSpec) RoachprodOpts(
 		// - if no particular volume size is requested, and,
 		// - on AWS, if the machine type supports it.
 		// - on GCE, if the machine type is not ARM64.
-		if s.PreferLocalSSD && s.VolumeSize == 0 && (s.Cloud != AWS || awsMachineSupportsSSD(machineType)) &&
+		if preferLocalSSD && s.VolumeSize == 0 && (s.Cloud != AWS || awsMachineSupportsSSD(machineType)) &&
 			(s.Cloud != GCE || selectedArch != vm.ArchARM64) {
 			// Ensure SSD count is at least 1 if UseLocalSSD is true.
 			if ssdCount == 0 {
@@ -343,7 +395,7 @@ func (s *ClusterSpec) RoachprodOpts(
 		}
 	}
 
-	zonesStr := s.defaultZones
+	zonesStr := params.Defaults.Zones
 	switch s.Cloud {
 	case AWS:
 		if s.AWS.Zones != "" {

@@ -46,22 +46,18 @@ func registerDiskStalledDetection(r registry.Registry) {
 			return &cgroupDiskStaller{t: t, c: c, readOrWrite: []string{"write"}, logsToo: true}
 		},
 	}
-	makeSpec := func() spec.ClusterSpec {
-		// TODO(DarrylWong): This test currently fails on Ubuntu 22.04 so we run it on 20.04.
-		// See: https://github.com/cockroachdb/cockroach/issues/112111.
-		// Once this issue is fixed we should remove this Ubuntu Version override.
-		s := r.MakeClusterSpec(4, spec.ReuseNone(), spec.UbuntuVersion(vm.FocalFossa))
-		// Use PDs in an attempt to work around flakes encountered when using SSDs.
-		// See #97968.
-		s.PreferLocalSSD = false
-		return s
-	}
+
 	for name, makeStaller := range stallers {
 		name, makeStaller := name, makeStaller
 		r.Add(registry.TestSpec{
-			Name:                fmt.Sprintf("disk-stalled/%s", name),
-			Owner:               registry.OwnerStorage,
-			Cluster:             makeSpec(),
+			Name:  fmt.Sprintf("disk-stalled/%s", name),
+			Owner: registry.OwnerStorage,
+			// Use PDs in an attempt to work around flakes encountered when using SSDs.
+			// See #97968.
+			// TODO(DarrylWong): This test currently fails on Ubuntu 22.04 so we run it on 20.04.
+			// See: https://github.com/cockroachdb/cockroach/issues/112111.
+			// Once this issue is fixed we should remove this Ubuntu Version override.
+			Cluster:             r.MakeClusterSpec(4, spec.ReuseNone(), spec.DisableLocalSSD(), spec.UbuntuVersion(vm.FocalFossa)),
 			CompatibleClouds:    registry.AllExceptAWS,
 			Suites:              registry.Suites(registry.Nightly),
 			Timeout:             30 * time.Minute,

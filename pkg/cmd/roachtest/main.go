@@ -120,7 +120,7 @@ Examples:
    roachtest list --suite weekly --owner kv
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg)
+			r := makeTestRegistry(cloud)
 			tests.RegisterTests(&r)
 
 			filter, err := makeTestFilter(args)
