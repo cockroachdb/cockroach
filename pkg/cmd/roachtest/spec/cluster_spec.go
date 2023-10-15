@@ -66,11 +66,6 @@ type ClusterSpec struct {
 	// their compatible clouds.
 	Cloud string
 
-	// TODO(radu): defaultInstanceType is the default machine type used (unless
-	// overridden by GCE.MachineType or AWS.MachineType); it does not belong in
-	// the spec.
-	defaultInstanceType string
-
 	// TODO(radu): defaultZones is the default zones specification (unless
 	// overridden by GCE.Zones or AWS.Zones); it does not belong in the spec.
 	defaultZones string
@@ -116,8 +111,8 @@ type ClusterSpec struct {
 }
 
 // MakeClusterSpec makes a ClusterSpec.
-func MakeClusterSpec(cloud string, instanceType string, nodeCount int, opts ...Option) ClusterSpec {
-	spec := ClusterSpec{Cloud: cloud, defaultInstanceType: instanceType, NodeCount: nodeCount}
+func MakeClusterSpec(cloud string, nodeCount int, opts ...Option) ClusterSpec {
+	spec := ClusterSpec{Cloud: cloud, NodeCount: nodeCount}
 	defaultOpts := []Option{CPU(4), nodeLifetime(12 * time.Hour), ReuseAny()}
 	for _, o := range append(defaultOpts, opts...) {
 		o(&spec)
@@ -238,6 +233,17 @@ type RoachprodClusterConfig struct {
 	// PreferredArch is the preferred CPU architecture; it is not guaranteed
 	// (depending on cloud and on other requirements on machine type).
 	PreferredArch vm.CPUArch
+
+	// Defaults contains configuration values that are used when the ClusterSpec
+	// does not specify the corresponding option.
+	Defaults struct {
+		// MachineType, if set, is the default machine type (used unless the
+		// ClusterSpec overrides it for the current cloud).
+		//
+		// If it is not set (and the ClusterSpec doesn't specify a machine type for
+		// the current cloud), a machine type is determined automatically.
+		MachineType string
+	}
 }
 
 // RoachprodOpts returns the opts to use when calling `roachprod.Create()`
@@ -281,7 +287,7 @@ func (s *ClusterSpec) RoachprodOpts(
 	createVMOpts.Arch = string(arch)
 	ssdCount := s.SSDs
 
-	machineType := s.defaultInstanceType
+	machineType := params.Defaults.MachineType
 	switch s.Cloud {
 	case AWS:
 		if s.AWS.MachineType != "" {
