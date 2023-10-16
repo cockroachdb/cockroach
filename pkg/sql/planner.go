@@ -195,7 +195,7 @@ type planner struct {
 		// planNodeToRowSource adapter before the "outer" query figured out that
 		// it must use the LeafTxn. Solving that issue properly is not trivial
 		// and is tracked in #41992.
-		innerPlansMustUseLeafTxn uint32
+		innerPlansMustUseLeafTxn int32
 	}
 
 	monitor *mon.BytesMonitor
