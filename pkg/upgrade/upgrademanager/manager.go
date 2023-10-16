@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -315,6 +316,8 @@ func (m *Manager) Migrate(
 		return nil
 	}
 
+	rng, _ := randutil.NewPseudoRand()
+
 	// Validation functions for updating the settings table. We use this in the
 	// tenant upgrade case to ensure that no new SQL servers were started
 	// mid-upgrade, with versions that are incompatible with the attempted
@@ -517,8 +520,15 @@ func (m *Manager) Migrate(
 		// Run the actual upgrade, if any.
 		mig, exists := m.GetUpgrade(clusterVersion)
 		if exists {
-			if err := m.runMigration(ctx, mig, user, clusterVersion, !m.knobs.DontUseJobs); err != nil {
-				return err
+			for {
+				if err := m.runMigration(ctx, mig, user, clusterVersion, !m.knobs.DontUseJobs); err != nil {
+					return err
+				}
+				if !buildutil.CrdbTestBuild || rng.Float64() < 0.5 {
+					// To ensure that migrations are idempotent we'll run each
+					// migration random number of times in test builds.
+					break
+				}
 			}
 		}
 
