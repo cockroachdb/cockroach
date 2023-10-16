@@ -480,6 +480,12 @@ func (t *jsonTime) encodeJSON() (json.JSON, error) {
 type jsonString string
 
 func (s *jsonString) decodeJSON(js json.JSON) error {
+	// Tolerate provided nil JSON value as valid case and interpret
+	// it as null result.
+	if js == nil {
+		*s = "<null>"
+		return nil
+	}
 	text, err := js.AsText()
 	if err != nil {
 		return err
