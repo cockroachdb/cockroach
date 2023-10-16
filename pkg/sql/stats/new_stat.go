@@ -88,7 +88,7 @@ func InsertNewStat(
 		}
 	}
 
-	if !settings.Version.IsActive(ctx, clusterversion.V23_1AddPartialStatisticsColumns) {
+	if !settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1AddPartialStatisticsColumns) {
 		if partialPredicate != "" {
 			return errors.New("unable to insert new partial statistic as cluster version is from before V23.1.")
 		}

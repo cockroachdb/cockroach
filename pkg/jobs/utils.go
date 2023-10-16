@@ -36,7 +36,7 @@ func RunningJobExists(
 	cv clusterversion.Handle,
 	jobTypes ...jobspb.Type,
 ) (exists bool, retErr error) {
-	if !cv.IsActive(ctx, clusterversion.V23_1BackfillTypeColumnInJobsTable) {
+	if !cv.IsActive(ctx, clusterversion.TODO_Delete_V23_1BackfillTypeColumnInJobsTable) {
 		return legacyRunningJobExists(ctx, ignoreJobID, txn, jobTypes...)
 	}
 

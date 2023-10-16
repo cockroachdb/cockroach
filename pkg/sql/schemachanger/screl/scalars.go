@@ -122,7 +122,7 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 		// These elements need v22.1 so they can be used without checking any version gates.
 		return true
 	case *scpb.IndexColumn, *scpb.EnumTypeValue, *scpb.TableZoneConfig:
-		return version.IsActive(clusterversion.V22_2)
+		return version.IsActive(clusterversion.TODO_Delete_V22_2)
 	case *scpb.DatabaseData, *scpb.TableData, *scpb.IndexData, *scpb.TablePartitioning,
 		*scpb.Function, *scpb.FunctionName, *scpb.FunctionVolatility, *scpb.FunctionLeakProof,
 		*scpb.FunctionNullInputBehavior, *scpb.FunctionBody, *scpb.FunctionParamDefaultExpression,
@@ -142,7 +142,7 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 func MaxElementVersion(el scpb.Element) (version clusterversion.Key, exists bool) {
 	switch el.(type) {
 	case *scpb.SecondaryIndexPartial:
-		return clusterversion.V23_1_SchemaChangerDeprecatedIndexPredicates, true /* exists */
+		return clusterversion.TODO_Delete_V23_1_SchemaChangerDeprecatedIndexPredicates, true /* exists */
 	}
 	return version, false /* exists */
 }

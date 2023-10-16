@@ -25,7 +25,7 @@ const (
 )
 
 // rulesVersionKey version of elements used by this rule set.
-var rulesVersionKey = clusterversion.V22_2
+var rulesVersionKey = clusterversion.TODO_Delete_V22_2
 
 // descriptorIsNotBeingDropped creates a clause which leads to the outer clause
 // failing to unify if the passed element is part of a descriptor and

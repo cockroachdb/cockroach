@@ -42,21 +42,21 @@ import (
 // is hand coded because the tables are used to bootstrap the SQL layer and may
 // not use SQL.
 //
-//	# V23_1_SystemRbrDualWrite
+//	# TODO_Delete_V23_1_SystemRbrDualWrite
 //  CRDB begins writing to the old and new indexes.
 //
-//	# V23_1_SystemRbrReadNew
+//	# TODO_Delete_V23_1_SystemRbrReadNew
 //  The backFillRegionalByRowIndex upgrade job is attached to this version. It
 //  backfills the new index then upgrades the descriptor to use the new index.
 //  The descriptor is not used internally, but clients can use it to inspect
 //  the system table. After the upgrade finishes, the version is advanced and
 //  CRDB begins reading the new value.
 //
-//  # V23_1_SystemRbrSingleWrite
+//  # TODO_Delete_V23_1_SystemRbrSingleWrite
 //  Now that all nodes are reading the new value, nodes only need to write to
 //  the new value.
 //
-//	# V23_1_SystemRbrCleanup
+//	# TODO_Delete_V23_1_SystemRbrCleanup
 //  The cleanUpRegionalByTableIndex is attached to this version gate and will
 //  delete data associated with the old index.
 

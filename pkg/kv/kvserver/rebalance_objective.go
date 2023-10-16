@@ -270,7 +270,7 @@ func ResolveLBRebalancingObjective(
 	// stores will not be populating additional fields in their StoreCapacity,
 	// in such cases we cannot balance another objective since the data may not
 	// exist. Fall back to QPS balancing.
-	if !st.Version.IsActive(ctx, clusterversion.V23_1AllocatorCPUBalancing) {
+	if !st.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1AllocatorCPUBalancing) {
 		log.Infof(ctx, "version doesn't support cpu objective, reverting to qps balance objective")
 		return LBRebalancingQueries
 	}

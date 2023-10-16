@@ -46,7 +46,7 @@ func (p *planner) AlterTenantCapability(
 	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "grant/revoke capabilities to", p.execCfg.Settings); err != nil {
 		return nil, err
 	}
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V23_1TenantCapabilities) {
+	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantCapabilities) {
 		return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "cannot alter tenant capabilities until version is finalized")
 	}
 

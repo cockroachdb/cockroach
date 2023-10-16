@@ -130,7 +130,7 @@ func (p *planner) createExternalConnection(
 	ex.SetConnectionDetails(*exConn.ConnectionProto())
 	ex.SetConnectionType(exConn.ConnectionType())
 	ex.SetOwner(p.User())
-	if p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.V23_1ExternalConnectionsTableHasOwnerIDColumn) {
+	if p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.TODO_Delete_V23_1ExternalConnectionsTableHasOwnerIDColumn) {
 		row, err := txn.QueryRowEx(params.ctx, `get-user-id`, txn.KV(),
 			sessiondata.NodeUserSessionDataOverride,
 			`SELECT user_id FROM system.users WHERE username = $1`,

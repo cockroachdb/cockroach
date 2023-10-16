@@ -76,7 +76,7 @@ func UpdateTenantRecord(
 SET active = $2, info = $3, name = $4, data_state = $5, service_mode = $6
 WHERE id = $1`
 	args := []interface{}{info.ID, active, infoBytes, name, info.DataState, info.ServiceMode}
-	if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+	if !settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
 		// Ensure the update can succeed if the upgrade is not finalized yet.
 		query = `UPDATE system.tenants SET active = $2, info = $3 WHERE id = $1`
 		args = args[:3]
@@ -106,7 +106,7 @@ func validateTenantInfo(
 		return errors.Newf("tenant in data state %v with dropped name %q", info.DataState, info.DroppedName)
 	}
 
-	if settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+	if settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
 		// We can only check the service mode after upgrading to a version
 		// that supports the service mode column.
 		if info.ServiceMode != mtinfopb.ServiceModeNone && info.DataState != mtinfopb.DataStateReady {
@@ -262,7 +262,7 @@ func (p *planner) renameTenant(
 			return pgerror.WithCandidateCode(err, pgcode.Syntax)
 		}
 
-		if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+		if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
 			return pgerror.Newf(pgcode.FeatureNotSupported, "cannot use tenant names")
 		}
 	}

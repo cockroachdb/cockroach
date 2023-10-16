@@ -243,7 +243,7 @@ func roleMembersRestoreFunc(
 	txn isql.Txn,
 	systemTableName, tempTableName string,
 ) error {
-	if !deps.settings.Version.IsActive(ctx, clusterversion.V23_1RoleMembersTableHasIDColumns) {
+	if !deps.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1RoleMembersTableHasIDColumns) {
 		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
 	}
 
@@ -370,7 +370,7 @@ func systemPrivilegesRestoreFunc(
 	txn isql.Txn,
 	systemTableName, tempTableName string,
 ) error {
-	if !deps.settings.Version.IsActive(ctx, clusterversion.V23_1SystemPrivilegesTableHasUserIDColumn) {
+	if !deps.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1SystemPrivilegesTableHasUserIDColumn) {
 		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
 	}
 
@@ -425,7 +425,7 @@ func systemDatabaseRoleSettingsRestoreFunc(
 	txn isql.Txn,
 	systemTableName, tempTableName string,
 ) error {
-	if !deps.settings.Version.IsActive(ctx, clusterversion.V23_1DatabaseRoleSettingsHasRoleIDColumn) {
+	if !deps.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1DatabaseRoleSettingsHasRoleIDColumn) {
 		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
 	}
 
@@ -480,7 +480,7 @@ func systemExternalConnectionsRestoreFunc(
 	txn isql.Txn,
 	systemTableName, tempTableName string,
 ) error {
-	if !deps.settings.Version.IsActive(ctx, clusterversion.V23_1ExternalConnectionsTableHasOwnerIDColumn) {
+	if !deps.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1ExternalConnectionsTableHasOwnerIDColumn) {
 		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
 	}
 

@@ -60,7 +60,7 @@ restart.
 // legacyInfoFormatVersion is a version used internally when processing data
 // loaded from legacy format files which contained no version info or collected
 // from old clusters.
-var legacyInfoFormatVersion = clusterversion.ByKey(clusterversion.V22_2)
+var legacyInfoFormatVersion = clusterversion.ByKey(clusterversion.TODO_Delete_V22_2)
 
 // checkVersionAllowedByBinary checks if binary could handle data version. Data
 // could be either loaded from files or received from cluster.

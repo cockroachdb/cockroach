@@ -65,7 +65,7 @@ func GetAllNonDropTenantIDs(
 ) ([]roachpb.TenantID, error) {
 	q := `SELECT id FROM system.tenants WHERE data_state != $1 ORDER BY id`
 	var arg interface{} = mtinfopb.DataStateDrop
-	if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+	if !settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
 		q = `SELECT id FROM system.tenants
 WHERE crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true)->>'deprecatedDataState' != $1 ORDER BY id`
 		arg = "DROP"
@@ -94,9 +94,9 @@ WHERE crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true)->>
 func GetTenantRecordByName(
 	ctx context.Context, settings *cluster.Settings, txn isql.Txn, tenantName roachpb.TenantName,
 ) (*mtinfopb.TenantInfo, error) {
-	if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+	if !settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
 		return nil, errors.Newf("tenant names not supported until upgrade to %s or higher is completed",
-			clusterversion.V23_1TenantNamesStateAndServiceMode.String())
+			clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode.String())
 	}
 	row, err := txn.QueryRowEx(
 		ctx, "get-tenant", txn.KV(), sessiondata.NodeUserSessionDataOverride,
@@ -116,7 +116,7 @@ func GetTenantRecordByID(
 	ctx context.Context, txn isql.Txn, tenID roachpb.TenantID, settings *cluster.Settings,
 ) (*mtinfopb.TenantInfo, error) {
 	q := `SELECT id, info, name, data_state, service_mode FROM system.tenants WHERE id = $1`
-	if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+	if !settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
 		q = `SELECT id, info, NULL, NULL, NULL FROM system.tenants WHERE id = $1`
 	}
 	row, err := txn.QueryRowEx(
