@@ -238,10 +238,7 @@ func TestReplicationStreamInitialization(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	serverArgs := base.TestServerArgs{
-		// This test fails when run from within a test tenant. This is likely
-		// due to the lack of support for tenant streaming, but more
-		// investigation is required. Tracked with #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
@@ -346,9 +343,7 @@ func TestStreamPartition(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	h, cleanup := replicationtestutils.NewReplicationHelper(t,
 		base.TestServerArgs{
-			// Test fails within a test tenant. More investigation is required.
-			// Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		})
 	defer cleanup()
 	testTenantName := roachpb.TenantName("test-tenant")
@@ -466,9 +461,7 @@ func TestStreamAddSSTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	h, cleanup := replicationtestutils.NewReplicationHelper(t, base.TestServerArgs{
-		// Test hangs when run within the default test tenant. Tracked with
-		// #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer cleanup()
 	testTenantName := roachpb.TenantName("test-tenant")
@@ -558,7 +551,7 @@ func TestCompleteStreamReplication(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		})
 	defer cleanup()
 	srcTenantID := serverutils.TestTenantID()
@@ -626,9 +619,7 @@ func TestStreamDeleteRange(t *testing.T) {
 	skip.UnderStressRace(t, "disabled under stress and race")
 
 	h, cleanup := replicationtestutils.NewReplicationHelper(t, base.TestServerArgs{
-		// Test hangs when run within the default test tenant. Tracked with
-		// #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer cleanup()
 	testTenantName := roachpb.TenantName("test-tenant")

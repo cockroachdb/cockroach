@@ -307,10 +307,7 @@ func TestCutoverBuiltin(t *testing.T) {
 
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			// Disable the test tenant as the test below looks for a
-			// streaming job assuming that it's within the system tenant.
-			// Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
@@ -514,7 +511,6 @@ func TestCutoverFractionProgressed(t *testing.T) {
 				},
 			},
 		},
-		DefaultTestTenant: base.TODOTestTenantDisabled,
 	})
 	defer s.Stopper().Stop(ctx)
 

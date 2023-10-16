@@ -187,7 +187,13 @@ func TestStreamIngestionProcessor(t *testing.T) {
 	ctx := context.Background()
 
 	tc := testcluster.StartTestCluster(t, 1 /* nodes */, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled},
+		ServerArgs: base.TestServerArgs{
+			// Perhaps it would be possible to make this
+			// run in a secondary tenant, but the test
+			// would need to be completely rewritten to be
+			// even further from real-world operation.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 	})
 	defer tc.Stopper().Stop(ctx)
 	db := tc.Server(0).InternalDB().(descs.DB)
