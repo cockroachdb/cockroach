@@ -286,3 +286,31 @@ statement ok
 DROP PROCEDURE rfp
 
 subtest end
+
+subtest regression_111021
+
+statement ok
+CREATE PROCEDURE p111021(i INT) LANGUAGE SQL AS 'SELECT i'
+
+# Subqueries are not allowed in arguments to procedures.
+statement error pgcode 0A000 p111021\(\): subqueries are not allowed in CALL argument
+CALL p111021((SELECT 1));
+
+# Subqueries nested within other expressions are not allowed in arguments to
+# procedures.
+statement error pgcode 0A000 p111021\(\): subqueries are not allowed in CALL argument
+CALL p111021(CASE WHEN false THEN 1 ELSE (SELECT 1) END);
+
+# The ALL prefix is allowed as an argument to a procedure, but has no effect.
+statement ok
+CALL p(ALL NULL);
+
+# The ALL prefix is allowed as an argument to a procedure, but has no effect.
+statement ok
+CALL p(ALL 1);
+
+# Calling a built-in function with ALL should not cause an internal error.
+statement error pgcode 42809 family\(val: inet\) is not a procedure
+CALL family(ALL NULL);
+
+subtest end
