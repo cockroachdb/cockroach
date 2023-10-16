@@ -45,7 +45,7 @@ func TestSupportedReleases(t *testing.T) {
 	latest := clusterversion.ByKey(clusterversion.BinaryVersionKey)
 	var incumbent roachpb.Version
 	for _, v := range clusterversion.ListBetween(earliest, latest) {
-		if v.Major != incumbent.Major && v.Minor != incumbent.Minor {
+		if v.Major != incumbent.Major || v.Minor != incumbent.Minor {
 			incumbent = roachpb.Version{
 				Major: v.Major,
 				Minor: v.Minor,
