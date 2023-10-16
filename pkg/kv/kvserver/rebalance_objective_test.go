@@ -130,8 +130,8 @@ func TestLoadBasedRebalancingObjective(t *testing.T) {
 
 	t.Run("older version only supports QPS", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettingsWithVersions(
-			clusterversion.ByKey(clusterversion.V22_2),
-			clusterversion.ByKey(clusterversion.V22_2), true)
+			clusterversion.ByKey(clusterversion.TODO_Delete_V22_2),
+			clusterversion.ByKey(clusterversion.TODO_Delete_V22_2), true)
 		gossipStoreDescProvider := testMakeProviderNotifier(allPositiveCPUMap)
 		LoadBasedRebalancingObjective.Override(ctx, &st.SV, int64(LBRebalancingQueries))
 		require.Equal(t,
@@ -245,9 +245,9 @@ func TestRebalanceObjectiveManager(t *testing.T) {
 	t.Run("store cpu unsupported version", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettingsWithVersions(
 			clusterversion.TestingBinaryVersion,
-			clusterversion.ByKey(clusterversion.V22_2), false)
+			clusterversion.ByKey(clusterversion.TODO_Delete_V22_2), false)
 		require.NoError(t, st.Version.SetActiveVersion(ctx, clusterversion.ClusterVersion{
-			Version: clusterversion.ByKey(clusterversion.V22_2),
+			Version: clusterversion.ByKey(clusterversion.TODO_Delete_V22_2),
 		}))
 		LoadBasedRebalancingObjective.Override(ctx, &st.SV, int64(LBRebalancingCPU))
 		providerNotifier := testMakeProviderNotifier(allPositiveCPUMap)
@@ -268,7 +268,7 @@ func TestRebalanceObjectiveManager(t *testing.T) {
 		// allowing CPU objective. This should trigger a callback and also
 		// update the objective to CPU.
 		require.NoError(t, st.Version.SetActiveVersion(ctx, clusterversion.ClusterVersion{
-			Version: clusterversion.ByKey(clusterversion.V23_1AllocatorCPUBalancing),
+			Version: clusterversion.ByKey(clusterversion.TODO_Delete_V23_1AllocatorCPUBalancing),
 		}))
 		require.Equal(t, LBRebalancingCPU, manager.Objective())
 		require.Len(t, *callbacks, 1)

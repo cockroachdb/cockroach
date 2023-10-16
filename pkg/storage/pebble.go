@@ -137,7 +137,7 @@ var UseExciseForSnapshots = settings.RegisterBoolSetting(
 // entry is replayed.
 //
 // The value of this cluster setting is ignored if the cluster version is not
-// yet at least V23_1EnableFlushableIngest.
+// yet at least TODO_Delete_V23_1EnableFlushableIngest.
 //
 // This cluster setting will be removed in a subsequent release.
 var IngestAsFlushable = settings.RegisterBoolSetting(
@@ -903,7 +903,7 @@ func (p *Pebble) SetStoreID(ctx context.Context, storeID int32) error {
 	// Note that SetCreatorID only does something if remote storage is configured
 	// in the pebble options. The version gate protects against accidentally
 	// setting the creator ID on an older store.
-	if storeID != base.TempStoreID && p.minVersion.AtLeast(clusterversion.ByKey(clusterversion.V23_1SetPebbleCreatorID)) {
+	if storeID != base.TempStoreID && p.minVersion.AtLeast(clusterversion.ByKey(clusterversion.TODO_Delete_V23_1SetPebbleCreatorID)) {
 		if err := p.db.SetCreatorID(uint64(storeID)); err != nil {
 			return err
 		}
@@ -1060,7 +1060,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	opts.Experimental.EnableValueBlocks = func() bool {
 		version := cfg.Settings.Version.ActiveVersionOrEmpty(logCtx)
 		return !version.Less(clusterversion.ByKey(
-			clusterversion.V23_1EnablePebbleFormatSSTableValueBlocks)) &&
+			clusterversion.TODO_Delete_V23_1EnablePebbleFormatSSTableValueBlocks)) &&
 			ValueBlocksEnabled.Get(&cfg.Settings.SV)
 	}
 	opts.Experimental.DisableIngestAsFlushable = func() bool {
@@ -2329,7 +2329,7 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 	}
 
 	// Set the shared object creator ID if the version is high enough. See SetStoreID().
-	if version.AtLeast(clusterversion.ByKey(clusterversion.V23_1SetPebbleCreatorID)) {
+	if version.AtLeast(clusterversion.ByKey(clusterversion.TODO_Delete_V23_1SetPebbleCreatorID)) {
 		if storeID := p.storeIDPebbleLog.Get(); storeID != 0 && storeID != base.TempStoreID {
 			if err := p.db.SetCreatorID(uint64(storeID)); err != nil {
 				return err
@@ -2366,13 +2366,13 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 	case !version.Less(clusterversion.ByKey(clusterversion.V23_2_PebbleFormatDeleteSizedAndObsolete)):
 		formatVers = pebble.FormatDeleteSizedAndObsolete
 
-	case !version.Less(clusterversion.ByKey(clusterversion.V23_1EnableFlushableIngest)):
+	case !version.Less(clusterversion.ByKey(clusterversion.TODO_Delete_V23_1EnableFlushableIngest)):
 		formatVers = pebble.FormatFlushableIngest
 
-	case !version.Less(clusterversion.ByKey(clusterversion.V23_1EnsurePebbleFormatSSTableValueBlocks)):
+	case !version.Less(clusterversion.ByKey(clusterversion.TODO_Delete_V23_1EnsurePebbleFormatSSTableValueBlocks)):
 		formatVers = pebble.FormatSSTableValueBlocks
 
-	case !version.Less(clusterversion.ByKey(clusterversion.V22_2)):
+	case !version.Less(clusterversion.ByKey(clusterversion.TODO_Delete_V22_2)):
 		// This is the earliest supported format. The code assumes that the features
 		// provided by this format are always available.
 		formatVers = pebble.FormatPrePebblev1Marked

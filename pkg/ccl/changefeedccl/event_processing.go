@@ -276,7 +276,7 @@ func newEvaluator(
 	sd := sql.NewInternalSessionData(ctx, cfg.Settings, "changefeed-evaluator")
 	if spec.Feed.SessionData == nil {
 		// This changefeed was created prior to
-		// clusterversion.V23_1_ChangefeedExpressionProductionReady; thus we must
+		// clusterversion.TODO_Delete_V23_1_ChangefeedExpressionProductionReady; thus we must
 		// rewrite expression to comply with current cluster version.
 		newExpr, err := cdceval.RewritePreviewExpression(sc)
 		if err != nil {
@@ -288,7 +288,7 @@ func newEvaluator(
 			log.Warningf(ctx,
 				"changefeed expression %s (job %d) created prior to %s rewritten as %s",
 				tree.AsString(sc), spec.JobID,
-				clusterversion.V23_1_ChangefeedExpressionProductionReady.String(),
+				clusterversion.TODO_Delete_V23_1_ChangefeedExpressionProductionReady.String(),
 				tree.AsString(newExpr))
 			sc = newExpr
 		}

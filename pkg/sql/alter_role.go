@@ -429,7 +429,7 @@ func (p *planner) processSetOrResetClause(
 
 func (n *alterRoleSetNode) startExec(params runParams) error {
 	databaseRoleSettingsHasRoleIDCol := params.p.ExecCfg().Settings.Version.IsActive(params.ctx,
-		clusterversion.V23_1DatabaseRoleSettingsHasRoleIDColumn)
+		clusterversion.TODO_Delete_V23_1DatabaseRoleSettingsHasRoleIDColumn)
 
 	var opName string
 	if n.isRole {

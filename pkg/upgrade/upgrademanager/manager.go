@@ -825,7 +825,7 @@ func (m *Manager) getRunningMigrationJob(
 	// Payload proto has inside.
 	cv := clusterversion.ClusterVersion{Version: version}
 	var query string
-	if m.settings.Version.IsActive(ctx, clusterversion.V23_1JobInfoTableIsBackfilled) {
+	if m.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1JobInfoTableIsBackfilled) {
 		query = PostJobInfoTableQuery
 	} else {
 		query = preJobInfoTableQuery

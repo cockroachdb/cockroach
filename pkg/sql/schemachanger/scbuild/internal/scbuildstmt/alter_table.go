@@ -111,7 +111,7 @@ func alterTableAlterPrimaryKeyChecks(
 	mode sessiondatapb.NewSchemaChangerMode,
 	activeVersion clusterversion.ClusterVersion,
 ) bool {
-	// Start supporting ALTER PRIMARY KEY (in general with fallback cases) from V22_2.
+	// Start supporting ALTER PRIMARY KEY (in general with fallback cases) from TODO_Delete_V22_2.
 	if !isV222Active(t, mode, activeVersion) {
 		return false
 	}
@@ -127,7 +127,7 @@ func alterTableAddConstraintChecks(
 	mode sessiondatapb.NewSchemaChangerMode,
 	activeVersion clusterversion.ClusterVersion,
 ) bool {
-	// Start supporting ADD PRIMARY KEY from V22_2.
+	// Start supporting ADD PRIMARY KEY from TODO_Delete_V22_2.
 	if d, ok := t.ConstraintDef.(*tree.UniqueConstraintTableDef); ok && d.PrimaryKey && t.ValidationBehavior == tree.ValidationDefault {
 		return isV222Active(t, mode, activeVersion)
 	}

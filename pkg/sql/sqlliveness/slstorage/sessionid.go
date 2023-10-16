@@ -70,9 +70,9 @@ func MakeSessionID(region []byte, id uuid.UUID) (sqlliveness.SessionID, error) {
 func UnsafeDecodeSessionID(session sqlliveness.SessionID) (region, id []byte, err error) {
 	b := session.UnsafeBytes()
 	if len(b) == legacyLen {
-		// TODO(jeffswenson): once the V23_1_SystemRbrCleanup version gate is
+		// TODO(jeffswenson): once the TODO_Delete_V23_1_SystemRbrCleanup version gate is
 		// deleted, replace this branch with a validation error.
-		_ = clusterversion.V23_1_SystemRbrCleanup
+		_ = clusterversion.TODO_Delete_V23_1_SystemRbrCleanup
 
 		// Legacy format of SessionID. Treat the session as if it belongs to
 		// region enum.One. This may crop up briefly if a session was created

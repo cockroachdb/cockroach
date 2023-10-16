@@ -69,7 +69,7 @@ func (g *generator) run(ctx context.Context, inc int64) (catid.DescID, error) {
 // descriptor ID generator is unavailable due to migrating the system tenant
 // counter from keys.LegacyDescIDGenerator to system.descriptor_id_seq.
 //
-// TODO(postamar): remove along with clusterversion.V23_1DescIDSequenceForSystemTenant
+// TODO(postamar): remove along with clusterversion.TODO_Delete_V23_1DescIDSequenceForSystemTenant
 var ErrDescIDSequenceMigrationInProgress = errors.New(
 	"descriptor ID generator unavailable, migration in progress, retry later",
 )
@@ -109,11 +109,11 @@ func key(
 ) (roachpb.Key, error) {
 	key := codec.SequenceKey(keys.DescIDSequenceID)
 	if cv := settings.Version; codec.ForSystemTenant() &&
-		!cv.IsActive(ctx, clusterversion.V23_1DescIDSequenceForSystemTenant) {
+		!cv.IsActive(ctx, clusterversion.TODO_Delete_V23_1DescIDSequenceForSystemTenant) {
 		// At this point, the system tenant may still be using a legacy non-SQL key,
 		// or may be in the process of undergoing the migration away from it, in
 		// which case descriptor ID generation is made unavailable.
-		if cv.IsActive(ctx, clusterversion.V23_1DescIDSequenceForSystemTenant-1) {
+		if cv.IsActive(ctx, clusterversion.TODO_Delete_V23_1DescIDSequenceForSystemTenant-1) {
 			return nil, ErrDescIDSequenceMigrationInProgress
 		}
 		key = keys.LegacyDescIDGenerator

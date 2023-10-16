@@ -78,7 +78,7 @@ FROM
   INNER JOIN payload ON id = job_id`
 	)
 
-	use23_1 := d.evalCtx.Settings.Version.IsActive(d.ctx, clusterversion.V23_1BackfillTypeColumnInJobsTable)
+	use23_1 := d.evalCtx.Settings.Version.IsActive(d.ctx, clusterversion.TODO_Delete_V23_1BackfillTypeColumnInJobsTable)
 
 	var selectClause string
 	if use23_1 {

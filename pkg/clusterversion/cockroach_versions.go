@@ -188,252 +188,260 @@ const (
 
 	VPrimordialMax
 
-	// v22.2 versions.
-	//
 	// Permanent_V22_2SQLSchemaTelemetryScheduledJobs adds an automatic schedule for SQL schema
 	// telemetry logging jobs.
 	// This is a permanent migration which should exist forever.
 	Permanent_V22_2SQLSchemaTelemetryScheduledJobs
 
-	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
-	V22_2
+	// TODO_Delete_V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
+	TODO_Delete_V22_2
 
-	// V23_1_Start demarcates the start of cluster versions stepped through during
-	// the process of upgrading from 22.2 to 23.1.
-	V23_1Start
+	// TODO_Delete_V23_1Start demarcates the start of cluster versions stepped
+	// through during the process of upgrading from 22.2 to 23.1.
+	TODO_Delete_V23_1Start
 
-	// V23_1TenantNamesStateAndServiceMode adds columns to system.tenants.
-	V23_1TenantNamesStateAndServiceMode
+	// TODO_Delete_V23_1TenantNamesStateAndServiceMode adds columns to
+	// system.tenants.
+	TODO_Delete_V23_1TenantNamesStateAndServiceMode
 
-	// V23_1DescIDSequenceForSystemTenant migrates the descriptor ID generator
-	// counter from a meta key to the system.descriptor_id_seq sequence for the
-	// system tenant.
-	V23_1DescIDSequenceForSystemTenant
+	// TODO_Delete_V23_1DescIDSequenceForSystemTenant migrates the descriptor ID
+	// generator counter from a meta key to the system.descriptor_id_seq sequence
+	// for the system tenant.
+	TODO_Delete_V23_1DescIDSequenceForSystemTenant
 
-	// V23_1AddPartialStatisticsColumns adds two columns: one to store the predicate
-	// for a partial statistics collection, and another to refer to the full statistic
-	// it was collected from.
-	V23_1AddPartialStatisticsColumns
+	// TODO_Delete_V23_1AddPartialStatisticsColumns adds two columns: one to store
+	// the predicate for a partial statistics collection, and another to refer to
+	// the full statistic it was collected from.
+	TODO_Delete_V23_1AddPartialStatisticsColumns
 
-	// V23_1_CreateSystemJobInfoTable creates the system.job_info table.
-	V23_1CreateSystemJobInfoTable
+	// TODO_Delete_V23_1CreateSystemJobInfoTable creates the system.job_info table.
+	TODO_Delete_V23_1CreateSystemJobInfoTable
 
-	// V23_1RoleMembersTableHasIDColumns is the version where the role_members
-	// system table has columns for ids.
-	V23_1RoleMembersTableHasIDColumns
+	// TODO_Delete_V23_1RoleMembersTableHasIDColumns is the version where the
+	// role_members system table has columns for ids.
+	TODO_Delete_V23_1RoleMembersTableHasIDColumns
 
-	// V23_1RoleMembersIDColumnsBackfilled is the version where the columns for
-	// ids in the role_members system table have been backfilled.
-	V23_1RoleMembersIDColumnsBackfilled
+	// TODO_Delete_V23_1RoleMembersIDColumnsBackfilled is the version where the
+	// columns for ids in the role_members system table have been backfilled.
+	TODO_Delete_V23_1RoleMembersIDColumnsBackfilled
 
-	// V23_1ScheduledChangefeeds is the version where scheduled changefeeds are
+	// TODO_Delete_V23_1ScheduledChangefeeds is the version where scheduled changefeeds are
 	// supported through `CREATE SCHEDULE FOR CHANGEFEED` statement.
-	V23_1ScheduledChangefeeds
+	TODO_Delete_V23_1ScheduledChangefeeds
 
-	// V23_1AddTypeColumnToJobsTable adds the nullable job_type
+	// TODO_Delete_V23_1AddTypeColumnToJobsTable adds the nullable job_type
 	// column to the system.jobs table.
-	V23_1AddTypeColumnToJobsTable
+	TODO_Delete_V23_1AddTypeColumnToJobsTable
 
-	// V23_1BackfillTypeColumnInJobsTable backfills the job_type
+	// TODO_Delete_V23_1BackfillTypeColumnInJobsTable backfills the job_type
 	// column in the system.jobs table.
-	V23_1BackfillTypeColumnInJobsTable
+	TODO_Delete_V23_1BackfillTypeColumnInJobsTable
 
-	// V23_1_AlterSystemStatementStatisticsAddIndexesUsage creates indexes usage virtual column
-	// based on (statistics->>'indexes') with inverted index on table system.statement_statistics.
-	V23_1_AlterSystemStatementStatisticsAddIndexesUsage
+	// TODO_Delete_V23_1_AlterSystemStatementStatisticsAddIndexesUsage creates
+	// indexes usage virtual column based on (statistics->>'indexes') with
+	// inverted index on table system.statement_statistics.
+	TODO_Delete_V23_1_AlterSystemStatementStatisticsAddIndexesUsage
 
-	// V23_1EnsurePebbleFormatSSTableValueBlocks upgrades the Pebble format major
-	// version to FormatSSTableValueBlocks, which supports writing sstables in a
-	// new format containing value blocks (sstable.TableFormatPebblev3).
+	// TODO_Delete_V23_1EnsurePebbleFormatSSTableValueBlocks upgrades the Pebble
+	// format major version to FormatSSTableValueBlocks, which supports writing
+	// sstables in a new format containing value blocks
+	// (sstable.TableFormatPebblev3).
 	//
 	// Only a Pebble version that has upgraded to FormatSSTableValueBlocks can
 	// read sstables with format sstable.TableFormatPebblev3 -- i.e., it is
 	// insufficient for the Pebble code to be recent enough. Hence, this is the
 	// first step of a two-part migration, and we cannot do this in a single
 	// step. With a single step migration, consider a cluster with nodes N1 and
-	// N2: once both are on V23_1EnsurePebbleFormatSSTableValueBlocks, N1 is notified
-	// of the change and upgrades the format major version in Pebble and starts
-	// constructing sstables (say for range snapshot ingestion) in this new
-	// format. This sstable could be sent to N2 before N2 has been notified
-	// about V23_1EnsurePebbleFormatSSTableValueBlocks, which will cause the sstable
-	// ingestion to fail.
-	V23_1EnsurePebbleFormatSSTableValueBlocks
+	// N2: once both are on TODO_Delete_V23_1EnsurePebbleFormatSSTableValueBlocks,
+	// N1 is notified of the change and upgrades the format major version in
+	// Pebble and starts constructing sstables (say for range snapshot ingestion)
+	// in this new format. This sstable could be sent to N2 before N2 has been
+	// notified about TODO_Delete_V23_1EnsurePebbleFormatSSTableValueBlocks, which
+	// will cause the sstable ingestion to fail.
+	TODO_Delete_V23_1EnsurePebbleFormatSSTableValueBlocks
 
-	// V23_1EnablePebbleFormatSSTableValueBlocks is the second step of the
-	// two-part migration. When this starts we are sure that all Pebble
+	// TODO_Delete_V23_1EnablePebbleFormatSSTableValueBlocks is the second step of
+	// the two-part migration. When this starts we are sure that all Pebble
 	// instances in the cluster have already upgraded to format major version
 	// FormatSSTableValueBlocks.
-	V23_1EnablePebbleFormatSSTableValueBlocks
+	TODO_Delete_V23_1EnablePebbleFormatSSTableValueBlocks
 
-	// V23_1AlterSystemSQLInstancesAddSqlAddr adds a sql_addr column to the
-	// system.sql_instances table.
-	V23_1AlterSystemSQLInstancesAddSQLAddr
+	// TODO_Delete_V23_1AlterSystemSQLInstancesAddSQLAddr adds a sql_addr column
+	// to the system.sql_instances table.
+	TODO_Delete_V23_1AlterSystemSQLInstancesAddSQLAddr
 
-	// V23_1_ChangefeedExpressionProductionReady marks changefeed expressions (transformation)
-	// as production ready.  This gate functions as a signal to attempt to upgrade
-	// chagnefeeds created prior to this version.
-	V23_1_ChangefeedExpressionProductionReady
+	// TODO_Delete_V23_1_ChangefeedExpressionProductionReady marks changefeed
+	// expressions (transformation) as production ready. This gate functions as a
+	// signal to attempt to upgrade chagnefeeds created prior to this version.
+	TODO_Delete_V23_1_ChangefeedExpressionProductionReady
 
 	// Permanent_V23_1KeyVisualizerTablesAndJobs adds the system tables that
 	// support the key visualizer.
 	Permanent_V23_1KeyVisualizerTablesAndJobs
 
-	// V23_1_KVDirectColumnarScans introduces the support of the "direct"
+	// TODO_Delete_V23_1_KVDirectColumnarScans introduces the support of the "direct"
 	// columnar scans in the KV layer.
-	V23_1_KVDirectColumnarScans
+	TODO_Delete_V23_1_KVDirectColumnarScans
 
-	V23_1_DeleteDroppedFunctionDescriptors
+	TODO_Delete_V23_1_DeleteDroppedFunctionDescriptors
 
 	// Permanent_V23_1_CreateJobsMetricsPollingJob creates the permanent job
 	// responsible for polling the jobs table for metrics.
 	Permanent_V23_1_CreateJobsMetricsPollingJob
 
-	// V23_1AllocatorCPUBalancing adds balancing CPU usage among stores using
-	// the allocator and store rebalancer. It assumes that at this version,
-	// stores now include their CPU in the StoreCapacity proto when gossiping.
-	V23_1AllocatorCPUBalancing
+	// TODO_Delete_V23_1AllocatorCPUBalancing adds balancing CPU usage among
+	// stores using the allocator and store rebalancer. It assumes that at this
+	// version, stores now include their CPU in the StoreCapacity proto when
+	// gossiping.
+	TODO_Delete_V23_1AllocatorCPUBalancing
 
-	// V23_1SystemPrivilegesTableHasUserIDColumn is the version where the
+	// TODO_Delete_V23_1SystemPrivilegesTableHasUserIDColumn is the version where the
 	// user_id column has been added to the system.privileges table.
-	V23_1SystemPrivilegesTableHasUserIDColumn
+	TODO_Delete_V23_1SystemPrivilegesTableHasUserIDColumn
 
-	// V23_1SystemPrivilegesTableUserIDColumnBackfilled is the version where the
-	// user_id column in the system.privileges table has been backfilled.
-	V23_1SystemPrivilegesTableUserIDColumnBackfilled
-
-	// V23_1WebSessionsTableHasUserIDColumn is the version where the
-	// user_id column has been added to the system.web_sessions table.
-	V23_1WebSessionsTableHasUserIDColumn
-
-	// V23_1WebSessionsTableUserIDColumnBackfilled is the version where the
-	// user_id column in the system.web_sessions table has been backfilled.
-	V23_1WebSessionsTableUserIDColumnBackfilled
-
-	// V23_1_SchemaChangerDeprecatedIndexPredicates is the version where the
-	// declarative schema changer no longer produces scpb.SecondaryIndexPartial
-	// elements.
-	V23_1_SchemaChangerDeprecatedIndexPredicates
-
-	// V23_1AlterSystemPrivilegesAddIndexOnPathAndUsername adds a covering secondary index to
-	// system.privileges, on the path and username columns.
-	V23_1AlterSystemPrivilegesAddIndexOnPathAndUsername
-
-	// V23_1DatabaseRoleSettingsHasRoleIDColumn is the version where the role_id
-	// column has been added to the system.database_role_settings table.
-	V23_1DatabaseRoleSettingsHasRoleIDColumn
-
-	// V23_1DatabaseRoleSettingsRoleIDColumnBackfilled is the version where
-	// the role_id column in the system.database_role_settings table has been
+	// TODO_Delete_V23_1SystemPrivilegesTableUserIDColumnBackfilled is the version
+	// where the user_id column in the system.privileges table has been
 	// backfilled.
-	V23_1DatabaseRoleSettingsRoleIDColumnBackfilled
+	TODO_Delete_V23_1SystemPrivilegesTableUserIDColumnBackfilled
 
-	// V23_1_MVCCRangeTombstonesUnconditionallyEnabled is a version gate after
-	// which Cockroach will always write MVCC Range Tombstones, regardless of the
-	// value of the storage.mvcc.range_tombstones.enabled cluster setting. Prior
-	// to this version, it was possible for a cluster to be writing MVCC Range
-	// Tombstones, but only if the cluster had been opted in manually, under a
-	// specific set of circumstances (i.e. appropriate 22.2.x version, Cockroach
-	// Cloud cluster, etc.).
-	V23_1_MVCCRangeTombstonesUnconditionallyEnabled
+	// TODO_Delete_V23_1WebSessionsTableHasUserIDColumn is the version where the
+	// user_id column has been added to the system.web_sessions table.
+	TODO_Delete_V23_1WebSessionsTableHasUserIDColumn
 
-	// V23_1TenantCapabilities is the version where tenant capabilities can be
-	// set.
-	V23_1TenantCapabilities
+	// TODO_Delete_V23_1WebSessionsTableUserIDColumnBackfilled is the version
+	// where the user_id column in the system.web_sessions table has been
+	// backfilled.
+	TODO_Delete_V23_1WebSessionsTableUserIDColumnBackfilled
 
-	// V23_1DeprecateClusterVersionKey is the version where we no longer write
-	// cluster version keys to engines.
-	V23_1DeprecateClusterVersionKey
+	// TODO_Delete_V23_1_SchemaChangerDeprecatedIndexPredicates is the version
+	// where the declarative schema changer no longer produces
+	// scpb.SecondaryIndexPartial elements.
+	TODO_Delete_V23_1_SchemaChangerDeprecatedIndexPredicates
 
-	// V23_1SetPebbleCreatorID is a version gate after which we set the Creator ID
-	// on Pebble stores that have shared storage configured.
-	V23_1SetPebbleCreatorID
+	// TODO_Delete_V23_1AlterSystemPrivilegesAddIndexOnPathAndUsername adds a
+	// covering secondary index to system.privileges, on the path and username
+	// columns.
+	TODO_Delete_V23_1AlterSystemPrivilegesAddIndexOnPathAndUsername
 
-	// V23_1_SystemRbrDualWrite indicates regional by row compatible system
-	// tables should write to the old and new indexes. See
+	// TODO_Delete_V23_1DatabaseRoleSettingsHasRoleIDColumn is the version where
+	// the role_id column has been added to the system.database_role_settings
+	// table.
+	TODO_Delete_V23_1DatabaseRoleSettingsHasRoleIDColumn
+
+	// TODO_Delete_V23_1DatabaseRoleSettingsRoleIDColumnBackfilled is the version
+	// where the role_id column in the system.database_role_settings table has
+	// been backfilled.
+	TODO_Delete_V23_1DatabaseRoleSettingsRoleIDColumnBackfilled
+
+	// TODO_Delete_V23_1_MVCCRangeTombstonesUnconditionallyEnabled is a version
+	// gate after which Cockroach will always write MVCC Range Tombstones,
+	// regardless of the value of the storage.mvcc.range_tombstones.enabled
+	// cluster setting. Prior to this version, it was possible for a cluster to be
+	// writing MVCC Range Tombstones, but only if the cluster had been opted in
+	// manually, under a specific set of circumstances (i.e. appropriate 22.2.x
+	// version, Cockroach Cloud cluster, etc.).
+	TODO_Delete_V23_1_MVCCRangeTombstonesUnconditionallyEnabled
+
+	// TODO_Delete_V23_1TenantCapabilities is the version where tenant
+	// capabilities can be set.
+	TODO_Delete_V23_1TenantCapabilities
+
+	// TODO_Delete_V23_1DeprecateClusterVersionKey is the version where we no
+	// longer write cluster version keys to engines.
+	TODO_Delete_V23_1DeprecateClusterVersionKey
+
+	// TODO_Delete_V23_1SetPebbleCreatorID is a version gate after which we set
+	// the Creator ID on Pebble stores that have shared storage configured.
+	TODO_Delete_V23_1SetPebbleCreatorID
+
+	// TODO_Delete_V23_1_SystemRbrDualWrite indicates regional by row compatible
+	// system tables should write to the old and new indexes. See
 	// system_rbr_indexes.go for more details.
-	V23_1_SystemRbrDualWrite
+	TODO_Delete_V23_1_SystemRbrDualWrite
 
-	// V23_1_SystemRbrReadNew indicates regional by row compatible system
-	// tables should read from the new index. See system_rbr_indexes.go for
+	// TODO_Delete_V23_1_SystemRbrReadNew indicates regional by row compatible
+	// system tables should read from the new index. See system_rbr_indexes.go for
 	// more details.
-	V23_1_SystemRbrReadNew
+	TODO_Delete_V23_1_SystemRbrReadNew
 
-	// V23_1_SystemRbrReadNew indicates regional by row compatible system
-	// tables no longer need to write to the old index. See
+	// TODO_Delete_V23_1_SystemRbrSingleWrite indicates regional by row compatible
+	// system tables no longer need to write to the old index. See
 	// system_rbr_indexes.go for more details.
-	V23_1_SystemRbrSingleWrite
+	TODO_Delete_V23_1_SystemRbrSingleWrite
 
-	// V23_1_SystemRbrCleanup is used to gate an upgrade job that cleans up old
-	// keys that are not regional by row compatible.
-	V23_1_SystemRbrCleanup
+	// TODO_Delete_V23_1_SystemRbrCleanup is used to gate an upgrade job that
+	// cleans up old keys that are not regional by row compatible.
+	TODO_Delete_V23_1_SystemRbrCleanup
 
-	// V23_1ExternalConnectionsTableHasOwnerIDColumn is the version where the
-	// owner_id column has been added to the system.external_connections table.
-	V23_1ExternalConnectionsTableHasOwnerIDColumn
+	// TODO_Delete_V23_1ExternalConnectionsTableHasOwnerIDColumn is the version
+	// where the owner_id column has been added to the system.external_connections
+	// table.
+	TODO_Delete_V23_1ExternalConnectionsTableHasOwnerIDColumn
 
-	// V23_1ExternalConnectionsTableOwnerIDColumnBackfilled is the version
-	// where the owner_id column in the system.external_connections table
+	// TODO_Delete_V23_1ExternalConnectionsTableOwnerIDColumnBackfilled is the
+	// version where the owner_id column in the system.external_connections table
 	// has been backfilled.
-	V23_1ExternalConnectionsTableOwnerIDColumnBackfilled
+	TODO_Delete_V23_1ExternalConnectionsTableOwnerIDColumnBackfilled
 
-	// V23_1AllowNewSystemPrivileges is the version at which we allow the new
-	// MODIFYSQLCLUSTERSETTING abd VIEWJOB system privileges to be used.
+	// TODO_Delete_V23_1AllowNewSystemPrivileges is the version at which we allow
+	// the new MODIFYSQLCLUSTERSETTING abd VIEWJOB system privileges to be used.
 	// Note: After v23.1 is released, we won't need to version gate these anymore,
 	// since we've made mixed-version clusters tolerate new privileges.
-	V23_1AllowNewSystemPrivileges
+	TODO_Delete_V23_1AllowNewSystemPrivileges
 
-	// V23_1JobInfoTableIsBackfilled is a version gate after which the
+	// TODO_Delete_V23_1JobInfoTableIsBackfilled is a version gate after which the
 	// system.job_info table has been backfilled with rows for the payload and
 	// progress of each job in the system.jobs table.
-	V23_1JobInfoTableIsBackfilled
+	TODO_Delete_V23_1JobInfoTableIsBackfilled
 
-	// V23_1EnableFlushableIngest upgrades the Pebble format major version to
-	// FormatFlushableIngest, which enables use of flushable ingestion.
-	V23_1EnableFlushableIngest
+	// TODO_Delete_V23_1EnableFlushableIngest upgrades the Pebble format major
+	// version to FormatFlushableIngest, which enables use of flushable ingestion.
+	TODO_Delete_V23_1EnableFlushableIngest
 
-	// V23_1_UseDelRangeInGCJob enables the use of the DelRange operation in the
-	// GC job. Before it is enabled, the GC job uses ClearRange operations
-	// after the job waits out the GC TTL. After it has been enabled, the
-	// job instead issues DelRange operations at the beginning of the job
-	// and then waits for the data to be removed automatically before removing
-	// the descriptor and zone configurations.
-	V23_1_UseDelRangeInGCJob
+	// TODO_Delete_V23_1_UseDelRangeInGCJob enables the use of the DelRange
+	// operation in the GC job. Before it is enabled, the GC job uses ClearRange
+	// operations after the job waits out the GC TTL. After it has been enabled,
+	// the job instead issues DelRange operations at the beginning of the job and
+	// then waits for the data to be removed automatically before removing the
+	// descriptor and zone configurations.
+	TODO_Delete_V23_1_UseDelRangeInGCJob
 
-	// V23_1WaitedForDelRangeInGCJob corresponds to the migration which waits for
-	// the GC jobs to adopt the use of DelRange with tombstones.
-	V23_1WaitedForDelRangeInGCJob
+	// TODO_Delete_V23_1WaitedForDelRangeInGCJob corresponds to the migration
+	// which waits for the GC jobs to adopt the use of DelRange with tombstones.
+	TODO_Delete_V23_1WaitedForDelRangeInGCJob
 
-	// V23_1_TaskSystemTables is the version where the system tables
+	// TODO_Delete_V23_1_TaskSystemTables is the version where the system tables
 	// task_payloads and tenant_tasks have been created.
-	V23_1_TaskSystemTables
+	TODO_Delete_V23_1_TaskSystemTables
 
 	// Permanent_V23_1_CreateAutoConfigRunnerJob is the version where the auto
 	// config runner persistent job has been created.
 	Permanent_V23_1_CreateAutoConfigRunnerJob
 
-	// V23_1AddSQLStatsComputedIndexes is the version at which Cockroach adds new
-	// computed columns and indexes to the statement_statistics and
-	// transaction_statistics system tables. These columns optimize persisted SQL
-	// statistics queries for observability.
-	V23_1AddSQLStatsComputedIndexes
+	// TODO_Delete_V23_1AddSQLStatsComputedIndexes is the version at which
+	// Cockroach adds new computed columns and indexes to the statement_statistics
+	// and transaction_statistics system tables. These columns optimize persisted
+	// SQL statistics queries for observability.
+	TODO_Delete_V23_1AddSQLStatsComputedIndexes
 
-	// V23_1AddSystemActivityTables is the version at which Cockroach adds system
-	// tables statement_activity and transaction_activity. These tables will
-	// contain a subset of data from statement_statistics and transaction_statistics
-	// that are optimized for the console.
-	V23_1AddSystemActivityTables
+	// TODO_Delete_V23_1AddSystemActivityTables is the version at which Cockroach
+	// adds system tables statement_activity and transaction_activity. These
+	// tables will contain a subset of data from statement_statistics and
+	// transaction_statistics that are optimized for the console.
+	TODO_Delete_V23_1AddSystemActivityTables
 
-	// V23_1StopWritingPayloadAndProgressToSystemJobs is the version where the
-	// payload and progress columns are no longer written to system.jobs.
-	V23_1StopWritingPayloadAndProgressToSystemJobs
+	// TODO_Delete_V23_1StopWritingPayloadAndProgressToSystemJobs is the version
+	// where the payload and progress columns are no longer written to
+	// system.jobs.
+	TODO_Delete_V23_1StopWritingPayloadAndProgressToSystemJobs
 
 	// Permanent_V23_1ChangeSQLStatsTTL is the version where the gc TTL was
 	// updated to all SQL Stats tables.
 	Permanent_V23_1ChangeSQLStatsTTL
 
-	// V23_1_TenantIDSequence is the version where system.tenant_id_seq
-	// was introduced.
-	V23_1_TenantIDSequence
+	// TODO_Delete_V23_1_TenantIDSequence is the version where
+	// system.tenant_id_seq was introduced.
+	TODO_Delete_V23_1_TenantIDSequence
 
 	// Permanent_V23_1CreateSystemActivityUpdateJob is the version at which
 	// Cockroach adds a job that periodically updates the statement_activity and
@@ -599,67 +607,67 @@ var rawVersionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 42},
 	},
 	{
-		Key:     V22_2,
+		Key:     TODO_Delete_V22_2,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 0},
 	},
 	{
-		Key:     V23_1Start,
+		Key:     TODO_Delete_V23_1Start,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 2},
 	},
 	{
-		Key:     V23_1TenantNamesStateAndServiceMode,
+		Key:     TODO_Delete_V23_1TenantNamesStateAndServiceMode,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 4},
 	},
 	{
-		Key:     V23_1DescIDSequenceForSystemTenant,
+		Key:     TODO_Delete_V23_1DescIDSequenceForSystemTenant,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 6},
 	},
 	{
-		Key:     V23_1AddPartialStatisticsColumns,
+		Key:     TODO_Delete_V23_1AddPartialStatisticsColumns,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 8},
 	},
 	{
-		Key:     V23_1CreateSystemJobInfoTable,
+		Key:     TODO_Delete_V23_1CreateSystemJobInfoTable,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 10},
 	},
 	{
-		Key:     V23_1RoleMembersTableHasIDColumns,
+		Key:     TODO_Delete_V23_1RoleMembersTableHasIDColumns,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 12},
 	},
 	{
-		Key:     V23_1RoleMembersIDColumnsBackfilled,
+		Key:     TODO_Delete_V23_1RoleMembersIDColumnsBackfilled,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 14},
 	},
 	{
-		Key:     V23_1ScheduledChangefeeds,
+		Key:     TODO_Delete_V23_1ScheduledChangefeeds,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 16},
 	},
 	{
-		Key:     V23_1AddTypeColumnToJobsTable,
+		Key:     TODO_Delete_V23_1AddTypeColumnToJobsTable,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 18},
 	},
 	{
-		Key:     V23_1BackfillTypeColumnInJobsTable,
+		Key:     TODO_Delete_V23_1BackfillTypeColumnInJobsTable,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 20},
 	},
 	{
-		Key:     V23_1_AlterSystemStatementStatisticsAddIndexesUsage,
+		Key:     TODO_Delete_V23_1_AlterSystemStatementStatisticsAddIndexesUsage,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 22},
 	},
 	{
-		Key:     V23_1EnsurePebbleFormatSSTableValueBlocks,
+		Key:     TODO_Delete_V23_1EnsurePebbleFormatSSTableValueBlocks,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 24},
 	},
 	{
-		Key:     V23_1EnablePebbleFormatSSTableValueBlocks,
+		Key:     TODO_Delete_V23_1EnablePebbleFormatSSTableValueBlocks,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 26},
 	},
 	{
-		Key:     V23_1AlterSystemSQLInstancesAddSQLAddr,
+		Key:     TODO_Delete_V23_1AlterSystemSQLInstancesAddSQLAddr,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 28},
 	},
 	{
-		Key:     V23_1_ChangefeedExpressionProductionReady,
+		Key:     TODO_Delete_V23_1_ChangefeedExpressionProductionReady,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 30},
 	},
 	{
@@ -667,11 +675,11 @@ var rawVersionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 32},
 	},
 	{
-		Key:     V23_1_KVDirectColumnarScans,
+		Key:     TODO_Delete_V23_1_KVDirectColumnarScans,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 34},
 	},
 	{
-		Key:     V23_1_DeleteDroppedFunctionDescriptors,
+		Key:     TODO_Delete_V23_1_DeleteDroppedFunctionDescriptors,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 36},
 	},
 	{
@@ -679,103 +687,103 @@ var rawVersionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 38},
 	},
 	{
-		Key:     V23_1AllocatorCPUBalancing,
+		Key:     TODO_Delete_V23_1AllocatorCPUBalancing,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 40},
 	},
 	{
-		Key:     V23_1SystemPrivilegesTableHasUserIDColumn,
+		Key:     TODO_Delete_V23_1SystemPrivilegesTableHasUserIDColumn,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 42},
 	},
 	{
-		Key:     V23_1SystemPrivilegesTableUserIDColumnBackfilled,
+		Key:     TODO_Delete_V23_1SystemPrivilegesTableUserIDColumnBackfilled,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 44},
 	},
 	{
-		Key:     V23_1WebSessionsTableHasUserIDColumn,
+		Key:     TODO_Delete_V23_1WebSessionsTableHasUserIDColumn,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 46},
 	},
 	{
-		Key:     V23_1WebSessionsTableUserIDColumnBackfilled,
+		Key:     TODO_Delete_V23_1WebSessionsTableUserIDColumnBackfilled,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 48},
 	},
 	{
-		Key:     V23_1_SchemaChangerDeprecatedIndexPredicates,
+		Key:     TODO_Delete_V23_1_SchemaChangerDeprecatedIndexPredicates,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 50},
 	},
 	{
-		Key:     V23_1AlterSystemPrivilegesAddIndexOnPathAndUsername,
+		Key:     TODO_Delete_V23_1AlterSystemPrivilegesAddIndexOnPathAndUsername,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 52},
 	},
 	{
-		Key:     V23_1DatabaseRoleSettingsHasRoleIDColumn,
+		Key:     TODO_Delete_V23_1DatabaseRoleSettingsHasRoleIDColumn,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 54},
 	},
 	{
-		Key:     V23_1DatabaseRoleSettingsRoleIDColumnBackfilled,
+		Key:     TODO_Delete_V23_1DatabaseRoleSettingsRoleIDColumnBackfilled,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 56},
 	},
 	{
-		Key:     V23_1_MVCCRangeTombstonesUnconditionallyEnabled,
+		Key:     TODO_Delete_V23_1_MVCCRangeTombstonesUnconditionallyEnabled,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 58},
 	},
 	{
-		Key:     V23_1TenantCapabilities,
+		Key:     TODO_Delete_V23_1TenantCapabilities,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 60},
 	},
 	{
-		Key:     V23_1DeprecateClusterVersionKey,
+		Key:     TODO_Delete_V23_1DeprecateClusterVersionKey,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 62},
 	},
 	{
-		Key:     V23_1SetPebbleCreatorID,
+		Key:     TODO_Delete_V23_1SetPebbleCreatorID,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 64},
 	},
 	{
-		Key:     V23_1_SystemRbrDualWrite,
+		Key:     TODO_Delete_V23_1_SystemRbrDualWrite,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 66},
 	},
 	{
-		Key:     V23_1_SystemRbrReadNew,
+		Key:     TODO_Delete_V23_1_SystemRbrReadNew,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 68},
 	},
 	{
-		Key:     V23_1_SystemRbrSingleWrite,
+		Key:     TODO_Delete_V23_1_SystemRbrSingleWrite,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 70},
 	},
 	{
-		Key:     V23_1_SystemRbrCleanup,
+		Key:     TODO_Delete_V23_1_SystemRbrCleanup,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 72},
 	},
 	{
-		Key:     V23_1ExternalConnectionsTableHasOwnerIDColumn,
+		Key:     TODO_Delete_V23_1ExternalConnectionsTableHasOwnerIDColumn,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 74},
 	},
 	{
-		Key:     V23_1ExternalConnectionsTableOwnerIDColumnBackfilled,
+		Key:     TODO_Delete_V23_1ExternalConnectionsTableOwnerIDColumnBackfilled,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 76},
 	},
 	{
-		Key:     V23_1AllowNewSystemPrivileges,
+		Key:     TODO_Delete_V23_1AllowNewSystemPrivileges,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 78},
 	},
 	{
-		Key:     V23_1JobInfoTableIsBackfilled,
+		Key:     TODO_Delete_V23_1JobInfoTableIsBackfilled,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 80},
 	},
 	{
-		Key:     V23_1EnableFlushableIngest,
+		Key:     TODO_Delete_V23_1EnableFlushableIngest,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 82},
 	},
 	{
-		Key:     V23_1_UseDelRangeInGCJob,
+		Key:     TODO_Delete_V23_1_UseDelRangeInGCJob,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 84},
 	},
 	{
-		Key:     V23_1WaitedForDelRangeInGCJob,
+		Key:     TODO_Delete_V23_1WaitedForDelRangeInGCJob,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 86},
 	},
 	{
-		Key:     V23_1_TaskSystemTables,
+		Key:     TODO_Delete_V23_1_TaskSystemTables,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 88},
 	},
 	{
@@ -783,15 +791,15 @@ var rawVersionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 90},
 	},
 	{
-		Key:     V23_1AddSQLStatsComputedIndexes,
+		Key:     TODO_Delete_V23_1AddSQLStatsComputedIndexes,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 92},
 	},
 	{
-		Key:     V23_1AddSystemActivityTables,
+		Key:     TODO_Delete_V23_1AddSystemActivityTables,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 94},
 	},
 	{
-		Key:     V23_1StopWritingPayloadAndProgressToSystemJobs,
+		Key:     TODO_Delete_V23_1StopWritingPayloadAndProgressToSystemJobs,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 96},
 	},
 	{
@@ -799,7 +807,7 @@ var rawVersionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 98},
 	},
 	{
-		Key:     V23_1_TenantIDSequence,
+		Key:     TODO_Delete_V23_1_TenantIDSequence,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 100},
 	},
 	{

@@ -3029,7 +3029,7 @@ func (r *restoreResumer) restoreSystemUsers(
 				return err
 			}
 
-			roleMembersHasIDColumns := r.execCfg.Settings.Version.IsActive(ctx, clusterversion.V23_1RoleMembersTableHasIDColumns)
+			roleMembersHasIDColumns := r.execCfg.Settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1RoleMembersTableHasIDColumns)
 			insertRoleMember := `
 INSERT INTO system.role_members ("role", "member", "isAdmin", role_id, member_id)
 VALUES ($1, $2, $3, (SELECT user_id FROM system.users WHERE username = $1), (SELECT user_id FROM system.users WHERE username = $2))`

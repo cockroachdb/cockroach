@@ -220,7 +220,7 @@ func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn
 		}
 	}
 
-	if !u.j.registry.settings.Version.IsActive(ctx, clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs) {
+	if !u.j.registry.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1StopWritingPayloadAndProgressToSystemJobs) {
 		if payloadBytes != nil {
 			addSetter("payload", payloadBytes)
 		}
@@ -261,7 +261,7 @@ func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn
 	//
 	// TODO(adityamaru): Stop writing the payload and details to the system.jobs
 	// table once we are outside the compatability window for 22.2.
-	if u.j.registry.settings.Version.IsActive(ctx, clusterversion.V23_1CreateSystemJobInfoTable) {
+	if u.j.registry.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1CreateSystemJobInfoTable) {
 		infoStorage := j.InfoStorage(u.txn)
 		if payloadBytes != nil {
 			if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
@@ -412,7 +412,7 @@ WITH
 	)
 
 	var stmt string
-	if version.IsActive(ctx, clusterversion.V23_1JobInfoTableIsBackfilled) {
+	if version.IsActive(ctx, clusterversion.TODO_Delete_V23_1JobInfoTableIsBackfilled) {
 		stmt = selectWithoutSession
 		if hasSession {
 			stmt = selectWithSession

@@ -247,7 +247,7 @@ func (s *Storage) isAlive(
 }
 
 func (s *Storage) getReadCodec(version *settingswatcher.VersionGuard) keyCodec {
-	if version.IsActive(clusterversion.V23_1_SystemRbrReadNew) {
+	if version.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrReadNew) {
 		return s.newKeyCodec
 	}
 	return s.oldKeyCodec
@@ -255,11 +255,11 @@ func (s *Storage) getReadCodec(version *settingswatcher.VersionGuard) keyCodec {
 
 func (s *Storage) getDualWriteCodec(version *settingswatcher.VersionGuard) keyCodec {
 	switch {
-	case version.IsActive(clusterversion.V23_1_SystemRbrSingleWrite):
+	case version.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrSingleWrite):
 		return nil
-	case version.IsActive(clusterversion.V23_1_SystemRbrReadNew):
+	case version.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrReadNew):
 		return s.oldKeyCodec
-	case version.IsActive(clusterversion.V23_1_SystemRbrDualWrite):
+	case version.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrDualWrite):
 		return s.newKeyCodec
 	default:
 		return nil
@@ -269,7 +269,7 @@ func (s *Storage) getDualWriteCodec(version *settingswatcher.VersionGuard) keyCo
 func (s *Storage) versionGuard(
 	ctx context.Context, txn *kv.Txn,
 ) (settingswatcher.VersionGuard, error) {
-	return s.settingsWatcher.MakeVersionGuard(ctx, txn, clusterversion.V23_1_SystemRbrCleanup)
+	return s.settingsWatcher.MakeVersionGuard(ctx, txn, clusterversion.TODO_Delete_V23_1_SystemRbrCleanup)
 }
 
 // This function will launch a singleflight goroutine for the session which
