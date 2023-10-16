@@ -417,8 +417,8 @@ func TestClientAddrOverride(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	ts := s.ApplicationLayer()
 
-	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, ts.AdvSQLAddr(), "testClientAddrOverride" /* prefix */, url.User(username.TestUser),
+	pgURL, cleanupFunc := ts.PGUrl(
+		t, serverutils.CertsDirPrefix("testClientAddrOverride"), serverutils.User(username.TestUser),
 	)
 	defer cleanupFunc()
 

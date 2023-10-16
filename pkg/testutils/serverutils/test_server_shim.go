@@ -129,7 +129,7 @@ func ShouldStartDefaultTestTenant(
 		return base.InternalNonDefaultDecision(baseArg, true, true)
 	}
 	return base.InternalNonDefaultDecision(baseArg, false, true)*/
-	return base.InternalNonDefaultDecision(baseArg, true, true)
+	return base.InternalNonDefaultDecision(baseArg, true, false)
 }
 
 // globalDefaultSelectionOverride is used when an entire package needs
