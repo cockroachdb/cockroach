@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -245,10 +246,15 @@ func TestMigrateWaitsForApplication(t *testing.T) {
 	endV := roachpb.Version{Major: 1000042}
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-		ReplicationMode: base.ReplicationManual,
-		ServerArgs: base.TestServerArgs{
-			Settings: cluster.MakeTestingClusterSettingsWithVersions(endV, startV, false),
+	const numNodes = 3
+	tcArgs := base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationManual,
+		ServerArgsPerNode: make(map[int]base.TestServerArgs),
+	}
+	for i := 0; i < numNodes; i++ {
+		// We must create a separate Settings object for each server.
+		tcArgs.ServerArgsPerNode[i] = base.TestServerArgs{
+			Settings: cluster.MakeTestingClusterSettingsWithVersions(endV, clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey), false),
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					BinaryVersionOverride:          startV,
@@ -263,8 +269,9 @@ func TestMigrateWaitsForApplication(t *testing.T) {
 					},
 				},
 			},
-		},
-	})
+		}
+	}
+	tc := testcluster.StartTestCluster(t, numNodes, tcArgs)
 	defer tc.Stopper().Stop(ctx)
 
 	// Create our scratch range and replicate it to n2 and n3.

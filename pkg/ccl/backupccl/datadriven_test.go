@@ -170,39 +170,40 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 		},
 	}
 
-	settings := cluster.MakeTestingClusterSettings()
-	if cfg.beforeVersion != "" {
-		settings = cluster.MakeClusterSettings()
-		beforeKey, ok := clusterVersionKeys[cfg.beforeVersion]
-		if !ok {
-			t.Fatalf("clusterVersion %s does not exist in data driven global map", cfg.beforeVersion)
-		}
-		beforeKey--
-		params.ServerArgs.Knobs.Server = &server.TestingKnobs{
-			BinaryVersionOverride:          clusterversion.ByKey(beforeKey),
-			DisableAutomaticVersionUpgrade: make(chan struct{}),
-			BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
-		}
+	var localities []string
+	clusterSize := cfg.nodes
+	if cfg.localities != "" {
+		localities = strings.Split(cfg.localities, ",")
+		clusterSize = len(localities)
 	}
 
-	closedts.TargetDuration.Override(context.Background(), &settings.SV, 10*time.Millisecond)
-	closedts.SideTransportCloseInterval.Override(context.Background(), &settings.SV, 10*time.Millisecond)
-	kvserver.RangeFeedRefreshInterval.Override(context.Background(), &settings.SV, 10*time.Millisecond)
-	sql.TempObjectWaitInterval.Override(context.Background(), &settings.SV, time.Millisecond)
-	params.ServerArgs.Settings = settings
-
-	clusterSize := cfg.nodes
-
-	if cfg.localities != "" {
-		cfgs := strings.Split(cfg.localities, ",")
-		clusterSize = len(cfgs)
-		serverArgsPerNode := make(map[int]base.TestServerArgs)
-		for i, cfg := range cfgs {
-			param := params.ServerArgs
-			param.Locality = localityCfgs[cfg]
-			serverArgsPerNode[i] = param
+	params.ServerArgsPerNode = make(map[int]base.TestServerArgs)
+	for i := 0; i < clusterSize; i++ {
+		param := params.ServerArgs
+		if localities != nil {
+			param.Locality = localityCfgs[localities[i]]
 		}
-		params.ServerArgsPerNode = serverArgsPerNode
+		settings := cluster.MakeTestingClusterSettings()
+		if cfg.beforeVersion != "" {
+			settings = cluster.MakeClusterSettings()
+			beforeKey, ok := clusterVersionKeys[cfg.beforeVersion]
+			if !ok {
+				t.Fatalf("clusterVersion %s does not exist in data driven global map", cfg.beforeVersion)
+			}
+			beforeKey--
+			param.Knobs.Server = &server.TestingKnobs{
+				BinaryVersionOverride:          clusterversion.ByKey(beforeKey),
+				DisableAutomaticVersionUpgrade: make(chan struct{}),
+				BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
+			}
+		}
+
+		closedts.TargetDuration.Override(context.Background(), &settings.SV, 10*time.Millisecond)
+		closedts.SideTransportCloseInterval.Override(context.Background(), &settings.SV, 10*time.Millisecond)
+		kvserver.RangeFeedRefreshInterval.Override(context.Background(), &settings.SV, 10*time.Millisecond)
+		sql.TempObjectWaitInterval.Override(context.Background(), &settings.SV, time.Millisecond)
+		param.Settings = settings
+		params.ServerArgsPerNode[i] = param
 	}
 	if cfg.testingKnobCfg != "" {
 		switch cfg.testingKnobCfg {
