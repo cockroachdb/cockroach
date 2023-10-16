@@ -77,7 +77,7 @@ go_test(
     args = ["-test.timeout=895s"],
     data = glob(["testdata/**"]),
     embed = [":sqlproxyccl"],
-    exec_properties = {"Pool": "medium"},
+    exec_properties = {"Pool": "large"},
     shard_count = 8,
     tags = ["ccl_test"],
     deps = [

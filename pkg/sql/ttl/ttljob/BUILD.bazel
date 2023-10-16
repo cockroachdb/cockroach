@@ -64,7 +64,7 @@ go_test(
         "ttljob_test.go",
     ],
     args = ["-test.timeout=895s"],
-    exec_properties = {"Pool": "medium"},
+    exec_properties = {"Pool": "large"},
     shard_count = 4,
     deps = [
         ":ttljob",
