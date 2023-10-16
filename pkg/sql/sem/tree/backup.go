@@ -201,15 +201,9 @@ func (node *Restore) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&node.AsOf)
 	}
 	if !node.Options.IsDefault() {
-		if ctx.HasFlags(FmtHideConstants) {
-			ctx.WriteString(" WITH OPTIONS (")
-			ctx.FormatNode(&node.Options)
-			ctx.WriteString(")")
-		} else {
-			ctx.WriteString(" WITH OPTIONS (")
-			ctx.FormatNode(&node.Options)
-			ctx.WriteString(")")
-		}
+		ctx.WriteString(" WITH OPTIONS (")
+		ctx.FormatNode(&node.Options)
+		ctx.WriteString(")")
 	}
 }
 
@@ -520,15 +514,9 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 	}
 
 	if o.ExecutionLocality != nil {
-		if ctx.HasFlags(FmtHideConstants) {
-			maybeAddSep()
-			ctx.WriteString("execution locality = ")
-			ctx.FormatNode(o.ExecutionLocality)
-		} else {
-			maybeAddSep()
-			ctx.WriteString("execution locality = ")
-			ctx.FormatNode(o.ExecutionLocality)
-		}
+		maybeAddSep()
+		ctx.WriteString("execution locality = ")
+		ctx.FormatNode(o.ExecutionLocality)
 	}
 
 	if o.ExperimentalOnline {
