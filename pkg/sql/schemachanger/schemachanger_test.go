@@ -943,11 +943,19 @@ func TestComparatorFromLogicTests(t *testing.T) {
 // logictest stmts corpus. Each blacklisted entry should be justified with
 // comments.
 func shouldSkipLogicTestCorpusEntry(entryName string) (skip bool, skipReason string) {
-	// `crdb_internal` contains stmts like `SELECT crdb_internal.force_panic('foo')`
-	// that will cause the framework to crash. Also, in general, we don't care about
-	// crdb_internal functions for purpose of schema changer comparator testing.
-	if entryName == "crdb_internal" {
+	switch entryName {
+	case "crdb_internal":
+		// `crdb_internal` contains stmts like `SELECT crdb_internal.force_panic('foo')`
+		// that will cause the framework to crash. Also, in general, we don't care about
+		// crdb_internal functions for purpose of schema changer comparator testing.
 		return true, `"crdb_internal" contains statement like "crdb_internal.force_panic()" that would crash the testing framework`
+	case "schema_repair":
+		// `schema_repair` contains stmts like `SELECT crdb_internal.unsafe_delete_descriptor(id)`
+		// that will corrupt descriptors. This subsequently would fail the query that
+		// attempts to fetch all descriptors during the post-execution metadata
+		// identity check.
+		return true, `"schema_repair" contains statement like "crdb_internal.unsafe_delete_descriptor(id)" that would cause descriptor corruptions, which would subsequently fail the query to fetch descriptors during the metadata identity check`
+	default:
+		return false, ""
 	}
-	return false, ""
 }
