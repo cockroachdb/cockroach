@@ -520,7 +520,7 @@ func (ct *cdcTester) runFeedLatencyVerifier(
 	)
 	verifier.statementTime = info.statementTime
 
-	finished := make(chan struct{})
+	finished := make(chan struct{}, 1)
 	ct.mon.Go(func(ctx context.Context) error {
 		defer func() {
 			finished <- struct{}{}
