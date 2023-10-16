@@ -1609,16 +1609,16 @@ func (r *DistSQLReceiver) ProducerDone() {
 // function updates the passed-in planner to make sure that the "inner" plans
 // use the LeafTxns if the "outer" plan happens to have concurrency. It also
 // returns a non-nil cleanup function that must be called once all plans (the
-// "outer" as well as all "inner" ones) are done. The returned functions can be
-// called multiple times.
+// "outer" as well as all "inner" ones) are done. The returned functions should
+// only be called once.
 func getFinishedSetupFn(planner *planner) (finishedSetupFn func(flowinfra.Flow), cleanup func()) {
 	finishedSetupFn = func(localFlow flowinfra.Flow) {
 		if localFlow.GetFlowCtx().Txn.Type() == kv.LeafTxn {
-			atomic.StoreUint32(&planner.atomic.innerPlansMustUseLeafTxn, 1)
+			atomic.AddInt32(&planner.atomic.innerPlansMustUseLeafTxn, 1)
 		}
 	}
 	cleanup = func() {
-		atomic.StoreUint32(&planner.atomic.innerPlansMustUseLeafTxn, 0)
+		atomic.AddInt32(&planner.atomic.innerPlansMustUseLeafTxn, -1)
 	}
 	return finishedSetupFn, cleanup
 }
@@ -2023,7 +2023,9 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		}
 		finalizePlanWithRowCount(ctx, localPlanCtx, localPhysPlan, localPlanCtx.planner.curPlan.mainRowCount)
 		recv.expectedRowsRead = int64(localPhysPlan.TotalEstimatedScannedRows)
-		dsp.Run(ctx, localPlanCtx, txn, localPhysPlan, recv, evalCtx, finishedSetupFn)
+		// We already called finishedSetupFn in the previous call to Run, since we
+		// only got here if we got a distributed error, not an error during setup.
+		dsp.Run(ctx, localPlanCtx, txn, localPhysPlan, recv, evalCtx, nil /* finishedSetupFn */)
 	}
 }
 
