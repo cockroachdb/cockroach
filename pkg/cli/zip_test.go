@@ -422,7 +422,7 @@ func TestUnavailableZip(t *testing.T) {
 	// Run debug zip against node 1.
 	debugZipCommand :=
 		"debug zip --concurrency=1 --cpu-profile-duration=0 " + os.
-			DevNull + " --timeout=.25s"
+			DevNull + " --timeout=.5s"
 
 	c := TestCLI{
 		t:        t,
@@ -439,26 +439,25 @@ func TestUnavailableZip(t *testing.T) {
 
 	// Assert debug zip output for cluster, node 1, node 2, node 3.
 	assert.NotEmpty(t, out)
-	assert.Contains(t, out, "[cluster] requesting nodes... received response...")
-	assert.Contains(t, out, "[cluster] requesting liveness... received response...")
-	for i := 1; i < tc.NumServers()+1; i++ {
-		assert.Contains(t, out, fmt.Sprintf("[node %d] using SQL connection URL",
-			i))
-		assert.Contains(t, out, fmt.Sprintf("[node %d] retrieving SQL data",
-			i))
-		assert.Contains(t, out, fmt.Sprintf("[node %d] requesting stacks... received response...",
-			i))
-		assert.Contains(t, out, fmt.Sprintf("[node %d] requesting stacks with labels... received response...",
-			i))
-		assert.Contains(t, out, fmt.Sprintf("[node %d] requesting heap file list... received response...",
-			i))
-		assert.Contains(t, out, fmt.Sprintf("[node %d] requesting goroutine dump list... received response...",
-			i))
-		assert.Contains(t, out, fmt.Sprintf("[node %d] requesting log files list... received response...",
-			i))
-		assert.Contains(t, out, fmt.Sprintf("[node %d] requesting ranges... received response...",
-			i))
+	clusterOut := []string{
+		"[cluster] requesting nodes... received response...",
+		"[cluster] requesting liveness... received response...",
 	}
+	expectedOut := clusterOut
+	for i := 1; i < tc.NumServers()+1; i++ {
+		nodeOut := baseZipOutput(i)
+
+		expectedOut = append(expectedOut, nodeOut...)
+
+		// If the request to nodes failed, we can't expect the remaining
+		// nodes to be present in the debug zip output.
+		if i == 1 && strings.Contains(out,
+			"[cluster] requesting nodes: last request failed") {
+			break
+		}
+	}
+
+	containsAssert(t, out, expectedOut)
 
 	// Run debug zip against node 2.
 	c = TestCLI{
@@ -474,15 +473,47 @@ func TestUnavailableZip(t *testing.T) {
 
 	// Assert debug zip output for cluster, node 2.
 	assert.NotEmpty(t, out)
-	assert.Contains(t, out, "[cluster] requesting nodes... received response...")
-	assert.Contains(t, out, "[cluster] requesting liveness... received response...")
-	assert.Contains(t, out, "[node 2] using SQL connection URL")
-	assert.Contains(t, out, "[node 2] retrieving SQL data")
-	assert.Contains(t, out, "[node 2] requesting ranges... received response...")
-	assert.Contains(t, out, "[node 2] writing ranges...")
 	assert.NotContains(t, out, "[node 1]")
 	assert.NotContains(t, out, "[node 3]")
 
+	nodeOut := baseZipOutput(2)
+	expectedOut = append(clusterOut, nodeOut...)
+
+	containsAssert(t, out, expectedOut)
+}
+
+func containsAssert(t *testing.T, actual string, expected []string) {
+	var logOut bool
+	for _, line := range expected {
+		if !strings.Contains(actual, line) {
+			assertFail := fmt.Sprintf("output does not contain %#v", line)
+			if !logOut {
+				assertFail = fmt.Sprintf(
+					"the following output does not contain expected lines:\n%#v\n",
+					actual) + assertFail
+				logOut = true
+			}
+			assert.Fail(t, assertFail)
+		}
+	}
+}
+
+func baseZipOutput(nodeId int) []string {
+	output := []string{
+		fmt.Sprintf("[node %d] using SQL connection URL", nodeId),
+		fmt.Sprintf("[node %d] retrieving SQL data", nodeId),
+		fmt.Sprintf("[node %d] requesting stacks... received response...", nodeId),
+		fmt.Sprintf("[node %d] requesting stacks with labels... received response...",
+			nodeId),
+		fmt.Sprintf("[node %d] requesting heap file list... received response...", nodeId),
+		fmt.Sprintf("[node %d] requesting goroutine dump list... received response...",
+			nodeId),
+		fmt.Sprintf("[node %d] requesting log files list... received response...",
+			nodeId),
+		fmt.Sprintf("[node %d] requesting ranges... received response...",
+			nodeId),
+	}
+	return output
 }
 
 func eraseNonDeterministicZipOutput(out string) string {
