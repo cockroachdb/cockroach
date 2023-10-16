@@ -103,6 +103,7 @@ func SynthesizeClusterVersionFromEngines(
 		if engVer == (roachpb.Version{}) {
 			return clusterversion.ClusterVersion{}, errors.AssertionFailedf("store %s has no version", eng)
 		}
+		fmt.Printf("\n eng ver: %v\n", engVer)
 
 		// Avoid running a binary with a store that is too new. For example,
 		// restarting into 1.1 after having upgraded to 1.2 doesn't work.

@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	rdebug "runtime/debug"
 	"strconv"
 	"sync"
 	"time"
@@ -1427,6 +1428,9 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	done := startup.Begin(ctx)
 	defer done()
 
+	fmt.Printf("\ntopLevelServer.PreStart\n\n")
+	rdebug.PrintStack()
+
 	// The following initialization is mirrored in
 	// (*SQLServerWrapper).PreStart. Please keep them in sync.
 
@@ -1481,12 +1485,14 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	{
 		getDialOpts := s.rpcContext.GRPCDialOptions
 		initConfig := newInitServerConfig(ctx, s.cfg, getDialOpts)
+		fmt.Printf("\n\nPreStart.inspectEngines\n")
 		inspectedDiskState, err := inspectEngines(
 			ctx,
 			s.engines,
 			s.cfg.Settings.Version.BinaryVersion(),
 			s.cfg.Settings.Version.BinaryMinSupportedVersion(),
 		)
+		fmt.Printf("%v\n", inspectedDiskState.clusterVersion.Version)
 		if err != nil {
 			return err
 		}

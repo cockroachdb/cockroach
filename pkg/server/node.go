@@ -463,6 +463,7 @@ func bootstrapCluster(
 
 	// We use our binary version to bootstrap the cluster.
 	bootstrapVersion := clusterversion.ClusterVersion{Version: initCfg.binaryVersion}
+	fmt.Printf("\nbootStrapCluster writing to engines: %v\n", bootstrapVersion.Version)
 	if err := kvstorage.WriteClusterVersionToEngines(ctx, engines, bootstrapVersion); err != nil {
 		return nil, err
 	}

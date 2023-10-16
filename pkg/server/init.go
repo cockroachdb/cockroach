@@ -658,6 +658,7 @@ func newInitServerConfig(
 				// use the minimum supported version for the initial values).
 				bootstrapVersion = overrideVersion
 			}
+			fmt.Printf("\n\n bootstrapVersion: %v\n", bootstrapVersion)
 			binaryVersion = bootstrapVersion
 		}
 	}
@@ -731,7 +732,7 @@ func inspectEngines(
 		initializedEngines = append(initializedEngines, eng)
 	}
 	clusterVersion, err := kvstorage.SynthesizeClusterVersionFromEngines(
-		ctx, initializedEngines, binaryVersion, binaryMinSupportedVersion,
+		ctx, engines, binaryVersion, binaryMinSupportedVersion,
 	)
 	if err != nil {
 		return nil, err

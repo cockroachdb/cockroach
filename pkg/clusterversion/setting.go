@@ -12,6 +12,8 @@ package clusterversion
 
 import (
 	"context"
+	"fmt"
+	"runtime/debug"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -90,6 +92,8 @@ func (cv *clusterVersionSetting) initialize(
 		// is first initialized to BinaryMinSupportedVersion and then
 		// re-initialized to BootstrapVersion (=BinaryVersion).
 		if version.Less(ver.Version) {
+			panic(errors.AssertionFailedf("cannot initialize version to %s because already set to: %s",
+				version, ver))
 			return errors.AssertionFailedf("cannot initialize version to %s because already set to: %s",
 				version, ver)
 		}
@@ -109,6 +113,8 @@ func (cv *clusterVersionSetting) initialize(
 	if err != nil {
 		return err
 	}
+	fmt.Printf("\n\nversion.initialize: %v\n", version)
+	debug.PrintStack()
 	cv.SetInternal(ctx, sv, encoded)
 	return nil
 }

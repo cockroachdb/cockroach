@@ -160,6 +160,7 @@ func NewWithOverrides(
 // have been retrieved. An error will be returned if the context is canceled or
 // the stopper is stopped prior to the initial data being retrieved.
 func (s *SettingsWatcher) Start(ctx context.Context) error {
+	log.Infof(ctx, "*** starting SettingsWatcher")
 	// Ensure we inform the read-only default notify callback function
 	// of the build-time defaults for SystemVisible settings.
 	//
@@ -355,7 +356,8 @@ func (s *SettingsWatcher) handleKV(
 		}
 	}
 
-	log.VEventf(ctx, 1, "found rangefeed event for %q = %+v (tombstone=%v)", settingKey, val, tombstone)
+	//log.VEventf(ctx, 1, "found rangefeed event for %q = %+v (tombstone=%v)", settingKey, val, tombstone)
+	log.Infof(ctx, "found rangefeed event for %q = %+v (tombstone=%v)", settingKey, val, tombstone)
 
 	// Ensure that the update is persisted to the local cache before we
 	// propagate the value to the in-RAM store. This ensures the latest
