@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -74,8 +75,7 @@ func ingestionTypeCheck(
 			ingestionStmt.Options.Retention},
 	}
 	if ingestionStmt.Options.ResumeTimestamp != nil {
-		if _, err := typeCheckSystemTimeExpr(ctx,
-			&p.ExtendedEvalContext().Context,
+		if _, err := asof.TypeCheckSystemTimeExpr(ctx,
 			p.SemaCtx(),
 			ingestionStmt.Options.ResumeTimestamp,
 			createReplicationOp); err != nil {
