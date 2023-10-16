@@ -723,6 +723,55 @@ project
  └── projections
       └── w:4 [as=max:7, outer=(4)]
 
+# Basic min case with ReduceGroupingCols disabled. By disabling this
+# normalization rule, the constant column w is left in the grouping columns
+# instead of being moved to a constant aggregate. This ensures that
+# ReplaceMinWithLimit handles constant grouping columns correctly.
+opt disable=ReduceGroupingCols expect=ReplaceMinWithLimit
+SELECT min(k) FROM kuvw WHERE w = 5 GROUP BY w
+----
+project
+ ├── columns: min:7!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7)
+ └── project
+      ├── columns: min:7!null w:4!null
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(4,7)
+      ├── scan kuvw@w
+      │    ├── columns: k:1!null w:4!null
+      │    ├── constraint: /4/1: [/5 - /5]
+      │    ├── limit: 1
+      │    ├── key: ()
+      │    └── fd: ()-->(1,4)
+      └── projections
+           └── k:1 [as=min:7, outer=(1)]
+
+# Basic max case with ReduceGroupingCols disabled.
+opt disable=ReduceGroupingCols expect=ReplaceMaxWithLimit
+SELECT max(w) FROM kuvw WHERE v = 5 GROUP BY v
+----
+project
+ ├── columns: max:7
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7)
+ └── project
+      ├── columns: max:7 v:3!null
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(3,7)
+      ├── scan kuvw@vw,rev
+      │    ├── columns: v:3!null w:4
+      │    ├── constraint: /3/4/1: [/5 - /5]
+      │    ├── limit: 1(rev)
+      │    ├── key: ()
+      │    └── fd: ()-->(3,4)
+      └── projections
+           └── w:4 [as=max:7, outer=(4)]
+
 # Add const_agg function, as well as min function.
 opt expect=ReplaceMinWithLimit
 SELECT v + 1, min(w), v FROM kuvw WHERE v = 5 AND w IS NOT NULL GROUP BY v
@@ -1075,6 +1124,83 @@ group-by (streaming)
  └── aggregations
       └── min [as=min:7, outer=(4)]
            └── w:4
+
+exec-ddl
+CREATE TABLE t112131 (
+    a INT PRIMARY KEY,
+    b INT NOT NULL
+)
+----
+
+# Regression test for #112131. ReplaceMinWithLimit should project constant
+# grouping columns.
+opt expect=ReplaceMinWithLimit
+SELECT a, min(b) FROM t112131
+WHERE a IN (
+    SELECT min(b) FROM t112131
+)
+GROUP BY a
+----
+project
+ ├── columns: a:1!null min:10!null
+ ├── cardinality: [0 - 1]
+ ├── key: (1)
+ ├── fd: (1)-->(10)
+ ├── inner-join (lookup t112131)
+ │    ├── columns: a:1!null b:2!null min:9!null
+ │    ├── key columns: [9] = [1]
+ │    ├── lookup columns are key
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2,9), (9)==(1), (1)==(9)
+ │    ├── scalar-group-by
+ │    │    ├── columns: min:9
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(9)
+ │    │    ├── scan t112131
+ │    │    │    └── columns: b:6!null
+ │    │    └── aggregations
+ │    │         └── min [as=min:9, outer=(6)]
+ │    │              └── b:6
+ │    └── filters (true)
+ └── projections
+      └── b:2 [as=min:10, outer=(2)]
+
+# Regression test for #112131. ReplaceMaxWithLimit should project constant
+# grouping columns.
+opt expect=ReplaceMaxWithLimit
+SELECT a, max(b) FROM t112131
+WHERE a IN (
+    SELECT max(b) FROM t112131
+)
+GROUP BY a
+----
+project
+ ├── columns: a:1!null max:10!null
+ ├── cardinality: [0 - 1]
+ ├── key: (1)
+ ├── fd: (1)-->(10)
+ ├── inner-join (lookup t112131)
+ │    ├── columns: a:1!null b:2!null max:9!null
+ │    ├── key columns: [9] = [1]
+ │    ├── lookup columns are key
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2,9), (9)==(1), (1)==(9)
+ │    ├── scalar-group-by
+ │    │    ├── columns: max:9
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(9)
+ │    │    ├── scan t112131
+ │    │    │    └── columns: b:6!null
+ │    │    └── aggregations
+ │    │         └── max [as=max:9, outer=(6)]
+ │    │              └── b:6
+ │    └── filters (true)
+ └── projections
+      └── b:2 [as=max:10, outer=(2)]
 
 # --------------------------------------------------
 # ReplaceScalarMinMaxWithScalarSubqueries
