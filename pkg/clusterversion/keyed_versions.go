@@ -12,8 +12,6 @@ package clusterversion
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -77,38 +75,6 @@ func (kv keyedVersions) Validate() error {
 		}
 		// Add to existing entry.
 		byRelease[n-1].vs = append(byRelease[n-1].vs, namedVersion)
-	}
-
-	// Iterate through all versions known to be active. For example, if
-	//
-	//   byRelease = ["19.1", "19.2", "20.1", "20.2"]
-	//
-	// then we know that the current release cycle is 21.1, so mixed version
-	// clusters are running at least 20.2, so anything slotted under 20.1 (like
-	// 20.1-12) and 19.2 is always-on. To avoid interfering with backports, we're
-	// a bit more lenient and allow one more release cycle until validation fails.
-	// In the above example, we would tolerate 20.1-x but not 19.2-x.
-	// Currently we're actually a few versions behind in enforcing a ban on old
-	// versions/upgrades. See #47447.
-	if n := len(byRelease) - 5; n >= 0 {
-		var buf strings.Builder
-		for i, mami := range byRelease[:n+1] {
-			s := "next release"
-			if i+1 < len(byRelease)-1 {
-				nextMM := byRelease[i+1]
-				s = fmt.Sprintf("%d.%d", nextMM.major, nextMM.minor)
-			}
-			for _, nv := range mami.vs {
-				fmt.Fprintf(&buf, "introduced in %s: %s\n", s, nv.Key)
-			}
-		}
-		mostRecentRelease := byRelease[len(byRelease)-1]
-		return errors.Errorf(
-			"found versions that are always active because %d.%d is already "+
-				"released; these should be removed:\n%s",
-			mostRecentRelease.minor, mostRecentRelease.major,
-			buf.String(),
-		)
 	}
 
 	// Check to see that for versions introduced in v21.1 and beyond, the
