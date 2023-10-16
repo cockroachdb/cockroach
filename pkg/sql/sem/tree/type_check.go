@@ -1216,9 +1216,13 @@ func (expr *FuncExpr) TypeCheck(
 
 	// Return NULL if at least one overload is possible, no overload accepts
 	// NULL arguments, the function isn't a generator or aggregate builtin, and
-	// NULL is given as an argument.
+	// NULL is given as an argument. We do not perform this transformation
+	// within a CALL statement because procedures are always called on NULL
+	// input, and because optbuilder requires a FuncExpr to remain after
+	// type-checking.
 	if len(s.overloadIdxs) > 0 && calledOnNullInputFns.Len() == 0 && funcCls != GeneratorClass &&
-		funcCls != AggregateClass && !hasUDFOverload {
+		funcCls != AggregateClass && !hasUDFOverload &&
+		semaCtx != nil && !semaCtx.Properties.Ancestors.Has(CallAncestor) {
 		for _, expr := range s.typedExprs {
 			if expr.ResolvedType().Family() == types.UnknownFamily {
 				return DNull, nil
