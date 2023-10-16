@@ -886,6 +886,9 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
     return u.val.(*tree.BeginTransaction)
 }
+func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
+    return u.val.(*tree.ShowFingerprintOptions)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -1286,7 +1289,7 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %type <tree.Statement> show_databases_stmt
 %type <tree.Statement> show_default_privileges_stmt
 %type <tree.Statement> show_enums_stmt
-%type <tree.Statement> show_fingerprints_stmt
+%type <tree.Statement> show_fingerprints_stmt opt_with_show_fingerprints_options fingerprint_options_list fingerprint_options
 %type <tree.Statement> show_functions_stmt
 %type <tree.Statement> show_procedures_stmt
 %type <tree.Statement> show_grants_stmt
@@ -9041,12 +9044,46 @@ show_fingerprints_stmt:
     /* SKIP DOC */
     $$.val = &tree.ShowFingerprints{Table: $5.unresolvedObjectName()}
   }
-|
-  SHOW EXPERIMENTAL_FINGERPRINTS FROM virtual_cluster virtual_cluster_spec
+| SHOW EXPERIMENTAL_FINGERPRINTS FROM virtual_cluster virtual_cluster_spec opt_with_show_fingerprints_options
   {
     /* SKIP DOC */
-    $$.val = &tree.ShowFingerprints{TenantSpec: $5.tenantSpec()}
+    $$.val = &tree.ShowFingerprints{TenantSpec: $5.tenantSpec(), Options: *$6.showFingerprintOptions()}
   }
+
+opt_with_show_fingerprints_options:
+  WITH fingerprint_options_list
+  {
+    $$.val = $2.showFingerprintOptions()
+  }
+| WITH OPTIONS '(' fingerprint_options_list ')'
+  {
+    $$.val = $4.showFingerprintOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = &tree.ShowFingerprintOptions{}
+  }
+
+fingerprint_options_list:
+  // Require at least one option
+  fingerprint_options
+  {
+    $$.val = $1.showFingerprintOptions()
+  }
+| fingerprint_options_list ',' fingerprint_options
+  {
+    if err := $1.showFingerprintOptions().CombineWith($3.showFingerprintOptions()); err != nil {
+      return setErr(sqllex, err)
+    }
+  }
+
+// List of valid backup options.
+fingerprint_options:
+  START TIMESTAMP '=' d_expr
+  {
+    $$.val = &tree.ShowFingerprintOptions{StartTimestamp: $4.expr()}
+  }
+
 
 show_full_scans_stmt:
   SHOW FULL TABLE SCANS
