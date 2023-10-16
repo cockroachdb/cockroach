@@ -84,7 +84,7 @@ func registerFlowable(r registry.Registry) {
 			c,
 			node,
 			"install dependencies",
-			`sudo apt-get -qq install default-jre openjdk-17-jdk-headless gradle maven`,
+			`sudo apt-get -qq install openjdk-17-jre-headless openjdk-17-jdk-headless`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -140,6 +140,18 @@ grep "force-commit" . -lr | xargs sed -i 's/-- force-commit//g'`,
 		if err := c.RunE(ctx, node,
 			`cd /mnt/data1/flowable-engine/ && \
 ./mvnw clean test -Dtest=Flowable6Test#testLongServiceTaskLoop -Ddatabase=cockroachdb`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		// Java 17 poses a problem for some other roachtests that use java.
+		if err := repeatRunE(
+			ctx,
+			t,
+			c,
+			node,
+			"uninstall java 17",
+			`sudo apt-get purge -qq openjdk-17-jre-headless openjdk-17-jdk-headless`,
 		); err != nil {
 			t.Fatal(err)
 		}
