@@ -489,6 +489,9 @@ subtest end
 subtest apply_join
 
 statement ok
+CREATE TABLE IF NOT EXISTS parent_cascade (p INT PRIMARY KEY);
+
+statement ok
 CREATE TABLE child_cascade (
   c INT PRIMARY KEY,
   p INT UNIQUE NOT NULL REFERENCES parent_cascade(p) ON DELETE CASCADE ON UPDATE CASCADE
