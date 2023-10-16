@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"strconv"
-	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -326,7 +325,7 @@ func runPlanInsidePlan(
 			recv,
 			&subqueryResultMemAcc,
 			false, /* skipDistSQLDiagramGeneration */
-			atomic.LoadUint32(&params.p.atomic.innerPlansMustUseLeafTxn) == 1,
+			params.p.mustUseLeafTxn(),
 		) {
 			return resultWriter.Err()
 		}
@@ -353,13 +352,16 @@ func runPlanInsidePlan(
 	evalCtx := evalCtxFactory()
 	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, &plannerCopy, plannerCopy.txn, distributeType)
 	planCtx.stmtType = recv.stmtType
-	planCtx.mustUseLeafTxn = atomic.LoadUint32(&params.p.atomic.innerPlansMustUseLeafTxn) == 1
+	planCtx.mustUseLeafTxn = params.p.mustUseLeafTxn()
 
-	finishedSetupFn, cleanup := getFinishedSetupFn(&plannerCopy)
-	defer cleanup()
-	execCfg.DistSQLPlanner.PlanAndRun(
-		ctx, evalCtx, planCtx, plannerCopy.Txn(), plan.main, recv, finishedSetupFn,
-	)
+	// Wrap PlanAndRun in a function call so that we clean up immediately.
+	func() {
+		finishedSetupFn, cleanup := getFinishedSetupFn(&plannerCopy)
+		defer cleanup()
+		execCfg.DistSQLPlanner.PlanAndRun(
+			ctx, evalCtx, planCtx, plannerCopy.Txn(), plan.main, recv, finishedSetupFn,
+		)
+	}()
 
 	// Check if there was an error interacting with the resultWriter.
 	if recv.commErr != nil {
