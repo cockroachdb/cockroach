@@ -1214,7 +1214,7 @@ func (t *logicTest) getOrOpenClient(user string, nodeIdx int, newSession bool) *
 		pgURL.Host = net.JoinHostPort("127.0.0.1", port)
 		pgURL.User = url.User(pgUser)
 	} else {
-		addr := t.cluster.Server(nodeIdx).AdvSQLAddr()
+		addr := t.cluster.Server(nodeIdx).ApplicationLayer().AdvSQLAddr()
 		if len(t.tenantAddrs) > 0 && !strings.HasPrefix(user, "host-cluster-") {
 			addr = t.tenantAddrs[nodeIdx]
 		}
@@ -2421,7 +2421,7 @@ func (t *logicTest) purgeZoneConfig() {
 		return
 	}
 	for i := 0; i < t.cluster.NumServers(); i++ {
-		sysconfigProvider := t.cluster.Server(i).SystemConfigProvider()
+		sysconfigProvider := t.cluster.Server(i).ApplicationLayer().SystemConfigProvider()
 		sysconfig := sysconfigProvider.GetSystemConfig()
 		if sysconfig != nil {
 			sysconfig.PurgeZoneConfigCache()
