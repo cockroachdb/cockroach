@@ -116,6 +116,39 @@ func TestTokenBucket(t *testing.T) {
 	} else if exp := time.Nanosecond; tryAgainAfter != exp {
 		t.Fatalf("tryAgainAfter: expected %s, got %s", exp, tryAgainAfter)
 	}
+
+	// Set limit.
+	args = tokenBucketReconfigureArgs{
+		NewRate:   10,
+		NewTokens: 100,
+		MaxTokens: 50,
+	}
+	check("-30.00 RU filling @ +Inf RU/s")
+	tb.Reconfigure(ts.Now(), args)
+	check("50.00 RU filling @ 10.00 RU/s")
+	ts.Advance(time.Second)
+	check("50.00 RU filling @ 10.00 RU/s")
+	ts.Advance(time.Second)
+	tb.RemoveTokens(ts.Now(), 15)
+	check("35.00 RU filling @ 10.00 RU/s")
+	ts.Advance(2 * time.Second)
+	fulfill(10)
+	check("40.00 RU filling @ 10.00 RU/s")
+
+	// Fulfill amount > limit.
+	if ok, tryAgainAfter := tb.TryToFulfill(ts.Now(), 60); ok {
+		t.Fatalf("fulfilled incorrectly")
+	} else if exp := 2 * time.Second; tryAgainAfter.Round(time.Millisecond) != exp {
+		t.Fatalf("tryAgainAfter: expected %s, got %s", exp, tryAgainAfter)
+	}
+	check("40.00 RU filling @ 10.00 RU/s")
+	ts.Advance(1 * time.Second)
+	fulfill(60)
+	check("0.00 RU filling @ 10.00 RU/s (10.00 waiting debt @ 5.00 RU/s)")
+	ts.Advance(8 * time.Second)
+	if available := tb.AvailableTokens(ts.Now()); available != 50.0 {
+		t.Fatalf("AvailableTokens: expected %.2f, got %.2f", 50.0, available)
+	}
 }
 
 // TestTokenBucketTryToFulfill verifies that the tryAgainAfter time returned by
