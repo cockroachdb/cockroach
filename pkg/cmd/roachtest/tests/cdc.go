@@ -522,9 +522,7 @@ func (ct *cdcTester) runFeedLatencyVerifier(
 
 	finished := make(chan struct{})
 	ct.mon.Go(func(ctx context.Context) error {
-		defer func() {
-			finished <- struct{}{}
-		}()
+		defer close(finished)
 		err := verifier.pollLatencyUntilJobSucceeds(ctx, ct.DB(), cj.jobID, time.Second, ct.doneCh)
 		if err != nil {
 			return err
