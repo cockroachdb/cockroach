@@ -418,11 +418,6 @@ type replicationSpec struct {
 	// maxLatency override the maxAcceptedLatencyDefault.
 	maxAcceptedLatency time.Duration
 
-	// TODO(msbutler): this knob only exists because the revision history
-	// fingerprint can encounter a gc ttl error for large fingerprints. Delete
-	// this knob once we lay a pts during fingerprinting.
-	nonRevisionHistoryFingerprint bool
-
 	// skipNodeDistributionCheck removes the requirement that multiple source and
 	// destination nodes must participate in the replication stream. This should
 	// be set if the roachtest runs on single node clusters or if the
@@ -757,21 +752,13 @@ func (rd *replicationDriver) compareTenantFingerprintsAtTimestamp(
 	rd.t.Status(fmt.Sprintf("comparing tenant fingerprints between start time %s and end time %s",
 		startTime, endTime))
 	fingerprintQuery := fmt.Sprintf(`
-SELECT *
-FROM crdb_internal.fingerprint(crdb_internal.tenant_span($1::INT), '%s'::DECIMAL, true)
-AS OF SYSTEM TIME '%s'`, startTime.AsOfSystemTime(), endTime.AsOfSystemTime())
-
-	if rd.rs.nonRevisionHistoryFingerprint {
-		fingerprintQuery = fmt.Sprintf(`
-SELECT *
-FROM crdb_internal.fingerprint(crdb_internal.tenant_span($1::INT), 0::DECIMAL, false)
-AS OF SYSTEM TIME '%s'`, endTime.AsOfSystemTime())
-	}
+SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER $1 WITH START TIMESTAMP = '%s'] AS OF SYSTEM TIME '%s'`,
+		startTime.AsOfSystemTime(), endTime.AsOfSystemTime())
 
 	var srcFingerprint int64
 	fingerPrintMonitor := rd.newMonitor(ctx)
 	fingerPrintMonitor.Go(func(ctx context.Context) error {
-		rd.setup.src.sysSQL.QueryRow(rd.t, fingerprintQuery, rd.setup.src.ID).Scan(&srcFingerprint)
+		rd.setup.src.sysSQL.QueryRow(rd.t, fingerprintQuery, rd.setup.src.name).Scan(&srcFingerprint)
 		rd.t.L().Printf("finished fingerprinting source tenant")
 		return nil
 	})
@@ -779,7 +766,7 @@ AS OF SYSTEM TIME '%s'`, endTime.AsOfSystemTime())
 	fingerPrintMonitor.Go(func(ctx context.Context) error {
 		// TODO(adityamaru): Measure and record fingerprinting throughput.
 		rd.metrics.fingerprintingStart = timeutil.Now()
-		rd.setup.dst.sysSQL.QueryRow(rd.t, fingerprintQuery, rd.setup.dst.ID).Scan(&destFingerprint)
+		rd.setup.dst.sysSQL.QueryRow(rd.t, fingerprintQuery, rd.setup.dst.name).Scan(&destFingerprint)
 		rd.metrics.fingerprintingEnd = timeutil.Now()
 		fingerprintingDuration := rd.metrics.fingerprintingEnd.Sub(rd.metrics.fingerprintingStart).String()
 		rd.t.L().Printf("fingerprinting the destination tenant took %s", fingerprintingDuration)
@@ -1147,13 +1134,12 @@ func registerClusterToCluster(r registry.Registry) {
 		},
 		{
 			// Large workload to test our 23.2 perf goals.
-			name:                          "c2c/weekly/kv50",
-			benchmark:                     true,
-			srcNodes:                      8,
-			dstNodes:                      8,
-			cpus:                          8,
-			pdSize:                        1000,
-			nonRevisionHistoryFingerprint: true,
+			name:      "c2c/weekly/kv50",
+			benchmark: true,
+			srcNodes:  8,
+			dstNodes:  8,
+			cpus:      8,
+			pdSize:    1000,
 
 			workload: replicateKV{
 				// Write a ~2TB initial scan.
