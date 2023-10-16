@@ -2274,7 +2274,15 @@ func (node *CreateTenantFromReplication) Format(ctx *FmtCtx) {
 
 // Format implements the NodeFormatter interface
 func (o *TenantReplicationOptions) Format(ctx *FmtCtx) {
+	var addSep bool
+	maybeAddSep := func() {
+		if addSep {
+			ctx.WriteString(", ")
+		}
+		addSep = true
+	}
 	if o.Retention != nil {
+		maybeAddSep()
 		ctx.WriteString("RETENTION = ")
 		_, canOmitParentheses := o.Retention.(alreadyDelimitedAsSyntacticDExpr)
 		if !canOmitParentheses {
@@ -2286,6 +2294,7 @@ func (o *TenantReplicationOptions) Format(ctx *FmtCtx) {
 		}
 	}
 	if o.ResumeTimestamp != nil {
+		maybeAddSep()
 		ctx.WriteString("RESUME TIMESTAMP = ")
 		_, canOmitParentheses := o.ResumeTimestamp.(alreadyDelimitedAsSyntacticDExpr)
 		if !canOmitParentheses {
