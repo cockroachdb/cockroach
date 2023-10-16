@@ -1811,6 +1811,21 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	toggleReplicationQueues(tc, true /* active */)
 	toggleSplitQueues(tc, true /* active */)
 
+	// Check that the two ranges exist for table t.
+	testutils.SucceedsSoon(t, func() error {
+		r := db.QueryRow(
+			"SELECT count(*) FROM [SHOW RANGES FROM TABLE t]")
+		var count int
+		if err := r.Scan(&count); err != nil {
+			return err
+		}
+		if count != 2 {
+			return fmt.Errorf(
+				"splits not created, expected %d ranges, found %d", 2, count)
+		}
+		return nil
+	})
+
 	// We're going to create a large row, but now large enough that write
 	// back-pressuring kicks in and refuses it.
 	var sb strings.Builder
