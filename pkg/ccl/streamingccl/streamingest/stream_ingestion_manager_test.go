@@ -115,6 +115,8 @@ func TestRevertTenantToTimestamp(t *testing.T) {
 		tenantSQL.CheckQueryResults(t, "SELECT max(k) FROM test.revert1", [][]string{{"1100"}})
 
 		systemSQL.Exec(t, "ALTER VIRTUAL CLUSTER target STOP SERVICE")
+		waitUntilTenantServerStopped(t, srv.SystemLayer(), "target")
+
 		systemSQL.Exec(t, fmt.Sprintf("SELECT crdb_internal.unsafe_revert_tenant_to_timestamp('target', %s)", ts))
 		systemSQL.Exec(t, "ALTER VIRTUAL CLUSTER target START SERVICE SHARED")
 
