@@ -131,7 +131,7 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 			c,
 			node,
 			"install dependencies",
-			`sudo apt-get -qq install default-jre openjdk-8-jdk-headless gradle`,
+			`sudo apt-get -qq install openjdk-8-jre-headless openjdk-8-jdk-headless gradle`,
 		); err != nil {
 			t.Fatal(err)
 		}
