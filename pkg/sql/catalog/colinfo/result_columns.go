@@ -198,10 +198,11 @@ var ShowFingerprintsColumns = ResultColumns{
 	{Name: "fingerprint", Typ: types.String},
 }
 
-// ShowFingerprintsColumns are the result columns of a
-// SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT statement.
+// ShowTenantFingerprintsColumns are the result columns of a SHOW
+// EXPERIMENTAL_FINGERPRINTS FROM TENANT statement.
 var ShowTenantFingerprintsColumns = ResultColumns{
 	{Name: "tenant_name", Typ: types.String},
+	{Name: "start_ts", Typ: types.Decimal},
 	{Name: "end_ts", Typ: types.Decimal},
 	{Name: "fingerprint", Typ: types.Int},
 }
