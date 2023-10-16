@@ -93,15 +93,24 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 		linesExecutedSoFar = append(linesExecutedSoFar, line)
 		t.Logf("Executing %q", line)
 
-		// Post-execution: Check metadata level identity between two clusters.
-		// Only run when not in a transaction (because legacy schema changer will be
-		// used in both clusters).
-		if !isInATransaction(ctx, t, legacyConn) && !syntaxError {
+		// Post-execution: Check metadata level identity between two clusters. Only
+		// run when not in a transaction (because legacy schema changer will be used
+		// in both clusters) and current database is not dropped (because the check
+		// fetches descriptor within current database).
+		if !isInATransaction(ctx, t, legacyConn) && !syntaxError && currentDatabaseExist(ctx, legacyConn) {
 			if containsStmtOfType(t, line, tree.TypeDDL) {
 				metaDataIdentityCheck(ctx, t, legacyConn, declarativeConn, linesExecutedSoFar)
 			}
 		}
 	}
+}
+
+// currentDatabaseExist returns false if current database (tracked by session
+// variable `database`) does not exist, which can happen after one drops the
+// current database and before setting `database` to an existing one.
+func currentDatabaseExist(ctx context.Context, conn *gosql.Conn) bool {
+	_, err := conn.ExecContext(ctx, "SHOW DATABASE")
+	return pgcode.MakeCode(string(getPQErrCode(err))) != pgcode.UndefinedDatabase
 }
 
 func hasSyntaxError(line string) bool {
