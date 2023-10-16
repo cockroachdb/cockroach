@@ -946,7 +946,7 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %token <str> HAVING HASH HEADER HIGH HISTOGRAM HOLD HOUR
 
 %token <str> IDENTITY
-%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMMUTABLE IMPORT IN INCLUDE
+%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMMEDIATELY IMMUTABLE IMPORT IN INCLUDE
 %token <str> INCLUDING INCLUDE_ALL_SECONDARY_TENANTS INCLUDE_ALL_VIRTUAL_CLUSTERS INCREMENT INCREMENTAL INCREMENTAL_LOCATION
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INITIALLY
@@ -3529,6 +3529,14 @@ alter_backup_schedule_cmd:
 		$$.val = &tree.AlterBackupScheduleSetScheduleOption{
 		  Option:  $4.kvOption(),
 		}
+  }
+| EXECUTE IMMEDIATELY
+  {
+    $$.val = &tree.AlterBackupScheduleNextRun{}
+  }
+| EXECUTE FULL IMMEDIATELY
+  {
+    $$.val = &tree.AlterBackupScheduleNextRun{Full: true}
   }
 
 // sconst_or_placeholder matches a simple string, or a placeholder.
@@ -16904,6 +16912,7 @@ unreserved_keyword:
 | HOUR
 | IDENTITY
 | IMMEDIATE
+| IMMEDIATELY
 | IMMUTABLE
 | IMPORT
 | INCLUDE
@@ -17425,6 +17434,7 @@ bare_label_keywords:
 | IGNORE_FOREIGN_KEYS
 | ILIKE
 | IMMEDIATE
+| IMMEDIATELY
 | IMMUTABLE
 | IMPORT
 | IN
