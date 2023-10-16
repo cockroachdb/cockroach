@@ -821,6 +821,10 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 		stmts: []string{
 			// Statements expected to succeed.
 			"SET sql_safe_updates = false;",
+			"CREATE DATABASE testdb1; SET DATABASE = testdb1",
+			"CREATE TABLE testdb1.t1 (i INT PRIMARY KEY); CREATE TABLE testdb1.t2 (i INT PRIMARY KEY REFERENCES testdb1.t1(i));",
+			"DROP DATABASE testdb1 CASCADE  -- current db is dropped; expect no post-execution checks",
+			"USE defaultdb",
 			"CREATE TABLE t2 (i INT PRIMARY KEY, j INT NOT NULL);",
 			"CREATE TABLE t1 (i INT PRIMARY KEY, j INT REFERENCES t2(i));",
 			"INSERT INTO t2 SELECT k, k+1 FROM generate_series(1,1000) AS tmp(k);",
