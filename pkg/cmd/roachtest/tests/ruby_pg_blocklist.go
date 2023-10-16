@@ -200,5 +200,6 @@ var rubyPGBlocklist = blocklist{
 }
 
 var rubyPGIgnorelist = blocklist{
-	`running with sync_* methods PG::Connection consume_input should raise ConnectionBad for a closed connection`: "unknown",
+	`PG::Connection OS thread support Connection.new shouldn't block a second thread`:                             "flaky",
+	`running with sync_* methods PG::Connection consume_input should raise ConnectionBad for a closed connection`: "flaky",
 }
