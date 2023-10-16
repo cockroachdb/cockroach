@@ -88,7 +88,11 @@ func TestOIDCEnabled(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// OIDC does not yet support multi-tenancy with independent
+		// configurations. Only system tenant OIDC is currently supported.
+		DisableDefaultTestTenant: true,
+	})
 	defer s.Stopper().Stop(ctx)
 
 	newRPCContext := func(cfg *base.Config) *rpc.Context {
