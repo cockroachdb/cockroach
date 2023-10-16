@@ -12,6 +12,7 @@ package asof
 
 import (
 	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -30,10 +31,7 @@ import (
 // or particular follower-read related functions. Do we want to do that here as well?
 // One nice side effect of allowing functions is that users can use NOW().
 func TypeCheckSystemTimeExpr(
-	ctx context.Context,
-	semaCtx *tree.SemaContext,
-	systemTimeExpr tree.Expr,
-	op string,
+	ctx context.Context, semaCtx *tree.SemaContext, systemTimeExpr tree.Expr, op string,
 ) (tree.TypedExpr, error) {
 	typedExpr, err := tree.TypeCheckAndRequire(ctx, systemTimeExpr, semaCtx, types.Any, op)
 	if err != nil {

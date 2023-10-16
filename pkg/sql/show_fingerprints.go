@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -42,6 +43,7 @@ type showFingerprintsNode struct {
 	indexes   []catalog.Index
 
 	tenantSpec tenantSpec
+	options    *resolvedShowTenantFingerprintOptions
 
 	run showFingerprintsRun
 }
@@ -67,7 +69,7 @@ func (p *planner) ShowFingerprints(
 	ctx context.Context, n *tree.ShowFingerprints,
 ) (planNode, error) {
 	if n.TenantSpec != nil {
-		return p.planShowTenantFingerprint(ctx, n.TenantSpec)
+		return p.planShowTenantFingerprint(ctx, n.TenantSpec, n.Options)
 	}
 
 	// We avoid the cache so that we can observe the fingerprints without
@@ -89,8 +91,31 @@ func (p *planner) ShowFingerprints(
 	}, nil
 }
 
+type resolvedShowTenantFingerprintOptions struct {
+	startTimestamp hlc.Timestamp
+}
+
+func evalShowTenantFingerprintOptions(
+	ctx context.Context,
+	options tree.ShowFingerprintOptions,
+	evalCtx *eval.Context,
+	semaCtx *tree.SemaContext,
+	op string,
+) (*resolvedShowTenantFingerprintOptions, error) {
+	r := &resolvedShowTenantFingerprintOptions{}
+	if options.StartTimestamp != nil {
+		ts, err := asof.EvalSystemTimeExpr(ctx, evalCtx, semaCtx, options.StartTimestamp, op, asof.ShowTenantFingerprint)
+		if err != nil {
+			return nil, err
+		}
+		r.startTimestamp = ts
+	}
+
+	return r, nil
+}
+
 func (p *planner) planShowTenantFingerprint(
-	ctx context.Context, ts *tree.TenantSpec,
+	ctx context.Context, ts *tree.TenantSpec, options tree.ShowFingerprintOptions,
 ) (planNode, error) {
 	if err := CanManageTenant(ctx, p); err != nil {
 		return nil, err
@@ -105,9 +130,16 @@ func (p *planner) planShowTenantFingerprint(
 		return nil, err
 	}
 
+	evalOptions, err := evalShowTenantFingerprintOptions(ctx, options, p.EvalContext(), p.SemaCtx(),
+		"SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER")
+	if err != nil {
+		return nil, err
+	}
+
 	return &showFingerprintsNode{
 		columns:    colinfo.ShowTenantFingerprintsColumns,
 		tenantSpec: tspec,
+		options:    evalOptions,
 	}, nil
 }
 
@@ -119,7 +151,12 @@ type showFingerprintsRun struct {
 	values []tree.Datum
 }
 
-func (n *showFingerprintsNode) startExec(params runParams) error {
+func (n *showFingerprintsNode) startExec(_ runParams) error {
+	if n.tenantSpec != nil {
+		n.run.values = []tree.Datum{tree.DNull, tree.DNull, tree.DNull, tree.DNull}
+		return nil
+	}
+
 	n.run.values = []tree.Datum{tree.DNull, tree.DNull}
 	return nil
 }
@@ -132,10 +169,10 @@ func (n *showFingerprintsNode) startExec(params runParams) error {
 // PTS record.
 func protectTenantSpanWithSession(
 	ctx context.Context,
-	evalCtx *eval.Context,
 	execCfg *ExecutorConfig,
 	tenantID roachpb.TenantID,
 	sessionID clusterunique.ID,
+	tsToProtect hlc.Timestamp,
 ) (func(), error) {
 	ptsRecordID := uuid.MakeV4()
 	ptsRecord := sessionprotectedts.MakeRecord(
@@ -145,7 +182,7 @@ func protectTenantSpanWithSession(
 		// the session_id table which returns the stringified
 		// session ID. But, maybe we can make this clearer.
 		[]byte(sessionID.String()),
-		evalCtx.Txn.ReadTimestamp(),
+		tsToProtect,
 		ptpb.MakeTenantsTarget([]roachpb.TenantID{tenantID}),
 	)
 	log.Infof(ctx, "protecting timestamp: %#+v", ptsRecord)
@@ -176,29 +213,45 @@ func (n *showFingerprintsNode) nextTenant(params runParams) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	n.run.values[0] = tree.NewDString(string(tinfo.Name))
 
 	tid, err := roachpb.MakeTenantID(tinfo.ID)
 	if err != nil {
 		return false, err
 	}
 
+	// We want to write a protected timestamp record at the earliest timestamp
+	// that the fingerprint query is going to read from. When fingerprinting
+	// revisions, this will be the specified start time.
+	tsToProtect := params.p.EvalContext().Txn.ReadTimestamp()
+	if n.options != nil && !n.options.startTimestamp.IsEmpty() {
+		tsToProtect = n.options.startTimestamp
+	}
 	cleanup, err := protectTenantSpanWithSession(
 		params.ctx,
-		params.p.EvalContext(),
 		params.p.ExecCfg(),
 		tid,
 		params.p.ExtendedEvalContext().SessionID,
+		tsToProtect,
 	)
 	if err != nil {
 		return false, err
 	}
 	defer cleanup()
 
+	var startTime hlc.Timestamp
+	var allRevisions bool
+	if n.options != nil && !n.options.startTimestamp.IsEmpty() {
+		startTime = n.options.startTimestamp
+		allRevisions = true
+		n.run.values[1] = eval.TimestampToDecimalDatum(startTime)
+	}
+
 	fingerprint, err := params.p.FingerprintSpan(params.ctx,
 		keys.MakeTenantSpan(tid),
-		hlc.Timestamp{},
-		false,
-		true)
+		startTime,
+		allRevisions,
+		!allRevisions /* stripped */)
 	if err != nil {
 		return false, err
 	}
@@ -206,11 +259,8 @@ func (n *showFingerprintsNode) nextTenant(params runParams) (bool, error) {
 	endTime := hlc.Timestamp{
 		WallTime: params.p.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
 	}
-	n.run.values = []tree.Datum{
-		tree.NewDString(string(tinfo.Name)),
-		eval.TimestampToDecimalDatum(endTime),
-		tree.NewDInt(tree.DInt(fingerprint)),
-	}
+	n.run.values[2] = eval.TimestampToDecimalDatum(endTime)
+	n.run.values[3] = tree.NewDInt(tree.DInt(fingerprint))
 	n.run.rowIdx++
 
 	return true, nil
