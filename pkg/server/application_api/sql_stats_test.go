@@ -12,10 +12,8 @@ package application_api_test
 
 import (
 	"context"
-	gosql "database/sql"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"reflect"
 	"sort"
 	"strings"
@@ -68,9 +66,6 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 	defer testCluster.Stopper().Stop(ctx)
 
 	thirdServer := testCluster.Server(2)
-	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, thirdServer.AdvSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
-	defer cleanupGoDB()
 	firstServerProto := testCluster.Server(0)
 
 	type testCase struct {
@@ -117,10 +112,11 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 
 		// Create a brand new connection for each app, so that we don't pollute
 		// transaction stats collection with `SET application_name` queries.
-		sqlDB, err := gosql.Open("postgres", pgURL.String())
+		sqlDB, err := thirdServer.ApplicationLayer().SQLConnE()
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if _, err := sqlDB.Exec(fmt.Sprintf(`SET application_name = "%s"`, appName)); err != nil {
 			t.Fatal(err)
 		}

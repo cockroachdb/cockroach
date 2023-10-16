@@ -1697,11 +1697,10 @@ func TestImportRowLimit(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	// Also create a pgx connection so we can check notices.
-	pgURL, cleanup := sqlutils.PGUrl(
+	pgURL, cleanup := tc.Server(0).PGUrl(
 		t,
-		tc.ApplicationLayer(0).AdvSQLAddr(),
-		"TestImportRowLimit",
-		url.User(username.RootUser),
+		serverutils.CertsDirPrefix("TestImportRowLimit"),
+		serverutils.User(username.RootUser),
 	)
 	defer cleanup()
 	config, err := pgx.ParseConfig(pgURL.String())

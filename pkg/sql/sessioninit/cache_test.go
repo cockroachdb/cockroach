@@ -13,7 +13,6 @@ package sessioninit_test
 import (
 	"context"
 	gosql "database/sql"
-	"net/url"
 	"sync"
 	"testing"
 
@@ -24,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -39,8 +37,8 @@ func TestCacheInvalidation(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
-	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.AdvSQLAddr(), "TestCacheInvalidation" /* prefix */, url.UserPassword("testuser", "abc"),
+	pgURL, cleanupFunc := s.PGUrl(
+		t, serverutils.CertsDirPrefix("TestCacheInvalidation"), serverutils.UserPassword("testuser", "abc"),
 	)
 	defer cleanupFunc()
 

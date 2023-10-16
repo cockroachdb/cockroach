@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -499,6 +500,33 @@ func (ts *testServer) SQLConnE(opts ...serverutils.SQLConnOption) (*gosql.DB, er
 		ts.cfg.SQLAdvertiseAddr,
 		ts.cfg.Insecure,
 		options.ClientCerts,
+		options.CertsDirPrefix,
+	)
+}
+
+// PGUrl is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) PGUrl(test serverutils.TestFataler, opts ...serverutils.SQLConnOption) (url.URL, func()) {
+	u, cleanupFn, err := ts.PGUrlE(opts...)
+	if err != nil {
+		test.Fatal(err)
+	}
+	return u, cleanupFn
+}
+
+// PGUrlE is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) PGUrlE(opts ...serverutils.SQLConnOption) (url.URL, func(), error) {
+	options := serverutils.DefaultSQLConnOptions()
+	for _, opt := range opts {
+		opt(options)
+	}
+	return pgURL(
+		options.DBName,
+		options.User,
+		catconstants.SystemTenantName,
+		ts.cfg.SQLAdvertiseAddr,
+		ts.cfg.Insecure,
+		options.ClientCerts,
+		options.CertsDirPrefix,
 	)
 }
 
@@ -924,6 +952,39 @@ func (t *testTenant) SQLConnE(opts ...serverutils.SQLConnOption) (*gosql.DB, err
 		t.Cfg.SQLAdvertiseAddr,
 		t.Cfg.Insecure,
 		options.ClientCerts,
+		options.CertsDirPrefix,
+	)
+}
+
+// PGUrl is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) PGUrl(test serverutils.TestFataler, opts ...serverutils.SQLConnOption) (url.URL, func()) {
+	u, cleanupFn, err := t.PGUrlE(opts...)
+	if err != nil {
+		test.Fatal(err)
+	}
+	return u, cleanupFn
+}
+
+// PGUrlE is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) PGUrlE(opts ...serverutils.SQLConnOption) (url.URL, func(), error) {
+	options := serverutils.DefaultSQLConnOptions()
+	for _, opt := range opts {
+		opt(options)
+	}
+	tenantName := t.t.tenantName
+	if !t.Cfg.DisableSQLListener {
+		// This tenant server has its own SQL listener. It will not accept
+		// a "cluster" connection parameter.
+		tenantName = ""
+	}
+	return pgURL(
+		options.DBName,
+		options.User,
+		tenantName,
+		t.Cfg.SQLAdvertiseAddr,
+		t.Cfg.Insecure,
+		options.ClientCerts,
+		options.CertsDirPrefix,
 	)
 }
 
