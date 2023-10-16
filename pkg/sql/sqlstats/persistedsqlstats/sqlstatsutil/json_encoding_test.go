@@ -608,6 +608,15 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, input, actualJSONUnmarshalled)
 	})
+
+	t.Run("random metadata JSON structure and values", func(t *testing.T) {
+		input := `{"HcEN0pht": null, "bar": [false, "foobar", true], "c": {"8r8qmK": 1.4687388461922657, "vbF3TH0I": null, "yNNmkGr6": 2.0887609844362762}, "db": {"KKDmambo": 0.10124464952424544}, "foobar": {"LM8G": {"zniUw24Z": 0.14422951431111297}, "bar": "lp7jfTq2"}, "r0O": false}`
+		value, err := json.ParseJSON(input)
+		require.NoError(t, err)
+		var actualJSONUnmarshalled appstatspb.AggregatedStatementMetadata
+		err = DecodeAggregatedMetadataJSON(value, &actualJSONUnmarshalled)
+		require.NoError(t, err)
+	})
 }
 
 func BenchmarkSQLStatsJson(b *testing.B) {
