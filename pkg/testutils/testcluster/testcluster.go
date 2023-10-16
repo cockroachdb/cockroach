@@ -247,6 +247,10 @@ func NewTestCluster(
 		t.Fatal("invalid cluster size: ", nodes)
 	}
 
+	if nodes > 1 && clusterArgs.ServerArgs.Settings != nil {
+		t.Fatalf("multiple test servers cannot share the same Settings object")
+	}
+
 	if err := checkServerArgsForCluster(
 		clusterArgs.ServerArgs, clusterArgs.ReplicationMode, disallowJoinAddr,
 	); err != nil {

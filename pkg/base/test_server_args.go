@@ -31,12 +31,21 @@ import (
 // testutils/serverutils (test code) and server.TestServer (non-test code).
 //
 // The zero value is suitable for most tests.
+//
+// Note: when starting a multi-node test cluster, TestServerArgs are copied for
+// each node. If any fields are added which are not safe to share (like
+// Settings), a check that the field is unset should be added in
+// testcluster.NewTestCluster (when the cluster has more than 1 node).
 type TestServerArgs struct {
 	// Knobs for the test server.
 	Knobs TestingKnobs
 
-	*cluster.Settings
-	RaftConfig
+	RaftConfig RaftConfig
+
+	// Settings object for the server.
+	// Note: this field cannot be used for TestClusterArgs.ServerArgs when there
+	// are multiple nodes.
+	Settings *cluster.Settings
 
 	// PartOfCluster must be set if the TestServer is joining others in a cluster.
 	// If not set (and hence the server is the only one in the cluster), the

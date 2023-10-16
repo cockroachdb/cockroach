@@ -344,19 +344,18 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
+	makeSettings := func() *cluster.Settings {
+		st := cluster.MakeTestingClusterSettings()
 
-	// Disable closed timestamps for control over when transaction gets bumped.
-	closedts.TargetDuration.Override(ctx, &st.SV, 1*time.Hour)
+		// Disable closed timestamps for control over when transaction gets bumped.
+		closedts.TargetDuration.Override(ctx, &st.SV, 1*time.Hour)
+		return st
+	}
 
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Settings: st,
-			Insecure: true,
-		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
-				Settings: st,
+				Settings: makeSettings(),
 				Insecure: true,
 				Knobs: base.TestingKnobs{
 					KVClient: &kvcoord.ClientTestingKnobs{
@@ -370,6 +369,14 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 						},
 					},
 				},
+			},
+			1: {
+				Settings: makeSettings(),
+				Insecure: true,
+			},
+			2: {
+				Settings: makeSettings(),
+				Insecure: true,
 			},
 		},
 	})
