@@ -1351,7 +1351,7 @@ func insertJSONStatistic(
 		name = s.Name
 	}
 
-	if !settings.Version.IsActive(ctx, clusterversion.V23_1AddPartialStatisticsColumns) {
+	if !settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1AddPartialStatisticsColumns) {
 
 		if s.PartialPredicate != "" {
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "statistic for columns %v with collection time %s to insert is partial but cluster version is below 23.1", s.Columns, s.CreatedAt)

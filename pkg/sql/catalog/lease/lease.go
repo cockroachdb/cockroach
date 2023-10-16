@@ -1364,7 +1364,7 @@ SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME 
 `
 		)
 		query := queryWithRegion
-		if !m.settings.Version.IsActive(ctx, clusterversion.V23_1_SystemRbrReadNew) {
+		if !m.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1_SystemRbrReadNew) {
 			query = queryWithoutRegion
 		}
 		sqlQuery := fmt.Sprintf(query, timeThreshold, instanceID)

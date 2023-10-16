@@ -686,12 +686,12 @@ func createChangefeedScheduleTypeCheck(
 		return false, nil, nil
 	}
 
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V23_1ScheduledChangefeeds) {
+	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1ScheduledChangefeeds) {
 		return false, nil,
 			pgerror.Newf(
 				pgcode.FeatureNotSupported,
 				"cannot use scheduled changefeeds until cluster is upgraded to %s",
-				clusterversion.V23_1ScheduledChangefeeds.String,
+				clusterversion.TODO_Delete_V23_1ScheduledChangefeeds.String,
 			)
 	}
 

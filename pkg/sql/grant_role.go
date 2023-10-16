@@ -176,7 +176,7 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 
 func (n *GrantRoleNode) startExec(params runParams) error {
 	var rowsAffected int
-	roleMembersHasIDs := params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.V23_1RoleMembersTableHasIDColumns)
+	roleMembersHasIDs := params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.TODO_Delete_V23_1RoleMembersTableHasIDColumns)
 
 	// Add memberships. Existing memberships are allowed.
 	// If admin option is false, we do not remove it from existing memberships.

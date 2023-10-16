@@ -206,7 +206,7 @@ func getDeclarativeSchemaChangerModeForStmt(
 }
 
 var isV222Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversion.ClusterVersion) bool {
-	return activeVersion.IsActive(clusterversion.V22_2)
+	return activeVersion.IsActive(clusterversion.TODO_Delete_V22_2)
 }
 
 var isV231Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversion.ClusterVersion) bool {

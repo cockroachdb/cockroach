@@ -69,7 +69,7 @@ func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstab
 	// table features available. Upgrade to an appropriate version only if the
 	// cluster supports it.
 	format := sstable.TableFormatPebblev2
-	if cs.Version.IsActive(ctx, clusterversion.V23_1EnablePebbleFormatSSTableValueBlocks) &&
+	if cs.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1EnablePebbleFormatSSTableValueBlocks) &&
 		ValueBlocksEnabled.Get(&cs.SV) {
 		format = sstable.TableFormatPebblev3
 	}

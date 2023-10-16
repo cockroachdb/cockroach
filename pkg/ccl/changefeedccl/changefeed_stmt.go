@@ -512,14 +512,14 @@ func createChangefeedJobRecord(
 			return nil, err
 		}
 		if withDiff {
-			if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V23_1_ChangefeedExpressionProductionReady) {
+			if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1_ChangefeedExpressionProductionReady) {
 				return nil,
 					pgerror.Newf(
 						pgcode.FeatureNotSupported,
 						"cannot create new changefeed with CDC expression <%s>, "+
 							"which requires access to cdc_prev until cluster upgrade to %s finalized.",
 						tree.AsString(normalized),
-						clusterversion.V23_1_ChangefeedExpressionProductionReady.String,
+						clusterversion.TODO_Delete_V23_1_ChangefeedExpressionProductionReady.String,
 					)
 			}
 			opts.ForceDiff()
@@ -1620,7 +1620,7 @@ func failureTypeForStartupError(err error) changefeedbase.FailureType {
 
 // maybeUpgradePreProductionReadyExpression updates job record for the
 // changefeed using CDC transformation, created prior to
-// clusterversion.V23_1_ChangefeedExpressionProductionReady. The update happens
+// clusterversion.TODO_Delete_V23_1_ChangefeedExpressionProductionReady. The update happens
 // once cluster version finalized.
 // Returns nil when nothing needs to be done.
 // Returns fatal error message, causing changefeed to fail, if automatic upgrade
@@ -1643,14 +1643,14 @@ func maybeUpgradePreProductionReadyExpression(
 	}
 
 	if !jobExec.ExecCfg().Settings.Version.IsActive(
-		ctx, clusterversion.V23_1_ChangefeedExpressionProductionReady,
+		ctx, clusterversion.TODO_Delete_V23_1_ChangefeedExpressionProductionReady,
 	) {
 		// Can't upgrade job record yet -- wait until upgrade finalized.
 		return nil
 	}
 
 	// Expressions prior to
-	// clusterversion.V23_1_ChangefeedExpressionProductionReady were rewritten to
+	// clusterversion.TODO_Delete_V23_1_ChangefeedExpressionProductionReady were rewritten to
 	// fully qualify all columns/types.  Furthermore, those expressions couldn't
 	// use any functions that depend on session data.  Thus, it is safe to use
 	// minimal session data.

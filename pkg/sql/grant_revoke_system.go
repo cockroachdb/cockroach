@@ -39,10 +39,10 @@ func (n *changeNonDescriptorBackedPrivilegesNode) ReadingOwnWrites() {}
 
 func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) error {
 	privilegesTableHasUserIDCol := params.p.ExecCfg().Settings.Version.IsActive(params.ctx,
-		clusterversion.V23_1SystemPrivilegesTableHasUserIDColumn)
+		clusterversion.TODO_Delete_V23_1SystemPrivilegesTableHasUserIDColumn)
 	if !params.p.ExecCfg().Settings.Version.IsActive(
 		params.ctx,
-		clusterversion.V23_1AllowNewSystemPrivileges,
+		clusterversion.TODO_Delete_V23_1AllowNewSystemPrivileges,
 	) {
 		if n.desiredprivs.Contains(privilege.MODIFYSQLCLUSTERSETTING) {
 			return pgerror.New(pgcode.FeatureNotSupported, "upgrade must be finalized before using MODIFYSQLCLUSTERSETTING system privilege")
