@@ -200,10 +200,16 @@ func (node *Restore) Format(ctx *FmtCtx) {
 		ctx.WriteString(" ")
 		ctx.FormatNode(&node.AsOf)
 	}
-	if !node.Options.IsDefault() && ctx.HasFlags(FmtHideConstants) {
-		ctx.WriteString(" WITH OPTIONS (")
-		ctx.FormatNode(&node.Options)
-		ctx.WriteString(")")
+	if !node.Options.IsDefault() {
+		if ctx.HasFlags(FmtHideConstants) {
+			ctx.WriteString(" WITH OPTIONS (")
+			ctx.FormatNode(&node.Options)
+			ctx.WriteString(")")
+		} else {
+			ctx.WriteString(" WITH OPTIONS (")
+			ctx.FormatNode(&node.Options)
+			ctx.WriteString(")")
+		}
 	}
 }
 
@@ -513,10 +519,16 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("unsafe_restore_incompatible_version")
 	}
 
-	if o.ExecutionLocality != nil && ctx.HasFlags(FmtHideConstants) {
-		maybeAddSep()
-		ctx.WriteString("execution locality = ")
-		ctx.FormatNode(o.ExecutionLocality)
+	if o.ExecutionLocality != nil {
+		if ctx.HasFlags(FmtHideConstants) {
+			maybeAddSep()
+			ctx.WriteString("execution locality = ")
+			ctx.FormatNode(o.ExecutionLocality)
+		} else {
+			maybeAddSep()
+			ctx.WriteString("execution locality = ")
+			ctx.FormatNode(o.ExecutionLocality)
+		}
 	}
 
 	if o.ExperimentalOnline {
