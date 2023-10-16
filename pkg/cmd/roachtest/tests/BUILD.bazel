@@ -24,6 +24,7 @@ go_library(
         "autoupgrade.go",
         "awsdms.go",
         "backup.go",
+        "backup_restore_roundtrip.go",
         "build_info.go",
         "canary.go",
         "cancel.go",

@@ -2487,15 +2487,20 @@ func (c *clusterImpl) ConnE(
 		return nil, err
 	}
 
-	dataSourceName := urls[0]
-	if connOptions.User != "" {
-		u, err := url.Parse(urls[0])
-		if err != nil {
-			return nil, err
-		}
-		u.User = url.User(connOptions.User)
-		dataSourceName = u.String()
+	u, err := url.Parse(urls[0])
+	if err != nil {
+		return nil, err
 	}
+
+	if connOptions.User != "" {
+		u.User = url.User(connOptions.User)
+	}
+
+	if connOptions.DBName != "" {
+		u.Path = connOptions.DBName
+	}
+	dataSourceName := u.String()
+
 	if len(connOptions.Options) > 0 {
 		vals := make(url.Values)
 		for k, v := range connOptions.Options {
