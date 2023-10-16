@@ -75,7 +75,7 @@ go_test(
     ],
     args = ["-test.timeout=895s"],
     embed = [":lease"],
-    exec_properties = {"Pool": "medium"},
+    exec_properties = {"Pool": "large"},
     shard_count = 4,
     deps = [
         "//pkg/base",
