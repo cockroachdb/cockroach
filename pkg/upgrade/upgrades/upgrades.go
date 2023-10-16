@@ -323,7 +323,7 @@ var upgrades = []upgradebase.Upgrade{
 	),
 	upgrade.NewPermanentTenantUpgrade(
 		"create system.mvcc_statistics table and job",
-		toCV(clusterversion.V23_2_MVCCStatisticsTable),
+		toCV(clusterversion.Permanent_V23_2_MVCCStatisticsTable),
 		createMVCCStatisticsTableAndJobMigration,
 		"create system.mvcc_statistics table and job",
 	),
