@@ -1110,9 +1110,11 @@ func (b *plpgsqlBuilder) buildEndOfFunctionRaise(inScope *scope) *scope {
 	// Build a dummy statement that returns NULL. It won't be executed, but
 	// ensures that the continuation routine's return type is correct.
 	eofColName := scopeColName("").WithMetadataName(b.makeIdentifier("end_of_function"))
-	eofScope := inScope.push()
-	b.ob.synthesizeColumn(eofScope, eofColName, b.returnType, nil /* expr */, memo.NullSingleton)
+	eofScope := con.s.push()
+	typedNull := b.ob.factory.ConstructNull(b.returnType)
+	b.ob.synthesizeColumn(eofScope, eofColName, b.returnType, nil /* expr */, typedNull)
 	b.ob.constructProjectForScope(inScope, eofScope)
+	b.appendBodyStmt(&con, eofScope)
 	return b.callContinuation(&con, inScope)
 }
 
