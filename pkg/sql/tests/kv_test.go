@@ -69,7 +69,7 @@ func newKVNativeAndEngine(tb testing.TB, valueBlocks bool) (*kvNative, storage.E
 	st := cluster.MakeTestingClusterSettings()
 	version := st.Version.ActiveVersionOrEmpty(context.Background())
 	if version.Less(clusterversion.ByKey(
-		clusterversion.V23_1EnablePebbleFormatSSTableValueBlocks)) {
+		clusterversion.TODO_Delete_V23_1EnablePebbleFormatSSTableValueBlocks)) {
 		tb.Fatalf("cluster version is too old %s", version.String())
 	}
 	storage.ValueBlocksEnabled.Override(context.Background(), &st.SV, valueBlocks)

@@ -271,7 +271,7 @@ func CreateTenantRecord(
 		return roachpb.TenantID{}, err
 	}
 	if info.Name != "" {
-		if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+		if !settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
 			return roachpb.TenantID{}, pgerror.Newf(pgcode.FeatureNotSupported, "cannot use tenant names")
 		}
 		if err := info.Name.IsValid(); err != nil {
@@ -299,7 +299,7 @@ func CreateTenantRecord(
 
 	// Update the ID sequence if available.
 	// We only keep the latest ID.
-	if settings.Version.IsActive(ctx, clusterversion.V23_1_TenantIDSequence) {
+	if settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1_TenantIDSequence) {
 		if err := updateTenantIDSequence(ctx, txn, info.ID); err != nil {
 			return roachpb.TenantID{}, err
 		}
@@ -307,7 +307,7 @@ func CreateTenantRecord(
 
 	if info.Name == "" {
 		// No name: generate one if we are at the appropriate version.
-		if settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+		if settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
 			info.Name = roachpb.TenantName(fmt.Sprintf("cluster-%d", info.ID))
 		}
 	}
@@ -339,7 +339,7 @@ func CreateTenantRecord(
 	// Insert into the tenant table and detect collisions.
 	var name tree.Datum
 	if info.Name != "" {
-		if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+		if !settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
 			return roachpb.TenantID{}, pgerror.Newf(pgcode.FeatureNotSupported, "cannot use tenant names")
 		}
 		name = tree.NewDString(string(info.Name))
@@ -349,7 +349,7 @@ func CreateTenantRecord(
 
 	query := `INSERT INTO system.tenants (id, active, info, name, data_state, service_mode) VALUES ($1, $2, $3, $4, $5, $6)`
 	args := []interface{}{tenID, active, infoBytes, name, info.DataState, info.ServiceMode}
-	if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+	if !settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
 		// Ensure the insert can succeed if the upgrade is not finalized yet.
 		query = `INSERT INTO system.tenants (id, active, info) VALUES ($1, $2, $3)`
 		args = args[:3]
@@ -607,7 +607,7 @@ HAVING ($1 = '' OR NOT EXISTS (SELECT 1 FROM system.tenants t WHERE t.name = $1)
 
 	// Is the sequence available yet?
 	var lastIDFromSequence int64
-	if settings.Version.IsActive(ctx, clusterversion.V23_1_TenantIDSequence) {
+	if settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1_TenantIDSequence) {
 		lastIDFromSequence, err = getTenantIDSequenceValue(ctx, txn)
 		if err != nil {
 			return roachpb.TenantID{}, err

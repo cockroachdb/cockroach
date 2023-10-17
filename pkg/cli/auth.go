@@ -128,7 +128,7 @@ func createAuthSessionToken(
 	err = sqlConn.ExecTxn(ctx, func(ctx context.Context, conn clisqlclient.TxBoundConn) error {
 		rows, err := conn.Query(ctx,
 			"SELECT crdb_internal.is_at_least_version($1)",
-			clusterversion.ByKey(clusterversion.V23_1WebSessionsTableHasUserIDColumn))
+			clusterversion.ByKey(clusterversion.TODO_Delete_V23_1WebSessionsTableHasUserIDColumn))
 		if err != nil {
 			return err
 		}

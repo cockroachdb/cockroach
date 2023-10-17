@@ -835,7 +835,7 @@ func NewColOperator(
 			var resultTypes []*types.T
 			if flowCtx.EvalCtx.SessionData().DirectColumnarScansEnabled {
 				canUseDirectScan := func() bool {
-					if !flowCtx.EvalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_1_KVDirectColumnarScans) {
+					if !flowCtx.EvalCtx.Settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1_KVDirectColumnarScans) {
 						return false
 					}
 					// We currently don't use the direct scans if TraceKV is

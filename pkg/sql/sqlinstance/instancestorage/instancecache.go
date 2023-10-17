@@ -240,7 +240,7 @@ func onVersionReached(
 // newMigrationCache uses the oldCache and newCache functions to construct
 // instanceCaches. The cache registers a hook with the setting and switches
 // from the old implementation to the new implementation when the version
-// changes to V23_1_SystemRbrReadNew.
+// changes to TODO_Delete_V23_1_SystemRbrReadNew.
 func newMigrationCache(
 	ctx context.Context,
 	stopper *stop.Stopper,
@@ -257,7 +257,7 @@ func newMigrationCache(
 			oldReady <- err
 		}
 
-		onVersionReached(ctx, settings, clusterversion.V23_1_SystemRbrReadNew, func() {
+		onVersionReached(ctx, settings, clusterversion.TODO_Delete_V23_1_SystemRbrReadNew, func() {
 			// Once the read new version gate is reached, close the original
 			// cache in order to clean up resources and prevent reading updates
 			// when the original index is deleted.
@@ -265,7 +265,7 @@ func newMigrationCache(
 		})
 
 		// If the old cache is already stale, do not return it.
-		if settings.Version.IsActive(ctx, clusterversion.V23_1_SystemRbrReadNew) {
+		if settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1_SystemRbrReadNew) {
 			return
 		}
 
@@ -288,7 +288,7 @@ func newMigrationCache(
 	// newReady is signaled when the new cache finishes starting.
 	newReady := make(chan error, 1)
 	newCacheCtx := logtags.AddTags(context.Background(), logtags.FromContext(ctx))
-	onVersionReached(ctx, settings, clusterversion.V23_1_SystemRbrReadNew, func() {
+	onVersionReached(ctx, settings, clusterversion.TODO_Delete_V23_1_SystemRbrReadNew, func() {
 		err := stopper.RunAsyncTask(newCacheCtx, "start-new-cache-implementation", func(ctx context.Context) {
 			// Rebuild the cancel signal since the goroutine has a  background
 			// context.

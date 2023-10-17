@@ -939,7 +939,7 @@ WITH
 	LEFT JOIN latestprogress AS progress ON j.id = progress.job_id
 `
 
-	// Before clusterversion.V23_1JobInfoTableIsBackfilled, the system.job_info
+	// Before clusterversion.TODO_Delete_V23_1JobInfoTableIsBackfilled, the system.job_info
 	// table has not been fully populated with the payload and progress of jobs in
 	// the cluster.
 	systemJobsBaseQuery = `
@@ -949,7 +949,7 @@ WITH
 		FROM system.jobs`
 
 	// TODO(jayant): remove the version gate in 24.1
-	// Before clusterversion.V23_1BackfillTypeColumnInJobsTable, the system.jobs table did not have
+	// Before clusterversion.TODO_Delete_V23_1BackfillTypeColumnInJobsTable, the system.jobs table did not have
 	// a fully populated job_type column, so we must project it manually
 	// with crdb_internal.job_payload_type.
 	oldSystemJobsBaseQuery = `
@@ -976,12 +976,12 @@ func getInternalSystemJobsQueryFromClusterVersion(
 	ctx context.Context, version clusterversion.Handle, predicate systemJobsPredicate,
 ) string {
 	var baseQuery string
-	if version.IsActive(ctx, clusterversion.V23_1JobInfoTableIsBackfilled) {
+	if version.IsActive(ctx, clusterversion.TODO_Delete_V23_1JobInfoTableIsBackfilled) {
 		baseQuery = SystemJobsAndJobInfoBaseQuery
 		if predicate == jobID {
 			baseQuery = systemJobsAndJobInfoBaseQueryWithIDPredicate
 		}
-	} else if version.IsActive(ctx, clusterversion.V23_1BackfillTypeColumnInJobsTable) {
+	} else if version.IsActive(ctx, clusterversion.TODO_Delete_V23_1BackfillTypeColumnInJobsTable) {
 		baseQuery = systemJobsBaseQuery
 	} else {
 		baseQuery = oldSystemJobsBaseQuery
@@ -1137,7 +1137,7 @@ const (
 )
 
 func getCRDBInternalJobsTableTypeFilter(ctx context.Context, version clusterversion.Handle) string {
-	if !version.IsActive(ctx, clusterversion.V23_1BackfillTypeColumnInJobsTable) {
+	if !version.IsActive(ctx, clusterversion.TODO_Delete_V23_1BackfillTypeColumnInJobsTable) {
 		return oldJobsTypeFilter
 	}
 	return jobsTypeFilter

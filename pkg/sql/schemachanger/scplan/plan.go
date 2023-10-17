@@ -161,7 +161,7 @@ type rulesForRelease struct {
 var rulesForReleases = []rulesForRelease{
 	{activeVersion: clusterversion.V23_2, rulesRegistry: current.GetRegistry()},
 	{activeVersion: clusterversion.V23_1, rulesRegistry: release_23_1.GetRegistry()},
-	{activeVersion: clusterversion.V22_2, rulesRegistry: release_22_2.GetRegistry()},
+	{activeVersion: clusterversion.TODO_Delete_V22_2, rulesRegistry: release_22_2.GetRegistry()},
 }
 
 // minVersionForRules the oldest version supported by the rules.

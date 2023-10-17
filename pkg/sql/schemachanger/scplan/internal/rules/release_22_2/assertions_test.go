@@ -38,7 +38,7 @@ func TestRuleAssertions(t *testing.T) {
 		checkIsIndexDependent,
 		checkIsConstraintDependent,
 	} {
-		version := clusterversion.ClusterVersion{Version: clusterversion.ByKey(clusterversion.V22_2)}
+		version := clusterversion.ClusterVersion{Version: clusterversion.ByKey(clusterversion.TODO_Delete_V22_2)}
 		var fni interface{} = fn
 		fullName := runtime.FuncForPC(reflect.ValueOf(fni).Pointer()).Name()
 		nameParts := strings.Split(fullName, "rules.")

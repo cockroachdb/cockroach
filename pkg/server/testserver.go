@@ -1566,7 +1566,7 @@ func (ts *testServer) StartTenant(
 	// TODO(ssd): We do not set this capability in
 	// StartSharedProcessTenant.
 	shouldGrantNodelocalCap := ts.params.ExternalIODir != ""
-	canGrantNodelocalCap := ts.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_1TenantCapabilities)
+	canGrantNodelocalCap := ts.ClusterSettings().Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantCapabilities)
 	if canGrantNodelocalCap && shouldGrantNodelocalCap {
 		_, err := ie.Exec(ctx, "testserver-alter-tenant-cap", nil,
 			"ALTER TENANT [$1] GRANT CAPABILITY can_use_nodelocal_storage", params.TenantID.ToUint64())

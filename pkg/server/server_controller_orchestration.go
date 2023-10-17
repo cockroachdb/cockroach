@@ -185,7 +185,7 @@ func (c *serverController) createServerEntryLocked(
 func (c *serverController) getExpectedRunningTenants(
 	ctx context.Context, ie isql.Executor,
 ) (tenantNames []roachpb.TenantName, resErr error) {
-	if !c.st.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+	if !c.st.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
 		// Cluster not yet upgraded - we know there is no secondary tenant
 		// with a name yet.
 		return []roachpb.TenantName{catconstants.SystemTenantName}, nil

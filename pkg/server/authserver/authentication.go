@@ -467,7 +467,7 @@ func (s *authenticationServer) NewAuthSession(
 ) (int64, []byte, error) {
 	st := s.sqlServer.ExecutorConfig().Settings
 	webSessionsTableHasUserIDCol := st.Version.IsActive(ctx,
-		clusterversion.V23_1WebSessionsTableHasUserIDColumn)
+		clusterversion.TODO_Delete_V23_1WebSessionsTableHasUserIDColumn)
 
 	secret, hashedSecret, err := CreateAuthSecret()
 	if err != nil {

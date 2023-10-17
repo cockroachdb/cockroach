@@ -765,7 +765,7 @@ func (tsp *TableStatisticProto) IsAuto() bool {
 func (sc *TableStatisticsCache) getTableStatsFromDB(
 	ctx context.Context, tableID descpb.ID, forecast bool,
 ) ([]*TableStatistic, error) {
-	partialStatisticsColumnsVerActive := sc.settings.Version.IsActive(ctx, clusterversion.V23_1AddPartialStatisticsColumns)
+	partialStatisticsColumnsVerActive := sc.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1AddPartialStatisticsColumns)
 	var partialPredicateCol string
 	var fullStatisticIDCol string
 	if partialStatisticsColumnsVerActive {

@@ -88,7 +88,7 @@ var minWALSyncInterval = settings.RegisterDurationSetting(
 // above note on jobs also applies in this case.
 //
 // If the version of the cluster is at or beyond the version
-// V23_1_MVCCRangeTombstonesUnconditionallyEnabled, the feature is
+// TODO_Delete_V23_1_MVCCRangeTombstonesUnconditionallyEnabled, the feature is
 // unconditionally enabled.
 var MVCCRangeTombstonesEnabledInMixedClusters = settings.RegisterBoolSetting(
 	settings.SystemVisible,
@@ -100,10 +100,10 @@ var MVCCRangeTombstonesEnabledInMixedClusters = settings.RegisterBoolSetting(
 // range tombstones, by setting DeleteRangeRequest.UseRangeTombstone. It
 // requires the storage.mvcc.range_tombstones.enabled cluster setting to be
 // enabled, OR the cluster version is at or beyond the
-// V23_1_MVCCRangeTombstonesUnconditionallyEnabled version (i.e. in 23.1, the
+// TODO_Delete_V23_1_MVCCRangeTombstonesUnconditionallyEnabled version (i.e. in 23.1, the
 // feature is unconditionally enabled).
 func CanUseMVCCRangeTombstones(ctx context.Context, st *cluster.Settings) bool {
-	return st.Version.IsActive(ctx, clusterversion.V23_1_MVCCRangeTombstonesUnconditionallyEnabled) ||
+	return st.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1_MVCCRangeTombstonesUnconditionallyEnabled) ||
 		MVCCRangeTombstonesEnabledInMixedClusters.Get(&st.SV)
 }
 

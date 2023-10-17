@@ -86,7 +86,7 @@ func dropTenantInternal(
 		return err
 	}
 
-	if settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+	if settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
 		if ignoreServiceMode {
 			// Compatibility with CC serverless use of
 			// crdb_internal.destroy_tenant(): we want to disable the check

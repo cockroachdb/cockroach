@@ -3978,7 +3978,7 @@ func isClusterVersionLessThan(
 }
 
 func maybeExpectPotentialDescIDGenerationError(ctx context.Context, tx pgx.Tx) (bool, error) {
-	descIDGenerationVersion := clusterversion.ByKey(clusterversion.V23_1DescIDSequenceForSystemTenant)
+	descIDGenerationVersion := clusterversion.ByKey(clusterversion.TODO_Delete_V23_1DescIDSequenceForSystemTenant)
 	descIDGenerationErrorPossible, err := isClusterVersionLessThan(ctx,
 		tx, descIDGenerationVersion)
 	return descIDGenerationErrorPossible, err

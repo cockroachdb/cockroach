@@ -731,7 +731,7 @@ func (j *Job) loadJobPayloadAndProgress(
 
 	payload := &jobspb.Payload{}
 	progress := &jobspb.Progress{}
-	if st.Version.IsActive(ctx, clusterversion.V23_1JobInfoTableIsBackfilled) {
+	if st.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1JobInfoTableIsBackfilled) {
 		infoStorage := j.InfoStorage(txn)
 
 		payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx)
@@ -759,7 +759,7 @@ func (j *Job) loadJobPayloadAndProgress(
 		return payload, progress, nil
 	}
 
-	// If V23_1JobInfoTableIsBackfilled is not active we should read the payload
+	// If TODO_Delete_V23_1JobInfoTableIsBackfilled is not active we should read the payload
 	// and progress from the system.jobs table.
 	const (
 		queryNoSessionID   = "SELECT payload, progress FROM system.jobs WHERE id = $1"

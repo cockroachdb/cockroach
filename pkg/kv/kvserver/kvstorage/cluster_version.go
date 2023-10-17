@@ -29,7 +29,7 @@ import (
 func WriteClusterVersion(
 	ctx context.Context, eng storage.Engine, cv clusterversion.ClusterVersion,
 ) error {
-	if cv.Less(clusterversion.ByKey(clusterversion.V23_1DeprecateClusterVersionKey)) {
+	if cv.Less(clusterversion.ByKey(clusterversion.TODO_Delete_V23_1DeprecateClusterVersionKey)) {
 		// We no longer read this key, but older versions still do. Continue writing
 		// the key for interoperability.
 		if err := storage.MVCCPutProto(
