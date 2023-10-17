@@ -81,6 +81,7 @@ go_test(
         "cluster_test.go",
         "github_test.go",
         "main_test.go",
+        "test_impl_test.go",
         "test_registry_test.go",
         "test_test.go",
         "zip_util_test.go",

@@ -469,18 +469,34 @@ func (t *testImpl) IsBuildVersion(minVersion string) bool {
 	return t.BuildVersion().AtLeast(vers)
 }
 
-// teamCityEscape escapes a string for use as <value> in a key='<value>' attribute
+// TeamCityEscape escapes a string for use as <value> in a key='<value>' attribute
 // in TeamCity build output marker.
-// Documentation here: https://confluence.jetbrains.com/display/TCD10/Build+Script+Interaction+with+TeamCity#BuildScriptInteractionwithTeamCity-Escapedvalues
-func teamCityEscape(s string) string {
-	r := strings.NewReplacer(
-		"\n", "|n",
-		"'", "|'",
-		"|", "||",
-		"[", "|[",
-		"]", "|]",
-	)
-	return r.Replace(s)
+// See https://www.jetbrains.com/help/teamcity/2023.05/service-messages.html#Escaped+Values
+func TeamCityEscape(s string) string {
+	var sb strings.Builder
+
+	for _, runeValue := range s {
+		switch runeValue {
+		case '\n':
+			sb.WriteString("|n")
+		case '\r':
+			sb.WriteString("|r")
+		case '|':
+			sb.WriteString("||")
+		case '[':
+			sb.WriteString("|[")
+		case ']':
+			sb.WriteString("|]")
+		default:
+			if runeValue > 127 {
+				// escape unicode
+				sb.WriteString(fmt.Sprintf("|0x%04x", runeValue))
+			} else {
+				sb.WriteRune(runeValue)
+			}
+		}
+	}
+	return sb.String()
 }
 
 func teamCityNameEscape(name string) string {
