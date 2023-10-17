@@ -962,7 +962,7 @@ func (r *testRunner) runTest(
 			// service messages else the test will be reported as having run twice.
 			if teamCity {
 				shout(ctx, l, stdout, "##teamcity[testIgnored name='%s' message='%s' duration='%d']\n",
-					s.Name, teamCityEscape(s.Skip), t.duration().Milliseconds())
+					s.Name, TeamCityEscape(s.Skip), t.duration().Milliseconds())
 			}
 			shout(ctx, l, stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, "N/A", s.Skip)
 		} else {
@@ -981,7 +981,7 @@ func (r *testRunner) runTest(
 					// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
 					// TeamCity regards the test as successful.
 					shout(ctx, l, stdout, "##teamcity[testFailed name='%s' details='%s' flowId='%s']",
-						s.Name, teamCityEscape(output), testRunID)
+						s.Name, TeamCityEscape(output), testRunID)
 				}
 
 				shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", testRunID, durationStr, output)
