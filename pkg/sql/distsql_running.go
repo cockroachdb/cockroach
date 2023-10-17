@@ -468,7 +468,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	origCtx := ctx
 	ctx, flow, opChains, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Planner.Mon(), &setupReq, recv, batchReceiver, localState)
 	if err == nil && planCtx.saveFlows != nil {
-		err = planCtx.saveFlows(flows, opChains, isVectorized)
+		err = planCtx.saveFlows(flows, opChains, planCtx.infra.LocalProcessors, isVectorized)
 	}
 	if len(flows) == 1 || err != nil {
 		// If there are no remote flows, or we fail to set up the local flow, we
@@ -1746,7 +1746,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	subqueryPlanCtx.subOrPostQuery = true
 	subqueryPlanCtx.mustUseLeafTxn = mustUseLeafTxn
 	if planner.instrumentation.ShouldSaveFlows() {
-		subqueryPlanCtx.saveFlows = subqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeSubquery)
+		subqueryPlanCtx.saveFlows = getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeSubquery)
 	}
 	subqueryPlanCtx.associateNodeWithComponents = planner.instrumentation.getAssociateNodeWithComponentsFn()
 	subqueryPlanCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
@@ -2018,8 +2018,8 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 	prevSteppingMode := planner.Txn().ConfigureStepping(ctx, kv.SteppingEnabled)
 	defer func() { _ = planner.Txn().ConfigureStepping(ctx, prevSteppingMode) }()
 
-	defaultGetSaveFlowsFunc := func(postqueryPlanCtx *PlanningCtx) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, bool) error {
-		return postqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypePostquery)
+	defaultGetSaveFlowsFunc := func() func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, []execinfra.LocalProcessor, bool) error {
+		return getDefaultSaveFlowsFunc(ctx, planner, planComponentTypePostquery)
 	}
 
 	// We treat plan.cascades as a queue.
@@ -2207,7 +2207,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	evalCtx *extendedEvalContext,
 	recv *DistSQLReceiver,
 	parallelCheck bool,
-	getSaveFlowsFunc func(postqueryPlanCtx *PlanningCtx) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, bool) error,
+	getSaveFlowsFunc func() func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, []execinfra.LocalProcessor, bool) error,
 	associateNodeWithComponents func(exec.Node, execComponents),
 	addTopLevelQueryStats func(stats *topLevelQueryStats),
 ) error {
@@ -2226,7 +2226,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	postqueryPlanCtx.skipDistSQLDiagramGeneration = true
 	postqueryPlanCtx.subOrPostQuery = true
 	if planner.instrumentation.ShouldSaveFlows() {
-		postqueryPlanCtx.saveFlows = getSaveFlowsFunc(postqueryPlanCtx)
+		postqueryPlanCtx.saveFlows = getSaveFlowsFunc()
 	}
 	postqueryPlanCtx.associateNodeWithComponents = associateNodeWithComponents
 	postqueryPlanCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
@@ -2294,17 +2294,17 @@ func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 			observer,
 		)
 	}
-	var getSaveFlowsFunc func(postqueryPlanCtx *PlanningCtx) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, bool) error
+	var getSaveFlowsFunc func() func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, []execinfra.LocalProcessor, bool) error
 	if planner.instrumentation.ShouldSaveFlows() {
 		// getDefaultSaveFlowsFunc returns a concurrency-unsafe function, so we
 		// need to explicitly protect calls to it. Allocate this function only
 		// when necessary.
-		getSaveFlowsFunc = func(postqueryPlanCtx *PlanningCtx) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, bool) error {
-			fn := postqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypePostquery)
-			return func(flowSpec map[base.SQLInstanceID]*execinfrapb.FlowSpec, opChains execopnode.OpChains, vectorized bool) error {
+		getSaveFlowsFunc = func() func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, []execinfra.LocalProcessor, bool) error {
+			fn := getDefaultSaveFlowsFunc(ctx, planner, planComponentTypePostquery)
+			return func(flowSpec map[base.SQLInstanceID]*execinfrapb.FlowSpec, opChains execopnode.OpChains, localProcessors []execinfra.LocalProcessor, vectorized bool) error {
 				mu.Lock()
 				defer mu.Unlock()
-				return fn(flowSpec, opChains, vectorized)
+				return fn(flowSpec, opChains, localProcessors, vectorized)
 			}
 		}
 	}
