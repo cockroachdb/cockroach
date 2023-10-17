@@ -83,7 +83,7 @@ case "$component" in
     ;;
   roachtest)
     # Roachtest binary.
-    bazel_args=(//pkg/cmd/roachtest)
+    bazel_args=(//pkg/cmd/roachtest --crdb_test)
     artifacts=("pkg/cmd/roachtest/roachtest_/roachtest:bin/roachtest.$os-$arch")
     ;;
   *)
