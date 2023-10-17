@@ -3880,6 +3880,14 @@ select * from "".crdb_internal.cross_db_references ORDER BY object_name
 db2  public  child   db1  public  parent  table foreign key reference
 db2  public  child2  db1  public  parent  table foreign key reference
 
+# Ensure later tests only operate on the test database to avoid
+# confusion.
+statement ok
+USE test;
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_fks.enabled = FALSE
+
 
 # Test that foreign keys cannot reference columns that are indexed by a partial
 # unique index or a partial unique constraint. Partial unique indexes and
@@ -4166,3 +4174,42 @@ create table t104546_fk_src (a int primary key, b int);
 
 statement error pgcode 42703 column "b" does not exist
 alter table t104546 add constraint con foreign key (b) references t104546_fk_src(b);
+
+statement ok
+create schema sc1;
+create schema sc2;
+create table sc1.parent (p int primary key);
+create table sc2.child(p int primary key, r int REFERENCES sc1.parent (p));
+
+query TTTTTT rowsort
+SELECT constraint_catalog, constraint_schema, constraint_name, unique_constraint_catalog, unique_constraint_schema, unique_constraint_name
+FROM  information_schema.referential_constraints;
+----
+test  public  unindexed_customer_fkey        test  public  customers_pkey
+test  public  refpairs_wrong_order_a_b_fkey  test  public  pairs_src_dest_key
+test  public  refpairs_c_between_a_b_fkey    test  public  pairs_src_dest_key
+test  public  refpairs_a_b_fkey              test  public  pairs_src_dest_key
+test  public  bar_id_fkey                    test  public  foo_pkey
+test  public  domain_modules_domain_id_fk    test  public  domains_pkey
+test  public  domain_modules_module_id_fk    test  public  modules_pkey
+test  public  tx_leg_tx_id_fkey              test  public  tx_pkey
+test  public  refers_a_fkey                  test  public  referee_pkey
+test  public  pkref_b_b_fkey                 test  public  pkref_a_pkey
+test  public  test20042_z_fkey               test  public  test20042_y_key
+test  public  test20045_y_fkey               test  public  test20045_pkey
+test  public  test20045_z_fkey               test  public  test20045_y_key
+test  public  fk_id                          test  public  parent_name_collision_pkey
+test  public  child_p_fkey                   test  public  parent_pkey
+test  public  self_y_fkey                    test  public  self_pkey
+test  public  fam_c_d_fkey                   test  public  two_pkey
+test  public  match_full_a_b_fkey            test  public  two_pkey
+test  public  match_simple_a_b_fkey          test  public  two_pkey
+test  public  fam_child_fk_fkey              test  public  fam_parent_pkey
+test  public  fk                             test  public  primary
+test  public  y_b_fkey                       test  public  x_pkey
+test  public  y_c_fkey                       test  public  x_pkey
+test  public  fk                             test  public  ba_idx
+test  public  p_fk                           test  public  reference_constraint_different_order_parent_pkey
+test  public  c76852_p_fkey                  test  public  p76852_pkey
+test  public  child80828_pid_fkey            test  public  parent80828_pkey
+test  sc2     child_r_fkey                   test  sc1     parent_pkey
