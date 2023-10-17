@@ -193,7 +193,7 @@ func (s *schemaChange) Ops(
 	// only for supported schema changes.
 	declarativeOpWeights := make([]int, len(opWeights))
 	for idx, weight := range opWeights {
-		if opDeclarative[idx] {
+		if _, ok := opDeclarativeVersion[opType(idx)]; ok {
 			declarativeOpWeights[idx] = weight
 		}
 	}
