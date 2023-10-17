@@ -2043,6 +2043,11 @@ func (c *clusterImpl) StartE(
 			return err
 		}
 	}
+	if settings.Secure {
+		if err := c.createDefaultAdminRoleForSecureCluster(ctx, l); err != nil {
+			l.Printf("failed to create an admin role", err)
+		}
+	}
 	return nil
 }
 
@@ -2082,6 +2087,26 @@ func (c *clusterImpl) Start(
 	if err := c.StartE(ctx, l, startOpts, settings, opts...); err != nil {
 		c.t.Fatal(err)
 	}
+}
+
+// createDefaultAdminRoleForSecureCluster creates an admin role with a password
+// that can be used to log into the db console, when the roachtest is run on a
+// secure cluster.
+func (c *clusterImpl) createDefaultAdminRoleForSecureCluster(
+	ctx context.Context, l *logger.Logger,
+) error {
+	const adminRole = "roach"
+	const password = "test"
+	db := c.Conn(ctx, l, 1)
+	defer db.Close()
+	if _, err := db.Exec(fmt.Sprintf(`CREATE ROLE %s WITH LOGIN PASSWORD '%s'`, adminRole, password)); err != nil {
+		return err
+	}
+	if _, err := db.Exec(fmt.Sprintf(`GRANT ADMIN TO %s`, adminRole)); err != nil {
+		return err
+	}
+	l.Printf(`Log into db console with username "%s" and password "%s"`, adminRole, password)
+	return nil
 }
 
 func envExists(envs []string, prefix string) bool {
