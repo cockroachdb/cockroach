@@ -2375,4 +2375,359 @@ SELECT * FROM xy;
 statement ok
 ABORT;
 
+subtest plpgsql_types
+# If an assignment cast is available, the cast is performed automatically.
+#
+# float -> int
+# TODO(112515): the float value is incorrectly truncated instead of rounded.
+statement ok
+DROP FUNCTION F();
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 105.67::FLOAT;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+105
+
+# decimal -> int
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 105.67::DECIMAL;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+106
+
+# int -> float
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS FLOAT AS $$
+  BEGIN
+    RETURN 105::INT;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query R
+SELECT f();
+----
+105
+
+# float -> decimal
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS DECIMAL AS $$
+  BEGIN
+    RETURN 105::INT;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query R
+SELECT f();
+----
+105
+
+# string -> varchar
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS VARCHAR AS $$
+  BEGIN
+    RETURN 'abcd123';
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+abcd123
+
+# string -> name
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS NAME AS $$
+  BEGIN
+    RETURN 'abcd123';
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+abcd123
+
+# name -> string
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS TEXT AS $$
+  BEGIN
+    RETURN 'abcd123'::NAME;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+abcd123
+
+# char -> string
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS STRING AS $$
+  BEGIN
+    RETURN 'a'::CHAR;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+a
+
+# string -> char
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS CHAR AS $$
+  BEGIN
+    RETURN 'a'::TEXT;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+a
+
+# TODO(drewk): postgres doesn't truncate the values.
+# string -> char succeeds even though the string is too long.
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS CHAR AS $$
+  BEGIN
+    RETURN 'abcd'::TEXT;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+a
+
+# string -> bit succeeds even though the string is too long.
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS BIT AS $$
+  BEGIN
+    RETURN '101'::TEXT;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+1
+
+# If an assignment cast is not valid, the expression is converted to a string,
+# and then cast to the required type.
+#
+# string -> int
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN '105';
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+105
+
+# char -> string -> int
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN '1'::CHAR;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+1
+
+# bit -> string -> int
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN '1'::BIT;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+1
+
+# string -> bit
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS BIT AS $$
+  BEGIN
+    RETURN '1'::TEXT;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+1
+
+# It is possible for the cast to fail.
+#
+# date -> string -> int
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN '2020-06-17'::DATE;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22P02 pq: could not parse \"2020-06-17\" as type int
+SELECT f();
+
+# bool -> string -> int
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN True;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22P02 pq: could not parse \"true\" as type int
+SELECT f();
+
+# string -> int
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN '105.67'::TEXT;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22P02 pq: could not parse \"105.67\" as type int
+SELECT f();
+
+# Typed NULL values are allowed, even for incompatible types.
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN NULL::BOOL;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+NULL
+
+# Type-coercion applies to branches of an IF statement.
+statement ok
+DROP FUNCTION f(INT);
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  BEGIN
+    If n = 0 THEN
+      RETURN 1;
+    ELSIF n = 1 THEN
+      RETURN 2.1::FLOAT;
+    ELSIF n = 2 THEN
+      RETURN 3.1::DECIMAL;
+    ELSIF n = 3 THEN
+      RETURN '4';
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f(0);
+----
+1
+
+query I
+SELECT f(1);
+----
+2
+
+query I
+SELECT f(2);
+----
+3
+
+query I
+SELECT f(3);
+----
+4
+
+# Type-coercion applies to assignments.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    w INT[] := ARRAY[1, 2, 3];
+    x FLOAT := 100.1010101;
+    y INT := 200;
+    z TEXT := 'abc';
+  BEGIN
+    w := w || '{4}';
+    x := x + 1000;
+    y := y + 1.111::DECIMAL;
+    z := z || 6.0::FLOAT;
+    RAISE NOTICE 'w: %, x: %, y: %, z: %', w, x, y, z;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: w: {1,2,3,4}, x: 1100.1010101, y: 201, z: abc6
+
+# The condition for an IF statement is coerced to BOOL.
+statement ok
+CREATE TABLE t_text(x TEXT);
+INSERT INTO t_text VALUES ('True');
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    IF (SELECT * FROM t_text) THEN
+      RETURN 0;
+    END IF;
+    RETURN 1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+0
+
+statement ok
+DELETE FROM t_text WHERE True;
+INSERT INTO t_text VALUES ('False');
+
+query I
+SELECT f();
+----
+1
+
 subtest end

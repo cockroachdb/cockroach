@@ -145,7 +145,8 @@ call
                 │                                                      │                                                      ├── values
                 │                                                      │                                                      │    └── tuple
                 │                                                      │                                                      └── projections
-                │                                                      │                                                           └── null [as=stmt_return_4:23]
+                │                                                      │                                                           └── cast: VOID [as=stmt_return_4:23]
+                │                                                      │                                                                └── null
                 │                                                      └── subquery
                 │                                                           └── project
                 │                                                                ├── columns: "_stmt_exec_6":55
@@ -190,5 +191,6 @@ call
                 │                                                                                                        ├── values
                 │                                                                                                        │    └── tuple
                 │                                                                                                        └── projections
-                │                                                                                                             └── null [as=stmt_return_4:23]
+                │                                                                                                             └── cast: VOID [as=stmt_return_4:23]
+                │                                                                                                                  └── null
                 └── const: 1
