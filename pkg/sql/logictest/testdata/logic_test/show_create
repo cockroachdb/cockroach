@@ -292,3 +292,43 @@ r2  CREATE PROCEDURE sc.r2(IN s STRING)
       AS $$
       SELECT 1;
     $$
+
+# Regression test for #112134 - correctly parse and display PLpgSQL.
+skipif config local-mixed-23.1
+statement ok
+CREATE FUNCTION f112134() RETURNS INT AS $$
+  DECLARE
+    x INT := 0;
+    i INT := 0;
+  BEGIN
+    WHILE i < 3 LOOP
+      x := x + i;
+      i := i + 1;
+    END LOOP;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# TODO(112136): Fix the formatting.
+skipif config local-mixed-23.1
+query TT
+SHOW CREATE FUNCTION f112134;
+----
+f112134  CREATE FUNCTION sc.f112134()
+           RETURNS INT8
+           VOLATILE
+           NOT LEAKPROOF
+           CALLED ON NULL INPUT
+           LANGUAGE plpgsql
+           AS $$
+           DECLARE
+           x INT8 := 0;
+           i INT8 := 0;
+           BEGIN
+           WHILE i < 3 LOOP
+           x := x + i;
+           i := i + 1;
+           END LOOP;
+           RETURN x;
+           END
+         $$
