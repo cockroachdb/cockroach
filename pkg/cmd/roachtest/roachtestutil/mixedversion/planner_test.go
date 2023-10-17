@@ -48,15 +48,15 @@ var (
 	// Hardcode build and previous versions so that the test won't fail
 	// when new versions are released.
 	buildVersion       = version.MustParse("v23.1.0")
-	predecessorVersion = "22.2.8"
+	predecessorVersion = "v22.2.8"
 )
 
-const (
-	seed        = 12345 // expectations are based on this seed
-	mainVersion = clusterupgrade.MainVersion
-)
+const seed = 12345 // expectations are based on this seed
 
 func TestTestPlanner(t *testing.T) {
+	reset := setBuildVersion()
+	defer reset()
+
 	mvt := newTest()
 	mvt.InMixedVersion("mixed-version 1", dummyHook)
 	mvt.InMixedVersion("mixed-version 2", dummyHook)
@@ -146,9 +146,12 @@ mixed-version test plan for upgrading from "%[1]s" to "<current>":
 // TestMultipleUpgrades tests the generation of test plans that
 // involve multiple upgrades.
 func TestMultipleUpgrades(t *testing.T) {
+	reset := setBuildVersion()
+	defer reset()
+
 	mvt := newTest(NumUpgrades(3))
-	mvt.predecessorFunc = func(rng *rand.Rand, v *version.Version, n int) ([]string, error) {
-		return []string{"22.1.8", "22.2.3", "23.1.4"}, nil
+	mvt.predecessorFunc = func(rng *rand.Rand, v *clusterupgrade.Version, n int) ([]*clusterupgrade.Version, error) {
+		return parseVersions([]string{"22.1.8", "22.2.3", "23.1.4"}), nil
 	}
 
 	mvt.InMixedVersion("mixed-version 1", dummyHook)
@@ -194,7 +197,7 @@ mixed-version test plan for upgrading from "%[1]s" to "%[2]s" to "%[3]s" to "<cu
    │   ├── restart node 1 with binary version <current> (25)
    │   ├── restart node 2 with binary version <current> (26)
    │   └── restart node 3 with binary version <current> (27)
-   ├── downgrade nodes :1-4 from "<current>" to "23.1.4"
+   ├── downgrade nodes :1-4 from "<current>" to "%[3]s"
    │   ├── restart node 1 with binary version %[3]s (28)
    │   ├── restart node 3 with binary version %[3]s (29)
    │   ├── restart node 4 with binary version %[3]s (30)
@@ -209,7 +212,7 @@ mixed-version test plan for upgrading from "%[1]s" to "%[2]s" to "%[3]s" to "<cu
    ├── finalize upgrade by resetting `+"`preserve_downgrade_option`"+` (38)
    ├── run "mixed-version 1" (39)
    └── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (40)
-`, "22.1.8", "22.2.3", "23.1.4")
+`, "v22.1.8", "v22.2.3", "v23.1.4")
 
 	expectedPrettyPlan = expectedPrettyPlan[1:] // remove leading newline
 	require.Equal(t, expectedPrettyPlan, plan.PrettyPrint())
@@ -374,6 +377,13 @@ func Test_upgradeTimeout(t *testing.T) {
 	assertTimeout(30*time.Minute, UpgradeTimeout(30*time.Minute)) // custom timeout applies.
 }
 
+func setBuildVersion() func() {
+	previousV := clusterupgrade.TestBuildVersion
+	clusterupgrade.TestBuildVersion = buildVersion
+
+	return func() { clusterupgrade.TestBuildVersion = previousV }
+}
+
 func newTest(options ...CustomOption) *Test {
 	testOptions := defaultTestOptions
 	for _, fn := range options {
@@ -386,7 +396,6 @@ func newTest(options ...CustomOption) *Test {
 		logger:          nilLogger,
 		crdbNodes:       nodes,
 		options:         testOptions,
-		_buildVersion:   buildVersion,
 		_arch:           archP(vm.ArchAMD64),
 		prng:            prng,
 		hooks:           &testHooks{prng: prng, crdbNodes: nodes},
@@ -401,8 +410,10 @@ func archP(a vm.CPUArch) *vm.CPUArch {
 // Always use the same predecessor version to make this test
 // deterministic even as changes continue to happen in the
 // cockroach_releases.yaml file.
-func testPredecessorFunc(rng *rand.Rand, v *version.Version, n int) ([]string, error) {
-	return []string{predecessorVersion}, nil
+func testPredecessorFunc(
+	rng *rand.Rand, v *clusterupgrade.Version, n int,
+) ([]*clusterupgrade.Version, error) {
+	return parseVersions([]string{predecessorVersion}), nil
 }
 
 // requireConcurrentHooks asserts that the given step is a concurrent

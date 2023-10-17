@@ -80,7 +80,9 @@ func registerIndexBackfill(r registry.Registry) {
 							t.Fatal(err)
 						}
 
-						path, err := clusterupgrade.UploadVersion(ctx, t, t.L(), c, c.All(), pred)
+						path, err := clusterupgrade.UploadVersion(
+							ctx, t, t.L(), c, c.All(), clusterupgrade.MustParseVersion(pred),
+						)
 						if err != nil {
 							t.Fatal(err)
 						}

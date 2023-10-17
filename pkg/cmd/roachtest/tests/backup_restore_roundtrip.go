@@ -60,7 +60,7 @@ func backupRestoreRoundTrip(ctx context.Context, t test.Test, c cluster.Cluster)
 	t.L().Printf("random seed: %d", seed)
 
 	// Upload binaries and start cluster.
-	uploadVersion(ctx, t, c, c.All(), clusterupgrade.MainVersion)
+	uploadVersion(ctx, t, c, c.All(), clusterupgrade.CurrentVersion())
 
 	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(install.SecureOption(true)), roachNodes)
 	m := c.NewMonitor(ctx, roachNodes)
@@ -101,7 +101,7 @@ func backupRestoreRoundTrip(ctx context.Context, t test.Test, c cluster.Cluster)
 		}
 
 		for i := 0; i < numFullBackups; i++ {
-			allNodes := labeledNodes{Nodes: roachNodes, Version: clusterupgrade.MainVersion}
+			allNodes := labeledNodes{Nodes: roachNodes, Version: clusterupgrade.CurrentVersion().String()}
 			bspec := backupSpec{
 				PauseProbability: pauseProbability,
 				Plan:             allNodes,
@@ -125,7 +125,7 @@ func backupRestoreRoundTrip(ctx context.Context, t test.Test, c cluster.Cluster)
 					m.ExpectDeaths(int32(n))
 				}
 
-				if err := testUtils.resetCluster(ctx, t.L(), clusterupgrade.MainVersion, expectDeathsFn); err != nil {
+				if err := testUtils.resetCluster(ctx, t.L(), clusterupgrade.CurrentVersion(), expectDeathsFn); err != nil {
 					return err
 				}
 			}

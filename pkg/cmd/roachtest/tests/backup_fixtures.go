@@ -13,7 +13,6 @@ package tests
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -133,9 +132,8 @@ func (bd *backupDriver) prepareCluster(ctx context.Context) {
 		// For now, only run the test on the cloud provider that also stores the backup.
 		bd.t.Skip(fmt.Sprintf("test configured to run on %s", bd.sp.backup.cloud))
 	}
-	version := strings.Replace(bd.sp.backup.version, "v", "", 1)
 	binaryPath, err := clusterupgrade.UploadVersion(ctx, bd.t, bd.t.L(), bd.c,
-		bd.sp.hardware.getCRDBNodes(), version)
+		bd.sp.hardware.getCRDBNodes(), clusterupgrade.MustParseVersion(bd.sp.backup.version))
 	require.NoError(bd.t, err)
 
 	require.NoError(bd.t, clusterupgrade.StartWithSettings(ctx, bd.t.L(), bd.c,

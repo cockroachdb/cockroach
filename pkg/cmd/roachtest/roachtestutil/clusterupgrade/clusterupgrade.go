@@ -15,10 +15,13 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -30,12 +33,61 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const (
-	// MainVersion is the sentinel used to represent that the binary
-	// passed to roachtest should be uploaded when `version` is left
-	// unspecified.
-	MainVersion = ""
+var (
+	TestBuildVersion *version.Version
+
+	currentBranch = os.Getenv("TC_BUILD_BRANCH")
 )
+
+// Version is a thin wrapper around the `version.Version` struct that
+// provides convenient utility function to pretty print versions and
+// check whether this is the current version being tested.
+type Version struct {
+	*version.Version
+}
+
+// String returns the string representation of this version. For
+// convenience, if this version represents the current version being
+// tested, we print the branch name being tested if the test is
+// running on TeamCity, to make it clearer (instead of "<current>").
+func (v *Version) String() string {
+	if v.IsCurrent() {
+		if currentBranch != "" {
+			return currentBranch
+		}
+
+		return "<current>"
+	}
+
+	return v.Version.String()
+}
+
+// IsCurrent returns whether this version corresponds to the current
+// version being tested.
+func (v *Version) IsCurrent() bool {
+	return v.Version.Compare(CurrentVersion().Version) == 0
+}
+
+// CurrentVersion returns the version associated with the current
+// build.
+func CurrentVersion() *Version {
+	if TestBuildVersion != nil {
+		return &Version{TestBuildVersion} // test-only
+	}
+
+	return &Version{version.MustParse(build.BinaryVersion())}
+}
+
+// MustParseVersion parses the version string given (with or without
+// leading 'v') and returns the corresponding `Version` object.
+func MustParseVersion(v string) *Version {
+	versionStr := v
+	if !strings.HasPrefix(v, "v") {
+		versionStr = "v" + v
+	}
+
+	return &Version{version.MustParse(versionStr)}
+}
 
 // BinaryVersion returns the binary version running on the node
 // associated with the given database connection.
@@ -80,23 +132,22 @@ func UploadVersion(
 	l *logger.Logger,
 	c cluster.Cluster,
 	nodes option.NodeListOption,
-	newVersion string,
+	newVersion *Version,
 ) (string, error) {
 	dstBinary := BinaryPathForVersion(t, newVersion)
 	srcBinary := t.Cockroach()
 
-	overrideBinary, isOverriden := t.VersionsBinaryOverride()[newVersion]
+	overrideBinary, isOverriden := t.VersionsBinaryOverride()[newVersion.String()]
 	if isOverriden {
 		l.Printf("using binary override for version %s: %s", newVersion, overrideBinary)
 		srcBinary = overrideBinary
 	}
 
-	if newVersion == MainVersion || isOverriden {
+	if newVersion.IsCurrent() || isOverriden {
 		if err := c.PutE(ctx, l, srcBinary, dstBinary, nodes); err != nil {
 			return "", err
 		}
 	} else {
-		v := "v" + newVersion
 		dir := filepath.Dir(dstBinary)
 
 		// Check if the cockroach binary already exists.
@@ -105,7 +156,7 @@ func UploadVersion(
 			return "", err
 		}
 
-		if err := c.Stage(ctx, l, "release", v, dir, nodes); err != nil {
+		if err := c.Stage(ctx, l, "release", newVersion.String(), dir, nodes); err != nil {
 			return "", err
 		}
 	}
@@ -118,17 +169,16 @@ func UploadVersion(
 // passed. After this step, the corresponding binary can be started on
 // the cluster and it will use that store directory.
 func InstallFixtures(
-	ctx context.Context, l *logger.Logger, c cluster.Cluster, nodes option.NodeListOption, v string,
+	ctx context.Context, l *logger.Logger, c cluster.Cluster, nodes option.NodeListOption, v *Version,
 ) error {
 	if err := c.RunE(ctx, nodes, "mkdir -p {store-dir}"); err != nil {
 		return fmt.Errorf("creating store-dir: %w", err)
 	}
 
-	vv := version.MustParse("v" + v)
 	// The fixtures use cluster version (major.minor) but the input might be
 	// a patch release.
 	name := CheckpointName(
-		roachpb.Version{Major: int32(vv.Major()), Minor: int32(vv.Minor())}.String(),
+		roachpb.Version{Major: int32(v.Major()), Minor: int32(v.Minor())}.String(),
 	)
 	for _, n := range nodes {
 		if err := c.PutE(ctx, l,
@@ -164,14 +214,14 @@ func StartWithSettings(
 // is expected to be found on roachprod nodes. The file will only
 // actually exist if there was a previous call to `UploadVersion` with
 // the same version parameter.
-func BinaryPathForVersion(t test.Test, v string) string {
-	if v == MainVersion {
+func BinaryPathForVersion(t test.Test, v *Version) string {
+	if v.IsCurrent() {
 		return "./cockroach"
-	} else if _, ok := t.VersionsBinaryOverride()[v]; ok {
+	} else if _, ok := t.VersionsBinaryOverride()[v.String()]; ok {
 		// If an override has been specified for `v`, use that binary.
-		return "./cockroach-" + v
+		return "./cockroach-" + v.String()
 	} else {
-		return filepath.Join("v"+v, "cockroach")
+		return filepath.Join(v.String(), "cockroach")
 	}
 }
 
@@ -184,7 +234,7 @@ func RestartNodesWithNewBinary(
 	c cluster.Cluster,
 	nodes option.NodeListOption,
 	startOpts option.StartOpts,
-	newVersion string,
+	newVersion *Version,
 	settings ...install.ClusterSettingOption,
 ) error {
 	// NB: We could technically stage the binary on all nodes before
@@ -198,7 +248,7 @@ func RestartNodesWithNewBinary(
 		nodes[i], nodes[j] = nodes[j], nodes[i]
 	})
 	for _, node := range nodes {
-		l.Printf("restarting node %d into version %s", node, VersionMsg(newVersion))
+		l.Printf("restarting node %d into version %s", node, newVersion.String())
 		// Stop the cockroach process gracefully in order to drain it properly.
 		// This makes the upgrade closer to how users do it in production, but
 		// it's also needed to eliminate flakiness. In particular, this will
@@ -314,16 +364,4 @@ func WaitForClusterUpgrade(
 // version.
 func CheckpointName(binaryVersion string) string {
 	return "checkpoint-v" + binaryVersion
-}
-
-// VersionMsg returns a version string to be displayed in logs. It's
-// either the version given, or the "<current>" string to represent
-// the latest cockroach version, typically built off the branch being
-// tested.
-func VersionMsg(v string) string {
-	if v == MainVersion {
-		return "<current>"
-	}
-
-	return v
 }

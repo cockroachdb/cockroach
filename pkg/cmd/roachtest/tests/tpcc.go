@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -438,7 +439,6 @@ func runTPCCMixedHeadroom(
 	}
 
 	randomCRDBNode := func() int { return crdbNodes.RandNode()[0] }
-	const mainBinary = ""
 
 	// NB: this results in ~100GB of (actual) disk usage per node once things
 	// have settled down, and ~7.5k ranges. The import takes ~40 minutes.
@@ -457,7 +457,11 @@ func runTPCCMixedHeadroom(
 	}
 	sep := " -> "
 	t.L().Printf("testing upgrade: %s%scurrent", strings.Join(history, sep), sep)
-	history = append(history, mainBinary)
+	releases := make([]*clusterupgrade.Version, 0, len(history))
+	for _, v := range history {
+		releases = append(releases, clusterupgrade.MustParseVersion(v))
+	}
+	releases = append(releases, clusterupgrade.CurrentVersion())
 
 	waitForWorkloadToRampUp := sleepStep(rampDuration(c.IsLocal()))
 	logStep := func(format string, args ...interface{}) versionStep {
@@ -466,12 +470,12 @@ func runTPCCMixedHeadroom(
 		}
 	}
 
-	oldestVersion := history[0]
+	oldestVersion := releases[0]
 	setupSteps := []versionStep{
 		logStep("starting from fixture at version %s", oldestVersion),
 		uploadAndStartFromCheckpointFixture(crdbNodes, oldestVersion),
-		waitForUpgradeStep(crdbNodes),               // let oldest version settle (gossip etc)
-		uploadVersionStep(workloadNode, mainBinary), // for tpccBackgroundStepper's workload
+		waitForUpgradeStep(crdbNodes),                                    // let oldest version settle (gossip etc)
+		uploadVersionStep(workloadNode, clusterupgrade.CurrentVersion()), // for tpccBackgroundStepper's workload
 
 		// Load TPCC dataset, don't run TPCC yet. We do this while in the
 		// version we are starting with to load some data and hopefully
@@ -486,17 +490,15 @@ func runTPCCMixedHeadroom(
 
 	// upgradeToVersionSteps returns the list of steps to be performed
 	// when upgrading to the given version.
-	upgradeToVersionSteps := func(crdbVersion string) []versionStep {
+	upgradeToVersionSteps := func(crdbVersion *clusterupgrade.Version) []versionStep {
 		duration := 10 * time.Minute
-		versionString := crdbVersion
-		if crdbVersion == mainBinary {
+		if crdbVersion.IsCurrent() {
 			duration = 100 * time.Minute
-			versionString = "current"
 		}
 		tpccWorkload := tpccBackgroundStepper(duration)
 
 		return []versionStep{
-			logStep("upgrading to version %q", versionString),
+			logStep("upgrading to version %q", crdbVersion.String()),
 			preventAutoUpgradeStep(randomCRDBNode()),
 			// Upload and restart cluster into the new
 			// binary (stays at previous cluster version).
@@ -527,7 +529,7 @@ func runTPCCMixedHeadroom(
 	// Test steps consist of the setup steps + the upgrade steps for
 	// each upgrade being carried out here.
 	testSteps := append([]versionStep{}, setupSteps...)
-	for _, nextVersion := range history[1:] {
+	for _, nextVersion := range releases[1:] {
 		testSteps = append(testSteps, upgradeToVersionSteps(nextVersion)...)
 	}
 
