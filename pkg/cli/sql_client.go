@@ -56,27 +56,41 @@ func makeSQLClient(
 	return makeTenantSQLClient(ctx, appName, defaultMode, userDefaultTenant)
 }
 
-// makeTenantSQLClient connects to the database using the connection
-// settings set by the command-line flags.
-// If a password is needed, it also prompts for the password.
-//
-// If forceSystemDB is set, it also connects it to the `system`
-// database. The --database flag or database part in the URL is then
-// ignored.
+// makeTenantSQLClient runs makeTenantSQLClient using the default cliContext
+// that has the connection settings set by the command-line flags.
+func makeTenantSQLClient(
+	ctx context.Context, appName string, defaultMode defaultSQLDb, tenantName string,
+) (clisqlclient.Conn, error) {
+	return cliCtx.makeTenantSQLClient(ctx, appName, defaultMode, tenantName)
+}
+
+// makeTenantSQLClient connects to the database using the connection settings in
+// the cliContext. If a password is needed, it also prompts for the password.
 //
 // The appName given as argument is added to the URL even if --url is
 // specified, but only if the URL didn't already specify
 // application_name. It is prefixed with '$ ' to mark it as internal.
-func makeTenantSQLClient(
+//
+// If defaultMode is useSystemDB, it connects it to the `system` database,
+// ignoring the --database flag or database part in the URL.
+//
+// Connections are made to the given tenantName using the ccluster option,
+// unless userDefaultTenant is used. If the cluster returns an error indicating
+// that the ccluster option is not supported, we retry without the ccluster
+// option for compatibility with separate process SQL servers.
+func (c *cliContext) makeTenantSQLClient(
 	ctx context.Context, appName string, defaultMode defaultSQLDb, tenantName string,
 ) (clisqlclient.Conn, error) {
-	baseURL, err := cliCtx.makeClientConnURL()
+	baseURL, err := c.makeClientConnURL()
 	if err != nil {
 		return nil, err
 	}
-
 	cclusterOptionRequired := tenantName != userDefaultTenant
 	if cclusterOptionRequired {
+		// makeClientConnURL returns a memoized URL. If we've been asked
+		// to connect to a particular tenant, clone the URL so that we
+		// aren't constantly appending options to the same URL.
+		baseURL = baseURL.Clone()
 		err = baseURL.AddOptions(url.Values{
 			"options": []string{"-ccluster=" + tenantName},
 		})
@@ -84,21 +98,22 @@ func makeTenantSQLClient(
 			return nil, err
 		}
 	}
+
 	conn, err := makeSQLClientForBaseURL(appName, defaultMode, baseURL)
 	if err != nil && shouldTryWithoutTenantName(tenantName, err) {
-		return makeTenantSQLClient(ctx, appName, defaultMode, userDefaultTenant)
+		return c.makeTenantSQLClient(ctx, appName, defaultMode, userDefaultTenant)
 	} else if err != nil {
 		return nil, err
 	}
 
 	if cclusterOptionRequired {
-		// If we've specified the ccluster option, we we don't know if
-		// it is supported until we actually try to make a connection.
+		// If we've specified the ccluster option, we don't know if it
+		// is supported until we actually try to make a connection.
 		if err := conn.EnsureConn(ctx); err != nil && shouldTryWithoutTenantName(tenantName, err) {
 			if err := conn.Close(); err != nil {
 				log.VInfof(ctx, 2, "close err: %v", err)
 			}
-			return makeTenantSQLClient(ctx, appName, defaultMode, userDefaultTenant)
+			return c.makeTenantSQLClient(ctx, appName, defaultMode, userDefaultTenant)
 		}
 	}
 
@@ -147,18 +162,22 @@ func makeSQLClientForBaseURL(
 	return sqlCtx.MakeConn(sqlURL)
 }
 
-// shouldTryWithoutTenantName returns true if the error may be the
-// result of specifying the ccluster option when that option is not
-// supported.
+// shouldTryWithoutTenantName returns true if given error is from a connection
+// attempt that should be retried without the ccluster option.
 //
-// We only expect to hit this when we are trying to explicitly use the system
-// tenant but are talking to a standalone tenant process.
+// Currently, we only expect to hit this when we are trying to explicitly use
+// the system tenant but are talking to a standalone tenant process.
 func shouldTryWithoutTenantName(tenantName string, err error) bool {
 	// We only want to retry if the SystemTenant was requested.
 	if tenantName != catconstants.SystemTenantName {
 		return false
 	}
+	return maybeTenantSelectionNotSupportedErr(err)
+}
 
+// maybeSelectionNotSupportedErr returns true if the error may be the result of
+// specifying the ccluster option when that option is not supported.
+func maybeTenantSelectionNotSupportedErr(err error) bool {
 	if strings.Contains(err.Error(), "tenant selection is not available on this server") {
 		return true
 	}
