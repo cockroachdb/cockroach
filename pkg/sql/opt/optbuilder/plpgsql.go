@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	ast "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -334,6 +335,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			returnColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_if"))
 			returnScope := s.push()
 			b.ensureScopeHasExpr(returnScope)
+			scalar = b.coerceType(scalar, b.returnType)
 			b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, scalar)
 			b.ob.constructProjectForScope(s, returnScope)
 			return returnScope
@@ -518,6 +520,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 						))
 					}
 				}
+				scalar = b.coerceType(scalar, typ)
 				b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
 			}
 			b.ob.constructProjectForScope(stmtScope, intoScope)
@@ -660,6 +663,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 					b.ob.factory.ConstructVariable(fetchCol),
 					memo.TupleOrdinal(j),
 				)
+				scalar = b.coerceType(scalar, typ)
 				b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
 			}
 			b.ob.constructProjectForScope(fetchScope, intoScope)
@@ -1258,7 +1262,34 @@ func (b *plpgsqlBuilder) buildPLpgSQLExpr(expr ast.Expr, typ *types.T, s *scope)
 	if err != nil {
 		panic(err)
 	}
-	return b.ob.buildScalar(typedExpr, s, nil, nil, b.colRefs)
+	scalar := b.ob.buildScalar(typedExpr, s, nil, nil, b.colRefs)
+	return b.coerceType(scalar, typ)
+}
+
+// coerceType implements PLpgSQL type-coercion behavior.
+func (b *plpgsqlBuilder) coerceType(scalar opt.ScalarExpr, typ *types.T) opt.ScalarExpr {
+	resolved := scalar.DataType()
+	if !resolved.Identical(typ) {
+		// Postgres will attempt to coerce the expression's type with an assignment
+		// cast. If that fails, it will convert to a string and attempt to parse the
+		// string as the desired type.
+		//
+		// Note that we intentionally use an explicit cast instead of an assignment
+		// cast here. This is because postgres does not error for narrowing type
+		// coercion, but instead performs the cast without truncation. Using an
+		// explicit cast, we also allow narrowing type coercion, but with
+		// truncation. This difference is tracked in #115384.
+		if !cast.ValidCast(resolved, typ, cast.ContextAssignment) {
+			if !cast.ValidCast(types.String, typ, cast.ContextExplicit) {
+				panic(pgerror.Newf(pgcode.DatatypeMismatch,
+					"unable to coerce type %s to %s", resolved.Name(), typ.Name(),
+				))
+			}
+			scalar = b.ob.factory.ConstructCast(scalar, types.String)
+		}
+		scalar = b.ob.factory.ConstructCast(scalar, typ)
+	}
+	return scalar
 }
 
 // resolveVariableForAssign attempts to retrieve the type of the variable with
