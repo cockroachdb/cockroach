@@ -1001,7 +1001,9 @@ func TestDistributedQueryErrorIsRetriedLocally(t *testing.T) {
 	// after the corresponding flow on the gateway has exited.
 	queries := []string{
 		"SELECT k FROM test.foo",
-		"SELECT v FROM test.foo",
+		// Run one of the queries via EXPLAIN ANALYZE (DEBUG) so that we can
+		// check the contents of the bundle later.
+		"EXPLAIN ANALYZE (DEBUG) SELECT v FROM test.foo",
 		"SELECT * FROM test.foo",
 	}
 	stmtToNodeIDForError := map[string]base.SQLInstanceID{
@@ -1023,6 +1025,7 @@ func TestDistributedQueryErrorIsRetriedLocally(t *testing.T) {
 					},
 				},
 			},
+			Insecure: true,
 		},
 	})
 	defer tc.Stopper().Stop(context.Background())
@@ -1047,6 +1050,7 @@ func TestDistributedQueryErrorIsRetriedLocally(t *testing.T) {
 		),
 	)
 
+	var bundleRows [][]string
 	for _, query := range queries {
 		nodeID := stmtToNodeIDForError[query]
 		injectError := nodeID != base.SQLInstanceID(0)
@@ -1056,10 +1060,13 @@ func TestDistributedQueryErrorIsRetriedLocally(t *testing.T) {
 			t.Logf("running %q without error being injected", query)
 		}
 		sqlDB.Exec(t, "SET TRACING=on;")
-		_, err := db.Exec(query)
-		// We expect that the query was retried as local which should succeed.
-		require.NoError(t, err)
+		// We expect that the query was retried as local which should succeed,
+		// so we can use the sql runner.
+		rows := sqlDB.QueryStr(t, query)
 		sqlDB.Exec(t, "SET TRACING=off;")
+		if strings.HasPrefix(query, "EXPLAIN ANALYZE (DEBUG)") {
+			bundleRows = rows
+		}
 		trace := sqlDB.QueryStr(t, "SELECT message FROM [SHOW TRACE FOR SESSION]")
 		// Inspect the trace to ensure that the query was, indeed, initially run
 		// as distributed but hit a retryable error and was rerun as local.
@@ -1095,6 +1102,16 @@ func TestDistributedQueryErrorIsRetriedLocally(t *testing.T) {
 		// lib/pq wraps the error, so we cannot use errors.Is() check.
 		require.True(t, strings.Contains(err.Error(), getError(nodeID).Error()))
 	}
+
+	// Now sanity check the contents of the stmt bundle that was collected when
+	// retry-as-local mechanism kicked in.
+	baseFiles := `env.sql opt-v.txt opt-vv.txt opt.txt plan.txt schema.sql statement.sql stats-test.public.foo.sql trace-jaeger.json trace.json trace.txt`
+	distributedRunFiles := `distsql-1-main-query.html vec-1-main-query-v.txt vec-1-main-query.txt`
+	localRunFiles := `distsql-2-main-query.html vec-2-main-query-v.txt vec-2-main-query.txt`
+	checkBundle(
+		t, fmt.Sprint(bundleRows), "public.foo" /* tableName */, nil, false, /* expectErrors */
+		baseFiles, distributedRunFiles, localRunFiles,
+	)
 }
 
 // TestLogicalPlanCorruptionBeforeRetryingLocally verifies that if a distributed

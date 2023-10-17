@@ -1984,6 +1984,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		localPlanCtx := dsp.NewPlanningCtx(
 			ctx, evalCtx, planCtx.planner, evalCtx.Txn, DistributionTypeNone,
 		)
+		localPlanCtx.setUpForMainQuery(ctx, planCtx.planner, recv)
 		localPhysPlan, localPhysPlanCleanup, err := dsp.createPhysPlan(ctx, localPlanCtx, plan)
 		defer localPhysPlanCleanup()
 		if err != nil {
