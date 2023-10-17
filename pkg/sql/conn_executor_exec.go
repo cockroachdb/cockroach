@@ -2266,7 +2266,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		if ex.server.cfg.TestingKnobs.TestingSaveFlows != nil {
 			planCtx.saveFlows = ex.server.cfg.TestingKnobs.TestingSaveFlows(planner.stmt.SQL)
 		} else if planner.instrumentation.ShouldSaveFlows() {
-			planCtx.saveFlows = planCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeMainQuery)
+			planCtx.saveFlows = getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeMainQuery)
 		}
 		planCtx.associateNodeWithComponents = planner.instrumentation.getAssociateNodeWithComponentsFn()
 		planCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
