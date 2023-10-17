@@ -685,7 +685,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 	"quote-kw-col" TIMESTAMPTZ,
 	text TEXT,
 	PRIMARY KEY (id, other_col, "quote-kw-col")
-) WITH (ttl_expire_after = '30 days', ttl_delete_rate_limit = 350)`,
+) WITH (ttl_expire_after = '30 days', ttl_select_rate_limit = 350, ttl_delete_rate_limit = 350)`,
 			numExpiredRows:    1001,
 			numNonExpiredRows: 5,
 		},

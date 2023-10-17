@@ -51,6 +51,11 @@ func ValidateRowLevelTTL(ttl *catpb.RowLevelTTL) error {
 			return err
 		}
 	}
+	if ttl.SelectRateLimit != 0 {
+		if err := ValidateTTLRateLimit("ttl_select_rate_limit", ttl.SelectRateLimit); err != nil {
+			return err
+		}
+	}
 	if ttl.DeleteRateLimit != 0 {
 		if err := ValidateTTLRateLimit("ttl_delete_rate_limit", ttl.DeleteRateLimit); err != nil {
 			return err

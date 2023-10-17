@@ -140,29 +140,31 @@ message TableDescriptor {
     option (gogoproto.equal) = true;
   
     // DurationExpr is the automatically assigned interval for when the TTL should apply to a row.
-    optional string duration_expr = 1 [(gogoproto.nullable)=false, (gogoproto.casttype)="Expression"];
+    optional string duration_expr = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "Expression"];
     // SelectBatchSize is the amount of rows that should be fetched at a time
-    optional int64 select_batch_size = 2 [(gogoproto.nullable)=false];
+    optional int64 select_batch_size = 2 [(gogoproto.nullable) = false];
     // DeleteBatchSize is the amount of rows that should be deleted at a time.
-    optional int64 delete_batch_size = 3 [(gogoproto.nullable)=false];
+    optional int64 delete_batch_size = 3 [(gogoproto.nullable) = false];
     // DeletionCron signifies how often the TTL deletion job runs in a cron format.
-    optional string deletion_cron = 4 [(gogoproto.nullable)=false];
+    optional string deletion_cron = 4 [(gogoproto.nullable) = false];
     // ScheduleID is the ID of the row-level TTL job schedules.
-    optional int64 schedule_id = 5 [(gogoproto.customname)="ScheduleID",(gogoproto.nullable)=false];
+    optional int64 schedule_id = 5 [(gogoproto.customname) = "ScheduleID", (gogoproto.nullable) = false];
     // RangeConcurrency is based on the number of spans and is no longer configurable.
     reserved 6;
     // DeleteRateLimit is the maximum amount of rows to delete per second.
-    optional int64 delete_rate_limit = 7 [(gogoproto.nullable)=false];
+    optional int64 delete_rate_limit = 7 [(gogoproto.nullable) = false];
     // Pause is set if the TTL job should not run.
-    optional bool pause = 8 [(gogoproto.nullable)=false];
+    optional bool pause = 8 [(gogoproto.nullable) = false];
     // RowStatsPollInterval is the interval to report row statistics (number of rows on table, number of expired
     // rows on table) during row level TTL. If zero, no statistics are reported.
-    optional int64 row_stats_poll_interval = 9 [(gogoproto.nullable)=false, (gogoproto.casttype)="time.Duration"];
+    optional int64 row_stats_poll_interval = 9 [(gogoproto.nullable) = false, (gogoproto.casttype) = "time.Duration"];
     // LabelMetrics is true if metrics for the TTL job should add a label containing
     // the relation name.
     optional bool label_metrics = 10 [(gogoproto.nullable) = false];
     // ExpirationExpr is the custom assigned expression for calculating when the TTL should apply to a row.
-    optional string expiration_expr = 11 [(gogoproto.nullable)=false, (gogoproto.casttype)="Expression"];
+    optional string expiration_expr = 11 [(gogoproto.nullable) = false, (gogoproto.casttype) = "Expression"];
+    // SelectRateLimit is the maximum amount of rows to select per second.
+    optional int64 select_rate_limit = 12 [(gogoproto.nullable) = false];
   }
 
   // ...
@@ -182,6 +184,7 @@ the following options to control the TTL job:
 | `ttl_expiration_expression`   | If set, uses the expression specified as the TTL expiration. Defaults to just using the `crdb_internal_expiration` column.                                |
 | `ttl_select_batch_size`       | How many rows to fetch from the range that have expired at a given time. Defaults to 500. Must be at least `1`.                                           |
 | `ttl_delete_batch_size`       | How many rows to delete at a time. Defaults to 100. Must be at least `1`.                                                                                 |
+| `ttl_select_rate_limit`       | Maximum number of rows to be selected per second (acts as the rate limit). Defaults to 0 (signifying none).                                               |
 | `ttl_delete_rate_limit`       | Maximum number of rows to be deleted per second (acts as the rate limit). Defaults to 0 (signifying none).                                                |
 | `ttl_row_stats_poll_interval` | Whilst the TTL job is running, counts rows and expired rows on the table to report as prometheus metrics. By default unset, meaning no stats are fetched. |
 | `ttl_pause`                   | Stops the TTL job from executing.                                                                                                                         |

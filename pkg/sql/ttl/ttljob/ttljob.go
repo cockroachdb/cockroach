@@ -38,6 +38,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// rowLevelTTLResumer implements the TTL job. The job can run on any node, but
+// the job node distributes SELECT/DELETE work via DistSQL to ttlProcessor
+// nodes. DistSQL divides work into spans that each ttlProcessor scans in a
+// SELECT/DELETE loop.
 type rowLevelTTLResumer struct {
 	job *jobs.Job
 	st  *cluster.Settings
@@ -185,6 +189,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		jobID := t.job.ID()
 		selectBatchSize := ttlbase.GetSelectBatchSize(settingsValues, rowLevelTTL)
 		deleteBatchSize := ttlbase.GetDeleteBatchSize(settingsValues, rowLevelTTL)
+		selectRateLimit := ttlbase.GetSelectRateLimit(settingsValues, rowLevelTTL)
 		deleteRateLimit := ttlbase.GetDeleteRateLimit(settingsValues, rowLevelTTL)
 		newTTLSpec := func(spans []roachpb.Span) *execinfrapb.TTLSpec {
 			return &execinfrapb.TTLSpec{
@@ -194,6 +199,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 				Spans:                       spans,
 				SelectBatchSize:             selectBatchSize,
 				DeleteBatchSize:             deleteBatchSize,
+				SelectRateLimit:             selectRateLimit,
 				DeleteRateLimit:             deleteRateLimit,
 				LabelMetrics:                rowLevelTTL.LabelMetrics,
 				PreDeleteChangeTableVersion: knobs.PreDeleteChangeTableVersion,

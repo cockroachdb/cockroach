@@ -13,6 +13,7 @@ package ttljob
 import (
 	"bytes"
 	"context"
+	"math"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -44,10 +45,17 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// ttlProcessor manages the work managed by a single node for a job run by
+// rowLevelTTLResumer. SpanToQueryBounds converts a DistSQL span into
+// QueryBounds. The QueryBounds are passed to SelectQueryBuilder and
+// DeleteQueryBuilder which manage the state for the SELECT/DELETE loop
+// that is run by runTTLOnQueryBounds.
 type ttlProcessor struct {
 	execinfra.ProcessorBase
 	ttlSpec execinfrapb.TTLSpec
 }
+
+var _ execinfra.RowSource = (*ttlProcessor)(nil)
 
 func (t *ttlProcessor) Start(ctx context.Context) {
 	ctx = t.StartInternal(ctx, "ttl")
@@ -65,6 +73,21 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	codec := serverCfg.Codec
 	details := ttlSpec.RowLevelTTLDetails
 	tableID := details.TableID
+	cutoff := details.Cutoff
+	ttlExpr := ttlSpec.TTLExpr
+
+	selectRateLimit := ttlSpec.SelectRateLimit
+	// Default 0 value to "unlimited" in case job started on node <= v23.2.
+	// todo(sql-foundations): Remove this in 25.1 for consistency with
+	//  deleteRateLimit.
+	if selectRateLimit == 0 {
+		selectRateLimit = math.MaxInt64
+	}
+	selectRateLimiter := quotapool.NewRateLimiter(
+		"ttl-select",
+		quotapool.Limit(selectRateLimit),
+		selectRateLimit,
+	)
 
 	deleteRateLimit := ttlSpec.DeleteRateLimit
 	deleteRateLimiter := quotapool.NewRateLimiter(
@@ -73,14 +96,13 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		deleteRateLimit,
 	)
 
-	processorRowCount := int64(0)
-
 	var (
-		relationName string
-		pkColNames   []string
-		pkColTypes   []*types.T
-		pkColDirs    []catenumpb.IndexColumn_Direction
-		labelMetrics bool
+		relationName      string
+		pkColNames        []string
+		pkColTypes        []*types.T
+		pkColDirs         []catenumpb.IndexColumn_Direction
+		labelMetrics      bool
+		processorRowCount int64
 	)
 	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		desc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
@@ -139,18 +161,39 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 			group.GoCtx(func(ctx context.Context) error {
 				for bounds := range boundsChan {
 					start := timeutil.Now()
+					selectBuilder := MakeSelectQueryBuilder(
+						SelectQueryParams{
+							RelationName:      relationName,
+							PKColNames:        pkColNames,
+							PKColDirs:         pkColDirs,
+							Bounds:            bounds,
+							AOSTDuration:      ttlSpec.AOSTDuration,
+							SelectBatchSize:   ttlSpec.SelectBatchSize,
+							TTLExpr:           ttlExpr,
+							SelectDuration:    metrics.SelectDuration,
+							SelectRateLimiter: selectRateLimiter,
+						},
+						cutoff,
+					)
+					deleteBuilder := MakeDeleteQueryBuilder(
+						DeleteQueryParams{
+							RelationName:      relationName,
+							PKColNames:        pkColNames,
+							DeleteBatchSize:   ttlSpec.DeleteBatchSize,
+							TTLExpr:           ttlExpr,
+							DeleteDuration:    metrics.DeleteDuration,
+							DeleteRateLimiter: deleteRateLimiter,
+						},
+						cutoff,
+					)
 					spanRowCount, err := t.runTTLOnQueryBounds(
 						ctx,
 						metrics,
-						bounds,
-						pkColNames,
-						pkColDirs,
-						relationName,
-						deleteRateLimiter,
+						selectBuilder,
+						deleteBuilder,
 					)
 					// add before returning err in case of partial success
 					atomic.AddInt64(&processorRowCount, spanRowCount)
-					metrics.SpanTotalDuration.RecordValue(int64(timeutil.Since(start)))
 					if err != nil {
 						// Continue until channel is fully read.
 						// Otherwise, the keys input will be blocked.
@@ -158,6 +201,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 						}
 						return err
 					}
+					metrics.SpanTotalDuration.RecordValue(int64(timeutil.Since(start)))
 				}
 				return nil
 			})
@@ -223,15 +267,14 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	)
 }
 
-// spanRowCount should be checked even if the function returns an error because it may have partially succeeded
+// runTTLOnQueryBounds runs the SELECT/DELETE loop for a single DistSQL span.
+// spanRowCount should be checked even if the function returns an error
+// because it may have partially succeeded.
 func (t *ttlProcessor) runTTLOnQueryBounds(
 	ctx context.Context,
 	metrics rowLevelTTLMetrics,
-	bounds QueryBounds,
-	pkColNames []string,
-	pkColDirs []catenumpb.IndexColumn_Direction,
-	relationName string,
-	deleteRateLimiter *quotapool.RateLimiter,
+	selectBuilder SelectQueryBuilder,
+	deleteBuilder DeleteQueryBuilder,
 ) (spanRowCount int64, err error) {
 	metrics.NumActiveSpans.Inc(1)
 	defer metrics.NumActiveSpans.Dec(1)
@@ -240,31 +283,9 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 
 	ttlSpec := t.ttlSpec
 	details := ttlSpec.RowLevelTTLDetails
-	cutoff := details.Cutoff
-	ttlExpr := ttlSpec.TTLExpr
 	flowCtx := t.FlowCtx
 	serverCfg := flowCtx.Cfg
 	ie := serverCfg.DB.Executor()
-
-	selectBatchSize := ttlSpec.SelectBatchSize
-	selectBuilder := MakeSelectQueryBuilder(
-		cutoff,
-		pkColNames,
-		pkColDirs,
-		relationName,
-		bounds,
-		ttlSpec.AOSTDuration,
-		selectBatchSize,
-		ttlExpr,
-	)
-	deleteBatchSize := ttlSpec.DeleteBatchSize
-	deleteBuilder := MakeDeleteQueryBuilder(
-		cutoff,
-		pkColNames,
-		relationName,
-		deleteBatchSize,
-		ttlExpr,
-	)
 
 	preSelectStatement := ttlSpec.PreSelectStatement
 	if preSelectStatement != "" {
@@ -288,16 +309,16 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 
 		// Step 1. Fetch some rows we want to delete using a historical
 		// SELECT query.
-		start := timeutil.Now()
 		expiredRowsPKs, hasNext, err := selectBuilder.Run(ctx, ie)
-		metrics.SelectDuration.RecordValue(int64(timeutil.Since(start)))
 		if err != nil {
 			return spanRowCount, errors.Wrapf(err, "error selecting rows to delete")
 		}
+
 		numExpiredRows := int64(len(expiredRowsPKs))
 		metrics.RowSelections.Inc(numExpiredRows)
 
 		// Step 2. Delete the rows which have expired.
+		deleteBatchSize := deleteBuilder.DeleteBatchSize
 		for startRowIdx := int64(0); startRowIdx < numExpiredRows; startRowIdx += deleteBatchSize {
 			until := startRowIdx + deleteBatchSize
 			if until > numExpiredRows {
@@ -319,18 +340,10 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 						desc.GetModificationTime().GoTime().Format(time.RFC3339),
 					)
 				}
-				tokens, err := deleteRateLimiter.Acquire(ctx, int64(len(deleteBatch)))
-				if err != nil {
-					return err
-				}
-				defer tokens.Consume()
-
-				start := timeutil.Now()
 				batchRowCount, err = deleteBuilder.Run(ctx, txn, deleteBatch)
 				if err != nil {
 					return err
 				}
-				metrics.DeleteDuration.RecordValue(int64(timeutil.Since(start)))
 				return nil
 			}
 			if err := serverCfg.DB.Txn(
