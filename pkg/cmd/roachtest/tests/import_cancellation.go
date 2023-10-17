@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/workload/tpch"
 	"github.com/cockroachdb/errors"
 )
 
@@ -53,19 +54,6 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 	t.Status("starting csv servers")
 	c.Run(ctx, c.All(), `./cockroach workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
-
-	// Download the tpch queries file. After the import, we'll run tpch queries
-	// against the imported tables.
-	const queriesFilename = "tpch"
-	const queriesURL = "https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/workload/querybench/tpch-queries"
-	t.Status(fmt.Sprintf("downloading %s query file from %s", queriesFilename, queriesURL))
-	if err := c.RunE(ctx, c.Node(1), fmt.Sprintf("curl %s > %s", queriesURL, queriesFilename)); err != nil {
-		t.Fatal(err)
-	}
-	numQueries, err := getNumQueriesInFile(queriesFilename, queriesURL)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	// Create the tables.
 	conn := c.Conn(ctx, t.L(), 1)
@@ -143,7 +131,7 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 	// that becomes GC'd.
 	for tbl := range tablesToNumFiles {
 		stmt := fmt.Sprintf(`ALTER TABLE csv.%s CONFIGURE ZONE USING gc.ttlseconds = $1`, tbl)
-		_, err = conn.ExecContext(ctx, stmt, 60*60*4 /* 4 hours */)
+		_, err := conn.ExecContext(ctx, stmt, 60*60*4 /* 4 hours */)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -158,12 +146,12 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 		// were run 2 times.
 		const numRunsPerQuery = 2
 		const maxLatency = 500 * time.Second
-		maxOps := numRunsPerQuery * numQueries
+		maxOps := numRunsPerQuery * tpch.NumQueries
 		cmd := fmt.Sprintf(
-			"./workload run querybench --db=csv --concurrency=1 --query-file=%s "+
-				"--num-runs=%d --max-ops=%d {pgurl%s} "+
+			"./workload run tpch --db=csv --concurrency=1 --num-runs=%d "+
+				"--max-ops=%d {pgurl%s}  --enable-checks=true"+
 				"--histograms="+t.PerfArtifactsDir()+"/stats.json --histograms-max-latency=%s",
-			queriesFilename, numRunsPerQuery, maxOps, c.All(), maxLatency.String())
+			numRunsPerQuery, maxOps, c.All(), maxLatency.String())
 		if err := c.RunE(ctx, c.Node(1), cmd); err != nil {
 			t.Fatal(err)
 		}
