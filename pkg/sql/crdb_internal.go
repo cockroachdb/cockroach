@@ -91,6 +91,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -458,7 +459,8 @@ CREATE TABLE crdb_internal.super_regions (
 func makeCrdbInternalTablesAddRowFn(
 	p *planner, pusher func(...tree.Datum) error,
 ) func(table catalog.TableDescriptor, dbName tree.Datum, scName string) error {
-	row := make(tree.Datums, 14)
+	const numDatums = 16
+	row := make(tree.Datums, numDatums)
 	return func(table catalog.TableDescriptor, dbName tree.Datum, scName string) (err error) {
 		dropTimeDatum := tree.DNull
 		if dropTime := table.GetDropTime(); dropTime != 0 {
@@ -477,8 +479,7 @@ func makeCrdbInternalTablesAddRowFn(
 			}
 			locality = tree.NewDString(f.String())
 		}
-		row = row[:0]
-		row = append(row,
+		row = append(row[:0],
 			tree.NewDInt(tree.DInt(int64(table.GetID()))),
 			tree.NewDInt(tree.DInt(int64(table.GetParentID()))),
 			tree.NewDString(table.GetName()),
@@ -496,6 +497,11 @@ func makeCrdbInternalTablesAddRowFn(
 			tree.NewDInt(tree.DInt(int64(table.GetParentSchemaID()))),
 			locality,
 		)
+		if buildutil.CrdbTestBuild {
+			if len(row) != numDatums {
+				return errors.AssertionFailedf("expected %d datums, got %d", numDatums, len(row))
+			}
+		}
 		return pusher(row...)
 	}
 }
@@ -680,12 +686,11 @@ CREATE TABLE crdb_internal.pg_catalog_table_is_implemented (
   implemented              BOOL
 )`,
 	generator: func(ctx context.Context, p *planner, dbDesc catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
-		row := make(tree.Datums, 14)
+		row := make(tree.Datums, 2)
 		worker := func(ctx context.Context, pusher rowPusher) error {
 			addDesc := func(table *virtualDefEntry, dbName tree.Datum, scName string) error {
 				tableDesc := table.desc
-				row = row[:0]
-				row = append(row,
+				row = append(row[:0],
 					tree.NewDString(tableDesc.GetName()),
 					tree.MakeDBool(tree.DBool(table.unimplemented)),
 				)
@@ -3852,7 +3857,8 @@ CREATE TABLE crdb_internal.table_columns (
 )
 `,
 	generator: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
-		row := make(tree.Datums, 8)
+		const numDatums = 8
+		row := make(tree.Datums, numDatums)
 		worker := func(ctx context.Context, pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
 				func(db catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
@@ -3870,8 +3876,7 @@ CREATE TABLE crdb_internal.table_columns (
 							}
 							defStr = tree.NewDString(defExpr)
 						}
-						row = row[:0]
-						row = append(row,
+						row = append(row[:0],
 							tableID,
 							tableName,
 							tree.NewDInt(tree.DInt(col.GetID())),
@@ -3881,6 +3886,11 @@ CREATE TABLE crdb_internal.table_columns (
 							defStr,
 							tree.MakeDBool(tree.DBool(col.IsHidden())),
 						)
+						if buildutil.CrdbTestBuild {
+							if len(row) != numDatums {
+								return errors.AssertionFailedf("expected %d datums, got %d", numDatums, len(row))
+							}
+						}
 						if err := pusher.pushRow(row...); err != nil {
 							return err
 						}
@@ -3916,7 +3926,8 @@ CREATE TABLE crdb_internal.table_indexes (
 	generator: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		primary := tree.NewDString("primary")
 		secondary := tree.NewDString("secondary")
-		var row []tree.Datum
+		const numDatums = 13
+		row := make([]tree.Datum, numDatums)
 		worker := func(ctx context.Context, pusher rowPusher) error {
 			alloc := &tree.DatumAlloc{}
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
@@ -3928,7 +3939,6 @@ CREATE TABLE crdb_internal.table_indexes (
 					return catalog.ForEachIndex(table, catalog.IndexOpts{
 						NonPhysicalPrimaryIndex: true,
 					}, func(idx catalog.Index) error {
-						row = row[:0]
 						idxType := secondary
 						if idx.Primary() {
 							idxType = primary
@@ -3977,7 +3987,7 @@ CREATE TABLE crdb_internal.table_indexes (
 						if err != nil {
 							return err
 						}
-						row = append(row,
+						row = append(row[:0],
 							tableID,
 							tableName,
 							tree.NewDInt(tree.DInt(idx.GetID())),
@@ -3992,6 +4002,11 @@ CREATE TABLE crdb_internal.table_indexes (
 							createdAt,
 							tree.NewDString(createIndexStmt),
 						)
+						if buildutil.CrdbTestBuild {
+							if len(row) != numDatums {
+								return errors.AssertionFailedf("expected %d datums, got %d", numDatums, len(row))
+							}
+						}
 						return pusher.pushRow(row...)
 					})
 				},
@@ -6725,7 +6740,8 @@ CREATE TABLE crdb_internal.index_usage_statistics (
 		}
 		indexStats := idxusage.NewLocalIndexUsageStatsFromExistingStats(&idxusage.Config{}, stats.Statistics)
 
-		row := make(tree.Datums, 4 /* number of columns for this virtual table */)
+		const numDatums = 4
+		row := make(tree.Datums, numDatums)
 		worker := func(ctx context.Context, pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
 				func(db catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
@@ -6733,7 +6749,6 @@ CREATE TABLE crdb_internal.index_usage_statistics (
 					return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(idx catalog.Index) error {
 						indexID := idx.GetID()
 						stats := indexStats.Get(roachpb.TableID(tableID), roachpb.IndexID(indexID))
-
 						lastScanTs := tree.DNull
 						if !stats.LastRead.IsZero() {
 							lastScanTs, err = tree.MakeDTimestampTZ(stats.LastRead, time.Nanosecond)
@@ -6741,16 +6756,17 @@ CREATE TABLE crdb_internal.index_usage_statistics (
 								return err
 							}
 						}
-
-						row = row[:0]
-
-						row = append(row,
+						row = append(row[:0],
 							tree.NewDInt(tree.DInt(tableID)),              // tableID
 							tree.NewDInt(tree.DInt(indexID)),              // indexID
 							tree.NewDInt(tree.DInt(stats.TotalReadCount)), // total_reads
 							lastScanTs, // last_scan
 						)
-
+						if buildutil.CrdbTestBuild {
+							if len(row) != numDatums {
+								return errors.AssertionFailedf("expected %d datums, got %d", numDatums, len(row))
+							}
+						}
 						return pusher.pushRow(row...)
 					})
 				})
@@ -6807,7 +6823,8 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 		curAggTs := s.ComputeAggregatedTs()
 		aggInterval := s.GetAggregationInterval()
 
-		row := make(tree.Datums, 9 /* number of columns for this virtual table */)
+		const numDatums = 10
+		row := make(tree.Datums, numDatums)
 		worker := func(ctx context.Context, pusher rowPusher) error {
 			return memSQLStats.IterateStatementStats(ctx, sqlstats.IteratorOptions{
 				SortedAppNames: true,
@@ -6849,8 +6866,7 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 					}
 				}
 
-				row = row[:0]
-				row = append(row,
+				row = append(row[:0],
 					aggregatedTs,                        // aggregated_ts
 					fingerprintID,                       // fingerprint_id
 					transactionFingerprintID,            // transaction_fingerprint_id
@@ -6862,7 +6878,11 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 					aggInterval,                         // aggregation_interval
 					indexRecommendations,                // index_recommendations
 				)
-
+				if buildutil.CrdbTestBuild {
+					if len(row) != numDatums {
+						return errors.AssertionFailedf("expected %d datums, got %d", numDatums, len(row))
+					}
+				}
 				return pusher.pushRow(row...)
 			})
 		}
@@ -7211,7 +7231,8 @@ CREATE TABLE crdb_internal.cluster_transaction_statistics (
 		curAggTs := s.ComputeAggregatedTs()
 		aggInterval := s.GetAggregationInterval()
 
-		row := make(tree.Datums, 5 /* number of columns for this virtual table */)
+		const numDatums = 6
+		row := make(tree.Datums, numDatums)
 		worker := func(ctx context.Context, pusher rowPusher) error {
 			return memSQLStats.IterateTransactionStats(ctx, sqlstats.IteratorOptions{
 				SortedAppNames: true,
@@ -7241,8 +7262,7 @@ CREATE TABLE crdb_internal.cluster_transaction_statistics (
 					duration.MakeDuration(aggInterval.Nanoseconds(), 0, 0),
 					types.DefaultIntervalTypeMetadata)
 
-				row = row[:0]
-				row = append(row,
+				row = append(row[:0],
 					aggregatedTs,                    // aggregated_ts
 					fingerprintID,                   // fingerprint_id
 					tree.NewDString(statistics.App), // app_name
@@ -7250,7 +7270,11 @@ CREATE TABLE crdb_internal.cluster_transaction_statistics (
 					tree.NewDJSON(statisticsJSON),   // statistics
 					aggInterval,                     // aggregation_interval
 				)
-
+				if buildutil.CrdbTestBuild {
+					if len(row) != numDatums {
+						return errors.AssertionFailedf("expected %d datums, got %d", numDatums, len(row))
+					}
+				}
 				return pusher.pushRow(row...)
 			})
 		}
@@ -7525,7 +7549,8 @@ CREATE TABLE crdb_internal.transaction_contention_events (
 			return nil, nil, err
 		}
 
-		row := make(tree.Datums, 6 /* number of columns for this virtual table */)
+		const numDatums = 15
+		row := make(tree.Datums, numDatums)
 		worker := func(ctx context.Context, pusher rowPusher) error {
 			for i := range resp.Events {
 				collectionTs, err := tree.MakeDTimestampTZ(resp.Events[i].CollectionTs, time.Microsecond)
@@ -7570,8 +7595,7 @@ CREATE TABLE crdb_internal.transaction_contention_events (
 					log.Errorf(ctx, "getContentionEventInfo failed to decode key: %v", err)
 				}
 
-				row = row[:0]
-				row = append(row,
+				row = append(row[:0],
 					collectionTs, // collection_ts
 					tree.NewDUuid(tree.DUuid{UUID: resp.Events[i].BlockingEvent.TxnMeta.ID}), // blocking_txn_id
 					blockingFingerprintID, // blocking_fingerprint_id
@@ -7588,7 +7612,11 @@ CREATE TABLE crdb_internal.transaction_contention_events (
 					tree.NewDString(indexName),  // index_name
 					tree.NewDString(resp.Events[i].ContentionType.String()),
 				)
-
+				if buildutil.CrdbTestBuild {
+					if len(row) != numDatums {
+						return errors.AssertionFailedf("expected %d datums, got %d", numDatums, len(row))
+					}
+				}
 				if err = pusher.pushRow(row...); err != nil {
 					return err
 				}
