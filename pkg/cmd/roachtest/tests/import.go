@@ -353,20 +353,21 @@ func successfulImportStep(warehouses, nodeID int) versionStep {
 }
 
 func runImportMixedVersion(
-	ctx context.Context, t test.Test, c cluster.Cluster, warehouses int, predecessorVersion string,
+	ctx context.Context, t test.Test, c cluster.Cluster, warehouses int, predVersion string,
 ) {
 	roachNodes := c.All()
 
 	t.Status("starting csv servers")
 
+	predecessorVersion := clusterupgrade.MustParseVersion(predVersion)
 	u := newVersionUpgradeTest(c,
 		uploadAndStartFromCheckpointFixture(roachNodes, predecessorVersion),
 		waitForUpgradeStep(roachNodes),
 		preventAutoUpgradeStep(1),
 
 		// Upgrade some of the nodes.
-		binaryUpgradeStep(c.Node(1), clusterupgrade.MainVersion),
-		binaryUpgradeStep(c.Node(2), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Node(1), clusterupgrade.CurrentVersion()),
+		binaryUpgradeStep(c.Node(2), clusterupgrade.CurrentVersion()),
 
 		successfulImportStep(warehouses, 1 /* nodeID */),
 	)
