@@ -4,6 +4,7 @@ go_library(
     name = "jobstest",
     srcs = [
         "logutils.go",
+        "resumer.go",
         "utils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/jobs/jobstest",
@@ -13,6 +14,7 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/scheduledjobs",
         "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/isql",
         "//pkg/sql/sem/tree",
         "//pkg/testutils",
         "//pkg/util/log",

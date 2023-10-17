@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -364,7 +365,7 @@ func TestGCDurationControl(t *testing.T) {
 	}
 
 	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, cs *cluster.Settings) jobs.Resumer {
-		return jobs.FakeResumer{}
+		return jobstest.FakeResumer{}
 	}, jobs.UsesTenantCostControl)
 	s, sqlDB, _ := serverutils.StartServer(t, args)
 	defer s.Stopper().Stop(ctx)
@@ -443,7 +444,7 @@ func TestErrorsPopulatedOnRetry(t *testing.T) {
 				return ctx.Err()
 			}
 		}
-		return jobs.FakeResumer{
+		return jobstest.FakeResumer{
 			OnResume:     execFn,
 			FailOrCancel: execFn,
 		}
