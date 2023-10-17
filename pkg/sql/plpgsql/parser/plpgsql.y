@@ -316,7 +316,7 @@ func (u *plpgsqlSymUnion) sqlStatement() tree.Statement {
 %type <tree.ResolvableTypeReference>	decl_datatype
 %type <str>		decl_collate
 
-%type <str>	expr_until_semi expr_until_paren
+%type <str>	expr_until_semi expr_until_paren stmt_until_semi
 %type <str>	expr_until_then expr_until_loop opt_expr_until_when
 %type <plpgsqltree.Expr>	opt_exitcond
 
@@ -480,7 +480,7 @@ opt_scrollable:
   }
 ;
 
-decl_cursor_query: expr_until_semi ';'
+decl_cursor_query: stmt_until_semi ';'
   {
     stmts, err := parser.Parse($1)
     if err != nil {
@@ -545,13 +545,15 @@ decl_datatype:
   {
     // Read until reaching one of the tokens that can follow a declaration
     // data type.
-    sqlStr, _ := plpgsqllex.(*lexer).ReadSqlConstruct(
+    sqlStr, _, err := plpgsqllex.(*lexer).ReadSqlExpr(
       ';', COLLATE, NOT, '=', COLON_EQUALS, DECLARE,
     )
-    // TODO(drewk): need to ensure the syntax for the type is correct.
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
     typ, err := plpgsqllex.(*lexer).GetTypeFromValidSQLSyntax(sqlStr)
     if err != nil {
-      setErr(plpgsqllex, err)
+      return setErr(plpgsqllex, err)
     }
     $$.val = typ
   }
@@ -597,11 +599,19 @@ decl_defval: ';'
 
 decl_defkey: assign_operator
   {
-    $$ = plpgsqllex.(*lexer).ReadSqlExpressionStr(';')
+    sqlStr, _, err := plpgsqllex.(*lexer).ReadSqlExpr(';')
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
+    $$ = sqlStr
   }
 | DEFAULT
   {
-    $$ = plpgsqllex.(*lexer).ReadSqlExpressionStr(';')
+    sqlStr, _, err := plpgsqllex.(*lexer).ReadSqlExpr(';')
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
+    $$ = sqlStr
   }
 ;
 
@@ -712,7 +722,7 @@ proc_stmt:pl_block ';'
   { }
 ;
 
-stmt_perform: PERFORM expr_until_semi ';'
+stmt_perform: PERFORM stmt_until_semi ';'
   {
     return unimplemented(plpgsqllex, "perform")
   }
@@ -730,7 +740,10 @@ stmt_call: CALL call_cmd ';'
 
 call_cmd:
   {
-    plpgsqllex.(*lexer).ReadSqlExpressionStr(';')
+    _, _, err := plpgsqllex.(*lexer).ReadSqlExpr(';')
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
   }
 ;
 
@@ -819,7 +832,7 @@ getdiag_item: unreserved_keyword {
       $$.val = plpgsqltree.GetDiagnosticsReturnedSQLState;
     default:
       // TODO(jane): Should this use an unimplemented error instead?
-      setErr(plpgsqllex, errors.Newf("unrecognized GET DIAGNOSTICS item: %s", redact.Safe($1)))
+      return setErr(plpgsqllex, errors.Newf("unrecognized GET DIAGNOSTICS item: %s", redact.Safe($1)))
   }
 }
 ;
@@ -890,12 +903,15 @@ stmt_case: CASE opt_expr_until_when case_when_list opt_case_else END_CASE CASE '
 
 opt_expr_until_when:
   {
-    expr := ""
-    tok := plpgsqllex.(*lexer).Peek()
-    if tok.id != WHEN {
-      expr = plpgsqllex.(*lexer).ReadSqlExpressionStr(WHEN)
+    if plpgsqllex.(*lexer).Peek().id != WHEN {
+      sqlStr, _, err := plpgsqllex.(*lexer).ReadSqlExpr(WHEN)
+      if err != nil {
+        return setErr(plpgsqllex, err)
+      }
+      $$ = sqlStr
+    } else {
+      $$ = ""
     }
-    $$ = expr
   }
 ;
 
@@ -1041,11 +1057,11 @@ stmt_return: RETURN return_variable ';'
       Expr: $2.expr(),
     }
   }
-| RETURN_NEXT NEXT return_variable ';'
+| RETURN_NEXT NEXT
   {
     return unimplemented(plpgsqllex, "return next")
   }
-| RETURN_QUERY QUERY query_options ';'
+| RETURN_QUERY QUERY
  {
    return unimplemented (plpgsqllex, "return query")
  }
@@ -1054,11 +1070,17 @@ stmt_return: RETURN return_variable ';'
 
 query_options:
   {
-    _, terminator := plpgsqllex.(*lexer).ReadSqlExpressionStr2(EXECUTE, ';')
+    _, terminator, err := plpgsqllex.(*lexer).ReadSqlExpr(EXECUTE, ';')
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
     if terminator == EXECUTE {
       return unimplemented (plpgsqllex, "return dynamic sql query")
     }
-    plpgsqllex.(*lexer).ReadSqlExpressionStr(';')
+    _, _, err = plpgsqllex.(*lexer).ReadSqlExpr(';')
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
   }
 ;
 
@@ -1153,7 +1175,10 @@ option_expr:
   option_type assign_operator
   {
     // Read until reaching one of the tokens that can follow a raise option.
-    sqlStr, _ := plpgsqllex.(*lexer).ReadSqlConstruct(',', ';')
+    sqlStr, _, err := plpgsqllex.(*lexer).ReadSqlExpr(',', ';')
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
     optionExpr, err := plpgsqllex.(*lexer).ParseExpr(sqlStr)
     if err != nil {
       return setErr(plpgsqllex, err)
@@ -1202,7 +1227,10 @@ format_exprs:
 format_expr: ','
   {
     // Read until reaching a token that can follow a raise format parameter.
-    sqlStr, _ := plpgsqllex.(*lexer).ReadSqlConstruct(',', ';', USING)
+    sqlStr, _, err := plpgsqllex.(*lexer).ReadSqlExpr(',', ';', USING)
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
     param, err := plpgsqllex.(*lexer).ParseExpr(sqlStr)
     if err != nil {
       return setErr(plpgsqllex, err)
@@ -1219,9 +1247,15 @@ stmt_assert: ASSERT assert_cond ';'
 
 assert_cond:
   {
-    _, terminator := plpgsqllex.(*lexer).ReadSqlExpressionStr2(',', ';')
+    _, terminator, err := plpgsqllex.(*lexer).ReadSqlExpr(',', ';')
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
     if terminator == ',' {
-      plpgsqllex.(*lexer).ReadSqlExpressionStr(';')
+      _, _, err = plpgsqllex.(*lexer).ReadSqlExpr(';')
+      if err != nil {
+        return setErr(plpgsqllex, err)
+      }
     }
   }
 ;
@@ -1251,7 +1285,11 @@ stmt_execsql_start:
 
 stmt_dynexecute: EXECUTE
   {
-    $$.val = plpgsqllex.(*lexer).MakeDynamicExecuteStmt()
+    stmt, err := plpgsqllex.(*lexer).MakeDynamicExecuteStmt()
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
+    $$.val = stmt
   }
 ;
 
@@ -1263,7 +1301,7 @@ stmt_open: OPEN IDENT ';'
   {
     return unimplemented(plpgsqllex, "cursor for execute")
   }
-| OPEN IDENT opt_scrollable FOR expr_until_semi ';'
+| OPEN IDENT opt_scrollable FOR stmt_until_semi ';'
   {
     stmts, err := parser.Parse($5)
     if err != nil {
@@ -1387,25 +1425,51 @@ proc_condition: any_identifier
 
 expr_until_semi:
   {
-    $$ = plpgsqllex.(*lexer).ReadSqlExpressionStr(';')
+    sqlStr, _, err := plpgsqllex.(*lexer).ReadSqlExpr(';')
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
+    $$ = sqlStr
+  }
+;
+
+stmt_until_semi:
+  {
+    sqlStr, _, err := plpgsqllex.(*lexer).ReadSqlStatement(';')
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
+    $$ = sqlStr
   }
 ;
 
 expr_until_then:
   {
-    $$ = plpgsqllex.(*lexer).ReadSqlExpressionStr(THEN)
+    sqlStr, _, err := plpgsqllex.(*lexer).ReadSqlExpr(THEN)
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
+    $$ = sqlStr
   }
 ;
 
 expr_until_loop:
   {
-    $$ = plpgsqllex.(*lexer).ReadSqlExpressionStr(LOOP)
+    sqlStr, _, err := plpgsqllex.(*lexer).ReadSqlExpr(LOOP)
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
+    $$ = sqlStr
   }
 ;
 
 expr_until_paren :
   {
-    $$ = plpgsqllex.(*lexer).ReadSqlExpressionStr(')')
+    sqlStr, _, err := plpgsqllex.(*lexer).ReadSqlExpr(')')
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
+    $$ = sqlStr
   }
 ;
 

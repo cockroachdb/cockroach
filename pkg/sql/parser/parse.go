@@ -388,8 +388,8 @@ func GetTypeReferenceFromName(typeName tree.Name) (tree.ResolvableTypeReference,
 
 // GetTypeFromValidSQLSyntax retrieves a type from its SQL syntax. The caller is
 // responsible for guaranteeing that the type expression is valid
-// SQL. This includes verifying that complex identifiers are enclosed
-// in double quotes, etc.
+// SQL (or handling the resulting error). This includes verifying that complex
+// identifiers are enclosed in double quotes, etc.
 func GetTypeFromValidSQLSyntax(sql string) (tree.ResolvableTypeReference, error) {
 	expr, err := ParseExpr(fmt.Sprintf("1::%s", sql))
 	if err != nil {
