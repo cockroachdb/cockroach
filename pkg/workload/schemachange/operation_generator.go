@@ -2674,6 +2674,24 @@ func makeOpStmt(queryType opStmtType) *opStmt {
 	}
 }
 
+// opStmtFromTree constructs an operation from the provide tree.Statement.
+func newOpStmt(stmt tree.Statement, codes codesWithConditions) *opStmt {
+	queryType := OpStmtDDL
+	if stmt.StatementType() != tree.TypeDDL {
+		queryType = OpStmtDML
+	}
+
+	expectedErrors := makeExpectedErrorSet()
+	expectedErrors.addAll(codes)
+
+	return &opStmt{
+		sql:                 tree.Serialize(stmt),
+		queryType:           queryType,
+		expectedExecErrors:  expectedErrors,
+		potentialExecErrors: makeExpectedErrorSet(),
+	}
+}
+
 // ErrorState wraps schemachange workload errors to have state information for
 // the purpose of dumping in our JSON log.
 type ErrorState struct {
