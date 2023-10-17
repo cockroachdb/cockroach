@@ -821,6 +821,10 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 		stmts: []string{
 			// Statements expected to succeed.
 			"SET sql_safe_updates = false;",
+			"CREATE DATABASE testdb1; SET DATABASE = testdb1",
+			"CREATE TABLE testdb1.t1 (i INT PRIMARY KEY); CREATE TABLE testdb1.t2 (i INT PRIMARY KEY REFERENCES testdb1.t1(i));",
+			"DROP DATABASE testdb1 CASCADE  -- current db is dropped; expect no post-execution checks",
+			"USE defaultdb",
 			"CREATE TABLE t2 (i INT PRIMARY KEY, j INT NOT NULL);",
 			"CREATE TABLE t1 (i INT PRIMARY KEY, j INT REFERENCES t2(i));",
 			"INSERT INTO t2 SELECT k, k+1 FROM generate_series(1,1000) AS tmp(k);",
@@ -867,6 +871,8 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"BEGIN;",
 			"ALTER TABLE t3 DROP CONSTRAINT t3_pkey;",
 			"DELETE FROM t3 WHERE i = 1;  -- expect to result in an error",
+			"ROLLBACK;",
+			"BEGIN; ALTER TABLE t3 ADD COLUMN j INT CREATE FAMILY;",
 			"ROLLBACK;",
 			"BEGIN; SAVEPOINT cockroach_restart;",
 			"RELEASE SAVEPOINT cockroach_restart;  -- move txn into DONE state",
@@ -941,11 +947,19 @@ func TestComparatorFromLogicTests(t *testing.T) {
 // logictest stmts corpus. Each blacklisted entry should be justified with
 // comments.
 func shouldSkipLogicTestCorpusEntry(entryName string) (skip bool, skipReason string) {
-	// `crdb_internal` contains stmts like `SELECT crdb_internal.force_panic('foo')`
-	// that will cause the framework to crash. Also, in general, we don't care about
-	// crdb_internal functions for purpose of schema changer comparator testing.
-	if entryName == "crdb_internal" {
+	switch entryName {
+	case "crdb_internal":
+		// `crdb_internal` contains stmts like `SELECT crdb_internal.force_panic('foo')`
+		// that will cause the framework to crash. Also, in general, we don't care about
+		// crdb_internal functions for purpose of schema changer comparator testing.
 		return true, `"crdb_internal" contains statement like "crdb_internal.force_panic()" that would crash the testing framework`
+	case "schema_repair":
+		// `schema_repair` contains stmts like `SELECT crdb_internal.unsafe_delete_descriptor(id)`
+		// that will corrupt descriptors. This subsequently would fail the query that
+		// attempts to fetch all descriptors during the post-execution metadata
+		// identity check.
+		return true, `"schema_repair" contains statement like "crdb_internal.unsafe_delete_descriptor(id)" that would cause descriptor corruptions, which would subsequently fail the query to fetch descriptors during the metadata identity check`
+	default:
+		return false, ""
 	}
-	return false, ""
 }
