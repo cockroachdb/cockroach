@@ -897,7 +897,7 @@ func (rd *restoreDriver) run(ctx context.Context, target string) error {
 	if err != nil {
 		return errors.Wrapf(err, "failed to connect to node 1; running restore")
 	}
-	_, err = conn.ExecContext(ctx, rd.restoreCmd(target, ""))
+	_, err = conn.ExecContext(ctx, rd.restoreCmd(target, "WITH unsafe_restore_incompatible_version"))
 	return err
 }
 
@@ -909,7 +909,7 @@ func (rd *restoreDriver) runDetached(
 		return 0, errors.Wrapf(err, "failed to connect to node %d; running restore detached", node)
 	}
 	if _, err = db.ExecContext(ctx, rd.restoreCmd(target,
-		"WITH DETACHED")); err != nil {
+		"WITH DETACHED, unsafe_restore_incompatible_version")); err != nil {
 		return 0, err
 	}
 	var jobID jobspb.JobID
