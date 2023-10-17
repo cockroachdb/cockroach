@@ -217,12 +217,29 @@ subtest reloptions
 statement ok
 CREATE TABLE tbl_reloptions (
   id INT PRIMARY KEY
-) WITH (ttl_expire_after = '10 minutes', ttl_select_batch_size = 10, ttl_delete_batch_size=20, ttl_delete_rate_limit = 30, ttl_pause = true, ttl_row_stats_poll_interval = '1 minute', ttl_label_metrics = true)
+) WITH (
+  ttl_expire_after = '10 minutes',
+  ttl_select_batch_size = 10,
+  ttl_delete_batch_size = 20,
+  ttl_select_rate_limit = 30,
+  ttl_delete_rate_limit = 40,
+  ttl_pause = true,
+  ttl_row_stats_poll_interval = '1 minute',
+  ttl_label_metrics = true
+)
 
-query T
-SELECT reloptions FROM pg_class WHERE relname = 'tbl_reloptions'
+query T rowsort
+SELECT unnest(reloptions) FROM pg_class WHERE relname = 'tbl_reloptions'
 ----
-{ttl='on',ttl_expire_after='00:10:00':::INTERVAL,ttl_select_batch_size=10,ttl_delete_batch_size=20,ttl_delete_rate_limit=30,ttl_pause=true,ttl_row_stats_poll_interval='1m0s',ttl_label_metrics=true}
+ttl='on'
+ttl_expire_after='00:10:00':::INTERVAL
+ttl_select_batch_size=10
+ttl_delete_batch_size=20
+ttl_select_rate_limit=30
+ttl_delete_rate_limit=40
+ttl_pause=true
+ttl_row_stats_poll_interval='1m0s'
+ttl_label_metrics=true
 
 subtest end
 
@@ -724,6 +741,9 @@ ALTER TABLE tbl_ttl_params_positive SET (ttl_select_batch_size = -1)
 statement error "ttl_delete_batch_size" must be at least 1
 ALTER TABLE tbl_ttl_params_positive SET (ttl_delete_batch_size = -1)
 
+statement error "ttl_select_rate_limit" must be at least 1
+ALTER TABLE tbl_ttl_params_positive SET (ttl_select_rate_limit = -1)
+
 statement error "ttl_delete_rate_limit" must be at least 1
 ALTER TABLE tbl_ttl_params_positive SET (ttl_delete_rate_limit = -1)
 
@@ -737,7 +757,16 @@ subtest set_ttl_params
 statement ok
 CREATE TABLE tbl_set_ttl_params (
   id INT PRIMARY KEY
-) WITH (ttl_expire_after = '10 minutes', ttl_select_batch_size = 10, ttl_delete_batch_size=20, ttl_delete_rate_limit = 30, ttl_pause = true, ttl_row_stats_poll_interval = '1 minute', ttl_label_metrics = true)
+) WITH (
+  ttl_expire_after = '10 minutes',
+  ttl_select_batch_size = 10,
+  ttl_delete_batch_size = 20,
+  ttl_select_rate_limit = 30,
+  ttl_delete_rate_limit = 40,
+  ttl_pause = true,
+  ttl_row_stats_poll_interval = '1 minute',
+  ttl_label_metrics = true
+)
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_ttl_params]
@@ -746,10 +775,10 @@ CREATE TABLE public.tbl_set_ttl_params (
   id INT8 NOT NULL,
   crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
   CONSTRAINT tbl_set_ttl_params_pkey PRIMARY KEY (id ASC)
-) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_select_batch_size = 10, ttl_delete_batch_size = 20, ttl_delete_rate_limit = 30, ttl_pause = true, ttl_row_stats_poll_interval = '1m0s', ttl_label_metrics = true)
+) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_select_batch_size = 10, ttl_delete_batch_size = 20, ttl_select_rate_limit = 30, ttl_delete_rate_limit = 40, ttl_pause = true, ttl_row_stats_poll_interval = '1m0s', ttl_label_metrics = true)
 
 statement ok
-ALTER TABLE tbl_set_ttl_params SET (ttl_select_batch_size = 110, ttl_delete_batch_size = 120, ttl_delete_rate_limit = 130, ttl_row_stats_poll_interval = '2m0s')
+ALTER TABLE tbl_set_ttl_params SET (ttl_select_batch_size = 110, ttl_delete_batch_size = 120, ttl_select_rate_limit = 130, ttl_delete_rate_limit = 140, ttl_row_stats_poll_interval = '2m0s')
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_ttl_params]
@@ -758,10 +787,17 @@ CREATE TABLE public.tbl_set_ttl_params (
   id INT8 NOT NULL,
   crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
   CONSTRAINT tbl_set_ttl_params_pkey PRIMARY KEY (id ASC)
-) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_select_batch_size = 110, ttl_delete_batch_size = 120, ttl_delete_rate_limit = 130, ttl_pause = true, ttl_row_stats_poll_interval = '2m0s', ttl_label_metrics = true)
+) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_select_batch_size = 110, ttl_delete_batch_size = 120, ttl_select_rate_limit = 130, ttl_delete_rate_limit = 140, ttl_pause = true, ttl_row_stats_poll_interval = '2m0s', ttl_label_metrics = true)
 
 statement ok
-ALTER TABLE tbl_set_ttl_params RESET (ttl_select_batch_size, ttl_delete_batch_size, ttl_delete_rate_limit, ttl_pause, ttl_row_stats_poll_interval)
+ALTER TABLE tbl_set_ttl_params RESET (
+  ttl_select_batch_size,
+  ttl_delete_batch_size,
+  ttl_select_rate_limit,
+  ttl_delete_rate_limit,
+  ttl_pause,
+  ttl_row_stats_poll_interval
+)
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_ttl_params]

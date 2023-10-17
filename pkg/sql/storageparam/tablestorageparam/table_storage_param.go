@@ -325,6 +325,26 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
+	`ttl_select_rate_limit`: {
+		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+			val, err := paramparse.DatumAsInt(ctx, evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if err := tabledesc.ValidateTTLRateLimit(key, val); err != nil {
+				return err
+			}
+			rowLevelTTL := po.getOrCreateRowLevelTTL()
+			rowLevelTTL.SelectRateLimit = val
+			return nil
+		},
+		onReset: func(_ context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+			if po.hasRowLevelTTL() {
+				po.UpdatedRowLevelTTL.SelectRateLimit = 0
+			}
+			return nil
+		},
+	},
 	`ttl_delete_rate_limit`: {
 		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			val, err := paramparse.DatumAsInt(ctx, evalCtx, key, datum)

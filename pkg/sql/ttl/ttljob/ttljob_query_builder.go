@@ -23,6 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -47,18 +50,23 @@ type QueryBounds struct {
 	End tree.Datums
 }
 
+type SelectQueryParams struct {
+	RelationName      string
+	PKColNames        []string
+	PKColDirs         []catenumpb.IndexColumn_Direction
+	Bounds            QueryBounds
+	AOSTDuration      time.Duration
+	SelectBatchSize   int64
+	TTLExpr           catpb.Expression
+	SelectDuration    *aggmetric.Histogram
+	SelectRateLimiter *quotapool.RateLimiter
+}
+
 // SelectQueryBuilder is responsible for maintaining state around the SELECT
 // portion of the TTL job.
 type SelectQueryBuilder struct {
-	relationName    string
-	pkColNames      []string
-	pkColDirs       []catenumpb.IndexColumn_Direction
-	selectOpName    string
-	bounds          QueryBounds
-	selectBatchSize int64
-	aostDuration    time.Duration
-	ttlExpr         catpb.Expression
-
+	SelectQueryParams
+	selectOpName string
 	// isFirst is true if we have not invoked a query using the builder yet.
 	isFirst bool
 	// cachedQuery is the cached query, which stays the same from the second
@@ -69,61 +77,43 @@ type SelectQueryBuilder struct {
 	cachedArgs []interface{}
 }
 
-func MakeSelectQueryBuilder(
-	cutoff time.Time,
-	pkColNames []string,
-	pkColDirs []catenumpb.IndexColumn_Direction,
-	relationName string,
-	bounds QueryBounds,
-	aostDuration time.Duration,
-	selectBatchSize int64,
-	ttlExpr catpb.Expression,
-) SelectQueryBuilder {
-	numPkCols := len(pkColNames)
+func MakeSelectQueryBuilder(params SelectQueryParams, cutoff time.Time) SelectQueryBuilder {
+	numPkCols := len(params.PKColNames)
 	if numPkCols == 0 {
-		panic("pkColNames is empty")
+		panic("PKColNames is empty")
 	}
-	if numPkCols != len(pkColDirs) {
-		panic("different number of pkColNames and pkColDirs")
+	if numPkCols != len(params.PKColDirs) {
+		panic("different number of PKColNames and PKColDirs")
 	}
-	// We will have a maximum of 1 + len(pkColNames)*2 columns, where one
-	// is reserved for AOST, and len(pkColNames) for both start and end key.
+	// We will have a maximum of 1 + len(PKColNames)*2 columns, where one
+	// is reserved for AOST, and len(PKColNames) for both start and end key.
 	cachedArgs := make([]interface{}, 0, 1+numPkCols*2)
 	cachedArgs = append(cachedArgs, cutoff)
-	endPK := bounds.End
-	for _, d := range endPK {
+	for _, d := range params.Bounds.End {
 		cachedArgs = append(cachedArgs, d)
 	}
-	startPK := bounds.Start
-	for _, d := range startPK {
+	for _, d := range params.Bounds.Start {
 		cachedArgs = append(cachedArgs, d)
 	}
 
 	return SelectQueryBuilder{
-		relationName:    relationName,
-		pkColNames:      pkColNames,
-		pkColDirs:       pkColDirs,
-		selectOpName:    fmt.Sprintf("ttl select %s", relationName),
-		bounds:          bounds,
-		aostDuration:    aostDuration,
-		selectBatchSize: selectBatchSize,
-		ttlExpr:         ttlExpr,
-
-		cachedArgs: cachedArgs,
-		isFirst:    true,
+		SelectQueryParams: params,
+		selectOpName:      fmt.Sprintf("ttl select %s", params.RelationName),
+		cachedArgs:        cachedArgs,
+		isFirst:           true,
 	}
 }
 
 func (b *SelectQueryBuilder) buildQuery() string {
 	return ttlbase.BuildSelectQuery(
-		b.relationName,
-		b.pkColNames,
-		b.pkColDirs,
-		b.aostDuration,
-		b.ttlExpr,
-		len(b.bounds.Start),
-		len(b.bounds.End),
-		b.selectBatchSize,
+		b.RelationName,
+		b.PKColNames,
+		b.PKColDirs,
+		b.AOSTDuration,
+		b.TTLExpr,
+		len(b.Bounds.Start),
+		len(b.Bounds.End),
+		b.SelectBatchSize,
 		b.isFirst,
 	)
 }
@@ -144,6 +134,13 @@ func (b *SelectQueryBuilder) Run(
 		query = b.cachedQuery
 	}
 
+	tokens, err := b.SelectRateLimiter.Acquire(ctx, b.SelectBatchSize)
+	if err != nil {
+		return nil, false, err
+	}
+	defer tokens.Consume()
+
+	start := timeutil.Now()
 	// Use a nil txn so that the AOST clause is handled correctly. Currently,
 	// the internal executor will treat a passed-in txn as an explicit txn, so
 	// the AOST clause on the SELECT query would not be interpreted correctly.
@@ -161,69 +158,66 @@ func (b *SelectQueryBuilder) Run(
 	if err != nil {
 		return nil, false, err
 	}
+	b.SelectDuration.RecordValue(int64(timeutil.Since(start)))
 
 	numRows := int64(len(rows))
 	if numRows > 0 {
 		// Move the cursor forward if SELECT returns rows.
 		lastRow := rows[numRows-1]
-		if len(lastRow) != len(b.pkColNames) {
-			return nil, false, errors.AssertionFailedf("expected %d columns for last row, got %d", len(b.pkColNames), len(lastRow))
+		if len(lastRow) != len(b.PKColNames) {
+			return nil, false, errors.AssertionFailedf("expected %d columns for last row, got %d", len(b.PKColNames), len(lastRow))
 		}
-		b.cachedArgs = b.cachedArgs[:len(b.cachedArgs)-len(b.bounds.Start)]
+		b.cachedArgs = b.cachedArgs[:len(b.cachedArgs)-len(b.Bounds.Start)]
 		for _, d := range lastRow {
 			b.cachedArgs = append(b.cachedArgs, d)
 		}
-		b.bounds.Start = lastRow
+		b.Bounds.Start = lastRow
 	}
 
-	return rows, numRows == b.selectBatchSize, nil
+	return rows, numRows == b.SelectBatchSize, nil
+}
+
+type DeleteQueryParams struct {
+	RelationName      string
+	PKColNames        []string
+	DeleteBatchSize   int64
+	TTLExpr           catpb.Expression
+	DeleteDuration    *aggmetric.Histogram
+	DeleteRateLimiter *quotapool.RateLimiter
 }
 
 // DeleteQueryBuilder is responsible for maintaining state around the DELETE
 // portion of the TTL job.
 type DeleteQueryBuilder struct {
-	relationName    string
-	pkColNames      []string
-	deleteBatchSize int64
-	deleteOpName    string
-	ttlExpr         catpb.Expression
-
+	DeleteQueryParams
+	deleteOpName string
 	// cachedQuery is the cached query, which stays the same as long as we are
-	// deleting up to deleteBatchSize elements.
+	// deleting up to DeleteBatchSize elements.
 	cachedQuery string
 	// cachedArgs keeps a cache of args to use in the run query.
 	// The cache is of form [cutoff, flattened PKs...].
 	cachedArgs []interface{}
 }
 
-func MakeDeleteQueryBuilder(
-	cutoff time.Time,
-	pkColNames []string,
-	relationName string,
-	deleteBatchSize int64,
-	ttlExpr catpb.Expression,
-) DeleteQueryBuilder {
-	if len(pkColNames) == 0 {
-		panic("pkColNames is empty")
+func MakeDeleteQueryBuilder(params DeleteQueryParams, cutoff time.Time) DeleteQueryBuilder {
+	if len(params.PKColNames) == 0 {
+		panic("PKColNames is empty")
 	}
-	cachedArgs := make([]interface{}, 0, 1+int64(len(pkColNames))*deleteBatchSize)
+	cachedArgs := make([]interface{}, 0, 1+int64(len(params.PKColNames))*params.DeleteBatchSize)
 	cachedArgs = append(cachedArgs, cutoff)
 
 	return DeleteQueryBuilder{
-		relationName:    relationName,
-		pkColNames:      pkColNames,
-		deleteBatchSize: deleteBatchSize,
-		deleteOpName:    fmt.Sprintf("ttl delete %s", relationName),
-		ttlExpr:         ttlExpr,
-		cachedArgs:      cachedArgs,
+		DeleteQueryParams: params,
+		deleteOpName:      fmt.Sprintf("ttl delete %s", params.RelationName),
+		cachedArgs:        cachedArgs,
 	}
 }
 
 func (b *DeleteQueryBuilder) buildQuery(numRows int) string {
 	return ttlbase.BuildDeleteQuery(
-		b.relationName,
-		b.pkColNames,
-		b.ttlExpr,
+		b.RelationName,
+		b.PKColNames,
+		b.TTLExpr,
 		numRows,
 	)
 }
@@ -233,7 +227,7 @@ func (b *DeleteQueryBuilder) Run(
 ) (int64, error) {
 	numRows := len(rows)
 	var query string
-	if int64(numRows) == b.deleteBatchSize {
+	if int64(numRows) == b.DeleteBatchSize {
 		if b.cachedQuery == "" {
 			b.cachedQuery = b.buildQuery(numRows)
 		}
@@ -249,6 +243,13 @@ func (b *DeleteQueryBuilder) Run(
 		}
 	}
 
+	tokens, err := b.DeleteRateLimiter.Acquire(ctx, int64(numRows))
+	if err != nil {
+		return 0, err
+	}
+	defer tokens.Consume()
+
+	start := timeutil.Now()
 	rowCount, err := txn.ExecEx(
 		ctx,
 		b.deleteOpName,
@@ -260,5 +261,9 @@ func (b *DeleteQueryBuilder) Run(
 		query,
 		deleteArgs...,
 	)
-	return int64(rowCount), err
+	if err != nil {
+		return 0, err
+	}
+	b.DeleteDuration.RecordValue(int64(timeutil.Since(start)))
+	return int64(rowCount), nil
 }
