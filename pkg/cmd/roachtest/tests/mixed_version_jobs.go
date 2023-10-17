@@ -228,12 +228,13 @@ FROM [SHOW JOBS] WHERE status = $1 OR status = $2`,
 }
 
 func runJobsMixedVersions(
-	ctx context.Context, t test.Test, c cluster.Cluster, warehouses int, predecessorVersion string,
+	ctx context.Context, t test.Test, c cluster.Cluster, warehouses int, predecessorVersionStr string,
 ) {
 	roachNodes := c.All()
 	backgroundTPCC := backgroundJobsTestTPCCImport(t, warehouses)
 	resumeAllJobsAndWaitStep := makeResumeAllJobsAndWaitStep(10 * time.Second)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(1))
+	predecessorVersion := clusterupgrade.MustParseVersion(predecessorVersionStr)
 
 	u := newVersionUpgradeTest(c,
 		uploadAndStartFromCheckpointFixture(roachNodes, predecessorVersion),
@@ -247,22 +248,22 @@ func runJobsMixedVersions(
 
 		// Roll the nodes into the new version one by one, while repeatedly pausing
 		// and resuming all jobs.
-		binaryUpgradeStep(c.Node(3), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Node(3), clusterupgrade.CurrentVersion()),
 		resumeAllJobsAndWaitStep,
 		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
-		binaryUpgradeStep(c.Node(2), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Node(2), clusterupgrade.CurrentVersion()),
 		resumeAllJobsAndWaitStep,
 		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
-		binaryUpgradeStep(c.Node(1), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Node(1), clusterupgrade.CurrentVersion()),
 		resumeAllJobsAndWaitStep,
 		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
-		binaryUpgradeStep(c.Node(4), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Node(4), clusterupgrade.CurrentVersion()),
 		resumeAllJobsAndWaitStep,
 		checkForFailedJobsStep,
 		pauseAllJobsStep(),
@@ -290,22 +291,22 @@ func runJobsMixedVersions(
 		pauseAllJobsStep(),
 
 		// Roll nodes forward and finalize upgrade.
-		binaryUpgradeStep(c.Node(4), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Node(4), clusterupgrade.CurrentVersion()),
 		resumeAllJobsAndWaitStep,
 		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
-		binaryUpgradeStep(c.Node(3), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Node(3), clusterupgrade.CurrentVersion()),
 		resumeAllJobsAndWaitStep,
 		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
-		binaryUpgradeStep(c.Node(1), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Node(1), clusterupgrade.CurrentVersion()),
 		resumeAllJobsAndWaitStep,
 		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
-		binaryUpgradeStep(c.Node(2), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Node(2), clusterupgrade.CurrentVersion()),
 		resumeAllJobsAndWaitStep,
 		checkForFailedJobsStep,
 		pauseAllJobsStep(),

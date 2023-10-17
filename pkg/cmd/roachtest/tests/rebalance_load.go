@@ -96,8 +96,9 @@ func registerRebalanceLoad(r registry.Registry) {
 			"--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
 		settings := install.MakeClusterSettings()
 		if mixedVersion {
-			predecessorVersion, err := release.LatestPredecessor(t.BuildVersion())
+			predecessorVersionStr, err := release.LatestPredecessor(t.BuildVersion())
 			require.NoError(t, err)
+			predecessorVersion := clusterupgrade.MustParseVersion(predecessorVersionStr)
 			settings.Binary = uploadVersion(ctx, t, c, c.All(), predecessorVersion)
 			// Upgrade some (or all) of the first N-1 CRDB nodes. We ignore the last
 			// CRDB node (to leave at least one node on the older version), and the
@@ -106,7 +107,7 @@ func registerRebalanceLoad(r registry.Registry) {
 			t.L().Printf("upgrading %d nodes to the current cockroach binary", lastNodeToUpgrade)
 			nodesToUpgrade := c.Range(1, lastNodeToUpgrade)
 			c.Start(ctx, t.L(), startOpts, settings, roachNodes)
-			upgradeNodes(ctx, t, c, nodesToUpgrade, startOpts, clusterupgrade.MainVersion)
+			upgradeNodes(ctx, t, c, nodesToUpgrade, startOpts, clusterupgrade.CurrentVersion())
 		} else {
 			c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 			c.Start(ctx, t.L(), startOpts, settings, roachNodes)
