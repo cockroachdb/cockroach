@@ -85,7 +85,7 @@ func runMultiTenantUpgrade(
 	currentBinaryMinSupportedVersion, ok := versionToMinSupportedVersion[curBinaryMajorAndMinorVersion]
 	require.True(t, ok, "current binary '%s' not found in 'versionToMinSupportedVersion' map", curBinaryMajorAndMinorVersion)
 
-	getPredecessorVersion := func() string {
+	getPredecessorVersion := func() *clusterupgrade.Version {
 		predecessor, err := release.LatestPredecessor(v)
 		require.NoError(t, err)
 
@@ -100,11 +100,11 @@ func runMultiTenantUpgrade(
 		if major == "23" && minor == "1" && patch < 9 {
 			predecessor = "23.1.4"
 		}
-		return predecessor
+		return clusterupgrade.MustParseVersion(predecessor)
 	}
 
 	predecessor := getPredecessorVersion()
-	currentBinary := uploadVersion(ctx, t, c, c.All(), clusterupgrade.MainVersion)
+	currentBinary := uploadVersion(ctx, t, c, c.All(), clusterupgrade.CurrentVersion())
 	predecessorBinary := uploadVersion(ctx, t, c, c.All(), predecessor)
 
 	kvNodes := c.Node(1)
@@ -268,7 +268,7 @@ func runMultiTenantUpgrade(
 
 	finalVersion := tenant11aRunner.QueryStr(t, "SELECT * FROM crdb_internal.node_executable_version();")[0][0]
 	// Remove patch release from predecessorVersion.
-	predecessorVersion := predecessor[:strings.LastIndex(predecessor, ".")]
+	predecessorVersion := fmt.Sprintf("%d.%d", predecessor.Major(), predecessor.Minor())
 
 	t.Status("migrating first tenant 11 server to the current version after system tenant is finalized which should fail because second server is still on old binary - expecting a failure here too")
 	expectErr(t, tenant11a.pgURL,
