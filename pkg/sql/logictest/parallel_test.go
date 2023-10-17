@@ -233,8 +233,6 @@ func TestParallel(t *testing.T) {
 	// Note: there is special code in teamcity-trigger/main.go to run this package
 	// with less concurrency in the nightly stress runs. If you see problems
 	// please make adjustments there.
-	// As of 6/4/2019, the logic tests never complete under race.
-	skip.UnderStressRace(t, "logic tests and race detector don't mix: #37993")
 
 	glob := *paralleltestdata
 	paths, err := filepath.Glob(glob)
