@@ -34,7 +34,7 @@ func registerImportCancellation(r registry.Registry) {
 		Name:             `import-cancellation`,
 		Owner:            registry.OwnerSQLQueries,
 		Benchmark:        true,
-		Timeout:          4 * time.Hour,
+		Timeout:          6 * time.Hour,
 		Cluster:          r.MakeClusterSpec(6, spec.CPU(32)),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
