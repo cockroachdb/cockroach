@@ -23,19 +23,16 @@ import (
 // Target schema changes in the system.statement_diagnostics_requests table,
 // adding two columns and updating the secondary index to store those columns.
 const (
-	addPlanGistColToStmtDiagReqs = `
+	addPlanGistColsToStmtDiagReqs = `
 ALTER TABLE system.statement_diagnostics_requests
-  ADD COLUMN plan_gist STRING NULL FAMILY "primary"`
-
-	addAntiPlanGistColToStmtDiagReqs = `
-ALTER TABLE system.statement_diagnostics_requests
+  ADD COLUMN plan_gist STRING NULL FAMILY "primary",
   ADD COLUMN anti_plan_gist BOOL NULL FAMILY "primary"`
 
 	createCompletedIdxV2 = `
 CREATE INDEX completed_idx_v2 ON system.statement_diagnostics_requests (completed, ID)
   STORING (statement_fingerprint, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist)`
 
-	dropCompletedIdx = `DROP INDEX system.statement_diagnostics_requests@completed_idx`
+	dropCompletedIdx = `DROP INDEX IF EXISTS system.statement_diagnostics_requests@completed_idx`
 )
 
 // stmtDiagForPlanGistMigration changes the schema of the
@@ -46,14 +43,8 @@ func stmtDiagForPlanGistMigration(
 	for _, op := range []operation{
 		{
 			name:           "add-stmt-diag-reqs-plan-gist-column",
-			schemaList:     []string{"plan_gist"},
-			query:          addPlanGistColToStmtDiagReqs,
-			schemaExistsFn: hasColumn,
-		},
-		{
-			name:           "add-stmt-diag-reqs-anti-plan-gist-column",
-			schemaList:     []string{"anti_plan_gist"},
-			query:          addAntiPlanGistColToStmtDiagReqs,
+			schemaList:     []string{"plan_gist", "anti_plan_gist"},
+			query:          addPlanGistColsToStmtDiagReqs,
 			schemaExistsFn: hasColumn,
 		},
 		{
