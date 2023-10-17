@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	kvpb "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -251,8 +250,9 @@ type validator struct {
 	// Observations for the current atomic unit. This is reset between units, in
 	// checkAtomic, which then calls processOp (which might recurse owing to the
 	// existence of txn closures, batches, etc).
-	curObservations []observedOp
-	buffering       bufferingType
+	curObservations   []observedOp
+	observationFilter observationFilter
+	buffering         bufferingType
 
 	// NB: The Generator carefully ensures that each value written is unique
 	// globally over a run, so there's a 1:1 relationship between a value that was
@@ -346,6 +346,18 @@ func (v *validator) tryConsumeRangedWrite(
 	return consumed, len(consumed) > 0
 }
 
+// observationFilter describes which observations should be included in the
+// validator's observations.
+type observationFilter int
+
+const (
+	// observeAll includes all observations.
+	observeAll observationFilter = iota
+	// observeLocking includes only observations for operations that acquire locks
+	// (i.e. writes and locking reads).
+	observeLocking
+)
+
 type bufferingType byte
 
 const (
@@ -399,7 +411,23 @@ func (v *validator) processOp(op Operation) {
 			SkipLocked: t.SkipLocked,
 			Value:      roachpb.Value{RawBytes: t.Result.Value},
 		}
-		v.curObservations = append(v.curObservations, read)
+		var observe bool
+		switch v.observationFilter {
+		case observeAll:
+			observe = true
+		case observeLocking:
+			// NOTE: even if t.ForUpdate || t.ForShare, we only consider the read to
+			// be locking if it has a guaranteed durability. Furthermore, we only
+			// consider the read as an observation if it found and returned a value,
+			// otherwise no lock would have been acquired on the non-existent key.
+			// Gets do not acquire gap locks.
+			observe = t.GuaranteedDurability && read.Value.IsPresent()
+		default:
+			panic("unexpected")
+		}
+		if observe {
+			v.curObservations = append(v.curObservations, read)
+		}
 
 		if v.buffering == bufferingSingle {
 			v.checkAtomic(`get`, t.Result)
@@ -469,14 +497,22 @@ func (v *validator) processOp(op Operation) {
 		}
 		v.curObservations = append(v.curObservations, deleteOps...)
 		// The span ought to be empty right after the DeleteRange.
-		v.curObservations = append(v.curObservations, &observedScan{
-			Span: roachpb.Span{
-				Key:    t.Key,
-				EndKey: t.EndKey,
-			},
-			IsDeleteRange: true, // just for printing
-			KVs:           nil,
-		})
+		//
+		// However, we do not add this observation if the observation filter is
+		// observeLocking because the DeleteRange's read is not locking. This means
+		// that for isolation levels that permit write skew, the DeleteRange does
+		// not prevent new keys from being inserted in the deletion span between the
+		// transaction's read and write timestamps.
+		if v.observationFilter != observeLocking {
+			v.curObservations = append(v.curObservations, &observedScan{
+				Span: roachpb.Span{
+					Key:    t.Key,
+					EndKey: t.EndKey,
+				},
+				IsDeleteRange: true, // just for printing
+				KVs:           nil,
+			})
+		}
 
 		if v.buffering == bufferingSingle {
 			v.checkAtomic(`deleteRange`, t.Result)
@@ -547,12 +583,17 @@ func (v *validator) processOp(op Operation) {
 
 		// The span ought to be empty right after the DeleteRange, even if parts of
 		// the DeleteRange that didn't materialize due to a shadowing operation.
-		v.curObservations = append(v.curObservations, &observedScan{
-			Span: roachpb.Span{
-				Key:    t.Key,
-				EndKey: t.EndKey,
-			},
-		})
+		//
+		// See above for why we do not add this observation if the observation
+		// filter is observeLocking.
+		if v.observationFilter != observeLocking {
+			v.curObservations = append(v.curObservations, &observedScan{
+				Span: roachpb.Span{
+					Key:    t.Key,
+					EndKey: t.EndKey,
+				},
+			})
+		}
 
 		if v.buffering == bufferingSingle {
 			v.checkAtomic(`deleteRangeUsingTombstone`, t.Result)
@@ -656,22 +697,43 @@ func (v *validator) processOp(op Operation) {
 		if _, isErr := v.checkError(op, t.Result); isErr {
 			break
 		}
-		scan := &observedScan{
-			Span: roachpb.Span{
-				Key:    t.Key,
-				EndKey: t.EndKey,
-			},
-			Reverse:    t.Reverse,
-			SkipLocked: t.SkipLocked,
-			KVs:        make([]roachpb.KeyValue, len(t.Result.Values)),
-		}
-		for i, kv := range t.Result.Values {
-			scan.KVs[i] = roachpb.KeyValue{
-				Key:   kv.Key,
-				Value: roachpb.Value{RawBytes: kv.Value},
+		switch v.observationFilter {
+		case observeAll:
+			scan := &observedScan{
+				Span: roachpb.Span{
+					Key:    t.Key,
+					EndKey: t.EndKey,
+				},
+				Reverse:    t.Reverse,
+				SkipLocked: t.SkipLocked,
+				KVs:        make([]roachpb.KeyValue, len(t.Result.Values)),
 			}
+			for i, kv := range t.Result.Values {
+				scan.KVs[i] = roachpb.KeyValue{
+					Key:   kv.Key,
+					Value: roachpb.Value{RawBytes: kv.Value},
+				}
+			}
+			v.curObservations = append(v.curObservations, scan)
+		case observeLocking:
+			// If we are only observing locking operations then we only want to
+			// consider the scan to be locking if it has a guaranteed durability.
+			// Furthermore, we only consider the individual keys that were returned to
+			// be locked, not the entire span that was scanned. Scans do not acquire
+			// gap locks.
+			if t.GuaranteedDurability {
+				for _, kv := range t.Result.Values {
+					read := &observedRead{
+						Key:        kv.Key,
+						SkipLocked: t.SkipLocked,
+						Value:      roachpb.Value{RawBytes: kv.Value},
+					}
+					v.curObservations = append(v.curObservations, read)
+				}
+			}
+		default:
+			panic("unexpected")
 		}
-		v.curObservations = append(v.curObservations, scan)
 
 		if v.buffering == bufferingSingle {
 			atomicScanType := `scan`
@@ -714,19 +776,19 @@ func (v *validator) processOp(op Operation) {
 		if t.CommitInBatch != nil {
 			ops = append(ops, t.CommitInBatch.Ops...)
 		}
+		if t.IsoLevel.ToleratesWriteSkew() {
+			// If the transaction ran under an isolation level that permits write skew
+			// then we only validate the atomicity of locking operations (writes and
+			// locking reads). Non-locking reads may be inconsistent with the commit
+			// timestamp of the transaction.
+			v.observationFilter = observeLocking
+		}
 		v.buffering = bufferingBatchOrTxn
 		for _, op := range ops {
 			v.processOp(op)
 		}
-		prevFailures := v.failures
 		atomicTxnType := fmt.Sprintf(`%s txn`, t.IsoLevel.StringLower())
 		v.checkAtomic(atomicTxnType, t.Result)
-		if t.IsoLevel != isolation.Serializable {
-			// TODO(nvanbenschoten): for now, we run snapshot and read committed
-			// transactions in the mix but don't validate their results. Doing so
-			// is non-trivial. See #100169 and #100170
-			v.failures = prevFailures
-		}
 	case *SplitOperation:
 		execTimestampStrictlyOptional = true
 		v.failIfError(op, t.Result) // splits should never return *any* error
@@ -809,6 +871,7 @@ func (v *validator) processOp(op Operation) {
 func (v *validator) checkAtomic(atomicType string, result Result) {
 	observations := v.curObservations
 	v.curObservations = nil
+	v.observationFilter = observeAll
 	v.buffering = bufferingSingle
 
 	// Only known-uncommitted results may come without a timestamp. Whenever we

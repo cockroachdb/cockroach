@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	kvpb "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -77,6 +78,10 @@ func withReadResultTS(op Operation, value string, ts int) Operation {
 		get.Result.Value = roachpb.MakeValueFromString(value).RawBytes
 	}
 	return op
+}
+
+func withScanResult(op Operation, kvs ...KeyValue) Operation {
+	return withScanResultTS(op, 0, kvs...)
 }
 
 func withScanResultTS(op Operation, ts int, kvs ...KeyValue) Operation {
@@ -2035,6 +2040,163 @@ func TestValidate(t *testing.T) {
 				step(withScanResultTS(reverseScanSkipLocked(k1, k3), t3, scanKV(k2, v2))),
 			},
 			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
+		},
+		{
+			name: "weak isolation transaction with non-atomic writes",
+			steps: []Step{
+				step(withResultTS(closureTxn(ClosureTxnType_Commit, isolation.Snapshot,
+					withResultOK(put(k1, s1)),
+					withResultOK(put(k2, s2)),
+				), t2)),
+			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
+		},
+		{
+			name: "weak isolation transaction with atomic writes",
+			steps: []Step{
+				step(withResultTS(closureTxn(ClosureTxnType_Commit, isolation.Snapshot,
+					withResultOK(put(k1, s1)),
+					withResultOK(put(k2, s2)),
+				), t2)),
+			},
+			kvs: kvs(kv(k1, t2, s1), kv(k2, t2, s2)), // difference: t2 instead of t1
+		},
+		{
+			name: "weak isolation transaction with non-atomic non-locking get",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t2)),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit, isolation.Snapshot,
+					withReadResult(get(k1), v1),
+					withResult(put(k3, s3)),
+				), t3)),
+			},
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t2, s2), kv(k3, t3, s3)),
+		},
+		{
+			name: "weak isolation transaction with non-atomic locking (unreplicated) get",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t2)),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit, isolation.Snapshot,
+					withReadResult(getForShare(k1), v1),
+					withResult(put(k3, s3)),
+				), t3)),
+			},
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t2, s2), kv(k3, t3, s3)),
+		},
+		{
+			name: "weak isolation transaction with non-atomic locking (replicated) get",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t2)),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit, isolation.Snapshot,
+					withReadResult(getForShareGuaranteedDurability(k1), v1),
+					withResult(put(k3, s3)),
+				), t3)),
+			},
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t2, s2), kv(k3, t3, s3)),
+		},
+		{
+			name: "weak isolation transaction with atomic locking (replicated) get",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t2)),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit, isolation.Snapshot,
+					withReadResult(getForShareGuaranteedDurability(k1), v2), // difference: v2 instead of v1
+					withResult(put(k3, s3)),
+				), t3)),
+			},
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t2, s2), kv(k3, t3, s3)),
+		},
+		{
+			name: "weak isolation transaction with atomic locking (replicated) get and missing key",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t2)),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit, isolation.Snapshot,
+					withReadResult(getForShareGuaranteedDurability(k1), ``), // difference: no value instead of v1
+					withResult(put(k3, s3)),
+				), t3)),
+			},
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t2, s2), kv(k3, t3, s3)),
+		},
+		{
+			name: "weak isolation transaction with non-atomic non-locking scan",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t2)),
+				step(withResultTS(put(k2, s3), t1)),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit, isolation.Snapshot,
+					withScanResult(scan(k1, k3), scanKV(k1, v1), scanKV(k2, v3)),
+					withResult(put(k3, s4)),
+				), t3)),
+			},
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t2, s2), kv(k2, t1, s3), kv(k3, t3, s4)),
+		},
+		{
+			name: "weak isolation transaction with non-atomic locking (unreplicated) scan",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t2)),
+				step(withResultTS(put(k2, s3), t1)),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit, isolation.Snapshot,
+					withScanResult(scanForShare(k1, k3), scanKV(k1, v1), scanKV(k2, v3)),
+					withResult(put(k3, s4)),
+				), t3)),
+			},
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t2, s2), kv(k2, t1, s3), kv(k3, t3, s4)),
+		},
+		{
+			name: "weak isolation transaction with non-atomic locking (replicated) scan",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t2)),
+				step(withResultTS(put(k2, s3), t1)),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit, isolation.Snapshot,
+					withScanResult(scanForShareGuaranteedDurability(k1, k3), scanKV(k1, v1), scanKV(k2, v3)),
+					withResult(put(k3, s4)),
+				), t3)),
+			},
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t2, s2), kv(k2, t1, s3), kv(k3, t3, s4)),
+		},
+		{
+			name: "weak isolation transaction with atomic locking (replicated) scan",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t2)),
+				step(withResultTS(put(k2, s3), t1)),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit, isolation.Snapshot,
+					withScanResult(scanForShareGuaranteedDurability(k1, k3), scanKV(k1, v2), scanKV(k2, v3)), // difference: v2 instead of v1
+					withResult(put(k3, s4)),
+				), t3)),
+			},
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t2, s2), kv(k2, t1, s3), kv(k3, t3, s4)),
+		},
+		{
+			name: "weak isolation transaction with atomic locking (replicated) scan and missing key",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k1, s2), t2)),
+				step(withResultTS(put(k2, s3), t1)),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit, isolation.Snapshot,
+					withScanResult(scanForShareGuaranteedDurability(k1, k3), scanKV(k1, v2)), // difference: k2 not returned
+					withResult(put(k3, s4)),
+				), t3)),
+			},
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t2, s2), kv(k2, t1, s3), kv(k3, t3, s4)),
+		},
+		{
+			name: "weak isolation transaction with non-atomic deleterange",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withResultTS(put(k3, s3), t1)),
+				step(withResultTS(closureTxn(ClosureTxnType_Commit, isolation.Snapshot,
+					withDeleteRangeResult(delRange(k1, k4, s4), noTS, roachpb.Key(k1), roachpb.Key(k3)),
+				), t3)),
+			},
+			kvs: kvs(kv(k1, t1, s1), kv(k1, t3, s4), kv(k2, t2, s2), kv(k3, t1, s3), kv(k3, t3, s4)),
 		},
 	}
 
