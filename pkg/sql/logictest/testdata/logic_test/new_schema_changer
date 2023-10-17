@@ -771,8 +771,13 @@ SELECT 'a'::db1.sc1.typ::string
 statement ok
 SET use_declarative_schema_changer = 'unsafe'
 
+let $db1_id
+SELECT id FROM system.namespace WHERE name = 'db1' AND "parentID" = 0 LIMIT 1
+
+# Only look at IDs greater than or equal to $db1_id so objects that were dropped
+# earlier in the test don't interfere with this count.
 let $desc_count_pre_drop
-select count(*) from system.descriptor
+select count(*) from system.descriptor WHERE id >= $db1_id
 
 # Actually drop the database now.
 statement ok
@@ -794,11 +799,15 @@ database_id  role_name      settings
 0            ·              {application_name=d}
 0            test_set_role  {application_name=a,custom_option.setting=e}
 
+# Only look at IDs greater than or equal to $db1_id so objects that were dropped
+# earlier in the test don't interfere with this count.
 let $desc_count_post_drop
-select count(*) from system.descriptor
+select count(*) from system.descriptor WHERE id >= $db1_id
 
 # Excluding anything that needs GC, we should drop by 13 (4 types [array and
-# normal], 4 schemas, and 5 views)
+# normal], 4 schemas, and 5 views). The tables and sequences will be GC'd later.
+# This is a regression test for an issue where descriptors were not cleaned up
+# properly (https://github.com/cockroachdb/cockroach/pull/73356).
 query I
 select $desc_count_pre_drop-$desc_count_post_drop
 ----
