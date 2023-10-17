@@ -1253,6 +1253,14 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 			if atomic.LoadInt32(&foundCheckpoint) != 0 {
 				return nil
 			}
+			if err := jobFeed.FetchTerminalJobErr(); err != nil {
+				t.Fatal(err)
+			}
+			runningStatus, err := jobFeed.FetchRunningStatus()
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Logf("changefeed running status: %s", runningStatus)
 			return errors.New("waiting for checkpoint")
 		})
 
