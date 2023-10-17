@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
@@ -823,12 +825,45 @@ func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 			// expression are being mutated.
 			if !isUpdate || referencedCols.Intersects(mutationCols) {
 				mb.checkColIDs[i] = scopeCol.id
+
+				// TODO(michae2): Under weaker isolation levels we need to use shared
+				// locking to enforce multi-column-family check constraints. Disallow it
+				// for now.
+				//
+				// When do we need the locking? If:
+				// - the check constraint involves a column family that is
+				//   modified (otherwise we don't need to do anything to maintain this constraint)
+				// - the check constraint involves a column family that is *not* modified, but *is* read.
+				//   in this case we don't have an intent, so we need a lock. but we're not currently taking that lock
+				referencedColFamilies := getColumnFamilySet(projectionsScope, referencedCols, mb.tab)
+				mutationColFamilies := getColumnFamilySet(projectionsScope, &mutationCols, mb.tab)
+				if mb.b.evalCtx.TxnIsoLevel != isolation.Serializable &&
+					referencedColFamilies.Difference(mutationColFamilies).Len() > 1 {
+					panic(unimplemented.NewWithIssuef(112488,
+						"multi-column-family check constraints are not yet supported under read committed isolation",
+					))
+				}
 			}
 		}
 
 		mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 		mb.outScope = projectionsScope
 	}
+}
+
+func getColumnFamilySet(s *scope, cols *opt.ColSet, tab cat.Table) intsets.Fast {
+	families := intsets.Fast{}
+	for i := 0; i < tab.FamilyCount(); i++ {
+		fam := tab.Family(i)
+		for j := 0; j < fam.ColumnCount(); j++ {
+			cols.ForEach(func(col opt.ColumnID) {
+				if fam.Column(j).Ordinal == s.getColumn(col).tableOrdinal {
+					families.Add(i)
+				}
+			})
+		}
+	}
+	return families
 }
 
 // mutationColumnIDs returns the set of all column IDs that will be mutated.
