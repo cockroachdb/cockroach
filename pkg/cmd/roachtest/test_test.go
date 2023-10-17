@@ -113,10 +113,12 @@ func TestRunnerRun(t *testing.T) {
 
 	r := mkReg(t)
 	r.Add(registry.TestSpec{
-		Name:    "pass",
-		Owner:   OwnerUnitTest,
-		Run:     func(ctx context.Context, t test.Test, c cluster.Cluster) {},
-		Cluster: r.MakeClusterSpec(0),
+		Name:             "pass",
+		Owner:            OwnerUnitTest,
+		Run:              func(ctx context.Context, t test.Test, c cluster.Cluster) {},
+		Cluster:          r.MakeClusterSpec(0),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 	})
 	r.Add(registry.TestSpec{
 		Name:  "fail",
@@ -124,7 +126,9 @@ func TestRunnerRun(t *testing.T) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			t.Fatal("failed")
 		},
-		Cluster: r.MakeClusterSpec(0),
+		Cluster:          r.MakeClusterSpec(0),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 	})
 	r.Add(registry.TestSpec{
 		Name:  "errors",
@@ -133,7 +137,9 @@ func TestRunnerRun(t *testing.T) {
 			t.Errorf("first %s", "error")
 			t.Errorf("second error")
 		},
-		Cluster: r.MakeClusterSpec(0),
+		Cluster:          r.MakeClusterSpec(0),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 	})
 	r.Add(registry.TestSpec{
 		Name:  "panic",
@@ -145,7 +151,9 @@ func TestRunnerRun(t *testing.T) {
 			idx := rand.Intn(2) + 1 // definitely out of bounds
 			t.L().Printf("boom %d", sl[idx])
 		},
-		Cluster: r.MakeClusterSpec(0),
+		Cluster:          r.MakeClusterSpec(0),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 	})
 
 	testCases := []struct {
@@ -217,7 +225,9 @@ func TestRunnerEncryptionAtRest(t *testing.T) {
 				atomic.StoreInt32(&sawEncrypted, 1)
 			}
 		},
-		Cluster: r.MakeClusterSpec(0),
+		Cluster:          r.MakeClusterSpec(0),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 	})
 
 	rt := setupRunnerTest(t, r, nil)
@@ -350,10 +360,12 @@ func TestRunnerTestTimeout(t *testing.T) {
 		debugMode: NoDebug,
 	}
 	test := registry.TestSpec{
-		Name:    `timeout`,
-		Owner:   OwnerUnitTest,
-		Timeout: 10 * time.Millisecond,
-		Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
+		Name:             `timeout`,
+		Owner:            OwnerUnitTest,
+		Timeout:          10 * time.Millisecond,
+		Cluster:          spec.MakeClusterSpec(spec.GCE, "", 0),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			<-ctx.Done()
 		},
@@ -385,20 +397,24 @@ func TestRegistryPrepareSpec(t *testing.T) {
 	}{
 		{
 			registry.TestSpec{
-				Name:    "a",
-				Owner:   OwnerUnitTest,
-				Run:     dummyRun,
-				Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
+				Name:             "a",
+				Owner:            OwnerUnitTest,
+				Run:              dummyRun,
+				Cluster:          spec.MakeClusterSpec(spec.GCE, "", 0),
+				CompatibleClouds: registry.AllExceptAWS,
+				Suites:           registry.Suites(registry.Nightly),
 			},
 			"",
 			[]string{"a"},
 		},
 		{
 			registry.TestSpec{
-				Name:    "illegal *[]",
-				Owner:   OwnerUnitTest,
-				Run:     dummyRun,
-				Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
+				Name:             "illegal *[]",
+				Owner:            OwnerUnitTest,
+				Run:              dummyRun,
+				Cluster:          spec.MakeClusterSpec(spec.GCE, "", 0),
+				CompatibleClouds: registry.AllExceptAWS,
+				Suites:           registry.Suites(registry.Nightly),
 			},
 			`illegal \*\[\]: Name must match this regexp: `,
 			nil,
@@ -431,9 +447,11 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 	runner := newUnitTestRunner(cr, stopper)
 	r := mkReg(t)
 	r.Add(registry.TestSpec{
-		Name:    "boom",
-		Owner:   OwnerUnitTest,
-		Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
+		Name:             "boom",
+		Owner:            OwnerUnitTest,
+		Cluster:          spec.MakeClusterSpec(spec.GCE, "", 0),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if injectedError != nil {
 				t.Fatal(injectedError)

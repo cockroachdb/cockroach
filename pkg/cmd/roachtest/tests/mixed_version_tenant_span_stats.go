@@ -36,6 +36,8 @@ func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 		Name:              "tenant-span-stats/mixed-version",
 		Owner:             registry.OwnerClusterObs,
 		Cluster:           r.MakeClusterSpec(4),
+		CompatibleClouds:  registry.AllExceptAWS,
+		Suites:            registry.Suites(registry.Nightly),
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Timeout:           30 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

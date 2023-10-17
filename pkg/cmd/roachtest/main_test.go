@@ -37,10 +37,12 @@ func makeRegistry(names ...string) testRegistryImpl {
 
 	for _, name := range names {
 		r.Add(registry.TestSpec{
-			Name:    name,
-			Owner:   OwnerUnitTest,
-			Run:     dummyRun,
-			Cluster: spec.MakeClusterSpec(spec.GCE, "", 0),
+			Name:             name,
+			Owner:            OwnerUnitTest,
+			Run:              dummyRun,
+			Cluster:          spec.MakeClusterSpec(spec.GCE, "", 0),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
 		})
 	}
 

@@ -276,6 +276,8 @@ func registerAllocationBenchSpec(r registry.Registry, allocSpec allocationBenchS
 			specOptions...,
 		),
 		NonReleaseBlocker: true,
+		CompatibleClouds:  registry.AllExceptAWS,
+		Suites:            registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAllocationBench(ctx, t, c, allocSpec)
 		},

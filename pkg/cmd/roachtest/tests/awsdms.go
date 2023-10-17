@@ -188,12 +188,14 @@ func dmsDescribeTasksInput(
 
 func registerAWSDMS(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "awsdms",
-		Owner:   registry.OwnerMigrations,
-		Cluster: r.MakeClusterSpec(1),
-		Tags:    registry.Tags(`weekly`, `aws-weekly`),
-		Leases:  registry.MetamorphicLeases,
-		Run:     runAWSDMS,
+		Name:             "awsdms",
+		Owner:            registry.OwnerMigrations,
+		Cluster:          r.MakeClusterSpec(1),
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Weekly),
+		Tags:             registry.Tags(`weekly`, `aws-weekly`),
+		Leases:           registry.MetamorphicLeases,
+		Run:              runAWSDMS,
 	})
 }
 

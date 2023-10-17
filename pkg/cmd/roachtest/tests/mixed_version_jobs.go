@@ -330,7 +330,9 @@ func registerJobsMixedVersions(r registry.Registry) {
 		// state machine states `Status{Pause,Cancel}Requested`. This test purpose
 		// is to to test the state transitions of jobs from paused to resumed and
 		// vice versa in order to detect regressions in the work done for 20.1.
-		Cluster: r.MakeClusterSpec(4),
+		Cluster:          r.MakeClusterSpec(4),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			predV, err := release.LatestPredecessor(t.BuildVersion())
 			if err != nil {

@@ -332,6 +332,8 @@ type replicationSpec struct {
 	// If non-empty, the test will be skipped with the supplied reason.
 	skip string
 
+	clouds registry.CloudSet
+	suites registry.SuiteSet
 	// tags are used to categorize the test.
 	tags map[string]struct{}
 }
@@ -747,16 +749,18 @@ func c2cRegisterWrapper(
 	}
 
 	r.Add(registry.TestSpec{
-		Name:            sp.name,
-		Owner:           registry.OwnerDisasterRecovery,
-		Benchmark:       sp.benchmark,
-		Cluster:         r.MakeClusterSpec(sp.dstNodes+sp.srcNodes+1, clusterOps...),
-		Leases:          registry.MetamorphicLeases,
-		Timeout:         sp.timeout,
-		Skip:            sp.skip,
-		Tags:            sp.tags,
-		RequiresLicense: true,
-		Run:             run,
+		Name:             sp.name,
+		Owner:            registry.OwnerDisasterRecovery,
+		Benchmark:        sp.benchmark,
+		Cluster:          r.MakeClusterSpec(sp.dstNodes+sp.srcNodes+1, clusterOps...),
+		Leases:           registry.MetamorphicLeases,
+		Timeout:          sp.timeout,
+		Skip:             sp.skip,
+		CompatibleClouds: sp.clouds,
+		Suites:           sp.suites,
+		Tags:             sp.tags,
+		RequiresLicense:  true,
+		Run:              run,
 	})
 }
 
@@ -772,6 +776,8 @@ func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster
 		workload:           replicateKV{readPercent: 0, debugRunDuration: 1 * time.Minute, maxBlockBytes: 1},
 		additionalDuration: 0 * time.Minute,
 		cutover:            30 * time.Second,
+		clouds:             registry.AllExceptAWS,
+		suites:             registry.Suites("nightly"),
 	}
 	rd := makeReplicationDriver(t, c, sp)
 	rd.setupC2C(ctx, t, c)
@@ -801,6 +807,8 @@ func registerClusterToCluster(r registry.Registry) {
 			workload:           replicateTPCC{warehouses: 500},
 			timeout:            1 * time.Hour,
 			additionalDuration: 10 * time.Minute,
+			clouds:             registry.AllExceptAWS,
+			suites:             registry.Suites("nightly"),
 			cutover:            5 * time.Minute,
 		},
 		{
@@ -818,6 +826,8 @@ func registerClusterToCluster(r registry.Registry) {
 			timeout:            3 * time.Hour,
 			additionalDuration: 60 * time.Minute,
 			cutover:            30 * time.Minute,
+			clouds:             registry.AllExceptAWS,
+			suites:             registry.Suites("nightly"),
 		},
 		{
 			name:               "c2c/kv0",
@@ -831,6 +841,8 @@ func registerClusterToCluster(r registry.Registry) {
 			additionalDuration: 10 * time.Minute,
 			cutover:            5 * time.Minute,
 			tags:               registry.Tags("aws"),
+			clouds:             registry.AllClouds,
+			suites:             registry.Suites("nightly"),
 		},
 		{
 			name:     "c2c/UnitTest",
@@ -843,7 +855,8 @@ func registerClusterToCluster(r registry.Registry) {
 			timeout:            5 * time.Minute,
 			additionalDuration: 0 * time.Minute,
 			cutover:            30 * time.Second,
-			skip:               "for local ad hoc testing",
+			clouds:             registry.AllExceptAWS,
+			suites:             registry.Suites("nightly"),
 		},
 		{
 			name:               "c2c/BulkOps",
@@ -855,6 +868,8 @@ func registerClusterToCluster(r registry.Registry) {
 			timeout:            4 * time.Hour,
 			additionalDuration: 0,
 			cutover:            5 * time.Minute,
+			clouds:             registry.AllExceptAWS,
+			suites:             registry.Suites("nightly"),
 			skip:               "flaky",
 		},
 	} {
@@ -1124,6 +1139,8 @@ func registerClusterReplicationResilience(r registry.Registry) {
 			additionalDuration: 6 * time.Minute,
 			cutover:            3 * time.Minute,
 			expectedNodeDeaths: 1,
+			clouds:             registry.AllExceptAWS,
+			suites:             registry.Suites("nightly"),
 		}
 
 		c2cRegisterWrapper(r, rsp.replicationSpec,
@@ -1227,6 +1244,8 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 		additionalDuration: 10 * time.Minute,
 		cutover:            2 * time.Minute,
 		maxAcceptedLatency: 12 * time.Minute,
+		clouds:             registry.AllExceptAWS,
+		suites:             registry.Suites("nightly"),
 	}
 	c2cRegisterWrapper(r, sp, func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		rd := makeReplicationDriver(t, c, sp)

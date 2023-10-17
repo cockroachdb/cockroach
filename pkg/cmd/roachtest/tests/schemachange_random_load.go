@@ -33,6 +33,8 @@ type randomLoadBenchSpec struct {
 	Nodes       int
 	Ops         int
 	Concurrency int
+	Clouds      registry.CloudSet
+	Suites      registry.SuiteSet
 	Tags        map[string]struct{}
 }
 
@@ -51,8 +53,10 @@ func registerSchemaChangeRandomLoad(r registry.Registry) {
 			spec.Geo(),
 			spec.Zones(geoZonesStr),
 		),
-		Leases:     registry.MetamorphicLeases,
-		NativeLibs: registry.LibGEOS,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		NativeLibs:       registry.LibGEOS,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxOps := 5000
 			concurrency := 20
@@ -69,6 +73,8 @@ func registerSchemaChangeRandomLoad(r registry.Registry) {
 		Nodes:       3,
 		Ops:         2000,
 		Concurrency: 1,
+		Clouds:      registry.AllClouds,
+		Suites:      registry.Suites(registry.Nightly),
 		Tags:        registry.Tags("aws"),
 	})
 
@@ -76,6 +82,8 @@ func registerSchemaChangeRandomLoad(r registry.Registry) {
 		Nodes:       3,
 		Ops:         10000,
 		Concurrency: 20,
+		Clouds:      registry.AllExceptAWS,
+		Suites:      registry.Suites(registry.Nightly),
 	})
 }
 
@@ -102,7 +110,9 @@ func registerRandomLoadBenchSpec(r registry.Registry, b randomLoadBenchSpec) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSchemaChangeRandomLoad(ctx, t, c, b.Ops, b.Concurrency)
 		},
-		Tags: b.Tags,
+		CompatibleClouds: b.Clouds,
+		Suites:           b.Suites,
+		Tags:             b.Tags,
 	})
 }
 

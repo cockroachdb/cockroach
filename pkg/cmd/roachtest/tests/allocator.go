@@ -148,33 +148,39 @@ func registerAllocator(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:      `replicate/up/1to3`,
-		Owner:     registry.OwnerKV,
-		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(4),
-		Leases:    registry.MetamorphicLeases,
+		Name:             `replicate/up/1to3`,
+		Owner:            registry.OwnerKV,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAllocator(ctx, t, c, 1, 10.0)
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      `replicate/rebalance/3to5`,
-		Owner:     registry.OwnerKV,
-		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(6),
-		Leases:    registry.MetamorphicLeases,
+		Name:             `replicate/rebalance/3to5`,
+		Owner:            registry.OwnerKV,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(6),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAllocator(ctx, t, c, 3, 42.0)
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      `replicate/wide`,
-		Owner:     registry.OwnerKV,
-		Benchmark: true,
-		Timeout:   10 * time.Minute,
-		Cluster:   r.MakeClusterSpec(9, spec.CPU(1)),
-		Leases:    registry.MetamorphicLeases,
-		Run:       runWideReplication,
+		Name:             `replicate/wide`,
+		Owner:            registry.OwnerKV,
+		Benchmark:        true,
+		Timeout:          10 * time.Minute,
+		Cluster:          r.MakeClusterSpec(9, spec.CPU(1)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Run:              runWideReplication,
 	})
 }
 

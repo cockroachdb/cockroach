@@ -77,6 +77,8 @@ func registerFailover(r registry.Registry) {
 				Owner:               registry.OwnerKV,
 				Timeout:             60 * time.Minute,
 				Cluster:             r.MakeClusterSpec(10, spec.CPU(2), spec.PreferLocalSSD(false), spec.ReuseNone()), // uses disk stalls
+				CompatibleClouds:    registry.AllExceptAWS,
+				Suites:              registry.Suites(registry.Nightly),
 				Leases:              leases,
 				SkipPostValidations: registry.PostValidationNoDeadNodes, // cleanup kills nodes
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -86,33 +88,39 @@ func registerFailover(r registry.Registry) {
 		}
 
 		r.Add(registry.TestSpec{
-			Name:      "failover/partial/lease-gateway" + suffix,
-			Owner:     registry.OwnerKV,
-			Benchmark: true,
-			Timeout:   30 * time.Minute,
-			Cluster:   r.MakeClusterSpec(8, spec.CPU(2)),
-			Leases:    leases,
-			Run:       runFailoverPartialLeaseGateway,
+			Name:             "failover/partial/lease-gateway" + suffix,
+			Owner:            registry.OwnerKV,
+			Benchmark:        true,
+			Timeout:          30 * time.Minute,
+			Cluster:          r.MakeClusterSpec(8, spec.CPU(2)),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           leases,
+			Run:              runFailoverPartialLeaseGateway,
 		})
 
 		r.Add(registry.TestSpec{
-			Name:      "failover/partial/lease-leader" + suffix,
-			Owner:     registry.OwnerKV,
-			Benchmark: true,
-			Timeout:   30 * time.Minute,
-			Cluster:   r.MakeClusterSpec(7, spec.CPU(2)),
-			Leases:    leases,
-			Run:       runFailoverPartialLeaseLeader,
+			Name:             "failover/partial/lease-leader" + suffix,
+			Owner:            registry.OwnerKV,
+			Benchmark:        true,
+			Timeout:          30 * time.Minute,
+			Cluster:          r.MakeClusterSpec(7, spec.CPU(2)),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           leases,
+			Run:              runFailoverPartialLeaseLeader,
 		})
 
 		r.Add(registry.TestSpec{
-			Name:      "failover/partial/lease-liveness" + suffix,
-			Owner:     registry.OwnerKV,
-			Benchmark: true,
-			Timeout:   30 * time.Minute,
-			Cluster:   r.MakeClusterSpec(8, spec.CPU(2)),
-			Leases:    leases,
-			Run:       runFailoverPartialLeaseLiveness,
+			Name:             "failover/partial/lease-liveness" + suffix,
+			Owner:            registry.OwnerKV,
+			Benchmark:        true,
+			Timeout:          30 * time.Minute,
+			Cluster:          r.MakeClusterSpec(8, spec.CPU(2)),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           leases,
+			Run:              runFailoverPartialLeaseLiveness,
 		})
 
 		for _, failureMode := range allFailureModes {
@@ -137,6 +145,8 @@ func registerFailover(r registry.Registry) {
 				Benchmark:           true,
 				Timeout:             30 * time.Minute,
 				Cluster:             r.MakeClusterSpec(7, clusterOpts...),
+				CompatibleClouds:    registry.AllExceptAWS,
+				Suites:              registry.Suites(registry.Nightly),
 				Leases:              leases,
 				SkipPostValidations: postValidation,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -146,6 +156,8 @@ func registerFailover(r registry.Registry) {
 			r.Add(registry.TestSpec{
 				Name:                fmt.Sprintf("failover/liveness/%s%s", failureMode, suffix),
 				Owner:               registry.OwnerKV,
+				CompatibleClouds:    registry.AllExceptAWS,
+				Suites:              registry.Suites(registry.Weekly),
 				Tags:                registry.Tags("weekly"),
 				Benchmark:           true,
 				Timeout:             30 * time.Minute,
@@ -159,6 +171,8 @@ func registerFailover(r registry.Registry) {
 			r.Add(registry.TestSpec{
 				Name:                fmt.Sprintf("failover/system-non-liveness/%s%s", failureMode, suffix),
 				Owner:               registry.OwnerKV,
+				CompatibleClouds:    registry.AllExceptAWS,
+				Suites:              registry.Suites(registry.Weekly),
 				Tags:                registry.Tags("weekly"),
 				Benchmark:           true,
 				Timeout:             30 * time.Minute,

@@ -29,14 +29,17 @@ import (
 )
 
 func registerImportCancellation(r registry.Registry) {
+
 	for _, rangeTombstones := range []bool{true, false} {
 		r.Add(registry.TestSpec{
-			Name:      fmt.Sprintf(`import-cancellation/rangeTs=%t`, rangeTombstones),
-			Owner:     registry.OwnerDisasterRecovery,
-			Benchmark: true,
-			Timeout:   4 * time.Hour,
-			Cluster:   r.MakeClusterSpec(6, spec.CPU(32)),
-			Leases:    registry.MetamorphicLeases,
+			Name:             fmt.Sprintf(`import-cancellation/rangeTs=%t`, rangeTombstones),
+			Owner:            registry.OwnerDisasterRecovery,
+			Benchmark:        true,
+			Timeout:          4 * time.Hour,
+			Cluster:          r.MakeClusterSpec(6, spec.CPU(32)),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.Spec().Cloud != spec.GCE {
 					t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")

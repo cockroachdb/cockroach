@@ -87,10 +87,12 @@ func registerImportNodeShutdown(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "import/nodeShutdown/worker",
-		Owner:   registry.OwnerSQLQueries,
-		Cluster: r.MakeClusterSpec(4),
-		Leases:  registry.MetamorphicLeases,
+		Name:             "import/nodeShutdown/worker",
+		Owner:            registry.OwnerSQLQueries,
+		Cluster:          r.MakeClusterSpec(4),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().Cloud != spec.GCE {
 				t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")
@@ -105,10 +107,12 @@ func registerImportNodeShutdown(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    "import/nodeShutdown/coordinator",
-		Owner:   registry.OwnerSQLQueries,
-		Cluster: r.MakeClusterSpec(4),
-		Leases:  registry.MetamorphicLeases,
+		Name:             "import/nodeShutdown/coordinator",
+		Owner:            registry.OwnerSQLQueries,
+		Cluster:          r.MakeClusterSpec(4),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().Cloud != spec.GCE {
 				t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")
@@ -176,6 +180,8 @@ func registerImportTPCC(r registry.Registry) {
 			Owner:             registry.OwnerSQLQueries,
 			Benchmark:         true,
 			Cluster:           r.MakeClusterSpec(numNodes),
+			CompatibleClouds:  registry.AllExceptAWS,
+			Suites:            registry.Suites(registry.Nightly),
 			Timeout:           timeout,
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -189,6 +195,8 @@ func registerImportTPCC(r registry.Registry) {
 		Name:              fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses),
 		Owner:             registry.OwnerSQLQueries,
 		Cluster:           r.MakeClusterSpec(8, spec.CPU(16), spec.Geo(), spec.Zones(geoZones)),
+		CompatibleClouds:  registry.AllExceptAWS,
+		Suites:            registry.Suites(registry.Nightly),
 		Timeout:           5 * time.Hour,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
@@ -223,6 +231,8 @@ func registerImportTPCH(r registry.Registry) {
 			Owner:             registry.OwnerSQLQueries,
 			Benchmark:         true,
 			Cluster:           r.MakeClusterSpec(item.nodes),
+			CompatibleClouds:  registry.AllExceptAWS,
+			Suites:            registry.Suites(registry.Nightly),
 			Timeout:           item.timeout,
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			Leases:            registry.MetamorphicLeases,
@@ -367,7 +377,9 @@ func registerImportMixedVersion(r registry.Registry) {
 		Name:  "import/mixed-versions",
 		Owner: registry.OwnerSQLQueries,
 		// Mixed-version support was added in 21.1.
-		Cluster: r.MakeClusterSpec(4),
+		Cluster:          r.MakeClusterSpec(4),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			predV, err := release.LatestPredecessor(t.BuildVersion())
 			if err != nil {
@@ -408,10 +420,12 @@ func registerImportDecommissioned(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "import/decommissioned",
-		Owner:   registry.OwnerSQLQueries,
-		Cluster: r.MakeClusterSpec(4),
-		Leases:  registry.MetamorphicLeases,
-		Run:     runImportDecommissioned,
+		Name:             "import/decommissioned",
+		Owner:            registry.OwnerSQLQueries,
+		Cluster:          r.MakeClusterSpec(4),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		Run:              runImportDecommissioned,
 	})
 }
