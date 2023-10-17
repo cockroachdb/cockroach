@@ -30,6 +30,11 @@ func (set errorCodeSet) merge(otherSet errorCodeSet) {
 }
 
 func (set errorCodeSet) add(code pgcode.Code) {
+	// For ergonomics, we allow the success code to be added to errorCodeSet. As
+	// it does not indicate an error, it won't actually be added.
+	if code == pgcode.SuccessfulCompletion {
+		return
+	}
 	set[code] = struct{}{}
 }
 

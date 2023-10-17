@@ -2671,6 +2671,31 @@ func makeOpStmt(queryType opStmtType) *opStmt {
 	}
 }
 
+// opStmtFromTree constructs an operation from the provide tree.Statement.
+//
+//lint:ignore U1000 Used in future commits. TODO(chrisseto): Remove the ignore.
+func newOpStmt(stmt tree.Statement, expectedExecErrors codesWithConditions) *opStmt {
+	var queryType opStmtType
+	switch stmt.StatementType() {
+	case tree.TypeDDL:
+		queryType = OpStmtDDL
+	case tree.TypeDML:
+		queryType = OpStmtDML
+	default:
+		panic("unhandled statement type")
+	}
+
+	expectedErrors := makeExpectedErrorSet()
+	expectedErrors.addAll(expectedExecErrors)
+
+	return &opStmt{
+		sql:                 tree.Serialize(stmt),
+		queryType:           queryType,
+		expectedExecErrors:  expectedErrors,
+		potentialExecErrors: makeExpectedErrorSet(),
+	}
+}
+
 // ErrorState wraps schemachange workload errors to have state information for
 // the purpose of dumping in our JSON log.
 type ErrorState struct {
