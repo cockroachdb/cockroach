@@ -261,7 +261,7 @@ func (r *Registry) resumeJob(
 ) (retErr error) {
 	log.Infof(ctx, "job %d: resuming execution", jobID)
 
-	readPayloadAndProgressFromJobInfo := r.settings.Version.IsActive(ctx, clusterversion.V23_1JobInfoTableIsBackfilled)
+	readPayloadAndProgressFromJobInfo := r.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1JobInfoTableIsBackfilled)
 	var resumeQuery string
 	if readPayloadAndProgressFromJobInfo {
 		resumeQuery = resumeQueryWithBackoff

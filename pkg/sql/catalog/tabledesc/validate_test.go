@@ -2794,7 +2794,7 @@ func TestValidateTableDesc(t *testing.T) {
 					DurationExpr: catpb.Expression("INTERVAL '2 minutes'"),
 				},
 			},
-			version: clusterversion.V22_2},
+			version: clusterversion.TODO_Delete_V22_2},
 		{err: `unknown mutation ID 123 associated with job ID 456`,
 			desc: descpb.TableDescriptor{
 				ID:            2,

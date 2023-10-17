@@ -68,13 +68,13 @@ func getStatementDetails(
 
 	// Used for mixed cluster version, where we need to use the persisted view with _v22_2.
 	tableSuffix := ""
-	if !settings.Version.IsActive(ctx, clusterversion.V23_1AddSQLStatsComputedIndexes) {
+	if !settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1AddSQLStatsComputedIndexes) {
 		tableSuffix = "_v22_2"
 	}
 	// Check if the activity tables have data within the selected period.
 	activityHasData := false
 	reqStartTime := getTimeFromSeconds(req.Start)
-	if settings.Version.IsActive(ctx, clusterversion.V23_1AddSystemActivityTables) {
+	if settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1AddSystemActivityTables) {
 		activityHasData, err = activityTablesHaveFullData(
 			ctx,
 			ie,

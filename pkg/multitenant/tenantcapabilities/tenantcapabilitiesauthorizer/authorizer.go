@@ -356,7 +356,7 @@ func (a *Authorizer) getMode(
 	// We prioritize what the cluster setting tells us.
 	selectedMode = authorizerModeType(authorizerMode.Get(&a.settings.SV))
 	if selectedMode == authorizerModeOn {
-		if !a.settings.Version.IsActive(ctx, clusterversion.V23_1TenantCapabilities) {
+		if !a.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantCapabilities) {
 			// If the cluster hasn't been upgraded to v23.1 with
 			// capabilities yet, the capabilities won't be ready for use. In
 			// that case, fall back to the previous behavior.
