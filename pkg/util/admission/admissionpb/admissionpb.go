@@ -208,9 +208,9 @@ func (w WorkClass) SafeFormat(p redact.SafePrinter, verb rune) {
 	case RegularWorkClass:
 		p.Printf("regular")
 	case ElasticWorkClass:
-		p.Print("elastic")
+		p.Printf("elastic")
 	default:
-		p.Print("<unknown-class>")
+		p.Printf("<unknown-class>")
 	}
 }
 
