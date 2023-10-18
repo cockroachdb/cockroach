@@ -179,7 +179,6 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 		params.ServerArgs.Knobs.Server = &server.TestingKnobs{
 			BinaryVersionOverride:          clusterversion.ByKey(beforeKey),
 			DisableAutomaticVersionUpgrade: make(chan struct{}),
-			BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
 		}
 	}
 
