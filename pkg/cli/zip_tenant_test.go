@@ -34,6 +34,7 @@ func TestTenantZip(t *testing.T) {
 
 	tenants := []struct {
 		testName      string
+		preZip        func(*testing.T, TestCLI)
 		addTenantArgs func(params TestCLIParams) TestCLIParams
 	}{
 		{
@@ -60,6 +61,20 @@ func TestTenantZip(t *testing.T) {
 				return params
 			},
 		},
+		{
+			testName: "testzip shared process virtualization with default tenant",
+			addTenantArgs: func(params TestCLIParams) TestCLIParams {
+				params.SharedProcessTenantArgs = &base.TestSharedProcessTenantArgs{
+					TenantName: "test-tenant",
+					TenantID:   serverutils.TestTenantID(),
+				}
+				params.UseSystemTenant = true
+				return params
+			},
+			preZip: func(_ *testing.T, c TestCLI) {
+				c.RunWithArgs([]string{"sql", "-e", "SET CLUSTER SETTING server.controller.default_target_cluster = 'test-tenant'"})
+			},
+		},
 	}
 
 	for _, tenant := range tenants {
@@ -75,6 +90,10 @@ func TestTenantZip(t *testing.T) {
 				Insecure: true,
 			}))
 			defer c.Cleanup()
+
+			if tenant.preZip != nil {
+				tenant.preZip(t, c)
+			}
 
 			out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s " + os.DevNull)
 			if err != nil {

@@ -139,6 +139,27 @@ func TestOptions(t *testing.T) {
 	require.Equal(t, u.extraOptions["application_name"], []string{"baz"})
 }
 
+func TestClone(t *testing.T) {
+	u := New()
+	require.NoError(t, u.SetOption("user", "testuser"))
+	require.Equal(t, u.GetUsername(), "testuser")
+	require.NoError(t, u.SetOption("application_name", "testapp"))
+	require.Equal(t, []string{"testapp"}, u.extraOptions["application_name"])
+
+	u2 := u.Clone()
+	// u2 has initial values from u.
+	require.Equal(t, u2.GetUsername(), "testuser")
+	require.Equal(t, []string{"testapp"}, u2.extraOptions["application_name"])
+
+	// Modifications to u2 only impact u2.
+	require.NoError(t, u2.SetOption("user", "testuser2"))
+	require.NoError(t, u2.SetOption("application_name", "testapp2"))
+	require.Equal(t, u2.GetUsername(), "testuser2")
+	require.Equal(t, u.GetUsername(), "testuser")
+	require.Equal(t, []string{"testapp"}, u.extraOptions["application_name"])
+	require.Equal(t, []string{"testapp2"}, u2.extraOptions["application_name"])
+}
+
 // Silence the unused linter
 var _ = ProtoUndefined
 var _ = TLSVerifyCA

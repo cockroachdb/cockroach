@@ -43,14 +43,12 @@ diagnostics activation requests.`,
 
 func runStmtDiagList(cmd *cobra.Command, args []string) (resErr error) {
 	const timeFmt = "2006-01-02 15:04:05 MST"
-
-	conn, err := makeSQLClient("cockroach statement-diag", useSystemDb)
+	ctx := context.Background()
+	conn, err := makeSQLClient(ctx, "cockroach statement-diag", useSystemDb)
 	if err != nil {
 		return err
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
-
-	ctx := context.Background()
 
 	// -- List bundles --
 	bundles, err := clisqlclient.StmtDiagListBundles(ctx, conn)
@@ -133,15 +131,15 @@ func runStmtDiagDownload(cmd *cobra.Command, args []string) (resErr error) {
 	} else {
 		filename = fmt.Sprintf("stmt-bundle-%d.zip", id)
 	}
-
-	conn, err := makeSQLClient("cockroach statement-diag", useSystemDb)
+	ctx := context.Background()
+	conn, err := makeSQLClient(ctx, "cockroach statement-diag", useSystemDb)
 	if err != nil {
 		return err
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
 	if err := clisqlclient.StmtDiagDownloadBundle(
-		context.Background(), conn, id, filename); err != nil {
+		ctx, conn, id, filename); err != nil {
 		return err
 	}
 	fmt.Printf("Bundle saved to %q\n", filename)
@@ -158,13 +156,12 @@ command, or delete all bundles.`,
 }
 
 func runStmtDiagDelete(cmd *cobra.Command, args []string) (resErr error) {
-	conn, err := makeSQLClient("cockroach statement-diag", useSystemDb)
+	ctx := context.Background()
+	conn, err := makeSQLClient(ctx, "cockroach statement-diag", useSystemDb)
 	if err != nil {
 		return err
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
-
-	ctx := context.Background()
 
 	if stmtDiagCtx.all {
 		if len(args) > 0 {
@@ -194,13 +191,12 @@ list command, or cancel all outstanding requests.`,
 }
 
 func runStmtDiagCancel(cmd *cobra.Command, args []string) (resErr error) {
-	conn, err := makeSQLClient("cockroach statement-diag", useSystemDb)
+	ctx := context.Background()
+	conn, err := makeSQLClient(ctx, "cockroach statement-diag", useSystemDb)
 	if err != nil {
 		return err
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
-
-	ctx := context.Background()
 
 	if stmtDiagCtx.all {
 		if len(args) > 0 {
