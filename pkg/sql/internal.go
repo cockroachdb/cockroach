@@ -1775,7 +1775,7 @@ func (ief *InternalDB) txn(
 			}
 
 			return commitTxnFn(ctx)
-		}); descs.IsTwoVersionInvariantViolationError(err) {
+		}); errIsRetriable(err) {
 			continue
 		} else {
 			if err == nil {
