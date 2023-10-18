@@ -30,6 +30,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const numFullBackups = 5
+
 func registerBackupRestoreRoundTrip(r registry.Registry) {
 	// backup-restore/round-trip tests that a round trip of creating a backup and
 	// restoring the created backup create the same objects.
@@ -76,11 +78,6 @@ func backupRestoreRoundTrip(ctx context.Context, t test.Test, c cluster.Cluster)
 			return err
 		}
 
-		stopBackgroundCommands, err := runBackgroundWorkload()
-		if err != nil {
-			return err
-		}
-
 		tables, err := testUtils.loadTablesForDBs(ctx, t.L(), testRNG, dbs...)
 		if err != nil {
 			return err
@@ -98,7 +95,12 @@ func backupRestoreRoundTrip(ctx context.Context, t test.Test, c cluster.Cluster)
 			return err
 		}
 
-		for i := 0; i < 10; i++ {
+		stopBackgroundCommands, err := runBackgroundWorkload()
+		if err != nil {
+			return err
+		}
+
+		for i := 0; i < numFullBackups; i++ {
 			allNodes := labeledNodes{Nodes: roachNodes, Version: clusterupgrade.MainVersion}
 			bspec := backupSpec{
 				PauseProbability: pauseProbability,
