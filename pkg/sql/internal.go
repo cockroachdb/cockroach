@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -1775,7 +1776,8 @@ func (ief *InternalDB) txn(
 			}
 
 			return commitTxnFn(ctx)
-		}); descs.IsTwoVersionInvariantViolationError(err) {
+		}); descs.IsTwoVersionInvariantViolationError(err) ||
+			errors.HasInterface(err, (*pgerror.ClientVisibleRetryError)(nil)) {
 			continue
 		} else {
 			if err == nil {
