@@ -1690,6 +1690,15 @@ require any additional stop-the-world operations to be collected.
 `,
 	}
 
+	ZipIncludeRunningJobTraces = FlagInfo{
+		Name: "include-running-job-traces",
+		Description: `
+Include information about each running, traceable job in jobs/*/*/trace.zip
+files. This involves collecting cluster-wide traces for each running job in the
+cluster.
+`,
+	}
+
 	ZipCPUProfileDuration = FlagInfo{
 		Name: "cpu-profile-duration",
 		Description: `
