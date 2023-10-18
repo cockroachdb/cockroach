@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -27,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
@@ -60,11 +60,12 @@ type engineWithLocation struct {
 	Location
 }
 
-// TODO(jackson): Tie this to the mapping in SetMinVersion.
-var latestReleaseFormatMajorVersion = pebble.FormatFlushableIngest // 23.1
+var previousReleaseFormatMajorVersion = pebbleFormatVersion(
+	clusterversion.ByKey(clusterversion.PreviousReleaseVersionKey),
+)
 
-var latestReleaseFormatMajorVersionOpt ConfigOption = func(cfg *engineConfig) error {
-	cfg.PebbleConfig.Opts.FormatMajorVersion = latestReleaseFormatMajorVersion
+var previousReleaseFormatMajorVersionOpt ConfigOption = func(cfg *engineConfig) error {
+	cfg.PebbleConfig.Opts.FormatMajorVersion = previousReleaseFormatMajorVersion
 	return nil
 }
 
@@ -86,7 +87,7 @@ func getInitialStateEngine(
 
 	opts := append([]ConfigOption{
 		MustExist,
-		latestReleaseFormatMajorVersionOpt,
+		previousReleaseFormatMajorVersionOpt,
 	}, initial.ConfigOptions()...)
 
 	var loc Location
@@ -131,7 +132,7 @@ func buildInitialState(
 		e.Close()
 		buildFS = e.Location.fs
 	} else {
-		opts := append([]ConfigOption{latestReleaseFormatMajorVersionOpt}, initial.ConfigOptions()...)
+		opts := append([]ConfigOption{previousReleaseFormatMajorVersionOpt}, initial.ConfigOptions()...)
 
 		// Regardless of whether the initial conditions specify an in-memory engine
 		// or not, we build the conditions using an in-memory engine for
@@ -217,7 +218,7 @@ var _ initialState = mvccBenchData{}
 func (d mvccBenchData) Key() []string {
 	key := []string{
 		"mvcc",
-		fmt.Sprintf("fmtver_%d", latestReleaseFormatMajorVersion),
+		fmt.Sprintf("fmtver_%d", previousReleaseFormatMajorVersion),
 		fmt.Sprintf("numKeys_%d", d.numKeys),
 		fmt.Sprintf("numVersions_%d", d.numVersions),
 		fmt.Sprintf("valueBytes_%d", d.valueBytes),
