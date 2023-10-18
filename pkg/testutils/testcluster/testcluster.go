@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -302,6 +303,12 @@ func NewTestCluster(
 			serverArgs = perNodeServerArgs
 		} else {
 			serverArgs = tc.clusterArgs.ServerArgs
+		}
+
+		// We cannot allow multiple nodes to share a Settings object, so we make a
+		// clone for each one.
+		if serverArgs.Settings != nil && nodes > 1 {
+			serverArgs.Settings = cluster.TestingCloneClusterSettings(serverArgs.Settings)
 		}
 
 		// If a reusable listener registry is provided, create reusable listeners
