@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -25,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -37,13 +37,13 @@ func registerDiskStalledDetection(r registry.Registry) {
 	stallers := map[string]func(test.Test, cluster.Cluster) diskStaller{
 		"dmsetup": func(t test.Test, c cluster.Cluster) diskStaller { return &dmsetupDiskStaller{t: t, c: c} },
 		"cgroup/read-write/logs-too=false": func(t test.Test, c cluster.Cluster) diskStaller {
-			return &cgroupDiskStaller{t: t, c: c, readOrWrite: []string{"write", "read"}}
+			return &cgroupDiskStaller{t: t, c: c, readOrWrite: []bandwidthReadWrite{writeBandwidth, readBandwidth}}
 		},
 		"cgroup/read-write/logs-too=true": func(t test.Test, c cluster.Cluster) diskStaller {
-			return &cgroupDiskStaller{t: t, c: c, readOrWrite: []string{"write", "read"}, logsToo: true}
+			return &cgroupDiskStaller{t: t, c: c, readOrWrite: []bandwidthReadWrite{writeBandwidth, readBandwidth}, logsToo: true}
 		},
 		"cgroup/write-only/logs-too=true": func(t test.Test, c cluster.Cluster) diskStaller {
-			return &cgroupDiskStaller{t: t, c: c, readOrWrite: []string{"write"}, logsToo: true}
+			return &cgroupDiskStaller{t: t, c: c, readOrWrite: []bandwidthReadWrite{writeBandwidth}, logsToo: true}
 		},
 	}
 
@@ -54,10 +54,7 @@ func registerDiskStalledDetection(r registry.Registry) {
 			Owner: registry.OwnerStorage,
 			// Use PDs in an attempt to work around flakes encountered when using SSDs.
 			// See #97968.
-			// TODO(DarrylWong): This test currently fails on Ubuntu 22.04 so we run it on 20.04.
-			// See: https://github.com/cockroachdb/cockroach/issues/112111.
-			// Once this issue is fixed we should remove this Ubuntu Version override.
-			Cluster:             r.MakeClusterSpec(4, spec.ReuseNone(), spec.DisableLocalSSD(), spec.UbuntuVersion(vm.FocalFossa)),
+			Cluster:             r.MakeClusterSpec(4, spec.ReuseNone(), spec.DisableLocalSSD()),
 			CompatibleClouds:    registry.AllExceptAWS,
 			Suites:              registry.Suites(registry.Nightly),
 			Timeout:             30 * time.Minute,
@@ -333,7 +330,7 @@ func (s *dmsetupDiskStaller) LogDir() string  { return "logs" }
 type cgroupDiskStaller struct {
 	t           test.Test
 	c           cluster.Cluster
-	readOrWrite []string
+	readOrWrite []bandwidthReadWrite
 	logsToo     bool
 }
 
@@ -357,13 +354,21 @@ func (s *cgroupDiskStaller) Stall(ctx context.Context, nodes option.NodeListOpti
 		s.readOrWrite[i], s.readOrWrite[j] = s.readOrWrite[j], s.readOrWrite[i]
 	})
 	for _, rw := range s.readOrWrite {
-		s.setThroughput(ctx, nodes, rw, 1)
+		// NB: I don't understand why, but attempting to set a
+		// bytesPerSecond={0,1} results in Invalid argument from the io.max
+		// cgroupv2 API.
+		if err := s.setThroughput(ctx, nodes, rw, throughput{limited: true, bytesPerSecond: 4}); err != nil {
+			s.t.Fatal(err)
+		}
 	}
 }
 
 func (s *cgroupDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOption) {
 	for _, rw := range s.readOrWrite {
-		s.setThroughput(ctx, nodes, rw, 0)
+		err := s.setThroughput(ctx, nodes, rw, throughput{limited: false})
+		s.t.L().PrintfCtx(ctx, "error unstalling the disk; stumbling on: %v", err)
+		// NB: We log the error and continue on because unstalling may not
+		// succeed if the process has successfully exited.
 	}
 }
 
@@ -383,16 +388,46 @@ func (s *cgroupDiskStaller) device() (major, minor int) {
 	}
 }
 
+type throughput struct {
+	limited        bool
+	bytesPerSecond int
+}
+
+type bandwidthReadWrite int8
+
+const (
+	readBandwidth bandwidthReadWrite = iota
+	writeBandwidth
+)
+
+func (rw bandwidthReadWrite) cgroupV2BandwidthProp() string {
+	switch rw {
+	case readBandwidth:
+		return "rbps"
+	case writeBandwidth:
+		return "wbps"
+	default:
+		panic("unreachable")
+	}
+}
+
 func (s *cgroupDiskStaller) setThroughput(
-	ctx context.Context, nodes option.NodeListOption, readOrWrite string, bytesPerSecond int,
-) {
-	major, minor := s.device()
-	s.c.Run(ctx, nodes, "sudo", "/bin/bash", "-c", fmt.Sprintf(
-		"'echo %d:%d %d > /sys/fs/cgroup/blkio/blkio.throttle.%s_bps_device'",
-		major,
-		minor,
-		bytesPerSecond,
-		readOrWrite,
+	ctx context.Context, nodes option.NodeListOption, rw bandwidthReadWrite, bw throughput,
+) error {
+	maj, min := s.device()
+	cockroachIOController := filepath.Join("/sys/fs/cgroup/system.slice", roachtestutil.SystemInterfaceSystemdUnitName()+".service", "io.max")
+
+	bytesPerSecondStr := "max"
+	if bw.limited {
+		bytesPerSecondStr = fmt.Sprintf("%d", bw.bytesPerSecond)
+	}
+	return s.c.RunE(ctx, nodes, "sudo", "/bin/bash", "-c", fmt.Sprintf(
+		`'echo %d:%d %s=%s > %s'`,
+		maj,
+		min,
+		rw.cgroupV2BandwidthProp(),
+		bytesPerSecondStr,
+		cockroachIOController,
 	))
 }
 
