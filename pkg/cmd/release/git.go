@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"os/exec"
 	"regexp"
 	"sort"
@@ -249,17 +250,31 @@ func findHealthyBuild(potentialRefs []string) (buildInfo, error) {
 	return buildInfo{}, fmt.Errorf("no ref found")
 }
 
-// remoteBranchExists checks if a branch exists in a remote repository, assuming the remote name is `origin`.
-func remoteBranchExists(branch string) (bool, error) {
-	cmd := exec.Command("git", "ls-remote", "--refs", "origin", "refs/heads/"+branch)
+// listRemoteBranches retrieves a list of remote branches using a pattern, assuming the remote name is `origin`.
+func listRemoteBranches(pattern string) ([]string, error) {
+	cmd := exec.Command("git", "ls-remote", "--refs", "origin", "refs/heads/"+pattern)
 	out, err := cmd.Output()
 	if err != nil {
-		return false, fmt.Errorf("git ls-remote: %w", err)
+		return []string{}, fmt.Errorf("git ls-remote: %w", err)
 	}
-	if len(out) == 0 {
-		return false, nil
+	log.Printf("git ls-remote returned: %s", out)
+	var remoteBranches []string
+	// Example output:
+	// $ git ls-remote origin "refs/heads/release-23.1*"
+	// 0175d195d544b77b286d56703aa5c9f74fb74367	refs/heads/release-23.1
+	// eee56b2379446c0a115e6d2cd30735a7efe4fad0	refs/heads/release-23.1.12-rc
+	for _, line := range strings.Split(string(out), "\n") {
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			return []string{}, fmt.Errorf("cannot find branch specification for %s in `%s`", pattern, line)
+		}
+		remoteBranches = append(remoteBranches, strings.TrimPrefix(fields[1], "refs/heads/"))
 	}
-	return true, nil
+	return remoteBranches, nil
+
 }
 
 // fileExistsInGit checks if a file exists in a local repository, assuming the remote name is `origin`.
@@ -267,7 +282,7 @@ func fileExistsInGit(branch string, f string) (bool, error) {
 	cmd := exec.Command("git", "ls-tree", "origin/"+branch, f)
 	out, err := cmd.Output()
 	if err != nil {
-		return false, fmt.Errorf("git ls-tree: %w", err)
+		return false, fmt.Errorf("git ls-tree: %w, `%s`", err, out)
 	}
 	if len(out) == 0 {
 		return false, nil

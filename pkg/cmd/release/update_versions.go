@@ -371,28 +371,22 @@ func generateRepoList(
 	var reposToWorkOn []prRepo
 
 	// 1. Bump the version. Branches we need to bump the version on:
-	// alpha, beta, rc: master and maybe release-major.minor.0
-	// stable releases: release-major.minor
-	var maybeVersionBumpBranches []string
-	stabilizationBranch := fmt.Sprintf("release-%d.%d.0", releasedVersion.Major(), releasedVersion.Minor())
-	stabilizationBranchExists, err := remoteBranchExists(stabilizationBranch)
+	// stable releases: release-major.minor and all RC branches of the same release series.
+	// alpha, beta, rc: master or all RC branches for the same release series
+	maybeVersionBumpBranches, err := listRemoteBranches(fmt.Sprintf("release-%d.%d.*", releasedVersion.Major(), releasedVersion.Minor()))
 	if err != nil {
-		return []prRepo{}, fmt.Errorf("checking stabilization branch: %w", err)
+		return []prRepo{}, fmt.Errorf("listing staging branches: %w", err)
 	}
 	if releasedVersion.Prerelease() == "" {
-		// Stable releases should bump the version on the main release branch (`release-$major.$minor`) and on the
-		// stabilization (aka dot zero) branch if it exists. This way we keep both branches ready for the next release.
-		maybeVersionBumpBranches = []string{fmt.Sprintf("release-%d.%d", releasedVersion.Major(), releasedVersion.Minor())}
-		if stabilizationBranchExists {
-			maybeVersionBumpBranches = append(maybeVersionBumpBranches, stabilizationBranch)
-		}
+		maybeVersionBumpBranches = append(maybeVersionBumpBranches, fmt.Sprintf("release-%d.%d", releasedVersion.Major(), releasedVersion.Minor()))
 	} else {
-		if stabilizationBranchExists {
-			maybeVersionBumpBranches = []string{stabilizationBranch}
-		} else {
+		// For alpha/betas/rc releases, if we have not created the dot-zero branch
+		// (which is covered by the `release-major.minor.*` pattern), then use the master branch for version bump.
+		if len(maybeVersionBumpBranches) == 0 {
 			maybeVersionBumpBranches = []string{"master"}
 		}
 	}
+	log.Printf("will bump version in the following branches: %s", strings.Join(maybeVersionBumpBranches, ", "))
 
 	for _, branch := range maybeVersionBumpBranches {
 		ok, err := fileExistsInGit(branch, versionFile)
