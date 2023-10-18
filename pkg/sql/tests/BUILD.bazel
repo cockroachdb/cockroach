@@ -80,7 +80,6 @@ go_test(
         "//pkg/ccl",
         "//pkg/cloud",
         "//pkg/cloud/impl:cloudimpl",
-        "//pkg/clusterversion",
         "//pkg/config/zonepb",
         "//pkg/internal/rsg",
         "//pkg/internal/sqlsmith",
