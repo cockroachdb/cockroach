@@ -23,7 +23,7 @@ DROP INDEX idx1 CASCADE
   {columnId: 1, indexId: 2, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC]
   {columnId: 3, indexId: 2, kind: KEY_SUFFIX, tableId: 104}
-- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC]
+- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC]
   {indexId: 2, isCreatedExplicitly: true, tableId: 104}
 - [[IndexName:{DescID: 104, Name: idx1, IndexID: 2}, ABSENT], PUBLIC]
   {indexId: 2, name: idx1, tableId: 104}
@@ -53,7 +53,7 @@ DROP INDEX idx2 CASCADE
   {columnId: 4, indexId: 4, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}, ABSENT], PUBLIC]
   {columnId: 3, indexId: 4, kind: KEY_SUFFIX, tableId: 104}
-- [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT], PUBLIC]
+- [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC]
   {expr: 'i > 0:::INT8', indexId: 4, isCreatedExplicitly: true, referencedColumnIds: [1], tableId: 104}
 - [[IndexName:{DescID: 104, Name: idx2, IndexID: 4}, ABSENT], PUBLIC]
   {indexId: 4, name: idx2, tableId: 104}
@@ -87,7 +87,7 @@ DROP INDEX idx3 CASCADE
   {columnId: 1, indexId: 6, ordinalInKind: 1, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 6}, ABSENT], PUBLIC]
   {columnId: 3, indexId: 6, kind: KEY_SUFFIX, tableId: 104}
-- [[SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT], PUBLIC]
+- [[SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC]
   {indexId: 6, isCreatedExplicitly: true, sharding: {columnNames: [i], isSharded: true, name: crdb_internal_i_shard_16, shardBuckets: 16}, tableId: 104}
 - [[IndexName:{DescID: 104, Name: idx3, IndexID: 6}, ABSENT], PUBLIC]
   {indexId: 6, name: idx3, tableId: 104}
@@ -139,7 +139,7 @@ DROP INDEX v2@idx CASCADE
   {columnId: 2, indexId: 2, tableId: 106}
 - [[IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC]
   {columnId: 3, indexId: 2, kind: KEY_SUFFIX, tableId: 106}
-- [[SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC]
+- [[SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC]
   {indexId: 2, isCreatedExplicitly: true, tableId: 106}
 - [[IndexName:{DescID: 106, Name: idx, IndexID: 2}, ABSENT], PUBLIC]
   {indexId: 2, name: idx, tableId: 106}

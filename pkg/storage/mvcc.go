@@ -22,7 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
@@ -76,35 +75,12 @@ var minWALSyncInterval = settings.RegisterDurationSetting(
 	settings.NonNegativeDurationWithMaximum(1*time.Second),
 )
 
-// MVCCRangeTombstonesEnabledInMixedClusters enables writing of MVCC range
-// tombstones. Currently, this is used for schema GC and import cancellation
-// rollbacks.
-//
-// Note that any executing jobs may not pick up this change, so these need to be
-// waited out before being certain that the setting has taken effect.
-//
-// If disabled after being enabled, this will prevent new range tombstones from
-// being written, but already written tombstones will remain until GCed. The
-// above note on jobs also applies in this case.
-//
-// If the version of the cluster is at or beyond the version
-// TODO_Delete_V23_1_MVCCRangeTombstonesUnconditionallyEnabled, the feature is
-// unconditionally enabled.
-var MVCCRangeTombstonesEnabledInMixedClusters = settings.RegisterBoolSetting(
-	settings.SystemVisible,
-	"storage.mvcc.range_tombstones.enabled",
-	"controls the use of MVCC range tombstones in mixed version clusters; range tombstones are always on in finalized 23.1 clusters",
-	false)
-
 // CanUseMVCCRangeTombstones returns true if the caller can begin writing MVCC
-// range tombstones, by setting DeleteRangeRequest.UseRangeTombstone. It
-// requires the storage.mvcc.range_tombstones.enabled cluster setting to be
-// enabled, OR the cluster version is at or beyond the
-// TODO_Delete_V23_1_MVCCRangeTombstonesUnconditionallyEnabled version (i.e. in 23.1, the
-// feature is unconditionally enabled).
+// range tombstones, by setting DeleteRangeRequest.UseRangeTombstone.
 func CanUseMVCCRangeTombstones(ctx context.Context, st *cluster.Settings) bool {
-	return st.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1_MVCCRangeTombstonesUnconditionallyEnabled) ||
-		MVCCRangeTombstonesEnabledInMixedClusters.Get(&st.SV)
+	// All compatible Cockroach cluster versions support MVCC range tombstones
+	// now.
+	return true
 }
 
 // MaxConflictsPerLockConflictError sets maximum number of locks returned in

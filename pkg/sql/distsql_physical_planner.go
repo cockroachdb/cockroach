@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -832,7 +833,7 @@ type PlanningCtx struct {
 
 	// If set, the flows for the physical plan will be passed to this function.
 	// The flows are not safe for use past the lifetime of the saveFlows function.
-	saveFlows func(_ map[base.SQLInstanceID]*execinfrapb.FlowSpec, _ execopnode.OpChains, vectorized bool) error
+	saveFlows func(_ map[base.SQLInstanceID]*execinfrapb.FlowSpec, _ execopnode.OpChains, _ []execinfra.LocalProcessor, vectorized bool) error
 
 	// If set, we will record the mapping from planNode to tracing metadata to
 	// later allow associating statistics with the planNode.
@@ -904,19 +905,36 @@ func (p *PlanningCtx) getPortalPauseInfo() *portalPauseInfo {
 	return nil
 }
 
+// setUpForMainQuery updates the PlanningCtx for the main query path.
+func (p *PlanningCtx) setUpForMainQuery(
+	ctx context.Context, planner *planner, recv *DistSQLReceiver,
+) {
+	p.stmtType = recv.stmtType
+	// Skip the diagram generation since on this "main" query path we can get it
+	// via the statement bundle.
+	p.skipDistSQLDiagramGeneration = true
+	if planner.execCfg.TestingKnobs.TestingSaveFlows != nil {
+		p.saveFlows = planner.execCfg.TestingKnobs.TestingSaveFlows(planner.stmt.SQL)
+	} else if planner.instrumentation.ShouldSaveFlows() {
+		p.saveFlows = getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeMainQuery)
+	}
+	p.associateNodeWithComponents = planner.instrumentation.getAssociateNodeWithComponentsFn()
+	p.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
+}
+
 // getDefaultSaveFlowsFunc returns the default function used to save physical
 // plans and their diagrams. The returned function is **not** concurrency-safe.
-func (p *PlanningCtx) getDefaultSaveFlowsFunc(
+func getDefaultSaveFlowsFunc(
 	ctx context.Context, planner *planner, typ planComponentType,
-) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, bool) error {
-	return func(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec, opChains execopnode.OpChains, vectorized bool) error {
+) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, []execinfra.LocalProcessor, bool) error {
+	return func(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec, opChains execopnode.OpChains, localProcessors []execinfra.LocalProcessor, vectorized bool) error {
 		var diagram execinfrapb.FlowDiagram
 		if planner.instrumentation.shouldSaveDiagrams() {
 			diagramFlags := execinfrapb.DiagramFlags{
 				MakeDeterministic: planner.execCfg.TestingKnobs.DeterministicExplain,
 			}
 			var err error
-			diagram, err = p.flowSpecsToDiagram(ctx, flows, diagramFlags)
+			diagram, err = flowSpecsToDiagram(planner, flows, diagramFlags)
 			if err != nil {
 				return err
 			}
@@ -924,7 +942,7 @@ func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 		var explainVec []string
 		var explainVecVerbose []string
 		if planner.instrumentation.collectBundle && vectorized {
-			flowCtx, cleanup := newFlowCtxForExplainPurposes(ctx, p, planner)
+			flowCtx, cleanup := newFlowCtxForExplainPurposes(ctx, planner)
 			defer cleanup()
 			flowCtx.Local = !planner.curPlan.flags.IsDistributed()
 			getExplain := func(verbose bool) []string {
@@ -933,7 +951,7 @@ func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 				// stats.
 				const recordingStats = true
 				explain, err := colflow.ExplainVec(
-					ctx, flowCtx, flows, p.infra.LocalProcessors, opChains,
+					ctx, flowCtx, flows, localProcessors, opChains,
 					gatewaySQLInstanceID, verbose, recordingStats,
 				)
 				if err != nil {
@@ -964,15 +982,15 @@ func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 }
 
 // flowSpecsToDiagram is a helper function used to convert flowSpecs into a
-// FlowDiagram using this PlanningCtx's information.
-func (p *PlanningCtx) flowSpecsToDiagram(
-	ctx context.Context,
+// FlowDiagram.
+func flowSpecsToDiagram(
+	p *planner,
 	flows map[base.SQLInstanceID]*execinfrapb.FlowSpec,
 	diagramFlags execinfrapb.DiagramFlags,
 ) (execinfrapb.FlowDiagram, error) {
 	var stmtStr string
-	if p.planner != nil && p.planner.stmt.AST != nil {
-		stmtStr = p.planner.stmt.String()
+	if p != nil && p.stmt.AST != nil {
+		stmtStr = p.stmt.String()
 	}
 	diagram, err := execinfrapb.GeneratePlanDiagram(
 		stmtStr, flows, diagramFlags,

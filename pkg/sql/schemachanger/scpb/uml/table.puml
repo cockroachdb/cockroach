@@ -295,6 +295,7 @@ object SecondaryIndex
 
 SecondaryIndex :  Index
 SecondaryIndex :  EmbeddedExpr
+SecondaryIndex :  RecreateSourceIndexID
 
 object SecondaryIndexPartial
 

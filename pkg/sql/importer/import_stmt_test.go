@@ -66,7 +66,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -6389,7 +6388,6 @@ func TestImportPgDumpSchemas(t *testing.T) {
 	baseDir := datapathutils.TestDataPath(t, "pgdump")
 	mkArgs := func() base.TestServerArgs {
 		s := cluster.MakeTestingClusterSettings()
-		storage.MVCCRangeTombstonesEnabledInMixedClusters.Override(ctx, &s.SV, true)
 		return base.TestServerArgs{
 			Settings:      s,
 			ExternalIODir: baseDir,

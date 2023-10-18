@@ -704,6 +704,7 @@ ElementState:
     isInverted: false
     isNotVisible: false
     isUnique: false
+    recreateSourceId: 0
     referencedColumnIds:
     - 1
     sharding: null
