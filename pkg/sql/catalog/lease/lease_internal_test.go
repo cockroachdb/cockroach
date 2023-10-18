@@ -992,7 +992,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 			// monotonically increasing expiration. This prevents two leases
 			// from having the same expiration due to randomness, as the
 			// leases are checked for having a different expiration.
-			LeaseJitterFraction.Override(ctx, &serverArgs.SV, 0)
+			LeaseJitterFraction.Override(ctx, &serverArgs.Settings.SV, 0)
 
 			srv, sqlDB, _ := serverutils.StartServer(t, serverArgs)
 			defer srv.Stopper().Stop(context.Background())
