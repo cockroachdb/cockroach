@@ -518,6 +518,13 @@ func randIndexTableDefFromCols(
 	copy(cpy, columnTableDefs)
 	rng.Shuffle(len(cpy), func(i, j int) { cpy[i], cpy[j] = cpy[j], cpy[i] })
 	nCols := rng.Intn(len(cpy)) + 1
+	if rng.Intn(10) == 0 {
+		// Create a single-column index 10% of the time. Single-column indexes are
+		// more likely then multi-column indexes to be used in query plans for
+		// randomly generated queries, so there is some benefit to guaranteeing that
+		// they are generated.
+		nCols = 1
+	}
 
 	cols := cpy[:nCols]
 
