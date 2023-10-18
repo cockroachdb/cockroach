@@ -208,6 +208,9 @@ var cmdBase = []string{
 	"/usr/bin/env",
 	"COCKROACH_SKIP_UPDATE_CHECK=1",
 	"COCKROACH_CRASH_REPORTS=",
+	// Disable metamorphic testing for acceptance tests, since they are
+	// end-to-end tests and metamorphic constants can make them too slow.
+	"COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true",
 	"/bin/bash",
 	"-c",
 }

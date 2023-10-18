@@ -461,9 +461,13 @@ func (l *DockerCluster) createNodeCerts() {
 
 // startNode starts a Docker container to run testNode. It may be called in
 // parallel to start many nodes at once, and thus should remain threadsafe.
-func (l *DockerCluster) startNode(ctx context.Context, node *testNode) {
+func (l *DockerCluster) startNode(ctx context.Context, node *testNode, singleNode bool) {
+	startCmd := "start"
+	if singleNode {
+		startCmd = "start-single-node"
+	}
 	cmd := []string{
-		"start",
+		startCmd,
 		"--certs-dir=/certs/",
 		"--listen-addr=" + node.nodeStr,
 		"--vmodule=*=1",
@@ -483,8 +487,10 @@ func (l *DockerCluster) startNode(ctx context.Context, node *testNode) {
 		cmd = append(cmd, fmt.Sprintf("--store=%s", storeSpec))
 	}
 	// Append --join flag for all nodes.
-	firstNodeAddr := l.Nodes[0].nodeStr
-	cmd = append(cmd, "--join="+net.JoinHostPort(firstNodeAddr, base.DefaultPort))
+	if !singleNode {
+		firstNodeAddr := l.Nodes[0].nodeStr
+		cmd = append(cmd, "--join="+net.JoinHostPort(firstNodeAddr, base.DefaultPort))
+	}
 
 	dockerLogDir := "/logs/" + node.nodeStr
 	localLogDir := filepath.Join(l.volumesDir, "logs", node.nodeStr)
@@ -499,6 +505,9 @@ func (l *DockerCluster) startNode(ctx context.Context, node *testNode) {
 		// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
 		// Remove in v23.2.
 		"COCKROACH_FORCE_DEPRECATED_SHOW_RANGE_BEHAVIOR=false",
+		// Disable metamorphic testing for acceptance tests, since they are
+		// end-to-end tests and metamorphic constants can make them too slow.
+		"COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true",
 	}
 	l.createRoach(ctx, node, l.vols, env, cmd...)
 	maybePanic(node.Start(ctx))
@@ -663,15 +672,16 @@ func (l *DockerCluster) Start(ctx context.Context) {
 	go l.monitor(ctx, l.monitorDone)
 	var wg sync.WaitGroup
 	wg.Add(len(l.Nodes))
+	singleNode := len(l.Nodes) == 1
 	for _, node := range l.Nodes {
 		go func(node *testNode) {
 			defer wg.Done()
-			l.startNode(ctx, node)
+			l.startNode(ctx, node, singleNode)
 		}(node)
 	}
 	wg.Wait()
 
-	if l.config.InitMode == INIT_COMMAND && len(l.Nodes) > 0 {
+	if l.config.InitMode == INIT_COMMAND && len(l.Nodes) > 1 {
 		l.RunInitCommand(ctx, 0)
 	}
 }
