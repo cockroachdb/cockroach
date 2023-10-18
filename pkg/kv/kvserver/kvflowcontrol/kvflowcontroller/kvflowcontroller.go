@@ -64,7 +64,9 @@ type Controller struct {
 		limit tokensPerWorkClass
 
 		// We maintain flow token buckets for {regular,elastic} work along each
-		// stream. This is lazily instantiated.
+		// stream. This is lazily instantiated. mu is held wen adding to the map.
+		// Readers only need to hold mu, if they don't want to miss a concurrently
+		// added entry.
 		//
 		// TODO(irfansharif): Sort out the GC story for these buckets. When
 		// streams get closed permanently (tenants get deleted, nodes removed)
@@ -246,9 +248,8 @@ func (c *Controller) ReturnTokens(
 
 // Inspect is part of the kvflowcontrol.Controller interface.
 func (c *Controller) Inspect(ctx context.Context) []kvflowinspectpb.Stream {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
+	// NB: we are not acquiring c.mu since we don't care about streams that are
+	// being concurrently added to the map.
 	var streams []kvflowinspectpb.Stream
 	c.mu.buckets.Range(func(key, value any) bool {
 		stream := key.(kvflowcontrol.Stream)
