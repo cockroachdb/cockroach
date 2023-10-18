@@ -20,6 +20,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -135,9 +136,6 @@ var UseExciseForSnapshots = settings.RegisterBoolSetting(
 // sstable was already lazily ingested but not flushed, a crash and subsequent
 // recovery will still enqueue the sstables as flushable when the ingest's WAL
 // entry is replayed.
-//
-// The value of this cluster setting is ignored if the cluster version is not
-// yet at least TODO_Delete_V23_1EnableFlushableIngest.
 //
 // This cluster setting will be removed in a subsequent release.
 var IngestAsFlushable = settings.RegisterBoolSetting(
@@ -901,9 +899,8 @@ func (p *Pebble) SetStoreID(ctx context.Context, storeID int32) error {
 	}
 	p.storeIDPebbleLog.Set(ctx, storeID)
 	// Note that SetCreatorID only does something if remote storage is configured
-	// in the pebble options. The version gate protects against accidentally
-	// setting the creator ID on an older store.
-	if storeID != base.TempStoreID && p.minVersion.AtLeast(clusterversion.ByKey(clusterversion.TODO_Delete_V23_1SetPebbleCreatorID)) {
+	// in the pebble options.
+	if storeID != base.TempStoreID {
 		if err := p.db.SetCreatorID(uint64(storeID)); err != nil {
 			return err
 		}
@@ -1058,10 +1055,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		return minWALSyncInterval.Get(&cfg.Settings.SV)
 	}
 	opts.Experimental.EnableValueBlocks = func() bool {
-		version := cfg.Settings.Version.ActiveVersionOrEmpty(logCtx)
-		return !version.Less(clusterversion.ByKey(
-			clusterversion.TODO_Delete_V23_1EnablePebbleFormatSSTableValueBlocks)) &&
-			ValueBlocksEnabled.Get(&cfg.Settings.SV)
+		return ValueBlocksEnabled.Get(&cfg.Settings.SV)
 	}
 	opts.Experimental.DisableIngestAsFlushable = func() bool {
 		// Disable flushable ingests if shared storage is enabled. This is because
@@ -2310,6 +2304,65 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 	return nil
 }
 
+// pebbleFormatVersionMap maps cluster versions to the corresponding pebble format version.
+// For a given cluster version, the entry with the latest version that is not
+// newer than the given version is chosen.
+//
+// This map needs to include the "final" version for each supported previous
+// release, and the in-development versions of the current release.
+//
+// Pebble has a concept of format major versions, similar to cluster versions.
+// Backwards incompatible changes to Pebble's on-disk format are gated behind
+// new format major versions. Bumping the storage engine's format major version
+// is tied to a CockroachDB cluster version.
+//
+// Format major versions and cluster versions both only ratchet upwards. Here we
+// map the persisted cluster version to the corresponding format major version,
+// ratcheting Pebble's format major version if necessary.
+//
+// Note that when introducing a new Pebble format version that relies on _all_
+// engines in a cluster being at the same, newer format major version, two
+// cluster versions should be used. The first is used to enable the feature in
+// Pebble, and should control the version ratchet below. The second is used as a
+// feature flag. The use of two cluster versions relies on a guarantee provided
+// by the migration framework (see pkg/migration) that if a node is at a version
+// X+1, it is guaranteed that all nodes have already ratcheted their store
+// version to the version X that enabled the feature at the Pebble level.
+var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
+	clusterversion.V23_1:                                    pebble.FormatFlushableIngest,
+	clusterversion.V23_2_PebbleFormatVirtualSSTables:        pebble.FormatVirtualSSTables,
+	clusterversion.V23_2_PebbleFormatDeleteSizedAndObsolete: pebble.FormatDeleteSizedAndObsolete,
+}
+
+// pebbleFormatVersionKeys contains the keys in the map above, in descending order.
+var pebbleFormatVersionKeys []clusterversion.Key = func() []clusterversion.Key {
+	versionKeys := make([]clusterversion.Key, 0, len(pebbleFormatVersionMap))
+	for k := range pebbleFormatVersionMap {
+		versionKeys = append(versionKeys, k)
+	}
+	// Sort the keys in reverse order.
+	sort.Slice(versionKeys, func(i, j int) bool {
+		return versionKeys[i] > versionKeys[j]
+	})
+	return versionKeys
+}()
+
+// pebbleFormatVersion finds the most recent pebble format version supported by
+// the given cluster version.
+func pebbleFormatVersion(clusterVersion roachpb.Version) pebble.FormatMajorVersion {
+	// pebbleFormatVersionKeys are sorted in descending order; find the first one
+	// that is not newer than clusterVersion.
+	for _, k := range pebbleFormatVersionKeys {
+		if clusterVersion.AtLeast(clusterversion.ByKey(k)) {
+			return pebbleFormatVersionMap[k]
+		}
+	}
+	// This should never happen in production. But we tolerate tests creating
+	// imaginary older versions; we must still use the earliest supported
+	// format.
+	return MinimumSupportedFormatVersion
+}
+
 // SetMinVersion implements the Engine interface.
 func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 	p.minVersion = version
@@ -2328,62 +2381,14 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 		return err
 	}
 
-	// Set the shared object creator ID if the version is high enough. See SetStoreID().
-	if version.AtLeast(clusterversion.ByKey(clusterversion.TODO_Delete_V23_1SetPebbleCreatorID)) {
-		if storeID := p.storeIDPebbleLog.Get(); storeID != 0 && storeID != base.TempStoreID {
-			if err := p.db.SetCreatorID(uint64(storeID)); err != nil {
-				return err
-			}
+	// Set the shared object creator ID .
+	if storeID := p.storeIDPebbleLog.Get(); storeID != 0 && storeID != base.TempStoreID {
+		if err := p.db.SetCreatorID(uint64(storeID)); err != nil {
+			return err
 		}
 	}
 
-	// Pebble has a concept of format major versions, similar to cluster
-	// versions. Backwards incompatible changes to Pebble's on-disk
-	// format are gated behind new format major versions. Bumping the
-	// storage engine's format major version is tied to a CockroachDB
-	// cluster version.
-	//
-	// Format major versions and cluster versions both only ratchet
-	// upwards. Here we map the persisted cluster version to the
-	// corresponding format major version, ratcheting Pebble's format
-	// major version if necessary.
-	//
-	// Note that when introducing a new Pebble format version that relies on _all_
-	// engines in a cluster being at the same, newer format major version, two
-	// cluster versions should be used. The first is used to enable the feature in
-	// Pebble, and should control the version ratchet below. The second is used as
-	// a feature flag. The use of two cluster versions relies on a guarantee
-	// provided by the migration framework (see pkg/migration) that if a node is
-	// at a version X+1, it is guaranteed that all nodes have already ratcheted
-	// their store version to the version X that enabled the feature at the Pebble
-	// level.
-	var formatVers pebble.FormatMajorVersion
-	// Cases are ordered from newer to older versions.
-	switch {
-	case !version.Less(clusterversion.ByKey(clusterversion.V23_2_PebbleFormatVirtualSSTables)):
-		formatVers = pebble.FormatVirtualSSTables
-
-	case !version.Less(clusterversion.ByKey(clusterversion.V23_2_PebbleFormatDeleteSizedAndObsolete)):
-		formatVers = pebble.FormatDeleteSizedAndObsolete
-
-	case !version.Less(clusterversion.ByKey(clusterversion.TODO_Delete_V23_1EnableFlushableIngest)):
-		formatVers = pebble.FormatFlushableIngest
-
-	case !version.Less(clusterversion.ByKey(clusterversion.TODO_Delete_V23_1EnsurePebbleFormatSSTableValueBlocks)):
-		formatVers = pebble.FormatSSTableValueBlocks
-
-	case !version.Less(clusterversion.ByKey(clusterversion.TODO_Delete_V22_2)):
-		// This is the earliest supported format. The code assumes that the features
-		// provided by this format are always available.
-		formatVers = pebble.FormatPrePebblev1Marked
-
-	default:
-		// This should never happen in production. But we tolerate tests creating
-		// imaginary older versions; we must still use the earliest supported
-		// format.
-		formatVers = MinimumSupportedFormatVersion
-	}
-
+	formatVers := pebbleFormatVersion(version)
 	if p.db.FormatMajorVersion() < formatVers {
 		if err := p.db.RatchetFormatMajorVersion(formatVers); err != nil {
 			return errors.Wrap(err, "ratcheting format major version")

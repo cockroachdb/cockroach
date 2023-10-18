@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	kv2 "github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -67,11 +66,6 @@ func newKVNative(b *testing.B) kvInterface {
 
 func newKVNativeAndEngine(tb testing.TB, valueBlocks bool) (*kvNative, storage.Engine) {
 	st := cluster.MakeTestingClusterSettings()
-	version := st.Version.ActiveVersionOrEmpty(context.Background())
-	if version.Less(clusterversion.ByKey(
-		clusterversion.TODO_Delete_V23_1EnablePebbleFormatSSTableValueBlocks)) {
-		tb.Fatalf("cluster version is too old %s", version.String())
-	}
 	storage.ValueBlocksEnabled.Override(context.Background(), &st.SV, valueBlocks)
 	s, _, db := serverutils.StartServer(tb, base.TestServerArgs{Settings: st})
 	engines := s.Engines()

@@ -1,0 +1,56 @@
+setup
+CREATE TABLE t (a INT NOT NULL, b INT NOT NULL);
+CREATE INDEX idx_b ON t(b);
+----
+
+stage-exec phase=PostCommitPhase stage=1:
+INSERT INTO t VALUES($stageKey, $stageKey + 1);
+INSERT INTO t VALUES($stageKey + 1, $stageKey);
+----
+
+# Each insert will be injected twice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*)=$successfulStageCount*2 FROM t;
+----
+true
+
+# Same scan on secondary indexes should keep working.
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*)=$successfulStageCount*2 FROM t@idx_b;
+----
+true
+
+stage-query phase=PostCommitPhase stage=:
+SELECT DISTINCT index_name FROM [ SHOW INDEXES FROM t] ORDER BY index_name;
+----
+idx_b
+t_pkey
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO t VALUES($stageKey, $stageKey + 1);
+INSERT INTO t VALUES($stageKey + 1, $stageKey);
+----
+
+# Each insert will be injected twice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*)=$successfulStageCount*2 FROM t;
+----
+true
+
+# Same scan on secondary indexes should keep working.
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*)=$successfulStageCount*2 FROM t@idx_b;
+----
+true
+
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT DISTINCT index_name FROM [ SHOW INDEXES FROM t] ORDER BY index_name;
+----
+idx_b
+t_pkey
+
+test
+alter table t add primary key (a);
+----
