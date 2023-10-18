@@ -452,23 +452,25 @@ func GetBootstrapSchema(
 func bootstrapCluster(
 	ctx context.Context, engines []storage.Engine, initCfg initServerCfg,
 ) (*initState, error) {
+	// We expect all the stores to be empty at this point, except for
+	// the store cluster version key. Assert so.
+	//
+	// TODO(jackson): Eventually we should be able to avoid opening the
+	// engines altogether until here.
+	if err := assertEnginesEmpty(engines); err != nil {
+		return nil, err
+	}
+
+	// We use our binary version to bootstrap the cluster.
+	bootstrapVersion := clusterversion.ClusterVersion{Version: initCfg.binaryVersion}
+	if err := kvstorage.WriteClusterVersionToEngines(ctx, engines, bootstrapVersion); err != nil {
+		return nil, err
+	}
+
 	clusterID := uuid.MakeV4()
 	// TODO(andrei): It'd be cool if this method wouldn't do anything to engines
 	// other than the first one, and let regular node startup code deal with them.
-	var bootstrapVersion clusterversion.ClusterVersion
 	for i, eng := range engines {
-		cv := eng.MinVersion()
-		if cv.Major == 0 {
-			return nil, errors.Errorf("missing bootstrap version")
-		}
-
-		// bootstrapCluster requires matching cluster versions on all engines.
-		if i == 0 {
-			bootstrapVersion.Version = cv
-		} else if bootstrapVersion.Version != cv {
-			return nil, errors.Errorf("found cluster versions %s and %s", bootstrapVersion, cv)
-		}
-
 		sIdent := roachpb.StoreIdent{
 			ClusterID: clusterID,
 			NodeID:    kvstorage.FirstNodeID,
@@ -490,23 +492,24 @@ func bootstrapCluster(
 				DefaultSystemZoneConfig: &initCfg.defaultSystemZoneConfig,
 				Codec:                   keys.SystemSQLCodec,
 			}
-			if initCfg.testingKnobs.Server != nil {
-				knobs := initCfg.testingKnobs.Server.(*TestingKnobs)
-				// If BinaryVersionOverride is set, and our `binaryMinSupportedVersion`
-				// is at its default value, we must populate the cluster with initial
-				// data from the `binaryMinSupportedVersion`. This cluster will then run
-				// the necessary upgrades until `BinaryVersionOverride` before being
-				// ready to use in the test.
-				if knobs.BinaryVersionOverride != (roachpb.Version{}) {
-					if initCfg.binaryMinSupportedVersion.Equal(
-						clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)) {
-						initialValuesOpts.OverrideKey = clusterversion.BinaryMinSupportedVersionKey
-					}
-				}
-				if knobs.BootstrapVersionKeyOverride != 0 {
-					initialValuesOpts.OverrideKey = initCfg.testingKnobs.Server.(*TestingKnobs).BootstrapVersionKeyOverride
+			for _, v := range bootstrap.VersionsWithInitialValues() {
+				if initCfg.binaryVersion == clusterversion.ByKey(v) {
+					initialValuesOpts.OverrideKey = v
+					break
 				}
 			}
+			if initialValuesOpts.OverrideKey == 0 {
+				if initCfg.binaryVersion.Less(clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)) {
+					// As an exception, we tolerate tests creating older versions; we just
+					// use the minimum supported version.
+					// TODO(radu): should we make sure there are no upgrades for versions
+					// earlier than this still registered?
+					initialValuesOpts.OverrideKey = clusterversion.BinaryMinSupportedVersionKey
+				} else {
+					return nil, errors.AssertionFailedf("cannot bootstrap at version %s", initCfg.binaryVersion)
+				}
+			}
+
 			initialValues, tableSplits, err := initialValuesOpts.GenerateInitialValues()
 			if err != nil {
 				return nil, err
@@ -531,6 +534,8 @@ func bootstrapCluster(
 		}
 	}
 
+	// Note that we wrote initcfg.binaryVersion, that will always be the version
+	// that inspectEngines determines.
 	return inspectEngines(ctx, engines, initCfg.binaryVersion, initCfg.binaryMinSupportedVersion)
 }
 

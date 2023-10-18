@@ -34,9 +34,9 @@ type InitialValuesOpts struct {
 	Codec                   keys.SQLCodec
 }
 
-// GenerateInitialValues generates the initial values with which to bootstrap
-// a new cluster. This generates the values assuming a cluster version equal to
-// to the latest binary, unless explicitly overridden.
+// GenerateInitialValues generates the initial values with which to bootstrap a
+// new cluster. This generates the values assuming a cluster version equal to
+// the latest binary, unless explicitly overridden.
 func (opts InitialValuesOpts) GenerateInitialValues() ([]roachpb.KeyValue, []roachpb.RKey, error) {
 	versionKey := clusterversion.BinaryVersionKey
 	if opts.OverrideKey != 0 {
@@ -47,6 +47,20 @@ func (opts InitialValuesOpts) GenerateInitialValues() ([]roachpb.KeyValue, []roa
 		return nil, nil, errors.Newf("unsupported version %q", versionKey)
 	}
 	return f(opts)
+}
+
+// VersionsWithInitialValues returns all the versions which can be used for
+// InitialValuesOpts.OverrideKey, in descending order; the first one is always
+// the current version.
+func VersionsWithInitialValues() []clusterversion.Key {
+	res := make([]clusterversion.Key, 0, len(initialValuesFactoryByKey))
+	for k := range initialValuesFactoryByKey {
+		res = append(res, k)
+	}
+	sort.Slice(res, func(i, j int) bool {
+		return res[i] > res[j]
+	})
+	return res
 }
 
 type initialValuesFactoryFn = func(opts InitialValuesOpts) (
