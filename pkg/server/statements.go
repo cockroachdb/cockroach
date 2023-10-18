@@ -75,18 +75,13 @@ func (s *statusServer) Statements(
 		return status.Statements(ctx, localReq)
 	}
 
-	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
-		client, err := s.dialNode(ctx, nodeID)
-		return client, err
-	}
-	nodeStatement := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
-		status := client.(serverpb.StatusClient)
+	nodeStatement := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
 		return status.Statements(ctx, localReq)
 	}
 
-	if err := s.iterateNodes(ctx, "statement statistics",
+	if err := iterateNodes(ctx, s.serverIterator, s.stopper, "statement statistics",
 		noTimeout,
-		dialFn,
+		s.dialNode,
 		nodeStatement,
 		func(nodeID roachpb.NodeID, resp interface{}) {
 			statementsResp := resp.(*serverpb.StatementsResponse)
