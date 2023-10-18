@@ -45,7 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	raft "go.etcd.io/raft/v3"
+	"go.etcd.io/raft/v3"
 	"go.etcd.io/raft/v3/tracker"
 )
 
@@ -1609,8 +1609,10 @@ func TestLeaseRequestBumpsEpoch(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, roachpb.LeaseEpoch, prevLease.Type())
 
-		// Non-cooperatively move the lease to n2.
-		kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, expLease)
+		for _, s := range tc.Servers {
+			// Non-cooperatively move the lease to n2.
+			kvserver.ExpirationLeasesOnly.Override(ctx, &s.ClusterSettings().SV, expLease)
+		}
 		t1 := tc.Target(1)
 		newLease, err := tc.MoveRangeLeaseNonCooperatively(ctx, desc, t1, manual)
 		require.NoError(t, err)
