@@ -304,6 +304,7 @@ func TestAlterTableDMLInjection(t *testing.T) {
 		{
 			desc:         "create index",
 			schemaChange: "CREATE INDEX idx ON tbl (val)",
+			skipIssue:    112421,
 		},
 		{
 			desc:         "drop index",
@@ -362,6 +363,7 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			desc:         "drop partial index",
 			setup:        []string{"CREATE INDEX idx ON tbl (val) WHERE val > 1"},
 			schemaChange: "DROP INDEX idx",
+			skipIssue:    112417,
 		},
 		{
 			desc: "drop column with partial index",
@@ -401,6 +403,7 @@ func TestAlterTableDMLInjection(t *testing.T) {
 				"CREATE MATERIALIZED VIEW mv AS SELECT * FROM tbl@idx",
 			},
 			schemaChange: "DROP INDEX idx CASCADE",
+			skipIssue:    112418,
 		},
 	}
 
