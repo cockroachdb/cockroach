@@ -77,6 +77,7 @@ func (r *traceSpanResumer) CollectProfile(_ context.Context, _ interface{}) erro
 func TestDebugJobTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	defer jobs.ResetConstructors()()
 
 	ctx := context.Background()
 	argsFn := func(args *base.TestServerArgs) {

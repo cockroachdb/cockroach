@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -107,7 +106,6 @@ type Registry struct {
 	settings  *cluster.Settings
 	execCtx   jobExecCtxMaker
 	metrics   Metrics
-	td        *tracedumper.TraceDumper
 	knobs     TestingKnobs
 
 	// adoptionChan is used to nudge the registry to resume claimed jobs and
@@ -226,7 +224,6 @@ func MakeRegistry(
 	histogramWindowInterval time.Duration,
 	execCtxFn jobExecCtxMaker,
 	preventAdoptionFile string,
-	td *tracedumper.TraceDumper,
 	knobs *TestingKnobs,
 ) *Registry {
 	r := &Registry{
@@ -241,7 +238,6 @@ func MakeRegistry(
 		execCtx:                 execCtxFn,
 		preventAdoptionFile:     preventAdoptionFile,
 		preventAdoptionLogEvery: log.Every(time.Minute),
-		td:                      td,
 		// Use a non-zero buffer to allow queueing of notifications.
 		// The writing method will use a default case to avoid blocking
 		// if a notification is already queued.

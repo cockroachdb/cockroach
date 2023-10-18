@@ -159,7 +159,7 @@ func TestJobsControlForSchedules(t *testing.T) {
 	// As such, the job does not undergo usual job state transitions
 	// (e.g. pause-request -> paused).
 	RegisterConstructor(jobspb.TypeImport, func(job *Job, _ *cluster.Settings) Resumer {
-		return FakeResumer{
+		return jobstest.FakeResumer{
 			OnResume: func(_ context.Context) error {
 				<-blockResume
 				return nil
@@ -273,7 +273,7 @@ func TestFilterJobsControlForSchedules(t *testing.T) {
 
 	// Our resume never completes any jobs, until this test completes.
 	RegisterConstructor(jobspb.TypeImport, func(job *Job, _ *cluster.Settings) Resumer {
-		return FakeResumer{
+		return jobstest.FakeResumer{
 			OnResume: func(_ context.Context) error {
 				<-blockResume
 				return nil
@@ -406,7 +406,7 @@ func TestJobControlByType(t *testing.T) {
 	// Make the jobs of each type controllable.
 	for _, jobType := range allJobTypes {
 		RegisterConstructor(jobType, func(job *Job, _ *cluster.Settings) Resumer {
-			return FakeResumer{
+			return jobstest.FakeResumer{
 				OnResume: func(ctx context.Context) error {
 					<-ctx.Done()
 					return nil
