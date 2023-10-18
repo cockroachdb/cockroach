@@ -94,10 +94,11 @@ const (
 	alterTableAddConstraintForeignKey // ALTER TABLE <table> ADD CONSTRAINT <constraint> FOREIGN KEY (<column>) REFERENCES <table> (<column>)
 	alterTableAddConstraintUnique     // ALTER TABLE <table> ADD CONSTRAINT <constraint> UNIQUE (<column>)
 	alterTableAlterColumnType         // ALTER TABLE <table> ALTER [COLUMN] <column> [SET DATA] TYPE <type>
+	alterTableAlterPrimaryKey         // ALTER TABLE <table> ALTER PRIMARY KEY USING COLUMNS (<columns>)
 	alterTableDropColumn              // ALTER TABLE <table> DROP COLUMN <column>
+	alterTableDropColumnDefault       // ALTER TABLE <table> ALTER [COLUMN] <column> DROP DEFAULT
 	alterTableDropConstraint          // ALTER TABLE <table> DROP CONSTRAINT <constraint>
 	alterTableDropNotNull             // ALTER TABLE <table> ALTER [COLUMN] <column> DROP NOT NULL
-	alterTableDropColumnDefault       // ALTER TABLE <table> ALTER [COLUMN] <column> DROP DEFAULT
 	alterTableDropStored              // ALTER TABLE <table> ALTER [COLUMN] <column> DROP STORED
 	alterTableLocality                // ALTER TABLE <table> LOCALITY <locality>
 	alterTableRenameColumn            // ALTER TABLE <table> RENAME [COLUMN] <column> TO <column>
@@ -151,7 +152,6 @@ const (
 	// alterSchemaOwner
 	// alterSchemaRename
 	// alterSequence
-	// alterTableAlterPrimaryKey
 	// alterTableInjectStats
 	// alterTableOwner
 	// alterTablePartitionByTable
@@ -216,6 +216,7 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	alterTableAddConstraintForeignKey: (*operationGenerator).addForeignKeyConstraint,
 	alterTableAddConstraintUnique:     (*operationGenerator).addUniqueConstraint,
 	alterTableAlterColumnType:         (*operationGenerator).setColumnType,
+	alterTableAlterPrimaryKey:         (*operationGenerator).alterTableAlterPrimaryKey,
 	alterTableDropColumn:              (*operationGenerator).dropColumn,
 	alterTableDropColumnDefault:       (*operationGenerator).dropColumnDefault,
 	alterTableDropConstraint:          (*operationGenerator).dropConstraint,
@@ -282,6 +283,7 @@ var opWeights = []int{
 	renameView:                        1,
 	alterTableSetColumnDefault:        1,
 	alterTableSetColumnNotNull:        1,
+	alterTableAlterPrimaryKey:         1,
 	alterTableAlterColumnType:         0, // Disabled and tracked with #66662.
 	alterDatabaseSurvivalGoal:         0, // Disabled and tracked with #83831
 }

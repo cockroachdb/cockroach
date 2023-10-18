@@ -18,6 +18,10 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+const (
+	descJSONQuery = `SELECT id, crdb_internal.pb_to_json('desc', descriptor) AS descriptor FROM system.descriptor`
+)
+
 type CTE struct {
 	As    string
 	Query string
