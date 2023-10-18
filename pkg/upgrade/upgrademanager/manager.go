@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradecluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradejob"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -396,6 +397,11 @@ func (m *Manager) Migrate(
 	clusterVersions := m.listBetween(from.Version, to.Version)
 	log.Infof(ctx, "migrating cluster from %s to %s (stepping through %s)", from, to, clusterVersions)
 	if len(clusterVersions) == 0 {
+		if buildutil.CrdbTestBuild && from.Version != to.Version {
+			// This suggests a test is using bogus versions and didn't set up
+			// ListBetweenOverride properly.
+			panic(errors.AssertionFailedf("no valid versions in (%s, %s]", from.Version, to.Version))
+		}
 		return nil
 	}
 

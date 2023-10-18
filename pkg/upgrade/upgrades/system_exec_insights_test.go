@@ -35,7 +35,6 @@ func TestExecSystemInsights(t *testing.T) {
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey),
-					BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
 				},
 			},
 		},
