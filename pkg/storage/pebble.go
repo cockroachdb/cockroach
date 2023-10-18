@@ -20,6 +20,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/filterstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -57,6 +59,7 @@ import (
 	"github.com/cockroachdb/pebble/replay"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/cockroachdb/redact"
 	humanize "github.com/dustin/go-humanize"
 )
 
@@ -827,6 +830,10 @@ type Pebble struct {
 		syncutil.Mutex
 		AggregatedBatchCommitStats
 	}
+	lastGoroutineDump struct {
+		syncutil.Mutex
+		time.Time
+	}
 	// Relevant options copied over from pebble.Options.
 	unencryptedFS vfs.FS
 	logCtx        context.Context
@@ -924,6 +931,21 @@ func (p *Pebble) GetStoreID() (int32, error) {
 		return 0, errors.AssertionFailedf("GetStoreID must be called after calling SetStoreID")
 	}
 	return storeID, nil
+}
+
+func (p *Pebble) shouldDiskSlowPrintGoroutines() bool {
+	now := timeutil.Now()
+	// We throttle the printing of filtered goroutine dumps during DiskSlow
+	// events because collecting goroutines is not trivial, and we don't want to
+	// spam logs. If it's been more than a second since a goroutine dumped
+	// stacks due to a slow disk, allow dumping again.
+	p.lastGoroutineDump.Lock()
+	defer p.lastGoroutineDump.Unlock()
+	if p.lastGoroutineDump.Add(time.Second).Before(now) {
+		p.lastGoroutineDump.Time = now
+		return true
+	}
+	return false
 }
 
 type remoteStorageAdaptor struct {
@@ -1187,14 +1209,34 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	// significantly in the future, we can improve the logic here by queueing up
 	// most of the logging work (except for the Fatalf call), and have it be done
 	// by a single goroutine.
-	lel := pebble.MakeLoggingEventListener(pebbleLogger{
+	plog := pebbleLogger{
 		ctx:   logCtx,
 		depth: 2, // skip over the EventListener stack frame
-	})
-	oldDiskSlow := lel.DiskSlow
+	}
+	lel := pebble.MakeLoggingEventListener(plog)
+	// Override the DiskSlow event listener, run it asynchronously and print a
+	// record of the inflight I/O stack traces.
 	lel.DiskSlow = func(info pebble.DiskSlowInfo) {
-		// Run oldDiskSlow asynchronously.
-		p.async(func() { oldDiskSlow(info) })
+		p.async(func() {
+			// Should we print all the goroutines that are in I/O? We don't want
+			// to print too frequently if no I/O is progressing. Limit ourselves
+			// to once a second.
+			if !p.shouldDiskSlowPrintGoroutines() {
+				plog.Infof("%s", info)
+				return
+			}
+			// Collect all the stacks that contain a frame in the VFS package.
+			// This won't strictly be only goroutines performing IO, but it's a
+			// superset of VFS IO and will include the disk-health checking
+			// goroutines themselves which may be illustrative if there's an
+			// issue with the disk-health checking itself.
+			var buf bytes.Buffer
+			fmt.Fprintf(&buf, "%s\n", info)
+			filterstacks.Dump(&buf, func(f runtime.Frame) bool {
+				return strings.Contains(f.File, "/pebble/vfs/")
+			})
+			plog.Infof("%s", redact.Safe(buf.String()))
+		})
 	}
 	el := pebble.TeeEventListener(
 		p.makeMetricEtcEventListener(logCtx),
@@ -1384,6 +1426,7 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 		DiskSlow: func(info pebble.DiskSlowInfo) {
 			maxSyncDuration := MaxSyncDuration.Get(&p.settings.SV)
 			fatalOnExceeded := MaxSyncDurationFatalOnExceeded.Get(&p.settings.SV)
+
 			if info.Duration.Seconds() >= maxSyncDuration.Seconds() {
 				atomic.AddInt64(&p.diskStallCount, 1)
 				// Note that the below log messages go to the main cockroach log, not

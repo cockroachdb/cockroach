@@ -70,6 +70,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/envutil",
+        "//pkg/util/filterstacks",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",

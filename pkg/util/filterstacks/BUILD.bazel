@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "filterstacks",
+    srcs = ["filterstacks.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/filterstacks",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "filterstacks_test",
+    srcs = ["filterstacks_test.go"],
+    args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
+    embed = [":filterstacks"],
+    deps = [
+        "//pkg/testutils/datapathutils",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+    ],
+)
