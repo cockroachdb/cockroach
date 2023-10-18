@@ -224,8 +224,16 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 	evalCtx := eval.NewTestingEvalContext(st)
 
 	tc := testcat.New()
-	if _, err := tc.ExecuteDDL(
-		"CREATE TABLE t (j JSON, a INT[], str STRING[], INVERTED INDEX (j), INVERTED INDEX (a), INVERTED INDEX (str))",
+	if _, err := tc.ExecuteDDL(`
+		CREATE TABLE t (
+			j JSON,
+			j2 JSON,
+			a INT[],
+			str STRING[],
+			INVERTED INDEX (j),
+			INVERTED INDEX (a),
+			INVERTED INDEX (str)
+		)`,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -307,6 +315,12 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			// Wrong index ordinal.
 			filters:  "j @> '1'",
 			indexOrd: arrayOrd,
+			ok:       false,
+		},
+		{
+			// Filtering a non-indexed column.
+			filters:  "j2 @> '1'",
+			indexOrd: jsonOrd,
 			ok:       false,
 		},
 		{
@@ -469,6 +483,12 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			remainingFilters: "j->0 = '1'",
 		},
 		{
+			// Filtering a non-indexed column.
+			filters:  "j2->0 = '1'",
+			indexOrd: jsonOrd,
+			ok:       false,
+		},
+		{
 			// Arrays on the right side of the equality are supported.
 			filters:          "j->'a' = '[1]'",
 			indexOrd:         jsonOrd,
@@ -593,6 +613,12 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			tight:            false,
 			unique:           true,
 			remainingFilters: `j->0 @> '{"b": "c"}'`,
+		},
+		{
+			// Filtering a non-indexed column.
+			filters:  `j2->0 @> '{"b": "c"}'`,
+			indexOrd: jsonOrd,
+			ok:       false,
 		},
 		{
 			// The inner most expression is not a fetch val expression with an
@@ -790,6 +816,12 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			tight:            true,
 			unique:           false,
 			remainingFilters: "",
+		},
+		{
+			// Filtering a non-indexed column.
+			filters:  `'1' <@ j2->'a'`,
+			indexOrd: jsonOrd,
+			ok:       false,
 		},
 		{
 			// JSONExists is supported. Unique is false for all Exists predicates
@@ -1081,6 +1113,12 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			remainingFilters: `j = '{"a": "b"}' OR j = '[1, 2, 3]'`,
 		},
 		{
+			// Filtering a non-indexed column.
+			filters:  `j2 = '"a"'`,
+			indexOrd: jsonOrd,
+			ok:       false,
+		},
+		{
 			// Testing the IN operator without the fetch value operator.
 			filters:          `j IN ('1', '2', '3')`,
 			indexOrd:         jsonOrd,
@@ -1128,6 +1166,12 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			tight:            false,
 			unique:           false,
 			remainingFilters: `j IN ('[1, 2, 3]', '{"a": "b"}', '1', '"a"')`,
+		},
+		{
+			// Filtering a non-indexed column.
+			filters:  `j2 IN ('1', '2', '3')`,
+			indexOrd: jsonOrd,
+			ok:       false,
 		},
 	}
 
