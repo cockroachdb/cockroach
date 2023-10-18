@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
@@ -96,6 +97,13 @@ var featureRestoreEnabled = settings.RegisterBoolSetting(
 	"set to true to enable restore, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,
 ).WithPublic()
+
+var optionRemoveRegionsEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"bulkio.restore.remove_regions.enabled",
+	"set true to enable RESTORE option remove_regions, false to disable; default is false",
+	false,
+)
 
 // maybeFilterMissingViews filters the set of tables to restore to exclude views
 // whose dependencies are either missing or are themselves unrestorable due to
@@ -920,6 +928,7 @@ func resolveOptionsForRestoreJobDescription(
 		SchemaOnly:                       opts.SchemaOnly,
 		VerifyData:                       opts.VerifyData,
 		UnsafeRestoreIncompatibleVersion: opts.UnsafeRestoreIncompatibleVersion,
+		RemoveRegions:                    opts.RemoveRegions,
 	}
 
 	if opts.EncryptionPassphrase != nil {
@@ -1066,6 +1075,11 @@ func restorePlanHook(
 		!p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2Start) {
 		return nil, nil, nil, false,
 			errors.New("cannot run RESTORE with schema_only until cluster has fully upgraded to 22.2")
+	}
+	if restoreStmt.Options.RemoveRegions && !optionRemoveRegionsEnabled.Get(&p.ExecCfg().Settings.SV) {
+		return nil, nil, nil, false,
+			errors.Newf("to use the remove_regions option, ensure that all nodes are running version %s "+
+				"or greater; then, enable cluster setting bulkio.restore.remove_regions.enabled", build.GetInfo().Tag)
 	}
 	if !restoreStmt.Options.SchemaOnly && restoreStmt.Options.VerifyData {
 		return nil, nil, nil, false,
@@ -1879,6 +1893,14 @@ func doRestorePlan(
 		}
 	}
 
+	if restoreStmt.Options.RemoveRegions {
+		for _, t := range tablesByID {
+			if t.LocalityConfig.GetRegionalByRow() != nil {
+				return errors.Newf("cannot perform a remove_regions RESTORE with region by row enabled table %s in BACKUP target", t.Name)
+			}
+		}
+	}
+
 	if !restoreStmt.Options.SkipLocalitiesCheck {
 		if err := checkClusterRegions(ctx, p, typesByID); err != nil {
 			return err
@@ -1918,6 +1940,15 @@ func doRestorePlan(
 	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
 		if err := dropDefaultUserDBs(ctx, p.InternalSQLTxn()); err != nil {
 			return err
+		}
+	}
+
+	// If we are removing regions, wipe tables of their LocalityConfig before we allocate
+	// descriptor rewrites - as validation in remapTables compares these tables with the non-mr
+	// database and fails otherwise
+	if restoreStmt.Options.RemoveRegions {
+		for _, t := range filteredTablesByID {
+			t.TableDesc().LocalityConfig = nil
 		}
 	}
 
@@ -2036,6 +2067,7 @@ func doRestorePlan(
 		VerifyData:          restoreStmt.Options.VerifyData,
 		SkipLocalitiesCheck: restoreStmt.Options.SkipLocalitiesCheck,
 		ExecutionLocality:   execLocality,
+		RemoveRegions:       restoreStmt.Options.RemoveRegions,
 	}
 
 	jr := jobs.Record{

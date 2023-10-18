@@ -1304,6 +1304,7 @@ unreserved_keyword ::=
 	| 'RELATIVE'
 	| 'RELEASE'
 	| 'RELOCATE'
+	| 'REMOVE_REGIONS'
 	| 'RENAME'
 	| 'REPEATABLE'
 	| 'REPLACE'
@@ -2623,6 +2624,7 @@ restore_options ::=
 	| 'VERIFY_BACKUP_TABLE_DATA'
 	| 'UNSAFE_RESTORE_INCOMPATIBLE_VERSION'
 	| 'EXECUTION' 'LOCALITY' '=' string_or_placeholder
+	| 'REMOVE_REGIONS'
 
 scrub_option_list ::=
 	( scrub_option ) ( ( ',' scrub_option ) )*
@@ -3851,6 +3853,7 @@ bare_label_keywords ::=
 	| 'RELATIVE'
 	| 'RELEASE'
 	| 'RELOCATE'
+	| 'REMOVE_REGIONS'
 	| 'RENAME'
 	| 'REPEATABLE'
 	| 'REPLACE'
