@@ -233,7 +233,7 @@ func TestTenantAutoUpgrade(t *testing.T) {
 		UpgradeTo roachpb.Version
 	}
 	succeedsSoon := 20 * time.Second
-	if util.RaceEnabled {
+	if util.RaceEnabled || skip.Stress() {
 		succeedsSoon = 60 * time.Second
 	}
 	// Wait for auto upgrade status to be received by the testing knob.
