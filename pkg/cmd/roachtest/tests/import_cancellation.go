@@ -144,14 +144,12 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 		t.WorkerStatus(`running tpch workload`)
 		// maxOps flag will allow us to exit the workload once all the queries
 		// were run 2 times.
-		const numRunsPerQuery = 2
+		maxOps := 2 * tpch.NumQueries
 		const maxLatency = 500 * time.Second
-		maxOps := numRunsPerQuery * tpch.NumQueries
 		cmd := fmt.Sprintf(
-			"./workload run tpch --db=csv --concurrency=1 --num-runs=%d "+
-				"--max-ops=%d {pgurl%s} --enable-checks=true "+
+			"./workload run tpch --db=csv --concurrency=1 --max-ops=%d {pgurl%s} --enable-checks=true "+
 				"--histograms="+t.PerfArtifactsDir()+"/stats.json --histograms-max-latency=%s",
-			numRunsPerQuery, maxOps, c.All(), maxLatency.String())
+			maxOps, c.All(), maxLatency.String())
 		if err := c.RunE(ctx, c.Node(1), cmd); err != nil {
 			t.Fatal(err)
 		}
