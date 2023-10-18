@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/blobs"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -76,10 +75,6 @@ type TestingKnobs struct {
 	// been started, `SET CLUSTER SETTING version = BinaryVersionOverride` will be
 	// run to step through the upgrades until the specified override.
 	//
-	// TODO(adityamaru): We should force tests that set BinaryVersionOverride to
-	// also set BootstrapVersionKeyOverride so as to specify what image they would
-	// like the cluster bootstrapped at before upgrading to BinaryVersionOverride.
-	//
 	// Case 2:
 	// ------
 	// If the test has overridden the
@@ -130,10 +125,6 @@ type TestingKnobs struct {
 	// StubTimeNow allows tests to override the timeutil.Now() function used
 	// in the jobs endpoint to calculate earliest_retained_time.
 	StubTimeNow func() time.Time
-
-	// We use clusterversion.Key rather than a roachpb.Version because it will be used
-	// to get initial values to use during bootstrap.
-	BootstrapVersionKeyOverride clusterversion.Key
 
 	// RequireGracefulDrain, if set, causes a shutdown to fail with a log.Fatal
 	// if the server is not gracefully drained prior to its stopper shutting down.

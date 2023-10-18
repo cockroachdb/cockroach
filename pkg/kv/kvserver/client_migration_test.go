@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -241,7 +243,7 @@ func TestMigrateWaitsForApplication(t *testing.T) {
 	blockApplicationCh := make(chan struct{})
 
 	// We're going to be migrating from startV to endV.
-	startV := roachpb.Version{Major: 1000041}
+	startV := clusterversion.ByKey(clusterversion.BinaryVersionKey)
 	endV := roachpb.Version{Major: 1000042}
 
 	ctx := context.Background()
@@ -253,6 +255,16 @@ func TestMigrateWaitsForApplication(t *testing.T) {
 				Server: &server.TestingKnobs{
 					BinaryVersionOverride:          startV,
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
+				},
+				UpgradeManager: &upgradebase.TestingKnobs{
+					ListBetweenOverride: func(from, to roachpb.Version) []roachpb.Version {
+						res := clusterversion.ListBetween(from, to)
+						// Pretend endV is a valid version.
+						if from.Less(endV) && to.AtLeast(endV) {
+							res = append(res, endV)
+						}
+						return res
+					},
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					TestingApplyCalledTwiceFilter: func(args kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
@@ -281,7 +293,7 @@ func TestMigrateWaitsForApplication(t *testing.T) {
 
 		repl := store.LookupReplica(roachpb.RKey(k))
 		require.NotNil(t, repl)
-		require.Equal(t, repl.Version(), startV)
+		require.Equal(t, startV, repl.Version())
 	}
 
 	desc := tc.LookupRangeOrFatal(t, k)

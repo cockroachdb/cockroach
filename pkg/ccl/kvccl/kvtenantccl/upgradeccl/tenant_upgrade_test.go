@@ -63,7 +63,6 @@ func TestTenantAutoUpgradeRespectsAutoUpgradeEnabledSetting(t *testing.T) {
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
 				BinaryVersionOverride:          clusterversion.ByKey(v0),
-				BootstrapVersionKeyOverride:    v0,
 			},
 			SQLEvalContext: &eval.TestingKnobs{
 				// When the host binary version is not equal to its cluster version, tenant logical version is set
@@ -95,9 +94,8 @@ func TestTenantAutoUpgradeRespectsAutoUpgradeEnabledSetting(t *testing.T) {
 			TenantName: roachpb.TenantName(name),
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					TenantAutoUpgradeInfo:       upgradeInfoCh,
-					BootstrapVersionKeyOverride: v0,
-					BinaryVersionOverride:       clusterversion.ByKey(v0),
+					TenantAutoUpgradeInfo: upgradeInfoCh,
+					BinaryVersionOverride: clusterversion.ByKey(v0),
 				},
 			},
 		}
@@ -166,7 +164,6 @@ func TestTenantAutoUpgrade(t *testing.T) {
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
 				BinaryVersionOverride:          clusterversion.ByKey(v0),
-				BootstrapVersionKeyOverride:    v0,
 			},
 			SQLEvalContext: &eval.TestingKnobs{
 				// When the host binary version is not equal to its cluster version, tenant logical version is set
@@ -201,7 +198,6 @@ func TestTenantAutoUpgrade(t *testing.T) {
 				Server: &server.TestingKnobs{
 					TenantAutoUpgradeInfo:                          upgradeInfoCh,
 					AllowTenantAutoUpgradeOnInternalVersionChanges: true,
-					BootstrapVersionKeyOverride:                    v0,
 					BinaryVersionOverride:                          clusterversion.ByKey(v0),
 				},
 			},
