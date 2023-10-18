@@ -436,6 +436,9 @@ func TestLatestIndexDescriptorVersionValues(t *testing.T) {
 	}
 	srv, sqlDB, kvDB := serverutils.StartServer(t, args)
 	defer srv.Stopper().Stop(ctx)
+	defer close(swapNotification)
+	defer close(waitBeforeContinuing)
+
 	codec := srv.ApplicationLayer().Codec()
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
@@ -486,48 +489,48 @@ func TestLatestIndexDescriptorVersionValues(t *testing.T) {
 				case "t_a_key":
 					require.True(t, np.IsMutation())
 					require.Equal(t, catenumpb.SecondaryIndexEncoding, np.GetEncodingType())
-					require.Equal(t, descpb.StrictIndexColumnIDGuaranteesVersion, np.GetVersion())
+					require.Equal(t, descpb.LatestIndexDescriptorVersion, np.GetVersion())
 
 				case "new_primary_key":
 					require.True(t, np.IsMutation())
 					require.Equal(t, catenumpb.PrimaryIndexEncoding, np.GetEncodingType())
-					require.Equal(t, descpb.StrictIndexColumnIDGuaranteesVersion, np.GetVersion())
+					require.Equal(t, descpb.LatestIndexDescriptorVersion, np.GetVersion())
 
 				case "tsec_rewrite_for_primary_key_change":
 					require.True(t, np.IsMutation())
 					require.Equal(t, catenumpb.SecondaryIndexEncoding, np.GetEncodingType())
-					require.Equal(t, descpb.StrictIndexColumnIDGuaranteesVersion, np.GetVersion())
+					require.Equal(t, descpb.LatestIndexDescriptorVersion, np.GetVersion())
 
 				case "t_c_key_rewrite_for_primary_key_change":
 					require.True(t, np.IsMutation())
 					require.True(t, np.IsUnique())
 					require.Equal(t, catenumpb.SecondaryIndexEncoding, np.GetEncodingType())
-					require.Equal(t, descpb.StrictIndexColumnIDGuaranteesVersion, np.GetVersion())
+					require.Equal(t, descpb.LatestIndexDescriptorVersion, np.GetVersion())
 
 				case "t_a_crdb_internal_dpe_key":
 					// Temporary index for new index based on old primary index (t_a_key)
 					require.True(t, np.IsMutation())
 					require.Equal(t, catenumpb.SecondaryIndexEncoding, np.GetEncodingType())
-					require.Equal(t, descpb.StrictIndexColumnIDGuaranteesVersion, np.GetVersion())
+					require.Equal(t, descpb.LatestIndexDescriptorVersion, np.GetVersion())
 
 				case "t_b_crdb_internal_dpe_idx":
 					// Temporary index for tsec_rewrite_for_primary_key_change
 					require.True(t, np.IsMutation())
 					require.Equal(t, catenumpb.SecondaryIndexEncoding, np.GetEncodingType())
-					require.Equal(t, descpb.StrictIndexColumnIDGuaranteesVersion, np.GetVersion())
+					require.Equal(t, descpb.LatestIndexDescriptorVersion, np.GetVersion())
 
 				case "t_c_crdb_internal_dpe_key":
 					// Temporary index for t_c_key_rewrite_for_primary_key_change
 					require.True(t, np.IsMutation())
 					require.True(t, np.IsUnique())
 					require.Equal(t, catenumpb.SecondaryIndexEncoding, np.GetEncodingType())
-					require.Equal(t, descpb.StrictIndexColumnIDGuaranteesVersion, np.GetVersion())
+					require.Equal(t, descpb.LatestIndexDescriptorVersion, np.GetVersion())
 
 				case "t_d_crdb_internal_dpe_key":
 					// Temporary index for new_primary_key
 					require.True(t, np.IsMutation())
 					require.Equal(t, catenumpb.PrimaryIndexEncoding, np.GetEncodingType())
-					require.Equal(t, descpb.StrictIndexColumnIDGuaranteesVersion, np.GetVersion())
+					require.Equal(t, descpb.LatestIndexDescriptorVersion, np.GetVersion())
 
 				default:
 					t.Fatalf("unexpected index or index mutation %q", np.GetName())

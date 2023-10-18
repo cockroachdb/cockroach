@@ -188,12 +188,9 @@ func (p *planner) AlterPrimaryKey(
 		CreatedExplicitly: true,
 		EncodingType:      catenumpb.PrimaryIndexEncoding,
 		Type:              descpb.IndexDescriptor_FORWARD,
-		// TODO(postamar): bump version to LatestIndexDescriptorVersion in 22.2
-		// This is not possible until then because of a limitation in 21.2 which
-		// affects mixed-21.2-22.1-version clusters (issue #78426).
-		Version:        descpb.StrictIndexColumnIDGuaranteesVersion,
-		ConstraintID:   tableDesc.GetNextConstraintID(),
-		CreatedAtNanos: p.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
+		Version:           descpb.LatestIndexDescriptorVersion,
+		ConstraintID:      tableDesc.GetNextConstraintID(),
+		CreatedAtNanos:    p.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
 	}
 	tableDesc.NextConstraintID++
 
@@ -492,10 +489,7 @@ func (p *planner) AlterPrimaryKey(
 		}
 
 		newIndex.Name = tabledesc.GenerateUniqueName(basename, nameExists)
-		// TODO(postamar): bump version to LatestIndexDescriptorVersion in 22.2
-		// This is not possible until then because of a limitation in 21.2 which
-		// affects mixed-21.2-22.1-version clusters (issue #78426).
-		newIndex.Version = descpb.StrictIndexColumnIDGuaranteesVersion
+		newIndex.Version = descpb.LatestIndexDescriptorVersion
 		newIndex.EncodingType = catenumpb.SecondaryIndexEncoding
 		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, &newIndex, newPrimaryIndexDesc, p.ExecCfg().Settings); err != nil {
 			return err
@@ -518,11 +512,7 @@ func (p *planner) AlterPrimaryKey(
 		newUniqueIdx.CompositeColumnIDs = nil
 		newUniqueIdx.KeyColumnIDs = nil
 		// Set correct version and encoding type.
-		//
-		// TODO(postamar): bump version to LatestIndexDescriptorVersion in 22.2
-		// This is not possible until then because of a limitation in 21.2 which
-		// affects mixed-21.2-22.1-version clusters (issue #78426).
-		newUniqueIdx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
+		newUniqueIdx.Version = descpb.LatestIndexDescriptorVersion
 		newUniqueIdx.EncodingType = catenumpb.SecondaryIndexEncoding
 		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, &newUniqueIdx, newPrimaryIndexDesc, p.ExecCfg().Settings); err != nil {
 			return err
