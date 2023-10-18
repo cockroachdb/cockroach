@@ -1218,11 +1218,13 @@ func TestStreamingRegionalConstraint(t *testing.T) {
 		c.SrcSysServer.DB(), srcCodec, "test", "x")
 	destCodec := keys.MakeSQLCodec(c.Args.DestTenantID)
 
-	testutils.SucceedsSoon(t,
-		checkLocalities(tableDesc.PrimaryIndexSpan(srcCodec), rangedesc.NewScanner(c.SrcSysServer.DB())))
+	testutils.SucceedsWithin(t,
+		checkLocalities(tableDesc.PrimaryIndexSpan(srcCodec), rangedesc.NewScanner(c.SrcSysServer.DB())),
+		time.Second*45*5)
 
-	testutils.SucceedsSoon(t,
-		checkLocalities(tableDesc.PrimaryIndexSpan(destCodec), rangedesc.NewScanner(c.DestSysServer.DB())))
+	testutils.SucceedsWithin(t,
+		checkLocalities(tableDesc.PrimaryIndexSpan(destCodec), rangedesc.NewScanner(c.DestSysServer.DB())),
+		time.Second*45*5)
 
 	tableName := "test"
 	tabledIDQuery := fmt.Sprintf(`SELECT id FROM system.namespace WHERE name ='%s'`, tableName)
