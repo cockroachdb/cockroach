@@ -1303,11 +1303,14 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 		testserver.CockroachLogsDirOpt(logsDir),
 	}
 	if strings.Contains(upgradeBinaryPath, "cockroach-short") {
-		// If we're using a cockroach-short binary, that means it was
-		// locally built, so we need to opt-out of version offsetting to
-		// better simulate a real upgrade path.
 		opts = append(opts, testserver.EnvVarOpt([]string{
+			// If we're using a cockroach-short binary, that means it was
+			// locally built, so we need to opt-out of version offsetting to
+			// better simulate a real upgrade path.
 			"COCKROACH_TESTING_FORCE_RELEASE_BRANCH=true",
+			// The build is made during testing, so it has metamorphic constants.
+			// We disable them here so that the test is more stable.
+			"COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true",
 		}))
 	}
 
