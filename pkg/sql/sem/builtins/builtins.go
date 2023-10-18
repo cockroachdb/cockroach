@@ -3547,6 +3547,37 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	"jsonb_array_to_string_array": makeBuiltin(arrayProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "input", Typ: types.Jsonb}},
+			ReturnType: tree.FixedReturnType(types.StringArray),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				strArray := tree.NewDArray(types.String)
+				if args[0] == tree.DNull {
+					return strArray, nil
+				}
+				jsonArray, ok := tree.MustBeDJSON(args[0]).AsArray()
+				if !ok {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "input argument must be JSON array type")
+				}
+
+				for _, elem := range jsonArray {
+					str, err := elem.AsText()
+					if err != nil {
+						return nil, err
+					}
+					err = strArray.Append(tree.NewDString(*str))
+					if err != nil {
+						return nil, err
+					}
+				}
+				return strArray, nil
+			},
+			Info:              "Convert a JSONB array into a string array.",
+			Volatility:        volatility.Immutable,
+			CalledOnNullInput: true,
+		}),
+
 	"array_to_string": makeBuiltin(arrayProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "input", Typ: types.AnyArray}, {Name: "delim", Typ: types.String}},
