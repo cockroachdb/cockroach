@@ -1837,11 +1837,14 @@ func MVCCPut(
 		}
 		defer iter.Close()
 
-		ltScanner, err = newLockTableKeyScanner(rw, opts.Txn, lock.Intent, opts.MaxLockConflicts)
-		if err != nil {
-			return err
+		inlinePut := timestamp.IsEmpty()
+		if !inlinePut {
+			ltScanner, err = newLockTableKeyScanner(rw, opts.Txn, lock.Intent, opts.MaxLockConflicts)
+			if err != nil {
+				return err
+			}
+			defer ltScanner.close()
 		}
-		defer ltScanner.close()
 	}
 	return mvccPutUsingIter(ctx, rw, iter, ltScanner, key, timestamp, value, nil, opts)
 }
@@ -1894,12 +1897,15 @@ func MVCCDelete(
 	}
 	defer iter.Close()
 
-	ltScanner, err := newLockTableKeyScanner(rw, opts.Txn, lock.Intent, opts.MaxLockConflicts)
-	if err != nil {
-		return false, err
+	inlineDelete := timestamp.IsEmpty()
+	var ltScanner *lockTableKeyScanner
+	if !inlineDelete {
+		ltScanner, err = newLockTableKeyScanner(rw, opts.Txn, lock.Intent, opts.MaxLockConflicts)
+		if err != nil {
+			return false, err
+		}
+		defer ltScanner.close()
 	}
-	defer ltScanner.close()
-
 	buf := newPutBuffer()
 	defer buf.release()
 
@@ -2146,8 +2152,15 @@ func mvccPutInternal(
 	}
 
 	putIsBlind := iter == nil
-	if putIsBlind != (ltScanner == nil) {
-		return false, errors.Errorf("iter and ltScanner must both be nil or both be non-nil")
+	putIsInline := timestamp.IsEmpty()
+	if (putIsBlind || putIsInline) != (ltScanner == nil) {
+		if ltScanner == nil {
+			return false, errors.Errorf(
+				"ltScanner must be non-nil for putIsBlind %t, putIsInline %t", putIsBlind, putIsInline)
+		} else {
+			return false, errors.Errorf(
+				"ltScanner must be nil for putIsBlind %t, putIsInline %t", putIsBlind, putIsInline)
+		}
 	}
 
 	metaKey := MakeMVCCMetadataKey(key)
@@ -2166,7 +2179,19 @@ func mvccPutInternal(
 			return false, err
 		}
 		meta = &buf.meta
+		// Verify we're not mixing inline and non-inline values.
+		if ok && putIsInline != meta.IsInline() {
+			return false, errors.Errorf("%q: put is inline=%t, but existing value is inline=%t",
+				metaKey, putIsInline, meta.IsInline())
+		}
 		if ok && !meta.IsInline() {
+			// INVARIANTS:
+			//   !putIsBlind
+			//   !meta.IsInline()
+			//   !meta.IsInline() => !putIsInline (due to previous if-block)
+			//   !putIsInline && !putIsBlind => ltScanner != nil (due to error check earlier in function)
+			//   So we can use ltScanner safely.
+			//
 			// If at least one version is found, scan the lock table for conflicting
 			// locks and/or an intent on the key from different transactions. If any
 			// such conflicts are found, the lock table scanner will return a
@@ -2193,12 +2218,6 @@ func mvccPutInternal(
 		}
 	}
 
-	// Verify we're not mixing inline and non-inline values.
-	putIsInline := timestamp.IsEmpty()
-	if ok && putIsInline != meta.IsInline() {
-		return false, errors.Errorf("%q: put is inline=%t, but existing value is inline=%t",
-			metaKey, putIsInline, meta.IsInline())
-	}
 	// Handle inline put. No IntentHistory is required for inline writes as they
 	// aren't allowed within transactions. MVCC range tombstones cannot exist
 	// across them either.
@@ -2651,6 +2670,9 @@ func MVCCIncrement(
 	opts MVCCWriteOptions,
 	inc int64,
 ) (int64, error) {
+	if timestamp.IsEmpty() {
+		return 0, errors.Errorf("increment not supported for inline values")
+	}
 	iter, err := newMVCCIterator(
 		rw, timestamp, false /* rangeKeyMasking */, true /* noInterleavedIntents */, IterOptions{
 			KeyTypes: IterKeyTypePointsAndRanges,
@@ -2749,12 +2771,15 @@ func MVCCConditionalPut(
 	}
 	defer iter.Close()
 
-	ltScanner, err := newLockTableKeyScanner(rw, opts.Txn, lock.Intent, opts.MaxLockConflicts)
-	if err != nil {
-		return err
+	inlinePut := timestamp.IsEmpty()
+	var ltScanner *lockTableKeyScanner
+	if !inlinePut {
+		ltScanner, err = newLockTableKeyScanner(rw, opts.Txn, lock.Intent, opts.MaxLockConflicts)
+		if err != nil {
+			return err
+		}
+		defer ltScanner.close()
 	}
-	defer ltScanner.close()
-
 	return mvccConditionalPutUsingIter(
 		ctx, rw, iter, ltScanner, key, timestamp, value, expVal, allowIfDoesNotExist, opts)
 }
@@ -2840,11 +2865,15 @@ func MVCCInitPut(
 	}
 	defer iter.Close()
 
-	ltScanner, err := newLockTableKeyScanner(rw, opts.Txn, lock.Intent, opts.MaxLockConflicts)
-	if err != nil {
-		return err
+	inlinePut := timestamp.IsEmpty()
+	var ltScanner *lockTableKeyScanner
+	if !inlinePut {
+		ltScanner, err = newLockTableKeyScanner(rw, opts.Txn, lock.Intent, opts.MaxLockConflicts)
+		if err != nil {
+			return err
+		}
+		defer ltScanner.close()
 	}
-	defer ltScanner.close()
 
 	return mvccInitPutUsingIter(ctx, rw, iter, ltScanner, key, timestamp, value, failOnTombstones, opts)
 }
@@ -3489,11 +3518,15 @@ func MVCCDeleteRange(
 	}
 	defer iter.Close()
 
-	ltScanner, err := newLockTableKeyScanner(rw, opts.Txn, lock.Intent, opts.MaxLockConflicts)
-	if err != nil {
-		return nil, nil, 0, err
+	inlineDelete := timestamp.IsEmpty()
+	var ltScanner *lockTableKeyScanner
+	if !inlineDelete {
+		ltScanner, err = newLockTableKeyScanner(rw, opts.Txn, lock.Intent, opts.MaxLockConflicts)
+		if err != nil {
+			return nil, nil, 0, err
+		}
+		defer ltScanner.close()
 	}
-	defer ltScanner.close()
 
 	buf := newPutBuffer()
 	defer buf.release()
@@ -3664,11 +3697,15 @@ func MVCCPredicateDeleteRange(
 	}
 	defer pointTombstoneIter.Close()
 
-	ltScanner, err := newLockTableKeyScanner(rw, nil /* txn */, lock.Intent, maxLockConflicts)
-	if err != nil {
-		return nil, err
+	inlineDelete := endTime.IsEmpty()
+	var ltScanner *lockTableKeyScanner
+	if !inlineDelete {
+		ltScanner, err = newLockTableKeyScanner(rw, nil /* txn */, lock.Intent, maxLockConflicts)
+		if err != nil {
+			return nil, err
+		}
+		defer ltScanner.close()
 	}
-	defer ltScanner.close()
 
 	pointTombstoneBuf := newPutBuffer()
 	defer pointTombstoneBuf.release()
