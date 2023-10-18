@@ -182,6 +182,10 @@ type JSON interface {
 	// and a boolean indicating if this JSON value is a bool type.
 	AsBool() (bool, bool)
 
+	// AsArray returns the JSON document as an Array if it is a array type,
+	// and a boolean indicating if this JSON value is a array type.
+	AsArray() ([]JSON, bool)
+
 	// Exists implements the `?` operator: does the string exist as a top-level
 	// key within the JSON value?
 	//
@@ -846,6 +850,34 @@ func (j jsonObject) Size() uintptr {
 		valSize += elem.v.Size()
 	}
 	return valSize
+}
+
+func (j jsonNull) AsArray() ([]JSON, bool) {
+	return nil, false
+}
+
+func (j jsonString) AsArray() ([]JSON, bool) {
+	return nil, false
+}
+
+func (j jsonFalse) AsArray() ([]JSON, bool) {
+	return nil, false
+}
+
+func (j jsonTrue) AsArray() ([]JSON, bool) {
+	return nil, false
+}
+
+func (j jsonObject) AsArray() ([]JSON, bool) {
+	return nil, false
+}
+
+func (j jsonArray) AsArray() ([]JSON, bool) {
+	return j, true
+}
+
+func (j jsonNumber) AsArray() ([]JSON, bool) {
+	return nil, false
 }
 
 // parseJSONGoStd parses json using encoding/json library.

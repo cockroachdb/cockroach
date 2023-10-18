@@ -583,6 +583,17 @@ func (j *jsonEncoded) AsBool() (bool, bool) {
 	return decoded.AsBool()
 }
 
+func (j *jsonEncoded) AsArray() ([]JSON, bool) {
+	if dec := j.alreadyDecoded(); dec != nil {
+		return dec.AsArray()
+	}
+	decoded, err := j.decode()
+	if err != nil {
+		return nil, false
+	}
+	return decoded.AsArray()
+}
+
 func (j *jsonEncoded) Compare(other JSON) (int, error) {
 	if other == nil {
 		return -1, nil
