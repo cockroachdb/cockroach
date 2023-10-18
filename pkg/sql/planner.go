@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -181,9 +182,9 @@ type planner struct {
 	internalSQLTxn internalTxn
 
 	atomic struct {
-		// innerPlansMustUseLeafTxn is set to 1 if the "outer" plan is using
-		// the LeafTxn forcing the "inner" plans to use the LeafTxns too. An
-		// example of this is apply-join iterations when the main query has
+		// innerPlansMustUseLeafTxn is a counter that is non-zero if the "outer"
+		// plan is using the LeafTxn forcing the "inner" plans to use the LeafTxns,
+		// too. An example of this is apply-join iterations when the main query has
 		// concurrency.
 		//
 		// Note that even though the planner is not safe for concurrent usage,
@@ -195,7 +196,7 @@ type planner struct {
 		// planNodeToRowSource adapter before the "outer" query figured out that
 		// it must use the LeafTxn. Solving that issue properly is not trivial
 		// and is tracked in #41992.
-		innerPlansMustUseLeafTxn uint32
+		innerPlansMustUseLeafTxn int32
 	}
 
 	monitor *mon.BytesMonitor
@@ -988,4 +989,9 @@ func (p *planner) Optimizer() interface{} {
 // AutoCommit is part of the eval.Planner interface.
 func (p *planner) AutoCommit() bool {
 	return p.autoCommit
+}
+
+// mustUseLeafTxn returns true if inner plans must use a leaf transaction.
+func (p *planner) mustUseLeafTxn() bool {
+	return atomic.LoadInt32(&p.atomic.innerPlansMustUseLeafTxn) >= 1
 }
