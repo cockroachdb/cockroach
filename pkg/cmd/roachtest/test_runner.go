@@ -919,7 +919,7 @@ func (r *testRunner) runTest(
 
 			if teamCity {
 				shout(ctx, l, stdout, "##teamcity[testFailed name='%s' details='%s' flowId='%s']",
-					t.Name(), teamCityEscape(output), runID)
+					t.Name(), TeamCityEscape(output), runID)
 			}
 
 			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", runID, durationStr, output)
