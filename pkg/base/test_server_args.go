@@ -35,8 +35,14 @@ type TestServerArgs struct {
 	// Knobs for the test server.
 	Knobs TestingKnobs
 
-	*cluster.Settings
-	RaftConfig
+	// Settings for the server.
+	//
+	// When TestServerArgs is used for a multi-node test cluster, the Settings
+	// object is cloned for each node (see cluster.TestingCloneClusterSettings).
+	// To effect a change in a node's settings, ClusterSettings() should be used.
+	Settings *cluster.Settings
+
+	RaftConfig RaftConfig
 
 	// PartOfCluster must be set if the TestServer is joining others in a cluster.
 	// If not set (and hence the server is the only one in the cluster), the

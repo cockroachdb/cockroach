@@ -26,7 +26,7 @@ func init() {
 		"dependent", "complex-constraint",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(rulesVersionKey, isConstraintDependent, Not(isConstraintWithIndexName)),
+				from.TypeFilter(rulesVersionKey, isConstraintDependent),
 				to.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint, isSubjectTo2VersionInvariant),
 				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
 				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
@@ -44,22 +44,6 @@ func init() {
 				to.TypeFilter(rulesVersionKey, isConstraintDependent),
 				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
 				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
-			}
-		},
-	)
-
-	// Constraint name should be assigned right before it becomes visible, otherwise
-	// we won't have the correct message inside errors.
-	registerDepRule(
-		"simple constraint visible before name",
-		scgraph.Precedence,
-		"simple-constraint", "constraint-name",
-		func(from, to NodeVars) rel.Clauses {
-			return rel.Clauses{
-				from.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint),
-				to.TypeFilter(rulesVersionKey, isConstraintWithIndexName),
-				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
-				StatusesToPublicOrTransient(from, scpb.Status_WRITE_ONLY, to, scpb.Status_PUBLIC),
 			}
 		},
 	)
