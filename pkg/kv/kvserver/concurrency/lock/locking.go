@@ -127,6 +127,15 @@ func (m *Mode) Empty() bool {
 	return m.Strength == None && m.Timestamp.IsEmpty()
 }
 
+// Less returns true if the receiver conflicts with fewer requests than the Mode
+// supplied.
+func (m Mode) Less(o Mode) bool {
+	if m.Strength == o.Strength {
+		return !m.Timestamp.Less(o.Timestamp) // lower timestamp conflicts with more requests
+	}
+	return m.Strength < o.Strength
+}
+
 // MakeModeNone constructs a Mode with strength None.
 func MakeModeNone(ts hlc.Timestamp, isoLevel isolation.Level) Mode {
 	return Mode{

@@ -3200,14 +3200,18 @@ func (kl *keyLocks) tryClearLock(force bool) bool {
 // transaction, else the lock is updated. Returns whether the keyLocks struct
 // can be garbage collected, and whether it was held by the txn.
 // Acquires l.mu.
-func (kl *keyLocks) tryUpdateLock(up *roachpb.LockUpdate) (heldByTxn, gc bool) {
+func (kl *keyLocks) tryUpdateLock(
+	up *roachpb.LockUpdate, st *cluster.Settings,
+) (heldByTxn, gc bool) {
 	kl.mu.Lock()
 	defer kl.mu.Unlock()
-	return kl.tryUpdateLockLocked(*up)
+	return kl.tryUpdateLockLocked(*up, st)
 }
 
 // REQUIRES: kl.mu is locked.
-func (kl *keyLocks) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bool) {
+func (kl *keyLocks) tryUpdateLockLocked(
+	up roachpb.LockUpdate, st *cluster.Settings,
+) (heldByTxn, gc bool) {
 	if kl.isEmptyLock() {
 		// Already free. This can happen when an unreplicated lock is removed in
 		// tryActiveWait due to the txn being in the txnStatusCache.
@@ -3242,6 +3246,7 @@ func (kl *keyLocks) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bo
 	txn := &up.Txn
 	ts := up.Txn.WriteTimestamp
 	beforeTs := tl.writeTS()
+	beforeStr := tl.getLockMode().Strength
 	advancedTs := beforeTs.Less(ts)
 	isLocked := false
 	// The MVCC keyspace is the source of truth about the disposition of a
@@ -3321,7 +3326,11 @@ func (kl *keyLocks) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bo
 		return true, gc
 	}
 
-	if advancedTs {
+	afterStr := tl.getLockMode().Strength
+
+	if beforeStr != afterStr {
+		kl.onMaybeDecreasedLockStr(st)
+	} else if advancedTs {
 		// We only need to let through non-locking readers if the lock is held with
 		// strength {Exclusive,Intent}. See acquireLock for an explanation as to
 		// why.
@@ -3347,10 +3356,75 @@ func (kl *keyLocks) increasedLockTs(newTs hlc.Timestamp) {
 		curr := e
 		e = e.Next()
 		if g.ts.Less(newTs) {
+			// TODO(arul): Flip this condition; as written, this short circuits --
+			// once we've removed the distinguished waiter, we'll stop releasing
+			// readers that may no longer conflict with the lock.
 			distinguishedRemoved = distinguishedRemoved || kl.removeReader(curr)
 		}
 		// Else don't inform an active waiter which continues to be an active waiter
 		// despite the timestamp increase.
+	}
+	if distinguishedRemoved {
+		kl.tryMakeNewDistinguished()
+	}
+}
+
+// onMaybeDecreasedLockStr is called when the overall lock strength a key is
+// locked with may have decreased. In such cases, non-locking waiters may no
+// longer need to wait on a lock and some previously queued locking requests
+// may now be compatible. Any such requests should now be allowed to proceed.
+//
+// REQUIRES: kl.mu to be locked.
+func (kl *keyLocks) onMaybeDecreasedLockStr(st *cluster.Settings) {
+	var strongestMode lock.Mode
+	for e := kl.holders.Front(); e != nil; e = e.Next() {
+		holder := e.Value
+		if strongestMode.Less(holder.getLockMode()) {
+			strongestMode = holder.getLockMode()
+		}
+	}
+
+	distinguishedRemoved := false
+	for e := kl.waitingReaders.Front(); e != nil; {
+		reader := e.Value
+		curr := e
+		e = e.Next()
+		if !lock.Conflicts(reader.curLockMode(), strongestMode, &st.SV) {
+			distinguishedRemoved = kl.removeReader(curr) || distinguishedRemoved
+		}
+	}
+	for e := kl.queuedLockingRequests.Front(); e != nil; {
+		qlr := e.Value
+		curr := e
+		e = e.Next()
+		if lock.Conflicts(qlr.mode, strongestMode, &st.SV) {
+			break
+		}
+		if qlr.active {
+			// A queued locking request, that's actively waiting, no longer conflicts
+			// with locks on this key -- it can be allowed to proceed. There's two
+			// cases:
+			// 1. If it's a transactional request, it needs to acquire a claim by
+			// holding its place in the lock wait queue while marking itself as
+			// inactive.
+			// 2. Non-transactional requests do not acquire claims, so they can be
+			// removed from the wait queue.
+			if qlr.guard.txn == nil {
+				distinguishedRemoved = kl.removeLockingRequest(curr) || distinguishedRemoved
+			} else {
+				qlr.active = false // mark as inactive
+				if qlr.guard == kl.distinguishedWaiter {
+					kl.distinguishedWaiter = nil
+					distinguishedRemoved = true
+				}
+				qlr.guard.mu.Lock()
+				qlr.guard.doneActivelyWaitingAtLock()
+				qlr.guard.mu.Unlock()
+			}
+		}
+		if strongestMode.Less(qlr.mode) {
+			strongestMode = qlr.mode
+		}
 	}
 	if distinguishedRemoved {
 		kl.tryMakeNewDistinguished()
@@ -4155,7 +4229,7 @@ func (t *lockTableImpl) updateLockInternal(up *roachpb.LockUpdate) (heldByTxn bo
 	var locksToGC []*keyLocks
 	heldByTxn = false
 	changeFunc := func(l *keyLocks) {
-		held, gc := l.tryUpdateLock(up)
+		held, gc := l.tryUpdateLock(up, t.settings)
 		heldByTxn = heldByTxn || held
 		if gc {
 			locksToGC = append(locksToGC, l)
