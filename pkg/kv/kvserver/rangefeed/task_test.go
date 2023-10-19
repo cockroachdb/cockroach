@@ -326,7 +326,7 @@ func TestInitResolvedTSScan(t *testing.T) {
 		eventC: make(chan *event, 100),
 	}
 
-	scanner, err := NewSeparatedIntentScanner(engine, span)
+	scanner, err := NewSeparatedIntentScanner(ctx, engine, span)
 	require.NoError(t, err, "failed to create scanner")
 	initScan := newInitResolvedTSScan(p.Span, &p, scanner)
 	initScan.Run(ctx)

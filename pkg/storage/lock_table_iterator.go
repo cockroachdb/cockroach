@@ -12,6 +12,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -122,12 +123,12 @@ var lockTableIteratorPool = sync.Pool{
 
 // NewLockTableIterator creates a new LockTableIterator.
 func NewLockTableIterator(
-	reader Reader, opts LockTableIteratorOptions,
+	ctx context.Context, reader Reader, opts LockTableIteratorOptions,
 ) (*LockTableIterator, error) {
 	if err := opts.validate(); err != nil {
 		return nil, err
 	}
-	iter, err := reader.NewEngineIterator(opts.toIterOptions())
+	iter, err := reader.NewEngineIterator(ctx, opts.toIterOptions())
 	if err != nil {
 		return nil, err
 	}

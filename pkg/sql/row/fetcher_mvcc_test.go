@@ -44,7 +44,7 @@ func slurpUserDataKVs(t testing.TB, e storage.Engine, codec keys.SQLCodec) []roa
 	var kvs []roachpb.KeyValue
 	testutils.SucceedsSoon(t, func() error {
 		kvs = nil
-		it, err := e.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: codec.TenantEndKey()})
+		it, err := e.NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: codec.TenantEndKey()})
 		if err != nil {
 			t.Fatal(err)
 		}

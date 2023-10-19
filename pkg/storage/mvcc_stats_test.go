@@ -70,7 +70,8 @@ func assertEqImpl(
 		}
 		// NOTE: we use ComputeStats for the lock table stats because it is not
 		// supported by ComputeStatsForIter.
-		compLockMS, err := ComputeStats(rw, lockKeyMin, lockKeyMax, ms.LastUpdateNanos)
+		compLockMS, err := ComputeStats(
+			context.Background(), rw, lockKeyMin, lockKeyMax, ms.LastUpdateNanos)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1479,13 +1480,13 @@ var mvccStatsTests = []struct {
 	{
 		name: "ComputeStats",
 		fn: func(r Reader, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
-			return ComputeStats(r, start, end, nowNanos)
+			return ComputeStats(context.Background(), r, start, end, nowNanos)
 		},
 	},
 	{
 		name: "ComputeStatsForIter",
 		fn: func(r Reader, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
-			iter, err := r.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+			iter, err := r.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{
 				KeyTypes:   IterKeyTypePointsAndRanges,
 				LowerBound: start,
 				UpperBound: end,

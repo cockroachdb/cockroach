@@ -11,6 +11,7 @@
 package raftlog
 
 import (
+	"context"
 	"math"
 	"math/rand"
 	"testing"
@@ -55,7 +56,7 @@ type mockReader struct {
 }
 
 func (m *mockReader) NewMVCCIterator(
-	storage.MVCCIterKind, storage.IterOptions,
+	context.Context, storage.MVCCIterKind, storage.IterOptions,
 ) (storage.MVCCIterator, error) {
 	return m.iter, nil
 }
@@ -133,12 +134,13 @@ func BenchmarkIterator(b *testing.B) {
 		}
 
 	}
+	ctx := context.Background()
 
 	b.Run("NewIterator", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			it, err := NewIterator(rangeID, &mockReader{}, IterOptions{Hi: 123456})
+			it, err := NewIterator(ctx, rangeID, &mockReader{}, IterOptions{Hi: 123456})
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -148,7 +150,7 @@ func BenchmarkIterator(b *testing.B) {
 	})
 
 	benchForOp := func(b *testing.B, method func(*Iterator) (bool, error)) {
-		it, err := NewIterator(rangeID, &mockReader{}, IterOptions{Hi: 123456})
+		it, err := NewIterator(ctx, rangeID, &mockReader{}, IterOptions{Hi: 123456})
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -186,11 +188,12 @@ func BenchmarkVisit(b *testing.B) {
 
 	ent, metaB := mkBenchEnt(b)
 	require.NoError(b, eng.PutUnversioned(keys.RaftLogKey(rangeID, kvpb.RaftIndex(ent.Index)), metaB))
+	ctx := context.Background()
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := Visit(eng, rangeID, 0, math.MaxUint64, func(entry raftpb.Entry) error {
+		if err := Visit(ctx, eng, rangeID, 0, math.MaxUint64, func(entry raftpb.Entry) error {
 			return nil
 		}); err != nil {
 			b.Fatal(err)

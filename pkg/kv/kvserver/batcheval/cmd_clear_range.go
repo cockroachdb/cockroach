@@ -155,7 +155,7 @@ func ClearRange(
 	// range key span, since we expect range keys to be rare.
 	const pointKeyThreshold, rangeKeyThreshold = 2, 2
 	if err := storage.ClearRangeWithHeuristic(
-		readWriter, readWriter, from, to, pointKeyThreshold, rangeKeyThreshold,
+		ctx, readWriter, readWriter, from, to, pointKeyThreshold, rangeKeyThreshold,
 	); err != nil {
 		return result.Result{}, err
 	}
@@ -192,7 +192,7 @@ func computeStatsDelta(
 	// If we can't use the fast stats path, or race test is enabled, compute stats
 	// across the key span to be cleared.
 	if !entireRange || util.RaceEnabled {
-		computed, err := storage.ComputeStats(readWriter, from, to, delta.LastUpdateNanos)
+		computed, err := storage.ComputeStats(ctx, readWriter, from, to, delta.LastUpdateNanos)
 		if err != nil {
 			return enginepb.MVCCStats{}, err
 		}
@@ -217,7 +217,7 @@ func computeStatsDelta(
 		if !entireRange {
 			leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
 				from, to, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
-			rkIter, err := readWriter.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+			rkIter, err := readWriter.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
 				KeyTypes:   storage.IterKeyTypeRangesOnly,
 				LowerBound: leftPeekBound,
 				UpperBound: rightPeekBound,

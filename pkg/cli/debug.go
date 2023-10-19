@@ -364,13 +364,14 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		splitScan = true
 		endKey = keys.LocalMax
 	}
-	if err := db.MVCCIterate(debugCtx.startKey.Key, endKey, storage.MVCCKeyAndIntentsIterKind,
+	if err := db.MVCCIterate(
+		cmd.Context(), debugCtx.startKey.Key, endKey, storage.MVCCKeyAndIntentsIterKind,
 		storage.IterKeyTypePointsAndRanges, iterFunc); err != nil {
 		return err
 	}
 	if splitScan {
-		if err := db.MVCCIterate(keys.LocalMax, debugCtx.endKey.Key, storage.MVCCKeyAndIntentsIterKind,
-			storage.IterKeyTypePointsAndRanges, iterFunc); err != nil {
+		if err := db.MVCCIterate(cmd.Context(), keys.LocalMax, debugCtx.endKey.Key,
+			storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsAndRanges, iterFunc); err != nil {
 			return err
 		}
 	}
@@ -469,7 +470,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	desc, err := loadRangeDescriptor(db, rangeID)
+	desc, err := loadRangeDescriptor(cmd.Context(), db, rangeID)
 	if err != nil {
 		return err
 	}
@@ -478,7 +479,8 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	defer snapshot.Close()
 
 	var results int
-	return rditer.IterateReplicaKeySpans(&desc, snapshot, debugCtx.replicated, rditer.ReplicatedSpansAll,
+	return rditer.IterateReplicaKeySpans(cmd.Context(), &desc, snapshot, debugCtx.replicated,
+		rditer.ReplicatedSpansAll,
 		func(iter storage.EngineIterator, _ roachpb.Span, keyType storage.IterKeyType) error {
 			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
 				switch keyType {
@@ -526,7 +528,7 @@ Prints all range descriptors in a store with a history of changes.
 }
 
 func loadRangeDescriptor(
-	db storage.Engine, rangeID roachpb.RangeID,
+	ctx context.Context, db storage.Engine, rangeID roachpb.RangeID,
 ) (roachpb.RangeDescriptor, error) {
 	var desc roachpb.RangeDescriptor
 	handleKV := func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
@@ -563,8 +565,8 @@ func loadRangeDescriptor(
 	end := keys.LocalRangeMax
 
 	// NB: Range descriptor keys can have intents.
-	if err := db.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind,
-		storage.IterKeyTypePointsOnly, handleKV); err != nil {
+	if err := db.MVCCIterate(
+		ctx, start, end, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly, handleKV); err != nil {
 		return roachpb.RangeDescriptor{}, err
 	}
 	if desc.RangeID == rangeID {
@@ -586,8 +588,8 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	end := keys.LocalRangeMax
 
 	// NB: Range descriptor keys can have intents.
-	return db.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
-		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+	return db.MVCCIterate(cmd.Context(), start, end, storage.MVCCKeyAndIntentsIterKind,
+		storage.IterKeyTypePointsOnly, func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
 			if kvserver.IsRangeDescriptorKey(kv.Key) != nil {
 				return nil
 			}
@@ -763,8 +765,8 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 		string(storage.EncodeMVCCKey(storage.MakeMVCCMetadataKey(end))))
 
 	// NB: raft log does not have intents.
-	return db.MVCCIterate(start, end, storage.MVCCKeyIterKind, storage.IterKeyTypePointsOnly,
-		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+	return db.MVCCIterate(cmd.Context(), start, end, storage.MVCCKeyIterKind,
+		storage.IterKeyTypePointsOnly, func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
 			kvserver.PrintMVCCKeyValue(kv)
 			return nil
 		})
@@ -1278,7 +1280,7 @@ func runDebugIntentCount(cmd *cobra.Command, args []string) error {
 		}
 	})
 
-	iter, err := db.NewEngineIterator(storage.IterOptions{
+	iter, err := db.NewEngineIterator(ctx, storage.IterOptions{
 		LowerBound: keys.LockTableSingleKeyStart,
 		UpperBound: keys.LockTableSingleKeyEnd,
 	})

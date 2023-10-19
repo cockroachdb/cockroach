@@ -46,7 +46,7 @@ import (
 // the input slice, or has been shallow-copied appropriately to avoid
 // mutating the original requests).
 func optimizePuts(
-	reader storage.Reader, origReqs []kvpb.RequestUnion, distinctSpans bool,
+	ctx context.Context, reader storage.Reader, origReqs []kvpb.RequestUnion, distinctSpans bool,
 ) ([]kvpb.RequestUnion, error) {
 	var minKey, maxKey roachpb.Key
 	var unique map[string]struct{}
@@ -100,7 +100,7 @@ func optimizePuts(
 	// iter is being used to find the parts of the key range that is empty. We
 	// don't need to see intents for this purpose since intents also have
 	// provisional values that we will see.
-	iter, err := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+	iter, err := reader.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
 		KeyTypes: storage.IterKeyTypePointsAndRanges,
 		// We want to include maxKey in our scan. Since UpperBound is exclusive, we
 		// need to set it to the key after maxKey.
@@ -190,7 +190,7 @@ func evaluateBatch(
 
 	// Optimize any contiguous sequences of put and conditional put ops.
 	if len(baReqs) >= optimizePutThreshold && evalPath == readWrite {
-		baReqs, err = optimizePuts(readWriter, baReqs, baHeader.DistinctSpans)
+		baReqs, err = optimizePuts(ctx, readWriter, baReqs, baHeader.DistinctSpans)
 	}
 	if err != nil {
 		pErr := kvpb.NewErrorWithTxn(err, baHeader.Txn)

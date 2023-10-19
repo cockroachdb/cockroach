@@ -94,7 +94,7 @@ func (ds dataDistribution) setupTest(
 	require.NoError(t, eng.Flush())
 	snap := eng.NewSnapshot()
 	defer snap.Close()
-	ms, err := rditer.ComputeStatsForRange(&desc, snap, maxTs.WallTime)
+	ms, err := rditer.ComputeStatsForRange(ctx, &desc, snap, maxTs.WallTime)
 	require.NoError(t, err)
 	return ms
 }

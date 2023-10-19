@@ -273,7 +273,8 @@ func (r *Replica) RangeFeed(
 	// Register the stream with a catch-up iterator.
 	var catchUpIter *rangefeed.CatchUpIterator
 	if usingCatchUpIter {
-		catchUpIter, err = rangefeed.NewCatchUpIterator(r.store.TODOEngine(), rSpan.AsRawSpanWithNoLocals(),
+		catchUpIter, err = rangefeed.NewCatchUpIterator(
+			ctx, r.store.TODOEngine(), rSpan.AsRawSpanWithNoLocals(),
 			args.Timestamp, iterSemRelease, pacer)
 		if err != nil {
 			r.raftMu.Unlock()
@@ -466,7 +467,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		// waiting for the Register call below to return.
 		r.raftMu.AssertHeld()
 
-		scanner, err := rangefeed.NewSeparatedIntentScanner(r.store.TODOEngine(), desc.RSpan())
+		scanner, err := rangefeed.NewSeparatedIntentScanner(ctx, r.store.TODOEngine(), desc.RSpan())
 		if err != nil {
 			done.Set(err)
 			return nil
@@ -676,7 +677,8 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 			if vhf == nil {
 				continue
 			}
-			valBytes, err := storage.MVCCLookupRangeKeyValue(reader, t.StartKey, t.EndKey, t.Timestamp)
+			valBytes, err := storage.MVCCLookupRangeKeyValue(
+				ctx, reader, t.StartKey, t.EndKey, t.Timestamp)
 			if err != nil {
 				panic(err)
 			}

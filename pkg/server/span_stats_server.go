@@ -226,6 +226,7 @@ func (s *systemStatusServer) statsForSpan(
 			}
 			err = s.stores.VisitStores(func(s *kvserver.Store) error {
 				stats, err := storage.ComputeStats(
+					ctx,
 					s.TODOEngine(),
 					scanStart.AsRawKey(),
 					scanEnd.AsRawKey(),

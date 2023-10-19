@@ -117,7 +117,7 @@ func slurpSSTablesLatestKey(
 	}
 
 	var kvs []storage.MVCCKeyValue
-	it, err := batch.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: roachpb.KeyMax})
+	it, err := batch.NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: roachpb.KeyMax})
 	require.NoError(t, err)
 	defer it.Close()
 	for it.SeekGE(start); ; it.NextKey() {

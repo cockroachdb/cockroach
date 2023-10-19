@@ -148,7 +148,7 @@ func Subsume(
 	// rather than introducing additional synchronization complexity.
 	ridPrefix := keys.MakeRangeIDReplicatedPrefix(desc.RangeID)
 	reply.RangeIDLocalMVCCStats, err = storage.ComputeStats(
-		readWriter, ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
+		ctx, readWriter, ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
 	if err != nil {
 		return result.Result{}, err
 	}

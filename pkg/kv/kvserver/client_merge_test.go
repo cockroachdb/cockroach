@@ -160,11 +160,11 @@ func getEngineKeySet(t *testing.T, e storage.Engine) map[string]struct{} {
 	t.Helper()
 	// Have to scan local and global keys separately as mentioned in the comment
 	// for storage.Scan (because of its use of intentInterleavingIter).
-	kvs, err := storage.Scan(e, roachpb.KeyMin, keys.LocalMax, 0 /* max */)
+	kvs, err := storage.Scan(context.Background(), e, roachpb.KeyMin, keys.LocalMax, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	globalKVs, err := storage.Scan(e, keys.LocalMax, roachpb.KeyMax, 0 /* max */)
+	globalKVs, err := storage.Scan(context.Background(), e, keys.LocalMax, roachpb.KeyMax, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3813,7 +3813,8 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			}
 		}
 
-		err := rditer.IterateReplicaKeySpans(inSnap.Desc, sendingEngSnapshot, true /* replicatedOnly */, rditer.ReplicatedSpansAll,
+		err := rditer.IterateReplicaKeySpans(
+			context.Background(), inSnap.Desc, sendingEngSnapshot, true /* replicatedOnly */, rditer.ReplicatedSpansAll,
 			func(iter storage.EngineIterator, span roachpb.Span, keyType storage.IterKeyType) error {
 				fw, ok := sstFileWriters[string(span.Key)]
 				if !ok || !fw.span.Equal(span) {
@@ -3913,7 +3914,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			EndKey:   roachpb.RKey(keyEnd),
 		}
 		if err := storage.ClearRangeWithHeuristic(
-			receivingEng, &sst, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey(), 64, 8,
+			ctx, receivingEng, &sst, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey(), 64, 8,
 		); err != nil {
 			return err
 		}
@@ -4080,7 +4081,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		}
 		// We only look at the range of keys the test has been manipulating.
 		getKeySet := func(engine storage.Engine) map[string]struct{} {
-			kvs, err := storage.Scan(engine, keyStart, keyEnd, 0 /* max */)
+			kvs, err := storage.Scan(context.Background(), engine, keyStart, keyEnd, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
