@@ -226,6 +226,13 @@ const (
 	// ReplicationCutover is when the DatumToHLC() is used for an
 	// ALTER VIRTUAL CLUSTER ... COMPLETE REPLICATION statement.
 	ReplicationCutover
+
+	// ShowTenantFingerprint is when the DatumToHLC() is used for an SHOW
+	// EXPERIMENTAL_FINGERPRINTS FROM TENANT ... WITH START TIMESTAMP statement.
+	//
+	// ShowTenantFingerprint has the same constraints as AsOf, and so we use the
+	// same value.
+	ShowTenantFingerprint = AsOf
 )
 
 // DatumToHLC performs the conversion from a Datum to an HLC timestamp.

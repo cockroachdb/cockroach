@@ -79,7 +79,7 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 		replicationtestutils.RunningStatus(t, c.DestSysSQL, ingestionJobID))
 
 	ts := c.DestCluster.Server(0).Clock().Now()
-	afterPauseFingerprint := replicationtestutils.FingerprintTenantAtTimestampNoHistory(t, c.DestSysSQL, c.Args.DestTenantID.ToUint64(), ts.AsOfSystemTime())
+	afterPauseFingerprint := replicationtestutils.FingerprintTenantAtTimestampNoHistory(t, c.DestSysSQL, c.Args.DestTenantName, ts.AsOfSystemTime())
 	// Make dest cluster to ingest KV events faster.
 	c.SrcSysSQL.ExecMultiple(t, replicationtestutils.ConfigureClusterSettings(map[string]string{
 		`stream_replication.min_checkpoint_frequency`: `'100ms'`,

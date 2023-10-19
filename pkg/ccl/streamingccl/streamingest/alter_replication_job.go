@@ -75,7 +75,7 @@ func evalTenantReplicationOptions(
 		r.retention = &retSeconds
 	}
 	if options.ResumeTimestamp != nil {
-		ts, err := evalSystemTimeExpr(ctx, evalCtx, semaCtx, options.ResumeTimestamp, op)
+		ts, err := asof.EvalSystemTimeExpr(ctx, evalCtx, semaCtx, options.ResumeTimestamp, op, asof.ReplicationCutover)
 		if err != nil {
 			return nil, err
 		}
@@ -107,18 +107,16 @@ func alterReplicationJobTypeCheck(
 		return false, nil, err
 	}
 	if alterStmt.Options.ResumeTimestamp != nil {
-		evalCtx := &p.ExtendedEvalContext().Context
-		if _, err := typeCheckSystemTimeExpr(ctx, evalCtx,
-			p.SemaCtx(), alterStmt.Options.ResumeTimestamp, alterReplicationJobOp); err != nil {
+		if _, err := asof.TypeCheckSystemTimeExpr(ctx, p.SemaCtx(),
+			alterStmt.Options.ResumeTimestamp, alterReplicationJobOp); err != nil {
 			return false, nil, err
 		}
 	}
 
 	if cutoverTime := alterStmt.Cutover; cutoverTime != nil {
 		if cutoverTime.Timestamp != nil {
-			evalCtx := &p.ExtendedEvalContext().Context
-			if _, err := typeCheckSystemTimeExpr(ctx, evalCtx,
-				p.SemaCtx(), cutoverTime.Timestamp, alterReplicationJobOp); err != nil {
+			if _, err := asof.TypeCheckSystemTimeExpr(ctx, p.SemaCtx(),
+				cutoverTime.Timestamp, alterReplicationJobOp); err != nil {
 				return false, nil, err
 			}
 		}
@@ -167,7 +165,8 @@ func alterReplicationJobHook(
 				return nil, nil, nil, false, errors.AssertionFailedf("unexpected nil cutover expression")
 			}
 
-			ct, err := evalSystemTimeExpr(ctx, evalCtx, p.SemaCtx(), alterTenantStmt.Cutover.Timestamp, alterReplicationJobOp)
+			ct, err := asof.EvalSystemTimeExpr(ctx, evalCtx, p.SemaCtx(), alterTenantStmt.Cutover.Timestamp,
+				alterReplicationJobOp, asof.ReplicationCutover)
 			if err != nil {
 				return nil, nil, nil, false, err
 			}
@@ -318,61 +317,6 @@ func alterTenantOptions(
 			return nil
 		})
 
-}
-
-// typeCheckSystemTimeExpr type checks an Expr as a system time. It
-// accepts the same types as AS OF SYSTEM TIME expressions and
-// functions that evaluate to one of those types.
-//
-// The types need to be kept in sync with those supported by
-// asof.DatumToHLC.
-//
-// TODO(ssd): AOST and SPLIT are restricted to the use of constant expressions
-// or particular follower-read related functions. Do we want to do that here as well?
-// One nice side effect of allowing functions is that users can use NOW().
-func typeCheckSystemTimeExpr(
-	ctx context.Context,
-	evalCtx *eval.Context,
-	semaCtx *tree.SemaContext,
-	systemTimeExpr tree.Expr,
-	op string,
-) (tree.TypedExpr, error) {
-	typedExpr, err := tree.TypeCheckAndRequire(ctx, systemTimeExpr, semaCtx, types.Any, op)
-	if err != nil {
-		return nil, err
-	}
-
-	switch typedExpr.ResolvedType().Family() {
-	case types.IntervalFamily, types.TimestampTZFamily, types.TimestampFamily, types.StringFamily, types.DecimalFamily, types.IntFamily:
-		return typedExpr, nil
-	default:
-		return nil, errors.Errorf("expected string, timestamp, decimal, interval, or integer, got %s", typedExpr.ResolvedType())
-	}
-}
-
-// evalSystemTimeExpr evaluates an Expr as a system time. It accepts
-// the same types as AS OF SYSTEM TIME expressions and functions that
-// evaluate to one of those types.
-func evalSystemTimeExpr(
-	ctx context.Context,
-	evalCtx *eval.Context,
-	semaCtx *tree.SemaContext,
-	systemTimeExpr tree.Expr,
-	op string,
-) (hlc.Timestamp, error) {
-	typedExpr, err := typeCheckSystemTimeExpr(ctx, evalCtx, semaCtx, systemTimeExpr, op)
-	if err != nil {
-		return hlc.Timestamp{}, err
-	}
-	d, err := eval.Expr(ctx, evalCtx, typedExpr)
-	if err != nil {
-		return hlc.Timestamp{}, err
-	}
-	if d == tree.DNull {
-		return hlc.MaxTimestamp, nil
-	}
-	stmtTimestamp := evalCtx.GetStmtTimestamp()
-	return asof.DatumToHLC(evalCtx, stmtTimestamp, d, asof.ReplicationCutover)
 }
 
 func init() {

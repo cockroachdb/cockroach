@@ -208,8 +208,8 @@ func (c *TenantStreamingClusters) CompareResult(query string) {
 }
 
 func (c *TenantStreamingClusters) RequireFingerprintMatchAtTimestamp(timestamp string) string {
-	expected := FingerprintTenantAtTimestampNoHistory(c.T, c.SrcSysSQL, c.Args.SrcTenantID.ToUint64(), timestamp)
-	actual := FingerprintTenantAtTimestampNoHistory(c.T, c.DestSysSQL, c.Args.DestTenantID.ToUint64(), timestamp)
+	expected := FingerprintTenantAtTimestampNoHistory(c.T, c.SrcSysSQL, c.Args.SrcTenantName, timestamp)
+	actual := FingerprintTenantAtTimestampNoHistory(c.T, c.DestSysSQL, c.Args.DestTenantName, timestamp)
 	require.Equal(c.T, expected, actual)
 	return actual
 }
@@ -217,16 +217,15 @@ func (c *TenantStreamingClusters) RequireFingerprintMatchAtTimestamp(timestamp s
 func (c *TenantStreamingClusters) RequireDestinationFingerprintAtTimestamp(
 	fingerprint string, timestamp string,
 ) {
-	actual := FingerprintTenantAtTimestampNoHistory(c.T, c.DestSysSQL, c.Args.DestTenantID.ToUint64(), timestamp)
+	actual := FingerprintTenantAtTimestampNoHistory(c.T, c.DestSysSQL, c.Args.DestTenantName, timestamp)
 	require.Equal(c.T, fingerprint, actual)
 }
 
 func FingerprintTenantAtTimestampNoHistory(
-	t sqlutils.Fataler, db *sqlutils.SQLRunner, tenantID uint64, timestamp string,
+	t sqlutils.Fataler, db *sqlutils.SQLRunner, tenantName roachpb.TenantName, timestamp string,
 ) string {
-	fingerprintQuery := fmt.Sprintf("SELECT * FROM crdb_internal.fingerprint(crdb_internal."+
-		"tenant_span($1::INT), 0::DECIMAL, false) AS OF SYSTEM TIME %s", timestamp)
-	return db.QueryStr(t, fingerprintQuery, tenantID)[0][0]
+	fingerprintQuery := fmt.Sprintf(`SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT $1] AS OF SYSTEM TIME %s`, timestamp)
+	return db.QueryStr(t, fingerprintQuery, tenantName)[0][0]
 }
 
 // WaitUntilReplicatedTime waits for the ingestion job high watermark

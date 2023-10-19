@@ -230,14 +230,17 @@ func TestDataDriven(t *testing.T) {
 					from = varValue
 				}
 				allRevisions := d.HasArg("with_revisions")
-				fingerprintQuery := `SELECT * FROM crdb_internal.fingerprint(crdb_internal.tenant_span('%s'), '%s'::TIMESTAMPTZ, %t) AS OF SYSTEM TIME '%s'`
+				fingerprintQuery := `SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT '%s'] AS OF SYSTEM TIME '%s'`
+				if allRevisions {
+					fingerprintQuery = `SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT '%s' WITH START TIMESTAMP = '%s'] AS OF SYSTEM TIME '%s'`
+				}
 				var fingerprintSrcTenant int64
 				ds.replicationClusters.SrcSysSQL.QueryRow(t, fmt.Sprintf(fingerprintQuery,
-					ds.replicationClusters.Args.SrcTenantName, from, allRevisions, to)).Scan(&fingerprintSrcTenant)
+					ds.replicationClusters.Args.SrcTenantName, from, to)).Scan(&fingerprintSrcTenant)
 				require.NotZero(t, fingerprintSrcTenant)
 				var fingerprintDestTenant int64
 				ds.replicationClusters.DestSysSQL.QueryRow(t, fmt.Sprintf(fingerprintQuery,
-					ds.replicationClusters.Args.DestTenantName, from, allRevisions, to)).Scan(&fingerprintDestTenant)
+					ds.replicationClusters.Args.DestTenantName, from, to)).Scan(&fingerprintDestTenant)
 				require.NotZero(t, fingerprintDestTenant)
 				if fingerprintSrcTenant != fingerprintDestTenant {
 					require.NoError(t, replicationutils.InvestigateFingerprints(ctx,
