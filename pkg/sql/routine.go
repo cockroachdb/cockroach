@@ -263,9 +263,10 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 		}
 
 		// Place a sequence point before each statement in the routine for
-		// volatile functions.
+		// volatile functions. Don't allow the txn's external read snapshot to
+		// advance.
 		if g.expr.EnableStepping {
-			if err := txn.Step(ctx); err != nil {
+			if err := txn.Step(ctx, false /* allowReadTimestampStep */); err != nil {
 				return err
 			}
 		}
