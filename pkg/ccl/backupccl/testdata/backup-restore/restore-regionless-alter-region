@@ -113,7 +113,7 @@ HINT: you must add a PRIMARY REGION first using ALTER DATABASE d PRIMARY REGION 
 exec-sql
 ALTER DATABASE d PRIMARY REGION "us-east-1";
 ----
-pq: zone configuration for database d has field "num_replicas" set which will be overwritten when setting the the initial PRIMARY REGION
+pq: zone configuration for database d has field "num_replicas" set which will be overwritten when setting the the initial PRIMARY REGION (expected=nil actual=5)
 HINT: discard the zone config using CONFIGURE ZONE DISCARD before continuing
 
 # ...let's listen to the error message

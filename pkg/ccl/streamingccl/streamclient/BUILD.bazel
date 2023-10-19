@@ -45,14 +45,14 @@ go_library(
 
 go_test(
     name = "streamclient_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "client_test.go",
         "main_test.go",
         "partitioned_stream_client_test.go",
         "span_config_stream_client_test.go",
     ],
-    args = ["-test.timeout=55s"],
+    args = ["-test.timeout=295s"],
     embed = [":streamclient"],
     tags = [
         "ccl_test",

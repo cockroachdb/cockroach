@@ -104,6 +104,7 @@ func failurePoster(res *testResultWithXml, opts *issues.Options) githubpost.Fail
 		if res.attempt != 0 {
 			req.ExtraParams["attempt"] = fmt.Sprintf("%d", res.attempt)
 		}
+		req.ExtraLabels = append(req.ExtraLabels, "O-remote-execution")
 		return fmter, req
 	}
 	return func(ctx context.Context, failure githubpost.Failure) error {

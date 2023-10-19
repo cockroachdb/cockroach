@@ -360,13 +360,12 @@ func decodeValuesIntoDatumsHelper(
 }
 
 func unwrapDatum(d tree.Datum) tree.Datum {
-	if wrapper, ok := d.(*tree.DOidWrapper); ok {
-		// REFCURSOR is implemented using DOidWrapper.
-		if wrapper.Oid != oid.T_refcursor {
-			return unwrapDatum(wrapper.Wrapped)
-		}
+	switch t := d.(type) {
+	case *tree.DOidWrapper:
+		return unwrapDatum(t.Wrapped)
+	default:
+		return d
 	}
-	return d
 }
 
 // ValidateDatum validates that the "contents" of the expected datum matches the
@@ -383,6 +382,7 @@ func ValidateDatum(t *testing.T, expected tree.Datum, actual tree.Datum) {
 	// we should unwrap them. We unwrap at this stage as opposed to when
 	// generating datums to test that the writer can handle wrapped datums.
 	expected = unwrapDatum(expected)
+	actual = unwrapDatum(actual)
 
 	switch expected.ResolvedType().Family() {
 	case types.JsonFamily:

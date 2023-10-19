@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"html/template"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -103,6 +104,16 @@ func pickSHA(_ *cobra.Command, _ []string) error {
 	fmt.Println("Previous version:", nextRelease.prevReleaseVersion)
 	fmt.Println("Next version:", nextRelease.nextReleaseVersion)
 	fmt.Println("Release SHA:", nextRelease.buildInfo.SHA)
+
+	// Verify that the guessed version matches the contents of the version.txt file.
+	curVersion, err := fileContent(nextRelease.buildInfo.SHA, versionFile)
+	if err != nil {
+		return fmt.Errorf("reading version file: %w", err)
+	}
+	curVersion = strings.TrimSpace(curVersion)
+	if curVersion != nextRelease.nextReleaseVersion {
+		return fmt.Errorf("guessed version %s does not match version.txt %s", nextRelease.nextReleaseVersion, curVersion)
+	}
 
 	// TODO: before copying check if it's already there and bail if exists, can be forced by -f
 	releaseInfoPath := fmt.Sprintf("%s/%s.json", pickSHAFlags.releaseObjectPrefix, nextRelease.nextReleaseVersion)
