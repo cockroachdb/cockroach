@@ -45,6 +45,10 @@ if [[ -n "${LOCAL}" || "${1-}" == "run" ]]; then
   fi
   # NB: ENV_VARS is never empty.
   export "${ENV_VARS[@]}"
+  # If we are collecting code coverage, make sure the directory exists.
+  if [ -n "${BAZEL_COVER_DIR:-}" ]; then
+    mkdir -p "${BAZEL_COVER_DIR}"
+  fi
   CODE=0
   "${BINARY}" "${ARGS[@]}" >> "${LOG_DIR}/cockroach.stdout.log" 2>> "${LOG_DIR}/cockroach.stderr.log" || CODE="$?"
   if [[ -z "${LOCAL}" || "${CODE}" -ne 0 ]]; then
