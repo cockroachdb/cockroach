@@ -1838,6 +1838,10 @@ func dropColumnImpl(
 	return droppedViews, validateDescriptor(params.ctx, params.p, tableDesc)
 }
 
+// handleTTLStorageParamChange changes TTL storage parameters. descriptorChanged
+// must be true if the descriptor was modified directly. The caller
+// (alterTableNode), has a separate check to see if any mutations were
+// enqueued.
 func handleTTLStorageParamChange(
 	params runParams, tn *tree.TableName, tableDesc *tabledesc.Mutable, after *catpb.RowLevelTTL,
 ) (descriptorChanged bool, err error) {
@@ -1957,15 +1961,16 @@ func handleTTLStorageParamChange(
 	// Adding TTL requires adding the TTL job before adding the TTL fields.
 	// Removing TTL requires removing the TTL job before removing the TTL fields.
 	var direction descpb.DescriptorMutation_Direction
+	directlyModifiesDescriptor := false
 	switch {
 	case before == nil && after != nil:
 		direction = descpb.DescriptorMutation_ADD
 	case before != nil && after == nil:
 		direction = descpb.DescriptorMutation_DROP
 	default:
-		descriptorChanged = true
+		directlyModifiesDescriptor = true
 	}
-	if !descriptorChanged {
+	if !directlyModifiesDescriptor {
 		// Add TTL mutation so that job is scheduled in SchemaChanger.
 		tableDesc.AddModifyRowLevelTTLMutation(
 			&descpb.ModifyRowLevelTTL{RowLevelTTL: after},
@@ -1984,11 +1989,11 @@ func handleTTLStorageParamChange(
 	}
 
 	// Modify the TTL fields here because it will not be done in a mutation.
-	if descriptorChanged {
+	if directlyModifiesDescriptor {
 		tableDesc.RowLevelTTL = after
 	}
 
-	return descriptorChanged, nil
+	return directlyModifiesDescriptor, nil
 }
 
 // tryRemoveFKBackReferences determines whether the provided unique constraint
