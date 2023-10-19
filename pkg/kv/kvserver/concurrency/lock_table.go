@@ -2950,20 +2950,9 @@ func (kl *keyLocks) acquireLock(
 		}
 		afterTs := tl.writeTS()
 		if beforeTs.Less(afterTs) {
-			// Check if the lock's timestamp has increased as a result of this
-			// lock acquisition. If it has, some waiting readers may no longer
-			// conflict with this lock, so they can be allowed through. We only
-			// need to do so if the lock is held with a strength of
-			// {Exclusive,Intent}, as non-locking readers do not conflict with
-			// any other lock strength (read: Shared). Conveniently, a key can
-			// only ever be locked by a single transaction with strength
-			// {Exclusive,Intent}. This means we don't have to bother with maintaining
-			// a low watermark timestamp across multiple lock holders by being cute
-			// here.
-			if tl.getLockMode().Strength == lock.Exclusive ||
-				tl.getLockMode().Strength == lock.Intent {
-				kl.increasedLockTs(afterTs)
-			}
+			// If the lock's timestamp has increased as a result of this lock
+			// acquisition, the queue of waiting readers might need to be recomputed.
+			kl.recomputeWaitQueues(st)
 		}
 		return nil
 	}
@@ -3200,14 +3189,18 @@ func (kl *keyLocks) tryClearLock(force bool) bool {
 // transaction, else the lock is updated. Returns whether the keyLocks struct
 // can be garbage collected, and whether it was held by the txn.
 // Acquires l.mu.
-func (kl *keyLocks) tryUpdateLock(up *roachpb.LockUpdate) (heldByTxn, gc bool) {
+func (kl *keyLocks) tryUpdateLock(
+	up *roachpb.LockUpdate, st *cluster.Settings,
+) (heldByTxn, gc bool) {
 	kl.mu.Lock()
 	defer kl.mu.Unlock()
-	return kl.tryUpdateLockLocked(*up)
+	return kl.tryUpdateLockLocked(*up, st)
 }
 
 // REQUIRES: kl.mu is locked.
-func (kl *keyLocks) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bool) {
+func (kl *keyLocks) tryUpdateLockLocked(
+	up roachpb.LockUpdate, st *cluster.Settings,
+) (heldByTxn, gc bool) {
 	if kl.isEmptyLock() {
 		// Already free. This can happen when an unreplicated lock is removed in
 		// tryActiveWait due to the txn being in the txnStatusCache.
@@ -3242,6 +3235,7 @@ func (kl *keyLocks) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bo
 	txn := &up.Txn
 	ts := up.Txn.WriteTimestamp
 	beforeTs := tl.writeTS()
+	beforeStr := tl.getLockMode().Strength
 	advancedTs := beforeTs.Less(ts)
 	isLocked := false
 	// The MVCC keyspace is the source of truth about the disposition of a
@@ -3321,14 +3315,10 @@ func (kl *keyLocks) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bo
 		return true, gc
 	}
 
-	if advancedTs {
-		// We only need to let through non-locking readers if the lock is held with
-		// strength {Exclusive,Intent}. See acquireLock for an explanation as to
-		// why.
-		if tl.getLockMode().Strength == lock.Exclusive ||
-			tl.getLockMode().Strength == lock.Intent {
-			kl.increasedLockTs(ts)
-		}
+	afterStr := tl.getLockMode().Strength
+
+	if beforeStr != afterStr || advancedTs {
+		kl.recomputeWaitQueues(st)
 	}
 	// Else no change for waiters. This can happen due to a race between different
 	// callers of UpdateLocks().
@@ -3336,25 +3326,97 @@ func (kl *keyLocks) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bo
 	return true, false
 }
 
-// The lock holder timestamp has increased. Some of the waiters may no longer
-// need to wait.
+// recomputeWaitQueues goes through the receiver's wait queues and recomputes
+// whether actively waiting requests should continue to do so, given the key's
+// locks holders and other waiting requests. Such computation is necessary when
+// a lock's strength has decreased[1] or locking requests have dropped out of
+// wait queue's[2] without actually acquiring the lock or the lock's timestamp
+// has advanced.
 //
-// REQUIRES: kl.mu is locked.
-func (kl *keyLocks) increasedLockTs(newTs hlc.Timestamp) {
-	distinguishedRemoved := false
+// [1] This can happen as a result of savepoint rollback or when the lock table
+// stops tracking a replicated lock because of a PUSH_TIMESTAMP that
+// successfully bumps the pushee's timestamp.
+// [2] A locking request that doesn't conflict with any held lock(s) may still
+// have to actively wait if it conflicts with a lower sequence numbered request
+// already in the lock's wait queue. Locking requests dropping out of a lock's
+// wait queue can therefore result in other requests no longer needing to
+// actively wait.
+//
+// TODO(arul): We could optimize this function if we had information about the
+// context it was being called in.
+//
+// REQUIRES: kl.mu to be locked.
+func (kl *keyLocks) recomputeWaitQueues(st *cluster.Settings) {
+	// Determine and maintain strongest mode for this key. Note that this logic is
+	// generalized for Update locks already -- things could be tightened if we
+	// only considered None, Shared, Exclusive, and Intent locking strengths
+	// (which are the only ones that exist at the time of writing).
+	var strongestMode lock.Mode
+	// Go through the list of lock holders.
+	for e := kl.holders.Front(); e != nil; e = e.Next() {
+		mode := e.Value.getLockMode()
+		if strongestMode.Weaker(mode) {
+			strongestMode = mode
+		}
+	}
+
+	// Go through the list of non-locking readers (all which are actively waiting,
+	// by definition) and check if any of them no longer conflict with the lock
+	// holder(s).
 	for e := kl.waitingReaders.Front(); e != nil; {
-		g := e.Value
+		reader := e.Value
 		curr := e
 		e = e.Next()
-		if g.ts.Less(newTs) {
-			distinguishedRemoved = distinguishedRemoved || kl.removeReader(curr)
+		if !lock.Conflicts(reader.curLockMode(), strongestMode, &st.SV) {
+			kl.removeReader(curr)
 		}
-		// Else don't inform an active waiter which continues to be an active waiter
-		// despite the timestamp increase.
 	}
-	if distinguishedRemoved {
-		kl.tryMakeNewDistinguished()
+
+	// Go through the list of locking requests and check if any that are actively
+	// waiting no longer need to do so. We start the iteration from the front of
+	// the linked list as requests are stored in increasing sequence number order.
+	// Moreover, as locking requests conflict with both a lock's holder(s) and
+	// lower sequence numbered requests waiting in the queue, we must update
+	// strongestMode as we go along.
+	for e := kl.queuedLockingRequests.Front(); e != nil; {
+		qlr := e.Value
+		curr := e
+		e = e.Next()
+		if lock.Conflicts(qlr.mode, strongestMode, &st.SV) {
+			break
+		}
+		removed := false
+		if qlr.active {
+			// A queued locking request, that's actively waiting, no longer conflicts
+			// with locks on this key -- it can be allowed to proceed. There's two
+			// cases:
+			// 1. If it's a transactional request, it needs to acquire a claim by
+			// holding its place in the lock wait queue while marking itself as
+			// inactive.
+			// 2. Non-transactional requests do not acquire claims, so they can be
+			// removed from the wait queue.
+			if qlr.guard.txn == nil {
+				kl.removeLockingRequest(curr)
+				removed = true
+			} else {
+				qlr.active = false // mark as inactive
+				if qlr.guard == kl.distinguishedWaiter {
+					// A new distinguished waiter will be selected by informActiveWaiters.
+					kl.distinguishedWaiter = nil
+				}
+				qlr.guard.mu.Lock()
+				qlr.guard.doneActivelyWaitingAtLock()
+				qlr.guard.mu.Unlock()
+			}
+		}
+		// Locking requests conflict with both the lock holder(s) and other lower
+		// sequence numbered locking requests in the lock's wait queue, so we may
+		// need to update strongestMode before moving on with our iteration.
+		if !removed && strongestMode.Weaker(qlr.mode) {
+			strongestMode = qlr.mode
+		}
 	}
+	kl.informActiveWaiters()
 }
 
 // removeLockingRequest removes the locking request (or non-transactional
@@ -3609,6 +3671,10 @@ func (kl *keyLocks) releaseWaitersOnKeyUnlocked() (gc bool) {
 // REQUIRES: kl.mu is locked.
 // REQUIRES: the (receiver) lock must not be held.
 // REQUIRES: there should not be any waitingReaders in the lock's wait queues.
+//
+// TODO(arul): There's a lot of overlap between this method and
+// recomputeWaitQueues. We should simplify things by trying to replace all
+// usages of this method with recomputeWaitQueues.
 func (kl *keyLocks) maybeReleaseCompatibleLockingRequests() {
 	if kl.isLocked() {
 		panic("maybeReleaseCompatibleLockingRequests called when lock is held")
@@ -4158,7 +4224,7 @@ func (t *lockTableImpl) updateLockInternal(up *roachpb.LockUpdate) (heldByTxn bo
 	var locksToGC []*keyLocks
 	heldByTxn = false
 	changeFunc := func(l *keyLocks) {
-		held, gc := l.tryUpdateLock(up)
+		held, gc := l.tryUpdateLock(up, t.settings)
 		heldByTxn = heldByTxn || held
 		if gc {
 			locksToGC = append(locksToGC, l)
