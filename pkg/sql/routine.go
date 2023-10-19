@@ -262,10 +262,12 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 			w = &droppingResultWriter{}
 		}
 
-		// Place a sequence point before each statement in the routine for
-		// volatile functions.
+		// Place a sequence point before each statement in the routine for volatile
+		// functions. Unlike Postgres, we don't allow the txn's external read
+		// snapshot to advance, because we do not support restoring the txn's prior
+		// external read snapshot after returning from the volatile function.
 		if g.expr.EnableStepping {
-			if err := txn.Step(ctx); err != nil {
+			if err := txn.Step(ctx, false /* allowReadTimestampStep */); err != nil {
 				return err
 			}
 		}
