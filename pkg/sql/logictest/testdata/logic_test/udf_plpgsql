@@ -2216,3 +2216,108 @@ SELECT * FROM xy;
 ----
 1  2
 3  4
+
+# Testing the special OTHERS condition for exception handling.
+subtest others
+
+statement ok
+DROP FUNCTION f(INT);
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS TEXT AS $$
+  BEGIN
+    IF n = 0 THEN
+      RAISE division_by_zero;
+    ELSIF n = 1 THEN
+      RAISE data_exception;
+    ELSIF n = 2 THEN
+      RAISE not_null_violation;
+    ELSIF n = 3 THEN
+      RAISE query_canceled;
+    ELSE
+      RAISE assert_failure;
+    END IF;
+  EXCEPTION
+    WHEN not_null_violation THEN
+      RETURN 'not_null_violation';
+    WHEN OTHERS THEN
+      RETURN 'others';
+    WHEN assert_failure THEN
+      RETURN 'assert_failure';
+    WHEN data_exception THEN
+      RETURN 'data_exception';
+  END
+$$ LANGUAGE PLpgSQL;
+
+# OTHERS should catch division_by_zero.
+query T
+SELECT f(0);
+----
+others
+
+# OTHERS should catch data_exception despite the later branch that
+# explicitly catches it.
+query T
+SELECT f(1);
+----
+others
+
+# OTHERS can catch not_null_violation, but does not in this instance because
+# the branch that explicitly catches it comes first.
+query T
+SELECT f(2);
+----
+not_null_violation
+
+# OTHERS cannot catch query_canceled or assert_failure; however, they can be
+# explicitly caught.
+statement error pgcode 57014 pq: query_canceled
+SELECT f(3);
+
+query T
+SELECT f(4);
+----
+assert_failure
+
+# Postgres allows multiple OTHERS branches.
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS TEXT AS $$
+  BEGIN
+    RAISE division_by_zero;
+  EXCEPTION
+    WHEN OTHERS THEN
+      RETURN 'first branch';
+    WHEN OTHERS THEN
+      RETURN 'second branch';
+    WHEN division_by_zero THEN
+      RETURN 'third branch';
+    WHEN OTHERS THEN
+      RETURN 'fourth branch';
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+first branch
+
+# The first OTHERS branch is taken even though it raises its own exception.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS TEXT AS $$
+  BEGIN
+    RAISE division_by_zero;
+  EXCEPTION
+    WHEN OTHERS THEN
+      RAISE null_value_not_allowed;
+    WHEN OTHERS THEN
+      RETURN 'second branch';
+    WHEN division_by_zero THEN
+      RETURN 'third branch';
+    WHEN OTHERS THEN
+      RETURN 'fourth branch';
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22004 pq: null_value_not_allowed
+SELECT f();
+
+subtest end
