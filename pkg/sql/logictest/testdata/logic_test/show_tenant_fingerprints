@@ -24,6 +24,32 @@ SELECT * FROM (SELECT 'fingerprint matches' FROM [ SHOW EXPERIMENTAL_FINGERPRINT
 ----
 fingerprint matches
 
+query TTTT
+SELECT * FROM (
+SELECT tenant_name, 'start_ts is NULL', 'end_ts is NOT NULL', 'fingerprint is non-zero'
+FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT target]
+WHERE (start_ts IS NULL) AND (end_ts IS NOT NULL))
+AS OF SYSTEM TIME $aost;
+----
+target  start_ts is NULL  end_ts is NOT NULL  fingerprint is non-zero
+
+let $aost2
+SELECT cluster_logical_timestamp();
+
+
+query TTTT
+SELECT * FROM (
+SELECT tenant_name, 'start_ts is NOT NULL', 'end_ts is NOT NULL', 'fingerprint is non-zero'
+FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT target WITH START TIMESTAMP = $aost]
+WHERE (start_ts IS NOT NULL) AND (end_ts IS NOT NULL))
+AS OF SYSTEM TIME $aost2;
+----
+target  start_ts is NOT NULL  end_ts is NOT NULL  fingerprint is non-zero
+
+# Test that the end timestamp has to be greater than equal to the start timestamp.
+statement error pgcode 22023 start timestamp.*is greater than the end timestamp.*
+SELECT * FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT target WITH START TIMESTAMP = $aost2] AS OF SYSTEM TIME $aost;
+
 
 user testuser
 
