@@ -1671,6 +1671,30 @@ The messages are dropped to help these replicas to recover from I/O overload.`,
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaTombstoneQueueSuccesses = metric.Metadata{
+		Name:        "queue.tombstone.process.success",
+		Help:        "Number of replicas successfully processed by the tombstone queue",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaTombstoneQueueFailures = metric.Metadata{
+		Name:        "queue.tombstone.process.failure",
+		Help:        "Number of replicas which failed processing in the tombstone queue",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaTombstoneQueuePending = metric.Metadata{
+		Name:        "queue.tombstone.pending",
+		Help:        "Number of pending replicas in the tombstone queue",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaTombstoneQueueProcessingNanos = metric.Metadata{
+		Name:        "queue.tombstone.processingnanos",
+		Help:        "Nanoseconds spent processing replicas in the tombstone queue",
+		Measurement: "Processing Time",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaMergeQueueSuccesses = metric.Metadata{
 		Name:        "queue.merge.process.success",
 		Help:        "Number of replicas successfully processed by the merge queue",
@@ -2544,6 +2568,10 @@ type StoreMetrics struct {
 	MVCCGCQueueFailures                       *metric.Counter
 	MVCCGCQueuePending                        *metric.Gauge
 	MVCCGCQueueProcessingNanos                *metric.Counter
+	TombstoneQueueSuccesses                   *metric.Counter
+	TombstoneQueueFailures                    *metric.Counter
+	TombstoneQueuePending                     *metric.Gauge
+	TombstoneQueueProcessingNanos             *metric.Counter
 	MergeQueueSuccesses                       *metric.Counter
 	MergeQueueFailures                        *metric.Counter
 	MergeQueuePending                         *metric.Gauge
@@ -3258,6 +3286,10 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		MVCCGCQueueFailures:                       metric.NewCounter(metaMVCCGCQueueFailures),
 		MVCCGCQueuePending:                        metric.NewGauge(metaMVCCGCQueuePending),
 		MVCCGCQueueProcessingNanos:                metric.NewCounter(metaMVCCGCQueueProcessingNanos),
+		TombstoneQueueSuccesses:                   metric.NewCounter(metaTombstoneQueueSuccesses),
+		TombstoneQueueFailures:                    metric.NewCounter(metaTombstoneQueueFailures),
+		TombstoneQueuePending:                     metric.NewGauge(metaTombstoneQueuePending),
+		TombstoneQueueProcessingNanos:             metric.NewCounter(metaTombstoneQueueProcessingNanos),
 		MergeQueueSuccesses:                       metric.NewCounter(metaMergeQueueSuccesses),
 		MergeQueueFailures:                        metric.NewCounter(metaMergeQueueFailures),
 		MergeQueuePending:                         metric.NewGauge(metaMergeQueuePending),

@@ -846,6 +846,7 @@ type Store struct {
 	storeRebalancer      *StoreRebalancer
 	rangeIDAlloc         *idalloc.Allocator // Range ID allocator
 	mvccGCQueue          *mvccGCQueue       // MVCC GC queue
+	tombstoneQueue       *tombstoneQueue    // Tombstone queue
 	mergeQueue           *mergeQueue        // Range merging queue
 	splitQueue           *splitQueue        // Range splitting queue
 	replicateQueue       *replicateQueue    // Replication queue
@@ -1622,6 +1623,7 @@ func NewStore(
 			cfg.ScanMinIdleTime, cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
 		)
 		s.mvccGCQueue = newMVCCGCQueue(s)
+		s.tombstoneQueue = newTombstoneQueue(s)
 		s.mergeQueue = newMergeQueue(s, s.db)
 		s.splitQueue = newSplitQueue(s, s.db)
 		s.replicateQueue = newReplicateQueue(s, s.allocator)
@@ -1634,7 +1636,7 @@ func NewStore(
 		// pkg/ui/src/views/reports/containers/enqueueRange/index.tsx
 		s.scanner.AddQueues(
 			s.mvccGCQueue, s.mergeQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue,
-			s.raftLogQueue, s.raftSnapshotQueue, s.consistencyQueue)
+			s.raftLogQueue, s.raftSnapshotQueue, s.consistencyQueue, s.tombstoneQueue)
 		tsDS := s.cfg.TimeSeriesDataStore
 		if s.cfg.TestingKnobs.TimeSeriesDataStore != nil {
 			tsDS = s.cfg.TestingKnobs.TimeSeriesDataStore
