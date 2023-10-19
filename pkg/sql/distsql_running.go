@@ -896,6 +896,10 @@ func (dsp *DistSQLPlanner) Run(
 			"unexpected concurrency for a flow that was forced to be planned locally"))
 		return
 	}
+	if buildutil.CrdbTestBuild && txn != nil && localState.MustUseLeaf && flow.GetFlowCtx().Txn.Type() != kv.LeafTxn {
+		recv.SetError(errors.AssertionFailedf("unexpected root txn used when leaf txn expected"))
+		return
+	}
 
 	noWait := planCtx.getPortalPauseInfo() != nil
 	flow.Run(ctx, noWait)
