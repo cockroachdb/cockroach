@@ -460,7 +460,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	// First, set up the flow on this node.
 	setupReq.Flow = *flows[thisNodeID]
 	var batchReceiver execinfra.BatchReceiver
-	if recv.resultWriterMu.batch != nil {
+	if recv.batchWriter != nil {
 		// Use the DistSQLReceiver as an execinfra.BatchReceiver only if the
 		// former has the corresponding writer set.
 		batchReceiver = recv
@@ -590,6 +590,8 @@ func (dsp *DistSQLPlanner) setupFlows(
 	// since flow.Cleanup() is the last thing before DistSQLPlanner.Run returns
 	// at which point the rowResultWriter is no longer protected by the mutex of
 	// the DistSQLReceiver.
+	// TODO(yuzefovich): think through this comment - we no longer have mutex
+	// protection in place, so perhaps this can be simplified.
 	cleanupCalledMu := struct {
 		syncutil.Mutex
 		called bool
@@ -623,9 +625,10 @@ func (dsp *DistSQLPlanner) setupFlows(
 						// so there is nothing to do.
 						return
 					}
-					// First, we update the DistSQL receiver with the error to
-					// be returned to the client eventually.
-					recv.SetError(res.err)
+					// First, we send the error to the DistSQL receiver to be
+					// returned to the client eventually (which will happen on
+					// the next Push or PushBatch call).
+					recv.concurrentErrorCh <- res.err
 					// Now explicitly cancel the local flow.
 					flow.Cancel()
 				}()
@@ -830,9 +833,11 @@ func (dsp *DistSQLPlanner) Run(
 		// We ended up planning everything locally, regardless of whether we
 		// intended to distribute or not.
 		localState.IsLocal = true
+		// Concurrent errors are only possible during the distributed execution.
+		recv.skipConcurrentErrorCheck = true
 	} else {
 		defer func() {
-			if recv.getError() != nil {
+			if recv.resultWriter.Err() != nil {
 				// The execution of this query encountered some error, so we
 				// will eagerly cancel all flows running on the remote nodes
 				// because they are now dead.
@@ -911,19 +916,25 @@ func (dsp *DistSQLPlanner) Run(
 type DistSQLReceiver struct {
 	ctx context.Context
 
-	resultWriterMu struct {
-		// Mutex only protects SetError() and Err() methods of the
-		// rowResultWriter.
-		syncutil.Mutex
-		// These two interfaces refer to the same object, but batch might be
-		// unset (row is always set). These are used to send the results to.
-		row   rowResultWriter
-		batch batchResultWriter
-	}
-	// status is execinfra.ConsumerStatus of the receiver. It should not be
-	// accessed directly - use getStatus() and setStatus() helpers instead.
-	status atomic.Uint32
+	// These two interfaces refer to the same object, but batchWriter might be
+	// unset (resultWriter is always set). These are used to send the results
+	// to.
+	resultWriter rowResultWriter
+	batchWriter  batchResultWriter
 
+	// concurrentErrorCh is a buffered channel that allows for concurrent
+	// goroutines to tell the main execution goroutine that there is an error.
+	// The main goroutine will read from this channel on the next call to Push
+	// or PushBatch.
+	//
+	// This channel is needed since rowResultWriter is not thread-safe and will
+	// only be sent on during distributed plan execution.
+	concurrentErrorCh chan error
+	// skipConcurrentErrorCheck is set when concurrent errors aren't possible,
+	// so there is no need to poll concurrentErrorCh.
+	skipConcurrentErrorCheck bool
+
+	status   execinfra.ConsumerStatus
 	stmtType tree.StatementReturnType
 
 	// outputTypes are the types of the result columns produced by the plan.
@@ -991,14 +1002,6 @@ type DistSQLReceiver struct {
 		// Possibly updated arguments are returned.
 		pushCallback func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata)
 	}
-}
-
-func (r *DistSQLReceiver) getStatus() execinfra.ConsumerStatus {
-	return execinfra.ConsumerStatus(r.status.Load())
-}
-
-func (r *DistSQLReceiver) setStatus(s execinfra.ConsumerStatus) {
-	r.status.Store(uint32(s))
 }
 
 // rowResultWriter is a subset of CommandResult to be used with the
@@ -1221,15 +1224,18 @@ func MakeDistSQLReceiver(
 	}
 	*r = DistSQLReceiver{
 		ctx:          consumeCtx,
-		cleanup:      cleanup,
-		rangeCache:   rangeCache,
-		txn:          txn,
-		clockUpdater: clockUpdater,
-		stmtType:     stmtType,
-		tracing:      tracing,
+		resultWriter: resultWriter,
+		batchWriter:  batchWriter,
+		// At the time of writing, there is only one concurrent goroutine that
+		// might send at most one error.
+		concurrentErrorCh: make(chan error, 1),
+		cleanup:           cleanup,
+		rangeCache:        rangeCache,
+		txn:               txn,
+		clockUpdater:      clockUpdater,
+		stmtType:          stmtType,
+		tracing:           tracing,
 	}
-	r.resultWriterMu.row = resultWriter
-	r.resultWriterMu.batch = batchWriter
 	return r
 }
 
@@ -1237,8 +1243,12 @@ func MakeDistSQLReceiver(
 // executing the plan - that encountered an error when run in the distributed
 // fashion - locally.
 func (r *DistSQLReceiver) resetForLocalRerun(stats topLevelQueryStats) {
-	r.resultWriterMu.row.SetError(nil)
-	r.setStatus(execinfra.NeedMoreRows)
+	r.resultWriter.SetError(nil)
+	// Note that DistSQLPlanner.Run will also set r.skipConcurrentErrorCheck to
+	// true, so r.concurrentErrorCh won't be pulled during the local rerun. Here
+	// we do so for clarity.
+	r.skipConcurrentErrorCheck = true
+	r.status = execinfra.NeedMoreRows
 	r.dataPushed = false
 	r.closed = false
 	r.stats = stats
@@ -1258,35 +1268,27 @@ func (r *DistSQLReceiver) Release() {
 func (r *DistSQLReceiver) clone() *DistSQLReceiver {
 	ret := receiverSyncPool.Get().(*DistSQLReceiver)
 	*ret = DistSQLReceiver{
-		ctx:          r.ctx,
-		cleanup:      func() {},
-		rangeCache:   r.rangeCache,
-		txn:          r.txn,
-		clockUpdater: r.clockUpdater,
-		stmtType:     tree.Rows,
-		tracing:      r.tracing,
+		ctx:               r.ctx,
+		concurrentErrorCh: make(chan error, 1),
+		cleanup:           func() {},
+		rangeCache:        r.rangeCache,
+		txn:               r.txn,
+		clockUpdater:      r.clockUpdater,
+		stmtType:          tree.Rows,
+		tracing:           r.tracing,
 	}
 	return ret
 }
 
-// getError returns the error stored in the rowResultWriter (if any).
-func (r *DistSQLReceiver) getError() error {
-	r.resultWriterMu.Lock()
-	defer r.resultWriterMu.Unlock()
-	return r.resultWriterMu.row.Err()
-}
-
-// SetError provides a convenient way for a client to pass in an error, thus
-// pretending that a query execution error happened. The error is passed along
-// to the resultWriter.
+// SetError passes the given error to the resultWriter and updates the status of
+// the DistSQLReceiver accordingly.
 //
-// The status of DistSQLReceiver is updated accordingly.
+// Note that this method is **not** concurrency safe and needs to be called only
+// from the main execution goroutine.
 func (r *DistSQLReceiver) SetError(err error) {
-	r.resultWriterMu.Lock()
-	defer r.resultWriterMu.Unlock()
 	// Check if the error we just received should take precedence over a
 	// previous error (if any).
-	if kvpb.ErrPriority(err) > kvpb.ErrPriority(r.resultWriterMu.row.Err()) {
+	if kvpb.ErrPriority(err) > kvpb.ErrPriority(r.resultWriter.Err()) {
 		if r.txn != nil {
 			if retryErr := (*kvpb.UnhandledRetryableError)(nil); errors.As(err, &retryErr) {
 				// Update the txn in response to remote errors. In the
@@ -1305,23 +1307,39 @@ func (r *DistSQLReceiver) SetError(err error) {
 				}
 			}
 		}
-		r.resultWriterMu.row.SetError(err)
+		r.resultWriter.SetError(err)
+		// If we encountered an error, we will transition to draining unless we
+		// were canceled.
+		if r.ctx.Err() != nil {
+			log.VEventf(r.ctx, 1, "encountered error (transitioning to shutting down): %v", r.ctx.Err())
+			r.status = execinfra.ConsumerClosed
+		} else {
+			log.VEventf(r.ctx, 1, "encountered error (transitioning to draining): %v", err)
+			r.status = execinfra.DrainRequested
+		}
 	}
-	// If we encountered an error, we will transition to draining unless we were
-	// canceled.
-	if r.ctx.Err() != nil {
-		log.VEventf(r.ctx, 1, "encountered error (transitioning to shutting down): %v", r.ctx.Err())
-		r.setStatus(execinfra.ConsumerClosed)
-	} else {
-		log.VEventf(r.ctx, 1, "encountered error (transitioning to draining): %v", err)
-		r.setStatus(execinfra.DrainRequested)
+}
+
+// checkConcurrentError checks whether a concurrent goroutine encountered an
+// error that should trigger the shutdown of the execution pipeline. The status
+// of the DistSQLReceiver is updated accordingly.
+func (r *DistSQLReceiver) checkConcurrentError() {
+	if r.skipConcurrentErrorCheck || r.status != execinfra.NeedMoreRows {
+		// If the status already is not NeedMoreRows, then it doesn't matter if
+		// there was a concurrent error set.
+		return
+	}
+	select {
+	case err := <-r.concurrentErrorCh:
+		r.SetError(err)
+	default:
 	}
 }
 
 // pushMeta takes in non-empty metadata object and pushes it to the result
 // writer. Possibly updated status is returned.
 func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra.ConsumerStatus {
-	if metaWriter, ok := r.resultWriterMu.row.(MetadataResultWriter); ok {
+	if metaWriter, ok := r.resultWriter.(MetadataResultWriter); ok {
 		metaWriter.AddMeta(r.ctx, meta)
 		if meta.Err == nil {
 			r.dataPushed = true
@@ -1362,7 +1380,7 @@ func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra
 	}
 	// Release the meta object. It is unsafe for use after this call.
 	meta.Release()
-	return r.getStatus()
+	return r.status
 }
 
 // handleCommErr handles the communication error (the one returned when
@@ -1373,12 +1391,12 @@ func (r *DistSQLReceiver) handleCommErr(commErr error) {
 	// client (that's why we don't set the error on the resultWriter).
 	if errors.Is(commErr, ErrLimitedResultClosed) {
 		log.VEvent(r.ctx, 1, "encountered ErrLimitedResultClosed (transitioning to draining)")
-		r.setStatus(execinfra.DrainRequested)
+		r.status = execinfra.DrainRequested
 	} else if errors.Is(commErr, errIEResultChannelClosed) {
 		log.VEvent(r.ctx, 1, "encountered errIEResultChannelClosed (transitioning to draining)")
-		r.setStatus(execinfra.DrainRequested)
+		r.status = execinfra.DrainRequested
 	} else if errors.Is(commErr, ErrPortalLimitHasBeenReached) {
-		r.setStatus(execinfra.SwitchToAnotherPortal)
+		r.status = execinfra.SwitchToAnotherPortal
 	} else {
 		// Set the error on the resultWriter to notify the consumer about
 		// it. Most clients don't care to differentiate between
@@ -1407,17 +1425,18 @@ func (r *DistSQLReceiver) handleCommErr(commErr error) {
 func (r *DistSQLReceiver) Push(
 	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) execinfra.ConsumerStatus {
+	r.checkConcurrentError()
 	if r.testingKnobs.pushCallback != nil {
 		row, _, meta = r.testingKnobs.pushCallback(row, nil /* batch */, meta)
 	}
 	if meta != nil {
 		return r.pushMeta(meta)
 	}
-	if r.ctx.Err() != nil && r.getStatus() != execinfra.ConsumerClosed {
+	if r.ctx.Err() != nil && r.status != execinfra.ConsumerClosed {
 		r.SetError(r.ctx.Err())
 	}
-	if status := r.getStatus(); status != execinfra.NeedMoreRows {
-		return status
+	if r.status != execinfra.NeedMoreRows {
+		return r.status
 	}
 
 	if r.stmtType != tree.Rows {
@@ -1425,8 +1444,8 @@ func (r *DistSQLReceiver) Push(
 		// We only need the row count. planNodeToRowSource is set up to handle
 		// ensuring that the last stage in the pipeline will return a single-column
 		// row with the row count in it, so just grab that and exit.
-		r.resultWriterMu.row.SetRowsAffected(r.ctx, n)
-		return r.getStatus()
+		r.resultWriter.SetRowsAffected(r.ctx, n)
+		return r.status
 	}
 
 	ensureDecodedRow := func() error {
@@ -1446,11 +1465,11 @@ func (r *DistSQLReceiver) Push(
 	if r.isTenantExplainAnalyze {
 		if err := ensureDecodedRow(); err != nil {
 			r.SetError(err)
-			return r.getStatus()
+			return r.status
 		}
 		if len(r.row) != len(r.outputTypes) {
 			r.SetError(errors.Errorf("expected number of columns and output types to be the same"))
-			return r.getStatus()
+			return r.status
 		}
 		if r.egressCounter == nil {
 			r.egressCounter = NewTenantNetworkEgressCounter()
@@ -1460,7 +1479,7 @@ func (r *DistSQLReceiver) Push(
 
 	if r.discardRows {
 		// Discard rows.
-		return r.getStatus()
+		return r.status
 	}
 
 	if r.existsMode {
@@ -1468,49 +1487,50 @@ func (r *DistSQLReceiver) Push(
 		// row is pushed or not, so the contents do not matter.
 		r.row = []tree.Datum{}
 		log.VEvent(r.ctx, 2, `a row is pushed in "exists" mode, so transition to draining`)
-		r.setStatus(execinfra.DrainRequested)
+		r.status = execinfra.DrainRequested
 	} else {
 		if err := ensureDecodedRow(); err != nil {
 			r.SetError(err)
-			return r.getStatus()
+			return r.status
 		}
 	}
 	r.tracing.TraceExecRowsResult(r.ctx, r.row)
-	if commErr := r.resultWriterMu.row.AddRow(r.ctx, r.row); commErr != nil {
+	if commErr := r.resultWriter.AddRow(r.ctx, r.row); commErr != nil {
 		r.handleCommErr(commErr)
 	}
 	r.dataPushed = true
-	return r.getStatus()
+	return r.status
 }
 
 // PushBatch is part of the execinfra.BatchReceiver interface.
 func (r *DistSQLReceiver) PushBatch(
 	batch coldata.Batch, meta *execinfrapb.ProducerMetadata,
 ) execinfra.ConsumerStatus {
+	r.checkConcurrentError()
 	if r.testingKnobs.pushCallback != nil {
 		_, batch, meta = r.testingKnobs.pushCallback(nil /* row */, batch, meta)
 	}
 	if meta != nil {
 		return r.pushMeta(meta)
 	}
-	if r.ctx.Err() != nil && r.getStatus() != execinfra.ConsumerClosed {
+	if r.ctx.Err() != nil && r.status != execinfra.ConsumerClosed {
 		r.SetError(r.ctx.Err())
 	}
-	if status := r.getStatus(); status != execinfra.NeedMoreRows {
-		return status
+	if r.status != execinfra.NeedMoreRows {
+		return r.status
 	}
 
 	if batch.Length() == 0 {
 		// Nothing to do on the zero-length batch.
-		return r.getStatus()
+		return r.status
 	}
 
 	if r.stmtType != tree.Rows {
 		// We only need the row count. planNodeToRowSource is set up to handle
 		// ensuring that the last stage in the pipeline will return a single-column
 		// row with the row count in it, so just grab that and exit.
-		r.resultWriterMu.row.SetRowsAffected(r.ctx, int(batch.ColVec(0).Int64()[0]))
-		return r.getStatus()
+		r.resultWriter.SetRowsAffected(r.ctx, int(batch.ColVec(0).Int64()[0]))
+		return r.status
 	}
 
 	if r.isTenantExplainAnalyze {
@@ -1522,7 +1542,7 @@ func (r *DistSQLReceiver) PushBatch(
 
 	if r.discardRows {
 		// Discard rows.
-		return r.getStatus()
+		return r.status
 	}
 
 	if r.existsMode {
@@ -1531,11 +1551,11 @@ func (r *DistSQLReceiver) PushBatch(
 		panic("unsupported exists mode for PushBatch")
 	}
 	r.tracing.TraceExecBatchResult(r.ctx, batch)
-	if commErr := r.resultWriterMu.batch.AddBatch(r.ctx, batch); commErr != nil {
+	if commErr := r.batchWriter.AddBatch(r.ctx, batch); commErr != nil {
 		r.handleCommErr(commErr)
 	}
 	r.dataPushed = true
-	return r.getStatus()
+	return r.status
 }
 
 var (
@@ -1659,7 +1679,7 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 		}
 	}
 
-	if recv.commErr != nil || recv.getError() != nil {
+	if recv.commErr != nil || recv.resultWriter.Err() != nil {
 		return recv.commErr
 	}
 
@@ -1776,7 +1796,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 
 	// TODO(yuzefovich): consider implementing batch receiving result writer.
 	subqueryRowReceiver := NewRowResultWriter(&rows)
-	subqueryRecv.resultWriterMu.row = subqueryRowReceiver
+	subqueryRecv.resultWriter = subqueryRowReceiver
 	subqueryPlans[planIdx].started = true
 	finishedSetupFn, cleanup := getFinishedSetupFn(planner)
 	defer cleanup()
@@ -1928,7 +1948,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		// was encountered or not.
 		return
 	}
-	if distributedErr := recv.getError(); distributedErr != nil &&
+	if distributedErr := recv.resultWriter.Err(); distributedErr != nil &&
 		distributedQueryRerunAsLocalEnabled.Get(&dsp.st.SV) {
 		// If we had a distributed plan which resulted in an error, we want to
 		// retry this query as local in some cases. In particular, this retry
@@ -1973,7 +1993,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		telemetry.Inc(sqltelemetry.DistributedErrorLocalRetryAttempt)
 		dsp.distSQLSrv.ServerConfig.Metrics.DistErrorLocalRetryAttempts.Inc(1)
 		defer func() {
-			if recv.getError() != nil {
+			if recv.resultWriter.Err() != nil {
 				telemetry.Inc(sqltelemetry.DistributedErrorLocalRetryFailure)
 				dsp.distSQLSrv.ServerConfig.Metrics.DistErrorLocalRetryFailures.Inc(1)
 			}
@@ -2244,12 +2264,12 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	defer postqueryRecv.Release()
 	defer addTopLevelQueryStats(&postqueryRecv.stats)
 	postqueryResultWriter := &errOnlyResultWriter{}
-	postqueryRecv.resultWriterMu.row = postqueryResultWriter
-	postqueryRecv.resultWriterMu.batch = postqueryResultWriter
+	postqueryRecv.resultWriter = postqueryResultWriter
+	postqueryRecv.batchWriter = postqueryResultWriter
 	finishedSetupFn, cleanup := getFinishedSetupFn(planner)
 	defer cleanup()
 	dsp.Run(ctx, postqueryPlanCtx, planner.txn, postqueryPhysPlan, postqueryRecv, evalCtx, finishedSetupFn)
-	return postqueryRecv.getError()
+	return postqueryRecv.resultWriter.Err()
 }
 
 // planAndRunChecksInParallel executes all checkPlans in parallel. The function
