@@ -1171,6 +1171,7 @@ func TestStreamingRegionalConstraint(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	skip.UnderStressRace(t, "takes too long under stress race")
 	skip.UnderStress(t, "the allocator machinery stuggles with cpu contention, which can cause the test to timeout")
+	skip.WithIssue(t, 112541)
 
 	ctx := context.Background()
 	regions := []string{"mars", "venus", "mercury"}
