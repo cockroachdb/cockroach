@@ -129,7 +129,7 @@ func MigrateDescriptorState(
 		return false
 	}
 	targetsToRemove := make(map[int]struct{})
-	newIndexes := make(map[catid.DescID]bool)
+	newIndexes := make(map[catid.DescID]*TargetMetadata)
 	newTargets := 0
 	updated := false
 	for idx, target := range state.Targets {
@@ -140,10 +140,10 @@ func MigrateDescriptorState(
 		}
 		if newIndexID, descID := checkForTableDataElement(target); descID != catid.InvalidDescID || newIndexID != catid.InvalidDescID {
 			if _, ok := newIndexes[newIndexID]; newIndexID != catid.InvalidDescID && !ok {
-				newIndexes[newIndexID] = false
+				newIndexes[newIndexID] = &target.Metadata
 			}
 			if descID != catid.InvalidDescID {
-				newIndexes[descID] = true
+				newIndexes[descID] = nil
 			}
 		}
 		current, targetStatus, update := migrateStatuses(state.CurrentStatuses[idx], target.TargetStatus)
@@ -153,15 +153,15 @@ func MigrateDescriptorState(
 			updated = true
 		}
 	}
-	for id, skip := range newIndexes {
-		if skip {
+	for id, md := range newIndexes {
+		if md == nil {
 			continue
 		}
 		// Generate a TableData element
 		state.Targets = append(state.Targets, MakeTarget(ToPublic, &TableData{
 			TableID:    id,
 			DatabaseID: parentID,
-		}, &TargetMetadata{}))
+		}, md))
 		state.CurrentStatuses = append(state.CurrentStatuses, Status_PUBLIC)
 		state.TargetRanks = append(state.TargetRanks, math.MaxUint32-uint32(newTargets))
 		newTargets += 1
