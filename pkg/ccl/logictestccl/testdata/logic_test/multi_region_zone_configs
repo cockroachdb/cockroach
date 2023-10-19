@@ -846,7 +846,7 @@ statement ok
 ALTER DATABASE initial_multiregion_db DROP REGION "us-east-1";
 ALTER INDEX tbl@a_idx CONFIGURE ZONE USING num_replicas = 10
 
-statement error zone configuration for index tbl@a_idx has field "num_replicas" set which will be overwritten when setting the initial PRIMARY REGION\nHINT: discard the zone config using CONFIGURE ZONE DISCARD before continuing
+statement error zone configuration for index tbl@a_idx has field "num_replicas" set which will be overwritten when setting the initial PRIMARY REGION \(expected=nil actual=10\)\nHINT: discard the zone config using CONFIGURE ZONE DISCARD before continuing
 ALTER DATABASE initial_multiregion_db SET PRIMARY REGION "us-east-1"
 
 # Variations of tests where a zone config is present while we try to transition
@@ -855,14 +855,14 @@ statement ok
 ALTER INDEX tbl@a_idx CONFIGURE ZONE DISCARD;
 ALTER TABLE tbl CONFIGURE ZONE USING num_replicas = 10
 
-statement error zone configuration for table tbl has field "num_replicas" set which will be overwritten when setting the the initial PRIMARY REGION\nHINT: discard the zone config using CONFIGURE ZONE DISCARD before continuing
+statement error zone configuration for table tbl has field "num_replicas" set which will be overwritten when setting the the initial PRIMARY REGION \(expected=nil actual=10\)\nHINT: discard the zone config using CONFIGURE ZONE DISCARD before continuing
 ALTER DATABASE initial_multiregion_db SET PRIMARY REGION "us-east-1"
 
 statement ok
 ALTER TABLE tbl CONFIGURE ZONE DISCARD;
 ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING num_replicas = 10
 
-statement error zone configuration for database initial_multiregion_db has field "num_replicas" set which will be overwritten when setting the the initial PRIMARY REGION\nHINT: discard the zone config using CONFIGURE ZONE DISCARD before continuing
+statement error zone configuration for database initial_multiregion_db has field "num_replicas" set which will be overwritten when setting the the initial PRIMARY REGION \(expected=nil actual=10\)\nHINT: discard the zone config using CONFIGURE ZONE DISCARD before continuing
 ALTER DATABASE initial_multiregion_db SET PRIMARY REGION "us-east-1"
 
 # Validate that if we DISCARD the zone configuration, we can successfully turn
