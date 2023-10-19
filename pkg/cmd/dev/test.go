@@ -252,7 +252,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		pkg = strings.TrimPrefix(pkg, "./")
 		pkg = strings.TrimRight(pkg, "/")
 
-		if !strings.HasPrefix(pkg, "pkg/") {
+		if !strings.HasPrefix(pkg, "pkg/") && !strings.HasPrefix(pkg, "pkg:") {
 			return fmt.Errorf("malformed package %q, expecting %q", pkg, "pkg/{...}")
 		}
 
