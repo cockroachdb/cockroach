@@ -1204,7 +1204,8 @@ func TestStreamingRegionalConstraint(t *testing.T) {
 				for _, desc := range descriptors {
 					for _, replica := range desc.InternalReplicas {
 						if replica.NodeID != marsNodeID {
-							return errors.Newf("found table data located on another node %d", replica.NodeID)
+							return errors.Newf("found table data located on another node %d, desc %v",
+								replica.NodeID, desc)
 						}
 					}
 				}
