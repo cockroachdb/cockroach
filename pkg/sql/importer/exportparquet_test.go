@@ -141,7 +141,8 @@ func validateDatum(t *testing.T, expected tree.Datum, actual tree.Datum, typ *ty
 		eArr := expected.(*tree.DArray)
 		aArr := actual.(*tree.DArray)
 		for i := 0; i < eArr.Len(); i++ {
-			validateDatum(t, tree.UnwrapDOidWrapper(eArr.Array[i]), aArr.Array[i], typ.ArrayContents())
+			validateDatum(t, tree.UnwrapDOidWrapper(eArr.Array[i]),
+				tree.UnwrapDOidWrapper(aArr.Array[i]), typ.ArrayContents())
 		}
 	case types.DateFamily:
 		// pgDate.orig property doesn't matter and can cause the test to fail
