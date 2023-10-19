@@ -711,7 +711,7 @@ func addSecondaryIndexTargetsForAddColumn(
 		tempIndexColumns = append(tempIndexColumns, c)
 	})
 	for _, c := range tempIndexColumns {
-		b.Add(c)
+		b.AddTransient(c)
 	}
 	b.AddTransient(temp)
 	b.AddTransient(&scpb.IndexData{TableID: temp.TableID, IndexID: temp.IndexID})
