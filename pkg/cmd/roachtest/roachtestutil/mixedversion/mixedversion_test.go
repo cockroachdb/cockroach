@@ -16,8 +16,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
 )
 
@@ -103,14 +103,14 @@ func Test_choosePreviousReleases(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			mvt := newTest()
 			mvt._arch = &tc.arch
-			mvt.predecessorFunc = func(_ *rand.Rand, _ *version.Version, _ int) ([]string, error) {
-				return tc.predecessorHistory, tc.predecessorErr
+			mvt.predecessorFunc = func(_ *rand.Rand, _ *clusterupgrade.Version, _ int) ([]*clusterupgrade.Version, error) {
+				return parseVersions(tc.predecessorHistory), tc.predecessorErr
 			}
 
 			releases, err := mvt.choosePreviousReleases()
 			if tc.expectedErr == "" {
 				require.NoError(t, err)
-				require.Equal(t, tc.expectedReleases, releases)
+				require.Equal(t, parseVersions(tc.expectedReleases), releases)
 			} else {
 				require.Error(t, err)
 				require.Equal(t, tc.expectedErr, err.Error())

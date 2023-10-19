@@ -296,7 +296,9 @@ var upgrades = []upgradebase.Upgrade{
 		createActivityUpdateJobMigration,
 		"create statement_activity and transaction_activity job",
 	),
-	firstUpgradeTowardsV23_2,
+
+	newFirstUpgrade(toCV(clusterversion.V23_2Start)),
+
 	upgrade.NewTenantUpgrade(
 		"enable partially visible indexes",
 		toCV(clusterversion.V23_2_PartiallyVisibleIndexes),
@@ -333,23 +335,12 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		systemExecInsightsTableMigration,
 	),
+
+	newFirstUpgrade(toCV(clusterversion.V24_1Start)),
+
+	// Note: when starting a new release version, the first upgrade (for
+	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
-
-var (
-	firstUpgradeTowardsV23_2 = upgrade.NewTenantUpgrade(
-		"prepare upgrade to v23.2 release",
-		toCV(clusterversion.V23_2Start),
-		FirstUpgradeFromReleasePrecondition,
-		FirstUpgradeFromRelease,
-	)
-
-	// This slice must contain all upgrades bound to V??_?Start cluster
-	// version keys. These should have FirstUpgradeFromReleasePrecondition as a
-	// precondition and FirstUpgradeFromRelease as the upgrade function.
-	firstUpgradesAfterPreExistingReleases = []upgradebase.Upgrade{
-		firstUpgradeTowardsV23_2,
-	}
-)
 
 func init() {
 	for _, m := range upgrades {

@@ -183,8 +183,8 @@ var (
 // sanitizeVersionForBackup takes the string representation of a
 // version and removes any characters that would not be allowed in a
 // backup destination.
-func sanitizeVersionForBackup(v string) string {
-	return invalidVersionRE.ReplaceAllString(clusterupgrade.VersionMsg(v), "")
+func sanitizeVersionForBackup(v *clusterupgrade.Version) string {
+	return invalidVersionRE.ReplaceAllString(v.String(), "")
 }
 
 // hasInternalSystemJobs returns true if the cluster is expected to
@@ -1414,7 +1414,7 @@ func (mvb *mixedVersionBackup) maybeTakePreviousVersionBackup(
 
 	previousVersion := h.Context().FromVersion
 	label := fmt.Sprintf("before upgrade in %s", sanitizeVersionForBackup(previousVersion))
-	allPrevVersionNodes := labeledNodes{Nodes: mvb.roachNodes, Version: previousVersion}
+	allPrevVersionNodes := labeledNodes{Nodes: mvb.roachNodes, Version: previousVersion.String()}
 	executeOnAllNodesSpec := backupSpec{PauseProbability: neverPause, Plan: allPrevVersionNodes, Execute: allPrevVersionNodes}
 	return mvb.createBackupCollection(ctx, l, rng, executeOnAllNodesSpec, executeOnAllNodesSpec, h, label)
 }
@@ -2152,9 +2152,9 @@ func (bc *backupCollection) verifyBackupCollection(
 // specified version binary. This is done before we attempt restoring a
 // full cluster backup.
 func (u *CommonTestUtils) resetCluster(
-	ctx context.Context, l *logger.Logger, version string, expectDeathsFn func(int),
+	ctx context.Context, l *logger.Logger, version *clusterupgrade.Version, expectDeathsFn func(int),
 ) error {
-	l.Printf("resetting cluster using version %q", clusterupgrade.VersionMsg(version))
+	l.Printf("resetting cluster using version %q", version.String())
 	expectDeathsFn(len(u.roachNodes))
 	if err := u.cluster.WipeE(ctx, l, true /* preserveCerts */, u.roachNodes); err != nil {
 		return fmt.Errorf("failed to wipe cluster: %w", err)
@@ -2228,12 +2228,11 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 	}
 
 	var restoreErrors []error
-	verify := func(version string) {
-		v := clusterupgrade.VersionMsg(version)
-		l.Printf("%s: verifying %d collections created during this test", v, len(mvb.collections))
+	verify := func(version *clusterupgrade.Version) {
+		l.Printf("%s: verifying %d collections created during this test", version.String(), len(mvb.collections))
 
 		for _, collection := range mvb.collections {
-			if version != clusterupgrade.MainVersion && strings.Contains(collection.name, finalizingLabel) {
+			if !version.IsCurrent() && strings.Contains(collection.name, finalizingLabel) {
 				// Do not attempt to restore, in the previous version, a
 				// backup that was taken while the cluster was finalizing, as
 				// that will most likely fail (the backup version will be past
@@ -2353,7 +2352,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 			)
 			testRNG := mvt.RNG()
 
-			uploadVersion(ctx, t, c, workloadNode, clusterupgrade.MainVersion)
+			uploadVersion(ctx, t, c, workloadNode, clusterupgrade.CurrentVersion())
 
 			dbs := []string{"bank", "tpcc"}
 			backupTest, err := newMixedVersionBackup(t, c, roachNodes, dbs)

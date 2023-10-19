@@ -20,10 +20,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
 func registerDeclSchemaChangeCompatMixedVersions(r registry.Registry) {
@@ -37,7 +37,7 @@ func registerDeclSchemaChangeCompatMixedVersions(r registry.Registry) {
 			if c.Cloud() != spec.GCE && !c.IsLocal() {
 				t.Skip("uses gs://cockroach-corpus; see https://github.com/cockroachdb/cockroach/issues/105968")
 			}
-			runDeclSchemaChangeCompatMixedVersions(ctx, t, c, t.BuildVersion())
+			runDeclSchemaChangeCompatMixedVersions(ctx, t, c)
 		},
 	})
 }
@@ -129,25 +129,42 @@ func validateCorpusFile(
 //  3. Elements from the current version are backwards compatible with the same
 //     version (specifically focused on master during development before
 //     a version bump).
-func runDeclSchemaChangeCompatMixedVersions(
-	ctx context.Context, t test.Test, c cluster.Cluster, buildVersion *version.Version,
-) {
-	versionRegex := regexp.MustCompile(`(\d+\.\d+)`)
-	predecessorVersion, err := release.LatestPredecessor(buildVersion)
+func runDeclSchemaChangeCompatMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
+	currentVersion := clusterupgrade.CurrentVersion()
+	predecessorVersionStr, err := release.LatestPredecessor(currentVersion.Version)
 	if err != nil {
 		t.Fatal(err)
 	}
+	predecessorVersion := clusterupgrade.MustParseVersion(predecessorVersionStr)
+
+	releaseSeries := func(v *clusterupgrade.Version) string {
+		return fmt.Sprintf("%d.%d", v.Major(), v.Minor())
+	}
+
 	// Test definitions which indicates which version of the corpus to fetch,
 	// and the binary to validate against.
 	compatTests := []struct {
 		testName               string
-		binaryVersion          string
+		binaryVersion          *clusterupgrade.Version
 		corpusVersion          string
 		alternateCorpusVersion string
 	}{
-		{"backwards compatibility", predecessorVersion, fmt.Sprintf("mixed-release-%d.%d", buildVersion.Major(), buildVersion.Minor()), "mixed-master"},
-		{"forwards compatibility", "", fmt.Sprintf("release-%s", versionRegex.FindStringSubmatch(predecessorVersion)[0]), ""},
-		{"same version", "", fmt.Sprintf("release-%s", versionRegex.FindStringSubmatch(buildVersion.String())[0]), "master"},
+		{
+			testName:               "backwards compatibility",
+			binaryVersion:          predecessorVersion,
+			corpusVersion:          fmt.Sprintf("mixed-release-%s", releaseSeries(currentVersion)),
+			alternateCorpusVersion: "mixed-master",
+		},
+		{
+			testName:      "forwards compatibility",
+			binaryVersion: currentVersion,
+			corpusVersion: fmt.Sprintf("release-%s", releaseSeries(predecessorVersion)),
+		},
+		{
+			testName:      "same version",
+			binaryVersion: currentVersion,
+			corpusVersion: fmt.Sprintf("release-%s", releaseSeries(currentVersion)),
+		},
 	}
 	for _, testInfo := range compatTests {
 		binaryName := uploadVersion(ctx, t, c, c.All(), testInfo.binaryVersion)

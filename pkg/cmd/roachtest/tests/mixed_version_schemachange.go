@@ -90,10 +90,11 @@ func runSchemaChangeMixedVersions(
 	concurrency int,
 	buildVersion *version.Version,
 ) {
-	predecessorVersion, err := release.LatestPredecessor(buildVersion)
+	predecessorVersionStr, err := release.LatestPredecessor(buildVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
+	predecessorVersion := clusterupgrade.MustParseVersion(predecessorVersionStr)
 
 	schemaChangeStep := runSchemaChangeWorkloadStep(c.All().RandNode()[0], maxOps, concurrency)
 	schemaChangeValidationStep := runSchemaChangeDoctorValidate()
@@ -120,16 +121,16 @@ func runSchemaChangeMixedVersions(
 		// Roll the nodes into the new version one by one, while repeatedly running
 		// schema changes. We use an empty string for the version below, which means
 		// use the main ./cockroach binary (i.e. the one being tested in this run).
-		binaryUpgradeStep(c.Node(3), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Node(3), clusterupgrade.CurrentVersion()),
 		schemaChangeStep,
 		schemaChangeValidationStep,
-		binaryUpgradeStep(c.Node(2), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Node(2), clusterupgrade.CurrentVersion()),
 		schemaChangeStep,
 		schemaChangeValidationStep,
-		binaryUpgradeStep(c.Node(1), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Node(1), clusterupgrade.CurrentVersion()),
 		schemaChangeStep,
 		schemaChangeValidationStep,
-		binaryUpgradeStep(c.Node(4), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Node(4), clusterupgrade.CurrentVersion()),
 		schemaChangeStep,
 		schemaChangeValidationStep,
 
@@ -149,16 +150,16 @@ func runSchemaChangeMixedVersions(
 		schemaChangeValidationStep,
 
 		// Roll nodes forward and finalize upgrade.
-		binaryUpgradeStep(c.Node(4), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Node(4), clusterupgrade.CurrentVersion()),
 		schemaChangeStep,
 		schemaChangeValidationStep,
-		binaryUpgradeStep(c.Node(3), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Node(3), clusterupgrade.CurrentVersion()),
 		schemaChangeStep,
 		schemaChangeValidationStep,
-		binaryUpgradeStep(c.Node(1), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Node(1), clusterupgrade.CurrentVersion()),
 		schemaChangeStep,
 		schemaChangeValidationStep,
-		binaryUpgradeStep(c.Node(2), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Node(2), clusterupgrade.CurrentVersion()),
 		schemaChangeStep,
 		schemaChangeValidationStep,
 

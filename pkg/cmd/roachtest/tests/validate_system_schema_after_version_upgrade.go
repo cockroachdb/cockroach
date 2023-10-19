@@ -37,10 +37,11 @@ func registerValidateSystemSchemaAfterVersionUpgrade(r registry.Registry) {
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			predecessorVersion, err := release.LatestPredecessor(t.BuildVersion())
+			predecessorVersionStr, err := release.LatestPredecessor(t.BuildVersion())
 			if err != nil {
 				t.Fatal(err)
 			}
+			predecessorVersion := clusterupgrade.MustParseVersion(predecessorVersionStr)
 
 			// Obtain system table definitions with `SHOW CREATE ALL TABLES` in the SYSTEM db.
 			obtainSystemSchema := func(ctx context.Context, t test.Test, u *versionUpgradeTest, node int) string {
@@ -104,7 +105,7 @@ func registerValidateSystemSchemaAfterVersionUpgrade(r registry.Registry) {
 
 			u := newVersionUpgradeTest(c,
 				// Start the node with the latest binary version.
-				uploadAndStart(c.Node(1), clusterupgrade.MainVersion),
+				uploadAndStart(c.Node(1), clusterupgrade.CurrentVersion()),
 
 				// Obtain expected output from the node.
 				obtainSystemSchemaStep(1, &expected),
@@ -116,7 +117,7 @@ func registerValidateSystemSchemaAfterVersionUpgrade(r registry.Registry) {
 				uploadAndStart(c.Node(1), predecessorVersion),
 
 				// Upgrade the node version.
-				binaryUpgradeStep(c.Node(1), clusterupgrade.MainVersion),
+				binaryUpgradeStep(c.Node(1), clusterupgrade.CurrentVersion()),
 
 				// Wait for the cluster version to also bump up to make sure the migration logic is run.
 				waitForUpgradeStep(c.Node(1)),
