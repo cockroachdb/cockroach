@@ -80,7 +80,7 @@ func init() {
 // Conflict rules are as described in the compatibility matrix in locking.pb.go.
 func Conflicts(m1, m2 Mode, sv *settings.Values) bool {
 	if m1.Empty() || m2.Empty() {
-		panic("cannot check conflict for uninitialized locks")
+		return false // no conflict with empty lock modes
 	}
 	if m1.Strength > m2.Strength {
 		// Conflict rules are symmetric, so reduce the number of cases we need to
@@ -125,6 +125,15 @@ func Conflicts(m1, m2 Mode, sv *settings.Values) bool {
 // Empty returns true if m is an empty (uninitialized) lock Mode.
 func (m *Mode) Empty() bool {
 	return m.Strength == None && m.Timestamp.IsEmpty()
+}
+
+// Weaker returns true if the receiver conflicts with fewer requests than the
+// Mode supplied.
+func (m Mode) Weaker(o Mode) bool {
+	if m.Strength == o.Strength {
+		return !m.Timestamp.Less(o.Timestamp) // lower timestamp conflicts with more requests
+	}
+	return m.Strength < o.Strength
 }
 
 // MakeModeNone constructs a Mode with strength None.
