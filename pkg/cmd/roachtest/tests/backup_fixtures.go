@@ -264,7 +264,7 @@ func registerBackupFixtures(r registry.Registry) {
 					backupSpecs: backupSpecs{
 						backupsIncluded: 4,
 						workload:        tpceRestore{customers: 1000}}}),
-			initFromBackupSpecs: backupSpecs{version: "v22.2.1", backupProperties: "inc-count=48"},
+			initFromBackupSpecs: backupSpecs{version: "v22.2.1", backupsIncluded: 48},
 			timeout:             2 * time.Hour,
 			clouds:              registry.AllClouds,
 			suites:              registry.Suites(registry.Weekly),
@@ -277,7 +277,7 @@ func registerBackupFixtures(r registry.Registry) {
 				backupSpecs: backupSpecs{
 					workload: tpceRestore{customers: 500000}}}),
 			timeout:             25 * time.Hour,
-			initFromBackupSpecs: backupSpecs{version: "v22.2.1", backupProperties: "inc-count=48"},
+			initFromBackupSpecs: backupSpecs{version: "v22.2.1", backupsIncluded: 48},
 			clouds:              registry.AllClouds,
 			suites:              registry.Suites(registry.Weekly),
 			// add the weekly tags to allow an over 24 hour timeout.
@@ -290,7 +290,7 @@ func registerBackupFixtures(r registry.Registry) {
 			backup: makeBackupFixtureSpecs(scheduledBackupSpecs{
 				backupSpecs: backupSpecs{
 					workload: tpceRestore{customers: 2000000}}}),
-			initFromBackupSpecs: backupSpecs{version: "v22.2.1", backupProperties: "inc-count=48"},
+			initFromBackupSpecs: backupSpecs{version: "v22.2.1", backupsIncluded: 48},
 			timeout:             48 * time.Hour,
 			clouds:              registry.AllClouds,
 			suites:              registry.Suites(registry.Weekly),
