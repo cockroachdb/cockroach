@@ -188,7 +188,7 @@ func assertRecomputedStats(
 ) {
 	t.Helper()
 
-	ms, err := rditer.ComputeStatsForRange(desc, r, nowNanos)
+	ms, err := rditer.ComputeStatsForRange(context.Background(), desc, r, nowNanos)
 	require.NoError(t, err)
 
 	// When used with a real wall clock these will not be the same, since it

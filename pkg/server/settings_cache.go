@@ -124,14 +124,11 @@ func storeCachedSettingsKVs(ctx context.Context, eng storage.Engine, kvs []roach
 }
 
 // loadCachedSettingsKVs loads locally stored cached settings.
-func loadCachedSettingsKVs(_ context.Context, eng storage.Engine) ([]roachpb.KeyValue, error) {
+func loadCachedSettingsKVs(ctx context.Context, eng storage.Engine) ([]roachpb.KeyValue, error) {
 	var settingsKVs []roachpb.KeyValue
-	if err := eng.MVCCIterate(
-		keys.LocalStoreCachedSettingsKeyMin,
-		keys.LocalStoreCachedSettingsKeyMax,
-		storage.MVCCKeyAndIntentsIterKind,
-		storage.IterKeyTypePointsOnly,
-		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+	if err := eng.MVCCIterate(ctx, keys.LocalStoreCachedSettingsKeyMin,
+		keys.LocalStoreCachedSettingsKeyMax, storage.MVCCKeyAndIntentsIterKind,
+		storage.IterKeyTypePointsOnly, func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
 			settingKey, err := keys.DecodeStoreCachedSettingsKey(kv.Key.Key)
 			if err != nil {
 				return err
@@ -145,8 +142,7 @@ func loadCachedSettingsKVs(_ context.Context, eng storage.Engine) ([]roachpb.Key
 				Value: roachpb.Value{RawBytes: meta.RawBytes},
 			})
 			return nil
-		},
-	); err != nil {
+		}); err != nil {
 		return nil, err
 	}
 	return settingsKVs, nil

@@ -50,6 +50,8 @@ type ReplicaDataIteratorOptions struct {
 type ReplicaMVCCDataIterator struct {
 	ReplicaDataIteratorOptions
 
+	// ctx is used for creating MVCCIterator.
+	ctx      context.Context
 	reader   storage.Reader
 	curIndex int
 	spans    []roachpb.Span
@@ -200,7 +202,10 @@ func makeRangeLocalKeySpan(sp roachpb.RSpan) roachpb.Span {
 // TODO(erikgrinaker): ReplicaMVCCDataIterator does not support MVCC range keys.
 // This should be deprecated in favor of e.g. IterateReplicaKeySpans.
 func NewReplicaMVCCDataIterator(
-	d *roachpb.RangeDescriptor, reader storage.Reader, opts ReplicaDataIteratorOptions,
+	ctx context.Context,
+	d *roachpb.RangeDescriptor,
+	reader storage.Reader,
+	opts ReplicaDataIteratorOptions,
 ) *ReplicaMVCCDataIterator {
 	if !reader.ConsistentIterators() {
 		panic("ReplicaMVCCDataIterator needs a Reader that provides ConsistentIterators")
@@ -211,6 +216,7 @@ func NewReplicaMVCCDataIterator(
 	}
 	ri := &ReplicaMVCCDataIterator{
 		ReplicaDataIteratorOptions: opts,
+		ctx:                        ctx,
 		reader:                     reader,
 		spans:                      spans,
 	}
@@ -233,13 +239,11 @@ func (ri *ReplicaMVCCDataIterator) tryCloseAndCreateIter() {
 			return
 		}
 		var err error
-		ri.it, err = ri.reader.NewMVCCIterator(
-			ri.IterKind,
-			storage.IterOptions{
-				LowerBound: ri.spans[ri.curIndex].Key,
-				UpperBound: ri.spans[ri.curIndex].EndKey,
-				KeyTypes:   ri.KeyTypes,
-			})
+		ri.it, err = ri.reader.NewMVCCIterator(ri.ctx, ri.IterKind, storage.IterOptions{
+			LowerBound: ri.spans[ri.curIndex].Key,
+			UpperBound: ri.spans[ri.curIndex].EndKey,
+			KeyTypes:   ri.KeyTypes,
+		})
 		if err != nil {
 			ri.err = err
 			return
@@ -371,6 +375,7 @@ func (ri *ReplicaMVCCDataIterator) HasPointAndRange() (bool, bool) {
 //
 // Must use a reader with consistent iterators.
 func IterateReplicaKeySpans(
+	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	reader storage.Reader,
 	replicatedOnly bool,
@@ -401,7 +406,7 @@ func IterateReplicaKeySpans(
 	for _, span := range spans {
 		for _, keyType := range keyTypes {
 			err := func() error {
-				iter, err := reader.NewEngineIterator(storage.IterOptions{
+				iter, err := reader.NewEngineIterator(ctx, storage.IterOptions{
 					KeyTypes:   keyType,
 					LowerBound: span.Key,
 					UpperBound: span.EndKey,
@@ -467,6 +472,7 @@ type IterateOptions struct {
 // way to IterateReplicaKeySpans, but uses MVCCIterator and gives additional
 // options to create reverse iterators and to combine keys are ranges.
 func IterateMVCCReplicaKeySpans(
+	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	reader storage.Reader,
 	options IterateOptions,
@@ -492,11 +498,12 @@ func IterateMVCCReplicaKeySpans(
 	for _, span := range spans {
 		for _, keyType := range keyTypes {
 			err := func() error {
-				iter, err := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
-					LowerBound: span.Key,
-					UpperBound: span.EndKey,
-					KeyTypes:   keyType,
-				})
+				iter, err := reader.NewMVCCIterator(ctx, storage.MVCCKeyAndIntentsIterKind,
+					storage.IterOptions{
+						LowerBound: span.Key,
+						UpperBound: span.EndKey,
+						KeyTypes:   keyType,
+					})
 				if err != nil {
 					return err
 				}

@@ -35,13 +35,11 @@ import (
 func hashRange(t *testing.T, reader storage.Reader, start, end roachpb.Key) []byte {
 	t.Helper()
 	h := sha256.New()
-	require.NoError(t, reader.MVCCIterate(
-		start, end, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
-		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
-			h.Write(kv.Key.Key)
-			h.Write(kv.Value)
-			return nil
-		}))
+	require.NoError(t, reader.MVCCIterate(context.Background(), start, end, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly, func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+		h.Write(kv.Key.Key)
+		h.Write(kv.Value)
+		return nil
+	}))
 	return h.Sum(nil)
 }
 
@@ -111,7 +109,7 @@ func TestCmdRevertRange(t *testing.T) {
 	cArgs := batcheval.CommandArgs{Header: kvpb.Header{RangeID: desc.RangeID, Timestamp: tsReq, MaxSpanRequestKeys: 2}}
 	evalCtx := &batcheval.MockEvalCtx{Desc: &desc, Clock: hlc.NewClockForTesting(nil), Stats: stats}
 	cArgs.EvalCtx = evalCtx.EvalContext()
-	afterStats, err := storage.ComputeStats(eng, keys.LocalMax, keys.MaxKey, 0)
+	afterStats, err := storage.ComputeStats(ctx, eng, keys.LocalMax, keys.MaxKey, 0)
 	require.NoError(t, err)
 	for _, tc := range []struct {
 		name     string
@@ -166,7 +164,7 @@ func TestCmdRevertRange(t *testing.T) {
 			}
 			evalStats := afterStats
 			evalStats.Add(*cArgs.Stats)
-			realStats, err := storage.ComputeStats(batch, keys.LocalMax, keys.MaxKey, evalStats.LastUpdateNanos)
+			realStats, err := storage.ComputeStats(ctx, batch, keys.LocalMax, keys.MaxKey, evalStats.LastUpdateNanos)
 			require.NoError(t, err)
 			require.Equal(t, realStats, evalStats)
 		})

@@ -642,7 +642,8 @@ func CalcReplicaDigest(
 	// all of the replicated key space.
 	var result ReplicaDigest
 	if !statsOnly {
-		ms, err := rditer.ComputeStatsForRangeWithVisitors(&desc, snap, 0 /* nowNanos */, visitors)
+		ms, err := rditer.ComputeStatsForRangeWithVisitors(
+			ctx, &desc, snap, 0 /* nowNanos */, visitors)
 		// Consume the remaining quota borrowed in the visitors. Do it even on
 		// iteration error, but prioritize returning the latter if it occurs.
 		if wErr := limiter.WaitN(ctx, batchSize); wErr != nil && err == nil {
