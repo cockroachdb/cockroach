@@ -1141,6 +1141,111 @@ num=1
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
 
+# ------------------------------------------------------------------------------
+# Tests where both a shared lock and (replicated) intent exist on a key, and the
+# intent is forgotten because of a lock update. In such cases, compatible
+# waiting requests should be allowed to proceed. They might re-discover the
+# intent, but that's okay -- we don't want requests waiting in the lock table if
+# the lock that was blocking them isn't being tracked.
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req59 txn=txn1 ts=10 spans=shared@a
+----
+
+scan r=req59
+----
+start-waiting: false
+
+acquire r=req59 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req60 txn=txn2 ts=10 spans=shared@a
+----
+
+scan r=req60
+----
+start-waiting: false
+
+add-discovered k=a durability=r strength=intent txn=txn1 r=req60
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent], unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: false req: 60, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+
+scan r=req60
+----
+start-waiting: true
+
+new-request r=req61 txn=txn3 ts=10 spans=shared@a
+----
+
+scan r=req61
+----
+start-waiting: true
+
+new-request r=req62 txn=none ts=10 spans=shared@a
+----
+
+scan r=req62
+----
+start-waiting: true
+
+new-request r=req63 txn=txn4 ts=10 spans=exclusive@a
+----
+
+scan r=req63
+----
+start-waiting: true
+
+new-request r=req64 txn=txn5 ts=10 spans=none@a
+----
+
+scan r=req64
+----
+start-waiting: true
+
+new-request r=req65 txn=txn5 ts=10 spans=none@a
+----
+
+scan r=req65
+----
+start-waiting: true
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent], unrepl [(str: Shared seq: 0)]
+   waiting readers:
+    req: 65, txn: 00000000-0000-0000-0000-000000000005
+    req: 64, txn: 00000000-0000-0000-0000-000000000005
+   queued locking requests:
+    active: true req: 60, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 61, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 62, strength: Shared, txn: none
+    active: true req: 63, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+   distinguished req: 60
+
+update txn=txn1 ts=11,0 epoch=0 span=a
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: false req: 60, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: false req: 61, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 63, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+   distinguished req: 63
+
 # TODO(arul): (non-exhaustive list) of shared lock state transitions that aren't
 # currently supported (and we need to add support for):
 #
