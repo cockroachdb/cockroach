@@ -456,13 +456,13 @@ func AggregatesCanMerge(inner, outer Operator) bool {
 func AggregateIgnoresDuplicates(op Operator) bool {
 	switch op {
 	case AnyNotNullAggOp, BitAndAggOp, BitOrAggOp, BoolAndOp, BoolOrOp,
-		ConstAggOp, ConstNotNullAggOp, FirstAggOp, MaxOp, MinOp, STExtentOp, STUnionOp:
+		ConstAggOp, ConstNotNullAggOp, FirstAggOp, MaxOp, MinOp, STExtentOp:
 		return true
 
 	case ArrayAggOp, ArrayCatAggOp, AvgOp, ConcatAggOp, CountOp, CorrOp, CountRowsOp,
 		SumIntOp, SumOp, SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, JsonAggOp, JsonbAggOp,
 		StringAggOp, PercentileDiscOp, PercentileContOp, StdDevPopOp, STMakeLineOp,
-		VarPopOp, JsonObjectAggOp, JsonbObjectAggOp, STCollectOp, CovarPopOp,
+		VarPopOp, JsonObjectAggOp, JsonbObjectAggOp, STCollectOp, STUnionOp, CovarPopOp,
 		CovarSampOp, RegressionAvgXOp, RegressionAvgYOp, RegressionInterceptOp,
 		RegressionR2Op, RegressionSlopeOp, RegressionSXXOp, RegressionSXYOp,
 		RegressionSYYOp, RegressionCountOp, MergeStatsMetadataOp, MergeStatementStatsOp,
