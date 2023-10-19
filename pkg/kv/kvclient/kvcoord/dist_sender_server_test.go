@@ -2289,7 +2289,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				if err := txn.Put(ctx, "a", "put"); err != nil {
 					return err
 				}
-				if err := txn.Step(ctx); err != nil {
+				if err := txn.Step(ctx, true /* allowReadTimestampStep */); err != nil {
 					return err
 				}
 				_, err := txn.Get(ctx, "a2")
@@ -2321,7 +2321,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				if err := txn.Put(ctx, "a", "put"); err != nil {
 					return err
 				}
-				if err := txn.Step(ctx); err != nil {
+				if err := txn.Step(ctx, true /* allowReadTimestampStep */); err != nil {
 					return err
 				}
 				_, err := txn.Scan(ctx, "a2", "a3", 0)
@@ -2353,7 +2353,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				if err := txn.Put(ctx, "a", "put"); err != nil {
 					return err
 				}
-				if err := txn.Step(ctx); err != nil {
+				if err := txn.Step(ctx, true /* allowReadTimestampStep */); err != nil {
 					return err
 				}
 				b := txn.NewBatch()
@@ -2386,7 +2386,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				if err := txn.Put(ctx, "a", "put"); err != nil {
 					return err
 				}
-				if err := txn.Step(ctx); err != nil {
+				if err := txn.Step(ctx, true /* allowReadTimestampStep */); err != nil {
 					return err
 				}
 				b := txn.NewBatch()
@@ -2504,7 +2504,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				if err := txn.Put(ctx, "a", "put"); err != nil {
 					return err
 				}
-				if err := txn.Step(ctx); err != nil {
+				if err := txn.Step(ctx, true /* allowReadTimestampStep */); err != nil {
 					return err
 				}
 				// Make the final batch large enough such that if we accounted
@@ -2556,7 +2556,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				if _, err := txn.DelRange(ctx, "a", "b", false /* returnKeys */); err != nil {
 					return err
 				}
-				if err := txn.Step(ctx); err != nil {
+				if err := txn.Step(ctx, true /* allowReadTimestampStep */); err != nil {
 					return err
 				}
 				// Make the final batch large enough such that if we accounted
@@ -2669,7 +2669,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				if err := txn.Put(ctx, "a", "put"); err != nil {
 					return err
 				}
-				if err := txn.Step(ctx); err != nil {
+				if err := txn.Step(ctx, true /* allowReadTimestampStep */); err != nil {
 					return err
 				}
 				// Get from "b" to establish a read span. It is important that we
@@ -2678,7 +2678,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				if _, err := txn.Get(ctx, "b"); err != nil {
 					return err
 				}
-				if err := txn.Step(ctx); err != nil {
+				if err := txn.Step(ctx, true /* allowReadTimestampStep */); err != nil {
 					return err
 				}
 				// Now, Put to "b", which would have thrown a write-too-old error had
@@ -2722,7 +2722,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				if err := txn.Put(ctx, "a", "txn-value1"); err != nil {
 					return err
 				}
-				if err := txn.Step(ctx); err != nil {
+				if err := txn.Step(ctx, true /* allowReadTimestampStep */); err != nil {
 					return err
 				}
 				// Write again to make sure the timestamp of the second intent
@@ -3892,7 +3892,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				} else if !bytes.Equal(b, []byte("newval")) {
 					return fmt.Errorf("expected \"newval\", got: %v", b)
 				}
-				if err := txn.Step(ctx); err != nil {
+				if err := txn.Step(ctx, true /* allowReadTimestampStep */); err != nil {
 					return err
 				}
 				return txn.Commit(ctx)
@@ -3989,7 +3989,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				if err := txn.Put(ctx, "a", "put"); err != nil {
 					return err
 				}
-				if err := txn.Step(ctx); err != nil {
+				if err := txn.Step(ctx, true /* allowReadTimestampStep */); err != nil {
 					return err
 				}
 				b := txn.NewBatch()
@@ -4212,7 +4212,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			if tc.priorReads {
 				_, err := txn.Get(ctx, "prior read")
 				require.NoError(t, err, "prior read")
-				require.NoError(t, txn.Step(ctx))
+				require.NoError(t, txn.Step(ctx, true /* allowReadTimestampStep */))
 			}
 
 			if tc.afterTxnStart != nil {
@@ -4226,7 +4226,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 
 			// If the transaction is still open, step one more time before the commit.
 			if txn.IsOpen() {
-				require.NoError(t, txn.Step(ctx))
+				require.NoError(t, txn.Step(ctx, true /* allowReadTimestampStep */))
 			}
 
 			return nil
