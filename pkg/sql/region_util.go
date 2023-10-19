@@ -1739,9 +1739,9 @@ type zoneConfigForMultiRegionValidator interface {
 	getExpectedTableZoneConfig(desc catalog.TableDescriptor) (zonepb.ZoneConfig, error)
 	transitioningRegions() catpb.RegionNames
 
-	newMismatchFieldError(descType string, descName string, field string) error
-	newMissingSubzoneError(descType string, descName string, field string) error
-	newExtraSubzoneError(descType string, descName string, field string) error
+	newMismatchFieldError(descType string, descName string, mismatch zonepb.DiffWithZoneMismatch) error
+	newMissingSubzoneError(descType string, descName string, mismatch zonepb.DiffWithZoneMismatch) error
+	newExtraSubzoneError(descType string, descName string, mismatch zonepb.DiffWithZoneMismatch) error
 }
 
 // zoneConfigForMultiRegionValidatorSetInitialRegion implements
@@ -1783,21 +1783,23 @@ func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) wrapErr(err error) e
 }
 
 func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) newMismatchFieldError(
-	descType string, descName string, field string,
+	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
 ) error {
 	return v.wrapErr(
 		pgerror.Newf(
 			pgcode.InvalidObjectDefinition,
-			"zone configuration for %s %s has field %q set which will be overwritten when setting the the initial PRIMARY REGION",
+			"zone configuration for %s %s has field %q set which will be overwritten when setting the the initial PRIMARY REGION (expected=%s actual=%s)",
 			descType,
 			descName,
-			field,
+			mismatch.Field,
+			mismatch.Expected,
+			mismatch.Actual,
 		),
 	)
 }
 
 func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) newMissingSubzoneError(
-	descType string, descName string, field string,
+	descType string, descName string, _ zonepb.DiffWithZoneMismatch,
 ) error {
 	// There can never be a missing subzone as we only compare against
 	// blank zone configs.
@@ -1809,15 +1811,17 @@ func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) newMissingSubzoneErr
 }
 
 func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) newExtraSubzoneError(
-	descType string, descName string, field string,
+	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
 ) error {
 	return v.wrapErr(
 		pgerror.Newf(
 			pgcode.InvalidObjectDefinition,
-			"zone configuration for %s %s has field %q set which will be overwritten when setting the initial PRIMARY REGION",
+			"zone configuration for %s %s has field %q set which will be overwritten when setting the initial PRIMARY REGION (expected=%s actual=%s)",
 			descType,
 			descName,
-			field,
+			mismatch.Field,
+			mismatch.Expected,
+			mismatch.Actual,
 		),
 	)
 }
@@ -1862,15 +1866,17 @@ type zoneConfigForMultiRegionValidatorModifiedByUser struct {
 var _ zoneConfigForMultiRegionValidator = (*zoneConfigForMultiRegionValidatorModifiedByUser)(nil)
 
 func (v *zoneConfigForMultiRegionValidatorModifiedByUser) newMismatchFieldError(
-	descType string, descName string, field string,
+	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
 ) error {
 	return v.wrapErr(
 		pgerror.Newf(
 			pgcode.InvalidObjectDefinition,
-			"attempting to update zone configuration for %s %s which contains modified field %q",
+			"attempting to update zone configuration for %s %s which contains modified field %q (expected=%s actual=%s)",
 			descType,
 			descName,
-			field,
+			mismatch.Field,
+			mismatch.Expected,
+			mismatch.Actual,
 		),
 	)
 }
@@ -1888,7 +1894,7 @@ func (v *zoneConfigForMultiRegionValidatorModifiedByUser) wrapErr(err error) err
 }
 
 func (v *zoneConfigForMultiRegionValidatorModifiedByUser) newMissingSubzoneError(
-	descType string, descName string, field string,
+	descType string, descName string, _ zonepb.DiffWithZoneMismatch,
 ) error {
 	return v.wrapErr(
 		pgerror.Newf(
@@ -1901,15 +1907,17 @@ func (v *zoneConfigForMultiRegionValidatorModifiedByUser) newMissingSubzoneError
 }
 
 func (v *zoneConfigForMultiRegionValidatorModifiedByUser) newExtraSubzoneError(
-	descType string, descName string, field string,
+	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
 ) error {
 	return v.wrapErr(
 		pgerror.Newf(
 			pgcode.InvalidObjectDefinition,
-			"attempting to update zone config which contains an extra zone configuration for %s %s with field %s populated",
+			"attempting to update zone config which contains an extra zone configuration for %s %s with field %s populated (expected=%s actual=%s)",
 			descType,
 			descName,
-			field,
+			mismatch.Field,
+			mismatch.Expected,
+			mismatch.Actual,
 		),
 	)
 }
@@ -1923,19 +1931,21 @@ type zoneConfigForMultiRegionValidatorValidation struct {
 var _ zoneConfigForMultiRegionValidator = (*zoneConfigForMultiRegionValidatorValidation)(nil)
 
 func (v *zoneConfigForMultiRegionValidatorValidation) newMismatchFieldError(
-	descType string, descName string, field string,
+	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
 ) error {
 	return pgerror.Newf(
 		pgcode.InvalidObjectDefinition,
-		"zone configuration for %s %s contains incorrectly configured field %q",
+		"zone configuration for %s %s contains incorrectly configured field %q (expected=%s actual=%s)",
 		descType,
 		descName,
-		field,
+		mismatch.Field,
+		mismatch.Expected,
+		mismatch.Actual,
 	)
 }
 
 func (v *zoneConfigForMultiRegionValidatorValidation) newMissingSubzoneError(
-	descType string, descName string, field string,
+	descType string, descName string, _ zonepb.DiffWithZoneMismatch,
 ) error {
 	return pgerror.Newf(
 		pgcode.InvalidObjectDefinition,
@@ -1946,14 +1956,16 @@ func (v *zoneConfigForMultiRegionValidatorValidation) newMissingSubzoneError(
 }
 
 func (v *zoneConfigForMultiRegionValidatorValidation) newExtraSubzoneError(
-	descType string, descName string, field string,
+	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
 ) error {
 	return pgerror.Newf(
 		pgcode.InvalidObjectDefinition,
-		"extraneous zone configuration for %s %s with field %s populated",
+		"extraneous zone configuration for %s %s with field %s populated (expected=%s actual=%s)",
 		descType,
 		descName,
-		field,
+		mismatch.Field,
+		mismatch.Expected,
+		mismatch.Actual,
 	)
 }
 
@@ -2032,7 +2044,7 @@ func (p *planner) validateZoneConfigForMultiRegionDatabase(
 		return zoneConfigForMultiRegionValidator.newMismatchFieldError(
 			"database",
 			dbName.String(),
-			mismatch.Field,
+			mismatch,
 		)
 	}
 	return nil
@@ -2263,21 +2275,21 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 			return zoneConfigForMultiRegionValidator.newMissingSubzoneError(
 				descType,
 				name,
-				mismatch.Field,
+				mismatch,
 			)
 		}
 		if mismatch.IsExtraSubzone {
 			return zoneConfigForMultiRegionValidator.newExtraSubzoneError(
 				descType,
 				name,
-				mismatch.Field,
+				mismatch,
 			)
 		}
 
 		return zoneConfigForMultiRegionValidator.newMismatchFieldError(
 			descType,
 			name,
-			mismatch.Field,
+			mismatch,
 		)
 	}
 
