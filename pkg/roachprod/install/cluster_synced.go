@@ -396,17 +396,18 @@ func (c *SyncedCluster) newSession(
 	return newRemoteSession(l, command)
 }
 
-// Stop is used to stop cockroach on all nodes in the cluster.
+// Stop is used to stop processes or virtual clusters.
 //
-// It sends a signal to all processes that have been started with ROACHPROD env
-// var and optionally waits until the processes stop. If the virtualClusterLabel
-// is not empty, then only sql processes with a matching label are stopped.
+// It sends a signal to all processes that have been started with
+// ROACHPROD env var and optionally waits until the processes stop. If
+// the virtualClusterLabel is not empty, then only the corresponding
+// virtual cluster is stopped (stopping the corresponding sql server
+// process for separate process deployments, or stopping the service
+// for shared-process configurations.)
 //
-// When running roachprod stop without other flags, the signal is 9 (SIGKILL)
-// and wait is true.
-//
-// If maxWait is non-zero, Stop stops waiting after that approximate
-// number of seconds.
+// When Stop needs to kill a process without other flags, the signal
+// is 9 (SIGKILL) and wait is true. If maxWait is non-zero, Stop stops
+// waiting after that approximate number of seconds.
 func (c *SyncedCluster) Stop(
 	ctx context.Context,
 	l *logger.Logger,
@@ -415,20 +416,58 @@ func (c *SyncedCluster) Stop(
 	maxWait int,
 	virtualClusterLabel string,
 ) error {
+	// virtualClusterDisplay includes information about the virtual
+	// cluster associated with OS processes being stopped in this
+	// function.
 	var virtualClusterDisplay string
+	// virtualClusterName is the virtualClusterName associated with the
+	// label passed, if any.
+	var virtualClusterName string
+	// killProcesses indicates whether processed need to be stopped.
+	killProcesses := true
+
 	if virtualClusterLabel != "" {
-		virtualClusterName, sqlInstance, err := VirtualClusterInfoFromLabel(virtualClusterLabel)
+		name, sqlInstance, err := VirtualClusterInfoFromLabel(virtualClusterLabel)
 		if err != nil {
 			return err
 		}
 
-		virtualClusterDisplay = fmt.Sprintf(" virtual cluster %q, instance %d", virtualClusterName, sqlInstance)
+		services, err := c.DiscoverServices(ctx, name, ServiceTypeSQL)
+		if err != nil {
+			return err
+		}
+
+		if len(services) == 0 {
+			return fmt.Errorf("no service for virtual cluster %q", virtualClusterName)
+		}
+
+		virtualClusterName = name
+		if services[0].ServiceMode == ServiceModeShared {
+			// For shared process virtual clusters, we just stop the service
+			// via SQL.
+			killProcesses = false
+		} else {
+			virtualClusterDisplay = fmt.Sprintf(" virtual cluster %q, instance %d", virtualClusterName, sqlInstance)
+		}
+
 	}
-	display := fmt.Sprintf("%s: stopping%s", c.Name, virtualClusterDisplay)
-	if wait {
-		display += " and waiting"
+
+	if killProcesses {
+		display := fmt.Sprintf("%s: stopping%s", c.Name, virtualClusterDisplay)
+		if wait {
+			display += " and waiting"
+		}
+		return c.kill(ctx, l, "stop", display, sig, wait, maxWait, virtualClusterLabel)
+	} else {
+		res, err := c.ExecSQL(ctx, l, c.Nodes[:1], "", 0, []string{
+			"-e", fmt.Sprintf("ALTER TENANT '%s' STOP SERVICE", virtualClusterName),
+		})
+		if err != nil || res[0].Err != nil {
+			return err
+		}
 	}
-	return c.kill(ctx, l, "stop", display, sig, wait, maxWait, virtualClusterLabel)
+
+	return nil
 }
 
 // Signal sends a signal to the CockroachDB process.
@@ -1654,7 +1693,7 @@ tar cvf %[3]s certs
 // DistributeTenantCerts will generate and distribute certificates to all of the
 // nodes, using the host cluster to generate tenant certificates.
 func (c *SyncedCluster) DistributeTenantCerts(
-	ctx context.Context, l *logger.Logger, hostCluster *SyncedCluster, tenantID int,
+	ctx context.Context, l *logger.Logger, hostCluster *SyncedCluster, virtualClusterID int,
 ) error {
 	if hostCluster.checkForTenantCertificates(ctx, l) {
 		return nil
@@ -1669,7 +1708,7 @@ func (c *SyncedCluster) DistributeTenantCerts(
 		return err
 	}
 
-	if err := hostCluster.createTenantCertBundle(ctx, l, tenantCertsTarName, tenantID, nodeNames); err != nil {
+	if err := hostCluster.createTenantCertBundle(ctx, l, tenantCertsTarName, virtualClusterID, nodeNames); err != nil {
 		return err
 	}
 
@@ -1688,7 +1727,11 @@ func (c *SyncedCluster) DistributeTenantCerts(
 // This function assumes it is running on a host cluster node that already has
 // had the main cert bundle created.
 func (c *SyncedCluster) createTenantCertBundle(
-	ctx context.Context, l *logger.Logger, bundleName string, tenantID int, nodeNames []string,
+	ctx context.Context,
+	l *logger.Logger,
+	bundleName string,
+	virtualClusterID int,
+	nodeNames []string,
 ) error {
 	display := fmt.Sprintf("%s: initializing tenant certs", c.Name)
 	return c.Parallel(ctx, l, c.Nodes[0:1], func(ctx context.Context, node Node) (*RunResultDetails, error) {
@@ -1718,7 +1761,7 @@ tar cvf %[4]s $CERT_DIR
 `,
 			cockroachNodeBinary(c, node),
 			strings.Join(nodeNames, " "),
-			tenantID,
+			virtualClusterID,
 			bundleName,
 		)
 
@@ -2543,11 +2586,7 @@ func (c *SyncedCluster) pgurls(
 		if err != nil {
 			return nil, err
 		}
-		sharedClusterName := ""
-		if desc.ServiceMode == ServiceModeShared {
-			sharedClusterName = virtualClusterName
-		}
-		m[node] = c.NodeURL(host, desc.Port, sharedClusterName)
+		m[node] = c.NodeURL(host, desc.Port, virtualClusterName, desc.ServiceMode)
 	}
 	return m, nil
 }
@@ -2929,7 +2968,7 @@ func (c *SyncedCluster) Init(ctx context.Context, l *logger.Logger, node Node) e
 		return errors.WithDetail(errors.CombineErrors(err, res.Err), "install.Init() failed: unable to initialize cluster.")
 	}
 
-	if res, err := c.setClusterSettings(ctx, l, node); err != nil || (res != nil && res.Err != nil) {
+	if res, err := c.setClusterSettings(ctx, l, node, ""); err != nil || (res != nil && res.Err != nil) {
 		return errors.WithDetail(errors.CombineErrors(err, res.Err), "install.Init() failed: unable to set cluster settings.")
 	}
 
