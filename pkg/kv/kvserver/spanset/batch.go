@@ -464,10 +464,8 @@ func (s spanSetReader) Closed() bool {
 }
 
 func (s spanSetReader) MVCCIterate(
-	start, end roachpb.Key,
-	iterKind storage.MVCCIterKind,
-	keyTypes storage.IterKeyType,
-	f func(storage.MVCCKeyValue, storage.MVCCRangeKeyStack) error,
+	ctx context.Context, start, end roachpb.Key, iterKind storage.MVCCIterKind,
+	keyTypes storage.IterKeyType, f func(storage.MVCCKeyValue, storage.MVCCRangeKeyStack) error,
 ) error {
 	if s.spansOnly {
 		if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
@@ -478,13 +476,11 @@ func (s spanSetReader) MVCCIterate(
 			return err
 		}
 	}
-	return s.r.MVCCIterate(start, end, iterKind, keyTypes, f)
+	return s.r.MVCCIterate(ctx, start, end, iterKind, keyTypes, f)
 }
 
-func (s spanSetReader) NewMVCCIterator(
-	iterKind storage.MVCCIterKind, opts storage.IterOptions,
-) (storage.MVCCIterator, error) {
-	mvccIter, err := s.r.NewMVCCIterator(iterKind, opts)
+func (s spanSetReader) NewMVCCIterator(ctx context.Context, iterKind storage.MVCCIterKind, opts storage.IterOptions) (storage.MVCCIterator, error) {
+	mvccIter, err := s.r.NewMVCCIterator(ctx, iterKind, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -494,8 +490,8 @@ func (s spanSetReader) NewMVCCIterator(
 	return NewIteratorAt(mvccIter, s.spans, s.ts), nil
 }
 
-func (s spanSetReader) NewEngineIterator(opts storage.IterOptions) (storage.EngineIterator, error) {
-	engineIter, err := s.r.NewEngineIterator(opts)
+func (s spanSetReader) NewEngineIterator(ctx context.Context, opts storage.IterOptions) (storage.EngineIterator, error) {
+	engineIter, err := s.r.NewEngineIterator(ctx, opts)
 	if err != nil {
 		return nil, err
 	}

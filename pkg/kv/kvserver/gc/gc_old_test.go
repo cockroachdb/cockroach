@@ -51,7 +51,7 @@ func runGCOld(
 	cleanupTxnIntentsAsyncFn CleanupTxnIntentsAsyncFunc,
 ) (Info, error) {
 
-	iter := rditer.NewReplicaMVCCDataIterator(desc, snap, rditer.ReplicaDataIteratorOptions{
+	iter := rditer.NewReplicaMVCCDataIterator(ctx, desc, snap, rditer.ReplicaDataIteratorOptions{
 		Reverse:  false,
 		IterKind: storage.MVCCKeyAndIntentsIterKind,
 		KeyTypes: storage.IterKeyTypePointsOnly,

@@ -368,7 +368,7 @@ func BenchmarkIntentScan(b *testing.B) {
 					setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, false, /* resolveAll */
 						1, false /* resolveIntentForLatestVersionWhenNotLockUpdate */)
 					lower := makeKey(nil, 0)
-					iter, err := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+					iter, err := eng.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{
 						LowerBound: lower,
 						UpperBound: makeKey(nil, numIntentKeys),
 					})
@@ -457,7 +457,7 @@ func BenchmarkScanAllIntentsResolved(b *testing.B) {
 							// practice, so we don't want it to happen in this Benchmark
 							// either.
 							b.StopTimer()
-							iter, err = eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+							iter, err = eng.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{
 								LowerBound: lower,
 								UpperBound: makeKey(nil, numIntentKeys),
 							})
@@ -505,7 +505,7 @@ func BenchmarkScanOneAllIntentsResolved(b *testing.B) {
 					buf := append([]byte(nil), lower...)
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
-						iter, err := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+						iter, err := eng.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{
 							LowerBound: buf,
 							UpperBound: upper,
 						})
@@ -770,7 +770,7 @@ func runMVCCScan(ctx context.Context, b *testing.B, opts benchScanOptions) {
 		// Pull all of the sstables into the RocksDB cache in order to make the
 		// timings more stable. Otherwise, the first run will be penalized pulling
 		// data into the cache while later runs will not.
-		if _, err := ComputeStats(eng, keys.LocalMax, roachpb.KeyMax, 0); err != nil {
+		if _, err := ComputeStats(ctx, eng, keys.LocalMax, roachpb.KeyMax, 0); err != nil {
 			b.Fatalf("stats failed: %s", err)
 		}
 	}
@@ -1225,7 +1225,7 @@ func runMVCCDeleteRangeUsingTombstone(
 			eng := getInitialStateEngine(ctx, b, opts, false /* inMemory */)
 			defer eng.Close()
 
-			ms, err := ComputeStats(eng, keys.LocalMax, keys.MaxKey, 0)
+			ms, err := ComputeStats(ctx, eng, keys.LocalMax, keys.MaxKey, 0)
 			require.NoError(b, err)
 
 			leftPeekBound = keys.LocalMax
@@ -1314,7 +1314,7 @@ func runMVCCComputeStats(ctx context.Context, b *testing.B, valueBytes int, numR
 	var stats enginepb.MVCCStats
 	var err error
 	for i := 0; i < b.N; i++ {
-		stats, err = ComputeStats(eng, keys.LocalMax, keys.MaxKey, 0)
+		stats, err = ComputeStats(ctx, eng, keys.LocalMax, keys.MaxKey, 0)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -1961,7 +1961,7 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 		startKey := makeKey(nil, 0)
 		endKey := makeKey(nil, totalNumKeys+1)
 		iter, err := newMVCCIterator(
-			rw, ts, false, false, IterOptions{
+			ctx, rw, ts, false, false, IterOptions{
 				KeyTypes:   IterKeyTypePointsAndRanges,
 				LowerBound: startKey,
 				UpperBound: endKey,

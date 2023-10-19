@@ -829,7 +829,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		}
 		return err
 	}
-	err := rditer.IterateReplicaKeySpans(snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
+	err := rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
 		replicatedFilter, iterateRKSpansVisitor)
 	if err != nil {
 		return 0, err
@@ -908,7 +908,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		})
 		if err != nil && errors.Is(err, pebble.ErrInvalidSkipSharedIteration) {
 			transitionFromSharedToRegularReplicate = true
-			err = rditer.IterateReplicaKeySpans(snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
+			err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
 				rditer.ReplicatedSpansUserOnly, iterateRKSpansVisitor)
 		}
 		if err != nil {

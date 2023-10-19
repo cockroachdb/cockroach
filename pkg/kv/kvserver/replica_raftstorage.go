@@ -974,6 +974,7 @@ func clearSubsumedReplicaDiskData(
 			)
 			defer subsumedReplSST.Close()
 			if err := storage.ClearRangeWithHeuristic(
+				ctx,
 				reader,
 				&subsumedReplSST,
 				keySpans[i].EndKey,

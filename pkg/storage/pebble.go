@@ -1513,27 +1513,25 @@ func (p *Pebble) Closed() bool {
 
 // MVCCIterate implements the Engine interface.
 func (p *Pebble) MVCCIterate(
-	start, end roachpb.Key,
-	iterKind MVCCIterKind,
-	keyTypes IterKeyType,
+	ctx context.Context, start, end roachpb.Key, iterKind MVCCIterKind, keyTypes IterKeyType,
 	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
 ) error {
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		err := iterateOnReader(r, start, end, iterKind, keyTypes, f)
+		err := iterateOnReader(ctx, r, start, end, iterKind, keyTypes, f)
 		r.Free()
 		return err
 	}
-	return iterateOnReader(p, start, end, iterKind, keyTypes, f)
+	return iterateOnReader(ctx, p, start, end, iterKind, keyTypes, f)
 }
 
 // NewMVCCIterator implements the Engine interface.
-func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) (MVCCIterator, error) {
+func (p *Pebble) NewMVCCIterator(ctx context.Context, iterKind MVCCIterKind, opts IterOptions) (MVCCIterator, error) {
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		iter, err := r.NewMVCCIterator(iterKind, opts)
+		iter, err := r.NewMVCCIterator(ctx, iterKind, opts)
 		r.Free()
 		if err != nil {
 			return nil, err
@@ -1541,7 +1539,7 @@ func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) (MVCCI
 		return maybeWrapInUnsafeIter(iter), nil
 	}
 
-	iter, err := newPebbleIterator(p.db, opts, StandardDurability, p)
+	iter, err := newPebbleIterator(ctx, p.db, opts, StandardDurability, p)
 	if err != nil {
 		return nil, err
 	}
@@ -1549,8 +1547,8 @@ func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) (MVCCI
 }
 
 // NewEngineIterator implements the Engine interface.
-func (p *Pebble) NewEngineIterator(opts IterOptions) (EngineIterator, error) {
-	return newPebbleIterator(p.db, opts, StandardDurability, p)
+func (p *Pebble) NewEngineIterator(ctx context.Context, opts IterOptions) (EngineIterator, error) {
+	return newPebbleIterator(ctx, p.db, opts, StandardDurability, p)
 }
 
 // ScanInternal implements the Engine interface.
@@ -2586,9 +2584,7 @@ func (p *pebbleReadOnly) Closed() bool {
 }
 
 func (p *pebbleReadOnly) MVCCIterate(
-	start, end roachpb.Key,
-	iterKind MVCCIterKind,
-	keyTypes IterKeyType,
+	ctx context.Context, start, end roachpb.Key, iterKind MVCCIterKind, keyTypes IterKeyType,
 	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
 ) error {
 	if p.closed {
@@ -2597,17 +2593,15 @@ func (p *pebbleReadOnly) MVCCIterate(
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		err := iterateOnReader(r, start, end, iterKind, keyTypes, f)
+		err := iterateOnReader(ctx, r, start, end, iterKind, keyTypes, f)
 		r.Free()
 		return err
 	}
-	return iterateOnReader(p, start, end, iterKind, keyTypes, f)
+	return iterateOnReader(ctx, p, start, end, iterKind, keyTypes, f)
 }
 
 // NewMVCCIterator implements the Engine interface.
-func (p *pebbleReadOnly) NewMVCCIterator(
-	iterKind MVCCIterKind, opts IterOptions,
-) (MVCCIterator, error) {
+func (p *pebbleReadOnly) NewMVCCIterator(ctx context.Context, iterKind MVCCIterKind, opts IterOptions) (MVCCIterator, error) {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
 	}
@@ -2615,7 +2609,7 @@ func (p *pebbleReadOnly) NewMVCCIterator(
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		iter, err := r.NewMVCCIterator(iterKind, opts)
+		iter, err := r.NewMVCCIterator(ctx, iterKind, opts)
 		r.Free()
 		if err != nil {
 			return nil, err
@@ -2628,7 +2622,7 @@ func (p *pebbleReadOnly) NewMVCCIterator(
 		iter = &p.prefixIter
 	}
 	if iter.inuse {
-		return newPebbleIteratorByCloning(CloneContext{
+		return newPebbleIteratorByCloning(ctx, CloneContext{
 			rawIter: p.iter,
 			engine:  p.parent,
 		}, opts, p.durability), nil
@@ -2637,7 +2631,8 @@ func (p *pebbleReadOnly) NewMVCCIterator(
 	if iter.iter != nil {
 		iter.setOptions(opts, p.durability)
 	} else {
-		if err := iter.initReuseOrCreate(p.parent.db, p.iter, p.iterUsed, opts, p.durability, p.parent); err != nil {
+		if err := iter.initReuseOrCreate(
+			ctx, p.parent.db, p.iter, p.iterUsed, opts, p.durability, p.parent); err != nil {
 			return nil, err
 		}
 		if p.iter == nil {
@@ -2653,7 +2648,7 @@ func (p *pebbleReadOnly) NewMVCCIterator(
 }
 
 // NewEngineIterator implements the Engine interface.
-func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) (EngineIterator, error) {
+func (p *pebbleReadOnly) NewEngineIterator(ctx context.Context, opts IterOptions) (EngineIterator, error) {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
 	}
@@ -2663,7 +2658,7 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) (EngineIterator, er
 		iter = &p.prefixEngineIter
 	}
 	if iter.inuse {
-		return newPebbleIteratorByCloning(CloneContext{
+		return newPebbleIteratorByCloning(ctx, CloneContext{
 			rawIter: p.iter,
 			engine:  p.parent,
 		}, opts, p.durability), nil
@@ -2672,7 +2667,8 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) (EngineIterator, er
 	if iter.iter != nil {
 		iter.setOptions(opts, p.durability)
 	} else {
-		err := iter.initReuseOrCreate(p.parent.db, p.iter, p.iterUsed, opts, p.durability, p.parent)
+		err := iter.initReuseOrCreate(
+			ctx, p.parent.db, p.iter, p.iterUsed, opts, p.durability, p.parent)
 		if err != nil {
 			return nil, err
 		}
@@ -2844,29 +2840,25 @@ func (p *pebbleSnapshot) Closed() bool {
 
 // MVCCIterate implements the Reader interface.
 func (p *pebbleSnapshot) MVCCIterate(
-	start, end roachpb.Key,
-	iterKind MVCCIterKind,
-	keyTypes IterKeyType,
+	ctx context.Context, start, end roachpb.Key, iterKind MVCCIterKind, keyTypes IterKeyType,
 	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
 ) error {
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		err := iterateOnReader(r, start, end, iterKind, keyTypes, f)
+		err := iterateOnReader(ctx, r, start, end, iterKind, keyTypes, f)
 		r.Free()
 		return err
 	}
-	return iterateOnReader(p, start, end, iterKind, keyTypes, f)
+	return iterateOnReader(ctx, p, start, end, iterKind, keyTypes, f)
 }
 
 // NewMVCCIterator implements the Reader interface.
-func (p *pebbleSnapshot) NewMVCCIterator(
-	iterKind MVCCIterKind, opts IterOptions,
-) (MVCCIterator, error) {
+func (p *pebbleSnapshot) NewMVCCIterator(ctx context.Context, iterKind MVCCIterKind, opts IterOptions) (MVCCIterator, error) {
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		iter, err := r.NewMVCCIterator(iterKind, opts)
+		iter, err := r.NewMVCCIterator(ctx, iterKind, opts)
 		r.Free()
 		if err != nil {
 			return nil, err
@@ -2874,7 +2866,7 @@ func (p *pebbleSnapshot) NewMVCCIterator(
 		return maybeWrapInUnsafeIter(iter), nil
 	}
 
-	iter, err := newPebbleIterator(p.snapshot, opts, StandardDurability, p.parent)
+	iter, err := newPebbleIterator(ctx, p.snapshot, opts, StandardDurability, p.parent)
 	if err != nil {
 		return nil, err
 	}
@@ -2882,8 +2874,8 @@ func (p *pebbleSnapshot) NewMVCCIterator(
 }
 
 // NewEngineIterator implements the Reader interface.
-func (p pebbleSnapshot) NewEngineIterator(opts IterOptions) (EngineIterator, error) {
-	return newPebbleIterator(p.snapshot, opts, StandardDurability, p.parent)
+func (p pebbleSnapshot) NewEngineIterator(ctx context.Context, opts IterOptions) (EngineIterator, error) {
+	return newPebbleIterator(ctx, p.snapshot, opts, StandardDurability, p.parent)
 }
 
 // ConsistentIterators implements the Reader interface.
@@ -2935,19 +2927,17 @@ func (p *pebbleEFOS) Closed() bool {
 
 // MVCCIterate implements the Reader interface.
 func (p *pebbleEFOS) MVCCIterate(
-	start, end roachpb.Key,
-	iterKind MVCCIterKind,
-	keyTypes IterKeyType,
+	ctx context.Context, start, end roachpb.Key, iterKind MVCCIterKind, keyTypes IterKeyType,
 	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
 ) error {
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		err := iterateOnReader(r, start, end, iterKind, keyTypes, f)
+		err := iterateOnReader(ctx, r, start, end, iterKind, keyTypes, f)
 		r.Free()
 		return err
 	}
-	return iterateOnReader(p, start, end, iterKind, keyTypes, f)
+	return iterateOnReader(ctx, p, start, end, iterKind, keyTypes, f)
 }
 
 // WaitForFileOnly implements the EventuallyFileOnlyReader interface.
@@ -2957,8 +2947,7 @@ func (p *pebbleEFOS) WaitForFileOnly(ctx context.Context) error {
 
 // NewMVCCIterator implements the Reader interface.
 func (p *pebbleEFOS) NewMVCCIterator(
-	iterKind MVCCIterKind, opts IterOptions,
-) (MVCCIterator, error) {
+	ctx context.Context, iterKind MVCCIterKind, opts IterOptions) (MVCCIterator, error) {
 	// Check if the bounds fall within the EFOS' keyRanges. We can only do this
 	// check for non-prefix iterators as prefix iterators often don't specify
 	// any bounds.
@@ -2981,7 +2970,7 @@ func (p *pebbleEFOS) NewMVCCIterator(
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		iter, err := r.NewMVCCIterator(iterKind, opts)
+		iter, err := r.NewMVCCIterator(ctx, iterKind, opts)
 		r.Free()
 		if err != nil {
 			return nil, err
@@ -2989,7 +2978,7 @@ func (p *pebbleEFOS) NewMVCCIterator(
 		return maybeWrapInUnsafeIter(iter), nil
 	}
 
-	iter, err := newPebbleIterator(p.efos, opts, StandardDurability, p.parent)
+	iter, err := newPebbleIterator(ctx, p.efos, opts, StandardDurability, p.parent)
 	if err != nil {
 		return nil, err
 	}
@@ -2997,8 +2986,8 @@ func (p *pebbleEFOS) NewMVCCIterator(
 }
 
 // NewEngineIterator implements the Reader interface.
-func (p *pebbleEFOS) NewEngineIterator(opts IterOptions) (EngineIterator, error) {
-	return newPebbleIterator(p.efos, opts, StandardDurability, p.parent)
+func (p *pebbleEFOS) NewEngineIterator(ctx context.Context, opts IterOptions) (EngineIterator, error) {
+	return newPebbleIterator(ctx, p.efos, opts, StandardDurability, p.parent)
 }
 
 // ConsistentIterators implements the Reader interface.

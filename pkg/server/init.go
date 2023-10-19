@@ -566,9 +566,11 @@ func (s *initServer) initializeFirstStoreAfterJoin(
 func assertEnginesEmpty(engines []storage.Engine) error {
 	storeClusterVersionKey := keys.DeprecatedStoreClusterVersionKey()
 
+	// TODO(sumeer): plumb a context if necessary.
+	ctx := context.Background()
 	for _, engine := range engines {
 		err := func() error {
-			iter, err := engine.NewEngineIterator(storage.IterOptions{
+			iter, err := engine.NewEngineIterator(ctx, storage.IterOptions{
 				KeyTypes:   storage.IterKeyTypePointsAndRanges,
 				UpperBound: roachpb.KeyMax,
 			})
