@@ -163,6 +163,25 @@ SELECT * FROM t
 1  11
 
 statement ok
+CREATE FUNCTION one() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+CALL t_update(one(), 12)
+
+query II
+SELECT * FROM t
+----
+1  12
+
+statement ok
+CALL t_update(one(), one()+12)
+
+query II
+SELECT * FROM t
+----
+1  13
+
+statement ok
 CREATE FUNCTION t_update() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
 
 # The procedure t_update and the function t_update can be disambiguated via the
