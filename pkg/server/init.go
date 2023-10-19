@@ -731,7 +731,7 @@ func inspectEngines(
 		initializedEngines = append(initializedEngines, eng)
 	}
 	clusterVersion, err := kvstorage.SynthesizeClusterVersionFromEngines(
-		ctx, engines, binaryVersion, binaryMinSupportedVersion,
+		ctx, initializedEngines, binaryVersion, binaryMinSupportedVersion,
 	)
 	if err != nil {
 		return nil, err
