@@ -1332,7 +1332,7 @@ func (b *Builder) buildWhere(where *tree.Where, inScope *scope) {
 		where.Expr,
 		types.Bool,
 		exprKindWhere,
-		tree.RejectGenerators|tree.RejectWindowApplications,
+		tree.RejectGenerators|tree.RejectWindowApplications|tree.RejectProcedures,
 		inScope,
 	)
 
