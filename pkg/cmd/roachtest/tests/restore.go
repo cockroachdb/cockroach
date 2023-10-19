@@ -390,9 +390,9 @@ func registerRestore(r registry.Registry) {
 			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 15, cpus: 16, volumeSize: 5000,
 				ebsThroughput: 250 /* MB/s */}),
 			backup: makeRestoringBackupSpecs(backupSpecs{
-				version:         "v22.2.4",
-				workload:        tpceRestore{customers: 2000000},
-				backupsIncluded: 400,
+				version:           "v22.2.4",
+				workload:          tpceRestore{customers: 2000000},
+				numBackupsInChain: 400,
 			}),
 			timeout: 30 * time.Hour,
 			clouds:  registry.AllClouds,
@@ -407,10 +407,10 @@ func registerRestore(r registry.Registry) {
 			// The weekly 32TB, 400 incremental layer Restore test on GCP.
 			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 15, cpus: 16, volumeSize: 5000}),
 			backup: makeRestoringBackupSpecs(backupSpecs{
-				version:         "v22.2.4",
-				workload:        tpceRestore{customers: 2000000},
-				cloud:           spec.GCE,
-				backupsIncluded: 400,
+				version:           "v22.2.4",
+				workload:          tpceRestore{customers: 2000000},
+				cloud:             spec.GCE,
+				numBackupsInChain: 400,
 			}),
 			timeout: 30 * time.Hour,
 			clouds:  registry.AllExceptAWS,
@@ -628,11 +628,11 @@ func makeHardwareSpecs(override hardwareSpecs) hardwareSpecs {
 
 var defaultRestoringBackupSpecs = backupSpecs{
 	// TODO(msbutler): write a script that automatically finds the latest versioned fixture.
-	version:         "v22.2.0",
-	cloud:           spec.AWS,
-	fullBackupDir:   "LATEST",
-	workload:        tpceRestore{customers: 25000},
-	backupsIncluded: 48,
+	version:           "v22.2.0",
+	cloud:             spec.AWS,
+	fullBackupDir:     "LATEST",
+	workload:          tpceRestore{customers: 25000},
+	numBackupsInChain: 48,
 }
 
 // backupSpecs define the backup that will get restored. These values should not
@@ -647,10 +647,10 @@ type backupSpecs struct {
 	// fullBackupDir specifies the full backup directory in the collection to restore from.
 	fullBackupDir string
 
-	// backupsIncluded specifies the length of the chain of the backup. This field
+	// numBackupsInChain specifies the length of the chain of the backup. This field
 	// is only to be used during backup fixture generation to control how many
 	// incremental backups we layer on top of the full.
-	backupsIncluded int
+	numBackupsInChain int
 
 	// workload defines the backed up workload.
 	workload backupWorkload
@@ -669,10 +669,10 @@ func (bs backupSpecs) backupCollection() string {
 	switch bs.storagePrefix() {
 	case "s3":
 		return fmt.Sprintf(`'s3://cockroach-fixtures-us-east-2/backups/%s/%s/inc-count=%d?AUTH=implicit'`,
-			bs.workload.fixtureDir(), bs.version, bs.backupsIncluded)
+			bs.workload.fixtureDir(), bs.version, bs.numBackupsInChain)
 	case "gs":
 		return fmt.Sprintf(`'gs://cockroach-fixtures/backups/%s/%s/inc-count=%d?AUTH=implicit'`,
-			bs.workload.fixtureDir(), bs.version, bs.backupsIncluded)
+			bs.workload.fixtureDir(), bs.version, bs.numBackupsInChain)
 	default:
 		panic(fmt.Sprintf("unknown storage prefix: %s", bs.storagePrefix()))
 	}
@@ -700,8 +700,8 @@ func makeBackupSpecs(override backupSpecs, specs backupSpecs) backupSpecs {
 		specs.fullBackupDir = override.fullBackupDir
 	}
 
-	if override.backupsIncluded != 0 {
-		specs.backupsIncluded = override.backupsIncluded
+	if override.numBackupsInChain != 0 {
+		specs.numBackupsInChain = override.numBackupsInChain
 	}
 
 	if override.workload != nil {
