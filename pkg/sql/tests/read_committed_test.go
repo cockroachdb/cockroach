@@ -145,3 +145,57 @@ func TestReadCommittedStmtRetry(t *testing.T) {
 	})
 	require.True(t, sawWriteTooOldError.Load())
 }
+
+// TestReadCommittedVolatileUDF verifies that volatile UDFs running under
+// READ COMMITTED do not have their external read timestamp incremented more
+// than they should be.
+func TestReadCommittedVolatileUDF(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	_, err := sqlDB.Exec(`SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true`)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`CREATE TABLE kv (k TEXT, v INT);`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`INSERT INTO kv VALUES ('a', 1);`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`CREATE FUNCTION f() RETURNS INT AS $$ SELECT v FROM kv WHERE k = 'a' OR k = 'b' ORDER BY v LIMIT 1 FOR SHARE $$ LANGUAGE SQL VOLATILE;`)
+	require.NoError(t, err)
+
+	g := ctxgroup.WithContext(ctx)
+
+	// Create a transaction that takes a lock on key "a".
+	txSerializable, err := sqlDB.BeginTx(ctx, &gosql.TxOptions{Isolation: gosql.LevelSerializable})
+	require.NoError(t, err)
+	_, err = txSerializable.Exec(`UPDATE kv SET v = 3 WHERE k = 'a'`)
+	require.NoError(t, err)
+
+	txReadCommitted, err := sqlDB.BeginTx(ctx, &gosql.TxOptions{Isolation: gosql.LevelReadCommitted})
+	require.NoError(t, err)
+
+	// Start a READ COMMITTED transaction that is blocked on txSerializable, and
+	// which tries to read a key that does not exist yet using a UDF.
+	var udfResult int
+	var executedUDF atomic.Bool
+	g.GoCtx(func(ctx context.Context) error {
+		err = txReadCommitted.QueryRow(`SELECT f()`).Scan(&udfResult)
+		executedUDF.Store(true)
+		return err
+	})
+
+	// In a third transaction, add another row to the table. This row should not
+	// be visible to txReadCommitted's UDF.
+	_, err = sqlDB.Exec(`INSERT INTO kv VALUES ('b', 2)`)
+	require.NoError(t, err)
+
+	require.False(t, executedUDF.Load())
+	require.NoError(t, txSerializable.Commit())
+	require.NoError(t, g.Wait())
+	require.NoError(t, txReadCommitted.Commit())
+	require.Equal(t, 3, udfResult)
+}
