@@ -191,7 +191,8 @@ func (node *RoutineExpr) Walk(v Visitor) Expr {
 // RoutineExceptionHandler encapsulates the information needed to match and
 // handle errors for the exception block of a routine defined with PLpgSQL.
 type RoutineExceptionHandler struct {
-	// Codes is a list of pgcode strings used to match exceptions.
+	// Codes is a list of pgcode strings used to match exceptions. Note that as a
+	// special case, the code may be "OTHERS", which matches most error codes.
 	Codes []pgcode.Code
 
 	// Actions contains a routine to handle each error code.

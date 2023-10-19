@@ -5484,3 +5484,70 @@ project
                      │                                                                └── projections
                      │                                                                     └── const: 0 [as=stmt_return_4:10]
                      └── const: 1
+
+# Correctly display the OTHERS branch.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN assert_failure THEN
+      RETURN -1;
+    WHEN OTHERS THEN
+      RETURN -2;
+    WHEN query_canceled THEN
+      RETURN -3;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:6
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:6]
+           └── body
+                └── limit
+                     ├── columns: exception_block_7:5
+                     ├── project
+                     │    ├── columns: exception_block_7:5
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── udf: exception_block_7 [as=exception_block_7:5]
+                     │              ├── body
+                     │              │    └── project
+                     │              │         ├── columns: stmt_return_8:4!null
+                     │              │         ├── values
+                     │              │         │    └── tuple
+                     │              │         └── projections
+                     │              │              └── floor-div [as=stmt_return_8:4]
+                     │              │                   ├── const: 1
+                     │              │                   └── const: 0
+                     │              └── exception-handler
+                     │                   ├── SQLSTATE 'P0004'
+                     │                   │    └── project
+                     │                   │         ├── columns: stmt_return_2:1!null
+                     │                   │         ├── values
+                     │                   │         │    └── tuple
+                     │                   │         └── projections
+                     │                   │              └── const: -1 [as=stmt_return_2:1]
+                     │                   ├── OTHERS
+                     │                   │    └── project
+                     │                   │         ├── columns: stmt_return_4:2!null
+                     │                   │         ├── values
+                     │                   │         │    └── tuple
+                     │                   │         └── projections
+                     │                   │              └── const: -2 [as=stmt_return_4:2]
+                     │                   └── SQLSTATE '57014'
+                     │                        └── project
+                     │                             ├── columns: stmt_return_6:3!null
+                     │                             ├── values
+                     │                             │    └── tuple
+                     │                             └── projections
+                     │                                  └── const: -3 [as=stmt_return_6:3]
+                     └── const: 1
