@@ -52,27 +52,27 @@ upgrade 1
 
 upgrade 2
 
-# Verify that all nodes are now running 23.2 binaries.
+# Verify that all nodes are now running 24.1 binaries.
 
 query B nodeidx=0
-SELECT crdb_internal.node_executable_version() SIMILAR TO '23.1-%'
+SELECT crdb_internal.node_executable_version() SIMILAR TO '23.2-%'
 ----
 true
 
 query B nodeidx=1
-SELECT crdb_internal.node_executable_version() SIMILAR TO '23.1-%'
+SELECT crdb_internal.node_executable_version() SIMILAR TO '23.2-%'
 ----
 true
 
 query B nodeidx=2
-SELECT crdb_internal.node_executable_version() SIMILAR TO '23.1-%'
+SELECT crdb_internal.node_executable_version() SIMILAR TO '23.2-%'
 ----
 true
 
 # Makes sure the upgrade job has finished, and the cluster version gate is
 # passed.
 query B retry
-SELECT crdb_internal.is_at_least_version('23.1-26')
+SELECT crdb_internal.is_at_least_version('23.2')
 ----
 true
 

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -210,9 +211,13 @@ type TableMeta struct {
 	// anns annotates the table metadata with arbitrary data.
 	anns [maxTableAnnIDCount]interface{}
 
-	// notVisibleIndexMap stores information about index invisibility which maps
-	// from index ordinal to index invisibility.
-	notVisibleIndexMap map[cat.IndexOrdinal]bool
+	// indexVisibility caches the ordinals of indexes which are not-visible. This
+	// avoids re-computation and ensures a consistent answer within the query for
+	// indexes with fractional visibility.
+	indexVisibility struct {
+		cached     intsets.Fast
+		notVisible intsets.Fast
+	}
 }
 
 // IsIndexNotVisible returns true if the given index is not visible, and false
@@ -223,12 +228,8 @@ type TableMeta struct {
 // is fully visible (to this query). IsIndexNotVisible caches the result so that
 // it always returns the same value for a given index.
 func (tm *TableMeta) IsIndexNotVisible(indexOrd cat.IndexOrdinal, rng *rand.Rand) bool {
-	if tm.notVisibleIndexMap == nil {
-		tm.notVisibleIndexMap = make(map[cat.IndexOrdinal]bool)
-	}
-	// See if the visibility is already cached.
-	if val, ok := tm.notVisibleIndexMap[indexOrd]; ok {
-		return val
+	if tm.indexVisibility.cached.Contains(indexOrd) {
+		return tm.indexVisibility.notVisible.Contains(indexOrd)
 	}
 	// Otherwise, roll the dice to assign index visibility.
 	indexInvisibility := tm.Table.Index(indexOrd).GetInvisibility()
@@ -254,7 +255,10 @@ func (tm *TableMeta) IsIndexNotVisible(indexOrd cat.IndexOrdinal, rng *rand.Rand
 			isNotVisible = true
 		}
 	}
-	tm.notVisibleIndexMap[indexOrd] = isNotVisible
+	tm.indexVisibility.cached.Add(indexOrd)
+	if isNotVisible {
+		tm.indexVisibility.notVisible.Add(indexOrd)
+	}
 	return isNotVisible
 }
 

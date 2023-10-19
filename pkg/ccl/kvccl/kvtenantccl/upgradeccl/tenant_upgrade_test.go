@@ -405,7 +405,6 @@ func v0v1v2() (roachpb.Version, roachpb.Version, roachpb.Version) {
 func TestTenantUpgradeFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 112209)
 
 	v0 := clusterversion.TestingBinaryMinSupportedVersion
 	v2 := clusterversion.TestingBinaryVersion
@@ -418,7 +417,10 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			break
 		}
 	}
-	require.NotEqual(t, v1, roachpb.Version{})
+	if v1 == (roachpb.Version{}) {
+		// There is no in-between version supported; skip this test.
+		skip.IgnoreLint(t, "test can only run when we support two previous releases")
+	}
 
 	t.Log("starting server")
 	ctx := context.Background()

@@ -481,6 +481,16 @@ var LogicTestConfigs = []TestClusterConfig{
 		DeclarativeCorpusCollection: true,
 	},
 	{
+		// This config runs tests using 23.2 cluster version, simulating a node that
+		// is operating in a mixed-version cluster.
+		Name:                        "local-mixed-23.2",
+		NumNodes:                    1,
+		OverrideDistSQLMode:         "off",
+		BootstrapVersion:            clusterversion.V23_2,
+		DisableUpgrade:              true,
+		DeclarativeCorpusCollection: true,
+	},
+	{
 		Name:                     "cockroach-go-testserver-upgrade-to-master",
 		UseCockroachGoTestserver: true,
 		NumNodes:                 3,
@@ -553,6 +563,7 @@ var (
 		"fakedist-vec-off",
 		"fakedist-disk",
 		"local-mixed-23.1",
+		"local-mixed-23.2",
 	}
 	// FiveNodeDefaultConfigName is a special alias for all 5 node configs.
 	FiveNodeDefaultConfigName = "5node-default-configs"
