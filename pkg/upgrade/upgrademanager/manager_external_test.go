@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -66,8 +67,11 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	startCV := clusterversion.VCurrent_Start
-	endCV := startCV + 1
+	endCV := clusterversion.BinaryVersionKey
+	if clusterversion.ByKey(endCV).Internal == 2 {
+		skip.IgnoreLint(t, "test cannot run until there is a new version key")
+	}
+	startCV := endCV - 1
 
 	ch := make(chan chan error)
 
@@ -554,8 +558,8 @@ func TestPauseMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	startCV := clusterversion.VCurrent_Start
-	endCV := startCV + 1
+	endCV := clusterversion.BinaryVersionKey
+	startCV := endCV - 1
 
 	type migrationEvent struct {
 		unblock  chan<- error
