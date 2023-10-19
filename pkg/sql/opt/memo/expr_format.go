@@ -984,7 +984,12 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 			for i := range udf.Def.ExceptionBlock.Codes {
 				code := udf.Def.ExceptionBlock.Codes[i]
 				body := udf.Def.ExceptionBlock.Actions[i].Body
-				branch := n.Childf("SQLSTATE '%s'", code)
+				var branch treeprinter.Node
+				if code.String() == "OTHERS" {
+					branch = n.Child("OTHERS")
+				} else {
+					branch = n.Childf("SQLSTATE '%s'", code)
+				}
 				for j := range body {
 					f.formatExpr(body[j], branch)
 				}
