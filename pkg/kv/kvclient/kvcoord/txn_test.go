@@ -422,7 +422,7 @@ func TestTxnReadCommittedPerStatementReadSnapshot(t *testing.T) {
 			incrementKey()
 
 			if step {
-				require.NoError(t, txn1.Step(ctx))
+				require.NoError(t, txn1.Step(ctx, true /* allowReadTimestampStep */))
 			}
 
 			// Read the key twice in the same batch, to demonstrate that regardless of

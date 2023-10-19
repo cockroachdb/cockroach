@@ -426,6 +426,12 @@ func TestHalloweenProblemAvoidance(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec(`
+SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true;
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (x FLOAT);
 `); err != nil {
@@ -442,6 +448,7 @@ CREATE TABLE t.test (x FLOAT);
 	// We choose a float +0.1 to ensure that none of the derived
 	// values become duplicate of already-present values.
 	if _, err := db.Exec(`
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 INSERT INTO t.test(x)
     -- the if ensures that no row is processed two times.
 SELECT IF(x::INT::FLOAT = x,
@@ -451,7 +458,8 @@ SELECT IF(x::INT::FLOAT = x,
        + 0.1
   FROM t.test
   -- the function used here is implemented by using the internal executor.
-  WHERE has_table_privilege('root', ((x+.1)/(x+1) + 1)::int::oid, 'INSERT') IS NULL
+  WHERE has_table_privilege('root', ((x+.1)/(x+1) + 1)::int::oid, 'INSERT') IS NULL;
+COMMIT;
 `); err != nil {
 		t.Fatal(err)
 	}
