@@ -357,6 +357,7 @@ func startC2CTestCluster(
 		for i, locality := range regions {
 			param := serverArgs
 			param.Locality = makeLocality(locality)
+			param.ScanMaxIdleTime = 10 * time.Millisecond
 			serverArgsPerNode[i] = param
 		}
 		params.ServerArgsPerNode = serverArgsPerNode

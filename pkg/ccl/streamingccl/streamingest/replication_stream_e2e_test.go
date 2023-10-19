@@ -1170,7 +1170,6 @@ func TestStreamingRegionalConstraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderStressRace(t, "takes too long under stress race")
-	skip.UnderStress(t, "the allocator machinery stuggles with cpu contention, which can cause the test to timeout")
 
 	ctx := context.Background()
 	regions := []string{"mars", "venus", "mercury"}
@@ -1204,7 +1203,8 @@ func TestStreamingRegionalConstraint(t *testing.T) {
 				for _, desc := range descriptors {
 					for _, replica := range desc.InternalReplicas {
 						if replica.NodeID != marsNodeID {
-							return errors.Newf("found table data located on another node %d", replica.NodeID)
+							return errors.Newf("found table data located on another node %d, desc %v",
+								replica.NodeID, desc)
 						}
 					}
 				}
