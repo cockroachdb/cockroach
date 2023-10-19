@@ -1327,6 +1327,13 @@ func (r *DistSQLReceiver) checkConcurrentError() {
 	if r.skipConcurrentErrorCheck || r.status != execinfra.NeedMoreRows {
 		// If the status already is not NeedMoreRows, then it doesn't matter if
 		// there was a concurrent error set.
+		if buildutil.CrdbTestBuild {
+			// SwitchToAnotherPortal is only reachable with local execution when
+			// skipConcurrentErrorCheck should be set to true.
+			if !r.skipConcurrentErrorCheck && r.status == execinfra.SwitchToAnotherPortal {
+				r.SetError(errors.AssertionFailedf("DistSQLReceiver's status is SwitchToAnotherPortal when skipConcurrentErrorCheck is false"))
+			}
+		}
 		return
 	}
 	select {
