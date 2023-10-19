@@ -170,7 +170,15 @@ func (c *Controller) Admit(
 		b := c.getBucket(connection.Stream())
 		waitEndState, waited = b.wait(ctx, class, connection.Disconnected())
 	}
-	waitDuration := c.clock.PhysicalTime().Sub(tstart)
+	var waitDuration time.Duration
+	if waited {
+		waitDuration = c.clock.PhysicalTime().Sub(tstart)
+	}
+	// Else, did not wait (common case), so waitDuration stays 0.
+	// Unconditionally computing the waitDuration as the elapsed time pollutes
+	// the wait duration metrics with CPU scheduling artifacts, causing
+	// confusion.
+
 	if waitEndState == waitSuccess {
 		const formatStr = "admitted request (pri=%s stream=%s wait-duration=%s mode=%s)"
 		if waited {
