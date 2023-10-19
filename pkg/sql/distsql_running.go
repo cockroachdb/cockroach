@@ -2047,7 +2047,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 		// We place a sequence point before every cascade, so
 		// that each subsequent cascade can observe the writes
 		// by the previous step.
-		if err := planner.Txn().Step(ctx); err != nil {
+		if err := planner.Txn().Step(ctx, true /* allowReadTimestampStep */); err != nil {
 			recv.SetError(err)
 			return false
 		}
@@ -2117,7 +2117,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 
 	// We place a sequence point before the checks, so that they observe the
 	// writes of the main query and/or any cascades.
-	if err := planner.Txn().Step(ctx); err != nil {
+	if err := planner.Txn().Step(ctx, true /* allowReadTimestampStep */); err != nil {
 		recv.SetError(err)
 		return false
 	}
