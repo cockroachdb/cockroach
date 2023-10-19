@@ -213,10 +213,11 @@ type TableMeta struct {
 
 	// indexVisibility caches the ordinals of indexes which are not-visible. This
 	// avoids re-computation and ensures a consistent answer within the query for
-	// indexes with fractional visibility.
+	// indexes with fractional visibility. The maps are stored as pointers to
+	// ensure that copying the TableMeta doesn't cause the maps to diverge.
 	indexVisibility struct {
-		cached     intsets.Fast
-		notVisible intsets.Fast
+		cached     *intsets.Fast
+		notVisible *intsets.Fast
 	}
 }
 
@@ -228,6 +229,10 @@ type TableMeta struct {
 // is fully visible (to this query). IsIndexNotVisible caches the result so that
 // it always returns the same value for a given index.
 func (tm *TableMeta) IsIndexNotVisible(indexOrd cat.IndexOrdinal, rng *rand.Rand) bool {
+	if tm.indexVisibility.cached == nil {
+		tm.indexVisibility.cached = &intsets.Fast{}
+		tm.indexVisibility.notVisible = &intsets.Fast{}
+	}
 	if tm.indexVisibility.cached.Contains(indexOrd) {
 		return tm.indexVisibility.notVisible.Contains(indexOrd)
 	}
