@@ -304,17 +304,17 @@ type TxnSender interface {
 	// the time the snapshot was established and ignore writes performed by the
 	// transaction since.
 	//
-	// Additionally, for Read Committed transactions, Step also advances the
-	// transaction's external read snapshot (i.e. ReadTimestamp) to a timestamp
-	// captured from the local HLC clock. This ensures that subsequent read-only
-	// operations observe the writes of other transactions that were committed
-	// before the time the new snapshot was established. For more detail on the
-	// interaction between transaction isolation levels and Step, see
-	// (isolation.Level).PerStatementReadSnapshot.
+	// Additionally, for Read Committed transactions, if allowReadTimestampStep is
+	// set, Step also advances the transaction's external read snapshot (i.e.
+	// ReadTimestamp) to a timestamp captured from the local HLC clock. This
+	// ensures that subsequent read-only operations observe the writes of other
+	// transactions that were committed before the time the new snapshot was
+	// established. For more detail on the interaction between transaction
+	// isolation levels and Step, see (isolation.Level).PerStatementReadSnapshot.
 	//
 	// Step() can only be called after stepping mode has been enabled
 	// using ConfigureStepping(SteppingEnabled).
-	Step(context.Context) error
+	Step(ctx context.Context, allowReadTimestampStep bool) error
 
 	// GetReadSeqNum gets the read sequence point for the current transaction.
 	GetReadSeqNum() enginepb.TxnSeq
