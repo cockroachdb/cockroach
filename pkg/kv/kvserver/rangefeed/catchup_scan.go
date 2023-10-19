@@ -77,13 +77,14 @@ type CatchUpIterator struct {
 // NB: startTime is exclusive, i.e. the first possible event will be emitted at
 // Timestamp.Next().
 func NewCatchUpIterator(
+	ctx context.Context,
 	reader storage.Reader,
 	span roachpb.Span,
 	startTime hlc.Timestamp,
 	closer func(),
 	pacer *admission.Pacer,
 ) (*CatchUpIterator, error) {
-	iter, err := storage.NewMVCCIncrementalIterator(reader,
+	iter, err := storage.NewMVCCIncrementalIterator(ctx, reader,
 		storage.MVCCIncrementalIterOptions{
 			KeyTypes:  storage.IterKeyTypePointsAndRanges,
 			StartKey:  span.Key,

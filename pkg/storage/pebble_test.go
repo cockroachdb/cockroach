@@ -100,7 +100,7 @@ func TestPebbleIterReuse(t *testing.T) {
 		}
 	}
 
-	iter1, err := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: []byte{40}, UpperBound: []byte{50}})
+	iter1, err := batch.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: []byte{40}, UpperBound: []byte{50}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestPebbleIterReuse(t *testing.T) {
 	// is lower than the previous iterator's lower bound. This should still result
 	// in the right amount of keys being returned; the lower bound from the
 	// previous iterator should get zeroed.
-	iter2, err := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: []byte{10}})
+	iter2, err := batch.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: []byte{10}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,13 +320,13 @@ func TestPebbleIterConsistency(t *testing.T) {
 	// Since an iterator is created on pebbleReadOnly, pebbleBatch before
 	// writing a newer version of "a", the newer version will not be visible to
 	// iterators that are created later.
-	iter, err := roEngine.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("a")})
+	iter, err := roEngine.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: []byte("a")})
 	require.NoError(t, err)
 	iter.Close()
-	batchIter, err := batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("a")})
+	batchIter, err := batch.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: []byte("a")})
 	require.NoError(t, err)
 	batchIter.Close()
-	engIter, err := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("a")})
+	engIter, err := eng.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: []byte("a")})
 	require.NoError(t, err)
 	engIter.Close()
 	// Pin the state for iterators.
@@ -370,23 +370,23 @@ func TestPebbleIterConsistency(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	checkMVCCIter(roEngine.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
-	checkMVCCIter(roEngine.NewMVCCIterator(MVCCKeyIterKind, IterOptions{Prefix: true}))
-	checkMVCCIter(batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
-	checkMVCCIter(batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{Prefix: true}))
-	checkMVCCIter(roEngine2.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
-	checkMVCCIter(roEngine2.NewMVCCIterator(MVCCKeyIterKind, IterOptions{Prefix: true}))
-	checkMVCCIter(batch2.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
-	checkMVCCIter(batch2.NewMVCCIterator(MVCCKeyIterKind, IterOptions{Prefix: true}))
+	checkMVCCIter(roEngine.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
+	checkMVCCIter(roEngine.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{Prefix: true}))
+	checkMVCCIter(batch.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
+	checkMVCCIter(batch.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{Prefix: true}))
+	checkMVCCIter(roEngine2.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
+	checkMVCCIter(roEngine2.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{Prefix: true}))
+	checkMVCCIter(batch2.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
+	checkMVCCIter(batch2.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{Prefix: true}))
 
-	checkEngineIter(roEngine.NewEngineIterator(IterOptions{UpperBound: []byte("b")}))
-	checkEngineIter(roEngine.NewEngineIterator(IterOptions{Prefix: true}))
-	checkEngineIter(batch.NewEngineIterator(IterOptions{UpperBound: []byte("b")}))
-	checkEngineIter(batch.NewEngineIterator(IterOptions{Prefix: true}))
-	checkEngineIter(roEngine2.NewEngineIterator(IterOptions{UpperBound: []byte("b")}))
-	checkEngineIter(roEngine2.NewEngineIterator(IterOptions{Prefix: true}))
-	checkEngineIter(batch2.NewEngineIterator(IterOptions{UpperBound: []byte("b")}))
-	checkEngineIter(batch2.NewEngineIterator(IterOptions{Prefix: true}))
+	checkEngineIter(roEngine.NewEngineIterator(context.Background(), IterOptions{UpperBound: []byte("b")}))
+	checkEngineIter(roEngine.NewEngineIterator(context.Background(), IterOptions{Prefix: true}))
+	checkEngineIter(batch.NewEngineIterator(context.Background(), IterOptions{UpperBound: []byte("b")}))
+	checkEngineIter(batch.NewEngineIterator(context.Background(), IterOptions{Prefix: true}))
+	checkEngineIter(roEngine2.NewEngineIterator(context.Background(), IterOptions{UpperBound: []byte("b")}))
+	checkEngineIter(roEngine2.NewEngineIterator(context.Background(), IterOptions{Prefix: true}))
+	checkEngineIter(batch2.NewEngineIterator(context.Background(), IterOptions{UpperBound: []byte("b")}))
+	checkEngineIter(batch2.NewEngineIterator(context.Background(), IterOptions{Prefix: true}))
 
 	checkIterSeesBothValues := func(iter MVCCIterator, err error) {
 		require.NoError(t, err)
@@ -404,7 +404,7 @@ func TestPebbleIterConsistency(t *testing.T) {
 		require.Equal(t, 2, count)
 	}
 	// The eng iterator will see both values.
-	checkIterSeesBothValues(eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
+	checkIterSeesBothValues(eng.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
 	// The indexed batches will see 2 values since the second one is written to the batch.
 	require.NoError(t, batch.PutMVCC(
 		MVCCKey{Key: []byte("a"), Timestamp: ts2},
@@ -414,8 +414,8 @@ func TestPebbleIterConsistency(t *testing.T) {
 		MVCCKey{Key: []byte("a"), Timestamp: ts2},
 		MVCCValue{Value: roachpb.MakeValueFromString("a2")},
 	))
-	checkIterSeesBothValues(batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
-	checkIterSeesBothValues(batch2.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
+	checkIterSeesBothValues(batch.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
+	checkIterSeesBothValues(batch2.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")}))
 }
 
 func BenchmarkMVCCKeyCompare(b *testing.B) {
@@ -757,7 +757,7 @@ func TestPebbleMVCCTimeIntervalCollectorAndFilter(t *testing.T) {
 						}
 						expect = append(expect, kv)
 					}
-					iter, err := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+					iter, err := eng.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{
 						KeyTypes:     keyType,
 						UpperBound:   keys.MaxKey,
 						MinTimestamp: tc.minTimestamp,
@@ -870,7 +870,7 @@ func TestPebbleMVCCTimeIntervalWithClears(t *testing.T) {
 						}
 						expect = append(expect, kv)
 					}
-					iter, err := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+					iter, err := eng.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{
 						KeyTypes:     keyType,
 						UpperBound:   keys.MaxKey,
 						MinTimestamp: tc.minTimestamp,
@@ -952,7 +952,7 @@ func TestPebbleMVCCTimeIntervalWithRangeClears(t *testing.T) {
 						}
 						expect = append(expect, kv)
 					}
-					iter, err := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+					iter, err := eng.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{
 						KeyTypes:     keyType,
 						UpperBound:   keys.MaxKey,
 						MinTimestamp: tc.minTimestamp,
@@ -1023,7 +1023,7 @@ func TestPebbleTablePropertyFilter(t *testing.T) {
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
-			iter, err := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+			iter, err := eng.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{
 				UpperBound:   keys.MaxKey,
 				MinTimestamp: hlc.Timestamp{WallTime: tc.minTimestamp},
 				MaxTimestamp: hlc.Timestamp{WallTime: tc.maxTimestamp},
@@ -1084,7 +1084,7 @@ func TestPebbleFlushCallbackAndDurabilityRequirement(t *testing.T) {
 	// Returns the value found or nil.
 	checkGetAndIter := func(reader Reader) []byte {
 		v := mvccGetRaw(t, reader, k)
-		iter, err := reader.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: k.Key.Next()})
+		iter, err := reader.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: k.Key.Next()})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1179,11 +1179,11 @@ func TestPebbleReaderMultipleIterators(t *testing.T) {
 	for name, r := range testcases {
 		t.Run(name, func(t *testing.T) {
 			// Make sure we can create two iterators of the same type.
-			i1, err := r.NewMVCCIterator(MVCCKeyIterKind, IterOptions{LowerBound: a1.Key, UpperBound: keys.MaxKey})
+			i1, err := r.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{LowerBound: a1.Key, UpperBound: keys.MaxKey})
 			if err != nil {
 				t.Fatal(err)
 			}
-			i2, err := r.NewMVCCIterator(MVCCKeyIterKind, IterOptions{LowerBound: b1.Key, UpperBound: keys.MaxKey})
+			i2, err := r.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{LowerBound: b1.Key, UpperBound: keys.MaxKey})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1210,12 +1210,12 @@ func TestPebbleReaderMultipleIterators(t *testing.T) {
 			i2.Close()
 
 			// Quick check for engine iterators too.
-			e1, err := r.NewEngineIterator(IterOptions{UpperBound: keys.MaxKey})
+			e1, err := r.NewEngineIterator(context.Background(), IterOptions{UpperBound: keys.MaxKey})
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer e1.Close()
-			e2, err := r.NewEngineIterator(IterOptions{UpperBound: keys.MaxKey})
+			e2, err := r.NewEngineIterator(context.Background(), IterOptions{UpperBound: keys.MaxKey})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1487,7 +1487,7 @@ func TestConvertFilesToBatchAndCommit(t *testing.T) {
 		}))
 	require.NoError(t, engs[ingestEngine].IngestLocalFiles(ctx, []string{fileName1, fileName2}))
 	outputState := func(eng Engine) []string {
-		it, err := eng.NewEngineIterator(IterOptions{
+		it, err := eng.NewEngineIterator(context.Background(), IterOptions{
 			UpperBound: roachpb.KeyMax,
 			KeyTypes:   IterKeyTypePointsAndRanges,
 		})

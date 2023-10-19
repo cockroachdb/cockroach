@@ -102,10 +102,12 @@ type SeparatedIntentScanner struct {
 
 // NewSeparatedIntentScanner returns an IntentScanner appropriate for
 // use when the separated intents migration has completed.
-func NewSeparatedIntentScanner(reader storage.Reader, span roachpb.RSpan) (IntentScanner, error) {
+func NewSeparatedIntentScanner(
+	ctx context.Context, reader storage.Reader, span roachpb.RSpan,
+) (IntentScanner, error) {
 	lowerBound, _ := keys.LockTableSingleKey(span.Key.AsRawKey(), nil)
 	upperBound, _ := keys.LockTableSingleKey(span.EndKey.AsRawKey(), nil)
-	iter, err := storage.NewLockTableIterator(reader, storage.LockTableIteratorOptions{
+	iter, err := storage.NewLockTableIterator(ctx, reader, storage.LockTableIteratorOptions{
 		LowerBound: lowerBound,
 		UpperBound: upperBound,
 		// Ignore Shared and Exclusive locks. We only care about intents.

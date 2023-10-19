@@ -1470,7 +1470,7 @@ func TestComputeSplitRangeKeyStatsDelta(t *testing.T) {
 
 			tc.expect.LastUpdateNanos = nowNanos
 
-			msDelta, err := computeSplitRangeKeyStatsDelta(engine, lhsDesc, rhsDesc)
+			msDelta, err := computeSplitRangeKeyStatsDelta(context.Background(), engine, lhsDesc, rhsDesc)
 			require.NoError(t, err)
 			msDelta.AgeTo(nowNanos)
 			require.Equal(t, tc.expect, msDelta)

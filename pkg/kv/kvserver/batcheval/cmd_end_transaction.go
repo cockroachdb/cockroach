@@ -1028,7 +1028,7 @@ func splitTrigger(
 			"unable to determine whether right hand side of split is empty")
 	}
 
-	rangeKeyDeltaMS, err := computeSplitRangeKeyStatsDelta(batch, split.LeftDesc, split.RightDesc)
+	rangeKeyDeltaMS, err := computeSplitRangeKeyStatsDelta(ctx, batch, split.LeftDesc, split.RightDesc)
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
 			"unable to compute range key stats delta for RHS")
@@ -1079,7 +1079,7 @@ func makeScanStatsFn(
 	sideName string,
 ) splitStatsScanFn {
 	return func() (enginepb.MVCCStats, error) {
-		sideMS, err := rditer.ComputeStatsForRange(sideDesc, reader, ts.WallTime)
+		sideMS, err := rditer.ComputeStatsForRange(ctx, sideDesc, reader, ts.WallTime)
 		if err != nil {
 			return enginepb.MVCCStats{}, errors.Wrapf(err,
 				"unable to compute stats for %s range after split", sideName)
@@ -1308,7 +1308,7 @@ func mergeTrigger(
 	// adjusted for range key merges (which is the inverse of the split
 	// adjustment).
 	ms.Add(merge.RightMVCCStats)
-	msRangeKeyDelta, err := computeSplitRangeKeyStatsDelta(batch, merge.LeftDesc, merge.RightDesc)
+	msRangeKeyDelta, err := computeSplitRangeKeyStatsDelta(ctx, batch, merge.LeftDesc, merge.RightDesc)
 	if err != nil {
 		return result.Result{}, err
 	}
@@ -1327,7 +1327,8 @@ func mergeTrigger(
 	} else {
 		_ = clusterversion.V23_1 // remove this branch when 23.1 support is removed
 		ridPrefix := keys.MakeRangeIDReplicatedPrefix(merge.RightDesc.RangeID)
-		sysMS, err := storage.ComputeStats(batch, ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
+		sysMS, err := storage.ComputeStats(
+			ctx, batch, ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -1420,7 +1421,7 @@ func changeReplicasTrigger(
 // range keys will already have been merged in Pebble by the time this is
 // called.
 func computeSplitRangeKeyStatsDelta(
-	r storage.Reader, lhs, rhs roachpb.RangeDescriptor,
+	ctx context.Context, r storage.Reader, lhs, rhs roachpb.RangeDescriptor,
 ) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
 
@@ -1431,7 +1432,7 @@ func computeSplitRangeKeyStatsDelta(
 		splitKey.Prevish(roachpb.PrevishKeyLength), splitKey.Next(),
 		lhs.StartKey.AsRawKey(), rhs.EndKey.AsRawKey())
 
-	iter, err := r.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+	iter, err := r.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypeRangesOnly,
 		LowerBound: leftPeekBound,
 		UpperBound: rightPeekBound,

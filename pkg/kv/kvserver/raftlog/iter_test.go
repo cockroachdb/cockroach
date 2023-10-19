@@ -12,6 +12,7 @@
 package raftlog
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strings"
@@ -154,7 +155,7 @@ func TestIteratorEmptyLog(t *testing.T) {
 
 	eng := storage.NewDefaultInMemForTesting()
 	for _, hi := range []kvpb.RaftIndex{0, 1} {
-		it, err := NewIterator(rangeID, eng, IterOptions{Hi: hi})
+		it, err := NewIterator(context.Background(), rangeID, eng, IterOptions{Hi: hi})
 		require.NoError(t, err)
 		ok, err := it.SeekGE(0)
 		it.Close()
@@ -250,7 +251,7 @@ func TestIterator(t *testing.T) {
 						hi = 0
 					}
 					t.Run(fmt.Sprintf("lo=%s,hi=%s", indToName(lo), indToName(hi)), func(t *testing.T) {
-						it, err := NewIterator(rangeID, eng, IterOptions{Hi: hi})
+						it, err := NewIterator(context.Background(), rangeID, eng, IterOptions{Hi: hi})
 						require.NoError(t, err)
 						sl, err := consumeIter(it, lo)
 						it.Close()

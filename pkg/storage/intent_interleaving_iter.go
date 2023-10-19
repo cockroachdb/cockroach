@@ -12,6 +12,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -67,16 +68,16 @@ var intentInterleavingReaderPool = sync.Pool{
 // NewMVCCIterator implements the Reader interface. The
 // intentInterleavingReader can be freed once this method returns.
 func (imr *intentInterleavingReader) NewMVCCIterator(
-	iterKind MVCCIterKind, opts IterOptions,
+	ctx context.Context, iterKind MVCCIterKind, opts IterOptions,
 ) (MVCCIterator, error) {
 	if (!opts.MinTimestamp.IsEmpty() || !opts.MaxTimestamp.IsEmpty()) &&
 		iterKind == MVCCKeyAndIntentsIterKind {
 		panic("cannot ask for interleaved intents when specifying timestamp hints")
 	}
 	if iterKind == MVCCKeyIterKind || opts.KeyTypes == IterKeyTypeRangesOnly {
-		return imr.wrappableReader.NewMVCCIterator(MVCCKeyIterKind, opts)
+		return imr.wrappableReader.NewMVCCIterator(ctx, MVCCKeyIterKind, opts)
 	}
-	return newIntentInterleavingIterator(imr.wrappableReader, opts)
+	return newIntentInterleavingIterator(ctx, imr.wrappableReader, opts)
 }
 
 func (imr *intentInterleavingReader) Free() {
@@ -232,7 +233,9 @@ func isLocal(k roachpb.Key) bool {
 	return k.Compare(keys.LocalMax) < 0
 }
 
-func newIntentInterleavingIterator(reader Reader, opts IterOptions) (MVCCIterator, error) {
+func newIntentInterleavingIterator(
+	ctx context.Context, reader Reader, opts IterOptions,
+) (MVCCIterator, error) {
 	if !opts.MinTimestamp.IsEmpty() || !opts.MaxTimestamp.IsEmpty() {
 		panic("intentInterleavingIter must not be used with timestamp hints")
 	}
@@ -288,7 +291,7 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) (MVCCIterato
 	// iterator for point keys only, or return a normal MVCC iterator if only
 	// range keys are requested.
 	if opts.KeyTypes == IterKeyTypeRangesOnly {
-		return reader.NewMVCCIterator(MVCCKeyIterKind, opts)
+		return reader.NewMVCCIterator(ctx, MVCCKeyIterKind, opts)
 	}
 
 	iiIter := intentInterleavingIterPool.Get().(*intentInterleavingIter)
@@ -316,7 +319,7 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) (MVCCIterato
 
 	// Note that we can reuse intentKeyBuf, intentLimitKeyBuf after
 	// NewLockTableIter returns.
-	intentIter, err := NewLockTableIterator(reader, ltOpts)
+	intentIter, err := NewLockTableIterator(ctx, reader, ltOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -327,13 +330,13 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) (MVCCIterato
 	// and we use that when possible to save allocations).
 	var iter *pebbleIterator
 	if reader.ConsistentIterators() {
-		mvccIter, err := reader.NewMVCCIterator(MVCCKeyIterKind, opts)
+		mvccIter, err := reader.NewMVCCIterator(ctx, MVCCKeyIterKind, opts)
 		if err != nil {
 			return nil, err
 		}
 		iter = maybeUnwrapUnsafeIter(mvccIter).(*pebbleIterator)
 	} else {
-		iter = newPebbleIteratorByCloning(intentIter.CloneContext(), opts, StandardDurability)
+		iter = newPebbleIteratorByCloning(ctx, intentIter.CloneContext(), opts, StandardDurability)
 	}
 
 	*iiIter = intentInterleavingIter{

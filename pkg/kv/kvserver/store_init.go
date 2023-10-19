@@ -216,7 +216,7 @@ func WriteInitialClusterData(
 			ctx, batch, *desc, firstReplicaID, initialReplicaVersion); err != nil {
 			return err
 		}
-		computedStats, err := rditer.ComputeStatsForRange(desc, batch, now.WallTime)
+		computedStats, err := rditer.ComputeStatsForRange(ctx, desc, batch, now.WallTime)
 		if err != nil {
 			return err
 		}

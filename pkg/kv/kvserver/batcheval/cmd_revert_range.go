@@ -76,13 +76,16 @@ func declareKeysRevertRange(
 
 // isEmptyKeyTimeRange checks if the span has no writes in (since,until].
 func isEmptyKeyTimeRange(
-	readWriter storage.ReadWriter, from, to roachpb.Key, since, until hlc.Timestamp,
+	ctx context.Context,
+	readWriter storage.ReadWriter,
+	from, to roachpb.Key,
+	since, until hlc.Timestamp,
 ) (bool, error) {
 	// Use a TBI to check if there is anything to delete -- the first key Seek hits
 	// may not be in the time range but the fact the TBI found any key indicates
 	// that there is *a* key in the SST that is in the time range. Thus we should
 	// proceed to iteration that actually checks timestamps on each key.
-	iter, err := readWriter.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+	iter, err := readWriter.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
 		KeyTypes:     storage.IterKeyTypePointsAndRanges,
 		LowerBound:   from,
 		UpperBound:   to,
@@ -126,7 +129,7 @@ func RevertRange(
 	}
 
 	if empty, err := isEmptyKeyTimeRange(
-		readWriter, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp,
+		ctx, readWriter, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp,
 	); err != nil {
 		return result.Result{}, err
 	} else if empty {
