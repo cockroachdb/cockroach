@@ -87,8 +87,14 @@ func GetDescriptors(
 // field must be set to the given MVCC timestamp. An error is returned if the
 // argument values are inconsistent.
 func MustSetModificationTime(
-	modTime hlc.Timestamp, mvccTimestamp hlc.Timestamp, version DescriptorVersion,
+	modTime hlc.Timestamp,
+	mvccTimestamp hlc.Timestamp,
+	version DescriptorVersion,
+	state DescriptorState,
 ) (bool, error) {
+	if state == DescriptorState_OFFLINE {
+		return false, nil
+	}
 	// Set the ModificationTime based on the passed mvccTimestamp if we should.
 	// Table descriptors can be updated in place after their version has been
 	// incremented (e.g. to include a schema change lease).
