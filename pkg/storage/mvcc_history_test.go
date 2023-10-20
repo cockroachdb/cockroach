@@ -209,48 +209,44 @@ func TestMVCCHistories(t *testing.T) {
 			var hasData bool
 
 			for _, span := range spans {
-				err = engine.MVCCIterate(
-					span.Key, span.EndKey, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypeRangesOnly,
-					func(_ storage.MVCCKeyValue, rangeKeys storage.MVCCRangeKeyStack) error {
-						hasData = true
-						buf.Printf("rangekey: %s/[", rangeKeys.Bounds)
-						for i, version := range rangeKeys.Versions {
-							val, err := storage.DecodeMVCCValue(version.Value)
-							require.NoError(t, err)
-							if i > 0 {
-								buf.Printf(" ")
-							}
-							buf.Printf("%s=%s", version.Timestamp, val)
+				err = engine.MVCCIterate(context.Background(), span.Key, span.EndKey, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypeRangesOnly, func(_ storage.MVCCKeyValue, rangeKeys storage.MVCCRangeKeyStack) error {
+					hasData = true
+					buf.Printf("rangekey: %s/[", rangeKeys.Bounds)
+					for i, version := range rangeKeys.Versions {
+						val, err := storage.DecodeMVCCValue(version.Value)
+						require.NoError(t, err)
+						if i > 0 {
+							buf.Printf(" ")
 						}
-						buf.Printf("]\n")
-						return nil
-					})
+						buf.Printf("%s=%s", version.Timestamp, val)
+					}
+					buf.Printf("]\n")
+					return nil
+				})
 				if err != nil {
 					return err
 				}
 
-				err = engine.MVCCIterate(
-					span.Key, span.EndKey, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
-					func(r storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
-						hasData = true
-						if r.Key.Timestamp.IsEmpty() {
-							// Meta is at timestamp zero.
-							meta := enginepb.MVCCMetadata{}
-							if err := protoutil.Unmarshal(r.Value, &meta); err != nil {
-								buf.Printf("meta: %v -> error decoding proto from %v: %v\n", r.Key, r.Value, err)
-							} else {
-								buf.Printf("meta: %v -> %+v\n", r.Key, &meta)
-							}
+				err = engine.MVCCIterate(context.Background(), span.Key, span.EndKey, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly, func(r storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+					hasData = true
+					if r.Key.Timestamp.IsEmpty() {
+						// Meta is at timestamp zero.
+						meta := enginepb.MVCCMetadata{}
+						if err := protoutil.Unmarshal(r.Value, &meta); err != nil {
+							buf.Printf("meta: %v -> error decoding proto from %v: %v\n", r.Key, r.Value, err)
 						} else {
-							val, err := storage.DecodeMVCCValue(r.Value)
-							if err != nil {
-								buf.Printf("data: %v -> error decoding value %v: %v\n", r.Key, r.Value, err)
-							} else {
-								buf.Printf("data: %v -> %s\n", r.Key, val)
-							}
+							buf.Printf("meta: %v -> %+v\n", r.Key, &meta)
 						}
-						return nil
-					})
+					} else {
+						val, err := storage.DecodeMVCCValue(r.Value)
+						if err != nil {
+							buf.Printf("data: %v -> error decoding value %v: %v\n", r.Key, r.Value, err)
+						} else {
+							buf.Printf("data: %v -> %s\n", r.Key, val)
+						}
+					}
+					return nil
+				})
 			}
 
 			if !hasData {
@@ -365,7 +361,7 @@ func TestMVCCHistories(t *testing.T) {
 			// Replicated locks.
 			ltStart := keys.LocalRangeLockTablePrefix
 			ltEnd := keys.LocalRangeLockTablePrefix.PrefixEnd()
-			iter, err := engine.NewEngineIterator(storage.IterOptions{UpperBound: ltEnd})
+			iter, err := engine.NewEngineIterator(context.Background(), storage.IterOptions{UpperBound: ltEnd})
 			if err != nil {
 				return err
 			}
@@ -644,12 +640,13 @@ func TestMVCCHistories(t *testing.T) {
 					var msEngineBefore enginepb.MVCCStats
 					if stats {
 						for _, span := range spans {
-							ms, err := storage.ComputeStats(e.engine, span.Key, span.EndKey, statsTS)
+							ms, err := storage.ComputeStats(ctx, e.engine, span.Key, span.EndKey, statsTS)
 							require.NoError(t, err)
 							msEngineBefore.Add(ms)
 
 							lockSpan := lockTableSpan(span)
-							lockMs, err := storage.ComputeStats(e.engine, lockSpan.Key, lockSpan.EndKey, statsTS)
+							lockMs, err := storage.ComputeStats(
+								ctx, e.engine, lockSpan.Key, lockSpan.EndKey, statsTS)
 							require.NoError(t, err)
 							msEngineBefore.Add(lockMs)
 						}
@@ -675,12 +672,13 @@ func TestMVCCHistories(t *testing.T) {
 						// command, and compare them with the real computed stats diff.
 						var msEngineDiff enginepb.MVCCStats
 						for _, span := range spans {
-							ms, err := storage.ComputeStats(e.engine, span.Key, span.EndKey, statsTS)
+							ms, err := storage.ComputeStats(ctx, e.engine, span.Key, span.EndKey, statsTS)
 							require.NoError(t, err)
 							msEngineDiff.Add(ms)
 
 							lockSpan := lockTableSpan(span)
-							lockMs, err := storage.ComputeStats(e.engine, lockSpan.Key, lockSpan.EndKey, statsTS)
+							lockMs, err := storage.ComputeStats(
+								ctx, e.engine, lockSpan.Key, lockSpan.EndKey, statsTS)
 							require.NoError(t, err)
 							msEngineDiff.Add(lockMs)
 						}
@@ -728,12 +726,13 @@ func TestMVCCHistories(t *testing.T) {
 				if stats && (dataChange || locksChange) {
 					var msFinal enginepb.MVCCStats
 					for _, span := range spans {
-						ms, err := storage.ComputeStats(e.engine, span.Key, span.EndKey, statsTS)
+						ms, err := storage.ComputeStats(ctx, e.engine, span.Key, span.EndKey, statsTS)
 						require.NoError(t, err)
 						msFinal.Add(ms)
 
 						lockSpan := lockTableSpan(span)
-						lockMs, err := storage.ComputeStats(e.engine, lockSpan.Key, lockSpan.EndKey, statsTS)
+						lockMs, err := storage.ComputeStats(
+							ctx, e.engine, lockSpan.Key, lockSpan.EndKey, statsTS)
 						require.NoError(t, err)
 						msFinal.Add(lockMs)
 					}
@@ -1097,7 +1096,7 @@ func cmdCheckIntent(e *evalCtx) error {
 
 	return e.withReader(func(r storage.Reader) error {
 		var meta enginepb.MVCCMetadata
-		iter, err := r.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{Prefix: true})
+		iter, err := r.NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{Prefix: true})
 		if err != nil {
 			return err
 		}
@@ -1219,7 +1218,7 @@ func cmdGCClearRange(e *evalCtx) error {
 	key, endKey := e.getKeyRange()
 	gcTs := e.getTs(nil)
 	return e.withWriter("gc_clear_range", func(rw storage.ReadWriter) error {
-		cms, err := storage.ComputeStats(rw, key, endKey, 100e9)
+		cms, err := storage.ComputeStats(context.Background(), rw, key, endKey, 100e9)
 		require.NoError(e.t, err, "failed to compute range stats")
 		return storage.MVCCGarbageCollectWholeRange(e.ctx, rw, e.ms, key, endKey, gcTs, cms)
 	})
@@ -1382,7 +1381,7 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 		// before the start key -- don't attempt to compute covered stats for these
 		// to avoid iterator panics.
 		if key.Compare(endKey) < 0 && key.Compare(keys.LocalMax) >= 0 {
-			ms, err := storage.ComputeStats(e.engine, key, endKey, ts.WallTime)
+			ms, err := storage.ComputeStats(context.Background(), e.engine, key, endKey, ts.WallTime)
 			if err != nil {
 				return err
 			}
@@ -1886,7 +1885,7 @@ func cmdIterNew(e *evalCtx) error {
 	}
 
 	r := e.newReader()
-	iter, err := r.NewMVCCIterator(kind, opts)
+	iter, err := r.NewMVCCIterator(context.Background(), kind, opts)
 	if err != nil {
 		return err
 	}
@@ -1953,7 +1952,7 @@ func cmdIterNewIncremental(e *evalCtx) error {
 	}
 
 	r := e.newReader()
-	mvccIter, err := storage.NewMVCCIncrementalIterator(r, opts)
+	mvccIter, err := storage.NewMVCCIncrementalIterator(context.Background(), r, opts)
 	if err != nil {
 		return err
 	}
@@ -1986,7 +1985,7 @@ func cmdIterNewReadAsOf(e *evalCtx) error {
 		opts.UpperBound = keys.MaxKey
 	}
 	r := e.newReader()
-	mvccIter, err := r.NewMVCCIterator(storage.MVCCKeyIterKind, opts)
+	mvccIter, err := r.NewMVCCIterator(context.Background(), storage.MVCCKeyIterKind, opts)
 	if err != nil {
 		return err
 	}
@@ -2331,7 +2330,7 @@ type boundSettingReader struct {
 
 // NewMVCCIterator implements the Reader interface.
 func (b boundSettingReader) NewMVCCIterator(
-	iterKind storage.MVCCIterKind, opts storage.IterOptions,
+	ctx context.Context, iterKind storage.MVCCIterKind, opts storage.IterOptions,
 ) (storage.MVCCIterator, error) {
 	if !opts.Prefix {
 		if len(opts.LowerBound) == 0 {
@@ -2353,7 +2352,7 @@ func (b boundSettingReader) NewMVCCIterator(
 			}
 		}
 	}
-	return b.Reader.NewMVCCIterator(iterKind, opts)
+	return b.Reader.NewMVCCIterator(ctx, iterKind, opts)
 }
 
 // evalCtx stored the current state of the environment of a running

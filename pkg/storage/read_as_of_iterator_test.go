@@ -86,7 +86,7 @@ func TestReadAsOfIterator(t *testing.T) {
 			batch := pebble.NewBatch()
 			defer batch.Close()
 			populateBatch(t, batch, test.input)
-			iter, err := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+			iter, err := batch.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 			require.NoError(t, err)
 			defer iter.Close()
 
@@ -160,7 +160,7 @@ func TestReadAsOfIteratorSeek(t *testing.T) {
 			batch := pebble.NewBatch()
 			defer batch.Close()
 			populateBatch(t, batch, test.input)
-			iter, err := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+			iter, err := batch.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 			require.NoError(t, err)
 			defer iter.Close()
 

@@ -11,6 +11,7 @@
 package storage
 
 import (
+	"context"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -120,7 +121,11 @@ var lockTableKeyScannerPool = sync.Pool{
 // should accumulate before returning an error. If maxConflicts is zero, the
 // scanner will accumulate all conflicting locks.
 func newLockTableKeyScanner(
-	reader Reader, txn *roachpb.Transaction, str lock.Strength, maxConflicts int64,
+	ctx context.Context,
+	reader Reader,
+	txn *roachpb.Transaction,
+	str lock.Strength,
+	maxConflicts int64,
 ) (*lockTableKeyScanner, error) {
 	var txnID uuid.UUID
 	if txn != nil {
@@ -130,7 +135,7 @@ func newLockTableKeyScanner(
 	if err != nil {
 		return nil, err
 	}
-	iter, err := NewLockTableIterator(reader, LockTableIteratorOptions{
+	iter, err := NewLockTableIterator(ctx, reader, LockTableIteratorOptions{
 		Prefix:      true,
 		MatchTxnID:  txnID,
 		MatchMinStr: minConflictStr,

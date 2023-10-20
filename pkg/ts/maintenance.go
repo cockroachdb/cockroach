@@ -54,7 +54,7 @@ func (tsdb *DB) MaintainTimeSeries(
 	budgetBytes int64,
 	now hlc.Timestamp,
 ) error {
-	series, err := tsdb.findTimeSeries(reader, start, end, now)
+	series, err := tsdb.findTimeSeries(ctx, reader, start, end, now)
 	if err != nil {
 		return err
 	}

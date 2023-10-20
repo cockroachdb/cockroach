@@ -2727,7 +2727,7 @@ func TestClearRange(t *testing.T) {
 		t.Helper()
 		start := prefix
 		end := prefix.PrefixEnd()
-		kvs, err := storage.Scan(store.TODOEngine(), start, end, 0 /* maxRows */)
+		kvs, err := storage.Scan(context.Background(), store.TODOEngine(), start, end, 0)
 		if err != nil {
 			t.Fatal(err)
 		}

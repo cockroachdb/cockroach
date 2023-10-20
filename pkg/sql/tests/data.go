@@ -68,6 +68,7 @@ func CheckKeyCountIncludingTombstonedE(
 
 	keyCount := 0
 	it, err := engines[0].NewMVCCIterator(
+		context.Background(),
 		storage.MVCCKeyIterKind,
 		storage.IterOptions{
 			LowerBound: tableSpan.Key,

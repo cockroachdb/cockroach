@@ -74,7 +74,7 @@ func QueryResolvedTimestamp(
 	intentCleanupAge := QueryResolvedTimestampIntentCleanupAge.Get(&st.SV)
 	intentCleanupThresh := cArgs.EvalCtx.Clock().Now().Add(-intentCleanupAge.Nanoseconds(), 0)
 	minIntentTS, encounteredIntents, err := computeMinIntentTimestamp(
-		reader, args.Span(), maxEncounteredIntents, maxEncounteredIntentKeyBytes, intentCleanupThresh,
+		ctx, reader, args.Span(), maxEncounteredIntents, maxEncounteredIntentKeyBytes, intentCleanupThresh,
 	)
 	if err != nil {
 		return result.Result{}, errors.Wrapf(err, "computing minimum intent timestamp")
@@ -96,6 +96,7 @@ func QueryResolvedTimestamp(
 // minimum timestamp of any intent. While doing so, it also collects and returns
 // up to maxEncounteredIntents intents that are older than intentCleanupThresh.
 func computeMinIntentTimestamp(
+	ctx context.Context,
 	reader storage.Reader,
 	span roachpb.Span,
 	maxEncounteredIntents int64,
@@ -110,7 +111,7 @@ func computeMinIntentTimestamp(
 		// Ignore Exclusive and Shared locks. We only care about intents.
 		MatchMinStr: lock.Intent,
 	}
-	iter, err := storage.NewLockTableIterator(reader, opts)
+	iter, err := storage.NewLockTableIterator(ctx, reader, opts)
 	if err != nil {
 		return hlc.Timestamp{}, nil, err
 	}
