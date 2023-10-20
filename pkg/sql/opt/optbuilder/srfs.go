@@ -89,7 +89,8 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 	// context.
 	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
 	b.semaCtx.Properties.Require(exprKindFrom.String(),
-		tree.RejectAggregates|tree.RejectWindowApplications|tree.RejectNestedGenerators)
+		tree.RejectAggregates|tree.RejectWindowApplications|
+			tree.RejectNestedGenerators|tree.RejectProcedures)
 	inScope.context = exprKindFrom
 
 	// Build each of the provided expressions.
