@@ -959,13 +959,13 @@ func PgURL(
 }
 
 type urlConfig struct {
-	path           string
-	usePublicIP    bool
-	openInBrowser  bool
-	secure         bool
-	port           int
-	tenantName     string
-	tenantInstance int
+	path               string
+	usePublicIP        bool
+	openInBrowser      bool
+	secure             bool
+	port               int
+	virtualClusterName string
+	sqlInstance        int
 }
 
 func urlGenerator(
@@ -979,10 +979,15 @@ func urlGenerator(
 	for i, node := range nodes {
 		host := vm.Name(c.Name, int(node)) + "." + gce.Subdomain
 
+		// There are no DNS entries for local clusters.
+		if c.IsLocal() {
+			uConfig.usePublicIP = true
+		}
+
 		// verify DNS is working / fallback to IPs if not.
 		if i == 0 && !uConfig.usePublicIP {
 			if _, err := net.LookupHost(host); err != nil {
-				l.Errorf("no valid DNS (yet?). might need to re-run `sync`?")
+				l.Errorf("host %s is unreachable, falling back to public IPs. DNS entries might be outdated, run `roachprod sync`.", host)
 				uConfig.usePublicIP = true
 			}
 		}
@@ -992,7 +997,9 @@ func urlGenerator(
 		}
 		port := uConfig.port
 		if port == 0 {
-			desc, err := c.DiscoverService(ctx, node, uConfig.tenantName, install.ServiceTypeUI, uConfig.tenantInstance)
+			desc, err := c.DiscoverService(
+				ctx, node, uConfig.virtualClusterName, install.ServiceTypeUI, uConfig.sqlInstance,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -1038,8 +1045,8 @@ func browserCmd(url string) *exec.Cmd {
 func AdminURL(
 	ctx context.Context,
 	l *logger.Logger,
-	clusterName, tenantName string,
-	tenantInstance int,
+	clusterName, virtualClusterName string,
+	sqlInstance int,
 	path string,
 	usePublicIP, openInBrowser, secure bool,
 ) ([]string, error) {
@@ -1051,12 +1058,12 @@ func AdminURL(
 		return nil, err
 	}
 	uConfig := urlConfig{
-		path:           path,
-		usePublicIP:    usePublicIP,
-		openInBrowser:  openInBrowser,
-		secure:         secure,
-		tenantName:     tenantName,
-		tenantInstance: tenantInstance,
+		path:               path,
+		usePublicIP:        usePublicIP,
+		openInBrowser:      openInBrowser,
+		secure:             secure,
+		virtualClusterName: virtualClusterName,
+		sqlInstance:        sqlInstance,
 	}
 	return urlGenerator(ctx, c, l, c.TargetNodes(), uConfig)
 }
