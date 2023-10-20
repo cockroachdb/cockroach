@@ -12,10 +12,12 @@ package githubpost
 
 import (
 	"context"
+	"encoding/xml"
 	"os"
 	"strings"
 	"testing"
 
+	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/stretchr/testify/assert"
@@ -441,11 +443,14 @@ func TestListFailuresFromTestXML(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run(c.fileName, func(t *testing.T) {
-			file, err := os.Open(datapathutils.TestDataPath(t, c.fileName))
+			content, err := os.ReadFile(datapathutils.TestDataPath(t, c.fileName))
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer file.Close()
+			var testXml bazelutil.TestSuites
+			if err := xml.Unmarshal(content, &testXml); err != nil {
+				t.Fatal(err)
+			}
 			curIssue := 0
 
 			f := func(ctx context.Context, f Failure) error {
@@ -470,7 +475,7 @@ func TestListFailuresFromTestXML(t *testing.T) {
 				curIssue++
 				return nil
 			}
-			if err := listFailuresFromTestXML(context.Background(), file, f); err != nil {
+			if err := listFailuresFromTestXML(context.Background(), testXml, f); err != nil {
 				t.Fatal(err)
 			}
 			if curIssue != len(c.expIssues) {
