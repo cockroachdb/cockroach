@@ -99,7 +99,7 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() (err error
 	// Set the ModificationTime field before doing anything else.
 	// Other changes may depend on it.
 	mustSetModTime, err := descpb.MustSetModificationTime(
-		ddb.original.ModificationTime, ddb.mvccTimestamp, ddb.original.Version,
+		ddb.original.ModificationTime, ddb.mvccTimestamp, ddb.original.Version, ddb.original.State,
 	)
 	if err != nil {
 		return err
