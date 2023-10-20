@@ -331,7 +331,7 @@ Output the list of metrics typical for a node.
 		// test servers too.
 		sArgs := base.TestServerArgs{
 			Insecure:          true,
-			DefaultTestTenant: base.TestTenantAlwaysEnabled,
+			DefaultTestTenant: base.TestExternalTenantAlwaysEnabled,
 		}
 		s, err := server.TestServerFactory.New(sArgs)
 		if err != nil {

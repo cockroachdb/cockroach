@@ -56,11 +56,12 @@ go_test(
         "main_test.go",
         "node_id_test.go",
         "store_spec_test.go",
+        "test_server_args_test.go",
     ],
     args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
+    embed = [":base"],
     deps = [
-        ":base",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

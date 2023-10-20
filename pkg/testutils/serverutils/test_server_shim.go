@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -74,21 +73,30 @@ func ShouldStartDefaultTestTenant(
 	t TestLogger, baseArg base.DefaultTestTenantOptions,
 ) (retval base.DefaultTestTenantOptions) {
 	// Explicit cases for enabling or disabling the default test tenant.
+	shared := false
+	if baseArg.SharedProcessMode() {
+		shared = true
+	}
+
 	if baseArg.TestTenantAlwaysEnabled() {
-		return baseArg
+		// TODO(herko): Remove this
+		return base.InternalNonDefaultDecision(baseArg, true, shared)
+		// return baseArg
 	}
 	if baseArg.TestTenantAlwaysDisabled() {
 		if issueNum, label := baseArg.IssueRef(); issueNum != 0 {
 			t.Logf("cluster virtualization disabled due to issue: #%d (expected label: %s)", issueNum, label)
 		}
-		return baseArg
+		//return baseArg
+		return base.InternalNonDefaultDecision(baseArg, false, false)
 	}
 
 	if skip.UnderBench() {
 		// Until #83461 is resolved, we want to make sure that we don't use the
 		// multi-tenant setup so that the comparison against old single-tenant
 		// SHAs in the benchmarks is fair.
-		return base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(83461)
+		return base.InternalNonDefaultDecision(baseArg, false, false)
+		//return base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(83461)
 	}
 
 	// Obey the env override if present.
@@ -99,9 +107,9 @@ func ShouldStartDefaultTestTenant(
 		}
 		if v {
 			t.Log(defaultTestTenantMessage + "\n(override via COCKROACH_TEST_TENANT)")
-			return base.InternalNonDefaultDecision(baseArg, true)
+			return base.InternalNonDefaultDecision(baseArg, true, true)
 		}
-		return base.InternalNonDefaultDecision(baseArg, false)
+		return base.InternalNonDefaultDecision(baseArg, false, true)
 	}
 
 	if globalDefaultSelectionOverride.isSet {
@@ -119,14 +127,18 @@ func ShouldStartDefaultTestTenant(
 	// Note: we ask the metamorphic framework for a "disable" value, instead
 	// of an "enable" value, because it probabilistically returns its default value
 	// more often than not and that is what we want.
-	enabled := !util.ConstantWithMetamorphicTestBoolWithoutLogging("disable-test-tenant", false)
+
+	// TODO(herko): Revert this
+	/*enabled := !util.ConstantWithMetamorphicTestBoolWithoutLogging("disable-test-tenant", false)
+	// TODO(herko): update shared mode settings to metamorphic constant (InternalNonDefaultDecision)
 	if enabled && t != nil {
 		t.Log(defaultTestTenantMessage)
 	}
 	if enabled {
-		return base.InternalNonDefaultDecision(baseArg, true)
+		return base.InternalNonDefaultDecision(baseArg, true, true)
 	}
-	return base.InternalNonDefaultDecision(baseArg, false)
+	return base.InternalNonDefaultDecision(baseArg, false, true)*/
+	return base.InternalNonDefaultDecision(baseArg, true, shared)
 }
 
 // globalDefaultSelectionOverride is used when an entire package needs
@@ -243,7 +255,7 @@ func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 			"from the package's TestMain()")
 	}
 	tcfg := params.DefaultTestTenant
-	if !(tcfg.TestTenantAlwaysEnabled() || tcfg.TestTenantAlwaysDisabled()) {
+	if tcfg.TestTenantNoDecisionMade() {
 		return nil, errors.AssertionFailedf("programming error: DefaultTestTenant does not contain a decision\n(maybe call ShouldStartDefaultTestTenant?)")
 	}
 

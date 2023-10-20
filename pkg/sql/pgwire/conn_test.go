@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -322,11 +321,9 @@ func TestConnMessageTooBig(t *testing.T) {
 		},
 	}
 
-	pgURL, cleanup := sqlutils.PGUrl(
+	pgURL, cleanup := s.PGUrl(
 		t,
-		s.AdvSQLAddr(),
-		"TestBigClientMessage",
-		url.User(username.RootUser),
+		serverutils.CertsDirPrefix("TestBigClientMessage"),
 	)
 	defer cleanup()
 
@@ -920,8 +917,8 @@ func TestConnCloseReleasesLocks(t *testing.T) {
 		defer srv.Stopper().Stop(ctx)
 		s := srv.ApplicationLayer()
 
-		pgURL, cleanupFunc := sqlutils.PGUrl(
-			t, s.AdvSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
+		pgURL, cleanupFunc := s.PGUrl(
+			t, serverutils.CertsDirPrefix("testConnClose"), serverutils.User(username.RootUser),
 		)
 		defer cleanupFunc()
 		db, err := gosql.Open("postgres", pgURL.String())
@@ -997,8 +994,8 @@ func TestConnCloseWhileProducingRows(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.AdvSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
+	pgURL, cleanupFunc := s.PGUrl(
+		t, serverutils.CertsDirPrefix("testConnClose"), serverutils.User(username.RootUser),
 	)
 	defer cleanupFunc()
 	noBufferDB, err := gosql.Open("postgres", pgURL.String())
@@ -1215,7 +1212,7 @@ func TestConnResultsBufferSize(t *testing.T) {
 		require.Equal(t, `16384`, size)
 	}
 
-	pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanup := s.PGUrl(t, serverutils.CertsDirPrefix(t.Name()), serverutils.User(username.RootUser))
 	defer cleanup()
 	q := pgURL.Query()
 
@@ -1719,15 +1716,19 @@ func TestParseSearchPathInConnectionString(t *testing.T) {
 		},
 	}
 
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
+			base.TestTenantProbabilistic, 0,
+		),
+	})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			pgURL, cleanupFunc := sqlutils.PGUrl(
-				t, s.AdvSQLAddr(), "TestParseSearchPathInConnectionString" /* prefix */, url.User(username.RootUser),
+			pgURL, cleanupFunc := s.PGUrl(
+				t, serverutils.CertsDirPrefix("TestParseSearchPathInConnectionString"), serverutils.User(username.RootUser),
 			)
 			defer cleanupFunc()
 
@@ -1750,7 +1751,11 @@ func TestParseSearchPathInConnectionString(t *testing.T) {
 func TestSetSessionArguments(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
+			base.TestTenantProbabilistic, 0,
+		),
+	})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
@@ -1758,8 +1763,8 @@ func TestSetSessionArguments(t *testing.T) {
 	_, err := s.SQLConn(t, serverutils.DBName("defaultdb")).Exec(`SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true`)
 	require.NoError(t, err)
 
-	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.AdvSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
+	pgURL, cleanupFunc := s.PGUrl(
+		t, serverutils.CertsDirPrefix("testConnClose"), serverutils.User(username.RootUser),
 	)
 	defer cleanupFunc()
 
@@ -1841,8 +1846,8 @@ func TestRoleDefaultSettings(t *testing.T) {
 	_, err := db.ExecContext(ctx, "CREATE ROLE testuser WITH LOGIN")
 	require.NoError(t, err)
 
-	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.AdvSQLAddr(), "TestRoleDefaultSettings" /* prefix */, url.User("testuser"),
+	pgURL, cleanupFunc := s.PGUrl(
+		t, serverutils.CertsDirPrefix("TestRoleDefaultSettings"), serverutils.User("testuser"),
 	)
 	defer cleanupFunc()
 
@@ -1960,8 +1965,8 @@ func TestRoleDefaultSettings(t *testing.T) {
 
 			pgURLCopy := pgURL
 			if tc.userOverride != "" {
-				newPGURL, cleanupFunc := sqlutils.PGUrl(
-					t, s.AdvSQLAddr(), "TestRoleDefaultSettings" /* prefix */, url.User(tc.userOverride),
+				newPGURL, cleanupFunc := s.PGUrl(
+					t, serverutils.CertsDirPrefix("TestRoleDefaultSettings"), serverutils.User(tc.userOverride),
 				)
 				defer cleanupFunc()
 				pgURLCopy = newPGURL
@@ -2009,12 +2014,10 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 	// and always returns an associated cleanup function, even in case of error,
 	// which should be called. The returned cleanup function is idempotent.
 	openConnWithUser := func(user string) (*pgx.Conn, func(), error) {
-		pgURL, cleanup := sqlutils.PGUrlWithOptionalClientCerts(
+		pgURL, cleanup := testServer.PGUrl(
 			t,
-			testServer.AdvSQLAddr(),
-			t.Name(),
-			url.UserPassword(user, user),
-			user == rootUser,
+			serverutils.UserPassword(user, user),
+			serverutils.ClientCerts(user == rootUser),
 		)
 		defer cleanup()
 		conn, err := pgx.Connect(ctx, pgURL.String())
@@ -2212,7 +2215,11 @@ func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
 func TestConnCloseReleasesReservedMem(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
+			base.TestTenantProbabilistic, 0,
+		),
+	})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)
 
@@ -2220,8 +2227,8 @@ func TestConnCloseReleasesReservedMem(t *testing.T) {
 
 	before := s.PGServer().(*Server).tenantSpecificConnMonitor.AllocBytes()
 
-	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.AdvSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
+	pgURL, cleanupFunc := s.PGUrl(
+		t, serverutils.CertsDirPrefix("testConnClose"), serverutils.User(username.RootUser),
 	)
 	values := pgURL.Query()
 	values.Add("options", "c sadsad=") // invalid client-provided session param

@@ -12,17 +12,14 @@ package tests
 
 import (
 	"context"
-	"net/url"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,11 +53,9 @@ func TestDropRoleConcurrentSession(t *testing.T) {
 	require.NoError(t, err)
 
 	// Start a session as testuser.
-	testUserURL, cleanupFunc := sqlutils.PGUrl(t, s.ApplicationLayer().AdvSQLAddr(), "TestDropRoleConcurrentSession", url.User("testuser"))
-	defer cleanupFunc()
-	testuserConn, err := pgx.Connect(ctx, testUserURL.String())
+	testuserConn, err := s.ApplicationLayer().SQLConnE(serverutils.User("testuser"), serverutils.DBName(""))
 	require.NoError(t, err)
-	defer func() { _ = testuserConn.Close(ctx) }()
+	defer func() { _ = testuserConn.Close() }()
 
 	// Also create a web session for testuser.
 	_, err = rootDB.Exec(`INSERT INTO system.web_sessions ("hashedSecret", username, "expiresAt", user_id)
@@ -70,25 +65,25 @@ func TestDropRoleConcurrentSession(t *testing.T) {
 
 	// Verify that testuser can access the cluster.
 	var i int
-	err = testuserConn.QueryRow(ctx, `SELECT * FROM inherit_from_public`).Scan(&i)
+	err = testuserConn.QueryRow(`SELECT * FROM inherit_from_public`).Scan(&i)
 	require.NoError(t, err)
 	require.Equal(t, 1, i)
-	err = testuserConn.QueryRow(ctx, `SELECT * FROM inherit_from_role`).Scan(&i)
+	err = testuserConn.QueryRow(`SELECT * FROM inherit_from_role`).Scan(&i)
 	require.NoError(t, err)
 	require.Equal(t, 2, i)
-	_, err = testuserConn.Exec(ctx, "CREATE TABLE new1(a INT PRIMARY KEY)")
+	_, err = testuserConn.Exec("CREATE TABLE new1(a INT PRIMARY KEY)")
 	require.NoError(t, err)
-	_, err = testuserConn.Exec(ctx, "DROP TABLE new1")
+	_, err = testuserConn.Exec("DROP TABLE new1")
 	require.NoError(t, err)
 
 	// Drop testuser, and verify that it no longer has access.
 	_, err = rootDB.Exec(`DROP USER testuser`)
 	require.NoError(t, err)
-	err = testuserConn.QueryRow(ctx, `SELECT * FROM inherit_from_public`).Scan(&i)
+	err = testuserConn.QueryRow(`SELECT * FROM inherit_from_public`).Scan(&i)
 	require.ErrorContains(t, err, "role testuser was concurrently dropped")
-	err = testuserConn.QueryRow(ctx, `SELECT * FROM inherit_from_role`).Scan(&i)
+	err = testuserConn.QueryRow(`SELECT * FROM inherit_from_role`).Scan(&i)
 	require.ErrorContains(t, err, "role testuser was concurrently dropped")
-	_, err = testuserConn.Exec(ctx, "CREATE TABLE new2(a INT PRIMARY KEY)")
+	_, err = testuserConn.Exec("CREATE TABLE new2(a INT PRIMARY KEY)")
 	require.ErrorContains(t, err, "role testuser was concurrently dropped")
 
 	var revokedAt time.Time
