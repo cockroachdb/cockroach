@@ -453,6 +453,9 @@ func AggregatesCanMerge(inner, outer Operator) bool {
 
 // AggregateIgnoresDuplicates returns true if the output of the given aggregate
 // operator does not change when duplicate rows are added to the input.
+//
+// NOTE: Adding a true case below requires adding corresponding test cases to
+// TestAggregateIgnoresDuplicates.
 func AggregateIgnoresDuplicates(op Operator) bool {
 	switch op {
 	case AnyNotNullAggOp, BitAndAggOp, BitOrAggOp, BoolAndOp, BoolOrOp,
