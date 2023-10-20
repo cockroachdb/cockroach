@@ -216,7 +216,9 @@ func IsPermanentSchemaChangeError(err error) bool {
 	// The Backfill will grab a new timestamp to read at for the rest
 	// of the backfill.
 	if errors.HasType(err, (*kvpb.BatchTimestampBeforeGCError)(nil)) {
-		return false
+		if target := (*ReadFixedTimestampBatchTimestampBeforeGCError)(nil); !errors.As(err, &target) || !target.isReadTimestampFixed {
+			return false
+		}
 	}
 
 	// Clock sync problems should not lead to permanently failed schema changes.
@@ -295,17 +297,44 @@ func (sc *SchemaChanger) refreshMaterializedView(
 
 const schemaChangerBackfillTxnDebugName = "schemaChangerBackfill"
 
+type ReadFixedTimestampBatchTimestampBeforeGCError struct {
+	*kvpb.BatchTimestampBeforeGCError
+	isReadTimestampFixed bool
+}
+
+func (e *ReadFixedTimestampBatchTimestampBeforeGCError) Cause() error {
+	return e.BatchTimestampBeforeGCError
+}
+
 func (sc *SchemaChanger) backfillQueryIntoTable(
 	ctx context.Context, table catalog.TableDescriptor, query string, ts hlc.Timestamp, desc string,
-) error {
+) (retErr error) {
 	if fn := sc.testingKnobs.RunBeforeQueryBackfill; fn != nil {
 		if err := fn(); err != nil {
 			return err
 		}
 	}
 
+	// the ticket mentions this may also fix the issue, but if both this and the
+	// change to IsPermanentSchemaChangeError are made, there should be a way to
+	// test each
+	/*cleaner := sc.execCfg.ProtectedTimestampManager.TryToProtectBeforeGC(ctx, sc.job, table, ts)
+	defer func() {
+		retErr = errors.CombineErrors(retErr, cleaner(ctx))
+	}()*/
+
 	isTxnRetry := false
-	return sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+	return sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) (retErr error) {
+		defer func() {
+			// If the timestamp is before the GC threshold and the timestamp is
+			// fixed, wrap the error for IsPermanentSchemaChangeError.
+			if target := (*kvpb.BatchTimestampBeforeGCError)(nil); errors.As(retErr, &target) {
+				retErr = &ReadFixedTimestampBatchTimestampBeforeGCError{
+					BatchTimestampBeforeGCError: target,
+					isReadTimestampFixed:        txn.KV().ReadTimestampFixed(),
+				}
+			}
+		}()
 		defer func() {
 			isTxnRetry = true
 		}()

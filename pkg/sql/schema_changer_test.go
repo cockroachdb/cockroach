@@ -7763,3 +7763,19 @@ func TestLegacySchemaChangerWaitsForOtherSchemaChanges(t *testing.T) {
 		return errors.New("")
 	})
 }
+
+func TestTxnReadFixedTimestampGCTTL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRunner.Exec(t, "CREATE TABLE t1 (id INT PRIMARY KEY)")
+	// this is not correctly reproducing the issue
+	sqlRunner.Exec(t, "ALTER TABLE t1 CONFIGURE ZONE USING gc.ttlseconds = 1")
+	require.NoError(t, s.ApplicationLayer().ForceTableGC(ctx, "defaultdb", "t1", s.Clock().Now()))
+	sqlRunner.Exec(t, "CREATE TABLE t2 AS SELECT * FROM t1")
+}
