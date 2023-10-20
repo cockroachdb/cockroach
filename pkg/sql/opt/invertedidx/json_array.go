@@ -568,7 +568,13 @@ func (j *jsonOrArrayFilterPlanner) extractJSONExistsCondition(
 func (j *jsonOrArrayFilterPlanner) extractJSONEqCondition(
 	ctx context.Context, evalCtx *eval.Context, left *memo.VariableExpr, right opt.ScalarExpr,
 ) inverted.Expression {
-	// The right side of the expression should be a constant JSON value.
+	// The left side of the expression must be a variable expression of the
+	// indexed column.
+	if !isIndexColumn(j.tabID, j.index, left, j.computedColumns) {
+		return inverted.NonInvertedColExpression{}
+	}
+
+	// The right side of the expression must be a constant JSON value.
 	if !memo.CanExtractConstDatum(right) {
 		return inverted.NonInvertedColExpression{}
 	}
@@ -577,8 +583,7 @@ func (j *jsonOrArrayFilterPlanner) extractJSONEqCondition(
 		return inverted.NonInvertedColExpression{}
 	}
 
-	// For Equals expressions, we will generate the inverted expression for the
-	// single object built from the keys and val.
+	// For Equals expressions, we will generate the inverted expression for val.
 	invertedExpr := getInvertedExprForJSONOrArrayIndexForContaining(ctx, evalCtx, val)
 
 	// Generated inverted expression won't be tight as we are searching for rows
