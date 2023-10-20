@@ -298,12 +298,16 @@ func (b *Builder) buildRoutine(
 				stmt.AST.Body = append(stmt.AST.Body, &plpgsqltree.Return{Expr: tree.DNull})
 			}
 		}
+		var expr memo.RelExpr
+		var physProps *physical.Required
 		var plBuilder plpgsqlBuilder
 		plBuilder.init(b, colRefs, o.Types.(tree.ParamTypes), stmt.AST, rtyp)
 		stmtScope := plBuilder.build(stmt.AST, bodyScope)
-		b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, f)
-		body = []memo.RelExpr{stmtScope.expr}
-		bodyProps = []*physical.Required{stmtScope.makePhysicalProps()}
+		rtyp = finishResolveType(stmtScope)
+		expr, physProps, isMultiColDataSource =
+			b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, f)
+		body = []memo.RelExpr{expr}
+		bodyProps = []*physical.Required{physProps}
 	default:
 		panic(errors.AssertionFailedf("unexpected language: %v", o.Language))
 	}
