@@ -74,9 +74,9 @@ func StartServiceForVirtualCluster(
 
 // StopServiceForVirtualCluster stops SQL instance processes on the virtualCluster given.
 func StopServiceForVirtualCluster(
-	ctx context.Context, l *logger.Logger, clusterName string, stopOpts StopOpts,
+	ctx context.Context, l *logger.Logger, clusterName string, secure bool, stopOpts StopOpts,
 ) error {
-	c, err := newCluster(l, clusterName)
+	c, err := newCluster(l, clusterName, install.SecureOption(secure))
 	if err != nil {
 		return err
 	}
