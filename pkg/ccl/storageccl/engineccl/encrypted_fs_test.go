@@ -455,9 +455,9 @@ type errorInjector struct {
 	startInjecting bool
 }
 
-func (i *errorInjector) MaybeError(op errorfs.Op, path string) error {
-	if i.startInjecting && op.OpKind() == errorfs.OpKindWrite &&
-		!strings.HasPrefix(path, "TEST") && i.rand.Float64() < i.prob {
+func (i *errorInjector) MaybeError(op errorfs.Op) error {
+	if i.startInjecting && op.Kind.ReadOrWrite() == errorfs.OpIsWrite &&
+		!strings.HasPrefix(op.Path, "TEST") && i.rand.Float64() < i.prob {
 		return errors.WithStack(errorfs.ErrInjected)
 	}
 	return nil
@@ -466,6 +466,9 @@ func (i *errorInjector) MaybeError(op errorfs.Op, path string) error {
 func (i *errorInjector) startErrors() {
 	i.startInjecting = true
 }
+
+// String implements fmt.Stringer.
+func (i *errorInjector) String() string { return "<opaque>" }
 
 // testFS is the interface implemented by a plain FS and encrypted FS being
 // tested.
