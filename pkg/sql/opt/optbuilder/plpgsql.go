@@ -11,6 +11,7 @@
 package optbuilder
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -218,6 +219,14 @@ func (b *plpgsqlBuilder) build(block *ast.Block, s *scope) *scope {
 			// constant variables only prevent assignment, not initialization.
 			b.constants[dec.Var] = struct{}{}
 		}
+	}
+	if types.IsRecordType(b.returnType) {
+		// Infer the concrete type by examining the RETURN statements. This has to
+		// happen after building the declaration block because RETURN statements can
+		// reference declared variables.
+		recordVisitor := newRecordTypeVisitor(b.ob.ctx, b.ob.semaCtx, s)
+		ast.Walk(recordVisitor, block)
+		b.returnType = recordVisitor.typ
 	}
 	if exceptions := b.buildExceptions(block); exceptions != nil {
 		// There is an implicit block around the body statements, with an optional
@@ -1374,4 +1383,57 @@ func (b *plpgsqlBuilder) getLoopContinuation() *continuation {
 		}
 	}
 	return nil
+}
+
+// recordTypeVisitor is used to infer the concrete return type for a
+// record-returning PLpgSQL routine. It visits each return statement and checks
+// that the types of all returned expressions are either identical or UNKNOWN.
+type recordTypeVisitor struct {
+	ctx     context.Context
+	semaCtx *tree.SemaContext
+	s       *scope
+	typ     *types.T
+}
+
+func newRecordTypeVisitor(
+	ctx context.Context, semaCtx *tree.SemaContext, s *scope,
+) *recordTypeVisitor {
+	return &recordTypeVisitor{ctx: ctx, semaCtx: semaCtx, s: s, typ: types.Unknown}
+}
+
+var _ ast.StatementVisitor = &recordTypeVisitor{}
+
+func (r *recordTypeVisitor) Visit(stmt ast.Statement) {
+	if retStmt, ok := stmt.(*ast.Return); ok {
+		desired := types.Any
+		if r.typ != types.Unknown {
+			desired = r.typ
+		}
+		expr, _ := tree.WalkExpr(r.s, retStmt.Expr)
+		typedExpr, err := expr.TypeCheck(r.ctx, r.semaCtx, desired)
+		if err != nil {
+			panic(err)
+		}
+		typ := typedExpr.ResolvedType()
+		if typ == types.Unknown {
+			return
+		}
+		if typ.Family() != types.TupleFamily {
+			panic(pgerror.New(pgcode.DatatypeMismatch,
+				"cannot return non-composite value from function returning composite type",
+			))
+		}
+		if r.typ == types.Unknown {
+			r.typ = typ
+			return
+		}
+		if !typ.Identical(r.typ) {
+			panic(errors.WithHint(
+				unimplemented.NewWithIssue(115384,
+					"returning different types from a RECORD-returning function is not yet supported",
+				),
+				"try casting all RETURN statements to the same type",
+			))
+		}
+	}
 }
