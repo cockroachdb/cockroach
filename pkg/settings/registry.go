@@ -227,6 +227,7 @@ var retiredSettings = map[InternalKey]struct{}{
 	"changefeed.lagging_ranges_polling_rate":                   {},
 	"trace.jaeger.agent":                                       {},
 	"bulkio.restore.use_simple_import_spans":                   {},
+	"bulkio.restore.remove_regions.enabled":                    {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults
