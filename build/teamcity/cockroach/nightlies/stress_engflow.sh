@@ -8,8 +8,7 @@ mkdir -p artifacts
 # and after this build step.
 ENGFLOW_FLAGS="--config engflow --config cibase --config crosslinux \
 --jobs 400 --tls_client_certificate=/home/agent/engflow/engflow.crt \
---tls_client_key=/home/agent/engflow/engflow.key \
---remote_upload_local_results=false"
+--tls_client_key=/home/agent/engflow/engflow.key"
 INVOCATION_ID=$(uuidgen)
 
 status=0
