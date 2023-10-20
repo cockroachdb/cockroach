@@ -136,6 +136,7 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			predV, err := release.LatestPredecessor(t.BuildVersion())
 			require.NoError(t, err)
+			predecessorVersion := clusterupgrade.MustParseVersion(predV)
 
 			allNodes := c.All()
 			upgradedNodes := c.Nodes(1, 2)
@@ -143,14 +144,14 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 
 			u := newVersionUpgradeTest(c,
 				// System setup.
-				uploadAndStartFromCheckpointFixture(allNodes, predV),
+				uploadAndStartFromCheckpointFixture(allNodes, predecessorVersion),
 				waitForUpgradeStep(allNodes),
 				preventAutoUpgradeStep(1),
 				setShortJobIntervalsStep(1),
 				setShortGCTTLInSystemZoneConfig(c),
 
 				// Upgrade some nodes.
-				binaryUpgradeStep(upgradedNodes, clusterupgrade.MainVersion),
+				binaryUpgradeStep(upgradedNodes, clusterupgrade.CurrentVersion()),
 
 				// Job backward compatibility test:
 				//   - upgraded nodes: plan schema change and create schema changer jobs
