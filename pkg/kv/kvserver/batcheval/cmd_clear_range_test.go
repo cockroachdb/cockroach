@@ -207,7 +207,7 @@ func TestCmdClearRange(t *testing.T) {
 				require.Equal(t, tc.expClearIter, batch.clearIterCount == 1)
 
 				// Ensure that the data is gone.
-				iter, err := eng.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+				iter, err := eng.NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 					KeyTypes:   storage.IterKeyTypePointsAndRanges,
 					LowerBound: startKey,
 					UpperBound: endKey,

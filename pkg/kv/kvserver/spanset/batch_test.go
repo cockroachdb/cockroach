@@ -11,6 +11,7 @@
 package spanset_test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -79,8 +80,8 @@ func TestReadWriterDeclareLockTable(t *testing.T) {
 					defer b.Close()
 					rw := fn(ss, b)
 
-					require.NoError(t, rw.MVCCIterate(ltStartKey, ltEndKey, storage.MVCCKeyIterKind, storage.IterKeyTypePointsOnly, nil))
-					require.Error(t, rw.MVCCIterate(ltEndKey, ltEndKey.Next(), storage.MVCCKeyIterKind, storage.IterKeyTypePointsOnly, nil))
+					require.NoError(t, rw.MVCCIterate(context.Background(), ltStartKey, ltEndKey, storage.MVCCKeyIterKind, storage.IterKeyTypePointsOnly, nil))
+					require.Error(t, rw.MVCCIterate(context.Background(), ltEndKey, ltEndKey.Next(), storage.MVCCKeyIterKind, storage.IterKeyTypePointsOnly, nil))
 
 					err := rw.PutUnversioned(ltStartKey, []byte("value"))
 					if str == lock.None {

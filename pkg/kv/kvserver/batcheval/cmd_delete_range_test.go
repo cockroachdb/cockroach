@@ -309,7 +309,7 @@ func TestDeleteRangeTombstone(t *testing.T) {
 // operated on. The command should not have written an actual rangekey!
 func checkPredicateDeleteRange(t *testing.T, engine storage.Reader, rKeyInfo storage.MVCCRangeKey) {
 
-	iter, err := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+	iter, err := engine.NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		LowerBound: rKeyInfo.StartKey,
 		UpperBound: rKeyInfo.EndKey,
@@ -349,7 +349,7 @@ func checkDeleteRangeTombstone(
 	written bool,
 	now hlc.ClockTimestamp,
 ) {
-	iter, err := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+	iter, err := engine.NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypeRangesOnly,
 		LowerBound: rangeKey.StartKey,
 		UpperBound: rangeKey.EndKey,
@@ -409,7 +409,7 @@ func computeStats(
 	if len(to) == 0 {
 		to = keys.MaxKey
 	}
-	ms, err := storage.ComputeStats(reader, from, to, nowNanos)
+	ms, err := storage.ComputeStats(context.Background(), reader, from, to, nowNanos)
 	require.NoError(t, err)
 	return ms
 }

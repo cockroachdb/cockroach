@@ -88,7 +88,7 @@ func (s *Store) ComputeMVCCStats(reader storage.Reader) (enginepb.MVCCStats, err
 	now := s.Clock().PhysicalNow()
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 		var stats enginepb.MVCCStats
-		stats, err = rditer.ComputeStatsForRange(r.Desc(), reader, now)
+		stats, err = rditer.ComputeStatsForRange(context.Background(), r.Desc(), reader, now)
 		if err != nil {
 			return false
 		}

@@ -153,7 +153,7 @@ func CheckSSTConflicts(
 		// first, where there are no keys in the reader between the sstable's start
 		// and end keys. We use a non-prefix iterator for this search, and reopen a
 		// prefix one if there are engine keys in the span.
-		nonPrefixIter, err := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		nonPrefixIter, err := reader.NewMVCCIterator(ctx, MVCCKeyAndIntentsIterKind, IterOptions{
 			KeyTypes:   IterKeyTypePointsAndRanges,
 			UpperBound: end.Key,
 		})
@@ -193,7 +193,7 @@ func CheckSSTConflicts(
 	}
 	rkIter.Close()
 
-	rkIter, err = reader.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+	rkIter, err = reader.NewMVCCIterator(ctx, MVCCKeyIterKind, IterOptions{
 		UpperBound: rightPeekBound,
 		KeyTypes:   IterKeyTypeRangesOnly,
 	})
@@ -233,7 +233,7 @@ func CheckSSTConflicts(
 		// https://github.com/cockroachdb/cockroach/issues/92254
 		statsDiff.ContainsEstimates += 2
 	}
-	extIter, err := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+	extIter, err := reader.NewMVCCIterator(ctx, MVCCKeyAndIntentsIterKind, IterOptions{
 		KeyTypes:             IterKeyTypePointsAndRanges,
 		LowerBound:           leftPeekBound,
 		UpperBound:           rightPeekBound,

@@ -952,7 +952,7 @@ func testMVCCGCQueueProcessImpl(t *testing.T, useEfos bool) {
 	// However, because the GC processing pushes transactions and
 	// resolves intents asynchronously, we use a SucceedsSoon loop.
 	testutils.SucceedsSoon(t, func() error {
-		kvs, err := storage.Scan(tc.store.TODOEngine(), key1, keys.MaxKey, 0)
+		kvs, err := storage.Scan(context.Background(), tc.store.TODOEngine(), key1, keys.MaxKey, 0)
 		if err != nil {
 			return err
 		}
@@ -1312,19 +1312,17 @@ func TestMVCCGCQueueIntentResolution(t *testing.T) {
 		meta := &enginepb.MVCCMetadata{}
 		// The range is specified using only global keys, since the implementation
 		// may use an intentInterleavingIter.
-		return tc.store.TODOEngine().MVCCIterate(
-			keys.LocalMax, roachpb.KeyMax, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
-			func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
-				if !kv.Key.IsValue() {
-					if err := protoutil.Unmarshal(kv.Value, meta); err != nil {
-						return err
-					}
-					if meta.Txn != nil {
-						return errors.Errorf("non-nil Txn after GC for key %s", kv.Key)
-					}
+		return tc.store.TODOEngine().MVCCIterate(context.Background(), keys.LocalMax, roachpb.KeyMax, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly, func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+			if !kv.Key.IsValue() {
+				if err := protoutil.Unmarshal(kv.Value, meta); err != nil {
+					return err
 				}
-				return nil
-			})
+				if meta.Txn != nil {
+					return errors.Errorf("non-nil Txn after GC for key %s", kv.Key)
+				}
+			}
+			return nil
+		})
 	})
 }
 

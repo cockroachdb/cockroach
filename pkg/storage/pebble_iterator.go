@@ -96,11 +96,16 @@ var pebbleIterPool = sync.Pool{
 
 // newPebbleIterator creates a new Pebble iterator for the given Pebble reader.
 func newPebbleIterator(
-	handle pebble.Reader, opts IterOptions, durability DurabilityRequirement, parent *Pebble,
+	ctx context.Context,
+	handle pebble.Reader,
+	opts IterOptions,
+	durability DurabilityRequirement,
+	parent *Pebble,
 ) (*pebbleIterator, error) {
 	p := pebbleIterPool.Get().(*pebbleIterator)
 	p.reusable = false // defensive
 	p.init(nil, opts, durability, parent)
+	// TODO(sumeer): fix after bumping to latest Pebble.
 	iter, err := handle.NewIter(&p.options)
 	if err != nil {
 		return nil, err
@@ -112,13 +117,13 @@ func newPebbleIterator(
 // newPebbleIteratorByCloning creates a new Pebble iterator by cloning the given
 // iterator and reconfiguring it.
 func newPebbleIteratorByCloning(
-	cloneCtx CloneContext, opts IterOptions, durability DurabilityRequirement,
+	ctx context.Context, cloneCtx CloneContext, opts IterOptions, durability DurabilityRequirement,
 ) *pebbleIterator {
 	var err error
 	p := pebbleIterPool.Get().(*pebbleIterator)
 	p.reusable = false // defensive
 	p.init(nil, opts, durability, cloneCtx.engine)
-	p.iter, err = cloneCtx.rawIter.Clone(pebble.CloneOptions{
+	p.iter, err = cloneCtx.rawIter.CloneWithContext(ctx, pebble.CloneOptions{
 		IterOptions:      &p.options,
 		RefreshBatchView: true,
 	})
@@ -181,6 +186,7 @@ func (p *pebbleIterator) init(
 // 2. iter != nil && clone: clone and reconfigure the given raw Pebble iterator.
 // 3. iter == nil: create a new iterator from handle.
 func (p *pebbleIterator) initReuseOrCreate(
+	ctx context.Context,
 	handle pebble.Reader,
 	iter pebbleiter.Iterator,
 	clone bool,
@@ -195,6 +201,7 @@ func (p *pebbleIterator) initReuseOrCreate(
 
 	p.init(nil, opts, durability, statsReporter)
 	if iter == nil {
+		// TODO(sumeer): fix after bumping to latest Pebble.
 		innerIter, err := handle.NewIter(&p.options)
 		if err != nil {
 			return err
@@ -202,7 +209,7 @@ func (p *pebbleIterator) initReuseOrCreate(
 		p.iter = pebbleiter.MaybeWrap(innerIter)
 	} else if clone {
 		var err error
-		p.iter, err = iter.Clone(pebble.CloneOptions{
+		p.iter, err = iter.CloneWithContext(ctx, pebble.CloneOptions{
 			IterOptions:      &p.options,
 			RefreshBatchView: true,
 		})

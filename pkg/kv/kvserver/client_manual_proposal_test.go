@@ -117,7 +117,7 @@ LIMIT
 
 	// Determine LastIndex, LastTerm, and next MaxLeaseIndex by scanning
 	// existing log.
-	it, err := raftlog.NewIterator(rangeID, eng, raftlog.IterOptions{})
+	it, err := raftlog.NewIterator(ctx, rangeID, eng, raftlog.IterOptions{})
 	require.NoError(t, err)
 	defer it.Close()
 	rsl := logstore.NewStateLoader(rangeID)
@@ -130,15 +130,16 @@ LIMIT
 
 	var lai kvpb.LeaseAppliedIndex
 	var lastTerm uint64
-	require.NoError(t, raftlog.Visit(eng, rangeID, lastIndex, math.MaxUint64, func(entry raftpb.Entry) error {
-		ent, err := raftlog.NewEntry(it.Entry())
-		require.NoError(t, err)
-		if lai < ent.Cmd.MaxLeaseIndex {
-			lai = ent.Cmd.MaxLeaseIndex
-		}
-		lastTerm = ent.Term
-		return nil
-	}))
+	require.NoError(t, raftlog.Visit(
+		ctx, eng, rangeID, lastIndex, math.MaxUint64, func(entry raftpb.Entry) error {
+			ent, err := raftlog.NewEntry(it.Entry())
+			require.NoError(t, err)
+			if lai < ent.Cmd.MaxLeaseIndex {
+				lai = ent.Cmd.MaxLeaseIndex
+			}
+			lastTerm = ent.Term
+			return nil
+		}))
 
 	sl := stateloader.Make(rangeID)
 	lease, err := sl.LoadLease(ctx, eng)

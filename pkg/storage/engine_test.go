@@ -143,7 +143,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 	{
 		batch := eng.NewBatch()
 		defer batch.Close()
-		iter, err := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+		iter, err := batch.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -309,7 +309,7 @@ func TestEngineBatch(t *testing.T) {
 			t.Errorf("%d: expected %s, but got %s", i, expectedValue, actualValue)
 		}
 		// Try using an iterator to get the value from the batch.
-		iter, err := b.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+		iter, err := b.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -579,7 +579,7 @@ func TestEngineTimeBound(t *testing.T) {
 	}{
 		"right not touching": {
 			iter: func() (MVCCIterator, error) {
-				return batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+				return batch.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{
 					MinTimestamp: maxTimestamp.WallNext(),
 					MaxTimestamp: maxTimestamp.WallNext().WallNext(),
 					UpperBound:   roachpb.KeyMax,
@@ -589,7 +589,7 @@ func TestEngineTimeBound(t *testing.T) {
 		},
 		"left not touching": {
 			iter: func() (MVCCIterator, error) {
-				return batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+				return batch.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{
 					MinTimestamp: minTimestamp.WallPrev().WallPrev(),
 					MaxTimestamp: minTimestamp.WallPrev(),
 					UpperBound:   roachpb.KeyMax,
@@ -599,7 +599,7 @@ func TestEngineTimeBound(t *testing.T) {
 		},
 		"right touching": {
 			iter: func() (MVCCIterator, error) {
-				return batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+				return batch.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{
 					MinTimestamp: maxTimestamp,
 					MaxTimestamp: maxTimestamp,
 					UpperBound:   roachpb.KeyMax,
@@ -614,7 +614,7 @@ func TestEngineTimeBound(t *testing.T) {
 		// visible.
 		"right touching enfoces logical": {
 			iter: func() (MVCCIterator, error) {
-				return batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+				return batch.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{
 					MinTimestamp: maxTimestamp.Next(),        // @7,1
 					MaxTimestamp: maxTimestamp.Next().Next(), // @7,2
 					UpperBound:   roachpb.KeyMax,
@@ -624,7 +624,7 @@ func TestEngineTimeBound(t *testing.T) {
 		},
 		"left touching": {
 			iter: func() (MVCCIterator, error) {
-				return batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+				return batch.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{
 					MinTimestamp: minTimestamp,
 					MaxTimestamp: minTimestamp,
 					UpperBound:   roachpb.KeyMax,
@@ -634,7 +634,7 @@ func TestEngineTimeBound(t *testing.T) {
 		},
 		"left touching upperbound": {
 			iter: func() (MVCCIterator, error) {
-				return batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+				return batch.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{
 					MinTimestamp: minTimestamp,
 					MaxTimestamp: minTimestamp,
 					UpperBound:   []byte("02"),
@@ -644,7 +644,7 @@ func TestEngineTimeBound(t *testing.T) {
 		},
 		"between": {
 			iter: func() (MVCCIterator, error) {
-				return batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+				return batch.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{
 					MinTimestamp: minTimestamp.Next(),
 					MaxTimestamp: minTimestamp.Next(),
 					UpperBound:   roachpb.KeyMax,
@@ -676,7 +676,7 @@ func TestEngineTimeBound(t *testing.T) {
 
 	// Make a regular iterator. Before #21721, this would accidentally pick up the
 	// time bounded iterator instead.
-	iter, err := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+	iter, err := batch.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -761,20 +761,20 @@ func TestEngineScan1(t *testing.T) {
 	}
 	sort.Strings(sortedKeys)
 
-	keyvals, err := Scan(engine, roachpb.Key("chinese"), roachpb.Key("german"), 0)
+	keyvals, err := Scan(context.Background(), engine, roachpb.Key("chinese"), roachpb.Key("german"), 0)
 	if err != nil {
 		t.Fatalf("could not run scan: %+v", err)
 	}
 	ensureRangeEqual(t, sortedKeys[1:4], keyMap, keyvals)
 
 	// Check an end of range which does not equal an existing key.
-	keyvals, err = Scan(engine, roachpb.Key("chinese"), roachpb.Key("german1"), 0)
+	keyvals, err = Scan(context.Background(), engine, roachpb.Key("chinese"), roachpb.Key("german1"), 0)
 	if err != nil {
 		t.Fatalf("could not run scan: %+v", err)
 	}
 	ensureRangeEqual(t, sortedKeys[1:5], keyMap, keyvals)
 
-	keyvals, err = Scan(engine, roachpb.Key("chinese"), roachpb.Key("german"), 2)
+	keyvals, err = Scan(context.Background(), engine, roachpb.Key("chinese"), roachpb.Key("german"), 2)
 	if err != nil {
 		t.Fatalf("could not run scan: %+v", err)
 	}
@@ -784,7 +784,7 @@ func TestEngineScan1(t *testing.T) {
 	// LocalMax is the lowest possible global key.
 	startKeys := []roachpb.Key{roachpb.Key("cat"), keys.LocalMax}
 	for _, startKey := range startKeys {
-		keyvals, err = Scan(engine, startKey, roachpb.KeyMax, 0)
+		keyvals, err = Scan(context.Background(), engine, startKey, roachpb.KeyMax, 0)
 		if err != nil {
 			t.Fatalf("could not run scan: %+v", err)
 		}
@@ -793,8 +793,7 @@ func TestEngineScan1(t *testing.T) {
 
 	// Test iterator stats.
 	ro := engine.NewReadOnly(StandardDurability)
-	iter, err := ro.NewMVCCIterator(MVCCKeyIterKind,
-		IterOptions{LowerBound: roachpb.Key("cat"), UpperBound: roachpb.Key("server")})
+	iter, err := ro.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{LowerBound: roachpb.Key("cat"), UpperBound: roachpb.Key("server")})
 	require.NoError(t, err)
 	iter.SeekGE(MVCCKey{Key: roachpb.Key("cat")})
 	for {
@@ -811,8 +810,7 @@ func TestEngineScan1(t *testing.T) {
 	require.Equal(t, "(interface (dir, seek, step): (fwd, 1, 5), (rev, 0, 0)), "+
 		"(internal (dir, seek, step): (fwd, 1, 5), (rev, 0, 0))", stats.String())
 	iter.Close()
-	iter, err = ro.NewMVCCIterator(MVCCKeyIterKind,
-		IterOptions{LowerBound: roachpb.Key("cat"), UpperBound: roachpb.Key("server")})
+	iter, err = ro.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{LowerBound: roachpb.Key("cat"), UpperBound: roachpb.Key("server")})
 	require.NoError(t, err)
 	// pebble.Iterator is reused, but stats are reset.
 	stats = iter.Stats().Stats
@@ -832,7 +830,7 @@ func TestEngineScan1(t *testing.T) {
 }
 
 func verifyScan(start, end roachpb.Key, max int64, expKeys []MVCCKey, engine Engine, t *testing.T) {
-	kvs, err := Scan(engine, start, end, max)
+	kvs, err := Scan(context.Background(), engine, start, end, max)
 	if err != nil {
 		t.Errorf("scan %q-%q: expected no error, but got %s", start, end, err)
 	}
@@ -919,8 +917,8 @@ func TestSnapshot(t *testing.T) {
 			valSnapshot, val1)
 	}
 
-	keyvals, _ := Scan(engine, key.Key, roachpb.KeyMax, 0)
-	keyvalsSnapshot, error := Scan(snap, key.Key, roachpb.KeyMax, 0)
+	keyvals, _ := Scan(context.Background(), engine, key.Key, roachpb.KeyMax, 0)
+	keyvalsSnapshot, error := Scan(context.Background(), snap, key.Key, roachpb.KeyMax, 0)
 	if error != nil {
 		t.Fatalf("error : %s", error)
 	}
@@ -967,8 +965,8 @@ func TestSnapshotMethods(t *testing.T) {
 	}
 
 	// Verify Scan.
-	keyvals, _ := Scan(engine, localMax, roachpb.KeyMax, 0)
-	keyvalsSnapshot, err := Scan(snap, localMax, roachpb.KeyMax, 0)
+	keyvals, _ := Scan(context.Background(), engine, localMax, roachpb.KeyMax, 0)
+	keyvalsSnapshot, err := Scan(context.Background(), snap, localMax, roachpb.KeyMax, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -979,15 +977,14 @@ func TestSnapshotMethods(t *testing.T) {
 
 	// Verify MVCCIterate.
 	index := 0
-	if err := snap.MVCCIterate(localMax, roachpb.KeyMax, MVCCKeyAndIntentsIterKind, IterKeyTypePointsOnly,
-		func(kv MVCCKeyValue, _ MVCCRangeKeyStack) error {
-			if !kv.Key.Equal(keys[index]) || !bytes.Equal(kv.Value, vals[index]) {
-				t.Errorf("%d: key/value not equal between expected and snapshot: %s/%s, %s/%s",
-					index, keys[index], vals[index], kv.Key, kv.Value)
-			}
-			index++
-			return nil
-		}); err != nil {
+	if err := snap.MVCCIterate(context.Background(), localMax, roachpb.KeyMax, MVCCKeyAndIntentsIterKind, IterKeyTypePointsOnly, func(kv MVCCKeyValue, _ MVCCRangeKeyStack) error {
+		if !kv.Key.Equal(keys[index]) || !bytes.Equal(kv.Value, vals[index]) {
+			t.Errorf("%d: key/value not equal between expected and snapshot: %s/%s, %s/%s",
+				index, keys[index], vals[index], kv.Key, kv.Value)
+		}
+		index++
+		return nil
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -999,7 +996,7 @@ func TestSnapshotMethods(t *testing.T) {
 	}
 
 	// Verify NewMVCCIterator still iterates over original snapshot.
-	iter, err := snap.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+	iter, err := snap.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1139,7 +1136,7 @@ func TestCreateCheckpoint_SpanConstrained(t *testing.T) {
 		require.NoError(t, err)
 		defer cDB.Close()
 
-		iter, err := cDB.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+		iter, err := cDB.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{
 			LowerBound: key(low),
 			UpperBound: key(high),
 		})
@@ -1562,7 +1559,7 @@ func TestGetIntent(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(string(test.key), func(t *testing.T) {
-			intent, err := GetIntent(eng, test.key)
+			intent, err := GetIntent(ctx, eng, test.key)
 			if test.expErr {
 				require.Error(t, err)
 			} else {
@@ -1791,7 +1788,7 @@ func TestEngineClearRange(t *testing.T) {
 
 		"ClearRangeWithHeuristic individual": {
 			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
-				return ClearRangeWithHeuristic(rw, rw, start, end, math.MaxInt, math.MaxInt)
+				return ClearRangeWithHeuristic(ctx, rw, rw, start, end, math.MaxInt, math.MaxInt)
 			},
 			clearsPointKeys: true,
 			clearsRangeKeys: true,
@@ -1799,7 +1796,7 @@ func TestEngineClearRange(t *testing.T) {
 		},
 		"ClearRangeWithHeuristic ranged": {
 			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
-				return ClearRangeWithHeuristic(rw, rw, start, end, 1, 1)
+				return ClearRangeWithHeuristic(ctx, rw, rw, start, end, 1, 1)
 			},
 			clearsPointKeys: true,
 			clearsRangeKeys: true,
@@ -1807,7 +1804,7 @@ func TestEngineClearRange(t *testing.T) {
 		},
 		"ClearRangeWithHeuristic point keys individual": {
 			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
-				return ClearRangeWithHeuristic(rw, rw, start, end, math.MaxInt, 0)
+				return ClearRangeWithHeuristic(ctx, rw, rw, start, end, math.MaxInt, 0)
 			},
 			clearsPointKeys: true,
 			clearsRangeKeys: false,
@@ -1815,7 +1812,7 @@ func TestEngineClearRange(t *testing.T) {
 		},
 		"ClearRangeWithHeuristic point keys ranged": {
 			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
-				return ClearRangeWithHeuristic(rw, rw, start, end, 1, 0)
+				return ClearRangeWithHeuristic(ctx, rw, rw, start, end, 1, 0)
 			},
 			clearsPointKeys: true,
 			clearsRangeKeys: false,
@@ -1823,7 +1820,7 @@ func TestEngineClearRange(t *testing.T) {
 		},
 		"ClearRangeWithHeuristic range keys individual": {
 			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
-				return ClearRangeWithHeuristic(rw, rw, start, end, 0, math.MaxInt)
+				return ClearRangeWithHeuristic(ctx, rw, rw, start, end, 0, math.MaxInt)
 			},
 			clearsPointKeys: false,
 			clearsRangeKeys: true,
@@ -1831,7 +1828,7 @@ func TestEngineClearRange(t *testing.T) {
 		},
 		"ClearRangeWithHeuristic range keys ranged": {
 			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
-				return ClearRangeWithHeuristic(rw, rw, start, end, 0, 1)
+				return ClearRangeWithHeuristic(ctx, rw, rw, start, end, 0, 1)
 			},
 			clearsPointKeys: false,
 			clearsRangeKeys: true,
@@ -1970,7 +1967,7 @@ func TestEngineIteratorVisibility(t *testing.T) {
 					LowerBound: keys.LocalMax,
 					UpperBound: keys.MaxKey,
 				}
-				iterOld, err := r.NewMVCCIterator(iterKind, opts)
+				iterOld, err := r.NewMVCCIterator(context.Background(), iterKind, opts)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -2006,7 +2003,7 @@ func TestEngineIteratorVisibility(t *testing.T) {
 				// Create another iterator from the regular reader. Consistent iterators
 				// should see the old state (because iterOld was already created for
 				// it), others should see the new state.
-				iterNew, err := r.NewMVCCIterator(iterKind, opts)
+				iterNew, err := r.NewMVCCIterator(context.Background(), iterKind, opts)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -2020,7 +2017,7 @@ func TestEngineIteratorVisibility(t *testing.T) {
 				// Create a new iterator from the pinned reader. Readers with consistent
 				// iterators should see the old (pinned) state, others should see the
 				// new state.
-				iterPinned, err := rPinned.NewMVCCIterator(iterKind, opts)
+				iterPinned, err := rPinned.NewMVCCIterator(context.Background(), iterKind, opts)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -2072,7 +2069,7 @@ func TestEngineIteratorVisibility(t *testing.T) {
 					// A new iterator should read our own writes if the reader supports it,
 					// but consistent iterators should not see the changes to the underlying
 					// engine either way.
-					iterOwn, err := r.NewMVCCIterator(iterKind, opts)
+					iterOwn, err := r.NewMVCCIterator(context.Background(), iterKind, opts)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -2674,7 +2671,7 @@ func TestEngineRangeKeyMutations(t *testing.T) {
 func scanRangeKeys(t *testing.T, r Reader) []MVCCRangeKeyValue {
 	t.Helper()
 
-	iter, err := r.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+	iter, err := r.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{
 		KeyTypes:   IterKeyTypeRangesOnly,
 		LowerBound: keys.LocalMax,
 		UpperBound: keys.MaxKey,
@@ -2700,7 +2697,7 @@ func scanRangeKeys(t *testing.T, r Reader) []MVCCRangeKeyValue {
 func scanPointKeys(t *testing.T, r Reader) []MVCCKey {
 	t.Helper()
 
-	iter, err := r.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+	iter, err := r.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{
 		LowerBound: keys.LocalMax,
 		UpperBound: keys.MaxKey,
 	})

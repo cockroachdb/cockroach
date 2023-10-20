@@ -83,8 +83,7 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 
 	reader := eng.NewReadOnly(StandardDurability)
 	defer reader.Close()
-	iter, err := reader.NewMVCCIterator(
-		MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: keys[0], UpperBound: roachpb.Key("d")})
+	iter, err := reader.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: keys[0], UpperBound: roachpb.Key("d")})
 	require.NoError(t, err)
 	defer iter.Close()
 
@@ -152,8 +151,7 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 
 	reader := eng.NewReadOnly(StandardDurability)
 	defer reader.Close()
-	iter, err := reader.NewMVCCIterator(
-		MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: keys[0], UpperBound: roachpb.Key("e")})
+	iter, err := reader.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: keys[0], UpperBound: roachpb.Key("e")})
 	require.NoError(t, err)
 	defer iter.Close()
 
@@ -232,8 +230,7 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 	}()
 
 	// iterator that can span over all the written keys.
-	iter, err := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
-		IterOptions{LowerBound: makeKey(nil, 0), UpperBound: makeKey(nil, 11)})
+	iter, err := eng.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: makeKey(nil, 0), UpperBound: makeKey(nil, 11)})
 	require.NoError(t, err)
 	defer iter.Close()
 

@@ -81,7 +81,7 @@ func refreshRange(
 	// Construct an incremental iterator with the desired time bounds. Incremental
 	// iterators will emit MVCC tombstones by default and will emit intents when
 	// configured to do so (see IntentPolicy).
-	iter, err := storage.NewMVCCIncrementalIterator(reader, storage.MVCCIncrementalIterOptions{
+	iter, err := storage.NewMVCCIncrementalIterator(ctx, reader, storage.MVCCIncrementalIterOptions{
 		KeyTypes:     storage.IterKeyTypePointsAndRanges,
 		StartKey:     span.Key,
 		EndKey:       span.EndKey,

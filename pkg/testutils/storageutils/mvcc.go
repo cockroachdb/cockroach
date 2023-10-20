@@ -11,6 +11,7 @@
 package storageutils
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -27,7 +28,8 @@ func MVCCGetRaw(t *testing.T, r storage.Reader, key storage.MVCCKey) []byte {
 // MVCCGetRawWithError is like MVCCGetRaw, but returns an error rather than
 // failing the test.
 func MVCCGetRawWithError(t *testing.T, r storage.Reader, key storage.MVCCKey) ([]byte, error) {
-	iter, err := r.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{Prefix: true})
+	iter, err := r.NewMVCCIterator(
+		context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{Prefix: true})
 	if err != nil {
 		return nil, err
 	}

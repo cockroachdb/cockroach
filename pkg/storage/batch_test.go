@@ -112,7 +112,7 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Write
 		{Key: mvccKey("d"), Value: []byte("before")},
 		{Key: keyF, Value: encodedValueF},
 	}
-	kvs, err := Scan(e, localMax, roachpb.KeyMax, 0)
+	kvs, err := Scan(context.Background(), e, localMax, roachpb.KeyMax, 0)
 	require.NoError(t, err)
 	require.Equal(t, expValues, kvs)
 
@@ -124,14 +124,14 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Write
 	}
 	if r, ok := b.(Reader); !writeOnly && ok {
 		// Scan values from batch directly.
-		kvs, err = Scan(r, localMax, roachpb.KeyMax, 0)
+		kvs, err = Scan(context.Background(), r, localMax, roachpb.KeyMax, 0)
 		require.NoError(t, err)
 		require.Equal(t, expValues, kvs)
 	}
 
 	// Commit batch and verify direct engine scan yields correct values.
 	require.NoError(t, commit(e, b))
-	kvs, err = Scan(e, localMax, roachpb.KeyMax, 0)
+	kvs, err = Scan(context.Background(), e, localMax, roachpb.KeyMax, 0)
 	require.NoError(t, err)
 	require.Equal(t, expValues, kvs)
 }
@@ -183,15 +183,14 @@ func TestReadOnlyBasics(t *testing.T) {
 	a := mvccKey("a")
 	successTestCases := []func(){
 		func() {
-			_ = ro.MVCCIterate(a.Key, a.Key, MVCCKeyIterKind, IterKeyTypePointsOnly,
-				func(MVCCKeyValue, MVCCRangeKeyStack) error { return iterutil.StopIteration() })
+			_ = ro.MVCCIterate(context.Background(), a.Key, a.Key, MVCCKeyIterKind, IterKeyTypePointsOnly, func(MVCCKeyValue, MVCCRangeKeyStack) error { return iterutil.StopIteration() })
 		},
 		func() {
-			iter, _ := ro.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+			iter, _ := ro.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 			iter.Close()
 		},
 		func() {
-			iter, _ := ro.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+			iter, _ := ro.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{
 				MinTimestamp: hlc.MinTimestamp,
 				MaxTimestamp: hlc.MaxTimestamp,
 				UpperBound:   roachpb.KeyMax,
@@ -255,7 +254,7 @@ func TestReadOnlyBasics(t *testing.T) {
 		{Key: mvccKey("c"), Value: appender("foobar")},
 	}
 
-	kvs, err := Scan(e, localMax, roachpb.KeyMax, 0)
+	kvs, err := Scan(context.Background(), e, localMax, roachpb.KeyMax, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -566,7 +565,7 @@ func TestBatchScan(t *testing.T) {
 	// Scan each case using the batch and store the results.
 	results := map[int][]MVCCKeyValue{}
 	for i, scan := range scans {
-		kvs, err := Scan(b, scan.start, scan.end, scan.max)
+		kvs, err := Scan(context.Background(), b, scan.start, scan.end, scan.max)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -578,7 +577,7 @@ func TestBatchScan(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i, scan := range scans {
-		kvs, err := Scan(e, scan.start, scan.end, scan.max)
+		kvs, err := Scan(context.Background(), e, scan.start, scan.end, scan.max)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -610,7 +609,7 @@ func TestBatchScanWithDelete(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	kvs, err := Scan(b, localMax, roachpb.KeyMax, 0)
+	kvs, err := Scan(context.Background(), b, localMax, roachpb.KeyMax, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -647,7 +646,7 @@ func TestBatchScanMaxWithDeleted(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A scan with max=1 should scan "b".
-	kvs, err := Scan(b, localMax, roachpb.KeyMax, 1)
+	kvs, err := Scan(context.Background(), b, localMax, roachpb.KeyMax, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -702,7 +701,7 @@ func TestUnindexedBatchThatSupportsReader(t *testing.T) {
 
 	// Verify that reads on the distinct batch go to the underlying engine, not
 	// to the unindexed batch.
-	iter, err := b.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+	iter, err := b.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -738,8 +737,12 @@ func TestWriteBatchPanicsAsReader(t *testing.T) {
 	a := mvccKey("a")
 	b := mvccKey("b")
 	testCases := []func(){
-		func() { _ = r.MVCCIterate(a.Key, b.Key, MVCCKeyIterKind, IterKeyTypePointsOnly, nil) },
-		func() { _, _ = r.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax}) },
+		func() {
+			_ = r.MVCCIterate(context.Background(), a.Key, b.Key, MVCCKeyIterKind, IterKeyTypePointsOnly, nil)
+		},
+		func() {
+			_, _ = r.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+		},
 	}
 	for i, f := range testCases {
 		func() {
@@ -782,7 +785,7 @@ func TestBatchIteration(t *testing.T) {
 	}
 
 	iterOpts := IterOptions{UpperBound: k3.Key}
-	iter, err := b.NewMVCCIterator(MVCCKeyIterKind, iterOpts)
+	iter, err := b.NewMVCCIterator(context.Background(), MVCCKeyIterKind, iterOpts)
 	if err != nil {
 		t.Fatal(err)
 	}

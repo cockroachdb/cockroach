@@ -552,8 +552,10 @@ type Reader interface {
 	// Note that this method is not expected take into account the timestamp of
 	// the end key; all MVCCKeys at end.Key are considered excluded in the
 	// iteration.
-	MVCCIterate(start, end roachpb.Key, iterKind MVCCIterKind, keyTypes IterKeyType,
-		f func(MVCCKeyValue, MVCCRangeKeyStack) error) error
+	MVCCIterate(
+		ctx context.Context, start, end roachpb.Key, iterKind MVCCIterKind, keyTypes IterKeyType,
+		f func(MVCCKeyValue, MVCCRangeKeyStack) error,
+	) error
 	// NewMVCCIterator returns a new instance of an MVCCIterator over this engine.
 	// The caller must invoke Close() on it when done to free resources.
 	//
@@ -573,12 +575,13 @@ type Reader interface {
 	//
 	// 4. Iterators on indexed batches see all batch writes as of their creation
 	//    time, but they satisfy ConsistentIterators for engine writes.
-	NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) (MVCCIterator, error)
+	NewMVCCIterator(
+		ctx context.Context, iterKind MVCCIterKind, opts IterOptions) (MVCCIterator, error)
 	// NewEngineIterator returns a new instance of an EngineIterator over this
 	// engine. The caller must invoke EngineIterator.Close() when finished
 	// with the iterator to free resources. The caller can change IterOptions
 	// after this function returns.
-	NewEngineIterator(opts IterOptions) (EngineIterator, error)
+	NewEngineIterator(ctx context.Context, opts IterOptions) (EngineIterator, error)
 	// ScanInternal allows a caller to inspect the underlying engine's InternalKeys
 	// using a visitor pattern, while also allowing for keys in shared files to be
 	// skipped if a visitor is provided for visitSharedFiles. Useful for
@@ -1370,14 +1373,14 @@ type EncryptionRegistries struct {
 // key, it will return nil rather than an error. Errors are returned for problem
 // at the storage layer, problem decoding the key, problem unmarshalling the
 // intent, missing transaction on the intent, or multiple intents for this key.
-func GetIntent(reader Reader, key roachpb.Key) (*roachpb.Intent, error) {
+func GetIntent(ctx context.Context, reader Reader, key roachpb.Key) (*roachpb.Intent, error) {
 	// Probe the lock table at key using a lock-table iterator.
 	opts := LockTableIteratorOptions{
 		Prefix: true,
 		// Ignore Exclusive and Shared locks. We only care about intents.
 		MatchMinStr: lock.Intent,
 	}
-	iter, err := NewLockTableIterator(reader, opts)
+	iter, err := NewLockTableIterator(ctx, reader, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -1441,9 +1444,11 @@ func GetIntent(reader Reader, key roachpb.Key) (*roachpb.Intent, error) {
 // intentInterleavingIter for details.
 //
 // NB: This function ignores MVCC range keys. It should only be used for tests.
-func Scan(reader Reader, start, end roachpb.Key, max int64) ([]MVCCKeyValue, error) {
+func Scan(
+	ctx context.Context, reader Reader, start, end roachpb.Key, max int64,
+) ([]MVCCKeyValue, error) {
 	var kvs []MVCCKeyValue
-	err := reader.MVCCIterate(start, end, MVCCKeyAndIntentsIterKind, IterKeyTypePointsOnly,
+	err := reader.MVCCIterate(ctx, start, end, MVCCKeyAndIntentsIterKind, IterKeyTypePointsOnly,
 		func(kv MVCCKeyValue, _ MVCCRangeKeyStack) error {
 			if max != 0 && int64(len(kvs)) >= max {
 				return iterutil.StopIteration()
@@ -1467,7 +1472,7 @@ func ScanLocks(
 
 	ltStart, _ := keys.LockTableSingleKey(start, nil)
 	ltEnd, _ := keys.LockTableSingleKey(end, nil)
-	iter, err := NewLockTableIterator(reader, LockTableIteratorOptions{
+	iter, err := NewLockTableIterator(ctx, reader, LockTableIteratorOptions{
 		LowerBound:  ltStart,
 		UpperBound:  ltEnd,
 		MatchMinStr: lock.Shared, // all locks
@@ -1547,10 +1552,14 @@ func WriteSyncNoop(eng Engine) error {
 // too, by doing a SeekLT when we reach the threshold. It's unclear whether it's
 // really worth it.
 func ClearRangeWithHeuristic(
-	r Reader, w Writer, start, end roachpb.Key, pointKeyThreshold, rangeKeyThreshold int,
+	ctx context.Context,
+	r Reader,
+	w Writer,
+	start, end roachpb.Key,
+	pointKeyThreshold, rangeKeyThreshold int,
 ) error {
 	clearPointKeys := func(r Reader, w Writer, start, end roachpb.Key, threshold int) error {
-		iter, err := r.NewEngineIterator(IterOptions{
+		iter, err := r.NewEngineIterator(ctx, IterOptions{
 			KeyTypes:   IterKeyTypePointsOnly,
 			LowerBound: start,
 			UpperBound: end,
@@ -1598,7 +1607,7 @@ func ClearRangeWithHeuristic(
 	}
 
 	clearRangeKeys := func(r Reader, w Writer, start, end roachpb.Key, threshold int) error {
-		iter, err := r.NewEngineIterator(IterOptions{
+		iter, err := r.NewEngineIterator(ctx, IterOptions{
 			KeyTypes:   IterKeyTypeRangesOnly,
 			LowerBound: start,
 			UpperBound: end,
@@ -1733,6 +1742,7 @@ func calculatePreIngestDelay(settings *cluster.Settings, metrics *pebble.Metrics
 
 // Helper function to implement Reader.MVCCIterate().
 func iterateOnReader(
+	ctx context.Context,
 	reader Reader,
 	start, end roachpb.Key,
 	iterKind MVCCIterKind,
@@ -1746,7 +1756,7 @@ func iterateOnReader(
 		return nil
 	}
 
-	it, err := reader.NewMVCCIterator(iterKind, IterOptions{
+	it, err := reader.NewMVCCIterator(ctx, iterKind, IterOptions{
 		KeyTypes:   keyTypes,
 		LowerBound: start,
 		UpperBound: end,
@@ -2020,7 +2030,7 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 		ltEnd, _ := keys.LockTableSingleKey(end, nil)
 		opts.UpperBound = ltEnd
 	}
-	iter, err := NewLockTableIterator(reader, opts)
+	iter, err := NewLockTableIterator(ctx, reader, opts)
 	if err != nil {
 		return false, err
 	}

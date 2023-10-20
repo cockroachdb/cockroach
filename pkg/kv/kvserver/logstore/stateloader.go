@@ -57,7 +57,8 @@ func (sl StateLoader) LoadLastIndex(
 ) (kvpb.RaftIndex, error) {
 	prefix := sl.RaftLogPrefix()
 	// NB: raft log has no intents.
-	iter, err := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{LowerBound: prefix})
+	iter, err := reader.NewMVCCIterator(
+		ctx, storage.MVCCKeyIterKind, storage.IterOptions{LowerBound: prefix})
 	if err != nil {
 		return 0, err
 	}

@@ -179,8 +179,8 @@ func visitStoreReplicas(
 		// at potentially uncommitted entries as we have no way to determine their
 		// outcome, and they will become committed as soon as the replica is
 		// designated as a survivor.
-		rangeUpdates, err := GetDescriptorChangesFromRaftLog(desc.RangeID,
-			rstate.RaftAppliedIndex+1, math.MaxInt64, reader)
+		rangeUpdates, err := GetDescriptorChangesFromRaftLog(
+			ctx, desc.RangeID, rstate.RaftAppliedIndex+1, math.MaxInt64, reader)
 		if err != nil {
 			return err
 		}
@@ -209,10 +209,10 @@ func visitStoreReplicas(
 // lo (inclusive) and hi (exclusive) and searches for changes to range
 // descriptors, as identified by presence of a commit trigger.
 func GetDescriptorChangesFromRaftLog(
-	rangeID roachpb.RangeID, lo, hi kvpb.RaftIndex, reader storage.Reader,
+	ctx context.Context, rangeID roachpb.RangeID, lo, hi kvpb.RaftIndex, reader storage.Reader,
 ) ([]loqrecoverypb.DescriptorChangeInfo, error) {
 	var changes []loqrecoverypb.DescriptorChangeInfo
-	if err := raftlog.Visit(reader, rangeID, lo, hi, func(ent raftpb.Entry) error {
+	if err := raftlog.Visit(ctx, reader, rangeID, lo, hi, func(ent raftpb.Entry) error {
 		e, err := raftlog.NewEntry(ent)
 		if err != nil {
 			return err

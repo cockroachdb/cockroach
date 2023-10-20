@@ -36,12 +36,12 @@ type instrumentedEngine struct {
 }
 
 func (ie *instrumentedEngine) NewMVCCIterator(
-	iterKind storage.MVCCIterKind, opts storage.IterOptions,
+	ctx context.Context, iterKind storage.MVCCIterKind, opts storage.IterOptions,
 ) (storage.MVCCIterator, error) {
 	if ie.onNewIterator != nil {
 		ie.onNewIterator(opts)
 	}
-	return ie.Engine.NewMVCCIterator(iterKind, opts)
+	return ie.Engine.NewMVCCIterator(ctx, iterKind, opts)
 }
 
 // TestCollectIntentsUsesSameIterator tests that all uses of CollectIntents
