@@ -233,9 +233,16 @@ func TestTableAndDatabaseDetailsAndStats(t *testing.T) {
 	require.Greater(t, tableStatsResp.Stats.LiveBytes, int64(0))
 
 	// TableDetails
-	tableDetailsResp := &serverpb.TableDetailsResponse{}
-	err = getAdminJSONProto(st, "databases/defaultdb/tables/public.test", tableDetailsResp)
-	require.NoError(t, err)
-
-	require.Greater(t, tableDetailsResp.DataLiveBytes, int64(0))
+	// Call to endpoint is wrapped with retry logic to potentially avoid flakiness of
+	// returned results (issue #112387).
+	testutils.SucceedsSoon(t, func() error {
+		tableDetailsResp := &serverpb.TableDetailsResponse{}
+		if err := getAdminJSONProto(st, "databases/defaultdb/tables/public.test", tableDetailsResp); err != nil {
+			return err
+		}
+		if tableDetailsResp.DataLiveBytes <= 0 {
+			return fmt.Errorf("expected DataLiveBytes to be greater than 0 but got %d", tableDetailsResp.DataLiveBytes)
+		}
+		return nil
+	})
 }
