@@ -16,11 +16,11 @@ require (
 	github.com/google/btree v1.0.1
 	github.com/google/pprof v0.0.0-20210827144239-02619b876842
 	github.com/google/uuid v1.3.0
-	golang.org/x/crypto v0.10.0
+	golang.org/x/crypto v0.12.0
 	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df
 	golang.org/x/exp/typeparams v0.0.0-20221208152030-732eee02a75a // indirect
 	golang.org/x/mod v0.11.0 // indirect
-	golang.org/x/net v0.11.0
+	golang.org/x/net v0.14.0
 	golang.org/x/oauth2 v0.5.0
 	golang.org/x/sync v0.3.0
 	golang.org/x/sys v0.11.0
@@ -88,7 +88,6 @@ require (
 	github.com/MichaelTJones/walk v0.0.0-20161122175330-4748e29d5718
 	github.com/NYTimes/gziphandler v0.0.0-20170623195520-56545f4a5d46
 	github.com/PuerkitoBio/goquery v1.5.1
-	github.com/Shopify/sarama v1.38.1
 	github.com/VividCortex/ewma v1.1.1
 	github.com/abourget/teamcity v0.0.0-00010101000000-000000000000
 	github.com/alessio/shellescape v1.4.1
@@ -162,7 +161,7 @@ require (
 	github.com/kevinburke/go-bindata v3.13.0+incompatible
 	github.com/kisielk/errcheck v1.6.1-0.20210625163953-8ddee489636a
 	github.com/kisielk/gotool v1.0.0
-	github.com/klauspost/compress v1.16.0
+	github.com/klauspost/compress v1.16.7
 	github.com/klauspost/pgzip v1.2.5
 	github.com/knz/bubbline v0.0.0-20230422210153-e176cdfe1c43
 	github.com/knz/strtime v0.0.0-20200318182718-be999391ffa9
@@ -189,7 +188,7 @@ require (
 	github.com/opencontainers/image-spec v1.0.3-0.20211202183452-c5a74bcca799
 	github.com/otan/gopgkrb5 v1.0.3
 	github.com/petermattis/goid v0.0.0-20211229010228-4d14c490ee36
-	github.com/pierrec/lz4/v4 v4.1.17
+	github.com/pierrec/lz4/v4 v4.1.18
 	github.com/pierrre/geohash v1.0.0
 	github.com/pires/go-proxyproto v0.7.0
 	github.com/pkg/browser v0.0.0-20210115035449-ce105d075bb4
@@ -225,7 +224,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.3.0
 	go.opentelemetry.io/otel/trace v1.3.0
 	golang.org/x/perf v0.0.0-20230113213139-801c7ef9e5c5
-	golang.org/x/term v0.9.0
+	golang.org/x/term v0.11.0
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	honnef.co/go/tools v0.4.5
@@ -247,6 +246,7 @@ require (
 	github.com/Azure/go-autorest/logger v0.2.1 // indirect
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v0.5.1 // indirect
+	github.com/IBM/sarama v1.41.0 // indirect
 	github.com/JohnCGriffin/overflow v0.0.0-20211019200055-46fa312c352c // indirect
 	github.com/Masterminds/goutils v1.1.0 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
@@ -274,8 +274,8 @@ require (
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/djherbis/atime v1.1.0 // indirect
 	github.com/docker/go-units v0.4.0 // indirect
-	github.com/eapache/go-resiliency v1.3.0 // indirect
-	github.com/eapache/go-xerial-snappy v0.0.0-20230111030713-bf00bc1b83b6 // indirect
+	github.com/eapache/go-resiliency v1.4.0 // indirect
+	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
 	github.com/fatih/structs v1.1.0 // indirect
 	github.com/felixge/httpsnoop v1.0.1 // indirect
@@ -320,7 +320,7 @@ require (
 	github.com/jcmturner/dnsutils/v2 v2.0.0 // indirect
 	github.com/jcmturner/gofork v1.7.6 // indirect
 	github.com/jcmturner/goidentity/v6 v6.0.1 // indirect
-	github.com/jcmturner/gokrb5/v8 v8.4.3 // indirect
+	github.com/jcmturner/gokrb5/v8 v8.4.4 // indirect
 	github.com/jcmturner/rpc/v2 v2.0.3 // indirect
 	github.com/jessevdk/go-flags v1.5.0 // indirect
 	github.com/jhump/protoreflect v1.9.1-0.20210817181203-db1a327a393e // indirect

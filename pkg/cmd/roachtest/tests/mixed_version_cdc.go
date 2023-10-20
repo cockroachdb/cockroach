@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"

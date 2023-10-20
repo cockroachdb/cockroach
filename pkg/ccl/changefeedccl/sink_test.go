@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
