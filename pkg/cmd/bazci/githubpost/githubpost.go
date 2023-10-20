@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"encoding/xml"
 	"fmt"
 	"io"
 	"log"
@@ -136,19 +135,19 @@ func PostFromJSON(formatterName string, in io.Reader) {
 // and posts issues for any failed tests to GitHub. If there are no failed
 // tests, it does nothing. Unlike PostFromTestXMLWithFailurePoster, it takes a
 // formatter name.
-func PostFromTestXMLWithFormatterName(formatterName string, in io.Reader) error {
+func PostFromTestXMLWithFormatterName(formatterName string, testXml buildutil.TestSuites) error {
 	ctx := context.Background()
 	fileIssue := getFailurePosterFromFormatterName(formatterName)
-	return PostFromTestXMLWithFailurePoster(ctx, fileIssue, in)
+	return PostFromTestXMLWithFailurePoster(ctx, fileIssue, testXml)
 }
 
 // PostFromTestXMLWithFailurePoster consumes a Bazel-style `test.xml` stream and posts
 // issues for any failed tests to GitHub. If there are no failed tests, it does
 // nothing.
 func PostFromTestXMLWithFailurePoster(
-	ctx context.Context, fileIssue FailurePoster, in io.Reader,
+	ctx context.Context, fileIssue FailurePoster, testXml buildutil.TestSuites,
 ) error {
-	return listFailuresFromTestXML(ctx, in, fileIssue)
+	return listFailuresFromTestXML(ctx, testXml, fileIssue)
 }
 
 type Failure struct {
@@ -496,17 +495,8 @@ func listFailuresFromJSON(
 }
 
 func listFailuresFromTestXML(
-	ctx context.Context, input io.Reader, fileIssue func(context.Context, Failure) error,
+	ctx context.Context, suites buildutil.TestSuites, fileIssue func(context.Context, Failure) error,
 ) error {
-	var buf bytes.Buffer
-	_, err := buf.ReadFrom(input)
-	if err != nil {
-		return err
-	}
-	var suites buildutil.TestSuites
-	if err := xml.Unmarshal(buf.Bytes(), &suites); err != nil {
-		return err
-	}
 	failures := make(map[scopedTest][]testEvent)
 	for _, suite := range suites.Suites {
 		pkg := suite.Name

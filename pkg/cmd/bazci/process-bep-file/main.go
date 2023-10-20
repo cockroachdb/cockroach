@@ -20,6 +20,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/xml"
 	"flag"
 	"fmt"
 	"io"
@@ -32,6 +33,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	bes "github.com/cockroachdb/cockroach/pkg/build/bazel/bes"
+	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost"
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	//lint:ignore SA1019
@@ -238,15 +240,44 @@ func process() error {
 	}
 
 	for _, results := range fullTestResults {
+		// seenFailedTests lists all the failed top-level (parent) tests
+		// that we have seen in this test package. If a test.xml doesn't
+		// introduce any new failed tests, we don't file a GitHub issue.
+		seenFailedTests := make(map[string]struct{})
 		for _, res := range results {
+			var seenNew bool
 			if res.testXml == "" {
 				// We already logged the download failure above.
 				continue
 			}
-			testXml := strings.NewReader(res.testXml)
-			if err := githubpost.PostFromTestXMLWithFailurePoster(
-				ctx, failurePoster(res, postOpts), testXml); err != nil {
-				fmt.Printf("could not post to GitHub: got error %+v", err)
+			var testXml bazelutil.TestSuites
+			if err := xml.Unmarshal([]byte(res.testXml), &testXml); err != nil {
+				fmt.Printf("could not parse test.xml: got error %+v", err)
+				continue
+			}
+			for _, suite := range testXml.Suites {
+				for _, testCase := range suite.TestCases {
+					if testCase.Failure == nil && testCase.Error == nil {
+						// Nothing to report.
+						continue
+					}
+					testName := testCase.Name
+					split := strings.SplitN(testName, "/", 2)
+					if len(split) == 2 {
+						// We want the parent test.
+						testName = split[0]
+					}
+					if _, ok := seenFailedTests[testName]; !ok {
+						seenFailedTests[testName] = struct{}{}
+						seenNew = true
+					}
+				}
+			}
+			if seenNew {
+				if err := githubpost.PostFromTestXMLWithFailurePoster(
+					ctx, failurePoster(res, postOpts), testXml); err != nil {
+					fmt.Printf("could not post to GitHub: got error %+v", err)
+				}
 			}
 		}
 	}

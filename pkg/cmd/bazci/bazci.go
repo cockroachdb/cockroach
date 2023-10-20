@@ -480,17 +480,19 @@ func processTestXmls(testXmls []string) error {
 	if doPost() {
 		var postErrors []string
 		for _, testXml := range testXmls {
-			xmlFile, err := os.Open(testXml)
+			xmlFile, err := os.ReadFile(testXml)
 			if err != nil {
-				postErrors = append(postErrors, fmt.Sprintf("Failed to open %s with the following error: %v", testXml, err))
+				postErrors = append(postErrors, fmt.Sprintf("Failed to read %s with the following error: %v", testXml, err))
 				continue
 			}
-			if err := githubpost.PostFromTestXMLWithFormatterName(githubPostFormatterName, xmlFile); err != nil {
+			var testSuites bazelutil.TestSuites
+			err = xml.Unmarshal(xmlFile, &testSuites)
+			if err != nil {
+				postErrors = append(postErrors, fmt.Sprintf("Failed to parse test.xml file with the following error: %+v", err))
+				continue
+			}
+			if err := githubpost.PostFromTestXMLWithFormatterName(githubPostFormatterName, testSuites); err != nil {
 				postErrors = append(postErrors, fmt.Sprintf("Failed to process %s with the following error: %+v", testXml, err))
-				continue
-			}
-			if err := xmlFile.Close(); err != nil {
-				postErrors = append(postErrors, fmt.Sprintf("Failed to close %s with error: %v\n", testXml, err))
 				continue
 			}
 		}
