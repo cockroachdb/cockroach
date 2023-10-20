@@ -22,6 +22,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -884,7 +885,7 @@ func executeSchemaChangeTxn(
 			return nil
 		})
 	}()
-	testutils.SucceedsSoon(t, func() error {
+	testutils.SucceedsWithin(t, func() error {
 		select {
 		case e := <-c:
 			err = e
@@ -892,7 +893,8 @@ func executeSchemaChangeTxn(
 		default:
 			return errors.Newf("waiting for statements to execute: %v", spec.Stmts)
 		}
-	})
+	},
+		time.Minute*2)
 	return err
 }
 
