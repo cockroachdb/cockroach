@@ -963,8 +963,13 @@ func (c *SyncedCluster) createAdminUserForSecureCluster(
 	}
 
 	const username = "roach"
-	// N.B.: we cannot reuse username and password combinations across
-	// the system interface and virtual clusters due to #109691.
+	// N.B.: although using the same username/password combination would
+	// be easier to remember, if we do it for the system interface and
+	// virtual clusters we would be unable to log-in to the virtual
+	// cluster console due to #109691.
+	//
+	// TODO(renato): use the same combination once we're able to select
+	// the virtual cluster we are connecting to in the console.
 	var password = startOpts.VirtualClusterName
 	if startOpts.VirtualClusterName == "" {
 		password = SystemInterfaceName
