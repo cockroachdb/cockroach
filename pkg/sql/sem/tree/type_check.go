@@ -120,6 +120,11 @@ func (s *SemaProperties) Require(context string, rejectFlags SemaRejectFlags) {
 	s.Ancestors.clear()
 }
 
+// Reject adds the given flags to the set of required constraints of s.
+func (s *SemaProperties) Reject(rejectFlags SemaRejectFlags) {
+	s.required.rejectFlags |= rejectFlags
+}
+
 // IsSet checks if the given rejectFlag is set as a required property.
 func (s *SemaProperties) IsSet(rejectFlags SemaRejectFlags) bool {
 	return s.required.rejectFlags&rejectFlags != 0
@@ -171,8 +176,14 @@ const (
 	// RejectSubqueries rejects subqueries in scalar contexts.
 	RejectSubqueries
 
+	// RejectProcedures rejects procedures in scalar contexts.
+	RejectProcedures
+
 	// RejectSpecial is used in common places like the LIMIT clause.
-	RejectSpecial = RejectAggregates | RejectGenerators | RejectWindowApplications
+	RejectSpecial = RejectAggregates |
+		RejectGenerators |
+		RejectWindowApplications |
+		RejectProcedures
 )
 
 // ScalarProperties contains the properties of the current scalar
@@ -1156,8 +1167,19 @@ func (expr *FuncExpr) TypeCheck(
 		(*qualifiedOverloads)(&def.Overloads), expr.Exprs...,
 	)
 	defer s.release()
-	if err := s.typeCheckOverloadedExprs(ctx, semaCtx, desired, false); err != nil {
-		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s()", def.Name)
+
+	if err := func() error {
+		// Disallow procedures in function arguments.
+		if semaCtx != nil {
+			defer semaCtx.Properties.Restore(semaCtx.Properties)
+			semaCtx.Properties.Reject(RejectProcedures)
+		}
+		if err := s.typeCheckOverloadedExprs(ctx, semaCtx, desired, false); err != nil {
+			return pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s()", def.Name)
+		}
+		return nil
+	}(); err != nil {
+		return nil, err
 	}
 
 	var hasUDFOverload bool
@@ -1265,6 +1287,16 @@ func (expr *FuncExpr) TypeCheck(
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	if overloadImpl.Type == ProcedureRoutine && semaCtx.Properties.IsSet(RejectProcedures) {
+		return nil, errors.WithHint(
+			pgerror.Newf(
+				pgcode.WrongObjectType,
+				"%s(%s) is a procedure", def.Name, overloadImpl.Types.String(),
+			),
+			"To call a procedure, use CALL.",
+		)
 	}
 
 	if expr.IsWindowFunctionApplication() {

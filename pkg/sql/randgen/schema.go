@@ -517,7 +517,28 @@ func randIndexTableDefFromCols(
 	cpy := make([]*tree.ColumnTableDef, len(columnTableDefs))
 	copy(cpy, columnTableDefs)
 	rng.Shuffle(len(cpy), func(i, j int) { cpy[i], cpy[j] = cpy[j], cpy[i] })
-	nCols := rng.Intn(len(cpy)) + 1
+
+	// Determine the number of indexed columns.
+	var nCols int
+	r := rng.Intn(100)
+	switch {
+	case r < 50:
+		// Create a single-column index 40% of the time. Single-column indexes
+		// are more likely then multi-column indexes to be used in query plans
+		// for randomly generated queries, so there is some benefit to
+		// guaranteeing that they are generated often.
+		nCols = 1
+	case r < 75:
+		nCols = 2
+	case r < 90:
+		nCols = 3
+	default:
+		nCols = rng.Intn(len(cpy)) + 1
+	}
+	if nCols > len(cpy) {
+		// nCols cannot be greater than the length of columnTableDefs.
+		nCols = len(cpy)
+	}
 
 	cols := cpy[:nCols]
 
