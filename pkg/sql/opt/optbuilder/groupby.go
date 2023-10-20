@@ -459,7 +459,8 @@ func (b *Builder) analyzeHaving(having *tree.Where, fromScope *scope) tree.Typed
 	// in case we are recursively called within a subquery context.
 	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
 	b.semaCtx.Properties.Require(
-		exprKindHaving.String(), tree.RejectWindowApplications|tree.RejectGenerators,
+		exprKindHaving.String(),
+		tree.RejectWindowApplications|tree.RejectGenerators|tree.RejectProcedures,
 	)
 	fromScope.context = exprKindHaving
 	return fromScope.resolveAndRequireType(having.Expr, types.Bool)

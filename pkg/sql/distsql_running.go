@@ -901,6 +901,10 @@ func (dsp *DistSQLPlanner) Run(
 			"unexpected concurrency for a flow that was forced to be planned locally"))
 		return
 	}
+	if buildutil.CrdbTestBuild && txn != nil && localState.MustUseLeafTxn() && flow.GetFlowCtx().Txn.Type() != kv.LeafTxn {
+		recv.SetError(errors.AssertionFailedf("unexpected root txn used when leaf txn expected"))
+		return
+	}
 
 	noWait := planCtx.getPortalPauseInfo() != nil
 	flow.Run(ctx, noWait)
@@ -1253,7 +1257,9 @@ func (r *DistSQLReceiver) resetForLocalRerun(stats topLevelQueryStats) {
 	r.closed = false
 	r.stats = stats
 	r.egressCounter = nil
-	atomic.StoreUint64(r.progressAtomic, math.Float64bits(0))
+	if r.progressAtomic != nil {
+		atomic.StoreUint64(r.progressAtomic, math.Float64bits(0))
+	}
 }
 
 // Release releases this DistSQLReceiver back to the pool.

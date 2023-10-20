@@ -46,6 +46,39 @@ SELECT currval('s')
 statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
 SELECT p()
 
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+CALL p(p())
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT * FROM (VALUES (1), (2), (3)) LIMIT p()
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT * FROM (VALUES (1), (2), (3)) ORDER BY p()
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT * FROM (VALUES (1), (2), (3)) v(i) WHERE i = p()
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT * FROM (VALUES (1), (2), (3)) v(i) GROUP BY i HAVING i > p()
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT * FROM (VALUES (1), (2)) v(i) JOIN (VALUES (2), (3)) w(j) ON i = p()
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT * FROM generate_series(1, p())
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT * FROM generate_series(1, p())
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT abs(p())
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT nth_value(1, p()) OVER () FROM (VALUES (1), (2))
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT nth_value(1, i) OVER (ORDER BY p()) FROM (VALUES (1), (2)) v(i)
+
 statement ok
 CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL AS ''
 
@@ -85,6 +118,27 @@ CREATE OR REPLACE PROCEDURE p2() LANGUAGE SQL AS $$
   CALL p();
 $$
 
+statement error pgcode 42883 unknown function: p\(\)
+CREATE FUNCTION err(i INT) RETURNS VOID LANGUAGE SQL AS 'SELECT p()'
+
+statement error pgcode 0A000 unimplemented: CALL usage inside a function definition
+CREATE FUNCTION err(i INT) RETURNS VOID LANGUAGE SQL AS 'CALL p()'
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+CREATE TABLE err (i INT DEFAULT p())
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+CREATE TABLE err (i INT AS (p()) STORED)
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+CREATE TABLE err (i INT, INDEX (p()))
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+CREATE TABLE err (a INT, b INT, INDEX (a, (b + p())))
+
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+CREATE TABLE err (a INT, INDEX (a) WHERE p() = 1)
+
 statement ok
 CREATE TABLE t (
   k INT PRIMARY KEY,
@@ -107,6 +161,25 @@ query II
 SELECT * FROM t
 ----
 1  11
+
+statement ok
+CREATE FUNCTION one() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+CALL t_update(one(), 12)
+
+query II
+SELECT * FROM t
+----
+1  12
+
+statement ok
+CALL t_update(one(), one()+12)
+
+query II
+SELECT * FROM t
+----
+1  13
 
 statement ok
 CREATE FUNCTION t_update() RETURNS INT LANGUAGE SQL AS 'SELECT 1'

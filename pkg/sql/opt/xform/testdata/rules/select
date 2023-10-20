@@ -8198,6 +8198,77 @@ select
  └── filters
       └── val:3 > st_maxdistance(geom:1, '010100000000000000000000000000000000000000') [outer=(1,3), immutable, constraints=(/3: (/NULL - ])]
 
+# Regression test for #111963. Do not plan inverted index scans on columns that
+# are not filtered in the query.
+exec-ddl
+CREATE TABLE t111963 (
+  j1 JSON,
+  j2 JSON
+)
+----
+
+exec-ddl
+CREATE INVERTED INDEX idx111963 ON t111963 (j1)
+----
+
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM t111963 WHERE j2 = '1'
+----
+select
+ ├── columns: j1:1 j2:2!null
+ ├── immutable
+ ├── fd: ()-->(2)
+ ├── scan t111963
+ │    └── columns: j1:1 j2:2
+ └── filters
+      └── j2:2 = '1' [outer=(2), immutable, constraints=(/2: [/'1' - /'1']; tight), fd=()-->(2)]
+
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM t111963 WHERE j2 IN ('1', '10', '100')
+----
+select
+ ├── columns: j1:1 j2:2!null
+ ├── scan t111963
+ │    └── columns: j1:1 j2:2
+ └── filters
+      └── j2:2 IN ('1', '10', '100') [outer=(2), constraints=(/2: [/'1' - /'1'] [/'10' - /'10'] [/'100' - /'100']; tight)]
+
+exec-ddl
+DROP INDEX idx111963
+----
+
+exec-ddl
+CREATE INVERTED INDEX idx111963 ON t111963 ((j1->'foo'))
+----
+
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM t111963 WHERE j1 = '1'
+----
+select
+ ├── columns: j1:1!null j2:2
+ ├── immutable
+ ├── fd: ()-->(1)
+ ├── scan t111963
+ │    ├── columns: j1:1 j2:2
+ │    └── computed column expressions
+ │         └── crdb_internal_idx_expr:7
+ │              └── j1:1->'foo'
+ └── filters
+      └── j1:1 = '1' [outer=(1), immutable, constraints=(/1: [/'1' - /'1']; tight), fd=()-->(1)]
+
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM t111963 WHERE j1 IN ('1', '10', '100')
+----
+select
+ ├── columns: j1:1!null j2:2
+ ├── scan t111963
+ │    ├── columns: j1:1 j2:2
+ │    └── computed column expressions
+ │         └── crdb_internal_idx_expr:7
+ │              └── j1:1->'foo'
+ └── filters
+      └── j1:1 IN ('1', '10', '100') [outer=(1), constraints=(/1: [/'1' - /'1'] [/'10' - /'10'] [/'100' - /'100']; tight)]
+
 # --------------------------------------------------
 # GenerateZigzagJoins
 # --------------------------------------------------

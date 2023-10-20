@@ -117,7 +117,8 @@ func (b *Builder) buildJoin(
 		if on, ok := cond.(*tree.OnJoinCond); ok {
 			// Do not allow special functions in the ON clause.
 			b.semaCtx.Properties.Require(
-				exprKindOn.String(), tree.RejectGenerators|tree.RejectWindowApplications,
+				exprKindOn.String(),
+				tree.RejectGenerators|tree.RejectWindowApplications|tree.RejectProcedures,
 			)
 			outScope.context = exprKindOn
 			filter := b.buildScalar(
