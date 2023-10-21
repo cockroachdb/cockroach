@@ -84,8 +84,8 @@ SELECT *
   FROM (
         SELECT name AS connection_name,
                a.username AS grantee,
-               privilege AS privilege_type,
-               a.privilege
+               crdb_internal.privilege_name(privilege_key) AS privilege_type,
+               a.privilege_key
                IN (
                   SELECT unnest(grant_options)
                     FROM system.privileges
@@ -97,7 +97,7 @@ SELECT *
                         e'/externalconn/(\\S+)'
                        ) AS name,
                        username,
-                       unnest(privileges) AS privilege
+                       unnest(privileges) AS privilege_key
                   FROM system.privileges
                  WHERE path ~* '^/externalconn/'
                ) AS a
