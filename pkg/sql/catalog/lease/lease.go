@@ -73,6 +73,51 @@ var LeaseJitterFraction = settings.RegisterFloatSetting(
 	base.DefaultDescriptorLeaseJitterFraction,
 	settings.Fraction)
 
+//go:generate stringer -type=SessionBasedLeasingMode
+
+type SessionBasedLeasingMode int64
+
+const (
+	// SessionBasedLeasingOff expiry based leasing is being used.
+	SessionBasedLeasingOff SessionBasedLeasingMode = iota
+	// SessionBasedDualWrite expiry based and session based leasing are
+	// active concurrently, and both tables must be consulted schema changes.
+	SessionBasedDualWrite
+	// SessionBasedDrain expiry based leases will not be granted or renewed.
+	// Valid pre-existing leases that are expiry based will still be respected.
+	SessionBasedDrain
+	// SessionBasedOnly session based leases are only active, and schema
+	// changes only need to consult this table.
+	SessionBasedOnly
+)
+
+// LeaseEnableSessionBasedLeasing used to enable / disable support for
+// session based leasing.
+var LeaseEnableSessionBasedLeasing = settings.RegisterEnumSetting(
+	settings.ApplicationLevel,
+	"sql.catalog.experimental_use_session_based_leasing",
+	"enables session based leasing for internal testing.",
+	"off",
+	map[int64]string{
+		int64(SessionBasedLeasingOff): "off",
+		int64(SessionBasedDualWrite):  "dual_write",
+		int64(SessionBasedDrain):      "drain",
+		int64(SessionBasedOnly):       "session",
+	},
+	settings.WithReportable(false),
+)
+
+// sessionBasedLeasingModeActive determines if the current mode at least meets
+// the required minimum.
+func (m *Manager) isSessionBasedLeasingModeActive(minimumMode SessionBasedLeasingMode) bool {
+	return m.getSessionBasedLeasingMode() >= minimumMode
+}
+
+// getSessionBasedLeasingMode returns the current session based leasing mode.
+func (m *Manager) getSessionBasedLeasingMode() SessionBasedLeasingMode {
+	return SessionBasedLeasingMode(LeaseEnableSessionBasedLeasing.Get(&m.settings.SV))
+}
+
 // WaitForNoVersion returns once there are no unexpired leases left
 // for any version of the descriptor.
 func (m *Manager) WaitForNoVersion(
@@ -756,10 +801,10 @@ func NewLeaseManager(
 	}
 	lm.storage.regionPrefix = &atomic.Value{}
 	lm.storage.regionPrefix.Store(enum.One)
+	lm.storage.sessionBasedLeasingMode = lm
 	lm.stopper.AddCloser(lm.sem.Closer("stopper"))
 	lm.mu.descriptors = make(map[descpb.ID]*descriptorState)
 	lm.mu.updatesResolvedTimestamp = clock.Now()
-
 	lm.draining.Store(false)
 	return lm
 }
