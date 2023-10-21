@@ -744,7 +744,8 @@ type UDFDefinition struct {
 type ExceptionBlock struct {
 	// Codes is a list of pgcode strings (see pgcode/codes.go). When the body of a
 	// routine with an ExceptionBlock returns an error, the code of that error is
-	// compared against the Codes slice for a match.
+	// compared against the Codes slice for a match. As a special case, the code
+	// may be "OTHERS", indicating that (almost) any error code should be matched.
 	Codes []pgcode.Code
 
 	// Actions contains routine definitions that represent exception handlers for

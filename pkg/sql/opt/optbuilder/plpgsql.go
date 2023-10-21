@@ -1030,6 +1030,11 @@ func (b *plpgsqlBuilder) buildExceptions(block *ast.Block) *memo.ExceptionBlock 
 				continue
 			}
 			// The match condition was supplied by name instead of code.
+			if strings.ToUpper(cond.SqlErrName) == "OTHERS" {
+				// The special "OTHERS" condition matches (almost) any error code.
+				addHandler("OTHERS" /* codeStr */, handlerCon.def)
+				continue
+			}
 			branchCodes, ok := pgcode.PLpgSQLConditionNameToCode[cond.SqlErrName]
 			if !ok {
 				panic(pgerror.Newf(

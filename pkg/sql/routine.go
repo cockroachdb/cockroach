@@ -325,7 +325,14 @@ func (g *routineGenerator) handleException(ctx context.Context, err error) error
 	exceptionHandler := blockState.ExceptionHandler
 	blockState.ExceptionHandler = nil
 	for i, code := range exceptionHandler.Codes {
-		if code == caughtCode {
+		caughtException := code == caughtCode
+		if code.String() == "OTHERS" {
+			// The special OTHERS condition matches any error code apart from
+			// query_canceled and assert_failure (though they can still be caught
+			// explicitly).
+			caughtException = caughtCode != pgcode.QueryCanceled && caughtCode != pgcode.AssertFailure
+		}
+		if caughtException {
 			cursErr := g.closeCursors(blockState)
 			if cursErr != nil {
 				return errors.CombineErrors(err, cursErr)
