@@ -220,7 +220,48 @@ var replicationBuiltins = map[string]builtinDefinition{
 					return nil, err
 				}
 				streamID := streampb.StreamID(int(tree.MustBeDInt(args[0])))
-				sps, err := mgr.HeartbeatReplicationStream(ctx, streamID, frontier)
+				sps, err := mgr.HeartbeatReplicationStream(ctx, streamID, frontier, streampb.ReplicationHeartbeatRequest{})
+				if err != nil {
+					return nil, err
+				}
+				rawStatus, err := protoutil.Marshal(&sps)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(rawStatus)), nil
+			},
+			Info: "This function can be used on the consumer side to heartbeat its replication progress to " +
+				"a replication stream in the source cluster. The returns a StreamReplicationStatus message " +
+				"that indicates stream status (`ACTIVE`, `PAUSED`, `INACTIVE`, or `STATUS_UNKNOWN_RETRY`).",
+			Volatility: volatility.Volatile,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "stream_id", Typ: types.Int},
+				{Name: "frontier_ts", Typ: types.String},
+				{Name: "heartbeat_req", Typ: types.Bytes},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull || args[1] == tree.DNull {
+					return tree.DNull, errors.New("stream_id or frontier_ts cannot be specified with null argument")
+				}
+				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
+				if err != nil {
+					return nil, err
+				}
+				frontier, err := hlc.ParseTimestamp(string(tree.MustBeDString(args[1])))
+				if err != nil {
+					return nil, err
+				}
+				reqBytes := []byte(tree.MustBeDBytes(args[2]))
+				req := streampb.ReplicationHeartbeatRequest{}
+				if err := protoutil.Unmarshal(reqBytes, &req); err != nil {
+					return nil, err
+				}
+
+				streamID := streampb.StreamID(int(tree.MustBeDInt(args[0])))
+				sps, err := mgr.HeartbeatReplicationStream(ctx, streamID, frontier, req)
 				if err != nil {
 					return nil, err
 				}

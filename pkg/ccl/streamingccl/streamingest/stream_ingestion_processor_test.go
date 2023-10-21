@@ -82,7 +82,7 @@ func (m *mockStreamClient) Dial(_ context.Context) error {
 
 // Heartbeat implements the Client interface.
 func (m *mockStreamClient) Heartbeat(
-	_ context.Context, _ streampb.StreamID, _ hlc.Timestamp,
+	_ context.Context, _ streampb.StreamID, _ hlc.Timestamp, _ streampb.ReplicationHeartbeatRequest,
 ) (streampb.StreamReplicationStatus, error) {
 	if m.onHeartbeat != nil {
 		return m.onHeartbeat()

@@ -41,9 +41,12 @@ func (r *replicationStreamManagerImpl) StartReplicationStream(
 
 // HeartbeatReplicationStream implements streaming.ReplicationStreamManager interface.
 func (r *replicationStreamManagerImpl) HeartbeatReplicationStream(
-	ctx context.Context, streamID streampb.StreamID, frontier hlc.Timestamp,
+	ctx context.Context,
+	streamID streampb.StreamID,
+	frontier hlc.Timestamp,
+	req streampb.ReplicationHeartbeatRequest,
 ) (streampb.StreamReplicationStatus, error) {
-	return heartbeatReplicationStream(ctx, r.evalCtx, r.txn, streamID, frontier)
+	return heartbeatReplicationStream(ctx, r.evalCtx, r.txn, streamID, frontier, req)
 }
 
 // StreamPartition implements streaming.ReplicationStreamManager interface.

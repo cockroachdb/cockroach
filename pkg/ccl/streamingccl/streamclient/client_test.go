@@ -69,7 +69,7 @@ func (sc testStreamClient) Plan(_ context.Context, _ streampb.StreamID) (Topolog
 
 // Heartbeat implements the Client interface.
 func (sc testStreamClient) Heartbeat(
-	_ context.Context, _ streampb.StreamID, _ hlc.Timestamp,
+	_ context.Context, _ streampb.StreamID, _ hlc.Timestamp, _ streampb.ReplicationHeartbeatRequest,
 ) (streampb.StreamReplicationStatus, error) {
 	return streampb.StreamReplicationStatus{}, nil
 }
@@ -267,7 +267,7 @@ func ExampleClient() {
 				ts := ingested.ts
 				ingested.Unlock()
 
-				if _, err := client.Heartbeat(ctx, id, ts); err != nil {
+				if _, err := client.Heartbeat(ctx, id, ts, streampb.ReplicationHeartbeatRequest{}); err != nil {
 					return err
 				}
 			}

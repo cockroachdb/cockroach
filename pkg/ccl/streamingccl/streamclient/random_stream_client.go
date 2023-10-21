@@ -398,7 +398,10 @@ func (m *RandomStreamClient) Create(
 
 // Heartbeat implements the Client interface.
 func (m *RandomStreamClient) Heartbeat(
-	ctx context.Context, _ streampb.StreamID, ts hlc.Timestamp,
+	ctx context.Context,
+	_ streampb.StreamID,
+	ts hlc.Timestamp,
+	_ streampb.ReplicationHeartbeatRequest,
 ) (streampb.StreamReplicationStatus, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

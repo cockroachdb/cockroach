@@ -13,10 +13,21 @@ package repstream
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/errors"
+)
+
+// CrossClusterReplicationEnabled enables the ability to setup and control a
+// cross cluster replication stream.
+var PhysicalReplicationEnabled = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"cross_cluster_replication.enabled",
+	"enables the ability to setup and control a cross cluster replication stream",
+	false,
+	settings.WithName("physical_replication.enabled"),
 )
 
 // GetReplicationStreamManagerHook is the hook to get access to the producer side replication APIs.

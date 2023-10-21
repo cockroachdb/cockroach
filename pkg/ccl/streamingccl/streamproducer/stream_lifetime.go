@@ -166,6 +166,7 @@ func updateReplicationStreamProgress(
 	streamID streampb.StreamID,
 	consumedTime hlc.Timestamp,
 	txn isql.Txn,
+	req streampb.ReplicationHeartbeatRequest,
 ) (status streampb.StreamReplicationStatus, err error) {
 	updateJob := func() (streampb.StreamReplicationStatus, error) {
 		j, err := registry.LoadJobWithTxn(ctx, jobspb.JobID(streamID), txn)
@@ -213,7 +214,16 @@ func updateReplicationStreamProgress(
 				status.ProtectedTimestamp = &consumedTime
 			}
 			// Allow expiration time to go backwards as user may set a smaller timeout.
-			md.Progress.GetStreamReplication().Expiration = expiration
+			progress := md.Progress.GetStreamReplication()
+			progress.Expiration = expiration
+
+			// Don't overwrite extended heartbeat info if
+			// we get an empty heartbeat.
+			if (req != streampb.ReplicationHeartbeatRequest{}) {
+				progress.DestinationClusterID = req.HostClusterID
+				progress.DestinationClusterVersion = req.HostClusterVersion
+			}
+
 			ju.UpdateProgress(md.Progress)
 			return nil
 		}); err != nil {
@@ -238,6 +248,7 @@ func heartbeatReplicationStream(
 	txn isql.Txn,
 	streamID streampb.StreamID,
 	frontier hlc.Timestamp,
+	req streampb.ReplicationHeartbeatRequest,
 ) (streampb.StreamReplicationStatus, error) {
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
@@ -250,7 +261,7 @@ func heartbeatReplicationStream(
 
 	return updateReplicationStreamProgress(ctx,
 		expirationTime, execConfig.ProtectedTimestampProvider, execConfig.JobRegistry,
-		streamID, frontier, txn)
+		streamID, frontier, txn, req)
 }
 
 // getReplicationStreamSpec gets a replication stream specification for the specified stream.
@@ -315,7 +326,8 @@ func buildReplicationStreamSpec(
 			SQLAddress: nodeInfo.SQLAddress,
 			Locality:   nodeInfo.Locality,
 			PartitionSpec: &streampb.StreamPartitionSpec{
-				Spans: sp.Spans,
+				SourceClusterVersionAtStart: evalCtx.Settings.Version.ActiveVersion(ctx).Version,
+				Spans:                       sp.Spans,
 				Config: streampb.StreamPartitionSpec_ExecutionConfig{
 					MinCheckpointFrequency: streamingccl.StreamReplicationMinCheckpointFrequency.Get(&evalCtx.Settings.SV),
 				},

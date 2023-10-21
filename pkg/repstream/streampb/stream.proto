@@ -77,6 +77,19 @@ message ReplicationProducerRequest {
   ];
 }
 
+// ReplicationHearbeatRequest is sent by the consuming cluster when
+// heartbeating a replication stream. The request includes additional
+// information about the desination cluster that we might want to know
+// about.
+message ReplicationHeartbeatRequest {
+  bytes host_cluster_id = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "HostClusterID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+  roachpb.Version host_cluster_version = 2 [(gogoproto.nullable) = false];
+}
+
 // StreamPartitionSpec is the stream partition specification.
 message StreamPartitionSpec {
   // PreviousReplicatedTimestamp specifies the timestamp from which spans will
@@ -111,6 +124,8 @@ message StreamPartitionSpec {
   }
 
   ExecutionConfig config = 3 [(gogoproto.nullable) = false];
+
+  roachpb.Version source_cluster_version_at_start = 5 [(gogoproto.nullable) = false];
 }
 
 // SpanConfigEventStreamSpec is the span config event stream specification.

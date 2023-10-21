@@ -224,6 +224,15 @@ message StreamReplicationProgress {
   // Status of the corresponding stream ingestion. The producer job tracks this
   // to determine its fate.
   StreamIngestionStatus stream_ingestion_status = 2;
+
+  bytes destination_cluster_id = 3 [
+    (gogoproto.customname) = "DestinationClusterID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false
+  ];
+
+  roachpb.Version destination_cluster_version = 4 [(gogoproto.nullable) = false];
+
 }
 
 message SchedulePTSChainingRecord {
