@@ -168,7 +168,6 @@ func getCombinedStatementStats(
 			req,
 			transactions,
 			testingKnobs,
-			activityHasAllData,
 			tableSuffix)
 	} else {
 		statements, err = collectCombinedStatements(
@@ -672,11 +671,10 @@ func collectCombinedStatements(
 	tableSuffix string,
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
 	aostClause := testingKnobs.GetAOSTClause()
-	const expectedNumDatums = 11
+	const expectedNumDatums = 10
 	const queryFormat = `
 SELECT 
     fingerprint_id,
-    txn_fingerprints,
     app_name,
     aggregated_ts,
     COALESCE(CAST(metadata -> 'distSQLCount' AS INT), 0)  AS distSQLCount,
@@ -688,7 +686,6 @@ SELECT
     FROM json_array_elements_text(metadata->'db') AS elem) AS databases,
     statistics
 FROM (SELECT fingerprint_id,
-             array_agg(distinct transaction_fingerprint_id)             AS txn_fingerprints,
              app_name,
              max(aggregated_ts)                                         AS aggregated_ts,
              crdb_internal.merge_stats_metadata(array_agg(metadata))    AS metadata,
@@ -713,7 +710,6 @@ FROM (SELECT fingerprint_id,
 			`
 SELECT 
     fingerprint_id,
-    txn_fingerprints,
     app_name,
     aggregated_ts,
     COALESCE(CAST(metadata -> 'distSQLCount' AS INT), 0)  AS distSQLCount,
@@ -725,7 +721,6 @@ SELECT
     FROM json_array_elements_text(metadata->'db') AS elem) AS databases,
     statistics
 FROM (SELECT fingerprint_id,
-             array_agg(distinct transaction_fingerprint_id)                    AS txn_fingerprints,
              app_name,
              max(aggregated_ts)                                                AS aggregated_ts,
              crdb_internal.merge_aggregated_stmt_metadata(array_agg(metadata)) AS metadata,
@@ -802,25 +797,15 @@ FROM (SELECT fingerprint_id,
 			return nil, srverrors.ServerError(ctx, err)
 		}
 
-		var txnFingerprintID uint64
-		txnFingerprintDatums := tree.MustBeDArray(row[1])
-		txnFingerprintIDs := make([]appstatspb.TransactionFingerprintID, 0, txnFingerprintDatums.Array.Len())
-		for _, idDatum := range txnFingerprintDatums.Array {
-			if txnFingerprintID, err = sqlstatsutil.DatumToUint64(idDatum); err != nil {
-				return nil, srverrors.ServerError(ctx, err)
-			}
-			txnFingerprintIDs = append(txnFingerprintIDs, appstatspb.TransactionFingerprintID(txnFingerprintID))
-		}
+		app := string(tree.MustBeDString(row[1]))
 
-		app := string(tree.MustBeDString(row[2]))
-
-		aggregatedTs := tree.MustBeDTimestampTZ(row[3]).Time
-		distSQLCount := int64(*row[4].(*tree.DInt))
-		fullScanCount := int64(*row[5].(*tree.DInt))
-		failedCount := int64(*row[6].(*tree.DInt))
-		query := string(tree.MustBeDString(row[7]))
-		querySummary := string(tree.MustBeDString(row[8]))
-		databases := string(tree.MustBeDString(row[9]))
+		aggregatedTs := tree.MustBeDTimestampTZ(row[2]).Time
+		distSQLCount := int64(*row[3].(*tree.DInt))
+		fullScanCount := int64(*row[4].(*tree.DInt))
+		failedCount := int64(*row[5].(*tree.DInt))
+		query := string(tree.MustBeDString(row[6]))
+		querySummary := string(tree.MustBeDString(row[7]))
+		databases := string(tree.MustBeDString(row[8]))
 
 		metadata := appstatspb.CollectedStatementStatistics{
 			Key: appstatspb.StatementStatisticsKey{
@@ -835,7 +820,7 @@ FROM (SELECT fingerprint_id,
 		}
 
 		var stats appstatspb.StatementStatistics
-		statsJSON := tree.MustBeDJSON(row[10]).JSON
+		statsJSON := tree.MustBeDJSON(row[9]).JSON
 		if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &stats); err != nil {
 			return nil, srverrors.ServerError(ctx, err)
 		}
@@ -847,7 +832,7 @@ FROM (SELECT fingerprint_id,
 			},
 			ID:                appstatspb.StmtFingerprintID(statementFingerprintID),
 			Stats:             stats,
-			TxnFingerprintIDs: txnFingerprintIDs,
+			TxnFingerprintIDs: []appstatspb.TransactionFingerprintID{appstatspb.InvalidTransactionFingerprintID},
 		}
 
 		statements = append(statements, stmt)
@@ -1026,13 +1011,15 @@ FROM (SELECT app_name,
 	return transactions, nil
 }
 
+// This does not use the activity tables because the statement information is
+// aggregated to remove the transaction fingerprint id to keep the size of the
+// statement_activity manageable when the transactions can have over 1k+ statement ids.
 func collectStmtsForTxns(
 	ctx context.Context,
 	ie *sql.InternalExecutor,
 	req *serverpb.CombinedStatementsStatsRequest,
 	transactions []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics,
 	testingKnobs *sqlstats.TestingKnobs,
-	activityTableHasAllData bool,
 	tableSuffix string,
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
 
@@ -1055,44 +1042,15 @@ GROUP BY
 	var it isql.Rows
 	var err error
 
-	if activityTableHasAllData {
-		it, err = ie.QueryIteratorEx(ctx, "console-combined-stmts-activity-for-txn", nil,
-			sessiondata.NodeUserSessionDataOverride, fmt.Sprintf(`
-SELECT fingerprint_id,
-       transaction_fingerprint_id,
-       crdb_internal.merge_aggregated_stmt_metadata(array_agg(metadata))   AS metadata,
-       crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
-       app_name
-FROM crdb_internal.statement_activity %s
-GROUP BY
-    fingerprint_id,
-    transaction_fingerprint_id,
-    app_name`, whereClause),
-			args...)
-		if err != nil {
-			return nil, srverrors.ServerError(ctx, err)
-		}
-	}
+	query := fmt.Sprintf(
+		queryFormat,
+		crdbInternalStmtStatsPersisted+tableSuffix,
+		whereClause)
+	it, err = ie.QueryIteratorEx(ctx, "console-combined-stmts-persisted-for-txn", nil,
+		sessiondata.NodeUserSessionDataOverride, query, args...)
 
-	// If there are no results from the activity table, retrieve the data from the persisted table.
-	var query string
-	if it == nil || !it.HasResults() {
-		if it != nil {
-			err = closeIterator(it, err)
-			if err != nil {
-				return nil, srverrors.ServerError(ctx, err)
-			}
-		}
-		query = fmt.Sprintf(
-			queryFormat,
-			crdbInternalStmtStatsPersisted+tableSuffix,
-			whereClause)
-		it, err = ie.QueryIteratorEx(ctx, "console-combined-stmts-persisted-for-txn", nil,
-			sessiondata.NodeUserSessionDataOverride, query, args...)
-
-		if err != nil {
-			return nil, srverrors.ServerError(ctx, err)
-		}
+	if err != nil {
+		return nil, srverrors.ServerError(ctx, err)
 	}
 
 	// If there are no results from the persisted table, retrieve the data from the combined view

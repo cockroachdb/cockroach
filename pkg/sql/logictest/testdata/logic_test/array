@@ -1191,6 +1191,30 @@ SELECT string_to_array('foofoofoofoo', 'foo', 'foo')
 ----
 {"","","","",""}
 
+# jsonb_array_to_string_array function
+
+statement ok
+CREATE TABLE str_arr(j JSONB)
+
+statement ok
+INSERT INTO str_arr
+VALUES
+    ('{"a": ["foo", "bar", "z"]}'),
+    ('{"a": ["1", "2", "3"]}'),
+    ('{"a": []}'),
+    ('{"b": "not-array"}')
+
+query T
+SELECT jsonb_array_to_string_array(j -> 'a') FROM str_arr ORDER BY j ASC
+----
+{}
+{1,2,3}
+{foo,bar,z}
+{}
+
+query error input argument must be JSON array type
+SELECT jsonb_array_to_string_array(j -> 'b') FROM str_arr ORDER BY j ASC
+
 # Regression test for #23429.
 
 statement ok

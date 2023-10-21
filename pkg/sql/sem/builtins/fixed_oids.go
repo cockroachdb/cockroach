@@ -2485,6 +2485,7 @@ var builtinOidsArray = []string{
 	2514: `crdb_internal.start_replication_stream(tenant_name: string, spec: bytes) -> bytes`,
 	2515: `crdb_internal.privilege_name(internal_key: string) -> string`,
 	2516: `crdb_internal.privilege_name(internal_key: string[]) -> string[]`,
+	2517: `jsonb_array_to_string_array(input: jsonb) -> string[]`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

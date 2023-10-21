@@ -768,6 +768,9 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 		for _, respTxn := range resp.Transactions {
 			delete(expectedTxnFingerprints, respTxn.StatsData.TransactionFingerprintID)
 		}
+		// We set the default value of Transaction Fingerprint as 0 for some cases,
+		// so this also needs to be removed from the list.
+		delete(expectedTxnFingerprints, 0)
 
 		sort.Strings(expectedStmts)
 		sort.Strings(statementsInResponse)
