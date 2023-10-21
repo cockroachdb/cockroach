@@ -907,7 +907,7 @@ func (p *planner) setAuditMode(
 		}
 		if !hasModify {
 			return false, pgerror.Newf(pgcode.InsufficientPrivilege,
-				"only users with admin or %s system privilege are allowed to change audit settings on a table ", privilege.MODIFYCLUSTERSETTING.String())
+				"only users with admin or %s system privilege are allowed to change audit settings on a table ", privilege.MODIFYCLUSTERSETTING)
 		}
 	}
 
