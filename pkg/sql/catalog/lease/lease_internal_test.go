@@ -1568,3 +1568,34 @@ func TestGetDescriptorsFromStoreForIntervalCPULimiterPagination(t *testing.T) {
 	require.Len(t, descs, 3)
 	require.Equal(t, numRequests, 1)
 }
+
+// TestSessionLeasingClusterSetting sanity testing for the new
+// experimental_use_session_based_leasing cluster setting and interfaces used
+// to consume it.
+func TestSessionLeasingClusterSetting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	// Validate all settings can be set and the provider works correctly.
+	for idx, setting := range []string{"off", "dual_write", "drain", "session"} {
+		_, err := sqlDB.Exec("SET CLUSTER SETTING sql.catalog.experimental_use_session_based_leasing=$1::STRING", setting)
+		require.NoError(t, err)
+		lm := srv.LeaseManager().(*Manager)
+
+		// Validate that the mode we just set is active and the provider handles
+		// it properly.
+		require.True(t, lm.isSessionBasedLeasingModeActive(SessionBasedLeasingMode(idx)))
+		require.Equal(t, lm.getSessionBasedLeasingMode(), SessionBasedLeasingMode(idx))
+		// Validate that the previous minimums are active and forwards ones are not.
+		for mode := SessionBasedLeasingOff; mode <= SessionBasedLeasingMode(idx); mode++ {
+			require.True(t, lm.isSessionBasedLeasingModeActive(mode))
+		}
+		for mode := SessionBasedLeasingMode(idx) + 1; mode <= SessionBasedOnly; mode++ {
+			require.False(t, lm.isSessionBasedLeasingModeActive(mode))
+		}
+	}
+}
