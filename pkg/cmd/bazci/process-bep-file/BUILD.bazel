@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//pkg/build",
         "//pkg/build/bazel/bes",
+        "//pkg/build/util",
         "//pkg/cmd/bazci/githubpost",
         "//pkg/cmd/internal/issues",
         "@com_github_golang_protobuf//proto:go_default_library",
