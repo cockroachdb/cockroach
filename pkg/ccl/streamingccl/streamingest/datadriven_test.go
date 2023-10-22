@@ -155,7 +155,7 @@ func TestDataDriven(t *testing.T) {
 					jobspb.JobID(ds.ingestionJobID))
 			case "start-replicated-tenant":
 				testingKnobs := replicationtestutils.DefaultAppTenantTestingKnobs()
-				cleanupTenant := ds.replicationClusters.StartDestTenant(ctx, &testingKnobs)
+				cleanupTenant := ds.replicationClusters.StartDestTenant(ctx, &testingKnobs, 0)
 				ds.cleanupFns = append(ds.cleanupFns, cleanupTenant)
 			case "let":
 				if len(d.CmdArgs) == 0 {
