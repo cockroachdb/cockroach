@@ -3419,22 +3419,22 @@ func (ex *connExecutor) setTransactionModes(
 	return ex.state.setReadOnlyMode(rwMode)
 }
 
-var allowSnapshotIsolation = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"sql.txn.snapshot_isolation_syntax.enabled",
-	"set to true to allow transactions to use the SNAPSHOT isolation level. At "+
-		"the time of writing, this setting is intended only for usage by "+
-		"CockroachDB developers.",
-	false,
-)
-
 var allowReadCommittedIsolation = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
-	"sql.txn.read_committed_syntax.enabled",
+	"sql.txn.read_committed_isolation.enabled",
 	"set to true to allow transactions to use the READ COMMITTED isolation "+
 		"level if specified by BEGIN/SET commands",
 	false,
 	settings.WithPublic,
+)
+
+var allowSnapshotIsolation = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.txn.snapshot_isolation.enabled",
+	"set to true to allow transactions to use the SNAPSHOT isolation level. At "+
+		"the time of writing, this setting is intended only for usage by "+
+		"CockroachDB developers.",
+	false,
 )
 
 func (ex *connExecutor) txnIsolationLevelToKV(

@@ -1764,7 +1764,7 @@ func TestSetSessionArguments(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
-	_, err := s.SQLConn(t, serverutils.DBName("defaultdb")).Exec(`SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true`)
+	_, err := s.SQLConn(t, serverutils.DBName("defaultdb")).Exec(`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true`)
 	require.NoError(t, err)
 
 	// TODO(herko): This test manipulates the query string directly and needs to
