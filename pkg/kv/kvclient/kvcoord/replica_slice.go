@@ -189,6 +189,10 @@ func localityMatch(a, b []roachpb.Tier) int {
 // node and a bool indicating whether the latency is valid.
 type LatencyFunc func(roachpb.NodeID) (time.Duration, bool)
 
+// HealthFunc returns whether the current node is healthy according to its
+// liveness. Unhealthy nodes are sorted behind healthy nodes.
+type HealthFunc func(roachpb.NodeID) bool
+
 // OptimizeReplicaOrder sorts the replicas in the order in which
 // they're to be used for sending RPCs (meaning in the order in which
 // they'll be probed for the lease). Lower latency and "closer"
@@ -205,7 +209,7 @@ type LatencyFunc func(roachpb.NodeID) (time.Duration, bool)
 // leaseholder is known by the caller, the caller will move it to the
 // front if appropriate.
 func (rs ReplicaSlice) OptimizeReplicaOrder(
-	nodeID roachpb.NodeID, latencyFn LatencyFunc, locality roachpb.Locality,
+	nodeID roachpb.NodeID, healthFn HealthFunc, latencyFn LatencyFunc, locality roachpb.Locality,
 ) {
 	// If we don't know which node we're on or its locality, and we don't have
 	// latency information to other nodes, send the RPCs randomly.
@@ -226,6 +230,13 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 		}
 		if rs[j].NodeID == nodeID {
 			return false // j < i
+		}
+
+		// Sort healthy nodes before unhealthy nodes.
+		healthI := healthFn(rs[i].NodeID)
+		healthJ := healthFn(rs[j].NodeID)
+		if healthI != healthJ {
+			return healthI
 		}
 
 		if latencyFn != nil {

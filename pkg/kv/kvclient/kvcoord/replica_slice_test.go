@@ -197,6 +197,8 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 		locality roachpb.Locality
 		// map from node address (see nodeDesc()) to latency to that node.
 		latencies map[roachpb.NodeID]time.Duration
+		// map from node to whether it is unhealthy.
+		unhealthy map[roachpb.NodeID]bool
 		slice     ReplicaSlice
 		// expOrder is the expected order in which the replicas sort. Replicas are
 		// only identified by their node. If multiple replicas are on different
@@ -266,9 +268,15 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 					return lat, ok
 				}
 			}
+			healthFn := func(id roachpb.NodeID) bool {
+				if test.unhealthy != nil {
+					return true
+				}
+				return !test.unhealthy[id]
+			}
 			// Randomize the input order, as it's not supposed to matter.
 			shuffle.Shuffle(test.slice)
-			test.slice.OptimizeReplicaOrder(test.nodeID, latencyFn, test.locality)
+			test.slice.OptimizeReplicaOrder(test.nodeID, healthFn, latencyFn, test.locality)
 			var sortedNodes []roachpb.NodeID
 			sortedNodes = append(sortedNodes, test.slice[0].NodeID)
 			for i := 1; i < len(test.slice); i++ {

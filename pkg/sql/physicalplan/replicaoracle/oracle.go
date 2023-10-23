@@ -52,6 +52,7 @@ type Config struct {
 	Clock       *hlc.Clock
 	RPCContext  *rpc.Context
 	LatencyFunc kvcoord.LatencyFunc
+	HealthFunc  kvcoord.HealthFunc
 }
 
 // Oracle is used to choose the lease holder for ranges. This
@@ -172,6 +173,7 @@ type closestOracle struct {
 	// inside the same process.
 	nodeID      roachpb.NodeID
 	locality    roachpb.Locality
+	healthFunc  kvcoord.HealthFunc
 	latencyFunc kvcoord.LatencyFunc
 }
 
@@ -185,6 +187,7 @@ func newClosestOracle(cfg Config) Oracle {
 		nodeID:      cfg.NodeID,
 		locality:    cfg.Locality,
 		latencyFunc: latencyFn,
+		healthFunc:  cfg.HealthFunc,
 	}
 }
 
@@ -202,7 +205,7 @@ func (o *closestOracle) ChoosePreferredReplica(
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, false, err
 	}
-	replicas.OptimizeReplicaOrder(o.nodeID, o.latencyFunc, o.locality)
+	replicas.OptimizeReplicaOrder(o.nodeID, o.healthFunc, o.latencyFunc, o.locality)
 	repl := replicas[0].ReplicaDescriptor
 	// There are no "misplanned" ranges if we know the leaseholder, and we're
 	// deliberately choosing non-leaseholder.
@@ -237,6 +240,7 @@ type binPackingOracle struct {
 	nodeID      roachpb.NodeID
 	locality    roachpb.Locality
 	latencyFunc kvcoord.LatencyFunc
+	healthFunc  kvcoord.HealthFunc
 }
 
 func newBinPackingOracle(cfg Config) Oracle {
@@ -246,6 +250,7 @@ func newBinPackingOracle(cfg Config) Oracle {
 		nodeID:                           cfg.NodeID,
 		locality:                         cfg.Locality,
 		latencyFunc:                      latencyFunc(cfg.RPCContext),
+		healthFunc:                       cfg.HealthFunc,
 	}
 }
 
@@ -266,7 +271,7 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, false, err
 	}
-	replicas.OptimizeReplicaOrder(o.nodeID, o.latencyFunc, o.locality)
+	replicas.OptimizeReplicaOrder(o.nodeID, o.healthFunc, o.latencyFunc, o.locality)
 
 	// Look for a replica that has been assigned some ranges, but it's not yet full.
 	minLoad := int(math.MaxInt32)
