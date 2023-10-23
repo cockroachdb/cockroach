@@ -1829,7 +1829,7 @@ func NewTableDesc(
 			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Inverted, version); err != nil {
 				return nil, err
 			}
-			if !version.IsActive(clusterversion.V23_2_PartiallyVisibleIndexes) &&
+			if !version.IsActive(clusterversion.V23_2) &&
 				d.Invisibility.Value > 0.0 && d.Invisibility.Value < 1.0 {
 				return nil, unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
 			}
@@ -1948,7 +1948,7 @@ func NewTableDesc(
 			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Inverted, version); err != nil {
 				return nil, err
 			}
-			if !version.IsActive(clusterversion.V23_2_PartiallyVisibleIndexes) &&
+			if !version.IsActive(clusterversion.V23_2) &&
 				d.Invisibility.Value > 0.0 && d.Invisibility.Value < 1.0 {
 				return nil, unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
 			}
