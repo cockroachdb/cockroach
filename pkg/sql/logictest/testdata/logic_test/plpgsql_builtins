@@ -627,3 +627,30 @@ DECLARE foo CURSOR FOR SELECT * FROM xy ORDER BY x DESC;
 
 statement error pgcode 22023 pq: invalid fetch/move direction: 10
 SELECT crdb_internal.plpgsql_fetch('foo', 10, 0, (NULL::INT, NULL::INT));
+
+statement ok
+ABORT;
+
+# Regression test for 112895. The plpgsql_close and plpgsql_fetch builtin
+# functions should return an expected error for NULL arguments.
+subtest null_error
+
+statement error pgcode 22004 pq: FETCH statement option cannot be null
+SELECT crdb_internal.plpgsql_fetch(NULL, 0, 1, (NULL::INT, NULL::INT));
+
+statement error pgcode 22004 pq: FETCH statement option cannot be null
+SELECT crdb_internal.plpgsql_fetch('foo', NULL, 1, (NULL::INT, NULL::INT));
+
+statement error pgcode 22004 pq: FETCH statement option cannot be null
+SELECT crdb_internal.plpgsql_fetch('foo', 0, NULL, (NULL::INT, NULL::INT));
+
+statement error pgcode 22004 pq: FETCH statement option cannot be null
+SELECT crdb_internal.plpgsql_fetch('foo', 0, 1, NULL);
+
+statement error pgcode 22004 pq: FETCH statement option cannot be null
+SELECT crdb_internal.plpgsql_fetch(NULL, NULL, NULL, NULL);
+
+statement error pgcode 22004 pq: cursor name for CLOSE statement cannot be null
+SELECT crdb_internal.plpgsql_close(NULL);
+
+subtest end
