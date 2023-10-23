@@ -1,7 +1,7 @@
 # LogicTest: !local-mixed-23.1
 
 statement ok
-SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true
+SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true
 
 subtest select_for_update
 
@@ -49,7 +49,7 @@ ROLLBACK
 
 # Use SELECT FOR UPDATE under snapshot isolation.
 statement ok
-SET CLUSTER SETTING sql.txn.snapshot_isolation_syntax.enabled = true
+SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT
@@ -63,7 +63,7 @@ statement ok
 ROLLBACK
 
 statement ok
-RESET CLUSTER SETTING sql.txn.snapshot_isolation_syntax.enabled
+RESET CLUSTER SETTING sql.txn.snapshot_isolation.enabled
 
 # Use SELECT FOR UPDATE in a subquery under read committed isolation.
 statement ok
