@@ -93,6 +93,11 @@ func MarshalLegacy(colType *types.T, val tree.Datum) (roachpb.Value, error) {
 			r.SetInt(int64(v.LSN))
 			return r, nil
 		}
+	case types.RefCursorFamily:
+		if v, ok := tree.AsDString(val); ok {
+			r.SetString(string(v))
+			return r, nil
+		}
 	case types.GeographyFamily:
 		if v, ok := val.(*tree.DGeography); ok {
 			err := r.SetGeo(v.SpatialObject())
@@ -249,6 +254,12 @@ func UnmarshalLegacy(a *tree.DatumAlloc, typ *types.T, value roachpb.Value) (tre
 			return nil, err
 		}
 		return a.NewDPGLSN(tree.DPGLSN{LSN: lsn.LSN(v)}), nil
+	case types.RefCursorFamily:
+		v, err := value.GetBytes()
+		if err != nil {
+			return nil, err
+		}
+		return a.NewDRefCursor(tree.DString(v)), nil
 	case types.FloatFamily:
 		v, err := value.GetFloat()
 		if err != nil {

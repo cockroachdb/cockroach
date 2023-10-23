@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 var (
@@ -205,8 +206,10 @@ func (s *Container) RecordStatement(
 	}
 
 	var errorCode string
+	var errorMsg redact.RedactableString
 	if value.StatementError != nil {
 		errorCode = pgerror.GetPGCode(value.StatementError).String()
+		errorMsg = redact.Sprint(value.StatementError)
 	}
 
 	s.insights.ObserveStatement(value.SessionID, &insights.Statement{
@@ -229,6 +232,7 @@ func (s *Container) RecordStatement(
 		Database:             value.Database,
 		CPUSQLNanos:          cpuSQLNanos,
 		ErrorCode:            errorCode,
+		ErrorMsg:             errorMsg,
 	})
 
 	return stats.ID, nil
@@ -370,6 +374,18 @@ func (s *Container) RecordTransaction(
 		cpuSQLNanos = value.ExecStats.CPUTime.Nanoseconds()
 	}
 
+	var errorCode string
+	var errorMsg redact.RedactableString
+	if value.TxnErr != nil {
+		errorCode = pgerror.GetPGCode(value.TxnErr).String()
+		errorMsg = redact.Sprint(value.TxnErr)
+	}
+
+	status := insights.Transaction_Failed
+	if value.Committed {
+		status = insights.Transaction_Completed
+	}
+
 	s.insights.ObserveTransaction(value.SessionID, &insights.Transaction{
 		ID:              value.TransactionID,
 		FingerprintID:   key,
@@ -385,6 +401,9 @@ func (s *Container) RecordTransaction(
 		RetryCount:      value.RetryCount,
 		AutoRetryReason: retryReason,
 		CPUSQLNanos:     cpuSQLNanos,
+		LastErrorCode:   errorCode,
+		LastErrorMsg:    errorMsg,
+		Status:          status,
 	})
 	return nil
 }

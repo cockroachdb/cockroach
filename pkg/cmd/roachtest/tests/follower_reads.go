@@ -62,11 +62,13 @@ func registerFollowerReads(r registry.Registry) {
 				6, /* nodeCount */
 				spec.CPU(4),
 				spec.Geo(),
-				spec.Zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b"),
+				spec.GCEZones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b"),
 			),
-			Leases: registry.MetamorphicLeases,
+			CompatibleClouds: registry.OnlyGCE,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Spec().Cloud == spec.GCE && c.Spec().Arch == vm.ArchARM64 {
+				if c.Cloud() == spec.GCE && c.Spec().Arch == vm.ArchARM64 {
 					t.Skip("arm64 in GCE is available only in us-central1")
 				}
 				c.Put(ctx, t.Cockroach(), "./cockroach")
@@ -106,6 +108,8 @@ func registerFollowerReads(r registry.Registry) {
 			3, /* nodeCount */
 			spec.CPU(2),
 		),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runFollowerReadsMixedVersionSingleRegionTest(ctx, t, c, t.BuildVersion())
 		},
@@ -893,7 +897,9 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 
 	// Start the cluster at the old version.
 	settings := install.MakeClusterSettings()
-	settings.Binary = uploadVersion(ctx, t, c, c.All(), predecessorVersion)
+	settings.Binary = uploadVersion(
+		ctx, t, c, c.All(), clusterupgrade.MustParseVersion(predecessorVersion),
+	)
 	startOpts := option.DefaultStartOpts()
 	c.Start(ctx, t.L(), startOpts, settings, c.All())
 	topology := topologySpec{multiRegion: false}
@@ -903,7 +909,7 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	randNode := 1 + rand.Intn(c.Spec().NodeCount)
 	t.L().Printf("upgrading n%d to current version", randNode)
 	nodeToUpgrade := c.Node(randNode)
-	upgradeNodes(ctx, t, c, nodeToUpgrade, startOpts, clusterupgrade.MainVersion)
+	upgradeNodes(ctx, t, c, nodeToUpgrade, startOpts, clusterupgrade.CurrentVersion())
 	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, exactStaleness, data)
 
 	// Upgrade the remaining nodes to the new version and run the test.
@@ -915,6 +921,6 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 		remainingNodes = remainingNodes.Merge(c.Node(i + 1))
 	}
 	t.L().Printf("upgrading nodes %s to current version", remainingNodes)
-	upgradeNodes(ctx, t, c, remainingNodes, startOpts, clusterupgrade.MainVersion)
+	upgradeNodes(ctx, t, c, remainingNodes, startOpts, clusterupgrade.CurrentVersion())
 	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, exactStaleness, data)
 }

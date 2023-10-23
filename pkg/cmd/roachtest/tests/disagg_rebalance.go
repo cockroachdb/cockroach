@@ -29,13 +29,15 @@ func registerDisaggRebalance(r registry.Registry) {
 	disaggRebalanceSpec := r.MakeClusterSpec(4)
 	r.Add(registry.TestSpec{
 		Name:              fmt.Sprintf("disagg-rebalance/aws/%s", disaggRebalanceSpec),
+		CompatibleClouds:  registry.AllClouds,
+		Suites:            registry.Suites(registry.Nightly),
 		Tags:              registry.Tags("aws"),
 		Owner:             registry.OwnerStorage,
 		Cluster:           disaggRebalanceSpec,
 		EncryptionSupport: registry.EncryptionAlwaysDisabled,
 		Timeout:           1 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.Spec().Cloud != spec.AWS {
+			if c.Cloud() != spec.AWS {
 				t.Skip("disagg-rebalance is only configured to run on AWS")
 			}
 			c.Put(ctx, t.Cockroach(), "./cockroach")

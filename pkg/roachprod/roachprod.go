@@ -432,7 +432,15 @@ func SQL(
 	if len(c.Nodes) == 1 {
 		return c.ExecOrInteractiveSQL(ctx, l, tenantName, tenantInstance, cmdArray)
 	}
-	return c.ExecSQL(ctx, l, c.Nodes, tenantName, tenantInstance, cmdArray)
+	results, err := c.ExecSQL(ctx, l, c.Nodes, tenantName, tenantInstance, cmdArray)
+	if err != nil {
+		return err
+	}
+
+	for _, r := range results {
+		l.Printf("node %d:\n%s", r.Node, r.CombinedOut)
+	}
+	return nil
 }
 
 // IP gets the ip addresses of the nodes in a cluster.
@@ -662,12 +670,14 @@ func DefaultStartOpts() install.StartOpts {
 		NumFilesLimit:      config.DefaultNumFilesLimit,
 		SkipInit:           false,
 		StoreCount:         1,
-		TenantID:           2,
+		VirtualClusterID:   2,
 		ScheduleBackups:    false,
 		ScheduleBackupArgs: "",
 		InitTarget:         1,
-		SQLPort:            config.DefaultSQLPort,
-		AdminUIPort:        config.DefaultAdminUIPort,
+		// TODO(renato): change the defaults below to `0` (i.e., pick a
+		// random available port) once #111052 is addressed.
+		SQLPort:     config.DefaultSQLPort,
+		AdminUIPort: config.DefaultAdminUIPort,
 	}
 }
 
@@ -710,6 +720,11 @@ type StopOpts struct {
 	// If MaxWait is set, roachprod waits that approximate number of seconds
 	// until the PID disappears.
 	MaxWait int
+
+	// Options that only apply to StopServiceForVirtualCluster
+	VirtualClusterID   int
+	VirtualClusterName string
+	SQLInstance        int
 }
 
 // DefaultStopOpts returns StopOpts populated with the default values used by Stop.
@@ -731,7 +746,7 @@ func Stop(ctx context.Context, l *logger.Logger, clusterName string, opts StopOp
 	if err != nil {
 		return err
 	}
-	return c.Stop(ctx, l, opts.Sig, opts.Wait, opts.MaxWait)
+	return c.Stop(ctx, l, opts.Sig, opts.Wait, opts.MaxWait, "")
 }
 
 // Signal sends a signal to nodes in the cluster.
@@ -892,10 +907,10 @@ func Get(ctx context.Context, l *logger.Logger, clusterName, src, dest string) e
 }
 
 type PGURLOptions struct {
-	Secure         bool
-	External       bool
-	TenantName     string
-	TenantInstance int
+	Secure             bool
+	External           bool
+	VirtualClusterName string
+	SQLInstance        int
 }
 
 // PgURL generates pgurls for the nodes in a cluster.
@@ -927,14 +942,14 @@ func PgURL(
 
 	var urls []string
 	for i, ip := range ips {
-		desc, err := c.DiscoverService(ctx, nodes[i], opts.TenantName, install.ServiceTypeSQL, opts.TenantInstance)
+		desc, err := c.DiscoverService(ctx, nodes[i], opts.VirtualClusterName, install.ServiceTypeSQL, opts.SQLInstance)
 		if err != nil {
 			return nil, err
 		}
 		if ip == "" {
 			return nil, errors.Errorf("empty ip: %v", ips)
 		}
-		urls = append(urls, c.NodeURL(ip, desc.Port, opts.TenantName))
+		urls = append(urls, c.NodeURL(ip, desc.Port, opts.VirtualClusterName, desc.ServiceMode))
 	}
 	if len(urls) != len(nodes) {
 		return nil, errors.Errorf("have nodes %v, but urls %v from ips %v", nodes, urls, ips)
@@ -1379,7 +1394,7 @@ func Create(
 			if err := cleanupFailedCreate(l, clusterName); err != nil {
 				l.Errorf("Error while cleaning up partially-created cluster: %s\n", err)
 			} else {
-				l.Errorf("Cleaning up OK\n")
+				l.Printf("Cleaning up OK\n")
 			}
 		}()
 	} else {

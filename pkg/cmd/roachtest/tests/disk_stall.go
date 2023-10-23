@@ -21,9 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -45,7 +47,10 @@ func registerDiskStalledDetection(r registry.Registry) {
 		},
 	}
 	makeSpec := func() spec.ClusterSpec {
-		s := r.MakeClusterSpec(4, spec.ReuseNone())
+		// TODO(DarrylWong): This test currently fails on Ubuntu 22.04 so we run it on 20.04.
+		// See: https://github.com/cockroachdb/cockroach/issues/112111.
+		// Once this issue is fixed we should remove this Ubuntu Version override.
+		s := r.MakeClusterSpec(4, spec.ReuseNone(), spec.UbuntuVersion(vm.FocalFossa))
 		// Use PDs in an attempt to work around flakes encountered when using SSDs.
 		// See #97968.
 		s.PreferLocalSSD = false
@@ -57,6 +62,8 @@ func registerDiskStalledDetection(r registry.Registry) {
 			Name:                fmt.Sprintf("disk-stalled/%s", name),
 			Owner:               registry.OwnerStorage,
 			Cluster:             makeSpec(),
+			CompatibleClouds:    registry.AllExceptAWS,
+			Suites:              registry.Suites(registry.Nightly),
 			Timeout:             30 * time.Minute,
 			SkipPostValidations: registry.PostValidationNoDeadNodes,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -254,8 +261,8 @@ func getProcessExitMonotonic(
 func getProcessMonotonicTimestamp(
 	ctx context.Context, t test.Test, c cluster.Cluster, nodeID int, prop string,
 ) (time.Duration, bool) {
-	details, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(nodeID),
-		"systemctl show cockroach.service --property="+prop)
+	details, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(nodeID), fmt.Sprintf(
+		"systemctl show %s --property=%s", roachtestutil.SystemInterfaceSystemdUnitName(), prop))
 	require.NoError(t, err)
 	require.NoError(t, details.Err)
 	parts := strings.Split(details.Stdout, "=")
@@ -292,14 +299,20 @@ type dmsetupDiskStaller struct {
 
 var _ diskStaller = (*dmsetupDiskStaller)(nil)
 
-func (s *dmsetupDiskStaller) device() string { return getDevice(s.t, s.c.Spec()) }
+func (s *dmsetupDiskStaller) device() string { return getDevice(s.t, s.c) }
 
 func (s *dmsetupDiskStaller) Setup(ctx context.Context) {
 	dev := s.device()
 	s.c.Run(ctx, s.c.All(), `sudo umount -f /mnt/data1 || true`)
 	s.c.Run(ctx, s.c.All(), `sudo dmsetup remove_all`)
-	s.c.Run(ctx, s.c.All(), `echo "0 $(sudo blockdev --getsz `+dev+`) linear `+dev+` 0" | `+
+	err := s.c.RunE(ctx, s.c.All(), `echo "0 $(sudo blockdev --getsz `+dev+`) linear `+dev+` 0" | `+
 		`sudo dmsetup create data1`)
+	if err != nil {
+		// This has occasionally been seen to fail with "Device or resource busy",
+		// with no clear explanation. Try to find out who it is.
+		s.c.Run(ctx, s.c.All(), "sudo bash -c 'ps aux; dmsetup status; mount; lsof'")
+		s.t.Fatal(err)
+	}
 	s.c.Run(ctx, s.c.All(), `sudo mount /dev/mapper/data1 /mnt/data1`)
 }
 
@@ -361,15 +374,15 @@ func (s *cgroupDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOp
 func (s *cgroupDiskStaller) device() (major, minor int) {
 	// TODO(jackson): Programmatically determine the device major,minor numbers.
 	// eg,:
-	//    deviceName := getDevice(s.t, s.c.Spec())
+	//    deviceName := getDevice(s.t, s.c)
 	//    `cat /proc/partitions` and find `deviceName`
-	switch s.c.Spec().Cloud {
+	switch s.c.Cloud() {
 	case spec.GCE:
 		// ls -l /dev/sdb
 		// brw-rw---- 1 root disk 8, 16 Mar 27 22:08 /dev/sdb
 		return 8, 16
 	default:
-		s.t.Fatalf("unsupported cloud %q", s.c.Spec().Cloud)
+		s.t.Fatalf("unsupported cloud %q", s.c.Cloud())
 		return 0, 0
 	}
 }
@@ -387,14 +400,14 @@ func (s *cgroupDiskStaller) setThroughput(
 	))
 }
 
-func getDevice(t test.Test, s spec.ClusterSpec) string {
-	switch s.Cloud {
+func getDevice(t test.Test, c cluster.Cluster) string {
+	switch c.Cloud() {
 	case spec.GCE:
 		return "/dev/sdb"
 	case spec.AWS:
 		return "/dev/nvme1n1"
 	default:
-		t.Fatalf("unsupported cloud %q", s.Cloud)
+		t.Fatalf("unsupported cloud %q", c.Cloud())
 		return ""
 	}
 }

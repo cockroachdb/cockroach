@@ -26,11 +26,11 @@ in which the server disallows new connections and waits until all sessions
 are closed by clients to shut down. While in CockroachDB’s case, the
 draining process consists of two consecutive periods, `drain_wait` and
 `query_wait`. Their duration is configured via two
-[cluster settings][cockroach cluster settings],`server.shutdown.drain_wait`
-and `server.shutdown.query_wait`, with the former “controlling the amount of
+[cluster settings][cockroach cluster settings],`server.shutdown.initial_wait`
+and `server.shutdown.transactions.timeout`, with the former “controlling the amount of
 time a server waits in an unready state before proceeding with the rest of the
 shutdown process”, and the latter specifying “the amount of time a server waits
-for existent queries to finish”. CockroachDB expects all SQL connections to be
+for current txns to finish”. CockroachDB expects all SQL connections to be
 closed by clients before the end of `drain_wait`. After `drain_wait` ends and
 `query_wait` starts, the server shuts down all SQL connections that are not with
 inflight queries (such as open transaction sessions). After the end of
@@ -50,7 +50,7 @@ and the workaround setting for `drain_wait`.
 
 ![Current Draining Process][current draining pic]
 The current workaround that CockroachDB provides is to set the cluster setting
-`server.shutdown.drain_wait` longer than the sum of the maximum lifetime of a
+`server.shutdown.initial_wait` longer than the sum of the maximum lifetime of a
 connection in the connection pool (`MaxLifeTime`), the time for the load
 balancer to stop routing new SQL connections, and the max transaction latency.
 This setting will let connections reach `MaxLifeTime` and be recycled by
@@ -61,9 +61,9 @@ from a different node.
 
 The downsides of this workaround are:
 
-  1. The setting `server.shutdown.drain_wait` has to be adjusted based on
+  1. The setting `server.shutdown.initial_wait` has to be adjusted based on
      clients’ configuration of the connection pooling and load balancer.
-  2. The server is doing a hard wait till the end of `server.shutdown.drain_wait`.
+  2. The server is doing a hard wait till the end of `server.shutdown.initial_wait`.
      So though setting a long `drain_wait` can help ensure all SQL connections
      are closed before the (true) draining starts, it brings a long downtime
      for this node.
@@ -157,7 +157,7 @@ declared as a `*settings.DurationSetting` as follows:
 
 ```go
 connectionWait = settings.RegisterDurationSetting(
-    settings.TenantReadOnly,
+    settings.SystemVisible,
     "server.shutdown.connection_wait",
     "the amount of time a server waits for clients to close existing SQL
     connections. After the start of connection_wait, no new SQL connections are
@@ -165,8 +165,8 @@ connectionWait = settings.RegisterDurationSetting(
     continue with the rest of the shutdown process before the end of
     connection_wait.”,
     0*time.Second,
+    settings.WithName("server.shutdown.connections.timeout"),
 ).WithPublic()
-
 ```
 
 The default duration length of `connection_wait` is set to be 0 seconds.
@@ -250,11 +250,11 @@ timeline for the draining:
 - lease transfer stage (unchanged): The server keeps retrying until all range
   leases and raft leaderships on this draining node have been tranfered.
   **In each iteration**, the kvserver transfers the leases with timeout
-  specified by `server.shutdown.lease_transfer_wait`.
+  specified by `server.shutdown.lease_transfer_iteration.timeout`.
   (Which means the total duration of the lease transfer stage is not totally
-  determined by the value of `server.shutdown.lease_transfer_wait"`.
+  determined by the value of `server.shutdown.lease_transfer_iteration.timeout"`.
   We [propose][Lease Transfer Issue] to rename this cluster setting with
-  `server.shutdown.lease_transfer_timeout"`, and document it seperately with
+  `server.shutdown.lease_transfer_iteration.timeout"`, and document it seperately with
   the other three waiting periods.)
 
 # Demo with changes from Technical Design
@@ -313,7 +313,7 @@ during draining.
   upgrade? Which migrations are needed?
   - If certain nodes in the cluster are not updated to support this feature,
     it may lead to confusion. We may need a version gate for
-    `server.shutdown.connection_wait`.
+    `server.shutdown.connections.timeout`.
 - Is the result/usage of this change different for CC end-users than for
   on-prem deployments? How?
   - The new functionality in this design is expected to be used in multitenent
@@ -372,20 +372,20 @@ during draining.
     system during each waiting period. We can refer to the `final state of this
     design` in this RFC.
   - How to correctly tune the cluster settings
-      - `server.shutdown.drain_wait` (the wait for the load balancer to detect
+      - `server.shutdown.initial_wait` (the wait for the load balancer to detect
         the draining status of the node) should be in coordination with the load
         balancer's settings, such as the health check interval.
-      - `server.shutdown.connection_wait` (the timeout to wait for all SQL
+      - `server.shutdown.connections.timeout` (the timeout to wait for all SQL
         connections to be closed) should be longer than the maximum life
         time of a connection as specified in the connection pool.
-      - `server.shutdown.query_wait` (the timeout to wait all SQL queries to
+      - `server.shutdown.transactions.timeout` (the timeout to wait all SQL txns to
         finish) should be greater than any of the followings:
         - The longest possible transaction in the workload expected to complete
           successfully under normal operating conditions.
         - The `sql.defaults.idle_in_transaction_session_timeout` cluster setting.
         - The `sql.defaults.statement_timeout` cluster setting.
 
-    Note that the cluster setting `server.shutdown.drain_wait` is of different
+    Note that the cluster setting `server.shutdown.initial_wait` is of different
     meaning of the `--drain-wait` flag under the `cockroach node drain` command.
     The latter specifies the "_amount of time to wait for the node to drain
     before returning to the client_", and it is usually set with several

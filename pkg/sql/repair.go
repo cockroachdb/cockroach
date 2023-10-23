@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -711,12 +712,8 @@ func checkPlannerStateForRepairFunctions(ctx context.Context, p *planner, method
 	if p.extendedEvalCtx.TxnReadOnly {
 		return readOnlyError(method)
 	}
-	hasAdmin, err := p.UserHasAdminRole(ctx, p.User())
-	if err != nil {
+	if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA); err != nil {
 		return err
-	}
-	if !hasAdmin {
-		return pgerror.Newf(pgcode.InsufficientPrivilege, "admin role required for %s", method)
 	}
 	return nil
 }
@@ -778,7 +775,7 @@ func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error 
 }
 
 func (p *planner) ExternalReadFile(ctx context.Context, uri string) ([]byte, error) {
-	if err := p.RequireAdminRole(ctx, "network I/O"); err != nil {
+	if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA); err != nil {
 		return nil, err
 	}
 
@@ -795,7 +792,7 @@ func (p *planner) ExternalReadFile(ctx context.Context, uri string) ([]byte, err
 }
 
 func (p *planner) ExternalWriteFile(ctx context.Context, uri string, content []byte) error {
-	if err := p.RequireAdminRole(ctx, "network I/O"); err != nil {
+	if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA); err != nil {
 		return err
 	}
 

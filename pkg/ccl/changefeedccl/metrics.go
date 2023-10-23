@@ -71,6 +71,7 @@ type AggMetrics struct {
 	AggregatorProgress        *aggmetric.AggGauge
 	CheckpointProgress        *aggmetric.AggGauge
 	LaggingRanges             *aggmetric.AggGauge
+	CloudstorageBufferedBytes *aggmetric.AggGauge
 
 	// There is always at least 1 sliMetrics created for defaultSLI scope.
 	mu struct {
@@ -100,6 +101,7 @@ type metricsRecorder interface {
 	recordSizeBasedFlush()
 	recordParallelIOQueueLatency(time.Duration)
 	recordSinkIOInflightChange(int64)
+	makeCloudstorageFileAllocCallback() func(delta int64)
 }
 
 var _ metricsRecorder = (*sliMetrics)(nil)
@@ -134,6 +136,7 @@ type sliMetrics struct {
 	AggregatorProgress        *aggmetric.Gauge
 	CheckpointProgress        *aggmetric.Gauge
 	LaggingRanges             *aggmetric.Gauge
+	CloudstorageBufferedBytes *aggmetric.Gauge
 
 	mu struct {
 		syncutil.Mutex
@@ -204,6 +207,14 @@ func (m *sliMetrics) recordOneMessage() recordOneMessageCallback {
 func (m *sliMetrics) recordMessageSize(sz int64) {
 	if m != nil {
 		m.MessageSize.RecordValue(sz)
+	}
+}
+
+func (m *sliMetrics) makeCloudstorageFileAllocCallback() func(delta int64) {
+	return func(delta int64) {
+		if m != nil {
+			m.CloudstorageBufferedBytes.Inc(delta)
+		}
 	}
 }
 
@@ -359,6 +370,10 @@ func (w *wrappingCostController) recordEmittedBatch(
 
 func (w *wrappingCostController) recordMessageSize(sz int64) {
 	w.inner.recordMessageSize(sz)
+}
+
+func (w *wrappingCostController) makeCloudstorageFileAllocCallback() func(delta int64) {
+	return w.inner.makeCloudstorageFileAllocCallback()
 }
 
 func (w *wrappingCostController) recordInternalRetry(numMessages int64, reducedBatchSize bool) {
@@ -615,6 +630,12 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaCloudstorageBufferedBytes := metric.Metadata{
+		Name:        "changefeed.cloudstorage_buffered_bytes",
+		Help:        "The number of bytes buffered in cloudstorage sink files which have not been emitted yet",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	functionalGaugeMinFn := func(childValues []int64) int64 {
 		var min int64
@@ -691,6 +712,7 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		AggregatorProgress:        b.FunctionalGauge(metaAggregatorProgress, functionalGaugeMinFn),
 		CheckpointProgress:        b.FunctionalGauge(metaCheckpointProgress, functionalGaugeMinFn),
 		LaggingRanges:             b.Gauge(metaLaggingRangePercentage),
+		CloudstorageBufferedBytes: b.Gauge(metaCloudstorageBufferedBytes),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
 	_, err := a.getOrCreateScope(defaultSLIScope)
@@ -751,6 +773,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		SchemaRegistryRetries:     a.SchemaRegistryRetries.AddChild(scope),
 		SchemaRegistrations:       a.SchemaRegistrations.AddChild(scope),
 		LaggingRanges:             a.LaggingRanges.AddChild(scope),
+		CloudstorageBufferedBytes: a.CloudstorageBufferedBytes.AddChild(scope),
 	}
 	sm.mu.resolved = make(map[int64]hlc.Timestamp)
 	sm.mu.checkpoint = make(map[int64]hlc.Timestamp)

@@ -42,7 +42,7 @@ func TestDropTableLowersSpanCount(t *testing.T) {
 	ts := tc.Server(0)
 
 	tenantID := roachpb.MustMakeTenantID(10)
-	tenant, err := ts.StartTenant(ctx, base.TestTenantArgs{
+	tenant, err := ts.TenantController().StartTenant(ctx, base.TestTenantArgs{
 		TenantID: tenantID,
 		TestingKnobs: base.TestingKnobs{
 			GCJob: &sql.GCJobTestingKnobs{

@@ -140,8 +140,10 @@ func registerClockMonotonicTests(r registry.Registry) {
 			Owner: registry.OwnerKV,
 			// These tests muck with NTP, therefor we don't want the cluster reused by
 			// others.
-			Cluster: r.MakeClusterSpec(1, spec.ReuseTagged("offset-injector"), spec.TerminateOnMigration()),
-			Leases:  registry.MetamorphicLeases,
+			Cluster:          r.MakeClusterSpec(1, spec.ReuseTagged("offset-injector"), spec.TerminateOnMigration()),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runClockMonotonicity(ctx, t, c, tc)
 			},

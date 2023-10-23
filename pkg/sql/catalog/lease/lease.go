@@ -60,14 +60,14 @@ var errReadOlderVersion = errors.New("read older descriptor version from store")
 
 // LeaseDuration controls the duration of sql descriptor leases.
 var LeaseDuration = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.catalog.descriptor_lease_duration",
 	"mean duration of sql descriptor leases, this actual duration is jitterred",
 	base.DefaultDescriptorLeaseDuration)
 
 // LeaseJitterFraction controls the percent jitter around sql lease durations
 var LeaseJitterFraction = settings.RegisterFloatSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.catalog.descriptor_lease_jitter_fraction",
 	"mean duration of sql descriptor leases, this actual duration is jitterred",
 	base.DefaultDescriptorLeaseJitterFraction,
@@ -840,10 +840,9 @@ func (m *Manager) AcquireByName(
 		return desc, nil
 	}
 	// Check if we have cached an ID for this name.
-	descVersion := m.names.get(ctx, parentID, parentSchemaID, name, timestamp)
+	descVersion, expiration := m.names.get(ctx, parentID, parentSchemaID, name, timestamp)
 	if descVersion != nil {
 		if descVersion.GetModificationTime().LessEq(timestamp) {
-			expiration := descVersion.getExpiration()
 			// If this lease is nearly expired, ensure a renewal is queued.
 			durationUntilExpiry := time.Duration(expiration.WallTime - timestamp.WallTime)
 			if durationUntilExpiry < m.storage.leaseRenewalTimeout() {
@@ -1224,7 +1223,7 @@ func (m *Manager) watchForUpdates(ctx context.Context, descUpdateCh chan<- catal
 // leaseRefreshLimit is the upper-limit on the number of descriptor leases
 // that will continuously have their lease refreshed.
 var leaseRefreshLimit = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.tablecache.lease.refresh_limit",
 	"maximum number of descriptors to periodically refresh leases for",
 	500,

@@ -489,6 +489,11 @@ func (desc *immutable) GetObjectType() privilege.ObjectType {
 	return privilege.Schema
 }
 
+// GetObjectTypeString implements the Object interface.
+func (desc *immutable) GetObjectTypeString() string {
+	return string(privilege.Schema)
+}
+
 // GetResolvedFuncDefinition implements the SchemaDescriptor interface.
 // TODO(mgartner): This should not create tree.Overloads because it cannot fully
 // populated them.

@@ -180,10 +180,10 @@ SELECT statistics_name, column_names, created, row_count, distinct_count, null_c
 FROM [SHOW STATISTICS FOR TABLE g WITH MERGE]
 ORDER BY created
 ----
-__auto__    {b}  1988-08-05 00:00:00 +0000 +0000  3   3   0  1
-__auto__    {b}  1988-08-07 00:00:00 +0000 +0000  9   9   0  1
-partial     {b}  1988-08-08 00:00:00 +0000 +0000  3   3   0  2
-__merged__  {b}  1988-08-08 00:00:00 +0000 +0000  12  12  0  1
+__auto__    {b}  1988-08-05 00:00:00 +0000 UTC  3   3   0  1
+__auto__    {b}  1988-08-07 00:00:00 +0000 UTC  9   9   0  1
+partial     {b}  1988-08-08 00:00:00 +0000 UTC  3   3   0  2
+__merged__  {b}  1988-08-08 00:00:00 +0000 UTC  12  12  0  1
 
 query T
 SELECT jsonb_pretty(stat)
@@ -304,11 +304,11 @@ SELECT statistics_name, column_names, created, row_count, distinct_count, null_c
 FROM [SHOW STATISTICS FOR TABLE g WITH MERGE, FORECAST]
 ORDER BY created
 ----
-__auto__      {b}  1988-08-05 00:00:00 +0000 +0000  3   3   0  1
-__auto__      {b}  1988-08-07 00:00:00 +0000 +0000  9   9   0  1
-partial       {b}  1988-08-08 00:00:00 +0000 +0000  3   3   0  2
-__merged__    {b}  1988-08-08 00:00:00 +0000 +0000  12  12  0  1
-__forecast__  {b}  1988-08-10 00:00:00 +0000 +0000  18  18  0  1
+__auto__      {b}  1988-08-05 00:00:00 +0000 UTC  3   3   0  1
+__auto__      {b}  1988-08-07 00:00:00 +0000 UTC  9   9   0  1
+partial       {b}  1988-08-08 00:00:00 +0000 UTC  3   3   0  2
+__merged__    {b}  1988-08-08 00:00:00 +0000 UTC  12  12  0  1
+__forecast__  {b}  1988-08-10 00:00:00 +0000 UTC  18  18  0  1
 
 query T
 SELECT jsonb_pretty(stat)
@@ -518,9 +518,9 @@ SELECT statistics_name, column_names, created, row_count, distinct_count, null_c
 FROM [SHOW STATISTICS FOR TABLE h WITH MERGE]
 ORDER BY created
 ----
-full        {h}  2022-12-07 17:43:58.649416 +0000 +0000  4  4  0  1
-partial     {h}  2022-12-07 17:46:22.436487 +0000 +0000  0  0  0  0
-__merged__  {h}  2022-12-07 17:46:22.436487 +0000 +0000  4  4  0  1
+full        {h}  2022-12-07 17:43:58.649416 +0000 UTC  4  4  0  1
+partial     {h}  2022-12-07 17:46:22.436487 +0000 UTC  0  0  0  0
+__merged__  {h}  2022-12-07 17:46:22.436487 +0000 UTC  4  4  0  1
 
 query T
 SELECT jsonb_pretty(stat)
@@ -675,9 +675,9 @@ SELECT statistics_name, column_names, created, row_count, distinct_count, null_c
 FROM [SHOW STATISTICS FOR TABLE i WITH MERGE]
 ORDER BY created
 ----
-full_0      {i}  1988-08-05 00:00:00 +0000 +0000         3  3  0  1
-sp          {i}  2022-12-07 19:57:07.781368 +0000 +0000  6  6  0  2
-__merged__  {i}  2022-12-07 19:57:07.781368 +0000 +0000  9  9  0  1
+full_0      {i}  1988-08-05 00:00:00 +0000 UTC         3  3  0  1
+sp          {i}  2022-12-07 19:57:07.781368 +0000 UTC  6  6  0  2
+__merged__  {i}  2022-12-07 19:57:07.781368 +0000 UTC  9  9  0  1
 
 query T
 SELECT jsonb_pretty(stat)
@@ -1027,13 +1027,13 @@ SELECT statistics_name, column_names, created, row_count, distinct_count, null_c
 FROM [SHOW STATISTICS FOR TABLE ab WITH MERGE]
 ORDER BY created
 ----
-statistics_name  column_names  created                                 row_count  distinct_count  null_count  avg_size
-full_a           {a}           2022-12-12 15:22:21.988179 +0000 +0000  28         26              3           3
-full_b           {b}           2022-12-12 15:22:21.988179 +0000 +0000  28         26              3           3
-partial_b        {b}           2022-12-13 15:22:21.988179 +0000 +0000  36         32              5           3
-__merged__       {b}           2022-12-13 15:22:21.988179 +0000 +0000  61         57              5           3
-partial_a        {a}           2022-12-14 15:22:21.988179 +0000 +0000  36         28              5           3
-__merged__       {a}           2022-12-14 15:22:21.988179 +0000 +0000  61         53              5           3
+statistics_name  column_names  created                               row_count  distinct_count  null_count  avg_size
+full_a           {a}           2022-12-12 15:22:21.988179 +0000 UTC  28         26              3           3
+full_b           {b}           2022-12-12 15:22:21.988179 +0000 UTC  28         26              3           3
+partial_b        {b}           2022-12-13 15:22:21.988179 +0000 UTC  36         32              5           3
+__merged__       {b}           2022-12-13 15:22:21.988179 +0000 UTC  61         57              5           3
+partial_a        {a}           2022-12-14 15:22:21.988179 +0000 UTC  36         28              5           3
+__merged__       {a}           2022-12-14 15:22:21.988179 +0000 UTC  61         53              5           3
 
 query T
 SELECT jsonb_pretty(stat)
@@ -1244,19 +1244,19 @@ SELECT statistics_name, column_names, created, row_count, distinct_count, null_c
 FROM [SHOW STATISTICS FOR TABLE ab]
 ORDER BY created
 ----
-statistics_name  column_names  created                                 row_count  distinct_count  null_count  avg_size
-full_b           {b}           2022-12-12 15:22:21.988179 +0000 +0000  28         26              3           3
-partial_b        {b}           2022-12-13 15:22:21.988179 +0000 +0000  36         32              5           3
+statistics_name  column_names  created                               row_count  distinct_count  null_count  avg_size
+full_b           {b}           2022-12-12 15:22:21.988179 +0000 UTC  28         26              3           3
+partial_b        {b}           2022-12-13 15:22:21.988179 +0000 UTC  36         32              5           3
 
 query TTTIIII colnames
 SELECT statistics_name, column_names, created, row_count, distinct_count, null_count, avg_size
 FROM [SHOW STATISTICS FOR TABLE ab WITH MERGE]
 ORDER BY created
 ----
-statistics_name  column_names  created                                 row_count  distinct_count  null_count  avg_size
-full_b           {b}           2022-12-12 15:22:21.988179 +0000 +0000  28         26              3           3
-partial_b        {b}           2022-12-13 15:22:21.988179 +0000 +0000  36         32              5           3
-__merged__       {b}           2022-12-13 15:22:21.988179 +0000 +0000  61         57              5           3
+statistics_name  column_names  created                               row_count  distinct_count  null_count  avg_size
+full_b           {b}           2022-12-12 15:22:21.988179 +0000 UTC  28         26              3           3
+partial_b        {b}           2022-12-13 15:22:21.988179 +0000 UTC  36         32              5           3
+__merged__       {b}           2022-12-13 15:22:21.988179 +0000 UTC  61         57              5           3
 
 # Finally, restore forecasts setting to its previous value.
 statement ok

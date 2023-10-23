@@ -10,7 +10,7 @@
 
 import { all, call, put, takeEvery } from "redux-saga/effects";
 
-import { actions } from "./databaseDetails.reducer";
+import { databaseDetailsReducer } from "./databaseDetails.reducer";
 import {
   DatabaseDetailsReqParams,
   ErrorWithKey,
@@ -19,6 +19,7 @@ import {
 import moment from "moment";
 import { PayloadAction } from "@reduxjs/toolkit";
 
+const actions = databaseDetailsReducer.actions;
 export function* refreshDatabaseDetailsSaga(
   action: PayloadAction<DatabaseDetailsReqParams>,
 ) {

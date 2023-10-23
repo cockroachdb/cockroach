@@ -62,7 +62,7 @@ export function aggregateLatencyInfo(
   b: StatementStatistics,
 ): cockroach.sql.ILatencyInfo {
   const min =
-    a.latency_info?.min == 0 || a.latency_info?.min > b.latency_info?.min
+    a.latency_info?.min === 0 || a.latency_info?.min > b.latency_info?.min
       ? b.latency_info?.min
       : a.latency_info?.min;
   const max =
@@ -76,7 +76,7 @@ export function aggregateLatencyInfo(
   // Use the latest value we have that is not zero.
   if (
     b.last_exec_timestamp < a.last_exec_timestamp &&
-    b.latency_info?.p50 != 0
+    b.latency_info?.p50 !== 0
   ) {
     p50 = a.latency_info?.p50;
     p90 = a.latency_info?.p90;

@@ -1,3 +1,5 @@
+# LogicTest: !local-mixed-23.1
+
 statement ok
 CREATE TABLE kv (
   k INT PRIMARY KEY,

@@ -19,6 +19,7 @@ import {
   SqlExecutionErrorMessage,
   SqlExecutionRequest,
   sqlResultsAreEmpty,
+  SqlExecutionResponse,
   SqlStatement,
   SqlTxnResult,
   txnResultIsEmpty,
@@ -40,12 +41,21 @@ export type DatabaseDetailsReqParams = {
   csIndexUnusedDuration: string;
 };
 
+export type DatabaseDetailsSpanStatsReqParams = {
+  database: string;
+};
+
 export type DatabaseDetailsResponse = {
   idResp: SqlApiQueryResponse<DatabaseIdRow>;
   grantsResp: SqlApiQueryResponse<DatabaseGrantsResponse>;
   tablesResp: SqlApiQueryResponse<DatabaseTablesResponse>;
   zoneConfigResp: SqlApiQueryResponse<DatabaseZoneConfigResponse>;
   stats?: DatabaseDetailsStats;
+  error?: SqlExecutionErrorMessage;
+};
+
+export type DatabaseDetailsSpanStatsResponse = {
+  spanStats: SqlApiQueryResponse<DatabaseSpanStatsRow>;
   error?: SqlExecutionErrorMessage;
 };
 
@@ -62,18 +72,24 @@ function newDatabaseDetailsResponse(): DatabaseDetailsResponse {
       zone_config_level: ZoneConfigurationLevel.CLUSTER,
     },
     stats: {
-      spanStats: {
-        approximate_disk_bytes: 0,
-        live_bytes: 0,
-        total_bytes: 0,
-        range_count: 0,
-      },
       replicaData: {
         replicas: [],
         regions: [],
       },
       indexStats: { num_index_recommendations: 0 },
     },
+  };
+}
+
+function newDatabaseDetailsSpanStatsResponse(): DatabaseDetailsSpanStatsResponse {
+  return {
+    spanStats: {
+      approximate_disk_bytes: 0,
+      live_bytes: 0,
+      total_bytes: 0,
+      range_count: 0,
+    },
+    error: undefined,
   };
 }
 
@@ -240,7 +256,7 @@ type DatabaseZoneConfigRow = {
 const getDatabaseZoneConfig: DatabaseDetailsQuery<DatabaseZoneConfigRow> = {
   createStmt: dbName => {
     return {
-      sql: `SELECT 
+      sql: `SELECT
         encode(
           crdb_internal.get_zone_config(
             (SELECT crdb_internal.get_database_id($1))
@@ -293,7 +309,6 @@ const getDatabaseZoneConfig: DatabaseDetailsQuery<DatabaseZoneConfigRow> = {
 
 // Database Stats
 type DatabaseDetailsStats = {
-  spanStats: SqlApiQueryResponse<DatabaseSpanStatsRow>;
   replicaData: SqlApiQueryResponse<DatabaseReplicasRegionsRow>;
   indexStats: SqlApiQueryResponse<DatabaseIndexUsageStatsResponse>;
 };
@@ -305,44 +320,38 @@ export type DatabaseSpanStatsRow = {
   range_count: number;
 };
 
-const getDatabaseSpanStats: DatabaseDetailsQuery<DatabaseSpanStatsRow> = {
-  createStmt: dbName => {
-    return {
-      sql: `SELECT
-            sum(range_count) as range_count,
-            sum(approximate_disk_bytes) as approximate_disk_bytes,
-            sum(live_bytes) as live_bytes,
-            sum(total_bytes) as total_bytes
-          FROM crdb_internal.tenant_span_stats((SELECT crdb_internal.get_database_id($1)))`,
-      arguments: [dbName],
-    };
-  },
-  addToDatabaseDetail: (
-    txn_result: SqlTxnResult<DatabaseSpanStatsRow>,
-    resp: DatabaseDetailsResponse,
-  ) => {
-    if (txn_result && txn_result.error) {
-      resp.stats.spanStats.error = txn_result.error;
-    }
-    if (txnResultIsEmpty(txn_result)) {
-      return;
-    }
-    if (txn_result.rows.length === 1) {
-      const row = txn_result.rows[0];
-      resp.stats.spanStats.approximate_disk_bytes = row.approximate_disk_bytes;
-      resp.stats.spanStats.range_count = row.range_count;
-      resp.stats.spanStats.live_bytes = row.live_bytes;
-      resp.stats.spanStats.total_bytes = row.total_bytes;
-    } else {
-      resp.stats.spanStats.error = new Error(
-        `DatabaseDetails - Span Stats, expected 1 row, got ${txn_result.rows.length}`,
-      );
-    }
-  },
-  handleMaxSizeError: (_dbName, _response, _dbDetail) => {
-    return Promise.resolve(false);
-  },
-};
+function formatSpanStatsExecutionResult(
+  res: SqlExecutionResponse<DatabaseSpanStatsRow>,
+): DatabaseDetailsSpanStatsResponse {
+  const out = newDatabaseDetailsSpanStatsResponse();
+
+  if (res.execution.txn_results.length === 0) {
+    return out;
+  }
+
+  const txn_result = res.execution.txn_results[0];
+
+  if (txn_result && txn_result.error) {
+    // Copy the SQLExecutionError and the SqlTransactionResult error.
+    out.error = res.error;
+    out.spanStats.error = txn_result.error;
+  }
+  if (txnResultIsEmpty(txn_result)) {
+    return out;
+  }
+  if (txn_result.rows.length === 1) {
+    const row = txn_result.rows[0];
+    out.spanStats.approximate_disk_bytes = row.approximate_disk_bytes;
+    out.spanStats.range_count = row.range_count;
+    out.spanStats.live_bytes = row.live_bytes;
+    out.spanStats.total_bytes = row.total_bytes;
+  } else {
+    out.spanStats.error = new Error(
+      `DatabaseDetails - Span Stats, expected 1 row, got ${txn_result.rows.length}`,
+    );
+  }
+  return out;
+}
 
 type DatabaseReplicasRegionsRow = {
   replicas: number[];
@@ -463,7 +472,6 @@ const databaseDetailQueries: DatabaseDetailsQuery<DatabaseDetailsRow>[] = [
   getDatabaseReplicasAndRegions,
   getDatabaseIndexUsageStats,
   getDatabaseZoneConfig,
-  getDatabaseSpanStats,
 ];
 
 export function createDatabaseDetailsReq(
@@ -478,6 +486,35 @@ export function createDatabaseDetailsReq(
     ),
     separate_txns: true,
   };
+}
+
+export function createDatabaseDetailsSpanStatsReq(
+  params: DatabaseDetailsSpanStatsReqParams,
+): SqlExecutionRequest {
+  const statement = {
+    sql: `SELECT
+            sum(range_count) as range_count,
+            sum(approximate_disk_bytes) as approximate_disk_bytes,
+            sum(live_bytes) as live_bytes,
+            sum(total_bytes) as total_bytes
+          FROM crdb_internal.tenant_span_stats((SELECT crdb_internal.get_database_id($1)))`,
+    arguments: [params.database],
+  };
+  return createSqlExecutionRequest(params.database, [statement]);
+}
+
+export async function getDatabaseDetailsSpanStats(
+  params: DatabaseDetailsSpanStatsReqParams,
+) {
+  const req: SqlExecutionRequest = createDatabaseDetailsSpanStatsReq(params);
+  const sqlResp = await executeInternalSql<DatabaseSpanStatsRow>(req);
+  const res = formatSpanStatsExecutionResult(sqlResp);
+  return formatApiResult<DatabaseDetailsSpanStatsResponse>(
+    res,
+    res.error,
+    "retrieving database span stats",
+    false,
+  );
 }
 
 export async function getDatabaseDetails(

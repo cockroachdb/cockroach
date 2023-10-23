@@ -143,6 +143,19 @@ func (d *dev) getDockerRunArgs(
 	} else {
 		args = append(args, "-i")
 	}
+	gitDir, err := d.exec.CommandContextSilent(ctx, "git", "rev-parse", "--git-dir")
+	if err != nil {
+		return nil, err
+	}
+	gitCommonDir, err := d.exec.CommandContextSilent(ctx, "git", "rev-parse", "--git-common-dir")
+	if err != nil {
+		return nil, err
+	}
+	// If run from inside a git worktree
+	if string(gitDir) != string(gitCommonDir) {
+		mountPath := strings.TrimSpace(string(gitCommonDir))
+		args = append(args, "-v", mountPath+":"+mountPath)
+	}
 	args = append(args, "-v", workspace+":/cockroach")
 	args = append(args, "--workdir=/cockroach")
 	args = append(args, "-v", filepath.Join(workspace, "build", "bazelutil", "empty.bazelrc")+":/cockroach/.bazelrc.user")

@@ -23,6 +23,7 @@ export default function (props: GraphDashboardProps) {
       title="Slow Raft Proposals"
       sources={storeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis label="proposals">
         <Metric
@@ -37,6 +38,7 @@ export default function (props: GraphDashboardProps) {
       title="Slow DistSender RPCs"
       sources={storeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis label="proposals">
         <Metric
@@ -51,6 +53,7 @@ export default function (props: GraphDashboardProps) {
       title="Slow Lease Acquisitions"
       sources={storeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis label="lease acquisitions">
         <Metric
@@ -65,6 +68,7 @@ export default function (props: GraphDashboardProps) {
       title="Slow Latch Acquisitions"
       sources={storeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis label="latch acquisitions">
         <Metric

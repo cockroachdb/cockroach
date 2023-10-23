@@ -461,6 +461,14 @@ func (c *Config) validateHTTPSinkConfig(hsc *HTTPSinkConfig) error {
 	if *hsc.Compression != GzipCompression && *hsc.Compression != NoneCompression {
 		return errors.New("compression must be 'gzip' or 'none'")
 	}
+	// If both header types are populated, make sure theres no duplicate keys
+	if hsc.Headers != nil && hsc.FileBasedHeaders != nil {
+		for key := range hsc.Headers {
+			if _, exists := hsc.FileBasedHeaders[key]; exists {
+				return errors.Newf("headers and file-based-headers have the same key %s", key)
+			}
+		}
+	}
 	return c.ValidateCommonSinkConfig(hsc.CommonSinkConfig)
 }
 

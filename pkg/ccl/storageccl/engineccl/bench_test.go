@@ -187,9 +187,9 @@ func BenchmarkTimeBoundIterate(b *testing.B) {
 			b.Run("TimeBoundIterator", func(b *testing.B) {
 				runIterate(b, loadFactor, func(e storage.Engine, startTime, endTime hlc.Timestamp) (storage.MVCCIterator, error) {
 					return e.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
-						MinTimestampHint: startTime,
-						MaxTimestampHint: endTime,
-						UpperBound:       roachpb.KeyMax,
+						MinTimestamp: startTime,
+						MaxTimestamp: endTime,
+						UpperBound:   roachpb.KeyMax,
 					})
 				})
 			})

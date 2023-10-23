@@ -39,29 +39,29 @@ import (
 
 func TestMemo(t *testing.T) {
 	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications |
-		memo.ExprFmtHideStats | memo.ExprFmtHideNotVisibleIndexInfo
+		memo.ExprFmtHideStats | memo.ExprFmtHideNotVisibleIndexInfo | memo.ExprFmtHideFastPathChecks
 	runDataDrivenTest(t, datapathutils.TestDataPath(t, "memo"), flags)
 }
 
 func TestFormat(t *testing.T) {
-	runDataDrivenTest(t, datapathutils.TestDataPath(t, "format"), memo.ExprFmtShowAll)
+	runDataDrivenTest(t, datapathutils.TestDataPath(t, "format"), memo.ExprFmtShowAll|memo.ExprFmtHideFastPathChecks)
 }
 
 func TestLogicalProps(t *testing.T) {
 	flags := memo.ExprFmtHideCost | memo.ExprFmtHideQualifications | memo.ExprFmtHideStats |
-		memo.ExprFmtHideNotVisibleIndexInfo
+		memo.ExprFmtHideNotVisibleIndexInfo | memo.ExprFmtHideFastPathChecks
 	runDataDrivenTest(t, datapathutils.TestDataPath(t, "logprops"), flags)
 }
 
 func TestStats(t *testing.T) {
 	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications |
-		memo.ExprFmtHideScalars | memo.ExprFmtHideNotVisibleIndexInfo
+		memo.ExprFmtHideScalars | memo.ExprFmtHideNotVisibleIndexInfo | memo.ExprFmtHideFastPathChecks
 	runDataDrivenTest(t, datapathutils.TestDataPath(t, "stats"), flags)
 }
 
 func TestStatsQuality(t *testing.T) {
 	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications |
-		memo.ExprFmtHideScalars | memo.ExprFmtHideNotVisibleIndexInfo
+		memo.ExprFmtHideScalars | memo.ExprFmtHideNotVisibleIndexInfo | memo.ExprFmtHideFastPathChecks
 	runDataDrivenTest(t, datapathutils.TestDataPath(t, "stats_quality"), flags)
 }
 
@@ -398,6 +398,18 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().DurableLockingForSerializable = true
 	stale()
 	evalCtx.SessionData().DurableLockingForSerializable = false
+	notStale()
+
+	// Stale enable_shared_locking_for_serializable.
+	evalCtx.SessionData().SharedLockingForSerializable = true
+	stale()
+	evalCtx.SessionData().SharedLockingForSerializable = false
+	notStale()
+
+	// Stale optimizer_use_lock_op_for_serializable.
+	evalCtx.SessionData().OptimizerUseLockOpForSerializable = true
+	stale()
+	evalCtx.SessionData().OptimizerUseLockOpForSerializable = false
 	notStale()
 
 	// Stale txn isolation level.

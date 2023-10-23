@@ -21,7 +21,7 @@ sample1: pass
 sample2: start running
 configurations generated using seed 1926012586526624009
 	loaded cluster with
- 		region:US [zone=US_1(nodes=5,stores=0), zone=US_2(nodes=5,stores=0), zone=US_3(nodes=5,stores=0)]
+ 		region:US [zone=US_1(nodes=5,stores=1), zone=US_2(nodes=5,stores=1), zone=US_3(nodes=5,stores=1)]
 	basic ranges with placement_type=even, ranges=10, key_space=200000, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
 	number of mutation events=0, number of assertion events=0
@@ -60,9 +60,9 @@ generating settings configurations using static option
 sample1: start running
 configurations generated using seed 608747136543856411
 	loaded cluster with
- 		region:US_East [zone=US_East_1(nodes=1,stores=0), zone=US_East_2(nodes=2,stores=0), zone=US_East_3(nodes=3,stores=0), zone=US_East_3(nodes=10,stores=0)]
-		region:US_West [zone=US_West_1(nodes=2,stores=0)]
-		region:EU [zone=EU_1(nodes=3,stores=0), zone=EU_2(nodes=3,stores=0), zone=EU_3(nodes=4,stores=0)]
+ 		region:US_East [zone=US_East_1(nodes=1,stores=1), zone=US_East_2(nodes=2,stores=1), zone=US_East_3(nodes=3,stores=1), zone=US_East_3(nodes=10,stores=1)]
+		region:US_West [zone=US_West_1(nodes=2,stores=1)]
+		region:EU [zone=EU_1(nodes=3,stores=1), zone=EU_2(nodes=3,stores=1), zone=EU_3(nodes=4,stores=1)]
 	basic ranges with placement_type=even, ranges=10, key_space=200000, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
 	number of mutation events=0, number of assertion events=0
@@ -92,9 +92,9 @@ sample1: pass
 sample2: start running
 configurations generated using seed 1926012586526624009
 	loaded cluster with
- 		region:US_East [zone=US_East_1(nodes=4,stores=0), zone=US_East_2(nodes=4,stores=0), zone=US_East_3(nodes=4,stores=0)]
-		region:US_West [zone=US_West_1(nodes=4,stores=0), zone=US_West_2(nodes=4,stores=0), zone=US_West_3(nodes=4,stores=0)]
-		region:EU [zone=EU_1(nodes=4,stores=0), zone=EU_2(nodes=4,stores=0), zone=EU_3(nodes=4,stores=0)]
+ 		region:US_East [zone=US_East_1(nodes=4,stores=1), zone=US_East_2(nodes=4,stores=1), zone=US_East_3(nodes=4,stores=1)]
+		region:US_West [zone=US_West_1(nodes=4,stores=1), zone=US_West_2(nodes=4,stores=1), zone=US_West_3(nodes=4,stores=1)]
+		region:EU [zone=EU_1(nodes=4,stores=1), zone=EU_2(nodes=4,stores=1), zone=EU_3(nodes=4,stores=1)]
 	basic ranges with placement_type=even, ranges=10, key_space=200000, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
 	number of mutation events=0, number of assertion events=0
@@ -128,9 +128,9 @@ sample2: pass
 sample3: start running
 configurations generated using seed 3534334367214237261
 	loaded cluster with
- 		region:US_East [zone=US_East_1(nodes=1,stores=0), zone=US_East_2(nodes=2,stores=0), zone=US_East_3(nodes=3,stores=0), zone=US_East_3(nodes=10,stores=0)]
-		region:US_West [zone=US_West_1(nodes=2,stores=0)]
-		region:EU [zone=EU_1(nodes=3,stores=0), zone=EU_2(nodes=3,stores=0), zone=EU_3(nodes=4,stores=0)]
+ 		region:US_East [zone=US_East_1(nodes=1,stores=1), zone=US_East_2(nodes=2,stores=1), zone=US_East_3(nodes=3,stores=1), zone=US_East_3(nodes=10,stores=1)]
+		region:US_West [zone=US_West_1(nodes=2,stores=1)]
+		region:EU [zone=EU_1(nodes=3,stores=1), zone=EU_2(nodes=3,stores=1), zone=EU_3(nodes=4,stores=1)]
 	basic ranges with placement_type=even, ranges=10, key_space=200000, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
 	number of mutation events=0, number of assertion events=0
@@ -179,7 +179,7 @@ sample1: pass
 sample2: start running
 configurations generated using seed 1926012586526624009
 	loaded cluster with
- 		region:US [zone=US_1(nodes=5,stores=0), zone=US_2(nodes=5,stores=0), zone=US_3(nodes=5,stores=0)]
+ 		region:US [zone=US_1(nodes=5,stores=1), zone=US_2(nodes=5,stores=1), zone=US_3(nodes=5,stores=1)]
 	basic ranges with placement_type=even, ranges=10, key_space=200000, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
 	number of mutation events=0, number of assertion events=0
@@ -188,9 +188,9 @@ sample2: pass
 sample3: start running
 configurations generated using seed 3534334367214237261
 	loaded cluster with
- 		region:US_East [zone=US_East_1(nodes=1,stores=0), zone=US_East_2(nodes=2,stores=0), zone=US_East_3(nodes=3,stores=0), zone=US_East_3(nodes=10,stores=0)]
-		region:US_West [zone=US_West_1(nodes=2,stores=0)]
-		region:EU [zone=EU_1(nodes=3,stores=0), zone=EU_2(nodes=3,stores=0), zone=EU_3(nodes=4,stores=0)]
+ 		region:US_East [zone=US_East_1(nodes=1,stores=1), zone=US_East_2(nodes=2,stores=1), zone=US_East_3(nodes=3,stores=1), zone=US_East_3(nodes=10,stores=1)]
+		region:US_West [zone=US_West_1(nodes=2,stores=1)]
+		region:EU [zone=EU_1(nodes=3,stores=1), zone=EU_2(nodes=3,stores=1), zone=EU_3(nodes=4,stores=1)]
 	basic ranges with placement_type=even, ranges=10, key_space=200000, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
 	number of mutation events=0, number of assertion events=0

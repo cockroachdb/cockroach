@@ -198,3 +198,8 @@ var rubyPGBlocklist = blocklist{
 	`with a Fiber scheduler should convert strings and parameters to #prepare and #exec_prepared`:                                                                                                                               "unknown",
 	`with a Fiber scheduler waits when sending query data`:                                                                                                                                                                      "unknown",
 }
+
+var rubyPGIgnorelist = blocklist{
+	`PG::Connection OS thread support Connection.new shouldn't block a second thread`:                             "flaky",
+	`running with sync_* methods PG::Connection consume_input should raise ConnectionBad for a closed connection`: "flaky",
+}

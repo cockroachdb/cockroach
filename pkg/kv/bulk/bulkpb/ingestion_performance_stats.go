@@ -24,11 +24,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
+	"github.com/codahale/hdrhistogram"
 	"github.com/gogo/protobuf/proto"
 	"go.opentelemetry.io/otel/attribute"
 )
 
 var _ bulk.TracingAggregatorEvent = (*IngestionPerformanceStats)(nil)
+
+const (
+	sigFigs    = 1
+	minLatency = time.Millisecond
+	maxLatency = 100 * time.Second
+
+	minBytes = 1024              // 1 KB
+	maxBytes = 256 * 1024 * 1024 // 256 MB
+)
 
 // Identity implements the TracingAggregatorEvent interface.
 func (s *IngestionPerformanceStats) Identity() bulk.TracingAggregatorEvent {
@@ -38,6 +48,38 @@ func (s *IngestionPerformanceStats) Identity() bulk.TracingAggregatorEvent {
 	}
 	stats.SendWaitByStore = make(map[roachpb.StoreID]time.Duration)
 	return &stats
+}
+
+// getCombinedHist returns a new HistogramData that contains the currentHist
+// combined with the recordValue. If currentHist is nil, a new histogram is
+// initialized.
+func getCombinedHist(
+	currentHist *HistogramData, recordValue int64, dataType HistogramDataType,
+) *HistogramData {
+	var hist *hdrhistogram.Histogram
+	if currentHist != nil {
+		hist = hdrhistogram.Import(&hdrhistogram.Snapshot{
+			LowestTrackableValue:  currentHist.LowestTrackableValue,
+			HighestTrackableValue: currentHist.HighestTrackableValue,
+			SignificantFigures:    currentHist.SignificantFigures,
+			Counts:                currentHist.Counts,
+		})
+	} else if dataType == HistogramDataTypeLatency {
+		hist = hdrhistogram.New(minLatency.Nanoseconds(),
+			maxLatency.Nanoseconds(), sigFigs)
+	} else if dataType == HistogramDataTypeBytes {
+		hist = hdrhistogram.New(minBytes, maxBytes, sigFigs)
+	}
+	_ = hist.RecordValue(recordValue)
+	// Return the snapshot of this new merged histogram.
+	cumulativeSnapshot := hist.Export()
+	return &HistogramData{
+		DataType:              dataType,
+		LowestTrackableValue:  cumulativeSnapshot.LowestTrackableValue,
+		HighestTrackableValue: cumulativeSnapshot.HighestTrackableValue,
+		SignificantFigures:    cumulativeSnapshot.SignificantFigures,
+		Counts:                cumulativeSnapshot.Counts,
+	}
 }
 
 // Combine implements the TracingAggregatorEvent interface.
@@ -66,6 +108,12 @@ func (s *IngestionPerformanceStats) Combine(other bulk.TracingAggregatorEvent) {
 	s.SplitWait += otherStats.SplitWait
 	s.ScatterWait += otherStats.ScatterWait
 	s.CommitWait += otherStats.CommitWait
+	s.AsWrites += otherStats.AsWrites
+
+	s.BatchWaitHist = getCombinedHist(s.BatchWaitHist,
+		otherStats.BatchWait.Nanoseconds(), HistogramDataTypeLatency)
+	s.SstSizeHist = getCombinedHist(s.SstSizeHist,
+		otherStats.SSTDataSize, HistogramDataTypeBytes)
 
 	// Duration should not be used in throughput calculations as adding durations
 	// of multiple flushes does not account for concurrent execution of these
@@ -126,6 +174,7 @@ func (s *IngestionPerformanceStats) String() string {
 	if s.SSTDataSize > 0 {
 		sstDataSizeMB := float64(s.SSTDataSize) / mb
 		b.WriteString(fmt.Sprintf("sst_data_size: %.2f MB\n", sstDataSizeMB))
+		b.WriteString(fmt.Sprintf("sst_data_hist:\n%s\n", s.SstSizeHist.String()))
 
 		if !s.CurrentFlushTime.IsEmpty() && !s.LastFlushTime.IsEmpty() {
 			duration := s.CurrentFlushTime.GoTime().Sub(s.LastFlushTime.GoTime())
@@ -138,6 +187,7 @@ func (s *IngestionPerformanceStats) String() string {
 	timeString(&b, "sort_wait", s.SortWait)
 	timeString(&b, "flush_wait", s.FlushWait)
 	timeString(&b, "batch_wait", s.BatchWait)
+	b.WriteString(fmt.Sprintf("batch_wait_hist:\n%s\n", s.BatchWaitHist.String()))
 	timeString(&b, "send_wait", s.SendWait)
 	timeString(&b, "split_wait", s.SplitWait)
 	timeString(&b, "scatter_wait", s.ScatterWait)
@@ -146,6 +196,7 @@ func (s *IngestionPerformanceStats) String() string {
 	b.WriteString(fmt.Sprintf("splits: %d\n", s.Splits))
 	b.WriteString(fmt.Sprintf("scatters: %d\n", s.Scatters))
 	b.WriteString(fmt.Sprintf("scatter_moved: %d\n", s.ScatterMoved))
+	b.WriteString(fmt.Sprintf("as_writes: %d\n", s.AsWrites))
 
 	// Sort store send wait by IDs before adding them as tags.
 	ids := make(roachpb.StoreIDSlice, 0, len(s.SendWaitByStore))

@@ -867,9 +867,24 @@ CREATE TABLE uu (x INT AS (generate_series(1, 3)) STORED)
 
 subtest correlated_srf
 
+# Initially this table will have 3 columns:
+# x, y, rowid
 statement ok
 CREATE TABLE vals (x INT, y INT, INDEX woo (x, y));
-   INSERT INTO vals VALUES (3, 4), (NULL, NULL), (5, 6);
+
+statement ok
+ALTER TABLE vals DROP COLUMN y cascade;
+
+# Once the second column is and added dropped this table will have the format:
+# x, rowid, y
+statement ok
+ALTER TABLE vals ADD COLUMN y int;
+
+statement ok
+CREATE INDEX woo ON vals(x,y);
+
+statement ok
+INSERT INTO vals VALUES (3, 4), (NULL, NULL), (5, 6);
 
 query III colnames
 SELECT x, generate_series(1,x), generate_series(1,2) FROM vals ORDER BY 1,2,3
@@ -916,19 +931,20 @@ ordered_t  1
 t          2
 u          2
 vals       1
-vals       2
 vals       3
+vals       4
 
+# We are going to order by the relname, indexrelid (index's OID), x and n (from pg_expandarray)
 query TT colnames
-SELECT relname, information_schema._pg_expandarray(indkey) FROM pg_class, pg_index WHERE pg_class.oid = pg_index.indrelid ORDER BY relname, x, n
+SELECT relname, information_schema._pg_expandarray(indkey) FROM pg_class, pg_index WHERE pg_class.oid = pg_index.indrelid ORDER BY relname, indexrelid, x, n
 ----
 relname    information_schema._pg_expandarray
 ordered_t  (1,1)
 t          (2,1)
 u          (2,1)
-vals       (1,1)
-vals       (2,2)
 vals       (3,1)
+vals       (1,1)
+vals       (4,2)
 
 # The following query needs indclass to become an oidvector.
 # See bug #26504.
@@ -1406,3 +1422,47 @@ NULL
 NULL
 4
 5
+
+# Regression test for #110952 - providing invalid arguments to unnest should
+# not trigger an internal error.
+statement error pgcode 42804 pq: could not determine polymorphic type: unnest\(string\)
+SELECT unnest('{}');
+
+statement error pgcode 42804 pq: could not determine polymorphic type: unnest\(string, string, string\)
+SELECT unnest('{}', '{}', '{}');
+
+statement error pgcode 42883 pq: unknown signature: unnest\(int\)
+SELECT unnest(1);
+
+statement error pgcode 42883 pq: unknown signature: unnest\(int, int, int\)
+SELECT unnest(1, 2, 3);
+
+statement error pgcode 42804 pq: could not determine polymorphic type: unnest\(unknown\)
+SELECT unnest(NULL);
+
+statement error pgcode 42804 pq: could not determine polymorphic type: unnest\(unknown, unknown, unknown\)
+SELECT unnest(NULL, NULL, NULL);
+
+# pg_expandarray handles return types similarly to unnest.
+statement error pgcode 42804 pq: could not determine polymorphic type: information_schema._pg_expandarray\(string\)
+SELECT information_schema._pg_expandarray('{}');
+
+query T
+SELECT unnest('{1}'::int[], '{2}', '{3}');
+----
+(1,2,3)
+
+query T
+SELECT unnest('{1}'::int[], '{}', '{}');
+----
+(1,,)
+
+query T
+SELECT unnest('{1}', '{2}', '{3}'::int[]);
+----
+(1,2,3)
+
+query T
+SELECT unnest('{}', '{}', '{3}'::int[]);
+----
+(,,3)

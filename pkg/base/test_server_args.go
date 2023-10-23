@@ -61,10 +61,12 @@ type TestServerArgs struct {
 	// DisableTLSForHTTP if set, disables TLS for the HTTP interface.
 	DisableTLSForHTTP bool
 
-	// SecondaryTenantPortOffset if non-zero forces the network addresses
-	// generated for servers started by the serverController to be offset
-	// from the base addressed by the specified amount.
-	SecondaryTenantPortOffset int
+	// ApplicationInternalRPCPortMin/PortMax define the range of TCP ports
+	// used to start the internal RPC service for application-level
+	// servers. This service is used for node-to-node RPC traffic and to
+	// serve data for 'debug zip'.
+	ApplicationInternalRPCPortMin int
+	ApplicationInternalRPCPortMax int
 
 	// JoinAddr is the address of a node we are joining.
 	//
@@ -129,6 +131,9 @@ type TestServerArgs struct {
 	// If set, the recording of events to the event log tables is disabled.
 	DisableEventLog bool
 
+	// If set, don't start the SQL service for this test.
+	DisableSQLServer bool
+
 	// If set, web session authentication will be disabled, even if the server
 	// is running in secure mode.
 	InsecureWebAccess bool
@@ -143,15 +148,6 @@ type TestServerArgs struct {
 	TracingDefault tracing.TracingMode
 	// If set, a TraceDir is initialized at the provided path.
 	TraceDir string
-
-	// DisableSpanConfigs disables the use of the span configs infrastructure
-	// (in favor of the gossiped system config span). It's equivalent to setting
-	// COCKROACH_DISABLE_SPAN_CONFIGS, and is only intended for tests written
-	// with the system config span in mind.
-	//
-	// TODO(irfansharif): Remove all uses of this when we rip out the system
-	// config span.
-	DisableSpanConfigs bool
 
 	// DefaultTestTenant determines whether a test's application
 	// workload will be redirected to a virtual cluster (secondary

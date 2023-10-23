@@ -13,8 +13,10 @@ package schemachanger_test
 import (
 	"context"
 	"encoding/hex"
+	"flag"
 	"fmt"
 	"math/rand"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -36,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/sctest"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -818,6 +821,10 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 		stmts: []string{
 			// Statements expected to succeed.
 			"SET sql_safe_updates = false;",
+			"CREATE DATABASE testdb1; SET DATABASE = testdb1",
+			"CREATE TABLE testdb1.t1 (i INT PRIMARY KEY); CREATE TABLE testdb1.t2 (i INT PRIMARY KEY REFERENCES testdb1.t1(i));",
+			"DROP DATABASE testdb1 CASCADE  -- current db is dropped; expect no post-execution checks",
+			"USE defaultdb",
 			"CREATE TABLE t2 (i INT PRIMARY KEY, j INT NOT NULL);",
 			"CREATE TABLE t1 (i INT PRIMARY KEY, j INT REFERENCES t2(i));",
 			"INSERT INTO t2 SELECT k, k+1 FROM generate_series(1,1000) AS tmp(k);",
@@ -828,14 +835,24 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"ALTER TABLE t2 ADD COLUMN p INT DEFAULT 50;",
 			"ALTER TABLE t2 DROP COLUMN p;",
 			"ALTER TABLE t2 ALTER PRIMARY KEY USING COLUMNS (j);",
+			"DROP TABLE IF EXISTS t1, t2;",
+			"CREATE TABLE t1 (rowid INT NOT NULL);",
+			"ALTER TABLE t1 ALTER PRIMARY KEY USING COLUMNS (rowid); -- special case where column name `rowid` is used",
 
 			// Statements expected to fail.
 			"CREATE TABLE t1 (); -- expect a DuplicateRelation error",
 			"ALTER TABLE t1 DROP COLUMN xyz; -- expect a rejected (sql_safe_updates = true) warning",
 			"ALTER TABLE t1 DROP COLUMN xyz; -- expect a UndefinedColumn error",
 			"ALTER TABLE txyz ADD COLUMN i INT DEFAULT 30; -- expect a UndefinedTable error",
+			"SELECT (*) FROM t1; -- expect a Syntax error",
+			"FROM t1 SELECT *; -- ditto",
+			"sdfsd  -- ditto",
+			"CREATE VIEW v AS (SELECT (*,1) FROM t);  -- ditto",
+			"CREATE MATERIALIZED VIEW v AS (xlsd);  -- ditto",
+			"CREATE FUNCTION f1() RETURNS INT LANGUAGE SQL AS $$ SELECT $$vsd $$;  -- ditto",
+			"CREATE FUNCTION f1() RETURNS INT LANGUAGE SQL AS $funcTag$ SELECT $$vsd $funcTag$;  -- ditto",
 
-			// statements with TCL commands or empty content.
+			// Statements with TCL commands or empty content.
 			"",
 			"BEGIN;",
 			"INSERT INTO t2 VALUES (1001, 1002); INSERT INTO t1 VALUES (1000, 1001);",
@@ -846,9 +863,21 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"ALTER TABLE t3 ADD PRIMARY KEY (i);",
 			"COMMIT;",
 			"BEGIN;",
-			"SELECT 1/0;",
-			"INSERT INTO t2 VALUES (1002, 1003); INSERT INTO t1 VALUES (1001, 1002); -- expect to be skipped",
+			"SELECT 1/0;  -- move txn into ERROR state",
+			"DROP TABLE IF EXISTS t2;  -- expect to be ignored",
+			"INSERT INTO t2 VALUES (1002, 1003); INSERT INTO t1 VALUES (1001, 1002);  -- expect to be ignored",
 			"ROLLBACK;",
+			"DROP TABLE IF EXISTS t3; CREATE TABLE t3 (i INT PRIMARY KEY);",
+			"BEGIN;",
+			"ALTER TABLE t3 DROP CONSTRAINT t3_pkey;",
+			"DELETE FROM t3 WHERE i = 1;  -- expect to result in an error",
+			"ROLLBACK;",
+			"BEGIN; ALTER TABLE t3 ADD COLUMN j INT CREATE FAMILY;",
+			"ROLLBACK;",
+			"BEGIN; SAVEPOINT cockroach_restart;",
+			"RELEASE SAVEPOINT cockroach_restart;  -- move txn into DONE state",
+			"SELECT 1;  -- expect to be ignored",
+			"COMMIT;",
 
 			// statements that will be altered due to known behavioral differences in LSC vs DSC.
 			"ALTER TABLE t1 ADD COLUMN xyz INT DEFAULT 30, ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i; -- unimplemented in legacy schema changer; expect to skip this line",
@@ -865,8 +894,72 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"ALTER TABLE t6 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i; -- ditto",
 			"ALTER TABLE t6 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k; -- ditto",
 			"ALTER TABLE t6 ADD COLUMN p INT DEFAULT 30, DROP COLUMN p; -- ditto",
+			"SET experimental_enable_temp_tables = true;",
+			"CREATE TEMPORARY TABLE t7 (i INT);  -- expect to skip this line",
+			"CREATE TEMP TABLE t7 (i INT);  -- ditto",
 		},
 	}
 
 	sctest.CompareLegacyAndDeclarative(t, ss)
+}
+
+var logictestStmtsCorpusFile = flag.String("logictest-stmt-corpus-path", "", "path to logictest stmts corpus")
+
+func TestComparatorFromLogicTests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	if *logictestStmtsCorpusFile == "" {
+		skip.IgnoreLint(t, "require `--logictest-stmt-corpus-path` to be set")
+	}
+
+	bytes, err := os.ReadFile(*logictestStmtsCorpusFile)
+	require.NoError(t, err)
+	corpus := scpb.LogicTestStmtsCorpus{}
+	err = protoutil.Unmarshal(bytes, &corpus)
+	require.NoError(t, err)
+
+	// Shuffle entries so the order of execution is different each time. It might
+	// speed up finding bugs.
+	rand.Shuffle(len(corpus.Entries), func(i, j int) {
+		corpus.Entries[i], corpus.Entries[j] = corpus.Entries[j], corpus.Entries[i]
+	})
+
+	for _, entry := range corpus.Entries {
+		subtestName := entry.Name
+		subtestStatements := entry.Statements
+
+		t.Run(subtestName, func(t *testing.T) {
+			if skipEntry, skipReason := shouldSkipLogicTestCorpusEntry(subtestName); skipEntry {
+				skip.IgnoreLint(t, skipReason)
+			}
+
+			t.Logf("running schema changer comparator testing on statements collected from logic test %q\n", subtestName)
+			ss := &staticSQLStmtLineProvider{
+				stmts: subtestStatements,
+			}
+			sctest.CompareLegacyAndDeclarative(t, ss)
+			t.Logf("schema changer comparator testing succeeded on logic test %q\n", subtestName)
+		})
+	}
+}
+
+// shouldSkipLogicTestCorpusEntry is the place where we blacklist entries in the
+// logictest stmts corpus. Each blacklisted entry should be justified with
+// comments.
+func shouldSkipLogicTestCorpusEntry(entryName string) (skip bool, skipReason string) {
+	switch entryName {
+	case "crdb_internal":
+		// `crdb_internal` contains stmts like `SELECT crdb_internal.force_panic('foo')`
+		// that will cause the framework to crash. Also, in general, we don't care about
+		// crdb_internal functions for purpose of schema changer comparator testing.
+		return true, `"crdb_internal" contains statement like "crdb_internal.force_panic()" that would crash the testing framework`
+	case "schema_repair":
+		// `schema_repair` contains stmts like `SELECT crdb_internal.unsafe_delete_descriptor(id)`
+		// that will corrupt descriptors. This subsequently would fail the query that
+		// attempts to fetch all descriptors during the post-execution metadata
+		// identity check.
+		return true, `"schema_repair" contains statement like "crdb_internal.unsafe_delete_descriptor(id)" that would cause descriptor corruptions, which would subsequently fail the query to fetch descriptors during the metadata identity check`
+	default:
+		return false, ""
+	}
 }

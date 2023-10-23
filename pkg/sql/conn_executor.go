@@ -92,7 +92,7 @@ import (
 )
 
 var maxNumNonAdminConnections = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.max_connections_per_gateway",
 	"the maximum number of SQL connections per gateway allowed at a given time "+
 		"(note: this will only limit future connection attempts and will not affect already established connections). "+
@@ -105,7 +105,7 @@ var maxNumNonAdminConnections = settings.RegisterIntSetting(
 // This setting may be extended one day to include an arbitrary list of users to exclude from connection limiting.
 // This setting may be removed one day.
 var maxNumNonRootConnections = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.cockroach_cloud.max_client_connections_per_gateway",
 	"this setting is intended to be used by Cockroach Cloud for limiting connections to serverless clusters. "+
 		"The maximum number of SQL connections per gateway allowed at a given time "+
@@ -121,7 +121,7 @@ var maxNumNonRootConnections = settings.RegisterIntSetting(
 // connections to serverless clusters.
 // This setting may be removed one day.
 var maxNumNonRootConnectionsReason = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.cockroach_cloud.max_client_connections_per_gateway_reason",
 	"a reason to provide in the error message for connections that are denied due to "+
 		"server.cockroach_cloud.max_client_connections_per_gateway",
@@ -1214,20 +1214,24 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		txnEvType = txnRollback
 	}
 
-	// Close all portals, otherwise there will be leftover bytes.
+	// Close all portals and cursors, otherwise there will be leftover bytes.
 	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(
 		ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 	)
 	ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.closeAllPortals(
 		ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 	)
+	if err := ex.extraTxnState.sqlCursors.closeAll(false /* errorOnWithHold */); err != nil {
+		log.Warningf(ctx, "error closing cursors: %v", err)
+	}
 
+	var payloadErr error
 	if closeType == normalClose {
 		// We'll cleanup the SQL txn by creating a non-retriable (commit:true) event.
 		// This event is guaranteed to be accepted in every state.
 		ev := eventNonRetriableErr{IsCommit: fsm.True}
-		payload := eventNonRetriableErrPayload{err: pgerror.Newf(pgcode.AdminShutdown,
-			"connExecutor closing")}
+		payloadErr = pgerror.Newf(pgcode.AdminShutdown, "connExecutor closing")
+		payload := eventNonRetriableErrPayload{err: payloadErr}
 		if err := ex.machine.ApplyWithPayload(ctx, ev, payload); err != nil {
 			log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
 		}
@@ -1251,7 +1255,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		ex.state.finishExternalTxn()
 	}
 
-	ex.resetExtraTxnState(ctx, txnEvent{eventType: txnEvType})
+	ex.resetExtraTxnState(ctx, txnEvent{eventType: txnEvType}, payloadErr)
 	if ex.hasCreatedTemporarySchema && !ex.server.cfg.TestingKnobs.DisableTempObjectsCleanupOnSessionExit {
 		err := cleanupSessionTempObjects(
 			ctx,
@@ -1270,7 +1274,8 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	}
 
 	if closeType != panicClose {
-		// Close all statements, prepared portals, and cursors.
+		// Close all statements and prepared portals. The cursors have already been
+		// closed.
 		ex.extraTxnState.prepStmtsNamespace.resetToEmpty(
 			ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 		)
@@ -1278,9 +1283,6 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 			ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 		)
 		ex.extraTxnState.prepStmtsNamespaceMemAcc.Close(ctx)
-		if err := ex.extraTxnState.sqlCursors.closeAll(false /* errorOnWithHold */); err != nil {
-			log.Warningf(ctx, "error closing cursors: %v", err)
-		}
 	}
 
 	if ex.sessionTracing.Enabled() {
@@ -1559,6 +1561,11 @@ type connExecutor struct {
 		// has admin privilege. hasAdminRoleCache is set for the first statement
 		// in a transaction.
 		hasAdminRoleCache HasAdminRoleCache
+
+		// roleExistsCache is a cache of role existence checks. This is used because
+		// role existence checks are made when checking privileges. Only positive
+		// values are cached.
+		roleExistsCache map[username.SQLUsername]struct{}
 
 		// createdSequences keeps track of sequences created in the current transaction.
 		// The map key is the sequence descpb.ID.
@@ -1964,12 +1971,14 @@ func (ns *prepStmtNamespace) resetTo(
 
 // resetExtraTxnState resets the fields of ex.extraTxnState when a transaction
 // finishes execution (either commits, rollbacks or restarts). Based on the
-// transaction event, resetExtraTxnState invokes corresponding callbacks
+// transaction event, resetExtraTxnState invokes corresponding callbacks.
+// The payload error is included for statistics recording.
 // (e.g. onTxnFinish() and onTxnRestart()).
-func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
+func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, payloadErr error) {
 	ex.extraTxnState.numDDL = 0
 	ex.extraTxnState.firstStmtExecuted = false
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
+	ex.extraTxnState.roleExistsCache = make(map[username.SQLUsername]struct{})
 	ex.extraTxnState.createdSequences = nil
 
 	if ex.extraTxnState.fromOuterTxn {
@@ -2003,7 +2012,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 			ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 		)
 		ex.extraTxnState.savepoints.clear()
-		ex.onTxnFinish(ctx, ev)
+		ex.onTxnFinish(ctx, ev, payloadErr)
 	case txnRestart:
 		ex.onTxnRestart(ctx)
 		ex.state.mu.Lock()
@@ -2442,9 +2451,9 @@ func (ex *connExecutor) execCmd() (retErr error) {
 
 	var advInfo advanceInfo
 
-	// We close all pausable portals when we encounter err payload, otherwise
-	// there will be leftover bytes.
-	shouldClosePausablePortals := func(payload fsm.EventPayload) bool {
+	// We close all pausable portals and cursors when we encounter err payload,
+	// otherwise there will be leftover bytes.
+	shouldClosePausablePortalsAndCursors := func(payload fsm.EventPayload) bool {
 		switch payload.(type) {
 		case eventNonRetriableErrPayload, eventRetriableErrPayload:
 			return true
@@ -2456,11 +2465,14 @@ func (ex *connExecutor) execCmd() (retErr error) {
 	// If an event was generated, feed it to the state machine.
 	if ev != nil {
 		var err error
-		if shouldClosePausablePortals(payload) {
+		if shouldClosePausablePortalsAndCursors(payload) {
 			// We need this as otherwise, there'll be leftover bytes when
 			// txnState.finishSQLTxn() is being called, as the underlying resources of
 			// pausable portals hasn't been cleared yet.
 			ex.extraTxnState.prepStmtsNamespace.closeAllPausablePortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
+			if err := ex.extraTxnState.sqlCursors.closeAll(false /* errorOnWithHold */); err != nil {
+				log.Warningf(ctx, "error closing cursors: %v", err)
+			}
 		}
 		advInfo, err = ex.txnStateTransitionsApplyWrapper(ev, payload, res, pos)
 		if err != nil {
@@ -3410,7 +3422,7 @@ func (ex *connExecutor) setTransactionModes(
 }
 
 var allowSnapshotIsolation = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.txn.snapshot_isolation_syntax.enabled",
 	"set to true to allow transactions to use the SNAPSHOT isolation level. At "+
 		"the time of writing, this setting is intended only for usage by "+
@@ -3419,7 +3431,7 @@ var allowSnapshotIsolation = settings.RegisterBoolSetting(
 )
 
 var allowReadCommittedIsolation = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.txn.read_committed_syntax.enabled",
 	"set to true to allow transactions to use the READ COMMITTED isolation "+
 		"level if specified by BEGIN/SET commands",
@@ -3613,6 +3625,7 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.SkipNormalize = false
 	evalCtx.SchemaChangerState = ex.extraTxnState.schemaChangerState
 	evalCtx.DescIDGenerator = ex.getDescIDGenerator()
+	evalCtx.RoleExistsCache = ex.extraTxnState.roleExistsCache
 
 	// See resetPlanner for more context on setting the maximum timestamp for
 	// AOST read retries.
@@ -3730,18 +3743,20 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 
 	advInfo := ex.state.consumeAdvanceInfo()
 
+	var payloadErr error
 	// If we had an error from DDL statement execution due to the presence of
 	// other concurrent schema changes when attempting a schema change, wait for
 	// the completion of those schema changes first.
 	if p, ok := payload.(payloadWithError); ok {
-		if descID := scerrors.ConcurrentSchemaChangeDescID(p.errorCause()); descID != descpb.InvalidID {
+		payloadErr = p.errorCause()
+		if descID := scerrors.ConcurrentSchemaChangeDescID(payloadErr); descID != descpb.InvalidID {
 			if err := ex.handleWaitingForConcurrentSchemaChanges(ex.Ctx(), descID); err != nil {
 				return advanceInfo{}, err
 			}
 		}
 		// Similarly, if the descriptor ID generator is not available because of
 		// an ongoing migration, wait for the migration to complete first.
-		if errors.Is(p.errorCause(), descidgen.ErrDescIDSequenceMigrationInProgress) {
+		if errors.Is(payloadErr, descidgen.ErrDescIDSequenceMigrationInProgress) {
 			if err := ex.handleWaitingForDescriptorIDGeneratorMigration(ex.Ctx()); err != nil {
 				return advanceInfo{}, err
 			}
@@ -3859,7 +3874,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 
 		fallthrough
 	case txnRollback:
-		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent)
+		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent, payloadErr)
 		// Since we're doing a complete rollback, there's no need to keep the
 		// prepared stmts for a txn rewind.
 		ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.closeAllPortals(
@@ -3869,7 +3884,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	case txnRestart:
 		// In addition to resetting the extraTxnState, the restart event may
 		// also need to reset the sqlliveness.Session.
-		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent)
+		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent, payloadErr)
 		if err := ex.maybeSetSQLLivenessSession(); err != nil {
 			return advanceInfo{}, err
 		}

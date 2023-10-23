@@ -35,7 +35,7 @@ import (
 // For estimates, see:
 // http://security.stackexchange.com/questions/17207/recommended-of-rounds-for-bcrypt
 var BcryptCost = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	BcryptCostSettingName,
 	fmt.Sprintf(
 		"the hashing cost to use when storing passwords supplied as cleartext by SQL clients "+
@@ -59,7 +59,7 @@ const BcryptCostSettingName = "server.user_login.password_hashes.default_cost.cr
 // The value of 4096 is the minimum value recommended by RFC 5802.
 // It should be increased along with computation power.
 var SCRAMCost = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	SCRAMCostSettingName,
 	fmt.Sprintf(
 		"the hashing cost to use when storing passwords supplied as cleartext by SQL clients "+
@@ -97,7 +97,7 @@ var ErrUnknownHashMethod = errors.New("unknown hash method")
 // to read the current hash method. Instead use the
 // GetConfiguredHashMethod() function.
 var PasswordHashMethod = settings.RegisterEnumSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.user_login.password_encryption",
 	"which hash method to use to encode cleartext passwords passed via ALTER/CREATE USER/ROLE WITH PASSWORD",
 	// Note: the default is initially SCRAM, even in mixed-version clusters where
@@ -136,7 +136,7 @@ func GetConfiguredPasswordHashMethod(sv *settings.Values) (method password.HashM
 // AutoDetectPasswordHashes is the cluster setting that configures whether
 // the server recognizes pre-hashed passwords.
 var AutoDetectPasswordHashes = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.user_login.store_client_pre_hashed_passwords.enabled",
 	"whether the server accepts to store passwords pre-hashed by clients",
 	true,
@@ -145,7 +145,7 @@ var AutoDetectPasswordHashes = settings.RegisterBoolSetting(
 // MinPasswordLength is the cluster setting that configures the
 // minimum SQL password length.
 var MinPasswordLength = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.user_login.min_password_length",
 	"the minimum length accepted for passwords set in cleartext via SQL. "+
 		"Note that a value lower than 1 is ignored: passwords cannot be empty in any case.",
@@ -156,7 +156,7 @@ var MinPasswordLength = settings.RegisterIntSetting(
 // AutoUpgradePasswordHashes is the cluster setting that configures whether to
 // automatically re-encode stored passwords using crdb-bcrypt to scram-sha-256.
 var AutoUpgradePasswordHashes = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled",
 	"if server.user_login.password_encryption=scram-sha-256, this controls "+
 		"whether to automatically re-encode stored passwords using crdb-bcrypt to scram-sha-256",
@@ -166,7 +166,7 @@ var AutoUpgradePasswordHashes = settings.RegisterBoolSetting(
 // AutoDowngradePasswordHashes is the cluster setting that configures whether to
 // automatically re-encode stored passwords using scram-sha-256 to crdb-bcrypt.
 var AutoDowngradePasswordHashes = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.user_login.downgrade_scram_stored_passwords_to_bcrypt.enabled",
 	"if server.user_login.password_encryption=crdb-bcrypt, this controls "+
 		"whether to automatically re-encode stored passwords using scram-sha-256 to crdb-bcrypt",
@@ -177,7 +177,7 @@ var AutoDowngradePasswordHashes = settings.RegisterBoolSetting(
 // automatically re-encode stored passwords using scram-sha-256 to use a new
 // default cost setting.
 var AutoRehashOnSCRAMCostChange = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.user_login.rehash_scram_stored_passwords_on_cost_change.enabled",
 	"if server.user_login.password_hashes.default_cost.scram_sha_256 differs from, "+
 		"the cost in a stored hash, this controls whether to automatically re-encode "+

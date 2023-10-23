@@ -12,6 +12,7 @@ package parquet
 
 import (
 	"io"
+	"math"
 
 	"github.com/apache/arrow/go/v11/parquet"
 	"github.com/apache/arrow/go/v11/parquet/compress"
@@ -39,7 +40,8 @@ func (f Option) apply(c *config) error {
 }
 
 // WithMaxRowGroupLength specifies the maximum number of rows to include
-// in a row group when writing data.
+// in a row group when writing data. This means that the writer will flush
+// data to the sink at least once every `l` rows automatically.
 func WithMaxRowGroupLength(l int64) Option {
 	return func(c *config) error {
 		if l <= 0 {
@@ -128,6 +130,9 @@ const (
 // A Writer writes datums into an io.Writer sink. The Writer should be Close()ed
 // before attempting to read from the output sink so all data is flushed and
 // parquet metadata is written.
+//
+// NB: The writer may buffer all the written data in memory until it is
+// Flush()ed to the sink.
 type Writer struct {
 	sch    *SchemaDefinition
 	writer *file.Writer
@@ -136,7 +141,10 @@ type Writer struct {
 	ba *batchAlloc
 
 	// The current number of rows written to the row group writer.
-	currentRowGroupSize   int64
+	currentRowGroupSize int64
+	// bufferedBytesEstimate is the number of bytes buffered by the row group
+	// writer. This does not include bytes written out to the sink.
+	bufferedBytesEstimate int64
 	currentRowGroupWriter file.BufferedRowGroupWriter
 	// Caches the file.ColumnChunkWriters for each datumColumn in the schema
 	// definition. The array at columnChunkWriterCache[i] has has
@@ -154,8 +162,14 @@ type Writer struct {
 // TODO(#99028): maxRowGroupSize should be a configuration Option, along with
 // compression schemes, allocator, batch size, page size etc
 func NewWriter(sch *SchemaDefinition, sink io.Writer, opts ...Option) (*Writer, error) {
+	// We want the caller to have control over when the buffer is flushed, so the max
+	// data page size and row group size are uncapped. This means that the library will not flush
+	// automatically when the buffered data size is large. It will only flush the caller calls Flush().
+	// Note that this means there will be one data page per column per row group in the final file.
+	defaultFlushSize := int64(math.MaxInt64)
+
 	cfg := config{
-		maxRowGroupLength: parquet.DefaultMaxRowGroupLen,
+		maxRowGroupLength: defaultFlushSize,
 		version:           parquet.V2_6,
 		compression:       compress.Codecs.Uncompressed,
 		metadata:          metadata.KeyValueMetadata{},
@@ -178,6 +192,7 @@ func NewWriter(sch *SchemaDefinition, sink io.Writer, opts ...Option) (*Writer, 
 		parquet.WithCreatedBy("cockroachdb"),
 		parquet.WithVersion(cfg.version),
 		parquet.WithCompression(cfg.compression),
+		parquet.WithDataPageSize(defaultFlushSize),
 	}
 	props := parquet.NewWriterProperties(parquetOpts...)
 	writer := file.NewParquetWriter(sink, sch.schema.Root(), file.WithWriterProps(props),
@@ -210,6 +225,7 @@ func (w *Writer) setNewRowGroupWriter() error {
 		}
 	}
 
+	w.bufferedBytesEstimate = 0
 	w.currentRowGroupSize = 0
 	return nil
 }
@@ -226,23 +242,43 @@ func (w *Writer) AddRow(datums []tree.Datum) error {
 		if err := w.setNewRowGroupWriter(); err != nil {
 			return err
 		}
-	} else if w.currentRowGroupSize == w.cfg.maxRowGroupLength {
-		if err := w.currentRowGroupWriter.Close(); err != nil {
-			return err
-		}
-		if err := w.setNewRowGroupWriter(); err != nil {
+	}
+	if w.currentRowGroupSize == w.cfg.maxRowGroupLength {
+		if err := w.Flush(); err != nil {
 			return err
 		}
 	}
 
+	w.bufferedBytesEstimate = 0
 	for datumColIdx, d := range datums {
-		if err := w.sch.cols[datumColIdx].colWriter.Write(d, w.columnChunkWriterCache[datumColIdx], w.ba); err != nil {
+		byteEst, err := w.sch.cols[datumColIdx].colWriter.Write(d, w.columnChunkWriterCache[datumColIdx], w.ba)
+		if err != nil {
 			return err
 		}
+		w.bufferedBytesEstimate += byteEst
 	}
 
 	w.currentRowGroupSize += 1
 	return nil
+}
+
+// BufferedBytesEstimate is the approximate number of bytes which are
+// buffered by the writer and not yet written to the sink.
+func (w *Writer) BufferedBytesEstimate() int64 {
+	return w.bufferedBytesEstimate
+}
+
+// Flush flushes any data buffered in memory out to the sink by creating a row
+// group containing that buffered data. It is a noop of the current row group
+// writer is empty or uninitialized (which is true IFF no data is buffered).
+func (w *Writer) Flush() error {
+	if w.currentRowGroupWriter == nil || w.currentRowGroupSize == 0 {
+		return nil
+	}
+	if err := w.currentRowGroupWriter.Close(); err != nil {
+		return err
+	}
+	return w.setNewRowGroupWriter()
 }
 
 // Close closes the writer and flushes any buffered data to the sink.
@@ -253,5 +289,6 @@ func (w *Writer) Close() error {
 			return err
 		}
 	}
+	w.bufferedBytesEstimate = 0
 	return w.writer.Close()
 }

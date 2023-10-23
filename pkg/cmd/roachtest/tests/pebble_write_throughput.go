@@ -32,13 +32,15 @@ func registerPebbleWriteThroughput(r registry.Registry) {
 	// Register the Pebble write benchmark. We only run the 1024 variant for now.
 	size := 1024
 	r.Add(registry.TestSpec{
-		Name:      fmt.Sprintf("pebble/write/size=%d", size),
-		Owner:     registry.OwnerStorage,
-		Benchmark: true,
-		Timeout:   10 * time.Hour,
-		Cluster:   r.MakeClusterSpec(5, spec.CPU(16), spec.SSD(16), spec.RAID0(true)),
-		Leases:    registry.MetamorphicLeases,
-		Tags:      registry.Tags("pebble_nightly_write"),
+		Name:             fmt.Sprintf("pebble/write/size=%d", size),
+		Owner:            registry.OwnerStorage,
+		Benchmark:        true,
+		Timeout:          10 * time.Hour,
+		Cluster:          r.MakeClusterSpec(5, spec.CPU(16), spec.SSD(16), spec.RAID0(true)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.PebbleNightlyWrite),
+		Tags:             registry.Tags("pebble_nightly_write"),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPebbleWriteBenchmark(ctx, t, c, size, pebble)
 		},

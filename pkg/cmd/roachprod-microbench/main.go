@@ -92,7 +92,7 @@ func makeRunCommand() *cobra.Command {
 	cmd.Flags().StringSliceVar(&config.excludeList, "exclude", []string{}, "comma-separated regex of packages and benchmarks to exclude e.g. 'pkg/util/.*:BenchmarkIntPool,pkg/sql:.*'")
 	cmd.Flags().IntVar(&config.iterations, "iterations", config.iterations, "number of iterations to run each benchmark")
 	cmd.Flags().BoolVar(&config.copyBinaries, "copy", config.copyBinaries, "copy and extract test binaries and libraries to the target cluster")
-	cmd.Flags().BoolVar(&config.lenient, "lenient", config.lenient, "tolerate errors in the benchmark results")
+	cmd.Flags().BoolVar(&config.lenient, "lenient", config.lenient, "tolerate errors while running benchmarks")
 	cmd.Flags().BoolVar(&config.affinity, "affinity", config.affinity, "run benchmarks with iterations and binaries having affinity to the same node, only applies when more than one archive is specified")
 	cmd.Flags().BoolVar(&config.quiet, "quiet", config.quiet, "suppress roachprod progress output")
 

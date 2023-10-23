@@ -316,8 +316,9 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 		req.stats.workCount = rand.Uint64()
 		req.stats.writeAccountedBytes = rand.Uint64()
 		req.stats.ingestedAccountedBytes = rand.Uint64()
-		req.stats.statsToIgnore.Bytes = rand.Uint64()
-		req.stats.statsToIgnore.ApproxIngestedIntoL0Bytes = rand.Uint64()
+		req.stats.statsToIgnore.ingestStats.Bytes = rand.Uint64()
+		req.stats.statsToIgnore.ingestStats.ApproxIngestedIntoL0Bytes = rand.Uint64()
+		req.stats.statsToIgnore.writeBytes = rand.Uint64()
 	}
 	kvGranter := &testGranterNonNegativeTokens{t: t}
 	st := cluster.MakeTestingClusterSettings()

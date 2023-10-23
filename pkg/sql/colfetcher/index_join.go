@@ -469,7 +469,7 @@ const productionIndexJoinUsingStreamerBatchSize = 8 << 20 /* 8MiB */
 // construct a single lookup KV batch by the ColIndexJoin when it is using the
 // Streamer API.
 var IndexJoinStreamerBatchSize = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.distsql.index_join_streamer.batch_size",
 	"size limit on the input rows to construct a single lookup KV batch "+
 		"(by the ColIndexJoin operator when using the Streamer API)",
@@ -563,6 +563,7 @@ func NewColIndexJoin(
 			flowCtx.EvalCtx.Settings,
 			spec.LockingWaitPolicy,
 			spec.LockingStrength,
+			spec.LockingDurability,
 			streamerBudgetLimit,
 			streamerBudgetAcc,
 			spec.MaintainOrdering,
@@ -580,6 +581,7 @@ func NewColIndexJoin(
 			false, /* reverse */
 			spec.LockingStrength,
 			spec.LockingWaitPolicy,
+			spec.LockingDurability,
 			flowCtx.EvalCtx.SessionData().LockTimeout,
 			kvFetcherMemAcc,
 			flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,

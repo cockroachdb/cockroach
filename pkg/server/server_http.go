@@ -67,7 +67,7 @@ func newHTTPServer(
 // server. These instruct a valid user agent to use HTTPS *only*
 // for all future connections to this host.
 var HSTSEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.hsts.enabled",
 	"if true, HSTS headers will be sent along with all HTTP "+
 		"requests. The headers will contain a max-age setting of one "+

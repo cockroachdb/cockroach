@@ -353,8 +353,10 @@ func TestFileRegistry(t *testing.T) {
 			}
 			return string(entry.EncryptionSettings)
 		case "load":
+			var softMaxSize int64
+			d.MaybeScanArgs(t, "soft-max-size", &softMaxSize)
 			require.Nil(t, registry)
-			registry = &PebbleFileRegistry{FS: fs}
+			registry = &PebbleFileRegistry{FS: fs, SoftMaxSize: softMaxSize}
 			require.NoError(t, registry.Load(context.Background()))
 			return buf.String()
 		case "reset":
@@ -624,7 +626,12 @@ func TestFileRegistryKeepOldFilesAndSync(t *testing.T) {
 
 	// Keep 2 old file registries.
 	var numOldRegistryFiles = 3
-	registry := &PebbleFileRegistry{FS: mem, DBDir: dir, NumOldRegistryFiles: numOldRegistryFiles}
+	registry := &PebbleFileRegistry{
+		FS:                  mem,
+		DBDir:               dir,
+		NumOldRegistryFiles: numOldRegistryFiles,
+		SoftMaxSize:         1024,
+	}
 	require.NoError(t, registry.Load(context.Background()))
 
 	// All the registry files created so far. Some may have been subsequently
@@ -696,7 +703,12 @@ func TestFileRegistryKeepOldFilesAndSync(t *testing.T) {
 	mem.SetIgnoreSyncs(false)
 	// Keep no old registry files.
 	numOldRegistryFiles = 0
-	registry = &PebbleFileRegistry{FS: mem, DBDir: dir, NumOldRegistryFiles: numOldRegistryFiles}
+	registry = &PebbleFileRegistry{
+		FS:                  mem,
+		DBDir:               dir,
+		NumOldRegistryFiles: numOldRegistryFiles,
+		SoftMaxSize:         1024,
+	}
 	require.NoError(t, registry.Load(context.Background()))
 	// Force check that the old registry files are gone.
 	accumRegistryFiles(true)

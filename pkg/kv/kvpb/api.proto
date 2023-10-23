@@ -978,6 +978,18 @@ message EndTxnResponse {
   // The commit timestamp of the STAGING transaction record written
   // by the request. Only set if the transaction record was staged.
   util.hlc.Timestamp staging_timestamp = 5 [(gogoproto.nullable) = false];
+  // ReplicatedLocksReleasedOnCommit, if non-empty, indicate that replicated
+  // locks with strength Shared or Exclusive were released in the referenced key
+  // spans when committing this transaction. Notably, this field is left unset
+  // if only write intents were resolved. The field is also left unset for
+  // transactions that aborted.
+  //
+  // The caller must bump the timestamp cache across these spans to the
+  // transaction's commit timestamp. Doing so ensures that the released locks
+  // (acquired by the now committed transaction) continue to provide protection
+  // against other writers up to the commit timestamp, even after the locks have
+  // been released.
+  repeated Span replicated_locks_released_on_commit = 6 [(gogoproto.nullable) = false];
 }
 
 // An AdminSplitRequest is the argument to the AdminSplit() method. The
@@ -1479,6 +1491,17 @@ message ResolveIntentRequest {
 // ResolveIntent() method.
 message ResolveIntentResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // ReplicatedLocksReleasedCommitTimestamp, if non-empty, indicates that a
+  // replicated lock with strength Shared or Exclusive was released by a
+  // transaction who committed at this timestamp. Notably, this field is left
+  // unset if only a write intent was resolved. The field is also left unset for
+  // transactions that aborted.
+  //
+  // The caller must bump the timestamp cache across the resolution span to this
+  // commit timestamp. Doing so ensures that the released lock (acquired by a
+  // now committed transaction) continues to provide protection against other
+  // writers up to the commit timestamp, even after the lock has been released.
+  util.hlc.Timestamp replicated_locks_released_commit_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
 // A ResolveIntentRangeRequest is arguments to the ResolveIntentRange() method.
@@ -1523,6 +1546,17 @@ message ResolveIntentRangeRequest {
 // ResolveIntent() method.
 message ResolveIntentRangeResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // ReplicatedLocksReleasedCommitTimestamp, if non-empty, indicates that at
+  // least one replicated lock with strength Shared or Exclusive was released by
+  // a transaction who committed at this timestamp. Notably, this field is left
+  // unset if only a write intent was resolved. The field is also left unset for
+  // transactions that aborted.
+  //
+  // The caller must bump the timestamp cache across the resolution span to this
+  // commit timestamp. Doing so ensures that the released lock (acquired by a
+  // now committed transaction) continues to provide protection against other
+  // writers up to the commit timestamp, even after the lock has been released.
+  util.hlc.Timestamp replicated_locks_released_commit_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
 // A MergeRequest contains arguments to the Merge() method. It

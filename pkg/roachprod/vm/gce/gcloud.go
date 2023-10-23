@@ -36,10 +36,11 @@ import (
 )
 
 const (
-	defaultProject      = "cockroach-ephemeral"
-	ProviderName        = "gce"
-	DefaultImage        = "ubuntu-2004-focal-v20230817"
-	ARM64Image          = "ubuntu-2004-focal-arm64-v20230817"
+	defaultProject = "cockroach-ephemeral"
+	ProviderName   = "gce"
+	DefaultImage   = "ubuntu-2204-jammy-v20230727"
+	ARM64Image     = "ubuntu-2204-jammy-arm64-v20230727"
+	// TODO(DarrylWong): Upgrade FIPS to Ubuntu 22 when it is available.
 	FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230811"
 	defaultImageProject = "ubuntu-os-cloud"
 	FIPSImageProject    = "ubuntu-os-pro-cloud"
@@ -126,6 +127,8 @@ type jsonVM struct {
 		ProvisioningModel         string
 	}
 	MachineType string
+	// CPU platform corresponding to machine type; see https://cloud.google.com/compute/docs/cpu-platforms
+	CPUPlatform string
 	SelfLink    string
 	Zone        string
 	instanceDisksResponse
@@ -168,6 +171,7 @@ func (jsonVM *jsonVM) toVM(
 	}
 
 	machineType := lastComponent(jsonVM.MachineType)
+	cpuPlatform := jsonVM.CPUPlatform
 	zone := lastComponent(jsonVM.Zone)
 	remoteUser := config.SharedUser
 	if !opts.useSharedUser {
@@ -238,6 +242,8 @@ func (jsonVM *jsonVM) toVM(
 		RemoteUser:             remoteUser,
 		VPC:                    vpc,
 		MachineType:            machineType,
+		CPUArch:                vm.ParseArch(cpuPlatform),
+		CPUFamily:              strings.Replace(strings.ToLower(cpuPlatform), "intel ", "", 1),
 		Zone:                   zone,
 		Project:                project,
 		NonBootAttachedVolumes: volumes,
@@ -253,9 +259,11 @@ type jsonAuth struct {
 // DefaultProviderOpts returns a new gce.ProviderOpts with default values set.
 func DefaultProviderOpts() *ProviderOpts {
 	return &ProviderOpts{
-		// projects needs space for one project, which is set by the flags for
-		// commands that accept a single project.
-		MachineType:          "n2-standard-4",
+		// N.B. we set minCPUPlatform to "Intel Ice Lake" by default because it's readily available in the majority of GCE
+		// regions. Furthermore, it gets us closer to AWS instances like m6i which exclusively run Ice Lake.
+		MachineType: "n2-standard-4",
+		// TODO(srosenberg): restore the change in https://github.com/cockroachdb/cockroach/pull/111140 after 23.2 branch cut.
+		//MinCPUPlatform:       "Intel Ice Lake",
 		MinCPUPlatform:       "",
 		Zones:                nil,
 		Image:                DefaultImage,
@@ -803,7 +811,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 
 	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n2-standard-4",
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
-	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "",
+	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "Intel Ice Lake",
 		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform)")
 	flags.StringVar(&o.Image, ProviderName+"-image", DefaultImage,
 		"Image to use to create the vm, "+
@@ -982,6 +990,10 @@ func (p *Provider) Create(
 				}
 			}
 		}
+		if providerOpts.MinCPUPlatform != "" {
+			l.Printf("WARNING: --gce-min-cpu-platform is ignored for T2A instances")
+			providerOpts.MinCPUPlatform = ""
+		}
 	}
 	//TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
 	if useArmAMI {
@@ -993,6 +1005,14 @@ func (p *Provider) Create(
 		image = FIPSImage
 		imageProject = FIPSImageProject
 		l.Printf("Using FIPS-enabled AMI: %s for machine type: %s", image, providerOpts.MachineType)
+	}
+	// If a non default Ubuntu version was specified, we want to use that instead.
+	if opts.UbuntuVersion.IsOverridden() {
+		image, err = getUbuntuImage(opts.UbuntuVersion, opts.Arch)
+		if err != nil {
+			return err
+		}
+		l.Printf("Overriding default Ubuntu image with %s", image)
 	}
 	args := []string{
 		"compute", "instances", "create",
@@ -1068,7 +1088,7 @@ func (p *Provider) Create(
 	}
 
 	// Create GCE startup script file.
-	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleDisks, opts.Arch == string(vm.ArchFIPS))
+	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleDisks, opts.Arch == string(vm.ArchFIPS), !shouldEnableRSAForSSH(opts.UbuntuVersion, opts.Arch))
 	if err != nil {
 		return errors.Wrapf(err, "could not write GCE startup script to temp file")
 	}
@@ -1145,7 +1165,8 @@ func (p *Provider) Create(
 // N.B. Only n1, n2 and c2 instances are supported since we don't typically use other instance types.
 // Consult https://cloud.google.com/compute/docs/disks/#local_ssd_machine_type_restrictions for other types of instances.
 func AllowedLocalSSDCount(machineType string) ([]int, error) {
-	machineTypes := regexp.MustCompile(`^([cn])(\d+)-.+-(\d+)$`)
+	// E.g., n2-standard-4, n2-custom-8-16384.
+	machineTypes := regexp.MustCompile(`^([cn])(\d+)-[a-z]+-(\d+)(?:-\d+)?$`)
 	matches := machineTypes.FindStringSubmatch(machineType)
 
 	if len(matches) >= 3 {
@@ -1189,7 +1210,7 @@ func AllowedLocalSSDCount(machineType string) ([]int, error) {
 			}
 		}
 	}
-	return nil, fmt.Errorf("unsupported machine type: %q", machineType)
+	return nil, fmt.Errorf("unsupported machine type: %q, matches: %v", machineType, matches)
 }
 
 // N.B. neither boot disk nor additional persistent disks are assigned VM labels by default.
@@ -1529,15 +1550,47 @@ func populateCostPerHour(l *logger.Logger, vms vm.List) error {
 							},
 						},
 					},
-					Preemptible: vm.Preemptible,
-					MachineType: &cloudbilling.MachineType{
-						PredefinedMachineType: &cloudbilling.PredefinedMachineType{
-							MachineType: machineType,
-						},
-					},
+					Preemptible:     vm.Preemptible,
 					PersistentDisks: []*cloudbilling.PersistentDisk{},
 					Region:          zone[:len(zone)-2],
 				},
+			}
+			if !strings.Contains(machineType, "custom") {
+				workload.ComputeVmWorkload.MachineType = &cloudbilling.MachineType{
+					PredefinedMachineType: &cloudbilling.PredefinedMachineType{
+						MachineType: machineType,
+					},
+				}
+			} else {
+				decodeCustomType := func() (string, int64, int64, error) {
+					parts := strings.Split(machineType, "-")
+					decodeErr := errors.Newf("invalid custom machineType %s", machineType)
+					if len(parts) != 4 {
+						return "", 0, 0, decodeErr
+					}
+					series, cpus, memory := parts[0], parts[2], parts[3]
+					cpusInt, parseErr := strconv.Atoi(cpus)
+					if parseErr != nil {
+						return "", 0, 0, decodeErr
+					}
+					memoryInt, parseErr := strconv.Atoi(memory)
+					if parseErr != nil {
+						return "", 0, 0, decodeErr
+					}
+					return series, int64(cpusInt), int64(memoryInt), nil
+				}
+				series, cpus, memory, err := decodeCustomType()
+				if err != nil {
+					l.Errorf("Error estimating VM costs (will continue without): %v", err)
+					continue
+				}
+				workload.ComputeVmWorkload.MachineType = &cloudbilling.MachineType{
+					CustomMachineType: &cloudbilling.CustomMachineType{
+						MachineSeries:   series,
+						VirtualCpuCount: cpus,
+						MemorySizeGb:    float64(memory / 1024),
+					},
+				}
 			}
 			for _, v := range vm.NonBootAttachedVolumes {
 				workload.ComputeVmWorkload.PersistentDisks = append(workload.ComputeVmWorkload.PersistentDisks, &cloudbilling.PersistentDisk{
@@ -1620,4 +1673,46 @@ func (p *Provider) ProjectActive(project string) bool {
 func lastComponent(url string) string {
 	s := strings.Split(url, "/")
 	return s[len(s)-1]
+}
+
+var (
+	// We define the actual image here because it's different for every provider.
+	focalFossa = vm.UbuntuImages{
+		DefaultImage: "ubuntu-2004-focal-v20230817",
+		ARM64Image:   "ubuntu-2004-focal-arm64-v20230817",
+		FIPSImage:    "ubuntu-pro-fips-2004-focal-v20230811",
+	}
+
+	gceUbuntuImages = map[vm.UbuntuVersion]vm.UbuntuImages{
+		vm.FocalFossa: focalFossa,
+	}
+)
+
+// getUbuntuImage returns the correct Ubuntu image for the specified Ubuntu version and architecture.
+func getUbuntuImage(version vm.UbuntuVersion, arch string) (string, error) {
+	image, ok := gceUbuntuImages[version]
+	if ok {
+		switch arch {
+		case string(vm.ArchAMD64):
+			return image.DefaultImage, nil
+		case string(vm.ArchARM64):
+			return image.ARM64Image, nil
+		case string(vm.ArchFIPS):
+			return image.FIPSImage, nil
+		default:
+			return "", errors.Errorf("Unknown architecture specified.")
+		}
+	}
+
+	return "", errors.Errorf("Unknown Ubuntu version specified.")
+}
+
+// Returns true if the current Ubuntu image is 22.04. RSA SHA1 is no longer supported
+// in 22.04, but is required by Jepsen tests so we enable it. However, some tests are
+// still on Ubuntu 20.04, which will break sshd if we try to enable.
+// TODO(DarrylWong): In the future, when all tests are run on Ubuntu 22.04, we can remove this check and default true.
+// See: https://github.com/cockroachdb/cockroach/issues/112112
+func shouldEnableRSAForSSH(version vm.UbuntuVersion, arch string) bool {
+	// FIPS is not yet available on 22.04, it's still using Ubuntu 20.04.
+	return version.IsOverridden() || arch == string(vm.ArchFIPS)
 }

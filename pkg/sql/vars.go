@@ -1625,6 +1625,14 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`virtual_cluster_name`: {
+		Hidden: true,
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return string(evalCtx.ExecCfg.VirtualClusterName), nil
+		},
+	},
+
+	// CockroachDB extension.
 	`allow_prepare_as_opt_plan`: {
 		Hidden: true,
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
@@ -2907,6 +2915,52 @@ var varGen = map[string]sessionVar{
 		},
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().DurableLockingForSerializable), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
+	`enable_shared_locking_for_serializable`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_shared_locking_for_serializable`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("enable_shared_locking_for_serializable", s)
+			if err != nil {
+				return err
+			}
+			m.SetSharedLockingForSerializable(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().SharedLockingForSerializable), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	interlockKeySessionVarName: {
+		Hidden: true,
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			m.SetUnsafeSettingInterlockKey(s)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return evalCtx.SessionData().UnsafeSettingInterlockKey, nil
+		},
+		GlobalDefault: func(_ *settings.Values) string { return "" },
+	},
+
+	// CockroachDB extension.
+	`optimizer_use_lock_op_for_serializable`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_lock_op_for_serializable`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_lock_op_for_serializable", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUseLockOpForSerializable(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseLockOpForSerializable), nil
 		},
 		GlobalDefault: globalFalse,
 	},

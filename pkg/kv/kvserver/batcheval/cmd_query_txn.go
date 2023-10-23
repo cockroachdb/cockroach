@@ -36,9 +36,10 @@ func declareKeysQueryTransaction(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
+) error {
 	qr := req.(*kvpb.QueryTxnRequest)
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.TransactionKey(qr.Txn.Key, qr.Txn.ID)})
+	return nil
 }
 
 // QueryTxn fetches the current state of a transaction.

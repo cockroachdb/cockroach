@@ -19,61 +19,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// FakeResumer calls optional callbacks during the job lifecycle.
-type FakeResumer struct {
-	OnResume      func(context.Context) error
-	FailOrCancel  func(context.Context) error
-	Success       func() error
-	PauseRequest  onPauseRequestFunc
-	TraceRealSpan bool
-}
-
-func (d FakeResumer) ForceRealSpan() bool {
-	return d.TraceRealSpan
-}
-
-func (d FakeResumer) DumpTraceAfterRun() bool {
-	return true
-}
-
-var _ Resumer = FakeResumer{}
-
-func (d FakeResumer) Resume(ctx context.Context, execCtx interface{}) error {
-	if d.OnResume != nil {
-		if err := d.OnResume(ctx); err != nil {
-			return err
-		}
-	}
-	if d.Success != nil {
-		return d.Success()
-	}
-	return nil
-}
-
-func (d FakeResumer) OnFailOrCancel(ctx context.Context, _ interface{}, _ error) error {
-	if d.FailOrCancel != nil {
-		return d.FailOrCancel(ctx)
-	}
-	return nil
-}
-
-func (d FakeResumer) CollectProfile(_ context.Context, _ interface{}) error {
-	return nil
-}
-
 // OnPauseRequestFunc forwards the definition for use in tests.
 type OnPauseRequestFunc = onPauseRequestFunc
-
-var _ PauseRequester = FakeResumer{}
-
-func (d FakeResumer) OnPauseRequest(
-	ctx context.Context, execCtx interface{}, txn isql.Txn, details *jobspb.Progress,
-) error {
-	if d.PauseRequest == nil {
-		return nil
-	}
-	return d.PauseRequest(ctx, execCtx, txn, details)
-}
 
 func (r *Registry) CancelRequested(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
 	return r.cancelRequested(ctx, txn, id)

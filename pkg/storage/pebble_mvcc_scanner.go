@@ -461,7 +461,7 @@ type pebbleMVCCScanner struct {
 	// Stores any error returned. If non-nil, iteration short circuits.
 	err error
 	// Number of iterations to try before we do a Seek/SeekReverse. Stays within
-	// [0, maxItersBeforeSeek] and defaults to maxItersBeforeSeek/2 .
+	// [0, maxItersBeforeSeek] and defaults to maxItersBeforeSeek/2.
 	itersBeforeSeek int
 	// machine is the state machine for how the iterator should be advanced in
 	// order to handle scans and reverse scans.
@@ -711,7 +711,7 @@ func (p *pebbleMVCCScanner) afterScan() (*roachpb.Span, kvpb.ResumeReason, int64
 	return nil, 0, 0, nil
 }
 
-// Increments itersBeforeSeek while ensuring it stays <= maxItersBeforeSeek
+// Increments itersBeforeSeek while ensuring it stays <= maxItersBeforeSeek.
 func (p *pebbleMVCCScanner) incrementItersBeforeSeek() {
 	p.itersBeforeSeek++
 	if p.itersBeforeSeek > maxItersBeforeSeek {

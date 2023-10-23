@@ -42,6 +42,26 @@ vectorized: true
   spans: FULL SCAN
   locking strength: for no key update
 
+# By default, SELECT FOR SHARE doesn't acquire any locks.
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR SHARE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+
+# However, if the session setting is configured to do so, SELECT FOR SHARE will
+# acquire shared locks.
+
+statement ok
+SET enable_shared_locking_for_serializable = true
+
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR SHARE
 ----

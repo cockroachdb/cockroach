@@ -43,7 +43,7 @@ func (p *planner) DropTenantByID(
 		return readOnlyError("DROP VIRTUAL CLUSTER")
 	}
 
-	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "drop"); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "drop", p.execCfg.Settings); err != nil {
 		return err
 	}
 
@@ -111,13 +111,13 @@ func dropTenantInternal(
 	//
 	// Cancel any running replication job on this tenant record.
 	// The GCJob will wait for this job to enter a terminal state.
-	if info.TenantReplicationJobID != 0 {
-		job, err := jobRegistry.LoadJobWithTxn(ctx, info.TenantReplicationJobID, txn)
+	if info.PhysicalReplicationConsumerJobID != 0 {
+		job, err := jobRegistry.LoadJobWithTxn(ctx, info.PhysicalReplicationConsumerJobID, txn)
 		if err != nil {
 			return errors.Wrap(err, "loading tenant replication job for cancelation")
 		}
 		if err := job.WithTxn(txn).CancelRequested(ctx); err != nil {
-			return errors.Wrapf(err, "canceling tenant replication job %d", info.TenantReplicationJobID)
+			return errors.Wrapf(err, "canceling tenant replication job %d", info.PhysicalReplicationConsumerJobID)
 		}
 	}
 

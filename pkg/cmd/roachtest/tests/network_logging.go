@@ -110,10 +110,12 @@ func registerNetworkLogging(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "network_logging",
-		Owner:   registry.OwnerObsInf,
-		Cluster: r.MakeClusterSpec(numNodesNetworkLogging),
-		Leases:  registry.MetamorphicLeases,
+		Name:             "network_logging",
+		Owner:            registry.OwnerObsInf,
+		Cluster:          r.MakeClusterSpec(numNodesNetworkLogging),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runNetworkLogging(ctx, t, c)
 		},

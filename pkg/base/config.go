@@ -413,14 +413,12 @@ type Config struct {
 	// RPCHearbeatTimeout is the timeout for Ping requests.
 	RPCHeartbeatTimeout time.Duration
 
-	// SecondaryTenantPortOffset is the increment to add to the various
-	// addresses to generate the network configuration for the in-memory
-	// secondary tenant. If set to zero (the default), ports are
-	// auto-allocated randomly.
-	// TODO(knz): Remove this mechanism altogether in favor of a single
-	// network listener with protocol routing.
-	// See: https://github.com/cockroachdb/cockroach/issues/84585
-	SecondaryTenantPortOffset int
+	// ApplicationInternalRPCPortMin/PortMax define the range of TCP ports
+	// used to start the internal RPC service for application-level
+	// servers. This service is used for node-to-node RPC traffic and to
+	// serve data for 'debug zip'.
+	ApplicationInternalRPCPortMin int
+	ApplicationInternalRPCPortMax int
 
 	// Enables the use of an PTP hardware clock user space API for HLC current time.
 	// This contains the path to the device to be used (i.e. /dev/ptp0)
@@ -494,7 +492,8 @@ func (cfg *Config) InitDefaults() {
 	cfg.DisableClusterNameVerification = false
 	cfg.ClockDevicePath = ""
 	cfg.AcceptSQLWithoutTLS = false
-	cfg.SecondaryTenantPortOffset = 0
+	cfg.ApplicationInternalRPCPortMin = 0
+	cfg.ApplicationInternalRPCPortMax = 0
 }
 
 // HTTPRequestScheme returns "http" or "https" based on the value of

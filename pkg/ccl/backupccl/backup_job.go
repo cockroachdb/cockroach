@@ -71,7 +71,7 @@ import (
 // BackupCheckpointInterval is the interval at which backup progress is saved
 // to durable storage.
 var BackupCheckpointInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.backup.checkpoint_interval",
 	"the minimum time between writing progress checkpoints during a backup",
 	time.Minute)
@@ -555,6 +555,10 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
+	if err := b.ensureClusterIDMatches(p.ExecCfg().NodeInfo.LogicalClusterID()); err != nil {
+		return err
+	}
+
 	kmsEnv := backupencryption.MakeBackupKMSEnv(
 		p.ExecCfg().Settings,
 		&p.ExecCfg().ExternalIODirConfig,
@@ -932,6 +936,18 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	)
 }
 
+// ensureClusterIDMatches verifies that this job record matches
+// the cluster ID of this cluster.
+// This check ensures that if the backup job has been restored from a
+// backup of a tenant, or from streaming replication, then we will fail
+// this backup since resuming the backup may overwrite backup metadata created by a different cluster.
+func (b *backupResumer) ensureClusterIDMatches(clusterID uuid.UUID) error {
+	if createdBy := b.job.Payload().CreationClusterID; createdBy != uuid.Nil && clusterID != createdBy {
+		return errors.Newf("cannot resume backup started on another cluster (%s != %s)", createdBy, clusterID)
+	}
+	return nil
+}
+
 // ReportResults implements JobResultsReporter interface.
 func (b *backupResumer) ReportResults(ctx context.Context, resultsCh chan<- tree.Datums) error {
 	select {
@@ -1204,9 +1220,7 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 		}
 
 		scheduleID := int64(tree.MustBeDInt(datums[0]))
-		if err := jobs.NotifyJobTermination(
-			ctx, txn, env, b.job.ID(), jobStatus, b.job.Details(), scheduleID,
-		); err != nil {
+		if err := jobs.NotifyJobTermination(ctx, txn, env, b.job.ID(), jobStatus, b.job.Details(), scheduleID); err != nil {
 			return errors.Wrapf(err,
 				"failed to notify schedule %d of completion of job %d", scheduleID, b.job.ID())
 		}
@@ -1226,13 +1240,24 @@ func (b *backupResumer) OnFailOrCancel(
 
 	p := execCtx.(sql.JobExecContext)
 	cfg := p.ExecCfg()
+	details := b.job.Details().(jobspb.BackupDetails)
+
 	b.deleteCheckpoint(ctx, cfg, p.User())
 	if err := cfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		details := b.job.Details().(jobspb.BackupDetails)
 		pts := cfg.ProtectedTimestampProvider.WithTxn(txn)
 		return releaseProtectedTimestamp(ctx, pts, details.ProtectedTimestampRecord)
 	}); err != nil {
 		return err
+	}
+
+	// If this backup should update cluster monitoring metrics, update the
+	// metrics.
+	if details.UpdatesClusterMonitoringMetrics {
+		metrics := p.ExecCfg().JobRegistry.MetricsStruct().Backup.(*BackupMetrics)
+		if cloud.IsKMSInaccessible(jobErr) {
+			now := timeutil.Now()
+			metrics.LastKMSInaccessibleErrorTime.Update(now.Unix())
+		}
 	}
 
 	// This should never return an error unless resolving the schedule that the

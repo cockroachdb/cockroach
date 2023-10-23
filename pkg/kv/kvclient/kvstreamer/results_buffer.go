@@ -52,8 +52,8 @@ type resultsBuffer interface {
 	get(context.Context) (_ []Result, allComplete bool, _ error)
 
 	// wait blocks until there is at least one Result available to be returned
-	// to the client.
-	wait()
+	// to the client or the passed-in context is canceled.
+	wait(context.Context) error
 
 	// releaseOne decrements the number of unreleased Results by one.
 	releaseOne()
@@ -232,8 +232,13 @@ func (b *resultsBufferBase) signal() bool {
 	}
 }
 
-func (b *resultsBufferBase) wait() {
-	<-b.hasResults
+func (b *resultsBufferBase) wait(ctx context.Context) error {
+	select {
+	case <-b.hasResults:
+		return b.error()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (b *resultsBufferBase) numUnreleased() int {

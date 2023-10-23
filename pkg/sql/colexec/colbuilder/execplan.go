@@ -311,7 +311,6 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, core *execinfrapb.ProcessorCo
 	case core.InvertedJoiner != nil:
 	case core.BackupData != nil:
 		return errBackupDataWrap
-	case core.SplitAndScatter != nil:
 	case core.RestoreData != nil:
 	case core.Filterer != nil:
 	case core.StreamIngestionData != nil:
@@ -1886,7 +1885,7 @@ func (r *renderExprCountVisitor) VisitPost(expr tree.Expr) tree.Expr {
 }
 
 var renderWrappingRowCountThreshold = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.distsql.vectorize_render_wrapping.max_row_count",
 	"determines the maximum number of estimated rows that flow through the render "+
 		"expressions up to which we handle those renders by wrapping a row-by-row processor",
@@ -1895,7 +1894,7 @@ var renderWrappingRowCountThreshold = settings.RegisterIntSetting(
 )
 
 var renderWrappingRenderCountThreshold = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.distsql.vectorize_render_wrapping.min_render_count",
 	"determines the minimum number of render expressions for which we fall "+
 		"back to handling renders by wrapping a row-by-row processor",

@@ -431,22 +431,6 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 		tc.WaitForNStores(t, tc.NumServers(), tc.Servers[0].StorageLayer().GossipI().(*gossip.Gossip))
 	}
 
-	if tc.clusterArgs.ReplicationMode == base.ReplicationManual {
-		// We've already disabled the merge queue via testing knobs above, but ALTER
-		// TABLE ... SPLIT AT will throw an error unless we also disable merges via
-		// the cluster setting.
-		//
-		// TODO(benesch): this won't be necessary once we have sticky bits for
-		// splits.
-		if _, err := tc.Servers[0].SystemLayer().
-			InternalExecutor().(isql.Executor).
-			Exec(ctx, "enable-merge-queue", nil, /* txn */
-				`SET CLUSTER SETTING kv.range_merge.queue.enabled = false`); err != nil {
-			tc.Stopper().Stop(ctx)
-			t.Fatal(err)
-		}
-	}
-
 	if disableLBS {
 		if _, err := tc.Servers[0].SystemLayer().
 			InternalExecutor().(isql.Executor).
@@ -1612,7 +1596,7 @@ func (tc *TestCluster) ReplicationMode() base.TestClusterReplicationMode {
 // ToggleReplicateQueues implements TestClusterInterface.
 func (tc *TestCluster) ToggleReplicateQueues(active bool) {
 	for _, s := range tc.Servers {
-		_ = s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
+		_ = s.StorageLayer().GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			store.SetReplicateQueueActive(active)
 			return nil
 		})
@@ -1787,6 +1771,7 @@ func (tc *TestCluster) RestartServerWithInspect(
 	// node. This is useful to avoid flakes: the newly restarted node is now on a
 	// different port, and a cycle of gossip is necessary to make all other nodes
 	// aware.
+	id := s.StorageLayer().NodeID()
 	return timeutil.RunWithTimeout(
 		ctx, "check-conn", 15*time.Second,
 		func(ctx context.Context) error {
@@ -1803,9 +1788,9 @@ func (tc *TestCluster) RestartServerWithInspect(
 						}
 						for i := 0; i < rpc.NumConnectionClasses; i++ {
 							class := rpc.ConnectionClass(i)
-							sl := s.StorageLayer()
-							if _, err := s.SystemLayer().NodeDialer().(*nodedialer.Dialer).Dial(ctx, sl.NodeID(), class); err != nil {
-								return errors.Wrapf(err, "connecting n%d->n%d (class %v)", sl.NodeID(), sl.NodeID(), class)
+							otherID := s.StorageLayer().NodeID()
+							if _, err := s.SystemLayer().NodeDialer().(*nodedialer.Dialer).Dial(ctx, id, class); err != nil {
+								return errors.Wrapf(err, "connecting n%d->n%d (class %v)", otherID, id, class)
 							}
 						}
 					}

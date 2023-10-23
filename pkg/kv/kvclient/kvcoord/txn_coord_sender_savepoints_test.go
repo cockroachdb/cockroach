@@ -174,7 +174,7 @@ func TestSavepoints(t *testing.T) {
 			case "get":
 				b := txn.NewBatch()
 				if td.HasArg("locking") {
-					b.GetForUpdate(td.CmdArgs[0].Key)
+					b.GetForUpdate(td.CmdArgs[0].Key, kvpb.BestEffort)
 				} else {
 					b.Get(td.CmdArgs[0].Key)
 				}
@@ -218,6 +218,15 @@ func TestSavepoints(t *testing.T) {
 					fmt.Fprintf(&buf, "(%T) %v\n", err, err)
 				} else {
 					ptxn()
+				}
+
+			case "can-use":
+				spn := td.CmdArgs[0].Key
+				spt := sp[spn]
+				if txn.CanUseSavepoint(ctx, spt) {
+					fmt.Fprintf(&buf, "true\n")
+				} else {
+					fmt.Fprintf(&buf, "false\n")
 				}
 
 			default:

@@ -15,15 +15,17 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -33,27 +35,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 )
 
-var replanThreshold = settings.RegisterFloatSetting(
-	settings.TenantWritable,
-	"stream_replication.replan_flow_threshold",
-	"fraction of nodes in the producer or consumer job that would need to change to refresh the"+
-		" physical execution plan. If set to 0, the physical plan will not automatically refresh.",
-	0,
-	settings.NonNegativeFloatWithMaximum(1),
-)
-
-var replanFrequency = settings.RegisterDurationSetting(
-	settings.TenantWritable,
-	"stream_replication.replan_flow_frequency",
-	"frequency at which the consumer job checks to refresh its physical execution plan",
-	10*time.Minute,
-	settings.PositiveDuration,
-)
+// replicationPartitionInfoFilename is the filename at which the replication job
+// resumer writes its partition specs.
+const replicationPartitionInfoFilename = "~replication-partition-specs.binpb"
 
 func startDistIngestion(
 	ctx context.Context, execCtx sql.JobExecContext, resumer *streamIngestionResumer,
@@ -128,7 +118,7 @@ func startDistIngestion(
 	replanOracle := sql.ReplanOnCustomFunc(
 		measurePlanChange,
 		func() float64 {
-			return replanThreshold.Get(execCtx.ExecCfg().SV())
+			return streamingccl.ReplanThreshold.Get(execCtx.ExecCfg().SV())
 		},
 	)
 
@@ -137,7 +127,7 @@ func startDistIngestion(
 		planner.generatePlan,
 		execCtx,
 		replanOracle,
-		func() time.Duration { return replanFrequency.Get(execCtx.ExecCfg().SV()) },
+		func() time.Duration { return streamingccl.ReplanFrequency.Get(execCtx.ExecCfg().SV()) },
 	)
 
 	tracingAggCh := make(chan *execinfrapb.TracingAggregatorEvents)
@@ -172,7 +162,6 @@ func startDistIngestion(
 		}
 		return ingestor.ingestSpanConfigs(ctx, details.SourceTenantName)
 	}
-
 	execInitialPlan := func(ctx context.Context) error {
 		defer func() {
 			stopReplanner()
@@ -208,12 +197,160 @@ func startDistIngestion(
 		return rw.Err()
 	}
 
-	updateRunningStatus(ctx, ingestionJob, jobspb.Replicating, "physical replication running")
+	// We now attempt to create initial splits. We currently do
+	// this once during initial planning to avoid re-splitting on
+	// resume since it isn't clear to us at the moment whether
+	// re-splitting is always going to be useful.
+	if !streamProgress.InitialSplitComplete {
+		codec := execCtx.ExtendedEvalContext().Codec
+		splitter := &dbSplitAndScatter{db: execCtx.ExecCfg().DB}
+		if err := createInitialSplits(ctx, codec, splitter, planner.initialTopology, details.DestinationTenantID); err != nil {
+			return err
+		}
+	} else {
+		log.Infof(ctx, "initial splits already complete")
+	}
+
+	if err := ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		md.Progress.GetStreamIngest().ReplicationStatus = jobspb.Replicating
+		md.Progress.GetStreamIngest().InitialSplitComplete = true
+		md.Progress.RunningStatus = "physical replication running"
+		ju.UpdateProgress(md.Progress)
+		return nil
+	}); err != nil {
+		return err
+	}
+
 	err = ctxgroup.GoAndWait(ctx, execInitialPlan, replanner, tracingAggLoop, streamSpanConfigs)
 	if errors.Is(err, sql.ErrPlanChanged) {
 		execCtx.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplanCount.Inc(1)
 	}
 	return err
+}
+
+// TODO(ssd): This is a duplicative with the split_and_scatter processor in
+// backupccl.
+type splitAndScatterer interface {
+	split(
+		ctx context.Context,
+		splitKey roachpb.Key,
+		expirationTime hlc.Timestamp,
+	) error
+
+	scatter(
+		ctx context.Context,
+		scatterKey roachpb.Key,
+	) error
+
+	now() hlc.Timestamp
+}
+
+type dbSplitAndScatter struct {
+	db *kv.DB
+}
+
+func (s *dbSplitAndScatter) split(
+	ctx context.Context, splitKey roachpb.Key, expirationTime hlc.Timestamp,
+) error {
+	return s.db.AdminSplit(ctx, splitKey, expirationTime)
+}
+
+func (s *dbSplitAndScatter) scatter(ctx context.Context, scatterKey roachpb.Key) error {
+	_, pErr := kv.SendWrapped(ctx, s.db.NonTransactionalSender(), &kvpb.AdminScatterRequest{
+		RequestHeader: kvpb.RequestHeaderFromSpan(roachpb.Span{
+			Key:    scatterKey,
+			EndKey: scatterKey.Next(),
+		}),
+		RandomizeLeases: true,
+		MaxSize:         1, // don't scatter non-empty ranges on resume.
+	})
+	return pErr.GoError()
+}
+
+func (s *dbSplitAndScatter) now() hlc.Timestamp {
+	return s.db.Clock().Now()
+}
+
+// createInitialSplits creates splits based on the given toplogy from the
+// source.
+//
+// The idea here is to use the information from the source cluster about
+// the distribution of the data to produce split points to help prevent
+// ingestion processors from pushing data into the same ranges during
+// the initial scan.
+func createInitialSplits(
+	ctx context.Context,
+	codec keys.SQLCodec,
+	splitter splitAndScatterer,
+	topology streamclient.Topology,
+	destTenantID roachpb.TenantID,
+) error {
+	ctx, sp := tracing.ChildSpan(ctx, "streamingest.createInitialSplits")
+	defer sp.Finish()
+
+	rekeyer, err := backupccl.MakeKeyRewriterFromRekeys(codec,
+		nil /* tableRekeys */, []execinfrapb.TenantRekey{
+			{
+				OldID: topology.SourceTenantID,
+				NewID: destTenantID,
+			}},
+		true /* restoreTenantFromStream */)
+	if err != nil {
+		return err
+	}
+	for _, partition := range topology.Partitions {
+		for _, span := range partition.Spans {
+			startKey := span.Key.Clone()
+			splitKey, _, err := rekeyer.RewriteKey(startKey, 0 /* walltimeForImportElision */)
+			if err != nil {
+				return err
+			}
+
+			// NOTE(ssd): EnsureSafeSplitKey called on an arbitrary
+			// key unfortunately results in many of our split keys
+			// mapping to the same key for workloads like TPCC where
+			// the schema of the table includes integers that will
+			// get erroneously treated as the column family length.
+			//
+			// Since the partitions are generated from a call to
+			// PartitionSpans on the source cluster, they should be
+			// aligned with the split points in the original cluster
+			// and thus should be valid split keys. But, we are
+			// opening ourselves up to replicating bad splits from
+			// the original cluster.
+			//
+			// if newSplitKey, err := keys.EnsureSafeSplitKey(splitKey); err != nil {
+			// 	// Ignore the error since keys such as
+			// 	// /Tenant/2/Table/13 is an OK start key but
+			// 	// returns an error.
+			// } else if len(newSplitKey) != 0 {
+			// 	splitKey = newSplitKey
+			// }
+			//
+			if err := splitAndScatter(ctx, roachpb.Key(splitKey), splitter); err != nil {
+				return err
+			}
+
+		}
+	}
+	return nil
+}
+
+var splitAndScatterSitckyBitDuration = time.Hour
+
+func splitAndScatter(
+	ctx context.Context, splitAndScatterKey roachpb.Key, s splitAndScatterer,
+) error {
+	log.Infof(ctx, "splitting and scattering at %s", splitAndScatterKey)
+	expirationTime := s.now().AddDuration(splitAndScatterSitckyBitDuration)
+	if err := s.split(ctx, splitAndScatterKey, expirationTime); err != nil {
+		return err
+	}
+	if err := s.scatter(ctx, splitAndScatterKey); err != nil {
+		log.Warningf(ctx, "failed to scatter span starting at %s: %v",
+			splitAndScatterKey, err)
+	}
+	return nil
 }
 
 // makeReplicationFlowPlanner creates a replicationFlowPlanner and the initial physical plan.
@@ -251,6 +388,7 @@ type replicationFlowPlanner struct {
 	initialPlanCtx *sql.PlanningCtx
 
 	initialStreamAddresses []string
+	initialTopology        streamclient.Topology
 
 	srcTenantID roachpb.TenantID
 }
@@ -284,6 +422,7 @@ func (p *replicationFlowPlanner) constructPlanGenerator(
 			return nil, nil, err
 		}
 		if !p.containsInitialStreamAddresses() {
+			p.initialTopology = topology
 			p.initialStreamAddresses = topology.StreamAddresses()
 		}
 
@@ -315,6 +454,9 @@ func (p *replicationFlowPlanner) constructPlanGenerator(
 		}
 		if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.AfterReplicationFlowPlan != nil {
 			knobs.AfterReplicationFlowPlan(streamIngestionSpecs, streamIngestionFrontierSpec)
+		}
+		if err := persistStreamIngestionPartitionSpecs(ctx, execCtx.ExecCfg(), ingestionJobID, streamIngestionSpecs); err != nil {
+			return nil, nil, err
 		}
 
 		// Setup a one-stage plan with one proc per input spec.
@@ -565,6 +707,8 @@ func constructStreamIngestionPlanSpecs(
 			SubscriptionToken: string(partition.SubscriptionToken),
 			Address:           string(partition.SrcAddr),
 			Spans:             partition.Spans,
+			SrcInstanceID:     base.SQLInstanceID(partition.SrcInstanceID),
+			DestInstanceID:    destID,
 		}
 		streamIngestionSpecs[destID].PartitionSpecs[partition.ID] = partSpec
 		trackedSpans = append(trackedSpans, partition.Spans...)

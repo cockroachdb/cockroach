@@ -34,10 +34,11 @@ import (
 func runDecommissionMixedVersions(
 	ctx context.Context, t test.Test, c cluster.Cluster, buildVersion *version.Version,
 ) {
-	predecessorVersion, err := release.LatestPredecessor(buildVersion)
+	predecessorVersionStr, err := release.LatestPredecessor(buildVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
+	predecessorVersion := clusterupgrade.MustParseVersion(predecessorVersionStr)
 
 	h := newDecommTestHelper(t, c)
 
@@ -54,7 +55,7 @@ func runDecommissionMixedVersions(
 		// We upload both binaries to each node, to be able to vary the binary
 		// used when issuing `cockroach node` subcommands.
 		uploadVersionStep(allNodes, predecessorVersion),
-		uploadVersionStep(allNodes, clusterupgrade.MainVersion),
+		uploadVersionStep(allNodes, clusterupgrade.CurrentVersion()),
 
 		startVersion(allNodes, predecessorVersion),
 		waitForUpgradeStep(allNodes),
@@ -64,8 +65,8 @@ func runDecommissionMixedVersions(
 		preloadDataStep(pinnedUpgrade),
 
 		// We upgrade a pinned node and one other random node of the cluster to the current version.
-		binaryUpgradeStep(c.Node(pinnedUpgrade), clusterupgrade.MainVersion),
-		binaryUpgradeStep(c.Node(h.getRandNodeOtherThan(pinnedUpgrade)), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Node(pinnedUpgrade), clusterupgrade.CurrentVersion()),
+		binaryUpgradeStep(c.Node(h.getRandNodeOtherThan(pinnedUpgrade)), clusterupgrade.CurrentVersion()),
 		checkAllMembership(pinnedUpgrade, "active"),
 
 		// After upgrading, which restarts the nodes, ensure that nodes are not
@@ -89,7 +90,7 @@ func runDecommissionMixedVersions(
 		binaryUpgradeStep(allNodes, predecessorVersion),
 
 		// Roll all nodes forward, and finalize upgrade.
-		binaryUpgradeStep(allNodes, clusterupgrade.MainVersion),
+		binaryUpgradeStep(allNodes, clusterupgrade.CurrentVersion()),
 		allowAutoUpgradeStep(1),
 		waitForUpgradeStep(allNodes),
 
@@ -105,20 +106,13 @@ func runDecommissionMixedVersions(
 		// to communicate with the cluster (i.e. most commands against it will fail).
 		// This is also why we're making sure to avoid decommissioning the pinned node
 		// itself, as we use it to check the membership after.
-		fullyDecommissionStep(h.getRandNodeOtherThan(pinnedUpgrade), h.getRandNode(), ""),
+		fullyDecommissionStep(
+			h.getRandNodeOtherThan(pinnedUpgrade), h.getRandNode(), clusterupgrade.CurrentVersion(),
+		),
 		checkOneMembership(pinnedUpgrade, "decommissioned"),
 	)
 
 	u.run(ctx, t)
-}
-
-// cockroachBinaryPath is a shorthand to retrieve the path for a cockroach
-// binary of a given version.
-func cockroachBinaryPath(version string) string {
-	if version == "" {
-		return "./cockroach"
-	}
-	return fmt.Sprintf("./v%s/cockroach", version)
 }
 
 // suspectLivenessSettingsStep sets the duration a node is considered "suspect"
@@ -152,10 +146,10 @@ func preloadDataStep(target int) versionStep {
 // partialDecommissionStep runs `cockroach node decommission --wait=none` from a
 // given node, targeting another. It uses the specified binary version to run
 // the command.
-func partialDecommissionStep(target, from int, binaryVersion string) versionStep {
+func partialDecommissionStep(target, from int, binaryVersion *clusterupgrade.Version) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		c := u.c
-		c.Run(ctx, c.Node(from), cockroachBinaryPath(binaryVersion), "node", "decommission",
+		c.Run(ctx, c.Node(from), clusterupgrade.BinaryPathForVersion(t, binaryVersion), "node", "decommission",
 			"--wait=none", "--insecure", strconv.Itoa(target), "--port", fmt.Sprintf("{pgport:%d}", from))
 	}
 }
@@ -163,20 +157,20 @@ func partialDecommissionStep(target, from int, binaryVersion string) versionStep
 // recommissionAllStep runs `cockroach node recommission` from a given node,
 // targeting all nodes in the cluster. It uses the specified binary version to
 // run the command.
-func recommissionAllStep(from int, binaryVersion string) versionStep {
+func recommissionAllStep(from int, binaryVersion *clusterupgrade.Version) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		c := u.c
-		c.Run(ctx, c.Node(from), cockroachBinaryPath(binaryVersion), "node", "recommission",
+		c.Run(ctx, c.Node(from), clusterupgrade.BinaryPathForVersion(t, binaryVersion), "node", "recommission",
 			"--insecure", c.All().NodeIDsString(), "--port", fmt.Sprintf("{pgport:%d}", from))
 	}
 }
 
 // fullyDecommissionStep is like partialDecommissionStep, except it uses
 // `--wait=all`.
-func fullyDecommissionStep(target, from int, binaryVersion string) versionStep {
+func fullyDecommissionStep(target, from int, binaryVersion *clusterupgrade.Version) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		c := u.c
-		c.Run(ctx, c.Node(from), cockroachBinaryPath(binaryVersion), "node", "decommission",
+		c.Run(ctx, c.Node(from), clusterupgrade.BinaryPathForVersion(t, binaryVersion), "node", "decommission",
 			"--wait=all", "--insecure", strconv.Itoa(target), "--port", fmt.Sprintf("{pgport:%d}", from))
 
 		// If we are decommissioning a target node from the same node, the drain
@@ -324,7 +318,7 @@ func checkAllMembership(from int, membership string) versionStep {
 
 // uploadVersionStep uploads the specified cockroach binary version on the specified
 // nodes.
-func uploadVersionStep(nodes option.NodeListOption, version string) versionStep {
+func uploadVersionStep(nodes option.NodeListOption, version *clusterupgrade.Version) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		// Put the binary.
 		uploadVersion(ctx, t, u.c, nodes, version)
@@ -333,9 +327,11 @@ func uploadVersionStep(nodes option.NodeListOption, version string) versionStep 
 
 // startVersion starts the specified cockroach binary version on the specified
 // nodes.
-func startVersion(nodes option.NodeListOption, version string) versionStep {
+func startVersion(nodes option.NodeListOption, version *clusterupgrade.Version) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		settings := install.MakeClusterSettings(install.BinaryOption(cockroachBinaryPath(version)))
+		settings := install.MakeClusterSettings(install.BinaryOption(
+			clusterupgrade.BinaryPathForVersion(t, version),
+		))
 		startOpts := option.DefaultStartOpts()
 		u.c.Start(ctx, t.L(), startOpts, settings, nodes)
 	}

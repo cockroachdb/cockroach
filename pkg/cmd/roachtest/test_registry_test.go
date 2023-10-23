@@ -23,30 +23,26 @@ import (
 
 func TestMakeTestRegistry(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "preferSSD", func(t *testing.T, preferSSD bool) {
-		r := makeTestRegistry(spec.AWS, "foo", "zone123", preferSSD, false)
+		r := makeTestRegistry(spec.AWS, "foo", "zone123", preferSSD)
 		require.Equal(t, preferSSD, r.preferSSD)
 		require.Equal(t, "zone123", r.zones)
 		require.Equal(t, "foo", r.instanceType)
 		require.Equal(t, spec.AWS, r.cloud)
 
-		s := r.MakeClusterSpec(100, spec.Geo(), spec.Zones("zone99"), spec.CPU(12),
+		s := r.MakeClusterSpec(100, spec.Geo(), spec.CPU(12),
 			spec.PreferLocalSSD(true))
 		require.EqualValues(t, 100, s.NodeCount)
-		require.Equal(t, "foo", s.InstanceType)
 		require.True(t, s.Geo)
-		require.Equal(t, "zone99", s.Zones)
 		require.EqualValues(t, 12, s.CPUs)
 		require.True(t, s.PreferLocalSSD)
 
 		s = r.MakeClusterSpec(100, spec.CPU(4), spec.TerminateOnMigration())
 		require.EqualValues(t, 100, s.NodeCount)
-		require.Equal(t, "foo", s.InstanceType)
 		require.EqualValues(t, 4, s.CPUs)
 		require.True(t, s.TerminateOnMigration)
 
 		s = r.MakeClusterSpec(10, spec.CPU(16), spec.Arch(vm.ArchARM64))
 		require.EqualValues(t, 10, s.NodeCount)
-		require.Equal(t, "foo", s.InstanceType)
 		require.EqualValues(t, 16, s.CPUs)
 		require.EqualValues(t, vm.ArchARM64, s.Arch)
 	})
@@ -55,7 +51,7 @@ func TestMakeTestRegistry(t *testing.T) {
 // TestPrometheusMetricParser tests that the registry.PromSub()
 // helper properly converts a string into a metric name that Prometheus can read.
 func TestPrometheusMetricParser(t *testing.T) {
-	r := makeTestRegistry(spec.AWS, "foo", "zone123", true, false)
+	r := makeTestRegistry(spec.AWS, "foo", "zone123", true)
 	f := r.PromFactory()
 
 	rawName := "restore/nodes=4/duration"

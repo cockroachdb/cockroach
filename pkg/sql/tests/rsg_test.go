@@ -490,6 +490,7 @@ func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	numTables := *flagRSGGoRoutines
 	roots := []string{
 		"alter_table_cmd",
 	}
@@ -498,13 +499,18 @@ func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
 		if err := db.exec(t, ctx, "SET CLUSTER SETTING sql.catalog.descriptor_lease_duration = '30s'"); err != nil {
 			return err
 		}
-		return db.exec(t, ctx, `
-			CREATE DATABASE ident;
-			CREATE TABLE ident.ident (ident decimal);
-		`)
+		if err := db.exec(t, ctx, `CREATE DATABASE ident;`); err != nil {
+			return err
+		}
+		for i := 0; i < numTables; i++ {
+			if err := db.exec(t, ctx, fmt.Sprintf(`CREATE TABLE ident.ident%d (ident decimal);`, i)); err != nil {
+				return err
+			}
+		}
+		return nil
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		n := r.Intn(len(roots))
-		s := fmt.Sprintf("ALTER TABLE ident.ident %s", r.Generate(roots[n], 500))
+		s := fmt.Sprintf("ALTER TABLE ident.ident%d %s", r.Intn(numTables), r.Generate(roots[n], 500))
 		// Execute with a resettable timeout, where we allow up to N go-routines worth
 		// of resets. This should be the maximum theoretical time we can get
 		// stuck behind other work.

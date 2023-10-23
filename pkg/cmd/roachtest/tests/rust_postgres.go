@@ -33,6 +33,9 @@ func registerRustPostgres(r registry.Registry) {
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 
+		// Most other ORM tests use an in-memory cluster. However, for this test, we
+		// need to restart the cluster with a different port, so we need disk
+		// storage.
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 		db := c.Conn(ctx, t.L(), 1)
 		_, err := db.Exec("create user postgres with createdb createlogin createrole cancelquery")
@@ -170,11 +173,13 @@ func registerRustPostgres(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "rust-postgres",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(1, spec.CPU(16)),
-		Leases:  registry.MetamorphicLeases,
-		Tags:    registry.Tags(`default`, `orm`),
+		Name:             "rust-postgres",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly, registry.ORM),
+		Tags:             registry.Tags(`default`, `orm`),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runRustPostgres(ctx, t, c)
 		},

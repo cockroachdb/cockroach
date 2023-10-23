@@ -140,7 +140,7 @@ var defaultNumWorkers = util.ConstantWithMetamorphicTestRange(
 // The maximum is not enforced since if the maximum is reduced in the future that
 // may cause the cluster setting to fail.
 var numRestoreWorkers = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.bulk_io_write.restore_node_concurrency",
 	fmt.Sprintf("the number of workers processing a restore per job per node; maximum %d",
 		maxConcurrentRestoreWorkers),
@@ -153,7 +153,7 @@ var numRestoreWorkers = settings.RegisterIntSetting(
 // and the limit determined by restorePerProcessorMemoryLimitSQLFraction
 // and --max-sql-memory.
 var restorePerProcessorMemoryLimit = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.restore.per_processor_memory_limit",
 	"limit on the amount of memory that can be used by a restore processor",
 	1<<30, // 1 GiB
@@ -162,7 +162,7 @@ var restorePerProcessorMemoryLimit = settings.RegisterByteSizeSetting(
 // restorePerProcessorMemoryLimitSQLFraction is the maximum percentage of the
 // SQL memory pool that could be used by a restoreDataProcessor.
 var restorePerProcessorMemoryLimitSQLFraction = settings.RegisterFloatSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.restore.per_processor_memory_limit_sql_fraction",
 	"limit on the amount of memory that can be used by a restore processor as a fraction of max SQL memory",
 	0.5,

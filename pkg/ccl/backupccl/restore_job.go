@@ -78,6 +78,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -85,16 +86,8 @@ import (
 // tables we process in a single txn when restoring their table statistics.
 const restoreStatsInsertBatchSize = 10
 
-var useSimpleImportSpans = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"bulkio.restore.use_simple_import_spans",
-	"if set to true, restore will generate its import spans using the makeSimpleImportSpans algorithm",
-	false,
-	settings.WithName("bulkio.restore.simple_import_spans.enabled"),
-)
-
 var restoreStatsInsertionConcurrency = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.restore.insert_stats_workers",
 	"number of concurrent workers that will restore backed up table statistics",
 	5,
@@ -333,8 +326,6 @@ func restore(
 		return roachpb.RowCount{}, err
 	}
 
-	simpleImportSpans := useSimpleImportSpans.Get(&execCtx.ExecCfg().Settings.SV)
-
 	countSpansCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
 	genSpan := func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error {
 		defer close(spanCh)
@@ -345,7 +336,6 @@ func restore(
 			layerToIterFactory,
 			backupLocalityMap,
 			filter,
-			simpleImportSpans,
 			spanCh,
 		)
 	}
@@ -437,30 +427,24 @@ func restore(
 				execCtx,
 				job,
 				dataToRestore,
-				endTime,
 				encryption,
-				kmsEnv,
 				details.URIs,
 				backupLocalityInfo,
-				filter,
-				numImportSpans,
-				simpleImportSpans,
 				progCh,
 				genSpan,
 			)
 		}
 		md := restoreJobMetadata{
-			jobID:                job.ID(),
-			dataToRestore:        dataToRestore,
-			restoreTime:          endTime,
-			encryption:           encryption,
-			kmsEnv:               kmsEnv,
-			uris:                 details.URIs,
-			backupLocalityInfo:   backupLocalityInfo,
-			spanFilter:           filter,
-			numImportSpans:       numImportSpans,
-			useSimpleImportSpans: simpleImportSpans,
-			execLocality:         details.ExecutionLocality,
+			jobID:              job.ID(),
+			dataToRestore:      dataToRestore,
+			restoreTime:        endTime,
+			encryption:         encryption,
+			kmsEnv:             kmsEnv,
+			uris:               details.URIs,
+			backupLocalityInfo: backupLocalityInfo,
+			spanFilter:         filter,
+			numImportSpans:     numImportSpans,
+			execLocality:       details.ExecutionLocality,
 		}
 		return distRestore(
 			ctx,
@@ -1053,6 +1037,17 @@ func createImportingDescriptors(
 		typesByID[types[i].GetID()] = types[i]
 	}
 
+	if details.RemoveRegions {
+		// Can't restore multi-region tables into non-multi-region database
+		for _, t := range tables {
+			t.TableDesc().LocalityConfig = nil
+		}
+
+		for _, d := range databases {
+			d.DatabaseDesc().RegionConfig = nil
+		}
+	}
+
 	// Collect all databases, for doing lookups of whether a database is new when
 	// updating schema references later on.
 	dbsByID := make(map[descpb.ID]catalog.DatabaseDescriptor)
@@ -1077,6 +1072,17 @@ func createImportingDescriptors(
 				if regionTypeDesc == nil {
 					continue
 				}
+
+				// When stripping localities, there is no longer a need for a region config. In addition,
+				// we need to make sure that multi-region databases no longer get tagged as such - meaning
+				// that we want to change the TypeDescriptor_MULTIREGION_ENUM to a normal enum. We `continue`
+				// to skip the multi-region work below.
+				if details.RemoveRegions {
+					t.TypeDesc().Kind = descpb.TypeDescriptor_ENUM
+					t.TypeDesc().RegionConfig = nil
+					continue
+				}
+
 				// Check to see if we've found more than one multi-region enum on any
 				// given database.
 				if id, ok := mrEnumsFound[regionTypeDesc.GetParentID()]; ok {
@@ -1103,6 +1109,7 @@ func createImportingDescriptors(
 						var regionNames []catpb.RegionName
 						_ = regionTypeDesc.ForEachPublicRegion(func(name catpb.RegionName) error {
 							regionNames = append(regionNames, name)
+
 							return nil
 						})
 						regionConfig := multiregion.MakeRegionConfig(
@@ -1675,7 +1682,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// the first place, as a special case.
 		publishDescriptors := func(ctx context.Context, txn descs.Txn) error {
 			return r.publishDescriptors(
-				ctx, p.ExecCfg().JobRegistry, p.ExecCfg().JobsKnobs(), txn, p.User(), details, nil,
+				ctx, p.ExecCfg().JobRegistry, p.ExecCfg().JobsKnobs(), txn, p.User(), details, nil, p.ExecCfg().NodeInfo.LogicalClusterID(),
 			)
 		}
 		if err := r.execCfg.InternalDB.DescsTxn(ctx, publishDescriptors); err != nil {
@@ -1817,7 +1824,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	publishDescriptors := func(ctx context.Context, txn descs.Txn) (err error) {
 		return r.publishDescriptors(
 			ctx, p.ExecCfg().JobRegistry, p.ExecCfg().JobsKnobs(), txn, p.User(),
-			details, devalidateIndexes,
+			details, devalidateIndexes, p.ExecCfg().NodeInfo.LogicalClusterID(),
 		)
 	}
 	if err := r.execCfg.InternalDB.DescsTxn(ctx, publishDescriptors); err != nil {
@@ -2200,6 +2207,7 @@ func (r *restoreResumer) publishDescriptors(
 	user username.SQLUsername,
 	details jobspb.RestoreDetails,
 	devalidateIndexes map[descpb.ID][]descpb.IndexID,
+	clusterID uuid.UUID,
 ) (err error) {
 	if details.DescriptorsPublished {
 		return nil
@@ -2267,6 +2275,7 @@ func (r *restoreResumer) publishDescriptors(
 				return err
 			}
 		}
+
 		version := r.settings.Version.ActiveVersion(ctx)
 		if err := mutTable.AllocateIDs(ctx, version); err != nil {
 			return err
@@ -2279,6 +2288,8 @@ func (r *restoreResumer) publishDescriptors(
 				jobs.ScheduledJobTxn(txn),
 				user,
 				mutTable,
+				clusterID,
+				version,
 			)
 			if err != nil {
 				return err
@@ -3208,14 +3219,9 @@ func sendAddRemoteSSTs(
 	execCtx sql.JobExecContext,
 	job *jobs.Job,
 	dataToRestore restorationData,
-	restoreTime hlc.Timestamp,
 	encryption *jobspb.BackupEncryptionOptions,
-	kmsEnv cloud.KMSEnv,
 	uris []string,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
-	spanFilter spanCoveringFilter,
-	numImportSpans int,
-	useSimpleImportSpans bool,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	genSpan func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
 ) error {
@@ -3227,9 +3233,6 @@ func sendAddRemoteSSTs(
 
 	if encryption != nil {
 		return errors.AssertionFailedf("encryption not supported with online restore")
-	}
-	if useSimpleImportSpans {
-		return errors.AssertionFailedf("useSimpleImportSpans is not supported with online restore")
 	}
 	if len(uris) > 1 {
 		return errors.AssertionFailedf("online restore can only restore data from a full backup")

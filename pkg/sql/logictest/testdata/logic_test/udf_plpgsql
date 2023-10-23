@@ -1,3 +1,5 @@
+# LogicTest: !local-mixed-23.1
+
 statement ok
 CREATE TABLE xy (x INT, y INT);
 INSERT INTO xy VALUES (1, 2), (3, 4);
@@ -1914,3 +1916,408 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
     RETURN i;
   END
 $$ LANGUAGE PLpgSQL;
+
+# Functions with VOID return types do not need explicit RETURN statements
+# for all possible control flows.
+statement ok
+DROP FUNCTION f(INT);
+CREATE OR REPLACE FUNCTION f(i INT) RETURNS VOID AS $$
+  BEGIN
+    IF i > 0 THEN
+      RAISE NOTICE 'inside IF';
+    END IF;
+    RAISE NOTICE 'outside IF';
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f(1)
+----
+NOTICE: inside IF
+NOTICE: outside IF
+
+query T noticetrace
+SELECT f(-1)
+----
+NOTICE: outside IF
+
+statement ok
+DELETE FROM xy WHERE x >= 100;
+
+# Testing rollback behavior for EXCEPTION blocks.
+statement ok
+DROP FUNCTION f(INT);
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    INSERT INTO xy VALUES (-100, -100);
+    i := 100;
+    RETURN 1 // 0;
+  EXCEPTION WHEN division_by_zero THEN
+    INSERT INTO xy VALUES (-200, -200);
+    IF n > 0 THEN
+      RAISE EXCEPTION 'foo';
+    END IF;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# After the division-by-zero error, the INSERT should have been rolled back
+# but the updated value for "i" should be returned. The INSERT in the exception
+# handler can proceed.
+query I
+SELECT f(0);
+----
+100
+
+query II rowsort
+SELECT * FROM xy;
+----
+1     2
+3     4
+-200  -200
+
+statement ok
+DELETE FROM xy WHERE x <> 1 AND x <> 3;
+
+# The error raised in the exception handler should prevent the second insert
+# from succeeding as well.
+statement error pgcode P0001 pq: foo
+SELECT f(1);
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    SELECT x INTO i FROM xy ORDER BY x;
+    INSERT INTO xy VALUES (-100, -100);
+    IF n = 0 THEN
+      RAISE division_by_zero;
+    END IF;
+    SELECT x INTO i FROM xy ORDER BY x;
+    IF n = 1 THEN
+      RAISE division_by_zero;
+    END IF;
+    RETURN i;
+  EXCEPTION WHEN division_by_zero THEN
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# The error occurs before reading from xy the second time.
+query I
+SELECT f(0);
+----
+1
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# The error occurs after reading from xy the second time. The insert should
+# "appear" in the result, but should not have been committed.
+query I
+SELECT f(1);
+----
+-100
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# There is no error, so the newly inserted value should be returned and
+# also committed.
+query I
+SELECT f(2);
+----
+-100
+
+query II rowsort
+SELECT * FROM xy;
+----
+1     2
+3     4
+-100  -100
+
+statement ok
+DELETE FROM xy WHERE x <> 1 AND x <> 3;
+
+# Test interaction with IF statements.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    IF n >= 0 THEN
+      INSERT INTO xy VALUES (n, n);
+    ELSIF n < 0 THEN
+      INSERT INTO xy VALUES (n*2, n*2);
+    END IF;
+    RETURN 1 // n;
+  EXCEPTION WHEN division_by_zero THEN
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# The insert should succeed.
+statement ok
+SELECT f(100);
+
+query II rowsort
+SELECT * FROM xy;
+----
+1     2
+3     4
+100   100
+
+# The insert should succeed with n * 2.
+statement ok
+SELECT f(-100);
+
+query II rowsort
+SELECT * FROM xy;
+----
+1     2
+3     4
+100   100
+-200  -200
+
+# The insert should fail.
+statement ok
+SELECT f(0);
+
+query II rowsort
+SELECT * FROM xy;
+----
+1     2
+3     4
+100   100
+-200  -200
+
+statement ok
+DELETE FROM xy WHERE x <> 1 AND x <> 3;
+
+# Test interaction with loops.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT := n;
+  BEGIN
+    WHILE i <= (n + 5) LOOP
+      IF i = 105 THEN
+        RAISE division_by_zero;
+      ELSIF i % 2 = 0 THEN
+        INSERT INTO xy VALUES (i, i);
+      END IF;
+      i := i + 1;
+    END LOOP;
+    RETURN 0;
+  EXCEPTION WHEN division_by_zero THEN
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# The insert should fail.
+statement ok
+SELECT f(100);
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# The inserts should succeed for even values.
+statement ok
+SELECT f(200);
+
+query II rowsort
+SELECT * FROM xy;
+----
+1    2
+3    4
+200  200
+202  202
+204  204
+
+statement ok
+DELETE FROM xy WHERE x <> 1 AND x <> 3;
+
+# Catching a Transaction Retry error is not supported, because such errors
+# leave the transaction in a poisoned state.
+statement error pgcode 0A000 pq: unimplemented: catching a Transaction Retry error in a PLpgSQL EXCEPTION block is not yet implemented
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 0;
+  EXCEPTION WHEN serialization_failure THEN
+    RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 0A000 pq: unimplemented: catching a Transaction Retry error in a PLpgSQL EXCEPTION block is not yet implemented
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 0;
+  EXCEPTION WHEN SQLSTATE '40001' THEN
+    RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# Branches of an exception block don't interact with one another.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      INSERT INTO xy VALUES (100, 100);
+      RAISE invalid_password;
+    WHEN invalid_password THEN
+      INSERT INTO xy VALUES (200, 200);
+      RETURN -2;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 28P01 pq: invalid_password
+SELECT f();
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# Testing the special OTHERS condition for exception handling.
+subtest others
+
+statement ok
+DROP FUNCTION f(INT);
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS TEXT AS $$
+  BEGIN
+    IF n = 0 THEN
+      RAISE division_by_zero;
+    ELSIF n = 1 THEN
+      RAISE data_exception;
+    ELSIF n = 2 THEN
+      RAISE not_null_violation;
+    ELSIF n = 3 THEN
+      RAISE query_canceled;
+    ELSE
+      RAISE assert_failure;
+    END IF;
+  EXCEPTION
+    WHEN not_null_violation THEN
+      RETURN 'not_null_violation';
+    WHEN OTHERS THEN
+      RETURN 'others';
+    WHEN assert_failure THEN
+      RETURN 'assert_failure';
+    WHEN data_exception THEN
+      RETURN 'data_exception';
+  END
+$$ LANGUAGE PLpgSQL;
+
+# OTHERS should catch division_by_zero.
+query T
+SELECT f(0);
+----
+others
+
+# OTHERS should catch data_exception despite the later branch that
+# explicitly catches it.
+query T
+SELECT f(1);
+----
+others
+
+# OTHERS can catch not_null_violation, but does not in this instance because
+# the branch that explicitly catches it comes first.
+query T
+SELECT f(2);
+----
+not_null_violation
+
+# OTHERS cannot catch query_canceled or assert_failure; however, they can be
+# explicitly caught.
+statement error pgcode 57014 pq: query_canceled
+SELECT f(3);
+
+query T
+SELECT f(4);
+----
+assert_failure
+
+# Postgres allows multiple OTHERS branches.
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS TEXT AS $$
+  BEGIN
+    RAISE division_by_zero;
+  EXCEPTION
+    WHEN OTHERS THEN
+      RETURN 'first branch';
+    WHEN OTHERS THEN
+      RETURN 'second branch';
+    WHEN division_by_zero THEN
+      RETURN 'third branch';
+    WHEN OTHERS THEN
+      RETURN 'fourth branch';
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT f();
+----
+first branch
+
+# The first OTHERS branch is taken even though it raises its own exception.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS TEXT AS $$
+  BEGIN
+    RAISE division_by_zero;
+  EXCEPTION
+    WHEN OTHERS THEN
+      RAISE null_value_not_allowed;
+    WHEN OTHERS THEN
+      RETURN 'second branch';
+    WHEN division_by_zero THEN
+      RETURN 'third branch';
+    WHEN OTHERS THEN
+      RETURN 'fourth branch';
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22004 pq: null_value_not_allowed
+SELECT f();
+
+subtest end

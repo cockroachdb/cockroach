@@ -233,6 +233,7 @@ message MVCCStatsDelta {
   sint64 val_count = 9;
   sint64 intent_bytes = 10;
   sint64 intent_count = 11;
+  sint64 lock_bytes = 21;
   sint64 lock_count = 16;
   sint64 range_key_count = 17;
   sint64 range_key_bytes = 18;

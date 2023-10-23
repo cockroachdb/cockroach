@@ -12,6 +12,7 @@
 package aws
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -38,6 +39,12 @@ const ProviderName = "aws"
 
 // providerInstance is the instance to be registered into vm.Providers by Init.
 var providerInstance = &Provider{}
+
+//go:embed config.json
+var configJson []byte
+
+//go:embed old.json
+var oldJson []byte
 
 // Init initializes the AWS provider and registers it into vm.Providers.
 //
@@ -254,7 +261,7 @@ const (
 
 var defaultConfig = func() (cfg *awsConfig) {
 	cfg = new(awsConfig)
-	if err := json.Unmarshal(MustAsset("config.json"), cfg); err != nil {
+	if err := json.Unmarshal(configJson, cfg); err != nil {
 		panic(errors.Wrap(err, "failed to embedded configuration"))
 	}
 	return cfg
@@ -864,9 +871,10 @@ func (p *Provider) listRegion(
 	var data struct {
 		Reservations []struct {
 			Instances []struct {
-				InstanceID string `json:"InstanceId"`
-				LaunchTime string
-				Placement  struct {
+				InstanceID   string `json:"InstanceId"`
+				Architecture string
+				LaunchTime   string
+				Placement    struct {
 					AvailabilityZone string
 				}
 				PrivateDNSName   string `json:"PrivateDnsName"`
@@ -982,6 +990,7 @@ func (p *Provider) listRegion(
 				RemoteUser:             opts.RemoteUserName,
 				VPC:                    in.VpcID,
 				MachineType:            in.InstanceType,
+				CPUArch:                vm.ParseArch(in.Architecture),
 				Zone:                   in.Placement.AvailabilityZone,
 				NonBootAttachedVolumes: nonBootableVolumes,
 			}

@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/rangekey"
 )
@@ -83,12 +82,6 @@ func (i *MVCCIterator) Valid() (bool, error) {
 func (i *MVCCIterator) SeekGE(key storage.MVCCKey) {
 	i.i.SeekGE(key)
 	i.checkAllowed(roachpb.Span{Key: key.Key}, true)
-}
-
-// SeekIntentGE is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID) {
-	i.i.SeekIntentGE(key, txnUUID)
-	i.checkAllowed(roachpb.Span{Key: key}, true)
 }
 
 // SeekLT is part of the storage.MVCCIterator interface.
@@ -897,6 +890,19 @@ func addLockTableSpans(spans *SpanSet) *SpanSet {
 		var ltEndKey roachpb.Key
 		if span.EndKey != nil {
 			ltEndKey, _ = keys.LockTableSingleKey(span.EndKey, nil)
+		}
+		if sa == SpanReadOnly && span.Timestamp == hlc.MaxTimestamp {
+			// Shared lock acquisition uses a read-only latch access with
+			// the maximum timestamp. This gives it sufficient isolation to
+			// write to the lock table without having to declare a write
+			// latch and be serialized with other shared lock acquisitions.
+			// For details, see DefaultDeclareIsolatedKeys.
+			//
+			// For the sake of this function, we consider this to be strong
+			// enough to declare write access to the lock table. This could
+			// be made cleaner if latch spans operated on locking strengths
+			// instead of read/write access.
+			sa = SpanReadWrite
 		}
 		withLocks.AddNonMVCC(sa, roachpb.Span{Key: ltKey, EndKey: ltEndKey})
 	})

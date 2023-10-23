@@ -786,13 +786,13 @@ CREATE INDEX x ON auth.t (x) PARTITION BY LIST (x) (
 user testuser
 
 # User should have no CONFIGURE ZONE abilities by default.
-statement error only users with the admin role are allowed to alter system ranges
+statement error user testuser does not have REPAIRCLUSTERMETADATA system privilege
 ALTER RANGE default CONFIGURE ZONE USING num_replicas = 3
 
 statement error pq: user testuser does not have ZONECONFIG or CREATE privilege on database auth
 ALTER DATABASE auth CONFIGURE ZONE USING num_replicas = 3
 
-statement error pq: only users with the admin role are allowed to alter system tables
+statement error user testuser does not have REPAIRCLUSTERMETADATA system privilege
 ALTER TABLE system.jobs CONFIGURE ZONE USING num_replicas = 3
 
 statement error pq: user testuser does not have ZONECONFIG or CREATE privilege on relation t

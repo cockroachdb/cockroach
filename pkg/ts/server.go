@@ -489,7 +489,7 @@ func dumpTimeseriesAllSources(
 
 	for span != nil {
 		b := &kv.Batch{}
-		scan := kvpb.NewScan(span.Key, span.EndKey, kvpb.NonLocking)
+		scan := kvpb.NewScan(span.Key, span.EndKey)
 		b.AddRawRequest(scan)
 		b.Header.MaxSpanRequestKeys = dumpBatchSize
 		err := db.Run(ctx, b)

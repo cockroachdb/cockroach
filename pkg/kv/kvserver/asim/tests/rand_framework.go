@@ -269,7 +269,9 @@ func (f randTestingFramework) randomEventSeriesGen(
 ) gen.StaticEvents {
 	switch eventsType := f.s.eventGen.eventsType; eventsType {
 	case cycleViaHardcodedSurvivalGoals:
-		return generateSurvivalGoalsEvents(cluster.Regions(), settings.Settings.StartTime, f.s.eventGen.durationToAssertOnEvent)
+		return generateHardcodedSurvivalGoalsEvents(cluster.Regions(), settings.Settings.StartTime, f.s.eventGen.durationToAssertOnEvent)
+	case cycleViaRandomSurvivalGoals:
+		return generateRandomSurvivalGoalsEvents(cluster.Regions(), settings.Settings.StartTime, f.s.eventGen.durationToAssertOnEvent, f.s.duration, f.s.randSource)
 	default:
 		panic("unknown event series type")
 	}

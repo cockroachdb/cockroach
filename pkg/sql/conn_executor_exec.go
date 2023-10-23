@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
@@ -2256,19 +2257,8 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		err = planner.resumeFlowForPausablePortal(recv)
 	} else {
 		evalCtx := planner.ExtendedEvalContext()
-		planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner,
-			planner.txn, distribute)
-		planCtx.stmtType = recv.stmtType
-		// Skip the diagram generation since on this "main" query path we can get it
-		// via the statement bundle.
-		planCtx.skipDistSQLDiagramGeneration = true
-		if ex.server.cfg.TestingKnobs.TestingSaveFlows != nil {
-			planCtx.saveFlows = ex.server.cfg.TestingKnobs.TestingSaveFlows(planner.stmt.SQL)
-		} else if planner.instrumentation.ShouldSaveFlows() {
-			planCtx.saveFlows = planCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeMainQuery)
-		}
-		planCtx.associateNodeWithComponents = planner.instrumentation.getAssociateNodeWithComponentsFn()
-		planCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
+		planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
+		planCtx.setUpForMainQuery(ctx, planner, recv)
 
 		var evalCtxFactory func(usedConcurrently bool) *extendedEvalContext
 		if len(planner.curPlan.subqueryPlans) != 0 ||
@@ -2993,7 +2983,7 @@ func payloadHasError(payload fsm.EventPayload) bool {
 	return hasErr
 }
 
-func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
+func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent, txnErr error) {
 	if ex.extraTxnState.shouldExecuteOnTxnFinish {
 		ex.extraTxnState.shouldExecuteOnTxnFinish = false
 		txnStart := ex.extraTxnState.txnFinishClosure.txnStartTime
@@ -3019,10 +3009,11 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
 				ex.sessionData(),
 				ev.txnID,
 				transactionFingerprintID,
+				txnErr,
 			)
 		}
 
-		err = ex.recordTransactionFinish(ctx, transactionFingerprintID, ev, implicit, txnStart)
+		err = ex.recordTransactionFinish(ctx, transactionFingerprintID, ev, implicit, txnStart, txnErr)
 		if err != nil {
 			if log.V(1) {
 				log.Warningf(ctx, "failed to record transaction stats: %s", err)
@@ -3109,6 +3100,7 @@ func (ex *connExecutor) recordTransactionFinish(
 	ev txnEvent,
 	implicit bool,
 	txnStart time.Time,
+	txnErr error,
 ) error {
 	recordingStart := timeutil.Now()
 	defer func() {
@@ -3175,17 +3167,46 @@ func (ex *connExecutor) recordTransactionFinish(
 		// TODO(107318): add asoftime or ishistorical
 		// TODO(107318): add readonly
 		SessionData: ex.sessionData(),
+		TxnErr:      txnErr,
 	}
 
 	if ex.server.cfg.TestingKnobs.OnRecordTxnFinish != nil {
 		ex.server.cfg.TestingKnobs.OnRecordTxnFinish(ex.executorType == executorTypeInternal, ex.phaseTimes, ex.planner.stmt.SQL)
 	}
 
+	ex.maybeRecordRetrySerializableContention(ev.txnID, transactionFingerprintID, txnErr)
+
 	return ex.statsCollector.RecordTransaction(
 		ctx,
 		transactionFingerprintID,
 		recordedTxnStats,
 	)
+}
+
+// Records a SERIALIZATION_CONFLICT contention event to the contention registry event
+// store if we have a known conflicting txn meta for a serialization conflict error.
+func (ex *connExecutor) maybeRecordRetrySerializableContention(
+	txnID uuid.UUID, txnFingerprintID appstatspb.TransactionFingerprintID, txnErr error,
+) {
+	if !contention.EnableSerializationConflictEvents.Get(&ex.server.cfg.Settings.SV) {
+		return
+	}
+
+	var retryErr *kvpb.TransactionRetryWithProtoRefreshError
+	if txnErr != nil && errors.As(txnErr, &retryErr) && retryErr.ConflictingTxn != nil {
+		contentionEvent := contentionpb.ExtendedContentionEvent{
+			ContentionType: contentionpb.ContentionType_SERIALIZATION_CONFLICT,
+			BlockingEvent: kvpb.ContentionEvent{
+				Key:     retryErr.ConflictingTxn.Key,
+				TxnMeta: *retryErr.ConflictingTxn,
+				// Duration is not relevant for SERIALIZATION conflicts.
+			},
+			WaitingTxnID:            txnID,
+			WaitingTxnFingerprintID: txnFingerprintID,
+			// Waiting statement fields are not relevant at this stage.
+		}
+		ex.server.cfg.ContentionRegistry.AddContentionEvent(contentionEvent)
+	}
 }
 
 // logTraceAboveThreshold logs a span's recording. It is used when txn or stmt threshold tracing is enabled.

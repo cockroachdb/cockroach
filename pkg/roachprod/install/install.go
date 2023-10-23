@@ -102,7 +102,9 @@ sudo apt-get update;
 sudo apt-get install -y gcc;
 `,
 
-	"go": `sudo apt --yes install golang-go;`,
+	"go": `
+sudo apt-get update;
+sudo apt-get install -y golang-go;`,
 
 	"haproxy": `
 sudo apt-get update;
@@ -117,7 +119,6 @@ sudo apt-get install -y \
 `,
 
 	"sysbench": `
-curl -s https://packagecloud.io/install/repositories/akopytov/sysbench/script.deb.sh | sudo bash;
 sudo apt-get update;
 sudo apt-get install -y sysbench;
 `,

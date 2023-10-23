@@ -39,7 +39,7 @@ func registerSequelize(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
@@ -84,7 +84,7 @@ func registerSequelize(r registry.Registry) {
 			c,
 			node,
 			"install dependencies",
-			`sudo apt-get -qq install make python3 libpq-dev python-dev gcc g++ `+
+			`sudo apt-get -qq install make python3 libpq-dev gcc g++ `+
 				`software-properties-common build-essential`,
 		); err != nil {
 			t.Fatal(err)
@@ -154,12 +154,14 @@ func registerSequelize(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:       "sequelize",
-		Owner:      registry.OwnerSQLFoundations,
-		Cluster:    r.MakeClusterSpec(1),
-		Leases:     registry.MetamorphicLeases,
-		NativeLibs: registry.LibGEOS,
-		Tags:       registry.Tags(`default`, `orm`),
+		Name:             "sequelize",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		NativeLibs:       registry.LibGEOS,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly, registry.ORM),
+		Tags:             registry.Tags(`default`, `orm`),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSequelize(ctx, t, c)
 		},

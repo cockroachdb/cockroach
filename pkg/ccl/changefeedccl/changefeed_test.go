@@ -3596,7 +3596,6 @@ func TestChangefeedFailOnTableOffline(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t, ""))
 		sysDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
-		sysDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
 		sqlDB.Exec(t, `CREATE TABLE for_import (a INT PRIMARY KEY, b INT)`)
 		defer sqlDB.Exec(t, `DROP TABLE for_import`)
 		sqlDB.Exec(t, `INSERT INTO for_import VALUES (0, NULL)`)
@@ -3762,7 +3761,6 @@ func TestChangefeedWorksOnRBRChange(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t, ""))
 		sysDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
-		sysDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
 		t.Run("regional by row change works", func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE rbr (a INT PRIMARY KEY, b INT)`)
 			defer sqlDB.Exec(t, `DROP TABLE rbr`)
@@ -3912,11 +3910,8 @@ func TestChangefeedStopOnSchemaChange(t *testing.T) {
 		sysDB.Exec(t, "SET CLUSTER SETTING changefeed.experimental_poll_interval = '200ms'")
 		sysDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING changefeed.experimental_poll_interval = '200ms'")
 		sysDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
-		sysDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
 		sysDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'")
-		sysDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'")
 		sysDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '50ms'")
-		sysDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '50ms'")
 
 		t.Run("add column not null", func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE add_column_not_null (a INT PRIMARY KEY)`)
@@ -4049,11 +4044,8 @@ func TestChangefeedNoBackfill(t *testing.T) {
 		sysDB.Exec(t, "SET CLUSTER SETTING changefeed.experimental_poll_interval = '200ms'")
 		sysDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING changefeed.experimental_poll_interval = '200ms'")
 		sysDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
-		sysDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
 		sysDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms'")
-		sysDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms'")
 		sysDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10ms'")
-		sysDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10ms'")
 
 		t.Run("add column not null", func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE add_column_not_null (a INT PRIMARY KEY)`)
@@ -4441,7 +4433,6 @@ func TestChangefeedMonitoring(t *testing.T) {
 		// Check that two changefeeds add correctly.
 		// Set cluster settings back so we don't interfere with schema changes.
 		sysDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
-		sysDB.Exec(t, `ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
 		fooCopy := feed(t, f, `CREATE CHANGEFEED FOR foo`)
 		_, _ = fooCopy.Next()
 		_, _ = fooCopy.Next()
@@ -7195,7 +7186,11 @@ func TestChangefeedEndTimeWithCursor(t *testing.T) {
 		defer closeFeed(t, feed)
 
 		// Don't care much about the values emitted (tested elsewhere) -- all
-		// we want to make sure is that the feed terminates.
+		// we want to make sure is that the feed terminates.  However, we do need
+		// to consume those values since some of the test sink implementations (kafka)
+		// will block.
+		defer DiscardMessages(feed)()
+
 		testFeed := feed.(cdctest.EnterpriseTestFeed)
 		require.NoError(t, testFeed.WaitForStatus(func(s jobs.Status) bool {
 			return s == jobs.StatusSucceeded
@@ -8866,4 +8861,73 @@ func TestChangefeedPubsubResolvedMessages(t *testing.T) {
 	}
 
 	cdcTest(t, testFn, feedTestForceSink("pubsub"))
+}
+
+// TestCloudstorageBufferedBytesMetric tests the metric which tracks the number
+// of buffered bytes in the cloudstorage sink.
+func TestCloudstorageBufferedBytesMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	rng, _ := randutil.NewTestRand()
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		metrics := registry.MetricsStruct().Changefeed.(*Metrics)
+		defaultSLI, err := metrics.getSLIMetrics(defaultSLIScope)
+		require.NoError(t, err)
+
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+
+		var shouldEmit atomic.Bool
+		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) (bool, error) {
+			return !shouldEmit.Load(), nil
+		}
+		db := sqlutils.MakeSQLRunner(s.DB)
+		db.Exec(t, `
+		  CREATE TABLE foo (key INT PRIMARY KEY);
+		  INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000);
+  		`)
+
+		require.Equal(t, int64(0), defaultSLI.CloudstorageBufferedBytes.Value())
+
+		format := "json"
+		if rng.Float32() < 0.5 {
+			format = "parquet"
+		}
+		foo, err := f.Feed(fmt.Sprintf("CREATE CHANGEFEED FOR TABLE foo WITH format='%s'", format))
+		require.NoError(t, err)
+
+		// Because checkpoints are disabled, we should have some bytes build up
+		// in the sink.
+		targetBytes := int64(40000)
+		if format == "parquet" {
+			// Parquet is a much more efficient format, so the buffered files will
+			// be much smaller.
+			targetBytes = 2000
+		}
+		testutils.SucceedsSoon(t, func() error {
+			numBytes := defaultSLI.CloudstorageBufferedBytes.Value()
+			if defaultSLI.CloudstorageBufferedBytes.Value() < targetBytes {
+				return errors.Newf("expected at least %d buffered bytes but found %d", targetBytes, numBytes)
+			}
+			return nil
+		})
+
+		// Allow checkpoints to pass through and flush the sink. We should see
+		// zero bytes buffered after that.
+		shouldEmit.Store(true)
+		testutils.SucceedsSoon(t, func() error {
+			numBytes := defaultSLI.CloudstorageBufferedBytes.Value()
+			if defaultSLI.CloudstorageBufferedBytes.Value() != 0 {
+				return errors.Newf("expected at least %d buffered bytes but found %d", 0, numBytes)
+			}
+			return nil
+		})
+
+		require.NoError(t, foo.Close())
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
 }

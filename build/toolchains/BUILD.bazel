@@ -616,3 +616,35 @@ config_setting(
         "//c-deps:__pkg__",
     ],
 )
+
+config_setting(
+    name = "is_linux_amd64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:linux",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+config_setting(
+    name = "is_linux_arm64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:linux",
+        "@platforms//cpu:arm64",
+    ],
+)
+
+config_setting(
+    name = "is_darwin_amd64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+config_setting(
+    name = "is_darwin_arm64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:arm64",
+    ],
+)

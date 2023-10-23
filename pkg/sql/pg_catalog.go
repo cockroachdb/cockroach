@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -408,8 +409,14 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 		lookup simpleSchemaResolver,
 		addRow func(...tree.Datum) error,
 	) error {
+		populatedColumns := intsets.Fast{}
+		maxPGAttributeNum := 0
 		// addColumn adds either a table or an index column to the pg_attribute table.
 		addColumn := func(column catalog.Column, attRelID tree.Datum, attNum uint32) error {
+			if int(column.GetID()) > maxPGAttributeNum {
+				maxPGAttributeNum = int(column.GetPGAttributeNum())
+			}
+			populatedColumns.Add(int(column.GetPGAttributeNum()))
 			colTyp := column.GetType()
 			// Sets the attgenerated column to 's' if the column is generated/
 			// computed stored, "v" if virtual, zero byte otherwise.
@@ -474,10 +481,60 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 		}
 
 		// Columns for table.
+		tableID := tableOid(table.GetID())
 		for _, column := range table.AccessibleColumns() {
-			tableID := tableOid(table.GetID())
 			if err := addColumn(column, tableID, uint32(column.GetPGAttributeNum())); err != nil {
 				return err
+			}
+		}
+		// The next column ID may not be populated on certain relations like
+		// sequences, so only use if it's available.
+		if int(table.GetNextColumnID()) > maxPGAttributeNum {
+			// We need to check the maximum in the table in case columns
+			// at the end were dropped.
+			maxPGAttributeNum = int(table.GetNextColumnID() - 1)
+		}
+		// Add a dropped entry for any attribute numbers in the middle that are
+		// missing, assuming there are any numeric gaps in the number of columns
+		// observed.
+		missingColumnType := types.Any
+		if populatedColumns.Len() != maxPGAttributeNum {
+			for colOrdinal := 1; colOrdinal <= maxPGAttributeNum; colOrdinal++ {
+				if populatedColumns.Contains(colOrdinal) {
+					continue
+				}
+				colName := strings.Replace(fmt.Sprintf("........pg.dropped.%-8d", colOrdinal), " ", ".", -1)
+				if err := addRow(
+					tableID,                             // attrelid
+					tree.NewDName(colName),              // attname
+					typOid(missingColumnType),           // atttypid
+					zeroVal,                             // attstattarget
+					typLen(missingColumnType),           // attlen
+					tree.NewDInt(tree.DInt(colOrdinal)), // attnum
+					zeroVal,                             // attndims
+					negOneVal,                           // attcacheoff
+					tree.NewDInt(tree.DInt(missingColumnType.TypeModifier())), // atttypmod
+					tree.DNull,                    // attbyval (see pg_type.typbyval)
+					tree.DNull,                    // attstorage
+					tree.DNull,                    // attalign
+					tree.DBoolFalse,               // attnotnull
+					tree.DBoolFalse,               // atthasdef
+					tree.NewDString(""),           // attidentity
+					tree.NewDString(""),           // attgenerated
+					tree.DBoolTrue,                // attisdropped
+					tree.DBoolTrue,                // attislocal
+					zeroVal,                       // attinhcount
+					typColl(missingColumnType, h), // attcollation
+					tree.DNull,                    // attacl
+					tree.DNull,                    // attoptions
+					tree.DNull,                    // attfdwoptions
+					// These columns were automatically created by pg_catalog_test's missing column generator.
+					tree.DNull, // atthasmissing
+					// These columns were automatically created by pg_catalog_test's missing column generator.
+					tree.DNull, // attmissingval
+				); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -1312,13 +1369,13 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 							catprivilege.GetPublicHasUsageOnTypes(&defaultPrivilegesForRole) {
 							continue
 						}
-					} else if objectType == privilege.Functions {
-						// if the objectType is Functions, we only omit the entry
+					} else if objectType == privilege.Routines {
+						// if the objectType is Routines, we only omit the entry
 						// if both the role has ALL privileges AND public has EXECUTE.
-						// This is the "default" state for default privileges on functions
+						// This is the "default" state for default privileges on routines
 						// in Postgres.
 						if (!defaultPrivilegesForRole.IsExplicitRole() ||
-							catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Functions)) &&
+							catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Routines)) &&
 							catprivilege.GetPublicHasExecuteOnFunctions(&defaultPrivilegesForRole) {
 							continue
 						}
@@ -1340,7 +1397,7 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 					c = "T"
 				case privilege.Schemas:
 					c = "n"
-				case privilege.Functions:
+				case privilege.Routines:
 					c = "f"
 				}
 				privilegeObjectType := targetObjectToPrivilegeObject[objectType]
@@ -1409,8 +1466,8 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 							}
 						}
 					}
-					if objectType == privilege.Functions {
-						if !catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Functions) &&
+					if objectType == privilege.Routines {
+						if !catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Routines) &&
 							catprivilege.GetPublicHasExecuteOnFunctions(&defaultPrivilegesForRole) {
 							defaclItem, err := createDefACLItem(
 								"" /* public role */, privilege.List{privilege.EXECUTE}, privilege.List{}, privilegeObjectType,
@@ -1811,6 +1868,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables do not have indexes */
 			func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 				tableOid := tableOid(table.GetID())
+
 				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
 					isMutation, isWriteOnly :=
 						table.GetIndexMutationCapabilities(index.GetID())
@@ -1821,9 +1879,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					// Also fill in indoption for each column to indicate if the index
 					// is ASC/DESC and if nulls appear first/last.
 					collationOids := tree.NewDArray(types.Oid)
-					indoption := tree.NewDArray(types.Int)
+					indoption := tree.NewDArray(types.Int2)
 
-					colIDs := make([]descpb.ColumnID, 0, index.NumKeyColumns())
+					colAttNums := make([]descpb.ColumnID, 0, index.NumKeyColumns())
 					exprs := make([]string, 0, index.NumKeyColumns())
 					for i := index.IndexDesc().ExplicitColumnStartIdx(); i < index.NumKeyColumns(); i++ {
 						columnID := index.GetKeyColumnID(i)
@@ -1834,7 +1892,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 						// The indkey for an expression element in an index
 						// should be 0.
 						if col.IsExpressionIndexColumn() {
-							colIDs = append(colIDs, 0)
+							colAttNums = append(colAttNums, 0)
 							formattedExpr, err := schemaexpr.FormatExprForDisplay(
 								ctx, table, col.GetComputeExpr(), p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog,
 							)
@@ -1843,7 +1901,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 							}
 							exprs = append(exprs, fmt.Sprintf("(%s)", formattedExpr))
 						} else {
-							colIDs = append(colIDs, columnID)
+							colAttNums = append(colAttNums, descpb.ColumnID(col.GetPGAttributeNum()))
 						}
 						if err := collationOids.Append(typColl(col.GetType(), h)); err != nil {
 							return err
@@ -1861,13 +1919,17 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 						}
 					}
 					// indnkeyatts is the number of attributes without INCLUDED columns.
-					indnkeyatts := len(colIDs)
+					indnkeyatts := len(colAttNums)
 					for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
-						colIDs = append(colIDs, index.GetStoredColumnID(i))
+						col, err := catalog.MustFindColumnByID(table, index.GetStoredColumnID(i))
+						if err != nil {
+							return err
+						}
+						colAttNums = append(colAttNums, descpb.ColumnID(col.GetPGAttributeNum()))
 					}
 					// indnatts is the number of attributes with INCLUDED columns.
-					indnatts := len(colIDs)
-					indkey, err := colIDArrayToVector(colIDs)
+					indnatts := len(colAttNums)
+					indkey, err := colIDArrayToVector(colAttNums)
 					if err != nil {
 						return err
 					}
@@ -2530,6 +2592,11 @@ func addPgProcUDFRow(
 		argNames = argNamesArray
 	}
 
+	kind := tree.NewDString("f")
+	if fnDesc.IsProcedure() {
+		kind = tree.NewDString("p")
+	}
+
 	lang := languageInternalOid
 	if fnDesc.GetLanguage() == catpb.Function_PLPGSQL {
 		lang = languagePlpgsqlOid
@@ -2567,7 +2634,7 @@ func addPgProcUDFRow(
 		tree.DNull,                                       // probin
 		tree.DNull,                                       // proconfig
 		tree.DNull,                                       // proacl
-		tree.NewDString("f"),                             // prokind
+		kind,                                             // prokind
 		// These columns were automatically created by pg_catalog_test's missing column generator.
 		tree.DNull, // prosupport
 	)
@@ -2634,7 +2701,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 				if funcdesc.IsOIDUserDefinedFunc(ooid) {
 					fnDesc, err := p.Descriptors().ByID(p.Txn()).WithoutNonPublic().Get().Function(ctx, funcdesc.UserDefinedFunctionOIDToID(ooid))
 					if err != nil {
-						if errors.Is(err, tree.ErrFunctionUndefined) {
+						if errors.Is(err, tree.ErrRoutineUndefined) {
 							return false, nil //nolint:returnerrcheck
 						}
 						return false, err
@@ -2657,7 +2724,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 				} else {
 					name, _, err := p.ResolveFunctionByOID(ctx, ooid)
 					if err != nil {
-						if errors.Is(err, tree.ErrFunctionUndefined) {
+						if errors.Is(err, tree.ErrRoutineUndefined) {
 							return false, nil //nolint:returnerrcheck
 						}
 						return false, err
@@ -4477,6 +4544,7 @@ var datumToTypeCategory = map[types.Family]*tree.DString{
 	types.TupleFamily:       typCategoryPseudo,
 	types.OidFamily:         typCategoryNumeric,
 	types.PGLSNFamily:       typCategoryUserDefined,
+	types.RefCursorFamily:   typCategoryUserDefined,
 	types.UuidFamily:        typCategoryUserDefined,
 	types.INetFamily:        typCategoryNetworkAddr,
 	types.UnknownFamily:     typCategoryUnknown,

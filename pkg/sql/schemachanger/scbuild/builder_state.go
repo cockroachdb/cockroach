@@ -1217,36 +1217,48 @@ func (b *builderState) ResolveConstraint(
 	})
 }
 
-func (b *builderState) ResolveUDF(
-	fnObj *tree.FuncObj, p scbuildstmt.ResolveParams,
+func (b *builderState) ResolveRoutine(
+	routineObj *tree.RoutineObj, p scbuildstmt.ResolveParams, routineType tree.RoutineType,
 ) scbuildstmt.ElementResultSet {
-	fd, err := b.cr.ResolveFunction(b.ctx, fnObj.FuncName.ToUnresolvedObjectName().ToUnresolvedName(), b.semaCtx.SearchPath)
+	name := routineObj.FuncName.ToUnresolvedObjectName().ToUnresolvedName()
+	// TODO(mgartner): We can probably make the distinction between the two
+	// types of unresolved routine names at parsing-time (or shortly after),
+	// rather than here. Ideally, the UnresolvedRoutineName interface can be
+	// incorporated with ResolvableFunctionReference.
+	var routineName tree.UnresolvedRoutineName
+	if routineType == tree.ProcedureRoutine {
+		routineName = tree.MakeUnresolvedProcedureName(name)
+	} else {
+		routineName = tree.MakeUnresolvedFunctionName(name)
+	}
+	fd, err := b.cr.ResolveFunction(b.ctx, routineName, b.semaCtx.SearchPath)
 	if err != nil {
-		if p.IsExistenceOptional && errors.Is(err, tree.ErrFunctionUndefined) {
+		if p.IsExistenceOptional && errors.Is(err, tree.ErrRoutineUndefined) {
 			return nil
 		}
 		panic(err)
 	}
 
-	paramTypes, err := fnObj.ParamTypes(b.ctx, b.cr)
+	paramTypes, err := routineObj.ParamTypes(b.ctx, b.cr)
 	if err != nil {
 		return nil
 	}
-	ol, err := fd.MatchOverload(paramTypes, fnObj.FuncName.Schema(), b.semaCtx.SearchPath)
+	ol, err := fd.MatchOverload(paramTypes, routineObj.FuncName.Schema(),
+		b.semaCtx.SearchPath, routineType)
 	if err != nil {
-		if p.IsExistenceOptional && errors.Is(err, tree.ErrFunctionUndefined) {
+		if p.IsExistenceOptional && errors.Is(err, tree.ErrRoutineUndefined) {
 			return nil
 		}
 		panic(err)
 	}
 
-	// ResolveUDF is not concerned with builtin functions that are defined using
+	// ResolveRoutine is not concerned with builtin functions that are defined using
 	// a SQL string, so we don't check ol.HasSQLBody() here.
-	if ol.Type != tree.UDFRoutine {
+	if ol.Type == tree.BuiltinRoutine {
 		panic(
 			errors.Errorf(
 				"cannot perform schema change on function %s%s because it is required by the database system",
-				fnObj.FuncName.Object(), ol.Signature(true),
+				routineObj.FuncName.Object(), ol.Signature(true),
 			),
 		)
 	}

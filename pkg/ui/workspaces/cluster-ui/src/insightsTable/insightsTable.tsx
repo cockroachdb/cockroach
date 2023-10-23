@@ -285,6 +285,10 @@ function descriptionCell(
             <span className={cx("label-bold")}>Error Code: </span>{" "}
             {insightRec.execution.errorCode}
           </div>
+          <div className={cx("description-item")}>
+            <span className={cx("label-bold")}> Error Message: </span>{" "}
+            {insightRec.execution.errorMsg}
+          </div>
         </>
       );
     case "Unknown":

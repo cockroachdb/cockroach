@@ -58,8 +58,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -242,15 +240,6 @@ type Gossip struct {
 	bootstrapInterval time.Duration
 	cullInterval      time.Duration
 
-	// The system config is treated unlike other info objects.
-	// It is used so often that we keep an unmarshaled version of it
-	// here and its own set of callbacks.
-	// We do not use the infostore to avoid unmarshalling under the
-	// main gossip lock.
-	systemConfig         *config.SystemConfig
-	systemConfigMu       syncutil.RWMutex
-	systemConfigChannels []chan<- struct{}
-
 	// addresses is a list of bootstrap host addresses for
 	// connecting to the gossip network.
 	addressIdx     int
@@ -266,8 +255,6 @@ type Gossip struct {
 	bootstrapAddrs map[util.UnresolvedAddr]roachpb.NodeID
 
 	locality roachpb.Locality
-
-	defaultZoneConfig *zonepb.ZoneConfig
 }
 
 // New creates an instance of a gossip node.
@@ -281,7 +268,6 @@ func New(
 	stopper *stop.Stopper,
 	registry *metric.Registry,
 	locality roachpb.Locality,
-	defaultZoneConfig *zonepb.ZoneConfig,
 ) *Gossip {
 	ambient.SetEventLog("gossip", "gossip")
 	g := &Gossip{
@@ -298,7 +284,6 @@ func New(
 		addressExists:     map[util.UnresolvedAddr]bool{},
 		bootstrapAddrs:    map[util.UnresolvedAddr]roachpb.NodeID{},
 		locality:          locality,
-		defaultZoneConfig: defaultZoneConfig,
 	}
 
 	stopper.AddCloser(stop.CloserFn(g.server.AmbientContext.FinishEventLog))
@@ -307,8 +292,6 @@ func New(
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	// Add ourselves as a SystemConfig watcher.
-	g.mu.is.registerCallback(KeyDeprecatedSystemConfig, g.updateSystemConfig)
 	// Add ourselves as a node descriptor watcher.
 	g.mu.is.registerCallback(MakePrefixPattern(KeyNodeDescPrefix), g.updateNodeAddress)
 	g.mu.is.registerCallback(MakePrefixPattern(KeyStoreDescPrefix), g.updateStoreMap)
@@ -318,13 +301,8 @@ func New(
 
 // NewTest is a simplified wrapper around New that creates the
 // ClusterIDContainer and NodeIDContainer internally. Used for testing.
-func NewTest(
-	nodeID roachpb.NodeID,
-	stopper *stop.Stopper,
-	registry *metric.Registry,
-	defaultZoneConfig *zonepb.ZoneConfig,
-) *Gossip {
-	return NewTestWithLocality(nodeID, stopper, registry, roachpb.Locality{}, defaultZoneConfig)
+func NewTest(nodeID roachpb.NodeID, stopper *stop.Stopper, registry *metric.Registry) *Gossip {
+	return NewTestWithLocality(nodeID, stopper, registry, roachpb.Locality{})
 }
 
 // NewTestWithLocality calls NewTest with an explicit locality value.
@@ -333,13 +311,12 @@ func NewTestWithLocality(
 	stopper *stop.Stopper,
 	registry *metric.Registry,
 	locality roachpb.Locality,
-	defaultZoneConfig *zonepb.ZoneConfig,
 ) *Gossip {
 	c := &base.ClusterIDContainer{}
 	n := &base.NodeIDContainer{}
 	var ac log.AmbientContext
 	ac.AddLogTag("n", n)
-	gossip := New(ac, c, n, stopper, registry, locality, defaultZoneConfig)
+	gossip := New(ac, c, n, stopper, registry, locality)
 	if nodeID != 0 {
 		n.Set(context.TODO(), nodeID)
 	}
@@ -1083,31 +1060,6 @@ func (g *Gossip) RegisterCallback(pattern string, method Callback, opts ...Callb
 		g.mu.Lock()
 		defer g.mu.Unlock()
 		unregister()
-	}
-}
-
-// updateSystemConfig is the raw gossip info callback. Unmarshal the
-// system config, and if successful, send on each system config
-// channel.
-func (g *Gossip) updateSystemConfig(key string, content roachpb.Value) {
-	ctx := g.AnnotateCtx(context.TODO())
-	if key != KeyDeprecatedSystemConfig {
-		log.Fatalf(ctx, "wrong key received on SystemConfig callback: %s", key)
-	}
-	cfg := config.NewSystemConfig(g.defaultZoneConfig)
-	if err := content.GetProto(&cfg.SystemConfigEntries); err != nil {
-		log.Errorf(ctx, "could not unmarshal system config on callback: %s", err)
-		return
-	}
-
-	g.systemConfigMu.Lock()
-	defer g.systemConfigMu.Unlock()
-	g.systemConfig = cfg
-	for _, c := range g.systemConfigChannels {
-		select {
-		case c <- struct{}{}:
-		default:
-		}
 	}
 }
 

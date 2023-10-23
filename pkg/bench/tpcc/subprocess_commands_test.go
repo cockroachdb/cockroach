@@ -19,8 +19,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -61,17 +62,16 @@ var (
 		require.True(t, ok)
 
 		defer log.Scope(t).Close(t)
-		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				StoreSpecs: []base.StoreSpec{{Path: storeDir}},
-			},
+		srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+			StoreSpecs: []base.StoreSpec{{Path: storeDir}},
 		})
-		defer tc.Stopper().Stop(ctx)
+		defer srv.Stopper().Stop(ctx)
 
-		db := tc.ServerConn(0)
+		// Make the generation faster.
+		logstore.DisableSyncRaftLog.Override(context.Background(), &srv.SystemLayer().ClusterSettings().SV, true)
+
 		tdb := sqlutils.MakeSQLRunner(db)
 		tdb.Exec(t, "CREATE DATABASE "+databaseName)
-		tdb.Exec(t, "SET CLUSTER SETTING kv.raft_log.synchronization.disabled = true")
 		tdb.Exec(t, "USE "+databaseName)
 		tpcc, err := workload.Get("tpcc")
 		require.NoError(t, err)

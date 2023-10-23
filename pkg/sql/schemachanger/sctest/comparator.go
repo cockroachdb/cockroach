@@ -12,6 +12,7 @@ package sctest
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"strings"
 	"testing"
@@ -53,66 +54,122 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 
 	legacyTSI, legacySQLDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer legacyTSI.Stopper().Stop(ctx)
-	legacyTDB := sqlutils.MakeSQLRunner(legacySQLDB)
-	legacyTDB.Exec(t, "SET use_declarative_schema_changer = off;")
+	legacyConn, err := legacySQLDB.Conn(ctx)
+	require.NoError(t, err)
+	_, err = legacyConn.ExecContext(ctx, "SET use_declarative_schema_changer = off;")
+	require.NoError(t, err)
 
 	declarativeTSI, declarativeSQLDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer declarativeTSI.Stopper().Stop(ctx)
-	declarativeTDB := sqlutils.MakeSQLRunner(declarativeSQLDB)
-	declarativeTDB.Exec(t, "SET use_declarative_schema_changer = on;")
+	declarativeConn, err := declarativeSQLDB.Conn(ctx)
+	require.NoError(t, err)
+	_, err = declarativeConn.ExecContext(ctx, "SET use_declarative_schema_changer = on;")
+	require.NoError(t, err)
 
 	// Track executed statements so far for debugging/repro purposes.
 	var linesExecutedSoFar []string
 
 	for ss.HasNextLine() {
 		line := ss.NextLine()
-		line = modifyBlacklistedStmt(t, line, legacyTDB)
-		_, errLegacy := legacySQLDB.Exec(line)
+		syntaxError := hasSyntaxError(line)
+
+		// Pre-execution: modify `line` so that executing it produces the same
+		// state. This step is to account for the known behavior difference between
+		// the two schema changers.
+		// Only run when not in a transaction (otherwise certain DDL combo can make
+		// sql queries issued during modification break; see commit message).
+		if !isInATransaction(ctx, t, legacyConn) && !syntaxError {
+			line = modifyBlacklistedStmt(ctx, t, line, legacyConn)
+		}
+
+		// Execution: `line` must be executed in both clusters with the same error
+		// code.
+		_, errLegacy := legacyConn.ExecContext(ctx, line)
 		if pgcode.MakeCode(string(getPQErrCode(errLegacy))) == pgcode.FeatureNotSupported {
 			continue
 		}
-		_, errDeclarative := declarativeSQLDB.Exec(line)
+		_, errDeclarative := declarativeConn.ExecContext(ctx, line)
 		requireNoErrOrSameErrCode(t, line, errLegacy, errDeclarative)
 		linesExecutedSoFar = append(linesExecutedSoFar, line)
+		t.Logf("Executing %q", line)
 
-		// Perform a descriptor identity check after a DDL.
-		if containsStmtOfType(t, line, tree.TypeDDL) {
-			metaDataIdentityCheck(t, legacyTDB, declarativeTDB, linesExecutedSoFar)
+		// Post-execution: Check metadata level identity between two clusters. Only
+		// run when not in a transaction (because legacy schema changer will be used
+		// in both clusters) and current database is not dropped (because the check
+		// fetches descriptor within current database).
+		if !isInATransaction(ctx, t, legacyConn) && !syntaxError && currentDatabaseExist(ctx, legacyConn) {
+			if containsStmtOfType(t, line, tree.TypeDDL) {
+				metaDataIdentityCheck(ctx, t, legacyConn, declarativeConn, linesExecutedSoFar)
+			}
 		}
 	}
+}
+
+// currentDatabaseExist returns false if current database (tracked by session
+// variable `database`) does not exist, which can happen after one drops the
+// current database and before setting `database` to an existing one.
+func currentDatabaseExist(ctx context.Context, conn *gosql.Conn) bool {
+	_, err := conn.ExecContext(ctx, "SHOW DATABASE")
+	return pgcode.MakeCode(string(getPQErrCode(err))) != pgcode.UndefinedDatabase
+}
+
+func hasSyntaxError(line string) bool {
+	_, err := parser.Parse(line)
+	return err != nil
+}
+
+// isInATransaction returns true if connection `db` is currently in a transaction.
+func isInATransaction(ctx context.Context, t *testing.T, conn *gosql.Conn) bool {
+	rows, err := conn.QueryContext(ctx, "SHOW transaction_status;")
+	errCode := pgcode.MakeCode(string(getPQErrCode(err)))
+	if errCode == pgcode.InFailedSQLTransaction || errCode == pgcode.InvalidTransactionState {
+		// Txn is in `ERROR` state (25P02) or `DONE` state (25000).
+		return true
+	}
+	require.NoError(t, err) // any other error not allowed
+	res, err := sqlutils.RowsToStrMatrix(rows)
+	require.NoError(t, err)
+	return res[0][0] == `Open` // Txn is in `Open` state.
 }
 
 // sqlLineModifier is the standard signature that takes as input a sql stmt(s) line
 // and perform some kind of modification to it.
 // The SQLRunner is there in case the modification requires being able to access
 // certain info from the cluster with sql.
-type sqlLineModifier func(*testing.T, statements.Statements, *sqlutils.SQLRunner) (statements.Statements, bool)
+type sqlLineModifier func(context.Context, *testing.T, statements.Statements, *gosql.Conn) (statements.Statements, bool)
 
 // modifyBlacklistedStmt attempts to detect whether `line` is a known statement
 // with different behavior under legacy vs under declarative schema changer.
 // Those cases are hard-coded, and if `line` is one of them, we transform it
 // into one with the same behavior under those two schema changers.
-func modifyBlacklistedStmt(t *testing.T, line string, legacyTDB *sqlutils.SQLRunner) string {
+func modifyBlacklistedStmt(
+	ctx context.Context, t *testing.T, line string, legacyConn *gosql.Conn,
+) string {
 	parsedLine, err := parser.Parse(line)
 	require.NoError(t, err)
 
 	var modify bool
-	for _, lm := range []sqlLineModifier{modifyExprsReferencingSequencesWithTrue, modifyAlterPKWithRowIDCol, modifySetDeclarativeSchemaChangerMode} {
+	for _, lm := range []sqlLineModifier{
+		modifyExprsReferencingSequencesWithTrue,
+		modifyAlterPKWithRowIDCol,
+		modifySetDeclarativeSchemaChangerMode,
+		modifyCreateTempTable,
+	} {
 		var m bool
-		parsedLine, m = lm(t, parsedLine, legacyTDB)
+		parsedLine, m = lm(ctx, t, parsedLine, legacyConn)
 		modify = modify || m
 	}
 	if modify {
 		t.Logf("Comparator testing framework modifies line %q to %q", line, parsedLine.String())
 	}
-	return parsedLine.String()
+	return parsedLine.StringWithFlags(tree.FmtSimple | tree.FmtTagDollarQuotes)
 }
 
 // modifySetDeclarativeSchemaChangerMode skips stmts that attempt to alter
 // schema changer mode via session variable "use_declarative_schema_changer" or
 // cluster setting "sql.schema.force_declarative_statements".
 func modifySetDeclarativeSchemaChangerMode(
-	t *testing.T, parsedStmts statements.Statements, _ *sqlutils.SQLRunner,
+	_ context.Context, t *testing.T, parsedStmts statements.Statements, _ *gosql.Conn,
 ) (statements.Statements, bool) {
 	var newParsedStmts statements.Statements
 	for _, parsedStmt := range parsedStmts {
@@ -138,20 +195,36 @@ func modifySetDeclarativeSchemaChangerMode(
 // column).
 // The returned boolean indicates if such a modification happened.
 func modifyAlterPKWithRowIDCol(
-	t *testing.T, parsedStmts statements.Statements, tdb *sqlutils.SQLRunner,
+	ctx context.Context, t *testing.T, parsedStmts statements.Statements, tdb *gosql.Conn,
 ) (statements.Statements, bool) {
 	// A helper to determine whether table `name`'s current primary key column is
-	// the implicit `rowid` column.
-	isCurrentPrimaryKeyColumnRowID := func(name *tree.UnresolvedObjectName) bool {
-		res := tdb.QueryStr(t, fmt.Sprintf(`SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) -> 'table' -> 'primaryIndex' ->> 'keyColumnNames' FROM system.descriptor WHERE id = '%v'::REGCLASS;`, name.String()))
-		return res[0][0] == `["rowid"]`
-	}
-
-	// A helper to determine whether the connection is currently in an open
-	// transaction.
-	isInAnOpenTransaction := func() bool {
-		res := tdb.QueryStr(t, `SHOW transaction_status;`)
-		return res[0][0] == `Open`
+	// the implicitly created `rowid` column.
+	isCurrentPrimaryKeyColumnRowID := func(name *tree.UnresolvedObjectName) (bool, string) {
+		rows, err := tdb.QueryContext(ctx, fmt.Sprintf(
+			`
+WITH columns AS
+ (SELECT jsonb_array_elements(crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) -> 'table' -> 'columns') AS col 
+  FROM system.descriptor 
+  WHERE id = '%v'::REGCLASS),
+pkcolumnids AS
+ (SELECT jsonb_array_elements(crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) -> 'table' -> 'primaryIndex' -> 'keyColumnIds') AS pkcolid 
+  FROM system.descriptor 
+  WHERE id = '%v'::REGCLASS)          
+SELECT col ->> 'name' as "colName", 
+       col ->> 'defaultExpr' as "defaultExpr", 
+       col ->> 'hidden' as "isHidden", 
+       col -> 'type' ->> 'family' as "columnFamilyType" 
+FROM columns, pkcolumnids
+WHERE col -> 'id' = pkcolid;`, name.String(), name.String()))
+		require.NoError(t, err)
+		res, err := sqlutils.RowsToStrMatrix(rows)
+		require.NoError(t, err)
+		if len(res) != 1 {
+			return false, ""
+		}
+		colName, colDefExpr, colIsHidden, colType := res[0][0], res[0][1], res[0][2], res[0][3]
+		return strings.HasPrefix(colName, "rowid") && colDefExpr == "unique_rowid()" &&
+			colIsHidden == "true" && colType == "IntFamily", colName
 	}
 
 	var newParsedStmts statements.Statements
@@ -160,20 +233,18 @@ func modifyAlterPKWithRowIDCol(
 		newParsedStmts = append(newParsedStmts, parsedStmt)
 		var isAlterPKWithRowID bool
 		var tableName *tree.UnresolvedObjectName
+		var implicitRowidColname string
 		switch ast := parsedStmt.AST.(type) {
 		case *tree.AlterTable:
+			tableName = ast.Table
 			for _, cmd := range ast.Cmds {
 				switch cmd := cmd.(type) {
 				case *tree.AlterTableAlterPrimaryKey:
-					if isCurrentPrimaryKeyColumnRowID(ast.Table) {
-						isAlterPKWithRowID = true
-						tableName = ast.Table
-					}
+					isAlterPKWithRowID, implicitRowidColname = isCurrentPrimaryKeyColumnRowID(ast.Table)
 				case *tree.AlterTableAddConstraint:
 					if alterTableAddPK, ok := cmd.ConstraintDef.(*tree.UniqueConstraintTableDef); ok &&
-						alterTableAddPK.PrimaryKey && isCurrentPrimaryKeyColumnRowID(ast.Table) {
-						isAlterPKWithRowID = true
-						tableName = ast.Table
+						alterTableAddPK.PrimaryKey {
+						isAlterPKWithRowID, implicitRowidColname = isCurrentPrimaryKeyColumnRowID(ast.Table)
 					}
 				}
 			}
@@ -181,14 +252,9 @@ func modifyAlterPKWithRowIDCol(
 		if isAlterPKWithRowID {
 			parsedCommit, err := parser.ParseOne("commit")
 			require.NoError(t, err)
-			parsedDropRowID, err := parser.ParseOne(fmt.Sprintf("ALTER TABLE %v DROP COLUMN IF EXISTS rowid", tableName))
+			parsedDropRowID, err := parser.ParseOne(fmt.Sprintf("ALTER TABLE %v DROP COLUMN IF EXISTS %v", tableName, implicitRowidColname))
 			require.NoError(t, err)
 			newParsedStmts = append(newParsedStmts, parsedCommit, parsedDropRowID)
-			if isInAnOpenTransaction() {
-				parsedBegin, err := parser.ParseOne("begin")
-				require.NoError(t, err)
-				newParsedStmts = append(newParsedStmts, parsedBegin)
-			}
 			modified = true
 		}
 	}
@@ -200,7 +266,7 @@ func modifyAlterPKWithRowIDCol(
 // that references sequences to "True". The returned boolean indicates whether
 // such a modification happened.
 func modifyExprsReferencingSequencesWithTrue(
-	t *testing.T, parsedStmts statements.Statements, _ *sqlutils.SQLRunner,
+	_ context.Context, t *testing.T, parsedStmts statements.Statements, _ *gosql.Conn,
 ) (statements.Statements, bool) {
 	// replaceSeqReferencesWithTrueInExpr detects if `expr` contains any references to
 	// sequences. If so, return a new expression "True"; otherwise, return `expr` as is.
@@ -254,6 +320,23 @@ func modifyExprsReferencingSequencesWithTrue(
 	return newParsedStmts, modified
 }
 
+// modifyCreateTempTable skips `CREATE TEMP TABLE` statement because its parent schema name,
+// constructed from sessionID, is naturally going to be different between the two clusters.
+// In short of a more clever way to bake this difference into the metadata identity check,
+// we decided to just skip those statements, for now.
+func modifyCreateTempTable(
+	_ context.Context, t *testing.T, parsedStmts statements.Statements, _ *gosql.Conn,
+) (newParsedStmts statements.Statements, modified bool) {
+	for _, parsedStmt := range parsedStmts {
+		if ast, ok := parsedStmt.AST.(*tree.CreateTable); ok && ast.Persistence.IsTemporary() {
+			modified = true
+			continue
+		}
+		newParsedStmts = append(newParsedStmts, parsedStmt)
+	}
+	return newParsedStmts, modified
+}
+
 // requireNoErrOrSameErrCode require errors from executing some statement
 // from legacy and declarative schema changer clusters to be both nil or
 // both PQ error with same code.
@@ -302,10 +385,20 @@ func containsStmtOfType(t *testing.T, line string, typ tree.StatementType) bool 
 // metaDataIdentityCheck looks up all descriptors' create_statements in
 // `legacy` and `declarative` clusters and assert that they are identical.
 func metaDataIdentityCheck(
-	t *testing.T, legacy, declarative *sqlutils.SQLRunner, linesExecutedSoFar []string,
+	ctx context.Context, t *testing.T, legacy, declarative *gosql.Conn, linesExecutedSoFar []string,
 ) {
-	legacyDescriptors := parserRoundTrip(t, legacy.QueryStr(t, fetchDescriptorStateQuery))
-	declarativeDescriptors := parserRoundTrip(t, declarative.QueryStr(t, fetchDescriptorStateQuery))
+	// A function to fetch all descriptors create statements, collectively known
+	// as the "descriptor state".
+	fetchDescriptorState := func(conn *gosql.Conn) [][]string {
+		rows, err := conn.QueryContext(ctx, fetchDescriptorStateQuery)
+		require.NoError(t, err)
+		res, err := sqlutils.RowsToStrMatrix(rows)
+		require.NoError(t, err)
+		return res
+	}
+
+	legacyDescriptors := parserRoundTrip(t, fetchDescriptorState(legacy))
+	declarativeDescriptors := parserRoundTrip(t, fetchDescriptorState(declarative))
 	if len(legacyDescriptors) != len(declarativeDescriptors) {
 		t.Fatal(errors.Newf("number of descriptors mismatches: "+
 			"legacy cluster = %v, declarative cluster = %v", len(legacyDescriptors), len(declarativeDescriptors)))

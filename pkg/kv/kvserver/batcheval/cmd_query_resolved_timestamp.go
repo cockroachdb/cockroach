@@ -69,8 +69,8 @@ func QueryResolvedTimestamp(
 	// (or until the GC runs). We cap the maximum size of this set to limit its
 	// cost, since this is all best-effort anyway.
 	st := cArgs.EvalCtx.ClusterSettings()
-	maxEncounteredIntents := gc.MaxIntentsPerCleanupBatch.Get(&st.SV)
-	maxEncounteredIntentKeyBytes := gc.MaxIntentKeyBytesPerCleanupBatch.Get(&st.SV)
+	maxEncounteredIntents := gc.MaxLocksPerCleanupBatch.Get(&st.SV)
+	maxEncounteredIntentKeyBytes := gc.MaxLockKeyBytesPerCleanupBatch.Get(&st.SV)
 	intentCleanupAge := QueryResolvedTimestampIntentCleanupAge.Get(&st.SV)
 	intentCleanupThresh := cArgs.EvalCtx.Clock().Now().Add(-intentCleanupAge.Nanoseconds(), 0)
 	minIntentTS, encounteredIntents, err := computeMinIntentTimestamp(

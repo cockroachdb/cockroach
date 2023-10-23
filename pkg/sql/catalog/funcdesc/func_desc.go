@@ -195,7 +195,7 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	if desc.Privileges == nil {
 		vea.Report(errors.AssertionFailedf("privileges not set"))
 	} else {
-		vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Function))
+		vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Routine))
 	}
 
 	// Validate types are properly set.
@@ -660,9 +660,9 @@ func (desc *Mutable) RemoveReference(id descpb.ID) {
 	desc.DependedOnBy = ret
 }
 
-// ToFuncObj converts the descriptor to a tree.FuncObj.
-func (desc *immutable) ToFuncObj() *tree.FuncObj {
-	ret := &tree.FuncObj{
+// ToRoutineObj converts the descriptor to a tree.RoutineObj.
+func (desc *immutable) ToRoutineObj() *tree.RoutineObj {
+	ret := &tree.RoutineObj{
 		FuncName: tree.MakeRoutineNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(desc.Name)),
 		Params:   make(tree.RoutineParams, len(desc.Params)),
 	}
@@ -676,7 +676,15 @@ func (desc *immutable) ToFuncObj() *tree.FuncObj {
 
 // GetObjectType implements the Object interface.
 func (desc *immutable) GetObjectType() privilege.ObjectType {
-	return privilege.Function
+	return privilege.Routine
+}
+
+// GetObjectTypeString implements the Object interface.
+func (desc *immutable) GetObjectTypeString() string {
+	if desc.IsProcedure() {
+		return "procedure"
+	}
+	return "function"
 }
 
 // FuncDesc implements the catalog.FunctionDescriptor interface.
@@ -691,7 +699,7 @@ func (desc *immutable) GetLanguage() catpb.Function_Language {
 
 func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 	routineType := tree.UDFRoutine
-	if desc.IsProcedure {
+	if desc.IsProcedure() {
 		routineType = tree.ProcedureRoutine
 	}
 	ret = &tree.Overload{
@@ -765,10 +773,11 @@ func (desc *immutable) calledOnNullInput() (bool, error) {
 // ToCreateExpr implements the FunctionDescriptor interface.
 func (desc *immutable) ToCreateExpr() (ret *tree.CreateRoutine, err error) {
 	ret = &tree.CreateRoutine{
-		Name: tree.MakeRoutineNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(desc.Name)),
+		Name:        tree.MakeRoutineNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(desc.Name)),
+		IsProcedure: desc.IsProcedure(),
 		ReturnType: tree.RoutineReturnType{
 			Type:  desc.ReturnType.Type,
-			IsSet: desc.ReturnType.ReturnSet,
+			SetOf: desc.ReturnType.ReturnSet,
 		},
 	}
 	ret.Params = make(tree.RoutineParams, len(desc.Params))
@@ -794,6 +803,11 @@ func (desc *immutable) ToCreateExpr() (ret *tree.CreateRoutine, err error) {
 	ret.Options = append(ret.Options, tree.RoutineBodyStr(desc.FunctionBody))
 	ret.Options = append(ret.Options, desc.getCreateExprLang())
 	return ret, nil
+}
+
+// IsProcedure implements the FunctionDescriptor interface.
+func (desc *immutable) IsProcedure() bool {
+	return desc.FunctionDescriptor.IsProcedure
 }
 
 func (desc *immutable) getCreateExprLang() tree.RoutineLanguage {

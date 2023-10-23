@@ -141,6 +141,17 @@ func (w *parquetWriter) addData(
 	return w.inner.AddRow(w.datumAlloc)
 }
 
+// estimatedBufferedBytes returns the number of bytes estimated to be buffered
+// and not yet written to the sink.
+func (w *parquetWriter) estimatedBufferedBytes() int64 {
+	return w.inner.BufferedBytesEstimate()
+}
+
+// flush flushes buffered datums to the sink.
+func (w *parquetWriter) flush() error {
+	return w.inner.Flush()
+}
+
 // close closes the writer and flushes any buffered data to the sink.
 func (w *parquetWriter) close() error {
 	return w.inner.Close()

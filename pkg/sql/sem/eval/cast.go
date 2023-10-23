@@ -69,6 +69,15 @@ func PerformCast(
 	return performCast(ctx, evalCtx, d, t, true /* truncateWidth */)
 }
 
+// PerformCastNoTruncate performs an explicit cast, but returns an error if the
+// value doesn't fit in the required type. It is used for coercing types in a
+// PLpgSQL INTO clause.
+func PerformCastNoTruncate(
+	ctx context.Context, evalCtx *Context, d tree.Datum, t *types.T,
+) (tree.Datum, error) {
+	return performCast(ctx, evalCtx, d, t, false /* truncateWidth */)
+}
+
 // PerformAssignmentCast performs an assignment cast from the provided Datum to
 // the specified type. The original datum is returned if its type is identical
 // to the specified type.
@@ -597,6 +606,19 @@ func performCastWithoutPrecisionTruncation(
 			return d, nil
 		}
 
+	case types.RefCursorFamily:
+		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_2) {
+			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+				"version %v must be finalized to use refcursor",
+				clusterversion.ByKey(clusterversion.V23_2))
+		}
+		switch d := d.(type) {
+		case *tree.DString:
+			return tree.NewDRefCursor(string(*d)), nil
+		case *tree.DCollatedString:
+			return tree.NewDRefCursor(d.Contents), nil
+		}
+
 	case types.GeographyFamily:
 		switch d := d.(type) {
 		case *tree.DString:
@@ -737,7 +759,7 @@ func performCastWithoutPrecisionTruncation(
 			return tree.MakeDTime(timeofday.FromTime(d.Time).Round(roundTo)), nil
 		case *tree.DTimestampTZ:
 			// Strip time zone. Times don't carry their location.
-			stripped, err := d.EvalAtTimeZone(evalCtx.GetLocation())
+			stripped, err := d.EvalAtAndRemoveTimeZone(evalCtx.GetLocation(), time.Microsecond)
 			if err != nil {
 				return nil, err
 			}
@@ -785,11 +807,7 @@ func performCastWithoutPrecisionTruncation(
 			return d.Round(roundTo)
 		case *tree.DTimestampTZ:
 			// Strip time zone. Timestamps don't carry their location.
-			stripped, err := d.EvalAtTimeZone(evalCtx.GetLocation())
-			if err != nil {
-				return nil, err
-			}
-			return stripped.Round(roundTo)
+			return d.EvalAtAndRemoveTimeZone(evalCtx.GetLocation(), roundTo)
 		}
 
 	case types.TimestampTZFamily:
@@ -811,9 +829,7 @@ func performCastWithoutPrecisionTruncation(
 			_, after := t.In(evalCtx.GetLocation()).Zone()
 			return tree.MakeDTimestampTZ(t.Add(time.Duration(before-after)*time.Second), roundTo)
 		case *tree.DTimestamp:
-			_, before := d.Time.Zone()
-			_, after := d.Time.In(evalCtx.GetLocation()).Zone()
-			return tree.MakeDTimestampTZ(d.Time.Add(time.Duration(before-after)*time.Second), roundTo)
+			return d.AddTimeZone(evalCtx.GetLocation(), roundTo)
 		case *tree.DInt:
 			return tree.MakeDTimestampTZ(timeutil.Unix(int64(*d), 0), roundTo)
 		case *tree.DTimestampTZ:
@@ -1018,7 +1034,7 @@ func performIntToOidCast(
 		}
 		name, _, err := res.ResolveFunctionByOID(ctx, oid.Oid(v))
 		if err != nil {
-			if errors.Is(err, tree.ErrFunctionUndefined) {
+			if errors.Is(err, tree.ErrRoutineUndefined) {
 				return tree.NewDOidWithType(o, t), nil //nolint:returnerrcheck
 			}
 			return nil, err

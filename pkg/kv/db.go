@@ -343,30 +343,35 @@ func (db *DB) Get(ctx context.Context, key interface{}) (KeyValue, error) {
 }
 
 // GetForUpdate retrieves the value for a key, returning the retrieved key/value
-// or an error. An unreplicated, exclusive lock is acquired on the key, if it
-// exists. It is not considered an error for the key not to exist.
+// or an error. An Exclusive lock with the supplied durability is acquired on
+// the key, if it exists. It is not considered an error for the key not to
+// exist.
 //
 //	r, err := db.GetForUpdate("a")
 //	// string(r.Key) == "a"
 //
 // key can be either a byte slice or a string.
-func (db *DB) GetForUpdate(ctx context.Context, key interface{}) (KeyValue, error) {
+func (db *DB) GetForUpdate(
+	ctx context.Context, key interface{}, dur kvpb.KeyLockingDurabilityType,
+) (KeyValue, error) {
 	b := &Batch{}
-	b.GetForUpdate(key)
+	b.GetForUpdate(key, dur)
 	return getOneRow(db.Run(ctx, b), b)
 }
 
-// GetForShare retrieves the value for a key, returning the retrieved key/value
-// or an error. An unreplicated, shared lock is acquired on the key, if it
-// exists. It is not considered an error for the key not to exist.
+// GetForShare retrieves the value for a key. A shared lock with the supplied
+// durability is acquired on the key, if it exists. A new result will be
+// appended to the batch which will contain a single row.
 //
 //	r, err := db.GetForShare("a")
 //	// string(r.Key) == "a"
 //
 // key can be either a byte slice or a string.
-func (db *DB) GetForShare(ctx context.Context, key interface{}) (KeyValue, error) {
+func (db *DB) GetForShare(
+	ctx context.Context, key interface{}, dur kvpb.KeyLockingDurabilityType,
+) (KeyValue, error) {
 	b := &Batch{}
-	b.GetForShare(key)
+	b.GetForShare(key, dur)
 	return getOneRow(db.Run(ctx, b), b)
 }
 
@@ -494,13 +499,14 @@ func (db *DB) scan(
 	isReverse bool,
 	str kvpb.KeyLockingStrengthType,
 	readConsistency kvpb.ReadConsistencyType,
+	dur kvpb.KeyLockingDurabilityType,
 ) ([]KeyValue, error) {
 	b := &Batch{}
 	b.Header.ReadConsistency = readConsistency
 	if maxRows > 0 {
 		b.Header.MaxSpanRequestKeys = maxRows
 	}
-	b.scan(begin, end, isReverse, str)
+	b.scan(begin, end, isReverse, str, dur)
 	r, err := getOneResult(db.Run(ctx, b), b)
 	return r.Rows, err
 }
@@ -512,33 +518,37 @@ func (db *DB) scan(
 //
 // key can be either a byte slice or a string.
 func (db *DB) Scan(ctx context.Context, begin, end interface{}, maxRows int64) ([]KeyValue, error) {
-	return db.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.NonLocking, kvpb.CONSISTENT)
+	return db.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.NonLocking, kvpb.CONSISTENT, kvpb.Invalid)
 }
 
 // ScanForUpdate retrieves the rows between begin (inclusive) and end
-// (exclusive) in ascending order. Unreplicated, exclusive locks are
-// acquired on each of the returned keys.
+// (exclusive) in ascending order. Exclusive locks with the supplied durability
+// are acquired on each of the returned keys.
 //
 // The returned []KeyValue will contain up to maxRows elements.
 //
 // key can be either a byte slice or a string.
 func (db *DB) ScanForUpdate(
-	ctx context.Context, begin, end interface{}, maxRows int64,
+	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType,
 ) ([]KeyValue, error) {
-	return db.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.ForUpdate, kvpb.CONSISTENT)
+	return db.scan(
+		ctx, begin, end, maxRows, false /* isReverse */, kvpb.ForUpdate, kvpb.CONSISTENT, dur,
+	)
 }
 
-// ScanForShare retrieves the rows between begin (inclusive) and end
-// (exclusive) in ascending order. Unreplicated, shared locks are
-// acquired on each of the returned keys.
+// ScanForShare retrieves the rows between begin (inclusive) and end (exclusive)
+// in ascending order. Shared locks with the supplied durability are acquired on
+// each of the returned keys.
 //
 // The returned []KeyValue will contain up to maxRows elements.
 //
 // key can be either a byte slice or a string.
 func (db *DB) ScanForShare(
-	ctx context.Context, begin, end interface{}, maxRows int64,
+	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType,
 ) ([]KeyValue, error) {
-	return db.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.ForShare, kvpb.CONSISTENT)
+	return db.scan(
+		ctx, begin, end, maxRows, false /* isReverse */, kvpb.ForShare, kvpb.CONSISTENT, dur,
+	)
 }
 
 // ReverseScan retrieves the rows between begin (inclusive) and end (exclusive)
@@ -550,33 +560,37 @@ func (db *DB) ScanForShare(
 func (db *DB) ReverseScan(
 	ctx context.Context, begin, end interface{}, maxRows int64,
 ) ([]KeyValue, error) {
-	return db.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.NonLocking, kvpb.CONSISTENT)
+	return db.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.NonLocking, kvpb.CONSISTENT, kvpb.Invalid)
 }
 
 // ReverseScanForUpdate retrieves the rows between begin (inclusive) and end
-// (exclusive) in descending order. Unreplicated, exclusive locks are acquired
-// on each of the returned keys.
+// (exclusive) in descending order. Exclusive locks with the supplied durability
+// are acquired on each of the returned keys.
 //
 // The returned []KeyValue will contain up to maxRows elements.
 //
 // key can be either a byte slice or a string.
 func (db *DB) ReverseScanForUpdate(
-	ctx context.Context, begin, end interface{}, maxRows int64,
+	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType,
 ) ([]KeyValue, error) {
-	return db.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.ForUpdate, kvpb.CONSISTENT)
+	return db.scan(
+		ctx, begin, end, maxRows, true /* isReverse */, kvpb.ForUpdate, kvpb.CONSISTENT, dur,
+	)
 }
 
 // ReverseScanForShare retrieves the rows between begin (inclusive) and end
-// (exclusive) in descending order. Unreplicated, shared locks are acquired
-// on each of the returned keys.
+// (exclusive) in descending order. Shared locks with the supplied durability
+// are acquired on each of the returned keys.
 //
 // The returned []KeyValue will contain up to maxRows elements.
 //
 // key can be either a byte slice or a string.
 func (db *DB) ReverseScanForShare(
-	ctx context.Context, begin, end interface{}, maxRows int64,
+	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType,
 ) ([]KeyValue, error) {
-	return db.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.ForShare, kvpb.CONSISTENT)
+	return db.scan(
+		ctx, begin, end, maxRows, true /* isReverse */, kvpb.ForShare, kvpb.CONSISTENT, dur,
+	)
 }
 
 // Del deletes one or more keys.

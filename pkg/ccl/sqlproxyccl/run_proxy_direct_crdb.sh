@@ -95,6 +95,6 @@ $COCKROACH mt start-proxy  --listen-addr=localhost:$PROXY_P --listen-cert=* --li
 
 echo "All files are in $BASE"
 echo "To connect:"
-echo "  $COCKROACH sql --url=\"postgresql://root:secret@127.0.0.1:$PROXY_P?sslmode=require&sslrootcert=a&options=--cluster%3Dtenant-cluster-123\""
+echo "  $COCKROACH sql --url=\"postgresql://root:secret@127.0.0.1:$PROXY_P?sslmode=require&options=--cluster%3Dtenant-cluster-123\""
 echo "Press any key to shutdown all processes and cleanup."
 read -r

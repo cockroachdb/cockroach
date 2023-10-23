@@ -39,7 +39,7 @@ func registerKnex(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		require.NoError(t, err)
@@ -127,12 +127,14 @@ func registerKnex(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:       "knex",
-		Owner:      registry.OwnerSQLFoundations,
-		Cluster:    r.MakeClusterSpec(1),
-		Leases:     registry.MetamorphicLeases,
-		NativeLibs: registry.LibGEOS,
-		Tags:       registry.Tags(`default`, `orm`),
+		Name:             "knex",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		NativeLibs:       registry.LibGEOS,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly, registry.ORM),
+		Tags:             registry.Tags(`default`, `orm`),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runKnex(ctx, t, c)
 		},

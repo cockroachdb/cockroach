@@ -60,12 +60,14 @@ func registerFixtures(r registry.Registry) {
 		makeVersionFixtureAndFatal(ctx, t, c, fixtureVersion)
 	}
 	spec := registry.TestSpec{
-		Name:    "generate-fixtures",
-		Timeout: 30 * time.Minute,
-		Tags:    registry.Tags("fixtures"),
-		Owner:   registry.OwnerDevInf,
-		Cluster: r.MakeClusterSpec(4),
-		Run:     runFixtures,
+		Name:             "generate-fixtures",
+		Timeout:          30 * time.Minute,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Fixtures),
+		Tags:             registry.Tags("fixtures"),
+		Owner:            registry.OwnerDevInf,
+		Cluster:          r.MakeClusterSpec(4),
+		Run:              runFixtures,
 	}
 	r.Add(spec)
 }

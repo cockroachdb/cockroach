@@ -430,6 +430,10 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW FUNCTIONS FROM ??`, `SHOW FUNCTIONS`},
 		{`SHOW FUNCTIONS FROM blah ??`, `SHOW FUNCTIONS`},
 
+		{`SHOW PROCEDURES ??`, `SHOW PROCEDURES`},
+		{`SHOW PROCEDURES FROM ??`, `SHOW PROCEDURES`},
+		{`SHOW PROCEDURES FROM blah ??`, `SHOW PROCEDURES`},
+
 		{`SHOW GRANTS ON ??`, `SHOW GRANTS`},
 		{`SHOW GRANTS ON foo FOR ??`, `SHOW GRANTS`},
 		{`SHOW GRANTS ON foo FOR bar ??`, `SHOW GRANTS`},
@@ -576,6 +580,8 @@ func TestContextualHelp(t *testing.T) {
 		{`DROP FUNCTION ??`, `DROP FUNCTION`},
 
 		{`CREATE PROCEDURE ??`, `CREATE PROCEDURE`},
+		{`ALTER PROCEDURE ??`, `ALTER PROCEDURE`},
+		{`DROP PROCEDURE ??`, `DROP PROCEDURE`},
 	}
 
 	// The following checks that the test definition above exercises all

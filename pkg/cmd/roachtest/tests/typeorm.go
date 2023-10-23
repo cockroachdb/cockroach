@@ -25,7 +25,10 @@ import (
 )
 
 var typeORMReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var supportedTypeORMRelease = "0.3.17"
+
+// Use 0.3.18 from the upstream repo once it is released.
+const supportedTypeORMRelease = "remove-unsafe-crdb-setting"
+const typeORMRepo = "https://github.com/rafiss/typeorm.git"
 
 // This test runs TypeORM's full test suite against a single cockroach node.
 func registerTypeORM(r registry.Registry) {
@@ -40,7 +43,7 @@ func registerTypeORM(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
 
 		cockroachVersion, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
@@ -78,7 +81,7 @@ func registerTypeORM(r registry.Registry) {
 			c,
 			node,
 			"install dependencies",
-			`sudo apt-get install -y make python3 libpq-dev python-dev gcc g++ `+
+			`sudo apt-get install -y make python3 libpq-dev gcc g++ `+
 				`software-properties-common build-essential`,
 		); err != nil {
 			t.Fatal(err)
@@ -117,7 +120,7 @@ func registerTypeORM(r registry.Registry) {
 			ctx,
 			t,
 			c,
-			"https://github.com/typeorm/typeorm.git",
+			typeORMRepo,
 			"/mnt/data1/typeorm",
 			supportedTypeORMRelease,
 			node,
@@ -195,11 +198,13 @@ func registerTypeORM(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "typeorm",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(1),
-		Leases:  registry.MetamorphicLeases,
-		Tags:    registry.Tags(`default`, `orm`),
+		Name:             "typeorm",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly, registry.ORM),
+		Tags:             registry.Tags(`default`, `orm`),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTypeORM(ctx, t, c)
 		},

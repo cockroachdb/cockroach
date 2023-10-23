@@ -43,9 +43,12 @@ func declareKeysRevertRange(
 	latchSpans *spanset.SpanSet,
 	lockSpans *lockspanset.LockSpanSet,
 	maxOffset time.Duration,
-) {
+) error {
 	args := req.(*kvpb.RevertRangeRequest)
-	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+	err := DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+	if err != nil {
+		return err
+	}
 	// We look up the range descriptor key to check whether the span
 	// is equal to the entire range for fast stats updating.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
@@ -68,6 +71,7 @@ func declareKeysRevertRange(
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 		Key: keys.MVCCRangeKeyGCKey(rs.GetRangeID()),
 	})
+	return nil
 }
 
 // isEmptyKeyTimeRange checks if the span has no writes in (since,until].
@@ -79,11 +83,11 @@ func isEmptyKeyTimeRange(
 	// that there is *a* key in the SST that is in the time range. Thus we should
 	// proceed to iteration that actually checks timestamps on each key.
 	iter, err := readWriter.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
-		KeyTypes:         storage.IterKeyTypePointsAndRanges,
-		LowerBound:       from,
-		UpperBound:       to,
-		MinTimestampHint: since.Next(), // make exclusive
-		MaxTimestampHint: until,
+		KeyTypes:     storage.IterKeyTypePointsAndRanges,
+		LowerBound:   from,
+		UpperBound:   to,
+		MinTimestamp: since.Next(), // make exclusive
+		MaxTimestamp: until,
 	})
 	if err != nil {
 		return false, err

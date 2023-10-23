@@ -51,7 +51,7 @@ type Values struct {
 	opaque interface{}
 }
 
-type classCheck int8
+type classCheck uint32
 
 const (
 	// classCheckUndefined is used when the settings.Values hasn't been
@@ -67,6 +67,14 @@ const (
 	classCheckVirtualCluster
 )
 
+func (ck *classCheck) get() classCheck {
+	return classCheck(atomic.LoadUint32((*uint32)(ck)))
+}
+
+func (ck *classCheck) set(nv classCheck) {
+	atomic.StoreUint32((*uint32)(ck), uint32(nv))
+}
+
 const numSlots = MaxSettings + 1
 
 type valuesContainer struct {
@@ -78,6 +86,7 @@ type valuesContainer struct {
 	// tenant). Reading or writing such a setting causes panics in test builds.
 	forbidden [numSlots]bool
 
+	// hasValue contains the origin of the current value of the setting.
 	hasValue [numSlots]uint32
 }
 
@@ -113,9 +122,9 @@ func (c *valuesContainer) checkForbidden(slot slotIdx) bool {
 		if buildutil.CrdbTestBuild {
 			const msg = `programming error: invalid access to SystemOnly setting %s from a virtual cluster!
 
-TIP: use class TenantWritable for settings that configure just 1
+TIP: use class ApplicationLevel for settings that configure just 1
 virtual cluster; SystemOnly for settings that affect only the shared
-storage layer; and TenantReadOnly for settings that affect the storage
+storage layer; and SystemVisible for settings that affect the storage
 layer and also must be visible to all virtual clusters.
 `
 			panic(errors.AssertionFailedf(msg, slotTable[slot].Name()))
@@ -150,20 +159,20 @@ TIP: avoid using the same cluster.Settings or settings.Value object across multi
 // SpecializeForSystemInterface marks the values container as
 // pertaining to the system interface.
 func (sv *Values) SpecializeForSystemInterface() {
-	if sv.classCheck != classCheckUndefined && sv.classCheck != classCheckSystemInterface {
+	if ck := sv.classCheck.get(); ck != classCheckUndefined && ck != classCheckSystemInterface {
 		panic(errors.AssertionFailedf(alreadySpecializedError))
 	}
-	sv.classCheck = classCheckSystemInterface
+	sv.classCheck.set(classCheckSystemInterface)
 }
 
 // SpecializeForVirtualCluster marks this container as pertaining to
 // a virtual cluster, after which use of SystemOnly values is
 // disallowed.
 func (sv *Values) SpecializeForVirtualCluster() {
-	if sv.classCheck != classCheckUndefined && sv.classCheck != classCheckVirtualCluster {
+	if ck := sv.classCheck.get(); ck != classCheckUndefined && ck != classCheckVirtualCluster {
 		panic(errors.AssertionFailedf(alreadySpecializedError))
 	}
-	sv.classCheck = classCheckVirtualCluster
+	sv.classCheck.set(classCheckVirtualCluster)
 	for slot, setting := range slotTable {
 		if setting != nil && setting.Class() == SystemOnly {
 			sv.container.forbidden[slot] = true
@@ -174,7 +183,7 @@ func (sv *Values) SpecializeForVirtualCluster() {
 // SpecializedToVirtualCluster returns true if this container is for a
 // virtual cluster (i.e. SpecializeToVirtualCluster() was called).
 func (sv *Values) SpecializedToVirtualCluster() bool {
-	return sv.classCheck == classCheckVirtualCluster
+	return sv.classCheck.get() == classCheckVirtualCluster
 }
 
 // Opaque returns the argument passed to Init.
@@ -249,11 +258,11 @@ func (sv *Values) setOnChange(slot slotIdx, fn func(ctx context.Context)) {
 // TestingCopyForVirtualCluster makes a copy of the input Values in
 // the target Values for use when initializing a server for a virtual
 // cluster in tests. This is meant to propagate overrides
-// to TenantWritable settings.
+// to ApplicationLevel settings.
 func (sv *Values) TestingCopyForVirtualCluster(input *Values) {
 	for slot := slotIdx(0); slot < slotIdx(len(registry)); slot++ {
 		s := slotTable[slot]
-		if s.Class() != TenantWritable && s.Class() != TenantReadOnly {
+		if s.Class() != ApplicationLevel && s.Class() != SystemVisible {
 			continue
 		}
 

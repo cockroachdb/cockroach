@@ -29,7 +29,7 @@ func (p *planner) alterTenantService(
 	// Even though the call to Update in startExec also
 	// performs this check, we need to do this early because otherwise
 	// the lookup of the ID from the name will fail.
-	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "set tenant service"); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "set tenant service", p.execCfg.Settings); err != nil {
 		return nil, err
 	}
 

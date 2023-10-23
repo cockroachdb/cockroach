@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -167,6 +168,18 @@ func (f *rowBasedFlow) setupProcessors(
 		if !fuse() {
 			processors = append(processors, p)
 			outputs = append(outputs, output)
+		}
+	}
+	if f.Gateway {
+		// On the gateway flow, the output of the "head" processor is the
+		// DistSQLReceiver wrapped with copyingRowReceiver. The latter is
+		// redundant because DistSQLReceiver.Push happens from the same
+		// goroutine as headProc.Next, so we don't actually need to make row
+		// copies.
+		if crr, ok := outputs[len(outputs)-1].(*copyingRowReceiver); ok {
+			outputs[len(outputs)-1] = crr.RowReceiver
+		} else if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("head processor output is not a copyingRowReceiver: %T", outputs[len(outputs)-1]))
 		}
 	}
 	return f.SetProcessorsAndOutputs(processors, outputs)

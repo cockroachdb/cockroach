@@ -37,20 +37,24 @@ import (
 func registerDrain(r registry.Registry) {
 	{
 		r.Add(registry.TestSpec{
-			Name:    "drain/early-exit-conn-wait",
-			Owner:   registry.OwnerSQLFoundations,
-			Cluster: r.MakeClusterSpec(1),
-			Leases:  registry.MetamorphicLeases,
+			Name:             "drain/early-exit-conn-wait",
+			Owner:            registry.OwnerSQLFoundations,
+			Cluster:          r.MakeClusterSpec(1),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runEarlyExitInConnectionWait(ctx, t, c)
 			},
 		})
 
 		r.Add(registry.TestSpec{
-			Name:    "drain/warn-conn-wait-timeout",
-			Owner:   registry.OwnerSQLFoundations,
-			Cluster: r.MakeClusterSpec(1),
-			Leases:  registry.MetamorphicLeases,
+			Name:             "drain/warn-conn-wait-timeout",
+			Owner:            registry.OwnerSQLFoundations,
+			Cluster:          r.MakeClusterSpec(1),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runWarningForConnWait(ctx, t, c)
 			},
@@ -60,6 +64,8 @@ func registerDrain(r registry.Registry) {
 			Name:                "drain/not-at-quorum",
 			Owner:               registry.OwnerSQLFoundations,
 			Cluster:             r.MakeClusterSpec(3),
+			CompatibleClouds:    registry.AllExceptAWS,
+			Suites:              registry.Suites(registry.Nightly),
 			Leases:              registry.MetamorphicLeases,
 			SkipPostValidations: registry.PostValidationNoDeadNodes,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -79,7 +85,7 @@ func runEarlyExitInConnectionWait(ctx context.Context, t test.Test, c cluster.Cl
 		connectionWaitDuration = 100 * time.Second
 		queryWaitDuration      = 10 * time.Second
 
-		// server.shutdown.lease_transfer_wait defaults to 5 seconds.
+		// server.shutdown.lease_transfer_iteration.timeout defaults to 5 seconds.
 		leaseTransferWaitDuration = 5 * time.Second
 
 		// pokeDuringDrainWaitDelay is the amount of time after drain begins when we
@@ -126,9 +132,9 @@ func runEarlyExitInConnectionWait(ctx context.Context, t test.Test, c cluster.Cl
 			c.Node(nodeToDrain),
 			// --drain-wait is set to a low value so that we can confirm that it
 			// gets automatically upgraded to use a higher value larger than the sum
-			// of server.shutdown.drain_wait, server.shutdown.connection_wait,
-			// server.shutdown.query_wait times two, and
-			// server.shutdown.lease_transfer_wait.
+			// of server.shutdown.initial_wait, server.shutdown.connections.timeout,
+			// server.shutdown.transactions.timeout times two, and
+			// server.shutdown.lease_transfer_iteration.timeout.
 			"./cockroach node drain --self --insecure --drain-wait=10s",
 		)
 		if err != nil {
@@ -237,7 +243,7 @@ func runWarningForConnWait(ctx context.Context, t test.Test, c cluster.Cluster) 
 
 	prepareCluster(ctx, t, c, drainWaitDuration, connectionWaitDuration, queryWaitDuration)
 
-	pgURL, err := c.ExternalPGUrl(ctx, t.L(), c.Node(nodeToDrain), "" /* tenant */)
+	pgURL, err := c.ExternalPGUrl(ctx, t.L(), c.Node(nodeToDrain), "" /* tenant */, 0 /* sqlInstance */)
 	require.NoError(t, err)
 	connNoTxn, err := pgx.Connect(ctx, pgURL[0])
 	require.NoError(t, err)
@@ -364,10 +370,10 @@ func prepareCluster(
 	defer db.Close()
 
 	waitPhasesSettingStmts := []string{
-		"SET CLUSTER SETTING server.shutdown.jobs_wait = '0s';",
-		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.drain_wait = '%fs';", drainWait.Seconds()),
-		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.query_wait = '%fs'", queryWait.Seconds()),
-		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.connection_wait = '%fs'", connectionWait.Seconds()),
+		"SET CLUSTER SETTING server.shutdown.jobs.timeout = '0s';",
+		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.initial_wait = '%fs';", drainWait.Seconds()),
+		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.transactions.timeout = '%fs'", queryWait.Seconds()),
+		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.connections.timeout = '%fs'", connectionWait.Seconds()),
 	}
 	for _, stmt := range waitPhasesSettingStmts {
 		_, err = db.ExecContext(ctx, stmt)

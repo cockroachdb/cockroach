@@ -697,14 +697,19 @@ func (node *ShowTables) Format(ctx *FmtCtx) {
 	}
 }
 
-// ShowFunctions represents a SHOW FUNCTIONS statement.
-type ShowFunctions struct {
+// ShowRoutines represents a SHOW FUNCTIONS or SHOW PROCEDURES statement.
+type ShowRoutines struct {
 	ObjectNamePrefix
+	Procedure bool
 }
 
 // Format implements the NodeFormatter interface.
-func (node *ShowFunctions) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW FUNCTIONS")
+func (node *ShowRoutines) Format(ctx *FmtCtx) {
+	if node.Procedure {
+		ctx.WriteString("SHOW PROCEDURES")
+	} else {
+		ctx.WriteString("SHOW FUNCTIONS")
+	}
 	if node.ExplicitSchema {
 		ctx.WriteString(" FROM ")
 		ctx.FormatNode(&node.ObjectNamePrefix)
@@ -1101,13 +1106,19 @@ func (node *ShowRangeForRow) Format(ctx *FmtCtx) {
 
 // ShowFingerprints represents a SHOW EXPERIMENTAL_FINGERPRINTS statement.
 type ShowFingerprints struct {
-	Table *UnresolvedObjectName
+	TenantSpec *TenantSpec
+	Table      *UnresolvedObjectName
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowFingerprints) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE ")
-	ctx.FormatNode(node.Table)
+	if node.Table != nil {
+		ctx.WriteString("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE ")
+		ctx.FormatNode(node.Table)
+	} else {
+		ctx.WriteString("SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER ")
+		ctx.FormatNode(node.TenantSpec)
+	}
 }
 
 // ShowTableStats represents a SHOW STATISTICS FOR TABLE statement.
@@ -1388,18 +1399,24 @@ func (s ShowCompletions) Format(ctx *FmtCtx) {
 
 var _ Statement = &ShowCompletions{}
 
-// ShowCreateFunction represents a SHOW CREATE FUNCTION statement.
-type ShowCreateFunction struct {
-	Name ResolvableFunctionReference
+// ShowCreateRoutine represents a SHOW CREATE FUNCTION or SHOW CREATE PROCEDURE
+// statement.
+type ShowCreateRoutine struct {
+	Name      ResolvableFunctionReference
+	Procedure bool
 }
 
 // Format implements the NodeFormatter interface.
-func (node *ShowCreateFunction) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW CREATE FUNCTION ")
+func (node *ShowCreateRoutine) Format(ctx *FmtCtx) {
+	if node.Procedure {
+		ctx.WriteString("SHOW CREATE PROCEDURE ")
+	} else {
+		ctx.WriteString("SHOW CREATE FUNCTION ")
+	}
 	ctx.FormatNode(&node.Name)
 }
 
-var _ Statement = &ShowCreateFunction{}
+var _ Statement = &ShowCreateRoutine{}
 
 // ShowCreateExternalConnections represents a SHOW CREATE EXTERNAL CONNECTION
 // statement.

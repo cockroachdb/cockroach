@@ -64,11 +64,13 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "restore/nodeShutdown/worker",
-		Owner:   registry.OwnerDisasterRecovery,
-		Cluster: sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
-		Leases:  registry.MetamorphicLeases,
-		Timeout: sp.timeout,
+		Name:             "restore/nodeShutdown/worker",
+		Owner:            registry.OwnerDisasterRecovery,
+		Cluster:          sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		Timeout:          sp.timeout,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 3
@@ -82,11 +84,13 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 	})
 
 	r.Add(registry.TestSpec{
-		Name:    "restore/nodeShutdown/coordinator",
-		Owner:   registry.OwnerDisasterRecovery,
-		Cluster: sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
-		Leases:  registry.MetamorphicLeases,
-		Timeout: sp.timeout,
+		Name:             "restore/nodeShutdown/coordinator",
+		Owner:            registry.OwnerDisasterRecovery,
+		Cluster:          sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		Timeout:          sp.timeout,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 			gatewayNode := 2
@@ -119,12 +123,14 @@ func registerRestore(r registry.Registry) {
 	withPauseSpecs.initTestName()
 
 	r.Add(registry.TestSpec{
-		Name:      withPauseSpecs.testName,
-		Owner:     registry.OwnerDisasterRecovery,
-		Benchmark: true,
-		Cluster:   withPauseSpecs.hardware.makeClusterSpecs(r, withPauseSpecs.backup.cloud),
-		Timeout:   withPauseSpecs.timeout,
-		Tags:      registry.Tags("aws"),
+		Name:             withPauseSpecs.testName,
+		Owner:            registry.OwnerDisasterRecovery,
+		Benchmark:        true,
+		Cluster:          withPauseSpecs.hardware.makeClusterSpecs(r, withPauseSpecs.backup.cloud),
+		Timeout:          withPauseSpecs.timeout,
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Nightly),
+		Tags:             registry.Tags("aws"),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 			rd := makeRestoreDriver(t, c, withPauseSpecs)
@@ -268,6 +274,8 @@ func registerRestore(r registry.Registry) {
 			hardware: makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */}),
 			backup:   makeRestoringBackupSpecs(backupSpecs{}),
 			timeout:  1 * time.Hour,
+			clouds:   registry.AllClouds,
+			suites:   registry.Suites(registry.Nightly),
 			tags:     registry.Tags("aws"),
 		},
 		{
@@ -276,6 +284,8 @@ func registerRestore(r registry.Registry) {
 			hardware: makeHardwareSpecs(hardwareSpecs{}),
 			backup:   makeRestoringBackupSpecs(backupSpecs{cloud: spec.GCE}),
 			timeout:  1 * time.Hour,
+			clouds:   registry.AllExceptAWS,
+			suites:   registry.Suites(registry.Nightly),
 		},
 		{
 			// Benchmarks using a low memory per core ratio - we don't expect ideal
@@ -283,6 +293,8 @@ func registerRestore(r registry.Registry) {
 			hardware: makeHardwareSpecs(hardwareSpecs{mem: spec.Low}),
 			backup:   makeRestoringBackupSpecs(backupSpecs{cloud: spec.GCE}),
 			timeout:  1 * time.Hour,
+			clouds:   registry.AllExceptAWS,
+			suites:   registry.Suites(registry.Nightly),
 		},
 		{
 			// Benchmarks if per node throughput remains constant if the number of
@@ -290,6 +302,8 @@ func registerRestore(r registry.Registry) {
 			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 8, ebsThroughput: 250 /* MB/s */}),
 			backup:   makeRestoringBackupSpecs(backupSpecs{}),
 			timeout:  1 * time.Hour,
+			clouds:   registry.AllClouds,
+			suites:   registry.Suites(registry.Nightly),
 			tags:     registry.Tags("aws"),
 		},
 		{
@@ -300,6 +314,8 @@ func registerRestore(r registry.Registry) {
 				zones: []string{"us-east-2b", "us-west-2b", "eu-west-1b"}}), // These zones are AWS-specific.
 			backup:  makeRestoringBackupSpecs(backupSpecs{cloud: spec.AWS}),
 			timeout: 90 * time.Minute,
+			clouds:  registry.AllClouds,
+			suites:  registry.Suites(registry.Nightly),
 			tags:    registry.Tags("aws"),
 		},
 		{
@@ -308,6 +324,8 @@ func registerRestore(r registry.Registry) {
 			hardware: makeHardwareSpecs(hardwareSpecs{cpus: 16, ebsThroughput: 250 /* MB/s */}),
 			backup:   makeRestoringBackupSpecs(backupSpecs{}),
 			timeout:  1 * time.Hour,
+			clouds:   registry.AllClouds,
+			suites:   registry.Suites(registry.Nightly),
 			tags:     registry.Tags("aws"),
 		},
 		{
@@ -316,6 +334,8 @@ func registerRestore(r registry.Registry) {
 			hardware: makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */}),
 			backup:   makeRestoringBackupSpecs(backupSpecs{backupsIncluded: 48}),
 			timeout:  1 * time.Hour,
+			clouds:   registry.AllClouds,
+			suites:   registry.Suites(registry.Nightly),
 			tags:     registry.Tags("aws"),
 		},
 		{
@@ -328,6 +348,8 @@ func registerRestore(r registry.Registry) {
 				version:  "v22.2.1",
 				workload: tpceRestore{customers: 500000}}),
 			timeout: 5 * time.Hour,
+			clouds:  registry.AllClouds,
+			suites:  registry.Suites(registry.Nightly),
 			tags:    registry.Tags("aws"),
 		},
 		{
@@ -338,6 +360,8 @@ func registerRestore(r registry.Registry) {
 				version:  "v22.2.1",
 				workload: tpceRestore{customers: 2000000}}),
 			timeout: 24 * time.Hour,
+			clouds:  registry.AllClouds,
+			suites:  registry.Suites(registry.Weekly),
 			tags:    registry.Tags("weekly", "aws-weekly"),
 		},
 		{
@@ -357,6 +381,8 @@ func registerRestore(r registry.Registry) {
 				backupProperties: "inc-count=400",
 			}),
 			timeout: 30 * time.Hour,
+			clouds:  registry.AllClouds,
+			suites:  registry.Suites(registry.Weekly),
 			tags:    registry.Tags("weekly", "aws-weekly"),
 			setUpStmts: []string{
 				`SET CLUSTER SETTING backup.restore_span.target_size = '0'`,
@@ -372,6 +398,8 @@ func registerRestore(r registry.Registry) {
 				cloud:            spec.GCE,
 			}),
 			timeout: 30 * time.Hour,
+			clouds:  registry.AllExceptAWS,
+			suites:  registry.Suites(registry.Weekly),
 			tags:    registry.Tags("weekly"),
 			setUpStmts: []string{
 				`SET CLUSTER SETTING backup.restore_span.target_size = '0'`,
@@ -384,6 +412,8 @@ func registerRestore(r registry.Registry) {
 				backupSpecs{workload: tpceRestore{customers: 1000},
 					version: "v22.2.1"}),
 			timeout:     3 * time.Hour,
+			clouds:      registry.AllExceptAWS,
+			suites:      registry.Suites(registry.Nightly),
 			fingerprint: 8445446819555404274,
 		},
 		// TODO(msbutler): add the following tests once roachperf/grafana is hooked up and old tests are
@@ -402,6 +432,8 @@ func registerRestore(r registry.Registry) {
 			// These tests measure performance. To ensure consistent perf,
 			// disable metamorphic encryption.
 			EncryptionSupport: registry.EncryptionAlwaysDisabled,
+			CompatibleClouds:  sp.clouds,
+			Suites:            sp.suites,
 			Tags:              sp.tags,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
@@ -420,7 +452,14 @@ func registerRestore(r registry.Registry) {
 					if err != nil {
 						return errors.Wrapf(err, "failure to run setup statements")
 					}
-					for _, stmt := range sp.setUpStmts {
+					// Run set-up SQL statements. In particular, enable collecting CPU
+					// profiles automatically if CPU usage is high. Historically, we
+					// observed CPU going as high as 100%, e.g. see issue #111160.
+					// TODO(pavelkalinnikov): enable CPU profiling in all roachtests.
+					for _, stmt := range append(sp.setUpStmts,
+						"SET CLUSTER SETTING server.cpu_profile.duration = '2s'",
+						"SET CLUSTER SETTING server.cpu_profile.cpu_usage_combined_threshold = 80",
+					) {
 						_, err := db.Exec(stmt)
 						if err != nil {
 							return errors.Wrapf(err, "error executing setup stmt [%s]", stmt)
@@ -490,22 +529,28 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry, backupCloud string
 		addWorkloadNode++
 	}
 	if len(hw.zones) > 0 {
-		clusterOpts = append(clusterOpts, spec.Zones(strings.Join(hw.zones, ",")))
+		// Each test is set up to run on one specific cloud, so it's ok that the
+		// zones will only make sense for one of them.
+		// TODO(radu): clean this up.
+		clusterOpts = append(clusterOpts, spec.GCEZones(strings.Join(hw.zones, ",")))
+		clusterOpts = append(clusterOpts, spec.AWSZones(strings.Join(hw.zones, ",")))
 		clusterOpts = append(clusterOpts, spec.Geo())
+	}
+	if hw.ebsThroughput != 0 {
+		clusterOpts = append(clusterOpts, spec.AWSVolumeThroughput(hw.ebsThroughput))
 	}
 	s := r.MakeClusterSpec(hw.nodes+addWorkloadNode, clusterOpts...)
 
-	if hw.ebsThroughput != 0 {
-		s.AWSVolumeThroughput = hw.ebsThroughput
-	}
-
-	if backupCloud == spec.AWS && s.Cloud == spec.AWS && s.VolumeSize != 0 {
+	if backupCloud == spec.AWS && s.VolumeSize != 0 {
 		// Work around an issue that RAID0s local NVMe and GP3 storage together:
 		// https://github.com/cockroachdb/cockroach/issues/98783.
 		//
 		// TODO(srosenberg): Remove this workaround when 98783 is addressed.
-		s.InstanceType, _ = spec.AWSMachineType(s.CPUs, s.Mem, vm.ArchAMD64)
-		s.InstanceType = strings.Replace(s.InstanceType, "d.", ".", 1)
+		// TODO(miral): This now returns an error instead of panicking, so even though
+		// we haven't panicked here before, we should handle the error. Moot if this is
+		// removed as per TODO above.
+		s.AWS.MachineType, _, _ = spec.SelectAWSMachineType(s.CPUs, s.Mem, s.PreferLocalSSD && s.VolumeSize == 0, vm.ArchAMD64)
+		s.AWS.MachineType = strings.Replace(s.AWS.MachineType, "d.", ".", 1)
 		s.Arch = vm.ArchAMD64
 	}
 	return s
@@ -772,6 +817,8 @@ type restoreSpecs struct {
 	hardware hardwareSpecs
 	backup   backupSpecs
 	timeout  time.Duration
+	clouds   registry.CloudSet
+	suites   registry.SuiteSet
 	tags     map[string]struct{}
 
 	// namePrefix appears in the name of the roachtest, i.e. `restore/{prefix}/{config}`.
@@ -818,20 +865,13 @@ func makeRestoreDriver(t test.Test, c cluster.Cluster, sp restoreSpecs) restoreD
 }
 
 func (rd *restoreDriver) prepareCluster(ctx context.Context) {
-	if rd.c.Spec().Cloud != rd.sp.backup.cloud {
+	if rd.c.Cloud() != rd.sp.backup.cloud {
 		// For now, only run the test on the cloud provider that also stores the backup.
 		rd.t.Skipf("test configured to run on %s", rd.sp.backup.cloud)
 	}
 	rd.c.Put(ctx, rd.t.Cockroach(), "./cockroach")
 	rd.c.Start(ctx, rd.t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 	rd.getAOST(ctx)
-
-	if rand.Intn(2) == 0 {
-		rd.t.L().Printf("Running non-default makeSimpleImportSpans")
-		conn := rd.c.Conn(ctx, rd.t.L(), 1)
-		_, err := conn.ExecContext(ctx, "SET CLUSTER SETTING bulkio.restore.simple_import_spans.enabled = true")
-		require.NoError(rd.t, err)
-	}
 }
 
 // getAOST gets the AOST to use in the restore cmd.
@@ -857,7 +897,7 @@ func (rd *restoreDriver) run(ctx context.Context, target string) error {
 	if err != nil {
 		return errors.Wrapf(err, "failed to connect to node 1; running restore")
 	}
-	_, err = conn.ExecContext(ctx, rd.restoreCmd(target, ""))
+	_, err = conn.ExecContext(ctx, rd.restoreCmd(target, "WITH unsafe_restore_incompatible_version"))
 	return err
 }
 
@@ -869,7 +909,7 @@ func (rd *restoreDriver) runDetached(
 		return 0, errors.Wrapf(err, "failed to connect to node %d; running restore detached", node)
 	}
 	if _, err = db.ExecContext(ctx, rd.restoreCmd(target,
-		"WITH DETACHED")); err != nil {
+		"WITH DETACHED, unsafe_restore_incompatible_version")); err != nil {
 		return 0, err
 	}
 	var jobID jobspb.JobID

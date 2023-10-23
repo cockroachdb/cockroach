@@ -223,15 +223,12 @@ func NewReplicationHelper(
 	sqlDB.ExecMultiple(t,
 		// Required for replication stremas to work.
 		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
-		`SET CLUSTER SETTING cross_cluster_replication.enabled = true`,
+		`SET CLUSTER SETTING physical_replication.enabled = true`,
 
 		// Speeds up the tests a bit.
 		`SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'`,
-		`ALTER TENANT ALL SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'`,
 		`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'`,
-		`ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'`,
 		`SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms'`,
-		`ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms'`,
 		`SET CLUSTER SETTING stream_replication.min_checkpoint_frequency = '10ms'`)
 
 	// Sink to read data from.

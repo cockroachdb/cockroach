@@ -2953,7 +2953,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 	// Now add the second replica.
 	tc.AddVotersOrFatal(t, splitKey, tc.Target(1))
 
-	if tc.GetFirstStoreFromServer(t, 1).LookupReplica(roachpb.RKey(key)).GetMaxBytes() == 0 {
+	if tc.GetFirstStoreFromServer(t, 1).LookupReplica(roachpb.RKey(key)).GetMaxBytes(ctx) == 0 {
 		t.Error("Range MaxBytes is not set after snapshot applied")
 	}
 	// Once it catches up, the effects of increment commands can be seen.
@@ -5652,7 +5652,7 @@ func TestElectionAfterRestart(t *testing.T) {
 								return
 							}
 
-							cur := replica.State(ctx).LastIndex
+							cur := replica.GetLastIndex()
 							if lastIndex == 0 {
 								lastIndex = cur
 							}

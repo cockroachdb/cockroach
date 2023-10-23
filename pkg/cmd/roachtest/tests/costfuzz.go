@@ -45,15 +45,17 @@ func registerCostFuzz(r registry.Registry) {
 			clusterSpec = r.MakeClusterSpec(1)
 		}
 		r.Add(registry.TestSpec{
-			Name:            fmt.Sprintf("costfuzz/%s", setupName),
-			Owner:           registry.OwnerSQLQueries,
-			Timeout:         timeOut,
-			RedactResults:   redactResults,
-			RequiresLicense: true,
-			Tags:            nil,
-			Cluster:         clusterSpec,
-			Leases:          registry.MetamorphicLeases,
-			NativeLibs:      registry.LibGEOS,
+			Name:             fmt.Sprintf("costfuzz/%s", setupName),
+			Owner:            registry.OwnerSQLQueries,
+			Timeout:          timeOut,
+			RedactResults:    redactResults,
+			RequiresLicense:  true,
+			Tags:             nil,
+			Cluster:          clusterSpec,
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
+			NativeLibs:       registry.LibGEOS,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				// When running in CI, only allow running workload-replay in the private roachtest,
 				// which has the required credentials.

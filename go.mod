@@ -102,20 +102,18 @@ require (
 	github.com/blevesearch/snowballstem v0.9.0
 	github.com/buchgr/bazel-remote v1.3.3
 	github.com/bufbuild/buf v0.56.0
-	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/charmbracelet/bubbles v0.15.1-0.20230123181021-a6a12c4a31eb
 	github.com/client9/misspell v0.3.4
 	github.com/cockroachdb/apd/v3 v3.2.1
-	github.com/cockroachdb/circuitbreaker v2.2.2-0.20190114160014-a614b14ccf63+incompatible
 	github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292
 	github.com/cockroachdb/cockroach-go/v2 v2.3.5
 	github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548
 	github.com/cockroachdb/datadriven v1.0.3-0.20230801171734-e384cf455877
-	github.com/cockroachdb/errors v1.10.1
+	github.com/cockroachdb/errors v1.11.1
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.19.0
 	github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b
-	github.com/cockroachdb/pebble v0.0.0-20230920181003-7d98bc363fb2
+	github.com/cockroachdb/pebble v0.0.0-20231009150004-a678d0968383
 	github.com/cockroachdb/redact v1.1.5
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b
@@ -221,7 +219,6 @@ require (
 	github.com/zabawaba99/go-gitignore v0.0.0-20200117185801-39e6bddfb292
 	go.etcd.io/raft/v3 v3.0.0-20230717153924-72a6e6c9f3ee
 	go.opentelemetry.io/otel v1.3.0
-	go.opentelemetry.io/otel/exporters/jaeger v1.0.0-RC3
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.3.0
 	go.opentelemetry.io/otel/exporters/zipkin v1.0.0-RC3
 	go.opentelemetry.io/otel/sdk v1.3.0
@@ -280,7 +277,6 @@ require (
 	github.com/eapache/go-resiliency v1.3.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20230111030713-bf00bc1b83b6 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
-	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a // indirect
 	github.com/fatih/structs v1.1.0 // indirect
 	github.com/felixge/httpsnoop v1.0.1 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
@@ -421,7 +417,6 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/opennota/wd v0.0.0-20180911144301-b446539ab1e7 // indirect
-	github.com/peterbourgon/g2s v0.0.0-20170223122336-d4e7ad98afea // indirect
 	// The indicated commit is required on top of v1.0.0-RC3 because
 	// it fixes an import comment that otherwise breaks our prereqs tool.
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.3.0 // indirect

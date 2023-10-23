@@ -107,11 +107,6 @@ type AuthorizationAccessor interface {
 	// HasAdminRole checks if the current session's user has admin role.
 	HasAdminRole(ctx context.Context) (bool, error)
 
-	// RequireAdminRole is a wrapper on top of HasAdminRole.
-	// It errors if HasAdminRole errors or if the user isn't a super-user.
-	// Includes the named action in the error message.
-	RequireAdminRole(ctx context.Context, action string) error
-
 	// MemberOfWithAdminOption looks up all the roles (direct and indirect) that 'member' is a member
 	// of and returns a map of role -> isAdmin.
 	MemberOfWithAdminOption(ctx context.Context, member username.SQLUsername) (map[username.SQLUsername]bool, error)
@@ -508,22 +503,6 @@ func (p *planner) HasAdminRole(ctx context.Context) (bool, error) {
 	return p.UserHasAdminRole(ctx, p.User())
 }
 
-// RequireAdminRole implements the AuthorizationAccessor interface.
-// Requires a valid transaction to be open.
-func (p *planner) RequireAdminRole(ctx context.Context, action string) error {
-	ok, err := p.HasAdminRole(ctx)
-
-	if err != nil {
-		return err
-	}
-	if !ok {
-		// raise error if user is not a super-user
-		return pgerror.Newf(pgcode.InsufficientPrivilege,
-			"only users with the admin role are allowed to %s", action)
-	}
-	return nil
-}
-
 // MemberOfWithAdminOption is a wrapper around the MemberOfWithAdminOption
 // method.
 func (p *planner) MemberOfWithAdminOption(
@@ -677,7 +656,7 @@ var defaultSingleQueryForRoleMembershipCache = util.ConstantWithMetamorphicTestB
 )
 
 var useSingleQueryForRoleMembershipCache = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.auth.resolve_membership_single_scan.enabled",
 	"determines whether to populate the role membership cache with a single scan",
 	defaultSingleQueryForRoleMembershipCache,
@@ -928,7 +907,7 @@ func (p *planner) checkCanAlterToNewOwner(
 	ctx context.Context, desc catalog.MutableDescriptor, newOwner username.SQLUsername,
 ) error {
 	// Make sure the newOwner exists.
-	roleExists, err := RoleExists(ctx, p.InternalSQLTxn(), newOwner)
+	roleExists, err := p.RoleExists(ctx, newOwner)
 	if err != nil {
 		return err
 	}
@@ -1022,25 +1001,35 @@ func (p *planner) HasOwnershipOnSchema(
 	return hasOwnership, nil
 }
 
-// HasViewActivityOrViewActivityRedactedRole implements the AuthorizationAccessor interface.
+// HasViewActivityOrViewActivityRedactedRole is part of the eval.SessionAccessor interface.
+// It returns 2 boolean values - the first indicating if we have either privilege requested,
+// and the second indicating  whether or not it was VIEWACTIVITYREDACTED.
 // Requires a valid transaction to be open.
-func (p *planner) HasViewActivityOrViewActivityRedactedRole(ctx context.Context) (bool, error) {
+func (p *planner) HasViewActivityOrViewActivityRedactedRole(
+	ctx context.Context,
+) (hasPrivs bool, shouldRedact bool, err error) {
 	if hasAdmin, err := p.HasAdminRole(ctx); err != nil {
-		return hasAdmin, err
+		return hasAdmin, false, err
 	} else if hasAdmin {
-		return true, nil
+		return true, false, nil
 	}
-	if hasView, err := p.HasViewActivity(ctx); err != nil {
-		return false, err
-	} else if hasView {
-		return true, nil
-	}
+
+	// We check for VIEWACTIVITYREDACTED first as users can have both
+	// VIEWACTIVITY and VIEWACTIVITYREDACTED, where VIEWACTIVITYREDACTED
+	// takes precedence (i.e. we must redact senstitive values).
 	if hasViewRedacted, err := p.HasViewActivityRedacted(ctx); err != nil {
-		return false, err
+		return false, false, err
 	} else if hasViewRedacted {
-		return true, nil
+		return true, true, nil
 	}
-	return false, nil
+
+	if hasView, err := p.HasViewActivity(ctx); err != nil {
+		return false, false, err
+	} else if hasView {
+		return true, false, nil
+	}
+
+	return false, false, nil
 }
 
 func (p *planner) HasViewActivityRedacted(ctx context.Context) (bool, error) {
@@ -1056,17 +1045,17 @@ func insufficientPrivilegeError(
 ) error {
 	// For consistency Postgres, we report the error message as not
 	// having a privilege on the object type "relation".
+	objTypeStr := object.GetObjectTypeString()
 	objType := object.GetObjectType()
-	typeForError := string(objType)
 	if objType == privilege.VirtualTable || objType == privilege.Table || objType == privilege.Sequence {
-		typeForError = "relation"
+		objTypeStr = "relation"
 	}
 
 	// If kind is 0 (no-privilege is 0), we return that the user has no privileges.
 	if kind == 0 {
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"user %s has no privileges on %s %s",
-			user, typeForError, object.GetName())
+			user, objTypeStr, object.GetName())
 	}
 
 	// Make a slightly different message for the global privilege object so that
@@ -1079,7 +1068,7 @@ func insufficientPrivilegeError(
 
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s does not have %s privilege on %s %s",
-		user, kind, typeForError, object.GetName())
+		user, kind, objTypeStr, object.GetName())
 }
 
 // IsInsufficientPrivilegeError returns true if the error is a pgerror

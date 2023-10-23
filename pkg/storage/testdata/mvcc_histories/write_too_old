@@ -9,6 +9,7 @@ with t=A
   put  k=a v=abc resolve
   txn_remove
 ----
+resolve_intent: "a" -> resolved key = true
 >> at end:
 data: "a"/44.000000000,0 -> /BYTES/abc
 
@@ -28,6 +29,7 @@ error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestam
 run ok
 resolve_intent t=A k=a status=ABORTED
 ----
+resolve_intent: "a" -> resolved key = false
 >> at end:
 data: "a"/44.000000000,0 -> /BYTES/abc
 
@@ -49,5 +51,6 @@ error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestam
 run ok
 resolve_intent t=B k=a status=ABORTED
 ----
+resolve_intent: "a" -> resolved key = false
 >> at end:
 data: "a"/44.000000000,0 -> /BYTES/abc

@@ -34,6 +34,7 @@ crdb_internal  cluster_transaction_statistics          table  node  NULL  NULL
 crdb_internal  cluster_transactions                    table  node  NULL  NULL
 crdb_internal  cluster_txn_execution_insights          table  node  NULL  NULL
 crdb_internal  create_function_statements              table  node  NULL  NULL
+crdb_internal  create_procedure_statements             table  node  NULL  NULL
 crdb_internal  create_schema_statements                table  node  NULL  NULL
 crdb_internal  create_statements                       table  node  NULL  NULL
 crdb_internal  create_type_statements                  table  node  NULL  NULL
@@ -324,7 +325,7 @@ ClusterID
 Organization
 Version
 Channel
-
+VirtualClusterName
 
 # The validity of the rows in this table are tested elsewhere; we merely assert the columns.
 query ITTTTTTTTTTTRTTIITTITT colnames
@@ -530,16 +531,26 @@ SELECT * FROM crdb_internal.ranges_no_leases WHERE range_id < 0
 ----
 range_id  start_key  start_pretty  end_key  end_pretty  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until
 
-query TTTBTTTTTIITITTTTTITT colnames
+query TTTBTTTTTIITITTTTTTTTTTTTITT colnames
+SELECT * FROM crdb_internal.cluster_execution_insights WHERE query = ''
+----
+session_id  txn_id  txn_fingerprint_id  stmt_id  stmt_fingerprint_id  problem  causes  query  status  start_time  end_time  full_scan  user_name  app_name  database_name  plan_gist  rows_read  rows_written  priority  retries  last_retry_reason  exec_node_ids  contention  index_recommendations  implicit_txn  cpu_sql_nanos  error_code  last_error_redactable
+
+query TTTBTTTTTIITITTTTTTTTTTTTITT colnames
+SELECT * FROM crdb_internal.node_execution_insights WHERE query = ''
+----
+session_id  txn_id  txn_fingerprint_id  stmt_id  stmt_fingerprint_id  problem  causes  query  status  start_time  end_time  full_scan  user_name  app_name  database_name  plan_gist  rows_read  rows_written  priority  retries  last_retry_reason  exec_node_ids  contention  index_recommendations  implicit_txn  cpu_sql_nanos  error_code  last_error_redactable
+
+query TTTBTTTTTIITITTTTTITTT colnames
 SELECT * FROM crdb_internal.cluster_txn_execution_insights WHERE query = ''
 ----
-txn_id  txn_fingerprint_id  query  implicit_txn  session_id  start_time  end_time  user_name  app_name  rows_read  rows_written  priority  retries  last_retry_reason  contention  problems  causes  stmt_execution_ids cpu_sql_nanos last_error_code status
+txn_id  txn_fingerprint_id  query  implicit_txn  session_id  start_time  end_time  user_name  app_name  rows_read  rows_written  priority  retries  last_retry_reason  contention  problems  causes  stmt_execution_ids  cpu_sql_nanos  last_error_code  last_error_redactable  status
 
 
-query TTTBTTTTTIITITTTTTITT colnames
+query TTTBTTTTTIITITTTTTITTT colnames
 SELECT * FROM crdb_internal.node_txn_execution_insights WHERE query = ''
 ----
-txn_id  txn_fingerprint_id  query  implicit_txn  session_id  start_time  end_time  user_name  app_name  rows_read  rows_written  priority  retries  last_retry_reason  contention  problems  causes  stmt_execution_ids cpu_sql_nanos last_error_code status
+txn_id  txn_fingerprint_id  query  implicit_txn  session_id  start_time  end_time  user_name  app_name  rows_read  rows_written  priority  retries  last_retry_reason  contention  problems  causes  stmt_execution_ids cpu_sql_nanos last_error_code last_error_redactable status
 
 
 statement ok
@@ -555,7 +566,6 @@ INSERT INTO system.zones (id, config) VALUES
   ($testdb_foo_id, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
   ($schema_bar_id, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0))
 
-skipif config local-mixed-22.2-23.1
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----
@@ -747,7 +757,7 @@ select crdb_internal.set_vmodule('')
 query error insufficient privilege
 select crdb_internal.get_vmodule()
 
-query error pq: only users with the admin role are allowed to access the node runtime information
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.node_runtime_info
 
 query error pq: only users with the VIEWACTIVITY or VIEWACTIVITYREDACTED or ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases
@@ -756,28 +766,28 @@ select * from crdb_internal.ranges
 query error pq: only users with the VIEWACTIVITY or VIEWACTIVITYREDACTED or ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases
 SHOW RANGES FROM TABLE foo
 
-query error pq: only users with the admin role are allowed to read crdb_internal.gossip_nodes
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.gossip_nodes
 
-query error pq: only users with the admin role are allowed to read crdb_internal.gossip_liveness
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.gossip_liveness
 
-query error pq: only users with the admin role are allowed to read crdb_internal.node_metrics
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.node_metrics
 
-query error pq: only users with the admin role are allowed to read crdb_internal.kv_node_status
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.kv_node_status
 
-query error pq: only users with the admin role are allowed to read crdb_internal.kv_store_status
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.kv_store_status
 
-query error pq: only users with the admin role are allowed to read crdb_internal.gossip_alerts
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.gossip_alerts
 
-query error pq: only users with the admin role are allowed to read crdb_internal.node_inflight_trace_spans
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 select * from crdb_internal.node_inflight_trace_spans
 
-query error pq: crdb_internal.check_consistency requires admin privileges
+query error user testuser does not have REPAIRCLUSTERMETADATA system privilege
 SELECT * FROM crdb_internal.check_consistency(true, b'\x02', b'\x04')
 
 # Anyone can see the executable version.
@@ -1271,13 +1281,11 @@ true
 
 user root
 
-skipif config local-mixed-22.2-23.1
 statement ok
 GRANT SYSTEM MODIFYSQLCLUSTERSETTING TO testuser
 
 user testuser
 
-skipif config local-mixed-22.2-23.1
 query T
 SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics.reporting.enabled')
 ----
@@ -1288,7 +1296,6 @@ user root
 statement ok
 REVOKE SYSTEM VIEWCLUSTERSETTING FROM testuser
 
-skipif config local-mixed-22.2-23.1
 statement ok
 REVOKE SYSTEM MODIFYSQLCLUSTERSETTING FROM testuser
 
@@ -1344,19 +1351,16 @@ awaitstatement sleepQuery
 
 user root
 
-skipif config local-mixed-22.2-23.1
 statement ok
 GRANT SYSTEM MODIFYSQLCLUSTERSETTING TO testuser
 
 user testuser
 
-skipif config local-mixed-22.2-23.1
 query T
 SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('sql.defaults.zigzag_join.enabled')
 ----
 false
 
-skipif config local-mixed-22.2-23.1
 query T
 SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics.reporting.enabled')
 ----
@@ -1364,7 +1368,6 @@ SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics
 
 user root
 
-skipif config local-mixed-22.2-23.1
 statement ok
 REVOKE SYSTEM MODIFYSQLCLUSTERSETTING FROM testuser
 
@@ -1433,3 +1436,222 @@ CREATE TABLE t76710_1 AS SELECT * FROM crdb_internal.statement_statistics;
 
 statement ok
 CREATE MATERIALIZED VIEW t76710_2 AS SELECT fingerprint_id FROM crdb_internal.cluster_statement_statistics;
+
+subtest end
+
+
+subtest create_function_statements
+
+statement ok
+CREATE FUNCTION f(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE FUNCTION f(STRING, b INT) RETURNS STRING STRICT IMMUTABLE LEAKPROOF LANGUAGE SQL AS $$ SELECT 'hello' $$;
+
+# Add a procedure to ensure that it doesn't show up in the
+# create_function_statements table.
+skipif config local-mixed-23.1
+statement ok
+CREATE PROCEDURE f(BOOL) LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE SCHEMA sc;
+
+statement
+CREATE FUNCTION sc.f2(STRING) RETURNS STRING LANGUAGE SQL AS $$ SELECT 'hello' $$;
+
+query TTTT
+SELECT database_name, schema_name, function_name, create_statement
+FROM crdb_internal.create_function_statements
+WHERE function_name IN ('f', 'f2')
+ORDER BY function_id;
+----
+test  public  f   CREATE FUNCTION public.f(IN INT8)
+                    RETURNS INT8
+                    VOLATILE
+                    NOT LEAKPROOF
+                    CALLED ON NULL INPUT
+                    LANGUAGE SQL
+                    AS $$
+                    SELECT 1;
+                  $$
+test  public  f   CREATE FUNCTION public.f(IN STRING, IN b INT8)
+                    RETURNS STRING
+                    IMMUTABLE
+                    LEAKPROOF
+                    STRICT
+                    LANGUAGE SQL
+                    AS $$
+                    SELECT 'hello';
+                  $$
+test  sc      f2  CREATE FUNCTION sc.f2(IN STRING)
+                    RETURNS STRING
+                    VOLATILE
+                    NOT LEAKPROOF
+                    CALLED ON NULL INPUT
+                    LANGUAGE SQL
+                    AS $$
+                    SELECT 'hello';
+                  $$
+
+statement ok
+CREATE DATABASE test_cross_db;
+USE test_cross_db;
+CREATE FUNCTION f_cross_db() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+USE test;
+
+query TTTT
+SELECT database_name, schema_name, function_name, create_statement
+FROM "".crdb_internal.create_function_statements
+WHERE function_name IN ('f', 'f2', 'f_cross_db')
+ORDER BY function_id;
+----
+test           public  f           CREATE FUNCTION public.f(IN INT8)
+                                     RETURNS INT8
+                                     VOLATILE
+                                     NOT LEAKPROOF
+                                     CALLED ON NULL INPUT
+                                     LANGUAGE SQL
+                                     AS $$
+                                     SELECT 1;
+                                   $$
+test           public  f           CREATE FUNCTION public.f(IN STRING, IN b INT8)
+                                     RETURNS STRING
+                                     IMMUTABLE
+                                     LEAKPROOF
+                                     STRICT
+                                     LANGUAGE SQL
+                                     AS $$
+                                     SELECT 'hello';
+                                   $$
+test           sc      f2          CREATE FUNCTION sc.f2(IN STRING)
+                                     RETURNS STRING
+                                     VOLATILE
+                                     NOT LEAKPROOF
+                                     CALLED ON NULL INPUT
+                                     LANGUAGE SQL
+                                     AS $$
+                                     SELECT 'hello';
+                                   $$
+test_cross_db  public  f_cross_db  CREATE FUNCTION public.f_cross_db()
+                                     RETURNS INT8
+                                     VOLATILE
+                                     NOT LEAKPROOF
+                                     CALLED ON NULL INPUT
+                                     LANGUAGE SQL
+                                     AS $$
+                                     SELECT 1;
+                                   $$
+
+skipif config local-mixed-23.1
+statement ok
+DROP PROCEDURE f(BOOL);
+
+statement ok
+DROP FUNCTION f(INT);
+DROP FUNCTION f(STRING, INT);
+DROP FUNCTION sc.f2(STRING);
+DROP SCHEMA sc;
+USE test_cross_db;
+DROP FUNCTION f_cross_db;
+USE test;
+DROP DATABASE test_cross_db;
+
+subtest end
+
+
+subtest create_procedure_statements
+
+skipif config local-mixed-23.1
+statement ok
+CREATE PROCEDURE p(INT) LANGUAGE SQL AS $$ SELECT 1 $$;
+
+skipif config local-mixed-23.1
+statement ok
+CREATE PROCEDURE p(STRING, b INT) LANGUAGE SQL AS $$ SELECT 'hello' $$;
+
+# Add a function to ensure that it doesn't show up in the
+# create_procedure_statements table.
+skipif config local-mixed-23.1
+statement ok
+CREATE FUNCTION p(BOOL) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+skipif config local-mixed-23.1
+statement ok
+CREATE SCHEMA sc;
+
+skipif config local-mixed-23.1
+statement
+CREATE PROCEDURE sc.p2(STRING) LANGUAGE SQL AS $$ SELECT 'hello' $$;
+
+skipif config local-mixed-23.1
+query ITITITT
+SELECT database_id, database_name, schema_id, schema_name, procedure_id, procedure_name, create_statement
+FROM crdb_internal.create_procedure_statements
+WHERE procedure_name IN ('p', 'p2')
+ORDER BY procedure_id;
+----
+104  test  105  public  137  p   CREATE PROCEDURE public.p(IN INT8)
+                                   LANGUAGE SQL
+                                   AS $$
+                                   SELECT 1;
+                                 $$
+104  test  105  public  138  p   CREATE PROCEDURE public.p(IN STRING, IN b INT8)
+                                   LANGUAGE SQL
+                                   AS $$
+                                   SELECT 'hello';
+                                 $$
+104  test  140  sc      141  p2  CREATE PROCEDURE sc.p2(IN STRING)
+                                   LANGUAGE SQL
+                                   AS $$
+                                   SELECT 'hello';
+                                 $$
+
+skipif config local-mixed-23.1
+statement ok
+CREATE DATABASE test_cross_db;
+USE test_cross_db;
+CREATE PROCEDURE p_cross_db() LANGUAGE SQL AS $$ SELECT 1 $$;
+USE test;
+
+skipif config local-mixed-23.1
+query ITITITT
+SELECT database_id, database_name, schema_id, schema_name, procedure_id, procedure_name, create_statement
+FROM "".crdb_internal.create_procedure_statements
+WHERE procedure_name IN ('p', 'p2', 'p_cross_db')
+ORDER BY procedure_id;
+----
+104  test           105  public  137  p           CREATE PROCEDURE public.p(IN INT8)
+                                                    LANGUAGE SQL
+                                                    AS $$
+                                                    SELECT 1;
+                                                  $$
+104  test           105  public  138  p           CREATE PROCEDURE public.p(IN STRING, IN b INT8)
+                                                    LANGUAGE SQL
+                                                    AS $$
+                                                    SELECT 'hello';
+                                                  $$
+104  test           140  sc      141  p2          CREATE PROCEDURE sc.p2(IN STRING)
+                                                    LANGUAGE SQL
+                                                    AS $$
+                                                    SELECT 'hello';
+                                                  $$
+142  test_cross_db  143  public  144  p_cross_db  CREATE PROCEDURE public.p_cross_db()
+                                                    LANGUAGE SQL
+                                                    AS $$
+                                                    SELECT 1;
+                                                  $$
+
+skipif config local-mixed-23.1
+statement ok
+DROP PROCEDURE p(INT);
+DROP PROCEDURE p(STRING, INT);
+DROP FUNCTION p(BOOL);
+DROP PROCEDURE sc.p2(STRING);
+DROP SCHEMA sc;
+USE test_cross_db;
+DROP PROCEDURE p_cross_db;
+USE test;
+DROP DATABASE test_cross_db;
+
+subtest end

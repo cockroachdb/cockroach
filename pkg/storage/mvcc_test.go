@@ -125,6 +125,7 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 		RangeKeyBytes:     1,
 		RangeValCount:     1,
 		RangeValBytes:     1,
+		LockBytes:         1,
 		LockCount:         1,
 		LockAge:           1,
 		GCBytesAge:        1,
@@ -160,7 +161,7 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 	// Run some checks for Forward.
 	goldDelta := enginepb.MVCCStats{
 		KeyBytes:        42,
-		IntentCount:     11,
+		LockCount:       11,
 		LastUpdateNanos: 1e9 - 1000,
 	}
 	delta := goldDelta
@@ -2302,7 +2303,7 @@ func TestMVCCInitPutWithTxn(t *testing.T) {
 	txnCommit := txn
 	txnCommit.Status = roachpb.COMMITTED
 	txnCommit.WriteTimestamp = clock.Now().Add(1, 0)
-	_, _, _, err = MVCCResolveWriteIntent(ctx, engine, nil,
+	_, _, _, _, err = MVCCResolveWriteIntent(ctx, engine, nil,
 		roachpb.MakeLockUpdate(&txnCommit, roachpb.Span{Key: testKey1}),
 		MVCCResolveWriteIntentOptions{})
 	require.NoError(t, err)
@@ -2595,7 +2596,7 @@ func TestMVCCResolveTxn(t *testing.T) {
 	}
 
 	// Resolve will write with txn1's timestamp which is 0,1.
-	if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil,
+	if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil,
 		roachpb.MakeLockUpdate(txn1Commit, roachpb.Span{Key: testKey1}),
 		MVCCResolveWriteIntentOptions{}); err != nil {
 		t.Fatal(err)
@@ -2635,7 +2636,7 @@ func TestMVCCResolveNewerIntent(t *testing.T) {
 	}
 
 	// Resolve will succeed but should remove the intent.
-	if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil,
+	if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil,
 		roachpb.MakeLockUpdate(txn1Commit, roachpb.Span{Key: testKey1}),
 		MVCCResolveWriteIntentOptions{}); err != nil {
 		t.Fatal(err)
@@ -2793,7 +2794,7 @@ func TestMVCCResolveIntentTxnTimestampMismatch(t *testing.T) {
 
 	// A bug (see #7654) caused intents to just stay where they were instead
 	// of being moved forward in the situation set up above.
-	if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil, intent, MVCCResolveWriteIntentOptions{}); err != nil {
+	if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil, intent, MVCCResolveWriteIntentOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2956,7 +2957,7 @@ func TestMVCCAbortTxn(t *testing.T) {
 	txn1AbortWithTS := txn1Abort.Clone()
 	txn1AbortWithTS.WriteTimestamp = hlc.Timestamp{Logical: 1}
 
-	if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil,
+	if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil,
 		roachpb.MakeLockUpdate(txn1AbortWithTS, roachpb.Span{Key: testKey1}),
 		MVCCResolveWriteIntentOptions{},
 	); err != nil {
@@ -2995,7 +2996,7 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 	txn1AbortWithTS := txn1Abort.Clone()
 	txn1AbortWithTS.WriteTimestamp = hlc.Timestamp{WallTime: 2}
 
-	if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil,
+	if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil,
 		roachpb.MakeLockUpdate(txn1AbortWithTS, roachpb.Span{Key: testKey1}),
 		MVCCResolveWriteIntentOptions{},
 	); err != nil {
@@ -3059,7 +3060,7 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 	txne2Commit := txne2
 	txne2Commit.Status = roachpb.COMMITTED
 	txne2Commit.WriteTimestamp = hlc.Timestamp{WallTime: 1}
-	_, _, _, err = MVCCResolveWriteIntent(ctx, engine, nil,
+	_, _, _, _, err = MVCCResolveWriteIntent(ctx, engine, nil,
 		roachpb.MakeLockUpdate(&txne2Commit, roachpb.Span{Key: testKey1}),
 		MVCCResolveWriteIntentOptions{})
 	require.NoError(t, err)
@@ -3314,7 +3315,7 @@ func TestMVCCGetWithPushedTimestamp(t *testing.T) {
 	}
 	// Resolve the intent, pushing its timestamp forward.
 	txn := makeTxn(*txn1, hlc.Timestamp{WallTime: 1})
-	if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil,
+	if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil,
 		roachpb.MakeLockUpdate(txn, roachpb.Span{Key: testKey1}),
 		MVCCResolveWriteIntentOptions{}); err != nil {
 		t.Fatal(err)
@@ -3342,7 +3343,7 @@ func TestMVCCResolveWithDiffEpochs(t *testing.T) {
 	if err := MVCCPut(ctx, engine, testKey2, txn1e2.ReadTimestamp, value2, MVCCWriteOptions{Txn: txn1e2}); err != nil {
 		t.Fatal(err)
 	}
-	numKeys, _, _, _, err := MVCCResolveWriteIntentRange(ctx, engine, nil,
+	numKeys, _, _, _, _, err := MVCCResolveWriteIntentRange(ctx, engine, nil,
 		roachpb.MakeLockUpdate(txn1e2Commit, roachpb.Span{Key: testKey1, EndKey: testKey2.Next()}),
 		MVCCResolveWriteIntentRangeOptions{MaxKeys: 2})
 	if err != nil {
@@ -3396,7 +3397,7 @@ func TestMVCCResolveWithUpdatedTimestamp(t *testing.T) {
 	// Resolve with a higher commit timestamp -- this should rewrite the
 	// intent when making it permanent.
 	txn := makeTxn(*txn1Commit, hlc.Timestamp{WallTime: 1})
-	if _, _, _, err = MVCCResolveWriteIntent(ctx, engine, nil,
+	if _, _, _, _, err = MVCCResolveWriteIntent(ctx, engine, nil,
 		roachpb.MakeLockUpdate(txn, roachpb.Span{Key: testKey1}),
 		MVCCResolveWriteIntentOptions{}); err != nil {
 		t.Fatal(err)
@@ -3445,7 +3446,7 @@ func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
 	// Resolve with a higher commit timestamp, but with still-pending transaction.
 	// This represents a straightforward push (i.e. from a read/write conflict).
 	txn := makeTxn(*txn1, hlc.Timestamp{WallTime: 1})
-	if _, _, _, err = MVCCResolveWriteIntent(ctx, engine, nil,
+	if _, _, _, _, err = MVCCResolveWriteIntent(ctx, engine, nil,
 		roachpb.MakeLockUpdate(txn, roachpb.Span{Key: testKey1}),
 		MVCCResolveWriteIntentOptions{}); err != nil {
 		t.Fatal(err)
@@ -3481,7 +3482,7 @@ func TestMVCCResolveTxnNoOps(t *testing.T) {
 	defer engine.Close()
 
 	// Resolve a non existent key; noop.
-	if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil,
+	if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil,
 		roachpb.MakeLockUpdate(txn1Commit, roachpb.Span{Key: testKey1}),
 		MVCCResolveWriteIntentOptions{}); err != nil {
 		t.Fatal(err)
@@ -3491,7 +3492,7 @@ func TestMVCCResolveTxnNoOps(t *testing.T) {
 	if err := MVCCPut(ctx, engine, testKey1, hlc.Timestamp{Logical: 1}, value1, MVCCWriteOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil,
+	if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil,
 		roachpb.MakeLockUpdate(txn2Commit, roachpb.Span{Key: testKey1}),
 		MVCCResolveWriteIntentOptions{}); err != nil {
 		t.Fatal(err)
@@ -3504,7 +3505,7 @@ func TestMVCCResolveTxnNoOps(t *testing.T) {
 
 	txn1CommitWithTS := txn2Commit.Clone()
 	txn1CommitWithTS.WriteTimestamp = hlc.Timestamp{WallTime: 1}
-	if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil,
+	if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil,
 		roachpb.MakeLockUpdate(txn1CommitWithTS, roachpb.Span{Key: testKey2}),
 		MVCCResolveWriteIntentOptions{}); err != nil {
 		t.Fatal(err)
@@ -3532,7 +3533,7 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	numKeys, _, resumeSpan, _, err := MVCCResolveWriteIntentRange(ctx, engine, nil,
+	numKeys, _, resumeSpan, _, _, err := MVCCResolveWriteIntentRange(ctx, engine, nil,
 		roachpb.MakeLockUpdate(txn1Commit, roachpb.Span{Key: testKey1, EndKey: testKey4.Next()}),
 		MVCCResolveWriteIntentRangeOptions{})
 	if err != nil {
@@ -3621,7 +3622,7 @@ func TestMVCCResolveTxnRangeResume(t *testing.T) {
 	defer rw.Close()
 
 	// Resolve up to 6 intents: the keys are 000, 033, 066, 099, 1212, 1515.
-	numKeys, _, resumeSpan, _, err := MVCCResolveWriteIntentRange(ctx, rw, nil,
+	numKeys, _, resumeSpan, _, _, err := MVCCResolveWriteIntentRange(ctx, rw, nil,
 		roachpb.MakeLockUpdate(txn1Commit, roachpb.Span{Key: roachpb.Key("00"), EndKey: roachpb.Key("33")}),
 		MVCCResolveWriteIntentRangeOptions{MaxKeys: 6})
 	if err != nil {
@@ -3666,16 +3667,14 @@ func TestMVCCResolveTxnRangeResumeWithManyVersions(t *testing.T) {
 	i := 0
 	for {
 		// Resolve up to 20 intents.
-		numKeys, _, resumeSpan, _, err := MVCCResolveWriteIntentRange(ctx, engine, nil, lockUpdate,
+		numKeys, _, resumeSpan, _, _, err := MVCCResolveWriteIntentRange(ctx, engine, nil, lockUpdate,
 			MVCCResolveWriteIntentRangeOptions{MaxKeys: 20})
 		require.NoError(t, err)
-		if resumeSpan == nil {
-			// Last call resolves 0 intents.
-			require.Equal(t, int64(0), numKeys)
-			break
-		}
 		require.Equal(t, int64(20), numKeys)
 		i++
+		if resumeSpan == nil {
+			break
+		}
 		expResumeSpan := roachpb.Span{
 			Key:    makeKey(nil, (i*20-1)*10).Next(),
 			EndKey: lockUpdate.EndKey,
@@ -3894,7 +3893,7 @@ func TestRandomizedMVCCResolveWriteIntentRange(t *testing.T) {
 		func() {
 			batch := engs[i].eng.NewBatch()
 			defer batch.Close()
-			_, _, _, _, err := MVCCResolveWriteIntentRange(ctx, batch, &engs[i].stats, lu, MVCCResolveWriteIntentRangeOptions{})
+			_, _, _, _, _, err := MVCCResolveWriteIntentRange(ctx, batch, &engs[i].stats, lu, MVCCResolveWriteIntentRangeOptions{})
 			require.NoError(t, err)
 			require.NoError(t, batch.Commit(false))
 		}()
@@ -3912,7 +3911,7 @@ func TestRandomizedMVCCResolveWriteIntentRange(t *testing.T) {
 			func() {
 				batch := engs[i].eng.NewBatch()
 				defer batch.Close()
-				_, _, _, _, err := MVCCResolveWriteIntentRange(ctx, batch, &engs[i].stats, lu, MVCCResolveWriteIntentRangeOptions{})
+				_, _, _, _, _, err := MVCCResolveWriteIntentRange(ctx, batch, &engs[i].stats, lu, MVCCResolveWriteIntentRangeOptions{})
 				require.NoError(t, err)
 				require.NoError(t, batch.Commit(false))
 			}()
@@ -4003,7 +4002,7 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 	}
 	// All the writes are ignored, so DEL is written for the intent. These
 	// should be buffered in the memtable.
-	_, _, _, _, err = MVCCResolveWriteIntentRange(ctx, eng, nil, lu, MVCCResolveWriteIntentRangeOptions{})
+	_, _, _, _, _, err = MVCCResolveWriteIntentRange(ctx, eng, nil, lu, MVCCResolveWriteIntentRangeOptions{})
 	require.NoError(t, err)
 	{
 		iter, err := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
@@ -4038,7 +4037,7 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 	if debug {
 		log.Infof(ctx, "LockUpdate: %s", lu.String())
 	}
-	_, _, _, _, err = MVCCResolveWriteIntentRange(ctx, eng, nil, lu, MVCCResolveWriteIntentRangeOptions{})
+	_, _, _, _, _, err = MVCCResolveWriteIntentRange(ctx, eng, nil, lu, MVCCResolveWriteIntentRangeOptions{})
 	require.NoError(t, err)
 	// Compact the engine so that SINGLEDEL consumes the SETWITHDEL, becoming a
 	// DEL.
@@ -6124,7 +6123,7 @@ func TestResolveIntentWithLowerEpoch(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Resolve the intent with a low epoch.
-	if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil,
+	if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil,
 		roachpb.MakeLockUpdate(txn1, roachpb.Span{Key: testKey1}),
 		MVCCResolveWriteIntentOptions{}); err != nil {
 		t.Fatal(err)

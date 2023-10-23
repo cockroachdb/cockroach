@@ -7,8 +7,12 @@ CREATE TABLE src (s STRING);
 CREATE TABLE dest (s STRING);
 INSERT INTO src SELECT repeat('a', 100000) FROM generate_series(1, 60)
 
+user host-cluster-root
+
 statement ok
 SET CLUSTER SETTING kv.raft.command.max_size='4MiB';
+
+user root
 
 statement ok
 SET CLUSTER SETTING sql.mutations.mutation_batch_byte_size='1MiB';
@@ -21,8 +25,12 @@ UPSERT INTO dest (s) (SELECT s FROM src)
 statement ok
 RESET CLUSTER SETTING sql.mutations.mutation_batch_byte_size;
 
+user host-cluster-root
+
 statement ok
 RESET CLUSTER SETTING kv.raft.command.max_size;
+
+user root
 
 statement ok
 DROP TABLE src;

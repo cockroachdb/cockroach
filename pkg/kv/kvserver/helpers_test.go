@@ -56,7 +56,7 @@ func (s *Store) Transport() *RaftTransport {
 }
 
 func (s *Store) FindTargetAndTransferLease(
-	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, conf roachpb.SpanConfig,
+	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, conf *roachpb.SpanConfig,
 ) (bool, error) {
 	transferStatus, err := s.replicateQueue.shedLease(
 		ctx, repl, desc, conf, allocator.TransferLeaseOptions{ExcludeLeaseRepl: true},
@@ -419,7 +419,7 @@ func (r *Replica) GetTSCacheHighWater() hlc.Timestamp {
 
 // ShouldBackpressureWrites returns whether writes to the range should be
 // subject to backpressure.
-func (r *Replica) ShouldBackpressureWrites() bool {
+func (r *Replica) ShouldBackpressureWrites(_ context.Context) bool {
 	return r.shouldBackpressureWrites()
 }
 

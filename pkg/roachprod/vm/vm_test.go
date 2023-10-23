@@ -156,3 +156,26 @@ func TestSanitizeLabel(t *testing.T) {
 		})
 	}
 }
+
+func TestParseArch(t *testing.T) {
+	cases := []struct {
+		arch     string
+		expected CPUArch
+	}{
+		{"amd64", ArchAMD64},
+		{"arm64", ArchARM64},
+		{"Intel", ArchAMD64},
+		{"x86_64", ArchAMD64},
+		{"aarch64", ArchARM64},
+		{"Intel Cascade Lake", ArchAMD64},
+		{"Ampere Altra", ArchARM64},
+		// E.g., GCE returns this when VM is still being provisioned.
+		{"Unknown CPU Platform", ArchUnknown},
+	}
+
+	for _, c := range cases {
+		t.Run(c.arch, func(t *testing.T) {
+			assert.EqualValues(t, c.expected, ParseArch(c.arch))
+		})
+	}
+}

@@ -150,6 +150,9 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 		tenantArgs := base.TestTenantArgs{
 			TenantID: id,
 			TestingKnobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
+				},
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				UpgradeManager: &upgradebase.TestingKnobs{
 					InterlockPausePoint:               test.PausePoint,
@@ -159,7 +162,7 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 			},
 			Settings: settings,
 		}
-		tenant, err := tc.Server(0).StartTenant(ctx, tenantArgs)
+		tenant, err := tc.Server(0).TenantController().StartTenant(ctx, tenantArgs)
 		require.NoError(t, err)
 		return tenant.SQLConn(t, ""), func() { tenant.AppStopper().Stop(ctx) }
 	}
@@ -278,11 +281,16 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 	}
 	require.NoError(t, clusterversion.Initialize(ctx, otherMsv, &otherServerSettings.SV))
 	otherServerStopper := stop.NewStopper()
-	otherServer, otherServerStartError := tc.Server(0).StartTenant(ctx,
+	otherServer, otherServerStartError := tc.Server(0).TenantController().StartTenant(ctx,
 		base.TestTenantArgs{
 			Stopper:  otherServerStopper,
 			TenantID: tenantID,
 			Settings: otherServerSettings,
+			TestingKnobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
+				},
+			},
 		})
 
 	var otherTenantRunner *sqlutils.SQLRunner

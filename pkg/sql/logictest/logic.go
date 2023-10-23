@@ -66,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
 	"github.com/cockroachdb/cockroach/pkg/testutils/physicalplanutils"
@@ -74,7 +75,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -209,8 +209,6 @@ import (
 // # cluster-opt: opt1 opt2
 //
 // The options are:
-// - disable-span-config: If specified, the span configs infrastructure will be
-//   disabled.
 // - tracing-off: If specified, tracing defaults to being turned off. This is
 //   used to override the environment, which may ask for tracing to be on by
 //   default.
@@ -1305,11 +1303,14 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 		testserver.CockroachLogsDirOpt(logsDir),
 	}
 	if strings.Contains(upgradeBinaryPath, "cockroach-short") {
-		// If we're using a cockroach-short binary, that means it was
-		// locally built, so we need to opt-out of version offsetting to
-		// better simulate a real upgrade path.
 		opts = append(opts, testserver.EnvVarOpt([]string{
+			// If we're using a cockroach-short binary, that means it was
+			// locally built, so we need to opt-out of version offsetting to
+			// better simulate a real upgrade path.
 			"COCKROACH_TESTING_FORCE_RELEASE_BRANCH=true",
+			// The build is made during testing, so it has metamorphic constants.
+			// We disable them here so that the test is more stable.
+			"COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true",
 		}))
 	}
 
@@ -1331,6 +1332,8 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 
 	// These tests involve stopping and starting nodes, so to reduce flakiness,
 	// we increase the lease Transfer timeout.
+	// Note: we use the old name of the setting for the benefit of mixed-version
+	// testing.
 	if _, err := t.db.Exec("SET CLUSTER SETTING server.shutdown.lease_transfer_wait = '40s'"); err != nil {
 		t.Fatal(err)
 	}
@@ -1348,7 +1351,7 @@ func (t *logicTest) newCluster(
 		if forSystemTenant {
 			// System tenants use the constructor that doesn't initialize the
 			// cluster version (see makeTestConfigFromParams). This is needed
-			// for local-mixed-22.2-23.1 config.
+			// for local-mixed configs.
 			st = cluster.MakeClusterSettings()
 		} else {
 			// Regular tenants use the constructor that initializes the cluster
@@ -1556,7 +1559,7 @@ func (t *logicTest) newCluster(
 				opt.apply(&tenantArgs.TestingKnobs)
 			}
 
-			tenant, err := t.cluster.Server(i).StartTenant(context.Background(), tenantArgs)
+			tenant, err := t.cluster.Server(i).TenantController().StartTenant(context.Background(), tenantArgs)
 			if err != nil {
 				t.rootT.Fatalf("%+v", err)
 			}
@@ -1773,7 +1776,7 @@ func (t *logicTest) newCluster(
 	}
 
 	for settingName, value := range toa.clusterSettings {
-		t.waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal(
+		t.waitForSystemVisibleClusterSettingToTakeEffectOrFatal(
 			settingName, value, params.ServerArgs.Insecure,
 		)
 	}
@@ -1781,10 +1784,10 @@ func (t *logicTest) newCluster(
 	t.setSessionUser(username.RootUser, 0 /* nodeIdx */, false /* newSession */)
 }
 
-// waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal waits until all tenant
+// waitForSystemVisibleClusterSettingToTakeEffectOrFatal waits until all tenant
 // servers are aware about the supplied setting's expected value. Fatal's if
 // this doesn't happen within the SucceedsSoonDuration.
-func (t *logicTest) waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal(
+func (t *logicTest) waitForSystemVisibleClusterSettingToTakeEffectOrFatal(
 	settingName string, expValue string, insecure bool,
 ) {
 	// Wait until all tenant servers are aware of the setting override.
@@ -1888,13 +1891,7 @@ func (t *logicTest) setup(
 		if err != nil {
 			t.Fatal(err)
 		}
-		bootstrapBinaryPath, err := binfetcher.Download(context.Background(), binfetcher.Options{
-			Binary:  "cockroach",
-			Dir:     tempExternalIODir,
-			Version: "v" + bootstrapVersion,
-			GOOS:    runtime.GOOS,
-			GOARCH:  runtime.GOARCH,
-		})
+		bootstrapBinaryPath, err := locateCockroachPredecessor(bootstrapVersion)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1944,17 +1941,6 @@ type tenantOverrideArgs struct {
 // which a test will run.
 type clusterOpt interface {
 	apply(args *base.TestServerArgs)
-}
-
-// clusterOptDisableSpanConfigs corresponds to the disable-span-configs
-// directive.
-type clusterOptDisableSpanConfigs struct{}
-
-var _ clusterOpt = clusterOptDisableSpanConfigs{}
-
-// apply implements the clusterOpt interface.
-func (c clusterOptDisableSpanConfigs) apply(args *base.TestServerArgs) {
-	args.DisableSpanConfigs = true
 }
 
 // clusterOptTracingOff corresponds to the tracing-off directive.
@@ -2143,8 +2129,6 @@ func readClusterOptions(t *testing.T, path string) []clusterOpt {
 	var res []clusterOpt
 	parseDirectiveOptions(t, path, clusterDirective, func(opt string) {
 		switch opt {
-		case "disable-span-configs":
-			res = append(res, clusterOptDisableSpanConfigs{})
 		case "tracing-off":
 			res = append(res, clusterOptTracingOff{})
 		case "ignore-tenant-strict-gc-enforcement":
@@ -4073,6 +4057,15 @@ func RunLogicTest(
 	// As of 6/4/2019, the logic tests never complete under race.
 	skip.UnderStressRace(t, "logic tests and race detector don't mix: #37993")
 
+	// This test relies on repeated sequential storage.EventuallyFileOnlySnapshot
+	// acquisitions. Reduce the max wait time for each acquisition to speed up
+	// this test.
+	origEFOSWait := storage.MaxEFOSWait
+	storage.MaxEFOSWait = 30 * time.Millisecond
+	defer func() {
+		storage.MaxEFOSWait = origEFOSWait
+	}()
+
 	if skipLogicTests {
 		skip.IgnoreLint(t, "COCKROACH_LOGIC_TESTS_SKIP")
 	}
@@ -4373,4 +4366,32 @@ func (t *logicTest) printCompletion(path string, config logictestbase.TestCluste
 	}
 	t.outf("--- done: %s with config %s: %d tests, %d failures%s", path, config.Name,
 		t.progress, t.failures, unsupportedMsg)
+}
+
+func locateCockroachPredecessor(version string) (string, error) {
+	if !strings.HasPrefix(version, "v") {
+		version = "v" + version
+	}
+	munge := func(s string) string {
+		return strings.ReplaceAll(
+			strings.ReplaceAll(s, ".", "_"), "-", "_")
+	}
+	configs := map[string]string{
+		"linux_amd64":  "linux-amd64",
+		"linux_arm64":  "linux-arm64",
+		"darwin_amd64": "darwin-10.9-amd64",
+		"darwin_arm64": "darwin-11.0-arm64",
+	}
+	cfg, ok := configs[fmt.Sprintf("%s_%s", runtime.GOOS, runtime.GOARCH)]
+	if !ok {
+		return "", fmt.Errorf("unknown GOOS/GOARCH combination")
+	}
+	where := fmt.Sprintf(
+		"external/cockroach_binary_%s_%s/cockroach-%s.%s/cockroach",
+		munge(version), munge(cfg), version, cfg)
+	path, err := bazel.Runfile(where)
+	if err != nil {
+		return "", err
+	}
+	return path, nil
 }

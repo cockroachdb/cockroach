@@ -47,7 +47,7 @@ var DefaultNumOldFileRegistryFiles = envutil.EnvOrDefaultInt(
 // elided instead of being written to the registry.
 var CanRegistryElideFunc func(entry *enginepb.FileEntry) bool
 
-const maxRegistrySize = 128 << 20 // 128 MB
+const defaultSoftMaxRegistrySize = 128 << 20 // 128 MB
 
 // PebbleFileRegistry keeps track of files for the data-FS and store-FS
 // for Pebble (see encrypted_fs.go for high-level comment).
@@ -66,18 +66,19 @@ type PebbleFileRegistry struct {
 
 	// The FS to write the file registry file.
 	FS vfs.FS
-
 	// The directory used by the DB. It is used to construct the name of the file registry file and
 	// to turn absolute path names of files in this directory into relative path names. The latter
 	// is done for compatibility with the file registry implemented for RocksDB, even though it
 	// currently requires some potentially non-portable filepath manipulation.
 	DBDir string
-
 	// Is the DB read only.
 	ReadOnly bool
-
 	// The number of old file registry files to keep for debugging purposes.
 	NumOldRegistryFiles int
+	// SoftMaxSize configures the "soft max" file size of a registry file. Once
+	// exceeded the registry may consider rolling over to a new file. Defaults
+	// to defaultSoftMaxRegistrySize.
+	SoftMaxSize int64
 
 	// Implementation.
 
@@ -89,6 +90,9 @@ type PebbleFileRegistry struct {
 		registryFile vfs.File
 		// registryWriter is a record.Writer for registryFile.
 		registryWriter *record.Writer
+		// rotationHelper holds state for deciding when to rotate to a new file
+		// registry file and write a snapshot.
+		rotationHelper record.RotationHelper
 		// registryMarker is an atomic file marker used to denote which
 		// of the records-based registry files is the current one. When
 		// we rotate files, the marker is atomically moved to the new
@@ -132,6 +136,9 @@ func CheckNoRegistryFile(fs vfs.FS, dbDir string) error {
 func (r *PebbleFileRegistry) Load(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.SoftMaxSize == 0 {
+		r.SoftMaxSize = defaultSoftMaxRegistrySize
+	}
 
 	// Initialize private fields needed when the file registry will be used.
 	r.mu.entries = make(map[string]*enginepb.FileEntry)
@@ -464,17 +471,32 @@ func (r *PebbleFileRegistry) applyBatch(batch *enginepb.RegistryUpdateBatch) {
 }
 
 func (r *PebbleFileRegistry) writeToRegistryFile(batch *enginepb.RegistryUpdateBatch) error {
-	// Create a new file registry file if one doesn't exist yet, or we need to
-	// rollover.
 	nilWriter := r.mu.registryWriter == nil
-	if nilWriter || r.mu.registryWriter.Size() > maxRegistrySize {
+
+	// Create a new file registry file if one doesn't exist yet, or the current
+	// one is too large.
+	//
+	// For largeness, we do not exclusively use r.SoftMaxSize size threshold
+	// since a large store may have a large enough volume of files that a single
+	// snapshot exceeds the size, resulting in rotation on every edit. This
+	// slows the system down since each file creation or deletion writes a new
+	// file registry snapshot. The primary goal of the size-based rollover logic
+	// is to ensure that when reopening a DB, the number of edits that need to
+	// be replayed on top of the snapshot is "sane". Rolling over to a new file
+	// registry after each edit is not relevant to that goal.
+	r.mu.rotationHelper.AddRecord(int64(len(batch.Updates)))
+
+	// If we don't have a file yet, we need to create one. If we do and its size
+	// exceeds the soft max, we may want to rotate. The record.RotationHelper
+	// implements logic to determine when we should rotate.
+	shouldRotate := nilWriter
+	if !shouldRotate && r.mu.registryWriter.Size() > r.SoftMaxSize {
+		shouldRotate = r.mu.rotationHelper.ShouldRotate(int64(len(r.mu.entries)))
+	}
+
+	if shouldRotate {
 		// If !nilWriter, exceeded the size threshold: create a new file registry
 		// file to hopefully shrink the size of the file.
-		//
-		// TODO(storage-team): fix this rollover logic to not rollover with each
-		// change if the total number of entries is large enough to exceed
-		// maxRegistrySize. Do something similar to what we do with the Pebble
-		// MANIFEST rollover.
 		if err := r.createNewRegistryFile(); err != nil {
 			if nilWriter {
 				return errors.Wrap(err, "creating new registry file")
@@ -482,6 +504,8 @@ func (r *PebbleFileRegistry) writeToRegistryFile(batch *enginepb.RegistryUpdateB
 				return errors.Wrap(err, "rotating registry file")
 			}
 		}
+		// Successfully rotated.
+		r.mu.rotationHelper.Rotate(int64(len(r.mu.entries)))
 	}
 	w, err := r.mu.registryWriter.Next()
 	if err != nil {

@@ -509,12 +509,6 @@ func (c *CloudStorageTestSpec) summary() (string, []string) {
 }
 
 // summary implements the diagramCellType interface.
-func (c *SplitAndScatterSpec) summary() (string, []string) {
-	detail := fmt.Sprintf("%d chunks", len(c.Chunks))
-	return "SplitAndScatterSpec", []string{detail}
-}
-
-// summary implements the diagramCellType interface.
 func (c *ReadImportDataSpec) summary() (string, []string) {
 	ss := make([]string, 0, len(c.Uri))
 	for _, s := range c.Uri {

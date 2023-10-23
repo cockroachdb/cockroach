@@ -25,7 +25,7 @@ import (
 // and modifies it in a mixed version setting. It aims to test the changes made
 // to index encodings done to allow secondary indexes to respect column families.
 func runIndexUpgrade(
-	ctx context.Context, t test.Test, c cluster.Cluster, predecessorVersion string,
+	ctx context.Context, t test.Test, c cluster.Cluster, predecessorVersionStr string,
 ) {
 	firstExpected := [][]int{
 		{2, 3, 4},
@@ -42,6 +42,7 @@ func runIndexUpgrade(
 	}
 
 	roachNodes := c.All()
+	predecessorVersion := clusterupgrade.MustParseVersion(predecessorVersionStr)
 	u := newVersionUpgradeTest(c,
 		uploadAndStart(roachNodes, predecessorVersion),
 		waitForUpgradeStep(roachNodes),
@@ -50,7 +51,7 @@ func runIndexUpgrade(
 		createDataStep(),
 
 		// Upgrade one of the nodes.
-		binaryUpgradeStep(c.Node(1), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Node(1), clusterupgrade.CurrentVersion()),
 
 		// Modify index data from that node.
 		modifyData(1,
@@ -64,8 +65,8 @@ func runIndexUpgrade(
 		verifyTableData(3, firstExpected),
 
 		// Upgrade the rest of the cluster.
-		binaryUpgradeStep(c.Node(2), clusterupgrade.MainVersion),
-		binaryUpgradeStep(c.Node(3), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Node(2), clusterupgrade.CurrentVersion()),
+		binaryUpgradeStep(c.Node(3), clusterupgrade.CurrentVersion()),
 
 		// Finalize the upgrade.
 		allowAutoUpgradeStep(1),
@@ -135,9 +136,11 @@ func verifyTableData(node int, expected [][]int) versionStep {
 
 func registerSecondaryIndexesMultiVersionCluster(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "schemachange/secondary-index-multi-version",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(3),
+		Name:             "schemachange/secondary-index-multi-version",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(3),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			predV, err := release.LatestPredecessor(t.BuildVersion())
 			if err != nil {

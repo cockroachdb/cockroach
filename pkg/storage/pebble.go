@@ -65,12 +65,12 @@ var maxSyncDurationDefault = envutil.EnvOrDefaultDuration("COCKROACH_ENGINE_MAX_
 
 // Default maximum wait time before an EventuallyFileOnlySnapshot transitions
 // to a file-only snapshot.
-var maxEfosWait = envutil.EnvOrDefaultDuration("COCKROACH_EFOS_MAX_WAIT", 3*time.Second)
+var MaxEFOSWait = envutil.EnvOrDefaultDuration("COCKROACH_EFOS_MAX_WAIT", 3*time.Second)
 
 // MaxSyncDuration is the threshold above which an observed engine sync duration
 // triggers either a warning or a fatal error.
 var MaxSyncDuration = settings.RegisterDurationSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"storage.max_sync_duration",
 	"maximum duration for disk operations; any operations that take longer"+
 		" than this setting trigger a warning log entry or process crash",
@@ -80,7 +80,7 @@ var MaxSyncDuration = settings.RegisterDurationSetting(
 // MaxSyncDurationFatalOnExceeded governs whether disk stalls longer than
 // MaxSyncDuration fatal the Cockroach process. Defaults to true.
 var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
-	settings.TenantWritable, // used for temp storage in virtual cluster servers
+	settings.ApplicationLevel, // used for temp storage in virtual cluster servers
 	"storage.max_sync_duration.fatal.enabled",
 	"if true, fatal the process when a disk operation exceeds storage.max_sync_duration",
 	true,
@@ -92,7 +92,7 @@ var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
 // compactions, and does not eagerly change the encoding of existing sstables.
 // Reads can correctly read both kinds of sstables.
 var ValueBlocksEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable, // used for temp storage in virtual cluster servers
+	settings.ApplicationLevel, // used for temp storage in virtual cluster servers
 	"storage.value_blocks.enabled",
 	"set to true to enable writing of value blocks in sstables",
 	util.ConstantWithMetamorphicTestBool(
@@ -101,14 +101,32 @@ var ValueBlocksEnabled = settings.RegisterBoolSetting(
 
 // UseEFOS controls whether uses of pebble Snapshots should use
 // EventuallyFileOnlySnapshots instead. This reduces write-amp with the main
-// tradeoff being higher space-amp.
+// tradeoff being higher space-amp. Note that UseExciseForSnapshot, if true,
+// effectively causes EventuallyFileOnlySnapshots to be used as well.
+//
+// Note: Do NOT read this setting directly. Use ShouldUseEFOS() instead.
 var UseEFOS = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"storage.experimental.eventually_file_only_snapshots.enabled",
-	"set to true to use eventually-file-only-snapshots",
+	"set to true to use eventually-file-only-snapshots even when kv.snapshot_receiver.excise.enabled is false",
 	util.ConstantWithMetamorphicTestBool(
 		"storage.experimental.eventually_file_only_snapshots.enabled", false), /* defaultValue */
 	settings.WithPublic)
+
+// UseExciseForSnapshots controls whether virtual-sstable-based excises should
+// be used instead of range deletions for clearing out replica contents as part
+// of a rebalance/recovery snapshot application. Applied on the receiver side.
+// Note that setting this setting to true also effectively causes UseEFOS above
+// to become true. This interaction is why this setting is defined in the
+// storage package even though it mostly affects KV.
+var UseExciseForSnapshots = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.snapshot_receiver.excise.enabled",
+	"set to true to use excises instead of range deletions for KV snapshots",
+	util.ConstantWithMetamorphicTestBool(
+		"kv.snapshot_receiver.excise.enabled", false), /* defaultValue */
+	settings.WithPublic,
+)
 
 // IngestAsFlushable controls whether ingested sstables that overlap the
 // memtable may be lazily ingested: written to the WAL and enqueued in the list
@@ -123,11 +141,18 @@ var UseEFOS = settings.RegisterBoolSetting(
 //
 // This cluster setting will be removed in a subsequent release.
 var IngestAsFlushable = settings.RegisterBoolSetting(
-	settings.TenantWritable, // used to init temp storage in virtual cluster servers
+	settings.ApplicationLevel, // used to init temp storage in virtual cluster servers
 	"storage.ingest_as_flushable.enabled",
 	"set to true to enable lazy ingestion of sstables",
 	util.ConstantWithMetamorphicTestBool(
 		"storage.ingest_as_flushable.enabled", true))
+
+// ShouldUseEFOS returns true if either of the UseEFOS or UseExciseForSnapshots
+// cluster settings are enabled, and EventuallyFileOnlySnapshots must be used
+// to guarantee snapshot-like semantics.
+func ShouldUseEFOS(settings *settings.Values) bool {
+	return UseEFOS.Get(settings) || UseExciseForSnapshots.Get(settings)
+}
 
 // EngineKeyCompare compares cockroach keys, including the version (which
 // could be MVCC timestamps).
@@ -1191,7 +1216,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		opts.Experimental.RemoteStorage = remote.MakeSimpleFactory(map[remote.Locator]remote.Storage{
 			"": esWrapper,
 		})
-		opts.Experimental.CreateOnShared = true
+		opts.Experimental.CreateOnShared = remote.CreateOnSharedLower
 		opts.Experimental.CreateOnSharedLocator = ""
 	} else {
 		if cfg.RemoteStorageFactory != nil {
@@ -2336,10 +2361,10 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 	// Cases are ordered from newer to older versions.
 	switch {
 	case !version.Less(clusterversion.ByKey(clusterversion.V23_2_PebbleFormatVirtualSSTables)):
-		formatVers = pebble.ExperimentalFormatVirtualSSTables
+		formatVers = pebble.FormatVirtualSSTables
 
 	case !version.Less(clusterversion.ByKey(clusterversion.V23_2_PebbleFormatDeleteSizedAndObsolete)):
-		formatVers = pebble.ExperimentalFormatDeleteSizedAndObsolete
+		formatVers = pebble.FormatDeleteSizedAndObsolete
 
 	case !version.Less(clusterversion.ByKey(clusterversion.V23_1EnableFlushableIngest)):
 		formatVers = pebble.FormatFlushableIngest
@@ -2375,6 +2400,95 @@ func (p *Pebble) MinVersion() roachpb.Version {
 // BufferedSize implements the Engine interface.
 func (p *Pebble) BufferedSize() int {
 	return 0
+}
+
+// ConvertFilesToBatchAndCommit implements the Engine interface.
+func (p *Pebble) ConvertFilesToBatchAndCommit(
+	_ context.Context, paths []string, clearedSpans []roachpb.Span,
+) error {
+	files := make([]sstable.ReadableFile, len(paths))
+	closeFiles := func() {
+		for i := range files {
+			if files[i] != nil {
+				files[i].Close()
+			}
+		}
+	}
+	for i, fileName := range paths {
+		f, err := p.FS.Open(fileName)
+		if err != nil {
+			closeFiles()
+			return err
+		}
+		files[i] = f
+	}
+	iter, err := NewSSTEngineIterator(
+		[][]sstable.ReadableFile{files},
+		IterOptions{
+			KeyTypes:   IterKeyTypePointsAndRanges,
+			LowerBound: roachpb.KeyMin,
+			UpperBound: roachpb.KeyMax,
+		}, true)
+	if err != nil {
+		// TODO(sumeer): we don't call closeFiles() since in the error case some
+		// of the files may be closed. See the code in
+		// https://github.com/cockroachdb/pebble/blob/master/external_iterator.go#L104-L113
+		// which closes the opened readers. At this point in the code we don't
+		// know which files are already closed. The callee needs to be fixed to
+		// not close any of the files or close all the files in the error case.
+		// The natural behavior would be to not close any file. Fix this in
+		// Pebble, and then adjust the code here if needed.
+		return err
+	}
+	defer iter.Close()
+
+	batch := p.NewWriteBatch()
+	for i := range clearedSpans {
+		err :=
+			batch.ClearRawRange(clearedSpans[i].Key, clearedSpans[i].EndKey, true, true)
+		if err != nil {
+			return err
+		}
+	}
+	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: roachpb.KeyMin})
+	for valid {
+		hasPoint, hasRange := iter.HasPointAndRange()
+		if hasPoint {
+			var k EngineKey
+			if k, err = iter.UnsafeEngineKey(); err != nil {
+				break
+			}
+			var v []byte
+			if v, err = iter.UnsafeValue(); err != nil {
+				break
+			}
+			if err = batch.PutEngineKey(k, v); err != nil {
+				break
+			}
+		}
+		if hasRange && iter.RangeKeyChanged() {
+			var rangeBounds roachpb.Span
+			if rangeBounds, err = iter.EngineRangeBounds(); err != nil {
+				break
+			}
+			rangeKeys := iter.EngineRangeKeys()
+			for i := range rangeKeys {
+				if err = batch.PutEngineRangeKey(rangeBounds.Key, rangeBounds.EndKey, rangeKeys[i].Version,
+					rangeKeys[i].Value); err != nil {
+					break
+				}
+			}
+			if err != nil {
+				break
+			}
+		}
+		valid, err = iter.NextEngineKey()
+	}
+	if err != nil {
+		batch.Close()
+		return err
+	}
+	return batch.Commit(true)
 }
 
 type pebbleReadOnly struct {
@@ -2833,7 +2947,7 @@ func (p *pebbleEFOS) MVCCIterate(
 
 // WaitForFileOnly implements the EventuallyFileOnlyReader interface.
 func (p *pebbleEFOS) WaitForFileOnly(ctx context.Context) error {
-	return p.efos.WaitForFileOnlySnapshot(ctx, maxEfosWait)
+	return p.efos.WaitForFileOnlySnapshot(ctx, MaxEFOSWait)
 }
 
 // NewMVCCIterator implements the Reader interface.

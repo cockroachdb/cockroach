@@ -24,6 +24,7 @@ go_test(
     name = "schemachanger_test",
     size = "enormous",
     srcs = [
+        "dml_injection_test.go",
         "main_test.go",
         "schemachanger_test.go",
         ":test_gen",  # keep
@@ -53,6 +54,7 @@ go_test(
         "//pkg/sql/rowenc",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scop",
+        "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan",
         "//pkg/sql/schemachanger/sctest",  # keep
         "//pkg/sql/sessiondatapb",
@@ -60,6 +62,7 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
         "//pkg/util/ctxgroup",
         "//pkg/util/leaktest",
         "//pkg/util/log",
@@ -70,6 +73,7 @@ go_test(
         "@com_github_lib_pq//:pq",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_exp//slices",
     ],
 )
 

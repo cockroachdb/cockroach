@@ -31,7 +31,7 @@ type githubIssues struct {
 	disable      bool
 	cluster      *clusterImpl
 	vmCreateOpts *vm.CreateOpts
-	issuePoster  func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest) error
+	issuePoster  func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest, *issues.Options) error
 	teamLoader   func() (team.Map, error)
 }
 
@@ -64,15 +64,19 @@ func generateHelpCommand(
 		)(renderer)
 		// An empty clusterName corresponds to a cluster creation failure.
 		// We only scrape metrics from GCE clusters for now.
-		if spec.GCE == cloud && clusterName != "" {
-			// N.B. This assumes we are posting from a source that does not run a test more than once.
-			// Otherwise, we'd need to use `testRunId`, which encodes the run number and allows us
-			// to distinguish between multiple runs of the same test, instead of `testName`.
-			issues.HelpCommandAsLink(
-				"Grafana",
-				fmt.Sprintf("https://go.crdb.dev/roachtest-grafana/%s/%s/%d/%d", vm.SanitizeLabel(runID),
-					vm.SanitizeLabel(testName), start.UnixMilli(), end.Add(2*time.Minute).UnixMilli()),
-			)(renderer)
+		if clusterName != "" {
+			if spec.GCE == cloud {
+				// N.B. This assumes we are posting from a source that does not run a test more than once.
+				// Otherwise, we'd need to use `testRunId`, which encodes the run number and allows us
+				// to distinguish between multiple runs of the same test, instead of `testName`.
+				issues.HelpCommandAsLink(
+					"Grafana",
+					fmt.Sprintf("https://go.crdb.dev/roachtest-grafana/%s/%s/%d/%d", vm.SanitizeLabel(runID),
+						vm.SanitizeLabel(testName), start.UnixMilli(), end.Add(2*time.Minute).UnixMilli()),
+				)(renderer)
+			} else {
+				renderer.Escaped(fmt.Sprintf("_Grafana is not yet available for %s clusters_", cloud))
+			}
 		}
 	}
 }
@@ -183,7 +187,7 @@ func (g *githubIssues) createPostRequest(
 		return issues.PostRequest{}, err
 	}
 
-	if sl, ok := teams.GetAliasesForPurpose(ownerToAlias(issueOwner), team.PurposeRoachtest); ok {
+	if sl, ok := teams.GetAliasesForPurpose(issueOwner.ToTeamAlias(), team.PurposeRoachtest); ok {
 		for _, alias := range sl {
 			mention = append(mention, "@"+string(alias))
 			if label := teams[alias].Label; label != "" {
@@ -256,11 +260,13 @@ func (g *githubIssues) MaybePost(t *testImpl, l *logger.Logger, message string) 
 	if err != nil {
 		return err
 	}
+	opts := issues.DefaultOptionsFromEnv()
 
 	return g.issuePoster(
 		context.Background(),
 		l,
 		issues.UnitTestFormatter,
 		postRequest,
+		opts,
 	)
 }

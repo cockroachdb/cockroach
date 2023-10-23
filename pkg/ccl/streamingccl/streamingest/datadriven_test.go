@@ -100,6 +100,11 @@ func TestDataDriven(t *testing.T) {
 
 	ctx := context.Background()
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
+		// Skip the test if it is a .txt file. This is to allow us to have non-test
+		// testdata in the same directory as the test files.
+		if strings.HasSuffix(path, ".txt") {
+			return
+		}
 		ds := newDatadrivenTestState()
 		defer ds.cleanup(t)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -125,10 +130,14 @@ func TestDataDriven(t *testing.T) {
 
 			case "create-replication-clusters":
 				args := replicationtestutils.DefaultTenantStreamingClustersArgs
+				args.NoMetamorphicExternalConnection = d.HasArg("no-external-conn")
+				tempDir, dirCleanup := testutils.TempDir(t)
+				args.ExternalIODir = tempDir
 				var cleanup func()
 				ds.replicationClusters, cleanup = replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 				ds.cleanupFns = append(ds.cleanupFns, func() error {
 					cleanup()
+					dirCleanup()
 					return nil
 				})
 
@@ -145,7 +154,8 @@ func TestDataDriven(t *testing.T) {
 				ds.replicationClusters.WaitUntilReplicatedTime(stringToHLC(t, replicatedTimeTarget),
 					jobspb.JobID(ds.ingestionJobID))
 			case "start-replicated-tenant":
-				cleanupTenant := ds.replicationClusters.StartDestTenant(ctx)
+				testingKnobs := replicationtestutils.DefaultAppTenantTestingKnobs()
+				cleanupTenant := ds.replicationClusters.StartDestTenant(ctx, &testingKnobs)
 				ds.cleanupFns = append(ds.cleanupFns, cleanupTenant)
 			case "let":
 				if len(d.CmdArgs) == 0 {

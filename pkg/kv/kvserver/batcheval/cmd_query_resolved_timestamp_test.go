@@ -192,8 +192,8 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 			}
 
 			st := cluster.MakeTestingClusterSettings()
-			gc.MaxIntentsPerCleanupBatch.Override(ctx, &st.SV, cfg.maxEncounteredIntents)
-			gc.MaxIntentKeyBytesPerCleanupBatch.Override(ctx, &st.SV, cfg.maxEncounteredIntentKeyBytes)
+			gc.MaxLocksPerCleanupBatch.Override(ctx, &st.SV, cfg.maxEncounteredIntents)
+			gc.MaxLockKeyBytesPerCleanupBatch.Override(ctx, &st.SV, cfg.maxEncounteredIntentKeyBytes)
 			QueryResolvedTimestampIntentCleanupAge.Override(ctx, &st.SV, cfg.intentCleanupAge)
 
 			clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 10)))

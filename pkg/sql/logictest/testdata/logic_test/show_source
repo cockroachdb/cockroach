@@ -70,6 +70,7 @@ enable_insert_fast_path                                    on
 enable_multiple_modifications_of_table                     off
 enable_multiregion_placement_policy                        off
 enable_seqscan                                             on
+enable_shared_locking_for_serializable                     off
 enable_super_regions                                       off
 enable_zigzag_join                                         off
 enforce_home_region                                        off
@@ -123,6 +124,7 @@ optimizer_use_improved_disjunction_stats                   on
 optimizer_use_improved_join_elimination                    on
 optimizer_use_improved_split_disjunction_for_joins         on
 optimizer_use_limit_ordering_for_streaming_group_by        on
+optimizer_use_lock_op_for_serializable                     off
 optimizer_use_multicol_stats                               on
 optimizer_use_not_visible_indexes                          off
 override_multi_region_zone_config                          off
@@ -184,22 +186,20 @@ sql.defaults.distsql
 off
 
 query TTTBTTT colnames
-SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE variable LIKE '%organization'
+SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE variable LIKE 'cluster%label'
 ----
-variable              value  setting_type  public  description        default_value  origin
-cluster.organization  ·      s             true    organization name  ·              default
+variable       value  setting_type  public  description                       default_value  origin
+cluster.label  ·      s             false   cluster specific free-form label  ·              default
 
 query TTTTTT colnames
-SELECT * FROM [SHOW CLUSTER SETTINGS] WHERE variable LIKE '%organization'
+SELECT * FROM [SHOW CLUSTER SETTINGS] WHERE variable LIKE 'cluster%label'
 ----
-variable              value  setting_type  description        default_value  origin
-cluster.organization  ·      s             organization name  ·              default
+variable  value  setting_type  description  default_value  origin
 
 query TTTTTT colnames
-SELECT * FROM [SHOW PUBLIC CLUSTER SETTINGS] WHERE variable LIKE '%organization'
+SELECT * FROM [SHOW PUBLIC CLUSTER SETTINGS] WHERE variable LIKE 'cluster%label'
 ----
-variable              value  setting_type  description        default_value  origin
-cluster.organization  ·      s             organization name  ·              default
+variable  value  setting_type  description  default_value  origin
 
 query T colnames
 SELECT * FROM [SHOW SESSION_USER]
@@ -294,6 +294,7 @@ public       join_tokens                      table     node   NULL
 public       lease                            table     node   NULL
 public       locations                        table     node   NULL
 public       migrations                       table     node   NULL
+public       mvcc_statistics                  table     node   NULL
 public       namespace                        table     node   NULL
 public       privileges                       table     node   NULL
 public       protected_ts_meta                table     node   NULL
@@ -320,6 +321,7 @@ public       statement_activity               table     node   NULL
 public       statement_bundle_chunks          table     node   NULL
 public       statement_diagnostics            table     node   NULL
 public       statement_diagnostics_requests   table     node   NULL
+public       statement_execution_insights     table     node   NULL
 public       statement_statistics             table     node   NULL
 public       table_statistics                 table     node   NULL
 public       task_payloads                    table     node   NULL
@@ -329,6 +331,7 @@ public       tenant_tasks                     table     node   NULL
 public       tenant_usage                     table     node   NULL
 public       tenants                          table     node   NULL
 public       transaction_activity             table     node   NULL
+public       transaction_execution_insights   table     node   NULL
 public       transaction_statistics           table     node   NULL
 public       ui                               table     node   NULL
 public       users                            table     node   NULL
@@ -352,6 +355,7 @@ public       join_tokens                      table     node   NULL      ·
 public       lease                            table     node   NULL      ·
 public       locations                        table     node   NULL      ·
 public       migrations                       table     node   NULL      ·
+public       mvcc_statistics                  table     node   NULL      ·
 public       namespace                        table     node   NULL      ·
 public       privileges                       table     node   NULL      ·
 public       protected_ts_meta                table     node   NULL      ·
@@ -378,6 +382,7 @@ public       statement_activity               table     node   NULL      ·
 public       statement_bundle_chunks          table     node   NULL      ·
 public       statement_diagnostics            table     node   NULL      ·
 public       statement_diagnostics_requests   table     node   NULL      ·
+public       statement_execution_insights     table     node   NULL      ·
 public       statement_statistics             table     node   NULL      ·
 public       table_statistics                 table     node   NULL      ·
 public       task_payloads                    table     node   NULL      ·
@@ -387,6 +392,7 @@ public       tenant_tasks                     table     node   NULL      ·
 public       tenant_usage                     table     node   NULL      ·
 public       tenants                          table     node   NULL      ·
 public       transaction_activity             table     node   NULL      ·
+public       transaction_execution_insights   table     node   NULL      ·
 public       transaction_statistics           table     node   NULL      ·
 public       ui                               table     node   NULL      ·
 public       users                            table     node   NULL      ·
@@ -498,7 +504,7 @@ query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM CURRENT_CATALOG WITH DETAILS]
 ----
 start_key  end_key  replicas  lease_holder
-/Table/62  /Max     {1}       1
+/Table/65  /Max     {1}       1
 
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE system.descriptor WITH DETAILS]

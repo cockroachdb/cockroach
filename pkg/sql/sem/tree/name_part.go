@@ -55,13 +55,13 @@ func NameString(s string) string {
 // identifier suitable for printing in error messages, avoiding a heap
 // allocation.
 func ErrNameStringP(s *string) string {
-	return ErrString(((*Name)(s)))
+	return ErrString((*Name)(s))
 }
 
 // ErrNameString escapes an identifier stored a string to a SQL
 // identifier suitable for printing in error messages.
 func ErrNameString(s string) string {
-	return ErrString(((*Name)(&s)))
+	return ErrString((*Name)(&s))
 }
 
 // Normalize normalizes to lowercase and Unicode Normalization Form C
@@ -178,6 +178,7 @@ type NameParts = [4]string
 
 // Format implements the NodeFormatter interface.
 func (u *UnresolvedName) Format(ctx *FmtCtx) {
+	isCrdbInternal := false
 	stopAt := 1
 	if u.Star {
 		stopAt = 2
@@ -188,9 +189,23 @@ func (u *UnresolvedName) Format(ctx *FmtCtx) {
 		// the grammar, so print it out as a "Name". Every part after that is
 		// necessarily an unrestricted name.
 		if i == u.NumParts {
-			ctx.FormatNode((*Name)(&u.Parts[i-1]))
+			if u.Parts[i-1] == "crdb_internal" && i > 1 {
+				ctx.WithFlags(ctx.flags&^FmtAnonymize&^FmtMarkRedactionNode, func() {
+					ctx.FormatNode((*Name)(&u.Parts[i-1]))
+				})
+				isCrdbInternal = true
+			} else {
+				ctx.FormatNode((*Name)(&u.Parts[i-1]))
+			}
 		} else {
-			ctx.FormatNode((*UnrestrictedName)(&u.Parts[i-1]))
+			if isCrdbInternal {
+				ctx.WithFlags(ctx.flags&^FmtAnonymize&^FmtMarkRedactionNode, func() {
+					ctx.FormatNode((*UnrestrictedName)(&u.Parts[i-1]))
+				})
+			} else {
+				ctx.FormatNode((*UnrestrictedName)(&u.Parts[i-1]))
+
+			}
 		}
 		if i > 1 {
 			ctx.WriteByte('.')

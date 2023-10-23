@@ -192,9 +192,9 @@ func TestReadOnlyBasics(t *testing.T) {
 		},
 		func() {
 			iter, _ := ro.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-				MinTimestampHint: hlc.MinTimestamp,
-				MaxTimestampHint: hlc.MaxTimestamp,
-				UpperBound:       roachpb.KeyMax,
+				MinTimestamp: hlc.MinTimestamp,
+				MaxTimestamp: hlc.MaxTimestamp,
+				UpperBound:   roachpb.KeyMax,
 			})
 			iter.Close()
 		},

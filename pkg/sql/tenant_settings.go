@@ -19,9 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -170,10 +172,7 @@ func (p *planner) ShowTenantClusterSetting(
 	// privileged operation than viewing local cluster settings. So we
 	// shouldn't be allowing with just the role option
 	// VIEWCLUSTERSETTINGS.
-	//
-	// TODO(knz): Using admin authz for now; we may want to introduce a
-	// more specific role option later.
-	if err := p.RequireAdminRole(ctx, "view a tenant cluster setting"); err != nil {
+	if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 		return nil, err
 	}
 

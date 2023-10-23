@@ -177,10 +177,10 @@ SELECT statistics_name, column_names, created, row_count, distinct_count, null_c
 FROM [SHOW STATISTICS FOR TABLE g WITH FORECAST]
 ORDER BY created
 ----
-__auto__      {a}  1988-08-05 00:00:00 +0000 +0000  3   3   0  1
-__auto__      {a}  1988-08-06 00:00:00 +0000 +0000  6   6   0  1
-__auto__      {a}  1988-08-07 00:00:00 +0000 +0000  9   9   0  1
-__forecast__  {a}  1988-08-08 00:00:00 +0000 +0000  12  12  0  1
+__auto__      {a}  1988-08-05 00:00:00 +0000 UTC  3   3   0  1
+__auto__      {a}  1988-08-06 00:00:00 +0000 UTC  6   6   0  1
+__auto__      {a}  1988-08-07 00:00:00 +0000 UTC  9   9   0  1
+__forecast__  {a}  1988-08-08 00:00:00 +0000 UTC  12  12  0  1
 
 query T
 EXPLAIN SELECT * FROM g WHERE a >= 9 AND a < 12
@@ -375,10 +375,10 @@ SELECT statistics_name, column_names, created, row_count, distinct_count, null_c
 FROM [SHOW STATISTICS FOR TABLE s WITH FORECAST]
 ORDER BY created
 ----
-__auto__      {b}  1988-08-05 00:00:00 +0000 +0000  9  9  0  1
-__auto__      {b}  1988-08-06 00:00:00 +0000 +0000  6  6  0  1
-__auto__      {b}  1988-08-07 00:00:00 +0000 +0000  3  3  0  1
-__forecast__  {b}  1988-08-08 00:00:00 +0000 +0000  0  0  0  1
+__auto__      {b}  1988-08-05 00:00:00 +0000 UTC  9  9  0  1
+__auto__      {b}  1988-08-06 00:00:00 +0000 UTC  6  6  0  1
+__auto__      {b}  1988-08-07 00:00:00 +0000 UTC  3  3  0  1
+__forecast__  {b}  1988-08-08 00:00:00 +0000 UTC  0  0  0  1
 
 query T
 SELECT jsonb_pretty(stat)
@@ -576,10 +576,10 @@ SELECT statistics_name, column_names, created, row_count, distinct_count, null_c
 FROM [SHOW STATISTICS FOR TABLE c WITH FORECAST]
 ORDER BY created
 ----
-__auto__      {h}  1988-08-05 00:00:00 +0000 +0000  24  24  0  7
-__auto__      {h}  1988-08-06 00:00:00 +0000 +0000  24  24  0  7
-__auto__      {h}  1988-08-07 00:00:00 +0000 +0000  24  24  0  7
-__forecast__  {h}  1988-08-08 00:00:00 +0000 +0000  24  24  0  7
+__auto__      {h}  1988-08-05 00:00:00 +0000 UTC  24  24  0  7
+__auto__      {h}  1988-08-06 00:00:00 +0000 UTC  24  24  0  7
+__auto__      {h}  1988-08-07 00:00:00 +0000 UTC  24  24  0  7
+__forecast__  {h}  1988-08-08 00:00:00 +0000 UTC  24  24  0  7
 
 query T
 EXPLAIN SELECT * FROM c WHERE h >= '1988-08-07'
@@ -837,10 +837,10 @@ SELECT statistics_name, column_names, created, row_count, distinct_count, null_c
 FROM [SHOW STATISTICS FOR TABLE d WITH FORECAST]
 ORDER BY created
 ----
-__auto__      {d}  1999-12-21 00:00:00 +0000 +0000  1  1  0  3
-__auto__      {d}  1999-12-26 00:00:00 +0000 +0000  2  2  0  3
-__auto__      {d}  1999-12-31 00:00:00 +0000 +0000  3  3  0  3
-__forecast__  {d}  2000-01-05 00:00:00 +0000 +0000  4  4  0  3
+__auto__      {d}  1999-12-21 00:00:00 +0000 UTC  1  1  0  3
+__auto__      {d}  1999-12-26 00:00:00 +0000 UTC  2  2  0  3
+__auto__      {d}  1999-12-31 00:00:00 +0000 UTC  3  3  0  3
+__forecast__  {d}  2000-01-05 00:00:00 +0000 UTC  4  4  0  3
 
 query T
 SELECT jsonb_pretty(stat->'histo_buckets')
@@ -1800,22 +1800,22 @@ SELECT statistics_name, column_names, created, row_count, distinct_count, null_c
 FROM [SHOW STATISTICS FOR TABLE t_103958 WITH FORECAST]
 ORDER BY row_count, avg_size
 ----
-__auto__      {a}    2023-01-01 00:00:00 +0000 +0000  1     1     0  1
-__auto__      {a}    2023-01-02 00:00:00 +0000 +0000  1     1     0  1
-__auto__      {a}    2023-01-03 00:00:00 +0000 +0000  1     1     0  1
-__auto__      {b}    2023-01-01 00:00:00 +0000 +0000  1     1     0  2
-__auto__      {b}    2023-01-02 00:00:00 +0000 +0000  1     1     0  2
-__auto__      {b}    2023-01-03 00:00:00 +0000 +0000  1     1     0  2
-__auto__      {a,b}  2023-01-01 00:00:00 +0000 +0000  1     1     0  3
-__auto__      {a,b}  2023-01-02 00:00:00 +0000 +0000  1     1     0  3
-__auto__      {a,b}  2023-01-03 00:00:00 +0000 +0000  1     1     0  3
-__forecast__  {a,b}  2023-01-04 00:00:00 +0000 +0000  1     1     0  3
-__auto__      {a}    2023-01-04 00:00:00 +0000 +0000  1000  1000  0  1
-__auto__      {b}    2023-01-04 00:00:00 +0000 +0000  1000  2     0  2
-__auto__      {b}    2023-01-05 00:00:00 +0000 +0000  2000  3     0  2
-__auto__      {a}    2023-01-05 00:00:00 +0000 +0000  2000  2000  0  3
-__auto__      {b}    2023-01-06 00:00:00 +0000 +0000  3000  4     0  2
-__auto__      {a}    2023-01-06 00:00:00 +0000 +0000  3000  3000  0  3
+__auto__      {a}    2023-01-01 00:00:00 +0000 UTC  1     1     0  1
+__auto__      {a}    2023-01-02 00:00:00 +0000 UTC  1     1     0  1
+__auto__      {a}    2023-01-03 00:00:00 +0000 UTC  1     1     0  1
+__auto__      {b}    2023-01-01 00:00:00 +0000 UTC  1     1     0  2
+__auto__      {b}    2023-01-02 00:00:00 +0000 UTC  1     1     0  2
+__auto__      {b}    2023-01-03 00:00:00 +0000 UTC  1     1     0  2
+__auto__      {a,b}  2023-01-01 00:00:00 +0000 UTC  1     1     0  3
+__auto__      {a,b}  2023-01-02 00:00:00 +0000 UTC  1     1     0  3
+__auto__      {a,b}  2023-01-03 00:00:00 +0000 UTC  1     1     0  3
+__forecast__  {a,b}  2023-01-04 00:00:00 +0000 UTC  1     1     0  3
+__auto__      {a}    2023-01-04 00:00:00 +0000 UTC  1000  1000  0  1
+__auto__      {b}    2023-01-04 00:00:00 +0000 UTC  1000  2     0  2
+__auto__      {b}    2023-01-05 00:00:00 +0000 UTC  2000  3     0  2
+__auto__      {a}    2023-01-05 00:00:00 +0000 UTC  2000  2000  0  3
+__auto__      {b}    2023-01-06 00:00:00 +0000 UTC  3000  4     0  2
+__auto__      {a}    2023-01-06 00:00:00 +0000 UTC  3000  3000  0  3
 
 query T
 SELECT jsonb_pretty(stat)

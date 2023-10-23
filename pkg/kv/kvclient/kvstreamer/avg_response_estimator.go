@@ -41,7 +41,7 @@ const (
 // streamerAvgResponseSizeMultiple determines the multiple used when calculating
 // the average response size.
 var streamerAvgResponseSizeMultiple = settings.RegisterFloatSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"sql.distsql.streamer.avg_response_size_multiple",
 	"determines the multiple used when calculating the average response size by the streamer component",
 	defaultAvgResponseSizeMultiple,

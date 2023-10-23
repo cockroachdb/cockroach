@@ -70,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -86,11 +87,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -143,6 +144,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalClusterSettingsTableID:             crdbInternalClusterSettingsTable,
 		catconstants.CrdbInternalClusterStmtStatsTableID:            crdbInternalClusterStmtStatsTable,
 		catconstants.CrdbInternalCreateFunctionStmtsTableID:         crdbInternalCreateFunctionStmtsTable,
+		catconstants.CrdbInternalCreateProcedureStmtsTableID:        crdbInternalCreateProcedureStmtsTable,
 		catconstants.CrdbInternalCreateSchemaStmtsTableID:           crdbInternalCreateSchemaStmtsTable,
 		catconstants.CrdbInternalCreateStmtsTableID:                 crdbInternalCreateStmtsTable,
 		catconstants.CrdbInternalCreateTypeStmtsTableID:             crdbInternalCreateTypeStmtsTable,
@@ -242,6 +244,8 @@ CREATE TABLE crdb_internal.node_build_info (
 			"Build":        info.Short(),
 			"Version":      info.Tag,
 			"Channel":      info.Channel,
+
+			"VirtualClusterName": string(execCfg.VirtualClusterName),
 		} {
 			if err := addRow(
 				tree.NewDInt(tree.DInt(nodeID)),
@@ -265,7 +269,7 @@ CREATE TABLE crdb_internal.node_runtime_info (
   value     STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireAdminRole(ctx, "access the node runtime information"); err != nil {
+		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 			return err
 		}
 
@@ -706,7 +710,7 @@ CREATE TABLE crdb_internal.pg_catalog_table_is_implemented (
 // is used to define the AS OF time for querying the system.table_statistics
 // table when building crdb_internal.table_row_statistics.
 var statsAsOfTimeClusterMode = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.crdb_internal.table_row_statistics.as_of_time",
 	"historical query time used to build the crdb_internal.table_row_statistics table",
 	-10*time.Second,
@@ -2016,7 +2020,7 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 )
 `,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		hasViewActivityOrhasViewActivityRedacted, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		hasViewActivityOrhasViewActivityRedacted, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 		if err != nil {
 			return err
 		}
@@ -2122,7 +2126,7 @@ CREATE TABLE crdb_internal.node_txn_stats (
   implicit_count     INT NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireAdminRole(ctx, "access application statistics"); err != nil {
+		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 			return err
 		}
 
@@ -2275,14 +2279,12 @@ CREATE TABLE crdb_internal.node_inflight_trace_spans (
   operation      STRING NULL      -- The span's operation.
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		hasAdmin, err := p.HasAdminRole(ctx)
-		if err != nil {
+		if err := p.CheckPrivilege(
+			ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA,
+		); err != nil {
 			return err
 		}
-		if !hasAdmin {
-			return pgerror.Newf(pgcode.InsufficientPrivilege,
-				"only users with the admin role are allowed to read crdb_internal.node_inflight_trace_spans")
-		}
+
 		return p.ExecCfg().AmbientCtx.Tracer.VisitSpans(func(span tracing.RegistrySpan) error {
 			trace := span.GetFullRecording(tracingpb.RecordingVerbose)
 			for _, rec := range trace.Flatten() {
@@ -2443,7 +2445,7 @@ var crdbInternalLocalTxnsTable = virtualSchemaTable{
 	comment: "running user transactions visible by the current user (RAM; local node only)",
 	schema:  fmt.Sprintf(txnsSchemaPattern, "node_transactions"),
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		hasViewActivityOrhasViewActivityRedacted, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		hasViewActivityOrhasViewActivityRedacted, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 		if err != nil {
 			return err
 		}
@@ -2466,7 +2468,7 @@ var crdbInternalClusterTxnsTable = virtualSchemaTable{
 	comment: "running user transactions visible by the current user (cluster RPC; expensive!)",
 	schema:  fmt.Sprintf(txnsSchemaPattern, "cluster_transactions"),
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		hasViewActivityOrhasViewActivityRedacted, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		hasViewActivityOrhasViewActivityRedacted, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 		if err != nil {
 			return err
 		}
@@ -2574,7 +2576,7 @@ func (p *planner) makeSessionsRequest(
 	if hasAdmin {
 		req.Username = ""
 	} else {
-		hasViewActivityOrhasViewActivityRedacted, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		hasViewActivityOrhasViewActivityRedacted, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 		if err != nil {
 			return serverpb.ListSessionsRequest{}, err
 		}
@@ -3122,23 +3124,12 @@ func populateContentionEventsTable(
 	response *serverpb.ListContentionEventsResponse,
 ) error {
 	// Validate users have correct permission/role.
-	hasPermission, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+	hasPermission, shouldRedactKey, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 	if err != nil {
 		return err
 	}
 	if !hasPermission {
 		return noViewActivityOrViewActivityRedactedRoleError(p.User())
-	}
-	isAdmin, err := p.HasAdminRole(ctx)
-	if err != nil {
-		return err
-	}
-	var shouldRedactKey bool
-	if !isAdmin {
-		shouldRedactKey, err = p.HasViewActivityRedacted(ctx)
-		if err != nil {
-			return err
-		}
 	}
 	key := tree.NewDBytes("")
 	for _, ice := range response.Events.IndexContentionEvents {
@@ -3269,7 +3260,7 @@ var crdbInternalLocalMetricsTable = virtualSchemaTable{
   value							 FLOAT NOT NULL    -- value of the metric
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireAdminRole(ctx, "read crdb_internal.node_metrics"); err != nil {
+		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 			return err
 		}
 
@@ -3536,20 +3527,10 @@ CREATE TABLE crdb_internal.create_schema_statements (
 	},
 }
 
-var crdbInternalCreateFunctionStmtsTable = virtualSchemaTable{
-	comment: "CREATE statements for all user-defined functions",
-	schema: `
-CREATE TABLE crdb_internal.create_function_statements (
- database_id INT,
- database_name STRING,
- schema_id INT,
- schema_name STRING,
- function_id INT,
- function_name STRING,
- create_statement STRING
-)
-`,
-	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+func createRoutinePopulate(
+	procedure bool,
+) func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	return func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		var dbDescs []catalog.DatabaseDescriptor
 		if db == nil {
 			var err error
@@ -3588,8 +3569,10 @@ CREATE TABLE crdb_internal.create_function_statements (
 
 		for _, desc := range fnDescs {
 			fnDesc := desc.(catalog.FunctionDescriptor)
-			if err != nil {
-				return err
+			if procedure != fnDesc.IsProcedure() {
+				// Skip functions if procedure is true, and skip procedures
+				// otherwise.
+				continue
 			}
 			treeNode, err := fnDesc.ToCreateExpr()
 			treeNode.Name.ObjectNamePrefix = tree.ObjectNamePrefix{
@@ -3601,21 +3584,39 @@ CREATE TABLE crdb_internal.create_function_statements (
 			}
 			for i := range treeNode.Options {
 				if body, ok := treeNode.Options[i].(tree.RoutineBodyStr); ok {
-					typeReplacedBody, err := formatFunctionQueryTypesForDisplay(ctx, &p.semaCtx, p.SessionData(), string(body))
-					if err != nil {
-						return err
+					bodyStr := string(body)
+					switch fnDesc.GetLanguage() {
+					case catpb.Function_SQL:
+						bodyStr, err = formatFunctionQueryTypesForDisplay(ctx, &p.semaCtx, p.SessionData(), bodyStr)
+						if err != nil {
+							return err
+						}
+						bodyStr, err = formatQuerySequencesForDisplay(ctx, &p.semaCtx, bodyStr, true /* multiStmt */)
+						if err != nil {
+							return err
+						}
+						bodyStr = "\n" + bodyStr + "\n"
+					case catpb.Function_PLPGSQL:
+						// TODO(drewk): integrate this with the SQL case above.
+						plpgsqlStmt, err := plpgsql.Parse(bodyStr)
+						if err != nil {
+							return err
+						}
+						fmtCtx := tree.NewFmtCtx(tree.FmtParsable)
+						fmtCtx.FormatNode(plpgsqlStmt.AST)
+						bodyStr = "\n" + fmtCtx.CloseAndGetString()
+					default:
+						return errors.AssertionFailedf("unexpected function language: %s", fnDesc.GetLanguage())
 					}
-					seqReplacedBody, err := formatQuerySequencesForDisplay(ctx, &p.semaCtx, typeReplacedBody, true /* multiStmt */)
-					if err != nil {
-						return err
-					}
-					stmtStrs := strings.Split(seqReplacedBody, "\n")
+					stmtStrs := strings.Split(bodyStr, "\n")
 					for i := range stmtStrs {
-						stmtStrs[i] = "\t" + stmtStrs[i]
+						if stmtStrs[i] != "" {
+							stmtStrs[i] = "\t" + stmtStrs[i]
+						}
 					}
 					p := &treeNode.Options[i]
 					// Add two new lines just for better formatting.
-					*p = "\n" + tree.RoutineBodyStr(strings.Join(stmtStrs, "\n")) + "\n"
+					*p = tree.RoutineBodyStr(strings.Join(stmtStrs, "\n"))
 				}
 			}
 
@@ -3633,7 +3634,39 @@ CREATE TABLE crdb_internal.create_function_statements (
 			}
 		}
 		return nil
-	},
+	}
+}
+
+var crdbInternalCreateFunctionStmtsTable = virtualSchemaTable{
+	comment: "CREATE statements for all user-defined functions",
+	schema: `
+CREATE TABLE crdb_internal.create_function_statements (
+  database_id INT,
+  database_name STRING,
+  schema_id INT,
+  schema_name STRING,
+  function_id INT,
+  function_name STRING,
+  create_statement STRING
+)
+`,
+	populate: createRoutinePopulate(false /* procedure */),
+}
+
+var crdbInternalCreateProcedureStmtsTable = virtualSchemaTable{
+	comment: "CREATE statements for all user-defined procedures",
+	schema: `
+CREATE TABLE crdb_internal.create_procedure_statements (
+  database_id INT,
+  database_name STRING,
+  schema_id INT,
+  schema_name STRING,
+  procedure_id INT,
+  procedure_name STRING,
+  create_statement STRING
+)
+`,
+	populate: createRoutinePopulate(true /* procedure */),
 }
 
 // Prepare the row populate function.
@@ -4449,7 +4482,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			if hasAdmin {
 				return true, nil
 			}
-			viewActOrViewActRedact, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+			viewActOrViewActRedact, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 			// Return if we have permission or encountered an error.
 			if viewActOrViewActRedact || err != nil {
 				return viewActOrViewActRedact, err
@@ -4530,7 +4563,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				replicaLocalityDatum := tree.DNull
 				nodeDesc, err := p.ExecCfg().NodeDescs.GetNodeDescriptor(replica.NodeID)
 				if err != nil {
-					if !errors.Is(err, &kvpb.DescNotFoundError{}) {
+					if !errors.HasType(err, &kvpb.DescNotFoundError{}) {
 						return nil, err
 					}
 				} else {
@@ -4853,7 +4886,7 @@ CREATE TABLE crdb_internal.gossip_nodes (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireAdminRole(ctx, "read crdb_internal.gossip_nodes"); err != nil {
+		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 			return err
 		}
 
@@ -4972,7 +5005,7 @@ CREATE TABLE crdb_internal.kv_node_liveness (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireAdminRole(ctx, "read crdb_internal.node_liveness"); err != nil {
+		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 			return err
 		}
 
@@ -5038,7 +5071,7 @@ CREATE TABLE crdb_internal.gossip_liveness (
 		// which is highly available. DO NOT CALL functions which require the
 		// cluster to be healthy, such as NodesStatusServer.ListNodesInternal().
 
-		if err := p.RequireAdminRole(ctx, "read crdb_internal.gossip_liveness"); err != nil {
+		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 			return err
 		}
 
@@ -5114,7 +5147,7 @@ CREATE TABLE crdb_internal.gossip_alerts (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireAdminRole(ctx, "read crdb_internal.gossip_alerts"); err != nil {
+		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 			return err
 		}
 
@@ -5435,11 +5468,10 @@ CREATE TABLE crdb_internal.kv_node_status (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireAdminRole(ctx, "read crdb_internal.kv_node_status"); err != nil {
+		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 			return err
 		}
-		ss, err := p.extendedEvalCtx.NodesStatusServer.OptionalNodesStatusServer(
-			errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
+		ss, err := p.extendedEvalCtx.NodesStatusServer.OptionalNodesStatusServer()
 		if err != nil {
 			return err
 		}
@@ -5549,11 +5581,10 @@ CREATE TABLE crdb_internal.kv_store_status (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireAdminRole(ctx, "read crdb_internal.kv_store_status"); err != nil {
+		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 			return err
 		}
-		ss, err := p.ExecCfg().NodesStatusServer.OptionalNodesStatusServer(
-			errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
+		ss, err := p.ExecCfg().NodesStatusServer.OptionalNodesStatusServer()
 		if err != nil {
 			return err
 		}
@@ -6406,7 +6437,7 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 			endPrefix := p.extendedEvalCtx.Codec.TablePrefix(uint32(endID - 1)).PrefixEnd()
 			b := p.Txn().NewBatch()
 			b.Header.MaxSpanRequestKeys = 1
-			scanRequest := kvpb.NewScan(startPrefix, endPrefix, kvpb.NonLocking).(*kvpb.ScanRequest)
+			scanRequest := kvpb.NewScan(startPrefix, endPrefix).(*kvpb.ScanRequest)
 			scanRequest.ScanFormat = kvpb.BATCH_RESPONSE
 			b.AddRawRequest(scanRequest)
 			err = p.execCfg.DB.Run(ctx, b)
@@ -6648,7 +6679,7 @@ CREATE TABLE crdb_internal.default_privileges (
 									schema,      // schema_name
 									role,        // role
 									forAllRoles, // for_all_roles
-									tree.NewDString(privilege.Functions.String()),           // object_type
+									tree.NewDString(privilege.Routines.String()),            // object_type
 									tree.NewDString(username.PublicRoleName().Normalized()), // grantee
 									tree.NewDString(privilege.EXECUTE.String()),             // privilege_type
 									tree.DBoolFalse, // is_grantable
@@ -7460,34 +7491,22 @@ CREATE TABLE crdb_internal.transaction_contention_events (
     waiting_stmt_id              string NOT NULL,
     waiting_stmt_fingerprint_id  BYTES NOT NULL,
     
-    database_name       				 STRING NOT NULL,
-    schema_name         				 STRING NOT NULL,
-    table_name          				 STRING NOT NULL,
-    index_name          				 STRING
+    database_name                STRING NOT NULL,
+    schema_name                  STRING NOT NULL,
+    table_name                   STRING NOT NULL,
+    index_name                   STRING,
+    contention_type              STRING NOT NULL
 );`,
 	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		// Check permission first before making RPC fanout.
-		hasPermission, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		// If a user has VIEWACTIVITYREDACTED role option but the user does not
+		// have the ADMIN role option, then the contending key should be redacted.
+		hasPermission, shouldRedactContendingKey, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 		if err != nil {
 			return nil, nil, err
 		}
 		if !hasPermission {
 			return nil, nil, noViewActivityOrViewActivityRedactedRoleError(p.User())
-		}
-
-		// If a user has VIEWACTIVITYREDACTED role option but the user does not
-		// have the ADMIN role option, then the contending key should be redacted.
-		isAdmin, err := p.HasAdminRole(ctx)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		shouldRedactContendingKey := false
-		if !isAdmin {
-			shouldRedactContendingKey, err = p.HasViewActivityRedacted(ctx)
-			if err != nil {
-				return nil, nil, err
-			}
 		}
 
 		// Account for memory used by the RPC fanout.
@@ -7567,6 +7586,7 @@ CREATE TABLE crdb_internal.transaction_contention_events (
 					tree.NewDString(schemaName), // schema_name
 					tree.NewDString(tableName),  // table_name
 					tree.NewDString(indexName),  // index_name
+					tree.NewDString(resp.Events[i].ContentionType.String()),
 				)
 
 				if err = pusher.pushRow(row...); err != nil {
@@ -7756,19 +7776,12 @@ func genClusterLocksGenerator(
 		if err != nil {
 			return nil, nil, err
 		}
-		hasViewActivityOrViewActivityRedacted, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		hasViewActivityOrViewActivityRedacted, shouldRedactKeys, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 		if err != nil {
 			return nil, nil, err
 		}
 		if !hasViewActivityOrViewActivityRedacted {
 			return nil, nil, noViewActivityOrViewActivityRedactedRoleError(p.User())
-		}
-		shouldRedactKeys := false
-		if !hasAdmin {
-			shouldRedactKeys, err = p.HasViewActivityRedacted(ctx)
-			if err != nil {
-				return nil, nil, err
-			}
 		}
 
 		all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
@@ -8049,6 +8062,7 @@ CREATE TABLE crdb_internal.%s (
   stmt_execution_ids         STRING[] NOT NULL,
   cpu_sql_nanos              INT8,
   last_error_code            STRING,
+  last_error_redactable      STRING,
   status                     STRING NOT NULL
 )`
 
@@ -8074,11 +8088,11 @@ func populateTxnExecutionInsights(
 	addRow func(...tree.Datum) error,
 	request *serverpb.ListExecutionInsightsRequest,
 ) (err error) {
-	hasRoleOption, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+	// Check if the user has sufficient privileges.
+	hasPrivs, shouldRedactError, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 	if err != nil {
 		return err
-	}
-	if !hasRoleOption {
+	} else if !hasPrivs {
 		return noViewActivityOrViewActivityRedactedRoleError(p.User())
 	}
 
@@ -8094,7 +8108,6 @@ func populateTxnExecutionInsights(
 			continue
 		}
 
-		var errorCode string
 		var queryBuilder strings.Builder
 		for i := range insight.Statements {
 			// Build query string.
@@ -8109,10 +8122,18 @@ func populateTxnExecutionInsights(
 				queryBuilder.WriteString(" ; ")
 			}
 			queryBuilder.WriteString(insight.Statements[i].Query)
+		}
 
-			if insight.Statements[i].ErrorCode != "" {
-				errorCode = insight.Statements[i].ErrorCode
-			}
+		errorCode := tree.DNull
+		if insight.Transaction.LastErrorCode != "" {
+			errorCode = tree.NewDString(insight.Transaction.LastErrorCode)
+		}
+
+		var errorMsg tree.Datum
+		if shouldRedactError {
+			errorMsg = tree.NewDString(string(insight.Transaction.LastErrorMsg.Redact()))
+		} else {
+			errorMsg = tree.NewDString(string(insight.Transaction.LastErrorMsg))
 		}
 
 		problems := tree.NewDArray(types.String)
@@ -8181,7 +8202,8 @@ func populateTxnExecutionInsights(
 			causes,
 			stmtIDs,
 			tree.NewDInt(tree.DInt(insight.Transaction.CPUSQLNanos)),
-			tree.NewDString(errorCode),
+			errorCode,
+			errorMsg,
 			tree.NewDString(insight.Transaction.Status.String()),
 		))
 
@@ -8222,7 +8244,8 @@ CREATE TABLE crdb_internal.%s (
 	index_recommendations      STRING[] NOT NULL,
 	implicit_txn               BOOL NOT NULL,
 	cpu_sql_nanos              INT8,
-    error_code                 STRING
+	error_code                 STRING,
+	last_error_redactable      STRING
 )`
 
 var crdbInternalClusterExecutionInsightsTable = virtualSchemaTable{
@@ -8257,11 +8280,11 @@ func populateStmtInsights(
 	addRow func(...tree.Datum) error,
 	request *serverpb.ListExecutionInsightsRequest,
 ) (err error) {
-	hasRoleOption, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+	// Check if the user has sufficient privileges.
+	hasPrivs, shouldRedactError, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 	if err != nil {
 		return err
-	}
-	if !hasRoleOption {
+	} else if !hasPrivs {
 		return noViewActivityOrViewActivityRedactedRoleError(p.User())
 	}
 
@@ -8324,6 +8347,17 @@ func populateStmtInsights(
 				}
 			}
 
+			errorCode := tree.DNull
+			errorMsg := tree.DNull
+			if s.ErrorCode != "" {
+				errorCode = tree.NewDString(s.ErrorCode)
+				if shouldRedactError {
+					errorMsg = tree.NewDString(string(s.ErrorMsg.Redact()))
+				} else {
+					errorMsg = tree.NewDString(string(s.ErrorMsg))
+				}
+			}
+
 			err = errors.CombineErrors(err, addRow(
 				tree.NewDString(hex.EncodeToString(insight.Session.ID.GetBytes())),
 				tree.NewDUuid(tree.DUuid{UUID: insight.Transaction.ID}),
@@ -8351,7 +8385,8 @@ func populateStmtInsights(
 				indexRecommendations,
 				tree.MakeDBool(tree.DBool(insight.Transaction.ImplicitTxn)),
 				tree.NewDInt(tree.DInt(s.CPUSQLNanos)),
-				tree.NewDString(s.ErrorCode),
+				errorCode,
+				errorMsg,
 			))
 		}
 	}
@@ -8424,7 +8459,7 @@ CREATE TABLE crdb_internal.node_memory_monitors (
 		// The memory monitors' names can expose some information about the
 		// activity on the node, so we require VIEWACTIVITY or
 		// VIEWACTIVITYREDACTED permissions.
-		hasRoleOption, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		hasRoleOption, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 		if err != nil {
 			return err
 		}
@@ -8457,7 +8492,7 @@ CREATE TABLE crdb_internal.node_tenant_capabilities_cache (
 );`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		const op = "node_tenant_capabilities_cache"
-		if err := p.RequireAdminRole(ctx, op); err != nil {
+		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 			return err
 		}
 		tenantCapabilitiesReader, err := p.ExecCfg().TenantCapabilitiesReader.Get(op)
@@ -8602,7 +8637,7 @@ CREATE TABLE crdb_internal.kv_flow_controller (
   available_elastic_tokens INT NOT NULL
 );`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		hasRoleOption, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		hasRoleOption, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 		if err != nil {
 			return err
 		}
@@ -8642,7 +8677,7 @@ CREATE TABLE crdb_internal.kv_flow_control_handles (
 	indexes: []virtualIndex{
 		{
 			populate: func(ctx context.Context, constraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
-				hasRoleOption, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+				hasRoleOption, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 				if err != nil {
 					return false, err
 				}
@@ -8663,7 +8698,7 @@ CREATE TABLE crdb_internal.kv_flow_control_handles (
 		},
 	},
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		hasRoleOption, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		hasRoleOption, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 		if err != nil {
 			return err
 		}
@@ -8718,7 +8753,7 @@ CREATE TABLE crdb_internal.kv_flow_token_deductions (
 	indexes: []virtualIndex{
 		{
 			populate: func(ctx context.Context, constraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
-				hasRoleOption, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+				hasRoleOption, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 				if err != nil {
 					return false, err
 				}
@@ -8739,7 +8774,7 @@ CREATE TABLE crdb_internal.kv_flow_token_deductions (
 		},
 	},
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		hasRoleOption, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		hasRoleOption, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 		if err != nil {
 			return err
 		}

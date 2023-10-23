@@ -937,6 +937,11 @@ func (desc *immutable) GetObjectType() privilege.ObjectType {
 	return privilege.Type
 }
 
+// GetObjectTypeString implements the Object interface.
+func (desc *immutable) GetObjectTypeString() string {
+	return string(privilege.Type)
+}
+
 // GetTypeDescriptorClosure returns all type descriptor IDs that are
 // referenced by this input types.T.
 func GetTypeDescriptorClosure(typ *types.T) (ret catalog.DescriptorIDSet) {

@@ -14,6 +14,7 @@
     "@cockroachlabs/crdb/require-antd-style-import": "error",
     // Instead of using console log methods directly, cluster-ui code should
     // call the getLogger() method to provide the appropriate logger.
-    "no-console": "error"
+    "no-console": "error",
+    "eqeqeq": ["error", "smart"]
   }
 }

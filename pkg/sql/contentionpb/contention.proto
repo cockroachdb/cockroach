@@ -147,6 +147,12 @@ message ResolvedTxnID {
 }
 
 
+enum ContentionType {
+  LOCK_WAIT = 0;
+  SERIALIZATION_CONFLICT = 1;
+}
+
+
 message ExtendedContentionEvent {
   cockroach.roachpb.ContentionEvent blocking_event = 1 [
     (gogoproto.nullable) = false
@@ -179,4 +185,6 @@ message ExtendedContentionEvent {
   bytes waiting_stmt_id = 7 [(gogoproto.customname) = "WaitingStmtID",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID",
     (gogoproto.nullable) = false];
+
+  ContentionType contention_type = 8;
 }

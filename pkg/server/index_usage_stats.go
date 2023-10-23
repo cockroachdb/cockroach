@@ -136,7 +136,7 @@ func (s *statusServer) ResetIndexUsageStats(
 	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.RequireRepairClusterMetadataPermission(ctx); err != nil {
 		return nil, err
 	}
 

@@ -24,7 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 )
@@ -127,16 +129,16 @@ func doAlterBackupSchedules(
 			s.incJob.ScheduleID())
 	}
 
-	// Check that the user is admin or the owner of the schedules being altered.
-	isAdmin, err := p.UserHasAdminRole(ctx, p.User())
+	// Check that the user has privileges or is the owner of the schedules being altered.
+	hasPriv, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA, p.User())
 	if err != nil {
 		return err
 	}
 	isOwnerOfFullJob := s.fullJob == nil || s.fullJob.Owner() == p.User()
 	isOwnerOfIncJob := s.incJob == nil || s.incJob.Owner() == p.User()
-	if !isAdmin && !(isOwnerOfFullJob && isOwnerOfIncJob) {
-		return pgerror.New(pgcode.InsufficientPrivilege, "must be admin or owner of the "+
-			"schedules being altered.")
+	if !hasPriv && !(isOwnerOfFullJob && isOwnerOfIncJob) {
+		return pgerror.Newf(pgcode.InsufficientPrivilege, "must be admin or the owner of the "+
+			"schedules being altered, or have %s privilege", privilege.REPAIRCLUSTERMETADATA)
 	}
 
 	if s, err = processFullBackupRecurrence(
@@ -299,8 +301,11 @@ func processScheduleOptions(
 			// NB: as of 20.2, schedule creation requires admin so this is duplicative
 			// but in the future we might relax so you can schedule anything that you
 			// can backup, but then this cluster-wide metric should be admin-only.
-			if err := p.RequireAdminRole(ctx, optUpdatesLastBackupMetric); err != nil {
-				return pgerror.Wrap(err, pgcode.InsufficientPrivilege, "")
+			if hasAdmin, err := p.HasAdminRole(ctx); err != nil {
+				return err
+			} else if !hasAdmin {
+				return pgerror.Newf(pgcode.InsufficientPrivilege,
+					"only users with the admin role are allowed to change %s", optUpdatesLastBackupMetric)
 			}
 
 			updatesLastBackupMetric, err := strconv.ParseBool(v)
@@ -376,6 +381,9 @@ func processOptionsForArgs(inOpts tree.BackupOptions, outOpts *tree.BackupOption
 		} else {
 			outOpts.IncrementalStorage = inOpts.IncrementalStorage
 		}
+	}
+	if inOpts.UpdatesClusterMonitoringMetrics != nil {
+		outOpts.UpdatesClusterMonitoringMetrics = inOpts.UpdatesClusterMonitoringMetrics
 	}
 	return nil
 }

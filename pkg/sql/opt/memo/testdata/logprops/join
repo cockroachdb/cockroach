@@ -1974,7 +1974,7 @@ inner-join (hash)
            ├── variable: x:7 [type=int]
            └── variable: r1:3 [type=int]
 
-norm
+norm set=enable_shared_locking_for_serializable=true
 SELECT * FROM fk INNER JOIN xysd ON x = r1 FOR SHARE OF xysd SKIP LOCKED
 ----
 inner-join (hash)

@@ -108,7 +108,7 @@ foocluster_admin BACKUP INTO LATEST IN 'external://foo/cluster' WITH OPTIONS (de
 foocluster_admin BACKUP INTO 'external://foo/cluster' WITH OPTIONS (detached)
 
 # nonadmin testuser is not allowed to drop a schedule they do not own.
-exec-sql expect-error-regex=(must be admin or owner of the schedule [0-9]+ to DROP it) user=testuser
+exec-sql expect-error-regex=(must have REPAIRCLUSTERMETADATA privilege or be owner of the schedule [0-9]+ to DROP it) user=testuser
 DROP SCHEDULE $fullID
 ----
 regex matches error
@@ -141,7 +141,7 @@ let $otherFullID $otherIncID
 with schedules as (show schedules) select id from schedules where label='foocluster_admin_revoke' order by command->>'backup_type' asc;
 ----
 
-exec-sql expect-error-regex=(must be admin or owner of the schedule [0-9]+ to DROP it) user=testuser
+exec-sql expect-error-regex=(must have REPAIRCLUSTERMETADATA privilege or be owner of the schedule [0-9]+ to DROP it) user=testuser
 DROP SCHEDULE $otherFullID
 ----
 regex matches error
@@ -180,17 +180,17 @@ DROP SCHEDULE $testuserIncID;
 ----
 
 # But testuser can't drop, alter, resume or pause the root owned schedules.
-exec-sql expect-error-regex=(must be admin or owner of the schedule [0-9]+ to PAUSE it) user=testuser
+exec-sql expect-error-regex=(must have REPAIRCLUSTERMETADATA privilege or be owner of the schedule [0-9]+ to PAUSE it) user=testuser
 PAUSE SCHEDULE $otherFullID
 ----
 regex matches error
 
-exec-sql expect-error-regex=(must be admin or owner of the schedule [0-9]+ to RESUME it) user=testuser
+exec-sql expect-error-regex=(must have REPAIRCLUSTERMETADATA privilege or be owner of the schedule [0-9]+ to RESUME it) user=testuser
 RESUME SCHEDULE $otherFullID
 ----
 regex matches error
 
-exec-sql expect-error-regex=(must be admin or owner of the schedule [0-9]+ to DROP it) user=testuser
+exec-sql expect-error-regex=(must have REPAIRCLUSTERMETADATA privilege or be owner of the schedule [0-9]+ to DROP it) user=testuser
 DROP SCHEDULE $otherFullID;
 ----
 regex matches error

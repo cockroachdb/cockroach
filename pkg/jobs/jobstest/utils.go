@@ -15,10 +15,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // EnvTablesType tells JobSchedulerTestEnv whether to use the system tables,
@@ -139,4 +142,18 @@ func GetJobsTableSchema(env scheduledjobs.JobSchedulerEnv) string {
 	}
 	return strings.Replace(systemschema.JobsTableSchema,
 		"system.jobs", env.SystemJobsTableName(), 1)
+}
+
+// DummyClusterID is used while instantiating dummy schedules
+var DummyClusterID = uuid.UUID{1}
+
+// DummyClusterVersion is used while instantiating dummy schedules
+var DummyClusterVersion = clusterversion.ClusterVersion{Version: clusterversion.TestingBinaryVersion}
+
+// AddDummyScheduleDetails augments passed in details with a dummy clusterID and CreationClusterVersion.
+func AddDummyScheduleDetails(details jobspb.ScheduleDetails) jobspb.ScheduleDetails {
+	dummyDetails := details
+	dummyDetails.ClusterID = DummyClusterID
+	dummyDetails.CreationClusterVersion = DummyClusterVersion
+	return dummyDetails
 }

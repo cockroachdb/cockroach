@@ -35,7 +35,7 @@ var targetObjectToPrivilegeObject = map[privilege.TargetObjectType]privilege.Obj
 	privilege.Sequences: privilege.Sequence,
 	privilege.Types:     privilege.Type,
 	privilege.Schemas:   privilege.Schema,
-	privilege.Functions: privilege.Function,
+	privilege.Routines:  privilege.Routine,
 }
 
 type alterDefaultPrivilegesNode struct {
@@ -140,8 +140,11 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 	}
 
 	if n.n.ForAllRoles {
-		if err := params.p.RequireAdminRole(params.ctx, "ALTER DEFAULT PRIVILEGES"); err != nil {
+		if hasAdmin, err := params.p.HasAdminRole(params.ctx); err != nil {
 			return err
+		} else if !hasAdmin {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with the admin role are allowed to ALTER DEFAULT PRIVILEGES FOR ALL ROLES")
 		}
 	} else {
 		// You can change default privileges only for objects that will be created

@@ -11,6 +11,8 @@
 package explain
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -255,6 +257,12 @@ func tableColumns(table cat.Table, ordinals exec.TableColumnOrdinalSet) colinfo.
 				Name: string(col.ColName()),
 				Typ:  col.DatumType(),
 			})
+		} else {
+			// Give downstream operators something to chew on so that they don't panic.
+			cols = append(cols, colinfo.ResultColumn{
+				Name: fmt.Sprintf("unknownCol-%d", i),
+				Typ:  types.Unknown,
+			})
 		}
 	}
 	return cols
@@ -294,7 +302,9 @@ func groupByColumns(
 	columns := make(colinfo.ResultColumns, 0, len(groupCols)+len(aggregations))
 	if inputCols != nil {
 		for _, col := range groupCols {
-			columns = append(columns, inputCols[col])
+			if len(inputCols) > int(col) {
+				columns = append(columns, inputCols[col])
+			}
 		}
 	}
 	for _, agg := range aggregations {

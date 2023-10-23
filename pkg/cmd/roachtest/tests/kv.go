@@ -62,7 +62,7 @@ func registerKV(r registry.Registry) {
 		raid0                    bool
 		duration                 time.Duration
 		tracing                  bool // `trace.debug.enable`
-		tags                     map[string]struct{}
+		weekly                   bool
 		owner                    registry.Owner // defaults to KV
 		sharedProcessMT          bool
 	}
@@ -263,8 +263,8 @@ func registerKV(r registry.Registry) {
 		{nodes: 1, cpus: 32, readPercent: 95, spanReads: true, splits: -1 /* no splits */, disableLoadSplits: true, sequential: true},
 
 		// Weekly larger scale configurations.
-		{nodes: 32, cpus: 8, readPercent: 0, tags: registry.Tags("weekly"), duration: time.Hour},
-		{nodes: 32, cpus: 8, readPercent: 95, tags: registry.Tags("weekly"), duration: time.Hour},
+		{nodes: 32, cpus: 8, readPercent: 0, weekly: true, duration: time.Hour},
+		{nodes: 32, cpus: 8, readPercent: 95, weekly: true, duration: time.Hour},
 	} {
 		opts := opts
 
@@ -274,12 +274,8 @@ func registerKV(r registry.Registry) {
 			limitedSpanStr = "limited-spans"
 		}
 		nameParts = append(nameParts, fmt.Sprintf("kv%d%s", opts.readPercent, limitedSpanStr))
-		if len(opts.tags) > 0 {
-			var keys []string
-			for k := range opts.tags {
-				keys = append(keys, k)
-			}
-			nameParts = append(nameParts, strings.Join(keys, "/"))
+		if opts.weekly {
+			nameParts = append(nameParts, "weekly")
 		}
 		nameParts = append(nameParts, fmt.Sprintf("enc=%t", opts.encryption))
 		nameParts = append(nameParts, fmt.Sprintf("nodes=%d", opts.nodes))
@@ -332,17 +328,26 @@ func registerKV(r registry.Registry) {
 		}
 		cSpec := r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.SSD(opts.ssds), spec.RAID0(opts.raid0))
 
-		// All the kv0|95 tests should run on AWS by default
-		if opts.tags == nil && opts.ssds == 0 && (opts.readPercent == 95 || opts.readPercent == 0) {
-			opts.tags = registry.Tags("aws")
+		var clouds registry.CloudSet
+		tags := make(map[string]struct{})
+		if opts.ssds != 0 {
+			// Multi-store tests are only supported on GCE.
+			clouds = registry.OnlyGCE
+		} else if !opts.weekly && (opts.readPercent == 95 || opts.readPercent == 0) {
+			// All the kv0|95 tests should run on AWS.
+			clouds = registry.AllClouds
+			tags = registry.Tags("aws")
+		} else {
+			clouds = registry.AllExceptAWS
 		}
 
-		var skip string
-		if opts.ssds != 0 && cSpec.Cloud != spec.GCE {
-			skip = fmt.Sprintf("multi-store tests are not supported on cloud %s", cSpec.Cloud)
+		suites := registry.Suites(registry.Nightly)
+		if opts.weekly {
+			suites = registry.Suites(registry.Weekly)
+			tags["weekly"] = struct{}{}
 		}
+
 		r.Add(registry.TestSpec{
-			Skip:      skip,
 			Name:      strings.Join(nameParts, "/"),
 			Owner:     owner,
 			Benchmark: true,
@@ -350,7 +355,9 @@ func registerKV(r registry.Registry) {
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runKV(ctx, t, c, opts)
 			},
-			Tags:              opts.tags,
+			CompatibleClouds:  clouds,
+			Suites:            suites,
+			Tags:              tags,
 			EncryptionSupport: encryption,
 		})
 	}
@@ -359,11 +366,13 @@ func registerKV(r registry.Registry) {
 func registerKVContention(r registry.Registry) {
 	const nodes = 4
 	r.Add(registry.TestSpec{
-		Name:      fmt.Sprintf("kv/contention/nodes=%d", nodes),
-		Owner:     registry.OwnerKV,
-		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(nodes + 1),
-		Leases:    registry.MetamorphicLeases,
+		Name:             fmt.Sprintf("kv/contention/nodes=%d", nodes),
+		Owner:            registry.OwnerKV,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(nodes + 1),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
@@ -433,6 +442,8 @@ func registerKVQuiescenceDead(r registry.Registry) {
 		Name:                "kv/quiescence/nodes=3",
 		Owner:               registry.OwnerReplication,
 		Cluster:             r.MakeClusterSpec(4),
+		CompatibleClouds:    registry.AllExceptAWS,
+		Suites:              registry.Suites(registry.Nightly),
 		Leases:              registry.EpochLeases,
 		SkipPostValidations: registry.PostValidationNoDeadNodes,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -509,10 +520,12 @@ func registerKVQuiescenceDead(r registry.Registry) {
 
 func registerKVGracefulDraining(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "kv/gracefuldraining/nodes=3",
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(4),
-		Leases:  registry.MetamorphicLeases,
+		Name:             "kv/gracefuldraining/nodes=3",
+		Owner:            registry.OwnerKV,
+		Cluster:          r.MakeClusterSpec(4),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, c.Spec().NodeCount))
 			nodes := c.Spec().NodeCount - 1
@@ -671,11 +684,13 @@ func registerKVSplits(r registry.Registry) {
 	} {
 		item := item // for use in closure below
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("kv/splits/nodes=3/quiesce=%t/lease=%s", item.quiesce, item.leases),
-			Owner:   registry.OwnerKV,
-			Timeout: item.timeout,
-			Cluster: r.MakeClusterSpec(4),
-			Leases:  item.leases,
+			Name:             fmt.Sprintf("kv/splits/nodes=3/quiesce=%t/lease=%s", item.quiesce, item.leases),
+			Owner:            registry.OwnerKV,
+			Timeout:          item.timeout,
+			Cluster:          r.MakeClusterSpec(4),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           item.leases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				nodes := c.Spec().NodeCount - 1
 				c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
@@ -740,10 +755,12 @@ func registerKVScalability(r registry.Registry) {
 		for _, p := range []int{0, 95} {
 			p := p
 			r.Add(registry.TestSpec{
-				Name:    fmt.Sprintf("kv%d/scale/nodes=6", p),
-				Owner:   registry.OwnerKV,
-				Cluster: r.MakeClusterSpec(7, spec.CPU(8)),
-				Leases:  registry.MetamorphicLeases,
+				Name:             fmt.Sprintf("kv%d/scale/nodes=6", p),
+				Owner:            registry.OwnerKV,
+				Cluster:          r.MakeClusterSpec(7, spec.CPU(8)),
+				CompatibleClouds: registry.AllExceptAWS,
+				Suites:           registry.Suites(registry.Nightly),
+				Leases:           registry.MetamorphicLeases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runScalability(ctx, t, c, p)
 				},
@@ -876,10 +893,12 @@ func registerKVRangeLookups(r registry.Registry) {
 			panic("unexpected")
 		}
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("kv50/rangelookups/%s/nodes=%d", workloadName, nodes),
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
-			Leases:  registry.MetamorphicLeases,
+			Name:             fmt.Sprintf("kv50/rangelookups/%s/nodes=%d", workloadName, nodes),
+			Owner:            registry.OwnerKV,
+			Cluster:          r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runRangeLookups(ctx, t, c, item.workers, item.workloadType, item.maximumRangeLookupsPerSec)
 			},
@@ -940,10 +959,12 @@ func registerKVRestartImpact(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name: "kv/restart/nodes=12",
 		// This test is expensive (104vcpu), we run it weekly.
-		Tags:    registry.Tags(`weekly`),
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(13, spec.CPU(8)),
-		Leases:  registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Weekly),
+		Tags:             registry.Tags(`weekly`),
+		Owner:            registry.OwnerKV,
+		Cluster:          r.MakeClusterSpec(13, spec.CPU(8)),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
 			workloadNode := c.Spec().NodeCount

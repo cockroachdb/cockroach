@@ -266,7 +266,7 @@ const joinReaderProcName = "join reader"
 // ParallelizeMultiKeyLookupJoinsEnabled determines whether the joinReader
 // parallelizes KV batches in all cases.
 var ParallelizeMultiKeyLookupJoinsEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.distsql.parallelize_multi_key_lookup_joins.enabled",
 	"determines whether KV batches are executed in parallel for lookup joins in all cases. "+
 		"Enabling this will increase the speed of lookup joins when each input row might get "+
@@ -536,6 +536,7 @@ func newJoinReader(
 			flowCtx.EvalCtx.Settings,
 			spec.LockingWaitPolicy,
 			spec.LockingStrength,
+			spec.LockingDurability,
 			streamerBudgetLimit,
 			&jr.streamerInfo.budgetAcc,
 			jr.streamerInfo.maintainOrdering,
@@ -562,6 +563,7 @@ func newJoinReader(
 			Txn:                        jr.txn,
 			LockStrength:               spec.LockingStrength,
 			LockWaitPolicy:             spec.LockingWaitPolicy,
+			LockDurability:             spec.LockingDurability,
 			LockTimeout:                flowCtx.EvalCtx.SessionData().LockTimeout,
 			Alloc:                      &jr.alloc,
 			MemMonitor:                 flowCtx.Mon,

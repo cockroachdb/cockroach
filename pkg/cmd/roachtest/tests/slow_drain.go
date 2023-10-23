@@ -33,10 +33,12 @@ func registerSlowDrain(r registry.Registry) {
 	duration := time.Minute
 
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("slow-drain/duration=%s", duration),
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(numNodes),
-		Leases:  registry.MetamorphicLeases,
+		Name:             fmt.Sprintf("slow-drain/duration=%s", duration),
+		Owner:            registry.OwnerKV,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSlowDrain(ctx, t, c, duration)
 		},

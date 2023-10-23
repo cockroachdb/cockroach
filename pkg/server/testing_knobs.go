@@ -161,6 +161,26 @@ type TestingKnobs struct {
 	// DialNodeCallback is used to mock dial errors when dialing a node. It is
 	// invoked by the dialNode method of server.serverIterator.
 	DialNodeCallback func(ctx context.Context, nodeID roachpb.NodeID) error
+
+	// DisableSettingsWatcher disables the watcher that monitors updates
+	// to system.settings.
+	DisableSettingsWatcher bool
+
+	TenantAutoUpgradeInfo chan struct {
+		Status    int
+		UpgradeTo roachpb.Version
+	}
+
+	// As of September 2023, only `v23.1` and master support shared process tenants. `v23.2` is not
+	// cut yet so the difference between the current binary version on master and v23.1 is only in the
+	// Internal version (both are major=23 minor=1). We only trigger shared process tenant auto upgrade
+	// on changes to major/minor versions but since we can only start shared process tenants in `v23.1`,
+	// there will not be any change to major/minor versions when upgrading from `v23.1` to master and
+	// we won't be able to test this new feature. This testing knob allows `TestTenantAutoUpgrade` to
+	// auto upgrade on changes to the Internal version.
+	// // TODO(ahmad/healthy-pod): Remove this once `v23.2` is cut and update `TestTenantAutoUpgrade`
+	// to reflect the changes.
+	AllowTenantAutoUpgradeOnInternalVersionChanges bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

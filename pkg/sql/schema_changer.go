@@ -69,7 +69,7 @@ import (
 )
 
 var schemaChangeJobMaxRetryBackoff = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"schemachanger.job.max_retry_backoff",
 	"the exponential back off when retrying jobs for schema changes",
 	20*time.Second,
@@ -1627,6 +1627,8 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 							scheduledJobs,
 							scTable.GetPrivileges().Owner(),
 							scTable,
+							sc.execCfg.NodeInfo.LogicalClusterID(),
+							sc.settings.Version.ActiveVersion(ctx),
 						)
 						if err != nil {
 							return err

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
@@ -595,4 +596,50 @@ func IsImplicitAuthConfigured() bool {
 func NewTestID() uint64 {
 	rng, _ := randutil.NewTestRand()
 	return rng.Uint64()
+}
+
+func RequireSuccessfulKMS(ctx context.Context, t *testing.T, uri string) {
+	data := []byte("test123")
+	k, err := cloud.KMSFromURI(ctx, uri, &cloud.TestKMSEnv{
+		Settings:         cluster.MakeTestingClusterSettings(),
+		ExternalIOConfig: &base.ExternalIODirConfig{},
+	})
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, k.Close())
+	}()
+
+	encData, err := k.Encrypt(ctx, data)
+	require.NoError(t, err)
+
+	decData, err := k.Decrypt(ctx, encData)
+	require.NoError(t, err)
+
+	require.Equal(t, data, decData)
+}
+
+func RequireKMSInaccessibleErrorContaining(
+	ctx context.Context, t *testing.T, uri string, errRE string,
+) {
+	data := []byte("test123")
+	k, err := cloud.KMSFromURI(ctx, uri, &cloud.TestKMSEnv{
+		Settings:         cluster.MakeTestingClusterSettings(),
+		ExternalIOConfig: &base.ExternalIODirConfig{},
+	})
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, k.Close())
+	}()
+
+	_, err = k.Encrypt(ctx, data)
+	require.True(t, cloud.IsKMSInaccessible(err), "error not kms inaccessible")
+	if !testutils.IsError(err, errRE) {
+		t.Fatalf("expected error '%s', got: %s", errRE, err)
+	}
+
+	_, err = k.Decrypt(ctx, data)
+	require.True(t, cloud.IsKMSInaccessible(err), "error not kms inaccessible")
+	if !testutils.IsError(err, errRE) {
+		t.Fatalf("expected error '%s', got: %s", errRE, err)
+	}
 }

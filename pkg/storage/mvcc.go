@@ -69,7 +69,7 @@ const (
 )
 
 var minWALSyncInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"rocksdb.min_wal_sync_interval",
 	"minimum duration between syncs of the RocksDB WAL",
 	0*time.Millisecond,
@@ -91,7 +91,7 @@ var minWALSyncInterval = settings.RegisterDurationSetting(
 // V23_1_MVCCRangeTombstonesUnconditionallyEnabled, the feature is
 // unconditionally enabled.
 var MVCCRangeTombstonesEnabledInMixedClusters = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"storage.mvcc.range_tombstones.enabled",
 	"controls the use of MVCC range tombstones in mixed version clusters; range tombstones are always on in finalized 23.1 clusters",
 	false)
@@ -110,7 +110,7 @@ func CanUseMVCCRangeTombstones(ctx context.Context, st *cluster.Settings) bool {
 // MaxConflictsPerLockConflictError sets maximum number of locks returned in
 // LockConflictError in operations that return multiple locks per error.
 var MaxConflictsPerLockConflictError = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"storage.mvcc.max_intents_per_error",
 	"maximum number of locks returned in errors during evaluation",
 	MaxConflictsPerLockConflictErrorDefault,
@@ -128,16 +128,209 @@ var rocksdbConcurrency = envutil.EnvOrDefaultInt(
 		return max
 	}())
 
-// The sub-level threshold at which to allow an increase in compaction
-// concurrency. The maximum is still controlled by
-// pebble.Options.MaxConcurrentCompactions. The default of 2 will allow an
-// additional compaction (so total 1 + 1 = 2 compactions) when the sub-level
-// count is 2, and increment concurrency by 1 whenever sub-level count
-// increases by 2 (so 1 + 3 = 4 compactions) when sub-level count is 6.
-// Admission control starts shaping regular traffic at a sub-level count of 5,
-// and elastic traffic at a sub-level count of 1, hence this default of 2. See
-// https://github.com/cockroachdb/pebble/issues/2832#issuecomment-1699743392
-// for some discussion on the bad behavior caused by not setting this option.
+// l0SubLevelCompactionConcurrency is the sub-level threshold at which to
+// allow an increase in compaction concurrency. The maximum is still
+// controlled by pebble.Options.MaxConcurrentCompactions. The default of 2
+// allows an additional compaction (so total 1 + 1 = 2 compactions) when the
+// sub-level count is 2, and increments concurrency by 1 whenever sub-level
+// count increases by 2 (so 1 + 2 = 3 compactions) when sub-level count is 4,
+// and so on, i.e., floor(1 + l/2), where l is the number of sub-levels. See
+// the logic in
+// https://github.com/cockroachdb/pebble/blob/86593692e09f904f4ea739e065074f44f40ec9ba/compaction_picker.go#L1204-L1220.
+//
+// We abbreviate l0SubLevelCompactionConcurrency to lslcc below. And all the
+// discussion below is in units of compaction concurrency. Let l represent the
+// current sub-level count. MaxConcurrentCompactions is a constant and not a
+// function of l. The upper bound on concurrent compactions, that we computed
+// above, is represented as upper-bound-cc(lslcc, l), since it is a function
+// of both lslcc and l. The formula is:
+//
+// upper-bound-cc(lslcc, l) = floor(1 + l/lslcc)
+//
+// where in the example above lslcc=2.
+//
+// A visual representation (where lslcc is fixed) is shown below, where the x
+// axis is the current number of sub-levels and the y axis is in units of
+// compaction concurrency (cc).
+//
+//	   ^               +  upper-bound-cc
+//	   |            +
+//	cc |---------+------------- MaxConcurrentCompactions
+//	   |      +
+//	   |   +
+//	   |+
+//	   |
+//	   ------------------------->
+//	      l
+//
+// Where the permitted concurrent compactions is the minimum across the two
+// curves shown above.
+//
+//	   ^
+//	   |
+//	cc |         **********     permitted concurrent compactions
+//	   |      *
+//	   |   *
+//	   |*
+//	   |
+//	   ------------------------->
+//	        l
+//
+// Next we discuss the interaction with admission control, which is where care
+// is needed. Admission control (see admission.ioLoadListener) gives out
+// tokens that shape the incoming traffic. The tokens are a function of l and
+// the measured compaction bandwidth out of L0. But the measured compaction
+// bandwidth is itself a function of the tokens and upper-bound-cc(lslcc,l)
+// and MaxConcurrentCompactions. To tease apart this interaction, we note that
+// when l increases and AC starts shaping incoming traffic, it initially gives
+// out tokens that are higher than the measured compaction bandwidth. That is,
+// it over-admits. So if Pebble has the ability to increase compaction
+// bandwidth to handle this over-admission, it has the opportunity to do so,
+// and the increased compaction bandwidth will feed back into even more
+// tokens, and this will repeat until Pebble has no ability to further
+// increase the compaction bandwidth. This simple analysis suffices when
+// upper-bound-cc(lslcc,l) is always infinity since Pebble can increase up to
+// MaxConcurrentCompactions as soon as it starts falling behind. This is
+// represented in the following diagram.
+//
+//	   ^----
+//	   |    --                  - AC tokens
+//	   |      --                + actual concurrent compactions
+//	cc |****+*+*+*+****         * permitted concurrent compactions
+//	   |  +       --
+//	   | +          --------
+//	   |+
+//	   |
+//	   ------------------------->
+//	        l
+//
+// Observe that in this diagram, the permitted concurrent compactions is
+// always equal to MaxConcurrentCompactions, and the actual concurrent
+// compactions ramps up very quickly to that permitted level as l increases.
+// The AC tokens start of at close to infinity and start declining as l
+// increases, but are still higher than the permitted concurrent compactions.
+// And the AC tokens fall below the permitted concurrent compactions *after*
+// the actual concurrent compactions have reached that permitted level. This
+// "fall below" happens to try to reduce the number of sub-levels (since AC
+// has an objective of what sub-level count it wants to be stable at).
+//
+// For the remainder of this discussion we will ignore the actual concurrent
+// compactions and just use permitted concurrent compactions to serve both the
+// roles of actual and permitted. In this simplified world, the objective we
+// have is that AC tokens exceed the permitted concurrent compactions until
+// permitted concurrent compactions have reached their max value. When this
+// objective is not satisfied, we will unnecessarily throttle traffic even
+// though there is the possibility to allow higher traffic since we have not
+// yet used up to the permitted concurrent compactions.
+//
+// Note, we are depicting AC tokens in terms of overall compaction concurrency
+// in this analysis, while real AC tokens are based on compactions out of L0,
+// and some of the compactions are happening between other levels. This is
+// fine if we reinterpret what we discuss here as AC tokens as not the real AC
+// tokens but the effect of the real AC tokens on the overall compaction
+// bandwidth needed in the LSM. To illustrate this idea, say 25% of the
+// compaction concurrency is spent on L0=>Lbase compactions and 75% on other
+// compactions. Say current permitted compaction concurrency is 4 (so
+// L0=>Lbase compaction concurrency is 1) and MaxConcurrentCompactions is 8.
+// And say that real AC tokens throttles traffic to this current level that
+// can be compacted out of L0. Then in the analysis here, we consider AC
+// tokens as shaping to a compaction concurrency of 4.
+//
+// As a reminder,
+//
+// permitted-concurrent-compactions = min(upper-bound-cc(lslcc,l), MaxConcurrentCompactions)
+//
+// We analyze AC tokens also expressed in units of compaction concurrency,
+// where ac-tokens are a function of l and the current
+// permitted-concurrent-compactions (since permitted==actual, in our
+// simplification), which we can write as
+// ac-tokens(l,permitted-concurrent-compactions). We consider two parts of
+// ac-tokens: the first part when upper-bound-cc(lslcc,l) <=
+// MaxConcurrentCompactions, and the second part when upper-bound-cc(lslcc,l)
+// > MaxConcurrentCompactions. There is a transition from the first part to
+// the second part at some point as l increases. In the first part,
+// permitted-concurrent-compactions=upper-bound-cc(lslcc,l), and so ac-tokens
+// is a function of l and upper-bound-cc. We translate our original objective
+// into the following simplified objective for the first part:
+//
+// ac-tokens should be greater than upper-bound-cc as l increases, and it
+// should be equal to or greater than upper-bound-cc when upper-bound-cc
+// becomes equal to MaxConcurrentCompactions.
+//
+// The following diagram shows an example that achieves this objective:
+//
+//	   ^
+//	   |-------
+//	   |       --      +              - ac-tokens
+//	   |         --  +                + upper-bound-cc
+//	cc |*********+*--***********      * MaxConcurrentCompactions
+//	   |      +       --
+//	   |   +            -----
+//	   |+
+//	   |
+//	   ------------------------->
+//	        l
+//
+// Note that the objective does not say anything about ac-tokens after
+// upper-bound-cc exceeds MaxConcurrentCompactions since what happens at
+// higher l values did not prevent us from achieving the maximum compaction
+// concurrency.
+//
+// ac-tokens for regular traffic with lslcc=2:
+//
+// Admission control (see admission.ioLoadListener) starts shaping regular
+// traffic at a sub-level count of 5, with twice the tokens as compaction
+// bandwidth (out of L0) at sub-level count 5, and tokens equal to the
+// compaction bandwidth at sub-level count of 10. AC wants to operate at a
+// stable point of 10 sub-levels under regular traffic overload. Let
+// MaxConcurrentCompactions be represented as mcc. At sub-level count 5, the
+// upper-bound-cc is floor(1+5/2)=3, so ac-tokens are representative of a
+// concurrency of min(3,mcc)*2. At sub-level count of 10, the upper-bound-cc
+// is floor(1+10/2)=6, so tokens are also representative of a compaction
+// concurrency of min(6,mcc)*1. This regular traffic token shaping behavior is
+// hard-wired in ioLoadListener (with code constants), and we don't currently
+// have a reason to change it. If MaxConcurrentCompactions is <= 6, the
+// objective stated earlier is achieved, since min(3,mcc)*2 and min(6,mcc) are
+// >= mcc. But if MaxConcurrentCompactions > 6, AC will throttle to compaction
+// concurrency of 6, which fails the objective since we have ignored the
+// ability to increase compaction concurrency. Note that this analysis is
+// somewhat pessimistic since if we are consistently operating at 5 or more
+// sub-levels, other levels in the LSM are also building up compaction debt,
+// and there is another mechanism in Pebble that increases compaction
+// concurrency in response to compaction debt. Nevertheless, this pessimistic
+// analysis shows that we are ok with MaxConcurrentCompactions <= 6. We will
+// consider the possibility of reducing lslcc below.
+//
+// ac-tokens for elastic traffic with lslcc=2:
+//
+// For elastic traffic, admission control starts shaping traffic at sub-level
+// count of 2, with tokens equal to 1.25x the compaction bandwidth, so
+// ac-tokens is 1.25*min(mcc,floor(1+2/2))=1.25*min(mcc,2) compaction
+// concurrency. And at sub-level count of 4, the tokens are equal to 1x the
+// compaction bandwidth, so ac-tokens is 1*min(mcc,floor(1+4/2))=min(mcc,3)
+// compaction concurrency. AC wants to operate at a stable point of 4
+// sub-levels under elastic traffic overload. For mcc=3 (the default value),
+// the above values at l=2 and l=4 are 2.5 and 3 respectively. Even though 2.5
+// < 3, we deem the value of ac-tokens as acceptable with mcc=3. But
+// deployments which use machines with a large number of CPUs are sometimes
+// configured with a larger value of MaxConcurrentCompactions. In those cases
+// elastic traffic will be throttled even though there is an opportunity to
+// increase compaction concurrency to allow more elastic traffic.
+//
+// If a deployment administrator knows that the system is provisioned such
+// that aggressively increasing up to MaxConcurrentCompactions is harmless to
+// foreground traffic, they can set l0SubLevelCompactionConcurrency=1. The
+// ac-tokens will be:
+//
+//   - Elastic: sub-level=2, 1.25*min(mcc,3); sub-level=4, 1*min(mcc,5);
+//     sub-level=6, 0.75*min(mcc,7). With mcc=4, at sub-level=2, we get
+//     ac-tokens=3.75, which is deemed acceptable. Also, compaction debt will
+//     increase and allow for utilizing even higher concurrency, eventually,
+//     and since this is elastic traffic that eventual behavior is acceptable.
+//
+//   - Regular: sub-level=5, 2*min(mcc,6); sub-level=10, 1*min(mcc,11). With
+//     mcc=12, at sub-level=5, we get ac-tokens=12. So we are satisfying the
+//     objective even if mcc were as high as 12.
 var l0SubLevelCompactionConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_L0_SUB_LEVEL_CONCURRENCY", 2)
 
@@ -556,6 +749,48 @@ func updateStatsOnResolve(
 		ms.IntentCount++
 		ms.LockCount++
 	}
+	return ms
+}
+
+// updateStatsOnAcquireLock updates MVCCStats for acquiring a replicated shared
+// or exclusive lock on a key. If orig is not nil, the lock acquisition is
+// replacing an existing lock with a new lock that has the exact same txn ID and
+// strength.
+func updateStatsOnAcquireLock(
+	origKeySize, origValSize, keySize, valSize int64, orig, meta *enginepb.MVCCMetadata,
+) enginepb.MVCCStats {
+	var ms enginepb.MVCCStats
+
+	// Remove current lock counts.
+	if orig != nil {
+		// Move the (so far empty) stats to the timestamp at which the previous
+		// lock was acquired, which is where we wish to reclassify its initial
+		// contributions.
+		ms.AgeTo(orig.Timestamp.WallTime)
+
+		// Subtract counts attributable to the lock we're replacing.
+		ms.LockBytes -= origKeySize + origValSize
+		ms.LockCount--
+	}
+
+	// Now add in the contributions from the new lock at the new acquisition
+	// timestamp.
+	ms.AgeTo(meta.Timestamp.WallTime)
+	ms.LockBytes += keySize + valSize
+	ms.LockCount++
+	return ms
+}
+
+// updateStatsOnReleaseLock updates MVCCStats for releasing a replicated shared
+// or exclusive lock on a key. orig is the lock being released, and must not be
+// nil.
+func updateStatsOnReleaseLock(
+	origKeySize, origValSize int64, orig *enginepb.MVCCMetadata,
+) enginepb.MVCCStats {
+	var ms enginepb.MVCCStats
+	ms.AgeTo(orig.Timestamp.WallTime)
+	ms.LockBytes -= origKeySize + origValSize
+	ms.LockCount--
 	return ms
 }
 
@@ -1439,14 +1674,17 @@ func (b *putBuffer) release() {
 	putBufferPool.Put(b)
 }
 
-func (b *putBuffer) lockTableKey(key roachpb.Key, str lock.Strength, txnID uuid.UUID) EngineKey {
-	var lockTableKey EngineKey
-	lockTableKey, b.ltKeyBuf = LockTableKey{
+func (b *putBuffer) lockTableKey(
+	key roachpb.Key, str lock.Strength, txnID uuid.UUID,
+) (ltEngKey EngineKey, keyBytes int64) {
+	ltKey := LockTableKey{
 		Key:      key,
 		Strength: str,
 		TxnUUID:  txnID,
-	}.ToEngineKey(b.ltKeyBuf)
-	return lockTableKey
+	}
+	ltEngKey, b.ltKeyBuf = ltKey.ToEngineKey(b.ltKeyBuf)
+	keyBytes = ltKey.EncodedSize()
+	return ltEngKey, keyBytes
 }
 
 func (b *putBuffer) marshalMeta(meta *enginepb.MVCCMetadata) (_ []byte, err error) {
@@ -1483,22 +1721,19 @@ var trueValue = true
 // putLockMeta puts a lock at the given key with the provided strength and
 // value.
 func (b *putBuffer) putLockMeta(
-	writer Writer, key MVCCKey, str lock.Strength, meta *enginepb.MVCCMetadata, alreadyExists bool,
+	writer Writer,
+	key roachpb.Key,
+	str lock.Strength,
+	meta *enginepb.MVCCMetadata,
+	alreadyExists bool,
 ) (keyBytes, valBytes int64, err error) {
-	if str == lock.Intent {
-		if meta.Timestamp.ToTimestamp() != meta.Txn.WriteTimestamp {
-			// The timestamps are supposed to be in sync. If they weren't, it wouldn't
-			// be clear for readers which one to use for what.
-			return 0, 0, errors.AssertionFailedf(
-				"meta.Timestamp != meta.Txn.WriteTimestamp: %s != %s", meta.Timestamp, meta.Txn.WriteTimestamp)
-		}
-	} else {
-		if !meta.Timestamp.ToTimestamp().IsEmpty() {
-			return 0, 0, errors.AssertionFailedf(
-				"meta.Timestamp not zero for lock with strength %s", str.String())
-		}
+	if meta.Timestamp.ToTimestamp() != meta.Txn.WriteTimestamp {
+		// The timestamps are supposed to be in sync. If they weren't, it wouldn't
+		// be clear for readers which one to use for what.
+		return 0, 0, errors.AssertionFailedf(
+			"meta.Timestamp != meta.Txn.WriteTimestamp: %s != %s", meta.Timestamp, meta.Txn.WriteTimestamp)
 	}
-	lockTableKey := b.lockTableKey(key.Key, str, meta.Txn.ID)
+	lockTableKey, lockTableKeyBytes := b.lockTableKey(key, str, meta.Txn.ID)
 	if alreadyExists {
 		// Absence represents false.
 		meta.TxnDidNotUpdateMeta = nil
@@ -1512,7 +1747,17 @@ func (b *putBuffer) putLockMeta(
 	if err = writer.PutEngineKey(lockTableKey, bytes); err != nil {
 		return 0, 0, err
 	}
-	return int64(key.EncodedSize()), int64(len(bytes)), nil
+	if str == lock.Intent {
+		// For historical reasons, intent metadata key-values use the encoded
+		// size of the unversioned MVCCKey that they are virtualized at (e.g. by
+		// the intentInterleavingIter) as their contribution to stats, instead
+		// of their real size in the lock table keyspace.
+		keyBytes = int64(MakeMVCCMetadataKey(key).EncodedSize())
+	} else {
+		keyBytes = lockTableKeyBytes
+	}
+	valBytes = int64(len(bytes))
+	return keyBytes, valBytes, nil
 }
 
 // clearLockMeta clears a lock at the given key and strength.
@@ -1528,19 +1773,26 @@ func (b *putBuffer) putLockMeta(
 // doing single-clear.
 func (b *putBuffer) clearLockMeta(
 	writer Writer,
-	key MVCCKey,
+	key roachpb.Key,
 	str lock.Strength,
 	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
 	opts ClearOptions,
 ) (keyBytes, valBytes int64, err error) {
-	lockTableKey := b.lockTableKey(key.Key, str, txnUUID)
+	lockTableKey, lockTableKeyBytes := b.lockTableKey(key, str, txnUUID)
 	if txnDidNotUpdateMeta {
 		err = writer.SingleClearEngineKey(lockTableKey)
 	} else {
 		err = writer.ClearEngineKey(lockTableKey, opts)
 	}
-	return int64(key.EncodedSize()), 0, err
+	if str == lock.Intent {
+		// See comment in putLockMeta.
+		keyBytes = int64(MakeMVCCMetadataKey(key).EncodedSize())
+	} else {
+		keyBytes = lockTableKeyBytes
+	}
+	valBytes = 0 // cleared
+	return keyBytes, valBytes, err
 }
 
 // MVCCPut sets the value for a specified key. It will save the value
@@ -2323,7 +2575,7 @@ func mvccPutInternal(
 		alreadyExists := ok && meta.Txn != nil
 		// Write the intent metadata key.
 		metaKeySize, metaValSize, err = buf.putLockMeta(
-			writer, metaKey, lock.Intent, newMeta, alreadyExists)
+			writer, metaKey.Key, lock.Intent, newMeta, alreadyExists)
 		if err != nil {
 			return false, err
 		}
@@ -4479,7 +4731,9 @@ func MVCCPaginate(
 //
 // Returns whether or not an intent was found to resolve, number of bytes added
 // to the write batch by intent resolution, and the resume span if the max
-// bytes limit was exceeded.
+// bytes limit was exceeded. Additionally, if any replicated locks with strength
+// lock.Shared or lock.Exclusive are released, a boolean indicating as such is
+// also returned.
 //
 // Transaction epochs deserve a bit of explanation. The epoch for a
 // transaction is incremented on transaction retries. A transaction
@@ -4502,223 +4756,109 @@ func MVCCResolveWriteIntent(
 	ms *enginepb.MVCCStats,
 	intent roachpb.LockUpdate,
 	opts MVCCResolveWriteIntentOptions,
-) (ok bool, numBytes int64, resumeSpan *roachpb.Span, err error) {
+) (ok bool, numBytes int64, resumeSpan *roachpb.Span, replLocksReleased bool, err error) {
 	if len(intent.Key) == 0 {
-		return false, 0, nil, emptyKeyError()
+		return false, 0, nil, false, emptyKeyError()
 	}
 	if len(intent.EndKey) > 0 {
-		return false, 0, nil, errors.Errorf("can't resolve range intent as point intent")
+		return false, 0, nil, false, errors.Errorf("can't resolve range intent as point intent")
 	}
 	if opts.TargetBytes < 0 {
-		return false, 0, &roachpb.Span{Key: intent.Key}, nil
+		return false, 0, &roachpb.Span{Key: intent.Key}, false, nil
 	}
 
-	iter, err := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-		KeyTypes: IterKeyTypePointsAndRanges,
-		Prefix:   true,
-	})
-	if err != nil {
-		return false, 0, nil, err
-	}
-	defer iter.Close()
-	iter.SeekIntentGE(intent.Key, intent.Txn.ID)
-	buf := newPutBuffer()
-	defer buf.release()
 	// Production code will use a buffered writer, which makes the numBytes
 	// calculation accurate. Note that an inaccurate numBytes (e.g. 0 in the
 	// case of an unbuffered writer) does not affect any safety properties of
 	// the database.
 	beforeBytes := rw.BufferedSize()
-	ok, err = mvccResolveWriteIntent(ctx, rw, iter, ms, intent, buf)
-	numBytes = int64(rw.BufferedSize() - beforeBytes)
-	return ok, numBytes, nil, err
-}
 
-// iterForKeyVersions provides a subset of the functionality of MVCCIterator.
-// The expected use-case is when the iter is already positioned at the intent
-// (if one exists) for a particular key, or some version, and positioning
-// operators like SeekGE, Next are only being used to find other versions for
-// that key, and never to find intents for other keys. A full-fledged
-// MVCCIterator can be used here. The methods below have the same behavior as
-// in MVCCIterator, but the caller should never call SeekGE with an empty
-// MVCCKey.Timestamp. Additionally, Next must be preceded by at least one call
-// to SeekGE.
-type iterForKeyVersions interface {
-	Valid() (bool, error)
-	HasPointAndRange() (bool, bool)
-	SeekGE(key MVCCKey)
-	Next()
-	UnsafeKey() MVCCKey
-	UnsafeValue() ([]byte, error)
-	MVCCValueLenAndIsTombstone() (int, bool, error)
-	ValueProto(msg protoutil.Message) error
-	RangeKeys() MVCCRangeKeyStack
-}
+	// Iterate over all locks held by intent.Txn on this key.
+	ltIter, err := NewLockTableIterator(rw, LockTableIteratorOptions{
+		Prefix:     true,
+		MatchTxnID: intent.Txn.ID,
+	})
+	if err != nil {
+		return false, 0, nil, false, err
+	}
+	defer ltIter.Close()
+	buf := newPutBuffer()
+	defer buf.release()
 
-// separatedIntentAndVersionIter is an implementation of iterForKeyVersions
-// used for ranged intent resolution. The MVCCIterator used by it is of
-// MVCCKeyIterKind. The caller attempting to do ranged intent resolution uses
-// seekEngineKey, nextEngineKey to iterate over the lock table, and for each
-// lock/intent that needs to be resolved passes this iterator to
-// mvccResolveWriteIntent. The MVCCIterator is positioned lazily, only if
-// needed -- the fast path for intent resolution when a transaction is
-// committing and does not need to change the provisional value or timestamp,
-// does not need to position the MVCCIterator. The other cases, which include
-// transaction aborts and changing provisional value timestamps, or changing
-// the provisional value due to savepoint rollback, will position the
-// MVCCIterator, and are the slow path.
-// Note that even this slow path is faster than when intents were interleaved,
-// since it can avoid iterating over keys with no intents.
-type separatedIntentAndVersionIter struct {
-	engineIter EngineIterator
-	mvccIter   MVCCIterator
+	var ltSeekKey EngineKey
+	ltSeekKey, buf.ltKeyBuf = LockTableKey{
+		Key: intent.Key,
+		// lock.Intent is the first locking strength in the lock-table. As a
+		// minor performance optimization, we seek to this version and iterate
+		// instead of iterating from the beginning of the version prefix (i.e.
+		// keys.LockTableSingleKey(intent.Key)). This can seek past half of the
+		// LSM tombstones on this key in cases like those described in d1c91e0e
+		// where intents are repeatedly written and removed on a specific key so
+		// an intent is surrounded by a large number of tombstones during its
+		// resolution.
+		//
+		// This isn't a full solution to this problem, because we still end up
+		// iterating through the other half of the LSM tombstones while checking
+		// for Exclusive and Shared locks. For a full solution, we need to track
+		// the locking strengths that we intend to resolve on the client so that
+		// we can seek to just those versions.
+		//
+		// We could also seek to all three versions (Intent, Exclusive, Shared)
+		// with a limit, but that would require 3 seeks in all cases instead of
+		// a single seek and step in cases where only an intent is present. We
+		// chose not to pessimize the common case to optimize the uncommon case.
+		Strength: lock.Intent,
+		TxnUUID:  intent.Txn.ID,
+	}.ToEngineKey(buf.ltKeyBuf)
 
-	// Already parsed meta, when the starting position is at an intent.
-	meta            *enginepb.MVCCMetadata
-	atMVCCIter      bool
-	engineIterValid bool
-	engineIterErr   error
-	intentKey       roachpb.Key
-}
-
-var _ iterForKeyVersions = &separatedIntentAndVersionIter{}
-
-func (s *separatedIntentAndVersionIter) seekEngineKeyGE(key EngineKey) {
-	s.atMVCCIter = false
-	s.meta = nil
-	s.engineIterValid, s.engineIterErr = s.engineIter.SeekEngineKeyGE(key)
-	s.initIntentKey()
-}
-
-func (s *separatedIntentAndVersionIter) nextEngineKey() {
-	s.atMVCCIter = false
-	s.meta = nil
-	s.engineIterValid, s.engineIterErr = s.engineIter.NextEngineKey()
-	s.initIntentKey()
-}
-
-func (s *separatedIntentAndVersionIter) initIntentKey() {
-	if s.engineIterValid {
-		engineKey, err := s.engineIter.UnsafeEngineKey()
+	for valid, err := ltIter.SeekEngineKeyGE(ltSeekKey); ; valid, err = ltIter.NextEngineKey() {
 		if err != nil {
-			s.engineIterErr = err
-			s.engineIterValid = false
-			return
+			return false, 0, nil, false, errors.Wrap(err, "seeking lock table")
+		} else if !valid {
+			break
 		}
-		if s.intentKey, err = keys.DecodeLockTableSingleKey(engineKey.Key); err != nil {
-			s.engineIterErr = err
-			s.engineIterValid = false
-			return
+		str, txnID, err := ltIter.LockTableKeyVersion()
+		if err != nil {
+			return false, 0, nil, false, errors.Wrap(err, "decoding lock table key version")
 		}
+		if txnID != intent.Txn.ID {
+			return false, 0, nil, false, errors.AssertionFailedf(
+				"unexpected txnID %v != %v while scanning lock table", txnID, intent.Txn.ID)
+		}
+		if err := ltIter.ValueProto(&buf.meta); err != nil {
+			return false, 0, nil, false, errors.Wrap(err, "unmarshaling lock table value")
+		}
+		var strOk bool
+		if str == lock.Intent {
+			// Intent resolution requires an MVCC iterator to look up the MVCC
+			// version associated with the intent. Create one.
+			var iter MVCCIterator
+			{
+				iter, err = rw.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+					Prefix:   true,
+					KeyTypes: IterKeyTypePointsAndRanges,
+				})
+				if err != nil {
+					return false, 0, nil, false, err
+				}
+				defer iter.Close()
+			}
+			strOk, err = mvccResolveWriteIntent(ctx, rw, iter, ms, intent, &buf.meta, buf)
+		} else {
+			strOk, err = mvccReleaseLockInternal(ctx, rw, ms, intent, str, &buf.meta, buf)
+			replLocksReleased = replLocksReleased || strOk
+		}
+		if err != nil {
+			return false, 0, nil, false, err
+		}
+		ok = ok || strOk
 	}
-}
-
-func (s *separatedIntentAndVersionIter) Valid() (bool, error) {
-	if s.atMVCCIter {
-		return s.mvccIter.Valid()
-	}
-	return s.engineIterValid, s.engineIterErr
-}
-
-func (s *separatedIntentAndVersionIter) HasPointAndRange() (bool, bool) {
-	hasPoint, hasRange := s.mvccIter.HasPointAndRange()
-	if !s.atMVCCIter {
-		hasPoint = s.engineIterValid
-	}
-	return hasPoint, hasRange
-}
-
-func (s *separatedIntentAndVersionIter) RangeKeys() MVCCRangeKeyStack {
-	return s.mvccIter.RangeKeys()
-}
-
-func (s *separatedIntentAndVersionIter) SeekGE(key MVCCKey) {
-	if !key.IsValue() {
-		panic(errors.AssertionFailedf("SeekGE only permitted for values"))
-	}
-	s.mvccIter.SeekGE(key)
-	s.atMVCCIter = true
-}
-
-func (s *separatedIntentAndVersionIter) Next() {
-	if !s.atMVCCIter {
-		panic(errors.AssertionFailedf("Next not preceded by SeekGE"))
-	}
-	s.mvccIter.Next()
-}
-
-func (s *separatedIntentAndVersionIter) UnsafeKey() MVCCKey {
-	if s.atMVCCIter {
-		return s.mvccIter.UnsafeKey()
-	}
-	return MVCCKey{Key: s.intentKey}
-}
-
-func (s *separatedIntentAndVersionIter) UnsafeValue() ([]byte, error) {
-	if s.atMVCCIter {
-		return s.mvccIter.UnsafeValue()
-	}
-	return s.engineIter.UnsafeValue()
-}
-
-func (s *separatedIntentAndVersionIter) MVCCValueLenAndIsTombstone() (int, bool, error) {
-	if !s.atMVCCIter {
-		return 0, false, errors.AssertionFailedf("not at MVCC value")
-	}
-	return s.mvccIter.MVCCValueLenAndIsTombstone()
-}
-
-func (s *separatedIntentAndVersionIter) ValueProto(msg protoutil.Message) error {
-	if s.atMVCCIter {
-		return s.mvccIter.ValueProto(msg)
-	}
-	meta, ok := msg.(*enginepb.MVCCMetadata)
-	if ok && meta == s.meta {
-		// Already parsed.
-		return nil
-	}
-	v, err := s.engineIter.UnsafeValue()
-	if err != nil {
-		return err
-	}
-	return protoutil.Unmarshal(v, msg)
-}
-
-// mvccGetIntent uses an iterForKeyVersions that has been seeked to
-// metaKey.Key for a potential intent, and tries to retrieve an intent if it
-// is present. ok returns true iff an intent for that key is found. In that
-// case, keyBytes and valBytes are set to non-zero and the deserialized intent
-// is placed in meta.
-func mvccGetIntent(
-	iter iterForKeyVersions, metaKey MVCCKey, meta *enginepb.MVCCMetadata,
-) (ok bool, keyBytes, valBytes int64, err error) {
-	if ok, err := iter.Valid(); !ok {
-		return false, 0, 0, err
-	}
-	if hasPoint, _ := iter.HasPointAndRange(); !hasPoint {
-		return false, 0, 0, nil
-	}
-	unsafeKey := iter.UnsafeKey()
-	if !unsafeKey.Key.Equal(metaKey.Key) {
-		return false, 0, 0, nil
-	}
-	if unsafeKey.IsValue() {
-		return false, 0, 0, nil
-	}
-	if err := iter.ValueProto(meta); err != nil {
-		return false, 0, 0, err
-	}
-	v, err := iter.UnsafeValue()
-	// iter.ValueProto returned without err, so we should not see an error now.
-	if err != nil {
-		return false, 0, 0, errors.HandleAsAssertionFailure(err)
-	}
-	valLen := int64(len(v))
-	return true, int64(unsafeKey.EncodedSize()), valLen, nil
+	numBytes = int64(rw.BufferedSize() - beforeBytes)
+	return ok, numBytes, nil, replLocksReleased, nil
 }
 
 // With the separated lock table, we are employing a performance optimization:
-// when an intent metadata is removed, we preferably want to do so using a
+// when a lock's metadata value is removed, we preferably want to do so using a
 // SingleDel (as opposed to a Del). This is only safe if the previous operations
 // on the metadata key allow it. Due to practical limitations, at the time of
 // writing the condition we need is that the pebble history of the key consists
@@ -4729,7 +4869,7 @@ func mvccGetIntent(
 // It is difficult to track the history of engine writes to a key precisely, in
 // particular when values are ever aborted. So we apply the optimization only to
 // the main case in which it is useful, namely that of a transaction committing
-// its intent that it never re-wrote in the initial epoch (i.e. no chance of it
+// its lock that it never re-wrote in the initial epoch (i.e. no chance of it
 // ever being removed before as part of being pushed). Note that when a txn
 // refreshes, it stays in the original epoch, and the intents are moved, which
 // does *not* cause a write to the MVCC metadata key (for which the history has
@@ -4746,7 +4886,7 @@ func mvccGetIntent(
 //	  INSERT INTO kv VALUES(1, 2);
 //	COMMIT;
 //
-// This would first remove the intent (1,1) during the ROLLBACK using a Del (the
+// This would first remove the lock (1,1) during the ROLLBACK using a Del (the
 // anomaly below would occur the same if a SingleDel were used here), and thus
 // without an additional condition the INSERT (1,2) would be eligible for
 // committing via a SingleDel. This has to be avoided as well, since the
@@ -4767,7 +4907,7 @@ func mvccGetIntent(
 //     ↓
 //   - Set
 //
-// which means that a previously deleted intent metadata would erroneously
+// which means that a previously deleted lock metadata would erroneously
 // become visible again. So on top of restricting SingleDel to the COMMIT case,
 // we also restrict it to the case of having no ignored sequence number ranges
 // (i.e. no nested txn was rolled back before the commit).
@@ -4792,47 +4932,50 @@ func (h singleDelOptimizationHelper) v() bool {
 	return *h._didNotUpdateMeta
 }
 
-// onCommitIntent returns true if the SingleDel optimization is available
-// for committing an intent.
-func (h singleDelOptimizationHelper) onCommitIntent() bool {
-	// We're committing the intent at epoch zero, the meta tracking says we didn't
-	// rewrite the intent, and we also didn't previously remove the metadata for
+// onCommitLock returns true if the SingleDel optimization is available
+// for committing a lock/intent.
+func (h singleDelOptimizationHelper) onCommitLock() bool {
+	// We're committing the lock at epoch zero, the meta tracking says we didn't
+	// rewrite the lock, and we also didn't previously remove the metadata for
 	// this key as part of a voluntary rollback of a nested txn. So we are safe to
 	// use a SingleDel here.
 	return h.v() && !h._hasIgnoredSeqs && h._epoch == 0
 }
 
-// onAbortIntent returns true if the SingleDel optimization is available
-// for removing an intent. It is always false.
-// Note that "removing an intent" can occur if we know that the epoch
+// onAbortLock returns true if the SingleDel optimization is available
+// for removing a lock/intent. It is always false.
+// Note that "removing a lock" can occur if we know that the epoch
 // changed, or when a savepoint is rolled back. It does not imply that
 // the transaction aborted.
-func (h singleDelOptimizationHelper) onAbortIntent() bool {
+func (h singleDelOptimizationHelper) onAbortLock() bool {
 	return false
 }
 
-// mvccResolveWriteIntent is the core logic for resolving an intent.
-// REQUIRES: iter is already seeked to intent.Key.
+// mvccResolveWriteIntent is the core logic for resolving an intent. The
+// function accepts instructions for how to resolve the intent (encoded in the
+// LockUpdate), and the current value of the intent (meta). Returns whether the
+// provided intent was resolved (true) or whether the resolution was a no-op
+// (false).
+//
+// REQUIRES: intent and meta refer to the same intent on the same key.
 // REQUIRES: iter surfaces range keys via IterKeyTypePointsAndRanges.
-// Returns whether an intent was found and resolved, false otherwise.
 func mvccResolveWriteIntent(
 	ctx context.Context,
 	writer Writer,
-	iter iterForKeyVersions,
+	iter MVCCIterator,
 	ms *enginepb.MVCCStats,
+	// TODO(nvanbenschoten): rename this field to "update".
 	intent roachpb.LockUpdate,
+	meta *enginepb.MVCCMetadata,
 	buf *putBuffer,
 ) (bool, error) {
+	if meta.Txn == nil || meta.Txn.ID != intent.Txn.ID {
+		return false, errors.Errorf("txn does not match: %v != %v", meta.Txn, intent.Txn)
+	}
+
 	metaKey := MakeMVCCMetadataKey(intent.Key)
-	meta := &buf.meta
-	ok, origMetaKeySize, origMetaValSize, err :=
-		mvccGetIntent(iter, metaKey, meta)
-	if err != nil {
-		return false, err
-	}
-	if !ok || meta.Txn == nil || intent.Txn.ID != meta.Txn.ID {
-		return false, nil
-	}
+	origMetaKeySize := int64(metaKey.EncodedSize())
+	origMetaValSize := int64(meta.Size())
 	metaTimestamp := meta.Timestamp.ToTimestamp()
 	canSingleDelHelper := singleDelOptimizationHelper{
 		_didNotUpdateMeta: meta.TxnDidNotUpdateMeta,
@@ -4904,6 +5047,7 @@ func mvccResolveWriteIntent(
 	// If only part of the intent history was rolled back, but the intent still
 	// remains, the rolledBackVal is set to a non-nil value.
 	var rolledBackVal *MVCCValue
+	var err error
 	if len(intent.IgnoredSeqNums) > 0 {
 		// NOTE: mvccMaybeRewriteIntentHistory mutates its meta argument.
 		// TODO(nvanbenschoten): this is an awkward interface. We shouldn't
@@ -5076,10 +5220,10 @@ func mvccResolveWriteIntent(
 			// to do anything to update the intent but to move the timestamp forward,
 			// even if it can.
 			metaKeySize, metaValSize, err = buf.putLockMeta(
-				writer, metaKey, lock.Intent, newMeta, true /* alreadyExists */)
+				writer, metaKey.Key, lock.Intent, newMeta, true /* alreadyExists */)
 		} else {
 			metaKeySize, metaValSize, err = buf.clearLockMeta(
-				writer, metaKey, lock.Intent, canSingleDelHelper.onCommitIntent(), meta.Txn.ID, ClearOptions{
+				writer, metaKey.Key, lock.Intent, canSingleDelHelper.onCommitLock(), meta.Txn.ID, ClearOptions{
 					ValueSizeKnown: true,
 					ValueSize:      uint32(origMetaValSize),
 				})
@@ -5134,7 +5278,7 @@ func mvccResolveWriteIntent(
 		Key: intent.Key,
 	})
 
-	ok = false
+	ok := false
 
 	// These variables containing the next key-value information are initialized
 	// in the following if-block when ok is set to true. These are only read
@@ -5191,7 +5335,7 @@ func mvccResolveWriteIntent(
 	if !ok {
 		// If there is no other version, we should just clean up the key entirely.
 		_, _, err := buf.clearLockMeta(
-			writer, metaKey, lock.Intent, canSingleDelHelper.onAbortIntent(), meta.Txn.ID, ClearOptions{
+			writer, metaKey.Key, lock.Intent, canSingleDelHelper.onAbortLock(), meta.Txn.ID, ClearOptions{
 				ValueSizeKnown: true,
 				ValueSize:      uint32(origMetaValSize),
 			})
@@ -5213,7 +5357,7 @@ func mvccResolveWriteIntent(
 		ValBytes: int64(nextValueLen),
 	}
 	metaKeySize, metaValSize, err := buf.clearLockMeta(
-		writer, metaKey, lock.Intent, canSingleDelHelper.onAbortIntent(), meta.Txn.ID, ClearOptions{
+		writer, metaKey.Key, lock.Intent, canSingleDelHelper.onAbortLock(), meta.Txn.ID, ClearOptions{
 			ValueSizeKnown: true,
 			ValueSize:      uint32(origMetaValSize),
 		})
@@ -5297,14 +5441,22 @@ func mvccMaybeRewriteIntentHistory(
 //
 // Returns the number of intents resolved, number of bytes added to the write
 // batch by intent resolution, the resume span if the max keys or bytes limit
-// was exceeded, and the resume reason.
+// was exceeded, and the resume reason. Additionally, if any replicated locks
+// with strength lock.Shared or lock.Exclusive are released, a boolean
+// indicating as such is also returned.
 func MVCCResolveWriteIntentRange(
 	ctx context.Context,
 	rw ReadWriter,
 	ms *enginepb.MVCCStats,
 	intent roachpb.LockUpdate,
 	opts MVCCResolveWriteIntentRangeOptions,
-) (numKeys, numBytes int64, resumeSpan *roachpb.Span, resumeReason kvpb.ResumeReason, err error) {
+) (
+	numKeys, numBytes int64,
+	resumeSpan *roachpb.Span,
+	resumeReason kvpb.ResumeReason,
+	replLocksReleased bool,
+	err error,
+) {
 	keysExceeded := opts.MaxKeys < 0
 	bytesExceeded := opts.TargetBytes < 0
 	if keysExceeded || bytesExceeded {
@@ -5314,15 +5466,20 @@ func MVCCResolveWriteIntentRange(
 		} else if bytesExceeded {
 			resumeReason = kvpb.RESUME_BYTE_LIMIT
 		}
-		return 0, 0, &resumeSpan, resumeReason, nil
+		return 0, 0, &resumeSpan, resumeReason, false, nil
 	}
+
 	ltStart, _ := keys.LockTableSingleKey(intent.Key, nil)
 	ltEnd, _ := keys.LockTableSingleKey(intent.EndKey, nil)
-	engineIter, err := rw.NewEngineIterator(IterOptions{LowerBound: ltStart, UpperBound: ltEnd})
+	ltIter, err := NewLockTableIterator(rw, LockTableIteratorOptions{
+		LowerBound: ltStart,
+		UpperBound: ltEnd,
+		MatchTxnID: intent.Txn.ID,
+	})
 	if err != nil {
-		return 0, 0, nil, 0, err
+		return 0, 0, nil, 0, false, err
 	}
-	defer engineIter.Close()
+	defer ltIter.Close()
 	var mvccIter MVCCIterator
 	iterOpts := IterOptions{
 		KeyTypes:   IterKeyTypePointsAndRanges,
@@ -5333,78 +5490,95 @@ func MVCCResolveWriteIntentRange(
 		// Production code should always have consistent iterators.
 		mvccIter, err = rw.NewMVCCIterator(MVCCKeyIterKind, iterOpts)
 		if err != nil {
-			return 0, 0, nil, 0, err
+			return 0, 0, nil, 0, false, err
 		}
 	} else {
 		// For correctness, we need mvccIter to be consistent with engineIter.
-		mvccIter = newPebbleIteratorByCloning(engineIter.CloneContext(), iterOpts, StandardDurability)
+		mvccIter = newPebbleIteratorByCloning(ltIter.CloneContext(), iterOpts, StandardDurability)
 	}
 	defer mvccIter.Close()
 	buf := newPutBuffer()
 	defer buf.release()
-	sepIter := &separatedIntentAndVersionIter{
-		engineIter: engineIter,
-		mvccIter:   mvccIter,
-	}
-	// Seek sepIter to position it for the loop below. The loop itself will
-	// only step the iterator and not seek.
-	sepIter.seekEngineKeyGE(EngineKey{Key: ltStart})
 
 	intentEndKey := intent.EndKey
 	intent.EndKey = nil
 
 	var lastResolvedKey roachpb.Key
-	for {
-		if valid, err := sepIter.Valid(); err != nil {
-			return 0, 0, nil, 0, err
+	var lastResolvedKeyOk bool
+	for valid, err := ltIter.SeekEngineKeyGE(EngineKey{Key: ltStart}); ; valid, err = ltIter.NextEngineKey() {
+		if err != nil {
+			return 0, 0, nil, 0, false, errors.Wrap(err, "seeking lock table")
 		} else if !valid {
 			// No more intents in the given range.
 			break
 		}
-		keysExceeded = opts.MaxKeys > 0 && numKeys == opts.MaxKeys
-		bytesExceeded = opts.TargetBytes > 0 && numBytes >= opts.TargetBytes
-		if keysExceeded || bytesExceeded {
-			if keysExceeded {
-				resumeReason = kvpb.RESUME_KEY_LIMIT
-			} else if bytesExceeded {
-				resumeReason = kvpb.RESUME_BYTE_LIMIT
+
+		ltEngineKey, err := ltIter.EngineKey()
+		if err != nil {
+			return 0, 0, nil, 0, false, errors.Wrap(err, "retrieving lock table key")
+		}
+		ltKey, err := ltEngineKey.ToLockTableKey()
+		if err != nil {
+			return 0, 0, nil, 0, false, errors.Wrap(err, "decoding lock table key")
+		}
+		sameLockedKey := lastResolvedKey.Equal(ltKey.Key)
+		if !sameLockedKey {
+			// If this is not the same locked key as the last iteration, check
+			// whether we've exceeded the max keys or bytes limit. We don't check in
+			// between locks with different strengths on the same key because we
+			// can't encode a resume span that would be correct in that case. A
+			// transaction can only hold up to 3 locks on any given key, so this
+			// will never lead to us significantly overshooting the TargetBytes
+			// limit. We also only count each unique locked key once towards the
+			// MaxKeys limit, so this will never lead to us overshooting the MaxKeys
+			// limit at all.
+			keysExceeded = opts.MaxKeys > 0 && numKeys == opts.MaxKeys
+			bytesExceeded = opts.TargetBytes > 0 && numBytes >= opts.TargetBytes
+			if keysExceeded || bytesExceeded {
+				if keysExceeded {
+					resumeReason = kvpb.RESUME_KEY_LIMIT
+				} else if bytesExceeded {
+					resumeReason = kvpb.RESUME_BYTE_LIMIT
+				}
+				// We could also compute a tighter nextKey here if we wanted to.
+				resumeSpan := &roachpb.Span{Key: lastResolvedKey.Next(), EndKey: intentEndKey}
+				return numKeys, numBytes, resumeSpan, resumeReason, replLocksReleased, nil
 			}
-			// We could also compute a tighter nextKey here if we wanted to.
-			return numKeys, numBytes, &roachpb.Span{Key: lastResolvedKey.Next(), EndKey: intentEndKey}, resumeReason, nil
+
+			// Copy the underlying bytes of the unsafe key. This is needed for
+			// stability of the key to check for sameLockedKey and to construct
+			// a resume span on subsequent iteration.
+			lastResolvedKey = append(lastResolvedKey[:0], ltKey.Key...)
+			lastResolvedKeyOk = false
 		}
-		// Parse the MVCCMetadata to see if it is a relevant intent.
-		meta := &buf.meta
-		if err := sepIter.ValueProto(meta); err != nil {
-			return 0, 0, nil, 0, err
+		if ltKey.TxnUUID != intent.Txn.ID {
+			return 0, 0, nil, 0, false, errors.AssertionFailedf(
+				"unexpected txnID %v != %v while scanning lock table", ltKey.TxnUUID, intent.Txn.ID)
 		}
-		if meta.Txn == nil {
-			return 0, 0, nil, 0, errors.Errorf("intent with no txn")
+		intent.Key = ltKey.Key
+		if err := ltIter.ValueProto(&buf.meta); err != nil {
+			return 0, 0, nil, 0, false, errors.Wrap(err, "unmarshaling lock table value")
 		}
-		if intent.Txn.ID != meta.Txn.ID {
-			// Intent for a different txn, so ignore.
-			sepIter.nextEngineKey()
-			continue
-		}
-		// Stash the parsed meta so don't need to parse it again in
-		// mvccResolveWriteIntent. This parsing can be ~10% of the resolution cost
-		// in some benchmarks.
-		sepIter.meta = meta
-		// Copy the underlying bytes of the unsafe key. This is needed for
-		// stability of the key passed to mvccResolveWriteIntent, and for the
-		// subsequent iteration to construct a resume span.
-		lastResolvedKey = append(lastResolvedKey[:0], sepIter.UnsafeKey().Key...)
-		intent.Key = lastResolvedKey
 		beforeBytes := rw.BufferedSize()
-		ok, err := mvccResolveWriteIntent(ctx, rw, sepIter, ms, intent, buf)
+		var ok bool
+		if ltKey.Strength == lock.Intent {
+			ok, err = mvccResolveWriteIntent(ctx, rw, mvccIter, ms, intent, &buf.meta, buf)
+		} else {
+			ok, err = mvccReleaseLockInternal(ctx, rw, ms, intent, ltKey.Strength, &buf.meta, buf)
+			replLocksReleased = replLocksReleased || ok
+		}
 		if err != nil {
 			log.Warningf(ctx, "failed to resolve intent for key %q: %+v", lastResolvedKey, err)
-		} else if ok {
+		}
+		if ok && !lastResolvedKeyOk {
+			// We only count the first successfully resolved lock/intent on a
+			// given key towards the returned key count and key limit.
+			lastResolvedKeyOk = true
 			numKeys++
 		}
 		numBytes += int64(rw.BufferedSize() - beforeBytes)
-		sepIter.nextEngineKey()
 	}
-	return numKeys, numBytes, nil, 0, nil
+	return numKeys, numBytes, nil, 0, replLocksReleased, nil
 }
 
 // MVCCCheckForAcquireLock scans the replicated lock table to determine whether
@@ -5544,13 +5718,22 @@ func MVCCAcquireLock(
 
 	newMeta := &buf.newMeta
 	newMeta.Txn = &txn.TxnMeta
-	keyBytes, valBytes, err := buf.putLockMeta(rw, MakeMVCCMetadataKey(key), str, newMeta, rolledBack)
+	newMeta.Timestamp = txn.WriteTimestamp.ToLegacyTimestamp()
+	keyBytes, valBytes, err := buf.putLockMeta(rw, key, str, newMeta, rolledBack)
 	if err != nil {
 		return err
 	}
 
-	// TODO(nvanbenschoten): handle MVCCStats update after addressing #109645.
-	_, _, _ = ms, keyBytes, valBytes
+	// Update MVCC stats.
+	if ms != nil {
+		origMeta := ltScanner.foundOwn(str)
+		var origKeySize, origValSize int64
+		if origMeta != nil {
+			origKeySize = keyBytes // same key
+			origValSize = int64(origMeta.Size())
+		}
+		ms.Add(updateStatsOnAcquireLock(origKeySize, origValSize, keyBytes, valBytes, origMeta, newMeta))
+	}
 
 	return nil
 }
@@ -5563,6 +5746,58 @@ func validateLockAcquisition(txn *roachpb.Transaction, str lock.Strength) error 
 		return errors.Errorf("invalid lock strength to acquire lock: %s", str.String())
 	}
 	return nil
+}
+
+// mvccReleaseLockInternal releases a lock at the specified key and strength and
+// by the specified transaction. The function accepts the instructions for how
+// to release the lock (encoded in the LockUpdate), and the current value of the
+// lock (meta).
+func mvccReleaseLockInternal(
+	ctx context.Context,
+	writer Writer,
+	ms *enginepb.MVCCStats,
+	update roachpb.LockUpdate,
+	str lock.Strength,
+	meta *enginepb.MVCCMetadata,
+	buf *putBuffer,
+) (bool, error) {
+	finalized := update.Status.IsFinalized()
+	rolledBack := meta.Txn.Epoch < update.Txn.Epoch ||
+		(meta.Txn.Epoch == update.Txn.Epoch && enginepb.TxnSeqIsIgnored(meta.Txn.Sequence, update.IgnoredSeqNums))
+	release := finalized || rolledBack
+	if !release {
+		return false, nil
+	}
+
+	canSingleDelHelper := singleDelOptimizationHelper{
+		_didNotUpdateMeta: meta.TxnDidNotUpdateMeta,
+		_hasIgnoredSeqs:   len(update.IgnoredSeqNums) > 0,
+		_epoch:            update.Txn.Epoch,
+	}
+	var txnDidNotUpdateMeta bool
+	if update.Status == roachpb.COMMITTED && !rolledBack {
+		txnDidNotUpdateMeta = canSingleDelHelper.onCommitLock()
+	} else {
+		txnDidNotUpdateMeta = canSingleDelHelper.onAbortLock()
+	}
+
+	keyBytes, _, err := buf.clearLockMeta(writer, update.Key, str, txnDidNotUpdateMeta, meta.Txn.ID, ClearOptions{
+		ValueSizeKnown: true,
+		ValueSize:      uint32(meta.Size()),
+	})
+	if err != nil {
+		return false, err
+	}
+
+	// Update MVCC stats.
+	if ms != nil {
+		origKeySize := keyBytes // same key
+		origValSize := int64(meta.Size())
+		ms.Add(updateStatsOnReleaseLock(origKeySize, origValSize, meta))
+	}
+
+	return true, nil
+
 }
 
 // MVCCGarbageCollect creates an iterator on the ReadWriter. In parallel
@@ -6474,18 +6709,26 @@ func willOverflow(a, b int64) bool {
 // specifies the wall time in nanoseconds since the epoch and is used to compute
 // age-related stats quantities.
 func ComputeStats(r Reader, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
-	return ComputeStatsWithVisitors(r, start, end, nowNanos, nil, nil)
+	return ComputeStatsWithVisitors(r, start, end, nowNanos, ComputeStatsVisitors{})
 }
 
-// ComputeStatsWithVisitors is like ComputeStats, but also takes a point and/or
-// range key callback that is invoked for each key.
+// ComputeStatsVisitors holds a set of callbacks that are invoked on each key
+// during stats computation.
+type ComputeStatsVisitors struct {
+	PointKey     func(MVCCKey, []byte) error
+	RangeKey     func(MVCCRangeKeyValue) error
+	LockTableKey func(LockTableKey, []byte) error
+}
+
+// ComputeStatsWithVisitors is like ComputeStats, but also takes callbacks that
+// are invoked on each key.
 func ComputeStatsWithVisitors(
-	r Reader,
-	start, end roachpb.Key,
-	nowNanos int64,
-	pointKeyVisitor func(MVCCKey, []byte) error,
-	rangeKeyVisitor func(MVCCRangeKeyValue) error,
+	r Reader, start, end roachpb.Key, nowNanos int64, visitors ComputeStatsVisitors,
 ) (enginepb.MVCCStats, error) {
+	if isLockTableKey(start) {
+		return computeLockTableStatsWithVisitors(r, start, end, nowNanos, visitors.LockTableKey)
+	}
+
 	iter, err := r.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 		KeyTypes:   IterKeyTypePointsAndRanges,
 		LowerBound: start,
@@ -6496,7 +6739,7 @@ func ComputeStatsWithVisitors(
 	}
 	defer iter.Close()
 	iter.SeekGE(MVCCKey{Key: start})
-	return computeStatsForIterWithVisitors(iter, nowNanos, pointKeyVisitor, rangeKeyVisitor)
+	return computeStatsForIterWithVisitors(iter, nowNanos, visitors.PointKey, visitors.RangeKey)
 }
 
 // ComputeStatsForIter is like ComputeStats, but scans across the given iterator
@@ -6607,24 +6850,34 @@ func computeStatsForIterWithVisitors(
 			}
 		}
 
-		// Check for ignored keys.
-		if bytes.HasPrefix(unsafeKey.Key, keys.LocalRangeIDPrefix) {
-			// RangeID-local key.
-			_ /* rangeID */, infix, suffix, _ /* detail */, err := keys.DecodeRangeIDKey(unsafeKey.Key)
-			if err != nil {
-				return enginepb.MVCCStats{}, errors.Wrap(err, "unable to decode rangeID key")
+		isSys := isSysLocal(unsafeKey.Key)
+		if isSys {
+			// Check for ignored keys.
+			if bytes.HasPrefix(unsafeKey.Key, keys.LocalRangeIDPrefix) {
+				// RangeID-local key.
+				_ /* rangeID */, infix, suffix, _ /* detail */, err := keys.DecodeRangeIDKey(unsafeKey.Key)
+				if err != nil {
+					return enginepb.MVCCStats{}, errors.Wrap(err, "unable to decode rangeID key")
+				}
+
+				if infix.Equal(keys.LocalRangeIDReplicatedInfix) {
+					// Replicated RangeID-local key.
+					if suffix.Equal(keys.LocalRangeAppliedStateSuffix) {
+						// RangeAppliedState key. Ignore.
+						continue
+					}
+				}
 			}
 
-			if infix.Equal(keys.LocalRangeIDReplicatedInfix) {
-				// Replicated RangeID-local key.
-				if suffix.Equal(keys.LocalRangeAppliedStateSuffix) {
-					// RangeAppliedState key. Ignore.
-					continue
-				}
+			// Check for lock table keys, which are not handled by this
+			// function. They are handled by computeLockTableStatsWithVisitors
+			// instead.
+			if bytes.HasPrefix(unsafeKey.Key, keys.LocalRangeLockTablePrefix) {
+				return enginepb.MVCCStats{}, errors.AssertionFailedf(
+					"lock table key encountered by ComputeStats: %s", unsafeKey.Key)
 			}
 		}
 
-		isSys := isSysLocal(unsafeKey.Key)
 		isValue := unsafeKey.IsValue()
 		implicitMeta := isValue && !bytes.Equal(unsafeKey.Key, prevKey)
 		prevKey = append(prevKey[:0], unsafeKey.Key...)
@@ -6769,6 +7022,78 @@ func computeStatsForIterWithVisitors(
 			ms.ValBytes += int64(valueLen)
 			ms.ValCount++
 		}
+	}
+
+	ms.LastUpdateNanos = nowNanos
+	return ms, nil
+}
+
+// computeLockTableStatsWithVisitors performs stats computation for the lock
+// table keys in the given span. It is split off from the main ComputeStats
+// logic because lock table iteration requires an EngineIterator (which is
+// wrapped in a LockTableIterator), while the main ComputeStats logic uses an
+// (intent interleaving) MVCCIterator.
+//
+// Unlike computeStatsForIterWithVisitors, this function accepts a Reader and
+// a start and end key. The start and end key must both be lock table keys.
+func computeLockTableStatsWithVisitors(
+	r Reader,
+	start, end roachpb.Key,
+	nowNanos int64,
+	lockTableKeyVisitor func(LockTableKey, []byte) error,
+) (enginepb.MVCCStats, error) {
+	iter, err := NewLockTableIterator(r, LockTableIteratorOptions{
+		LowerBound:  start,
+		UpperBound:  end,
+		MatchMinStr: lock.Shared, // all locks
+	})
+	if err != nil {
+		return enginepb.MVCCStats{}, err
+	}
+	defer iter.Close()
+
+	var ms enginepb.MVCCStats
+	var meta enginepb.MVCCMetadata
+	var ok bool
+	for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: start}); ok; ok, err = iter.NextEngineKey() {
+		key, err := iter.UnsafeLockTableKey()
+		if err != nil {
+			return enginepb.MVCCStats{}, err
+		}
+		if key.Strength == lock.Intent {
+			// The contributions of intents to the MVCCStats are handled by
+			// computeStatsForIterWithVisitors, which uses an intent
+			// interleaving iterator to interpret the mvcc keyspace. That
+			// function draws a distinction between provisional versioned values
+			// that are associated with intents and committed versioned values
+			// that are not.
+			//
+			// For simplicity, we ignore intents in this function.
+			continue
+		}
+		val, err := iter.UnsafeValue()
+		if err != nil {
+			return enginepb.MVCCStats{}, err
+		}
+		if err := protoutil.Unmarshal(val, &meta); err != nil {
+			return ms, errors.Wrap(err, "unable to decode MVCCMetadata")
+		}
+
+		if lockTableKeyVisitor != nil {
+			if err := lockTableKeyVisitor(key, val); err != nil {
+				return enginepb.MVCCStats{}, err
+			}
+		}
+
+		keyBytes := key.EncodedSize()
+		valBytes := int64(len(val))
+
+		ms.LockBytes += keyBytes + valBytes
+		ms.LockCount++
+		ms.LockAge += nowNanos/1e9 - meta.Timestamp.WallTime/1e9
+	}
+	if err != nil {
+		return enginepb.MVCCStats{}, err
 	}
 
 	ms.LastUpdateNanos = nowNanos

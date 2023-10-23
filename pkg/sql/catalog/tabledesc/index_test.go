@@ -394,7 +394,7 @@ func TestIndexStrictColumnIDs(t *testing.T) {
 	err = rows.Scan(&msg)
 	require.NoError(t, err)
 	var tenantPrefix string
-	if srv.StartedDefaultTestTenant() {
+	if srv.TenantController().StartedDefaultTestTenant() {
 		tenantPrefix = codec.TenantPrefix().String()
 	}
 	expected := fmt.Sprintf(`InitPut %s/Table/%d/2/0/0/0/0/0/0 -> /BYTES/0x2300030003000300`, tenantPrefix, mut.GetID())

@@ -172,6 +172,10 @@ type mutationBuilder struct {
 	// uniqueChecks contains unique check queries; see buildUnique* methods.
 	uniqueChecks memo.UniqueChecksExpr
 
+	// fastPathUniqueChecks contains fast path unique check queries which are used for
+	// insert fast path; see buildInsertionCheck.
+	fastPathUniqueChecks memo.FastPathUniqueChecksExpr
+
 	// fkChecks contains foreign key check queries; see buildFK* methods.
 	fkChecks memo.FKChecksExpr
 
@@ -198,6 +202,10 @@ type mutationBuilder struct {
 	// arbiterPredicateHelper is used to prevent allocating the helper
 	// separately.
 	arbiterPredicateHelper arbiterPredicateHelper
+
+	// inputForInsertExpr stores the result of outscope.expr from the most
+	// recent call to buildInputForInsert.
+	inputForInsertExpr memo.RelExpr
 }
 
 func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias tree.TableName) {
@@ -306,7 +314,7 @@ func (mb *mutationBuilder) buildInputForUpdate(
 	// together with the table being updated.
 	fromClausePresent := len(from) > 0
 	if fromClausePresent {
-		fromScope := mb.b.buildFromTables(from, noRowLocking, inScope)
+		fromScope := mb.b.buildFromTables(from, noLocking, inScope)
 
 		// Check that the same table name is not used multiple times.
 		mb.b.validateJoinTableNames(mb.fetchScope, fromScope)
@@ -416,7 +424,7 @@ func (mb *mutationBuilder) buildInputForDelete(
 	// USING
 	usingClausePresent := len(using) > 0
 	if usingClausePresent {
-		usingScope := mb.b.buildFromTables(using, noRowLocking, inScope)
+		usingScope := mb.b.buildFromTables(using, noLocking, inScope)
 
 		// Check that the same table name is not used multiple times.
 		mb.b.validateJoinTableNames(mb.fetchScope, usingScope)

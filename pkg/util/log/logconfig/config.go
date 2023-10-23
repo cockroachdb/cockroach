@@ -513,6 +513,10 @@ type HTTPDefaults struct {
 	// Headers is a list of headers to attach to each HTTP request
 	Headers map[string]string `yaml:",omitempty,flow"`
 
+	// FileBasedHeaders is a list of headers with filepaths whose contents are
+	// attached to each HTTP request
+	FileBasedHeaders map[string]string `yaml:"file-based-headers,omitempty,flow"`
+
 	// Compression can be "none" or "gzip" to enable gzip compression.
 	// Set to "gzip" by default.
 	Compression *string `yaml:",omitempty"`

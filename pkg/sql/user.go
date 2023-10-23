@@ -442,7 +442,7 @@ WHERE
 }
 
 var userLoginTimeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.user_login.timeout",
 	"timeout after which client authentication times out if some system range is unavailable (0 = no timeout)",
 	10*time.Second,
@@ -473,9 +473,20 @@ func (p *planner) GetAllRoles(ctx context.Context) (map[username.SQLUsername]boo
 	return users, nil
 }
 
-// RoleExists returns true if the role exists.
+// RoleExists returns true if the role exists. If a role is found to exist,
+// the existence will be cached for the duration of the transaction.
 func (p *planner) RoleExists(ctx context.Context, role username.SQLUsername) (bool, error) {
-	return RoleExists(ctx, p.InternalSQLTxn(), role)
+	cache := p.EvalContext().RoleExistsCache
+	if cache != nil {
+		if _, exists := cache[role]; exists {
+			return true, nil
+		}
+	}
+	exists, err := RoleExists(ctx, p.InternalSQLTxn(), role)
+	if cache != nil && exists {
+		cache[role] = struct{}{}
+	}
+	return exists, err
 }
 
 // RoleExists returns true if the role exists.

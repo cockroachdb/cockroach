@@ -1775,6 +1775,10 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeIsFn(types.Void, types.Unknown, volatility.Leakproof),
 		makeIsFn(types.Unknown, types.Void, volatility.Leakproof),
 
+		// REFCURSOR cannot be compared with itself, but as a special case, it can
+		// be compared with NULL using IS NOT DISTINCT FROM.
+		makeIsFn(types.RefCursor, types.Unknown, volatility.Leakproof),
+
 		// Tuple comparison.
 		{
 			LeftType:          types.AnyTuple,
@@ -2052,7 +2056,8 @@ func (e *MultipleResultsError) Error() string {
 func (expr *FuncExpr) MaybeWrapError(err error) error {
 	// If we are facing an explicit error, propagate it unchanged.
 	fName := expr.Func.String()
-	if fName == `crdb_internal.force_error` || fName == `crdb_internal.plpgsql_raise` {
+	if fName == `crdb_internal.force_error` || fName == `crdb_internal.plpgsql_raise` ||
+		fName == `crdb_internal.plpgsql_close` || fName == `crdb_internal.plpgsql_fetch` {
 		return err
 	}
 	// Otherwise, wrap it with context.

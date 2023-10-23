@@ -3038,7 +3038,7 @@ subtest crdb_internal.payloads_for_span
 # switch users -- this one has no permissions so expect errors
 user testuser
 
-query error pq: only users with the admin role are allowed to use crdb_internal.payloads_for_span
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 SELECT * FROM crdb_internal.payloads_for_span(0)
 
 user root
@@ -3054,7 +3054,7 @@ subtest crdb_internal.payloads_for_trace
 # switch users -- this one has no permissions so expect errors
 user testuser
 
-query error pq: only users with the admin role are allowed to use crdb_internal.payloads_for_span
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 SELECT * FROM crdb_internal.payloads_for_span(0)
 
 user root
@@ -4005,7 +4005,8 @@ FROM crdb_internal.check_consistency(true, crdb_internal.tenant_span()[1], crdb_
 ORDER BY range_id
 LIMIT 1
 ----
-RANGE_CONSISTENT  stats: {ContainsEstimates: LastUpdateNanos: LockAge: GCBytesAge: LiveBytes: LiveCount: KeyBytes: KeyCount: ValBytes: ValCount: IntentBytes: IntentCount: LockCount: RangeKeyCount: RangeKeyBytes: RangeValCount: RangeValBytes: SysBytes: SysCount: AbortSpanBytes:}
+RANGE_CONSISTENT  stats: {ContainsEstimates: LastUpdateNanos: LockAge: GCBytesAge: LiveBytes: LiveCount: KeyBytes: KeyCount: ValBytes: ValCount: IntentBytes: IntentCount: LockBytes: LockCount: RangeKeyCount: RangeKeyBytes: RangeValCount: RangeValBytes: SysBytes: SysCount: AbortSpanBytes:}
+
 
 
 # Fill a table with consistency check results. This used to panic.

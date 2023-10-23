@@ -106,21 +106,27 @@ subtest end
 
 subtest plpgsql_volatility
 
+skipif config local-mixed-23.1
 statement error pgcode 22023 pq: referencing relations is not allowed in immutable function
 CREATE FUNCTION f() RETURNS FLOAT LANGUAGE PLpgSQL IMMUTABLE AS $$ BEGIN RETURN (SELECT a FROM t1); END $$;
 
+skipif config local-mixed-23.1
 statement error pgcode 22023 pq: volatile statement not allowed in immutable function: BEGIN
 CREATE FUNCTION f() RETURNS FLOAT LANGUAGE PLpgSQL IMMUTABLE AS $$ BEGIN RETURN (SELECT random()); END $$;
 
+skipif config local-mixed-23.1
 statement error pgcode 22023 pq: stable statement not allowed in immutable function: BEGIN
 CREATE FUNCTION f() RETURNS TIMESTAMP LANGUAGE PLpgSQL IMMUTABLE AS $$ BEGIN RETURN (SELECT statement_timestamp()); END $$;
 
+skipif config local-mixed-23.1
 statement error pgcode 22023 pq: volatile statement not allowed in stable function: BEGIN
 CREATE FUNCTION f() RETURNS FLOAT LANGUAGE PLpgSQL STABLE AS $$ BEGIN RETURN (SELECT random()); END $$;
 
+skipif config local-mixed-23.1
 statement error pgcode 22023 pq: volatile statement not allowed in immutable function: BEGIN
 CREATE FUNCTION f() RETURNS FLOAT LANGUAGE PLpgSQL IMMUTABLE AS $$ BEGIN RETURN (SELECT @1 FROM random()); END $$;
 
+skipif config local-mixed-23.1
 statement error pgcode 22023 pq: volatile statement not allowed in immutable function: BEGIN
 CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL IMMUTABLE AS $$
   BEGIN
@@ -128,6 +134,7 @@ CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL IMMUTABLE AS $$
   END
 $$;
 
+skipif config local-mixed-23.1
 statement error pgcode 22023 pq: volatile statement not allowed in immutable function: BEGIN
 CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL IMMUTABLE AS $$
   BEGIN

@@ -1503,16 +1503,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "com_github_cockroachdb_circuitbreaker",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/cockroachdb/circuitbreaker",
-        sha256 = "52fdb5ba6a60e9a2f1db42d5b3c4c13cc5bb3947d5ce7f1bba9b0a14de71813a",
-        strip_prefix = "github.com/cockroachdb/circuitbreaker@v2.2.2-0.20190114160014-a614b14ccf63+incompatible",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/circuitbreaker/com_github_cockroachdb_circuitbreaker-v2.2.2-0.20190114160014-a614b14ccf63+incompatible.zip",
-        ],
-    )
-    go_repository(
         name = "com_github_cockroachdb_cmux",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/cmux",
@@ -1562,10 +1552,10 @@ def go_deps():
         ],
         build_file_proto_mode = "default",
         importpath = "github.com/cockroachdb/errors",
-        sha256 = "da2747d1c254d8daacd246c303250640adbcc00d4a7e0c97de4e00dad5d8c1ca",
-        strip_prefix = "github.com/cockroachdb/errors@v1.10.1",
+        sha256 = "6c8101703839a0d69685485d3d0d6040f51b83382bbc53c362c47732246249bf",
+        strip_prefix = "github.com/cockroachdb/errors@v1.11.1",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/errors/com_github_cockroachdb_errors-v1.10.1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/errors/com_github_cockroachdb_errors-v1.11.1.zip",
         ],
     )
     go_repository(
@@ -1609,10 +1599,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "0219654f51b9ecbb9e8d63577a086e9157dd8e4e32e485870c84cb11759b4213",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20230920181003-7d98bc363fb2",
+        sha256 = "ad17adfa874889e8e1c43a3fe6c02ca1e4b6c67170ed37e2015e710aee5fdc7a",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20231009150004-a678d0968383",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20230920181003-7d98bc363fb2.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20231009150004-a678d0968383.zip",
         ],
     )
     go_repository(
@@ -1633,16 +1623,6 @@ def go_deps():
         strip_prefix = "github.com/cockroachdb/returncheck@v0.0.0-20200612231554-92cdbca611dd",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/returncheck/com_github_cockroachdb_returncheck-v0.0.0-20200612231554-92cdbca611dd.zip",
-        ],
-    )
-    go_repository(
-        name = "com_github_cockroachdb_sentry_go",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/cockroachdb/sentry-go",
-        sha256 = "fbb2207d02aecfdd411b1357efe1192dbb827959e36b7cab7491731ac55935c9",
-        strip_prefix = "github.com/cockroachdb/sentry-go@v0.6.1-cockroachdb.2",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/sentry-go/com_github_cockroachdb_sentry_go-v0.6.1-cockroachdb.2.zip",
         ],
     )
     go_repository(
@@ -2654,16 +2634,6 @@ def go_deps():
         strip_prefix = "github.com/evanphx/json-patch@v4.11.0+incompatible",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/evanphx/json-patch/com_github_evanphx_json_patch-v4.11.0+incompatible.zip",
-        ],
-    )
-    go_repository(
-        name = "com_github_facebookgo_clock",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/facebookgo/clock",
-        sha256 = "5d6b671bd5afef8459fb7561d19bcf7c7f378da9943722d36676735b3c6272fa",
-        strip_prefix = "github.com/facebookgo/clock@v0.0.0-20150410010913-600d898af40a",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/facebookgo/clock/com_github_facebookgo_clock-v0.0.0-20150410010913-600d898af40a.zip",
         ],
     )
     go_repository(
@@ -7204,16 +7174,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "com_github_peterbourgon_g2s",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/peterbourgon/g2s",
-        sha256 = "41526f42b4fe3019581ab3745afea18271d7f037eb55a6e9fb3e32fd09ff9b8d",
-        strip_prefix = "github.com/peterbourgon/g2s@v0.0.0-20170223122336-d4e7ad98afea",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/peterbourgon/g2s/com_github_peterbourgon_g2s-v0.0.0-20170223122336-d4e7ad98afea.zip",
-        ],
-    )
-    go_repository(
         name = "com_github_peterh_liner",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/peterh/liner",
@@ -10928,16 +10888,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "io_opentelemetry_go_otel_exporters_jaeger",
-        build_file_proto_mode = "disable_global",
-        importpath = "go.opentelemetry.io/otel/exporters/jaeger",
-        sha256 = "89e57276d1f4c79e2353bda09fdeb6eb5c47af0cd974a490637ce1f71744830c",
-        strip_prefix = "go.opentelemetry.io/otel/exporters/jaeger@v1.0.0-RC3",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/go.opentelemetry.io/otel/exporters/jaeger/io_opentelemetry_go_otel_exporters_jaeger-v1.0.0-RC3.zip",
-        ],
-    )
-    go_repository(
         name = "io_opentelemetry_go_otel_exporters_otlp_internal_retry",
         build_file_proto_mode = "disable_global",
         importpath = "go.opentelemetry.io/otel/exporters/otlp/internal/retry",
@@ -11344,10 +11294,6 @@ def go_deps():
         name = "org_golang_x_tools",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/tools",
-        patch_args = ["-p1"],
-        patches = [
-            "@com_github_cockroachdb_cockroach//build/patches:org_golang_x_tools.patch",
-        ],
         sha256 = "562f25e674aab49f00a23ec1fcb46a57b0a9d27287ea9a885886c994306d9c14",
         strip_prefix = "golang.org/x/tools@v0.10.0",
         urls = [

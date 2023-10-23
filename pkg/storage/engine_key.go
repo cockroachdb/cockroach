@@ -351,6 +351,11 @@ func (lk LockTableKey) ToEngineKey(buf []byte) (EngineKey, []byte) {
 	return k, buf
 }
 
+// EncodedSize returns the size of the LockTableKey when encoded.
+func (lk LockTableKey) EncodedSize() int64 {
+	return int64(len(lk.Key)) + engineKeyVersionLockTableLen
+}
+
 // EngineRangeKeyValue is a raw value for a general range key as stored in the
 // engine. It consists of a version (suffix) and corresponding value. The range
 // key bounds are not included, but are surfaced via EngineRangeBounds().

@@ -36,11 +36,13 @@ var supportedSQLAlchemyTag = "2.0.20"
 // node.
 func registerSQLAlchemy(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "sqlalchemy",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(1),
-		Leases:  registry.MetamorphicLeases,
-		Tags:    registry.Tags(`default`, `orm`),
+		Name:             "sqlalchemy",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly, registry.ORM),
+		Tags:             registry.Tags(`default`, `orm`),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSQLAlchemy(ctx, t, c)
 		},
@@ -70,7 +72,7 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	if err := repeatRunE(ctx, t, c, node, "install dependencies", `
-		sudo apt-get -qq install make python3.7 libpq-dev python3.7-dev gcc python3-setuptools python-setuptools build-essential python3.7-distutils python3-virtualenv
+		sudo apt-get -qq install make python3.7 libpq-dev python3.7-dev gcc python3-setuptools python-setuptools build-essential python3.7-distutils python3-virtualenv python3-typing-extensions
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +127,7 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	t.Status("setting up cockroach")
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+	c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
 
 	version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 	if err != nil {

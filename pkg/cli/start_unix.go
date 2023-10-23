@@ -50,6 +50,11 @@ var quitSignal os.Signal = unix.SIGQUIT
 // debugSignal is the signal to open a pprof debugging server.
 var debugSignal os.Signal = unix.SIGUSR2
 
+// exitAbruptlySignal is the signal to make the process exit immediately. It is
+// preferable to SIGKILL when running with coverage instrumentation because the
+// coverage profile gets dumped on exit.
+var exitAbruptlySignal os.Signal = unix.SIGUSR1
+
 func handleSignalDuringShutdown(sig os.Signal) {
 	// On Unix, a signal that was not handled gracefully by the application
 	// should be reraised so it is visible in the exit code.

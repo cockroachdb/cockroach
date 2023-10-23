@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"math/rand"
 	"os"
 	"testing"
 
@@ -55,7 +56,7 @@ func TestParquetRows(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	maxRowGroupSize := int64(2)
+	maxRowGroupSize := int64(4)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
@@ -81,6 +82,19 @@ func TestParquetRows(t *testing.T) {
 				`INSERT INTO foo VALUES (2,   'c1', '5a02bd48-ba64-4134-9199-844c1517f722')`,
 				`UPDATE foo SET stringCol = 'changed' WHERE int32Col = 1`,
 				`DELETE FROM foo WHERE int32Col = 0`,
+				`INSERT INTO foo VALUES (3,   'd1', '5a02bd48-ba64-4134-9199-844c1517f723')`,
+				`INSERT INTO foo VALUES (4,   'e1', '5a02bd48-ba64-4134-9199-844c1517f724')`,
+				`INSERT INTO foo VALUES (5,   'f1', '5a02bd48-ba64-4134-9199-844c1517f725')`,
+				`INSERT INTO foo VALUES (6,   'g1', '5a02bd48-ba64-4134-9199-844c1517f726')`,
+				`INSERT INTO foo VALUES (7,   'h1', '5a02bd48-ba64-4134-9199-844c1517f727')`,
+				`UPDATE foo SET stringCol = 'changed' WHERE int32Col = 3`,
+				`INSERT INTO foo VALUES (9,   'j1', '5a02bd48-ba64-4134-9199-844c1517f729')`,
+				`INSERT INTO foo VALUES (10,   'k1', '5a02bd48-ba64-4134-9199-844c1517f712')`,
+				`INSERT INTO foo VALUES (11,   'l1', '5a02bd48-ba64-4134-9199-844c1517f713')`,
+				`DELETE FROM foo WHERE int32Col = 4`,
+				`INSERT INTO foo VALUES (12,   'm1', '5a02bd48-ba64-4134-9199-844c1517f714')`,
+				`INSERT INTO foo VALUES (13,   'n1', '5a02bd48-ba64-4134-9199-844c1517f715')`,
+				`INSERT INTO foo VALUES (14,   'o1', '5a02bd48-ba64-4134-9199-844c1517f716')`,
 			},
 			expectedDatumRows: [][]tree.Datum{
 				{tree.NewDInt(0), tree.NewDString("a1"),
@@ -96,6 +110,31 @@ func TestParquetRows(t *testing.T) {
 					&tree.DUuid{UUID: uuid.FromStringOrNil("0ce43188-e4a9-4b73-803b-a253abc57e6b")},
 					parquetEventTypeDatumStringMap[parquetEventUpdate]},
 				{tree.NewDInt(0), tree.DNull, tree.DNull, parquetEventTypeDatumStringMap[parquetEventDelete]},
+				{tree.NewDInt(3), tree.NewDString("d1"),
+					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f723")}, parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(4), tree.NewDString("e1"),
+					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f724")}, parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(5), tree.NewDString("f1"),
+					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f725")}, parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(6), tree.NewDString("g1"),
+					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f726")}, parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(7), tree.NewDString("h1"),
+					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f727")}, parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(3), tree.NewDString("changed"),
+					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f723")}, parquetEventTypeDatumStringMap[parquetEventUpdate]},
+				{tree.NewDInt(9), tree.NewDString("j1"),
+					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f729")}, parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(10), tree.NewDString("k1"),
+					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f712")}, parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(11), tree.NewDString("l1"),
+					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f713")}, parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(4), tree.DNull, tree.DNull, parquetEventTypeDatumStringMap[parquetEventDelete]},
+				{tree.NewDInt(12), tree.NewDString("m1"),
+					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f714")}, parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(13), tree.NewDString("n1"),
+					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f715")}, parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.NewDInt(14), tree.NewDString("o1"),
+					&tree.DUuid{UUID: uuid.FromStringOrNil("5a02bd48-ba64-4134-9199-844c1517f716")}, parquetEventTypeDatumStringMap[parquetEventInsert]},
 			},
 		},
 	} {
@@ -154,11 +193,19 @@ func TestParquetRows(t *testing.T) {
 				err = writer.addData(updatedRow, prevRow, hlc.Timestamp{}, hlc.Timestamp{})
 				require.NoError(t, err)
 
+				// Flush every 3 rows on average.
+				if rand.Float32() < 0.33 {
+					require.NoError(t, writer.flush())
+				}
+
 				datums[i] = tc.expectedDatumRows[i]
 			}
 
 			err = writer.close()
 			require.NoError(t, err)
+
+			// We inserted 18 updates, but may get dupes from rangefeeds.
+			require.GreaterOrEqual(t, numRows, 18)
 
 			meta, readDatums, err := parquet.ReadFile(f.Name())
 			require.NoError(t, err)

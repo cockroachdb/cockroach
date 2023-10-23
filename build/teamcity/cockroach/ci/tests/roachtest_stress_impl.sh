@@ -10,7 +10,11 @@ if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
   ssh-keygen -q -C "roachtest-stress $(date)" -N "" -f ~/.ssh/id_rsa
 fi
 
-source "$root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh"
+arch=amd64
+if [[ ${FIPS_ENABLED:-0} == 1 ]]; then
+  arch=amd64-fips
+fi
+$root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh $arch
 
 # NOTE: we use the GOOGLE_CREDENTIALS environment here, rather than the
 # "ephemeral" variant. The former is specific to the roachtest stress job,

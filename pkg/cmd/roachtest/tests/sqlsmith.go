@@ -123,7 +123,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 		t.L().Printf("setup:\n%s", strings.Join(setup, "\n"))
 		for _, stmt := range setup {
 			if _, err := conn.Exec(stmt); err != nil {
-				t.Fatal(err)
+				t.Fatalf("error: %s\nstatement: %s", err.Error(), stmt)
 			} else {
 				logStmt(stmt)
 			}
@@ -307,17 +307,19 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			clusterSpec = r.MakeClusterSpec(numNodes)
 		}
 		r.Add(registry.TestSpec{
-			Name:            fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
-			Owner:           registry.OwnerSQLQueries,
-			Cluster:         clusterSpec,
-			Leases:          registry.MetamorphicLeases,
-			NativeLibs:      registry.LibGEOS,
-			Timeout:         time.Minute * 20,
-			RequiresLicense: true,
+			Name:             fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
+			Owner:            registry.OwnerSQLQueries,
+			Cluster:          clusterSpec,
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
+			NativeLibs:       registry.LibGEOS,
+			Timeout:          time.Minute * 20,
+			RequiresLicense:  true,
 			// NB: sqlsmith failures should never block a release.
 			NonReleaseBlocker: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Spec().Cloud != spec.GCE && !c.IsLocal() {
+				if c.Cloud() != spec.GCE && !c.IsLocal() {
 					t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")
 				}
 				runSQLSmith(ctx, t, c, setup, setting)

@@ -179,7 +179,7 @@ subtest node_tenant_capabilities_cache
 
 user testuser
 
-statement error only users with the admin role are allowed to node_tenant_capabilities_cache
+statement error user testuser does not have VIEWCLUSTERMETADATA system privilege
 SELECT * FROM crdb_internal.node_tenant_capabilities_cache
 
 user root

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -67,18 +68,19 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			sqlPoolMemorySize: 2 << 10,
 			cacheSize:         1 << 10,
 			expected: base.TestServerArgs{
-				DefaultTestTenant:         base.TODOTestTenantDisabled,
-				PartOfCluster:             true,
-				JoinAddr:                  "127.0.0.1",
-				DisableTLSForHTTP:         true,
-				Addr:                      "127.0.0.1:1334",
-				SQLAddr:                   "127.0.0.1:1234",
-				HTTPAddr:                  "127.0.0.1:4567",
-				SecondaryTenantPortOffset: -2,
-				SQLMemoryPoolSize:         2 << 10,
-				CacheSize:                 1 << 10,
-				NoAutoInitializeCluster:   true,
-				EnableDemoLoginEndpoint:   true,
+				DefaultTestTenant:             base.TODOTestTenantDisabled,
+				PartOfCluster:                 true,
+				JoinAddr:                      "127.0.0.1",
+				DisableTLSForHTTP:             true,
+				Addr:                          "127.0.0.1:1334",
+				SQLAddr:                       "127.0.0.1:1234",
+				HTTPAddr:                      "127.0.0.1:4567",
+				ApplicationInternalRPCPortMin: 1332,
+				ApplicationInternalRPCPortMax: 2356,
+				SQLMemoryPoolSize:             2 << 10,
+				CacheSize:                     1 << 10,
+				NoAutoInitializeCluster:       true,
+				EnableDemoLoginEndpoint:       true,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						StickyVFSRegistry: stickyVFSRegistry,
@@ -92,18 +94,19 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			sqlPoolMemorySize: 4 << 10,
 			cacheSize:         4 << 10,
 			expected: base.TestServerArgs{
-				DefaultTestTenant:         base.TODOTestTenantDisabled,
-				PartOfCluster:             true,
-				JoinAddr:                  "127.0.0.1",
-				Addr:                      "127.0.0.1:1336",
-				SQLAddr:                   "127.0.0.1:1236",
-				HTTPAddr:                  "127.0.0.1:4569",
-				SecondaryTenantPortOffset: -2,
-				DisableTLSForHTTP:         true,
-				SQLMemoryPoolSize:         4 << 10,
-				CacheSize:                 4 << 10,
-				NoAutoInitializeCluster:   true,
-				EnableDemoLoginEndpoint:   true,
+				DefaultTestTenant:             base.TODOTestTenantDisabled,
+				PartOfCluster:                 true,
+				JoinAddr:                      "127.0.0.1",
+				Addr:                          "127.0.0.1:1336",
+				SQLAddr:                       "127.0.0.1:1236",
+				HTTPAddr:                      "127.0.0.1:4569",
+				ApplicationInternalRPCPortMin: 1334,
+				ApplicationInternalRPCPortMax: 2358,
+				DisableTLSForHTTP:             true,
+				SQLMemoryPoolSize:             4 << 10,
+				CacheSize:                     4 << 10,
+				NoAutoInitializeCluster:       true,
+				EnableDemoLoginEndpoint:       true,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						StickyVFSRegistry: stickyVFSRegistry,
@@ -302,6 +305,9 @@ func TestTransientClusterMultitenant(t *testing.T) {
 	var cancel func()
 	ctx, cancel = c.stopper.WithCancelOnQuiesce(ctx)
 	defer cancel()
+
+	// Ensure CREATE TABLE below works properly.
+	sql.RestrictAccessToSystemInterface.Override(ctx, &c.firstServer.SystemLayer().ClusterSettings().SV, false)
 
 	testutils.RunTrueAndFalse(t, "forSecondaryTenant", func(t *testing.T, forSecondaryTenant bool) {
 		url, err := c.getNetworkURLForServer(ctx, 0,

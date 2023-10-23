@@ -95,13 +95,13 @@ func (ms MVCCStats) HasNoUserData() bool {
 // AvgLockAge returns the average age of outstanding locks,
 // based on current wall time specified via nowNanos.
 func (ms MVCCStats) AvgLockAge(nowNanos int64) float64 {
-	if ms.IntentCount == 0 {
+	if ms.LockCount == 0 {
 		return 0
 	}
 	// Advance age by any elapsed time since last computed. Note that
 	// we operate on a copy.
 	ms.AgeTo(nowNanos)
-	return float64(ms.LockAge) / float64(ms.IntentCount)
+	return float64(ms.LockAge) / float64(ms.LockCount)
 }
 
 // GCByteAge returns the total age of outstanding gc'able
@@ -134,7 +134,7 @@ func (ms *MVCCStats) AgeTo(nowNanos int64) {
 	diffSeconds := nowNanos/1e9 - ms.LastUpdateNanos/1e9
 
 	ms.GCBytesAge += ms.GCBytes() * diffSeconds
-	ms.LockAge += ms.IntentCount * diffSeconds
+	ms.LockAge += ms.LockCount * diffSeconds
 	ms.LastUpdateNanos = nowNanos
 }
 
@@ -159,6 +159,7 @@ func (ms *MVCCStats) Add(oms MVCCStats) {
 	ms.KeyCount += oms.KeyCount
 	ms.ValCount += oms.ValCount
 	ms.IntentCount += oms.IntentCount
+	ms.LockBytes += oms.LockBytes
 	ms.LockCount += oms.LockCount
 	ms.RangeKeyCount += oms.RangeKeyCount
 	ms.RangeKeyBytes += oms.RangeKeyBytes
@@ -190,6 +191,7 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 	ms.KeyCount -= oms.KeyCount
 	ms.ValCount -= oms.ValCount
 	ms.IntentCount -= oms.IntentCount
+	ms.LockBytes -= oms.LockBytes
 	ms.LockCount -= oms.LockCount
 	ms.RangeKeyCount -= oms.RangeKeyCount
 	ms.RangeKeyBytes -= oms.RangeKeyBytes

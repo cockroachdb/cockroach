@@ -9,6 +9,7 @@ with t=A
 ----
 >> del k=a resolve t=A
 del: "a": found key false
+resolve_intent: "a" -> resolved key = true
 stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+784
 >> at end:
 data: "a"/44.000000000,0 -> /<empty>
@@ -110,6 +111,7 @@ with t=A
   resolve_intent k=a status=ABORTED
   txn_remove
 ----
+resolve_intent: "a" -> resolved key = false
 >> at end:
 data: "a"/48.000000000,0 -> /<empty>
 data: "a"/47.000000000,0 -> /<empty>
@@ -138,6 +140,7 @@ with t=A
   resolve_intent k=a status=ABORTED
   txn_remove
 ----
+resolve_intent: "a" -> resolved key = false
 >> at end:
 data: "a"/48.000000000,0 -> /<empty>
 data: "a"/47.000000000,0 -> /<empty>
@@ -166,6 +169,7 @@ with t=A
   resolve_intent k=a status=ABORTED
   txn_remove
 ----
+resolve_intent: "a" -> resolved key = false
 >> at end:
 data: "a"/48.000000000,0 -> /<empty>
 data: "a"/47.000000000,0 -> /<empty>
@@ -194,6 +198,7 @@ with t=A
   resolve_intent k=a status=ABORTED
   txn_remove
 ----
+resolve_intent: "a" -> resolved key = false
 >> at end:
 data: "a"/48.000000000,0 -> /<empty>
 data: "a"/47.000000000,0 -> /<empty>

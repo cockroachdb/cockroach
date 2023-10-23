@@ -59,6 +59,7 @@ func getStreamer(
 		nil, /* kvPairsRead */
 		nil, /* batchRequestsIssued */
 		lock.None,
+		lock.Unreplicated,
 	)
 }
 
@@ -90,7 +91,7 @@ func TestStreamerLimitations(t *testing.T) {
 		defer streamer.Close(ctx)
 		streamer.Init(kvstreamer.OutOfOrder, kvstreamer.Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
 		k := append(s.Codec().TenantPrefix(), roachpb.Key("key")...)
-		get := kvpb.NewGet(k, kvpb.NonLocking)
+		get := kvpb.NewGet(k)
 		reqs := []kvpb.RequestUnion{{
 			Value: &kvpb.RequestUnion_Get{
 				Get: get.(*kvpb.GetRequest),
@@ -115,6 +116,7 @@ func TestStreamerLimitations(t *testing.T) {
 				nil,           /* kvPairsRead */
 				nil,           /* batchRequestsIssued */
 				lock.None,
+				lock.Unreplicated,
 			)
 		})
 	})

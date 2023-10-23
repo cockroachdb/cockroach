@@ -26,6 +26,7 @@ with t=A
   get             k=k
 ----
 get: "k" -> /BYTES/b @50.000000000,0
+resolve_intent: "k" -> resolved key = true
 get: "k" -> /BYTES/b @50.000000000,0
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=25} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
@@ -41,6 +42,7 @@ with t=A
   txn_ignore_seqs seqs=(20-20)
   resolve_intent k=k status=COMMITTED
 ----
+resolve_intent: "k" -> resolved key = true
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=25} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
 data: "k"/50.000000000,0 -> {localTs=15.000000000,0}/BYTES/a

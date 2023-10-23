@@ -31,23 +31,25 @@ func registerDatabaseDrop(r registry.Registry) {
 	clusterSpec := r.MakeClusterSpec(
 		10, /* nodeCount */
 		spec.CPU(8),
-		spec.Zones("us-east1-b"),
 		spec.VolumeSize(500),
 		spec.Cloud(spec.GCE),
+		spec.GCEMinCPUPlatform("Intel Ice Lake"),
+		spec.GCEVolumeType("pd-ssd"),
+		spec.GCEMachineType("n2-standard-8"),
+		spec.GCEZones("us-east1-b"),
 	)
-	clusterSpec.InstanceType = "n2-standard-8"
-	clusterSpec.GCEMinCPUPlatform = "Intel Ice Lake"
-	clusterSpec.GCEVolumeType = "pd-ssd"
 
 	r.Add(registry.TestSpec{
-		Name:            "admission-control/database-drop",
-		Timeout:         10 * time.Hour,
-		Owner:           registry.OwnerAdmissionControl,
-		Benchmark:       true,
-		Tags:            registry.Tags(`weekly`),
-		Cluster:         clusterSpec,
-		RequiresLicense: true,
-		SnapshotPrefix:  "droppable-database-tpce-100k",
+		Name:             "admission-control/database-drop",
+		Timeout:          10 * time.Hour,
+		Owner:            registry.OwnerAdmissionControl,
+		Benchmark:        true,
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.Suites(registry.Weekly),
+		Tags:             registry.Tags(`weekly`),
+		Cluster:          clusterSpec,
+		RequiresLicense:  true,
+		SnapshotPrefix:   "droppable-database-tpce-100k",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			crdbNodes := c.Spec().NodeCount - 1
 			workloadNode := c.Spec().NodeCount
@@ -66,7 +68,9 @@ func registerDatabaseDrop(r registry.Registry) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				path, err := clusterupgrade.UploadVersion(ctx, t, t.L(), c, c.All(), pred)
+				path, err := clusterupgrade.UploadVersion(
+					ctx, t, t.L(), c, c.All(), clusterupgrade.MustParseVersion(pred),
+				)
 				if err != nil {
 					t.Fatal(err)
 				}

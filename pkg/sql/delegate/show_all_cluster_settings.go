@@ -95,10 +95,7 @@ func (d *delegator) delegateShowTenantClusterSettingList(
 	// privileged operation than viewing local cluster settings. So we
 	// shouldn't be allowing with just the role option
 	// VIEWCLUSTERSETTINGS.
-	//
-	// TODO(knz): Using admin authz for now; we may want to introduce a
-	// more specific role option later.
-	if err := d.catalog.RequireAdminRole(d.ctx, "show a tenant cluster setting"); err != nil {
+	if err := d.catalog.CheckPrivilege(d.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 		return nil, err
 	}
 

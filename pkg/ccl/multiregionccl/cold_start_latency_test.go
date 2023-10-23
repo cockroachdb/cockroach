@@ -316,7 +316,7 @@ SELECT checkpoint > extract(epoch from after)
 		defer r.Release()
 		start := timeutil.Now()
 		sn := tenantServerKnobs(i)
-		tenant, err := tc.Server(i).StartTenant(ctx, base.TestTenantArgs{
+		tenant, err := tc.Server(i).TenantController().StartTenant(ctx, base.TestTenantArgs{
 			TenantID:            serverutils.TestTenantID(),
 			DisableCreateTenant: true,
 			SkipTenantCheck:     true,

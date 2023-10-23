@@ -81,7 +81,7 @@ const serverHBAConfSetting = "server.host_based_authentication.configuration"
 // connAuthConf is the cluster setting that holds the HBA
 // configuration.
 var connAuthConf = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	serverHBAConfSetting,
 	"host-based authentication configuration to use during connection authentication",
 	"",

@@ -25,7 +25,7 @@ export default function (props: GraphDashboardProps) {
     props;
 
   return [
-    <LineGraph title="Network Bytes Received">
+    <LineGraph title="Network Bytes Received" showMetricsInTooltip={true}>
       <Axis units={AxisUnits.Bytes} label="bytes">
         {nodeIDs.map(nid => (
           <Metric
@@ -39,7 +39,7 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Network Bytes Sent">
+    <LineGraph title="Network Bytes Sent" showMetricsInTooltip={true}>
       <Axis units={AxisUnits.Bytes} label="bytes">
         {nodeIDs.map(nid => (
           <Metric
@@ -57,6 +57,7 @@ export default function (props: GraphDashboardProps) {
       title="RPC Heartbeat Latency: 50th percentile"
       isKvGraph={false}
       tooltip={`Round-trip latency for recent successful outgoing heartbeats.`}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {nodeIDs.map(nid => (
@@ -75,6 +76,7 @@ export default function (props: GraphDashboardProps) {
       title="RPC Heartbeat Latency: 99th percentile"
       isKvGraph={false}
       tooltip={`Round-trip latency for recent successful outgoing heartbeats.`}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {nodeIDs.map(nid => (
@@ -91,7 +93,9 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="Unhealthy RPC Connections"
-      tooltip={`The number of outgoing connections on each node that are in an unhealthy state.`}
+      tooltip={`The number of outgoing connections on each node that are in an
+          unhealthy state.`}
+      showMetricsInTooltip={true}
     >
       <Axis label="connections">
         {nodeIDs.map(nid => (

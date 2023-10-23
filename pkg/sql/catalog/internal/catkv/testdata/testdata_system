@@ -375,6 +375,15 @@ catalog:
   "062":
     descriptor: relation
     namespace: (1, 29, "tenant_id_seq")
+  "063":
+    descriptor: relation
+    namespace: (1, 29, "mvcc_statistics")
+  "064":
+    descriptor: relation
+    namespace: (1, 29, "transaction_execution_insights")
+  "065":
+    descriptor: relation
+    namespace: (1, 29, "statement_execution_insights")
   "100":
     comments:
       database: this is the default database
@@ -580,6 +589,12 @@ catalog:
     namespace: (1, 29, "transaction_activity")
   "062":
     namespace: (1, 29, "tenant_id_seq")
+  "063":
+    namespace: (1, 29, "mvcc_statistics")
+  "064":
+    namespace: (1, 29, "transaction_execution_insights")
+  "065":
+    namespace: (1, 29, "statement_execution_insights")
   "100":
     comments:
       database: this is the default database

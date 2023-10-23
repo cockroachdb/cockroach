@@ -161,11 +161,11 @@ func registerTPCHConcurrency(r registry.Registry) {
 		disableStreamer bool,
 	) {
 		setupCluster(ctx, t, c, disableStreamer)
-		// Run at concurrency 1000. We often can push this a bit higher, but
-		// then the iterations also get longer. 1000 concurrently running
-		// analytical queries on the 3 node cluster that doesn't crash is much
-		// more than we expect our users to run.
-		const concurrency = 1000
+		// Run at concurrency 500. We often can push this higher, but then the
+		// iterations also get longer. 500 concurrently running analytical
+		// queries on the 3 node cluster that doesn't crash is much more than we
+		// expect our users to run.
+		const concurrency = 500
 		// Each iteration can take on the order of 3 hours, so we choose the
 		// iteration count such that it'd be definitely completed with 18 hour
 		// timeout.
@@ -201,20 +201,24 @@ func registerTPCHConcurrency(r registry.Registry) {
 	const timeout = 18 * time.Hour
 
 	r.Add(registry.TestSpec{
-		Name:    "tpch_concurrency",
-		Owner:   registry.OwnerSQLQueries,
-		Timeout: timeout,
-		Cluster: r.MakeClusterSpec(numNodes),
+		Name:             "tpch_concurrency",
+		Owner:            registry.OwnerSQLQueries,
+		Timeout:          timeout,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHConcurrency(ctx, t, c, false /* disableStreamer */)
 		},
 	})
 
 	r.Add(registry.TestSpec{
-		Name:    "tpch_concurrency/no_streamer",
-		Owner:   registry.OwnerSQLQueries,
-		Timeout: timeout,
-		Cluster: r.MakeClusterSpec(numNodes),
+		Name:             "tpch_concurrency/no_streamer",
+		Owner:            registry.OwnerSQLQueries,
+		Timeout:          timeout,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHConcurrency(ctx, t, c, true /* disableStreamer */)
 		},

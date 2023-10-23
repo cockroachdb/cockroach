@@ -43,9 +43,9 @@ func TestRegistry(t *testing.T) {
 	ctx := context.Background()
 
 	session := Session{ID: clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))}
-	transaction := &Transaction{ID: uuid.FastMakeV4()}
 
 	t.Run("slow detection", func(t *testing.T) {
+		transaction := &Transaction{ID: uuid.FastMakeV4()}
 		statement := &Statement{
 			Status:           Statement_Completed,
 			ID:               clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
@@ -80,12 +80,16 @@ func TestRegistry(t *testing.T) {
 	})
 
 	t.Run("failure detection", func(t *testing.T) {
+		// Verify that statement error info gets bubbled up to the transaction
+		// when the transaction does not have this information.
+		transaction := &Transaction{ID: uuid.FastMakeV4()}
 		statement := &Statement{
 			ID:               clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
 			FingerprintID:    appstatspb.StmtFingerprintID(100),
 			LatencyInSeconds: 2,
 			Status:           Statement_Failed,
 			ErrorCode:        "22012",
+			ErrorMsg:         "division by zero",
 		}
 
 		st := cluster.MakeTestingClusterSettings()
@@ -93,6 +97,11 @@ func TestRegistry(t *testing.T) {
 		store := newStore(st)
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		registry.ObserveStatement(session.ID, statement)
+		// Transaction status is set during transaction stats recorded based on
+		// if the transaction committed. We'll inject the failure here to align
+		// it with the test. The insights integration tests will verify that this
+		// field is set properly.
+		transaction.Status = Transaction_Failed
 		registry.ObserveTransaction(session.ID, transaction)
 
 		expected := []*Insight{{
@@ -114,9 +123,11 @@ func TestRegistry(t *testing.T) {
 		require.Equal(t, expected, actual)
 		require.Equal(t, transaction.LastErrorCode, statement.ErrorCode)
 		require.Equal(t, transaction.Status, Transaction_Status(statement.Status))
+		require.Equal(t, transaction.LastErrorMsg, statement.ErrorMsg)
 	})
 
 	t.Run("disabled", func(t *testing.T) {
+		transaction := &Transaction{ID: uuid.FastMakeV4()}
 		statement := &Statement{
 			Status:           Statement_Completed,
 			ID:               clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
@@ -141,6 +152,7 @@ func TestRegistry(t *testing.T) {
 	})
 
 	t.Run("too fast", func(t *testing.T) {
+		transaction := &Transaction{ID: uuid.FastMakeV4()}
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
 		statement2 := &Statement{
@@ -164,6 +176,7 @@ func TestRegistry(t *testing.T) {
 	})
 
 	t.Run("buffering statements per session", func(t *testing.T) {
+		transaction := &Transaction{ID: uuid.FastMakeV4()}
 		statement := &Statement{
 			Status:           Statement_Completed,
 			ID:               clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
@@ -217,6 +230,7 @@ func TestRegistry(t *testing.T) {
 	})
 
 	t.Run("sibling statements without problems", func(t *testing.T) {
+		transaction := &Transaction{ID: uuid.FastMakeV4()}
 		statement := &Statement{
 			Status:           Statement_Completed,
 			ID:               clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
@@ -259,12 +273,14 @@ func TestRegistry(t *testing.T) {
 	})
 
 	t.Run("txn with no stmts", func(t *testing.T) {
+		transaction := &Transaction{ID: uuid.FastMakeV4()}
 		st := cluster.MakeTestingClusterSettings()
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, newStore(st))
 		require.NotPanics(t, func() { registry.ObserveTransaction(session.ID, transaction) })
 	})
 
 	t.Run("txn with high accumulated contention without high single stmt contention", func(t *testing.T) {
+		transaction := &Transaction{ID: uuid.FastMakeV4()}
 		st := cluster.MakeTestingClusterSettings()
 		store := newStore(st)
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
@@ -308,6 +324,7 @@ func TestRegistry(t *testing.T) {
 	})
 
 	t.Run("statement that is slow but should be ignored", func(t *testing.T) {
+		transaction := &Transaction{ID: uuid.FastMakeV4()}
 		statementNotIgnored := &Statement{
 			Status:           Statement_Completed,
 			ID:               clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),

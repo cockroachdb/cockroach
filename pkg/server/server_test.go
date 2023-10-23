@@ -169,6 +169,7 @@ func TestServerStartClock(t *testing.T) {
 				MaxOffset: time.Second,
 			},
 		},
+		DisableSQLServer: true,
 	}
 	s := serverutils.StartServerOnly(t, params)
 	defer s.Stopper().Stop(context.Background())

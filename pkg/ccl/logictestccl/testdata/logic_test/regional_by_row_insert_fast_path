@@ -1,0 +1,203 @@
+# LogicTest: multiregion-9node-3region-3azs !metamorphic-batch-sizes
+# This file contains a subset of insert fast path tests on REGIONAL BY
+# ROW tables, The tests are split off from the EXPLAIN query runs in order to
+# use randomized column families to achieve more test coverage.
+
+# Set the closed timestamp interval to be short to shorten the amount of time
+# we need to wait for the system config to propagate.
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms';
+
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms';
+
+statement ok
+SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10ms';
+
+statement ok
+CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE REGION FAILURE;
+
+statement ok
+USE multi_region_test_db
+
+subtest insertFastPathUnique
+
+statement ok
+SET database = multi_region_test_db
+
+statement ok
+CREATE TABLE users2 (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name STRING NOT NULL,
+  email STRING NOT NULL UNIQUE,
+  INDEX (name)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+INSERT INTO users2 (crdb_region, name, email)
+VALUES ('us-east-1', 'Craig Roacher', 'craig@cockroachlabs.com')
+
+# Verify insert fast path detects unique constraint violations.
+statement error pq: duplicate key value violates unique constraint "users2_email_key"\nDETAIL: Key \(email\)=\('craig@cockroachlabs.com'\) already exists\.
+INSERT INTO users2 (name, email)
+VALUES ('Craig Roacher', 'craig@cockroachlabs.com')
+
+# Verify insert fast path detects unique constraint violations.
+statement error pq: duplicate key value violates unique constraint "users2_email_key"\nDETAIL: Key \(email\)=\('craig@cockroachlabs.com'\) already exists\.
+INSERT INTO users2 (crdb_region, name, email)
+VALUES ('ap-southeast-2', 'Craig Roacher', 'craig@cockroachlabs.com')
+
+# Verify insert fast path detects unique constraint violations.
+statement error pq: duplicate key value violates unique constraint "users2_email_key"\nDETAIL: Key \(email\)=\('craig@cockroachlabs.com'\) already exists\.
+INSERT INTO users2 (crdb_region, name, email)
+VALUES ('ca-central-1', 'Craig Roacher', 'craig@cockroachlabs.com')
+
+statement ok
+INSERT INTO users2 (name, email)
+VALUES ('Bill Roacher', 'bill@cockroachlabs.com'), ('Jill Roacher', 'jill@cockroachlabs.com')
+
+# Verify multi-row insert fast path detects unique constraint violations.
+statement error pq: duplicate key value violates unique constraint "users2_email_key"\nDETAIL: Key \(email\)=\('bill@cockroachlabs.com'\) already exists\.
+INSERT INTO users2 (name, email)
+VALUES ('Bill Roacher', 'bill@cockroachlabs.com'), ('Jill Roacher', 'jill@cockroachlabs.com')
+
+# Multi-row insert fast path uniqueness checks as a prepared statement not
+# currently supported.
+statement ok
+PREPARE e1 AS EXPLAIN INSERT INTO users2 (name, email)
+VALUES ($1, $2), ($3, $4)
+
+statement ok
+PREPARE p1 AS INSERT INTO users2 (name, email)
+VALUES ($1, $2), ($3, $4)
+
+# Verify parameterized multi-row insert fast path detects unique constraint
+# violations.
+statement error pq: duplicate key value violates unique constraint "users2_email_key"\nDETAIL: Key \(email\)=\('bill@cockroachlabs.com'\) already exists\.
+EXECUTE p1 ('Bill Roacher', 'bill@cockroachlabs.com', 'Jo Roacher', 'jo@cockroachlabs.com')
+
+statement ok
+CREATE TABLE users4 (
+  id UUID,
+  name STRING NOT NULL PRIMARY KEY,
+  email STRING NOT NULL UNIQUE
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+INSERT INTO users4 SELECT * FROM users2
+
+statement ok
+ALTER TABLE users2 ADD CONSTRAINT users4_fk FOREIGN KEY (name) REFERENCES users4 (name) ON DELETE CASCADE
+
+# Verify multi-row insert fast path detects unique constraint violations.
+statement error pq: duplicate key value violates unique constraint "users2_email_key"\nDETAIL: Key \(email\)=\('bill@cockroachlabs.com'\) already exists\.
+INSERT INTO users2 (name, email)
+VALUES ('Bill Roacher', 'bill@cockroachlabs.com'), ('Jo Roacher', 'jo@cockroachlabs.com')
+
+statement ok
+CREATE TABLE users (
+    id         UUID   PRIMARY KEY DEFAULT gen_random_uuid(),
+    id2        INT,
+    username   STRING NOT NULL,
+    UNIQUE INDEX id2_idx(id2)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+INSERT INTO users (crdb_region, id, id2, username)
+VALUES ('us-east-1', '5ebfedee-0dcf-41e6-a315-5fa0b51b9882', 2, 'Craig Roacher')
+
+statement ok
+INSERT INTO users (crdb_region, id, id2, username)
+VALUES ('ap-southeast-2', '5ebfedee-0dcf-41e6-a315-5fa0b51b9889', 19, 'Dale Roacher')
+
+statement ok
+CREATE TABLE user_settings2 (
+    id      UUID   PRIMARY KEY DEFAULT gen_random_uuid(),
+    id2     INT,
+    user_id UUID   NOT NULL,
+    value   STRING NOT NULL,
+    INDEX(user_id),
+    UNIQUE INDEX id2_idx(id2),
+    FOREIGN KEY (user_id, crdb_region) REFERENCES users (id, crdb_region)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE TABLE user_settings3 (
+    id      UUID   PRIMARY KEY DEFAULT gen_random_uuid(),
+    id2     INT,
+    user_id UUID   NOT NULL,
+    value   STRING NOT NULL,
+    INDEX(user_id),
+    UNIQUE INDEX id2_idx(id2),
+    FOREIGN KEY (user_id) REFERENCES users (id)
+) LOCALITY REGIONAL BY ROW;
+
+# Insert fast path should catch this uniqueness violation within the batch of
+# input rows.
+statement error pq: duplicate key value violates unique constraint "id2_idx"\nDETAIL: Key \(id2\)=\(2\) already exists\.
+INSERT INTO user_settings2 (id, id2, user_id, value)
+VALUES ('5ebfedee-0dcf-41e6-a315-5fa0b51b9883', 2, '5ebfedee-0dcf-41e6-a315-5fa0b51b9889', 'foo'),
+       ('5ebfedee-0dcf-41e6-a315-5fa0b51b9884', 2, '5ebfedee-0dcf-41e6-a315-5fa0b51b9889', 'foo')
+
+# The first insert doesn't violate uniqueness.
+statement ok
+INSERT INTO user_settings2 (crdb_region, id2, user_id, value) VALUES ('us-east-1', 2, '5ebfedee-0dcf-41e6-a315-5fa0b51b9882', 'foo')
+
+# Verify insert fast path errors out uniqueness violations correctly.
+statement error pq: duplicate key value violates unique constraint "id2_idx"\nDETAIL: Key \(id2\)=\(2\) already exists\.
+INSERT INTO user_settings2 (crdb_region, id2, user_id, value) VALUES ('us-east-1', 2, '5ebfedee-0dcf-41e6-a315-5fa0b51b9882', 'foo')
+
+# Verify insert fast path errors out FK violations correctly when there's also
+# a UNIQUE WITHOUT INDEX constraint.
+statement error pq: insert on table "user_settings2" violates foreign key constraint "user_settings2_user_id_crdb_region_fkey"\nDETAIL: Key \(user_id, crdb_region\)=\('5ebfedee-0dcf-41e6-a315-5fa0b51b9889', 'us-east-1'\) is not present in table "users"\.
+INSERT INTO user_settings2 (crdb_region, id2, user_id, value) VALUES ('us-east-1', 9, '5ebfedee-0dcf-41e6-a315-5fa0b51b9889', 'foo')
+
+# Verify insert fast path with both a uniqueness violation and an FK violation
+# reports the uniqueness violation (the same as is done for non-fast path).
+statement error pq: duplicate key value violates unique constraint "id2_idx"\nDETAIL: Key \(id2\)=\(2\) already exists\.
+INSERT INTO user_settings2 (crdb_region, id2, user_id, value) VALUES ('us-east-1', 2, '5ebfedee-0dcf-41e6-a315-5fa0b51b9889', 'foo')
+
+# Hash-sharded RBR table.
+statement ok
+CREATE TABLE hash_sharded_rbr_computed (
+  region_id STRING(10) NOT NULL,
+  my_uuid UUID NOT NULL,
+  my_uuid2 UUID NOT NULL,
+  another_id INT NOT NULL,
+  row_ts TIMESTAMP NULL,
+  crdb_region_col crdb_internal_region NOT VISIBLE NOT NULL AS (CASE WHEN substring(region_id, 1:::INT8, 4:::INT8) = 'east':::STRING THEN 'us-east-1':::crdb_internal_region WHEN substring(region_id, 1:::INT8, 2:::INT8) = 'ap':::STRING THEN 'ap-southeast-2':::crdb_internal_region ELSE 'ca-central-1':::crdb_internal_region END) STORED,
+  CONSTRAINT "primary" PRIMARY KEY (region_id ASC) USING HASH
+) LOCALITY REGIONAL BY ROW AS crdb_region_col;
+
+statement ok
+CREATE UNIQUE INDEX idx_date ON hash_sharded_rbr_computed (row_ts ASC, another_id ASC) USING HASH
+
+statement ok
+INSERT
+INTO
+  hash_sharded_rbr_computed (region_id, my_uuid, my_uuid2, another_id, row_ts)
+VALUES
+  ('east1234', gen_random_uuid(), gen_random_uuid(), 1, TIMESTAMP '2016-01-25 10:10:10.555555')
+
+# Test fast path unique checks work properly on a hash-sharded RBR table.
+statement error pq: duplicate key value violates unique constraint "idx_date"\nDETAIL: Key \(row_ts, another_id\)=\('2016-01-25 10:10:10.555555', 1\) already exists\.
+INSERT
+INTO
+  hash_sharded_rbr_computed (region_id, my_uuid, my_uuid2, another_id, row_ts)
+VALUES
+  ('ap1234', gen_random_uuid(), gen_random_uuid(), 1, TIMESTAMP '2016-01-25 10:10:10.555555')
+
+statement ok
+INSERT INTO users (crdb_region, id, id2, username)
+VALUES ('ap-southeast-2', '5ebfedee-0dcf-41e6-a315-5fa0b51b9992', 9, 'Craig Roacher')
+
+statement ok
+SET tracing = on,kv,results; INSERT INTO user_settings2 (id2, user_id, value)
+VALUES (9, '5ebfedee-0dcf-41e6-a315-5fa0b51b9992', 'foo'); SET tracing = off
+
+# The FK and uniqueness checks should be bundled in a single batch of scans.
+query T rowsort
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE '%batch%' AND message LIKE '%Scan%'
+----
+r67: sending batch 4 Scan to (n1,s1):1

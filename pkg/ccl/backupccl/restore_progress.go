@@ -28,7 +28,7 @@ import (
 // to the checkpoint record. The default is set using the same reasoning as
 // changefeed.frontier_checkpoint_max_bytes.
 var restoreCheckpointMaxBytes = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"restore.frontier_checkpoint_max_bytes",
 	"controls the maximum size of the restore checkpoint frontier as a the sum of the (span,"+
 		"timestamp) tuples",

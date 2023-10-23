@@ -96,10 +96,8 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 			JobRegistry:      execCtx.ExecCfg().JobRegistry,
 			TestingKnobs:     execCtx.ExecCfg().UpgradeTestingKnobs,
 			SessionData:      execCtx.SessionData(),
+			ClusterID:        execCtx.ExtendedEvalContext().ClusterID,
 		}
-		tenantDeps.SpanConfig.KVAccessor = execCtx.ExecCfg().SpanConfigKVAccessor
-		tenantDeps.SpanConfig.Splitter = execCtx.ExecCfg().SpanConfigSplitter
-		tenantDeps.SpanConfig.Default = execCtx.ExecCfg().DefaultZoneConfig.AsSpanConfig()
 
 		tenantDeps.SchemaResolverConstructor = func(
 			txn *kv.Txn, descriptors *descs.Collection, currDb string,

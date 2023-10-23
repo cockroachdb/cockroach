@@ -14,20 +14,34 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
 type showFingerprintsNode struct {
-	optColumnsSlot
+	columns colinfo.ResultColumns
 
 	tableDesc catalog.TableDescriptor
 	indexes   []catalog.Index
+
+	tenantSpec tenantSpec
 
 	run showFingerprintsRun
 }
@@ -52,6 +66,10 @@ type showFingerprintsNode struct {
 func (p *planner) ShowFingerprints(
 	ctx context.Context, n *tree.ShowFingerprints,
 ) (planNode, error) {
+	if n.TenantSpec != nil {
+		return p.planShowTenantFingerprint(ctx, n.TenantSpec)
+	}
+
 	// We avoid the cache so that we can observe the fingerprints without
 	// taking a lease, like other SHOW commands.
 	tableDesc, err := p.ResolveUncachedTableDescriptorEx(
@@ -65,8 +83,31 @@ func (p *planner) ShowFingerprints(
 	}
 
 	return &showFingerprintsNode{
+		columns:   colinfo.ShowFingerprintsColumns,
 		tableDesc: tableDesc,
 		indexes:   tableDesc.ActiveIndexes(),
+	}, nil
+}
+
+func (p *planner) planShowTenantFingerprint(
+	ctx context.Context, ts *tree.TenantSpec,
+) (planNode, error) {
+	if err := CanManageTenant(ctx, p); err != nil {
+		return nil, err
+	}
+
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "fingerprint", p.execCfg.Settings); err != nil {
+		return nil, err
+	}
+
+	tspec, err := p.planTenantSpec(ctx, ts, "SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER")
+	if err != nil {
+		return nil, err
+	}
+
+	return &showFingerprintsNode{
+		columns:    colinfo.ShowTenantFingerprintsColumns,
+		tenantSpec: tspec,
 	}, nil
 }
 
@@ -83,7 +124,103 @@ func (n *showFingerprintsNode) startExec(params runParams) error {
 	return nil
 }
 
+// protectTenantSpanWithSession creates a protected timestamp record
+// for the given tenant ID at the read timestamp of the current
+// transaction. The PTS record will be tied to the given sessionID.
+//
+// The caller should call the returned cleanup function to release the
+// PTS record.
+func protectTenantSpanWithSession(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	execCfg *ExecutorConfig,
+	tenantID roachpb.TenantID,
+	sessionID clusterunique.ID,
+) (func(), error) {
+	ptsRecordID := uuid.MakeV4()
+	ptsRecord := sessionprotectedts.MakeRecord(
+		ptsRecordID,
+		// TODO(ssd): The type here seems weird. I think this
+		// is correct in that we use this to compare against
+		// the session_id table which returns the stringified
+		// session ID. But, maybe we can make this clearer.
+		[]byte(sessionID.String()),
+		evalCtx.Txn.ReadTimestamp(),
+		ptpb.MakeTenantsTarget([]roachpb.TenantID{tenantID}),
+	)
+	log.Infof(ctx, "protecting timestamp: %#+v", ptsRecord)
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		pts := execCfg.ProtectedTimestampProvider.WithTxn(txn)
+		return pts.Protect(ctx, ptsRecord)
+	}); err != nil {
+		return nil, err
+	}
+
+	releasePTS := func() {
+		if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			pts := execCfg.ProtectedTimestampProvider.WithTxn(txn)
+			return pts.Release(ctx, ptsRecordID)
+		}); err != nil {
+			log.Warningf(ctx, "failed to release protected timestamp %s: %v", ptsRecordID, err)
+		}
+	}
+	return releasePTS, nil
+}
+
+func (n *showFingerprintsNode) nextTenant(params runParams) (bool, error) {
+	if n.run.rowIdx > 0 {
+		return false, nil
+	}
+
+	tinfo, err := n.tenantSpec.getTenantInfo(params.ctx, params.p)
+	if err != nil {
+		return false, err
+	}
+
+	tid, err := roachpb.MakeTenantID(tinfo.ID)
+	if err != nil {
+		return false, err
+	}
+
+	cleanup, err := protectTenantSpanWithSession(
+		params.ctx,
+		params.p.EvalContext(),
+		params.p.ExecCfg(),
+		tid,
+		params.p.ExtendedEvalContext().SessionID,
+	)
+	if err != nil {
+		return false, err
+	}
+	defer cleanup()
+
+	fingerprint, err := params.p.FingerprintSpan(params.ctx,
+		keys.MakeTenantSpan(tid),
+		hlc.Timestamp{},
+		false,
+		true)
+	if err != nil {
+		return false, err
+	}
+
+	endTime := hlc.Timestamp{
+		WallTime: params.p.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
+	}
+	n.run.values = []tree.Datum{
+		tree.NewDString(string(tinfo.Name)),
+		eval.TimestampToDecimalDatum(endTime),
+		tree.NewDInt(tree.DInt(fingerprint)),
+	}
+	n.run.rowIdx++
+
+	return true, nil
+}
+
 func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
+	if n.tenantSpec != nil {
+		return n.nextTenant(params)
+	}
+
 	if n.run.rowIdx >= len(n.indexes) {
 		return false, nil
 	}

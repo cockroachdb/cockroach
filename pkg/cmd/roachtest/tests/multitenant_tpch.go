@@ -93,7 +93,8 @@ func runMultiTenantTPCH(
 
 	// Now we create a tenant and run all TPCH queries within it.
 	if sharedProcess {
-		db := createInMemoryTenant(ctx, t, c, appTenantName, c.All(), true /* secure */)
+		db := createInMemoryTenantWithConn(ctx, t, c, appTenantName, c.All(), true /* secure */)
+		defer db.Close()
 		url := fmt.Sprintf("{pgurl:1:%s}", appTenantName)
 		runTPCH(db, url, 1 /* setupIdx */)
 	} else {
@@ -153,11 +154,13 @@ func registerMultiTenantTPCH(r registry.Registry) {
 				name += "/enable_direct_scans"
 			}
 			r.Add(registry.TestSpec{
-				Name:      name,
-				Owner:     registry.OwnerSQLQueries,
-				Benchmark: true,
-				Cluster:   r.MakeClusterSpec(1 /* nodeCount */),
-				Leases:    registry.MetamorphicLeases,
+				Name:             name,
+				Owner:            registry.OwnerSQLQueries,
+				Benchmark:        true,
+				Cluster:          r.MakeClusterSpec(1 /* nodeCount */),
+				CompatibleClouds: registry.AllExceptAWS,
+				Suites:           registry.Suites(registry.Nightly),
+				Leases:           registry.MetamorphicLeases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runMultiTenantTPCH(ctx, t, c, enableDirectScans, sharedProcess)
 				},

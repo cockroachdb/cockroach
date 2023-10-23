@@ -29,9 +29,14 @@ import (
 )
 
 // perfArtifactsDir is the directory on cluster nodes in which perf artifacts
-// reside. Upon success this directory is copied into test artifactsDir from
+// reside. Upon success this directory is copied into the test's ArtifactsDir() from
 // each node in the cluster.
 const perfArtifactsDir = "perf"
+
+// goCoverArtifactsDir the directory on cluster nodes in which go coverage
+// profiles are dumped. At the end of a test this directory is copied into the
+// test's ArtifactsDir() from each node in the cluster.
+const goCoverArtifactsDir = "gocover"
 
 type testStatus struct {
 	msg      string
@@ -111,6 +116,9 @@ type testImpl struct {
 	// Version strings look like "20.1.4".
 	versionsBinaryOverride map[string]string
 	skipInit               bool
+	// If true, go coverage is enabled and the BAZEL_COVER_DIR env var will be set
+	// when starting nodes.
+	goCoverEnabled bool
 }
 
 func newFailure(squashedErr error, errs []error) failure {
@@ -434,6 +442,13 @@ func (t *testImpl) PerfArtifactsDir() string {
 	return perfArtifactsDir
 }
 
+func (t *testImpl) GoCoverArtifactsDir() string {
+	if t.goCoverEnabled {
+		return goCoverArtifactsDir
+	}
+	return ""
+}
+
 // IsBuildVersion returns true if the build version is greater than or equal to
 // minVersion. This allows a test to optionally perform additional checks
 // depending on the cockroach version it is running against. Note that the
@@ -454,18 +469,34 @@ func (t *testImpl) IsBuildVersion(minVersion string) bool {
 	return t.BuildVersion().AtLeast(vers)
 }
 
-// teamCityEscape escapes a string for use as <value> in a key='<value>' attribute
+// TeamCityEscape escapes a string for use as <value> in a key='<value>' attribute
 // in TeamCity build output marker.
-// Documentation here: https://confluence.jetbrains.com/display/TCD10/Build+Script+Interaction+with+TeamCity#BuildScriptInteractionwithTeamCity-Escapedvalues
-func teamCityEscape(s string) string {
-	r := strings.NewReplacer(
-		"\n", "|n",
-		"'", "|'",
-		"|", "||",
-		"[", "|[",
-		"]", "|]",
-	)
-	return r.Replace(s)
+// See https://www.jetbrains.com/help/teamcity/2023.05/service-messages.html#Escaped+Values
+func TeamCityEscape(s string) string {
+	var sb strings.Builder
+
+	for _, runeValue := range s {
+		switch runeValue {
+		case '\n':
+			sb.WriteString("|n")
+		case '\r':
+			sb.WriteString("|r")
+		case '|':
+			sb.WriteString("||")
+		case '[':
+			sb.WriteString("|[")
+		case ']':
+			sb.WriteString("|]")
+		default:
+			if runeValue > 127 {
+				// escape unicode
+				sb.WriteString(fmt.Sprintf("|0x%04x", runeValue))
+			} else {
+				sb.WriteRune(runeValue)
+			}
+		}
+	}
+	return sb.String()
 }
 
 func teamCityNameEscape(name string) string {

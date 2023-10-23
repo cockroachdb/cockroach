@@ -257,13 +257,6 @@ type MVCCIterator interface {
 	// the first key.
 	Prev()
 
-	// SeekIntentGE is a specialized version of SeekGE(MVCCKey{Key: key}), when
-	// the caller expects to find an intent, and additionally has the txnUUID
-	// for the intent it is looking for. When running with separated intents,
-	// this can optimize the behavior of the underlying Engine for write heavy
-	// keys by avoiding the need to iterate over many deleted intents.
-	SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID)
-
 	// UnsafeRawKey returns the current raw key which could be an encoded
 	// MVCCKey, or the more general EngineKey (for a lock table key).
 	// This is a low-level and dangerous method since it will expose the
@@ -427,38 +420,22 @@ type IterOptions struct {
 	// the iterator. UpperBound must be provided unless Prefix is true, in which
 	// case the end of the prefix will be used as the upper bound.
 	UpperBound roachpb.Key
-	// MinTimestampHint and MaxTimestampHint, if set, indicate that keys outside
-	// of the time range formed by [MinTimestampHint, MaxTimestampHint] do not
-	// need to be presented by the iterator. The underlying iterator may be able
-	// to efficiently skip over keys outside of the hinted time range, e.g., when
-	// an SST indicates that it contains no keys within the time range. Intents
+	// MinTimestamp and MaxTimestamp, if set, indicate that only keys
+	// within the time range formed by [MinTimestamp, MaxTimestamp] should be
+	// returned. The underlying iterator may be able to efficiently skip over
+	// keys outside of the hinted time range, e.g., when a block handle
+	// indicates that the block contains no keys within the time range. Intents
 	// will not be visible to such iterators at all. This is only relevant for
 	// MVCCIterators.
 	//
-	// Note that time bound hints are strictly a performance optimization, and
-	// iterators with time bounds hints will frequently return keys outside of the
-	// [start, end] time range. If you must guarantee that you never see a key
-	// outside of the time bounds, perform your own filtering.
-	//
-	// NB: The iterator may surface stale data. Pebble range tombstones do not have
-	// timestamps and thus may be ignored entirely depending on whether their SST
-	// happens to satisfy the filter. Furthermore, keys outside the timestamp
-	// range may be stale and must be ignored -- for example, consider a key foo@5
-	// written in an SST with timestamp range [3-7], and then a non-MVCC removal
-	// or update of this key in a different SST with timestamp range [3-5]. Using
-	// an iterator with range [6-9] would surface the old foo@5 key because it
-	// would return all keys in the old [3-7] SST but not take into account the
-	// separate [3-5] SST where foo@5 was removed or updated. See also:
-	// https://github.com/cockroachdb/pebble/issues/1786
+	// Note that time-bound iterators previously were only a performance
+	// optimization but now guarantee that no keys outside of the [start, end]
+	// time range will be returned.
 	//
 	// NB: Range keys are not currently subject to timestamp filtering due to
 	// complications with MVCCIncrementalIterator. See:
 	// https://github.com/cockroachdb/cockroach/issues/86260
-	//
-	// Currently, the only way to correctly use such an iterator is to use it in
-	// concert with an iterator without timestamp hints, as done by
-	// MVCCIncrementalIterator.
-	MinTimestampHint, MaxTimestampHint hlc.Timestamp
+	MinTimestamp, MaxTimestamp hlc.Timestamp
 	// KeyTypes specifies the types of keys to surface: point and/or range keys.
 	// Use HasPointAndRange() to determine which key type is present at a given
 	// iterator position, and RangeBounds() and RangeKeys() to access range keys.
@@ -1043,6 +1020,7 @@ type Engine interface {
 	// files. These files can be referred to by multiple stores, but are not
 	// modified or deleted by the Engine doing the ingestion.
 	IngestExternalFiles(ctx context.Context, external []pebble.ExternalFile) (pebble.IngestOperationStats, error)
+
 	// PreIngestDelay offers an engine the chance to backpressure ingestions.
 	// When called, it may choose to block if the engine determines that it is in
 	// or approaching a state where further ingestions may risk its health.
@@ -1051,7 +1029,21 @@ type Engine interface {
 	// counts for the given key span, along with how many of those bytes are on
 	// remote, as well as specifically external remote, storage.
 	ApproximateDiskBytes(from, to roachpb.Key) (total, remote, external uint64, _ error)
-
+	// ConvertFilesToBatchAndCommit converts local files with the given paths to
+	// a WriteBatch and commits the batch with sync=true. The files represented
+	// in paths must not be overlapping -- this is the same contract as
+	// IngestLocalFiles*. Additionally, clearedSpans represents the spans which
+	// must be deleted before writing the data contained in these paths.
+	//
+	// This method is expected to be used instead of IngestLocalFiles* or
+	// IngestAndExciseFiles when the sum of the file sizes is small.
+	//
+	// TODO(sumeer): support this as an alternative to IngestAndExciseFiles.
+	// This should be easy since we use NewSSTEngineIterator to read the ssts,
+	// which supports multiple levels.
+	ConvertFilesToBatchAndCommit(
+		ctx context.Context, paths []string, clearedSpans []roachpb.Span,
+	) error
 	// CompactRange ensures that the specified range of key value pairs is
 	// optimized for space efficiency.
 	CompactRange(start, end roachpb.Key) error
@@ -1377,19 +1369,22 @@ type EncryptionRegistries struct {
 // GetIntent will look up an intent given a key. It there is no intent for a
 // key, it will return nil rather than an error. Errors are returned for problem
 // at the storage layer, problem decoding the key, problem unmarshalling the
-// intent, missing transaction on the intent or multiple intents for this key.
+// intent, missing transaction on the intent, or multiple intents for this key.
 func GetIntent(reader Reader, key roachpb.Key) (*roachpb.Intent, error) {
-	// Translate this key from a regular key to one in the lock space so it can be
-	// used for queries.
-	lbKey, _ := keys.LockTableSingleKey(key, nil)
-
-	iter, err := reader.NewEngineIterator(IterOptions{Prefix: true, LowerBound: lbKey})
+	// Probe the lock table at key using a lock-table iterator.
+	opts := LockTableIteratorOptions{
+		Prefix: true,
+		// Ignore Exclusive and Shared locks. We only care about intents.
+		MatchMinStr: lock.Intent,
+	}
+	iter, err := NewLockTableIterator(reader, opts)
 	if err != nil {
 		return nil, err
 	}
 	defer iter.Close()
 
-	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: lbKey})
+	seekKey, _ := keys.LockTableSingleKey(key, nil)
+	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: seekKey})
 	if err != nil {
 		return nil, err
 	}
@@ -1401,21 +1396,20 @@ func GetIntent(reader Reader, key roachpb.Key) (*roachpb.Intent, error) {
 	if err != nil {
 		return nil, err
 	}
-	checkKey, err := keys.DecodeLockTableSingleKey(engineKey.Key)
+	ltKey, err := engineKey.ToLockTableKey()
 	if err != nil {
 		return nil, err
 	}
-	if !checkKey.Equal(key) {
+	if !ltKey.Key.Equal(key) {
 		// This should not be possible, a key and using prefix match means that it
 		// must match.
-		return nil, errors.AssertionFailedf("key does not match expected %v != %v", checkKey, key)
+		return nil, errors.AssertionFailedf("key does not match expected %v != %v", ltKey.Key, key)
+	}
+	if ltKey.Strength != lock.Intent {
+		return nil, errors.AssertionFailedf("unexpected strength for LockTableKey %s: %v", ltKey.Strength, ltKey)
 	}
 	var meta enginepb.MVCCMetadata
-	v, err := iter.UnsafeValue()
-	if err != nil {
-		return nil, err
-	}
-	if err = protoutil.Unmarshal(v, &meta); err != nil {
+	if err = iter.ValueProto(&meta); err != nil {
 		return nil, err
 	}
 	if meta.Txn == nil {
@@ -1665,14 +1659,14 @@ func ClearRangeWithHeuristic(
 }
 
 var ingestDelayL0Threshold = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"rocksdb.ingest_backpressure.l0_file_count_threshold",
 	"number of L0 files after which to backpressure SST ingestions",
 	20,
 )
 
 var ingestDelayTime = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"rocksdb.ingest_backpressure.max_delay",
 	"maximum amount of time to backpressure a single SST ingestion",
 	time.Second*5,

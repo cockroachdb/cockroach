@@ -30,6 +30,16 @@ func DefaultStartOpts() StartOpts {
 	return startOpts
 }
 
+// DefaultStartOptsInMemory returns a StartOpts populated with default values,
+// and with in-memory storage
+func DefaultStartOptsInMemory() StartOpts {
+	startOpts := StartOpts{RoachprodOpts: roachprod.DefaultStartOpts()}
+	startOpts.RoachprodOpts.ScheduleBackups = true
+	// size=0.3 means 30% of available RAM.
+	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--store=type=mem,size=0.3")
+	return startOpts
+}
+
 // DefaultStartOptsNoBackups returns a StartOpts with default values,
 // but a scheduled backup will not begin at the start of the roachtest.
 func DefaultStartOptsNoBackups() StartOpts {

@@ -19,9 +19,9 @@ import (
 	"io"
 	"math"
 	"net"
+	"sync/atomic"
 	"time"
 
-	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
@@ -230,7 +230,6 @@ type Context struct {
 	metrics Metrics
 
 	// For unittesting.
-	BreakerFactory  func() *circuit.Breaker
 	testingDialOpts []grpc.DialOption
 
 	// For testing. See the comment on the same field in HeartbeatService.
@@ -1260,6 +1259,17 @@ type pipe struct {
 	errC  chan error
 }
 
+// buffer size for channel used to connect local streaming rpcs.
+var localStreamChannelBufferSize int64 = 128 // accessed atomically.
+
+// TestingSetLocalStreamChannelBufferSize overrides channel buffer size
+// used for streaming RPCs.
+func TestingSetLocalStreamChannelBufferSize(s int64) func() {
+	old := atomic.LoadInt64(&localStreamChannelBufferSize)
+	atomic.StoreInt64(&localStreamChannelBufferSize, s)
+	return func() { atomic.StoreInt64(&localStreamChannelBufferSize, old) }
+}
+
 // makePipe creates a pipe and return it as its two ends.
 //
 // assignPtr is a function that implements *dst = *src for the type of the
@@ -1269,7 +1279,7 @@ type pipe struct {
 // (i.e. interface{}) way.
 func makePipe(assignPtr func(dst interface{}, src interface{})) (pipeWriter, pipeReader) {
 	p := &pipe{
-		respC: make(chan interface{}, 128),
+		respC: make(chan interface{}, atomic.LoadInt64(&localStreamChannelBufferSize)),
 		errC:  make(chan error, 1),
 	}
 	w := pipeWriter{pipe: p}

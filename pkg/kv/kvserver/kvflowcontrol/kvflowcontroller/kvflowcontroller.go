@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // regularTokensPerStream determines the flow tokens available for regular work
@@ -93,7 +94,7 @@ func New(registry *metric.Registry, settings *cluster.Settings, clock *hlc.Clock
 		elastic: elasticTokens,
 	}
 	c.mu.buckets = sync.Map{}
-	regularTokensPerStream.SetOnChange(&settings.SV, func(ctx context.Context) {
+	onChangeFunc := func(ctx context.Context) {
 		c.mu.Lock()
 		defer c.mu.Unlock()
 
@@ -112,17 +113,30 @@ func New(registry *metric.Registry, settings *cluster.Settings, clock *hlc.Clock
 			// new buckets being added, synchronization we don't get out of
 			// sync.Map.Range() directly.
 			b := value.(*bucket)
-			b.mu.Lock()
-			b.mu.tokensPerWorkClass.regular += adjustment.regular
-			b.mu.tokensPerWorkClass.elastic += adjustment.elastic
-			b.mu.Unlock()
-			c.metrics.onTokenAdjustment(adjustment)
-			if adjustment.regular > 0 || adjustment.elastic > 0 {
-				b.signal() // signal a waiter, if any
+			adj, _ := b.adjust(
+				ctx, admissionpb.RegularWorkClass, adjustment.regular, now, true, c.clock.PhysicalTime())
+			if adj.elastic != 0 {
+				panic(errors.AssertionFailedf("elastic should not be adjusted"))
 			}
+			if buildutil.CrdbTestBuild && adj.regular != adjustment.regular {
+				panic(errors.AssertionFailedf(
+					"unequal adjustments %d != %d", adj.regular, adjustment.regular))
+			}
+			adj, _ = b.adjust(
+				ctx, admissionpb.ElasticWorkClass, adjustment.elastic, now, true, c.clock.PhysicalTime())
+			if adj.regular != 0 {
+				panic(errors.AssertionFailedf("regular should not be adjusted"))
+			}
+			if buildutil.CrdbTestBuild && adj.elastic != adjustment.elastic {
+				panic(errors.AssertionFailedf(
+					"unequal adjustments %d != %d", adj.elastic, adjustment.elastic))
+			}
+			c.metrics.onTokenAdjustment(adjustment)
 			return true
 		})
-	})
+	}
+	regularTokensPerStream.SetOnChange(&settings.SV, onChangeFunc)
+	elasticTokensPerStream.SetOnChange(&settings.SV, onChangeFunc)
 	c.metrics = newMetrics(c)
 	registry.AddMetricStruct(c.metrics)
 	return c
@@ -144,67 +158,48 @@ func (c *Controller) Admit(
 	class := admissionpb.WorkClassFromPri(pri)
 	c.metrics.onWaiting(class)
 
-	logged := false
 	tstart := c.clock.PhysicalTime()
-	for {
+
+	// In addition to letting requests through when there are tokens
+	// being available, we'll also let them through if we're not
+	// applying flow control to their specific work class.
+	bypass := c.mode() == kvflowcontrol.ApplyToElastic && class == admissionpb.RegularWorkClass
+	waitEndState := waitSuccess
+	waited := false
+	if !bypass {
 		b := c.getBucket(connection.Stream())
-
-		tokens := b.tokens(class)
-		// In addition to letting requests through when there are tokens
-		// being available, we'll also let them through if we're not
-		// applying flow control to their specific work class.
-		bypass := c.mode() == kvflowcontrol.ApplyToElastic && class == admissionpb.RegularWorkClass
-		if tokens > 0 || bypass {
-			if log.V(2) {
-				log.Infof(ctx, "admitted request (pri=%s stream=%s tokens=%s wait-duration=%s mode=%s)",
-					pri, connection.Stream(), tokens, c.clock.PhysicalTime().Sub(tstart), c.mode())
-			}
-
-			// TODO(irfansharif): Right now we continue forwarding admission
-			// grants to request while the available tokens > 0, which can lead
-			// to over-admission since deduction is deferred (see
-			// testdata/simulation/over_admission).
-			// A. One mitigation could be terminating grant forwarding if the
-			//    'tentatively deducted tokens' exceeds some amount (say, 16
-			//    MiB). When tokens are actually deducted, we'll reduce from
-			//    this 'tentatively deducted' count. We can re-signal() on every
-			//    actual token deduction where available tokens is still > 0.
-			// B. The pathological case with A is when all these tentatively
-			//    deducted tokens are due to requests that are waiting on
-			//    latches and locks. And the next request that wants to be
-			//    admitted is not contending with those latches/locks but gets
-			//    stuck behind it anyway. We could instead count the # of
-			//    requests that go through this bucket and are also past the
-			//    latch/lock acquisition but not yet evaluated, and block if
-			//    that count is greater than some small multiple of GOMAXPROCS.
-
-			b.signal() // signal a waiter, if any
-			c.metrics.onAdmitted(class, c.clock.PhysicalTime().Sub(tstart))
-			if bypass {
-				return false, nil
-			}
-			return true, nil
-		}
-
-		if !logged && log.V(2) {
-			log.Infof(ctx, "waiting for flow tokens (pri=%s stream=%s tokens=%s)",
-				pri, connection.Stream(), tokens)
-			logged = true
-		}
-
-		select {
-		case <-b.wait(): // wait for a signal
-		case <-connection.Disconnected():
-			c.metrics.onBypassed(class, c.clock.PhysicalTime().Sub(tstart))
-			return true, nil
-		case <-ctx.Done():
-			if ctx.Err() != nil {
-				c.metrics.onErrored(class, c.clock.PhysicalTime().Sub(tstart))
-			}
-			return false, ctx.Err()
-		}
+		waitEndState, waited = b.wait(ctx, class, connection.Disconnected())
 	}
+	waitDuration := c.clock.PhysicalTime().Sub(tstart)
+	if waitEndState == waitSuccess {
+		const formatStr = "admitted request (pri=%s stream=%s wait-duration=%s mode=%s)"
+		if waited {
+			// Always trace if there is any waiting.
+			log.VEventf(ctx, 2, formatStr, pri, connection.Stream(), waitDuration, c.mode())
+		} else if log.V(2) {
+			log.Infof(ctx, formatStr, pri, connection.Stream(), waitDuration, c.mode())
+		}
+		// Else, common case, did not wait and logging verbosity is not high.
 
+		c.metrics.onAdmitted(class, waitDuration)
+		if bypass {
+			return false, nil
+		} else {
+			return true, nil
+		}
+	} else if waitEndState == contextCanceled {
+		log.VEventf(ctx, 2,
+			"canceled after waiting (pri=%s stream=%s wait-duration=%s mode=%s)",
+			pri, connection.Stream(), waitDuration, c.mode())
+		c.metrics.onErrored(class, waitDuration)
+		return false, ctx.Err()
+	} else {
+		log.VEventf(ctx, 2,
+			"bypassed as stream disconnected (pri=%s stream=%s wait-duration=%s mode=%s)",
+			pri, connection.Stream(), waitDuration, c.mode())
+		c.metrics.onBypassed(class, waitDuration)
+		return true, nil
+	}
 	// TODO(irfansharif): Use CreateTime for ordering among waiting
 	// requests, integrate it with epoch-LIFO. See I12 from
 	// kvflowcontrol/doc.go.
@@ -296,13 +291,11 @@ func (c *Controller) adjustTokens(
 	// below) when running kv0/enc=false/nodes=3/cpu=96. Do this as part of
 	// #104154.
 	b := c.getBucket(stream)
-	adjustment, unaccounted := b.adjust(ctx, class, delta, c.mu.limit)
+	adjustment, unaccounted :=
+		b.adjust(ctx, class, delta, c.mu.limit, false, c.clock.PhysicalTime())
 	c.metrics.onTokenAdjustment(adjustment)
 	if unaccounted.regular > 0 || unaccounted.elastic > 0 {
 		c.metrics.onUnaccounted(unaccounted)
-	}
-	if adjustment.regular > 0 || adjustment.elastic > 0 {
-		b.signal() // signal a waiter, if any
 	}
 
 	if log.V(2) {
@@ -324,7 +317,7 @@ func (c *Controller) getBucket(stream kvflowcontrol.Stream) *bucket {
 	if !ok {
 		c.mu.Lock()
 		var loaded bool
-		b, loaded = c.mu.buckets.LoadOrStore(stream, newBucket(c.mu.limit))
+		b, loaded = c.mu.buckets.LoadOrStore(stream, newBucket(c.mu.limit, c.clock.PhysicalTime()))
 		if !loaded {
 			c.mu.bucketCount += 1
 		}
@@ -333,35 +326,161 @@ func (c *Controller) getBucket(stream kvflowcontrol.Stream) *bucket {
 	return b.(*bucket)
 }
 
+// bucketPerWorkClass is a helper struct for implementing bucket. tokens and
+// stats are protected by the mutex in bucket. Operations on the signalCh may
+// not be protected by that mutex -- see the comment below.
+type bucketPerWorkClass struct {
+	wc     admissionpb.WorkClass
+	tokens kvflowcontrol.Tokens
+	// Waiting requests do so by waiting on signalCh without holding a mutex.
+	//
+	// Requests first check for available tokens (by acquiring and releasing the
+	// mutex), and then wait if tokens for their work class are unavailable. The
+	// risk in such waiting after releasing the mutex is the following race:
+	// tokens become available after the waiter releases the mutex and before it
+	// starts waiting. We handle this race by ensuring that signalCh always has
+	// an entry if tokens are available:
+	//
+	// - Whenever tokens are returned, signalCh is signaled, waking up a single
+	//   waiting request. If the request finds no available tokens, it starts
+	//   waiting again.
+	// - Whenever a request gets admitted, it signals the next waiter if any.
+	//
+	// So at least one request that observed unavailable tokens will get
+	// unblocked, which will in turn unblock others. This turn by turn admission
+	// provides some throttling to over-admission since the goroutine scheduler
+	// needs to schedule the goroutine that got the entry for it to unblock
+	// another. Hopefully, before we over-admit much, some of the scheduled
+	// goroutines will complete proposal evaluation and deduct the tokens they
+	// need.
+	//
+	// TODO(irfansharif): Right now we continue forwarding admission grants to
+	// request while the available tokens > 0, which can lead to over-admission
+	// since deduction is deferred (see testdata/simulation/over_admission).
+	//
+	// A. One mitigation could be terminating grant forwarding if the
+	//    'tentatively deducted tokens' exceeds some amount (say, 16
+	//    MiB). When tokens are actually deducted, we'll reduce from
+	//    this 'tentatively deducted' count. We can re-signal() on every
+	//    actual token deduction where available tokens is still > 0.
+	// B. The pathological case with A is when all these tentatively
+	//    deducted tokens are due to requests that are waiting on
+	//    latches and locks. And the next request that wants to be
+	//    admitted is not contending with those latches/locks but gets
+	//    stuck behind it anyway. We could instead count the # of
+	//    requests that go through this bucket and are also past the
+	//    latch/lock acquisition but not yet evaluated, and block if
+	//    that count is greater than some small multiple of GOMAXPROCS.
+
+	signalCh chan struct{}
+	stats    struct {
+		deltaStats
+		noTokenStartTime time.Time
+	}
+}
+
+type deltaStats struct {
+	noTokenDuration time.Duration
+	tokensDeducted  kvflowcontrol.Tokens
+}
+
+func makeBucketPerWorkClass(
+	wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens, now time.Time,
+) bucketPerWorkClass {
+	bwc := bucketPerWorkClass{
+		wc:       wc,
+		tokens:   tokens,
+		signalCh: make(chan struct{}, 1),
+	}
+	bwc.stats.noTokenStartTime = now
+	return bwc
+}
+
+func (bwc *bucketPerWorkClass) adjustTokensLocked(
+	ctx context.Context,
+	delta kvflowcontrol.Tokens,
+	limit kvflowcontrol.Tokens,
+	admin bool,
+	now time.Time,
+) (adjustment, unaccounted kvflowcontrol.Tokens) {
+	before := bwc.tokens
+	bwc.tokens += delta
+	if delta > 0 {
+		if bwc.tokens > limit {
+			unaccounted = bwc.tokens - limit
+			bwc.tokens = limit
+		}
+		if before <= 0 && bwc.tokens > 0 {
+			bwc.signal()
+			bwc.stats.noTokenDuration += now.Sub(bwc.stats.noTokenStartTime)
+		}
+	} else {
+		bwc.stats.deltaStats.tokensDeducted -= delta
+		if before > 0 && bwc.tokens <= 0 {
+			bwc.stats.noTokenStartTime = now
+		}
+	}
+	if buildutil.CrdbTestBuild && !admin && unaccounted != 0 {
+		log.Fatalf(ctx, "unaccounted[%s]=%d delta=%d limit=%d", bwc.wc, unaccounted, delta, limit)
+	}
+	adjustment = bwc.tokens - before
+	return adjustment, unaccounted
+}
+
+func (bwc *bucketPerWorkClass) signal() {
+	select {
+	case bwc.signalCh <- struct{}{}: // non-blocking channel write that ensures it's topped up to 1 entry
+	default:
+	}
+}
+
+type waitEndState int32
+
+const (
+	waitSuccess waitEndState = iota
+	contextCanceled
+	stopWaitSignaled
+)
+
+func (bwc *bucketPerWorkClass) wait(ctx context.Context, stopWaitCh <-chan struct{}) waitEndState {
+	select {
+	case <-bwc.signalCh:
+		return waitSuccess
+	case <-stopWaitCh:
+		return stopWaitSignaled
+	case <-ctx.Done():
+		return contextCanceled
+	}
+}
+
+func (bwc *bucketPerWorkClass) getAndResetStats(now time.Time) deltaStats {
+	stats := bwc.stats.deltaStats
+	if bwc.tokens <= 0 {
+		stats.noTokenDuration += now.Sub(bwc.stats.noTokenStartTime)
+	}
+	bwc.stats.deltaStats = deltaStats{}
+	// Doesn't matter if bwc.tokens is actually > 0 since in that case we won't
+	// use this value.
+	bwc.stats.noTokenStartTime = now
+	return stats
+}
+
 // bucket holds flow tokens for {regular,elastic} traffic over a
 // kvflowcontrol.Stream. It's used to synchronize handoff between threads
 // returning and waiting for flow tokens.
 type bucket struct {
 	mu struct {
 		syncutil.RWMutex
-		tokensPerWorkClass tokensPerWorkClass
+		buckets [admissionpb.NumWorkClasses]bucketPerWorkClass
 	}
-
-	// Waiting requests do so by waiting on signalCh without holding mutexes.
-	// Requests first check for available tokens, waiting if unavailable.
-	// - Whenever tokens are returned, signalCh is signaled, waking up a single
-	//   waiting request. If the request finds no available tokens, it starts
-	//   waiting again.
-	// - Whenever a request gets admitted, it signals the next waiter if any.
-	// The invariant we are ensuring is that whenever there are tokens
-	// available, the channel will have an entry, so at least one request that
-	// observed unavailable tokens will get unblocked, which will in turn
-	// unblock others. The concurrent request that adds tokens also tops up the
-	// channel so that the at least one waiter that observed unavailable tokens
-	// will find the channel signaled.
-	signalCh chan struct{}
 }
 
-func newBucket(tokensPerWorkClass tokensPerWorkClass) *bucket {
-	b := bucket{
-		signalCh: make(chan struct{}, 1),
-	}
-	b.mu.tokensPerWorkClass = tokensPerWorkClass
+func newBucket(tokensPerWorkClass tokensPerWorkClass, now time.Time) *bucket {
+	b := bucket{}
+	b.mu.buckets[admissionpb.RegularWorkClass] = makeBucketPerWorkClass(
+		admissionpb.RegularWorkClass, tokensPerWorkClass.regular, now)
+	b.mu.buckets[admissionpb.ElasticWorkClass] = makeBucketPerWorkClass(
+		admissionpb.ElasticWorkClass, tokensPerWorkClass.elastic, now)
 	return &b
 }
 
@@ -372,28 +491,65 @@ func (b *bucket) tokens(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
 }
 
 func (b *bucket) tokensLocked(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
-	if wc == regular {
-		return b.mu.tokensPerWorkClass.regular
+	return b.mu.buckets[wc].tokens
+}
+
+// wait causes the caller that has work with work class wc to wait until
+// either tokens are available for work class wc, or the context is cancelled,
+// or stopWaitCh is signaled. The waitEndState return value indicates which
+// one of these terminated the wait. The waited bool is set to true only if
+// there was some waiting, since the common case is that there will be tokens
+// available and there will be no waiting.
+//
+// The implementation of wait uses the bucketPerWorkClass instance for the
+// work class wc. The only reason we don't encapsulate the logic inside the
+// bucketPerWorkClass struct is the shared mutex (bucket.mu). See the long
+// comment in the bucketPerWorkClass declaration describing the waiting and
+// signaling scheme.
+func (b *bucket) wait(
+	ctx context.Context, wc admissionpb.WorkClass, stopWaitCh <-chan struct{},
+) (state waitEndState, waited bool) {
+	waitedWithWaitSuccess := false
+	for {
+		b.mu.RLock()
+		tokens := b.tokensLocked(wc)
+		b.mu.RUnlock()
+		if tokens > 0 {
+			// No need to wait.
+			if waitedWithWaitSuccess {
+				// Waited in a previous iteration of the loop, so must have consumed
+				// the entry in the channel. Unblock another waiter.
+				b.mu.buckets[wc].signal()
+			}
+			return waitSuccess, waited
+		}
+		waited = true
+		state = b.mu.buckets[wc].wait(ctx, stopWaitCh)
+		if state != waitSuccess {
+			// We could have previously removed the entry in the channel, if in a
+			// previous iteration waitedWithWaitSuccess became true. But we don't
+			// need to add an entry here, since we've sampled the tokens after
+			// consuming that entry and still found tokens <= 0. So whoever
+			// transitions tokens to a value greater than 0 will add an entry.
+			return state, waited
+		} else {
+			waitedWithWaitSuccess = true
+			// Continue in the loop to see if tokens are now available (common
+			// case).
+		}
 	}
-	return b.mu.tokensPerWorkClass.elastic
 }
 
-func (b *bucket) signal() {
-	select {
-	case b.signalCh <- struct{}{}: // non-blocking channel write that ensures it's topped up to 1 entry
-	default:
-	}
-}
-
-func (b *bucket) wait() chan struct{} {
-	return b.signalCh
-}
-
+// admin is set to true when this method is called because of a settings
+// change. In that case the class is interpreted narrowly as only updating the
+// tokens for that class.
 func (b *bucket) adjust(
 	ctx context.Context,
 	class admissionpb.WorkClass,
 	delta kvflowcontrol.Tokens,
 	limit tokensPerWorkClass,
+	admin bool,
+	now time.Time,
 ) (adjustment, unaccounted tokensPerWorkClass) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -427,41 +583,40 @@ func (b *bucket) adjust(
 	//		}()
 	//	}
 
-	unaccounted = tokensPerWorkClass{}
-	before := b.mu.tokensPerWorkClass
-
 	switch class {
+	case regular:
+		adjustment.regular, unaccounted.regular =
+			b.mu.buckets[admissionpb.RegularWorkClass].adjustTokensLocked(
+				ctx, delta, limit.regular, admin, now)
+		if !admin {
+			// Regular {deductions,returns} also affect elastic flow tokens.
+			adjustment.elastic, unaccounted.elastic =
+				b.mu.buckets[admissionpb.ElasticWorkClass].adjustTokensLocked(
+					ctx, delta, limit.elastic, admin, now)
+		}
 	case elastic:
 		// Elastic {deductions,returns} only affect elastic flow tokens.
-		b.mu.tokensPerWorkClass.elastic += delta
-		if delta > 0 && b.mu.tokensPerWorkClass.elastic > limit.elastic {
-			unaccounted.elastic = b.mu.tokensPerWorkClass.elastic - limit.elastic
-			b.mu.tokensPerWorkClass.elastic = limit.elastic // enforce ceiling
-		}
-	case regular:
-		b.mu.tokensPerWorkClass.regular += delta
-		if delta > 0 && b.mu.tokensPerWorkClass.regular > limit.regular {
-			unaccounted.regular = b.mu.tokensPerWorkClass.regular - limit.regular
-			b.mu.tokensPerWorkClass.regular = limit.regular // enforce ceiling
-		}
-
-		b.mu.tokensPerWorkClass.elastic += delta
-		if delta > 0 && b.mu.tokensPerWorkClass.elastic > limit.elastic {
-			unaccounted.elastic = b.mu.tokensPerWorkClass.elastic - limit.elastic
-			b.mu.tokensPerWorkClass.elastic = limit.elastic // enforce ceiling
-		}
-	}
-
-	if buildutil.CrdbTestBuild && (unaccounted.regular != 0 || unaccounted.elastic != 0) {
-		log.Fatalf(ctx, "unaccounted[regular]=%s unaccounted[elastic]=%s for class=%s delta=%s limit[regular]=%s limit[elastic]=%s",
-			unaccounted.regular, unaccounted.elastic, class, delta, limit.regular, limit.elastic)
-	}
-
-	adjustment = tokensPerWorkClass{
-		regular: b.mu.tokensPerWorkClass.regular - before.regular,
-		elastic: b.mu.tokensPerWorkClass.elastic - before.elastic,
+		adjustment.elastic, unaccounted.elastic =
+			b.mu.buckets[admissionpb.ElasticWorkClass].adjustTokensLocked(
+				ctx, delta, limit.elastic, admin, now)
 	}
 	return adjustment, unaccounted
+}
+
+func (b *bucket) getAndResetStats(now time.Time) (regularStats, elasticStats deltaStats) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	regularStats = b.mu.buckets[admissionpb.RegularWorkClass].getAndResetStats(now)
+	elasticStats = b.mu.buckets[admissionpb.ElasticWorkClass].getAndResetStats(now)
+	return regularStats, elasticStats
+}
+
+func (b *bucket) testingGetChannel(wc admissionpb.WorkClass) <-chan struct{} {
+	return b.mu.buckets[wc].signalCh
+}
+
+func (b *bucket) testingSignalChannel(wc admissionpb.WorkClass) {
+	b.mu.buckets[wc].signal()
 }
 
 type tokensPerWorkClass struct {
@@ -531,13 +686,13 @@ func (c *Controller) TestingNonBlockingAdmit(
 		}
 
 		b := c.getBucket(connection.Stream())
-
 		tokens := b.tokens(class)
 		if tokens <= 0 {
 			return false
 		}
-
-		b.signal() // signal a waiter, if any
+		// Signal a waiter, if any, since we may have removed an entry from the
+		// channel via testingSignaled.
+		b.testingSignalChannel(class)
 		c.metrics.onAdmitted(class, c.clock.PhysicalTime().Sub(tstart))
 		return true
 	}
@@ -547,7 +702,7 @@ func (c *Controller) TestingNonBlockingAdmit(
 	}
 
 	b := c.testingGetBucket(connection.Stream())
-	return false, b.testingSignaled(connection), admit
+	return false, b.testingSignaled(connection, class), admit
 }
 
 // TestingAdjustTokens exports adjustTokens for testing purposes.
@@ -569,12 +724,14 @@ func (c *Controller) testingGetBucket(stream kvflowcontrol.Stream) *bucket {
 	return c.getBucket(stream)
 }
 
-func (b *bucket) testingSignaled(connection kvflowcontrol.ConnectedStream) func() bool {
+func (b *bucket) testingSignaled(
+	connection kvflowcontrol.ConnectedStream, wc admissionpb.WorkClass,
+) func() bool {
 	return func() bool {
 		select {
 		case <-connection.Disconnected():
 			return true
-		case <-b.wait(): // check if signaled
+		case <-b.testingGetChannel(wc): // check if signaled
 			return true
 		default:
 			return false

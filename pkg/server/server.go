@@ -100,6 +100,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob" // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionprotectedts"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"      // register jobs declared outside of pkg/sql
 	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlschedule" // register schedules declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -316,7 +317,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		stopper,
 		nodeRegistry,
 		cfg.Locality,
-		&cfg.DefaultZoneConfig,
 	)
 
 	tenantCapabilitiesTestingKnobs, _ := cfg.TestingKnobs.TenantCapabilitiesTestingKnobs.(*tenantcapabilities.TestingKnobs)
@@ -666,6 +666,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			jobsprotectedts.GetMetaType(jobsprotectedts.Schedules): jobsprotectedts.MakeStatusFunc(
 				jobRegistry, jobsprotectedts.Schedules,
 			),
+			sessionprotectedts.SessionMetaType: sessionprotectedts.MakeStatusFunc(),
 		},
 	})
 	if err != nil {
@@ -746,74 +747,58 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		// tenant records.
 		kvAccessorForTenantRecords spanconfig.KVAccessor
 	}
-	if !cfg.SpanConfigsDisabled {
-		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
-		if spanConfigKnobs != nil && spanConfigKnobs.StoreKVSubscriberOverride != nil {
-			spanConfig.subscriber = spanConfigKnobs.StoreKVSubscriberOverride
-		} else {
-			// We use the span configs infra to control whether rangefeeds are
-			// enabled on a given range. At the moment this only applies to
-			// system tables (on both host and secondary tenants). We need to
-			// consider two things:
-			// - The sql-side reconciliation process runs asynchronously. When
-			//   the config for a given range is requested, we might not yet have
-			//   it, thus falling back to the static config below.
-			// - Various internal subsystems rely on rangefeeds to function.
-			//
-			// Consequently, we configure our static fallback config to actually
-			// allow rangefeeds. As the sql-side reconciliation process kicks
-			// off, it'll install the actual configs that we'll later consult.
-			// For system table ranges we install configs that allow for
-			// rangefeeds. Until then, we simply allow rangefeeds when a more
-			// targeted config is not found.
-			fallbackConf := cfg.DefaultZoneConfig.AsSpanConfig()
-			fallbackConf.RangefeedEnabled = true
-			// We do the same for opting out of strict GC enforcement; it
-			// really only applies to user table ranges
-			fallbackConf.GCPolicy.IgnoreStrictEnforcement = true
-
-			spanConfig.subscriber = spanconfigkvsubscriber.New(
-				clock,
-				rangeFeedFactory,
-				keys.SpanConfigurationsTableID,
-				1<<20, /* 1 MB */
-				fallbackConf,
-				cfg.Settings,
-				spanconfigstore.NewBoundsReader(tenantCapabilitiesWatcher),
-				spanConfigKnobs,
-				nodeRegistry,
-			)
-		}
-
-		scKVAccessor := spanconfigkvaccessor.New(
-			db, internalExecutor, cfg.Settings, clock,
-			systemschema.SpanConfigurationsTableName.FQString(),
-			spanConfigKnobs,
-		)
-		spanConfig.kvAccessor, spanConfig.kvAccessorForTenantRecords = scKVAccessor, scKVAccessor
-		spanConfig.reporter = spanconfigreporter.New(
-			nodeLiveness,
-			storePool,
-			spanConfig.subscriber,
-			rangedesc.NewScanner(db),
-			cfg.Settings,
-			spanConfigKnobs,
-		)
+	spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
+	if spanConfigKnobs != nil && spanConfigKnobs.StoreKVSubscriberOverride != nil {
+		spanConfig.subscriber = spanConfigKnobs.StoreKVSubscriberOverride
 	} else {
-		// If the spanconfigs infrastructure is disabled, there should be no
-		// reconciliation jobs or RPCs issued against the infrastructure. Plug
-		// in a disabled spanconfig.KVAccessor that would error out for
-		// unexpected use.
-		spanConfig.kvAccessor = spanconfigkvaccessor.DisabledKVAccessor
+		// We use the span configs infra to control whether rangefeeds are
+		// enabled on a given range. At the moment this only applies to
+		// system tables (on both host and secondary tenants). We need to
+		// consider two things:
+		// - The sql-side reconciliation process runs asynchronously. When
+		//   the config for a given range is requested, we might not yet have
+		//   it, thus falling back to the static config below.
+		// - Various internal subsystems rely on rangefeeds to function.
+		//
+		// Consequently, we configure our static fallback config to actually
+		// allow rangefeeds. As the sql-side reconciliation process kicks
+		// off, it'll install the actual configs that we'll later consult.
+		// For system table ranges we install configs that allow for
+		// rangefeeds. Until then, we simply allow rangefeeds when a more
+		// targeted config is not found.
+		fallbackConf := cfg.DefaultZoneConfig.AsSpanConfig()
+		fallbackConf.RangefeedEnabled = true
+		// We do the same for opting out of strict GC enforcement; it
+		// really only applies to user table ranges
+		fallbackConf.GCPolicy.IgnoreStrictEnforcement = true
 
-		// Ditto for the spanconfig.Reporter.
-		spanConfig.reporter = spanconfigreporter.DisabledReporter
-
-		// Use a no-op accessor where tenant records are created/destroyed.
-		spanConfig.kvAccessorForTenantRecords = spanconfigkvaccessor.NoopKVAccessor
-
-		spanConfig.subscriber = spanconfigkvsubscriber.NewNoopSubscriber(clock)
+		spanConfig.subscriber = spanconfigkvsubscriber.New(
+			clock,
+			rangeFeedFactory,
+			keys.SpanConfigurationsTableID,
+			4<<20, /* 4 MB */
+			fallbackConf,
+			cfg.Settings,
+			spanconfigstore.NewBoundsReader(tenantCapabilitiesWatcher),
+			spanConfigKnobs,
+			nodeRegistry,
+		)
 	}
+
+	scKVAccessor := spanconfigkvaccessor.New(
+		db, internalExecutor, cfg.Settings, clock,
+		systemschema.SpanConfigurationsTableName.FQString(),
+		spanConfigKnobs,
+	)
+	spanConfig.kvAccessor, spanConfig.kvAccessorForTenantRecords = scKVAccessor, scKVAccessor
+	spanConfig.reporter = spanconfigreporter.New(
+		nodeLiveness,
+		storePool,
+		spanConfig.subscriber,
+		rangedesc.NewScanner(db),
+		cfg.Settings,
+		spanConfigKnobs,
+	)
 
 	var protectedTSReader spanconfig.ProtectedTSReader
 	if cfg.TestingKnobs.SpanConfig != nil &&
@@ -868,7 +853,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		SharedStorageEnabled:         cfg.SharedStorage != "",
 		SystemConfigProvider:         systemConfigWatcher,
 		SpanConfigSubscriber:         spanConfig.subscriber,
-		SpanConfigsDisabled:          cfg.SpanConfigsDisabled,
 		SnapshotApplyLimit:           cfg.SnapshotApplyLimit,
 		SnapshotSendLimit:            cfg.SnapshotSendLimit,
 		RangeLogWriter:               rangeLogWriter,
@@ -1128,6 +1112,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			spanConfigKVAccessor:     spanConfig.kvAccessorForTenantRecords,
 			kvStoresIterator:         kvserver.MakeStoresIterator(node.stores),
 			inspectzServer:           inspectzServer,
+
+			notifyChangeToSystemVisibleSettings: tenantSettingsWatcher.SetAlternateDefaults,
 		},
 		SQLConfig:                &cfg.SQLConfig,
 		BaseConfig:               &cfg.BaseConfig,
@@ -1235,6 +1221,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		&systemServerWrapper{server: lateBoundServer},
 		systemTenantNameContainer,
 		pgPreServer.SendRoutingError,
+		tenantCapabilitiesWatcher,
 	)
 	drain.serverCtl = sc
 
@@ -1566,7 +1553,8 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// The SQL listener is returned, to start the SQL server later
 	// below when the server has initialized.
 	pgL, loopbackPgL, rpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(
-		ctx, workersCtx, s.cfg.BaseConfig, s.stopper, s.grpc, true /* enableSQLListener */)
+		ctx, workersCtx, s.cfg.BaseConfig,
+		s.stopper, s.grpc, ListenAndUpdateAddrs, true /* enableSQLListener */)
 	if err != nil {
 		return err
 	}
@@ -2007,11 +1995,9 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		return err
 	}
 
-	if !s.cfg.SpanConfigsDisabled && s.spanConfigSubscriber != nil {
-		if subscriber, ok := s.spanConfigSubscriber.(*spanconfigkvsubscriber.KVSubscriber); ok {
-			if err := subscriber.Start(workersCtx, s.stopper); err != nil {
-				return err
-			}
+	if subscriber, ok := s.spanConfigSubscriber.(*spanconfigkvsubscriber.KVSubscriber); ok {
+		if err := subscriber.Start(workersCtx, s.stopper); err != nil {
+			return err
 		}
 	}
 	// Start garbage collecting system events.
@@ -2065,14 +2051,16 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// executes a SQL query, this must be done after the SQL layer is ready.
 	s.node.recordJoinEvent(ctx)
 
-	// Start the SQL subsystem.
-	if err := s.sqlServer.preStart(
-		workersCtx,
-		s.stopper,
-		s.cfg.TestingKnobs,
-		orphanedLeasesTimeThresholdNanos,
-	); err != nil {
-		return err
+	if !s.cfg.DisableSQLServer {
+		// Start the SQL subsystem.
+		if err := s.sqlServer.preStart(
+			workersCtx,
+			s.stopper,
+			s.cfg.TestingKnobs,
+			orphanedLeasesTimeThresholdNanos,
+		); err != nil {
+			return err
+		}
 	}
 
 	// Initialize the external storage builders configuration params now that the
@@ -2163,8 +2151,16 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		return err
 	}
 
-	if err := s.node.tenantSettingsWatcher.Start(workersCtx, s.sqlServer.execCfg.SystemTableIDResolver); err != nil {
-		return errors.Wrap(err, "failed to initialize the tenant settings watcher")
+	startSettingsWatcher := true
+	if serverKnobs := s.cfg.TestingKnobs.Server; serverKnobs != nil {
+		if serverKnobs.(*TestingKnobs).DisableSettingsWatcher {
+			startSettingsWatcher = false
+		}
+	}
+	if startSettingsWatcher {
+		if err := s.node.tenantSettingsWatcher.Start(workersCtx, s.sqlServer.execCfg.SystemTableIDResolver); err != nil {
+			return errors.Wrap(err, "failed to initialize the tenant settings watcher")
+		}
 	}
 	if err := s.tenantCapabilitiesWatcher.Start(ctx); err != nil {
 		return errors.Wrap(err, "initializing tenant capabilities")
@@ -2210,6 +2206,10 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 // This mirrors the implementation of (*SQLServerWrapper).AcceptClients.
 // TODO(knz): Find a way to implement this method only once for both.
 func (s *topLevelServer) AcceptClients(ctx context.Context) error {
+	// Don't listen on the SQL port if the SQL Server is not starting.
+	if s.cfg.DisableSQLServer {
+		return nil
+	}
 	workersCtx := s.AnnotateCtx(context.Background())
 
 	if err := startServeSQL(
@@ -2242,6 +2242,10 @@ func (s *topLevelServer) AcceptClients(ctx context.Context) error {
 // AcceptInternalClients starts listening for incoming SQL connections on the
 // internal loopback interface.
 func (s *topLevelServer) AcceptInternalClients(ctx context.Context) error {
+	// Don't listen on the SQL port if the SQL Server is not starting.
+	if s.cfg.DisableSQLServer {
+		return nil
+	}
 	connManager := netutil.MakeTCPServer(ctx, s.stopper)
 
 	return s.stopper.RunAsyncTaskEx(ctx,

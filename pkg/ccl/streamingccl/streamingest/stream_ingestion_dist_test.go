@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -323,4 +325,95 @@ func TestSourceDestMatching(t *testing.T) {
 			}
 		})
 	}
+}
+
+type testSplitter struct {
+	splits     []roachpb.Key
+	scatters   []roachpb.Key
+	splitErr   func(key roachpb.Key) error
+	scatterErr func(key roachpb.Key) error
+}
+
+func (ts *testSplitter) split(_ context.Context, splitKey roachpb.Key, _ hlc.Timestamp) error {
+	ts.splits = append(ts.splits, splitKey)
+	if ts.splitErr != nil {
+		return ts.splitErr(splitKey)
+	}
+	return nil
+}
+
+func (ts *testSplitter) scatter(_ context.Context, scatterKey roachpb.Key) error {
+	ts.scatters = append(ts.scatters, scatterKey)
+	if ts.scatterErr != nil {
+		return ts.scatterErr(scatterKey)
+	}
+	return nil
+}
+
+func (ts *testSplitter) now() hlc.Timestamp {
+	return hlc.Timestamp{}
+}
+
+func TestCreateInitialSplits(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	sourceTenantID := roachpb.MustMakeTenantID(11)
+	inputCodec := keys.MakeSQLCodec(sourceTenantID)
+	destTenantID := roachpb.MustMakeTenantID(12)
+	outputCodec := keys.MakeSQLCodec(destTenantID)
+
+	testSpan := func(codec keys.SQLCodec, tableID uint32) roachpb.Span {
+		return roachpb.Span{
+			Key:    codec.IndexPrefix(tableID, 1),
+			EndKey: codec.IndexPrefix(tableID, 2),
+		}
+	}
+	inputSpans := []roachpb.Span{
+		testSpan(inputCodec, 100),
+		testSpan(inputCodec, 200),
+		testSpan(inputCodec, 300),
+		testSpan(inputCodec, 400),
+	}
+	outputSpans := []roachpb.Span{
+		testSpan(outputCodec, 100),
+		testSpan(outputCodec, 200),
+		testSpan(outputCodec, 300),
+		testSpan(outputCodec, 400),
+	}
+	topo := streamclient.Topology{
+		SourceTenantID: sourceTenantID,
+		Partitions: []streamclient.PartitionInfo{
+			{Spans: inputSpans},
+		},
+	}
+
+	t.Run("rekeys before splitting", func(t *testing.T) {
+		ts := &testSplitter{}
+		err := createInitialSplits(ctx, keys.SystemSQLCodec, ts, topo, destTenantID)
+		require.NoError(t, err)
+		expectedSplitsAndScatters := make([]roachpb.Key, 0, len(outputSpans))
+		for _, sp := range outputSpans {
+			expectedSplitsAndScatters = append(expectedSplitsAndScatters, sp.Key)
+		}
+
+		require.Equal(t, expectedSplitsAndScatters, ts.splits)
+		require.Equal(t, expectedSplitsAndScatters, ts.scatters)
+
+	})
+	t.Run("split errors are fatal", func(t *testing.T) {
+		require.Error(t, createInitialSplits(ctx, keys.SystemSQLCodec, &testSplitter{
+			splitErr: func(_ roachpb.Key) error {
+				return errors.New("test error")
+			},
+		}, topo, destTenantID))
+	})
+	t.Run("ignores scatter errors", func(t *testing.T) {
+		require.NoError(t, createInitialSplits(ctx, keys.SystemSQLCodec, &testSplitter{
+			scatterErr: func(_ roachpb.Key) error {
+				return errors.New("test error")
+			},
+		}, topo, destTenantID))
+	})
 }

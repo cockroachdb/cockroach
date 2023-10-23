@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	kv2 "github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -105,7 +106,7 @@ func (kv *kvNative) Update(rows, run int) error {
 		// Don't permute the rows, to be similar to SQL which sorts the spans in a
 		// batch.
 		for i := 0; i < rows; i++ {
-			b.GetForUpdate(fmt.Sprintf("%s%08d", kv.prefix, i))
+			b.GetForUpdate(fmt.Sprintf("%s%08d", kv.prefix, i), kvpb.BestEffort)
 		}
 		if err := txn.Run(ctx, b); err != nil {
 			return err

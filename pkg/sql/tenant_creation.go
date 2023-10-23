@@ -47,7 +47,7 @@ import (
 )
 
 const (
-	tenantCreationMinSupportedVersionKey = clusterversion.V22_2
+	tenantCreationMinSupportedVersionKey = clusterversion.BinaryMinSupportedVersionKey
 )
 
 // CreateTenant implements the tree.TenantOperator interface.
@@ -89,7 +89,7 @@ func (p *planner) createTenantInternal(
 	if p.EvalContext().TxnReadOnly {
 		return tid, readOnlyError("create_tenant()")
 	}
-	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "create"); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "create", p.execCfg.Settings); err != nil {
 		return tid, err
 	}
 	if err := CanManageTenant(ctx, p); err != nil {
@@ -264,7 +264,7 @@ func CreateTenantRecord(
 	testingKnobs *TenantTestingKnobs,
 ) (roachpb.TenantID, error) {
 	const op = "create"
-	if err := rejectIfCantCoordinateMultiTenancy(codec, op); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(codec, op, settings); err != nil {
 		return roachpb.TenantID{}, err
 	}
 	if err := rejectIfSystemTenant(info.ID, op); err != nil {
@@ -308,7 +308,7 @@ func CreateTenantRecord(
 	if info.Name == "" {
 		// No name: generate one if we are at the appropriate version.
 		if settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
-			info.Name = roachpb.TenantName(fmt.Sprintf("tenant-%d", info.ID))
+			info.Name = roachpb.TenantName(fmt.Sprintf("cluster-%d", info.ID))
 		}
 	}
 

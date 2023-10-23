@@ -194,6 +194,14 @@ var defaultRangefeedSchedulerConcurrency = envutil.EnvOrDefaultInt(
 var defaultRangefeedSchedulerShardSize = envutil.EnvOrDefaultInt(
 	"COCKROACH_RANGEFEED_SCHEDULER_SHARD_SIZE", 8)
 
+// defaultRangefeedSchedulerPriorityShardSize specifies the default size of the
+// rangefeed scheduler priority shard, used for certain system ranges. This
+// shard is always fully populated with workers that don't count towards the
+// concurrency limit, and is thus effectively the number of priority workers per
+// store.
+var defaultRangefeedSchedulerPriorityShardSize = envutil.EnvOrDefaultInt(
+	"COCKROACH_RANGEFEED_SCHEDULER_PRIORITY_SHARD_SIZE", 2)
+
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
 var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
@@ -254,19 +262,18 @@ var queueAdditionOnSystemConfigUpdateBurst = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
-// leaseTransferWait is the timeout for a single iteration of draining range leases.
-var leaseTransferWait = settings.RegisterDurationSetting(
+// LeaseTransferPerIterationTimeout is the timeout for a single iteration of draining range leases.
+var LeaseTransferPerIterationTimeout = settings.RegisterDurationSetting(
 	settings.SystemOnly,
-	leaseTransferWaitSettingName,
+	"server.shutdown.lease_transfer_wait",
 	"the timeout for a single iteration of the range lease transfer phase of draining "+
 		"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
 		"after changing this setting)",
 	5*time.Second,
+	settings.WithName("server.shutdown.lease_transfer_iteration.timeout"),
 	settings.NonNegativeDuration,
 	settings.WithPublic,
 )
-
-const leaseTransferWaitSettingName = "server.shutdown.lease_transfer_wait"
 
 // ExportRequestsLimit is the number of Export requests that can run at once.
 // Each extracts data from Pebble to an in-memory SST and returns it to the
@@ -276,7 +283,7 @@ const leaseTransferWaitSettingName = "server.shutdown.lease_transfer_wait"
 // here since we check it in the caller to limit generated requests as well
 // to prevent excessive queuing.
 var ExportRequestsLimit = settings.RegisterIntSetting(
-	settings.TenantReadOnly, // used in backup processor
+	settings.SystemVisible, // used in backup processor
 	"kv.bulk_io_write.concurrent_export_requests",
 	"number of export requests a store will handle concurrently before queuing",
 	3,
@@ -1209,11 +1216,11 @@ type StoreConfig struct {
 	// SpanConfigsDisabled determines whether we're able to use the span configs
 	// infrastructure or not.
 	//
-	// TODO(irfansharif): We can remove this.
+	// TODO(baptist): Don't add any future uses of this. Will be removed soon.
 	SpanConfigsDisabled bool
+
 	// Used to subscribe to span configuration changes, keeping up-to-date a
-	// data structure useful for retrieving span configs. Only available if
-	// SpanConfigsDisabled is unset.
+	// data structure useful for retrieving span configs.
 	SpanConfigSubscriber spanconfig.KVSubscriber
 	// SharedStorageEnabled stores whether this store is configured with a
 	// shared.Storage instance and can accept shared snapshots.
@@ -1247,6 +1254,11 @@ type StoreConfig struct {
 	// RangeFeedSchedulerConcurrency specifies number of rangefeed scheduler
 	// workers for the store.
 	RangeFeedSchedulerConcurrency int
+
+	// RangeFeedSchedulerConcurrentPriority specifies the number of rangefeed
+	// scheduler workers for this store's dedicated priority shard. Values < 1
+	// imply 1.
+	RangeFeedSchedulerConcurrencyPriority int
 
 	// RangeFeedSchedulerShardSize specifies the maximum number of workers per
 	// scheduler shard.
@@ -1336,6 +1348,9 @@ func (sc *StoreConfig) SetDefaults(numStores int) {
 	}
 	if sc.RangeFeedSchedulerShardSize == 0 {
 		sc.RangeFeedSchedulerShardSize = defaultRangefeedSchedulerShardSize
+	}
+	if sc.RangeFeedSchedulerConcurrencyPriority == 0 {
+		sc.RangeFeedSchedulerConcurrencyPriority = defaultRangefeedSchedulerPriorityShardSize
 	}
 }
 
@@ -1761,7 +1776,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 					case <-transferCtx.Done():
 						// Context canceled: the timeout loop has decided we've
 						// done enough draining
-						// (server.shutdown.lease_transfer_wait).
+						// (server.shutdown.lease_transfer_iteration.timeout).
 						//
 						// We need this check here because each call of
 						// transferAllAway() traverses all stores/replicas without
@@ -1920,7 +1935,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 
 	// We've seen all the replicas once. Now we're going to iterate
 	// until they're all gone, up to the configured timeout.
-	transferTimeout := leaseTransferWait.Get(&s.cfg.Settings.SV)
+	transferTimeout := LeaseTransferPerIterationTimeout.Get(&s.cfg.Settings.SV)
 
 	drainLeasesOp := "transfer range leases"
 	if err := timeutil.RunWithTimeout(ctx, drainLeasesOp, transferTimeout,
@@ -1960,7 +1975,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 			// same time. If we see it on healthy ones, there's likely something to fix.
 			log.Warningf(ctx, "unable to drain cleanly within %s (cluster setting %s), "+
 				"service might briefly deteriorate if the node is terminated: %s",
-				transferTimeout, leaseTransferWaitSettingName, tErr.Cause())
+				transferTimeout, LeaseTransferPerIterationTimeout.Name(), tErr.Cause())
 		} else {
 			log.Warningf(ctx, "drain error: %+v", err)
 		}
@@ -1996,14 +2011,20 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		return err
 	}
 
-	rfs := rangefeed.NewScheduler(rangefeed.SchedulerConfig{
-		Workers:   s.cfg.RangeFeedSchedulerConcurrency,
-		ShardSize: s.cfg.RangeFeedSchedulerShardSize,
-	})
-	if err = rfs.Start(ctx, s.stopper); err != nil {
-		return err
+	{
+		m := rangefeed.NewSchedulerMetrics(s.cfg.HistogramWindowInterval)
+		rfs := rangefeed.NewScheduler(rangefeed.SchedulerConfig{
+			Workers:         s.cfg.RangeFeedSchedulerConcurrency,
+			PriorityWorkers: s.cfg.RangeFeedSchedulerConcurrencyPriority,
+			ShardSize:       s.cfg.RangeFeedSchedulerShardSize,
+			Metrics:         m,
+		})
+		s.Registry().AddMetricStruct(m)
+		if err = rfs.Start(ctx, s.stopper); err != nil {
+			return err
+		}
+		s.rangefeedScheduler = rfs
 	}
-	s.rangefeedScheduler = rfs
 
 	s.rangefeedRestarter.start(ctx, stopper)
 
@@ -2203,20 +2224,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			s.onSpanConfigUpdate(ctx, update)
 		})
 
-		// When toggling between the system config span and the span
-		// configs infrastructure, we want to re-apply configs on all
-		// replicas from whatever the new source is.
-		spanconfigstore.EnabledSetting.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
-			enabled := spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV)
-			if enabled {
-				s.applyAllFromSpanConfigStore(ctx)
-			} else if scp := s.cfg.SystemConfigProvider; scp != nil {
-				if sc := scp.GetSystemConfig(); sc != nil {
-					s.systemGossipUpdate(sc)
-				}
-			}
-		})
-
 		// We also want to do it when the fallback config setting is changed.
 		spanconfigstore.FallbackConfigOverride.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
 			s.applyAllFromSpanConfigStore(ctx)
@@ -2262,10 +2269,7 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 		return s.cfg.TestingKnobs.ConfReaderInterceptor(), nil
 	}
 
-	if s.cfg.SpanConfigsDisabled ||
-		!spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) ||
-		s.TestingKnobs().UseSystemConfigSpanForQueues {
-
+	if s.cfg.SpanConfigsDisabled || s.TestingKnobs().UseSystemConfigSpanForQueues {
 		sysCfg := s.cfg.SystemConfigProvider.GetSystemConfig()
 		if sysCfg == nil {
 			return nil, errSpanConfigsUnavailable
@@ -2465,10 +2469,6 @@ func (s *Store) removeReplicaWithRangefeed(rangeID roachpb.RangeID) {
 // onSpanConfigUpdate is the callback invoked whenever this store learns of a
 // span config update.
 func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
-	if !spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) {
-		return
-	}
-
 	sp, err := keys.SpanAddr(updated)
 	if err != nil {
 		log.Errorf(ctx, "skipped applying update (%s), unexpected error resolving span address: %v",
@@ -3475,12 +3475,16 @@ func (s *Store) ReplicateQueueDryRun(
 		s.cfg.AmbientCtx.Tracer, "replicate queue dry run",
 	)
 	defer collectAndFinish()
-	canTransferLease := func(ctx context.Context, repl plan.LeaseCheckReplica, conf roachpb.SpanConfig) bool {
+	canTransferLease := func(ctx context.Context, repl plan.LeaseCheckReplica, conf *roachpb.SpanConfig) bool {
 		return true
 	}
 	desc := repl.Desc()
-	conf := repl.SpanConfig()
-	_, err := s.replicateQueue.processOneChange(
+	conf, err := repl.LoadSpanConfig(ctx)
+	if err != nil {
+		log.Eventf(ctx, "error simulating allocator unable to load span config %s: %s", repl, err)
+		return collectAndFinish(), nil
+	}
+	_, err = s.replicateQueue.processOneChange(
 		ctx, repl, desc, conf, canTransferLease, false /* scatter */, true, /* dryRun */
 	)
 	if err != nil {
@@ -3539,7 +3543,7 @@ func (s *Store) AllocatorCheckRange(
 		storePool = s.cfg.StorePool
 	}
 
-	action, _ := s.allocator.ComputeAction(ctx, storePool, conf, desc)
+	action, _ := s.allocator.ComputeAction(ctx, storePool, &conf, desc)
 
 	// In the case that the action does not require a target, return immediately.
 	if !(action.Add() || action.Replace()) {
@@ -3553,7 +3557,7 @@ func (s *Store) AllocatorCheckRange(
 		return action, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
 	}
 
-	target, _, err := s.allocator.AllocateTarget(ctx, storePool, conf,
+	target, _, err := s.allocator.AllocateTarget(ctx, storePool, &conf,
 		filteredVoters, filteredNonVoters, replacing, action.ReplicaStatus(), action.TargetReplicaType(),
 	)
 	if err == nil {
@@ -3564,7 +3568,7 @@ func (s *Store) AllocatorCheckRange(
 		fragileQuorumErr := s.allocator.CheckAvoidsFragileQuorum(
 			ctx,
 			storePool,
-			conf,
+			&conf,
 			desc.Replicas().VoterDescriptors(),
 			filteredVoters,
 			action.ReplicaStatus(),

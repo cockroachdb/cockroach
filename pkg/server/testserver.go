@@ -23,8 +23,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cenkalti/backoff"
-	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -48,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -177,6 +176,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.RetryOptions = params.RetryOptions
 	cfg.Locality = params.Locality
 	cfg.StartDiagnosticsReporting = params.StartDiagnosticsReporting
+	cfg.DisableSQLServer = params.DisableSQLServer
 	if params.TraceDir != "" {
 		if err := initTraceDir(params.TraceDir); err == nil {
 			cfg.InflightTraceDirName = params.TraceDir
@@ -236,8 +236,11 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.SQLAdvertiseAddr = util.IsolatedTestAddr.String()
 		cfg.HTTPAddr = util.IsolatedTestAddr.String()
 	}
-	if params.SecondaryTenantPortOffset != 0 {
-		cfg.SecondaryTenantPortOffset = params.SecondaryTenantPortOffset
+	if params.ApplicationInternalRPCPortMin != 0 {
+		cfg.ApplicationInternalRPCPortMin = params.ApplicationInternalRPCPortMin
+	}
+	if params.ApplicationInternalRPCPortMax != 0 {
+		cfg.ApplicationInternalRPCPortMax = params.ApplicationInternalRPCPortMax
 	}
 	if params.Addr != "" {
 		cfg.Addr = params.Addr
@@ -255,9 +258,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.TestingInsecureWebAccess = params.InsecureWebAccess
 	if params.EnableDemoLoginEndpoint {
 		cfg.EnableDemoLoginEndpoint = true
-	}
-	if params.DisableSpanConfigs {
-		cfg.SpanConfigsDisabled = true
 	}
 	if params.SnapshotApplyLimit != 0 {
 		cfg.SnapshotApplyLimit = params.SnapshotApplyLimit
@@ -587,6 +587,10 @@ func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 	// it here.
 	if ts.params.DefaultTestTenant.TestTenantAlwaysDisabled() {
 		return nil
+	}
+
+	if ts.params.DisableSQLServer {
+		return serverutils.PreventDisableSQLForTenantError()
 	}
 
 	tenantSettings := cluster.MakeTestingClusterSettings()
@@ -1158,7 +1162,6 @@ func (ts *testServer) StartSharedProcessTenant(
 	}
 	tenantExists := tenantRow != nil
 
-	justCreated := false
 	var tenantID roachpb.TenantID
 	if tenantExists {
 		// A tenant with the given name already exists; let's check that
@@ -1171,7 +1174,6 @@ func (ts *testServer) StartSharedProcessTenant(
 		tenantID = roachpb.MustMakeTenantID(id)
 	} else {
 		// The tenant doesn't exist; let's create it.
-		justCreated = true
 		if args.TenantID.IsSet() {
 			// Create with name and ID.
 			_, err := ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
@@ -1204,19 +1206,17 @@ func (ts *testServer) StartSharedProcessTenant(
 		}
 	}
 
-	if justCreated {
-		// Also mark it for shared-process execution.
-		_, err := ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
-			ctx,
-			"start-tenant-shared-service",
-			nil, /* txn */
-			sessiondata.NodeUserSessionDataOverride,
-			"ALTER TENANT $1 START SERVICE SHARED",
-			args.TenantName,
-		)
-		if err != nil {
-			return nil, nil, err
-		}
+	// Also mark it for shared-process execution.
+	_, err = ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
+		ctx,
+		"start-tenant-shared-service",
+		nil, /* txn */
+		sessiondata.NodeUserSessionDataOverride,
+		"ALTER TENANT $1 START SERVICE SHARED",
+		args.TenantName,
+	)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	// Wait for the rangefeed to catch up.
@@ -1542,16 +1542,27 @@ func (ts *testServer) StartTenant(
 	baseCfg.HeapProfileDirName = ts.Cfg.BaseConfig.HeapProfileDirName
 	baseCfg.GoroutineDumpDirName = ts.Cfg.BaseConfig.GoroutineDumpDirName
 
-	// TODO(knz): Once https://github.com/cockroachdb/cockroach/issues/96512 is
-	// resolved, we could override this cluster setting for the secondary tenant
-	// using SQL instead of reaching in using this testing knob. One way to do
-	// so would be to perform the override for all tenants and only then
-	// initializing our test tenant; However, the linked issue above prevents
-	// us from being able to do so.
-	sql.SecondaryTenantScatterEnabled.Override(ctx, &baseCfg.Settings.SV, true)
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &baseCfg.Settings.SV, true)
-	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &baseCfg.Settings.SV, true)
-	sql.SecondaryTenantsMultiRegionAbstractionsEnabled.Override(ctx, &baseCfg.Settings.SV, true)
+	for _, setting := range []settings.Setting{
+		sql.SecondaryTenantScatterEnabled,
+		sql.SecondaryTenantSplitAtEnabled,
+		sql.SecondaryTenantZoneConfigsEnabled,
+		sql.SecondaryTenantsMultiRegionAbstractionsEnabled,
+	} {
+		// Update the override for this setting. We need to do this
+		// instead of calling .Override() on the setting directly: certain
+		// tests expect to be able to change the value afterwards using
+		// another ALTER VC SET CLUSTER SETTING statement, which is not
+		// possible with regular overrides.
+		_, err := ie.Exec(ctx, "testserver-alter-tenant-cap", nil,
+			fmt.Sprintf("ALTER VIRTUAL CLUSTER [$1] SET CLUSTER SETTING %s = true", setting.Name()), params.TenantID.ToUint64())
+		if err != nil {
+			if params.SkipTenantCheck {
+				log.Infof(ctx, "ignoring error changing setting because SkipTenantCheck is true: %v", err)
+			} else {
+				return nil, err
+			}
+		}
+	}
 
 	// Waiting for capabilities can time To avoid paying this cost in all
 	// cases, we only set the nodelocal storage capability if the caller has
@@ -2347,14 +2358,6 @@ func (testServerFactoryImpl) New(params base.TestServerArgs) (interface{}, error
 		return nil, err
 	}
 	ts.topLevelServer = srv.(*topLevelServer)
-
-	// Create a breaker which never trips and never backs off to avoid
-	// introducing timing-based flakes.
-	ts.rpcContext.BreakerFactory = func() *circuit.Breaker {
-		return circuit.NewBreakerWithOptions(&circuit.Options{
-			BackOff: &backoff.ZeroBackOff{},
-		})
-	}
 
 	// Our context must be shared with our server.
 	ts.Cfg = &ts.topLevelServer.cfg

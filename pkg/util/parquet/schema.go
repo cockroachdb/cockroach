@@ -162,6 +162,15 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (d
 		}
 		result.colWriter = scalarWriter(writePGLSN)
 		return result, nil
+	case types.RefCursorFamily:
+		result.node, err = schema.NewPrimitiveNodeLogical(colName,
+			repetitions, schema.StringLogicalType{}, parquet.Types.ByteArray,
+			defaultTypeLength, defaultSchemaFieldID)
+		if err != nil {
+			return datumColumn{}, err
+		}
+		result.colWriter = scalarWriter(writeString)
+		return result, nil
 	case types.DecimalFamily:
 		// According to PostgresSQL docs, scale or precision of 0 implies max
 		// precision and scale. This code assumes that CRDB matches this behavior.

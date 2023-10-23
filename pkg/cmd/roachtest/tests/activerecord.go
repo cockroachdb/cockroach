@@ -46,7 +46,7 @@ func registerActiveRecord(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
@@ -111,11 +111,11 @@ func registerActiveRecord(r registry.Registry) {
 			t,
 			c,
 			node,
-			"install ruby 2.7",
+			"install ruby 3.1",
 			`mkdir -p ruby-install && \
-        curl -fsSL https://github.com/postmodern/ruby-install/archive/v0.6.1.tar.gz | tar --strip-components=1 -C ruby-install -xz && \
+        curl -fsSL https://github.com/postmodern/ruby-install/archive/v0.9.1.tar.gz | tar --strip-components=1 -C ruby-install -xz && \
         sudo make -C ruby-install install && \
-        sudo ruby-install --system ruby 2.7.1 && \
+        sudo ruby-install --system ruby 3.1.4 && \
         sudo gem update --system`,
 		); err != nil {
 			t.Fatal(err)
@@ -247,13 +247,15 @@ func registerActiveRecord(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:       "activerecord",
-		Owner:      registry.OwnerSQLFoundations,
-		Timeout:    5 * time.Hour,
-		Cluster:    r.MakeClusterSpec(1),
-		NativeLibs: registry.LibGEOS,
-		Tags:       registry.Tags(`default`, `orm`),
-		Run:        runActiveRecord,
-		Leases:     registry.MetamorphicLeases,
+		Name:             "activerecord",
+		Owner:            registry.OwnerSQLFoundations,
+		Timeout:          5 * time.Hour,
+		Cluster:          r.MakeClusterSpec(1),
+		NativeLibs:       registry.LibGEOS,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly, registry.ORM),
+		Tags:             registry.Tags(`default`, `orm`),
+		Run:              runActiveRecord,
+		Leases:           registry.MetamorphicLeases,
 	})
 }

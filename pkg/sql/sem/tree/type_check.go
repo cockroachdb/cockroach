@@ -75,6 +75,10 @@ type SemaContext struct {
 	DateStyle pgdate.DateStyle
 	// IntervalStyle refers to the IntervalStyle to parse as.
 	IntervalStyle duration.IntervalStyle
+
+	// UnsupportedTypeChecker is used to determine whether a builtin data type is
+	// supported by the current cluster version. It may be unset.
+	UnsupportedTypeChecker UnsupportedTypeChecker
 }
 
 // SemaProperties is a holder for required and derived properties
@@ -114,6 +118,11 @@ func (s *SemaProperties) Require(context string, rejectFlags SemaRejectFlags) {
 	s.required.rejectFlags = rejectFlags
 	s.Derived.Clear()
 	s.Ancestors.clear()
+}
+
+// Reject adds the given flags to the set of required constraints of s.
+func (s *SemaProperties) Reject(rejectFlags SemaRejectFlags) {
+	s.required.rejectFlags |= rejectFlags
 }
 
 // IsSet checks if the given rejectFlag is set as a required property.
@@ -167,8 +176,14 @@ const (
 	// RejectSubqueries rejects subqueries in scalar contexts.
 	RejectSubqueries
 
+	// RejectProcedures rejects procedures in scalar contexts.
+	RejectProcedures
+
 	// RejectSpecial is used in common places like the LIMIT clause.
-	RejectSpecial = RejectAggregates | RejectGenerators | RejectWindowApplications
+	RejectSpecial = RejectAggregates |
+		RejectGenerators |
+		RejectWindowApplications |
+		RejectProcedures
 )
 
 // ScalarProperties contains the properties of the current scalar
@@ -214,6 +229,10 @@ const (
 	// checking condition expressions CASE, COALESCE, and IF. Used to reject
 	// set-returning functions within conditional expressions.
 	ConditionalAncestor
+
+	// CallAncestor is added to ScalarAncestors while type checking children of
+	// a CALL statement. Used to print sensible error messages for procedures.
+	CallAncestor
 )
 
 // Push adds the given ancestor to s.
@@ -595,6 +614,9 @@ func (expr *CastExpr) TypeCheck(
 	if err != nil {
 		return nil, err
 	}
+	if err = CheckUnsupportedType(ctx, semaCtx, exprType); err != nil {
+		return nil, err
+	}
 	expr.Type = exprType
 	canElideCast := true
 	switch {
@@ -733,6 +755,9 @@ func (expr *AnnotateTypeExpr) TypeCheck(
 ) (TypedExpr, error) {
 	annotateType, err := ResolveType(ctx, expr.Type, semaCtx.GetTypeResolver())
 	if err != nil {
+		return nil, err
+	}
+	if err = CheckUnsupportedType(ctx, semaCtx, annotateType); err != nil {
 		return nil, err
 	}
 	expr.Type = annotateType
@@ -1112,6 +1137,11 @@ func (expr *FuncExpr) TypeCheck(
 
 	def, err := expr.Func.Resolve(ctx, searchPath, resolver)
 	if err != nil {
+		if errors.Is(err, ErrRoutineUndefined) {
+			if procErr := procedureDoesNotExistErr(expr.Func.String(), semaCtx); procErr != nil {
+				return nil, procErr
+			}
+		}
 		return nil, err
 	}
 
@@ -1137,8 +1167,19 @@ func (expr *FuncExpr) TypeCheck(
 		(*qualifiedOverloads)(&def.Overloads), expr.Exprs...,
 	)
 	defer s.release()
-	if err := s.typeCheckOverloadedExprs(ctx, semaCtx, desired, false); err != nil {
-		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s()", def.Name)
+
+	if err := func() error {
+		// Disallow procedures in function arguments.
+		if semaCtx != nil {
+			defer semaCtx.Properties.Restore(semaCtx.Properties)
+			semaCtx.Properties.Reject(RejectProcedures)
+		}
+		if err := s.typeCheckOverloadedExprs(ctx, semaCtx, desired, false); err != nil {
+			return pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s()", def.Name)
+		}
+		return nil
+	}(); err != nil {
+		return nil, err
 	}
 
 	var hasUDFOverload bool
@@ -1197,9 +1238,13 @@ func (expr *FuncExpr) TypeCheck(
 
 	// Return NULL if at least one overload is possible, no overload accepts
 	// NULL arguments, the function isn't a generator or aggregate builtin, and
-	// NULL is given as an argument.
+	// NULL is given as an argument. We do not perform this transformation
+	// within a CALL statement because procedures are always called on NULL
+	// input, and because optbuilder requires a FuncExpr to remain after
+	// type-checking.
 	if len(s.overloadIdxs) > 0 && calledOnNullInputFns.Len() == 0 && funcCls != GeneratorClass &&
-		funcCls != AggregateClass && !hasUDFOverload {
+		funcCls != AggregateClass && !hasUDFOverload &&
+		semaCtx != nil && !semaCtx.Properties.Ancestors.Has(CallAncestor) {
 		for _, expr := range s.typedExprs {
 			if expr.ResolvedType().Family() == types.UnknownFamily {
 				return DNull, nil
@@ -1208,6 +1253,9 @@ func (expr *FuncExpr) TypeCheck(
 	}
 
 	if len(s.overloadIdxs) == 0 {
+		if procErr := procedureDoesNotExistErr(expr.Func.String(), semaCtx); procErr != nil {
+			return nil, procErr
+		}
 		return nil, pgerror.Newf(pgcode.UndefinedFunction, "unknown signature: %s", getFuncSig(expr, s.typedExprs, desired))
 	}
 
@@ -1239,6 +1287,16 @@ func (expr *FuncExpr) TypeCheck(
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	if overloadImpl.Type == ProcedureRoutine && semaCtx.Properties.IsSet(RejectProcedures) {
+		return nil, errors.WithHint(
+			pgerror.Newf(
+				pgcode.WrongObjectType,
+				"%s(%s) is a procedure", def.Name, overloadImpl.Types.String(),
+			),
+			"To call a procedure, use CALL.",
+		)
 	}
 
 	if expr.IsWindowFunctionApplication() {
@@ -1312,6 +1370,25 @@ func (expr *FuncExpr) TypeCheck(
 		(*overloadImpl.OnTypeCheck)()
 	}
 	return expr, nil
+}
+
+// procedureDoesNotExistErr returns a "procedure does not exist" error if the
+// current ancestors indicate that type checking is occuring at the top-level
+// child of a CALL statement.
+//
+// TODO(#111139): We'll need to reconsider how we determine that we're looking
+// for a procedure once we support calling procedures from within UDFs.
+func procedureDoesNotExistErr(fnName string, semaCtx *SemaContext) error {
+	if semaCtx != nil &&
+		semaCtx.Properties.Ancestors.Has(CallAncestor) &&
+		!semaCtx.Properties.Ancestors.Has(FuncExprAncestor) {
+		return errors.WithHint(
+			pgerror.Newf(pgcode.UndefinedFunction, "procedure %s does not exist", fnName),
+			"No procedure matches the given name and argument types. "+
+				"You might need to add explicit type casts.",
+		)
+	}
+	return nil
 }
 
 // TypeCheck implements the Expr interface.
@@ -2564,6 +2641,15 @@ type typeCheckExprsState struct {
 	resolvableIdxs  intsets.Fast // index into exprs/typedExprs
 }
 
+func findFirstTupleIndex(exprs ...Expr) (index int, ok bool) {
+	for i, expr := range exprs {
+		if _, ok := expr.(*Tuple); ok {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
 // typeCheckSameTypedExprs type checks a list of expressions, asserting that all
 // resolved TypeExprs have the same type. An optional desired type can be provided,
 // which will hint that type which the expressions should resolve to, if possible.
@@ -2587,9 +2673,26 @@ func typeCheckSameTypedExprs(
 		return []TypedExpr{typedExpr}, typ, nil
 	}
 
-	// Handle tuples, which will in turn call into this function recursively for each element.
-	if _, ok := exprs[0].(*Tuple); ok {
-		return typeCheckSameTypedTupleExprs(ctx, semaCtx, desired, exprs...)
+	// Handle tuples, which will in turn call into this function recursively for
+	// each element.
+	// TODO(msirek): Rewrite typeCheckSameTypedTupleExprs to handle all types of
+	// expressions which could resolve to a type family of `TupleFamily`, like a
+	// VALUES clause. Logic in `typeCheckSameTypedTupleExprs` states that the call
+	// to `TypeCheck` should be deferred until the common type is determined. So,
+	// we would need a way to determine which expressions are in the tuple family
+	// without inspecting the AST node and without calling `TypeCheck`. Does the
+	// call to `TypeCheck` really need to be deferred?
+	if idx, ok := findFirstTupleIndex(exprs...); ok {
+		if _, ok := exprs[idx].(*Tuple); ok {
+			// typeCheckSameTypedTupleExprs expects the first expression in the slice
+			// to be a tuple.
+			exprs[0], exprs[idx] = exprs[idx], exprs[0]
+			typedExprs, commonType, err := typeCheckSameTypedTupleExprs(ctx, semaCtx, desired, exprs...)
+			if err == nil {
+				typedExprs[0], typedExprs[idx] = typedExprs[idx], typedExprs[0]
+			}
+			return typedExprs, commonType, err
+		}
 	}
 
 	// Hold the resolved type expressions of the provided exprs, in order.
@@ -3353,4 +3456,25 @@ func getMostSignificantOverload(
 		return QualifiedOverload{}, pgerror.Newf(pgcode.UndefinedFunction, "unknown signature: %s", getFuncSig())
 	}
 	return ret, nil
+}
+
+// UnsupportedTypeChecker is used to check that a type is supported by the
+// current cluster version. It is an interface because some packages cannot
+// import the clusterversion package.
+type UnsupportedTypeChecker interface {
+	// CheckType returns an error if the given type is not supported by the
+	// current cluster version.
+	CheckType(ctx context.Context, typ *types.T) error
+}
+
+// CheckUnsupportedType returns an error if the given type is not supported by
+// the current cluster version. If the given SemaContext is nil or
+// uninitialized, CheckUnsupportedType returns nil.
+func CheckUnsupportedType(ctx context.Context, semaCtx *SemaContext, typ *types.T) error {
+	if semaCtx == nil || semaCtx.UnsupportedTypeChecker == nil {
+		// Sometimes TypeCheck() is called with a nil SemaContext for tests, and
+		// some (non-test) locations don't initialize all fields of the SemaContext.
+		return nil
+	}
+	return semaCtx.UnsupportedTypeChecker.CheckType(ctx, typ)
 }

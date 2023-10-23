@@ -119,7 +119,7 @@ var mvccGCQueueHighPriInterval = settings.RegisterDurationSetting(
 )
 
 // EnqueueInMvccGCQueueOnSpanConfigUpdateEnabled controls whether replicas
-// are enqueued into the mvcc queue, following a span config update which
+// are enqueued into the mvcc gc queue, following a span config update which
 // affects the replica.
 // TODO(baptist): Enable this once we have better AC control and have verified
 // this doesn't cause any overload problems.
@@ -231,6 +231,7 @@ type mvccGCQueueScore struct {
 	GCBytes                  int64
 	GCByteAge                int64
 	ExpMinGCByteAgeReduction int64
+	Hint                     roachpb.GCHint
 }
 
 func (r mvccGCQueueScore) String() string {
@@ -244,11 +245,15 @@ func (r mvccGCQueueScore) String() string {
 	if r.LastGC != 0 {
 		lastGC = fmt.Sprintf("%s ago", r.LastGC)
 	}
-	return fmt.Sprintf("queue=%t with %.2f/fuzz(%.2f)=%.2f=valScaleScore(%.2f)*deadFrac(%.2f)+intentScore(%.2f)\n"+
+	s := fmt.Sprintf("queue=%t with %.2f/fuzz(%.2f)=%.2f=valScaleScore(%.2f)*deadFrac(%.2f)+intentScore(%.2f)\n"+
 		"likely last GC: %s, %s non-live, curr. age %s*s, min exp. reduction: %s*s",
 		r.ShouldQueue, r.FinalScore, r.FuzzFactor, r.FinalScore/r.FuzzFactor, r.ValuesScalableScore,
 		r.DeadFraction, r.IntentScore, lastGC, humanizeutil.IBytes(r.GCBytes),
 		humanizeutil.IBytes(r.GCByteAge), humanizeutil.IBytes(r.ExpMinGCByteAgeReduction))
+	if !r.Hint.IsEmpty() {
+		s += fmt.Sprintf("\nhint: %s", r.Hint)
+	}
+	return s
 }
 
 // shouldQueue determines whether a replica should be queued for garbage
@@ -260,13 +265,20 @@ func (mgcq *mvccGCQueue) shouldQueue(
 ) (bool, float64) {
 	// Consult the protected timestamp state to determine whether we can GC and
 	// the timestamp which can be used to calculate the score.
-	conf := repl.SpanConfig()
+	conf, err := repl.LoadSpanConfig(ctx)
+	if err != nil {
+		log.VErrEventf(ctx, 2, "failed to load span config: %v", err)
+		return false, 0
+	}
 	canGC, _, gcTimestamp, oldThreshold, newThreshold, err := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
 	if err != nil {
 		log.VErrEventf(ctx, 2, "failed to check protected timestamp for gc: %v", err)
 		return false, 0
 	}
 	if !canGC {
+		log.VEventf(ctx, 2,
+			"shouldQueue=false: canGC=false gcTimestamp=%s oldThreshold=%s newThreshold=%s gcTTL=%s",
+			gcTimestamp, oldThreshold, newThreshold, conf.TTL())
 		return false, 0
 	}
 	canAdvanceGCThreshold := !newThreshold.Equal(oldThreshold)
@@ -277,6 +289,7 @@ func (mgcq *mvccGCQueue) shouldQueue(
 	}
 
 	r := makeMVCCGCQueueScore(ctx, repl, gcTimestamp, lastGC, conf.TTL(), canAdvanceGCThreshold)
+	log.VEventf(ctx, 2, "shouldQueue=%t: %s", r.ShouldQueue, r)
 	return r.ShouldQueue, r.FinalScore
 }
 
@@ -417,6 +430,7 @@ func makeMVCCGCQueueScoreImpl(
 	}
 
 	r.TTL = gcTTL
+	r.Hint = hint
 
 	// Treat a zero TTL as a one-second TTL, which avoids a priority of infinity
 	// and otherwise behaves indistinguishable given that we can't possibly hope
@@ -647,7 +661,7 @@ func (r *replicaGCer) GC(
 // If it is safe to GC, process iterates through all keys in a replica's range,
 // calling the garbage collector for each key and associated set of
 // values. GC'd keys are batched into GC calls. Extant intents are resolved if
-// intents are older than intentAgeThreshold. The transaction and AbortSpan
+// intents are older than lockAgeThreshold. The transaction and AbortSpan
 // records are also scanned and old entries evicted. During normal operation,
 // both of these records are cleaned up when their respective transaction
 // finishes, so the amount of work done here is expected to be small.
@@ -710,7 +724,7 @@ func (mgcq *mvccGCQueue) process(
 	}
 
 	var snap storage.Reader
-	if repl.store.cfg.SharedStorageEnabled || storage.UseEFOS.Get(&repl.ClusterSettings().SV) {
+	if repl.store.cfg.SharedStorageEnabled || storage.ShouldUseEFOS(&repl.ClusterSettings().SV) {
 		efos := repl.store.TODOEngine().NewEventuallyFileOnlySnapshot(rditer.MakeReplicatedKeySpans(desc))
 		if util.RaceEnabled {
 			ss := rditer.MakeReplicatedKeySpanSet(desc)
@@ -724,9 +738,9 @@ func (mgcq *mvccGCQueue) process(
 	}
 	defer snap.Close()
 
-	intentAgeThreshold := gc.IntentAgeThreshold.Get(&repl.store.ClusterSettings().SV)
-	maxIntentsPerCleanupBatch := gc.MaxIntentsPerCleanupBatch.Get(&repl.store.ClusterSettings().SV)
-	maxIntentKeyBytesPerCleanupBatch := gc.MaxIntentKeyBytesPerCleanupBatch.Get(&repl.store.ClusterSettings().SV)
+	lockAgeThreshold := gc.LockAgeThreshold.Get(&repl.store.ClusterSettings().SV)
+	maxLocksPerCleanupBatch := gc.MaxLocksPerCleanupBatch.Get(&repl.store.ClusterSettings().SV)
+	maxLocksKeyBytesPerCleanupBatch := gc.MaxLockKeyBytesPerCleanupBatch.Get(&repl.store.ClusterSettings().SV)
 	txnCleanupThreshold := gc.TxnCleanupThreshold.Get(&repl.store.ClusterSettings().SV)
 	var clearRangeMinKeys int64 = 0
 	if repl.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_1) {
@@ -735,13 +749,13 @@ func (mgcq *mvccGCQueue) process(
 
 	info, err := gc.Run(ctx, desc, snap, gcTimestamp, newThreshold,
 		gc.RunOptions{
-			IntentAgeThreshold:                     intentAgeThreshold,
-			MaxIntentsPerIntentCleanupBatch:        maxIntentsPerCleanupBatch,
-			MaxIntentKeyBytesPerIntentCleanupBatch: maxIntentKeyBytesPerCleanupBatch,
-			TxnCleanupThreshold:                    txnCleanupThreshold,
-			MaxTxnsPerIntentCleanupBatch:           intentresolver.MaxTxnsPerIntentCleanupBatch,
-			IntentCleanupBatchTimeout:              mvccGCQueueIntentBatchTimeout,
-			ClearRangeMinKeys:                      clearRangeMinKeys,
+			LockAgeThreshold:                     lockAgeThreshold,
+			MaxLocksPerIntentCleanupBatch:        maxLocksPerCleanupBatch,
+			MaxLockKeyBytesPerIntentCleanupBatch: maxLocksKeyBytesPerCleanupBatch,
+			TxnCleanupThreshold:                  txnCleanupThreshold,
+			MaxTxnsPerIntentCleanupBatch:         intentresolver.MaxTxnsPerIntentCleanupBatch,
+			IntentCleanupBatchTimeout:            mvccGCQueueIntentBatchTimeout,
+			ClearRangeMinKeys:                    clearRangeMinKeys,
 		},
 		conf.TTL(),
 		&replicaGCer{
@@ -749,7 +763,15 @@ func (mgcq *mvccGCQueue) process(
 			admissionController: mgcq.store.cfg.KVAdmissionController,
 			storeID:             mgcq.store.StoreID(),
 		},
-		func(ctx context.Context, intents []roachpb.Intent) error {
+		func(ctx context.Context, locks []roachpb.Lock) error {
+			// TODO(nvanbenschoten): the IntentResolver current operates on
+			// roachpb.Intent objects, instead of roachpb.Lock objects, even
+			// though it resolves locks with any strength. Fix this.
+			intents := make([]roachpb.Intent, len(locks))
+			for i := range locks {
+				l := &locks[i]
+				intents[i] = roachpb.MakeIntent(&l.Txn, l.Key)
+			}
 			intentCount, err := repl.store.intentResolver.CleanupIntents(
 				ctx, gcAdmissionHeader(repl.store.ClusterSettings()), intents, gcTimestamp, kvpb.PUSH_TOUCH)
 			if err == nil {
@@ -822,8 +844,8 @@ func (mgcq *mvccGCQueue) process(
 func updateStoreMetricsWithGCInfo(metrics *StoreMetrics, info gc.Info) {
 	metrics.GCNumKeysAffected.Inc(int64(info.NumKeysAffected))
 	metrics.GCNumRangeKeysAffected.Inc(int64(info.NumRangeKeysAffected))
-	metrics.GCIntentsConsidered.Inc(int64(info.IntentsConsidered))
-	metrics.GCIntentTxns.Inc(int64(info.IntentTxns))
+	metrics.GCIntentsConsidered.Inc(int64(info.LocksConsidered))
+	metrics.GCIntentTxns.Inc(int64(info.LockTxns))
 	metrics.GCTransactionSpanScanned.Inc(int64(info.TransactionSpanTotal))
 	metrics.GCTransactionSpanGCAborted.Inc(int64(info.TransactionSpanGCAborted))
 	metrics.GCTransactionSpanGCCommitted.Inc(int64(info.TransactionSpanGCCommitted))

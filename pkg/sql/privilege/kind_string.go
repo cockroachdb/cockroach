@@ -43,7 +43,8 @@ func _() {
 	_ = x[CREATELOGIN-33]
 	_ = x[CREATEDB-34]
 	_ = x[CONTROLJOB-35]
-	_ = x[largestKind-35]
+	_ = x[REPAIRCLUSTERMETADATA-36]
+	_ = x[largestKind-36]
 }
 
 func (i Kind) String() string {
@@ -118,6 +119,8 @@ func (i Kind) String() string {
 		return "CREATEDB"
 	case CONTROLJOB:
 		return "CONTROLJOB"
+	case REPAIRCLUSTERMETADATA:
+		return "REPAIRCLUSTERMETADATA"
 	default:
 		return "Kind(" + strconv.FormatInt(int64(i), 10) + ")"
 	}

@@ -89,6 +89,8 @@ func registerEncryption(r registry.Registry) {
 			Leases:            registry.MetamorphicLeases,
 			Owner:             registry.OwnerStorage,
 			Cluster:           r.MakeClusterSpec(n),
+			CompatibleClouds:  registry.AllExceptAWS,
+			Suites:            registry.Suites(registry.Nightly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runEncryption(ctx, t, c)
 			},
