@@ -104,16 +104,19 @@ send "SELECT 111;\r"
 eexpect 111
 eexpect root@
 
-flush_and_sync_logs $logfile "SELECT ..*111..*"
-
+# The regex here is finicky... CI can't handle matching against redaction marker literals, but .* is too broad
+# to match against and leads to false matches. Therefore, this regex matches against a literal `"SELECT `, followed
+# by a single character of any type to capture the opening and closing redaction markers `.\\{1\\}`, and then the
+# closing quotation mark. Similar concepts are used for the following grep assertions.
+flush_and_sync_logs $logfile "\"SELECT .\\{1\\}111.\\{1\\}\""
 
 # Two separate single-stmt txns.
-system "n=`grep 'SELECT ..*550..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\).*/\\1/g' | uniq | wc -l`; if test \$n -ne 2; then echo unexpected \$n; exit 1; fi"
+system "n=`grep '\"SELECT .\\{1\\}550.\\{1\\} +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\).*/\\1/g' | uniq | wc -l`; if test \$n -ne 2; then echo unexpected \$n; exit 1; fi"
 # Same txns.
-system "n=`grep 'SELECT ..*660..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\).*/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
-system "n=`grep 'SELECT ..*770..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\).*/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
-system "n=`grep 'SELECT ..*880..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\).*/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
-system "n=`grep 'SELECT ..*990..* +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\).*/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
+system "n=`grep '\"SELECT .\\{1\\}660.\\{1\\} +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\).*/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
+system "n=`grep '\"SELECT .\\{1\\}770.\\{1\\} +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\).*/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
+system "n=`grep '\"SELECT .\\{1\\}880.\\{1\\} +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\).*/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
+system "n=`grep '\"SELECT .\\{1\\}990.\\{1\\} +' $logfile | sed -e 's/.*TxnCounter.:\\(\[0-9\]*\\).*/\\1/g' | uniq | wc -l`; if test \$n -ne 1; then echo unexpected \$n; exit 1; fi"
 
 end_test
 
