@@ -30,7 +30,12 @@ func TestTeamCityEscape(t *testing.T) {
 	require.Equal(t, "Connection to 104.196.113.229 port 22: Broken pipe|r|nlost connection: exit status 1",
 		TeamCityEscape("Connection to 104.196.113.229 port 22: Broken pipe\r\nlost connection: exit status 1"))
 
-	//Unicode
+	require.Equal(t,
+		"Messages:   	current binary |'24.1|' not found in |'versionToMinSupportedVersion|'",
+		TeamCityEscape("Messages:   	current binary '24.1' not found in 'versionToMinSupportedVersion'"),
+	)
+
+	// Unicode
 	require.Equal(t, "|0x00bf", TeamCityEscape("\u00bf"))
 	require.Equal(t, "|0x00bfaaa", TeamCityEscape("\u00bfaaa"))
 	require.Equal(t, "bb|0x00bfaaa", TeamCityEscape("bb\u00bfaaa"))
