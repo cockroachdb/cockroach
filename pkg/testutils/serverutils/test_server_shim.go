@@ -73,10 +73,7 @@ var PreventStartTenantError = errors.New("attempting to manually start a virtual
 func ShouldStartDefaultTestTenant(
 	t TestLogger, baseArg base.DefaultTestTenantOptions,
 ) (retval base.DefaultTestTenantOptions) {
-	// Explicit cases for enabling or disabling the default test tenant.
-	if baseArg.TestTenantAlwaysEnabled() {
-		return baseArg
-	}
+	// Explicit case for disabling the default test tenant.
 	if baseArg.TestTenantAlwaysDisabled() {
 		if issueNum, label := baseArg.IssueRef(); issueNum != 0 {
 			t.Logf("cluster virtualization disabled due to issue: #%d (expected label: %s)", issueNum, label)
@@ -91,6 +88,29 @@ func ShouldStartDefaultTestTenant(
 		return base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(83461)
 	}
 
+	// If the test tenant is explicitly enabled and a process mode selected, then
+	// we are done.
+	if !baseArg.TestTenantNoDecisionMade() {
+		return baseArg
+	}
+
+	// Determine if the default test tenant should be run as a shared process.
+	var shared bool
+	switch {
+	case baseArg.SharedProcessMode():
+		shared = true
+	case baseArg.ExternalProcessMode():
+		shared = false
+	default:
+		shared = util.ConstantWithMetamorphicTestBoolWithoutLogging("test-tenant-shared-process", false)
+	}
+
+	// Explicit case for enabling the default test tenant, but with a
+	// probabilistic selection made for running as a shared or external process.
+	if baseArg.TestTenantAlwaysEnabled() {
+		return base.InternalNonDefaultDecision(baseArg, true /* enabled */, shared /* shared */)
+	}
+
 	// Obey the env override if present.
 	if str, present := envutil.EnvString("COCKROACH_TEST_TENANT", 0); present {
 		v, err := strconv.ParseBool(str)
@@ -99,13 +119,16 @@ func ShouldStartDefaultTestTenant(
 		}
 		if v {
 			t.Log(defaultTestTenantMessage + "\n(override via COCKROACH_TEST_TENANT)")
-			return base.InternalNonDefaultDecision(baseArg, true)
+			return base.InternalNonDefaultDecision(baseArg, true /* enabled */, shared /* shared */)
 		}
-		return base.InternalNonDefaultDecision(baseArg, false)
+		return base.InternalNonDefaultDecision(baseArg, false /* enabled */, false /* shared */)
 	}
 
 	if globalDefaultSelectionOverride.isSet {
 		override := globalDefaultSelectionOverride.value
+		if override.TestTenantNoDecisionMade() {
+			panic("programming error: global override does not contain a final decision")
+		}
 		if override.TestTenantAlwaysDisabled() {
 			if issueNum, label := override.IssueRef(); issueNum != 0 {
 				t.Logf("cluster virtualization disabled in global scope due to issue: #%d (expected label: %s)", issueNum, label)
@@ -124,9 +147,9 @@ func ShouldStartDefaultTestTenant(
 		t.Log(defaultTestTenantMessage)
 	}
 	if enabled {
-		return base.InternalNonDefaultDecision(baseArg, true)
+		return base.InternalNonDefaultDecision(baseArg, true /* enable */, shared /* shared */)
 	}
-	return base.InternalNonDefaultDecision(baseArg, false)
+	return base.InternalNonDefaultDecision(baseArg, false /* enable */, false /* shared */)
 }
 
 // globalDefaultSelectionOverride is used when an entire package needs
@@ -243,7 +266,7 @@ func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 			"from the package's TestMain()")
 	}
 	tcfg := params.DefaultTestTenant
-	if !(tcfg.TestTenantAlwaysEnabled() || tcfg.TestTenantAlwaysDisabled()) {
+	if tcfg.TestTenantNoDecisionMade() {
 		return nil, errors.AssertionFailedf("programming error: DefaultTestTenant does not contain a decision\n(maybe call ShouldStartDefaultTestTenant?)")
 	}
 
