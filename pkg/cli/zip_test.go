@@ -920,13 +920,13 @@ func TestZipJobTrace(t *testing.T) {
 		jobutils.WaitForJobToRun(t, runner, jobID)
 		return jobID
 	}
+	sqlURL, cleanupFn := s.ApplicationLayer().PGUrl(t, serverutils.User(username.RootUser))
+	defer cleanupFn()
 
-	sqlURL := url.URL{
-		Scheme:   "postgres",
-		User:     url.User(username.RootUser),
-		Host:     s.AdvSQLAddr(),
-		RawQuery: "sslmode=disable",
-	}
+	options := url.Values{}
+	options.Add("sslmode", "disable")
+	sqlURL.RawQuery = options.Encode()
+
 	sqlConn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, sqlURL.String())
 	defer func() {
 		if err := sqlConn.Close(); err != nil {

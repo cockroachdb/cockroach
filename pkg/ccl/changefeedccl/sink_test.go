@@ -11,7 +11,6 @@ package changefeedccl
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -480,7 +479,7 @@ func TestSQLSink(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 
-	pgURL, cleanup := sqlutils.PGUrl(t, s.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanup := s.PGUrl(t, serverutils.CertsDirPrefix(t.Name()), serverutils.User(username.RootUser))
 	defer cleanup()
 	pgURL.Path = `d`
 
