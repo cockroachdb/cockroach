@@ -731,7 +731,7 @@ func newTransportForRange(
 	if err != nil {
 		return nil, err
 	}
-	replicas.OptimizeReplicaOrder(ds.nodeIDGetter(), latencyFn, ds.locality)
+	replicas.OptimizeReplicaOrder(ds.st, ds.nodeIDGetter(), ds.HealthFunc(), latencyFn, ds.locality)
 	opts := SendOptions{class: connectionClass(&ds.st.SV)}
 	return ds.transportFactory(opts, ds.nodeDialer, replicas)
 }

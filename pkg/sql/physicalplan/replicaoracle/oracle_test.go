@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -43,9 +44,11 @@ func TestClosest(t *testing.T) {
 		nd2, err := g.GetNodeDescriptor(2)
 		require.NoError(t, err)
 		o := NewOracle(ClosestChoice, Config{
-			NodeDescs: g,
-			NodeID:    1,
-			Locality:  nd2.Locality, // pretend node 2 is closest.
+			NodeDescs:  g,
+			NodeID:     1,
+			Locality:   nd2.Locality, // pretend node 2 is closest.
+			Settings:   cluster.MakeTestingClusterSettings(),
+			HealthFunc: func(_ roachpb.NodeID) bool { return true },
 		})
 		o.(*closestOracle).latencyFunc = func(id roachpb.NodeID) (time.Duration, bool) {
 			if id == 2 {

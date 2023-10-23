@@ -26,6 +26,7 @@ go_test(
     deps = [
         "//pkg/gossip",
         "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/util",
         "//pkg/util/hlc",

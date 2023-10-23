@@ -28,8 +28,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
@@ -676,6 +679,7 @@ func TestOracle(t *testing.T) {
 				Settings:   st,
 				RPCContext: rpcContext,
 				Clock:      clock,
+				HealthFunc: func(roachpb.NodeID) bool { return true },
 			})
 
 			res, _, err := o.ChoosePreferredReplica(ctx, c.txn, desc, c.lh, c.ctPolicy, replicaoracle.QueryState{})
@@ -1118,4 +1122,151 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 			require.Equal(t, numN2FRs, 1, "follower read wasn't served by n2: %s", rec)
 		})
 	}
+}
+
+// Test draining a node stops any follower reads to that node. This is important
+// because a drained node is about to shut down and a follower read prior to a
+// shutdown may need to wait for a gRPC timeout.
+func TestDrainStopsFollowerReads(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer utilccl.TestingEnableEnterprise()()
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	sv := &settings.SV
+	// TODO(baptist): Remove this if we make this the default.
+	kvcoord.FollowerReadsUnhealthy.Override(context.Background(), sv, false)
+
+	// Turn down these durations to allow follower reads to happen faster.
+	closeTime := 10 * time.Millisecond
+	closedts.TargetDuration.Override(ctx, sv, closeTime)
+	closedts.SideTransportCloseInterval.Override(ctx, sv, closeTime)
+	ClosedTimestampPropagationSlack.Override(ctx, sv, closeTime)
+
+	// Configure localities so n3 and n4 are in the same locality.
+	// SQL runs on n4 (west).
+	// Drain n3 (west).
+	numNodes := 4
+	locality := func(region string) roachpb.Locality {
+		return roachpb.Locality{
+			Tiers: []roachpb.Tier{
+				{Key: "region", Value: region},
+			},
+		}
+	}
+	localities := []roachpb.Locality{
+		locality("us-east"),
+		locality("us-east"),
+		locality("us-west"),
+		locality("us-west"),
+	}
+	manualClock := hlc.NewHybridManualClock()
+
+	// Record which store processed the read request for our key.
+	var lastReader atomic.Int32
+	recordDestStore := func(args kvserverbase.FilterArgs) *kvpb.Error {
+		getArg, ok := args.Req.(*kvpb.GetRequest)
+		if !ok || !keys.ScratchRangeMin.Equal(getArg.Key) {
+			return nil
+		}
+		lastReader.Store(int32(args.Sid))
+		return nil
+	}
+
+	// Set up the nodes in different locality and use the LatencyFunc to
+	// simulate latency.
+	serverArgs := make(map[int]base.TestServerArgs)
+	for i := 0; i < numNodes; i++ {
+		i := i
+		serverArgs[i] = base.TestServerArgs{
+			Settings: settings,
+			Locality: localities[i],
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+						TestingEvalFilter: recordDestStore,
+					},
+				},
+				// Currently we use latency as the "primary" signal and use
+				// locality only if the latency is unavailable. Simulate
+				// locality based on whether the nodes are in the same locality.
+				// TODO(baptist): Remove this if we sort replicas by region (#112993).
+				KVClient: &kvcoord.ClientTestingKnobs{
+					LatencyFunc: func(id roachpb.NodeID) (time.Duration, bool) {
+						if localities[id-1].Equal(localities[i]) {
+							return time.Millisecond, true
+						}
+						return 100 * time.Millisecond, true
+					},
+				},
+			},
+		}
+	}
+
+	// Set ReplicationManual as we don't want any leases to move around and affect
+	// the results of this test.
+	tc := testcluster.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						WallClock: manualClock,
+					},
+				},
+			},
+			ServerArgsPerNode: serverArgs,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	// Put the scratch range on nodes 1, 2, 3 and leave the lease on 1.
+	// We want all follower read request to come from 4 and go to node 3 due to
+	// the way latency and localities are set up.
+	scratchKey := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, scratchKey, tc.Targets(1, 2)...)
+	server := tc.Server(3).ApplicationLayer()
+	db := server.DB()
+
+	// Keep the read time the same as a time in the recent past. Once the
+	// readTime is closed, we expect all future reads to go to n3.
+	readTime := server.Clock().Now()
+
+	testutils.SucceedsSoon(t, func() error {
+		sendFollowerRead(t, db, scratchKey, readTime)
+		reader := lastReader.Load()
+		if reader != 3 {
+			return errors.Newf("expected read to n3 not n%d", reader)
+		}
+		return nil
+	})
+
+	// Send a drain request to n3 and wait until the drain is completed. Other
+	// nodes find out about the drain asynchronously through gossip.
+	req := serverpb.DrainRequest{Shutdown: false, DoDrain: true, NodeId: "3"}
+	drainStream, err := tc.Server(0).GetAdminClient(t).Drain(ctx, &req)
+	require.NoError(t, err)
+	// When we get a response the drain is complete.
+	drainResp, err := drainStream.Recv()
+	require.NoError(t, err)
+	require.True(t, drainResp.IsDraining)
+
+	// Follower reads should stop going to n3 once other nodes notice it
+	// draining.
+	testutils.SucceedsSoon(t, func() error {
+		sendFollowerRead(t, db, scratchKey, readTime)
+		reader := lastReader.Load()
+		if reader == 3 {
+			return errors.New("expected to not read from n3")
+		}
+		return nil
+	})
+}
+
+func sendFollowerRead(t *testing.T, db *kv.DB, scratchKey roachpb.Key, readTime hlc.Timestamp) {
+	// Manually construct the BatchRequest to set the Timestamp.
+	b := db.NewBatch()
+	b.Get(scratchKey)
+	b.Header.Timestamp = readTime
+	require.NoError(t, db.Run(context.Background(), b))
 }
