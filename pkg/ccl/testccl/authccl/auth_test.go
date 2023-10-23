@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
@@ -284,9 +283,10 @@ func jwtRunTest(t *testing.T, insecure bool) {
 
 					// We want the certs to be present in the filesystem for this test.
 					// However, certs are only generated for users "root" and "testuser" specifically.
-					sqlURL, cleanupFn := sqlutils.PGUrlWithOptionalClientCerts(
-						t, s.AdvSQLAddr(), t.Name(), url.User(user),
-						forceCerts || user == username.RootUser || user == username.TestUser /* withClientCerts */)
+					sqlURL, cleanupFn := s.PGUrl(
+						t, serverutils.CertsDirPrefix(t.Name()), serverutils.User(user),
+						serverutils.ClientCerts(forceCerts || user == username.RootUser || user == username.TestUser),
+					)
 					defer cleanupFn()
 
 					var host, port string
@@ -417,8 +417,8 @@ func TestClientAddrOverride(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	ts := s.ApplicationLayer()
 
-	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, ts.AdvSQLAddr(), "testClientAddrOverride" /* prefix */, url.User(username.TestUser),
+	pgURL, cleanupFunc := ts.PGUrl(
+		t, serverutils.CertsDirPrefix("testClientAddrOverride"), serverutils.User(username.TestUser),
 	)
 	defer cleanupFunc()
 
