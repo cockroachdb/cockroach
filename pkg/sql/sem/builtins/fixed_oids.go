@@ -2506,6 +2506,7 @@ var builtinOidsArray = []string{
 	2535: `last_value(val: refcursor) -> refcursor`,
 	2536: `percentile_disc_impl(arg1: float, arg2: refcursor) -> refcursor`,
 	2537: `percentile_disc_impl(arg1: float[], arg2: refcursor) -> refcursor[]`,
+	2538: `information_schema._pg_char_octet_length(typid: oid, typmod: int4) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
