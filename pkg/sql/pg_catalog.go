@@ -397,7 +397,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-attrdef.html`,
 			}
 		}
 		return nil
-	})
+	},
+	nil)
 
 var pgCatalogAttributeTable = makeAllRelationsVirtualTableWithDescriptorIDIndex(
 	`table columns (incomplete - see also information_schema.columns)
@@ -567,7 +568,8 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 			}
 			return nil
 		})
-	})
+	},
+	addPGAttributeRowForCompositeType)
 
 var pgCatalogCastTable = virtualSchemaTable{
 	comment: `casts (empty - needs filling out)
@@ -862,7 +864,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 				tree.DNull, // relminmxid
 			)
 		})
-	})
+	},
+	addPGClassRowForCompositeType)
 
 var pgCatalogCollationTable = virtualSchemaTable{
 	comment: `available collations (incomplete)
@@ -1151,11 +1154,11 @@ func (r oneAtATimeSchemaResolver) getSchemaByID(id descpb.ID) (catalog.SchemaDes
 }
 
 // makeAllRelationsVirtualTableWithDescriptorIDIndex creates a virtual table that searches through
-// all table descriptors in the system. It automatically adds a virtual index implementation to the
-// table id column as well. The input schema must have a single INDEX definition
-// with a single column, which must be the column that contains the table id.
+// all table and type descriptors in the system. It automatically adds a virtual index implementation
+// to the table/type id column as well. The input schema must have a single INDEX definition
+// with a single column, which must be the column that contains the table/type id.
 // includesIndexEntries should be set to true if the indexed column produces
-// index ids as well as just ordinary table descriptor ids. In this case, the
+// index ids as well as just ordinary table/type descriptor ids. In this case, the
 // caller must pass true for this variable to prevent failed lookups.
 func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 	comment string,
@@ -1166,14 +1169,50 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 		sc catalog.SchemaDescriptor, table catalog.TableDescriptor, lookup simpleSchemaResolver,
 		addRow func(...tree.Datum) error,
 	) error,
+	populateFromType func(h oidHasher, nspOid tree.Datum, owner tree.Datum, typ *types.T, addRow func(...tree.Datum) error,
+	) error,
 ) virtualSchemaTable {
+	includesCompositeTypes := populateFromType != nil
 	populateAll := func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		return forEachTableDescWithTableLookup(ctx, p, dbContext, virtualOpts,
+		if err := forEachTableDescWithTableLookup(
+			ctx,
+			p,
+			dbContext,
+			virtualOpts,
 			func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor, lookup tableLookupFn) error {
 				return populateFromTable(ctx, p, h, db, sc, table, lookup, addRow)
-			})
+			},
+		); err != nil {
+			return err
+		}
+
+		// Loop through all user defined types (enums and composite types).
+		if includesCompositeTypes {
+			return forEachTypeDesc(
+				ctx,
+				p,
+				dbContext,
+				func(_ catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, typeDesc catalog.TypeDescriptor) error {
+					nspOid := schemaOid(sc.GetID())
+					tn := tree.NewQualifiedTypeName(dbContext.GetName(), sc.GetName(), typeDesc.GetName())
+					typ, err := typedesc.HydratedTFromDesc(ctx, tn, typeDesc, p)
+					if err != nil {
+						return err
+					}
+					ownerOid, err := getOwnerOID(ctx, p, typeDesc)
+					if err != nil {
+						return err
+					}
+					// Generate rows for some/all user defined types (depending on function populateFromType).
+					return populateFromType(h, nspOid, ownerOid, typ, addRow)
+				},
+			)
+		}
+
+		return nil
 	}
+
 	return virtualSchemaTable{
 		comment: comment,
 		schema:  schemaDef,
@@ -1192,68 +1231,54 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 						return false, errors.AssertionFailedf("unexpected type %T for table id column in virtual table %s",
 							unwrappedConstraint, schemaDef)
 					}
+					maybeID := id
+					if includesCompositeTypes {
+						maybeID = catid.UserDefinedOIDToID(oid.Oid(id))
+					}
 					desc, err := p.byIDGetterBuilder().WithoutNonPublic().Get().Desc(ctx, id)
 					if err != nil {
 						if errors.Is(err, catalog.ErrDescriptorNotFound) ||
 							catalog.HasInactiveDescriptorError(err) {
-							// No table found, so no rows. If know this value is
-							// not a hashed OID we can safely say the table was populated
-							// and skip an expensive step populating the full tables.
-							//nolint:returnerrcheck
-							return !IsMaybeHashedOid(oid.Oid(id)), nil
+							// There is a possibility that we are not finding the descriptor because it points to
+							// the OID of a user-defined type. If we are including user-defined composite types in
+							// the catalog table being populated, we should use the converted maybeID as the id for
+							// our lookup.
+							if includesCompositeTypes && maybeID != catid.InvalidDescID {
+								desc, err = p.byIDGetterBuilder().WithoutNonPublic().Get().Desc(ctx, maybeID)
+								if err != nil {
+									if errors.Is(err, catalog.ErrDescriptorNotFound) ||
+										catalog.HasInactiveDescriptorError(err) {
+										//nolint:returnerrcheck
+										return !IsMaybeHashedOid(oid.Oid(id)), nil
+									}
+									return false, err
+								}
+							} else {
+								// No table found, so no rows. If we know this value is
+								// not a hashed OID we can safely say the table was populated
+								// and skip an expensive step populating the full tables.
+								//nolint:returnerrcheck
+								return !IsMaybeHashedOid(oid.Oid(id)), nil
+							}
+						} else {
+							return false, err
 						}
-						return false, err
 					}
-					// If the descriptor is not a table, then we have a complete result
+					// If the descriptor is not a table or a composite type, then we have a complete result
 					// from this virtual index. We can mark the result as populated,
 					// because we know the underlying descriptor will generate no rows, since
-					// the ID being queried is *not* a table.
-					table, ok := desc.(catalog.TableDescriptor)
-					if !ok {
+					// the ID being queried is *not* a table or a composite type.
+					switch d := desc.(type) {
+					case catalog.TableDescriptor:
+						return populateVirtualIndexForTable(ctx, p, db, d, addRow, populateFromTable)
+					case catalog.TypeDescriptor:
+						if !includesCompositeTypes {
+							return true, nil
+						}
+						return populateVirtualIndexForType(ctx, p, db, d, addRow, populateFromType)
+					default:
 						return true, nil
 					}
-					// Don't include tables that aren't in the current database unless
-					// they're virtual, dropped tables, or ones that the user can't see.
-					canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, table, db, true /*allowAdding*/)
-					if err != nil {
-						return false, err
-					}
-					// Skip over tables from a different DB, ones which aren't visible
-					// or are dropped. From a virtual index viewpoint, we will consider
-					// this result set as populated, since the underlying full table will
-					// also skip the same descriptors.
-					if (!table.IsVirtualTable() && table.GetParentID() != db.GetID()) ||
-						table.Dropped() || !canSeeDescriptor {
-						return true, nil
-					}
-					h := makeOidHasher()
-					scResolver := oneAtATimeSchemaResolver{p: p, ctx: ctx}
-					var sc catalog.SchemaDescriptor
-					if table.IsTemporary() {
-						// Temp tables from other sessions should still be visible here.
-						// Ideally, the catalog API would be able to return the temporary
-						// schemas from other sessions, but it cannot right now. See
-						// https://github.com/cockroachdb/cockroach/issues/97822.
-						if err := forEachSchema(ctx, p, db, false /* requiresPrivileges*/, func(schema catalog.SchemaDescriptor) error {
-							if schema.GetID() == table.GetParentSchemaID() {
-								sc = schema
-							}
-							return nil
-						}); err != nil {
-							return false, err
-						}
-					}
-					if sc == nil {
-						sc, err = p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, table.GetParentSchemaID())
-						if err != nil {
-							return false, err
-						}
-					}
-					if err := populateFromTable(ctx, p, h, db, sc, table, scResolver,
-						addRow); err != nil {
-						return false, err
-					}
-					return true, nil
 				},
 			},
 		},
@@ -1267,7 +1292,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-constraint.html`,
 	vtable.PGCatalogConstraint,
 	hideVirtual, /* Virtual tables have no constraints */
 	false,       /* includesIndexEntries */
-	populateTableConstraints)
+	populateTableConstraints,
+	nil)
 
 // colIDArrayToDatum returns an int[] containing the ColumnIDs, or NULL if there
 // are no ColumnIDs.
@@ -3238,13 +3264,19 @@ func addPGTypeRowForTable(
 }
 
 func addPGTypeRow(
-	h oidHasher, nspOid tree.Datum, owner tree.Datum, typ *types.T, addRow func(...tree.Datum) error,
+	h oidHasher,
+	nspOid tree.Datum,
+	owner tree.Datum,
+	typ *types.T,
+	isUDT bool,
+	addRow func(...tree.Datum) error,
 ) error {
 	cat := typCategory(typ)
 	typType := typTypeBase
 	typElem := oidZero
 	typArray := oidZero
 	builtinPrefix := builtins.PGIOBuiltinPrefix(typ)
+	typrelid := oidZero
 	switch typ.Family() {
 	case types.ArrayFamily:
 		switch typ.Oid() {
@@ -3272,6 +3304,10 @@ func addPGTypeRow(
 		builtinPrefix = "record_"
 		typType = typTypeComposite
 		typArray = tree.NewDOid(types.CalcArrayOid(typ))
+		// Predefined composite types still have a typrelid of 0.
+		if isUDT {
+			typrelid = tree.NewDOid(typ.Oid())
+		}
 	case types.VoidFamily:
 		// void does not have an array type.
 	default:
@@ -3294,7 +3330,7 @@ func addPGTypeRow(
 		tree.DBoolFalse,         // typispreferred
 		tree.DBoolTrue,          // typisdefined
 		typDelim,                // typdelim
-		oidZero,                 // typrelid
+		typrelid,                // typrelid
 		typElem,                 // typelem
 		typArray,                // typarray
 
@@ -3318,6 +3354,115 @@ func addPGTypeRow(
 		tree.DNull,      // typdefault
 		tree.DNull,      // typacl
 	)
+}
+
+// addPGClassRowForCompositeType is utilized to populate rows in the pg_class table; it will
+// add a row iff the type we are looking at is a composite type (it does not add rows for enum types).
+func addPGClassRowForCompositeType(
+	h oidHasher, nspOid tree.Datum, owner tree.Datum, typ *types.T, addRow func(...tree.Datum) error,
+) error {
+	var typType *tree.DString
+	var tupLen int
+
+	switch typ.Family() {
+	case types.TupleFamily:
+		typType = typTypeComposite
+
+		tupLen = len(typ.TupleContents())
+	default:
+		return nil
+	}
+	typname := typ.PGName()
+	return addRow(
+		tree.NewDOid(typ.Oid()),         // oid
+		tree.NewDName(typname),          // relname
+		nspOid,                          // relnamespace
+		tree.NewDOid(typ.Oid()),         // reltype
+		oidZero,                         // reloftype (used for type tables, which us unsupported)
+		owner,                           // relowner
+		oidZero,                         // relam
+		oidZero,                         // refilenode
+		oidZero,                         // reltablespace
+		tree.DNull,                      // relpages
+		tree.DNull,                      // reltuples
+		zeroVal,                         // relallvisible
+		oidZero,                         // reltoastrelid
+		tree.DBoolFalse,                 // relhasindex (composite types implemented as virtual tables - no indexes)
+		tree.DBoolFalse,                 // relisshared
+		relPersistencePermanent,         // relpersistance
+		tree.DBoolFalse,                 // relistemp
+		typType,                         // relkind
+		tree.NewDInt(tree.DInt(tupLen)), // relnatts
+		zeroVal,                         // relchecks
+		tree.DBoolFalse,                 // relhasoids
+		tree.DBoolFalse,                 // relhaspkey
+		tree.DBoolFalse,                 // relhasrules
+		tree.DBoolFalse,                 // relhastriggers
+		tree.DBoolFalse,                 // relhassubclass
+		zeroVal,                         // relfrozenxid
+		tree.DNull,                      // relacl
+		tree.DNull,                      // reloptions
+		tree.DNull,                      // relforcerowsecurity
+		tree.DNull,                      // relispartition
+		tree.DNull,                      // relispopulated
+		tree.NewDString("n"),            // relreplident (compositite types are views)
+		tree.DNull,                      // relrewrite
+		tree.DNull,                      // relrowsecurity
+		tree.DNull,                      // relpartbound
+		tree.DNull,                      // relminmxid
+	)
+}
+
+// addPGAttributeRowForCompositeType is utilized to populate rows in the pg_attribute table; it will
+// add a row (per type in list) iff the type we are looking at is a composite type (it does not add rows for enum types).
+func addPGAttributeRowForCompositeType(
+	h oidHasher, nspOid tree.Datum, owner tree.Datum, typ *types.T, addRow func(...tree.Datum) error,
+) error {
+	var tupLabels []string
+	var tupContents []*types.T
+
+	switch typ.Family() {
+	case types.TupleFamily:
+		tupLabels = typ.TupleLabels()
+		tupContents = typ.TupleContents()
+	default:
+		return nil
+	}
+
+	for i, colTyp := range tupContents {
+		if err := addRow(
+			tree.NewDOid(typ.Oid()),      // attrelid
+			tree.NewDName(tupLabels[i]),  // attname
+			typOid(colTyp),               // atttypid
+			zeroVal,                      // attstattarget
+			typLen(colTyp),               // attlen
+			tree.NewDInt(tree.DInt(i+1)), // attnum
+			zeroVal,                      // attndims
+			negOneVal,                    // attcacheoff
+			tree.NewDInt(tree.DInt(colTyp.TypeModifier())), // atttypmod
+			tree.DNull,          // attbyval (see pg_type.typbyval)
+			tree.DNull,          // attstorage
+			tree.DNull,          // attalign
+			tree.DBoolFalse,     // attnotnull
+			tree.DBoolFalse,     // atthasdef
+			tree.NewDString(""), // attidentity
+			tree.NewDString(""), // attgenerated
+			tree.DBoolFalse,     // attisdropped
+			tree.DBoolTrue,      // attislocal
+			zeroVal,             // attinhcount
+			typColl(colTyp, h),  // attcollation
+			tree.DNull,          // attacl
+			tree.DNull,          // attoptions
+			tree.DNull,          // attfdwoptions
+			// These columns were automatically created by pg_catalog_test's missing column generator.
+			tree.DNull, // atthasmissing
+			// These columns were automatically created by pg_catalog_test's missing column generator.
+			tree.DNull, // attmissingval
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func getSchemaAndTypeByTypeID(
@@ -3351,7 +3496,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 
 				// Generate rows for all predefined types.
 				for _, typ := range types.OidToType {
-					if err := addPGTypeRow(h, nspOid, tree.DNull /* owner */, typ, addRow); err != nil {
+					if err := addPGTypeRow(h, nspOid, tree.DNull /* owner */, typ, false /* isUDT */, addRow); err != nil {
 						return err
 					}
 				}
@@ -3385,7 +3530,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 						if err != nil {
 							return err
 						}
-						return addPGTypeRow(h, nspOid, ownerOid, typ, addRow)
+						return addPGTypeRow(h, nspOid, ownerOid, typ, true /* isUDT */, addRow)
 					},
 				)
 			},
@@ -3405,7 +3550,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 				// Check if it is a predefined type.
 				typ, ok := types.OidToType[ooid]
 				if ok {
-					if err := addPGTypeRow(h, nspOid, tree.DNull /* owner */, typ, addRow); err != nil {
+					if err := addPGTypeRow(h, nspOid, tree.DNull /* owner */, typ, false /* isUDT */, addRow); err != nil {
 						return false, err
 					}
 					return true, nil
@@ -3478,7 +3623,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 				if err != nil {
 					return false, err
 				}
-				if err := addPGTypeRow(h, nspOid, ownerOid, typ, addRow); err != nil {
+				if err := addPGTypeRow(h, nspOid, ownerOid, typ, true /* isUDT */, addRow); err != nil {
 					return false, err
 				}
 
@@ -4972,4 +5117,96 @@ func funcVolatility(v catpb.Function_Volatility) string {
 	default:
 		return ""
 	}
+}
+
+// populateVirtualIndexForTable is used to populate the virtual index with context of the given table descriptor.
+func populateVirtualIndexForTable(
+	ctx context.Context,
+	p *planner,
+	db catalog.DatabaseDescriptor,
+	tableDesc catalog.TableDescriptor,
+	addRow func(...tree.Datum) error,
+	populateFromTable func(ctx context.Context, p *planner, h oidHasher, db catalog.DatabaseDescriptor,
+		sc catalog.SchemaDescriptor, table catalog.TableDescriptor, lookup simpleSchemaResolver,
+		addRow func(...tree.Datum) error,
+	) error,
+) (bool, error) {
+
+	// Don't include tables that aren't in the current database unless
+	// they're virtual, dropped tables, or ones that the user can't see.
+	canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, tableDesc, db, true /*allowAdding*/)
+	if err != nil {
+		return false, err
+	}
+	// Skip over tables from a different DB, ones which aren't visible
+	// or are dropped. From a virtual index viewpoint, we will consider
+	// this result set as populated, since the underlying full table will
+	// also skip the same descriptors.
+	if (!tableDesc.IsVirtualTable() && tableDesc.GetParentID() != db.GetID()) ||
+		tableDesc.Dropped() || !canSeeDescriptor {
+		return true, nil
+	}
+	h := makeOidHasher()
+	scResolver := oneAtATimeSchemaResolver{p: p, ctx: ctx}
+	var sc catalog.SchemaDescriptor
+	if tableDesc.IsTemporary() {
+		// Temp tables from other sessions should still be visible here.
+		// Ideally, the catalog API would be able to return the temporary
+		// schemas from other sessions, but it cannot right now. See
+		// https://github.com/cockroachdb/cockroach/issues/97822.
+		if err := forEachSchema(ctx, p, db, false /* requiresPrivileges*/, func(schema catalog.SchemaDescriptor) error {
+			if schema.GetID() == tableDesc.GetParentSchemaID() {
+				sc = schema
+			}
+			return nil
+		}); err != nil {
+			return false, err
+		}
+	}
+	if sc == nil {
+		sc, err = p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, tableDesc.GetParentSchemaID())
+		if err != nil {
+			return false, err
+		}
+	}
+	if err := populateFromTable(ctx, p, h, db, sc, tableDesc, scResolver, addRow); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// populateVirtualIndexForType is used to populate the virtual index with context of the given type descriptor.
+func populateVirtualIndexForType(
+	ctx context.Context,
+	p *planner,
+	db catalog.DatabaseDescriptor,
+	typeDesc catalog.TypeDescriptor,
+	addRow func(...tree.Datum) error,
+	populateFromType func(h oidHasher, nspOid tree.Datum, owner tree.Datum,
+		typ *types.T, addRow func(...tree.Datum) error) error,
+) (bool, error) {
+	// Skip over types from a different DB.
+	if typeDesc.GetParentID() != db.GetID() {
+		return true, nil
+	}
+	h := makeOidHasher()
+	sc, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, typeDesc.GetParentSchemaID())
+	if err != nil {
+		return false, err
+	}
+
+	nspOid := schemaOid(sc.GetID())
+	tn := tree.NewQualifiedTypeName(db.GetName(), sc.GetName(), typeDesc.GetName())
+	typ, err := typedesc.HydratedTFromDesc(ctx, tn, typeDesc, p)
+	if err != nil {
+		return false, err
+	}
+	ownerOid, err := getOwnerOID(ctx, p, typeDesc)
+	if err != nil {
+		return false, err
+	}
+	if err := populateFromType(h, nspOid, ownerOid, typ, addRow); err != nil {
+		return false, err
+	}
+	return true, nil
 }
