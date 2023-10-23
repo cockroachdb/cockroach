@@ -40,7 +40,7 @@ upgrade 2
 # Makes sure the upgrade job has finished, and the cluster version gate is
 # passed.
 query B retry
-SELECT crdb_internal.is_at_least_version('23.1-34')
+SELECT crdb_internal.is_at_least_version('23.2')
 ----
 true
 

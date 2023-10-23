@@ -834,7 +834,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	if notvisible := og.randIntn(20) == 0; notvisible {
 		invisibility.Value = 1.0
 		partiallyVisibleIndexNotSupported, err := isClusterVersionLessThan(
-			ctx, tx, clusterversion.ByKey(clusterversion.V23_2_PartiallyVisibleIndexes),
+			ctx, tx, clusterversion.ByKey(clusterversion.V23_2),
 		)
 		if err != nil {
 			return nil, err
@@ -1111,7 +1111,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	}
 
 	partiallyVisibleIndexNotSupported, err := isClusterVersionLessThan(
-		ctx, tx, clusterversion.ByKey(clusterversion.V23_2_PartiallyVisibleIndexes),
+		ctx, tx, clusterversion.ByKey(clusterversion.V23_2),
 	)
 	if err != nil {
 		return nil, err

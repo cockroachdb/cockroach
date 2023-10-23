@@ -418,14 +418,6 @@ const (
 	// the process of upgrading from previous supported releases to 23.2.
 	V23_2Start
 
-	// V23_2TTLAllowDescPK is the version where TTL tables can have descending
-	// primary keys.
-	V23_2TTLAllowDescPK
-
-	// V23_2_PartiallyVisibleIndexes is the version where partially visible
-	// indexes are enabled.
-	V23_2_PartiallyVisibleIndexes
-
 	// V23_2_EnableRangeCoalescingForSystemTenant enables range coalescing for
 	// the system tenant.
 	V23_2_EnableRangeCoalescingForSystemTenant
@@ -484,16 +476,6 @@ const (
 	// V23_2_AddSystemExecInsightsTable is the version at which Cockroach creates
 	// {statement|transaction}_execution_insights system tables.
 	V23_2_AddSystemExecInsightsTable
-
-	// V23_2_Procedures is the version where procedures are enabled.
-	V23_2_Procedures
-
-	// V23_2_PLpgSQL is the version at which Cockroach supports routines using
-	// PLpgSQL language.
-	V23_2_PLpgSQL
-
-	// V23_2_UDFMutations is the version where UDFs with mutations are enabled.
-	V23_2_UDFMutations
 
 	// ***************************************************************************
 	//            WHERE TO ADD VERSION GATES DURING 23.2 STABILITY?
@@ -787,14 +769,6 @@ var rawVersionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 2},
 	},
 	{
-		Key:     V23_2TTLAllowDescPK,
-		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 4},
-	},
-	{
-		Key:     V23_2_PartiallyVisibleIndexes,
-		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 6},
-	},
-	{
 		Key:     V23_2_EnableRangeCoalescingForSystemTenant,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 8},
 	},
@@ -845,18 +819,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_2_AddSystemExecInsightsTable,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 32},
-	},
-	{
-		Key:     V23_2_Procedures,
-		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 34},
-	},
-	{
-		Key:     V23_2_PLpgSQL,
-		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 36},
-	},
-	{
-		Key:     V23_2_UDFMutations,
-		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 38},
 	},
 
 	{
