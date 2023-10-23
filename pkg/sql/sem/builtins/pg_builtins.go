@@ -2115,7 +2115,7 @@ var pgBuiltins = map[string]builtinDefinition{
 					return tree.NewDInt(64), nil
 				case oid.T_numeric:
 					if typmod != -1 {
-						// This logics matches the postgres implementation
+						// This logic matches the postgres implementation
 						// of how to calculate the precision based on the typmod
 						// https://github.com/postgres/postgres/blob/d84ffffe582b8e036a14c6bc2378df29167f3a00/src/backend/catalog/information_schema.sql#L109
 						return tree.NewDInt(((typmod - 4) >> 16) & 65535), nil
@@ -2180,6 +2180,46 @@ var pgBuiltins = map[string]builtinDefinition{
 			},
 			Info:       "Returns the scale of the given type with type modifier",
 			Volatility: volatility.Immutable,
+		},
+	),
+
+	// NOTE: this could be defined as a user-defined function, like
+	// it is in Postgres:
+	// https://github.com/postgres/postgres/blob/master/src/backend/catalog/information_schema.sql
+	// CREATE FUNCTION _pg_char_octet_length(typid oid, typmod int4) RETURNS integer
+	//     LANGUAGE sql
+	//     IMMUTABLE
+	//     PARALLEL SAFE
+	//     RETURNS NULL ON NULL INPUT
+	// RETURN
+	//     CASE WHEN $1 IN (25, 1042, 1043) /* text, char, varchar */
+	//          THEN CASE WHEN $2 = -1 /* default typmod */
+	//                    THEN CAST(2^30 AS integer)
+	//                    ELSE information_schema._pg_char_max_length($1, $2) *
+	//                         pg_catalog.pg_encoding_max_length((SELECT encoding FROM pg_catalog.pg_database WHERE datname = pg_catalog.current_database()))
+	//               END
+	//          ELSE null
+	// END;
+	"information_schema._pg_char_octet_length": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "typid", Typ: types.Oid},
+				{Name: "typmod", Typ: types.Int4},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Body: `SELECT
+						 CASE WHEN $1 IN (25, 1042, 1043)
+			            THEN CASE WHEN $2 = -1
+														THEN CAST(2^30 AS integer)
+			                    	ELSE information_schema._pg_char_max_length($1, $2) *
+			                           pg_catalog.pg_encoding_max_length((SELECT encoding FROM pg_catalog.pg_database WHERE datname = pg_catalog.current_database()))
+			                 END
+			            ELSE null
+			       END`,
+			Info:              notUsableInfo,
+			Volatility:        volatility.Immutable,
+			CalledOnNullInput: true,
+			Language:          tree.RoutineLangSQL,
 		},
 	),
 
