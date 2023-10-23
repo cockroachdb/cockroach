@@ -487,6 +487,8 @@ func TeamCityEscape(s string) string {
 			sb.WriteString("|[")
 		case ']':
 			sb.WriteString("|]")
+		case '\'':
+			sb.WriteString("|'")
 		default:
 			if runeValue > 127 {
 				// escape unicode
