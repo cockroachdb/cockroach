@@ -16,11 +16,11 @@ token-bucket-request tenant=5
 instance_id: 1
 ru: 10
 ----
-10 RUs granted over 100ms. Fallback rate: 100 RU/s
+10 RUs granted over 10s. Fallback rate: 100 RU/s
 
 inspect tenant=5
 ----
-Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=-10  current-share-sum=0
+Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=-10  ru-current-avg=1875000
 Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:00:00.000
 First active instance: 1
@@ -39,7 +39,7 @@ ru: 500
 
 inspect tenant=5
 ----
-Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=490  current-share-sum=0
+Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=490  ru-current-avg=1406497.5
 Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:00:10.000
 First active instance: 1
@@ -70,7 +70,7 @@ ru: 10
 # Last update time for the tenant is unchanged. The per-instance time does get updated.
 inspect tenant=5
 ----
-Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=230  current-share-sum=0
+Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=230  ru-current-avg=791306.71875
 Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:00:10.000
 First active instance: 1
@@ -89,7 +89,7 @@ instance_id: 1
 # The current RU amount stays the same.
 inspect tenant=5
 ----
-Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=230  current-share-sum=0
+Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=230  ru-current-avg=593537.539062
 Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:00:10.000
 First active instance: 1
@@ -108,7 +108,7 @@ instance_id: 1
 # RU refilling resumed.
 inspect tenant=5
 ----
-Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=330  current-share-sum=0
+Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=330  ru-current-avg=445235.654297
 Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:00:11.000
 First active instance: 1
