@@ -1190,7 +1190,6 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/public-bazel-artifacts/c-deps/20230718-202534/libproj_foreign.windows.20230718-202534.tar.gz": "16de1e76ee8de4bd144dc57bfde05385d086943ca1b64cc246055c8b0cd71c65",
     "https://storage.googleapis.com/public-bazel-artifacts/go/20231011-170949/go1.20.10.darwin-amd64.tar.gz": "9f554a97818568cdcb58b8860ebdc0d25cbe7a6441e7f8fc9612c00330d3f145",
     "https://storage.googleapis.com/public-bazel-artifacts/go/20231011-170949/go1.20.10.darwin-arm64.tar.gz": "4920629c1e65cf28f4fb8c74d7b2f90a1bb6333df60d2fd7e756a3436209f004",
-    "https://storage.googleapis.com/public-bazel-artifacts/go/20231011-170949/go1.20.10.freebsd-amd64.tar.gz": "e337b8e645e37f52d04e5f91352b929e05fd74d960b2a1c8e78977e4777c4ffa",
     "https://storage.googleapis.com/public-bazel-artifacts/go/20231011-170949/go1.20.10.linux-amd64.tar.gz": "cb95ca59edf9d15d6e7949395756f78542383b612abced2565ad2349213a36e3",
     "https://storage.googleapis.com/public-bazel-artifacts/go/20231011-170949/go1.20.10.linux-arm64.tar.gz": "5fa30f7c4f39c96d31756d7eab6c560ac129caf0462512c9f1fc2afa00570778",
     "https://storage.googleapis.com/public-bazel-artifacts/go/20231011-170949/go1.20.10.windows-amd64.tar.gz": "d84f04cf636033073c114ac5c51f38d948bf21bb53b3aa9442d362e970f94b32",
