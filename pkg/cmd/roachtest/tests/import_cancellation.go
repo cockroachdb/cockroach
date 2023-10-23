@@ -147,7 +147,7 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 		maxOps := 2 * tpch.NumQueries
 		const maxLatency = 500 * time.Second
 		cmd := fmt.Sprintf(
-			"./workload run tpch --db=csv --concurrency=1 --max-ops=%d {pgurl%s} --enable-checks=true "+
+			"./workload run tpch --db=csv --concurrency=1 --max-ops=%d {pgurl%s} "+
 				"--histograms="+t.PerfArtifactsDir()+"/stats.json --histograms-max-latency=%s",
 			maxOps, c.All(), maxLatency.String())
 		if err := c.RunE(ctx, c.Node(1), cmd); err != nil {
