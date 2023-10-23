@@ -2486,6 +2486,9 @@ var builtinOidsArray = []string{
 	2515: `crdb_internal.privilege_name(internal_key: string) -> string`,
 	2516: `crdb_internal.privilege_name(internal_key: string[]) -> string[]`,
 	2517: `jsonb_array_to_string_array(input: jsonb) -> string[]`,
+	2518: `st_tileenvelope(tileZoom: int4, tileX: int4, tileY: int4) -> geometry`,
+	2519: `st_tileenvelope(tileZoom: int4, tileX: int4, tileY: int4, bounds: geometry) -> geometry`,
+	2520: `st_tileenvelope(tileZoom: int4, tileX: int4, tileY: int4, bounds: geometry, margin: float) -> geometry`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
