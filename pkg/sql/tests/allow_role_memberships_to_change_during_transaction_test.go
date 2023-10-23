@@ -13,7 +13,6 @@ package tests
 import (
 	"context"
 	gosql "database/sql"
-	"net/url"
 	"testing"
 	"time"
 
@@ -39,19 +38,10 @@ func TestAllowRoleMembershipsToChangeDuringTransaction(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	openUser := func(username, dbName string) (_ *gosql.DB, cleanup func()) {
-		pgURL, testuserCleanupFunc := sqlutils.PGUrlWithOptionalClientCerts(
-			t, s.ApplicationLayer().AdvSQLAddr(), username,
-			url.UserPassword(username, username),
-			false, /* withClientCerts */
-		)
-		pgURL.Path = dbName
-		db, err := gosql.Open("postgres", pgURL.String())
-		if err != nil {
-			t.Fatal(err)
-		}
+		db := s.ApplicationLayer().
+			SQLConn(t, serverutils.UserPassword(username, username), serverutils.DBName(dbName), serverutils.ClientCerts(false))
 		return db, func() {
 			require.NoError(t, db.Close())
-			testuserCleanupFunc()
 		}
 	}
 

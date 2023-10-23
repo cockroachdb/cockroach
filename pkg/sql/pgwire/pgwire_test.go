@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -75,17 +74,8 @@ func TestPGWireDrainClient(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	tt := srv.ApplicationLayer()
 
-	host, port, err := net.SplitHostPort(tt.AdvSQLAddr())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	pgBaseURL := url.URL{
-		Scheme:   "postgres",
-		Host:     net.JoinHostPort(host, port),
-		User:     url.User(username.RootUser),
-		RawQuery: "sslmode=disable",
-	}
+	pgBaseURL, cleanupFn := tt.PGUrl(t)
+	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgBaseURL.String())
 	if err != nil {
@@ -147,17 +137,11 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
-	host, port, err := net.SplitHostPort(s.AdvSQLAddr())
+	pgBaseURL, cleanupFn, err := s.PGUrlE()
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	pgBaseURL := url.URL{
-		Scheme:   "postgres",
-		Host:     net.JoinHostPort(host, port),
-		User:     url.User(username.RootUser),
-		RawQuery: "sslmode=disable",
-	}
+	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgBaseURL.String())
 	if err != nil {
@@ -1544,8 +1528,9 @@ func TestSQLNetworkMetrics(t *testing.T) {
 	srv := s.ApplicationLayer()
 
 	// Setup pgwire client.
-	pgURL, cleanupFn := sqlutils.PGUrl(
-		t, srv.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanupFn := srv.PGUrl(
+		t, serverutils.CertsDirPrefix(t.Name()), serverutils.User(username.RootUser),
+	)
 	defer cleanupFn()
 
 	const minbytes = 10

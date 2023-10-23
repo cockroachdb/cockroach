@@ -639,9 +639,7 @@ func TestClientAddrOverride(t *testing.T) {
 
 	s := srv.ApplicationLayer()
 
-	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.AdvSQLAddr(), "testClientAddrOverride" /* prefix */, url.User(username.TestUser),
-	)
+	pgURL, cleanupFunc := s.PGUrl(t, serverutils.CertsDirPrefix("testClientAddrOverride"), serverutils.User(username.TestUser))
 	defer cleanupFunc()
 
 	// Ensure the test user exists.
@@ -807,15 +805,20 @@ func TestSSLSessionVar(t *testing.T) {
 
 	s.SetAcceptSQLWithoutTLS(true)
 
-	pgURLWithCerts, cleanupFuncCerts := sqlutils.PGUrlWithOptionalClientCerts(
-		t, s.AdvSQLAddr(), "TestSSLSessionVarCerts" /* prefix */, url.User(username.TestUser), true,
+	pgURLWithCerts, cleanupFuncCerts := s.PGUrl(t,
+		serverutils.CertsDirPrefix("TestSSLSessionVarCerts"),
+		serverutils.User(username.TestUser),
+		serverutils.ClientCerts(true),
 	)
 	defer cleanupFuncCerts()
 
-	pgURLWithoutCerts, cleanupFuncWithoutCerts := sqlutils.PGUrlWithOptionalClientCerts(
-		t, s.AdvSQLAddr(), "TestSSLSessionVarNoCerts" /* prefix */, url.UserPassword(username.TestUser, "abc"), false,
+	pgURLWithoutCerts, cleanupFuncWithoutCerts := s.PGUrl(t,
+		serverutils.CertsDirPrefix("TestSSLSessionVarNoCerts"),
+		serverutils.UserPassword(username.TestUser, "abc"),
+		serverutils.ClientCerts(false),
 	)
 	defer cleanupFuncWithoutCerts()
+
 	q := pgURLWithoutCerts.Query()
 	q.Set("sslmode", "disable")
 	pgURLWithoutCerts.RawQuery = q.Encode()

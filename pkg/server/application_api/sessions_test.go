@@ -15,7 +15,6 @@ import (
 	gosql "database/sql"
 	"encoding/hex"
 	"fmt"
-	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -340,14 +339,9 @@ func TestListClosedSessions(t *testing.T) {
 	}
 
 	getUserConn := func(t *testing.T, username string, server serverutils.ApplicationLayerInterface) *gosql.DB {
-		pgURL := url.URL{
-			Scheme: "postgres",
-			User:   url.UserPassword(username, "hunter2"),
-			Host:   server.AdvSQLAddr(),
-		}
-		db, err := gosql.Open("postgres", pgURL.String())
-		require.NoError(t, err)
-		return db
+		return server.SQLConn(
+			t, serverutils.UserPassword(username, "hunter2"), serverutils.ClientCerts(false),
+		)
 	}
 
 	// Create a test user.
