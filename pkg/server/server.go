@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
@@ -538,6 +539,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	})
 
 	nodeRegistry.AddMetricStruct(nodeLiveness.Metrics())
+
+	// TODO(baptist): Refactor this to change the dependency between liveness and
+	// the dist sender. Today the persistence of liveness requires the distsender
+	// to read and write the liveness records, but the cache only needs the gossip
+	// struct. We could construct the liveness cache separately from the rest of
+	// liveness and use that to compute this rather than the entire liveness
+	// struct.
+	distSender.SetHealthFunc(func(id roachpb.NodeID) bool {
+		return nodeLiveness.GetNodeVitalityFromCache(id).IsLive(livenesspb.DistSender)
+	})
 
 	nodeLivenessFn := storepool.MakeStorePoolNodeLivenessFunc(nodeLiveness)
 	if nodeLivenessKnobs, ok := cfg.TestingKnobs.NodeLiveness.(kvserver.NodeLivenessTestingKnobs); ok {
