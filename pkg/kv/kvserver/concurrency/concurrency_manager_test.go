@@ -1317,6 +1317,7 @@ var goroutineStalledStates = map[string]bool{
 	"waiting":   true,
 	"dead":      false,
 	"copystack": false,
+	"preempted": false,
 	"???":       false, // catch-all in runtime.goroutineheader
 
 	// runtime.goroutineheader may override these G statuses with a waitReason.
@@ -1344,13 +1345,22 @@ var goroutineStalledStates = map[string]bool{
 	// runtime itself. No request-level synchronization points use mutexes to
 	// wait for state transitions by other requests, so it is safe to ignore
 	// this state and wait for it to exit.
-	"semacquire":             false,
-	"sleep":                  false,
-	"sync.Cond.Wait":         true,
-	"timer goroutine (idle)": false,
+	"semacquire":     false,
+	"sleep":          false,
+	"sync.Cond.Wait": true,
+	// Similar to "semaquire" above, we mark the following three mutex states as
+	// non-stalled, assuming that they are transient states.
+	"sync.Mutex.Lock":        false,
+	"sync.RWMutex.RLock":     false,
+	"sync.RWMutex.Lock":      false,
 	"trace reader (blocked)": false,
 	"wait for GC cycle":      false,
 	"GC worker (idle)":       false,
+	"GC worker (active)":     false,
+	// "preempted" is already included above as part of gStatusStrings.
+	"debug call":          false,
+	"GC mark termination": false,
+	"stopping the world":  false,
 }
 
 // goroutineStatus returns a stack trace for each goroutine whose stack frame
