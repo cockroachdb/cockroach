@@ -920,7 +920,9 @@ func (r *rangeKeyBatcher) flush(ctx context.Context, toFlush mvccRangeKeyValues)
 	sstToFlush := &rangeKeySST{
 		data:  sstFile.Bytes(),
 		start: start,
-		end:   end.Next(),
+		// NB: End is set from the range key EndKey, which is
+		// already exclusive.
+		end: end,
 	}
 
 	work := []*rangeKeySST{sstToFlush}
@@ -956,7 +958,18 @@ func (r *rangeKeyBatcher) flush(ctx context.Context, toFlush mvccRangeKeyValues)
 				if err != nil {
 					return err
 				}
-				work = append([]*rangeKeySST{left, right}, work...)
+
+				// The second two cases really should not be possible unless we've
+				// passed the wrong bounds to AddSSTable originally.
+				if left != nil && right != nil {
+					work = append([]*rangeKeySST{left, right}, work...)
+				} else if left != nil {
+					log.Warningf(ctx, "RHS of split point %s was unexpectedly empty", split)
+					work = append([]*rangeKeySST{left}, work...)
+				} else if right != nil {
+					log.Warningf(ctx, "LHS of split point %s was unexpectedly empty", split)
+					work = append([]*rangeKeySST{right}, work...)
+				}
 			} else {
 				return err
 			}
@@ -985,6 +998,17 @@ func (r *rangeKeyBatcher) flush(ctx context.Context, toFlush mvccRangeKeyValues)
 func splitRangeKeySSTAtKey(
 	ctx context.Context, st *cluster.Settings, start, end, splitKey roachpb.Key, data []byte,
 ) (*rangeKeySST, *rangeKeySST, error) {
+	// Special case: The split key less than the start key.
+	if splitKey.Compare(start) < 0 {
+		return nil, &rangeKeySST{start: start, end: end, data: data}, nil
+	}
+
+	// Special case: The split key is greater or equal to the
+	// exclusive end key.
+	if end.Compare(splitKey) <= 0 {
+		return &rangeKeySST{start: start, end: end, data: data}, nil, nil
+	}
+
 	var (
 		// left and right are our output SSTs.
 		// Data less than the split key is written into left.
@@ -1024,6 +1048,10 @@ func splitRangeKeySSTAtKey(
 		if err := writer.Finish(); err != nil {
 			return err
 		}
+		if first == nil || last == nil {
+			return errors.AssertionFailedf("likely prorgramming error: invalid SST bounds on RHS [%v, %v)", first, last)
+		}
+
 		leftRet = &rangeKeySST{start: first, end: last, data: left.Data()}
 		writer = rightWriter
 		last = nil
@@ -1118,11 +1146,19 @@ func splitRangeKeySSTAtKey(
 		iter.Next()
 	}
 
+	if !reachedSplit {
+		return nil, nil, errors.AssertionFailedf("likely programming error: split point %s not found in SST", splitKey)
+	}
+
 	if err := writer.Finish(); err != nil {
 		return nil, nil, err
 	}
-	rightRet = &rangeKeySST{start: first, end: last, data: right.Data()}
 
+	if first == nil || last == nil {
+		return nil, nil, errors.AssertionFailedf("likely prorgramming error: invalid SST bounds on RHS [%v, %v)", first, last)
+	}
+
+	rightRet = &rangeKeySST{start: first, end: last, data: right.Data()}
 	return leftRet, rightRet, nil
 }
 
