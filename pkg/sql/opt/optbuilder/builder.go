@@ -328,7 +328,7 @@ func (b *Builder) buildStmt(
 		case *tree.Select, tree.SelectStatement:
 		case *tree.Insert, *tree.Update, *tree.Delete:
 			activeVersion := b.evalCtx.Settings.Version.ActiveVersion(b.ctx)
-			if !activeVersion.IsActive(clusterversion.V23_2_UDFMutations) {
+			if !activeVersion.IsActive(clusterversion.V23_2) {
 				panic(unimplemented.Newf("user-defined functions", "%s usage inside a function definition is not supported until version 23.2", stmt.StatementTag()))
 			}
 		default:

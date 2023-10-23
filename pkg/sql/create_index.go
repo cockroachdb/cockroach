@@ -199,7 +199,7 @@ func makeIndexDescriptor(
 		return nil, err
 	}
 
-	if !activeVersion.IsActive(clusterversion.V23_2_PartiallyVisibleIndexes) &&
+	if !activeVersion.IsActive(clusterversion.V23_2) &&
 		n.Invisibility.Value > 0.0 && n.Invisibility.Value < 1.0 {
 		return nil, unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
 	}

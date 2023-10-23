@@ -977,7 +977,7 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// ValidateRowLevelTTL is also used before the table descriptor is fully
 	// initialized to validate the storage parameters.
 	vea.Report(ValidateTTLExpirationExpr(desc))
-	vea.Report(ValidateTTLExpirationColumn(desc, vea.IsActive(clusterversion.V23_2TTLAllowDescPK)))
+	vea.Report(ValidateTTLExpirationColumn(desc, vea.IsActive(clusterversion.V23_2)))
 
 	// Validate that there are no column with both a foreign key ON UPDATE and an
 	// ON UPDATE expression. This check is made to ensure that we know which ON
