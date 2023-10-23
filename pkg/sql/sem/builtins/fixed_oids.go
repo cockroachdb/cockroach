@@ -2487,6 +2487,7 @@ var builtinOidsArray = []string{
 	2516: `crdb_internal.privilege_name(internal_key: string[]) -> string[]`,
 	2517: `jsonb_array_to_string_array(input: jsonb) -> string[]`,
 	2518: `information_schema._pg_char_octet_length(typid: oid, typmod: int4) -> int`,
+	2519: `information_schema._pg_datetime_precision(typid: oid, typmod: int4) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

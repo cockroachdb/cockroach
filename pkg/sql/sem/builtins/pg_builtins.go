@@ -2223,6 +2223,53 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
+	// NOTE: this could be defined as a user-defined function, like
+	// it is in Postgres:
+	// https://github.com/postgres/postgres/blob/master/src/backend/catalog/information_schema.sql
+	// CREATE FUNCTION _pg_datetime_precision(typid oid, typmod int4) RETURNS integer
+	//     LANGUAGE sql
+	//     IMMUTABLE
+	//     PARALLEL SAFE
+	//     RETURNS NULL ON NULL INPUT
+	// RETURN
+	//   CASE WHEN $1 IN (1082) /* date */
+	// 						THEN 0
+	// 	 			WHEN $1 IN (1083, 1114, 1184, 1266) /* time, timestamp, same + tz */
+	// 						THEN CASE WHEN $2 < 0 THEN 6 ELSE $2 END
+	// 				WHEN $1 IN (1186) /* interval */
+	// 						THEN CASE WHEN $2 < 0 OR $2 & 0xFFFF = 0xFFFF THEN 6 ELSE $2 & 0xFFFF END
+	// 				ELSE null
+	// END;
+	"information_schema._pg_datetime_precision": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "typid", Typ: types.Oid},
+				{Name: "typmod", Typ: types.Int4},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				typid := args[0].(*tree.DOid).Oid
+				typmod := *args[1].(*tree.DInt)
+				if typid == oid.T_date {
+					return tree.DZero, nil
+				} else if typid == oid.T_time || typid == oid.T_timestamp || typid == oid.T_timestamptz || typid == oid.T_timetz {
+					if typmod < 0 {
+						return tree.NewDInt(6), nil
+					}
+					return tree.NewDInt(typmod), nil
+				} else if typid == oid.T_interval {
+					if typmod < 0 || (typmod&0xFFFF) == 0xFFFF {
+						return tree.NewDInt(6), nil
+					}
+					return tree.NewDInt(typmod & 0xFFFF), nil
+				}
+				return tree.DNull, nil
+			},
+			Info:       notUsableInfo,
+			Volatility: volatility.Immutable,
+		},
+	),
+
 	"nameconcatoid": makeBuiltin(
 		tree.FunctionProperties{
 			Category: builtinconstants.CategorySystemInfo,
