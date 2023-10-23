@@ -3592,7 +3592,9 @@ message ScanStats {
   // NumGets, NumScans, and NumReverseScans tracks the number of Gets, Scans,
   // and ReverseScans, respectively, that were actually evaluated as part of the
   // BatchResponse. These don't include requests that were not evaluated due to
-  // reaching the BatchResponse's limits or an error.
+  // reaching the BatchResponse's limits or an error. NumScans also tracks the
+  // number of ExportRequests evaluated (including ones that resulted in an
+  // error).
   uint64 num_gets = 17;
   uint64 num_scans = 18;
   uint64 num_reverse_scans = 19;
