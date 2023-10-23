@@ -17,6 +17,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"net/http"
+	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -184,6 +185,15 @@ type ApplicationLayerInterface interface {
 	// SQLConnE is like SQLConn, but it allows the test to check the error.
 	SQLConnE(opts ...SQLConnOption) (*gosql.DB, error)
 
+	// PGUrl returns a postgres connection URL for the server's SQL interface
+	// similar to the URL that SQLConn uses to open a SQL connection. The SQLConn
+	// method should be preferred and this method only should be used when the
+	// test needs to open a connection with special options, or in a specific way.
+	PGUrl(t TestFataler, opts ...SQLConnOption) (url.URL, func())
+
+	// PGUrlE is like PGUrl, but it allows the test to check the error.
+	PGUrlE(opts ...SQLConnOption) (url.URL, func(), error)
+
 	// DB returns a handle to the cluster's KV interface.
 	DB() *kv.DB
 
@@ -209,7 +219,7 @@ type ApplicationLayerInterface interface {
 	// HTTPAuthServer returns the authserver.Server as an interface{}.
 	HTTPAuthServer() interface{}
 
-	// HTTPserver returns the server.httpServer as an interface{}.
+	// HTTPServer returns the server.httpServer as an interface{}.
 	HTTPServer() interface{}
 
 	// SQLLoopbackListener returns the *netutil.LoopbackListener as an interface{}.

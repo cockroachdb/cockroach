@@ -42,6 +42,50 @@ import (
 // TODO(#107747): re-enable this.
 const useLoopbackListener = false
 
+func pgURL(
+	dbName string,
+	user *url.Userinfo,
+	tenantName roachpb.TenantName,
+	sqlAddr string,
+	insecure bool,
+	clientCerts bool,
+	prefix string,
+) (pgURL url.URL, cleanupFn func(), err error) {
+	opts := url.Values{}
+	if tenantName != "" && !strings.HasPrefix(dbName, "cluster:") {
+		opts.Add("options", fmt.Sprintf("-ccluster=%s", tenantName))
+	}
+	if insecure || useLoopbackListener {
+		opts.Add("sslmode", "disable")
+	}
+
+	if useLoopbackListener {
+		return url.URL{
+			Scheme:   "postgres",
+			User:     user,
+			Host:     "unused",
+			Path:     dbName,
+			RawQuery: opts.Encode(),
+		}, func() {}, nil
+	}
+
+	// No LoopbackListener
+	pgURL, cleanupFn, err = sqlutils.PGUrlWithOptionalClientCertsE(sqlAddr, prefix, user, clientCerts)
+	if err != nil {
+		return pgURL, cleanupFn, err
+	}
+	pgURL.Path = dbName
+
+	// Add the common query options decided above to those prepared by
+	// PGUrlE().
+	qv := pgURL.Query()
+	for k, v := range opts {
+		qv[k] = v
+	}
+	pgURL.RawQuery = qv.Encode()
+	return pgURL, cleanupFn, nil
+}
+
 // openTestSQLConn is a test helper that supports the SQLConn* methods
 // of serverutils.ApplicationLayerInterface.
 func openTestSQLConn(
@@ -55,52 +99,24 @@ func openTestSQLConn(
 	sqlAddr string,
 	insecure bool,
 	clientCerts bool,
+	prefix string,
 ) (*gosql.DB, error) {
-	cleanupFn := func() {}
 	var goDB *gosql.DB
-
-	opts := url.Values{}
-	if tenantName != "" && !strings.HasPrefix(dbName, "cluster:") {
-		opts.Add("options", fmt.Sprintf("-ccluster=%s", tenantName))
-	}
-	if insecure || useLoopbackListener {
-		opts.Add("sslmode", "disable")
+	u, cleanupFn, err := pgURL(dbName, user, tenantName, sqlAddr, insecure, clientCerts, prefix)
+	if err != nil {
+		return nil, err
 	}
 
 	if useLoopbackListener {
-		pgurl := url.URL{
-			Scheme:   "postgres",
-			User:     user,
-			Host:     "unused",
-			Path:     dbName,
-			RawQuery: opts.Encode(),
-		}
 		// TODO(sql): consider using pgx for tests instead of lib/pq.
-		connector, err := pq.NewConnector(pgurl.String())
+		connector, err := pq.NewConnector(u.String())
 		if err != nil {
 			return nil, err
 		}
 		connector.Dialer(testDialer{pgL})
 		goDB = gosql.OpenDB(connector)
 	} else /* useLoopbackListener == false */ {
-		var pgURL url.URL
-		var err error
-		pgURL, cleanupFn, err = sqlutils.PGUrlWithOptionalClientCertsE(sqlAddr, "openTestSQLConn", user, clientCerts)
-		if err != nil {
-			return nil, err
-		}
-		pgURL.Path = dbName
-
-		// Add the common query options decided above to those prepared by
-		// PGUrlE().
-		qv := pgURL.Query()
-		for k, v := range opts {
-			qv[k] = v
-		}
-		pgURL.RawQuery = qv.Encode()
-
-		// Open the connection.
-		goDB, err = gosql.Open("postgres", pgURL.String())
+		goDB, err = gosql.Open("postgres", u.String())
 		if err != nil {
 			cleanupFn()
 			return nil, err
