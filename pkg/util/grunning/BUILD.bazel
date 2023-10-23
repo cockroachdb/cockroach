@@ -81,18 +81,26 @@ go_test(
         ],
         "@io_bazel_rules_go//go/platform:freebsd_386": [
             ":grunning",
+            "//pkg/testutils/skip",
+            "//pkg/util/syncutil",
             "@com_github_stretchr_testify//require",
         ],
         "@io_bazel_rules_go//go/platform:freebsd_amd64": [
             ":grunning",
+            "//pkg/testutils/skip",
+            "//pkg/util/syncutil",
             "@com_github_stretchr_testify//require",
         ],
         "@io_bazel_rules_go//go/platform:freebsd_arm": [
             ":grunning",
+            "//pkg/testutils/skip",
+            "//pkg/util/syncutil",
             "@com_github_stretchr_testify//require",
         ],
         "@io_bazel_rules_go//go/platform:freebsd_arm64": [
             ":grunning",
+            "//pkg/testutils/skip",
+            "//pkg/util/syncutil",
             "@com_github_stretchr_testify//require",
         ],
         "@io_bazel_rules_go//go/platform:illumos_amd64": [
