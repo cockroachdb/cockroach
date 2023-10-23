@@ -6219,3 +6219,37 @@ statement ok
 SET testing_optimizer_disable_rule_probability = 0
 
 subtest end
+
+subtest st_tileenvelope
+
+query T
+SELECT ST_TileEnvelope(NULL, NULL, NULL);
+----
+NULL
+
+query T
+SELECT ST_AsText(ST_TileEnvelope(8, 1, 2));
+----
+POLYGON ((-19880965.308861203491688 19567879.241005122661591, -19880965.308861203491688 19724422.274933163076639, -19724422.274933163076639 19724422.274933163076639, -19724422.274933163076639 19567879.241005122661591, -19880965.308861203491688 19567879.241005122661591))
+
+query T
+SELECT ST_TileEnvelope(8, 1, 2, NULL);
+----
+NULL
+
+query T
+SELECT ST_AsText(ST_TileEnvelope(3, 1, 1, ST_MakeEnvelope(-180, -90, 180, 90, 4326)) );
+----
+POLYGON ((-135 45, -135 67.5, -90 67.5, -90 45, -135 45))
+
+query T
+SELECT ST_TileEnvelope(3, 1, 1, ST_MakeEnvelope(-180, -90, 180, 90, 4326), NULL);
+----
+NULL
+
+query T
+SELECT ST_AsText(ST_TileEnvelope(3, 1, 1, ST_MakeEnvelope(-180, -90, 180, 90, 4326), 0.125));
+----
+POLYGON ((-140.625 42.1875, -140.625 70.3125, -84.375 70.3125, -84.375 42.1875, -140.625 42.1875))
+
+subtest end
