@@ -166,11 +166,11 @@ func (c *TenantStreamingClusters) init(ctx context.Context) {
 // will not yet be active. If the caller passes withTestingKnobs, the
 // destination tenant starts up via a testServer.StartSharedProcessTenant().
 func (c *TenantStreamingClusters) StartDestTenant(
-	ctx context.Context, withTestingKnobs *base.TestingKnobs,
+	ctx context.Context, withTestingKnobs *base.TestingKnobs, server int,
 ) func() error {
 	if withTestingKnobs != nil {
 		var err error
-		_, c.DestTenantConn, err = c.DestCluster.Server(0).StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
+		_, c.DestTenantConn, err = c.DestCluster.Server(server).StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
 			TenantID:    c.Args.DestTenantID,
 			TenantName:  c.Args.DestTenantName,
 			Knobs:       *withTestingKnobs,
@@ -179,7 +179,7 @@ func (c *TenantStreamingClusters) StartDestTenant(
 		require.NoError(c.T, err)
 	} else {
 		c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 START SERVICE SHARED`, c.Args.DestTenantName)
-		c.DestTenantConn = c.DestCluster.Server(0).SystemLayer().SQLConn(c.T, serverutils.DBName("cluster:"+string(c.Args.DestTenantName)+"/defaultdb"))
+		c.DestTenantConn = c.DestCluster.Server(server).SystemLayer().SQLConn(c.T, serverutils.DBName("cluster:"+string(c.Args.DestTenantName)+"/defaultdb"))
 	}
 
 	c.DestTenantSQL = sqlutils.MakeSQLRunner(c.DestTenantConn)
@@ -189,7 +189,7 @@ func (c *TenantStreamingClusters) StartDestTenant(
 	// TODO (msbutler): consider granting the new tenant some capabilities.
 	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs.enabled=true`, c.Args.DestTenantName)
 	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 GRANT CAPABILITY can_use_nodelocal_storage`, c.Args.DestTenantName)
-	require.NoError(c.T, c.DestCluster.Server(0).WaitForTenantCapabilities(ctx, c.Args.DestTenantID, map[tenantcapabilities.ID]string{
+	require.NoError(c.T, c.DestCluster.Server(server).WaitForTenantCapabilities(ctx, c.Args.DestTenantID, map[tenantcapabilities.ID]string{
 		tenantcapabilities.CanUseNodelocalStorage: "true",
 	}, ""))
 	return func() error {

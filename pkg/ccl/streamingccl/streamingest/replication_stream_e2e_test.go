@@ -485,17 +485,16 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 
 	skip.UnderDeadlock(t, "multi-node may time out under deadlock")
 	skip.UnderRace(t, "takes too long with multiple nodes")
+	skip.UnderStress(t, "multi node test times out under stress")
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.MultitenantSingleClusterNumNodes = 4
 
-	args.SrcNumNodes = 4
-	args.DestNumNodes = 3
-
-	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
 	defer cleanup()
 
-	replicationtestutils.CreateScatteredTable(t, c, 3)
+	replicationtestutils.CreateScatteredTable(t, c, 4)
 	srcScatteredData := c.SrcTenantSQL.QueryStr(c.T, "SELECT * FROM d.scattered ORDER BY key")
 
 	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
@@ -526,6 +525,9 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	c.SrcTenantServer.AppStopper().Stop(ctx)
 	c.SrcCluster.StopServer(0)
 
+	// Switch the SQL connection to a new node, as node 0 has shutdown-- recall that
+	// the source and destination tenant are on the same cluster.
+	c.DestSysSQL = sqlutils.MakeSQLRunner(c.DestCluster.Conns[1])
 	c.DestSysSQL.Exec(t, `RESUME JOB $1`, ingestionJobID)
 	jobutils.WaitForJobToRun(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
@@ -537,7 +539,7 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	require.Equal(c.T, cutoverTime, cutoverOutput.GoTime())
 	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
-	cleanUpTenant := c.StartDestTenant(ctx, nil)
+	cleanUpTenant := c.StartDestTenant(ctx, nil, 1)
 	defer func() {
 		require.NoError(t, cleanUpTenant())
 	}()
@@ -655,12 +657,11 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderDeadlock(t, "multi-node may time out under deadlock")
-	skip.UnderRace(t, "takes too long with multiple nodes")
+	skip.UnderRace(t, "multi-node test may time out under race")
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
-	args.SrcNumNodes = 4
-	args.DestNumNodes = 3
+	args.MultitenantSingleClusterNumNodes = 3
 
 	// Track the number of unique addresses that were connected to
 	clientAddresses := make(map[string]struct{})
@@ -673,7 +674,7 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 		},
 	}
 
-	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
 	defer cleanup()
 
 	// Make sure we have data on all nodes, so that we will have multiple
