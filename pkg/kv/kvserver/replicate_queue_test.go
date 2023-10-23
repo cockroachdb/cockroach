@@ -1877,7 +1877,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		forceProcess()
 		r := db.QueryRow(
-			"SELECT replicas FROM [SHOW RANGES FROM TABLE t] WHERE start_key LIKE '%TableMin%'")
+			"SELECT replicas FROM [SHOW RANGES FROM TABLE t] WHERE start_key NOT LIKE '%/2'")
 		var repl string
 		if err := r.Scan(&repl); err != nil {
 			return err
