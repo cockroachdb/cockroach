@@ -426,8 +426,8 @@ func TestHalloweenProblemAvoidance(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	for _, s := range []string{
-		`SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true;`,
-		`SET CLUSTER SETTING sql.txn.snapshot_isolation_syntax.enabled = true;`,
+		`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true;`,
+		`SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true;`,
 		`CREATE DATABASE t;`,
 		`CREATE TABLE t.test (x FLOAT);`,
 	} {
@@ -1467,7 +1467,7 @@ func TestInjectRetryErrors(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	defer db.Close()
 
-	_, err := db.Exec(`SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true`)
+	_, err := db.Exec(`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true`)
 	require.NoError(t, err)
 	_, err = db.Exec("SET inject_retry_errors_enabled = 'true'")
 	require.NoError(t, err)

@@ -172,8 +172,8 @@ func registerYCSB(r registry.Registry) {
 
 func enableIsolationLevels(ctx context.Context, t test.Test, db *gosql.DB) error {
 	for _, cmd := range []string{
-		`SET CLUSTER SETTING sql.txn.snapshot_isolation_syntax.enabled = 'true';`,
-		`SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = 'true';`,
+		`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = 'true';`,
+		`SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = 'true';`,
 	} {
 		if _, err := db.ExecContext(ctx, cmd); err != nil {
 			return err
