@@ -3601,6 +3601,13 @@ func TestReplicaTxnIdempotency(t *testing.T) {
 		_, pErr := tc.Sender().Send(ctx, ba)
 		return pErr.GoError()
 	}
+	runWithTs := func(ts hlc.Timestamp, reqs ...kvpb.Request) error {
+		ba := &kvpb.BatchRequest{}
+		ba.Header.Timestamp = ts
+		ba.Add(reqs...)
+		_, pErr := tc.Sender().Send(ctx, ba)
+		return pErr.GoError()
+	}
 	keyAtSeqHasVal := func(txn *roachpb.Transaction, key []byte, seq enginepb.TxnSeq, val *roachpb.Value) error {
 		args := getArgs(key)
 		args.Sequence = seq
@@ -3946,6 +3953,46 @@ func TestReplicaTxnIdempotency(t *testing.T) {
 					keyAtSeqHasVal(txn, key, 1, nil),
 					keyAtSeqHasVal(txn, key, 2, byteVal(val1)),
 					keyAtSeqHasVal(txn, key, 3, byteVal(val1)),
+				)
+			},
+		},
+		{
+			// A put is issued again at the same seqNum but higher timestamp than the
+			// original intent (same as the case above). A get with a timestamp
+			// between the original write and the replay should see the updated intent
+			// with the higher ts and be able to read under it.
+			// Bugs (like #112409), where the replayed write does not update the
+			// intent, can cause a discrepancy between the ts of the replicated lock
+			// in the lock table and the intent. This in turn can cause an infinite
+			// lock discovery loop where the read does not conflict with the lock
+			// table lock (at the higher ts) but when it tried to evaluate, it
+			// conflicts with the intent (at the lower ts).
+			name: "reissued write at higher timestamp and a concurrent get",
+			afterTxnStart: func(txn *roachpb.Transaction, key []byte) error {
+				// Write an intent at ts1 = txn.WriteTimestamp.
+				args := putArgs(key, val1)
+				args.Sequence = 2
+				err := runWithTxn(txn, &args)
+				if err != nil {
+					return err
+				}
+				// Replay the write above at a higher ts3 = txn.WriteTimestamp.Add(2, 0).
+				txnHighTS := txn.Clone()
+				txnHighTS.WriteTimestamp = txn.WriteTimestamp.Add(2, 0)
+				args = putArgs(key, val1)
+				args.Sequence = 2
+				return runWithTxn(txnHighTS, &args)
+			},
+			run: func(txn *roachpb.Transaction, key []byte) error {
+				// Get at ts2 = txn.WriteTimestamp.Add(1, 0), such that ts1 <= ts2 < ts3.
+				// The get ts is between the original write and the replay.
+				args := getArgs(key)
+				return runWithTs(txn.WriteTimestamp.Add(1, 0), &args)
+			},
+			validate: func(txn *roachpb.Transaction, key []byte) error {
+				return firstErr(
+					keyAtSeqHasVal(txn, key, 1, nil),
+					keyAtSeqHasVal(txn, key, 2, byteVal(val1)),
 				)
 			},
 		},

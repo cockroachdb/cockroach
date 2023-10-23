@@ -30,12 +30,12 @@ with t=A k=a
   put v=first
 ----
 >> put v=first t=A k=a
-stats: no change
+stats: val_bytes=+11 live_bytes=+11 intent_bytes=+13 lock_age=-1
 >> at end:
 txn: "A" meta={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
-meta: "a"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=12 vlen=10 mergeTs=<nil> txnDidNotUpdateMeta=true
-data: "a"/11.000000000,0 -> /BYTES/first
-stats: key_count=1 key_bytes=14 val_count=1 val_bytes=61 live_count=1 live_bytes=75 intent_count=1 intent_bytes=22 lock_count=1 lock_age=89
+meta: "a"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=0} ts=12.000000000,0 del=false klen=12 vlen=23 mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=72 live_count=1 live_bytes=86 intent_count=1 intent_bytes=35 lock_count=1 lock_age=88
 
 run ok
 with t=A k=a
@@ -343,20 +343,20 @@ with t=G k=k
 del_range: "a"-"z" -> deleted 2 key(s)
 del_range: returned "a"
 del_range: returned "k"
-stats: no change
+stats: val_bytes=+26 gc_bytes_age=+2288 intent_bytes=+30
 >> at end:
 txn: "G" meta={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,2 min=0,0 seq=0} lock=true stat=PENDING rts=12.000000000,1 wto=false gul=0,0
-meta: "a"/0,0 -> txn={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,1 min=0,0 seq=0} ts=12.000000000,1 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
-data: "a"/12.000000000,1 -> /<empty>
+meta: "a"/0,0 -> txn={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,2 min=0,0 seq=0} ts=12.000000000,2 del=true klen=12 vlen=15 mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "a"/12.000000000,2 -> {localTs=12.000000000,1}/<empty>
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
-meta: "k"/0,0 -> txn={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,1 min=0,0 seq=0} ts=12.000000000,1 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
-data: "k"/12.000000000,1 -> /<empty>
+meta: "k"/0,0 -> txn={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,2 min=0,0 seq=0} ts=12.000000000,2 del=true klen=12 vlen=15 mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k"/12.000000000,2 -> {localTs=12.000000000,1}/<empty>
 data: "k"/6.000000000,0 -> /BYTES/k6
 data: "k"/4.000000000,0 -> /<empty>
 data: "k"/3.000000000,0 -> /BYTES/k3
 data: "k"/0,2 -> /BYTES/k2
 data: "k"/0,1 -> /BYTES/k1
-stats: key_count=2 key_bytes=100 val_count=8 val_bytes=157 gc_bytes_age=23263 intent_count=2 intent_bytes=24 lock_count=2 lock_age=176
+stats: key_count=2 key_bytes=100 val_count=8 val_bytes=183 gc_bytes_age=25551 intent_count=2 intent_bytes=54 lock_count=2 lock_age=176
 
 run stats error
 with t=G k=k
@@ -368,18 +368,18 @@ with t=G k=k
 stats: no change
 >> at end:
 txn: "G" meta={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,3 min=0,0 seq=0} lock=true stat=PENDING rts=12.000000000,1 wto=false gul=0,0
-meta: "a"/0,0 -> txn={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,1 min=0,0 seq=0} ts=12.000000000,1 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
-data: "a"/12.000000000,1 -> /<empty>
+meta: "a"/0,0 -> txn={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,2 min=0,0 seq=0} ts=12.000000000,2 del=true klen=12 vlen=15 mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "a"/12.000000000,2 -> {localTs=12.000000000,1}/<empty>
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
-meta: "k"/0,0 -> txn={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,1 min=0,0 seq=0} ts=12.000000000,1 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
-data: "k"/12.000000000,1 -> /<empty>
+meta: "k"/0,0 -> txn={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,2 min=0,0 seq=0} ts=12.000000000,2 del=true klen=12 vlen=15 mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k"/12.000000000,2 -> {localTs=12.000000000,1}/<empty>
 data: "k"/6.000000000,0 -> /BYTES/k6
 data: "k"/4.000000000,0 -> /<empty>
 data: "k"/3.000000000,0 -> /BYTES/k3
 data: "k"/0,2 -> /BYTES/k2
 data: "k"/0,1 -> /BYTES/k1
-stats: key_count=2 key_bytes=100 val_count=8 val_bytes=157 gc_bytes_age=23263 intent_count=2 intent_bytes=24 lock_count=2 lock_age=176
-error: (*withstack.withStack:) transaction 00000007-0000-0000-0000-000000000000 with sequence 0 prevented from changing write timestamp from 12.000000000,1 to 12.000000000,3 due to ambiguous replay protection
+stats: key_count=2 key_bytes=100 val_count=8 val_bytes=183 gc_bytes_age=25551 intent_count=2 intent_bytes=54 lock_count=2 lock_age=176
+error: (*withstack.withStack:) transaction 00000007-0000-0000-0000-000000000000 with sequence 0 prevented from changing write timestamp from 12.000000000,2 to 12.000000000,3 due to ambiguous replay protection
 
 run ok
 with t=G

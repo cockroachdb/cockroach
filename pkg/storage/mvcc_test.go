@@ -2892,6 +2892,33 @@ func TestMVCCMultiplePutOldTimestamp(t *testing.T) {
 	require.Equal(t, value3.RawBytes, valueRes.Value.RawBytes)
 }
 
+func TestMVCCPutReplayWithForwardedTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	engine := NewDefaultInMemForTesting()
+	defer engine.Close()
+
+	txn := makeTxn(*txn1, hlc.Timestamp{WallTime: 1})
+	err := MVCCPut(ctx, engine, testKey1, txn.ReadTimestamp, value1, MVCCWriteOptions{Txn: txn})
+	require.NoError(t, err)
+	// Verify the value was written.
+	valueRes, err := MVCCGet(ctx, engine, testKey1, hlc.MaxTimestamp, MVCCGetOptions{Txn: txn})
+	require.NoError(t, err)
+	require.Equal(t, value1.RawBytes, valueRes.Value.RawBytes)
+
+	// Put again after advancing the txn's timestamp but keeping the seqNum the same.
+	txn.BumpReadTimestamp(hlc.Timestamp{WallTime: 2})
+	err = MVCCPut(ctx, engine, testKey1, txn.ReadTimestamp, value1, MVCCWriteOptions{Txn: txn})
+	require.NoError(t, err)
+	// Verify new value was actually written at ts 2.
+	valueRes, err = MVCCGet(ctx, engine, testKey1, hlc.MaxTimestamp, MVCCGetOptions{Txn: txn})
+	require.NoError(t, err)
+	require.Equal(t, hlc.Timestamp{WallTime: 2}, valueRes.Value.Timestamp)
+	require.Equal(t, value1.RawBytes, valueRes.Value.RawBytes)
+}
+
 func TestMVCCPutNegativeTimestampError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

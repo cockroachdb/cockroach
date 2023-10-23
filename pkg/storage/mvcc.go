@@ -1969,6 +1969,9 @@ func MVCCScanDecodeKeyValues(repr [][]byte, fn func(key MVCCKey, rawBytes []byte
 // transactional idempotency.
 func replayTransactionalWrite(
 	ctx context.Context,
+	writer Writer,
+	buf *putBuffer,
+	ms *enginepb.MVCCStats,
 	iter MVCCIterator,
 	meta *enginepb.MVCCMetadata,
 	key roachpb.Key,
@@ -2069,6 +2072,17 @@ func replayTransactionalWrite(
 		return errors.Errorf("transaction %s with sequence %d prevented from changing "+
 			"write timestamp from %s to %s due to ambiguous replay protection",
 			txn.ID, txn.Sequence, meta.Txn.WriteTimestamp, txn.WriteTimestamp)
+	}
+
+	// This replay is at a higher timestamp and not alongside an ambiguous error,
+	// so we need to bump its timestamp without adding a new version in the mvcc
+	// history. mvccResolveWriteIntent does exactly that for non-finalized
+	// transactions.
+	if meta.Txn.WriteTimestamp.Less(txn.WriteTimestamp) {
+		_, err = mvccResolveWriteIntent(ctx, writer, iter, ms, roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}), meta, buf)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -2285,7 +2299,7 @@ func mvccPutInternal(
 				// The transaction has executed at this sequence before. This is merely a
 				// replay of the transactional write. Assert that all is in order and return
 				// early.
-				return false, replayTransactionalWrite(ctx, iter, meta, key, value, opts.Txn, valueFn, opts.ReplayWriteTimestampProtection)
+				return false, replayTransactionalWrite(ctx, writer, buf, opts.Stats, iter, meta, key, value, opts.Txn, valueFn, opts.ReplayWriteTimestampProtection)
 			}
 
 			// We're overwriting the intent that was present at this key, before we do
