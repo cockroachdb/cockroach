@@ -365,6 +365,7 @@ func testMigrationWithFailures(
 										endCV,
 										upgrade.NoPrecondition,
 										migrationFunc,
+										upgrade.RestoreActionNotRequired("test"),
 									), true
 								}
 								panic("unexpected version")
