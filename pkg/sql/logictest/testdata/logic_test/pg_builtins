@@ -892,14 +892,14 @@ subtest end
 subtest information_schema._pg_char_octet_length
 
 query I
-SELECT information_schema._pg_char_octet_length(25, NULL)
-----
-NULL
-
-query I
 SELECT information_schema._pg_char_octet_length(25, -1)
 ----
 1073741824
+
+query I
+SELECT information_schema._pg_char_octet_length(25, NULL)
+----
+NULL
 
 statement ok
 CREATE TYPE u AS (ufoo char, ubar int);
@@ -931,6 +931,45 @@ SELECT pg_encoding_max_length(6)
 
 query I
 SELECT pg_encoding_max_length(1)
+----
+NULL
+
+subtest end
+
+subtest information_schema._pg_datetime_precision
+
+query I
+select information_schema._pg_datetime_precision(1082, -1);
+----
+0
+
+query I
+select information_schema._pg_datetime_precision(1083, -1);
+----
+6
+
+query I
+select information_schema._pg_datetime_precision(1083, 5);
+----
+5
+
+query I
+select information_schema._pg_datetime_precision(1186, -1);
+----
+6
+
+query I
+select information_schema._pg_datetime_precision(1186, 5);
+----
+5
+
+query I
+select information_schema._pg_datetime_precision(1086, 5);
+----
+NULL
+
+query I
+select information_schema._pg_datetime_precision(1186, NULL);
 ----
 NULL
 
