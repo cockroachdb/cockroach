@@ -68,7 +68,7 @@ consumption:
 
 inspect tenant=5
 ----
-Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  current-share-sum=0
+Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  ru-current-avg=5781250
 Consumption: ru=1110 kvru=888  reads=2220 in 222 batches (3330 bytes)  writes=4440 in 333 batches (5550 bytes)  pod-cpu-usage: 6660 secs  pgwire-egress=7770 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:00:00.000
 First active instance: 1

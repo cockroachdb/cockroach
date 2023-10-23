@@ -103,7 +103,6 @@ func (s *instance) TokenBucketRequest(
 			instance.Seq = in.SeqNum
 		}
 
-		// TODO(radu): update shares.
 		*result = tenant.Bucket.Request(ctx, in)
 
 		instance.LastUpdate.Time = now
