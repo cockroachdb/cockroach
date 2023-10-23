@@ -270,20 +270,6 @@ toolchain(
     toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
 )
 
-toolchain(
-    name = "node_freebsd_toolchain",
-    exec_compatible_with = [
-        "@platforms//os:freebsd",
-    ],
-    toolchain = ":node_freebsd_local_toolchain",
-    toolchain_type = "@rules_nodejs//nodejs:toolchain_type",
-)
-
-node_toolchain(
-    name = "node_freebsd_local_toolchain",
-    target_tool_path = "/usr/local/bin/node",
-)
-
 # There are aliases for each of these flags defined in .bazelrc; for example,
 # --crdb_test instead of --//build/toolchains:crdb_test_flag.
 #
