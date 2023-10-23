@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -422,7 +423,12 @@ type EncDatumRow []EncDatum
 
 func (r EncDatumRow) stringToBuf(types []*types.T, a *tree.DatumAlloc, b *bytes.Buffer) {
 	if len(types) != len(r) {
-		panic(errors.AssertionFailedf("mismatched types (%v) and row (%v)", types, r))
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("mismatched types (%v) and row (%v)", types, r))
+		} else {
+			b.WriteString(fmt.Sprintf("mismatched types (%v) and row (%v)", types, r))
+			return
+		}
 	}
 	b.WriteString("[")
 	for i := range r {
