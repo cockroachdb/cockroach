@@ -189,9 +189,15 @@ func (zc *debugZipContext) collectClusterData(
 	}
 
 	if zipCtx.includeRunningJobTraces {
-		zc.clusterPrinter.info("collecting the inflight traces for jobs")
-		if err := zc.dumpTraceableJobTraces(); err != nil {
-			return &serverpb.NodesListResponse{}, nil, err
+		s := zc.clusterPrinter.start("collecting the inflight traces for jobs")
+		if requestErr := zc.runZipFn(ctx, s, func(ctx context.Context) error {
+			return zc.dumpTraceableJobTraces(ctx)
+		}); requestErr != nil {
+			if err := zc.z.createError(s, zc.prefix+"/jobs", requestErr); err != nil {
+				return &serverpb.NodesListResponse{}, nil, s.fail(err)
+			}
+		} else {
+			s.done()
 		}
 	}
 
