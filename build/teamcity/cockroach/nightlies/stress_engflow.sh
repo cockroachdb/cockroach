@@ -12,8 +12,8 @@ ENGFLOW_FLAGS="--config engflow --config cibase --config crosslinux \
 INVOCATION_ID=$(uuidgen)
 
 status=0
-bazel test //pkg:all_tests $ENGFLOW_FLAGS --runs_per_test 30 \
-      --verbose_failures --build_event_binary_file=artifacts/eventstream \
+bazel test //pkg:all_tests $ENGFLOW_FLAGS --remote_download_minimal \
+      --runs_per_test 30 --verbose_failures --build_event_binary_file=artifacts/eventstream \
       --profile=artifacts/profile.json.gz --invocation_id=$INVOCATION_ID \
     || status=$?
 
