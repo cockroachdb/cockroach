@@ -3566,14 +3566,16 @@ value if you rely on the HLC for accuracy.`,
 					if err != nil {
 						return nil, err
 					}
-					err = strArray.Append(tree.NewDString(*str))
-					if err != nil {
-						return nil, err
+					if str != nil {
+						err = strArray.Append(tree.NewDString(*str))
+						if err != nil {
+							return nil, err
+						}
 					}
 				}
 				return strArray, nil
 			},
-			Info:              "Convert a JSONB array into a string array.",
+			Info:              "Convert a JSONB array into a string array, removing 'null' elements.",
 			Volatility:        volatility.Immutable,
 			CalledOnNullInput: true,
 		}),

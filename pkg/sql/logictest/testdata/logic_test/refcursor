@@ -394,63 +394,78 @@ NULL  NULL  NULL  foo   NULL  NULL  NULL  NULL  NULL  NULL  NULL  NULL
 # REFCURSOR doesn't support any comparisons (with an exception mentioned below).
 subtest comparisons
 
-# TODO(drewk): The error code should be 42883.
-statement error pgcode 22023 pq: unsupported comparison operator
+statement error pgcode 42883 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR = 'foo'::REFCURSOR;
 
+# TODO(drewk): The error code should be 42883.
 statement error pgcode 22023 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR = 'foo'::TEXT;
 
-statement error pgcode 22023 pq: unsupported comparison operator
+statement error pgcode 42883 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR = NULL;
 
-statement error pgcode 22023 pq: unsupported comparison operator
+statement error pgcode 42883 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR < 'foo'::REFCURSOR;
 
 statement error pgcode 22023 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR < 'foo'::TEXT;
 
-statement error pgcode 22023 pq: unsupported comparison operator
+statement error pgcode 42883 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR < NULL;
 
-statement error pgcode 22023 pq: unsupported comparison operator
+statement error pgcode 42883 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR > 'foo'::REFCURSOR;
 
 statement error pgcode 22023 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR > 'foo'::TEXT;
 
-statement error pgcode 22023 pq: unsupported comparison operator
+statement error pgcode 42883 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR > NULL;
 
-statement error pgcode 22023 pq: unsupported comparison operator
+statement error pgcode 42883 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR <= 'foo'::REFCURSOR;
 
 statement error pgcode 22023 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR <= 'foo'::TEXT;
 
-statement error pgcode 22023 pq: unsupported comparison operator
+statement error pgcode 42883 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR <= NULL;
 
-statement error pgcode 22023 pq: unsupported comparison operator
+statement error pgcode 42883 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR >= 'foo'::REFCURSOR;
 
 statement error pgcode 22023 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR >= 'foo'::TEXT;
 
-statement error pgcode 22023 pq: unsupported comparison operator
+statement error pgcode 42883 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR >= NULL;
 
-statement error pgcode 22023 pq: unsupported comparison operator
+statement error pgcode 42883 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR IS DISTINCT FROM 'foo'::REFCURSOR;
 
 statement error pgcode 22023 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR IS DISTINCT FROM 'foo'::TEXT;
 
-statement error pgcode 22023 pq: unsupported comparison operator
+statement error pgcode 42883 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM 'foo'::REFCURSOR;
 
 statement error pgcode 22023 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM 'foo'::TEXT;
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR BETWEEN 'foo'::REFCURSOR AND 'bar'::REFCURSOR;
+
+statement error pgcode 22023 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR BETWEEN 'foo'::TEXT AND 'bar'::TEXT;
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT 'foo'::REFCURSOR BETWEEN NULL AND NULL;
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT NULLIF('foo'::REFCURSOR, 'bar'::REFCURSOR);
+
+statement error pgcode 42883 pq: unsupported comparison operator
+SELECT NULLIF('foo'::REFCURSOR, NULL);
 
 # Regression test for #112010 - REFCURSOR should allow IS NULL and
 # IS NOT NULL comparisons.
@@ -514,17 +529,17 @@ true
 true
 
 # Comparison with column is not allowed.
-statement error pgcode 22023 pq: unsupported comparison operator
+statement error pgcode 42883 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR IS DISTINCT FROM l FROM implicit_types;
 
-statement error pgcode 22023 pq: unsupported comparison operator
+statement error pgcode 42883 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM l FROM implicit_types;
 
 # Comparison with typed NULL is not allowed.
-statement error pgcode 22023 pq: unsupported comparison operator
+statement error pgcode 42883 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR IS DISTINCT FROM (NULL::REFCURSOR);
 
-statement error pgcode 22023 pq: unsupported comparison operator
+statement error pgcode 42883 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM (NULL::REFCURSOR);
 
 # Comparison with CASE expression is not allowed.
@@ -534,23 +549,18 @@ SELECT 'foo'::REFCURSOR IS DISTINCT FROM (CASE WHEN true THEN NULL ELSE 1 END);
 statement error pgcode 22023 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM (CASE WHEN true THEN NULL ELSE 1 END);
 
-# The CASE operator is folded into an untyped NULL, so it's allowed.
-# TODO(drewk): Postgres doesn't allow this case.
-query B
+# The CASE operator is folded into an untyped NULL.
+statement error pgcode 42883 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR IS DISTINCT FROM (CASE WHEN true THEN NULL ELSE NULL END);
-----
-true
 
-query B
+statement error pgcode 42883 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM (CASE WHEN true THEN NULL ELSE NULL END);
-----
-false
 
-# The CASE operator is folded into a typed NULL, so it's not allowed.
-statement error pgcode 22023 pq: unsupported comparison operator
+# The CASE operator is folded into a typed NULL.
+statement error pgcode 42883 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR IS DISTINCT FROM (CASE WHEN true THEN NULL ELSE NULL::REFCURSOR END);
 
-statement error pgcode 22023 pq: unsupported comparison operator
+statement error pgcode 42883 pq: unsupported comparison operator
 SELECT 'foo'::REFCURSOR IS NOT DISTINCT FROM (CASE WHEN true THEN NULL ELSE NULL::REFCURSOR END);
 
 # Regression test for #112099 - REFCURSOR is not valid as an index column.

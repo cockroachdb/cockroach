@@ -939,6 +939,11 @@ func (expr *ComparisonExpr) TypeCheck(
 			expr.Left,
 			expr.Right,
 		)
+		if err == nil {
+			err = checkRefCursorComparison(
+				expr.SubOperator.Symbol, leftTyped.ResolvedType(), rightTyped.ResolvedType(),
+			)
+		}
 	} else {
 		leftTyped, rightTyped, cmpOp, alwaysNull, err = typeCheckComparisonOp(
 			ctx,
@@ -947,6 +952,11 @@ func (expr *ComparisonExpr) TypeCheck(
 			expr.Left,
 			expr.Right,
 		)
+		if err == nil {
+			err = checkRefCursorComparison(
+				expr.Operator.Symbol, leftTyped.ResolvedType(), rightTyped.ResolvedType(),
+			)
+		}
 	}
 	if err != nil {
 		return nil, err
@@ -1535,6 +1545,10 @@ func (expr *NullIfExpr) TypeCheck(
 			leftType, op, rightType)
 		return nil, decorateTypeCheckError(err, "incompatible NULLIF expressions")
 	}
+	err = checkRefCursorComparison(treecmp.EQ, leftType, rightType)
+	if err != nil {
+		return nil, err
+	}
 
 	expr.Expr1, expr.Expr2 = typedSubExprs[0], typedSubExprs[1]
 	expr.typ = retType
@@ -1616,10 +1630,20 @@ func (expr *RangeCond) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
 	leftFromTyped, fromTyped, _, _, err := typeCheckComparisonOp(ctx, semaCtx, treecmp.MakeComparisonOperator(treecmp.GT), expr.Left, expr.From)
+	if err == nil {
+		err = checkRefCursorComparison(
+			treecmp.GT, leftFromTyped.ResolvedType(), fromTyped.ResolvedType(),
+		)
+	}
 	if err != nil {
 		return nil, err
 	}
 	leftToTyped, toTyped, _, _, err := typeCheckComparisonOp(ctx, semaCtx, treecmp.MakeComparisonOperator(treecmp.LT), expr.Left, expr.To)
+	if err == nil {
+		err = checkRefCursorComparison(
+			treecmp.LT, leftToTyped.ResolvedType(), toTyped.ResolvedType(),
+		)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -3477,4 +3501,43 @@ func CheckUnsupportedType(ctx context.Context, semaCtx *SemaContext, typ *types.
 		return nil
 	}
 	return semaCtx.UnsupportedTypeChecker.CheckType(ctx, typ)
+}
+
+// checkRefCursorComparison checks whether the given types are or contain the
+// REFCURSOR data type, which is invalid for comparison. We don't simply remove
+// the relevant comparison overloads because we rely on their existence in
+// various locations throughout the codebase.
+func checkRefCursorComparison(op treecmp.ComparisonOperatorSymbol, left, right *types.T) error {
+	if (op == treecmp.IsNotDistinctFrom || op == treecmp.IsDistinctFrom) &&
+		(left.Family() == types.RefCursorFamily && right == types.Unknown) {
+		// Special case: "REFCURSOR IS [NOT] DISTINCT FROM NULL" is allowed.
+		return nil
+	}
+	if left.Family() == types.RefCursorFamily || right.Family() == types.RefCursorFamily {
+		return pgerror.Newf(pgcode.UndefinedFunction,
+			"unsupported comparison operator: %s %s %s", left, op, right,
+		)
+	}
+	var checkRecursive func(*types.T) bool
+	checkRecursive = func(typ *types.T) bool {
+		switch typ.Family() {
+		case types.RefCursorFamily:
+			return true
+		case types.TupleFamily:
+			for _, t := range typ.TupleContents() {
+				if checkRecursive(t) {
+					return true
+				}
+			}
+		case types.ArrayFamily:
+			return checkRecursive(typ.ArrayContents())
+		}
+		return false
+	}
+	if checkRecursive(left) || checkRecursive(right) {
+		return pgerror.Newf(pgcode.UndefinedFunction,
+			"could not identify a comparison function for type refcursor",
+		)
+	}
+	return nil
 }
