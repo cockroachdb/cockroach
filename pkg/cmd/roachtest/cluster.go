@@ -1397,17 +1397,22 @@ func (c *clusterImpl) assertNoDeadNode(ctx context.Context, t test.Test) error {
 		return err
 	}
 
-	deadNodes := 0
+	deadProcesses := 0
 	for info := range eventsCh {
 		t.L().Printf("%s", info)
 
-		if _, isDeath := info.Event.(install.MonitorNodeDead); isDeath {
-			deadNodes++
+		if _, isDeath := info.Event.(install.MonitorProcessDead); isDeath {
+			deadProcesses++
 		}
 	}
 
-	if deadNodes > 0 {
-		return errors.Newf("%d dead node(s) detected", deadNodes)
+	var plural string
+	if deadProcesses > 1 {
+		plural = "es"
+	}
+
+	if deadProcesses > 0 {
+		return errors.Newf("%d dead cockroach process%s detected", deadProcesses, plural)
 	}
 	return nil
 }

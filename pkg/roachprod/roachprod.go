@@ -430,7 +430,15 @@ func SQL(
 	if len(c.Nodes) == 1 {
 		return c.ExecOrInteractiveSQL(ctx, l, tenantName, tenantInstance, cmdArray)
 	}
-	return c.ExecSQL(ctx, l, c.Nodes, tenantName, tenantInstance, cmdArray)
+	results, err := c.ExecSQL(ctx, l, c.Nodes, tenantName, tenantInstance, cmdArray)
+	if err != nil {
+		return err
+	}
+
+	for _, r := range results {
+		l.Printf("node %d:\n%s", r.Node, r.CombinedOut)
+	}
+	return nil
 }
 
 // IP gets the ip addresses of the nodes in a cluster.
@@ -664,8 +672,10 @@ func DefaultStartOpts() install.StartOpts {
 		ScheduleBackups:    false,
 		ScheduleBackupArgs: "",
 		InitTarget:         1,
-		SQLPort:            config.DefaultSQLPort,
-		AdminUIPort:        config.DefaultAdminUIPort,
+		// TODO(renato): change the defaults below to `0` (i.e., pick a
+		// random available port) once #111052 is addressed.
+		SQLPort:     config.DefaultSQLPort,
+		AdminUIPort: config.DefaultAdminUIPort,
 	}
 }
 
@@ -708,6 +718,11 @@ type StopOpts struct {
 	// If MaxWait is set, roachprod waits that approximate number of seconds
 	// until the PID disappears.
 	MaxWait int
+
+	// Options that only apply to StopServiceForVirtualCluster
+	VirtualClusterID   int
+	VirtualClusterName string
+	SQLInstance        int
 }
 
 // DefaultStopOpts returns StopOpts populated with the default values used by Stop.
@@ -729,7 +744,7 @@ func Stop(ctx context.Context, l *logger.Logger, clusterName string, opts StopOp
 	if err != nil {
 		return err
 	}
-	return c.Stop(ctx, l, opts.Sig, opts.Wait, opts.MaxWait)
+	return c.Stop(ctx, l, opts.Sig, opts.Wait, opts.MaxWait, "")
 }
 
 // Signal sends a signal to nodes in the cluster.
@@ -932,7 +947,7 @@ func PgURL(
 		if ip == "" {
 			return nil, errors.Errorf("empty ip: %v", ips)
 		}
-		urls = append(urls, c.NodeURL(ip, desc.Port, opts.VirtualClusterName))
+		urls = append(urls, c.NodeURL(ip, desc.Port, opts.VirtualClusterName, desc.ServiceMode))
 	}
 	if len(urls) != len(nodes) {
 		return nil, errors.Errorf("have nodes %v, but urls %v from ips %v", nodes, urls, ips)

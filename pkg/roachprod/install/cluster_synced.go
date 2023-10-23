@@ -22,6 +22,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -292,14 +293,18 @@ func (c *SyncedCluster) roachprodEnvValue(node Node) string {
 	return strings.Join(parts, "/")
 }
 
+func envVarRegex(name, value string) string {
+	escaped := strings.ReplaceAll(value, "/", "\\/")
+	// We look for either a trailing space or a slash (in which case, we
+	// tolerate any remaining tag suffix). The env var may also be the
+	// last environment variable declared, so we also account for that.
+	return fmt.Sprintf(`(%[1]s=%[2]s$|%[1]s=%[2]s[ \/])`, name, escaped)
+}
+
 // roachprodEnvRegex returns a regexp that matches the ROACHPROD value for the
 // given node.
 func (c *SyncedCluster) roachprodEnvRegex(node Node) string {
-	escaped := strings.Replace(c.roachprodEnvValue(node), "/", "\\/", -1)
-	// We look for either a trailing space or a slash (in which case, we tolerate
-	// any remaining tag suffix). ROACHPROD may also be the last environment
-	// variable declared, so we also account for that.
-	return fmt.Sprintf(`(ROACHPROD=%[1]s$|ROACHPROD=%[1]s[ \/])`, escaped)
+	return envVarRegex("ROACHPROD", c.roachprodEnvValue(node))
 }
 
 // validateHostnameCmd wraps the command given with a check that the
@@ -391,39 +396,98 @@ func (c *SyncedCluster) newSession(
 	return newRemoteSession(l, command)
 }
 
-// Stop is used to stop cockroach on all nodes in the cluster.
+// Stop is used to stop processes or virtual clusters.
 //
-// It sends a signal to all processes that have been started with ROACHPROD env
-// var and optionally waits until the processes stop.
+// It sends a signal to all processes that have been started with
+// ROACHPROD env var and optionally waits until the processes stop. If
+// the virtualClusterLabel is not empty, then only the corresponding
+// virtual cluster is stopped (stopping the corresponding sql server
+// process for separate process deployments, or stopping the service
+// for shared-process configurations.)
 //
-// When running roachprod stop without other flags, the signal is 9 (SIGKILL)
-// and wait is true.
-//
-// If maxWait is non-zero, Stop stops waiting after that approximate
-// number of seconds.
+// When Stop needs to kill a process without other flags, the signal
+// is 9 (SIGKILL) and wait is true. If maxWait is non-zero, Stop stops
+// waiting after that approximate number of seconds.
 func (c *SyncedCluster) Stop(
-	ctx context.Context, l *logger.Logger, sig int, wait bool, maxWait int,
+	ctx context.Context,
+	l *logger.Logger,
+	sig int,
+	wait bool,
+	maxWait int,
+	virtualClusterLabel string,
 ) error {
-	display := fmt.Sprintf("%s: stopping", c.Name)
-	if wait {
-		display += " and waiting"
+	// virtualClusterDisplay includes information about the virtual
+	// cluster associated with OS processes being stopped in this
+	// function.
+	var virtualClusterDisplay string
+	// virtualClusterName is the virtualClusterName associated with the
+	// label passed, if any.
+	var virtualClusterName string
+	// killProcesses indicates whether processed need to be stopped.
+	killProcesses := true
+
+	if virtualClusterLabel != "" {
+		name, sqlInstance, err := VirtualClusterInfoFromLabel(virtualClusterLabel)
+		if err != nil {
+			return err
+		}
+
+		services, err := c.DiscoverServices(ctx, name, ServiceTypeSQL)
+		if err != nil {
+			return err
+		}
+
+		if len(services) == 0 {
+			return fmt.Errorf("no service for virtual cluster %q", virtualClusterName)
+		}
+
+		virtualClusterName = name
+		if services[0].ServiceMode == ServiceModeShared {
+			// For shared process virtual clusters, we just stop the service
+			// via SQL.
+			killProcesses = false
+		} else {
+			virtualClusterDisplay = fmt.Sprintf(" virtual cluster %q, instance %d", virtualClusterName, sqlInstance)
+		}
+
 	}
-	return c.kill(ctx, l, "stop", display, sig, wait, maxWait)
+
+	if killProcesses {
+		display := fmt.Sprintf("%s: stopping%s", c.Name, virtualClusterDisplay)
+		if wait {
+			display += " and waiting"
+		}
+		return c.kill(ctx, l, "stop", display, sig, wait, maxWait, virtualClusterLabel)
+	} else {
+		res, err := c.ExecSQL(ctx, l, c.Nodes[:1], "", 0, []string{
+			"-e", fmt.Sprintf("ALTER TENANT '%s' STOP SERVICE", virtualClusterName),
+		})
+		if err != nil || res[0].Err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // Signal sends a signal to the CockroachDB process.
 func (c *SyncedCluster) Signal(ctx context.Context, l *logger.Logger, sig int) error {
 	display := fmt.Sprintf("%s: sending signal %d", c.Name, sig)
-	return c.kill(ctx, l, "signal", display, sig, false /* wait */, 0 /* maxWait */)
+	return c.kill(ctx, l, "signal", display, sig, false /* wait */, 0 /* maxWait */, "")
 }
 
 // kill sends the signal sig to all nodes in the cluster using the kill command.
 // cmdName and display specify the roachprod subcommand and a status message,
 // for output/logging. If wait is true, the command will wait for the processes
 // to exit, up to maxWait seconds.
-// TODO(herko): This command does not support virtual clusters yet.
 func (c *SyncedCluster) kill(
-	ctx context.Context, l *logger.Logger, cmdName, display string, sig int, wait bool, maxWait int,
+	ctx context.Context,
+	l *logger.Logger,
+	cmdName, display string,
+	sig int,
+	wait bool,
+	maxWait int,
+	virtualClusterLabel string,
 ) error {
 	if sig == 9 {
 		// `kill -9` without wait is never what a caller wants. See #77334.
@@ -454,6 +518,14 @@ func (c *SyncedCluster) kill(
 			)
 		}
 
+		var virtualClusterFilter string
+		if virtualClusterLabel != "" {
+			virtualClusterFilter = fmt.Sprintf(
+				"grep -E '%s' |",
+				envVarRegex("ROACHPROD_VIRTUAL_CLUSTER", virtualClusterLabel),
+			)
+		}
+
 		// NB: the awkward-looking `awk` invocation serves to avoid having the
 		// awk process match its own output from `ps`.
 		cmd := fmt.Sprintf(`
@@ -461,17 +533,19 @@ mkdir -p %[1]s
 echo ">>> roachprod %[1]s: $(date)" >> %[2]s/roachprod.log
 ps axeww -o pid -o command >> %[2]s/roachprod.log
 pids=$(ps axeww -o pid -o command | \
+  %[3]s \
   sed 's/export ROACHPROD=//g' | \
-  awk '/%[3]s/ { print $1 }')
+  awk '/%[4]s/ { print $1 }')
 if [ -n "${pids}" ]; then
-  kill -%[4]d ${pids}
-%[5]s
+  kill -%[5]d ${pids}
+%[6]s
 fi`,
 			cmdName,                   // [1]
 			c.LogDir(node, "", 0),     // [2]
-			c.roachprodEnvRegex(node), // [3]
-			sig,                       // [4]
-			waitCmd,                   // [5]
+			virtualClusterFilter,      // [3]
+			c.roachprodEnvRegex(node), // [4]
+			sig,                       // [5]
+			waitCmd,                   // [6]
 		)
 
 		return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("kill"))
@@ -481,7 +555,7 @@ fi`,
 // Wipe TODO(peter): document
 func (c *SyncedCluster) Wipe(ctx context.Context, l *logger.Logger, preserveCerts bool) error {
 	display := fmt.Sprintf("%s: wiping", c.Name)
-	if err := c.Stop(ctx, l, 9, true /* wait */, 0 /* maxWait */); err != nil {
+	if err := c.Stop(ctx, l, 9, true /* wait */, 0 /* maxWait */, ""); err != nil {
 		return err
 	}
 	return c.Parallel(ctx, l, c.Nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
@@ -558,18 +632,26 @@ fi
 	return statuses, nil
 }
 
-// MonitorNodeSkipped represents a node whose status was not checked.
-type MonitorNodeSkipped struct{}
-
-// MonitorNodeRunning represents the cockroach process running on a
-// node.
-type MonitorNodeRunning struct {
-	PID string
+// MonitorProcessSkipped represents a cockroach process whose status
+// was not checked.
+type MonitorProcessSkipped struct {
+	VirtualClusterName string
+	SQLInstance        int
 }
 
-// MonitorNodeDead represents the cockroach process dying on a node.
-type MonitorNodeDead struct {
-	ExitCode string
+// MonitorProcessRunning represents the cockroach process running on a
+// node.
+type MonitorProcessRunning struct {
+	VirtualClusterName string
+	SQLInstance        int
+	PID                string
+}
+
+// MonitorProcessDead represents the cockroach process dying on a node.
+type MonitorProcessDead struct {
+	VirtualClusterName string
+	SQLInstance        int
+	ExitCode           string
 }
 
 type MonitorError struct {
@@ -581,24 +663,36 @@ type NodeMonitorInfo struct {
 	// The index of the node (in a SyncedCluster) at which the message originated.
 	Node Node
 	// Event describes what happened to the node; it is one of
-	// MonitorNodeSkipped (no store directory was found);
-	// MonitorNodeRunning, sent when cockroach is running on a node;
-	// MonitorNodeDead, when the cockroach process stops running on a
-	// node; or MonitorError, typically indicate networking issues
-	// or nodes that have (physically) shut down.
+	// MonitorProcessSkipped (no store directory was found);
+	// MonitorProcessRunning, sent when cockroach is running on a node;
+	// MonitorProcessDead, when the cockroach process stops running on a
+	// node; or MonitorError, typically indicate networking issues or
+	// nodes that have (physically) shut down.
 	Event interface{}
 }
 
 func (nmi NodeMonitorInfo) String() string {
 	var status string
 
+	virtualClusterDesc := func(name string, instance int) string {
+		if name == SystemInterfaceName {
+			return "system interface"
+		}
+
+		return fmt.Sprintf("virtual cluster %q, instance %d", name, instance)
+	}
+
 	switch event := nmi.Event.(type) {
-	case MonitorNodeRunning:
-		status = fmt.Sprintf("cockroach process is running (PID: %s)", event.PID)
-	case MonitorNodeSkipped:
-		status = "node skipped"
-	case MonitorNodeDead:
-		status = fmt.Sprintf("cockroach process died (exit code %s)", event.ExitCode)
+	case MonitorProcessRunning:
+		status = fmt.Sprintf("cockroach process for %s is running (PID: %s)",
+			virtualClusterDesc(event.VirtualClusterName, event.SQLInstance), event.PID,
+		)
+	case MonitorProcessSkipped:
+		status = fmt.Sprintf("%s was skipped", virtualClusterDesc(event.VirtualClusterName, event.SQLInstance))
+	case MonitorProcessDead:
+		status = fmt.Sprintf("cockroach process for %s died (exit code %s)",
+			virtualClusterDesc(event.VirtualClusterName, event.SQLInstance), event.ExitCode,
+		)
 	case MonitorError:
 		status = fmt.Sprintf("error: %s", event.Err.Error())
 	}
@@ -620,9 +714,14 @@ type MonitorOpts struct {
 // channel is subsequently closed; otherwise the process continues indefinitely
 // (emitting new information as the status of the cockroach process changes).
 //
-// If IgnoreEmptyNodes is true, nodes on which no CockroachDB data is found
-// (in {store-dir}) will not be probed and single event, MonitorNodeSkipped,
-// will be emitted for them.
+// If IgnoreEmptyNodes is true, tenants on which no CockroachDB data is found
+// (in {store-dir}) will not be probed and single event, MonitorTenantSkipped,
+// will be emitted for each tenant.
+//
+// Note that the monitor will only send events for tenants that exist
+// at the time this function is called. In other words, this function
+// will not emit events for tenants started *after* a call to
+// Monitor().
 func (c *SyncedCluster) Monitor(
 	l *logger.Logger, ctx context.Context, opts MonitorOpts,
 ) chan NodeMonitorInfo {
@@ -635,6 +734,13 @@ func (c *SyncedCluster) Monitor(
 	// that is listened to by the caller. Bails if the context is
 	// canceled.
 	sendEvent := func(info NodeMonitorInfo) {
+		// if the monitor's context is already canceled, do not attempt to
+		// send the error down the channel, as it is most likely *caused*
+		// by the cancelation itself.
+		if monitorCtx.Err() != nil {
+			return
+		}
+
 		select {
 		case ch <- info:
 			// We were able to send the info through the channel.
@@ -650,39 +756,87 @@ func (c *SyncedCluster) Monitor(
 		deadMsg    = "dead"
 	)
 
+	wg.Add(len(nodes))
 	for i := range nodes {
-		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-
 			node := nodes[i]
-			port, err := c.NodePort(ctx, node)
-			if err != nil {
-				err := errors.Wrap(err, "failed to get node port")
+
+			// We first find out all cockroach processes that are currently
+			// running in this node.
+			cockroachProcessesCmd := fmt.Sprintf(`ps axeww -o command | `+
+				`grep -E '%s' | `+ // processes started by roachprod
+				`grep -E -o 'ROACHPROD_VIRTUAL_CLUSTER=[^ ]*' | `+ // ROACHPROD_VIRTUAL_CLUSTER indicates this is a cockroach process
+				`cut -d= -f2`, // grab the virtual cluster label
+				c.roachprodEnvRegex(node),
+			)
+
+			result, err := c.runCmdOnSingleNode(
+				ctx, l, node, cockroachProcessesCmd, defaultCmdOpts("list-processes"),
+			)
+			if err := errors.CombineErrors(err, result.Err); err != nil {
+				err := errors.Wrap(err, "failed to list cockroach processes")
 				sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
 				return
 			}
-			// On each monitored node, we loop looking for a cockroach process.
+
+			type virtualClusterInfo struct {
+				Name     string
+				Instance int
+			}
+
+			// Make the collection of virtual clusters a set to handle the
+			// unlikely but possible case that, in `local` runs, we'll find
+			// two processes associated with the same virtual cluster
+			// label. This can happen if we invoke the command above while the
+			// parent cockroach process already created the child,
+			// background process, but has not terminated yet.
+			vcs := map[virtualClusterInfo]struct{}{}
+			vcLines := strings.TrimSuffix(result.CombinedOut, "\n")
+			if vcLines == "" {
+				err := errors.New("no cockroach processes running")
+				sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
+				return
+			}
+			for _, label := range strings.Split(vcLines, "\n") {
+				name, instance, err := VirtualClusterInfoFromLabel(label)
+				if err != nil {
+					sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
+					return
+				}
+				vcs[virtualClusterInfo{name, instance}] = struct{}{}
+			}
+
 			data := struct {
 				OneShot     bool
+				Node        Node
 				IgnoreEmpty bool
 				Store       string
-				Port        int
 				Local       bool
 				Separator   string
 				SkippedMsg  string
 				RunningMsg  string
 				DeadMsg     string
+				Processes   []virtualClusterInfo
 			}{
 				OneShot:     opts.OneShot,
+				Node:        node,
 				IgnoreEmpty: opts.IgnoreEmptyNodes,
 				Store:       c.NodeDir(node, 1 /* storeIndex */),
-				Port:        port,
 				Local:       c.IsLocal(),
 				Separator:   separator,
 				SkippedMsg:  skippedMsg,
 				RunningMsg:  runningMsg,
 				DeadMsg:     deadMsg,
+				Processes:   maps.Keys(vcs),
+			}
+
+			storeFor := func(name string, instance int) string {
+				return c.InstanceStoreDir(node, name, instance)
+			}
+
+			localPIDFile := func(name string, instance int) string {
+				return filepath.Join(c.LogDir(node, name, instance), "cockroach.pid")
 			}
 
 			// NB.: we parse the output of every line this script
@@ -690,62 +844,86 @@ func (c *SyncedCluster) Monitor(
 			// down below in order to produce structured results to the
 			// caller.
 			snippet := `
-{{ if .IgnoreEmpty }}
-if ! ls {{.Store}}/marker.* 1> /dev/null 2>&1; then
-  echo "{{.SkippedMsg}}"
-  exit 0
-fi
-{{- end}}
-# Init with -1 so that when cockroach is initially dead, we print
-# a dead event for it.
-lastpid=-1
-while :; do
-{{ if .Local }}
-  pid=$(lsof -i :{{.Port}} -sTCP:LISTEN | awk '!/COMMAND/ {print $2}')
-	pid=${pid:-0} # default to 0
-	status="unknown"
-{{- else }}
-  # When CRDB is not running, this is zero.
-	pid=$(systemctl show cockroach --property MainPID --value)
-	status=$(systemctl show cockroach --property ExecMainStatus --value)
-{{- end }}
-  if [[ "${lastpid}" == -1 && "${pid}" != 0 ]]; then
-    # On the first iteration through the loop, if the process is running,
-    # don't register a PID change (which would trigger an erroneous dead
-    # event).
-    lastpid=0
+dead_parent() {
+  ! ps -p "$1" >/dev/null || ps -o ucomm -p "$1" | grep -q defunct
+}
+{{ range .Processes }}
+monitor_process_{{$.Node}}_{{.Name}}_{{.Instance}}() {
+  {{ if $.IgnoreEmpty }}
+  if ! ls {{storeFor .Name .Instance}}/marker.* 1> /dev/null 2>&1; then
+    echo "{{.Name}}{{$.Separator}}{{.Instance}}{{$.Separator}}{{$.SkippedMsg}}"
+    return 0
   fi
-  # Output a dead event whenever the PID changes from a nonzero value to
-  # any other value. In particular, we emit a dead event when the node stops
-  # (lastpid is nonzero, pid is zero), but not when the process then starts
-  # again (lastpid is zero, pid is nonzero).
-  if [ "${pid}" != "${lastpid}" ]; then
-    if [ "${lastpid}" != 0 ]; then
-      if [ "${pid}" != 0 ]; then
-        # If the PID changed but neither is zero, then the status refers to
-        # the new incarnation. We lost the actual exit status of the old PID.
-        status="unknown"
+  {{- end}}
+  # Init with -1 so that when cockroach is initially dead, we print
+  # a dead event for it.
+  lastpid=-1
+  while :; do
+    # if parent process terminated, quit as well.
+    if dead_parent "$1"; then
+      return 0
+    fi
+    {{ if $.Local }}
+    pidFile=$(cat "{{pidFile .Name .Instance}}")
+    # Make sure the process is still running
+    pid=$(test -n "${pidFile}" && ps -p "${pidFile}" >/dev/null && echo "${pidFile}")
+    pid=${pid:-0} # default to 0
+    status="unknown"
+    {{- else }}
+    # When CRDB is not running, this is zero.
+    pid=$(systemctl show "{{virtualClusterLabel .Name .Instance}}" --property MainPID --value)
+    status=$(systemctl show "{{virtualClusterLabel .Name .Instance}}" --property ExecMainStatus --value)
+    {{- end }}
+    if [[ "${lastpid}" == -1 && "${pid}" != 0 ]]; then
+      # On the first iteration through the loop, if the process is running,
+      # don't register a PID change (which would trigger an erroneous dead
+      # event).
+      lastpid=0
+    fi
+    # Output a dead event whenever the PID changes from a nonzero value to
+    # any other value. In particular, we emit a dead event when the node stops
+    # (lastpid is nonzero, pid is zero), but not when the process then starts
+    # again (lastpid is zero, pid is nonzero).
+    if [ "${pid}" != "${lastpid}" ]; then
+      if [ "${lastpid}" != 0 ]; then
+        if [ "${pid}" != 0 ]; then
+          # If the PID changed but neither is zero, then the status refers to
+          # the new incarnation. We lost the actual exit status of the old PID.
+          status="unknown"
+        fi
+    	  echo "{{.Name}}{{$.Separator}}{{.Instance}}{{$.Separator}}{{$.DeadMsg}}{{$.Separator}}${status}"
       fi
-    	echo "{{.DeadMsg}}{{.Separator}}${status}"
+  	  if [ "${pid}" != 0 ]; then
+  		  echo "{{.Name}}{{$.Separator}}{{.Instance}}{{$.Separator}}{{$.RunningMsg}}{{$.Separator}}${pid}"
+      fi
+      lastpid=${pid}
     fi
-		if [ "${pid}" != 0 ]; then
-			echo "{{.RunningMsg}}{{.Separator}}${pid}"
+    {{ if $.OneShot }}
+      return 0
+    {{- end }}
+    sleep 1
+    if [ "${pid}" != 0 ]; then
+      while kill -0 "${pid}" && ! dead_parent "$1"; do
+        sleep 1
+      done
     fi
-    lastpid=${pid}
-  fi
-{{ if .OneShot }}
-  exit 0
-{{- end }}
-  sleep 1
-  if [ "${pid}" != 0 ]; then
-    while kill -0 "${pid}"; do
-      sleep 1
-    done
-  fi
-done
+  done
+}
+{{ end }}
+
+# monitor every cockroach process in parallel.
+{{ range .Processes }}
+monitor_process_{{$.Node}}_{{.Name}}_{{.Instance}} $$ &
+{{ end }}
+
+wait
 `
 
-			t := template.Must(template.New("script").Parse(snippet))
+			t := template.Must(template.New("script").Funcs(template.FuncMap{
+				"storeFor":            storeFor,
+				"pidFile":             localPIDFile,
+				"virtualClusterLabel": VirtualClusterLabel,
+			}).Parse(snippet))
 			var buf bytes.Buffer
 			if err := t.Execute(&buf, data); err != nil {
 				err := errors.Wrap(err, "failed to execute template")
@@ -761,7 +939,6 @@ done
 			if err != nil {
 				err := errors.Wrap(err, "failed to read stdout pipe")
 				sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
-				wg.Done()
 				return
 			}
 			// Request a PTY so that the script will receive a SIGPIPE when the
@@ -785,20 +962,46 @@ done
 					if err != nil {
 						err := errors.Wrap(err, "error reading from session")
 						sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
+						return
 					}
 
 					parts := strings.Split(string(line), separator)
-					switch parts[0] {
+					ensureNumParts := func(n int) {
+						if len(parts) < n {
+							panic(fmt.Errorf("invalid output from monitor: %q", line))
+						}
+					}
+					// Every event is expected to have at least 3 parts. If
+					// that's not the case, panic explicitly below. Otherwise,
+					// we'd get a slice out of bounds error and the error
+					// message would not include the actual problematic line,
+					// which would make understanding the failure more
+					// difficult.
+					ensureNumParts(3) // name, instance, event
+
+					// Virtual cluster name and instance are the first fields of
+					// every event type.
+					name, instanceStr := parts[0], parts[1]
+					instance, _ := strconv.Atoi(instanceStr)
+					switch parts[2] {
 					case skippedMsg:
-						sendEvent(NodeMonitorInfo{Node: node, Event: MonitorNodeSkipped{}})
+						sendEvent(NodeMonitorInfo{Node: node, Event: MonitorProcessSkipped{
+							VirtualClusterName: name, SQLInstance: instance,
+						}})
 					case runningMsg:
-						pid := parts[1]
-						sendEvent(NodeMonitorInfo{Node: node, Event: MonitorNodeRunning{pid}})
+						ensureNumParts(4)
+						pid := parts[3]
+						sendEvent(NodeMonitorInfo{Node: node, Event: MonitorProcessRunning{
+							VirtualClusterName: name, SQLInstance: instance, PID: pid,
+						}})
 					case deadMsg:
-						exitCode := parts[1]
-						sendEvent(NodeMonitorInfo{Node: node, Event: MonitorNodeDead{exitCode}})
+						ensureNumParts(4)
+						exitCode := parts[3]
+						sendEvent(NodeMonitorInfo{Node: node, Event: MonitorProcessDead{
+							VirtualClusterName: name, SQLInstance: instance, ExitCode: exitCode,
+						}})
 					default:
-						err := fmt.Errorf("internal error: unrecognized output from monitor: %s", line)
+						err := fmt.Errorf("internal error: unrecognized output from monitor: %q", line)
 						sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
 					}
 				}
@@ -810,8 +1013,8 @@ done
 				return
 			}
 
-			// Watch for context cancellation, which can happen either if
-			// the test fails, or if the monitor loop exits.
+			// Watch for context cancellation, which can happen if the test
+			// fails, or if the monitor loop exits.
 			go func() {
 				<-monitorCtx.Done()
 				sess.Close()
@@ -1484,7 +1687,7 @@ tar cvf %[3]s certs
 // DistributeTenantCerts will generate and distribute certificates to all of the
 // nodes, using the host cluster to generate tenant certificates.
 func (c *SyncedCluster) DistributeTenantCerts(
-	ctx context.Context, l *logger.Logger, hostCluster *SyncedCluster, tenantID int,
+	ctx context.Context, l *logger.Logger, hostCluster *SyncedCluster, virtualClusterID int,
 ) error {
 	if hostCluster.checkForTenantCertificates(ctx, l) {
 		return nil
@@ -1499,7 +1702,7 @@ func (c *SyncedCluster) DistributeTenantCerts(
 		return err
 	}
 
-	if err := hostCluster.createTenantCertBundle(ctx, l, tenantCertsTarName, tenantID, nodeNames); err != nil {
+	if err := hostCluster.createTenantCertBundle(ctx, l, tenantCertsTarName, virtualClusterID, nodeNames); err != nil {
 		return err
 	}
 
@@ -1518,7 +1721,11 @@ func (c *SyncedCluster) DistributeTenantCerts(
 // This function assumes it is running on a host cluster node that already has
 // had the main cert bundle created.
 func (c *SyncedCluster) createTenantCertBundle(
-	ctx context.Context, l *logger.Logger, bundleName string, tenantID int, nodeNames []string,
+	ctx context.Context,
+	l *logger.Logger,
+	bundleName string,
+	virtualClusterID int,
+	nodeNames []string,
 ) error {
 	display := fmt.Sprintf("%s: initializing tenant certs", c.Name)
 	return c.Parallel(ctx, l, c.Nodes[0:1], func(ctx context.Context, node Node) (*RunResultDetails, error) {
@@ -1548,7 +1755,7 @@ fi
 `,
 			cockroachNodeBinary(c, node),
 			strings.Join(nodeNames, " "),
-			tenantID,
+			virtualClusterID,
 			bundleName,
 		)
 
@@ -2358,11 +2565,7 @@ func (c *SyncedCluster) pgurls(
 		if err != nil {
 			return nil, err
 		}
-		sharedClusterName := ""
-		if desc.ServiceMode == ServiceModeShared {
-			sharedClusterName = virtualClusterName
-		}
-		m[node] = c.NodeURL(host, desc.Port, sharedClusterName)
+		m[node] = c.NodeURL(host, desc.Port, virtualClusterName, desc.ServiceMode)
 	}
 	return m, nil
 }
@@ -2717,7 +2920,7 @@ func (c *SyncedCluster) Init(ctx context.Context, l *logger.Logger, node Node) e
 		return errors.WithDetail(errors.CombineErrors(err, res.Err), "install.Init() failed: unable to initialize cluster.")
 	}
 
-	if res, err := c.setClusterSettings(ctx, l, node); err != nil || (res != nil && res.Err != nil) {
+	if res, err := c.setClusterSettings(ctx, l, node, ""); err != nil || (res != nil && res.Err != nil) {
 		return errors.WithDetail(errors.CombineErrors(err, res.Err), "install.Init() failed: unable to set cluster settings.")
 	}
 
