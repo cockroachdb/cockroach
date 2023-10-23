@@ -156,6 +156,7 @@ func TestDBClientScan(t *testing.T) {
 				func(value roachpb.KeyValue) {},
 				rangefeed.WithInitialScanParallelismFn(func() int { return parallelism }),
 				rangefeed.WithOnScanCompleted(func(ctx context.Context, sp roachpb.Span) error {
+					t.Logf("completed scan for %s", sp)
 					atomic.AddInt32(&barrier, 1)
 					<-proceed
 					return nil
@@ -164,10 +165,10 @@ func TestDBClientScan(t *testing.T) {
 		})
 
 		testutils.SucceedsSoon(t, func() error {
-			if atomic.LoadInt32(&barrier) == int32(parallelism) {
-				return nil
+			if b := atomic.LoadInt32(&barrier); b != int32(parallelism) {
+				return errors.Errorf("still waiting for barrier (%d/%d)", b, parallelism)
 			}
-			return errors.New("still  waiting for barrier")
+			return nil
 		})
 		close(proceed)
 		require.NoError(t, g.Wait())
