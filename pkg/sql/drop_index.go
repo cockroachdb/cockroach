@@ -146,6 +146,7 @@ func (n *dropIndexNode) startExec(params runParams) error {
 		// in the primary index. Dropping these columns will lead to data loss.
 		if idx != nil {
 			primaryStoredColumns := tableDesc.GetPrimaryIndex().CollectPrimaryStoredColumnIDs()
+			tableDesc.GetPrimaryIndex().CollectKeyColumnIDs().ForEach(primaryStoredColumns.Add)
 			secondaryStoredColumns := idx.CollectSecondaryStoredColumnIDs()
 			for _, col := range tableDesc.AllColumns() {
 				if col.IsVirtual() {
