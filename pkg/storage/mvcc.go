@@ -3561,7 +3561,7 @@ func MVCCPredicateDeleteRange(
 
 	var runStart, runEnd roachpb.Key
 
-	buf := make([]roachpb.Key, rangeTombstoneThreshold)
+	buf := make([]roachpb.Key, 0, rangeTombstoneThreshold)
 
 	if ms == nil {
 		return nil, errors.AssertionFailedf(
@@ -3685,8 +3685,11 @@ func MVCCPredicateDeleteRange(
 			batchByteSize += runByteSize
 			batchSize += runSize
 		}
+
 		runSize = 0
 		runStart = roachpb.Key{}
+		runEnd = roachpb.Key{}
+		buf = buf[:0]
 		return nil
 	}
 
@@ -3777,10 +3780,11 @@ func MVCCPredicateDeleteRange(
 			if runSize < rangeTombstoneThreshold {
 				// Only buffer keys if there's a possibility of issuing point tombstones.
 				//
-				// To avoid unecessary memory allocation, overwrite the previous key at
-				// buffer's current position. No data corruption occurs because the
-				// buffer is flushed up to runSize.
-				buf[runSize] = append(buf[runSize][:0], runEnd...)
+				// TODO(ssd): It would be nice to avoid unnecessary allocations
+				// here. We copy the end key because when mvccInternalPut publishes
+				// the logical operation related to the delete, it currenty assumes
+				// that the key will not be subsequently modified.
+				buf = append(buf, runEnd.Clone())
 			}
 
 			runSize++
