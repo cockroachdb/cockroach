@@ -208,7 +208,7 @@ BEGIN TRANSACTION; SET TRANSACTION ISOLATION LEVEL READ COMMITTED; COMMIT
 # It is an error to change the isolation level of a running transaction.
 
 statement ok
-SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true
+SET CLUSTER SETTING sql.txn.read_committed_isolation_syntax.enabled = true
 
 statement ok
 BEGIN TRANSACTION
@@ -237,7 +237,7 @@ statement ok
 ROLLBACK
 
 statement ok
-RESET CLUSTER SETTING sql.txn.read_committed_syntax.enabled
+RESET CLUSTER SETTING sql.txn.read_committed_isolation_syntax.enabled
 
 # Transactions default to serializable.
 
@@ -382,7 +382,7 @@ statement ok
 SET CLUSTER SETTING sql.txn.snapshot_isolation_syntax.enabled = false
 
 statement ok
-SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true
+SET CLUSTER SETTING sql.txn.read_committed_isolation_syntax.enabled = true
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED

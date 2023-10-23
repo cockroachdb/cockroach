@@ -1451,7 +1451,7 @@ func TestInjectRetryErrors(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	defer db.Close()
 
-	_, err := db.Exec(`SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true`)
+	_, err := db.Exec(`SET CLUSTER SETTING sql.txn.read_committed_isolation_syntax.enabled = true`)
 	require.NoError(t, err)
 	_, err = db.Exec("SET inject_retry_errors_enabled = 'true'")
 	require.NoError(t, err)

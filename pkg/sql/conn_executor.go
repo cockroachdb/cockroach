@@ -3432,7 +3432,7 @@ var allowSnapshotIsolation = settings.RegisterBoolSetting(
 
 var allowReadCommittedIsolation = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
-	"sql.txn.read_committed_syntax.enabled",
+	"sql.txn.read_committed_isolation_syntax.enabled",
 	"set to true to allow transactions to use the READ COMMITTED isolation "+
 		"level if specified by BEGIN/SET commands",
 	false,

@@ -86,7 +86,7 @@ func TestReadCommittedStmtRetry(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	codec = s.ApplicationLayer().Codec()
 
-	_, err := sqlDB.Exec(`SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true`)
+	_, err := sqlDB.Exec(`SET CLUSTER SETTING sql.txn.read_committed_isolation_syntax.enabled = true`)
 	require.NoError(t, err)
 
 	// Create a table with three rows. Note that k is not the primary key,
