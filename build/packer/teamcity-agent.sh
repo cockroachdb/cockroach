@@ -55,7 +55,8 @@ apt-get install --yes \
   python2 \
   python3 \
   sudo \
-  unzip
+  unzip \
+  zip
 
 # Enable support for executing binaries of all architectures via qemu emulation
 # (necessary for building arm64 Docker images)
