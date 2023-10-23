@@ -5660,7 +5660,25 @@ func MVCCAcquireLock(
 			// Acquiring at new epoch.
 			rolledBack = true
 		} else if foundLock.Txn.Sequence > txn.Sequence {
-			// Acquiring at same epoch and old sequence number.
+			// Acquiring at same epoch and an old sequence number.
+			//
+			// If the found lock has a different strength than the acquisition then we
+			// ignore it and continue. We are likely part of a replayed batch where a
+			// later request in the batch acquired a lock with a higher strength (or
+			// performed an intent write) on the same key.
+			if iterStr != str {
+				continue
+			}
+			// If the found lock has the same strength as the acquisition then this is
+			// an unexpected case. We are likely part of a replayed batch and either:
+			// 1. the lock was reacquired at a later sequence number and the minimum
+			//    acquisition sequence number was not properly retained (bug!). See
+			//    below about why we preserve the earliest non-rolled back sequence
+			//    number for each lock strength.
+			// 2. this acquisition's sequence number was rolled back and the lock was
+			//    subsequently acquired again at a higher sequence number. In such
+			//    cases, we can return an error as the client is no longer waiting for
+			//    a response.
 			return errors.Errorf(
 				"cannot acquire lock with strength %s at seq number %d, "+
 					"already held at higher seq number %d",
