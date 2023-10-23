@@ -2488,6 +2488,7 @@ var builtinOidsArray = []string{
 	2517: `jsonb_array_to_string_array(input: jsonb) -> string[]`,
 	2518: `information_schema._pg_char_octet_length(typid: oid, typmod: int4) -> int`,
 	2519: `information_schema._pg_datetime_precision(typid: oid, typmod: int4) -> int`,
+	2520: `information_schema._pg_interval_type(typid: oid, typmod: int4) -> string`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

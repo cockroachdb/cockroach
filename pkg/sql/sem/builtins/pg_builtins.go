@@ -2270,6 +2270,38 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
+	// NOTE: this could be defined as a user-defined function, like
+	// it is in Postgres:
+	// https://github.com/postgres/postgres/blob/master/src/backend/catalog/information_schema.sql
+	// CREATE FUNCTION _pg_interval_type(typid oid, mod int4) RETURNS text
+	//     LANGUAGE sql
+	//     IMMUTABLE
+	//     PARALLEL SAFE
+	//     RETURNS NULL ON NULL INPUT
+	// RETURN
+	//   CASE WHEN $1 IN (1186) /* interval */
+	// 						THEN pg_catalog.upper(substring(pg_catalog.format_type($1, $2) similar 'interval[()0-9]* #"%#"' escape '#'))
+	//        ELSE null
+	// END;
+	"information_schema._pg_interval_type": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "typid", Typ: types.Oid},
+				{Name: "typmod", Typ: types.Int4},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Body: `SELECT
+						 CASE WHEN $1 IN (1186) 
+			 								THEN pg_catalog.upper(substring(pg_catalog.format_type($1, $2), 'interval[()0-9]* #"%#"', '#')) 
+			        		ELSE null
+  			     END`,
+			Info:              notUsableInfo,
+			Volatility:        volatility.Immutable,
+			CalledOnNullInput: true,
+			Language:          tree.RoutineLangSQL,
+		},
+	),
+
 	"nameconcatoid": makeBuiltin(
 		tree.FunctionProperties{
 			Category: builtinconstants.CategorySystemInfo,

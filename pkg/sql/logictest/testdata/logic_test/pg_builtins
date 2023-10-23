@@ -927,3 +927,29 @@ select information_schema._pg_datetime_precision(1186, NULL);
 NULL
 
 subtest end
+
+subtest information_schema._pg_interval_type
+
+query T
+SELECT information_schema._pg_interval_type(1, 0);
+----
+NULL
+
+statement ok
+CREATE TYPE u AS (ufoo interval, ubar interval);
+
+query TTT colnames
+SELECT a.attname,
+       t.typname,
+       information_schema._pg_interval_type(a.atttypid, a.atttypmod)
+FROM pg_attribute a
+JOIN pg_type t
+ON a.atttypid = t.oid
+WHERE a.attname IN ('ufoo', 'ubar')
+ORDER BY a.attname
+----
+attname  typname   information_schema._pg_interval_type
+ubar  interval     NULL
+ufoo  interval     NULL
+
+subtest end
