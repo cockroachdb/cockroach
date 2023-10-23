@@ -154,6 +154,7 @@ func NewSpanResolver(
 			Clock:       clock,
 			RPCContext:  rpcCtx,
 			LatencyFunc: distSender.LatencyFunc(),
+			HealthFunc:  distSender.HealthFunc(),
 		}),
 		distSender: distSender,
 	}
