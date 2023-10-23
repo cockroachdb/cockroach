@@ -418,14 +418,6 @@ const (
 	// the process of upgrading from previous supported releases to 23.2.
 	V23_2Start
 
-	// V23_2TTLAllowDescPK is the version where TTL tables can have descending
-	// primary keys.
-	V23_2TTLAllowDescPK
-
-	// V23_2_PartiallyVisibleIndexes is the version where partially visible
-	// indexes are enabled.
-	V23_2_PartiallyVisibleIndexes
-
 	// V23_2_EnableRangeCoalescingForSystemTenant enables range coalescing for
 	// the system tenant.
 	V23_2_EnableRangeCoalescingForSystemTenant
@@ -484,16 +476,6 @@ const (
 	// V23_2_AddSystemExecInsightsTable is the version at which Cockroach creates
 	// {statement|transaction}_execution_insights system tables.
 	V23_2_AddSystemExecInsightsTable
-
-	// V23_2_Procedures is the version where procedures are enabled.
-	V23_2_Procedures
-
-	// V23_2_PLpgSQL is the version at which Cockroach supports routines using
-	// PLpgSQL language.
-	V23_2_PLpgSQL
-
-	// V23_2_UDFMutations is the version where UDFs with mutations are enabled.
-	V23_2_UDFMutations
 
 	// ***************************************************************************
 	//            WHERE TO ADD VERSION GATES DURING 23.2 STABILITY?
@@ -787,76 +769,56 @@ var rawVersionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 2},
 	},
 	{
-		Key:     V23_2TTLAllowDescPK,
+		Key:     V23_2_EnableRangeCoalescingForSystemTenant,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 4},
 	},
 	{
-		Key:     V23_2_PartiallyVisibleIndexes,
+		Key:     V23_2_UseACRaftEntryEntryEncodings,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 6},
 	},
 	{
-		Key:     V23_2_EnableRangeCoalescingForSystemTenant,
+		Key:     V23_2_PebbleFormatDeleteSizedAndObsolete,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 8},
 	},
 	{
-		Key:     V23_2_UseACRaftEntryEntryEncodings,
+		Key:     V23_2_UseSizedPebblePointTombstones,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 10},
 	},
 	{
-		Key:     V23_2_PebbleFormatDeleteSizedAndObsolete,
+		Key:     V23_2_PebbleFormatVirtualSSTables,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 12},
 	},
 	{
-		Key:     V23_2_UseSizedPebblePointTombstones,
+		Key:     V23_2_StmtDiagForPlanGist,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 14},
 	},
 	{
-		Key:     V23_2_PebbleFormatVirtualSSTables,
+		Key:     V23_2_RegionaLivenessTable,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 16},
 	},
 	{
-		Key:     V23_2_StmtDiagForPlanGist,
+		Key:     V23_2_RemoveLockTableWaiterTouchPush,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 18},
 	},
 	{
-		Key:     V23_2_RegionaLivenessTable,
+		Key:     V23_2_ChangefeedLaggingRangesOpts,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 20},
 	},
 	{
-		Key:     V23_2_RemoveLockTableWaiterTouchPush,
+		Key:     V23_2_GrantExecuteToPublic,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 22},
 	},
 	{
-		Key:     V23_2_ChangefeedLaggingRangesOpts,
+		Key:     V23_2_EnablePebbleFormatVirtualSSTables,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 24},
 	},
 	{
-		Key:     V23_2_GrantExecuteToPublic,
+		Key:     Permanent_V23_2_MVCCStatisticsTable,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 26},
 	},
 	{
-		Key:     V23_2_EnablePebbleFormatVirtualSSTables,
-		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 28},
-	},
-	{
-		Key:     Permanent_V23_2_MVCCStatisticsTable,
-		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 30},
-	},
-	{
 		Key:     V23_2_AddSystemExecInsightsTable,
-		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 32},
-	},
-	{
-		Key:     V23_2_Procedures,
-		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 34},
-	},
-	{
-		Key:     V23_2_PLpgSQL,
-		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 36},
-	},
-	{
-		Key:     V23_2_UDFMutations,
-		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 38},
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 28},
 	},
 
 	{
