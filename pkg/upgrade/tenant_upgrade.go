@@ -87,13 +87,18 @@ var NoPrecondition PreconditionFunc = nil
 
 // NewTenantUpgrade constructs a TenantUpgrade.
 func NewTenantUpgrade(
-	description string, v roachpb.Version, precondition PreconditionFunc, fn TenantUpgradeFunc,
+	description string,
+	v roachpb.Version,
+	precondition PreconditionFunc,
+	fn TenantUpgradeFunc,
+	restore RestoreBehavior,
 ) *TenantUpgrade {
 	m := &TenantUpgrade{
 		upgrade: upgrade{
 			description: description,
 			v:           v,
 			permanent:   false,
+			restore:     restore,
 		},
 		fn:           fn,
 		precondition: precondition,
@@ -105,7 +110,11 @@ func NewTenantUpgrade(
 // an upgrade that will run regardless of the cluster's bootstrap version.
 // Note however that the upgrade will still run at most once.
 func NewPermanentTenantUpgrade(
-	description string, v roachpb.Version, fn TenantUpgradeFunc, v22_2StartupMigrationName string,
+	description string,
+	v roachpb.Version,
+	fn TenantUpgradeFunc,
+	v22_2StartupMigrationName string,
+	restore RestoreBehavior,
 ) *TenantUpgrade {
 	m := &TenantUpgrade{
 		upgrade: upgrade{
@@ -113,6 +122,7 @@ func NewPermanentTenantUpgrade(
 			v:                         v,
 			permanent:                 true,
 			v22_2StartupMigrationName: v22_2StartupMigrationName,
+			restore:                   restore,
 		},
 		fn:           fn,
 		precondition: nil,

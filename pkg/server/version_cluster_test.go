@@ -433,7 +433,7 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 						ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 					) error {
 						return nil
-					}), true
+					}, "test"), true
 			},
 		},
 	}
