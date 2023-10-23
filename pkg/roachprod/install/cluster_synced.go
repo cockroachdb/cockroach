@@ -463,6 +463,10 @@ func (c *SyncedCluster) Stop(
 			"-e", fmt.Sprintf("ALTER TENANT '%s' STOP SERVICE", virtualClusterName),
 		})
 		if err != nil || res[0].Err != nil {
+			if len(res) > 0 {
+				return errors.CombineErrors(err, res[0].Err)
+			}
+
 			return err
 		}
 	}
