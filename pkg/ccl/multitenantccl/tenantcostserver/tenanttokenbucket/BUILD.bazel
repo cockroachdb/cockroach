@@ -21,6 +21,7 @@ go_test(
     tags = ["ccl_test"],
     deps = [
         "//pkg/kv/kvpb",
+        "//pkg/roachpb",
         "//pkg/testutils/datapathutils",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_datadriven//:datadriven",

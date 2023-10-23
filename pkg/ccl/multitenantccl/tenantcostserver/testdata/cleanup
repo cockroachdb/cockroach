@@ -21,7 +21,7 @@ instance_id: 9
 
 inspect tenant=5
 ----
-Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  current-share-sum=0
+Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  ru-current-avg=6835937.5
 Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:00:00.000
 First active instance: 3
@@ -47,7 +47,7 @@ instance_id: 3
 
 inspect tenant=13
 ----
-Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  current-share-sum=0
+Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  ru-current-avg=5781250
 Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:00:00.000
 First active instance: 2
@@ -73,7 +73,7 @@ next_live_instance_id: 9
 
 wait-inspect tenant=5
 ----
-Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10030000  current-share-sum=0
+Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10030000  ru-current-avg=7634453.125
 Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:05:00.000
 First active instance: 3
@@ -94,7 +94,7 @@ next_live_instance_id: 3
 
 wait-inspect tenant=5
 ----
-Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10060000  current-share-sum=0
+Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10060000  ru-current-avg=8240839.84375
 Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:10:00.000
 First active instance: 3
@@ -115,7 +115,7 @@ next_live_instance_id: 5
 
 wait-inspect tenant=5
 ----
-Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10090000  current-share-sum=0
+Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10090000  ru-current-avg=8703129.88281
 Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:15:00.000
 First active instance: 5
@@ -123,7 +123,7 @@ First active instance: 5
 
 inspect tenant=13
 ----
-Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  current-share-sum=0
+Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  ru-current-avg=5781250
 Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:00:00.000
 First active instance: 2
