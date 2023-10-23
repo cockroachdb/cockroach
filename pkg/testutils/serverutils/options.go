@@ -18,9 +18,10 @@ import (
 
 // SQLConnOptions contains options for opening a SQL connection.
 type SQLConnOptions struct {
-	DBName      string
-	User        *url.Userinfo
-	ClientCerts bool
+	DBName         string
+	User           *url.Userinfo
+	ClientCerts    bool
+	CertsDirPrefix string
 }
 
 // SQLConnOption is an option for opening a SQL connection.
@@ -29,9 +30,10 @@ type SQLConnOption func(result *SQLConnOptions)
 // DefaultSQLConnOptions returns the default options for opening a SQL connection.
 func DefaultSQLConnOptions() *SQLConnOptions {
 	return &SQLConnOptions{
-		DBName:      "",
-		User:        url.User(username.RootUser),
-		ClientCerts: true,
+		DBName:         "",
+		User:           url.User(username.RootUser),
+		ClientCerts:    true,
+		CertsDirPrefix: "openTestSQLConn",
 	}
 }
 
@@ -64,5 +66,13 @@ func UserPassword(username, password string) SQLConnOption {
 func ClientCerts(clientCerts bool) SQLConnOption {
 	return func(result *SQLConnOptions) {
 		result.ClientCerts = clientCerts
+	}
+}
+
+// CertsDirPrefix sets the prefix for the directory where the client certificates
+// are stored.
+func CertsDirPrefix(certsDirPrefix string) SQLConnOption {
+	return func(result *SQLConnOptions) {
+		result.CertsDirPrefix = certsDirPrefix
 	}
 }
