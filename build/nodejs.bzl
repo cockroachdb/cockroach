@@ -24,7 +24,6 @@ _COPY_DIRECTORY_URL_PREFIX = "https://storage.googleapis.com/public-bazel-artifa
 _COPY_DIRECTORY_VERSIONS = {
     "darwin_amd64": "b4d39cd9498b8367ba75ad6c13c7687562dabafbf8c782883815314061f9f043",
     "darwin_arm64": "1fd4268a242181d7cdbee7f8035b34548b895fd9e438fab05d48e4627e072e53",
-    "freebsd_amd64": "f874c274202ea767b432f05c62e716f51bd7580ea8efb1349eb29a35375408eb",
     "linux_amd64": "ce4aaaf41b3b8f9589290d0f3d657400514b7361b9c27f85ac8f966ee4d663b8",
     "linux_arm64": "51099a643689c2e563ab7cd9e14345dd9670ee4814ac4046501675d402decdf4",
     "windows_amd64": "6df30928734abb48515ea16d1273a829651adb77b9ecbbe49e02d17cfffab519",
@@ -35,7 +34,6 @@ _COPY_TO_DIRECTORY_URL_PREFIX = "https://storage.googleapis.com/public-bazel-art
 _COPY_TO_DIRECTORY_VERSIONS = {
     "darwin_amd64": "dadf2fc200a14968664c4b740a76fcee700cb975eb5bfcd3215d253b97a28b23",
     "darwin_arm64": "97ae06279adf44786c1151aa3e4715474603a4792fa64ec6bccb1b52fa00abc1",
-    "freebsd_amd64": "195becca548395db4f165e6ee1e3830b375641999f7820a2815ff52f31223981",
     "linux_amd64": "cfac1d923b7039555265ecf1558200d391ffbed62804a4b8c4510b12a18d6e70",
     "linux_arm64": "5c4c69f6f20ba0d6646435ad9922d6193871f3b4262cbc65295e4b89ece667a4",
     "windows_amd64": "2be5d8b2771ffa3922438cda8899f782046633d6d230f744bf63031888a8bf48",
@@ -115,12 +113,6 @@ def declare_nodejs_repos():
             node_version = _NODE_VERSION,
             platform = name,
         )
-    # This is used only by rules_nodejs to find the local version of node.
-    native.new_local_repository(
-        name = "nodejs_freebsd_amd64",
-        build_file_content = """exports_files[("bin/node")]""",
-        path = "/usr/local",
-    )
     nodejs_repo_host_os_alias(name = "nodejs", user_node_repository_name = "nodejs")
     nodejs_repo_host_os_alias(name = "nodejs_host", user_node_repository_name = "nodejs")
     toolchains_repo(name = "nodejs_toolchains", user_node_repository_name = "nodejs")

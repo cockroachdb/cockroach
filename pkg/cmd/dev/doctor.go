@@ -98,34 +98,6 @@ Please perform the following steps:
 		},
 	},
 	{
-		name: "node",
-		check: func(d *dev, ctx context.Context, cfg doctorConfig) string {
-			// Having a pre-installed node is only necessary on freebsd.
-			if runtime.GOOS != "freebsd" {
-				return ""
-			}
-			_, err := d.exec.CommandContextSilent(ctx, "/usr/local/bin/node", "--version")
-			if err != nil {
-				return `/usr/local/bin/node not found.
-You can install node with: ` + "`pkg install node`"
-			}
-			return ""
-		},
-		autofix: func(d *dev, ctx context.Context, cfg doctorConfig) error {
-			if !cfg.haveAutofixPermission && cfg.interactive {
-				response := promptInteractiveInput("Do you want me to run `pkg install node` for you?", "y")
-				canAutofix, ok := toBoolFuzzy(response)
-				if ok && canAutofix {
-					cfg.haveAutofixPermission = true
-				}
-			}
-			if !cfg.haveAutofixPermission {
-				return fmt.Errorf("do not have permission to install node")
-			}
-			return d.exec.CommandContextInheritingStdStreams(ctx, "pkg", "install", "node")
-		},
-	},
-	{
 		name: "submodules",
 		check: func(d *dev, ctx context.Context, cfg doctorConfig) string {
 			if _, err := os.Stat("bin/.submodules-initialized"); err == nil {
