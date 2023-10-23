@@ -226,13 +226,13 @@ func (sr *SampleReservoir) GetNonNullDatums(
 		}
 		values = make(tree.Datums, 0, len(sr.samples))
 		for _, sample := range sr.samples {
-			ed := &sample.Row[colIdx]
-			if ed.Datum == nil {
+			d := sample.Row[colIdx].Datum
+			if d == nil {
 				values = nil
 				return errors.AssertionFailedf("value in column %d not decoded", colIdx)
 			}
-			if !ed.IsNull() {
-				values = append(values, ed.Datum)
+			if d != tree.DNull {
+				values = append(values, d)
 			}
 		}
 		return nil
