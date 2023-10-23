@@ -137,11 +137,14 @@ type SystemUpgrade struct {
 type SystemUpgradeFunc func(context.Context, clusterversion.ClusterVersion, SystemDeps) error
 
 // NewSystemUpgrade constructs a SystemUpgrade.
-func NewSystemUpgrade(description string, v roachpb.Version, fn SystemUpgradeFunc) *SystemUpgrade {
+func NewSystemUpgrade(
+	description string, v roachpb.Version, fn SystemUpgradeFunc, restore RestoreBehavior,
+) *SystemUpgrade {
 	return &SystemUpgrade{
 		upgrade: upgrade{
 			description: description,
 			v:           v,
+			restore:     restore,
 		},
 		fn: fn,
 	}
@@ -151,7 +154,11 @@ func NewSystemUpgrade(description string, v roachpb.Version, fn SystemUpgradeFun
 // "permanent": an upgrade that will run regardless of the cluster's bootstrap
 // version. Note however that the upgrade will still run at most once.
 func NewPermanentSystemUpgrade(
-	description string, v roachpb.Version, fn SystemUpgradeFunc, v22_2StartupMigrationName string,
+	description string,
+	v roachpb.Version,
+	fn SystemUpgradeFunc,
+	v22_2StartupMigrationName string,
+	restore RestoreBehavior,
 ) *SystemUpgrade {
 	return &SystemUpgrade{
 		upgrade: upgrade{
@@ -159,6 +166,7 @@ func NewPermanentSystemUpgrade(
 			v:                         v,
 			permanent:                 true,
 			v22_2StartupMigrationName: v22_2StartupMigrationName,
+			restore:                   restore,
 		},
 		fn: fn,
 	}

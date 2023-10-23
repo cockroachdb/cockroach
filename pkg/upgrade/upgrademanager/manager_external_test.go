@@ -111,7 +111,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 							case <-ctx.Done():
 								return ctx.Err()
 							}
-						}), true
+						}, upgrade.RestoreActionNotRequired("test")), true
 					},
 				},
 			},
@@ -281,7 +281,7 @@ func TestPostJobInfoTableQueryDuplicateJobInfo(t *testing.T) {
 			case <-ctx.Done():
 				return ctx.Err()
 			}
-		}), true
+		}, upgrade.RestoreActionNotRequired("test")), true
 	}
 
 	ts, systemSQLDB, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -399,7 +399,7 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 							ctx context.Context, version clusterversion.ClusterVersion, d upgrade.SystemDeps,
 						) error {
 							return d.DB.KV().Migrate(ctx, desc.StartKey, desc.EndKey, cv)
-						}), true
+						}, upgrade.RestoreActionNotRequired("test")), true
 					},
 				},
 			},
@@ -511,7 +511,9 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 							atomic.AddInt32(&active, -1)
 							migrationRunCounts[version]++
 							return nil
-						}), true
+						},
+							upgrade.RestoreActionNotRequired("test"),
+						), true
 					},
 				},
 			},
@@ -597,7 +599,7 @@ func TestPauseMigration(t *testing.T) {
 							case err := <-canResume:
 								return err
 							}
-						}), true
+						}, upgrade.RestoreActionNotRequired("test")), true
 					},
 				},
 			},
@@ -723,11 +725,13 @@ func TestPrecondition(t *testing.T) {
 							return cf(&preconditionRun, &preconditionErr)(ctx, cv, td)
 						}),
 						cf(&migrationRun, &migrationErr),
+						upgrade.RestoreActionNotRequired("test"),
 					), true
 				case v2:
 					return upgrade.NewTenantUpgrade("v2", cv,
 						upgrade.NoPrecondition,
 						cf(&migrationRun, &migrationErr),
+						upgrade.RestoreActionNotRequired("test"),
 					), true
 				default:
 					return nil, false
@@ -870,7 +874,7 @@ func TestMigrationFailure(t *testing.T) {
 						errorUpgrade := func(ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps) error {
 							return errors.New("the upgrade failed with some error!")
 						}
-						return upgrade.NewTenantUpgrade("test", cv, nil, errorUpgrade), true
+						return upgrade.NewTenantUpgrade("test", cv, nil, errorUpgrade, upgrade.RestoreActionNotRequired("test")), true
 					}
 					return upgrades.GetUpgrade(cv)
 				},
