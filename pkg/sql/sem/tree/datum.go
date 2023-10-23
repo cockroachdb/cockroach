@@ -3629,7 +3629,9 @@ func NewDPGLSN(l lsn.LSN) *DPGLSN {
 func ParseDPGLSN(str string) (*DPGLSN, error) {
 	v, err := lsn.ParseLSN(str)
 	if err != nil {
-		return nil, errors.Wrapf(err, "could not parse pg_lsn")
+		return nil, pgerror.Newf(pgcode.InvalidTextRepresentation,
+			"invalid input syntax for type pg_lsn: \"%s\"", str,
+		)
 	}
 	return NewDPGLSN(v), nil
 }

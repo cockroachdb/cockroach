@@ -221,7 +221,8 @@ func TestStringConstantVerifyAvailableTypes(t *testing.T) {
 
 			semaCtx := tree.MakeSemaContext()
 			if _, err := test.c.ResolveAsType(context.Background(), &semaCtx, availType); err != nil {
-				if !strings.Contains(err.Error(), "could not parse") {
+				if !strings.Contains(err.Error(), "could not parse") &&
+					!strings.Contains(err.Error(), "invalid input syntax") {
 					// Parsing errors are permitted for this test, as proper tree.StrVal parsing
 					// is tested in TestStringConstantTypeResolution. Any other error should
 					// throw a failure.
@@ -693,7 +694,8 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 					if !strings.Contains(err.Error(), "could not parse") &&
 						!strings.Contains(err.Error(), "parsing") &&
 						!strings.Contains(err.Error(), "out of range") &&
-						!strings.Contains(err.Error(), "exceeds supported") {
+						!strings.Contains(err.Error(), "exceeds supported") &&
+						!strings.Contains(err.Error(), "invalid input syntax") {
 						// Parsing errors are permitted for this test, but the number of correctly
 						// parseable types will be verified. Any other error should throw a failure.
 						t.Errorf("%d: expected resolving %v as available type %s would either succeed"+
