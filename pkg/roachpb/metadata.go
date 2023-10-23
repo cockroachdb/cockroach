@@ -935,13 +935,27 @@ func (h *GCHint) Merge(rhs *GCHint, leftEmpty, rightEmpty bool) bool {
 	updated := h.ScheduleGCFor(rhs.GCTimestamp)
 	// NB: don't swap the operands, we need the side effect of the method call.
 	updated = h.ScheduleGCFor(rhs.GCTimestampNext) || updated
+	return h.MergeLatestRangeDeleteTimestamp(rhs, leftEmpty, rightEmpty) || updated
+}
 
+// MergeLatestRangeDeleteTimestamp combines GC hints of two ranges. The result
+// is either a hint that covers both ranges or empty hint if it is not possible
+// to merge hints. leftEmpty and rightEmpty arguments are set based on
+// MVCCStats.HasNoUserData of receiver hint (leftEmpty) and argument hint
+// (rightEmpty). Returns true if receiver state was changed.
+//
+// TODO(pavelkalinnikov): remove this, and inline into the Merge method when min
+// supported version is 23.2.
+//   - Before 23.1, hints were merged using this method.
+//   - In 23.1, it is behind a cluster setting. Merge() can be used instead.
+//   - In 23.2, it is no longer used.
+func (h *GCHint) MergeLatestRangeDeleteTimestamp(rhs *GCHint, leftEmpty, rightEmpty bool) bool {
 	// If LHS or RHS has data but no LatestRangeDeleteTimestamp hint, then this
 	// side is not known to be covered by range tombstones. Correspondingly, the
 	// union of the two is not too. If so, clear the hint.
 	if (rhs.LatestRangeDeleteTimestamp.IsEmpty() && !rightEmpty) ||
 		(h.LatestRangeDeleteTimestamp.IsEmpty() && !leftEmpty) {
-		updated = updated || h.LatestRangeDeleteTimestamp.IsSet()
+		updated := h.LatestRangeDeleteTimestamp.IsSet()
 		h.LatestRangeDeleteTimestamp = hlc.Timestamp{}
 		return updated
 	}
@@ -950,7 +964,7 @@ func (h *GCHint) Merge(rhs *GCHint, leftEmpty, rightEmpty bool) bool {
 	// on top of the range tombstones, so the ClearRange optimization may not be
 	// effective. For now, live with the false positive because this is unlikely.
 
-	return h.ForwardLatestRangeDeleteTimestamp(rhs.LatestRangeDeleteTimestamp) || updated
+	return h.ForwardLatestRangeDeleteTimestamp(rhs.LatestRangeDeleteTimestamp)
 }
 
 // ForwardLatestRangeDeleteTimestamp bumps LatestDeleteRangeTimestamp in GC hint
@@ -968,6 +982,9 @@ func (h *GCHint) ForwardLatestRangeDeleteTimestamp(ts hlc.Timestamp) bool {
 // eagerly enqueued for GC when considered by the MVCC GC queue.
 //
 // Returns true iff the hint was updated.
+//
+// NB: this method is used behind a cluster setting in 23.1, and is behind a
+// version gate in 23.2.
 func (h *GCHint) ScheduleGCFor(ts hlc.Timestamp) bool {
 	if ts.IsEmpty() {
 		return false
