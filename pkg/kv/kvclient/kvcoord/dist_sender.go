@@ -224,6 +224,16 @@ var senderConcurrencyLimit = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+// FollowerReadsUnhealthy controls whether we will send follower reads to nodes
+// that are not considered healthy. By default, we will sort these nodes behind
+// healthy nodes.
+var FollowerReadsUnhealthy = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"kv.dist_sender.follower_reads_unhealthy.enabled",
+	"send follower reads to unhealthy nodes",
+	true,
+)
+
 func max(a, b int64) int64 {
 	if a > b {
 		return a
@@ -370,6 +380,9 @@ type DistSender struct {
 
 	// LatencyFunc is used to estimate the latency to other nodes.
 	latencyFunc LatencyFunc
+
+	// HealthFunc returns true if the node is alive and not draining.
+	healthFunc atomic.Pointer[HealthFunc]
 
 	onRangeSpanningNonTxnalBatch func(ba *kvpb.BatchRequest) *kvpb.Error
 
@@ -530,12 +543,32 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 		ds.onRangeSpanningNonTxnalBatch = cfg.TestingKnobs.OnRangeSpanningNonTxnalBatch
 	}
 
+	// Placeholder function until we inject the real health function in using
+	// SetHealthFunc.
+	// TODO(baptist): Restructure the code to allow injecting the correct
+	// HealthFunc at construction time.
+	healthFunc := HealthFunc(func(id roachpb.NodeID) bool {
+		return true
+	})
+	ds.healthFunc.Store(&healthFunc)
+
 	return ds
+}
+
+// SetHealthFunc is called after construction due to the circular dependency
+// between DistSender and NodeLiveness.
+func (ds *DistSender) SetHealthFunc(healthFn HealthFunc) {
+	ds.healthFunc.Store(&healthFn)
 }
 
 // LatencyFunc returns the LatencyFunc of the DistSender.
 func (ds *DistSender) LatencyFunc() LatencyFunc {
 	return ds.latencyFunc
+}
+
+// HealthFunc returns the HealthFunc of the DistSender.
+func (ds *DistSender) HealthFunc() HealthFunc {
+	return *ds.healthFunc.Load()
 }
 
 // DisableFirstRangeUpdates disables updates of the first range via
@@ -2068,7 +2101,7 @@ func (ds *DistSender) sendToReplicas(
 		// First order by latency, then move the leaseholder to the front of the
 		// list, if it is known.
 		if !ds.dontReorderReplicas {
-			replicas.OptimizeReplicaOrder(ds.getNodeID(), ds.latencyFunc, ds.locality)
+			replicas.OptimizeReplicaOrder(ds.st, ds.getNodeID(), ds.HealthFunc(), ds.latencyFunc, ds.locality)
 		}
 
 		idx := -1
@@ -2087,7 +2120,7 @@ func (ds *DistSender) sendToReplicas(
 	case kvpb.RoutingPolicy_NEAREST:
 		// Order by latency.
 		log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not required")
-		replicas.OptimizeReplicaOrder(ds.getNodeID(), ds.latencyFunc, ds.locality)
+		replicas.OptimizeReplicaOrder(ds.st, ds.getNodeID(), ds.HealthFunc(), ds.latencyFunc, ds.locality)
 
 	default:
 		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
