@@ -1215,6 +1215,26 @@ SELECT jsonb_array_to_string_array(j -> 'a') FROM str_arr ORDER BY j ASC
 query error input argument must be JSON array type
 SELECT jsonb_array_to_string_array(j -> 'b') FROM str_arr ORDER BY j ASC
 
+query T
+SELECT jsonb_array_to_string_array('[1, 2, 3]':::JSONB)
+----
+{1,2,3}
+
+query T
+SELECT jsonb_array_to_string_array('[true, false, false, true]':::JSONB)
+----
+{true,false,false,true}
+
+query T
+SELECT jsonb_array_to_string_array('[null]':::JSONB)
+----
+{}
+
+query T
+SELECT jsonb_array_to_string_array('["foo", null]':::JSONB)
+----
+{foo}
+
 # Regression test for #23429.
 
 statement ok
