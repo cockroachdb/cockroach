@@ -29,6 +29,12 @@ func TestUniqueVersions(t *testing.T) {
 	}
 }
 
+func TestRestoreBehaviorIsSet(t *testing.T) {
+	for _, m := range upgrades {
+		require.NotEmpty(t, m.RestoreBehavior(), "expected %s to document a restore behavior", m.Name())
+	}
+}
+
 // TestFirstUpgradesAfterPreExistingRelease checks that the first internal
 // version following each supported pre-existing release has an firstUpgrade
 // registered for it.

@@ -211,7 +211,11 @@ func newFirstUpgrade(v roachpb.Version) *upgrade.TenantUpgrade {
 		panic("not the first internal release")
 	}
 	return upgrade.NewTenantUpgrade(
-		firstUpgradeDescription(v), v, FirstUpgradeFromReleasePrecondition, FirstUpgradeFromRelease,
+		firstUpgradeDescription(v),
+		v,
+		FirstUpgradeFromReleasePrecondition,
+		FirstUpgradeFromRelease,
+		upgrade.RestoreActionNotRequired("first upgrade is a persists nothing"),
 	)
 }
 
