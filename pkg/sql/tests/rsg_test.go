@@ -495,6 +495,19 @@ func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
 		"alter_table_cmd",
 	}
 
+	// The goroutines will use round-robin to pick the next table to modify.
+	tableIDMu := syncutil.Mutex{}
+	tableID := 0
+	incrementTableID := func() int {
+		tableIDMu.Lock()
+		defer tableIDMu.Unlock()
+		tableID++
+		if tableID >= numTables {
+			tableID = 0
+		}
+		return tableID
+	}
+
 	testRandomSyntax(t, true, "ident", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		if err := db.exec(t, ctx, "SET CLUSTER SETTING sql.catalog.descriptor_lease_duration = '30s'"); err != nil {
 			return err
@@ -510,7 +523,7 @@ func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
 		return nil
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		n := r.Intn(len(roots))
-		s := fmt.Sprintf("ALTER TABLE ident.ident%d %s", r.Intn(numTables), r.Generate(roots[n], 500))
+		s := fmt.Sprintf("ALTER TABLE ident.ident%d %s", incrementTableID(), r.Generate(roots[n], 500))
 		// Execute with a resettable timeout, where we allow up to N go-routines worth
 		// of resets. This should be the maximum theoretical time we can get
 		// stuck behind other work.
