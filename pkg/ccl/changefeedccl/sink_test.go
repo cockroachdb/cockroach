@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -474,12 +475,20 @@ func TestSQLSink(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
+			base.TestTenantProbabilistic, 112863,
+		),
+		UseDatabase: "d",
+	})
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 
-	pgURL, cleanup := s.PGUrl(t, serverutils.CertsDirPrefix(t.Name()), serverutils.User(username.RootUser))
+	// TODO(herko): When the issue relating to this test is fixed, update this
+	// to use PGUrl on the server interface instead.
+	// See: https://github.com/cockroachdb/cockroach/issues/112863
+	pgURL, cleanup := sqlutils.PGUrl(t, s.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	pgURL.Path = `d`
 
@@ -490,6 +499,9 @@ func TestSQLSink(t *testing.T) {
 	targets.Add(barTopic.GetTargetSpecification())
 
 	const testTableName = `sink`
+	// TODO(herko): `makeSQLSink` does not expect "options" to be present in the URL, find out if
+	// this is a bug, or if we should add it to to `consumeParam` in the `makeSQLSink` function.
+	// See: https://github.com/cockroachdb/cockroach/issues/112863.
 	sink, err := makeSQLSink(sinkURL{URL: &pgURL}, testTableName, targets, nilMetricsRecorderBuilder)
 	require.NoError(t, err)
 	require.NoError(t, sink.(*sqlSink).Dial())

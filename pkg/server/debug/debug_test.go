@@ -182,7 +182,11 @@ func TestAdminDebugAuth(t *testing.T) {
 func TestAdminDebugRedirect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
+			base.TestTenantProbabilistic, 112955,
+		),
+	})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.ApplicationLayer()
 

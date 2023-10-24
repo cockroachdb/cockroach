@@ -38,6 +38,9 @@ func TestStatusGetFiles(t *testing.T) {
 	storeSpec := base.StoreSpec{Path: tempDir}
 
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
+			base.TestTenantProbabilistic, 112956,
+		),
 		StoreSpecs: []base.StoreSpec{
 			storeSpec,
 		},
