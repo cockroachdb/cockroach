@@ -368,6 +368,13 @@ func TestValueChecksumWithBytes(t *testing.T) {
 	}
 }
 
+func TestValueGetErrorsRedacted(t *testing.T) {
+	v := MakeValueFromString("Hello world")
+	_, err := v.GetInt()
+	require.EqualError(t, err, "value type is not INT: BYTES")
+	require.Equal(t, string(redact.Sprintf("%s %s", err, "sensitive").Redact()), "value type is not INT: BYTES ‹×›")
+}
+
 func TestSetGetChecked(t *testing.T) {
 	v := Value{}
 
