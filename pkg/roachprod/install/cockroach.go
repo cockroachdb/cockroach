@@ -415,11 +415,7 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 		}
 
 		if startOpts.GetInitTarget() == node {
-			res, err = c.createAdminUserForSecureCluster(ctx, l, startOpts)
-			if err != nil || res.Err != nil {
-				return res, errors.CombineErrors(err, res.Err)
-			}
-
+			c.createAdminUserForSecureCluster(ctx, l, startOpts)
 			return c.setClusterSettings(ctx, l, node, startOpts.VirtualClusterName)
 		}
 
@@ -954,12 +950,15 @@ func (c *SyncedCluster) initializeCluster(
 
 // createAdminUserForSecureCluster creates a `roach` user with admin
 // privileges. The password used matches the virtual cluster name
-// ('system' for the storage cluster).
+// ('system' for the storage cluster). If it cannot be created, this
+// function will log an error and continue. Roachprod is used in a
+// variety of contexts within roachtests, and a failure to create a
+// user might be "expected" depending on what the test is doing.
 func (c *SyncedCluster) createAdminUserForSecureCluster(
 	ctx context.Context, l *logger.Logger, startOpts StartOpts,
-) (*RunResultDetails, error) {
+) {
 	if !c.Secure {
-		return &RunResultDetails{}, nil
+		return
 	}
 
 	const username = "roach"
@@ -980,7 +979,6 @@ func (c *SyncedCluster) createAdminUserForSecureCluster(
 		fmt.Sprintf("GRANT ADMIN TO %s", username),
 	}, "; ")
 
-	var result *RunResultDetails
 	// We retry a few times here because cockroach process might not be
 	// ready to serve connections at this point. We also can't use
 	// `COCKROACH_CONNECT_TIMEOUT` in this case because that would not
@@ -994,14 +992,13 @@ func (c *SyncedCluster) createAdminUserForSecureCluster(
 
 		if err != nil || results[0].Err != nil {
 			err := errors.CombineErrors(err, results[0].Err)
-			l.Printf("error (retrying): %v, output: %s", err, results[0].CombinedOut)
 			return err
 		}
 
-		result = results[0]
 		return nil
 	}); err != nil {
-		return &RunResultDetails{}, fmt.Errorf("failed to create default admin user: %w", err)
+		l.Printf("not creating default admin user due to error: %v", err)
+		return
 	}
 
 	var virtualClusterInfo string
@@ -1010,7 +1007,6 @@ func (c *SyncedCluster) createAdminUserForSecureCluster(
 	}
 
 	l.Printf("log into DB console%s with user=%s password=%s", virtualClusterInfo, username, password)
-	return result, nil
 }
 
 func (c *SyncedCluster) setClusterSettings(

@@ -100,7 +100,7 @@ func registerCDCBench(r registry.Registry) {
 					CompatibleClouds: registry.AllExceptAWS,
 					Suites:           registry.Suites(registry.Nightly),
 					RequiresLicense:  true,
-					Timeout:          2 * time.Hour, // catchup scans with 100k ranges can take >1 hour
+					Timeout:          4 * time.Hour, // Allow for the initial import and catchup scans with 100k ranges.
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 						runCDCBenchScan(ctx, t, c, scanType, rows, ranges, protocol, format)
 					},
