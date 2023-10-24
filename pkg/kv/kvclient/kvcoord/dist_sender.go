@@ -278,6 +278,17 @@ var FollowerReadsUnhealthy = settings.RegisterBoolSetting(
 	true,
 )
 
+// sortByLocalityFirst controls whether we sort by locality before sorting by
+// latency. If it is set to false we will only look at the latency values.
+// TODO(baptist): Remove this in 25.1 once we have validated that we don't need
+// to fall back to the previous behavior of only sorting by latency.
+var sortByLocalityFirst = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"kv.dist_sender.sort_locality_first.enabled",
+	"sort followers by locality before sorting by latency",
+	true,
+)
+
 func max(a, b int64) int64 {
 	if a > b {
 		return a

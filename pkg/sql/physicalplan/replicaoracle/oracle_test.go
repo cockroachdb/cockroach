@@ -49,13 +49,13 @@ func TestClosest(t *testing.T) {
 			Locality:   nd2.Locality, // pretend node 2 is closest.
 			Settings:   cluster.MakeTestingClusterSettings(),
 			HealthFunc: func(_ roachpb.NodeID) bool { return true },
+			LatencyFunc: func(id roachpb.NodeID) (time.Duration, bool) {
+				if id == 2 {
+					return time.Nanosecond, validLatencyFunc
+				}
+				return time.Millisecond, validLatencyFunc
+			},
 		})
-		o.(*closestOracle).latencyFunc = func(id roachpb.NodeID) (time.Duration, bool) {
-			if id == 2 {
-				return time.Nanosecond, validLatencyFunc
-			}
-			return time.Millisecond, validLatencyFunc
-		}
 		internalReplicas := []roachpb.ReplicaDescriptor{
 			{NodeID: 4, StoreID: 4},
 			{NodeID: 2, StoreID: 2},

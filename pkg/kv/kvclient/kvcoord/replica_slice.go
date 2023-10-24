@@ -209,6 +209,8 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 		shuffle.Shuffle(rs)
 		return
 	}
+	followerReadsUnhealthy := FollowerReadsUnhealthy.Get(&st.SV)
+	sortByLocalityFirst := sortByLocalityFirst.Get(&st.SV)
 	// Populate the health, tier match length and locality before the sort loop.
 	for i := range rs {
 		rs[i].tierMatchLength = locality.SharedPrefix(rs[i].Locality)
@@ -224,7 +226,7 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 			}
 		}
 
-		if !FollowerReadsUnhealthy.Get(&st.SV) {
+		if !followerReadsUnhealthy {
 			rs[i].healthy = healthFn(rs[i].NodeID)
 		}
 	}
@@ -236,15 +238,27 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 			return rs[i].healthy
 		}
 
+		// If the region is different choose the closer one.
+		// If the setting is true(default) consider locality before latency.
+		if sortByLocalityFirst {
+			// If the region is different choose the closer one.
+			if rs[i].tierMatchLength != rs[j].tierMatchLength {
+				return rs[i].tierMatchLength > rs[j].tierMatchLength
+			}
+		}
+
 		// Use latency if they are different. The local node has a latency of -1
 		// so will sort before any other node.
 		if rs[i].latency != rs[j].latency {
 			return rs[i].latency < rs[j].latency
 		}
 
-		// If the region is different choose the closer one.
-		if rs[i].tierMatchLength != rs[j].tierMatchLength {
-			return rs[i].tierMatchLength > rs[j].tierMatchLength
+		// If the setting is false, sort locality after latency.
+		if !sortByLocalityFirst {
+			// If the region is different choose the closer one.
+			if rs[i].tierMatchLength != rs[j].tierMatchLength {
+				return rs[i].tierMatchLength > rs[j].tierMatchLength
+			}
 		}
 
 		// If everything else is equal sort by node id.
