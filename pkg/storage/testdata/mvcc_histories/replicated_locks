@@ -433,7 +433,7 @@ data: "k4"/10.000000000,0 -> /BYTES/v4_prime
 error: (*kvpb.LockConflictError:) conflicting locks on "k1"
 
 run error
-put notxn k=k1 v=v1
+put notxn ts=10,0 k=k1 v=v1
 ----
 >> at end:
 data: "k1"/5.000000000,0 -> /BYTES/v1
