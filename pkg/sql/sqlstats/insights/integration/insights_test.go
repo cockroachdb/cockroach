@@ -48,6 +48,7 @@ func TestInsightsIntegration(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const appName = "TestInsightsIntegration"
+	const appNameToIgnore = "TestInsightsIntegrationIgnore"
 
 	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
 	ctx := context.Background()
@@ -61,7 +62,7 @@ func TestInsightsIntegration(t *testing.T) {
 	latencyThreshold := 250 * time.Millisecond
 	insights.LatencyThreshold.Override(ctx, &settings.SV, latencyThreshold)
 
-	_, err := conn.ExecContext(ctx, "SET SESSION application_name=$1", appName)
+	_, err := conn.ExecContext(ctx, "SET SESSION application_name=$1", appNameToIgnore)
 	require.NoError(t, err)
 
 	// See no recorded insights.
@@ -74,8 +75,16 @@ func TestInsightsIntegration(t *testing.T) {
 	require.Equal(t, 0, count, "expect:0, actual:%d, queries:%s", count, queryText)
 
 	queryDelayInSeconds := latencyThreshold.Seconds()
+	_, err = conn.ExecContext(ctx, "SET SESSION application_name=$1", appName)
+	require.NoError(t, err)
+
 	// Execute a "long-running" statement, running longer than our latencyThreshold.
+	// Use a specific app name just for this query, and ignore the other statements, since
+	// the select used to check the values can end up or not as part of the Insights view.
 	_, err = conn.ExecContext(ctx, "SELECT pg_sleep($1)", queryDelayInSeconds)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, "SET SESSION application_name=$1", appNameToIgnore)
 	require.NoError(t, err)
 
 	// Eventually see one recorded insight.
