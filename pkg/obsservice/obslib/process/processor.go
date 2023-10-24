@@ -14,7 +14,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/validate"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -85,8 +84,7 @@ func (p ProcessorGroup[T]) Process(ctx context.Context, event T) error {
 		}
 	}
 	if validationErrors != nil {
-		log.Errorf(ctx, "%s event validation failed, err = %v", p.logPrefix, validationErrors)
-		return validationErrors
+		return errors.Wrapf(validationErrors, "%s event validation failed, err = %v", p.logPrefix, validationErrors)
 	}
 	var processorErrors error
 	for _, processor := range p.processors {
@@ -96,8 +94,7 @@ func (p ProcessorGroup[T]) Process(ctx context.Context, event T) error {
 		}
 	}
 	if processorErrors != nil {
-		log.Errorf(ctx, "%s failed to process event, err = %v", p.logPrefix, processorErrors)
-		return processorErrors
+		return errors.Wrapf(processorErrors, "%s failed to process event, err = %v", p.logPrefix, processorErrors)
 	}
 	return nil
 }
