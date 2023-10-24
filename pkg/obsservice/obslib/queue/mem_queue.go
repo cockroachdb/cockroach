@@ -59,6 +59,11 @@ func NewMemoryQueue[T any](maxBytes int, sizeFn SizeFn[T], alias string) *Memory
 	return q
 }
 
+// Alias returns this MemoryQueue's alias, provided at initialization. Useful for logging.
+func (q *MemoryQueue[T]) Alias() string {
+	return q.alias
+}
+
 // Enqueue adds the provided element to the MemoryQueue, so long
 // as it would not exceed the configured max size for this
 // MemoryQueue in bytes. FIFO order is maintained.
