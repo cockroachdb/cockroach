@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
@@ -94,9 +95,7 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 		// the system.sql_instances table) for the failed SQL server to
 		// be removed as quickly as possible. This is because a failed
 		// instance in that table can cause RPC attempts to that server
-		// to fail. The changes below in the other server setup will
-		// ensure that the failed SQL server expires quickly. Here we
-		// need to also ensure that it will be reclaimed quickly.
+		// to fail.
 		instancestorage.ReclaimLoopInterval.Override(ctx, &s.SV, 500*time.Millisecond)
 	}
 
@@ -107,9 +106,16 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 		// because a failed instance in that table can cause RPC attempts to
 		// that server to fail. To accomplish this, we decrease the default
 		// TTL and heartbeat for the sessions so that they expire and are
-		// cleaned up faster.
-		slinstance.DefaultTTL.Override(ctx, &s.SV, 250*time.Millisecond)
-		slinstance.DefaultHeartBeat.Override(ctx, &s.SV, 50*time.Millisecond)
+		// cleaned up faster. In cases where this test is being stressed, we
+		// extend the TTL by 10x to handle cases where the system is too
+		// overloaded to heartbeat at sub-second intervals.
+		ttlOverride := 250 * time.Millisecond
+		if skip.Stress() {
+			ttlOverride *= 10
+		}
+		heartbeatOverride := ttlOverride / 10
+		slinstance.DefaultTTL.Override(ctx, &s.SV, ttlOverride)
+		slinstance.DefaultHeartBeat.Override(ctx, &s.SV, heartbeatOverride)
 	}
 
 	// Initialize the version to the BinaryMinSupportedVersion so that
