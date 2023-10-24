@@ -331,7 +331,7 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="crdb_internal.merge_transaction_stats"></a><code>crdb_internal.merge_transaction_stats(input: jsonb[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Merge an array of appstatspb.TransactionStatistics into a single JSONB object</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_array_to_string_array"></a><code>jsonb_array_to_string_array(input: jsonb) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>Convert a JSONB array into a string array, removing ‘null’ elements.</p>
+<tr><td><a name="jsonb_array_to_string_array"></a><code>jsonb_array_to_string_array(input: jsonb) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>Convert a JSONB array into a string array.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="string_to_array"></a><code>string_to_array(str: <a href="string.html">string</a>, delimiter: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>Split a string into components on a delimiter.</p>
 </span></td><td>Immutable</td></tr>
