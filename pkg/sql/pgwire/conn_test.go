@@ -1717,13 +1717,20 @@ func TestParseSearchPathInConnectionString(t *testing.T) {
 		},
 	}
 
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
+			base.TestTenantProbabilistic, 112959,
+		),
+	})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
+			// TODO(herko): This test manipulates the query string directly and needs
+			// to be updated to support a cluster option in order to support shared
+			// process virtual clusters.
 			pgURL, cleanupFunc := sqlutils.PGUrl(
 				t, s.AdvSQLAddr(), "TestParseSearchPathInConnectionString" /* prefix */, url.User(username.RootUser),
 			)
@@ -1748,7 +1755,11 @@ func TestParseSearchPathInConnectionString(t *testing.T) {
 func TestSetSessionArguments(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
+			base.TestTenantProbabilistic, 112959,
+		),
+	})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
@@ -1756,6 +1767,9 @@ func TestSetSessionArguments(t *testing.T) {
 	_, err := s.SQLConn(t, serverutils.DBName("defaultdb")).Exec(`SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true`)
 	require.NoError(t, err)
 
+	// TODO(herko): This test manipulates the query string directly and needs to
+	// be updated to support a cluster option in order to support shared process
+	// virtual clusters.
 	pgURL, cleanupFunc := sqlutils.PGUrl(
 		t, s.AdvSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
 	)

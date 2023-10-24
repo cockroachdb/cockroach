@@ -383,6 +383,9 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 
 	ctx := context.Background()
 	var params base.TestClusterArgs
+	params.ServerArgs.DefaultTestTenant = base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
+		base.TestTenantProbabilistic, 112957,
+	)
 	params.ServerArgs.Settings = cluster.MakeTestingClusterSettings()
 	// Set the lease duration such that the next lease acquisition will
 	// require the lease to be reacquired.
@@ -1240,6 +1243,9 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 	var testAcquiredCount int32
 	var testAcquisitionBlockCount int32
 	var params base.TestClusterArgs
+	params.ServerArgs.DefaultTestTenant = base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
+		base.TestTenantProbabilistic, 112957,
+	)
 	params.ServerArgs.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
@@ -1829,6 +1835,9 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 	var expected catalog.DescriptorIDSet
 
 	var params base.TestClusterArgs
+	params.ServerArgs.DefaultTestTenant = base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
+		base.TestTenantProbabilistic, 112957,
+	)
 	params.ServerArgs.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
@@ -2338,6 +2347,9 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 	blockLeaseAcquisitionOfInterestingTable := make(chan chan struct{})
 	unblockAll := make(chan struct{})
 	args := base.TestServerArgs{}
+	args.DefaultTestTenant = base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
+		base.TestTenantProbabilistic, 112957,
+	)
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: args,
 	})
@@ -2957,6 +2969,9 @@ func TestLeaseTxnDeadlineExtension(t *testing.T) {
 	var txnID string
 
 	var params base.TestServerArgs
+	params.DefaultTestTenant = base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
+		base.TestTenantProbabilistic, 112957,
+	)
 	params.Settings = cluster.MakeTestingClusterSettings()
 	// Set the lease duration such that the next lease acquisition will
 	// require the lease to be reacquired.
