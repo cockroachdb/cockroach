@@ -45,7 +45,7 @@ case "${cmd}" in
            --maintenance-policy "MIGRATE" \
            --image-project "ubuntu-os-cloud" \
            --image-family "ubuntu-2004-lts" \
-           --boot-disk-size "100" \
+           --boot-disk-size "250" \
            --boot-disk-type "pd-ssd" \
            --boot-disk-device-name "${NAME}" \
            --scopes "cloud-platform" \
