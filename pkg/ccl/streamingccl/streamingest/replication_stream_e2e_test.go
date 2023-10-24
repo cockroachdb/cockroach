@@ -1169,8 +1169,8 @@ func TestLoadProducerAndIngestionProgress(t *testing.T) {
 func TestStreamingRegionalConstraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 111541)
 	skip.UnderStressRace(t, "takes too long under stress race")
+	skip.UnderStress(t, "the allocator machinery stuggles with cpu contention, which can cause the test to timeout")
 
 	ctx := context.Background()
 	regions := []string{"mars", "venus", "mercury"}
@@ -1218,11 +1218,13 @@ func TestStreamingRegionalConstraint(t *testing.T) {
 		c.SrcSysServer.DB(), srcCodec, "test", "x")
 	destCodec := keys.MakeSQLCodec(c.Args.DestTenantID)
 
-	testutils.SucceedsSoon(t,
-		checkLocalities(tableDesc.PrimaryIndexSpan(srcCodec), rangedesc.NewScanner(c.SrcSysServer.DB())))
+	testutils.SucceedsWithin(t,
+		checkLocalities(tableDesc.PrimaryIndexSpan(srcCodec), rangedesc.NewScanner(c.SrcSysServer.DB())),
+		time.Second*45*5)
 
-	testutils.SucceedsSoon(t,
-		checkLocalities(tableDesc.PrimaryIndexSpan(destCodec), rangedesc.NewScanner(c.DestSysServer.DB())))
+	testutils.SucceedsWithin(t,
+		checkLocalities(tableDesc.PrimaryIndexSpan(destCodec), rangedesc.NewScanner(c.DestSysServer.DB())),
+		time.Second*45*5)
 
 	tableName := "test"
 	tabledIDQuery := fmt.Sprintf(`SELECT id FROM system.namespace WHERE name ='%s'`, tableName)
