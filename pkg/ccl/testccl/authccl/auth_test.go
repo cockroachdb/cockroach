@@ -181,6 +181,9 @@ func jwtRunTest(t *testing.T, insecure bool) {
 
 		srv, conn, _ := serverutils.StartServer(t,
 			base.TestServerArgs{
+				DefaultTestTenant: base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
+					base.TestTenantProbabilistic, 112949,
+				),
 				Insecure:   insecure,
 				SocketFile: maybeSocketFile,
 			})
@@ -412,7 +415,11 @@ func TestClientAddrOverride(t *testing.T) {
 	defer sc.Close(t)
 
 	// Start a server.
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
+			base.TestTenantProbabilistic, 112867,
+		),
+	})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 	ts := s.ApplicationLayer()

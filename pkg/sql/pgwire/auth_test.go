@@ -633,7 +633,11 @@ func TestClientAddrOverride(t *testing.T) {
 	defer sc.Close(t)
 
 	// Start a server.
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
+			base.TestTenantProbabilistic, 112867,
+		),
+	})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)
 
@@ -803,6 +807,12 @@ func TestSSLSessionVar(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Set the system layer to accept SQL without TLS in the event of a shared
+	// process virtual cluster.
+	srv.SystemLayer().SetAcceptSQLWithoutTLS(true)
+
+	// TODO(herko): What effect should this have on a shared process virtual
+	// cluster? See: https://github.com/cockroachdb/cockroach/issues/112961
 	s.SetAcceptSQLWithoutTLS(true)
 
 	pgURLWithCerts, cleanupFuncCerts := s.PGUrl(t,
