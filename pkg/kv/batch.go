@@ -1166,6 +1166,10 @@ func (b *Batch) bulkRequest(
 }
 
 // GetResult retrieves the Result and Result row KeyValue for a particular index.
+//
+// WARNING: introduce new usages of this function with care. See discussion in
+// https://github.com/cockroachdb/cockroach/pull/112937.
+// TODO(yuzefovich): look into removing this confusing function.
 func (b *Batch) GetResult(idx int) (*Result, KeyValue, error) {
 	origIdx := idx
 	for i := range b.Results {
@@ -1173,6 +1177,8 @@ func (b *Batch) GetResult(idx int) (*Result, KeyValue, error) {
 		if idx < r.calls {
 			if idx < len(r.Rows) {
 				return r, r.Rows[idx], nil
+			} else if idx < len(r.Keys) {
+				return r, KeyValue{Key: r.Keys[idx]}, nil
 			} else {
 				return r, KeyValue{}, nil
 			}
