@@ -285,7 +285,7 @@ func GC(
 				res.Replicated.State = &kvserverpb.ReplicaState{}
 			}
 			res.Replicated.State.GCHint = hint
-			if _, err := sl.SetGCHint(ctx, readWriter, cArgs.Stats, hint); err != nil {
+			if err := sl.SetGCHint(ctx, readWriter, cArgs.Stats, hint); err != nil {
 				return result.Result{}, err
 			}
 		}
