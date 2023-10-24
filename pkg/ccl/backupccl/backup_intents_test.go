@@ -105,7 +105,7 @@ func TestCleanupIntentsDuringBackupPerformanceRegression(t *testing.T) {
 		numIntentResolveBatches.Store(0)
 		numPushBatches.Store(0)
 
-		_, err = sqlDb.Exec("backup table foo to 'userfile:///test.foo'")
+		_, err = sqlDb.Exec("backup table foo into 'userfile:///test.foo'")
 		require.NoError(t, err, "Failed to run backup")
 
 		// We expect each group of 10 intents to take 2 intent resolution batches:

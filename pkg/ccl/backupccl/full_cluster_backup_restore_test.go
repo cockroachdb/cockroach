@@ -158,7 +158,7 @@ CREATE TABLE data2.foo (a int);
 	// Note: this is not the backup under test, this just serves as a job which
 	// should appear in the restore.
 	// This job will eventually fail since it will run from a new cluster.
-	sqlDB.Exec(t, `BACKUP data.bank TO 'nodelocal://1/throwawayjob'`)
+	sqlDB.Exec(t, `BACKUP data.bank INTO 'nodelocal://1/throwawayjob'`)
 	// Populate system.settings.
 	sqlDB.Exec(t, `INSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, now())`, "some_key", "some_val")
 	// Populate system.comments.
@@ -179,7 +179,7 @@ CREATE TABLE data2.foo (a int);
 	sqlDB.Exec(t, `PAUSE SCHEDULES SELECT id FROM [SHOW SCHEDULES FOR BACKUP]`)
 
 	injectStats(t, sqlDB, "data.bank", "id")
-	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
 
 	// Create a bunch of user tables on the restoring cluster that we're going
 	// to delete.
@@ -202,7 +202,7 @@ CREATE TABLE data2.foo (a int);
 	doneRestore := make(chan struct{})
 	go func() {
 		defer close(doneRestore)
-		sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
+		sqlDBRestore.Exec(t, `RESTORE FROM LATEST IN $1`, localFoo)
 	}()
 
 	// Check that zones are restored during pre-restore.
@@ -388,8 +388,8 @@ func TestSingletonSpanConfigJobPostRestore(t *testing.T) {
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
-	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
-	sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
+	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
+	sqlDBRestore.Exec(t, `RESTORE FROM LATEST IN $1`, localFoo)
 
 	const numRunningReconciliationJobQuery = `
 SELECT count(*) FROM [SHOW AUTOMATIC JOBS]
@@ -416,11 +416,11 @@ func TestIncrementalFullClusterBackup(t *testing.T) {
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
-	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
 	sqlDB.Exec(t, "CREATE USER maxroach1")
 
-	sqlDB.Exec(t, `BACKUP TO $1 INCREMENTAL FROM $2`, incrementalBackupLocation, localFoo)
-	sqlDBRestore.Exec(t, `RESTORE FROM $1, $2`, localFoo, incrementalBackupLocation)
+	sqlDB.Exec(t, `BACKUP INTO $1 WITH incremental_location = $2`, localFoo, incrementalBackupLocation)
+	sqlDBRestore.Exec(t, `RESTORE FROM LATEST IN $1 WITH incremental_location = $2`, localFoo, incrementalBackupLocation)
 
 	checkQuery := "SELECT * FROM system.users"
 	sqlDBRestore.CheckQueryResults(t, checkQuery, sqlDB.QueryStr(t, checkQuery))
@@ -439,8 +439,8 @@ func TestEmptyFullClusterRestore(t *testing.T) {
 
 	sqlDB.Exec(t, `CREATE USER alice`)
 	sqlDB.Exec(t, `CREATE USER bob`)
-	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
-	sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
+	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
+	sqlDBRestore.Exec(t, `RESTORE FROM LATEST IN $1`, localFoo)
 
 	checkQuery := "SELECT * FROM system.users"
 	sqlDBRestore.CheckQueryResults(t, checkQuery, sqlDB.QueryStr(t, checkQuery))
@@ -459,8 +459,8 @@ func TestClusterRestoreEmptyDB(t *testing.T) {
 
 	sqlDB.Exec(t, `CREATE DATABASE some_db`)
 	sqlDB.Exec(t, `CREATE DATABASE some_db_2`)
-	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
-	sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
+	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
+	sqlDBRestore.Exec(t, `RESTORE FROM LATEST IN $1`, localFoo)
 
 	checkQuery := "SHOW DATABASES"
 	sqlDBRestore.CheckQueryResults(t, checkQuery, sqlDB.QueryStr(t, checkQuery))
@@ -476,11 +476,11 @@ func TestDisallowFullClusterRestoreOnNonFreshCluster(t *testing.T) {
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
-	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
 	sqlDBRestore.Exec(t, `CREATE DATABASE foo`)
 	sqlDBRestore.ExpectErr(t,
 		"pq: full cluster restore can only be run on a cluster with no tables or databases but found 2 descriptors: foo, public",
-		`RESTORE FROM $1`, localFoo,
+		`RESTORE FROM LATEST IN $1`, localFoo,
 	)
 }
 
@@ -510,8 +510,8 @@ func TestClusterRestoreSystemTableOrdering(t *testing.T) {
 			})
 	}
 
-	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
-	sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
+	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
+	sqlDBRestore.Exec(t, `RESTORE FROM LATEST IN $1`, localFoo)
 	// Check that the settings table is the last of the system tables to be
 	// restored.
 	require.Equal(t, restoredSystemTables[len(restoredSystemTables)-1],
@@ -528,10 +528,10 @@ func TestDisallowFullClusterRestoreOfNonFullBackup(t *testing.T) {
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
-	sqlDB.Exec(t, `BACKUP data.bank TO $1`, localFoo)
+	sqlDB.Exec(t, `BACKUP data.bank INTO $1`, localFoo)
 	sqlDBRestore.ExpectErr(
 		t, "pq: full cluster RESTORE can only be used on full cluster BACKUP files",
-		`RESTORE FROM $1`, localFoo,
+		`RESTORE FROM LATEST IN $1`, localFoo,
 	)
 }
 
@@ -543,9 +543,9 @@ func TestAllowNonFullClusterRestoreOfFullBackup(t *testing.T) {
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
-	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
 	sqlDB.Exec(t, `CREATE DATABASE data2`)
-	sqlDB.Exec(t, `RESTORE data.bank FROM $1 WITH into_db='data2'`, localFoo)
+	sqlDB.Exec(t, `RESTORE data.bank FROM LATEST IN $1 WITH into_db='data2'`, localFoo)
 
 	checkResults := "SELECT * FROM data.bank"
 	sqlDB.CheckQueryResults(t, checkResults, sqlDB.QueryStr(t, checkResults))
@@ -559,11 +559,11 @@ func TestRestoreFromFullClusterBackup(t *testing.T) {
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
-	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
 	sqlDB.Exec(t, `DROP DATABASE data`)
 
 	t.Run("database", func(t *testing.T) {
-		sqlDB.Exec(t, `RESTORE DATABASE data FROM $1`, localFoo)
+		sqlDB.Exec(t, `RESTORE DATABASE data FROM LATEST IN $1`, localFoo)
 		defer sqlDB.Exec(t, `DROP DATABASE data`)
 		sqlDB.CheckQueryResults(t, "SELECT count(*) FROM data.bank", [][]string{{"10"}})
 	})
@@ -571,20 +571,20 @@ func TestRestoreFromFullClusterBackup(t *testing.T) {
 	t.Run("table", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE DATABASE data`)
 		defer sqlDB.Exec(t, `DROP DATABASE data`)
-		sqlDB.Exec(t, `RESTORE data.bank FROM $1`, localFoo)
+		sqlDB.Exec(t, `RESTORE data.bank FROM LATEST IN $1`, localFoo)
 		sqlDB.CheckQueryResults(t, "SELECT count(*) FROM data.bank", [][]string{{"10"}})
 	})
 
 	t.Run("tables", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE DATABASE data`)
 		defer sqlDB.Exec(t, `DROP DATABASE data`)
-		sqlDB.Exec(t, `RESTORE data.* FROM $1`, localFoo)
+		sqlDB.Exec(t, `RESTORE data.* FROM LATEST IN $1`, localFoo)
 		sqlDB.CheckQueryResults(t, "SELECT count(*) FROM data.bank", [][]string{{"10"}})
 	})
 
 	t.Run("system tables", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE DATABASE temp_sys`)
-		sqlDB.Exec(t, `RESTORE system.users, system.role_id_seq FROM $1 WITH into_db='temp_sys'`, localFoo)
+		sqlDB.Exec(t, `RESTORE system.users, system.role_id_seq FROM LATEST IN $1 WITH into_db='temp_sys'`, localFoo)
 		sqlDB.CheckQueryResults(t, "SELECT * FROM temp_sys.users", sqlDB.QueryStr(t, "SELECT * FROM system.users"))
 	})
 }
@@ -596,12 +596,12 @@ func TestCreateDBAndTableIncrementalFullClusterBackup(t *testing.T) {
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
 	defer cleanupFn()
 
-	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
 	sqlDB.Exec(t, `CREATE DATABASE foo`)
 	sqlDB.Exec(t, `CREATE TABLE foo.bar (a int)`)
 
 	// Ensure that the new backup succeeds.
-	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
 }
 
 // TestClusterRestoreFailCleanup tests that a failed RESTORE is cleaned up.
@@ -649,7 +649,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 			return nil
 		})
 	}
-	sqlDB.Exec(t, `BACKUP TO 'nodelocal://1/missing-ssts'`)
+	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://1/missing-ssts'`)
 
 	// Bugger the backup by removing the SST files. (Note this messes up all of
 	// the backups, but there is only one at this point.)
@@ -670,13 +670,13 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	// Note: this is not the backup under test, this just serves as a job which
 	// should appear in the restore.
 	// This job will eventually fail since it will run from a new cluster.
-	sqlDB.Exec(t, `BACKUP data.bank TO 'nodelocal://1/throwawayjob'`)
-	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+	sqlDB.Exec(t, `BACKUP data.bank INTO 'nodelocal://1/throwawayjob'`)
+	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
 
 	t.Run("during restoration of data", func(t *testing.T) {
 		_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 		defer cleanupEmptyCluster()
-		sqlDBRestore.ExpectErr(t, "sst: no such file", `RESTORE FROM 'nodelocal://1/missing-ssts'`)
+		sqlDBRestore.ExpectErr(t, "sst: no such file", `RESTORE FROM LATEST IN 'nodelocal://1/missing-ssts'`)
 		// Verify the failed RESTORE added some DROP tables.
 		// Note that the system tables here correspond to the temporary tables
 		// imported, not the system tables themselves.
@@ -739,7 +739,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 						})
 				}
 				// The initial restore will return an error, and restart.
-				sqlDBRestore.ExpectErr(t, `running execution from '.*' to '.*' on \d+ failed: injected error`, `RESTORE FROM $1`, localFoo)
+				sqlDBRestore.ExpectErr(t, `running execution from '.*' to '.*' on \d+ failed: injected error`, `RESTORE FROM LATEST IN $1`, localFoo)
 				// Reduce retry delays.
 				sqlDBRestore.Exec(t, "SET CLUSTER SETTING jobs.registry.retry.initial_delay = '1ms'")
 				// Expect the restore to succeed.
@@ -767,7 +767,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				})
 		}
 
-		sqlDBRestore.ExpectErr(t, "injected error", `RESTORE FROM $1`, localFoo)
+		sqlDBRestore.ExpectErr(t, "injected error", `RESTORE FROM LATEST IN $1`, localFoo)
 		// Verify the failed RESTORE added some DROP tables.
 		// Note that the system tables here correspond to the temporary tables
 		// imported, not the system tables themselves.
@@ -810,7 +810,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				})
 		}
 
-		sqlDBRestore.ExpectErr(t, "injected error", `RESTORE FROM $1`, localFoo)
+		sqlDBRestore.ExpectErr(t, "injected error", `RESTORE FROM LATEST IN $1`, localFoo)
 	})
 }
 
@@ -824,15 +824,15 @@ func TestDropDatabaseRevisionHistory(t *testing.T) {
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
-	sqlDB.Exec(t, `BACKUP TO $1 WITH revision_history`, localFoo)
+	sqlDB.Exec(t, `BACKUP INTO $1 WITH revision_history`, localFoo)
 	sqlDB.Exec(t, `CREATE DATABASE same_name_db;`)
 	sqlDB.Exec(t, `DROP DATABASE same_name_db;`)
 	sqlDB.Exec(t, `CREATE DATABASE same_name_db;`)
-	sqlDB.Exec(t, `BACKUP TO $1 WITH revision_history`, localFoo)
+	sqlDB.Exec(t, `BACKUP INTO $1 WITH revision_history`, localFoo)
 
 	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupEmptyCluster()
-	sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
+	sqlDBRestore.Exec(t, `RESTORE FROM LATEST IN $1`, localFoo)
 	sqlDBRestore.ExpectErr(t, `database "same_name_db" already exists`, `CREATE DATABASE same_name_db`)
 }
 
@@ -891,7 +891,7 @@ func TestClusterRevisionHistory(t *testing.T) {
 		},
 	}
 	testCases = append(testCases, tc)
-	sqlDB.Exec(t, `BACKUP TO $1 WITH revision_history`, localFoo)
+	sqlDB.Exec(t, `BACKUP INTO $1 WITH revision_history`, localFoo)
 
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[3])
 	sqlDB.Exec(t, `DROP DATABASE d2;`)
@@ -905,7 +905,7 @@ func TestClusterRevisionHistory(t *testing.T) {
 		},
 	}
 	testCases = append(testCases, tc)
-	sqlDB.Exec(t, `BACKUP TO $1 WITH revision_history`, localFoo)
+	sqlDB.Exec(t, `BACKUP INTO $1 WITH revision_history`, localFoo)
 
 	sqlDB.Exec(t, `CREATE DATABASE d1`)
 	sqlDB.Exec(t, `CREATE TABLE d1.t (a INT)`)
@@ -933,14 +933,14 @@ func TestClusterRevisionHistory(t *testing.T) {
 		},
 	}
 	testCases = append(testCases, tc)
-	sqlDB.Exec(t, `BACKUP TO $1 WITH revision_history`, localFoo)
+	sqlDB.Exec(t, `BACKUP INTO $1 WITH revision_history`, localFoo)
 
 	for i, testCase := range testCases {
 		t.Run(fmt.Sprintf("t%d", i), func(t *testing.T) {
 			_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 			defer cleanupEmptyCluster()
 
-			sqlDBRestore.Exec(t, `RESTORE FROM $1 AS OF SYSTEM TIME `+testCase.ts, localFoo)
+			sqlDBRestore.Exec(t, `RESTORE FROM LATEST IN $1 AS OF SYSTEM TIME `+testCase.ts, localFoo)
 			testCase.check(t, sqlDBRestore)
 		})
 	}
@@ -1007,22 +1007,22 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 
 	// Take a backup that we'll use to create an OFFLINE descriptor.
 	srcDB.Exec(t, `CREATE INDEX new_idx ON data.bank (balance)`)
-	srcDB.Exec(t, `BACKUP DATABASE data TO $1 WITH revision_history`, dbBackupLoc)
+	srcDB.Exec(t, `BACKUP DATABASE data INTO $1 WITH revision_history`, dbBackupLoc)
 
 	srcDB.Exec(t, `CREATE DATABASE restoredb;`)
 
 	// Take a base full backup.
-	srcDB.Exec(t, `BACKUP TO $1 WITH revision_history`, clusterBackupLoc)
+	srcDB.Exec(t, `BACKUP INTO $1 WITH revision_history`, clusterBackupLoc)
 
 	var g errgroup.Group
 	g.Go(func() error {
-		_, err := srcDB.DB.ExecContext(ctx, `RESTORE data.bank FROM $1 WITH into_db='restoredb'`, dbBackupLoc)
+		_, err := srcDB.DB.ExecContext(ctx, `RESTORE data.bank FROM LATEST IN $1 WITH into_db='restoredb'`, dbBackupLoc)
 		return err
 	})
 
 	// Take an incremental backup after the database restore starts.
 	<-dbRestoreStarted
-	srcDB.Exec(t, `BACKUP TO $1 WITH revision_history`, clusterBackupLoc)
+	srcDB.Exec(t, `BACKUP INTO $1 WITH revision_history`, clusterBackupLoc)
 
 	var tsMidRestore string
 	srcDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&tsMidRestore)
@@ -1042,14 +1042,14 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 	// also re-included.
 	srcDB.Exec(t, `DROP INDEX new_idx`)
 
-	srcDB.Exec(t, `BACKUP TO $1 WITH revision_history`, clusterBackupLoc)
+	srcDB.Exec(t, `BACKUP INTO $1 WITH revision_history`, clusterBackupLoc)
 
 	t.Run("spans-reintroduced", func(t *testing.T) {
 		_, destDB, cleanupDst := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 		defer cleanupDst()
 
 		// Restore the incremental backup chain that has missing writes.
-		destDB.Exec(t, `RESTORE FROM $1 AS OF SYSTEM TIME `+tsBefore, clusterBackupLoc)
+		destDB.Exec(t, `RESTORE FROM LATEST IN $1 AS OF SYSTEM TIME `+tsBefore, clusterBackupLoc)
 
 		// Assert that the restored database has the same number of rows in both the
 		// source and destination cluster.
@@ -1083,10 +1083,10 @@ func TestClusterRevisionDoesNotBackupOptOutSystemTables(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE test;`)
 	sqlDB.Exec(t, `USE test;`)
 	sqlDB.Exec(t, `CREATE TABLE foo (id INT);`)
-	sqlDB.Exec(t, `BACKUP TO 'nodelocal://1/foo' WITH revision_history;`)
-	sqlDB.Exec(t, `BACKUP TO 'nodelocal://1/foo' WITH revision_history;`)
+	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://1/foo' WITH revision_history;`)
+	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://1/foo' WITH revision_history;`)
 	sqlDB.Exec(t, `CREATE TABLE bar (id INT);`)
-	sqlDB.Exec(t, `BACKUP TO 'nodelocal://1/foo' WITH revision_history;`)
+	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://1/foo' WITH revision_history;`)
 }
 
 func TestRestoreWithRecreatedDefaultDB(t *testing.T) {
@@ -1105,9 +1105,9 @@ func TestRestoreWithRecreatedDefaultDB(t *testing.T) {
 DROP DATABASE defaultdb;
 CREATE DATABASE defaultdb;
 `)
-	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
 
-	sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
+	sqlDBRestore.Exec(t, `RESTORE FROM LATEST IN $1`, localFoo)
 
 	sqlDBRestore.CheckQueryResults(t, `SELECT name FROM system.namespace WHERE name = 'defaultdb'`, [][]string{
 		{"defaultdb"},
@@ -1129,9 +1129,9 @@ func TestRestoreWithDroppedDefaultDB(t *testing.T) {
 	sqlDB.Exec(t, `
 DROP DATABASE defaultdb;
 `)
-	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
 
-	sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
+	sqlDBRestore.Exec(t, `RESTORE FROM LATEST IN $1`, localFoo)
 
 	sqlDBRestore.CheckQueryResults(t, `SELECT count(*) FROM system.namespace WHERE name = 'defaultdb'`, [][]string{
 		{"0"},
@@ -1162,7 +1162,7 @@ func TestFullClusterRestoreWithUserIDs(t *testing.T) {
 
 	sqlDB.Exec(t, `CREATE USER test1`)
 	sqlDB.Exec(t, `CREATE USER test2`)
-	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
 
 	sqlDB.CheckQueryResults(t, `SELECT * FROM system.users ORDER BY user_id`, [][]string{
 		{"root", "", "false", "1"},
@@ -1171,7 +1171,7 @@ func TestFullClusterRestoreWithUserIDs(t *testing.T) {
 		{"test2", "NULL", "false", "101"},
 	})
 	// Ensure that the new backup succeeds.
-	sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
+	sqlDBRestore.Exec(t, `RESTORE FROM LATEST IN $1`, localFoo)
 
 	sqlDBRestore.CheckQueryResults(t, `SELECT * FROM system.users ORDER BY user_id`, [][]string{
 		{"root", "", "false", "1"},
