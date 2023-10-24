@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -1515,6 +1516,329 @@ func TestClosestInstances(t *testing.T) {
 			}
 			require.ElementsMatch(t, tc.expected, got)
 			require.Equal(t, tc.expectedLocalityStrength, strength)
+		})
+	}
+}
+
+// TestPartitionSpansPartitionState is almost identical to TestPartitionSpans
+// but additionally asserts that we log the correct information if tracing is
+// enabled.
+func TestPartitionSpansPartitionState(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		ranges    []testSpanResolverRange
+		deadNodes []int
+
+		gatewayNode int
+
+		// spans to be passed to PartitionSpans. If the second string is empty,
+		// the span is actually a point lookup.
+		spans [][2]string
+
+		locFilter string
+
+		// expected result: a map of node to list of spans.
+		partitions      map[int][][2]string
+		partitionStates []string
+	}{
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
+			gatewayNode: 1,
+
+			spans: [][2]string{{"A1", "C1"}, {"D1", "X"}},
+
+			partitions: map[int][][2]string{
+				1: {{"A1", "B"}, {"C", "C1"}},
+				2: {{"B", "C"}},
+				3: {{"D1", "X"}},
+			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
+				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
+			},
+		},
+
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
+			deadNodes:   []int{1}, // The health status of the gateway node shouldn't matter.
+			gatewayNode: 1,
+
+			spans: [][2]string{{"A1", "C1"}, {"D1", "X"}},
+
+			partitions: map[int][][2]string{
+				1: {{"A1", "B"}, {"C", "C1"}},
+				2: {{"B", "C"}},
+				3: {{"D1", "X"}},
+			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
+				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
+			},
+		},
+
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
+			deadNodes:   []int{2},
+			gatewayNode: 1,
+
+			spans: [][2]string{{"A1", "C1"}, {"D1", "X"}},
+
+			partitions: map[int][][2]string{
+				1: {{"A1", "C1"}},
+				3: {{"D1", "X"}},
+			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {B-C}, instance ID: 1, reason: gossip-gateway-target-unhealthy",
+				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
+			},
+		},
+
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
+			deadNodes:   []int{3},
+			gatewayNode: 1,
+
+			spans: [][2]string{{"A1", "C1"}, {"D1", "X"}},
+
+			partitions: map[int][][2]string{
+				1: {{"A1", "B"}, {"C", "C1"}, {"D1", "X"}},
+				2: {{"B", "C"}},
+			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
+				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {D1-X}, instance ID: 1, reason: gossip-gateway-target-unhealthy",
+			},
+		},
+
+		// Test point lookups intertwined with span scans.
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 1}, {"C", 2}},
+			gatewayNode: 1,
+
+			spans: [][2]string{{"A1", ""}, {"A1", "A2"}, {"A2", ""}, {"A2", "C2"}, {"B1", ""}, {"A3", "B3"}, {"B2", ""}},
+
+			partitions: map[int][][2]string{
+				1: {{"A1", ""}, {"A1", "A2"}, {"A2", ""}, {"A2", "C"}, {"B1", ""}, {"A3", "B3"}, {"B2", ""}},
+				2: {{"C", "C2"}},
+			},
+
+			partitionStates: []string{
+				"partition span: A1, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: A{1-2}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: A2, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {A2-B}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {B-C}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: C{-2}, instance ID: 2, reason: gossip-target-healthy",
+				"partition span: B1, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {A3-B}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: B{-3}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: B2, instance ID: 1, reason: gossip-target-healthy",
+			},
+		},
+
+		// Test some locality-filtered planning too.
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
+			gatewayNode: 1,
+
+			spans:     [][2]string{{"A1", "C1"}, {"D1", "X"}},
+			locFilter: "x=1",
+			partitions: map[int][][2]string{
+				1: {{"A1", "B"}, {"C", "C1"}, {"D1", "X"}},
+				2: {{"B", "C"}},
+			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 1, reason: target-healthy",
+				"partition span: {B-C}, instance ID: 2, reason: target-healthy",
+				"partition span: C{-1}, instance ID: 1, reason: target-healthy",
+				"partition span: {D1-X}, instance ID: 1, reason: gateway-no-locality-match",
+			},
+		},
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
+			gatewayNode: 1,
+
+			spans:     [][2]string{{"A1", "C1"}, {"D1", "X"}},
+			locFilter: "y=0",
+			partitions: map[int][][2]string{
+				2: {{"A1", "C1"}},
+				4: {{"D1", "X"}},
+			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 2, reason: closest-locality-match",
+				"partition span: {B-C}, instance ID: 2, reason: target-healthy",
+				"partition span: C{-1}, instance ID: 2, reason: closest-locality-match",
+				"partition span: {D1-X}, instance ID: 4, reason: closest-locality-match",
+			},
+		},
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
+			gatewayNode: 7,
+
+			spans:     [][2]string{{"A1", "C1"}, {"D1", "X"}},
+			locFilter: "x=3",
+			partitions: map[int][][2]string{
+				7: {{"A1", "C1"}, {"D1", "X"}},
+			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 7, reason: gateway-no-locality-match",
+				"partition span: {B-C}, instance ID: 7, reason: gateway-no-locality-match",
+				"partition span: C{-1}, instance ID: 7, reason: gateway-no-locality-match",
+				"partition span: {D1-X}, instance ID: 7, reason: gateway-no-locality-match",
+			},
+		},
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
+			gatewayNode: 1,
+
+			spans:     [][2]string{{"A1", "C1"}, {"D1", "X"}},
+			locFilter: "x=3,y=1",
+			partitions: map[int][][2]string{
+				7: {{"A1", "C1"}, {"D1", "X"}},
+			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 7, reason: locality-aware-random",
+				"partition span: {B-C}, instance ID: 7, reason: locality-aware-random",
+				"partition span: C{-1}, instance ID: 7, reason: locality-aware-random",
+				"partition span: {D1-X}, instance ID: 7, reason: locality-aware-random",
+			},
+		},
+	}
+
+	// We need a mock Gossip to contain addresses for the nodes. Otherwise the
+	// DistSQLPlanner will not plan flows on them.
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	mockGossip := gossip.NewTest(roachpb.NodeID(1), s.Stopper(), metric.NewRegistry())
+	var nodeDescs []*roachpb.NodeDescriptor
+	mockInstances := make(mockAddressResolver)
+	for i := 1; i <= 10; i++ {
+		sqlInstanceID := base.SQLInstanceID(i)
+		var l roachpb.Locality
+		require.NoError(t, l.Set(fmt.Sprintf("x=%d,y=%d", (i/3)+1, i%2)))
+		desc := &roachpb.NodeDescriptor{
+			NodeID:   roachpb.NodeID(sqlInstanceID),
+			Address:  util.UnresolvedAddr{AddressField: fmt.Sprintf("addr%d", i)},
+			Locality: l,
+		}
+		mockInstances[sqlInstanceID] = l
+		if err := mockGossip.SetNodeDescriptor(desc); err != nil {
+			t.Fatal(err)
+		}
+		if err := mockGossip.AddInfoProto(
+			gossip.MakeDistSQLNodeVersionKey(sqlInstanceID),
+			&execinfrapb.DistSQLVersionGossipInfo{
+				MinAcceptedVersion: execinfra.MinAcceptedVersion,
+				Version:            execinfra.Version,
+			},
+			0, // ttl - no expiration
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		nodeDescs = append(nodeDescs, desc)
+	}
+
+	for testIdx, tc := range testCases {
+		t.Run("test"+strconv.Itoa(testIdx), func(t *testing.T) {
+			ctx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, s.Tracer(), "PartitionSpans")
+
+			stopper := stop.NewStopper()
+			defer stopper.Stop(context.Background())
+
+			tsp := &testSpanResolver{
+				nodes:  nodeDescs,
+				ranges: tc.ranges,
+			}
+
+			nID := &base.NodeIDContainer{}
+			nID.Reset(tsp.nodes[tc.gatewayNode-1].NodeID)
+
+			gw := gossip.MakeOptionalGossip(mockGossip)
+			dsp := DistSQLPlanner{
+				planVersion:          execinfra.Version,
+				st:                   cluster.MakeTestingClusterSettings(),
+				gatewaySQLInstanceID: base.SQLInstanceID(tsp.nodes[tc.gatewayNode-1].NodeID),
+				stopper:              stopper,
+				spanResolver:         tsp,
+				gossip:               gw,
+				nodeHealth: distSQLNodeHealth{
+					gossip: gw,
+					connHealth: func(node roachpb.NodeID, _ rpc.ConnectionClass) error {
+						for _, n := range tc.deadNodes {
+							if int(node) == n {
+								return fmt.Errorf("test node is unhealthy")
+							}
+						}
+						return nil
+					},
+					isAvailable: func(base.SQLInstanceID) bool {
+						return true
+					},
+				},
+				sqlAddressResolver: mockInstances,
+				distSQLSrv:         &distsql.ServerImpl{ServerConfig: execinfra.ServerConfig{NodeID: base.NewSQLIDContainerForNode(nID)}},
+				codec:              keys.SystemSQLCodec,
+				nodeDescs:          mockGossip,
+			}
+
+			var locFilter roachpb.Locality
+			if tc.locFilter != "" {
+				require.NoError(t, locFilter.Set(tc.locFilter))
+			}
+			planCtx := dsp.NewPlanningCtxWithOracle(ctx, &extendedEvalContext{
+				Context: eval.Context{Codec: keys.SystemSQLCodec},
+			}, nil, nil, DistributionTypeSystemTenantOnly, physicalplan.DefaultReplicaChooser, locFilter)
+			var spans []roachpb.Span
+			for _, s := range tc.spans {
+				spans = append(spans, roachpb.Span{Key: roachpb.Key(s[0]), EndKey: roachpb.Key(s[1])})
+			}
+
+			partitions, err := dsp.PartitionSpans(ctx, planCtx, spans)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			resMap := make(map[int][][2]string)
+			for _, p := range partitions {
+				if _, ok := resMap[int(p.SQLInstanceID)]; ok {
+					t.Fatalf("node %d shows up in multiple partitions", p)
+				}
+				var spans [][2]string
+				for _, s := range p.Spans {
+					spans = append(spans, [2]string{string(s.Key), string(s.EndKey)})
+				}
+				resMap[int(p.SQLInstanceID)] = spans
+			}
+
+			recording := getRecAndFinish()
+			t.Logf("recording is %s", recording)
+			for _, expectedMsg := range tc.partitionStates {
+				require.NotEqual(t, -1, tracing.FindMsgInRecording(recording, expectedMsg))
+			}
+
+			if !reflect.DeepEqual(resMap, tc.partitions) {
+				t.Errorf("expected partitions:\n  %v\ngot:\n  %v", tc.partitions, resMap)
+			}
 		})
 	}
 }
