@@ -161,9 +161,10 @@ func runDeclSchemaChangeCompatMixedVersions(ctx context.Context, t test.Test, c 
 			corpusVersion: fmt.Sprintf("release-%s", releaseSeries(predecessorVersion)),
 		},
 		{
-			testName:      "same version",
-			binaryVersion: currentVersion,
-			corpusVersion: fmt.Sprintf("release-%s", releaseSeries(currentVersion)),
+			testName:               "same version",
+			binaryVersion:          currentVersion,
+			corpusVersion:          fmt.Sprintf("release-%s", releaseSeries(currentVersion)),
+			alternateCorpusVersion: "master",
 		},
 	}
 	for _, testInfo := range compatTests {
