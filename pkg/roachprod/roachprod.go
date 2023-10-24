@@ -377,7 +377,7 @@ func Run(
 	}
 
 	cmd := strings.TrimSpace(strings.Join(cmdArray, " "))
-	return c.Run(ctx, l, stdout, stderr, c.Nodes, TruncateString(cmd, 30), cmd, opts...)
+	return c.Run(ctx, l, stdout, stderr, c.Nodes, TruncateString(cmd, 100), cmd, opts...)
 }
 
 // RunWithDetails runs a command on the nodes in a cluster.
@@ -403,7 +403,7 @@ func RunWithDetails(
 	}
 
 	cmd := strings.TrimSpace(strings.Join(cmdArray, " "))
-	return c.RunWithDetails(ctx, l, c.Nodes, TruncateString(cmd, 30), cmd)
+	return c.RunWithDetails(ctx, l, c.Nodes, TruncateString(cmd, 100), cmd)
 }
 
 // SQL runs `cockroach sql` on a remote cluster. If a single node is passed,

@@ -2201,7 +2201,7 @@ func (c *clusterImpl) RunE(ctx context.Context, nodes option.NodeListOption, arg
 	defer l.Close()
 
 	cmd := strings.Join(args, " ")
-	c.t.L().Printf("running cmd `%s` on nodes [%v]; details in %s.log", roachprod.TruncateString(cmd, 30), nodes, logFile)
+	c.t.L().Printf("running cmd `%s` on nodes [%v]; details in %s.log", roachprod.TruncateString(cmd, 100), nodes, logFile)
 	l.Printf("> %s", cmd)
 	if err := roachprod.Run(ctx, l, c.MakeNodes(nodes), "", "", c.IsSecure(), l.Stdout, l.Stderr, args); err != nil {
 		if err := ctx.Err(); err != nil {
@@ -2255,7 +2255,7 @@ func (c *clusterImpl) RunWithDetails(
 
 	// This could probably be removed in favour of c.t.L() but it's used extensively in roachtests.
 	if testLogger != nil {
-		testLogger.Printf("running cmd `%s` on nodes [%v]; details in %s.log", roachprod.TruncateString(cmd, 30), nodes, logFile)
+		testLogger.Printf("running cmd `%s` on nodes [%v]; details in %s.log", roachprod.TruncateString(cmd, 100), nodes, logFile)
 	}
 
 	l.Printf("> %s", cmd)
