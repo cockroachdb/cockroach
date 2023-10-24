@@ -294,6 +294,7 @@ func (u *plpgsqlSymUnion) sqlStatement() tree.Statement {
 %token <str>  THEN
 %token <str>  TO
 %token <str>  TYPE
+%token <str>  UPSERT
 %token <str>  USE_COLUMN
 %token <str>  USE_VARIABLE
 %token <str>  USING
@@ -1279,6 +1280,7 @@ stmt_execsql: stmt_execsql_start
 stmt_execsql_start:
   IMPORT
 | INSERT
+| UPSERT
 | MERGE
 | IDENT
 ;
@@ -1601,6 +1603,7 @@ unreserved_keyword:
 | TABLE
 | TABLE_NAME
 | TYPE
+| UPSERT
 | USE_COLUMN
 | USE_VARIABLE
 | VARIABLE_CONFLICT

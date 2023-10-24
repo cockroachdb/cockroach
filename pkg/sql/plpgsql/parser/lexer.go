@@ -144,8 +144,10 @@ func (l *lexer) MakeExecSqlStmt() (*plpgsqltree.Execute, error) {
 		prevTok := tok
 		tok = l.tokens[pos]
 		if tok.id == INTO {
-			if prevTok.id == INSERT || prevTok.id == MERGE || firstTok.id == IMPORT {
-				// INSERT INTO, MERGE INTO, and IMPORT ... INTO are not INTO-targets.
+			if prevTok.id == INSERT || prevTok.id == UPSERT ||
+				prevTok.id == MERGE || firstTok.id == IMPORT {
+				// INSERT INTO, UPSERT INTO, MERGE INTO, and IMPORT ... INTO are not
+				// INTO-targets.
 				continue
 			}
 			if haveInto {
