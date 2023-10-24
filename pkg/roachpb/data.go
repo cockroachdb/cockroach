@@ -270,6 +270,13 @@ const (
 	headerSize            = tagPos + 1
 )
 
+var _ redact.SafeFormatter = ValueType(0)
+
+// Safeformat implements the redact.SafeFormatter interface.
+func (t ValueType) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.SafeString(redact.SafeString(t.String()))
+}
+
 func (v Value) checksum() uint32 {
 	if len(v.RawBytes) < checksumSize {
 		return 0
@@ -318,7 +325,7 @@ func (v Value) Verify(key []byte) error {
 	}
 	if sum := v.checksum(); sum != 0 {
 		if computedSum := v.computeChecksum(key); computedSum != sum {
-			return fmt.Errorf("%s: invalid checksum (%x) value [% x]",
+			return errors.Errorf("%s: invalid checksum (%x) value [% x]",
 				Key(key), computedSum, v.RawBytes)
 		}
 	}
@@ -572,7 +579,7 @@ func (v *Value) SetTuple(data []byte) {
 // BYTES an error will be returned.
 func (v Value) GetBytes() ([]byte, error) {
 	if tag := v.GetTag(); tag != ValueType_BYTES {
-		return nil, fmt.Errorf("value type is not %s: %s", ValueType_BYTES, tag)
+		return nil, errors.Errorf("value type is not %s: %s", ValueType_BYTES, tag)
 	}
 	return v.dataBytes(), nil
 }
@@ -582,11 +589,11 @@ func (v Value) GetBytes() ([]byte, error) {
 // will be returned.
 func (v Value) GetFloat() (float64, error) {
 	if tag := v.GetTag(); tag != ValueType_FLOAT {
-		return 0, fmt.Errorf("value type is not %s: %s", ValueType_FLOAT, tag)
+		return 0, errors.Errorf("value type is not %s: %s", ValueType_FLOAT, tag)
 	}
 	dataBytes := v.dataBytes()
 	if len(dataBytes) != 8 {
-		return 0, fmt.Errorf("float64 value should be exactly 8 bytes: %d", len(dataBytes))
+		return 0, errors.Errorf("float64 value should be exactly 8 bytes: %d", len(dataBytes))
 	}
 	_, u, err := encoding.DecodeUint64Ascending(dataBytes)
 	if err != nil {
@@ -599,7 +606,7 @@ func (v Value) GetFloat() (float64, error) {
 // tag is not GEO an error will be returned.
 func (v Value) GetGeo() (geopb.SpatialObject, error) {
 	if tag := v.GetTag(); tag != ValueType_GEO {
-		return geopb.SpatialObject{}, fmt.Errorf("value type is not %s: %s", ValueType_GEO, tag)
+		return geopb.SpatialObject{}, errors.Errorf("value type is not %s: %s", ValueType_GEO, tag)
 	}
 	var ret geopb.SpatialObject
 	err := protoutil.Unmarshal(v.dataBytes(), &ret)
@@ -611,11 +618,11 @@ func (v Value) GetGeo() (geopb.SpatialObject, error) {
 func (v Value) GetBox2D() (geopb.BoundingBox, error) {
 	box := geopb.BoundingBox{}
 	if tag := v.GetTag(); tag != ValueType_BOX2D {
-		return box, fmt.Errorf("value type is not %s: %s", ValueType_BOX2D, tag)
+		return box, errors.Errorf("value type is not %s: %s", ValueType_BOX2D, tag)
 	}
 	dataBytes := v.dataBytes()
 	if len(dataBytes) != 32 {
-		return box, fmt.Errorf("float64 value should be exactly 32 bytes: %d", len(dataBytes))
+		return box, errors.Errorf("float64 value should be exactly 32 bytes: %d", len(dataBytes))
 	}
 	var err error
 	var val uint64
@@ -648,14 +655,14 @@ func (v Value) GetBox2D() (geopb.BoundingBox, error) {
 // an error will be returned.
 func (v Value) GetBool() (bool, error) {
 	if tag := v.GetTag(); tag != ValueType_INT {
-		return false, fmt.Errorf("value type is not %s: %s", ValueType_INT, tag)
+		return false, errors.Errorf("value type is not %s: %s", ValueType_INT, tag)
 	}
 	i, n := binary.Varint(v.dataBytes())
 	if n <= 0 {
-		return false, fmt.Errorf("int64 varint decoding failed: %d", n)
+		return false, errors.Errorf("int64 varint decoding failed: %d", n)
 	}
 	if i > 1 || i < 0 {
-		return false, fmt.Errorf("invalid bool: %d", i)
+		return false, errors.Errorf("invalid bool: %d", i)
 	}
 	return i != 0, nil
 }
@@ -664,11 +671,11 @@ func (v Value) GetBool() (bool, error) {
 // tag is not INT or the value cannot be decoded an error will be returned.
 func (v Value) GetInt() (int64, error) {
 	if tag := v.GetTag(); tag != ValueType_INT {
-		return 0, fmt.Errorf("value type is not %s: %s", ValueType_INT, tag)
+		return 0, errors.Errorf("value type is not %s: %s", ValueType_INT, tag)
 	}
 	i, n := binary.Varint(v.dataBytes())
 	if n <= 0 {
-		return 0, fmt.Errorf("int64 varint decoding failed: %d", n)
+		return 0, errors.Errorf("int64 varint decoding failed: %d", n)
 	}
 	return i, nil
 }
@@ -685,7 +692,7 @@ func (v Value) GetProto(msg protoutil.Message) error {
 	}
 
 	if tag := v.GetTag(); tag != expectedTag {
-		return fmt.Errorf("value type is not %s: %s", expectedTag, tag)
+		return errors.Errorf("value type is not %s: %s", expectedTag, tag)
 	}
 	return protoutil.Unmarshal(v.dataBytes(), msg)
 }
@@ -694,7 +701,7 @@ func (v Value) GetProto(msg protoutil.Message) error {
 // tag is not TIME an error will be returned.
 func (v Value) GetTime() (time.Time, error) {
 	if tag := v.GetTag(); tag != ValueType_TIME {
-		return time.Time{}, fmt.Errorf("value type is not %s: %s", ValueType_TIME, tag)
+		return time.Time{}, errors.Errorf("value type is not %s: %s", ValueType_TIME, tag)
 	}
 	_, t, err := encoding.DecodeTimeAscending(v.dataBytes())
 	return t, err
@@ -704,7 +711,7 @@ func (v Value) GetTime() (time.Time, error) {
 // tag is not TIMETZ an error will be returned.
 func (v Value) GetTimeTZ() (timetz.TimeTZ, error) {
 	if tag := v.GetTag(); tag != ValueType_TIMETZ {
-		return timetz.TimeTZ{}, fmt.Errorf("value type is not %s: %s", ValueType_TIMETZ, tag)
+		return timetz.TimeTZ{}, errors.Errorf("value type is not %s: %s", ValueType_TIMETZ, tag)
 	}
 	_, t, err := encoding.DecodeTimeTZAscending(v.dataBytes())
 	return t, err
@@ -714,7 +721,7 @@ func (v Value) GetTimeTZ() (timetz.TimeTZ, error) {
 // the tag is not DURATION an error will be returned.
 func (v Value) GetDuration() (duration.Duration, error) {
 	if tag := v.GetTag(); tag != ValueType_DURATION {
-		return duration.Duration{}, fmt.Errorf("value type is not %s: %s", ValueType_DURATION, tag)
+		return duration.Duration{}, errors.Errorf("value type is not %s: %s", ValueType_DURATION, tag)
 	}
 	_, t, err := encoding.DecodeDurationAscending(v.dataBytes())
 	return t, err
@@ -724,7 +731,7 @@ func (v Value) GetDuration() (duration.Duration, error) {
 // the tag is not BITARRAY an error will be returned.
 func (v Value) GetBitArray() (bitarray.BitArray, error) {
 	if tag := v.GetTag(); tag != ValueType_BITARRAY {
-		return bitarray.BitArray{}, fmt.Errorf("value type is not %s: %s", ValueType_BITARRAY, tag)
+		return bitarray.BitArray{}, errors.Errorf("value type is not %s: %s", ValueType_BITARRAY, tag)
 	}
 	_, t, err := encoding.DecodeUntaggedBitArrayValue(v.dataBytes())
 	return t, err
@@ -734,7 +741,7 @@ func (v Value) GetBitArray() (bitarray.BitArray, error) {
 // tag is not DECIMAL an error will be returned.
 func (v Value) GetDecimal() (apd.Decimal, error) {
 	if tag := v.GetTag(); tag != ValueType_DECIMAL {
-		return apd.Decimal{}, fmt.Errorf("value type is not %s: %s", ValueType_DECIMAL, tag)
+		return apd.Decimal{}, errors.Errorf("value type is not %s: %s", ValueType_DECIMAL, tag)
 	}
 	return encoding.DecodeNonsortingDecimal(v.dataBytes(), nil)
 }
@@ -744,7 +751,7 @@ func (v Value) GetDecimal() (apd.Decimal, error) {
 // tag is not DECIMAL an error will be returned.
 func (v Value) GetDecimalInto(d *apd.Decimal) error {
 	if tag := v.GetTag(); tag != ValueType_DECIMAL {
-		return fmt.Errorf("value type is not %s: %s", ValueType_DECIMAL, tag)
+		return errors.Errorf("value type is not %s: %s", ValueType_DECIMAL, tag)
 	}
 	return encoding.DecodeIntoNonsortingDecimal(d, v.dataBytes(), nil)
 }
@@ -766,7 +773,7 @@ func (v Value) GetTimeseries() (InternalTimeSeriesData, error) {
 // error will be returned.
 func (v Value) GetTuple() ([]byte, error) {
 	if tag := v.GetTag(); tag != ValueType_TUPLE {
-		return nil, fmt.Errorf("value type is not %s: %s", ValueType_TUPLE, tag)
+		return nil, errors.Errorf("value type is not %s: %s", ValueType_TUPLE, tag)
 	}
 	return v.dataBytes(), nil
 }
