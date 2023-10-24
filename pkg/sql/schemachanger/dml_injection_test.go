@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/slices"
 )
@@ -303,7 +302,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 		{
 			desc:         "create index",
 			schemaChange: "CREATE INDEX idx ON tbl (val)",
-			skipIssue:    112421,
 		},
 		{
 			desc:         "drop index",
@@ -362,7 +360,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			desc:         "drop partial index",
 			setup:        []string{"CREATE INDEX idx ON tbl (val) WHERE val > 1"},
 			schemaChange: "DROP INDEX idx",
-			skipIssue:    112417,
 		},
 		{
 			desc: "drop column with partial index",
@@ -402,7 +399,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 				"CREATE MATERIALIZED VIEW mv AS SELECT * FROM tbl@idx",
 			},
 			schemaChange: "DROP INDEX idx CASCADE",
-			skipIssue:    112418,
 		},
 	}
 
@@ -423,6 +419,7 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			var sqlDB *sqlutils.SQLRunner
 			var clusterCreated atomic.Bool
 			poMap := make(map[phaseOrdinal]int)
+			poCompleted := make(map[phaseOrdinal]struct{})
 			var poSlice []phaseOrdinal
 			testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
@@ -442,17 +439,19 @@ func TestAlterTableDMLInjection(t *testing.T) {
 								}
 
 								if t.Failed() {
-									return errors.New("terminating schema change due to test failure")
+									// Just bail out of this hook if the test has failed,
+									// returning errors will break rollbacks.
+									return nil
 								}
 
 								currentStage := p.Stages[stageIdx]
 								currentPO := toPhaseOrdinal(currentStage)
 								errorMessage := fmt.Sprintf("phaseOrdinal=%s", currentPO)
 
-								// Capture all stages in the StatementPhase before they disappear.
-								if currentStage.Phase == scop.StatementPhase {
-									require.Empty(t, poMap, errorMessage)
-									require.Empty(t, poSlice, errorMessage)
+								// Capture all stages in the StatementPhase before they disappear,
+								// only if they haven't been collected (we could encounter retries).
+								if currentStage.Phase == scop.StatementPhase &&
+									len(poSlice) == 0 {
 									for i, s := range p.Stages {
 										po := toPhaseOrdinal(s)
 										poMap[po] = i
@@ -499,6 +498,11 @@ func TestAlterTableDMLInjection(t *testing.T) {
 									panic(fmt.Sprintf("slice contains duplicate elements a=%s b=%s %s", a, b, errorMessage))
 								})
 								actualResults := sqlDB.QueryStr(t, `SELECT 	insert_phase_ordinal, operation_phase_ordinal, operation, val FROM tbl`)
+								// Transaction retry errors can occur, so don't repeat the same
+								// DML if hit such a case to avoid flaky tests.
+								if _, exists := poCompleted[currentPO]; exists {
+									return nil
+								}
 								// Use subset instead of equals for better error output.
 								require.Subset(t, expectedResults, actualResults, errorMessage)
 								require.Subset(t, actualResults, expectedResults, errorMessage)
@@ -532,6 +536,7 @@ func TestAlterTableDMLInjection(t *testing.T) {
 									sqlDB.ExecWithMessage(t, errorMessage, insert, toAnySlice(currentPO.deleteRow(poSlice[i]))...)
 									sqlDB.ExecWithMessage(t, errorMessage, insert, toAnySlice(currentPO.updateRow(poSlice[i], false))...)
 								}
+								poCompleted[currentPO] = struct{}{}
 								return nil
 							},
 						},
