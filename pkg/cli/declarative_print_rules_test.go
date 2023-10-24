@@ -49,7 +49,7 @@ func TestDeclarativeRules(t *testing.T) {
 			// for testing purposes. This can change from build to build, and
 			// need changes for every version bump.
 			return strings.Replace(invalidOut,
-				" "+clusterversion.ByKey(clusterversion.V23_2).String()+"\n",
+				" "+clusterversion.ByKey(clusterversion.V24_1).String()+"\n",
 				" latest\n",
 				-1)
 		})

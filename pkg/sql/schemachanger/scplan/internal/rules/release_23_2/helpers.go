@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package current
+package release_23_2
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -21,11 +21,11 @@ import (
 
 const (
 	// rulesVersion version of elements that can be appended to rel rule names.
-	rulesVersion = "-24.1"
+	rulesVersion = "-23.2"
 )
 
 // rulesVersionKey version of elements used by this rule set.
-var rulesVersionKey = clusterversion.V24_1
+var rulesVersionKey = clusterversion.V23_2
 
 // descriptorIsNotBeingDropped creates a clause which leads to the outer clause
 // failing to unify if the passed element is part of a descriptor and
