@@ -100,7 +100,7 @@ func TestCleanupIntentsDuringBackupPerformanceRegression(t *testing.T) {
 			}
 		}
 
-		_, err = sqlDb.Exec("backup table foo to 'userfile:///test.foo'")
+		_, err = sqlDb.Exec("backup table foo into 'userfile:///test.foo'")
 		require.NoError(t, err, "Failed to run backup")
 
 		if !abort {
