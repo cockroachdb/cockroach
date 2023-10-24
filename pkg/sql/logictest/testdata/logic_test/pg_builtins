@@ -952,4 +952,38 @@ attname  typname   information_schema._pg_interval_type
 ubar  interval     NULL
 ufoo  interval     NULL
 
+statement ok
+DROP TYPE u;
+
 subtest end
+
+subtest information_schema._pg_char_octet_length
+
+query I
+SELECT information_schema._pg_char_octet_length(25, NULL)
+----
+NULL
+
+query I
+SELECT information_schema._pg_char_octet_length(25, -1)
+----
+1073741824
+
+statement ok
+CREATE TYPE u AS (ufoo char, ubar int);
+
+query TTI colnames
+SELECT a.attname,
+       t.typname,
+       information_schema._pg_char_octet_length(a.atttypid,a.atttypmod)
+FROM pg_attribute a
+JOIN pg_type t
+ON a.atttypid = t.oid
+WHERE a.attname = 'ufoo'
+ORDER BY a.attname
+----
+attname  typname  information_schema._pg_char_octet_length
+ufoo     bpchar   4
+
+subtest end
+
