@@ -529,6 +529,8 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	opts := option.DefaultStartOpts()
 	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
+	settings.Env = append(settings.Env, "COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER=true")
+	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
 	m := c.NewMonitor(ctx, c.Range(1, 6))
 
@@ -543,6 +545,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 
 	// Place all ranges on n1-n3 to start with, and wait for upreplication.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
+
 	// NB: We want to ensure the system ranges are all down-replicated from their
 	// initial RF of 5, so pass in exactlyReplicationFactor below.
 	require.NoError(t, WaitForReplication(ctx, t, conn, 3, exactlyReplicationFactor))
@@ -563,15 +566,6 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	// spread the ranges across all nodes regardless.
 	relocateRanges(t, ctx, conn, `database_name = 'kv'`, []int{1, 2, 3}, []int{4, 5, 6})
 	relocateRanges(t, ctx, conn, `database_name != 'kv'`, []int{4, 5, 6}, []int{1, 2, 3})
-
-	settings.Env = append(settings.Env, "COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER=true")
-
-	// Restart the nodes with the updated cluster setting.
-	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(1, 6))
-	c.Start(ctx, t.L(), opts, settings, c.Range(1, 6))
-
-	// Wait for the TimeAfterNodeSuspect interval.
-	sleepFor(ctx, t, 30*time.Second)
 
 	// Check that we have a few split leaders/leaseholders on n4-n6. We give
 	// it a few seconds, since metrics are updated every 10 seconds.

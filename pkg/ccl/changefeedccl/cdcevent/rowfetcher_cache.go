@@ -10,11 +10,14 @@ package cdcevent
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -23,10 +26,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+)
+
+// RowFetcherTraceKVLogFrequency controls how frequently KVs are logged when
+// KV tracing is enabled.
+var traceKVLogFrequency = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"changefeed.cdcevent.trace_kv.log_frequency",
+	"controls how frequently KVs are logged when KV tracing is enabled",
+	500*time.Millisecond,
+	settings.NonNegativeDuration,
 )
 
 // rowFetcherCache maintains a cache of single table row.Fetchers. Given a key
@@ -43,7 +58,16 @@ type rowFetcherCache struct {
 	collection *descs.Collection
 	db         *kv.DB
 
+	rfArgs rowFetcherArgs
+
 	a tree.DatumAlloc
+}
+
+// rowFetcherArgs contains arguments to pass to all row fetchers
+// created by this cache.
+type rowFetcherArgs struct {
+	traceKV             bool
+	traceKVLogFrequency time.Duration
 }
 
 type cachedFetcher struct {
@@ -65,6 +89,7 @@ func newRowFetcherCache(
 	leaseMgr *lease.Manager,
 	cf *descs.CollectionFactory,
 	db *kv.DB,
+	s *cluster.Settings,
 	targets changefeedbase.Targets,
 ) (*rowFetcherCache, error) {
 	if targets.Size == 0 {
@@ -85,6 +110,10 @@ func newRowFetcherCache(
 		db:              db,
 		fetchers:        cache.NewUnorderedCache(DefaultCacheConfig),
 		watchedFamilies: watchedFamilies,
+		rfArgs: rowFetcherArgs{
+			traceKV:             log.V(row.TraceKVVerbosity),
+			traceKVLogFrequency: traceKVLogFrequency.Get(&s.SV),
+		},
 	}, err
 }
 
@@ -259,6 +288,8 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 			WillUseKVProvider: true,
 			Alloc:             &c.a,
 			Spec:              &spec,
+			TraceKV:           c.rfArgs.traceKV,
+			TraceKVEvery:      &util.EveryN{N: c.rfArgs.traceKVLogFrequency},
 		},
 	); err != nil {
 		return nil, nil, err

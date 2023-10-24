@@ -466,6 +466,7 @@ func NewEventDecoder(
 		cfg.LeaseManager,
 		cfg.CollectionFactory,
 		cfg.DB,
+		cfg.Settings,
 		targets,
 	)
 	if err != nil {

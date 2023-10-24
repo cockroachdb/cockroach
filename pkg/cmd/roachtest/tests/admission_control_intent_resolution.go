@@ -124,10 +124,7 @@ func registerIntentResolutionOverload(r registry.Registry) {
 				}
 				// Loop for up to 20 minutes. Intents take ~10min to resolve, and
 				// we're padding by another 10min.
-				//
-				// TODO(sumeer): change subLevelThreshold to 20 after intent
-				// resolution is subject to admission control.
-				const subLevelThreshold = 100
+				const subLevelThreshold = 20
 				numErrors := 0
 				numSuccesses := 0
 				latestIntentCount := math.MaxInt
