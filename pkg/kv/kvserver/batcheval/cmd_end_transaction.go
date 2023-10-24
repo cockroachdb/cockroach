@@ -1354,9 +1354,14 @@ func mergeTrigger(
 		if err != nil {
 			return result.Result{}, err
 		}
+
 		updated := false
 		leftEmpty, rightEmpty := rec.GetMVCCStats().HasNoUserData(), merge.RightMVCCStats.HasNoUserData()
-		if enableStickyGCHint.Get(&rec.ClusterSettings().SV) {
+		// TODO(pavelkalinnikov): deprecate the cluster setting and call Merge()
+		// unconditionally when min supported version is 23.2.
+		if rec.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_2) ||
+			enableStickyGCHint.Get(&rec.ClusterSettings().SV) {
+			// Add the timestamp to GCHint to guarantee that GC eventually clears it.
 			updated = lhsHint.Merge(rhsHint, leftEmpty, rightEmpty)
 		} else {
 			updated = lhsHint.MergeLatestRangeDeleteTimestamp(rhsHint, leftEmpty, rightEmpty)
