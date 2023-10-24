@@ -25,7 +25,7 @@ import (
 // CountLeases returns the number of unexpired leases for a number of descriptors
 // each at a particular version at a particular time.
 func CountLeases(
-	ctx context.Context, executor isql.Executor, versions []IDVersion, at hlc.Timestamp,
+	ctx context.Context, db isql.DB, versions []IDVersion, at hlc.Timestamp,
 ) (int, error) {
 	var whereClauses []string
 	for _, t := range versions {
@@ -39,6 +39,7 @@ func CountLeases(
 		at.AsOfSystemTime()) +
 		strings.Join(whereClauses, " OR ")
 
+	executor := db.Executor()
 	values, err := executor.QueryRowEx(
 		ctx, "count-leases", nil, /* txn */
 		sessiondata.RootUserSessionDataOverride,

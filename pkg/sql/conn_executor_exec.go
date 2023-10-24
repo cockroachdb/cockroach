@@ -1332,7 +1332,7 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 	return descs.CheckTwoVersionInvariant(
 		ctx,
 		ex.server.cfg.Clock,
-		ex.server.cfg.InternalDB.Executor(),
+		ex.server.cfg.InternalDB,
 		ex.extraTxnState.descCollection,
 		ex.state.mu.txn,
 		inRetryBackoff,
