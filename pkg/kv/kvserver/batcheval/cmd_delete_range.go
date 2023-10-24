@@ -147,7 +147,7 @@ func DeleteRange(
 				return nil
 			}
 
-			if updated, err := sl.SetGCHint(ctx, readWriter, cArgs.Stats, hint); err != nil || !updated {
+			if err := sl.SetGCHint(ctx, readWriter, cArgs.Stats, hint); err != nil {
 				return err
 			}
 			res.Replicated.State = &kvserverpb.ReplicaState{

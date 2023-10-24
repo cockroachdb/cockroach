@@ -1355,14 +1355,11 @@ func mergeTrigger(
 			return result.Result{}, err
 		}
 		if lhsHint.Merge(rhsHint, rec.GetMVCCStats().HasNoUserData(), merge.RightMVCCStats.HasNoUserData()) {
-			updated, err := lhsLoader.SetGCHint(ctx, batch, ms, lhsHint)
-			if err != nil {
+			if err := lhsLoader.SetGCHint(ctx, batch, ms, lhsHint); err != nil {
 				return result.Result{}, err
 			}
-			if updated {
-				pd.Replicated.State = &kvserverpb.ReplicaState{
-					GCHint: lhsHint,
-				}
+			pd.Replicated.State = &kvserverpb.ReplicaState{
+				GCHint: lhsHint,
 			}
 		}
 	}
