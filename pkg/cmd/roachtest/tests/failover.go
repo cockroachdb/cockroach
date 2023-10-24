@@ -537,22 +537,17 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 
 	// Place all ranges on n1-n3 to start with, and wait for upreplication.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
+
 	// NB: We want to ensure the system ranges are all down-replicated from their
 	// initial RF of 5, so pass in exactlyReplicationFactor below.
 	require.NoError(t, WaitForReplication(ctx, t, conn, 3, exactlyReplicationFactor))
-
-	// Disable the replicate queue. It can otherwise end up with stuck
-	// overreplicated ranges during rebalancing, because downreplication requires
-	// the Raft leader to be colocated with the leaseholder.
-	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.replicate_queue.enabled = false`)
-	require.NoError(t, err)
 
 	// Now that system ranges are properly placed on n1-n3, start n4-n6.
 	c.Start(ctx, t.L(), opts, settings, c.Range(4, 6))
 
 	// Create the kv database on n4-n6.
 	t.L().Printf("creating workload database")
-	_, err = conn.ExecContext(ctx, `CREATE DATABASE kv`)
+	_, err := conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
 	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{replicas: 3, onlyNodes: []int{4, 5, 6}})
 

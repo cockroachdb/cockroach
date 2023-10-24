@@ -1213,6 +1213,12 @@ func (sc *StoreConfig) SetDefaults(numStores int) {
 	if envutil.EnvOrDefaultBool("COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER", false) {
 		sc.TestingKnobs.DisableLeaderFollowsLeaseholder = true
 		sc.TestingKnobs.AllowLeaseRequestProposalsWhenNotLeader = true // otherwise lease requests fail
+		// The allocator must skip snapshot checks, since these only work when the
+		// leader and leaseholder are colocated.
+		if sc.TestingKnobs.AllocatorKnobs == nil {
+			sc.TestingKnobs.AllocatorKnobs = &allocator.TestingKnobs{}
+		}
+		sc.TestingKnobs.AllocatorKnobs.AllowLeaseTransfersToReplicasNeedingSnapshots = true
 	}
 }
 
