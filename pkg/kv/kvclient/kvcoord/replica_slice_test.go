@@ -218,7 +218,24 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 			expOrdered: []roachpb.NodeID{1, 2, 4, 3},
 		},
 		{
-			name:     "order by latency",
+			name:     "order by latency only",
+			nodeID:   1,
+			locality: locality(t, []string{"country=us"}),
+			latencies: map[roachpb.NodeID]time.Duration{
+				2: time.Hour,
+				3: time.Minute,
+				4: time.Second,
+			},
+			slice: ReplicaSlice{
+				info(t, 2, 2, []string{"country=us"}),
+				info(t, 4, 4, []string{"country=us"}),
+				info(t, 4, 44, []string{"country=us"}),
+				info(t, 3, 3, []string{"country=us"}),
+			},
+			expOrdered: []roachpb.NodeID{4, 3, 2},
+		},
+		{
+			name:     "order by locality than latency",
 			nodeID:   1,
 			locality: locality(t, []string{"country=us", "region=west", "city=la"}),
 			latencies: map[roachpb.NodeID]time.Duration{
@@ -232,7 +249,7 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 				info(t, 4, 44, []string{"country=us", "region=east", "city=ny"}),
 				info(t, 3, 3, []string{"country=uk", "city=london"}),
 			},
-			expOrdered: []roachpb.NodeID{4, 3, 2},
+			expOrdered: []roachpb.NodeID{2, 4, 3},
 		},
 		{
 			// Test that replicas on the local node sort first, regardless of factors

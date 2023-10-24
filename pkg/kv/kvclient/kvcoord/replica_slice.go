@@ -228,6 +228,17 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 			return false // j < i
 		}
 
+		// If we have locality defined use this first.
+		attrMatchI := localityMatch(locality.Tiers, rs[i].Tiers)
+		attrMatchJ := localityMatch(locality.Tiers, rs[j].Tiers)
+		// Longer locality matches sort first (the assumption is that
+		// they'll have better latencies).
+		if attrMatchI != attrMatchJ {
+			return attrMatchI > attrMatchJ
+		}
+
+		// These nodes are otherwise equal, choose the one that has a lower
+		// latency to us.
 		if latencyFn != nil {
 			latencyI, okI := latencyFn(rs[i].NodeID)
 			latencyJ, okJ := latencyFn(rs[j].NodeID)
@@ -235,11 +246,11 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 				return latencyI < latencyJ
 			}
 		}
-		attrMatchI := localityMatch(locality.Tiers, rs[i].Tiers)
-		attrMatchJ := localityMatch(locality.Tiers, rs[j].Tiers)
-		// Longer locality matches sort first (the assumption is that
-		// they'll have better latencies).
-		return attrMatchI > attrMatchJ
+		// We need to choose one node, so for consistent sorting, always choose
+		// the node with the lower node id. Note that on real systems we almost
+		// never get here since the latencyFn will be defined and we return a
+		// latency for both the nodes.
+		return rs[i].NodeID < rs[j].NodeID
 	})
 }
 
