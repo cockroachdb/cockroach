@@ -1159,6 +1159,8 @@ func (b *Batch) GetResult(idx int) (*Result, KeyValue, error) {
 		if idx < r.calls {
 			if idx < len(r.Rows) {
 				return r, r.Rows[idx], nil
+			} else if idx < len(r.Keys) {
+				return r, KeyValue{Key: r.Keys[idx]}, nil
 			} else {
 				return r, KeyValue{}, nil
 			}

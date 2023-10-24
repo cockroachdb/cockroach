@@ -1112,7 +1112,7 @@ func TestBulkBatchAPI(t *testing.T) {
 	testF(func(b *kv.Batch) { b.CPutValuesEmpty(&byteSliceBulkSource[roachpb.Value]{kys, values}) })
 }
 
-func TestGetResults(t *testing.T) {
+func TestGetResult(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db := setup(t)
@@ -1126,6 +1126,8 @@ func TestGetResults(t *testing.T) {
 	b := txn.NewBatch()
 	b.PutBytes(&byteSliceBulkSource[[]byte]{kys1, vals})
 	b.PutBytes(&byteSliceBulkSource[[]byte]{kys2, vals})
+	keyToDel := roachpb.Key("b")
+	b.Del(keyToDel)
 	err := txn.CommitInBatch(ctx, b)
 	require.NoError(t, err)
 	for i := 0; i < len(kys1)+len(kys2); i++ {
@@ -1134,12 +1136,16 @@ func TestGetResults(t *testing.T) {
 		require.Equal(t, row, b.Results[i/3].Rows[i%3])
 		require.NoError(t, err)
 	}
+	// test Del request (it uses Result.Keys rather than Result.Rows)
+	_, kv, err := b.GetResult(len(kys1) + len(kys2))
+	require.NoError(t, err)
+	require.Equal(t, keyToDel, kv.Key)
 	// test EndTxn result
-	_, _, err = b.GetResult(len(kys1) + len(kys2))
+	_, _, err = b.GetResult(len(kys1) + len(kys2) + 1)
 	require.NoError(t, err)
 
 	// test out of bounds
-	_, _, err = b.GetResult(len(kys1) + len(kys2) + 1)
+	_, _, err = b.GetResult(len(kys1) + len(kys2) + 2)
 	require.Error(t, err)
 }
 
