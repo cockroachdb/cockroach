@@ -462,11 +462,13 @@ func (s *drainServer) drainClients(
 	if err != nil {
 		return err
 	}
-
-	instanceID := s.sqlServer.sqlIDContainer.SQLInstanceID()
-	err = s.sqlServer.sqlInstanceStorage.ReleaseInstance(ctx, session, instanceID)
-	if err != nil {
-		return err
+	// If we started a sql session on this node.
+	if session != "" {
+		instanceID := s.sqlServer.sqlIDContainer.SQLInstanceID()
+		err = s.sqlServer.sqlInstanceStorage.ReleaseInstance(ctx, session, instanceID)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Mark the node as fully drained.

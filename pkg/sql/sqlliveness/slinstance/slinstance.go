@@ -457,7 +457,7 @@ func (l *Instance) Release(ctx context.Context) (sqlliveness.SessionID, error) {
 	}()
 
 	if session == nil {
-		return sqlliveness.SessionID(""), errors.New("no session to release")
+		return "", nil
 	}
 
 	if err := l.storage.Delete(ctx, session.ID()); err != nil {
