@@ -1228,12 +1228,12 @@ SELECT jsonb_array_to_string_array('[true, false, false, true]':::JSONB)
 query T
 SELECT jsonb_array_to_string_array('[null]':::JSONB)
 ----
-{}
+{NULL}
 
 query T
-SELECT jsonb_array_to_string_array('["foo", null]':::JSONB)
+SELECT jsonb_array_to_string_array('[1, "abc", true, ["a", "b"], {"b": "foo"}, null]':::JSONB)
 ----
-{foo}
+{1,abc,true,"[\"a\", \"b\"]","{\"b\": \"foo\"}",NULL}
 
 # Regression test for #23429.
 
