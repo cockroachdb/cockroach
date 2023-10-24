@@ -11,7 +11,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"net"
 	"os"
 	"os/signal"
@@ -82,34 +81,44 @@ from one or more CockroachDB clusters.`,
 		signalCh := make(chan os.Signal, 1)
 		signal.Notify(signalCh, drainSignals...)
 
-		stop := stop.NewStopper()
+		stopper := stop.NewStopper()
 
 		// Run the event ingestion in the background.
 		eventRouter := router.NewEventRouter(map[obspb.EventType]obslib.EventConsumer{
 			obspb.EventlogEvent: &obsutil.StdOutConsumer{},
 		})
 		ingester := ingest.MakeEventIngester(ctx, eventRouter, nil)
+
+		// Instantiate the net listener & gRPC server.
 		listener, err := net.Listen("tcp", otlpAddr)
 		if err != nil {
 			return errors.Wrapf(err, "failed to listen for incoming HTTP connections on address %s", otlpAddr)
 		}
-		fmt.Printf("Listening for OTLP connections on %s.", otlpAddr)
 		grpcServer := grpc.NewServer()
 		logspb.RegisterLogsServiceServer(grpcServer, ingester)
-		if err := stop.RunAsyncTask(ctx, "event ingester", func(ctx context.Context) {
-			_ = grpcServer.Serve(listener)
+		if err := stopper.RunAsyncTask(ctx, "server-quiesce", func(ctx context.Context) {
+			<-stopper.ShouldQuiesce()
+			grpcServer.GracefulStop()
 		}); err != nil {
 			return err
 		}
+		if err := stopper.RunAsyncTask(ctx, "event-ingester-server", func(ctx context.Context) {
+			if err := grpcServer.Serve(listener); err != nil {
+				log.Fatalf(ctx, "gRPC server returned an unexpected error: %+v", err)
+			}
+		}); err != nil {
+			return err
+		}
+		log.Infof(ctx, "Listening for OTLP connections on %s.\n", otlpAddr)
 
 		// Run the reverse HTTP proxy in the background.
-		httpproxy.NewReverseHTTPProxy(ctx, cfg).Start(ctx, stop)
+		httpproxy.NewReverseHTTPProxy(ctx, cfg).Start(ctx, stopper)
 
 		// Block until the process is signaled to terminate.
 		sig := <-signalCh
 		log.Infof(ctx, "received signal %s. Shutting down.", sig)
 		go func() {
-			stop.Stop(ctx)
+			stopper.Stop(ctx)
 		}()
 
 		// Print the shutdown progress every 5 seconds.
@@ -119,8 +128,8 @@ from one or more CockroachDB clusters.`,
 			for {
 				select {
 				case <-ticker.C:
-					log.Infof(ctx, "%d running tasks", stop.NumTasks())
-				case <-stop.IsStopped():
+					log.Infof(ctx, "%d running tasks", stopper.NumTasks())
+				case <-stopper.IsStopped():
 					return
 				}
 			}
@@ -128,7 +137,7 @@ from one or more CockroachDB clusters.`,
 
 		// Wait until the shutdown is complete or we receive another signal.
 		select {
-		case <-stop.IsStopped():
+		case <-stopper.IsStopped():
 			log.Infof(ctx, "shutdown complete")
 		case sig = <-signalCh:
 			switch sig {
