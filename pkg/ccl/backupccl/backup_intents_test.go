@@ -100,14 +100,13 @@ func TestCleanupIntentsDuringBackupPerformanceRegression(t *testing.T) {
 			}
 		}
 
+		// Reset the counters to avoid counting pushes and intent resolutions not
+		// part of the backup.
+		numIntentResolveBatches.Store(0)
+		numPushBatches.Store(0)
+
 		_, err = sqlDb.Exec("backup table foo to 'userfile:///test.foo'")
 		require.NoError(t, err, "Failed to run backup")
-
-		if !abort {
-			for _, tx := range transactions {
-				require.NoError(t, tx.Commit())
-			}
-		}
 
 		// We expect each group of 10 intents to take 2 intent resolution batches:
 		// - One intent gets discovered and added to the lock table, which forces the
@@ -120,5 +119,12 @@ func TestCleanupIntentsDuringBackupPerformanceRegression(t *testing.T) {
 		// Each of the 1,000 transactions is expected to get pushed once, but in an
 		// actual run of the test we might see more pushes (e.g. of other transactions).
 		require.GreaterOrEqual(t, 1100, int(numPushBatches.Load()))
+
+		if !abort {
+			for _, tx := range transactions {
+				// Ensure the long-running transactions can commit.
+				require.NoError(t, tx.Commit())
+			}
+		}
 	})
 }
