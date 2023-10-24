@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -146,10 +147,6 @@ func (s *StartOpts) IsVirtualCluster() bool {
 	return s.Target == StartSharedProcessForVirtualCluster || s.Target == StartServiceForVirtualCluster
 }
 
-// startSQLTimeout identifies the COCKROACH_CONNECT_TIMEOUT to use (in seconds)
-// for sql cmds within syncedCluster.Start().
-const startSQLTimeout = 1200
-
 // StartTarget identifies what flavor of cockroach we are starting.
 type StartTarget int
 
@@ -165,9 +162,17 @@ const (
 	// StartRoutingProxy starts the SQL proxy process to route
 	// connections to multiple virtual clusters.
 	StartRoutingProxy
-)
 
-const defaultInitTarget = Node(1)
+	// startSQLTimeout identifies the COCKROACH_CONNECT_TIMEOUT to use (in seconds)
+	// for sql cmds within syncedCluster.Start().
+	startSQLTimeout = 1200
+	// NoSQLTimeout indicates that a `cockroach sql` call is expected to
+	// succeed immediately (i.e., the server is known to be accepting
+	// requests at the time the call is made).
+	NoSQLTimeout = 0
+
+	defaultInitTarget = Node(1)
+)
 
 func (st StartTarget) String() string {
 	return [...]string{
@@ -387,7 +392,7 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 		res, err := c.startNode(ctx, l, node, startOpts)
 		if err != nil || res.Err != nil {
 			// If err is non-nil, then this will not be retried, but if res.Err is non-nil, it will be.
-			return res, err
+			return res, errors.CombineErrors(err, res.Err)
 		}
 
 		// We reserve a few special operations (bootstrapping, and setting
@@ -403,12 +408,22 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 		// `--start-single-node` flag will handle all of this for us.
 		shouldInit := startOpts.Target == StartDefault && !c.useStartSingleNode()
 		if shouldInit {
-			if res, err := c.initializeCluster(ctx, l, node); err != nil || res.Err != nil {
+			if initRes, err := c.initializeCluster(ctx, l, node); err != nil || initRes.Err != nil {
 				// If err is non-nil, then this will not be retried, but if res.Err is non-nil, it will be.
-				return res, err
+				return initRes, errors.CombineErrors(err, res.Err)
 			}
 		}
-		return c.setClusterSettings(ctx, l, node, startOpts.VirtualClusterName)
+
+		if startOpts.GetInitTarget() == node {
+			res, err = c.createAdminUserForSecureCluster(ctx, l, startOpts)
+			if err != nil || res.Err != nil {
+				return res, errors.CombineErrors(err, res.Err)
+			}
+
+			return c.setClusterSettings(ctx, l, node, startOpts.VirtualClusterName)
+		}
+
+		return res, err
 	}, WithConcurrency(parallelism)); err != nil {
 		return err
 	}
@@ -935,6 +950,67 @@ func (c *SyncedCluster) initializeCluster(
 		}
 	}
 	return res, err
+}
+
+// createAdminUserForSecureCluster creates a `roach` user with admin
+// privileges. The password used matches the virtual cluster name
+// ('system' for the storage cluster).
+func (c *SyncedCluster) createAdminUserForSecureCluster(
+	ctx context.Context, l *logger.Logger, startOpts StartOpts,
+) (*RunResultDetails, error) {
+	if !c.Secure {
+		return &RunResultDetails{}, nil
+	}
+
+	const username = "roach"
+	// N.B.: although using the same username/password combination would
+	// be easier to remember, if we do it for the system interface and
+	// virtual clusters we would be unable to log-in to the virtual
+	// cluster console due to #109691.
+	//
+	// TODO(renato): use the same combination once we're able to select
+	// the virtual cluster we are connecting to in the console.
+	var password = startOpts.VirtualClusterName
+	if startOpts.VirtualClusterName == "" {
+		password = SystemInterfaceName
+	}
+
+	stmts := strings.Join([]string{
+		fmt.Sprintf("CREATE USER IF NOT EXISTS %s WITH LOGIN PASSWORD '%s'", username, password),
+		fmt.Sprintf("GRANT ADMIN TO %s", username),
+	}, "; ")
+
+	var result *RunResultDetails
+	// We retry a few times here because cockroach process might not be
+	// ready to serve connections at this point. We also can't use
+	// `COCKROACH_CONNECT_TIMEOUT` in this case because that would not
+	// work for shared-process virtual clusters.
+	retryOpts := retry.Options{MaxRetries: 20}
+	if err := retryOpts.Do(ctx, func(ctx context.Context) error {
+		results, err := c.ExecSQL(
+			ctx, l, c.Nodes[:1], startOpts.VirtualClusterName, startOpts.SQLInstance, []string{
+				"-e", stmts,
+			})
+
+		if err != nil || results[0].Err != nil {
+			err := errors.CombineErrors(err, results[0].Err)
+			l.Printf("error (retrying): %v, output: %s", err, results[0].CombinedOut)
+			return err
+		}
+
+		result = results[0]
+		return nil
+	}); err != nil {
+		return &RunResultDetails{}, fmt.Errorf("failed to create default admin user: %w", err)
+	}
+
+	var virtualClusterInfo string
+	if startOpts.VirtualClusterName != "" && startOpts.VirtualClusterName != SystemInterfaceName {
+		virtualClusterInfo = fmt.Sprintf(" for virtual cluster %s", startOpts.VirtualClusterName)
+	}
+
+	l.Printf("log into DB console%s with user=%s password=%s", virtualClusterInfo, username, password)
+	return result, nil
 }
 
 func (c *SyncedCluster) setClusterSettings(
