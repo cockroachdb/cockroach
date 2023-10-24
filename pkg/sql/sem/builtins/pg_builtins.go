@@ -1370,6 +1370,27 @@ var pgBuiltins = map[string]builtinDefinition{
 	// Note that this function was removed from Postgres in version 10.
 	"pg_is_xlog_replay_paused": makeNotUsableFalseBuiltin(),
 
+	// pg_encoding_max_length returns the maximum length of a given encoding. For CRDB's use case,
+	// we only support UTF8; so, this will return the max_length of UTF8 - which is 4.
+	// https://github.com/postgres/postgres/blob/master/src/common/wchar.c
+	"pg_encoding_max_length": makeBuiltin(
+		tree.FunctionProperties{},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "encoding", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if cmp, err := args[0].CompareError(evalCtx, DatEncodingUTFId); err != nil {
+					return tree.DNull, err
+				} else if cmp == 0 {
+					return tree.NewDInt(4), nil
+				}
+				return tree.DNull, nil
+			},
+			Info:       notUsableInfo,
+			Volatility: volatility.Immutable,
+		},
+	),
+
 	// Access Privilege Inquiry Functions allow users to query object access
 	// privileges programmatically. Each function has a number of variants,
 	// which differ based on their function signatures. These signatures have
