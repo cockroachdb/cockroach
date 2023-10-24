@@ -20,10 +20,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+)
+
+// enableStickyGCHint controls whether the sticky GCHint is enabled.
+var enableStickyGCHint = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.gc.sticky_hint.enabled",
+	"enable writing sticky GC hints which expedite garbage collection after schema changes"+
+		" (ignored and assumed 'true' in 23.2)",
+	false,
 )
 
 func init() {
@@ -127,8 +137,11 @@ func DeleteRange(
 				return err
 			}
 
-			// Add the timestamp to GCHint to guarantee that GC eventually clears it.
-			updated := hint.ScheduleGCFor(h.Timestamp)
+			updated := false
+			if enableStickyGCHint.Get(&cArgs.EvalCtx.ClusterSettings().SV) {
+				// Add the timestamp to GCHint to guarantee that GC eventually clears it.
+				updated = hint.ScheduleGCFor(h.Timestamp)
+			}
 			// If the range tombstone covers the whole Range key span, update the
 			// corresponding timestamp in GCHint to enable ClearRange optimization.
 			if args.Key.Equal(desc.StartKey.AsRawKey()) && args.EndKey.Equal(desc.EndKey.AsRawKey()) {
