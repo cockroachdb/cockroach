@@ -197,8 +197,8 @@ func (n *showFingerprintsNode) nextTenant(params runParams) (bool, error) {
 	fingerprint, err := params.p.FingerprintSpan(params.ctx,
 		keys.MakeTenantSpan(tid),
 		hlc.Timestamp{},
-		false,
-		true)
+		false, /* allRevisions */
+		false /* stripped */)
 	if err != nil {
 		return false, err
 	}
