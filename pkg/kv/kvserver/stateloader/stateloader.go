@@ -124,7 +124,7 @@ func (rsl StateLoader) Save(
 	if err := rsl.SetGCThreshold(ctx, readWriter, ms, state.GCThreshold); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if _, err := rsl.SetGCHint(ctx, readWriter, ms, state.GCHint); err != nil {
+	if err := rsl.SetGCHint(ctx, readWriter, ms, state.GCHint); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	// TODO(sep-raft-log): SetRaftTruncatedState will be in a separate batch when
@@ -327,15 +327,12 @@ func (rsl StateLoader) LoadGCHint(
 // SetGCHint writes the GC hint.
 func (rsl StateLoader) SetGCHint(
 	ctx context.Context, readWriter storage.ReadWriter, ms *enginepb.MVCCStats, hint *roachpb.GCHint,
-) (updated bool, _ error) {
+) error {
 	if hint == nil {
-		return false, errors.New("cannot persist nil GCHint")
+		return errors.New("cannot persist nil GCHint")
 	}
-	if err := storage.MVCCPutProto(ctx, readWriter, rsl.RangeGCHintKey(),
-		hlc.Timestamp{}, hint, storage.MVCCWriteOptions{Stats: ms}); err != nil {
-		return false, err
-	}
-	return true, nil
+	return storage.MVCCPutProto(ctx, readWriter, rsl.RangeGCHintKey(),
+		hlc.Timestamp{}, hint, storage.MVCCWriteOptions{Stats: ms})
 }
 
 // LoadVersion loads the replica version.
