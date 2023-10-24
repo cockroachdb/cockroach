@@ -2183,8 +2183,10 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 	// If there are any replicas that do match lease preferences, then we check if
 	// the existing leaseholder is one of them.
 	preferred := a.PreferredLeaseholders(storePool, conf, candidates)
-	preferred = excludeReplicasInNeedOfSnapshots(
-		ctx, leaseRepl.RaftStatus(), leaseRepl.GetFirstIndex(), preferred)
+	if a.knobs == nil || !a.knobs.AllowLeaseTransfersToReplicasNeedingSnapshots {
+		preferred = excludeReplicasInNeedOfSnapshots(
+			ctx, leaseRepl.RaftStatus(), leaseRepl.GetFirstIndex(), preferred)
+	}
 	if len(preferred) == 0 {
 		return false
 	}
