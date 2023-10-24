@@ -145,14 +145,15 @@ func (n *dropIndexNode) startExec(params runParams) error {
 		// Determine if any of the columns stored by this index are *not* kept
 		// in the primary index. Dropping these columns will lead to data loss.
 		if idx != nil {
-			primaryStoredColumns := tableDesc.GetPrimaryIndex().CollectPrimaryStoredColumnIDs()
+			primaryIdxColumns := tableDesc.GetPrimaryIndex().CollectPrimaryStoredColumnIDs()
+			tableDesc.GetPrimaryIndex().CollectKeyColumnIDs().ForEach(primaryIdxColumns.Add)
 			secondaryStoredColumns := idx.CollectSecondaryStoredColumnIDs()
 			for _, col := range tableDesc.AllColumns() {
 				if col.IsVirtual() {
 					secondaryStoredColumns.Remove(col.GetID())
 				}
 			}
-			if missingColumns := secondaryStoredColumns.Difference(primaryStoredColumns); !missingColumns.Empty() {
+			if missingColumns := secondaryStoredColumns.Difference(primaryIdxColumns); !missingColumns.Empty() {
 				return sqlerrors.NewSecondaryIndexDataLossError(idx.GetName())
 			}
 		}
