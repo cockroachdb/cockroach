@@ -268,6 +268,17 @@ var senderConcurrencyLimit = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+// sortByLocalityFirst controls whether we sort by locality before sorting by
+// latency. If it is set to false we will only look at the latency values.
+// TODO(baptist): Remove this in 25.1 once we have validated that we don't need
+// to fall back to the previous behavior of only sorting by latency.
+var sortByLocalityFirst = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"kv.dist_sender.sort_locality_first.enabled",
+	"sort followers by locality before sorting by latency",
+	true,
+)
+
 func max(a, b int64) int64 {
 	if a > b {
 		return a
@@ -2240,7 +2251,7 @@ func (ds *DistSender) sendToReplicas(
 		// First order by latency, then move the leaseholder to the front of the
 		// list, if it is known.
 		if !ds.dontReorderReplicas {
-			replicas.OptimizeReplicaOrder(ds.nodeIDGetter(), ds.latencyFunc, ds.locality)
+			replicas.OptimizeReplicaOrder(ds.st, ds.nodeIDGetter(), ds.latencyFunc, ds.locality)
 		}
 
 		idx := -1
@@ -2259,7 +2270,7 @@ func (ds *DistSender) sendToReplicas(
 	case kvpb.RoutingPolicy_NEAREST:
 		// Order by latency.
 		log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not required")
-		replicas.OptimizeReplicaOrder(ds.nodeIDGetter(), ds.latencyFunc, ds.locality)
+		replicas.OptimizeReplicaOrder(ds.st, ds.nodeIDGetter(), ds.latencyFunc, ds.locality)
 
 	default:
 		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)

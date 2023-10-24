@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -46,13 +47,14 @@ func TestClosest(t *testing.T) {
 			NodeDescs: g,
 			NodeID:    1,
 			Locality:  nd2.Locality, // pretend node 2 is closest.
+			Settings:  cluster.MakeTestingClusterSettings(),
+			LatencyFunc: func(id roachpb.NodeID) (time.Duration, bool) {
+				if id == 2 {
+					return time.Nanosecond, validLatencyFunc
+				}
+				return time.Millisecond, validLatencyFunc
+			},
 		})
-		o.(*closestOracle).latencyFunc = func(id roachpb.NodeID) (time.Duration, bool) {
-			if id == 2 {
-				return time.Nanosecond, validLatencyFunc
-			}
-			return time.Millisecond, validLatencyFunc
-		}
 		internalReplicas := []roachpb.ReplicaDescriptor{
 			{NodeID: 4, StoreID: 4},
 			{NodeID: 2, StoreID: 2},

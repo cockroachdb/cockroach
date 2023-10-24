@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/errors"
@@ -25,7 +26,7 @@ import (
 // Locality information.
 type ReplicaInfo struct {
 	roachpb.ReplicaDescriptor
-	Tiers []roachpb.Tier
+	Locality roachpb.Locality
 }
 
 // A ReplicaSlice is a slice of ReplicaInfo.
@@ -129,7 +130,7 @@ func NewReplicaSlice(
 		}
 		rs = append(rs, ReplicaInfo{
 			ReplicaDescriptor: r,
-			Tiers:             nd.Locality.Tiers,
+			Locality:          nd.Locality,
 		})
 	}
 	if len(rs) == 0 {
@@ -171,20 +172,6 @@ func (rs ReplicaSlice) MoveToFront(i int) {
 	rs[0] = front
 }
 
-// localityMatch returns the number of consecutive locality tiers
-// which match between a and b.
-func localityMatch(a, b []roachpb.Tier) int {
-	if len(a) == 0 {
-		return 0
-	}
-	for i := range a {
-		if i >= len(b) || a[i] != b[i] {
-			return i
-		}
-	}
-	return len(a)
-}
-
 // A LatencyFunc returns the latency from this node to a remote
 // node and a bool indicating whether the latency is valid.
 type LatencyFunc func(roachpb.NodeID) (time.Duration, bool)
@@ -205,7 +192,7 @@ type LatencyFunc func(roachpb.NodeID) (time.Duration, bool)
 // leaseholder is known by the caller, the caller will move it to the
 // front if appropriate.
 func (rs ReplicaSlice) OptimizeReplicaOrder(
-	nodeID roachpb.NodeID, latencyFn LatencyFunc, locality roachpb.Locality,
+	st *cluster.Settings, nodeID roachpb.NodeID, latencyFn LatencyFunc, locality roachpb.Locality,
 ) {
 	// If we don't know which node we're on or its locality, and we don't have
 	// latency information to other nodes, send the RPCs randomly.
@@ -228,18 +215,41 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 			return false // j < i
 		}
 
+		// If this setting is false, ignore locality to match pre 24.1 behavior.
+		if sortByLocalityFirst.Get(&st.SV) {
+			// Longer locality matches sort first. The assumption is that they
+			// are closer and will be better choices. If the locality match is
+			// the same, then use the latency.
+			attrMatchI := locality.SharedPrefix(rs[i].Locality)
+			attrMatchJ := locality.SharedPrefix(rs[j].Locality)
+			if attrMatchI != attrMatchJ {
+				return attrMatchI > attrMatchJ
+			}
+		}
+
+		// These nodes are otherwise equal, choose the one that has a lower
+		// latency to us.  The latencyFn is only nil in some tests.
 		if latencyFn != nil {
+			// For disconnected or just recently connected nodes, the latencyFn
+			// can return not OK. We sort not OK nodes behind other nodes that
+			// we know the latency for.
 			latencyI, okI := latencyFn(rs[i].NodeID)
 			latencyJ, okJ := latencyFn(rs[j].NodeID)
+			if okI && !okJ {
+				return true
+			}
+			if okJ && !okI {
+				return false
+			}
 			if okI && okJ {
 				return latencyI < latencyJ
 			}
 		}
-		attrMatchI := localityMatch(locality.Tiers, rs[i].Tiers)
-		attrMatchJ := localityMatch(locality.Tiers, rs[j].Tiers)
-		// Longer locality matches sort first (the assumption is that
-		// they'll have better latencies).
-		return attrMatchI > attrMatchJ
+		// We want a transitive consistent sorting. Choose the node with the lower
+		// node id.
+		// NB: We don't usually get here since the latencyFn is defined and we know
+		// the latency to all other nodes.
+		return rs[i].NodeID < rs[j].NodeID
 	})
 }
 
@@ -255,7 +265,7 @@ func (rs ReplicaSlice) Descriptors() []roachpb.ReplicaDescriptor {
 // LocalityValue returns the value of the locality tier associated with the
 // given key.
 func (ri *ReplicaInfo) LocalityValue(key string) string {
-	for _, tier := range ri.Tiers {
+	for _, tier := range ri.Locality.Tiers {
 		if tier.Key == key {
 			return tier.Value
 		}
