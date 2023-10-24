@@ -1,3 +1,5 @@
+# Scheduled Backups Test
+
 parse
 CREATE SCHEDULE FOR BACKUP TABLE foo INTO 'bar' RECURRING '@hourly'
 ----
@@ -61,3 +63,13 @@ CREATE SCHEDULE IF NOT EXISTS 'baz' FOR BACKUP INTO 'bar' WITH revision_history 
 CREATE SCHEDULE IF NOT EXISTS ('baz') FOR BACKUP INTO ('bar') WITH revision_history = (true) RECURRING ('@daily') FULL BACKUP ('@weekly') WITH SCHEDULE OPTIONS first_run = ('now') -- fully parenthesized
 CREATE SCHEDULE IF NOT EXISTS '_' FOR BACKUP INTO '_' WITH revision_history = _ RECURRING '_' FULL BACKUP '_' WITH SCHEDULE OPTIONS first_run = '_' -- literals removed
 CREATE SCHEDULE IF NOT EXISTS 'baz' FOR BACKUP INTO 'bar' WITH revision_history = true RECURRING '@daily' FULL BACKUP '@weekly' WITH SCHEDULE OPTIONS _ = 'now' -- identifiers removed
+
+# Scheduled Changefeed Tests
+
+parse
+CREATE SCHEDULE FOR CHANGEFEED d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown' WITH initial_scan='only' RECURRING '@hourly'
+----
+CREATE SCHEDULE FOR CHANGEFEED TABLE d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown' WITH OPTIONS (initial_scan = 'only' ) RECURRING '@hourly' -- normalized!
+CREATE SCHEDULE FOR CHANGEFEED TABLE (d.public.foo) INTO ('webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown') WITH OPTIONS (initial_scan = ('only') ) RECURRING ('@hourly') -- fully parenthesized
+CREATE SCHEDULE FOR CHANGEFEED TABLE d.public.foo INTO '_' WITH OPTIONS (initial_scan = '_' ) RECURRING '_' -- literals removed
+CREATE SCHEDULE FOR CHANGEFEED TABLE _._._ INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown' WITH OPTIONS (_ = 'only' ) RECURRING '@hourly' -- identifiers removed
