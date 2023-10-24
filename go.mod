@@ -1,6 +1,6 @@
 module github.com/cockroachdb/cockroach
 
-go 1.20
+go 1.21
 
 // The following dependencies are key infrastructure dependencies and
 // should be updated as their own commit (i.e. not bundled with a dep

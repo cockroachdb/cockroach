@@ -75,37 +75,117 @@ index 554a60d747..8d64ee31c8 100644
  	if gcBlackenEnabled != 0 && gp.gcAssistBytes > 0 {
  		// Flush assist credit to the global pool. This gives
 diff --git a/src/runtime/runtime2.go b/src/runtime/runtime2.go
-index 9381d1e3f7..8182f8e9bc 100644
+index f4c76abd1c..57672bd8c5 100644
 --- a/src/runtime/runtime2.go
 +++ b/src/runtime/runtime2.go
-@@ -474,7 +474,6 @@ type g struct {
- 	traceseq       uint64   // trace event sequencer
- 	tracelastp     puintptr // last P emitted an event for this goroutine
- 	lockedm        muintptr
--	sig            uint32
- 	writebuf       []byte
- 	sigcode0       uintptr
- 	sigcode1       uintptr
-@@ -488,6 +487,9 @@ type g struct {
- 	labels         unsafe.Pointer // profiler labels
- 	timer          *timer         // cached timer for time.Sleep
- 	selectDone     atomic.Uint32  // are we participating in a select and did someone win the race?
-+	sig            uint32
-+	lastsched      int64 // timestamp when the G last started running
-+	runningnanos   int64 // wall time spent in the running state
+@@ -477,7 +477,6 @@ type g struct {
+ 	trackingStamp int64 // timestamp of when the G last started being tracked
+ 	runnableTime  int64 // the amount of time spent runnable, cleared when running, only used when tracking
+ 	lockedm       muintptr
+-	sig           uint32
+ 	writebuf      []byte
+ 	sigcode0      uintptr
+ 	sigcode1      uintptr
+@@ -492,6 +491,9 @@ type g struct {
+ 	labels        unsafe.Pointer // profiler labels
+ 	timer         *timer         // cached timer for time.Sleep
+ 	selectDone    atomic.Uint32  // are we participating in a select and did someone win the race?
++	sig           uint32
++	lastsched     int64 // timestamp when the G last started running
++	runningnanos  int64 // wall time spent in the running state
  
  	// goroutineProfiled indicates the status of this goroutine's stack for the
  	// current in-progress goroutine profile
 diff --git a/src/runtime/sizeof_test.go b/src/runtime/sizeof_test.go
-index 9ce0a3afcd..bfb5d6e33e 100644
+index fb9195481a..55e37287c2 100644
 --- a/src/runtime/sizeof_test.go
 +++ b/src/runtime/sizeof_test.go
-@@ -21,7 +21,7 @@ func TestSizeof(t *testing.T) {
+@@ -21,6 +21,6 @@ func TestSizeof(t *testing.T) {
  		_32bit uintptr // size on 32bit platforms
  		_64bit uintptr // size on 64bit platforms
  	}{
--		{runtime.G{}, 240, 392},   // g, but exported for testing
-+		{runtime.G{}, 248, 400},   // g, but exported for testing
+-		{runtime.G{}, 252, 408},   // g, but exported for testing
++		{runtime.G{}, 260, 416},   // g, but exported for testing
  		{runtime.Sudog{}, 56, 88}, // sudog, but exported for testing
  	}
+diff -ru a/src/context/context.go b/src/context/context.go
+--- a/src/context/context.go
++++ b/src/context/context.go
+@@ -472,17 +472,7 @@
  
+ 	if p, ok := parentCancelCtx(parent); ok {
+ 		// parent is a *cancelCtx, or derives from one.
+-		p.mu.Lock()
+-		if p.err != nil {
+-			// parent has already been canceled
+-			child.cancel(false, p.err, p.cause)
+-		} else {
+-			if p.children == nil {
+-				p.children = make(map[canceler]struct{})
+-			}
+-			p.children[child] = struct{}{}
+-		}
+-		p.mu.Unlock()
++		p.addChild(child)
+ 		return
+ 	}
+ 
+@@ -510,6 +500,22 @@
+ 	}()
+ }
+ 
++// addChild adds child to the list of children.
++// NB: CockroachDB runtime patch.
++func (c *cancelCtx) addChild(child canceler) {
++	c.mu.Lock()
++	if c.err != nil {
++		// parent has already been canceled
++		child.cancel(false, c.err, c.cause)
++	} else {
++		if c.children == nil {
++			c.children = make(map[canceler]struct{})
++		}
++		c.children[child] = struct{}{}
++	}
++	c.mu.Unlock()
++}
++
+ type stringer interface {
+ 	String() string
+ }
+@@ -781,5 +787,35 @@
+ 		default:
+ 			return c.Value(key)
+ 		}
++	}
++}
++
++// CockroachDB runtime patch.
++// cancelerAdapter invokes f when cancel context completes.
++type cancelerAdapter struct {
++	*cancelCtx
++	f func()
++}
++
++func (c *cancelerAdapter) cancel(removeFromParent bool, err, cause error) {
++	if removeFromParent {
++		removeChild(c.cancelCtx, c)
+ 	}
++	c.f()
+ }
++
++// PropagateCancel arranges for f to be invoked when parent is done.
++// Parent must be one of the cancelable contexts.
++// Returns true if cancellation will be propagated, false if the parent
++// is not cancelable.
++// This is similar to AfterFunc(), but does not spin up goroutine, and instead
++// invokes f on whatever goroutine completed parent context.
++func PropagateCancel(parent Context, f func()) bool {
++	p, ok := parent.Value(&cancelCtxKey).(*cancelCtx)
++	if !ok {
++		return false
++	}
++	a := cancelerAdapter{cancelCtx: p, f: f}
++	p.addChild(&a)
++	return true
++}

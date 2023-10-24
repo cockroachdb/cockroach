@@ -124,7 +124,7 @@ func TestRotateCerts(t *testing.T) {
 
 	// Some errors codes.
 	const kBadAuthority = "certificate signed by unknown authority"
-	const kBadCertificate = "tls: bad certificate"
+	const kUnknownAuthority = "tls: unknown certificate authority"
 
 	// Test client with the same certs.
 	clientContext := rpc.SecurityContextOptions{SSLCertsDir: certsDir}
@@ -308,8 +308,8 @@ func TestRotateCerts(t *testing.T) {
 	thirdSQLClient := createTestClient()
 	defer thirdSQLClient.Close()
 
-	if _, err := thirdSQLClient.Exec("SELECT 1"); !testutils.IsError(err, kBadCertificate) {
-		t.Fatalf("expected error %q, got: %q", kBadCertificate, err)
+	if _, err := thirdSQLClient.Exec("SELECT 1"); !testutils.IsError(err, kUnknownAuthority) {
+		t.Fatalf("expected error %q, got: %q", kUnknownAuthority, err)
 	}
 
 	// We haven't triggered the reload, second client should still work.

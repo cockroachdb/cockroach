@@ -340,6 +340,7 @@ func unsafeGetBytes(s string) ([]byte, error) {
 	if len(s) == 0 {
 		return nil, nil
 	}
+	//lint:ignore SA1019 StringHeader is deprecated, but no clear replacement
 	p := unsafe.Pointer((*reflect.StringHeader)(unsafe.Pointer(&s)).Data)
 	return (*[maxStrLen]byte)(p)[:len(s):len(s)], nil
 }
