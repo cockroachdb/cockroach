@@ -30,7 +30,7 @@ executable.
 ### Deployment
 
 The deploy image is a downsized image containing a minimal environment for
-running CockroachDB. It is based on RedHat's `ubi8/ubi-minimal` image and
+running CockroachDB. It is based on RedHat's `ubi9/ubi-minimal` image and
 contains only the main CockroachDB binary, libgeos libraries, and licenses. To
 fetch this image, run `docker pull cockroachdb/cockroach` in the usual fashion.
 
