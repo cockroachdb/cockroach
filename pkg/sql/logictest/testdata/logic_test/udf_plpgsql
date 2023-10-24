@@ -2320,4 +2320,59 @@ $$ LANGUAGE PLpgSQL;
 statement error pgcode 22004 pq: null_value_not_allowed
 SELECT f();
 
+# Regression test for #112940 - UPSERT INTO should be allowed.
+subtest upsert_into
+
+statement ok
+BEGIN;
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+statement ok
+DROP FUNCTION f();
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    UPSERT INTO xy VALUES (100, 200);
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+SELECT f();
+
+query II rowsort
+SELECT * FROM xy;
+----
+1    2
+3    4
+100  200
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    a INT;
+  BEGIN
+    UPSERT INTO xy VALUES (300, 400) RETURNING y, x INTO a;
+    RETURN a;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+400
+
+query II rowsort
+SELECT * FROM xy;
+----
+1    2
+3    4
+100  200
+300  400
+
+statement ok
+ABORT;
+
 subtest end
