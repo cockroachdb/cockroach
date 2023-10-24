@@ -885,6 +885,9 @@ func TestZipJobTrace(t *testing.T) {
 	defer jobs.ResetConstructors()()
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
+			base.TestTenantProbabilistic, 112950,
+		),
 		Insecure: true,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),

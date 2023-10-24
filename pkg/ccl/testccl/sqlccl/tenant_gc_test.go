@@ -49,7 +49,7 @@ func TestGCTenantRemovesSpanConfigs(t *testing.T) {
 
 	ctx := context.Background()
 	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantProbabilistic,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		Knobs: base.TestingKnobs{
 			SpanConfig: &spanconfig.TestingKnobs{
 				// Disable the system tenant's reconciliation process so that we can
