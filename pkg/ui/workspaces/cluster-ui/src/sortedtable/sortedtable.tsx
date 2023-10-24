@@ -461,8 +461,8 @@ export const handleSortSettingFromQueryString = (
   if (
     onSortingChange &&
     columnTitle &&
-    (sortSetting.columnTitle != columnTitle ||
-      sortSetting.ascending != ascending)
+    (sortSetting.columnTitle !== columnTitle ||
+      sortSetting.ascending !== ascending)
   ) {
     onSortingChange(page, columnTitle, ascending);
   }
@@ -495,8 +495,8 @@ export const updateSortSettingQueryParamsOnTab = (
     searchParams.get("columnTitle") || defaultSortSetting.columnTitle;
   if (
     currentTab === tab &&
-    (sortSetting.columnTitle != columnTitle ||
-      sortSetting.ascending != ascending)
+    (sortSetting.columnTitle !== columnTitle ||
+      sortSetting.ascending !== ascending)
   ) {
     const params = {
       ascending: sortSetting.ascending.toString(),

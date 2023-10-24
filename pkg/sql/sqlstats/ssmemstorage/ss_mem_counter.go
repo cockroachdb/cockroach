@@ -64,7 +64,7 @@ type SQLStatsAtomicCounters struct {
 // DiscardedStatsLogInterval specifies the interval between log emissions for discarded
 // statement and transaction statistics due to reaching the SQL statistics memory limit.
 var DiscardedStatsLogInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.metrics.discarded_stats_log.interval",
 	"interval between log emissions for discarded statistics due to SQL statistics memory limit",
 	1*time.Minute,
@@ -166,8 +166,8 @@ func (s *SQLStatsAtomicCounters) tryAddTxnFingerprint() (ok bool) {
 func (s *SQLStatsAtomicCounters) freeByCnt(
 	uniqueStmtFingerprintCount, uniqueTxnFingerprintCount int64,
 ) {
-	atomic.AddInt64(&s.uniqueStmtFingerprintCount, uniqueStmtFingerprintCount)
-	atomic.AddInt64(&s.uniqueTxnFingerprintCount, uniqueTxnFingerprintCount)
+	atomic.AddInt64(&s.uniqueStmtFingerprintCount, -uniqueStmtFingerprintCount)
+	atomic.AddInt64(&s.uniqueTxnFingerprintCount, -uniqueTxnFingerprintCount)
 }
 
 // GetTotalFingerprintCount returns total number of unique statement and

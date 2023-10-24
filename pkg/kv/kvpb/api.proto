@@ -978,6 +978,18 @@ message EndTxnResponse {
   // The commit timestamp of the STAGING transaction record written
   // by the request. Only set if the transaction record was staged.
   util.hlc.Timestamp staging_timestamp = 5 [(gogoproto.nullable) = false];
+  // ReplicatedLocksReleasedOnCommit, if non-empty, indicate that replicated
+  // locks with strength Shared or Exclusive were released in the referenced key
+  // spans when committing this transaction. Notably, this field is left unset
+  // if only write intents were resolved. The field is also left unset for
+  // transactions that aborted.
+  //
+  // The caller must bump the timestamp cache across these spans to the
+  // transaction's commit timestamp. Doing so ensures that the released locks
+  // (acquired by the now committed transaction) continue to provide protection
+  // against other writers up to the commit timestamp, even after the locks have
+  // been released.
+  repeated Span replicated_locks_released_on_commit = 6 [(gogoproto.nullable) = false];
 }
 
 // An AdminSplitRequest is the argument to the AdminSplit() method. The
@@ -1479,6 +1491,17 @@ message ResolveIntentRequest {
 // ResolveIntent() method.
 message ResolveIntentResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // ReplicatedLocksReleasedCommitTimestamp, if non-empty, indicates that a
+  // replicated lock with strength Shared or Exclusive was released by a
+  // transaction who committed at this timestamp. Notably, this field is left
+  // unset if only a write intent was resolved. The field is also left unset for
+  // transactions that aborted.
+  //
+  // The caller must bump the timestamp cache across the resolution span to this
+  // commit timestamp. Doing so ensures that the released lock (acquired by a
+  // now committed transaction) continues to provide protection against other
+  // writers up to the commit timestamp, even after the lock has been released.
+  util.hlc.Timestamp replicated_locks_released_commit_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
 // A ResolveIntentRangeRequest is arguments to the ResolveIntentRange() method.
@@ -1523,6 +1546,17 @@ message ResolveIntentRangeRequest {
 // ResolveIntent() method.
 message ResolveIntentRangeResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // ReplicatedLocksReleasedCommitTimestamp, if non-empty, indicates that at
+  // least one replicated lock with strength Shared or Exclusive was released by
+  // a transaction who committed at this timestamp. Notably, this field is left
+  // unset if only a write intent was resolved. The field is also left unset for
+  // transactions that aborted.
+  //
+  // The caller must bump the timestamp cache across the resolution span to this
+  // commit timestamp. Doing so ensures that the released lock (acquired by a
+  // now committed transaction) continues to provide protection against other
+  // writers up to the commit timestamp, even after the lock has been released.
+  util.hlc.Timestamp replicated_locks_released_commit_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
 // A MergeRequest contains arguments to the Merge() method. It
@@ -2068,13 +2102,13 @@ message AddSSTableRequest {
   // is likely non-empty. See AddSSTableResponse.FollowingLikelyNonEmptySpanStart.
   bool return_following_likely_non_empty_span_start = 9;
 
-  // RemoteFile indicates that the span indicated by the request start and end 
+  // RemoteFile indicates that the span indicated by the request start and end
   // key of the file specified should be added. Data cannot be set if RemoteFile
   // is non-empty, and many other request parameters such as collision/shadow
   // checking, write-at-request-timestamp, or ingest-as-writes are unsupported.
   //
   // TODO(dt, msbutler, bilal): This is unsupported.
-  // TOOD(dt, msbutler, bilal): support sst_timestamp_to_request_timestamp.
+  // TODO(dt, msbutler, bilal): support sst_timestamp_to_request_timestamp.
   // TODO(msbutler): rename to ExternalFile.
   message  RemoteFile {
     string locator = 1;
@@ -2082,8 +2116,8 @@ message AddSSTableRequest {
     uint64 backing_file_size = 3;
   }
   RemoteFile remote_file = 10 [(gogoproto.nullable) = false];
-  
-  // AddSSTableRequest_PrefixReplacement is used to represent a prefix to be 
+
+  // AddSSTableRequest_PrefixReplacement is used to represent a prefix to be
   // replaced and the prefix with which to replace it.
   message PrefixReplacement {
     bytes from = 1;
@@ -2092,7 +2126,7 @@ message AddSSTableRequest {
 
   // PrefixReplacement is used to that keys in the sst with the prefix specified
   // in "from" should instead appear to have that prefix replaced by "to", when
-  // during iteration, seeking, or other reads. For example, an SST containing 
+  // during iteration, seeking, or other reads. For example, an SST containing
   // keys a1, a2, and a3 when added with PrefixReplacement={From: a, To:x} would
   // produce the same results for subsequent operations as adding an SST with
   // the keys x1, x2, x3 instead. The implementaiton may however elect to defer
@@ -2102,8 +2136,8 @@ message AddSSTableRequest {
   PrefixReplacement prefix_replacement = 11 [(gogoproto.nullable) = false];
 
   // IgnoreKeysAboveTimestamp is used when ingesting an SSTable that contains
-  // keys, including mvcc revisions of keys, captured over a time range, to 
-  // indicate that readers of that sstable should read it "as of" a the fixed 
+  // keys, including mvcc revisions of keys, captured over a time range, to
+  // indicate that readers of that sstable should read it "as of" a the fixed
   // time, ignoring any keys with later timestamps.
   //
   // TODO(dt,msbutler,bilal): This is unsupported.
@@ -3558,7 +3592,9 @@ message ScanStats {
   // NumGets, NumScans, and NumReverseScans tracks the number of Gets, Scans,
   // and ReverseScans, respectively, that were actually evaluated as part of the
   // BatchResponse. These don't include requests that were not evaluated due to
-  // reaching the BatchResponse's limits or an error.
+  // reaching the BatchResponse's limits or an error. NumScans also tracks the
+  // number of ExportRequests evaluated (including ones that resulted in an
+  // error).
   uint64 num_gets = 17;
   uint64 num_scans = 18;
   uint64 num_reverse_scans = 19;

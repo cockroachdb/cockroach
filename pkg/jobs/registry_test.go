@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -128,6 +129,7 @@ func TestRegistryGC(t *testing.T) {
 				DontUseJobs:                       true,
 				SkipJobMetricsPollingJobBootstrap: true,
 				SkipAutoConfigRunnerJobBootstrap:  true,
+				SkipMVCCStatisticsJobBootstrap:    true,
 			},
 			KeyVisualizer: &keyvisualizer.TestingKnobs{
 				SkipJobBootstrap: true,
@@ -282,6 +284,7 @@ func TestRegistryGCPagination(t *testing.T) {
 				SkipJobMetricsPollingJobBootstrap: true,
 				SkipAutoConfigRunnerJobBootstrap:  true,
 				SkipUpdateSQLActivityJobBootstrap: true,
+				SkipMVCCStatisticsJobBootstrap:    true,
 			},
 			KeyVisualizer: &keyvisualizer.TestingKnobs{
 				SkipJobBootstrap: true,
@@ -333,7 +336,6 @@ func TestCreateJobWritesToJobInfo(t *testing.T) {
 				SkipJobBootstrap: true,
 			},
 		},
-		DisableSpanConfigs: true,
 	}
 
 	ctx := context.Background()
@@ -343,7 +345,7 @@ func TestCreateJobWritesToJobInfo(t *testing.T) {
 	r := s.JobRegistry().(*Registry)
 
 	RegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
-		return FakeResumer{
+		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				return nil
 			},
@@ -520,7 +522,6 @@ func TestBatchJobsCreation(t *testing.T) {
 							SkipJobBootstrap: true,
 						},
 					},
-					DisableSpanConfigs: true,
 				}
 
 				ctx := context.Background()
@@ -531,7 +532,7 @@ func TestBatchJobsCreation(t *testing.T) {
 				r := s.JobRegistry().(*Registry)
 
 				RegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
-					return FakeResumer{
+					return jobstest.FakeResumer{
 						OnResume: func(ctx context.Context) error {
 							return nil
 						},
@@ -701,6 +702,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 					SkipJobMetricsPollingJobBootstrap: true,
 					SkipAutoConfigRunnerJobBootstrap:  true,
 					SkipUpdateSQLActivityJobBootstrap: true,
+					SkipMVCCStatisticsJobBootstrap:    true,
 				},
 				KeyVisualizer: &keyvisualizer.TestingKnobs{
 					SkipJobBootstrap: true,
@@ -727,7 +729,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		bti.adopted = bti.registry.metrics.AdoptIterations
 		bti.resumed = bti.registry.metrics.ResumedJobs
 		RegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
-			return FakeResumer{
+			return jobstest.FakeResumer{
 				OnResume: func(ctx context.Context) error {
 					if bti.done.Load().(bool) {
 						return nil
@@ -1039,7 +1041,7 @@ func TestExponentialBackoffSettings(t *testing.T) {
 			tdb = sqlutils.MakeSQLRunner(sdb)
 			// Create and run a dummy job.
 			RegisterConstructor(jobspb.TypeImport, func(_ *Job, cs *cluster.Settings) Resumer {
-				return FakeResumer{}
+				return jobstest.FakeResumer{}
 			}, UsesTenantCostControl)
 			registry := s.JobRegistry().(*Registry)
 			id := registry.MakeJobID()
@@ -1178,7 +1180,7 @@ func TestRunWithoutLoop(t *testing.T) {
 				atomic.AddInt64(counter, 1)
 			}
 		}
-		return FakeResumer{
+		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				maybeIncrementCounter(&successDone, &ran)
 				if shouldFail {
@@ -1258,7 +1260,7 @@ func TestJobIdleness(t *testing.T) {
 	resumeErrChan := make(chan error)
 	defer close(resumeErrChan)
 	RegisterConstructor(jobspb.TypeImport, func(_ *Job, cs *cluster.Settings) Resumer {
-		return FakeResumer{
+		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				resumeStartChan <- struct{}{}
 				return <-resumeErrChan
@@ -1484,7 +1486,7 @@ func TestGetClaimedResumerFromRegistry(t *testing.T) {
 	defer close(resumeErrChan)
 	var counter int
 	RegisterConstructor(jobspb.TypeImport, func(_ *Job, cs *cluster.Settings) Resumer {
-		return FakeResumer{
+		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				resumeStartChan <- struct{}{}
 				return <-resumeErrChan

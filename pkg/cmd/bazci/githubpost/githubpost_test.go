@@ -12,10 +12,12 @@ package githubpost
 
 import (
 	"context"
+	"encoding/xml"
 	"os"
 	"strings"
 	"testing"
 
+	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/stretchr/testify/assert"
@@ -95,7 +97,7 @@ func TestListFailuresFromJSON(t *testing.T) {
 		fileName  string
 		expPkg    string
 		expIssues []issue
-		formatter formatter
+		formatter Formatter
 	}{
 		{
 			pkgEnv:   "",
@@ -109,7 +111,7 @@ func TestListFailuresFromJSON(t *testing.T) {
 				extraLabels: []string{"T-kv"},
 				hasProject:  true,
 			}},
-			formatter: defaultFormatter,
+			formatter: DefaultFormatter,
 		},
 		{
 			// A clone of the above but configured to set SkipTestLabelTestFailure to
@@ -127,7 +129,7 @@ func TestListFailuresFromJSON(t *testing.T) {
 				hasProject:           true,
 				skiplabelTestFailure: true,
 			}},
-			formatter: defaultFormatter,
+			formatter: DefaultFormatter,
 		},
 		{
 			pkgEnv:   "github.com/cockroachdb/cockroach/pkg/kv/kvserver",
@@ -141,7 +143,7 @@ func TestListFailuresFromJSON(t *testing.T) {
 				extraLabels: []string{"T-kv"},
 				hasProject:  true,
 			}},
-			formatter: defaultFormatter,
+			formatter: DefaultFormatter,
 		},
 		{
 			pkgEnv:   "github.com/cockroachdb/cockroach/pkg/kv/kvserver",
@@ -155,7 +157,7 @@ func TestListFailuresFromJSON(t *testing.T) {
 				extraLabels: []string{"T-kv"},
 				hasProject:  true,
 			}},
-			formatter: defaultFormatter,
+			formatter: DefaultFormatter,
 		},
 		{
 			pkgEnv:   "github.com/cockroachdb/cockroach/pkg/storage",
@@ -169,7 +171,7 @@ func TestListFailuresFromJSON(t *testing.T) {
 				extraLabels: []string{"T-testeng"},
 				hasProject:  true,
 			}},
-			formatter: defaultFormatter,
+			formatter: DefaultFormatter,
 		},
 		{
 			pkgEnv:   "github.com/cockroachdb/cockroach/pkg/util/json",
@@ -183,7 +185,7 @@ func TestListFailuresFromJSON(t *testing.T) {
     	json_test.go:1656: injected failure`,
 				mention: []string{"@cockroachdb/unowned"},
 			}},
-			formatter: defaultFormatter,
+			formatter: DefaultFormatter,
 		},
 		{
 			// A test run where there's a timeout, and the timed out test was the
@@ -216,7 +218,7 @@ TestAnchorKey - 1.01s
 					hasProject:  true,
 				},
 			},
-			formatter: defaultFormatter,
+			formatter: DefaultFormatter,
 		},
 		{
 			// A test run where there's a timeout, but the test that happened to be
@@ -240,7 +242,7 @@ TestXXA - 1.00s
 					hasProject:  true,
 				},
 			},
-			formatter: defaultFormatter,
+			formatter: DefaultFormatter,
 		},
 		{
 			// Like the above, except this time the output comes from a stress run,
@@ -264,7 +266,7 @@ TestXXA - 1.00s
 					hasProject:  true,
 				},
 			},
-			formatter: defaultFormatter,
+			formatter: DefaultFormatter,
 		},
 		{
 			// A stress timeout where the test running when the timeout is hit is the
@@ -288,7 +290,7 @@ TestXXA - 1.00s
 					hasProject:  true,
 				},
 			},
-			formatter: defaultFormatter,
+			formatter: DefaultFormatter,
 		},
 		{
 			// A panic in a test.
@@ -305,7 +307,7 @@ TestXXA - 1.00s
 					hasProject:  true,
 				},
 			},
-			formatter: defaultFormatter,
+			formatter: DefaultFormatter,
 		},
 		{
 			// A panic outside of a test (in this case, in a package init function).
@@ -322,7 +324,7 @@ TestXXA - 1.00s
 					hasProject:  true,
 				},
 			},
-			formatter: defaultFormatter,
+			formatter: DefaultFormatter,
 		},
 		{
 			// The Pebble metamorphic issue formatter.
@@ -360,7 +362,7 @@ TestXXA - 1.00s
 			defer file.Close()
 			curIssue := 0
 
-			f := func(ctx context.Context, f failure) error {
+			f := func(ctx context.Context, f Failure) error {
 				if t.Failed() {
 					return nil
 				}
@@ -420,7 +422,7 @@ func TestListFailuresFromTestXML(t *testing.T) {
 		fileName  string
 		expPkg    string
 		expIssues []issue
-		formatter formatter
+		formatter Formatter
 	}{
 		{
 			fileName: "basic.xml",
@@ -435,20 +437,23 @@ func TestListFailuresFromTestXML(t *testing.T) {
     --- FAIL: TestJSONErrors/frues (0.00s)`,
 				mention: []string{"@cockroachdb/unowned"},
 			}},
-			formatter: defaultFormatter,
+			formatter: DefaultFormatter,
 		},
 	}
 
 	for _, c := range testCases {
 		t.Run(c.fileName, func(t *testing.T) {
-			file, err := os.Open(datapathutils.TestDataPath(t, c.fileName))
+			content, err := os.ReadFile(datapathutils.TestDataPath(t, c.fileName))
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer file.Close()
+			var testXml bazelutil.TestSuites
+			if err := xml.Unmarshal(content, &testXml); err != nil {
+				t.Fatal(err)
+			}
 			curIssue := 0
 
-			f := func(ctx context.Context, f failure) error {
+			f := func(ctx context.Context, f Failure) error {
 				if t.Failed() {
 					return nil
 				}
@@ -470,7 +475,7 @@ func TestListFailuresFromTestXML(t *testing.T) {
 				curIssue++
 				return nil
 			}
-			if err := listFailuresFromTestXML(context.Background(), file, f); err != nil {
+			if err := listFailuresFromTestXML(context.Background(), testXml, f); err != nil {
 				t.Fatal(err)
 			}
 			if curIssue != len(c.expIssues) {
@@ -484,7 +489,7 @@ func TestPostGeneralFailure(t *testing.T) {
 	testCases := []struct {
 		fileName  string
 		expIssues []issue
-		formatter formatter
+		formatter Formatter
 	}{
 		{
 			fileName: "failed-build-output.txt",
@@ -493,7 +498,7 @@ func TestPostGeneralFailure(t *testing.T) {
 				mention:     []string{"@cockroachdb/unowned"},
 				extraLabels: []string{"T-testeng"},
 			}},
-			formatter: defaultFormatter,
+			formatter: DefaultFormatter,
 		},
 	}
 
@@ -508,7 +513,7 @@ func TestPostGeneralFailure(t *testing.T) {
 				issue.message = string(b)
 			}
 
-			f := func(ctx context.Context, f failure) error {
+			f := func(ctx context.Context, f Failure) error {
 				if t.Failed() {
 					return nil
 				}

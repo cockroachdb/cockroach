@@ -16,7 +16,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -58,9 +57,7 @@ type Network struct {
 }
 
 // NewNetwork creates nodeCount gossip nodes.
-func NewNetwork(
-	stopper *stop.Stopper, nodeCount int, createAddresses bool, defaultZoneConfig *zonepb.ZoneConfig,
-) *Network {
+func NewNetwork(stopper *stop.Stopper, nodeCount int, createAddresses bool) *Network {
 	ctx := context.TODO()
 	log.Infof(ctx, "simulating gossip network with %d nodes", nodeCount)
 
@@ -89,7 +86,7 @@ func NewNetwork(
 	n.RPCContext.StorageClusterID.Set(context.TODO(), uuid.MakeV4())
 
 	for i := 0; i < nodeCount; i++ {
-		node, err := n.CreateNode(defaultZoneConfig)
+		node, err := n.CreateNode()
 		if err != nil {
 			log.Fatalf(context.TODO(), "%v", err)
 		}
@@ -103,7 +100,7 @@ func NewNetwork(
 }
 
 // CreateNode creates a simulation node and starts an RPC server for it.
-func (n *Network) CreateNode(defaultZoneConfig *zonepb.ZoneConfig) (*Node, error) {
+func (n *Network) CreateNode() (*Node, error) {
 	ctx := context.TODO()
 	server, err := rpc.NewServer(ctx, n.RPCContext)
 	if err != nil {
@@ -114,7 +111,7 @@ func (n *Network) CreateNode(defaultZoneConfig *zonepb.ZoneConfig) (*Node, error
 		return nil, err
 	}
 	node := &Node{Server: server, Listener: ln, Registry: metric.NewRegistry()}
-	node.Gossip = gossip.NewTest(0, n.Stopper, node.Registry, defaultZoneConfig)
+	node.Gossip = gossip.NewTest(0, n.Stopper, node.Registry)
 	gossip.RegisterGossipServer(server, node.Gossip)
 	n.Stopper.AddCloser(stop.CloserFn(server.Stop))
 	_ = n.Stopper.RunAsyncTask(ctx, "node-wait-quiesce", func(context.Context) {

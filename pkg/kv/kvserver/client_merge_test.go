@@ -160,11 +160,11 @@ func getEngineKeySet(t *testing.T, e storage.Engine) map[string]struct{} {
 	t.Helper()
 	// Have to scan local and global keys separately as mentioned in the comment
 	// for storage.Scan (because of its use of intentInterleavingIter).
-	kvs, err := storage.Scan(e, roachpb.KeyMin, keys.LocalMax, 0 /* max */)
+	kvs, err := storage.Scan(context.Background(), e, roachpb.KeyMin, keys.LocalMax, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	globalKVs, err := storage.Scan(e, keys.LocalMax, roachpb.KeyMax, 0 /* max */)
+	globalKVs, err := storage.Scan(context.Background(), e, keys.LocalMax, roachpb.KeyMax, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -473,7 +473,6 @@ func mergeCheckingTimestampCaches(
 	var snapshotFilter func(kvserver.IncomingSnapshot)
 	beforeSnapshotSSTIngestion := func(
 		inSnap kvserver.IncomingSnapshot,
-		snapType kvserverpb.SnapshotRequest_Type,
 		_ []string,
 	) error {
 		filterMu.Lock()
@@ -3726,7 +3725,6 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	rangeIds := make(map[string]roachpb.RangeID, 4)
 	beforeSnapshotSSTIngestion := func(
 		inSnap kvserver.IncomingSnapshot,
-		snapType kvserverpb.SnapshotRequest_Type,
 		sstNames []string,
 	) error {
 		// Only verify snapshots of type VIA_SNAPSHOT_QUEUE and on the range under
@@ -3735,8 +3733,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		// there are too many keys and the other replicated keys are verified later
 		// on in the test. This function verifies that the subsumed replicas have
 		// been handled properly.
-		if snapType != kvserverpb.SnapshotRequest_VIA_SNAPSHOT_QUEUE ||
-			inSnap.Desc.RangeID != rangeIds[string(keyA)] {
+		if inSnap.Desc.RangeID != rangeIds[string(keyA)] {
 			return nil
 		}
 
@@ -3799,11 +3796,15 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		}
 		keySpans := rditer.MakeReplicatedKeySpans(inSnap.Desc)
 		sstFileWriters := map[string]sstFileWriter{}
-		for _, span := range keySpans {
+		for i, span := range keySpans {
 			file := &storage.MemObject{}
 			writer := storage.MakeIngestionSSTWriter(ctx, st, file)
-			if err := writer.ClearRawRange(span.Key, span.EndKey, true, true); err != nil {
-				return err
+			// If UseExciseForSnapshots is enabled, the snapshot won't write the last
+			// ClearRange in the sstable.
+			if i < len(keySpans)-1 || !storage.UseExciseForSnapshots.Get(&st.SV) {
+				if err := writer.ClearRawRange(span.Key, span.EndKey, true, true); err != nil {
+					return err
+				}
 			}
 			sstFileWriters[string(span.Key)] = sstFileWriter{
 				span:   span,
@@ -3812,7 +3813,8 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			}
 		}
 
-		err := rditer.IterateReplicaKeySpans(inSnap.Desc, sendingEngSnapshot, true /* replicatedOnly */, rditer.ReplicatedSpansAll,
+		err := rditer.IterateReplicaKeySpans(
+			context.Background(), inSnap.Desc, sendingEngSnapshot, true /* replicatedOnly */, rditer.ReplicatedSpansAll,
 			func(iter storage.EngineIterator, span roachpb.Span, keyType storage.IterKeyType) error {
 				fw, ok := sstFileWriters[string(span.Key)]
 				if !ok || !fw.span.Equal(span) {
@@ -3912,7 +3914,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			EndKey:   roachpb.RKey(keyEnd),
 		}
 		if err := storage.ClearRangeWithHeuristic(
-			receivingEng, &sst, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey(), 64, 8,
+			ctx, receivingEng, &sst, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey(), 64, 8,
 		); err != nil {
 			return err
 		}
@@ -4079,7 +4081,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		}
 		// We only look at the range of keys the test has been manipulating.
 		getKeySet := func(engine storage.Engine) map[string]struct{} {
-			kvs, err := storage.Scan(engine, keyStart, keyEnd, 0 /* max */)
+			kvs, err := storage.Scan(context.Background(), engine, keyStart, keyEnd, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -4235,8 +4237,7 @@ func TestMergeQueue(t *testing.T) {
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
 	settings := cluster.MakeTestingClusterSettings()
-	sv := &settings.SV
-	kvserver.MergeQueueInterval.Override(ctx, sv, 0) // process greedily
+	kvserver.MergeQueueInterval.Override(ctx, &settings.SV, 0) // process greedily
 
 	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.RangeMinBytes = proto.Int64(1 << 10) // 1KB
@@ -4320,10 +4321,13 @@ func TestMergeQueue(t *testing.T) {
 			}
 		}
 		setSpanConfigs(t, conf)
-		// Disable load-based splitting, so that the absence of sufficient QPS
-		// measurements do not prevent ranges from merging. Certain subtests
-		// re-enable the functionality.
-		kvserver.SplitByLoadEnabled.Override(ctx, sv, false)
+		for _, s := range tc.Servers {
+			// Disable load-based splitting, so that the absence of sufficient QPS
+			// measurements do not prevent ranges from merging. Certain subtests
+			// re-enable the functionality.
+			kvserver.SplitByLoadEnabled.Override(ctx, &s.ClusterSettings().SV, false)
+		}
+
 		store.MustForceMergeScanAndProcess() // drain any merges that might already be queued
 		split(t, rhsStartKey.AsRawKey(), hlc.Timestamp{} /* expirationTime */)
 	}
@@ -4394,32 +4398,38 @@ func TestMergeQueue(t *testing.T) {
 		const splitByLoadMergeDelay = 1000 * time.Second
 
 		setSplitObjective := func(dim kvserver.LBRebalancingObjective) {
-			kvserver.LoadBasedRebalancingObjective.Override(ctx, sv, int64(dim))
+			for _, s := range tc.Servers {
+				kvserver.LoadBasedRebalancingObjective.Override(ctx, &s.ClusterSettings().SV, int64(dim))
+			}
 		}
 
 		resetForLoadBasedSubtest := func(t *testing.T) {
 			reset(t)
 
-			// Enable load-based splitting for these subtests, which also instructs
-			// the mergeQueue to consider load when making range merge decisions. When
-			// load is a consideration, the mergeQueue is fairly conservative. In an
-			// effort to avoid thrashing and to avoid overreacting to temporary
-			// fluctuations in load, the mergeQueue will only consider a merge when
-			// the combined load across the RHS and LHS ranges is below half the
-			// threshold required to split a range due to load. Furthermore, to ensure
-			// that transient drops in load do not trigger range merges, the
-			// mergeQueue will only consider a merge when it deems the maximum qps
-			// measurement from both sides to be sufficiently stable and reliable,
-			// meaning that it was a maximum measurement over some extended period of
-			// time.
-			kvserver.SplitByLoadEnabled.Override(ctx, sv, true)
-			kvserver.SplitByLoadQPSThreshold.Override(ctx, sv, splitByLoadStat)
-			kvserver.SplitByLoadCPUThreshold.Override(ctx, sv, splitByLoadStat)
+			for _, s := range tc.Servers {
+				sv := &s.ClusterSettings().SV
+				// Enable load-based splitting for these subtests, which also instructs
+				// the mergeQueue to consider load when making range merge decisions.
+				// When load is a consideration, the mergeQueue is fairly conservative.
+				// In an effort to avoid thrashing and to avoid overreacting to
+				// temporary fluctuations in load, the mergeQueue will only consider a
+				// merge when the combined load across the RHS and LHS ranges is below
+				// half the threshold required to split a range due to load.
+				// Furthermore, to ensure that transient drops in load do not trigger
+				// range merges, the mergeQueue will only consider a merge when it deems
+				// the maximum qps measurement from both sides to be sufficiently stable
+				// and reliable, meaning that it was a maximum measurement over some
+				// extended period of time.
+				kvserver.SplitByLoadEnabled.Override(ctx, sv, true)
+				kvserver.SplitByLoadQPSThreshold.Override(ctx, sv, splitByLoadStat)
+				kvserver.SplitByLoadCPUThreshold.Override(ctx, sv, splitByLoadStat)
 
-			// Drop the load-based splitting merge delay setting, which also dictates
-			// the duration that a leaseholder must measure QPS before considering its
-			// measurements to be reliable enough to base range merging decisions on.
-			kvserverbase.SplitByLoadMergeDelay.Override(ctx, sv, splitByLoadMergeDelay)
+				// Drop the load-based splitting merge delay setting, which also
+				// dictates the duration that a leaseholder must measure QPS before
+				// considering its measurements to be reliable enough to base range
+				// merging decisions on.
+				kvserverbase.SplitByLoadMergeDelay.Override(ctx, sv, splitByLoadMergeDelay)
+			}
 
 			// Reset both range's load-based splitters, so that QPS measurements do
 			// not leak over between subtests. Then, bump the manual clock so that

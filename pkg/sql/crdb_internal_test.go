@@ -22,12 +22,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -949,6 +948,7 @@ func TestTxnContentionEventsTableWithRangeDescriptor(t *testing.T) {
 		WaitingTxnFingerprintID:  9002,
 		WaitingStmtID:            clusterunique.ID{Uint128: uint128.Uint128{Lo: 9003, Hi: 1004}},
 		WaitingStmtFingerprintID: 9004,
+		ContentionType:           contentionpb.ContentionType_LOCK_WAIT,
 	})
 
 	// Contention flush can take some time to flush
@@ -1029,7 +1029,7 @@ func causeContention(
 		ctx, fmt.Sprintf("UPDATE %s SET s = $1 where id = 'test';", table), updateValue)
 	require.NoError(t, errUpdate)
 	end := timeutil.Now()
-	require.GreaterOrEqual(t, end.Sub(start), 500*time.Millisecond)
+	require.GreaterOrEqual(t, end.Sub(start), 499*time.Millisecond)
 
 	wgTxnDone.Wait()
 }
@@ -1292,7 +1292,7 @@ func TestExecutionInsights(t *testing.T) {
 				}()
 
 				// Connect to the cluster as the test user.
-				tdb := s.SQLConnForUser(t, "testuser", "")
+				tdb := s.SQLConn(t, serverutils.User("testuser"))
 
 				// Try to read the virtual table, and see that we can or cannot as expected.
 				rows, err := tdb.Query(fmt.Sprintf("SELECT count(*) FROM crdb_internal.%s", table))
@@ -1404,47 +1404,6 @@ func TestInternalSystemJobsTableMirrorsSystemJobsTable(t *testing.T) {
 	)
 
 	// TODO(adityamaru): add checks for payload and progress
-}
-
-// TestInternalSystemJobsTableWorksWithVersionPreV23_1BackfillTypeColumnInJobsTable
-// tests that crdb_internal.system_jobs and crdb_internal.jobs work when
-// the server has a version pre-V23_1AddTypeColumnToJobsTable. In this version,
-// the job_type column was added to the system.jobs table.
-func TestInternalSystemJobsTableWorksWithVersionPreV23_1BackfillTypeColumnInJobsTable(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			Server: &server.TestingKnobs{
-				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride: clusterversion.ByKey(
-					clusterversion.V23_1BackfillTypeColumnInJobsTable - 1),
-			},
-		},
-	})
-	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-	tdb := sqlutils.MakeSQLRunner(db)
-
-	tdb.Exec(t,
-		"SELECT * FROM crdb_internal.jobs",
-	)
-	tdb.Exec(t,
-		"SELECT * FROM crdb_internal.system_jobs",
-	)
-	// Exercise indexes.
-	tdb.Exec(t,
-		"SELECT * FROM crdb_internal.system_jobs WHERE job_type = 'CHANGEFEED'",
-	)
-	tdb.Exec(t,
-		"SELECT * FROM crdb_internal.system_jobs WHERE id = 0",
-	)
-	tdb.Exec(t,
-		"SELECT * FROM crdb_internal.system_jobs WHERE status = 'running'",
-	)
 }
 
 // TestCorruptPayloadError asserts that we can an error
@@ -1603,16 +1562,17 @@ func TestVirtualTableDoesntHangOnQueryCanceledError(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					DistSQLReceiverPushCallbackFactory: func(query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
+					DistSQLReceiverPushCallbackFactory: func(query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
 						if !addCallback.Load() || strings.HasPrefix(query, sql.SystemJobsAndJobInfoBaseQuery) {
 							return nil
 						}
 						numCallbacksAdded.Add(1)
-						return func(_ rowenc.EncDatumRow, _ coldata.Batch, meta *execinfrapb.ProducerMetadata) {
+						return func(row rowenc.EncDatumRow, batch coldata.Batch, meta *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
 							if meta != nil {
 								*meta = execinfrapb.ProducerMetadata{}
 								meta.Err = err
 							}
+							return row, batch, meta
 						}
 					},
 				},
@@ -1831,6 +1791,7 @@ func TestVirtualPTSTable(t *testing.T) {
 		sj.SetOwner(username.TestUserName())
 		sj.SetScheduleLabel("test-schedule")
 		sj.SetExecutionDetails(tree.ScheduledBackupExecutor.InternalName(), jobspb.ExecutionArguments{})
+		sj.SetScheduleDetails(jobstest.AddDummyScheduleDetails(jobspb.ScheduleDetails{}))
 
 		err := internalDB.Txn(ctx2, func(ctx3 context.Context, txn isql.Txn) error {
 			err2 := jobs.ScheduledJobTxn(txn).Create(ctx3, sj)

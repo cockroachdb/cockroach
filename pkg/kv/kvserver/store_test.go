@@ -198,7 +198,7 @@ func createTestStoreWithoutStart(
 	// TestChooseLeaseToTransfer and TestNoLeaseTransferToBehindReplicas. This is
 	// generally considered bad and should eventually be refactored away.
 	if cfg.Gossip == nil {
-		cfg.Gossip = gossip.NewTest(1, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+		cfg.Gossip = gossip.NewTest(1, stopper, metric.NewRegistry())
 	}
 	if cfg.StorePool == nil {
 		cfg.StorePool = NewTestStorePool(*cfg)
@@ -521,7 +521,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		memMS := repl.GetMVCCStats()
 		// Stats should agree with a recomputation.
 		now := store.Clock().Now()
-		diskMS, err := rditer.ComputeStatsForRange(repl.Desc(), store.TODOEngine(), now.WallTime)
+		diskMS, err := rditer.ComputeStatsForRange(ctx, repl.Desc(), store.TODOEngine(), now.WallTime)
 		require.NoError(t, err)
 		memMS.AgeTo(diskMS.LastUpdateNanos)
 		require.Equal(t, memMS, diskMS)

@@ -273,7 +273,7 @@ func ForEachElementInActiveVersion(
 	version clusterversion.ClusterVersion, fn func(element scpb.Element) error,
 ) error {
 	return scpb.ForEachElementType(func(e scpb.Element) error {
-		if version.IsActive(screl.MinElementVersion(e)) {
+		if screl.VersionSupportsElementUse(e, version) {
 			if err := fn(e); err != nil {
 				return iterutil.Map(err)
 			}

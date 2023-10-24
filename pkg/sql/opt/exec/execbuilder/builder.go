@@ -145,6 +145,10 @@ type Builder struct {
 	// plan uses non-default key locking strength.
 	ContainsNonDefaultKeyLocking bool
 
+	// CheckContainsNonDefaultKeyLocking is set to true if at least one node in at
+	// least one check query plan uses non-default key locking strength.
+	CheckContainsNonDefaultKeyLocking bool
+
 	// MaxFullScanRows is the maximum number of rows scanned by a full scan, as
 	// estimated by the optimizer.
 	MaxFullScanRows float64
@@ -267,7 +271,10 @@ func (b *Builder) wrapFunction(fnName string) (tree.ResolvableFunctionReference,
 	if b.evalCtx != nil && b.catalog != nil { // Some tests leave those unset.
 		unresolved := tree.MakeUnresolvedName(fnName)
 		fnDef, err := b.catalog.ResolveFunction(
-			context.Background(), &unresolved, &b.evalCtx.SessionData().SearchPath)
+			context.Background(),
+			tree.MakeUnresolvedFunctionName(&unresolved),
+			&b.evalCtx.SessionData().SearchPath,
+		)
 		if err != nil {
 			return tree.ResolvableFunctionReference{}, err
 		}
@@ -298,7 +305,7 @@ func (b *Builder) build(e opt.Expr) (_ execPlan, err error) {
 		)
 	}
 
-	canAutoCommit := b.canAutoCommit(rel)
+	canAutoCommit := memo.CanAutoCommit(rel)
 	b.allowAutoCommit = b.allowAutoCommit && canAutoCommit
 
 	// First condition from ConstructFastPathInsert:

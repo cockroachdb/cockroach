@@ -99,7 +99,7 @@ func streamPartition(ctx context.Context, streamAddr *url.URL) error {
 		return err
 	}
 
-	replicationProducerSpec, err := client.Create(ctx, roachpb.TenantName(*tenant))
+	replicationProducerSpec, err := client.Create(ctx, roachpb.TenantName(*tenant), streampb.ReplicationProducerRequest{})
 	if err != nil {
 		return err
 	}

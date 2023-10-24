@@ -48,7 +48,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
@@ -296,8 +295,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 
 	if p.repl.shouldUseExpirationLeaseRLocked() ||
 		(transfer &&
-			TransferExpirationLeasesFirstEnabled.Get(&p.repl.store.ClusterSettings().SV) &&
-			p.repl.store.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V22_2EnableLeaseUpgrade)) {
+			TransferExpirationLeasesFirstEnabled.Get(&p.repl.store.ClusterSettings().SV)) {
 		// In addition to ranges that should be using expiration-based leases
 		// (typically the meta and liveness ranges), we also use them during lease
 		// transfers for all other ranges. After acquiring these expiration based
@@ -1571,7 +1569,7 @@ const (
 // LeaseViolatesPreferences checks if this replica owns the lease and if it
 // violates the lease preferences defined in the span config. If no preferences
 // are defined then it will return false and consider it to be in conformance.
-func (r *Replica) LeaseViolatesPreferences(ctx context.Context, conf roachpb.SpanConfig) bool {
+func (r *Replica) LeaseViolatesPreferences(ctx context.Context, conf *roachpb.SpanConfig) bool {
 	storeID := r.store.StoreID()
 	preferences := conf.LeasePreferences
 	leaseStatus := r.CurrentLeaseStatus(ctx)

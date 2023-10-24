@@ -22,10 +22,15 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -35,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -193,6 +199,7 @@ func TestFailedInsights(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const appName = "TestFailedInsights"
+	re := regexp.MustCompile(",?SlowExecution,?")
 
 	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
 	ctx := context.Background()
@@ -200,7 +207,7 @@ func TestFailedInsights(t *testing.T) {
 	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
 	tc := testcluster.StartTestCluster(t, 1, args)
 	defer tc.Stopper().Stop(ctx)
-	rootConn := sqlutils.MakeSQLRunner(tc.ApplicationLayer(0).SQLConn(t, ""))
+	rootConn := sqlutils.MakeSQLRunner(tc.ApplicationLayer(0).SQLConn(t))
 
 	// Enable detection by setting a latencyThreshold > 0.
 	latencyThreshold := 100 * time.Millisecond
@@ -211,9 +218,9 @@ func TestFailedInsights(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "with_redaction", func(t *testing.T, testRedacted bool) {
 		rootConn.Exec(t, `select crdb_internal.reset_sql_stats()`)
-		conn := tc.ApplicationLayer(0).SQLConn(t, "")
+		conn := tc.ApplicationLayer(0).SQLConn(t)
 		if testRedacted {
-			conn = tc.ApplicationLayer(0).SQLConnForUser(t, "testuser", "")
+			conn = tc.ApplicationLayer(0).SQLConn(t, serverutils.User("testuser"))
 		}
 
 		_, err := conn.Exec("SET SESSION application_name=$1", appName)
@@ -275,12 +282,7 @@ FROM crdb_internal.node_execution_insights
 WHERE query = $1 AND app_name = $2 `,
 					tc.fingerprint, appName)
 
-				err = row.Scan(&query, &status, &problem, &errorCode, &errorMsg)
-				if err != nil {
-					return err
-				}
-
-				return nil
+				return row.Scan(&query, &status, &problem, &errorCode, &errorMsg)
 			}, 1*time.Second)
 
 			require.Equal(t, tc.status, status)
@@ -329,7 +331,7 @@ WHERE query = $1 AND app_name = $2 `,
 				// Multi-statement txn with a slow stmt and then a failed execution.
 				stmts:            "BEGIN; SELECT (pg_sleep(0.1)); CREATE TABLE exists(); CREATE TABLE exists();",
 				fingerprint:      "SELECT (pg_sleep(_)) ; CREATE TABLE \"exists\" () ; CREATE TABLE \"exists\" ()",
-				problems:         "{SlowExecution,FailedExecution}",
+				problems:         "{FailedExecution,SlowExecution}",
 				errorCode:        "42P07",
 				errorMsg:         `relation ‹"defaultdb.public.\"exists\""› already exists`,
 				errorMsgRedacted: `relation ‹×› already exists`,
@@ -366,12 +368,7 @@ SELECT query,
 FROM crdb_internal.node_txn_execution_insights 
 WHERE query = $1 AND app_name = $2`, tc.fingerprint, appName)
 
-				err = row.Scan(&query, &problems, &status, &errorCode, &errorMsg)
-
-				if err != nil {
-					return err
-				}
-				return nil
+				return row.Scan(&query, &problems, &status, &errorCode, &errorMsg)
 			}, 1*time.Second)
 
 			require.Equal(t, tc.txnStatus, status)
@@ -386,7 +383,6 @@ WHERE query = $1 AND app_name = $2`, tc.fingerprint, appName)
 			if problems != tc.problems {
 				// During tests some transactions can stay open for longer, adding an extra
 				// `SlowExecution` to the problems list. This checks for that possibility.
-				re := regexp.MustCompile(",?SlowExecution,?")
 				replacedSlowProblems = re.ReplaceAllString(replacedSlowProblems, "")
 			}
 			// Print the original problems if we did any replacements, for debugging.
@@ -397,13 +393,171 @@ WHERE query = $1 AND app_name = $2`, tc.fingerprint, appName)
 	})
 }
 
+// TestTransactionInsightsFailOnCommit specifically tests for the scenario where a transaction
+// fails on COMMIT. COMMIT is executed specially and does not get stats recorded, skipping
+// the insights recording step. We should ensure txns failing on COMMIT are also captured.
+func TestTransactionInsightsFailOnCommit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const appName = "TestTransactionInsightsFailOnCommit"
+	re := regexp.MustCompile(",?SlowExecution,?")
+
+	type txnInConflict struct {
+		txnID            uuid.UUID
+		txnFingerprintID appstatspb.TransactionFingerprintID
+		err              error
+	}
+
+	ctx := context.Background()
+	conflictingTxns := make([]txnInConflict, 0, 4)
+
+	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				BeforeTxnStatsRecorded: func(session *sessiondata.SessionData,
+					txnID uuid.UUID, txnFingerprintID appstatspb.TransactionFingerprintID, err error) {
+					if session.ApplicationName != appName {
+						return
+					}
+
+					conflictingTxns = append(conflictingTxns,
+						txnInConflict{txnID: txnID, txnFingerprintID: txnFingerprintID, err: err})
+
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	connDefault := sqlutils.MakeSQLRunner(db)
+	// Connections specifically to run our conflicting txns.
+	conn1 := sqlutils.MakeSQLRunner(srv.ApplicationLayer().SQLConn(t))
+	conn2 := sqlutils.MakeSQLRunner(srv.ApplicationLayer().SQLConn(t))
+
+	connDefault.Exec(t, "SET CLUSTER SETTING sql.contention.event_store.resolution_interval = '100ms'")
+
+	// Set up myUsers table with 2 users.
+	connDefault.Exec(t, "CREATE TABLE myUsers (name STRING, city STRING)")
+	connDefault.Exec(t, "INSERT INTO myUsers VALUES ('WENDY', 'NYC'), ('NOVI', 'TORONTO')")
+
+	conn1.Exec(t, "SET SESSION application_name=$1", appName)
+	conn2.Exec(t, "SET SESSION application_name=$1", appName)
+
+	// The first 2 recorded txns are setting the session name.
+	conflictingTxns = conflictingTxns[2:]
+
+	testutils.RunTrueAndFalse(t, "enable recording SERIALIZATION_CONFLICT events", func(t *testing.T, enabled bool) {
+		contention.EnableSerializationConflictEvents.Override(ctx, &srv.ApplicationLayer().ClusterSettings().SV, enabled)
+		// We will simulate a 40001 transaction retry error due to conflicting locks.
+		// Transaction 1 will fail on COMMIT.
+		tx1 := conn1.Begin(t)
+		_, err := tx1.Exec("SELECT * FROM myUsers WHERE city = 'TORONTO'")
+		require.NoError(t, err)
+
+		tx2 := conn2.Begin(t)
+		_, err = tx2.Exec("UPDATE myUsers SET name = 'NOVI' WHERE city = 'TORONTO'")
+		require.NoError(t, err)
+
+		_, err = tx1.Exec("UPDATE myUsers SET name = 'WENDY' WHERE city = 'NYC'")
+		require.NoError(t, err)
+		require.Error(t, tx1.Commit())
+
+		// Commit the blocking txn. There should be no error here.
+		require.NoError(t, tx2.Commit())
+
+		require.Equal(t, 2, len(conflictingTxns))
+
+		t.Run("40001 error exists in txn insights", func(t *testing.T) {
+			{
+				var query, problems, status, errorCode, errorMsg string
+				testutils.SucceedsSoon(t, func() error {
+					// Query the node txn execution insights table.
+					row := connDefault.DB.QueryRowContext(ctx, `
+SELECT query,
+       problems,
+       status,
+       COALESCE(last_error_code, '') last_error_code,
+       COALESCE(last_error_redactable, '') last_error
+FROM crdb_internal.node_txn_execution_insights 
+WHERE app_name = $1`, appName)
+
+					return row.Scan(&query, &problems, &status, &errorCode, &errorMsg)
+				})
+
+				require.Equal(t, "SELECT * FROM myusers WHERE city = '_' ; UPDATE myusers SET name = '_' WHERE city = '_'", query)
+				expectedProblem := "{FailedExecution}"
+				replacedSlowProblems := problems
+				if problems != expectedProblem {
+					// During tests some transactions can stay open for longer, adding an extra
+					// `SlowExecution` to the problems list. This checks for that possibility.
+					replacedSlowProblems = re.ReplaceAllString(replacedSlowProblems, "")
+				}
+				// Print the original problems if we did any replacements, for debugging.
+				require.Equal(t, expectedProblem, replacedSlowProblems, "received: %s, used to compare: %s", problems, replacedSlowProblems)
+				require.Equal(t, "Failed", status)
+				require.Equal(t, "40001", errorCode)
+				require.Contains(t, errorMsg, "TransactionRetryWithProtoRefreshError")
+			}
+		})
+
+		var blockingID uuid.UUID
+		var blockingFingerprint, dbName, schema, table, index, contentionType string
+
+		var txRetryErr *kvpb.TransactionRetryWithProtoRefreshError
+		require.Error(t, conflictingTxns[0].err)
+		require.ErrorAs(t, conflictingTxns[0].err, &txRetryErr)
+		conflictingTxnID := txRetryErr.ConflictingTxn.ID
+
+		if enabled {
+			// We need this SucceedsSoon to wait for the txn fingerprint to resolve.
+			testutils.SucceedsSoon(t, func() error {
+				row := connDefault.DB.QueryRowContext(ctx, `
+SELECT blocking_txn_id,
+		   encode(blocking_txn_fingerprint_id, 'hex') AS blocking_txn_fingerprint_id,
+       database_name,
+       schema_name,
+       table_name,
+       index_name,
+       contention_type
+FROM crdb_internal.transaction_contention_events 
+WHERE blocking_txn_id = $1 AND blocking_txn_fingerprint_id != $2`, conflictingTxnID, "0000000000000000")
+				return row.Scan(&blockingID, &blockingFingerprint, &dbName, &schema, &table, &index, &contentionType)
+
+			})
+
+			require.Equal(t, blockingID, conflictingTxnID)
+			require.Equal(t, "defaultdb", dbName)
+			require.Equal(t, "public", schema)
+			require.Equal(t, "myusers", table)
+			require.Equal(t, "myusers_pkey", index)
+			require.Equal(t, "SERIALIZATION_CONFLICT", contentionType)
+
+			return
+		}
+
+		// Recording serialization conflicts is not enabled.
+		// Check that we don't generate the SERIALIZATION_CONFLICT event.
+		for i := 0; i < 100; i++ {
+			rows, err := connDefault.DB.QueryContext(ctx, `
+SELECT contention_type FROM crdb_internal.transaction_contention_events 
+WHERE contention_type = 'SERIALIZATION_CONFLICT'`)
+
+			require.NoError(t, err)
+			require.False(t, rows.Next())
+		}
+
+		conflictingTxns = make([]txnInConflict, 0, 2)
+	})
+}
+
 func TestInsightsPriorityIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	const appName = "TestInsightsPriorityIntegration"
 
-	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettings()
 	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
@@ -594,7 +748,7 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 		query,
 		COALESCE(insight.contention, 0::INTERVAL)::FLOAT,
 		COALESCE(sum(txn_contention.contention_duration), 0::INTERVAL)::FLOAT AS durationMs,
-		txn_contention.schema_name,
+		COALESCE(txn_contention.schema_name, ''::STRING)::STRING AS schema_name,
 		txn_contention.database_name,
 		txn_contention.table_name,
 		txn_contention.index_name,

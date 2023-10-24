@@ -53,6 +53,13 @@ func NewSSTIterator(
 	return newPebbleSSTIterator(files, opts, forwardOnly)
 }
 
+// NewSSTEngineIterator is like NewSSTIterator, but returns an EngineIterator.
+func NewSSTEngineIterator(
+	files [][]sstable.ReadableFile, opts IterOptions, forwardOnly bool,
+) (EngineIterator, error) {
+	return newPebbleSSTIterator(files, opts, forwardOnly)
+}
+
 // NewMemSSTIterator returns an MVCCIterator for the provided SST data,
 // similarly to NewSSTIterator().
 func NewMemSSTIterator(sst []byte, verify bool, opts IterOptions) (MVCCIterator, error) {
@@ -146,7 +153,7 @@ func CheckSSTConflicts(
 		// first, where there are no keys in the reader between the sstable's start
 		// and end keys. We use a non-prefix iterator for this search, and reopen a
 		// prefix one if there are engine keys in the span.
-		nonPrefixIter, err := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		nonPrefixIter, err := reader.NewMVCCIterator(ctx, MVCCKeyAndIntentsIterKind, IterOptions{
 			KeyTypes:   IterKeyTypePointsAndRanges,
 			UpperBound: end.Key,
 		})
@@ -186,7 +193,7 @@ func CheckSSTConflicts(
 	}
 	rkIter.Close()
 
-	rkIter, err = reader.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+	rkIter, err = reader.NewMVCCIterator(ctx, MVCCKeyIterKind, IterOptions{
 		UpperBound: rightPeekBound,
 		KeyTypes:   IterKeyTypeRangesOnly,
 	})
@@ -226,7 +233,7 @@ func CheckSSTConflicts(
 		// https://github.com/cockroachdb/cockroach/issues/92254
 		statsDiff.ContainsEstimates += 2
 	}
-	extIter, err := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+	extIter, err := reader.NewMVCCIterator(ctx, MVCCKeyAndIntentsIterKind, IterOptions{
 		KeyTypes:             IterKeyTypePointsAndRanges,
 		LowerBound:           leftPeekBound,
 		UpperBound:           rightPeekBound,
@@ -1255,6 +1262,8 @@ func UpdateSSTTimestamps(
 		// Calculate this delta by subtracting all the relevant stats at the
 		// old timestamp, and then aging the stats to the new timestamp before
 		// zeroing the stats again.
+		// TODO(nvanbenschoten): should this just be using MVCCStats.Add and
+		// MVCCStats.Subtract?
 		statsDelta.AgeTo(from.WallTime)
 		statsDelta.KeyBytes -= stats.KeyBytes
 		statsDelta.ValBytes -= stats.ValBytes
@@ -1263,6 +1272,8 @@ func UpdateSSTTimestamps(
 		statsDelta.LiveBytes -= stats.LiveBytes
 		statsDelta.IntentBytes -= stats.IntentBytes
 		statsDelta.IntentCount -= stats.IntentCount
+		statsDelta.LockBytes -= stats.LockBytes
+		statsDelta.LockCount -= stats.LockCount
 		statsDelta.AgeTo(to.WallTime)
 		statsDelta.KeyBytes += stats.KeyBytes
 		statsDelta.ValBytes += stats.ValBytes
@@ -1271,6 +1282,8 @@ func UpdateSSTTimestamps(
 		statsDelta.LiveBytes += stats.LiveBytes
 		statsDelta.IntentBytes += stats.IntentBytes
 		statsDelta.IntentCount += stats.IntentCount
+		statsDelta.LockBytes += stats.LockBytes
+		statsDelta.LockCount += stats.LockCount
 	}
 
 	// Fancy optimized Pebble SST rewriter.

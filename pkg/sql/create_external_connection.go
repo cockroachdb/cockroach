@@ -70,12 +70,6 @@ func (p *planner) createExternalConnection(
 ) error {
 	txn := p.InternalSQLTxn()
 
-	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.TODODelete_V22_2SystemExternalConnectionsTable) {
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"version %v must be finalized to create an External Connection",
-			clusterversion.ByKey(clusterversion.TODODelete_V22_2SystemExternalConnectionsTable))
-	}
-
 	if err := params.p.CheckPrivilege(params.ctx, syntheticprivilege.GlobalPrivilegeObject,
 		privilege.EXTERNALCONNECTION); err != nil {
 		return pgerror.New(
@@ -136,7 +130,7 @@ func (p *planner) createExternalConnection(
 	ex.SetConnectionDetails(*exConn.ConnectionProto())
 	ex.SetConnectionType(exConn.ConnectionType())
 	ex.SetOwner(p.User())
-	if p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.V23_1ExternalConnectionsTableHasOwnerIDColumn) {
+	if p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.TODO_Delete_V23_1ExternalConnectionsTableHasOwnerIDColumn) {
 		row, err := txn.QueryRowEx(params.ctx, `get-user-id`, txn.KV(),
 			sessiondata.NodeUserSessionDataOverride,
 			`SELECT user_id FROM system.users WHERE username = $1`,

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -42,23 +44,40 @@ func (c *serverController) start(ctx context.Context, ie isql.Executor) error {
 
 	// Run the detection of which servers should be started or stopped.
 	return c.stopper.RunAsyncTask(ctx, "mark-tenant-services", func(ctx context.Context) {
-		const watchInterval = time.Second
+		// We receieve updates from the tenantcapabilities
+		// watcher, but we also refresh our state at a fixed
+		// interval to account for:
+		//
+		//  - A rapid stop & start in which the start is
+		//    initially ignored because the server is still
+		//    stopping.
+		//
+		//  - Startup failures that we want to retry.
+		const watchInterval = 1 * time.Second
 		ctx, cancel := c.stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
+
+		timer := timeutil.NewTimer()
+		defer timer.Stop()
+
 		for {
+			allTenants, updateCh := c.watcher.GetAllTenants()
+			if err := c.startMissingServers(ctx, allTenants); err != nil {
+				log.Warningf(ctx, "cannot update running tenant services: %v", err)
+			}
+
+			timer.Reset(watchInterval)
 			select {
-			case <-time.After(watchInterval):
+			case <-updateCh:
+			case <-timer.C:
+				timer.Read = true
 			case <-c.stopper.ShouldQuiesce():
 				// Expedited server shutdown of outer server.
 				return
-			}
-			if c.draining.Get() {
+			case <-c.drainCh:
 				// The outer server has started a graceful drain: stop
 				// picking up new servers.
 				return
-			}
-			if err := c.scanTenantsForRunnableServices(ctx, ie); err != nil {
-				log.Warningf(ctx, "cannot update running tenant services: %v", err)
 			}
 		}
 	})
@@ -91,21 +110,25 @@ func (c *serverController) startInitialSecondaryTenantServers(
 	return nil
 }
 
-// scanTenantsForRunnableServices checks which tenants need to be
-// started and queues the necessary server lifecycle changes.
-func (c *serverController) scanTenantsForRunnableServices(
-	ctx context.Context, ie isql.Executor,
+func (c *serverController) startMissingServers(
+	ctx context.Context, tenants []tenantcapabilities.Entry,
 ) error {
-	// The list of tenants that should have a running server.
-	reqTenants, err := c.getExpectedRunningTenants(ctx, ie)
-	if err != nil {
-		return err
-	}
-
-	// Now add all the missing servers.
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for _, name := range reqTenants {
+	for _, t := range tenants {
+		if t.Name == "" {
+			continue
+		}
+
+		if t.DataState != mtinfopb.DataStateReady {
+			continue
+		}
+
+		if t.ServiceMode != mtinfopb.ServiceModeShared {
+			continue
+		}
+
+		name := t.Name
 		if _, ok := c.mu.servers[name]; !ok {
 			log.Infof(ctx, "tenant %q has changed service mode, should now start", name)
 			// Mark the server for async creation.
@@ -159,12 +182,10 @@ func (c *serverController) createServerEntryLocked(
 
 // getExpectedRunningTenants retrieves the tenant IDs that should
 // be running right now.
-// TODO(knz): Use a watcher here.
-// Probably as followup to https://github.com/cockroachdb/cockroach/pull/95657.
 func (c *serverController) getExpectedRunningTenants(
 	ctx context.Context, ie isql.Executor,
 ) (tenantNames []roachpb.TenantName, resErr error) {
-	if !c.st.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+	if !c.st.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
 		// Cluster not yet upgraded - we know there is no secondary tenant
 		// with a name yet.
 		return []roachpb.TenantName{catconstants.SystemTenantName}, nil

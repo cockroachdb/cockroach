@@ -64,7 +64,7 @@ func registerClusterVersionSetting() *clusterVersionSetting {
 	s := &clusterVersionSetting{}
 	s.VersionSetting = settings.MakeVersionSetting(s)
 	settings.RegisterVersionSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		KeyVersionSetting,
 		"set the active cluster version in the format '<major>.<minor>'", // hide optional `-<internal>,
 		&s.VersionSetting,
@@ -241,7 +241,7 @@ func (cv *clusterVersionSetting) validateBinaryVersions(
 }
 
 var PreserveDowngradeVersion = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cluster.preserve_downgrade_option",
 	"disable (automatic or manual) cluster version upgrade from the specified version until reset",
 	"",
@@ -306,3 +306,13 @@ func MakeMetricsAndRegisterOnVersionChangeCallback(sv *settings.Values) Metrics 
 		PreserveDowngradeLastUpdated: gauge,
 	}
 }
+
+// AutoUpgradeEnabled is used to enable and disable automatic upgrade.
+var AutoUpgradeEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"cluster.auto_upgrade.enabled",
+	"disable automatic cluster version upgrade until reset",
+	true,
+	settings.WithReportable(true),
+	settings.WithPublic,
+)

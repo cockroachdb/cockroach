@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/errors"
@@ -332,6 +333,23 @@ func (*DummyEvalPlanner) Optimizer() interface{} {
 	return nil
 }
 
+// GenUniqueCursorName is part of the eval.Planner interface.
+func (*DummyEvalPlanner) GenUniqueCursorName() tree.Name {
+	return ""
+}
+
+// PLpgSQLCloseCursor is part of the eval.Planner interface.
+func (*DummyEvalPlanner) PLpgSQLCloseCursor(_ tree.Name) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
+// PLpgSQLFetchCursor is part of the Planner interface.
+func (*DummyEvalPlanner) PLpgSQLFetchCursor(
+	context.Context, *tree.CursorStmt,
+) (tree.Datums, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
 var _ eval.Planner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,
@@ -342,6 +360,12 @@ func (ep *DummyEvalPlanner) CurrentDatabaseRegionConfig(
 	_ context.Context,
 ) (eval.DatabaseRegionConfig, error) {
 	return nil, errors.WithStack(errEvalPlanner)
+}
+
+func (ep *DummyEvalPlanner) FingerprintSpan(
+	_ context.Context, _ roachpb.Span, _ hlc.Timestamp, _ bool, _ bool,
+) (uint64, error) {
+	return 0, errors.AssertionFailedf("FingerprintSpan unimplemented")
 }
 
 // ResetMultiRegionZoneConfigsForTable is part of the eval.RegionOperator
@@ -452,7 +476,7 @@ func (ep *DummyEvalPlanner) IsActive(_ context.Context, _ clusterversion.Key) bo
 
 // ResolveFunction implements FunctionReferenceResolver interface.
 func (ep *DummyEvalPlanner) ResolveFunction(
-	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+	ctx context.Context, name tree.UnresolvedRoutineName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
 	return nil, errors.AssertionFailedf("ResolveFunction unimplemented")
 }
@@ -511,6 +535,11 @@ func (ep *DummyEvalPlanner) GetDetailsForSpanStats(
 
 // MaybeReallocateAnnotations is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) MaybeReallocateAnnotations(numAnnotations tree.AnnotationIdx) {
+}
+
+// AutoCommit is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) AutoCommit() bool {
+	return false
 }
 
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.

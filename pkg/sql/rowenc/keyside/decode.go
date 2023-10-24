@@ -82,6 +82,16 @@ func Decode(
 			rkey, i, err = encoding.DecodeUvarintDescending(key)
 		}
 		return a.NewDPGLSN(tree.DPGLSN{LSN: lsn.LSN(i)}), rkey, err
+	case types.RefCursorFamily:
+		var r string
+		if dir == encoding.Ascending {
+			// Perform a deep copy so that r would never reference the key's
+			// memory which might keep the BatchResponse alive.
+			rkey, r, err = encoding.DecodeUnsafeStringAscendingDeepCopy(key, nil)
+		} else {
+			rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
+		}
+		return a.NewDRefCursor(tree.DString(r)), rkey, err
 	case types.FloatFamily:
 		var f float64
 		if dir == encoding.Ascending {

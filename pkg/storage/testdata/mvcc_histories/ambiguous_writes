@@ -42,6 +42,7 @@ with t=A k=a
   resolve_intent
   txn_remove
 ----
+resolve_intent: "a" -> resolved key = true
 >> at end:
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
 
@@ -66,6 +67,7 @@ with t=B k=k
   resolve_intent
   txn_remove
 ----
+resolve_intent: "k" -> resolved key = true
 >> at end:
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
 data: "k"/0,1 -> /BYTES/k1
@@ -105,6 +107,7 @@ with t=C k=k
   resolve_intent
   txn_remove
 ----
+resolve_intent: "k" -> resolved key = true
 >> at end:
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
 data: "k"/0,2 -> /BYTES/k2
@@ -152,6 +155,7 @@ with t=D k=k
   resolve_intent
   txn_remove
 ----
+resolve_intent: "k" -> resolved key = true
 >> at end:
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
 data: "k"/3.000000000,0 -> /BYTES/k3
@@ -167,6 +171,7 @@ with t=E k=k
 ----
 >> del resolve t=E k=k
 del: "k": found key true
+resolve_intent: "k" -> resolved key = true
 stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+3168
 >> at end:
 txn: "E" meta={id=00000005 key="k" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=4.000000000,0 wto=false gul=0,0
@@ -283,6 +288,7 @@ with t=F k=k
   resolve_intent status=ABORTED
   txn_remove
 ----
+resolve_intent: "k" -> resolved key = true
 >> at end:
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
 data: "k"/4.000000000,0 -> /<empty>
@@ -383,6 +389,8 @@ with t=G
   resolve_intent k=k
   txn_remove
 ----
+resolve_intent: "a" -> resolved key = true
+resolve_intent: "k" -> resolved key = true
 >> at end:
 data: "a"/12.000000000,2 -> {localTs=12.000000000,1}/<empty>
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first

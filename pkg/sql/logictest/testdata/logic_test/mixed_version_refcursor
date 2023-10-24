@@ -1,0 +1,156 @@
+# LogicTest: cockroach-go-testserver-upgrade-to-master
+
+statement ok
+CREATE TABLE xy (x INT, y INT);
+
+# ----------------------------------------------------------------------
+# Test REFCURSOR references with all nodes running old binaries.
+# ----------------------------------------------------------------------
+
+subtest all_old_cast
+
+# Cast to REFCURSOR.
+statement error pgcode 42704 pq: type \"refcursor\" does not exist
+SELECT 'foo'::REFCURSOR;
+
+# Cast to REFCURSOR using the vectorized engine.
+statement error pgcode 42704 pq: type \"refcursor\" does not exist
+SELECT 'foo'::REFCURSOR FROM generate_series(1, 100) LIMIT 1;
+
+subtest all_old_table
+
+# Table that references REFCURSOR.
+statement error pgcode 42704 pq: type \"refcursor\" does not exist
+CREATE TABLE t (x REFCURSOR);
+
+# Add a REFCURSOR column.
+statement error pgcode 42704 pq: type \"refcursor\" does not exist
+ALTER TABLE xy ADD COLUMN curs REFCURSOR;
+
+# Alter a column type to REFCURSOR.
+statement ok
+SET enable_experimental_alter_column_type_general=true;
+
+statement error pgcode 42704 pq: type \"refcursor\" does not exist
+ALTER TABLE xy ALTER COLUMN y TYPE REFCURSOR;
+
+# Create a partial index that uses the REFCURSOR type.
+statement error pgcode 42704 pq: type \"refcursor\" does not exist
+CREATE INDEX part ON xy (x) WHERE y::REFCURSOR < 'foo';
+
+# Add a check constraint that uses the REFCURSOR type.
+statement error pgcode 42704 pq: type \"refcursor\" does not exist
+ALTER TABLE xy ADD CONSTRAINT bar CHECK (y::REFCURSOR < 'baz');
+
+subtest all_old_type
+
+# UDT that references REFCURSOR.
+statement error pgcode 42704 pq: type \"refcursor\" does not exist
+CREATE TYPE typ AS (x INT, y REFCURSOR);
+
+subtest all_old_function
+
+# Function that returns REFCURSOR.
+statement error pgcode 42704 pq: type \"refcursor\" does not exist
+CREATE OR REPLACE FUNCTION f() RETURNS REFCURSOR AS $$
+  SELECT 'foo';
+$$ LANGUAGE SQL;
+
+# Function that takes REFCURSOR argument.
+statement error pgcode 42704 pq: type \"refcursor\" does not exist
+CREATE OR REPLACE FUNCTION f(curs REFCURSOR) RETURNS STRING AS $$
+  SELECT curs;
+$$ LANGUAGE SQL;
+
+# Function that references REFCURSOR internally.
+statement error pgcode 42704 pq: type \"refcursor\" does not exist
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  SELECT 'foo'::REFCURSOR;
+  SELECT 0;
+$$ LANGUAGE SQL;
+
+# Function that returns a composite type with REFCURSOR component.
+statement error pgcode 42704 pq: type \"refcursor\" does not exist
+CREATE FUNCTION f() RETURNS RECORD AS $$
+  SELECT (1, 'foo'::REFCURSOR, true);
+$$ LANGUAGE SQL;
+
+subtest end
+
+# ----------------------------------------------------------------------
+# Verify that REFCURSOR is not allowed after upgrading the gateway.
+# ----------------------------------------------------------------------
+
+upgrade 0
+
+user root nodeidx=0
+
+subtest upgrade_one_cast
+
+# Cast to REFCURSOR.
+statement error pgcode 0A000 pq: refcursor not supported until version 23.2
+SELECT 'foo'::REFCURSOR;
+
+# Cast to REFCURSOR using the vectorized engine.
+statement error pgcode 0A000 pq: refcursor not supported until version 23.2
+SELECT 'foo'::REFCURSOR FROM generate_series(1, 100) LIMIT 1;
+
+subtest upgrade_one_table
+
+# Table that references REFCURSOR.
+statement error pgcode 0A000 pq: refcursor not supported until version 23.2
+CREATE TABLE t (x REFCURSOR);
+
+# Add a REFCURSOR column.
+statement error pgcode 0A000 pq: refcursor not supported until version 23.2
+ALTER TABLE xy ADD COLUMN curs REFCURSOR;
+
+# Alter a column type to REFCURSOR.
+statement ok
+SET enable_experimental_alter_column_type_general=true;
+
+statement error pgcode 0A000 pq: refcursor not supported until version 23.2
+ALTER TABLE xy ALTER COLUMN y TYPE REFCURSOR;
+
+# Create a partial index that uses the REFCURSOR type.
+statement error pgcode 0A000 pq: refcursor not supported until version 23.2
+CREATE INDEX part ON xy (x) WHERE y::REFCURSOR < 'foo';
+
+# Add a check constraint that uses the REFCURSOR type.
+statement error pgcode 0A000 pq: refcursor not supported until version 23.2
+ALTER TABLE xy ADD CONSTRAINT bar CHECK (y::REFCURSOR < 'baz');
+
+subtest upgrade_one_type
+
+# UDT that references REFCURSOR.
+statement error pgcode 0A000 pq: refcursor not supported until version 23.2
+CREATE TYPE typ AS (x INT, y REFCURSOR);
+
+subtest upgrade_one_function
+
+# Function that returns REFCURSOR.
+statement error pgcode 0A000 pq: refcursor not supported until version 23.2
+CREATE OR REPLACE FUNCTION f() RETURNS REFCURSOR AS $$
+  SELECT 'foo';
+$$ LANGUAGE SQL;
+
+# Function that takes REFCURSOR argument.
+statement error pgcode 0A000 pq: refcursor not supported until version 23.2
+CREATE OR REPLACE FUNCTION f(curs REFCURSOR) RETURNS INT AS $$
+  SELECT 0;
+$$ LANGUAGE SQL;
+
+# Function that references REFCURSOR internally.
+statement error pgcode 0A000 pq: refcursor not supported until version 23.2
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  SELECT 'foo'::REFCURSOR;
+  SELECT 0;
+$$ LANGUAGE SQL;
+
+# Function that returns a composite type with REFCURSOR component.
+statement error pgcode 0A000 pq: refcursor not supported until version 23.2
+CREATE FUNCTION f() RETURNS RECORD AS $$
+  SELECT (1, 'foo'::REFCURSOR, true);
+$$ LANGUAGE SQL;
+
+subtest end

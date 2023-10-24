@@ -21,7 +21,7 @@ if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
   ssh-keygen -q -N "" -f ~/.ssh/id_rsa
 fi
 
-artifacts=$PWD/artifacts/$(date +"%%Y%%m%%d")-${TC_BUILD_ID}
+artifacts=$PWD/artifacts/$(date +"%Y%m%d")-${TC_BUILD_ID}
 mkdir -p "$artifacts"
 
 if [[ ${FIPS_ENABLED:-0} == 1 ]]; then

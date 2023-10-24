@@ -166,7 +166,7 @@ type HasPrivilegeSpecifier struct {
 	ColumnName   *tree.Name
 	ColumnAttNum *uint32
 
-	// Function privilege
+	// Routine privilege
 	// This needs to be a user-defined function OID. Builtin function OIDs won't
 	// work since they're not descriptors based.
 	FunctionOID *oid.Oid
@@ -348,6 +348,12 @@ type Planner interface {
 	// it is invalid.
 	RepairTTLScheduledJobForTable(ctx context.Context, tableID int64) error
 
+	// FingerprintSpan calculates a fingerprint for the given span. If a
+	// startTime is passed and allRevisions is true, then the fingerprint
+	// includes the MVCC history between startTime and the read timestamp of
+	// the transaction.
+	FingerprintSpan(ctx context.Context, span roachpb.Span, startTime hlc.Timestamp, allRevisions bool, stripped bool) (uint64, error)
+
 	// QueryRowEx executes the supplied SQL statement and returns a single row, or
 	// nil if no row is found, or an error if more that one row is returned.
 	//
@@ -404,6 +410,25 @@ type Planner interface {
 
 	// Optimizer returns the optimizer associated with this Planner, if any.
 	Optimizer() interface{}
+
+	// GenUniqueCursorName returns a name that is guaranteed to be unique among
+	// the current list of cursors and portals. It is used to implement PLpgSQL
+	// OPEN statements when used with an unnamed cursor.
+	GenUniqueCursorName() tree.Name
+
+	// PLpgSQLCloseCursor closes the cursor with the given name, returning an
+	// error if the cursor doesn't exist. It is used to implement the PLpgSQL
+	// CLOSE statement.
+	PLpgSQLCloseCursor(cursorName tree.Name) error
+
+	// PLpgSQLFetchCursor returns the next row from the cursor with the given
+	// name, if any. It returns nil if no such row exists. Used to implement the
+	// PLpgSQL FETCH statement.
+	PLpgSQLFetchCursor(ctx context.Context, cursor *tree.CursorStmt) (res tree.Datums, err error)
+
+	// AutoCommit indicates whether the Planner has flagged the current statement
+	// as eligible for transaction auto-commit.
+	AutoCommit() bool
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
@@ -670,6 +695,7 @@ type GossipOperator interface {
 type SQLStatsController interface {
 	ResetClusterSQLStats(ctx context.Context) error
 	ResetActivityTables(ctx context.Context) error
+	ResetInsightsTables(ctx context.Context) error
 	CreateSQLStatsCompactionSchedule(ctx context.Context) error
 }
 

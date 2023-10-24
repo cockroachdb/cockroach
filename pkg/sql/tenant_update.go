@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -75,7 +76,7 @@ func UpdateTenantRecord(
 SET active = $2, info = $3, name = $4, data_state = $5, service_mode = $6
 WHERE id = $1`
 	args := []interface{}{info.ID, active, infoBytes, name, info.DataState, info.ServiceMode}
-	if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+	if !settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
 		// Ensure the update can succeed if the upgrade is not finalized yet.
 		query = `UPDATE system.tenants SET active = $2, info = $3 WHERE id = $1`
 		args = args[:3]
@@ -98,14 +99,14 @@ WHERE id = $1`
 func validateTenantInfo(
 	ctx context.Context, settings *cluster.Settings, info *mtinfopb.TenantInfo,
 ) error {
-	if info.TenantReplicationJobID != 0 && info.DataState == mtinfopb.DataStateReady {
-		return errors.Newf("tenant in data state %v with replication job ID %d", info.DataState, info.TenantReplicationJobID)
+	if info.PhysicalReplicationConsumerJobID != 0 && info.DataState == mtinfopb.DataStateReady {
+		return errors.Newf("tenant in data state %v with replication job ID %d", info.DataState, info.PhysicalReplicationConsumerJobID)
 	}
 	if info.DroppedName != "" && info.DataState != mtinfopb.DataStateDrop {
 		return errors.Newf("tenant in data state %v with dropped name %q", info.DataState, info.DroppedName)
 	}
 
-	if settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+	if settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
 		// We can only check the service mode after upgrading to a version
 		// that supports the service mode column.
 		if info.ServiceMode != mtinfopb.ServiceModeNone && info.DataState != mtinfopb.DataStateReady {
@@ -157,7 +158,7 @@ func (p *planner) UpdateTenantResourceLimits(
 		return err
 	}
 
-	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, op); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, op, p.execCfg.Settings); err != nil {
 		return err
 	}
 	if err := rejectIfSystemTenant(tenantID, op); err != nil {
@@ -183,7 +184,7 @@ func ActivateTenant(
 	serviceMode mtinfopb.TenantServiceMode,
 ) error {
 	const op = "activate"
-	if err := rejectIfCantCoordinateMultiTenancy(codec, op); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(codec, op, settings); err != nil {
 		return err
 	}
 	if err := rejectIfSystemTenant(tenID, op); err != nil {
@@ -216,7 +217,7 @@ func (p *planner) setTenantService(
 	if err := CanManageTenant(ctx, p); err != nil {
 		return err
 	}
-	if err := rejectIfCantCoordinateMultiTenancy(p.ExecCfg().Codec, "set tenant service"); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(p.ExecCfg().Codec, "set tenant service", p.ExecCfg().Settings); err != nil {
 		return err
 	}
 	if err := rejectIfSystemTenant(info.ID, "set tenant service"); err != nil {
@@ -236,6 +237,7 @@ func (p *planner) setTenantService(
 	}
 
 	info.ServiceMode = newMode
+	info.LastRevertTenantTimestamp = hlc.Timestamp{}
 	return UpdateTenantRecord(ctx, p.ExecCfg().Settings, p.InternalSQLTxn(), info)
 }
 
@@ -245,7 +247,7 @@ func (p *planner) renameTenant(
 	if p.EvalContext().TxnReadOnly {
 		return readOnlyError("ALTER VIRTUAL CLUSTER RENAME TO")
 	}
-	if err := rejectIfCantCoordinateMultiTenancy(p.ExecCfg().Codec, "rename tenant"); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(p.ExecCfg().Codec, "rename tenant", p.ExecCfg().Settings); err != nil {
 		return err
 	}
 	if err := rejectIfSystemTenant(info.ID, "rename"); err != nil {
@@ -260,7 +262,7 @@ func (p *planner) renameTenant(
 			return pgerror.WithCandidateCode(err, pgcode.Syntax)
 		}
 
-		if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+		if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
 			return pgerror.Newf(pgcode.FeatureNotSupported, "cannot use tenant names")
 		}
 	}

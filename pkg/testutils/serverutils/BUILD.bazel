@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "api.go",
         "conditional_wrap.go",
+        "options.go",
         "test_cluster_shim.go",
         "test_cluster_utils.go",
         "test_server_shim.go",
@@ -137,6 +138,7 @@ go_test(
     srcs = [
         "conditional_wrap_internal_test.go",
         "conditional_wrap_test.go",
+        "test_url_test.go",
     ],
     args = ["-test.timeout=295s"],
     embed = [":serverutils"],

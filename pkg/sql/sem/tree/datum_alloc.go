@@ -157,6 +157,11 @@ func (a *DatumAlloc) NewDName(v DString) Datum {
 	return NewDNameFromDString(a.NewDString(v))
 }
 
+// NewDRefCursor allocates a DRefCursor.
+func (a *DatumAlloc) NewDRefCursor(v DString) Datum {
+	return NewDRefCursorFromDString(a.NewDString(v))
+}
+
 // NewDBytes allocates a DBytes.
 func (a *DatumAlloc) NewDBytes(v DBytes) *DBytes {
 	r := (*DBytes)(a.newString())

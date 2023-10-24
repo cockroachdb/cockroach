@@ -495,7 +495,15 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 	return cj
 }
 
-func (ct *cdcTester) runFeedLatencyVerifier(cj changefeedJob, targets latencyTargets) {
+// runFeedLatencyVerifier runs a goroutine which polls the various latencies
+// for a changefeed job (initial scan latency, etc) and asserts that they
+// are below the specified targets.
+//
+// It returns a function which blocks until the job succeeds and verification
+// on the succeeded job completes.
+func (ct *cdcTester) runFeedLatencyVerifier(
+	cj changefeedJob, targets latencyTargets,
+) (waitForCompletion func()) {
 	info, err := getChangefeedInfo(ct.DB(), cj.jobID)
 	if err != nil {
 		ct.t.Fatalf("failed to get changefeed info: %s", err.Error())
@@ -512,8 +520,10 @@ func (ct *cdcTester) runFeedLatencyVerifier(cj changefeedJob, targets latencyTar
 	)
 	verifier.statementTime = info.statementTime
 
+	finished := make(chan struct{})
 	ct.mon.Go(func(ctx context.Context) error {
-		err := verifier.pollLatency(ctx, ct.DB(), cj.jobID, time.Second, ct.doneCh)
+		defer close(finished)
+		err := verifier.pollLatencyUntilJobSucceeds(ctx, ct.DB(), cj.jobID, time.Second, ct.doneCh)
 		if err != nil {
 			return err
 		}
@@ -522,6 +532,13 @@ func (ct *cdcTester) runFeedLatencyVerifier(cj changefeedJob, targets latencyTar
 		verifier.maybeLogLatencyHist()
 		return nil
 	})
+
+	return func() {
+		select {
+		case <-ct.ctx.Done():
+		case <-finished:
+		}
+	}
 }
 
 func (cj *changefeedJob) runFeedPoller(
@@ -598,6 +615,7 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster) cdcTester
 	// behind, which is well above the 60s targetSteadyLatency we have in some tests.
 	settings.ClusterSettings["changefeed.slow_span_log_threshold"] = "30s"
 	settings.ClusterSettings["server.child_metrics.enabled"] = "true"
+	settings.ClusterSettings["changefeed.balance_range_distribution.enable"] = "true"
 
 	settings.Env = append(settings.Env, envVars...)
 
@@ -980,6 +998,10 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 			"create changefeed with TLS transport and SASL/SCRAM-SHA-512",
 			fmt.Sprintf("%s?tls_enabled=true&ca_cert=%s&sasl_enabled=true&sasl_user=scram512&sasl_password=scram512-secret&sasl_mechanism=SCRAM-SHA-512", saslURL, caCert),
 		},
+		{
+			"create changefeed with confluent-cloud scheme",
+			fmt.Sprintf("%s&api_key=plain&api_secret=plain-secret", kafka.sinkURLAsConfluentCloudUrl(ctx)),
+		},
 	}
 
 	for _, f := range feeds {
@@ -1020,10 +1042,11 @@ func registerCDC(r registry.Registry) {
 				targets:  allTpccTargets,
 				opts:     map[string]string{"initial_scan": "'only'"},
 			})
-			ct.runFeedLatencyVerifier(feed, latencyTargets{
+			waitForCompletion := ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 30 * time.Minute,
 			})
-			feed.waitForCompletion()
+			waitForCompletion()
+
 			exportStatsFile()
 		},
 	})
@@ -1052,6 +1075,32 @@ func registerCDC(r registry.Registry) {
 				steadyLatency:      10 * time.Minute,
 			})
 			ct.waitForWorkload()
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/initial-scan-only/parquet",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		RequiresLicense:  true,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 200})
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: cloudStorageSink,
+				targets:  allTpccTargets,
+				opts:     map[string]string{"initial_scan": "'only'", "format": "'parquet'"},
+			})
+			waitForCompletion := ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 30 * time.Minute,
+			})
+			waitForCompletion()
+
 		},
 	})
 	r.Add(registry.TestSpec{
@@ -2260,6 +2309,20 @@ func (k kafkaManager) sinkURLSASL(ctx context.Context) string {
 		k.t.Fatal(err)
 	}
 	return `kafka://` + ips[0] + `:9094`
+}
+
+// sinkURLAsConfluentCloudUrl allows the test to connect to the kafka brokers
+// as if it was connecting to kafka hosted in confluent cloud.
+func (k kafkaManager) sinkURLAsConfluentCloudUrl(ctx context.Context) string {
+	ips, err := k.c.InternalIP(ctx, k.t.L(), k.nodes)
+	if err != nil {
+		k.t.Fatal(err)
+	}
+	// Confluent cloud does not use TLS 1.2 and instead uses PLAIN username/password
+	// authentication (see https://docs.confluent.io/platform/current/security/security_tutorial.html#overview).
+	// Because the kafka manager has certs configured, connecting without a ca_cert will raise an error.
+	// To connect without a cert, we set insecure_tls_skip_verify=true.
+	return `confluent-cloud://` + ips[0] + `:9094?insecure_tls_skip_verify=true`
 }
 
 func (k kafkaManager) sinkURLOAuth(ctx context.Context, creds clientcredentials.Config) string {

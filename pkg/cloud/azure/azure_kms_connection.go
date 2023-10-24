@@ -31,12 +31,12 @@ func validateAzureKMSConnectionURI(
 
 func init() {
 	externalconn.RegisterConnectionDetailsFromURIFactory(
-		scheme,
+		kmsScheme,
 		connectionpb.ConnectionProvider_azure_kms,
 		externalconn.SimpleURIFactory,
 	)
 	externalconn.RegisterDefaultValidation(
-		scheme,
+		kmsScheme,
 		validateAzureKMSConnectionURI,
 	)
 }

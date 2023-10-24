@@ -48,13 +48,14 @@ func init() {
 // declareKeys{End,Heartbeat}Transaction.
 func declareKeysWriteTransaction(
 	_ ImmutableRangeState, header *kvpb.Header, req kvpb.Request, latchSpans *spanset.SpanSet,
-) {
+) error {
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
 		latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 			Key: keys.TransactionKey(req.Header().Key, header.Txn.ID),
 		})
 	}
+	return nil
 }
 
 func declareKeysEndTxn(
@@ -64,9 +65,11 @@ func declareKeysEndTxn(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
+) error {
 	et := req.(*kvpb.EndTxnRequest)
-	declareKeysWriteTransaction(rs, header, req, latchSpans)
+	if err := declareKeysWriteTransaction(rs, header, req, latchSpans); err != nil {
+		return err
+	}
 	var minTxnTS hlc.Timestamp
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
@@ -208,6 +211,7 @@ func declareKeysEndTxn(
 			}
 		}
 	}
+	return nil
 }
 
 // EndTxn either commits or aborts (rolls back) an extant transaction according
@@ -285,7 +289,7 @@ func EndTxn(
 				// The transaction has already been aborted by other.
 				// Do not return TransactionAbortedError since the client anyway
 				// wanted to abort the transaction.
-				resolvedLocks, externalLocks, err := resolveLocalLocks(ctx, readWriter, cArgs.EvalCtx, ms, args, reply.Txn)
+				resolvedLocks, _, externalLocks, err := resolveLocalLocks(ctx, readWriter, cArgs.EvalCtx, ms, args, reply.Txn)
 				if err != nil {
 					return result.Result{}, err
 				}
@@ -432,7 +436,8 @@ func EndTxn(
 	// we position the transaction record next to the first write of a transaction.
 	// This avoids the need for the intentResolver to have to return to this range
 	// to resolve locks for this transaction in the future.
-	resolvedLocks, externalLocks, err := resolveLocalLocks(ctx, readWriter, cArgs.EvalCtx, ms, args, reply.Txn)
+	resolvedLocks, releasedReplLocks, externalLocks, err := resolveLocalLocks(
+		ctx, readWriter, cArgs.EvalCtx, ms, args, reply.Txn)
 	if err != nil {
 		return result.Result{}, err
 	}
@@ -468,8 +473,16 @@ func EndTxn(
 	txnResult.Local.UpdatedTxns = []*roachpb.Transaction{reply.Txn}
 	txnResult.Local.ResolvedLocks = resolvedLocks
 
-	// Run the commit triggers if successfully committed.
 	if reply.Txn.Status == roachpb.COMMITTED {
+		// Return whether replicated {shared, exclusive} locks were released by
+		// the committing transaction. If such locks were released, we still
+		// need to make sure other transactions can't write underneath the
+		// transaction's commit timestamp to the key spans previously protected
+		// by the locks. We return the spans on the response and update the
+		// timestamp cache a few layers above to ensure this.
+		reply.ReplicatedLocksReleasedOnCommit = releasedReplLocks
+
+		// Run the commit triggers if successfully committed.
 		triggerResult, err := RunCommitTrigger(
 			ctx, cArgs.EvalCtx, readWriter.(storage.Batch), ms, args, reply.Txn,
 		)
@@ -535,7 +548,7 @@ func resolveLocalLocks(
 	ms *enginepb.MVCCStats,
 	args *kvpb.EndTxnRequest,
 	txn *roachpb.Transaction,
-) (resolvedLocks []roachpb.LockUpdate, externalLocks []roachpb.Span, _ error) {
+) (resolvedLocks []roachpb.LockUpdate, releasedReplLocks, externalLocks []roachpb.Span, _ error) {
 	var resolveAllowance int64 = lockResolutionBatchSize
 	var targetBytes int64 = lockResolutionBatchByteSize
 	if args.InternalCommitTrigger != nil {
@@ -559,7 +572,7 @@ func resolveLocalLocksWithPagination(
 	txn *roachpb.Transaction,
 	maxKeys int64,
 	targetBytes int64,
-) (resolvedLocks []roachpb.LockUpdate, externalLocks []roachpb.Span, _ error) {
+) (resolvedLocks []roachpb.LockUpdate, releasedReplLocks, externalLocks []roachpb.Span, _ error) {
 	desc := evalCtx.Desc()
 	if mergeTrigger := args.InternalCommitTrigger.GetMergeTrigger(); mergeTrigger != nil {
 		// If this is a merge, then use the post-merge descriptor to determine
@@ -591,7 +604,7 @@ func resolveLocalLocksWithPagination(
 			//
 			// Note that the underlying pebbleIterator will still be reused
 			// since readWriter is a pebbleBatch in the typical case.
-			ok, numBytes, resumeSpan, err := storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update,
+			ok, numBytes, resumeSpan, wereReplLocksReleased, err := storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update,
 				storage.MVCCResolveWriteIntentOptions{TargetBytes: targetBytes})
 			if err != nil {
 				return 0, 0, 0, errors.Wrapf(err, "resolving write intent at %s on end transaction [%s]", span, txn.Status)
@@ -617,6 +630,9 @@ func resolveLocalLocksWithPagination(
 					}
 				}
 			}
+			if wereReplLocksReleased {
+				releasedReplLocks = append(releasedReplLocks, update.Span)
+			}
 			return numKeys, numBytes, resumeReason, nil
 		}
 		// For update ranges, cut into parts inside and outside our key
@@ -626,8 +642,10 @@ func resolveLocalLocksWithPagination(
 		externalLocks = append(externalLocks, outSpans...)
 		if inSpan != nil {
 			update.Span = *inSpan
-			numKeys, numBytes, resumeSpan, resumeReason, err := storage.MVCCResolveWriteIntentRange(ctx, readWriter, ms, update,
-				storage.MVCCResolveWriteIntentRangeOptions{MaxKeys: maxKeys, TargetBytes: targetBytes})
+			numKeys, numBytes, resumeSpan, resumeReason, wereReplLocksReleased, err :=
+				storage.MVCCResolveWriteIntentRange(ctx, readWriter, ms, update,
+					storage.MVCCResolveWriteIntentRangeOptions{MaxKeys: maxKeys, TargetBytes: targetBytes},
+				)
 			if err != nil {
 				return 0, 0, 0, errors.Wrapf(err, "resolving write intent range at %s on end transaction [%s]", span, txn.Status)
 			}
@@ -649,6 +667,9 @@ func resolveLocalLocksWithPagination(
 						span, txn.Status)
 				}
 			}
+			if wereReplLocksReleased {
+				releasedReplLocks = append(releasedReplLocks, update.Span)
+			}
 			return numKeys, numBytes, resumeReason, nil
 		}
 		return 0, 0, 0, nil
@@ -656,7 +677,7 @@ func resolveLocalLocksWithPagination(
 
 	numKeys, _, _, err := storage.MVCCPaginate(ctx, maxKeys, targetBytes, false /* allowEmpty */, f)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	externalLocks = append(externalLocks, remainingLockSpans...)
@@ -664,10 +685,10 @@ func resolveLocalLocksWithPagination(
 	removedAny := numKeys > 0
 	if WriteAbortSpanOnResolve(txn.Status, args.Poison, removedAny) {
 		if err := UpdateAbortSpan(ctx, evalCtx, readWriter, ms, txn.TxnMeta, args.Poison); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
-	return resolvedLocks, externalLocks, nil
+	return resolvedLocks, releasedReplLocks, externalLocks, nil
 }
 
 // updateStagingTxn persists the STAGING transaction record with updated status
@@ -1007,7 +1028,7 @@ func splitTrigger(
 			"unable to determine whether right hand side of split is empty")
 	}
 
-	rangeKeyDeltaMS, err := computeSplitRangeKeyStatsDelta(batch, split.LeftDesc, split.RightDesc)
+	rangeKeyDeltaMS, err := computeSplitRangeKeyStatsDelta(ctx, batch, split.LeftDesc, split.RightDesc)
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
 			"unable to compute range key stats delta for RHS")
@@ -1058,7 +1079,7 @@ func makeScanStatsFn(
 	sideName string,
 ) splitStatsScanFn {
 	return func() (enginepb.MVCCStats, error) {
-		sideMS, err := rditer.ComputeStatsForRange(sideDesc, reader, ts.WallTime)
+		sideMS, err := rditer.ComputeStatsForRange(ctx, sideDesc, reader, ts.WallTime)
 		if err != nil {
 			return enginepb.MVCCStats{}, errors.Wrapf(err,
 				"unable to compute stats for %s range after split", sideName)
@@ -1287,7 +1308,7 @@ func mergeTrigger(
 	// adjusted for range key merges (which is the inverse of the split
 	// adjustment).
 	ms.Add(merge.RightMVCCStats)
-	msRangeKeyDelta, err := computeSplitRangeKeyStatsDelta(batch, merge.LeftDesc, merge.RightDesc)
+	msRangeKeyDelta, err := computeSplitRangeKeyStatsDelta(ctx, batch, merge.LeftDesc, merge.RightDesc)
 	if err != nil {
 		return result.Result{}, err
 	}
@@ -1306,7 +1327,8 @@ func mergeTrigger(
 	} else {
 		_ = clusterversion.V23_1 // remove this branch when 23.1 support is removed
 		ridPrefix := keys.MakeRangeIDReplicatedPrefix(merge.RightDesc.RangeID)
-		sysMS, err := storage.ComputeStats(batch, ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
+		sysMS, err := storage.ComputeStats(
+			ctx, batch, ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -1399,7 +1421,7 @@ func changeReplicasTrigger(
 // range keys will already have been merged in Pebble by the time this is
 // called.
 func computeSplitRangeKeyStatsDelta(
-	r storage.Reader, lhs, rhs roachpb.RangeDescriptor,
+	ctx context.Context, r storage.Reader, lhs, rhs roachpb.RangeDescriptor,
 ) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
 
@@ -1410,7 +1432,7 @@ func computeSplitRangeKeyStatsDelta(
 		splitKey.Prevish(roachpb.PrevishKeyLength), splitKey.Next(),
 		lhs.StartKey.AsRawKey(), rhs.EndKey.AsRawKey())
 
-	iter, err := r.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+	iter, err := r.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypeRangesOnly,
 		LowerBound: leftPeekBound,
 		UpperBound: rightPeekBound,

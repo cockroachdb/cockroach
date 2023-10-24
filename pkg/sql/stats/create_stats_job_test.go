@@ -70,7 +70,7 @@ func TestCreateStatsControlJob(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, nodes, params)
 	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(tc.ApplicationLayer(0).SQLConn(t, ""))
+	sqlDB := sqlutils.MakeSQLRunner(tc.ApplicationLayer(0).SQLConn(t))
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)`)
 	var tID descpb.ID
@@ -205,7 +205,7 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 	const nodes = 1
 	tc := testcluster.StartTestCluster(t, nodes, params)
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.ApplicationLayer(0).SQLConn(t, "")
+	conn := tc.ApplicationLayer(0).SQLConn(t)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
@@ -299,7 +299,7 @@ func TestDeleteFailedJob(t *testing.T) {
 	serverArgs := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: serverArgs})
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.ApplicationLayer(0).SQLConn(t, "")
+	conn := tc.ApplicationLayer(0).SQLConn(t)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
@@ -374,7 +374,7 @@ func TestCreateStatsProgress(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, nodes, params)
 	defer tc.Stopper().Stop(ctx)
 	s := tc.ApplicationLayer(0)
-	conn := s.SQLConn(t, "")
+	conn := s.SQLConn(t)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
@@ -513,7 +513,7 @@ func TestCreateStatsAsOfTime(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(tc.ApplicationLayer(0).SQLConn(t, ""))
+	sqlDB := sqlutils.MakeSQLRunner(tc.ApplicationLayer(0).SQLConn(t))
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)`)
 

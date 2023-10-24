@@ -128,7 +128,6 @@ Typical usage:
 		makeDoctorCmd(ret.doctor),
 		makeGenerateCmd(ret.generate),
 		makeGoCmd(ret.gocmd),
-		makeMergeTestXMLsCmd(ret.mergeTestXMLs),
 		makeTestLogicCmd(ret.testlogic),
 		makeLintCmd(ret.lint),
 		makeTestCmd(ret.test),

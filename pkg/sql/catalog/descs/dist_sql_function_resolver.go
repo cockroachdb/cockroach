@@ -15,6 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -42,9 +44,9 @@ func NewDistSQLFunctionResolver(descs *Collection, txn *kv.Txn) *DistSQLFunction
 // TODO(chengxiong): extract resolution logics in schema_resolver.go into
 // separate package so that it can be reused here.
 func (d *DistSQLFunctionResolver) ResolveFunction(
-	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+	ctx context.Context, name tree.UnresolvedRoutineName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
-	fn, err := name.ToRoutineName()
+	fn, err := name.UnresolvedName().ToRoutineName()
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +56,10 @@ func (d *DistSQLFunctionResolver) ResolveFunction(
 		return nil, err
 	}
 	if builtinDef == nil {
-		return nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %s not found", fn.Object())
+		return nil, errors.Mark(
+			pgerror.Newf(pgcode.UndefinedFunction, "function %s not found", fn.Object()),
+			tree.ErrRoutineUndefined,
+		)
 	}
 	return builtinDef, nil
 }
@@ -67,7 +72,10 @@ func (d *DistSQLFunctionResolver) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
 ) (*tree.RoutineName, *tree.Overload, error) {
 	if !funcdesc.IsOIDUserDefinedFunc(oid) {
-		return nil, nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %d not found", oid)
+		return nil, nil, errors.Mark(
+			pgerror.Newf(pgcode.UndefinedFunction, "function %d not found", oid),
+			tree.ErrRoutineUndefined,
+		)
 	}
 	descID := funcdesc.UserDefinedFunctionOIDToID(oid)
 	funcDesc, err := d.g.Function(ctx, descID)

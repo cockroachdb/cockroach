@@ -99,9 +99,6 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		if err := os.Unsetenv("COCKROACH_EXPERIMENTAL_LINEARIZABLE"); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.Unsetenv("COCKROACH_DISABLE_SPAN_CONFIGS"); err != nil {
-			t.Fatal(err)
-		}
 		if err := os.Unsetenv("COCKROACH_SCAN_INTERVAL"); err != nil {
 			t.Fatal(err)
 		}
@@ -139,10 +136,6 @@ func TestReadEnvironmentVariables(t *testing.T) {
 
 	// Set all the environment variables to valid values and ensure they are set
 	// correctly.
-	if err := os.Setenv("COCKROACH_DISABLE_SPAN_CONFIGS", "true"); err != nil {
-		t.Fatal(err)
-	}
-	cfgExpected.SpanConfigsDisabled = true
 	if err := os.Setenv("COCKROACH_EXPERIMENTAL_LINEARIZABLE", "true"); err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +160,6 @@ func TestReadEnvironmentVariables(t *testing.T) {
 	}
 
 	for _, envVar := range []string{
-		"COCKROACH_DISABLE_SPAN_CONFIGS",
 		"COCKROACH_EXPERIMENTAL_LINEARIZABLE",
 		"COCKROACH_SCAN_INTERVAL",
 		"COCKROACH_SCAN_MIN_IDLE_TIME",

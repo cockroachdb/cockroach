@@ -12,7 +12,6 @@ package ttljob
 
 import (
 	"context"
-	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -21,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -40,37 +38,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var (
-	defaultSelectBatchSize = settings.RegisterIntSetting(
-		settings.TenantWritable,
-		"sql.ttl.default_select_batch_size",
-		"default amount of rows to select in a single query during a TTL job",
-		500,
-		settings.PositiveInt,
-		settings.WithPublic)
-	defaultDeleteBatchSize = settings.RegisterIntSetting(
-		settings.TenantWritable,
-		"sql.ttl.default_delete_batch_size",
-		"default amount of rows to delete in a single query during a TTL job",
-		100,
-		settings.PositiveInt,
-		settings.WithPublic)
-	defaultDeleteRateLimit = settings.RegisterIntSetting(
-		settings.TenantWritable,
-		"sql.ttl.default_delete_rate_limit",
-		"default delete rate limit for all TTL jobs. Use 0 to signify no rate limit.",
-		0,
-		settings.NonNegativeInt,
-		settings.WithPublic)
-
-	jobEnabled = settings.RegisterBoolSetting(
-		settings.TenantWritable,
-		"sql.ttl.job.enabled",
-		"whether the TTL job is enabled",
-		true,
-		settings.WithPublic)
-)
-
+// rowLevelTTLResumer implements the TTL job. The job can run on any node, but
+// the job node distributes SELECT/DELETE work via DistSQL to ttlProcessor
+// nodes. DistSQL divides work into spans that each ttlProcessor scans in a
+// SELECT/DELETE loop.
 type rowLevelTTLResumer struct {
 	job *jobs.Job
 	st  *cluster.Settings
@@ -86,7 +57,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	descsCol := jobExecCtx.ExtendedEvalContext().Descs
 
 	settingsValues := execCfg.SV()
-	if err := checkEnabled(settingsValues); err != nil {
+	if err := ttlbase.CheckJobEnabled(settingsValues); err != nil {
 		return err
 	}
 
@@ -103,15 +74,8 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	if knobs.AOSTDuration != nil {
 		aostDuration = *knobs.AOSTDuration
 	}
-	aost := details.Cutoff.Add(aostDuration)
 
-	ttlSpecAOST := aost
-	// Set ttlSpec.AOST to 0 to avoid overriding 0 duration in tests.
-	if knobs.AOSTDuration != nil {
-		ttlSpecAOST = time.Time{}
-	}
-
-	var rowLevelTTL catpb.RowLevelTTL
+	var rowLevelTTL *catpb.RowLevelTTL
 	var relationName string
 	var entirePKSpan roachpb.Span
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -122,6 +86,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		// If the AOST timestamp is before the latest descriptor timestamp, exit
 		// early as the delete will not work.
 		modificationTime := desc.GetModificationTime().GoTime()
+		aost := details.Cutoff.Add(aostDuration)
 		if modificationTime.After(aost) {
 			return pgerror.Newf(
 				pgcode.ObjectNotInPrerequisiteState,
@@ -134,7 +99,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			return errors.Newf("unable to find TTL on table %s", desc.GetName())
 		}
 
-		rowLevelTTL = *desc.GetRowLevelTTL()
+		rowLevelTTL = desc.GetRowLevelTTL()
 
 		if rowLevelTTL.Pause {
 			return pgerror.Newf(pgcode.OperatorIntervention, "ttl jobs on table %s are currently paused", tree.Name(desc.GetName()))
@@ -222,19 +187,19 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		}
 
 		jobID := t.job.ID()
-		selectBatchSize := getSelectBatchSize(settingsValues, rowLevelTTL)
-		deleteBatchSize := getDeleteBatchSize(settingsValues, rowLevelTTL)
-		deleteRateLimit := getDeleteRateLimit(settingsValues, rowLevelTTL)
+		selectBatchSize := ttlbase.GetSelectBatchSize(settingsValues, rowLevelTTL)
+		deleteBatchSize := ttlbase.GetDeleteBatchSize(settingsValues, rowLevelTTL)
+		selectRateLimit := ttlbase.GetSelectRateLimit(settingsValues, rowLevelTTL)
+		deleteRateLimit := ttlbase.GetDeleteRateLimit(settingsValues, rowLevelTTL)
 		newTTLSpec := func(spans []roachpb.Span) *execinfrapb.TTLSpec {
 			return &execinfrapb.TTLSpec{
-				JobID:              jobID,
-				RowLevelTTLDetails: details,
-				// Set AOST in case of mixed 22.2.0/22.2.1+ cluster where the job started on a 22.2.1+ node.
-				AOST:                        ttlSpecAOST,
+				JobID:                       jobID,
+				RowLevelTTLDetails:          details,
 				TTLExpr:                     ttlExpr,
 				Spans:                       spans,
 				SelectBatchSize:             selectBatchSize,
 				DeleteBatchSize:             deleteBatchSize,
+				SelectRateLimit:             selectRateLimit,
 				DeleteRateLimit:             deleteRateLimit,
 				LabelMetrics:                rowLevelTTL.LabelMetrics,
 				PreDeleteChangeTableVersion: knobs.PreDeleteChangeTableVersion,
@@ -324,44 +289,6 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	}
 
 	return group.Wait()
-}
-
-func checkEnabled(settingsValues *settings.Values) error {
-	if enabled := jobEnabled.Get(settingsValues); !enabled {
-		return errors.Newf(
-			"ttl jobs are currently disabled by CLUSTER SETTING %s",
-			jobEnabled.Name(),
-		)
-	}
-	return nil
-}
-
-func getSelectBatchSize(sv *settings.Values, ttl catpb.RowLevelTTL) int64 {
-	bs := ttl.SelectBatchSize
-	if bs == 0 {
-		bs = defaultSelectBatchSize.Get(sv)
-	}
-	return bs
-}
-
-func getDeleteBatchSize(sv *settings.Values, ttl catpb.RowLevelTTL) int64 {
-	bs := ttl.DeleteBatchSize
-	if bs == 0 {
-		bs = defaultDeleteBatchSize.Get(sv)
-	}
-	return bs
-}
-
-func getDeleteRateLimit(sv *settings.Values, ttl catpb.RowLevelTTL) int64 {
-	rl := ttl.DeleteRateLimit
-	if rl == 0 {
-		rl = defaultDeleteRateLimit.Get(sv)
-	}
-	// Put the maximum tokens possible if there is no rate limit.
-	if rl == 0 {
-		rl = math.MaxInt64
-	}
-	return rl
 }
 
 // OnFailOrCancel implements the jobs.Resumer interface.

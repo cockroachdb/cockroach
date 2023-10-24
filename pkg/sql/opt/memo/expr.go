@@ -725,6 +725,18 @@ type UDFDefinition struct {
 	// ExceptionBlock contains information needed for exception-handling when the
 	// body of this routine returns an error. It can be unset.
 	ExceptionBlock *ExceptionBlock
+
+	// BlockState is shared between the routines that encapsulate a PLpgSQL block.
+	// It is used to coordinate between the nested routines during exception
+	// handling.
+	BlockState *tree.BlockState
+
+	// CursorDeclaration contains the information needed to open a SQL cursor with
+	// the result of the *first* body statement. If it is set, there will be at
+	// least two body statements - one to open the cursor, and one to evaluate the
+	// result of the routine. This invariant is enforced when the PLpgSQL routine
+	// is built. CursorDeclaration may be unset.
+	CursorDeclaration *tree.RoutineOpenCursor
 }
 
 // ExceptionBlock contains the information needed to match and handle errors in
@@ -732,7 +744,8 @@ type UDFDefinition struct {
 type ExceptionBlock struct {
 	// Codes is a list of pgcode strings (see pgcode/codes.go). When the body of a
 	// routine with an ExceptionBlock returns an error, the code of that error is
-	// compared against the Codes slice for a match.
+	// compared against the Codes slice for a match. As a special case, the code
+	// may be "OTHERS", indicating that (almost) any error code should be matched.
 	Codes []pgcode.Code
 
 	// Actions contains routine definitions that represent exception handlers for

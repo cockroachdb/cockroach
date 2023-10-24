@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -59,12 +60,22 @@ func assertEqImpl(
 		keyMin = keys.LocalMax
 		keyMax = roachpb.KeyMax
 	}
+	lockKeyMin, _ := keys.LockTableSingleKey(keyMin, nil)
+	lockKeyMax, _ := keys.LockTableSingleKey(keyMax, nil)
 
 	for _, mvccStatsTest := range mvccStatsTests {
 		compMS, err := mvccStatsTest.fn(rw, keyMin, keyMax, ms.LastUpdateNanos)
 		if err != nil {
 			t.Fatal(err)
 		}
+		// NOTE: we use ComputeStats for the lock table stats because it is not
+		// supported by ComputeStatsForIter.
+		compLockMS, err := ComputeStats(
+			context.Background(), rw, lockKeyMin, lockKeyMax, ms.LastUpdateNanos)
+		if err != nil {
+			t.Fatal(err)
+		}
+		compMS.Add(compLockMS)
 		require.Equal(t, compMS, *ms, "%s: diff(ms, %s)", debug, mvccStatsTest.name)
 	}
 }
@@ -135,7 +146,7 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 	ts4 := hlc.Timestamp{WallTime: 4 * 1e9}
 	txn.Status = roachpb.COMMITTED
 	txn.WriteTimestamp.Forward(ts4)
-	if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
+	if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
 		roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
 		MVCCResolveWriteIntentOptions{},
 	); err != nil {
@@ -225,7 +236,7 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 	ts4 := hlc.Timestamp{WallTime: 4 * 1e9}
 	txn.Status = roachpb.COMMITTED
 	txn.WriteTimestamp.Forward(ts4)
-	if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
+	if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
 		roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
 		MVCCResolveWriteIntentOptions{},
 	); err != nil {
@@ -313,7 +324,7 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 	// push as it would happen for a SNAPSHOT txn)
 	ts4 := hlc.Timestamp{WallTime: 4 * 1e9}
 	txn.WriteTimestamp.Forward(ts4)
-	if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
+	if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
 		roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
 		MVCCResolveWriteIntentOptions{},
 	); err != nil {
@@ -691,7 +702,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 		txnCommit := txn.Clone()
 		txnCommit.Status = roachpb.COMMITTED
 		txnCommit.WriteTimestamp.Forward(ts3)
-		if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, &aggMS,
+		if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, &aggMS,
 			roachpb.MakeLockUpdate(txnCommit, roachpb.Span{Key: key}),
 			MVCCResolveWriteIntentOptions{},
 		); err != nil {
@@ -728,7 +739,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 		txnAbort := txn.Clone()
 		txnAbort.Status = roachpb.ABORTED
 		txnAbort.WriteTimestamp.Forward(ts3)
-		if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, &aggMS,
+		if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, &aggMS,
 			roachpb.MakeLockUpdate(txnAbort, roachpb.Span{Key: key}),
 			MVCCResolveWriteIntentOptions{},
 		); err != nil {
@@ -866,7 +877,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 
 		txnAbort := txn.Clone()
 		txnAbort.Status = roachpb.ABORTED // doesn't change m2ValSize, fortunately
-		if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, &aggMS,
+		if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, &aggMS,
 			roachpb.MakeLockUpdate(txnAbort, roachpb.Span{Key: key}),
 			MVCCResolveWriteIntentOptions{},
 		); err != nil {
@@ -1382,7 +1393,7 @@ func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 
 	// Now abort the intent.
 	txn.Status = roachpb.ABORTED
-	if _, _, _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
+	if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
 		roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
 		MVCCResolveWriteIntentOptions{},
 	); err != nil {
@@ -1469,13 +1480,13 @@ var mvccStatsTests = []struct {
 	{
 		name: "ComputeStats",
 		fn: func(r Reader, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
-			return ComputeStats(r, start, end, nowNanos)
+			return ComputeStats(context.Background(), r, start, end, nowNanos)
 		},
 	},
 	{
 		name: "ComputeStatsForIter",
 		fn: func(r Reader, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
-			iter, err := r.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+			iter, err := r.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{
 				KeyTypes:   IterKeyTypePointsAndRanges,
 				LowerBound: start,
 				UpperBound: end,
@@ -1758,8 +1769,18 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		endTime := hlc.MaxTimestamp
 		clearRangeThreshold := int(s.rng.Int63n(5))
 
+		// TODO(nvanbenschoten): this should be pushed into MVCCClearTimeRange, which
+		// does not currently handle replicated locks correctly.
+		locks, err := ScanLocks(ctx, s.batch, keySpan.Key, keySpan.EndKey, 1, 0)
+		if err == nil && len(locks) > 0 {
+			err = &kvpb.LockConflictError{Locks: locks}
+		}
+		if err != nil {
+			return false, err.Error()
+		}
+
 		desc := fmt.Sprintf("mvccClearTimeRange=%s, startTime=%s, endTime=%s", keySpan, startTime, endTime)
-		_, err := MVCCClearTimeRange(ctx, s.batch, s.MSDelta, keySpan.Key, keySpan.EndKey,
+		_, err = MVCCClearTimeRange(ctx, s.batch, s.MSDelta, keySpan.Key, keySpan.EndKey,
 			startTime, endTime, nil /* leftPeekBound */, nil /* rightPeekBound */, clearRangeThreshold, 0, 0)
 		if err != nil {
 			desc += " " + err.Error()
@@ -1767,6 +1788,16 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		}
 
 		return true, desc
+	}
+	actions["AcquireLock"] = func(s *state) (bool, string) {
+		str := lock.Shared
+		if s.rng.Intn(2) != 0 {
+			str = lock.Exclusive
+		}
+		if err := MVCCAcquireLock(ctx, s.batch, s.Txn, str, s.key, s.MSDelta, 0); err != nil {
+			return false, err.Error()
+		}
+		return true, ""
 	}
 	actions["EnsureTxn"] = func(s *state) (bool, string) {
 		if s.Txn == nil {
@@ -1781,13 +1812,13 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		desc := fmt.Sprintf("ranged=%t", ranged)
 		if s.Txn != nil {
 			if !ranged {
-				if _, _, _, err := MVCCResolveWriteIntent(ctx, s.batch, s.MSDelta, s.intent(status), MVCCResolveWriteIntentOptions{}); err != nil {
+				if _, _, _, _, err := MVCCResolveWriteIntent(ctx, s.batch, s.MSDelta, s.intent(status), MVCCResolveWriteIntentOptions{}); err != nil {
 					return false, desc + ": " + err.Error()
 				}
 			} else {
 				max := s.rng.Int63n(5)
 				desc += fmt.Sprintf(", max=%d", max)
-				if _, _, _, _, err := MVCCResolveWriteIntentRange(
+				if _, _, _, _, _, err := MVCCResolveWriteIntentRange(
 					ctx, s.batch, s.MSDelta, s.intentRange(status),
 					MVCCResolveWriteIntentRangeOptions{}); err != nil {
 					return false, desc + ": " + err.Error()

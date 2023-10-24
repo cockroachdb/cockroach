@@ -326,7 +326,7 @@ func makeIntentScanner(data []storeOp, span roachpb.RSpan) (*blockingScanner, fu
 	if err != nil {
 		return nil, nil, err
 	}
-	scanner, err := NewSeparatedIntentScanner(engine, span)
+	scanner, err := NewSeparatedIntentScanner(context.Background(), engine, span)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -67,6 +67,7 @@ export interface OwnProps extends MetricsDataComponentProps {
   hoverState?: HoverState;
   preCalcGraphSize?: boolean;
   legendAsTooltip?: boolean;
+  showMetricsInTooltip?: boolean;
 }
 
 export type LineGraphProps = OwnProps & WithTimezoneProps;
@@ -381,7 +382,41 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
       tenantSource,
       preCalcGraphSize,
       legendAsTooltip,
+      showMetricsInTooltip,
     } = this.props;
+    let tt = tooltip;
+    const addLines: React.ReactNode = tooltip ? (
+      <>
+        <br />
+        <br />
+      </>
+    ) : null;
+    // Extend tooltip to include metrics names
+    if (showMetricsInTooltip) {
+      if (data?.results?.length === 1) {
+        tt = (
+          <>
+            {tt}
+            {addLines}
+            Metric: {data.results[0].query.name}
+          </>
+        );
+      } else if (data?.results?.length > 1) {
+        tt = (
+          <>
+            {tt}
+            {addLines}
+            Metrics:
+            <ul>
+              {data.results.map(m => (
+                <li key={m.query.name}>{m.query.name}</li>
+              ))}
+            </ul>
+          </>
+        );
+      }
+    }
+
     if (!this.hasDataPoints(data) && isSecondaryTenant(tenantSource)) {
       return (
         <div className="linegraph-empty">
@@ -404,7 +439,7 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
       <Visualization
         title={title}
         subtitle={subtitle}
-        tooltip={tooltip}
+        tooltip={tt}
         loading={!data}
         preCalcGraphSize={preCalcGraphSize}
       >

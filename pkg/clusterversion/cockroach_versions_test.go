@@ -41,8 +41,18 @@ func TestPreserveVersionsForMinBinaryVersion(t *testing.T) {
 			prevVersion = namedVersion
 			continue
 		}
+		expectedDiff := int32(2)
+		if prevVersion.Key == V23_2Start {
+			// In 23.2 cycle V23_2TTLAllowDescPK and
+			// V23_2_PartiallyVisibleIndexes were introduced but then later
+			// removed (since they were redundant), so we exempt them from not
+			// being deleted. (There were more versions introduced and then
+			// removed, but they were at the tail of 23.2 versions, so they
+			// don't require a similar exemption.)
+			expectedDiff = 6
+		}
 		if v.Major == prevVersion.Major && v.Minor == prevVersion.Minor {
-			require.Equalf(t, prevVersion.Internal+2, v.Internal,
+			require.Equalf(t, prevVersion.Internal+expectedDiff, v.Internal,
 				"version(s) between %s (%s) and %s (%s) is(are) at or above minBinaryVersion (%s) and should not be removed",
 				prevVersion.Key, prevVersion.Version,
 				namedVersion.Key, namedVersion.Version,

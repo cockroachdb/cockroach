@@ -17,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -88,7 +87,7 @@ func makeGossip(t *testing.T, stopper *stop.Stopper, nodeIDs []int) (*gossip.Gos
 	clock := hlc.NewClockForTesting(nil)
 
 	const nodeID = 1
-	g := gossip.NewTest(nodeID, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	g := gossip.NewTest(nodeID, stopper, metric.NewRegistry())
 	if err := g.SetNodeDescriptor(newNodeDesc(nodeID)); err != nil {
 		t.Fatal(err)
 	}

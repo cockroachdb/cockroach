@@ -46,8 +46,11 @@ func declareKeysClearRange(
 	latchSpans *spanset.SpanSet,
 	lockSpans *lockspanset.LockSpanSet,
 	maxOffset time.Duration,
-) {
-	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+) error {
+	err := DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+	if err != nil {
+		return err
+	}
 	// We look up the range descriptor key to check whether the span
 	// is equal to the entire range for fast stats updating.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
@@ -71,6 +74,7 @@ func declareKeysClearRange(
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 		Key: keys.MVCCRangeKeyGCKey(rs.GetRangeID()),
 	})
+	return nil
 }
 
 // ClearRange wipes all MVCC versions of keys covered by the specified
@@ -151,7 +155,7 @@ func ClearRange(
 	// range key span, since we expect range keys to be rare.
 	const pointKeyThreshold, rangeKeyThreshold = 2, 2
 	if err := storage.ClearRangeWithHeuristic(
-		readWriter, readWriter, from, to, pointKeyThreshold, rangeKeyThreshold,
+		ctx, readWriter, readWriter, from, to, pointKeyThreshold, rangeKeyThreshold,
 	); err != nil {
 		return result.Result{}, err
 	}
@@ -188,7 +192,7 @@ func computeStatsDelta(
 	// If we can't use the fast stats path, or race test is enabled, compute stats
 	// across the key span to be cleared.
 	if !entireRange || util.RaceEnabled {
-		computed, err := storage.ComputeStats(readWriter, from, to, delta.LastUpdateNanos)
+		computed, err := storage.ComputeStats(ctx, readWriter, from, to, delta.LastUpdateNanos)
 		if err != nil {
 			return enginepb.MVCCStats{}, err
 		}
@@ -213,7 +217,7 @@ func computeStatsDelta(
 		if !entireRange {
 			leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
 				from, to, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
-			rkIter, err := readWriter.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+			rkIter, err := readWriter.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
 				KeyTypes:   storage.IterKeyTypeRangesOnly,
 				LowerBound: leftPeekBound,
 				UpperBound: rightPeekBound,

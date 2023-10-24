@@ -176,6 +176,9 @@ type MVCCValueMerger struct {
 
 	// Used to avoid heap allocations when passing pointer to `Unmarshal()`.
 	meta enginepb.MVCCMetadata
+	// merged and metaSubset are used to avoid heap allocations in Finish().
+	merged     roachpb.InternalTimeSeriesData
+	metaSubset enginepb.MVCCMetadataSubsetForMergeSerialization
 }
 
 const (
@@ -269,13 +272,15 @@ func (t *MVCCValueMerger) Finish(includesBase bool) ([]byte, io.Closer, error) {
 			totalLen += len(rawByteOp)
 		}
 		// See the motivating comment in mvcc.proto.
-		var meta enginepb.MVCCMetadataSubsetForMergeSerialization
-		meta.RawBytes = make([]byte, mvccHeaderSize, mvccHeaderSize+totalLen)
+		meta := &t.metaSubset // avoid allocation
+		*meta = enginepb.MVCCMetadataSubsetForMergeSerialization{
+			RawBytes: make([]byte, mvccHeaderSize, mvccHeaderSize+totalLen),
+		}
 		meta.RawBytes[mvccTagPos] = byte(roachpb.ValueType_BYTES)
 		for _, rawByteOp := range t.rawByteOps {
 			meta.RawBytes = append(meta.RawBytes, rawByteOp...)
 		}
-		res, err := protoutil.Marshal(&meta)
+		res, err := protoutil.Marshal(meta)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -287,10 +292,13 @@ func (t *MVCCValueMerger) Finish(includesBase bool) ([]byte, io.Closer, error) {
 	// compatible with any version that supports row format only. Then we can drop support
 	// for row format entirely. It requires significant cleanup effort as many tests target
 	// the row format.
-	var merged roachpb.InternalTimeSeriesData
-	merged.StartTimestampNanos = t.timeSeriesOps[0].StartTimestampNanos
-	merged.SampleDurationNanos = t.timeSeriesOps[0].SampleDurationNanos
-	for _, timeSeriesOp := range t.timeSeriesOps {
+	merged := &t.merged // avoid allocation
+	*merged = roachpb.InternalTimeSeriesData{
+		StartTimestampNanos: t.timeSeriesOps[0].StartTimestampNanos,
+		SampleDurationNanos: t.timeSeriesOps[0].SampleDurationNanos,
+	}
+	for i := range t.timeSeriesOps {
+		timeSeriesOp := &t.timeSeriesOps[i]
 		if timeSeriesOp.StartTimestampNanos != merged.StartTimestampNanos {
 			return nil, nil, errors.Errorf("start timestamp mismatch")
 		}
@@ -298,33 +306,34 @@ func (t *MVCCValueMerger) Finish(includesBase bool) ([]byte, io.Closer, error) {
 			return nil, nil, errors.Errorf("sample duration mismatch")
 		}
 		if !isColumnar && len(timeSeriesOp.Offset) > 0 {
-			ensureColumnar(&merged)
-			ensureColumnar(&timeSeriesOp)
+			ensureColumnar(merged)
+			ensureColumnar(timeSeriesOp)
 			isColumnar = true
 		} else if isColumnar {
-			ensureColumnar(&timeSeriesOp)
+			ensureColumnar(timeSeriesOp)
 		}
-		proto.Merge(&merged, &timeSeriesOp)
+		proto.Merge(merged, timeSeriesOp)
 	}
 	if isColumnar {
-		sortAndDeduplicateColumns(&merged)
+		sortAndDeduplicateColumns(merged)
 	} else {
-		sortAndDeduplicateRows(&merged)
+		sortAndDeduplicateRows(merged)
 	}
-	tsBytes, err := protoutil.Marshal(&merged)
-	if err != nil {
-		return nil, nil, err
+
+	meta := &t.metaSubset // avoid allocation
+	*meta = enginepb.MVCCMetadataSubsetForMergeSerialization{
+		RawBytes: make([]byte, mvccHeaderSize+merged.Size()),
 	}
+	meta.RawBytes[mvccTagPos] = byte(roachpb.ValueType_TIMESERIES)
 	// See the motivating comment in mvcc.proto.
-	var meta enginepb.MVCCMetadataSubsetForMergeSerialization
 	if !(t.oldestMergeTS == hlc.LegacyTimestamp{}) {
 		meta.MergeTimestamp = &t.oldestMergeTS
 	}
-	tsTag := byte(roachpb.ValueType_TIMESERIES)
-	header := make([]byte, mvccHeaderSize)
-	header[mvccTagPos] = tsTag
-	meta.RawBytes = append(header, tsBytes...)
-	res, err := protoutil.Marshal(&meta)
+	_, err := protoutil.MarshalToSizedBuffer(merged, meta.RawBytes[mvccHeaderSize:])
+	if err != nil {
+		return nil, nil, err
+	}
+	res, err := protoutil.Marshal(meta)
 	if err != nil {
 		return nil, nil, err
 	}

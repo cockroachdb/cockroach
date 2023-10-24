@@ -20,6 +20,9 @@ import (
 // LogRecordToEvent transforms a given LogRecord, with an accompanying
 // Resource and Scope, into an internal Event message for further
 // processing.
+//
+// We avoid using the EventTransformer here because the resulting
+// obspb.Event's are not yet event-specific.
 func LogRecordToEvent(
 	ingestTime time.Time,
 	resource *resourcev1.Resource,

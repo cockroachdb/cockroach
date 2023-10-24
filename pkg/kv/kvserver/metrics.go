@@ -227,6 +227,12 @@ var (
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaLockBytes = metric.Metadata{
+		Name:        "lockbytes",
+		Help:        "Number of bytes taken up by replicated lock key-values (shared and exclusive strength, not intent strength)",
+		Measurement: "Storage",
+		Unit:        metric.Unit_BYTES,
+	}
 	metaLiveCount = metric.Metadata{
 		Name:        "livecount",
 		Help:        "Count of live keys",
@@ -263,7 +269,12 @@ var (
 		Measurement: "Keys",
 		Unit:        metric.Unit_COUNT,
 	}
-	// TODO(nvanbenschoten): add a "lockcount" metric.
+	metaLockCount = metric.Metadata{
+		Name:        "lockcount",
+		Help:        "Count of replicated locks (shared, exclusive, and intent strength)",
+		Measurement: "Locks",
+		Unit:        metric.Unit_COUNT,
+	}
 	// TODO(nvanbenschoten): rename "intentage" metric to "lockage".
 	metaLockAge = metric.Metadata{
 		Name:        "intentage",
@@ -1221,9 +1232,38 @@ histogram.
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaRaftCommandsProposed = metric.Metadata{
+		Name: "raft.commands.proposed",
+		Help: `Number of Raft commands proposed.
+
+The number of proposals and all kinds of reproposals made by leaseholders. This
+metric approximates the number of commands submitted through Raft.`,
+		Measurement: "Commands",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRaftCommandsReproposed = metric.Metadata{
+		Name: "raft.commands.reproposed.unchanged",
+		Help: `Number of Raft commands re-proposed without modification.
+
+The number of Raft commands that leaseholders re-proposed without modification.
+Such re-proposals happen for commands that are not committed/applied within a
+timeout, and have a high chance of being dropped.`,
+		Measurement: "Commands",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRaftCommandsReproposedLAI = metric.Metadata{
+		Name: "raft.commands.reproposed.new-lai",
+		Help: `Number of Raft commands re-proposed with a newer LAI.
+
+The number of Raft commands that leaseholders re-proposed with a modified LAI.
+Such re-proposals happen for commands that are committed to Raft out of intended
+order, and hence can not be applied as is.`,
+		Measurement: "Commands",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRaftCommandsApplied = metric.Metadata{
 		Name: "raft.commandsapplied",
-		Help: `Count of Raft commands applied.
+		Help: `Number of Raft commands applied.
 
 This measurement is taken on the Raft apply loops of all Replicas (leaders and
 followers alike), meaning that it does not measure the number of Raft commands
@@ -2451,6 +2491,9 @@ type StoreMetrics struct {
 	RaftQuotaPoolPercentUsed   metric.IHistogram
 	RaftWorkingDurationNanos   *metric.Counter
 	RaftTickingDurationNanos   *metric.Counter
+	RaftCommandsProposed       *metric.Counter
+	RaftCommandsReproposed     *metric.Counter
+	RaftCommandsReproposedLAI  *metric.Counter
 	RaftCommandsApplied        *metric.Counter
 	RaftLogCommitLatency       metric.IHistogram
 	RaftCommandCommitLatency   metric.IHistogram
@@ -2650,12 +2693,14 @@ type TenantsStorageMetrics struct {
 	RangeValBytes  *aggmetric.AggGauge
 	TotalBytes     *aggmetric.AggGauge
 	IntentBytes    *aggmetric.AggGauge
+	LockBytes      *aggmetric.AggGauge
 	LiveCount      *aggmetric.AggGauge
 	KeyCount       *aggmetric.AggGauge
 	ValCount       *aggmetric.AggGauge
 	RangeKeyCount  *aggmetric.AggGauge
 	RangeValCount  *aggmetric.AggGauge
 	IntentCount    *aggmetric.AggGauge
+	LockCount      *aggmetric.AggGauge
 	LockAge        *aggmetric.AggGauge
 	GcBytesAge     *aggmetric.AggGauge
 	SysBytes       *aggmetric.AggGauge
@@ -2750,12 +2795,14 @@ func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) *tenan
 			m.RangeValBytes = sm.RangeValBytes.AddChild(tenantIDStr)
 			m.TotalBytes = sm.TotalBytes.AddChild(tenantIDStr)
 			m.IntentBytes = sm.IntentBytes.AddChild(tenantIDStr)
+			m.LockBytes = sm.LockBytes.AddChild(tenantIDStr)
 			m.LiveCount = sm.LiveCount.AddChild(tenantIDStr)
 			m.KeyCount = sm.KeyCount.AddChild(tenantIDStr)
 			m.ValCount = sm.ValCount.AddChild(tenantIDStr)
 			m.RangeKeyCount = sm.RangeKeyCount.AddChild(tenantIDStr)
 			m.RangeValCount = sm.RangeValCount.AddChild(tenantIDStr)
 			m.IntentCount = sm.IntentCount.AddChild(tenantIDStr)
+			m.LockCount = sm.LockCount.AddChild(tenantIDStr)
 			m.LockAge = sm.LockAge.AddChild(tenantIDStr)
 			m.GcBytesAge = sm.GcBytesAge.AddChild(tenantIDStr)
 			m.SysBytes = sm.SysBytes.AddChild(tenantIDStr)
@@ -2801,12 +2848,14 @@ func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, ref *tenantM
 		&m.RangeValBytes,
 		&m.TotalBytes,
 		&m.IntentBytes,
+		&m.LockBytes,
 		&m.LiveCount,
 		&m.KeyCount,
 		&m.ValCount,
 		&m.RangeKeyCount,
 		&m.RangeValCount,
 		&m.IntentCount,
+		&m.LockCount,
 		&m.LockAge,
 		&m.GcBytesAge,
 		&m.SysBytes,
@@ -2848,12 +2897,14 @@ type tenantStorageMetrics struct {
 	RangeValBytes  *aggmetric.Gauge
 	TotalBytes     *aggmetric.Gauge
 	IntentBytes    *aggmetric.Gauge
+	LockBytes      *aggmetric.Gauge
 	LiveCount      *aggmetric.Gauge
 	KeyCount       *aggmetric.Gauge
 	ValCount       *aggmetric.Gauge
 	RangeKeyCount  *aggmetric.Gauge
 	RangeValCount  *aggmetric.Gauge
 	IntentCount    *aggmetric.Gauge
+	LockCount      *aggmetric.Gauge
 	LockAge        *aggmetric.Gauge
 	GcBytesAge     *aggmetric.Gauge
 	SysBytes       *aggmetric.Gauge
@@ -2871,12 +2922,14 @@ func newTenantsStorageMetrics() *TenantsStorageMetrics {
 		RangeValBytes:  b.Gauge(metaRangeValBytes),
 		TotalBytes:     b.Gauge(metaTotalBytes),
 		IntentBytes:    b.Gauge(metaIntentBytes),
+		LockBytes:      b.Gauge(metaLockBytes),
 		LiveCount:      b.Gauge(metaLiveCount),
 		KeyCount:       b.Gauge(metaKeyCount),
 		ValCount:       b.Gauge(metaValCount),
 		RangeKeyCount:  b.Gauge(metaRangeKeyCount),
 		RangeValCount:  b.Gauge(metaRangeValCount),
 		IntentCount:    b.Gauge(metaIntentCount),
+		LockCount:      b.Gauge(metaLockCount),
 		LockAge:        b.Gauge(metaLockAge),
 		GcBytesAge:     b.Gauge(metaGcBytesAge),
 		SysBytes:       b.Gauge(metaSysBytes),
@@ -3108,9 +3161,12 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			SigFigs:      1,
 			BucketConfig: metric.Percent100Buckets,
 		}),
-		RaftWorkingDurationNanos: metric.NewCounter(metaRaftWorkingDurationNanos),
-		RaftTickingDurationNanos: metric.NewCounter(metaRaftTickingDurationNanos),
-		RaftCommandsApplied:      metric.NewCounter(metaRaftCommandsApplied),
+		RaftWorkingDurationNanos:  metric.NewCounter(metaRaftWorkingDurationNanos),
+		RaftTickingDurationNanos:  metric.NewCounter(metaRaftTickingDurationNanos),
+		RaftCommandsProposed:      metric.NewCounter(metaRaftCommandsProposed),
+		RaftCommandsReproposed:    metric.NewCounter(metaRaftCommandsReproposed),
+		RaftCommandsReproposedLAI: metric.NewCounter(metaRaftCommandsReproposedLAI),
+		RaftCommandsApplied:       metric.NewCounter(metaRaftCommandsApplied),
 		RaftLogCommitLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaRaftLogCommitLatency,
@@ -3352,12 +3408,14 @@ func (sm *TenantsStorageMetrics) incMVCCGauges(
 	tm.RangeValBytes.Inc(delta.RangeValBytes)
 	tm.TotalBytes.Inc(delta.Total())
 	tm.IntentBytes.Inc(delta.IntentBytes)
+	tm.LockBytes.Inc(delta.LockBytes)
 	tm.LiveCount.Inc(delta.LiveCount)
 	tm.KeyCount.Inc(delta.KeyCount)
 	tm.ValCount.Inc(delta.ValCount)
 	tm.RangeKeyCount.Inc(delta.RangeKeyCount)
 	tm.RangeValCount.Inc(delta.RangeValCount)
 	tm.IntentCount.Inc(delta.IntentCount)
+	tm.LockCount.Inc(delta.LockCount)
 	tm.LockAge.Inc(delta.LockAge)
 	tm.GcBytesAge.Inc(delta.GCBytesAge)
 	tm.SysBytes.Inc(delta.SysBytes)

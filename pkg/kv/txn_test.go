@@ -574,7 +574,7 @@ func TestTxnNegotiateAndSend(t *testing.T) {
 			MinTimestampBound: ts10,
 		}
 		ba.RoutingPolicy = kvpb.RoutingPolicy_NEAREST
-		ba.Add(kvpb.NewGet(roachpb.Key("a"), kvpb.NonLocking))
+		ba.Add(kvpb.NewGet(roachpb.Key("a")))
 		br, pErr := txn.NegotiateAndSend(ctx, ba)
 
 		if fastPath {
@@ -685,7 +685,7 @@ func TestTxnNegotiateAndSendWithDeadline(t *testing.T) {
 				MaxTimestampBound: test.maxTSBound,
 			}
 			ba.RoutingPolicy = kvpb.RoutingPolicy_NEAREST
-			ba.Add(kvpb.NewGet(roachpb.Key("a"), kvpb.NonLocking))
+			ba.Add(kvpb.NewGet(roachpb.Key("a")))
 			br, pErr := txn.NegotiateAndSend(ctx, ba)
 
 			if test.expErr == "" {
@@ -755,7 +755,7 @@ func TestTxnNegotiateAndSendWithResumeSpan(t *testing.T) {
 		}
 		ba.RoutingPolicy = kvpb.RoutingPolicy_NEAREST
 		ba.MaxSpanRequestKeys = 2
-		ba.Add(kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), kvpb.NonLocking))
+		ba.Add(kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d")))
 		br, pErr := txn.NegotiateAndSend(ctx, ba)
 
 		if fastPath {

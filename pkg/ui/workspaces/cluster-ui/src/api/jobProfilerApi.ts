@@ -10,7 +10,11 @@
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { fetchData } from "./fetchData";
-import { SqlExecutionRequest, executeInternalSql } from "./sqlApi";
+import {
+  SqlExecutionRequest,
+  executeInternalSql,
+  LONG_TIMEOUT,
+} from "./sqlApi";
 import { propsToQueryString } from "../util";
 
 const JOB_PROFILER_PATH = "_status/job_profiler_execution_details";
@@ -75,6 +79,7 @@ export function collectExecutionDetails({
   const req: SqlExecutionRequest = {
     execute: true,
     statements: [collectExecutionDetails],
+    timeout: LONG_TIMEOUT,
   };
 
   return executeInternalSql<CollectExecutionDetailsResponse>(req).then(res => {

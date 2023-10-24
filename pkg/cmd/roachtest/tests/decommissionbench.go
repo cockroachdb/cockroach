@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -271,7 +272,7 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 
 	if benchSpec.multiregion {
 		geoZones := []string{regionUsEast, regionUsWest, regionUsCentral}
-		specOptions = append(specOptions, spec.Zones(strings.Join(geoZones, ",")))
+		specOptions = append(specOptions, spec.GCEZones(strings.Join(geoZones, ",")))
 		specOptions = append(specOptions, spec.Geo())
 		extraNameParts = append(extraNameParts, "multi-region")
 	}
@@ -940,8 +941,8 @@ func runSingleDecommission(
 		if err := h.c.RunE(
 			ctx, h.c.Node(target),
 			fmt.Sprintf("sudo bash -c 'echo \"259:0  %d\" > "+
-				"/sys/fs/cgroup/blkio/system.slice/cockroach.service/blkio.throttle.write_bps_device'",
-				100*(1<<20))); err != nil {
+				"/sys/fs/cgroup/blkio/system.slice/%s.service/blkio.throttle.write_bps_device'",
+				100*(1<<20), roachtestutil.SystemInterfaceSystemdUnitName())); err != nil {
 			return err
 		}
 		// Wait for some time after limiting write bandwidth in order to affect read amplification.

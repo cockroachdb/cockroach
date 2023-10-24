@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -107,7 +106,6 @@ type Registry struct {
 	settings  *cluster.Settings
 	execCtx   jobExecCtxMaker
 	metrics   Metrics
-	td        *tracedumper.TraceDumper
 	knobs     TestingKnobs
 
 	// adoptionChan is used to nudge the registry to resume claimed jobs and
@@ -226,7 +224,6 @@ func MakeRegistry(
 	histogramWindowInterval time.Duration,
 	execCtxFn jobExecCtxMaker,
 	preventAdoptionFile string,
-	td *tracedumper.TraceDumper,
 	knobs *TestingKnobs,
 ) *Registry {
 	r := &Registry{
@@ -241,7 +238,6 @@ func MakeRegistry(
 		execCtx:                 execCtxFn,
 		preventAdoptionFile:     preventAdoptionFile,
 		preventAdoptionLogEvery: log.Every(time.Minute),
-		td:                      td,
 		// Use a non-zero buffer to allow queueing of notifications.
 		// The writing method will use a default case to avoid blocking
 		// if a notification is already queued.
@@ -322,6 +318,8 @@ const (
 
 	// SqlActivityUpdaterJobID A static job ID is used for the SQL activity tables.
 	SqlActivityUpdaterJobID = jobspb.JobID(103)
+
+	MVCCStatisticsJobID = jobspb.JobID(104)
 )
 
 // MakeJobID generates a new job ID.
@@ -436,7 +434,7 @@ func createJobsInBatchWithTxn(
 	//
 	// TODO(adityamaru): Stop writing the payload and details to the system.jobs
 	// table once we are outside the compatability window for 22.2.
-	if r.settings.Version.IsActive(ctx, clusterversion.V23_1CreateSystemJobInfoTable) {
+	if r.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1CreateSystemJobInfoTable) {
 		if err := batchJobWriteToJobInfo(ctx, txn, jobs, modifiedMicros); err != nil {
 			return nil, err
 		}
@@ -518,7 +516,7 @@ func batchJobInsertStmt(
 
 	// TODO(adityamaru: Remove this once we are outside the compatability
 	// window for 22.2.
-	if r.settings.Version.IsActive(ctx, clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs) {
+	if r.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1StopWritingPayloadAndProgressToSystemJobs) {
 		columns = []string{`id`, `created`, `status`, `claim_session_id`, `claim_instance_id`, `job_type`}
 		valueFns = map[string]func(*Job) (interface{}, error){
 			`id`:                func(job *Job) (interface{}, error) { return job.ID(), nil },
@@ -537,7 +535,7 @@ func batchJobInsertStmt(
 	// TODO(jayant): remove this version gate in 24.1
 	// To run the upgrade below, migration and schema change jobs will need to be
 	// created using the old schema, which does not have the job_type column.
-	if !r.settings.Version.IsActive(ctx, clusterversion.V23_1AddTypeColumnToJobsTable) {
+	if !r.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1AddTypeColumnToJobsTable) {
 		numColumns -= 1
 	}
 
@@ -631,7 +629,7 @@ func (r *Registry) CreateJobWithTxn(
 
 		cols := []string{"id", "created", "status", "payload", "progress", "claim_session_id", "claim_instance_id", "job_type"}
 		vals := []interface{}{jobID, created, StatusRunning, payloadBytes, progressBytes, s.ID().UnsafeBytes(), r.ID(), jobType.String()}
-		if r.settings.Version.IsActive(ctx, clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs) {
+		if r.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1StopWritingPayloadAndProgressToSystemJobs) {
 			cols = []string{"id", "created", "status", "claim_session_id", "claim_instance_id", "job_type"}
 			vals = []interface{}{jobID, created, StatusRunning, s.ID().UnsafeBytes(), r.ID(), jobType.String()}
 		}
@@ -652,7 +650,7 @@ func (r *Registry) CreateJobWithTxn(
 		// database in question is being dropped.
 		override := sessiondata.RootUserSessionDataOverride
 		override.Database = catconstants.SystemDatabaseName
-		hasJobTypeColumn := r.settings.Version.IsActive(ctx, clusterversion.V23_1AddTypeColumnToJobsTable)
+		hasJobTypeColumn := r.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1AddTypeColumnToJobsTable)
 		if !hasJobTypeColumn {
 			numCols -= 1
 		}
@@ -672,7 +670,7 @@ func (r *Registry) CreateJobWithTxn(
 		//
 		// TODO(adityamaru): Stop writing the payload and details to the system.jobs
 		// table once we are outside the compatability window for 22.2.
-		if r.settings.Version.IsActive(ctx, clusterversion.V23_1CreateSystemJobInfoTable) {
+		if r.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1CreateSystemJobInfoTable) {
 			infoStorage := j.InfoStorage(txn)
 			if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
 				return err
@@ -778,10 +776,10 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 		cols := []string{"id", "status", "payload", "progress", "created_by_type", "created_by_id", "job_type"}
 		placeholders := []string{"$1", "$2", "$3", "$4", "$5", "$6", "$7"}
 		values := []interface{}{jobID, StatusRunning, payloadBytes, progressBytes, createdByType, createdByID, typ}
-		if !r.settings.Version.IsActive(ctx, clusterversion.V23_1AddTypeColumnToJobsTable) {
+		if !r.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1AddTypeColumnToJobsTable) {
 			nCols -= 1
 		}
-		if r.settings.Version.IsActive(ctx, clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs) {
+		if r.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1StopWritingPayloadAndProgressToSystemJobs) {
 			cols = []string{"id", "status", "created_by_type", "created_by_id", "job_type"}
 			placeholders = []string{"$1", "$2", "$3", "$4", "$5"}
 			values = []interface{}{jobID, StatusRunning, createdByType, createdByID, typ}
@@ -807,7 +805,7 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 		//
 		// TODO(adityamaru): Stop writing the payload and details to the system.jobs
 		// table once we are outside the compatability window for 22.2.
-		if r.settings.Version.IsActive(ctx, clusterversion.V23_1CreateSystemJobInfoTable) {
+		if r.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1CreateSystemJobInfoTable) {
 			infoStorage := j.InfoStorage(txn)
 			if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
 				return err
@@ -1277,7 +1275,7 @@ func (r *Registry) cleanupOldJobsPage(
 	ctx context.Context, olderThan time.Time, minID jobspb.JobID, pageSize int,
 ) (done bool, maxID jobspb.JobID, retErr error) {
 	var query string
-	if r.settings.Version.IsActive(ctx, clusterversion.V23_1JobInfoTableIsBackfilled) {
+	if r.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1JobInfoTableIsBackfilled) {
 		query = expiredJobsQueryWithJobInfoTable
 	} else {
 		query = expiredJobsQuery

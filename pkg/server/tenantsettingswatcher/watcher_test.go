@@ -77,16 +77,16 @@ func TestWatcher(t *testing.T) {
 	t1 := roachpb.MustMakeTenantID(1)
 	t2 := roachpb.MustMakeTenantID(2)
 	t3 := roachpb.MustMakeTenantID(3)
-	all, allCh := w.GetAllTenantOverrides()
+	all, allCh := w.GetAllTenantOverrides(ctx)
 	expect(all, "foo=foo-all")
 
-	t1Overrides, t1Ch := w.GetTenantOverrides(t1)
+	t1Overrides, t1Ch := w.GetTenantOverrides(ctx, t1)
 	expect(t1Overrides, "bar=bar-t1 foo=foo-t1")
 
-	t2Overrides, _ := w.GetTenantOverrides(t2)
+	t2Overrides, _ := w.GetTenantOverrides(ctx, t2)
 	expect(t2Overrides, "baz=baz-t2")
 
-	t3Overrides, t3Ch := w.GetTenantOverrides(t3)
+	t3Overrides, t3Ch := w.GetTenantOverrides(ctx, t3)
 	expect(t3Overrides, "")
 
 	expectClose := func(ch <-chan struct{}) {
@@ -100,24 +100,24 @@ func TestWatcher(t *testing.T) {
 	// Add an all-tenant override.
 	r.Exec(t, "INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES (0, 'bar', 'bar-all', 's')")
 	expectClose(allCh)
-	all, allCh = w.GetAllTenantOverrides()
+	all, allCh = w.GetAllTenantOverrides(ctx)
 	expect(all, "bar=bar-all foo=foo-all")
 
 	// Modify a tenant override.
 	r.Exec(t, "UPSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES (1, 'bar', 'bar-t1-updated', 's')")
 	expectClose(t1Ch)
-	t1Overrides, _ = w.GetTenantOverrides(t1)
+	t1Overrides, _ = w.GetTenantOverrides(ctx, t1)
 	expect(t1Overrides, "bar=bar-t1-updated foo=foo-t1")
 
 	// Remove an all-tenant override.
 	r.Exec(t, "DELETE FROM system.tenant_settings WHERE tenant_id = 0 AND name = 'foo'")
 	expectClose(allCh)
-	all, _ = w.GetAllTenantOverrides()
+	all, _ = w.GetAllTenantOverrides(ctx)
 	expect(all, "bar=bar-all")
 
 	// Add an override for a tenant that has no overrides.
 	r.Exec(t, "INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES (3, 'qux', 'qux-t3', 's')")
 	expectClose(t3Ch)
-	t3Overrides, _ = w.GetTenantOverrides(t3)
+	t3Overrides, _ = w.GetTenantOverrides(ctx, t3)
 	expect(t3Overrides, "qux=qux-t3")
 }

@@ -49,9 +49,11 @@ func declareKeysAddSSTable(
 	latchSpans *spanset.SpanSet,
 	lockSpans *lockspanset.LockSpanSet,
 	maxOffset time.Duration,
-) {
+) error {
 	args := req.(*kvpb.AddSSTableRequest)
-	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+	if err := DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset); err != nil {
+		return err
+	}
 	// We look up the range descriptor key to return its span.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
 
@@ -72,6 +74,7 @@ func declareKeysAddSSTable(
 			Key: keys.MVCCRangeKeyGCKey(rs.GetRangeID()),
 		})
 	}
+	return nil
 }
 
 // AddSSTableRewriteConcurrency sets the concurrency of a single SST rewrite.
@@ -394,7 +397,7 @@ func EvalAddSSTable(
 
 	reply := resp.(*kvpb.AddSSTableResponse)
 	reply.RangeSpan = cArgs.EvalCtx.Desc().KeySpan().AsRawSpanWithNoLocals()
-	reply.AvailableBytes = cArgs.EvalCtx.GetMaxBytes() - cArgs.EvalCtx.GetMVCCStats().Total() - stats.Total()
+	reply.AvailableBytes = cArgs.EvalCtx.GetMaxBytes(ctx) - cArgs.EvalCtx.GetMVCCStats().Total() - stats.Total()
 
 	// If requested, locate and return the start of the span following the file
 	// span which may be non-empty, that is, the first key after the file's end
@@ -405,12 +408,12 @@ func EvalAddSSTable(
 	// needs to know what data is there, it must issue its own real Scan.
 	if args.ReturnFollowingLikelyNonEmptySpanStart {
 		existingIter, err := spanset.DisableReaderAssertions(readWriter).NewMVCCIterator(
+			ctx,
 			storage.MVCCKeyIterKind, // don't care if it is committed or not, just that it isn't empty.
 			storage.IterOptions{
 				KeyTypes:   storage.IterKeyTypePointsAndRanges,
 				UpperBound: reply.RangeSpan.EndKey,
-			},
-		)
+			})
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "error when creating iterator for non-empty span")
 		}

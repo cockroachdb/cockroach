@@ -518,7 +518,7 @@ func TestScheduledProcessorKillSwitch(t *testing.T) {
 	require.NoError(t, ts.Start(ctx), "start server")
 	defer ts.Stopper().Stop(ctx)
 
-	db := ts.SystemLayer().SQLConn(t, "")
+	db := ts.SystemLayer().SQLConn(t)
 	_, err = db.Exec("set cluster setting kv.rangefeed.enabled = t")
 	require.NoError(t, err, "can't enable rangefeeds")
 	_, err = db.Exec("set cluster setting kv.rangefeed.scheduler.enabled = t")

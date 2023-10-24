@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/blobs"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -76,10 +75,6 @@ type TestingKnobs struct {
 	// been started, `SET CLUSTER SETTING version = BinaryVersionOverride` will be
 	// run to step through the upgrades until the specified override.
 	//
-	// TODO(adityamaru): We should force tests that set BinaryVersionOverride to
-	// also set BootstrapVersionKeyOverride so as to specify what image they would
-	// like the cluster bootstrapped at before upgrading to BinaryVersionOverride.
-	//
 	// Case 2:
 	// ------
 	// If the test has overridden the
@@ -131,10 +126,6 @@ type TestingKnobs struct {
 	// in the jobs endpoint to calculate earliest_retained_time.
 	StubTimeNow func() time.Time
 
-	// We use clusterversion.Key rather than a roachpb.Version because it will be used
-	// to get initial values to use during bootstrap.
-	BootstrapVersionKeyOverride clusterversion.Key
-
 	// RequireGracefulDrain, if set, causes a shutdown to fail with a log.Fatal
 	// if the server is not gracefully drained prior to its stopper shutting down.
 	RequireGracefulDrain bool
@@ -161,6 +152,26 @@ type TestingKnobs struct {
 	// DialNodeCallback is used to mock dial errors when dialing a node. It is
 	// invoked by the dialNode method of server.serverIterator.
 	DialNodeCallback func(ctx context.Context, nodeID roachpb.NodeID) error
+
+	// DisableSettingsWatcher disables the watcher that monitors updates
+	// to system.settings.
+	DisableSettingsWatcher bool
+
+	TenantAutoUpgradeInfo chan struct {
+		Status    int
+		UpgradeTo roachpb.Version
+	}
+
+	// As of September 2023, only `v23.1` and master support shared process tenants. `v23.2` is not
+	// cut yet so the difference between the current binary version on master and v23.1 is only in the
+	// Internal version (both are major=23 minor=1). We only trigger shared process tenant auto upgrade
+	// on changes to major/minor versions but since we can only start shared process tenants in `v23.1`,
+	// there will not be any change to major/minor versions when upgrading from `v23.1` to master and
+	// we won't be able to test this new feature. This testing knob allows `TestTenantAutoUpgrade` to
+	// auto upgrade on changes to the Internal version.
+	// // TODO(ahmad/healthy-pod): Remove this once `v23.2` is cut and update `TestTenantAutoUpgrade`
+	// to reflect the changes.
+	AllowTenantAutoUpgradeOnInternalVersionChanges bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

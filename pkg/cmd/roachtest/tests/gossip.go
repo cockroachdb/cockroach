@@ -459,7 +459,7 @@ SELECT count(replicas)
 		if i != 1 {
 			return c.Conn(ctx, l, i)
 		}
-		urls, err := c.ExternalPGUrl(ctx, l, c.Node(1), "")
+		urls, err := c.ExternalPGUrl(ctx, l, c.Node(1), "" /* tenant */, 0 /* sqlInstance */)
 		if err != nil {
 			t.Fatal(err)
 		}

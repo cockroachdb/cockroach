@@ -296,7 +296,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 
 				activeVersion := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
-				if !activeVersion.IsActive(clusterversion.V23_2_PartiallyVisibleIndexes) &&
+				if !activeVersion.IsActive(clusterversion.V23_2) &&
 					d.Invisibility.Value > 0.0 && d.Invisibility.Value < 1.0 {
 					return unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
 				}
@@ -907,7 +907,7 @@ func (p *planner) setAuditMode(
 		}
 		if !hasModify {
 			return false, pgerror.Newf(pgcode.InsufficientPrivilege,
-				"only users with admin or %s system privilege are allowed to change audit settings on a table ", privilege.MODIFYCLUSTERSETTING.String())
+				"only users with admin or %s system privilege are allowed to change audit settings on a table ", privilege.MODIFYCLUSTERSETTING)
 		}
 	}
 
@@ -1351,7 +1351,7 @@ func insertJSONStatistic(
 		name = s.Name
 	}
 
-	if !settings.Version.IsActive(ctx, clusterversion.V23_1AddPartialStatisticsColumns) {
+	if !settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1AddPartialStatisticsColumns) {
 
 		if s.PartialPredicate != "" {
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "statistic for columns %v with collection time %s to insert is partial but cluster version is below 23.1", s.Columns, s.CreatedAt)
@@ -1838,6 +1838,10 @@ func dropColumnImpl(
 	return droppedViews, validateDescriptor(params.ctx, params.p, tableDesc)
 }
 
+// handleTTLStorageParamChange changes TTL storage parameters. descriptorChanged
+// must be true if the descriptor was modified directly. The caller
+// (alterTableNode), has a separate check to see if any mutations were
+// enqueued.
 func handleTTLStorageParamChange(
 	params runParams, tn *tree.TableName, tableDesc *tabledesc.Mutable, after *catpb.RowLevelTTL,
 ) (descriptorChanged bool, err error) {
@@ -1957,15 +1961,16 @@ func handleTTLStorageParamChange(
 	// Adding TTL requires adding the TTL job before adding the TTL fields.
 	// Removing TTL requires removing the TTL job before removing the TTL fields.
 	var direction descpb.DescriptorMutation_Direction
+	directlyModifiesDescriptor := false
 	switch {
 	case before == nil && after != nil:
 		direction = descpb.DescriptorMutation_ADD
 	case before != nil && after == nil:
 		direction = descpb.DescriptorMutation_DROP
 	default:
-		descriptorChanged = true
+		directlyModifiesDescriptor = true
 	}
-	if !descriptorChanged {
+	if !directlyModifiesDescriptor {
 		// Add TTL mutation so that job is scheduled in SchemaChanger.
 		tableDesc.AddModifyRowLevelTTLMutation(
 			&descpb.ModifyRowLevelTTL{RowLevelTTL: after},
@@ -1984,11 +1989,11 @@ func handleTTLStorageParamChange(
 	}
 
 	// Modify the TTL fields here because it will not be done in a mutation.
-	if descriptorChanged {
+	if directlyModifiesDescriptor {
 		tableDesc.RowLevelTTL = after
 	}
 
-	return descriptorChanged, nil
+	return directlyModifiesDescriptor, nil
 }
 
 // tryRemoveFKBackReferences determines whether the provided unique constraint

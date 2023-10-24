@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd/v3"
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -126,7 +127,7 @@ import (
 
 // ClusterOrganization is the organization name.
 var ClusterOrganization = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.SystemVisible,
 	"cluster.organization",
 	"organization name",
 	"",
@@ -141,9 +142,9 @@ func ClusterIsInternal(sv *settings.Values) bool {
 // ClusterSecret is a cluster specific secret. This setting is
 // non-reportable.
 var ClusterSecret = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cluster.secret",
-	"cluster specific secret",
+	"cluster specific secret, used to anonymize telemetry reports",
 	"",
 	// Even though string settings are non-reportable by default, we
 	// still mark them explicitly in case a future code change flips the
@@ -151,11 +152,22 @@ var ClusterSecret = settings.RegisterStringSetting(
 	settings.WithReportable(false),
 )
 
+// ClusterLabel is an application-level free-form string that is not
+// used by CockroachDB. It can be used by end-users to label their
+// clusters.
+var _ = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	"cluster.label",
+	"cluster specific free-form label",
+	"",
+	settings.WithReportable(false),
+)
+
 // defaultIntSize controls how a "naked" INT type will be parsed.
 // TODO(bob): Change this to 4 in v2.3; https://github.com/cockroachdb/cockroach/issues/32534
 // TODO(bob): Remove or n-op this in v2.4: https://github.com/cockroachdb/cockroach/issues/32844
 var defaultIntSize = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.default_int_size",
 	"the size, in bytes, of an INT type",
 	8,
@@ -171,7 +183,7 @@ var defaultIntSize = settings.RegisterIntSetting(
 const allowCrossDatabaseFKsSetting = "sql.cross_db_fks.enabled"
 
 var allowCrossDatabaseFKs = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	allowCrossDatabaseFKsSetting,
 	"if true, creating foreign key references across databases is allowed",
 	false,
@@ -180,7 +192,7 @@ var allowCrossDatabaseFKs = settings.RegisterBoolSetting(
 const allowCrossDatabaseViewsSetting = "sql.cross_db_views.enabled"
 
 var allowCrossDatabaseViews = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	allowCrossDatabaseViewsSetting,
 	"if true, creating views that refer to other databases is allowed",
 	false,
@@ -189,7 +201,7 @@ var allowCrossDatabaseViews = settings.RegisterBoolSetting(
 const allowCrossDatabaseSeqOwnerSetting = "sql.cross_db_sequence_owners.enabled"
 
 var allowCrossDatabaseSeqOwner = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	allowCrossDatabaseSeqOwnerSetting,
 	"if true, creating sequences owned by tables from other databases is allowed",
 	false,
@@ -198,7 +210,7 @@ var allowCrossDatabaseSeqOwner = settings.RegisterBoolSetting(
 const allowCrossDatabaseSeqReferencesSetting = "sql.cross_db_sequence_references.enabled"
 
 var allowCrossDatabaseSeqReferences = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	allowCrossDatabaseSeqReferencesSetting,
 	"if true, sequences referenced by tables from other databases are allowed",
 	false,
@@ -209,7 +221,7 @@ var allowCrossDatabaseSeqReferences = settings.RegisterBoolSetting(
 //
 // This setting has no effect on zone configurations that have already been set.
 var SecondaryTenantZoneConfigsEnabled = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"sql.zone_configs.allow_for_secondary_tenant.enabled",
 	"enable the use of ALTER CONFIGURE ZONE in virtual clusters",
 	false,
@@ -220,7 +232,7 @@ var SecondaryTenantZoneConfigsEnabled = settings.RegisterBoolSetting(
 // run ALTER TABLE/INDEX ... SPLIT AT statements. It has no effect for the
 // system tenant.
 var SecondaryTenantSplitAtEnabled = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"sql.split_at.allow_for_secondary_tenant.enabled",
 	"enable the use of ALTER TABLE/INDEX ... SPLIT AT in virtual clusters",
 	false,
@@ -231,7 +243,7 @@ var SecondaryTenantSplitAtEnabled = settings.RegisterBoolSetting(
 // run ALTER TABLE/INDEX ... SCATTER statements. It has no effect for the
 // system tenant.
 var SecondaryTenantScatterEnabled = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"sql.scatter.allow_for_secondary_tenant.enabled",
 	"enable the use of ALTER TABLE/INDEX ... SCATTER in virtual clusters",
 	false,
@@ -246,7 +258,7 @@ var SecondaryTenantScatterEnabled = settings.RegisterBoolSetting(
 // all execution because traces are gathered for all transactions even
 // if they are not output.
 var traceTxnThreshold = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.trace.txn.enable_threshold",
 	"enables tracing on all transactions; transactions open for longer than "+
 		"this duration will have their trace logged (set to 0 to disable); "+
@@ -261,7 +273,7 @@ var traceTxnThreshold = settings.RegisterDurationSetting(
 // to be able to reduce the noise associated with a larger transaction (e.g.
 // round trips to client).
 var TraceStmtThreshold = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.trace.stmt.enable_threshold",
 	"enables tracing on all statements; statements executing for longer than "+
 		"this duration will have their trace logged (set to 0 to disable); "+
@@ -276,7 +288,7 @@ var TraceStmtThreshold = settings.RegisterDurationSetting(
 // non-trivial performance impact and also reveals SQL statements
 // which may be a privacy concern.
 var traceSessionEventLogEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.trace.session_eventlog.enabled",
 	"set to true to enable session tracing; "+
 		"note that enabling this may have a negative performance impact",
@@ -290,7 +302,7 @@ const ReorderJoinsLimitClusterSettingName = "sql.defaults.reorder_joins_limit"
 // ReorderJoinsLimitClusterValue controls the cluster default for the maximum
 // number of joins reordered.
 var ReorderJoinsLimitClusterValue = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	ReorderJoinsLimitClusterSettingName,
 	"default number of joins to reorder",
 	opt.DefaultJoinOrderLimit,
@@ -299,14 +311,14 @@ var ReorderJoinsLimitClusterValue = settings.RegisterIntSetting(
 )
 
 var requireExplicitPrimaryKeysClusterMode = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.require_explicit_primary_keys.enabled",
 	"default value for requiring explicit primary keys in CREATE TABLE statements",
 	false,
 	settings.WithPublic)
 
 var placementEnabledClusterMode = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.multiregion_placement_policy.enabled",
 	"default value for enable_multiregion_placement_policy;"+
 		" allows for use of PLACEMENT RESTRICTED",
@@ -314,7 +326,7 @@ var placementEnabledClusterMode = settings.RegisterBoolSetting(
 )
 
 var autoRehomingEnabledClusterMode = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.experimental_auto_rehoming.enabled",
 	"default value for experimental_enable_auto_rehoming;"+
 		" allows for rows in REGIONAL BY ROW tables to be auto-rehomed on UPDATE",
@@ -322,7 +334,7 @@ var autoRehomingEnabledClusterMode = settings.RegisterBoolSetting(
 )
 
 var onUpdateRehomeRowEnabledClusterMode = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.on_update_rehome_row.enabled",
 	"default value for on_update_rehome_row;"+
 		" enables ON UPDATE rehome_row() expressions to trigger on updates",
@@ -330,21 +342,21 @@ var onUpdateRehomeRowEnabledClusterMode = settings.RegisterBoolSetting(
 	settings.WithPublic)
 
 var temporaryTablesEnabledClusterMode = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.experimental_temporary_tables.enabled",
 	"default value for experimental_enable_temp_tables; allows for use of temporary tables by default",
 	false,
 	settings.WithPublic)
 
 var implicitColumnPartitioningEnabledClusterMode = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.experimental_implicit_column_partitioning.enabled",
 	"default value for experimental_enable_temp_tables; allows for the use of implicit column partitioning",
 	false,
 	settings.WithPublic)
 
 var overrideMultiRegionZoneConfigClusterMode = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.override_multi_region_zone_config.enabled",
 	"default value for override_multi_region_zone_config; "+
 		"allows for overriding the zone configs of a multi-region table or database",
@@ -352,7 +364,7 @@ var overrideMultiRegionZoneConfigClusterMode = settings.RegisterBoolSetting(
 	settings.WithPublic)
 
 var maxHashShardedIndexRangePreSplit = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.hash_sharded_range_pre_split.max",
 	"max pre-split ranges to have when adding hash sharded index to an existing table",
 	16,
@@ -360,14 +372,14 @@ var maxHashShardedIndexRangePreSplit = settings.RegisterIntSetting(
 	settings.WithPublic)
 
 var zigzagJoinClusterMode = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.zigzag_join.enabled",
 	"default value for enable_zigzag_join session setting; disallows use of zig-zag join by default",
 	false,
 	settings.WithPublic)
 
 var optDrivenFKCascadesClusterLimit = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.foreign_key_cascades_limit",
 	"default value for foreign_key_cascades_limit session setting; limits the number of cascading operations that run as part of a single query",
 	10000,
@@ -375,7 +387,7 @@ var optDrivenFKCascadesClusterLimit = settings.RegisterIntSetting(
 	settings.WithPublic)
 
 var preferLookupJoinsForFKs = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.prefer_lookup_joins_for_fks.enabled",
 	"default value for prefer_lookup_joins_for_fks session setting; causes foreign key operations to use lookup joins when possible",
 	false,
@@ -388,7 +400,7 @@ var preferLookupJoinsForFKs = settings.RegisterBoolSetting(
 // haven't been collected. Collection of histograms is controlled by the
 // cluster setting sql.stats.histogram_collection.enabled.
 var optUseHistogramsClusterMode = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.optimizer_use_histograms.enabled",
 	"default value for optimizer_use_histograms session setting; enables usage of histograms in the optimizer by default",
 	true,
@@ -401,7 +413,7 @@ var optUseHistogramsClusterMode = settings.RegisterBoolSetting(
 // if they haven't been collected. Collection of multi-column stats is
 // controlled by the cluster setting sql.stats.multi_column_collection.enabled.
 var optUseMultiColStatsClusterMode = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.optimizer_use_multicol_stats.enabled",
 	"default value for optimizer_use_multicol_stats session setting; enables usage of multi-column stats in the optimizer by default",
 	true,
@@ -413,7 +425,7 @@ var optUseMultiColStatsClusterMode = settings.RegisterBoolSetting(
 // searched for matching rows before remote nodes, in the hope that the
 // execution engine can avoid visiting remote nodes.
 var localityOptimizedSearchMode = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.locality_optimized_partitioned_index_scan.enabled",
 	"default value for locality_optimized_partitioned_index_scan session setting; "+
 		"enables searching for rows in the current region before searching remote regions",
@@ -421,21 +433,21 @@ var localityOptimizedSearchMode = settings.RegisterBoolSetting(
 	settings.WithPublic)
 
 var implicitSelectForUpdateClusterMode = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.implicit_select_for_update.enabled",
 	"default value for enable_implicit_select_for_update session setting; enables FOR UPDATE locking during the row-fetch phase of mutation statements",
 	true,
 	settings.WithPublic)
 
 var insertFastPathClusterMode = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.insert_fast_path.enabled",
 	"default value for enable_insert_fast_path session setting; enables a specialized insert path",
 	true,
 	settings.WithPublic)
 
 var experimentalAlterColumnTypeGeneralMode = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.experimental_alter_column_type.enabled",
 	"default value for experimental_alter_column_type session setting; "+
 		"enables the use of ALTER COLUMN TYPE for general conversions",
@@ -443,7 +455,7 @@ var experimentalAlterColumnTypeGeneralMode = settings.RegisterBoolSetting(
 	settings.WithPublic)
 
 var clusterStatementTimeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.statement_timeout",
 	"default value for the statement_timeout; "+
 		"default value for the statement_timeout session setting; controls the "+
@@ -454,7 +466,7 @@ var clusterStatementTimeout = settings.RegisterDurationSetting(
 	settings.WithPublic)
 
 var clusterLockTimeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.lock_timeout",
 	"default value for the lock_timeout; "+
 		"default value for the lock_timeout session setting; controls the "+
@@ -466,7 +478,7 @@ var clusterLockTimeout = settings.RegisterDurationSetting(
 	settings.WithPublic)
 
 var clusterIdleInSessionTimeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.idle_in_session_timeout",
 	"default value for the idle_in_session_timeout; "+
 		"default value for the idle_in_session_timeout session setting; controls the "+
@@ -477,7 +489,7 @@ var clusterIdleInSessionTimeout = settings.RegisterDurationSetting(
 	settings.WithPublic)
 
 var clusterIdleInTransactionSessionTimeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.idle_in_transaction_session_timeout",
 	"default value for the idle_in_transaction_session_timeout; controls the "+
 		"duration a session is permitted to idle in a transaction before the "+
@@ -489,7 +501,7 @@ var clusterIdleInTransactionSessionTimeout = settings.RegisterDurationSetting(
 // TODO(rytaft): remove this once unique without index constraints are fully
 // supported.
 var experimentalUniqueWithoutIndexConstraintsMode = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.experimental_enable_unique_without_index_constraints.enabled",
 	"default value for experimental_enable_unique_without_index_constraints session setting;"+
 		"disables unique without index constraints by default",
@@ -497,7 +509,7 @@ var experimentalUniqueWithoutIndexConstraintsMode = settings.RegisterBoolSetting
 	settings.WithPublic)
 
 var experimentalUseNewSchemaChanger = settings.RegisterEnumSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.use_declarative_schema_changer",
 	"default value for use_declarative_schema_changer session setting;"+
 		"disables new schema changer by default",
@@ -511,14 +523,14 @@ var experimentalUseNewSchemaChanger = settings.RegisterEnumSetting(
 	settings.WithPublic)
 
 var stubCatalogTablesEnabledClusterValue = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	`sql.defaults.stub_catalog_tables.enabled`,
 	`default value for stub_catalog_tables session setting`,
 	true,
 	settings.WithPublic)
 
 var experimentalComputedColumnRewrites = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.experimental_computed_column_rewrites",
 	"allows rewriting computed column expressions in CREATE TABLE and ALTER TABLE statements; "+
 		"the format is: '(before expression) -> (after expression) [, (before expression) -> (after expression) ...]'",
@@ -530,7 +542,7 @@ var experimentalComputedColumnRewrites = settings.RegisterStringSetting(
 )
 
 var propagateInputOrdering = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	`sql.defaults.propagate_input_ordering.enabled`,
 	`default value for the experimental propagate_input_ordering session variable`,
 	false,
@@ -539,7 +551,7 @@ var propagateInputOrdering = settings.RegisterBoolSetting(
 // settingWorkMemBytes is a cluster setting that determines the maximum amount
 // of RAM that a processor can use.
 var settingWorkMemBytes = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.distsql.temp_storage.workmem",
 	"maximum amount of memory in bytes a processor can use before falling back to temp storage",
 	execinfra.DefaultMemoryLimit, /* 64MiB */
@@ -555,7 +567,7 @@ const ExperimentalDistSQLPlanningClusterSettingName = "sql.defaults.experimental
 // optimizer-driven DistSQL planning that sidesteps intermediate planNode
 // transition when going from opt.Expr to DistSQL processor specs.
 var experimentalDistSQLPlanningClusterMode = settings.RegisterEnumSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	ExperimentalDistSQLPlanningClusterSettingName,
 	"default experimental_distsql_planning mode; enables experimental opt-driven DistSQL planning",
 	"off",
@@ -572,7 +584,7 @@ const VectorizeClusterSettingName = "sql.defaults.vectorize"
 // VectorizeClusterMode controls the cluster default for when automatic
 // vectorization is enabled.
 var VectorizeClusterMode = settings.RegisterEnumSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	VectorizeClusterSettingName,
 	"default vectorize mode",
 	"on",
@@ -587,7 +599,7 @@ var VectorizeClusterMode = settings.RegisterEnumSetting(
 
 // DistSQLClusterExecMode controls the cluster default for when DistSQL is used.
 var DistSQLClusterExecMode = settings.RegisterEnumSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.distsql",
 	"default distributed SQL execution mode",
 	"auto",
@@ -602,7 +614,7 @@ var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 // SerialNormalizationMode controls how the SERIAL type is interpreted in table
 // definitions.
 var SerialNormalizationMode = settings.RegisterEnumSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.serial_normalization",
 	"default handling of SERIAL in table definitions",
 	"rowid",
@@ -616,7 +628,7 @@ var SerialNormalizationMode = settings.RegisterEnumSetting(
 	settings.WithPublic)
 
 var disallowFullTableScans = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	`sql.defaults.disallow_full_table_scans.enabled`,
 	"setting to true rejects queries that have planned a full table scan",
 	false,
@@ -624,7 +636,7 @@ var disallowFullTableScans = settings.RegisterBoolSetting(
 
 // intervalStyle controls intervals representation.
 var intervalStyle = settings.RegisterEnumSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.intervalstyle",
 	"default value for IntervalStyle session setting",
 	strings.ToLower(duration.IntervalStyle_POSTGRES.String()),
@@ -645,7 +657,7 @@ var dateStyleEnumMap = map[int64]string{
 
 // dateStyle controls dates representation.
 var dateStyle = settings.RegisterEnumSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.datestyle",
 	"default value for DateStyle session setting",
 	pgdate.DefaultDateStyle().SQLString(),
@@ -653,7 +665,7 @@ var dateStyle = settings.RegisterEnumSetting(
 	settings.WithPublic)
 
 var txnRowsWrittenLog = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.transaction_rows_written_log",
 	"the threshold for the number of rows written by a SQL transaction "+
 		"which - once exceeded - will trigger a logging event to SQL_PERF (or "+
@@ -663,7 +675,7 @@ var txnRowsWrittenLog = settings.RegisterIntSetting(
 	settings.WithPublic)
 
 var txnRowsWrittenErr = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.transaction_rows_written_err",
 	"the limit for the number of rows written by a SQL transaction which - "+
 		"once exceeded - will fail the transaction (or will trigger a logging "+
@@ -673,7 +685,7 @@ var txnRowsWrittenErr = settings.RegisterIntSetting(
 	settings.WithPublic)
 
 var txnRowsReadLog = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.transaction_rows_read_log",
 	"the threshold for the number of rows read by a SQL transaction "+
 		"which - once exceeded - will trigger a logging event to SQL_PERF (or "+
@@ -683,7 +695,7 @@ var txnRowsReadLog = settings.RegisterIntSetting(
 	settings.WithPublic)
 
 var txnRowsReadErr = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.transaction_rows_read_err",
 	"the limit for the number of rows read by a SQL transaction which - "+
 		"once exceeded - will fail the transaction (or will trigger a logging "+
@@ -695,7 +707,7 @@ var txnRowsReadErr = settings.RegisterIntSetting(
 // This is a float setting (rather than an int setting) because the optimizer
 // uses floating point for calculating row estimates.
 var largeFullScanRows = settings.RegisterFloatSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.large_full_scan_rows",
 	"default value for large_full_scan_rows session setting which determines "+
 		"the maximum table size allowed for a full scan when disallow_full_table_scans "+
@@ -704,14 +716,14 @@ var largeFullScanRows = settings.RegisterFloatSetting(
 	settings.WithPublic)
 
 var costScansWithDefaultColSize = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	`sql.defaults.cost_scans_with_default_col_size.enabled`,
 	"setting to true uses the same size for all columns to compute scan cost",
 	false,
 	settings.WithPublic)
 
 var enableSuperRegions = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.super_regions.enabled",
 	"default value for enable_super_regions; "+
 		"allows for the usage of super regions",
@@ -719,7 +731,7 @@ var enableSuperRegions = settings.RegisterBoolSetting(
 	settings.WithPublic)
 
 var overrideAlterPrimaryRegionInSuperRegion = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.override_alter_primary_region_in_super_region.enabled",
 	"default value for override_alter_primary_region_in_super_region; "+
 		"allows for altering the primary region even if the primary region is a "+
@@ -1446,6 +1458,10 @@ type ExecutorConfig struct {
 	// AutoConfigProvider informs the auto config runner job of new
 	// tasks to run.
 	AutoConfigProvider acprovider.Provider
+
+	// VirtualClusterName contains the name of the virtual cluster
+	// (tenant).
+	VirtualClusterName roachpb.TenantName
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us
@@ -1578,7 +1594,7 @@ type ExecutorTestingKnobs struct {
 	// query (i.e. no subqueries). The physical plan is only safe for use for the
 	// lifetime of this function. Note that returning a nil function is
 	// unsupported and will lead to a panic.
-	TestingSaveFlows func(stmt string) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, bool) error
+	TestingSaveFlows func(stmt string) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, []execinfra.LocalProcessor, bool) error
 
 	// DeterministicExplain, if set, will result in overriding fields in EXPLAIN
 	// and EXPLAIN ANALYZE that can vary between runs (like elapsed times).
@@ -1598,8 +1614,9 @@ type ExecutorTestingKnobs struct {
 	// DistSQLReceiverPushCallbackFactory, if set, will be called every time a
 	// DistSQLReceiver is created for a new query execution, and it should
 	// return, possibly nil, a callback that will be called every time
-	// DistSQLReceiver.Push or DistSQLReceiver.PushBatch is called.
-	DistSQLReceiverPushCallbackFactory func(query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata)
+	// DistSQLReceiver.Push or DistSQLReceiver.PushBatch is called. Possibly
+	// updated arguments are returned.
+	DistSQLReceiverPushCallbackFactory func(query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata)
 
 	// OnTxnRetry, if set, will be called if there is a transaction retry.
 	OnTxnRetry func(autoRetryReason error, evalCtx *eval.Context)
@@ -1614,6 +1631,7 @@ type ExecutorTestingKnobs struct {
 		sessionData *sessiondata.SessionData,
 		txnID uuid.UUID,
 		txnFingerprintID appstatspb.TransactionFingerprintID,
+		txErr error,
 	)
 
 	// AfterBackupChunk is called after each chunk of a backup is completed.
@@ -1797,6 +1815,8 @@ type StreamingTestingKnobs struct {
 	AfterResumerJobLoad func(err error) error
 
 	SkipSpanConfigReplication bool
+
+	SpanConfigRangefeedCacheKnobs *rangefeedcache.TestingKnobs
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}
@@ -1991,6 +2011,7 @@ func checkResultType(typ *types.T) error {
 	case types.INetFamily:
 	case types.OidFamily:
 	case types.PGLSNFamily:
+	case types.RefCursorFamily:
 	case types.TupleFamily:
 	case types.EnumFamily:
 	case types.VoidFamily:
@@ -3638,6 +3659,18 @@ func (m *sessionDataMutator) SetDurableLockingForSerializable(val bool) {
 	m.data.DurableLockingForSerializable = val
 }
 
+func (m *sessionDataMutator) SetSharedLockingForSerializable(val bool) {
+	m.data.SharedLockingForSerializable = val
+}
+
+func (m *sessionDataMutator) SetUnsafeSettingInterlockKey(val string) {
+	m.data.UnsafeSettingInterlockKey = val
+}
+
+func (m *sessionDataMutator) SetOptimizerUseLockOpForSerializable(val bool) {
+	m.data.OptimizerUseLockOpForSerializable = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
@@ -3784,14 +3817,17 @@ func (cfg *ExecutorConfig) GetRowMetrics(internal bool) *rowinfra.Metrics {
 	return cfg.RowMetrics
 }
 
-// RequireSystemTenantOrClusterSetting returns a setting disabled error if
+// requireSystemTenantOrClusterSetting returns a setting disabled error if
 // executed from inside a secondary tenant that does not have the specified
 // cluster setting.
-func (cfg *ExecutorConfig) RequireSystemTenantOrClusterSetting(
-	setting *settings.BoolSetting,
+func requireSystemTenantOrClusterSetting(
+	codec keys.SQLCodec, settings *cluster.Settings, setting *settings.BoolSetting,
 ) error {
-	if cfg.Codec.ForSystemTenant() || setting.Get(&cfg.Settings.SV) {
+	if codec.ForSystemTenant() || setting.Get(&settings.SV) {
 		return nil
 	}
-	return errors.Newf("tenant cluster setting %s disabled", setting.Name())
+	return errors.WithDetailf(errors.WithHint(
+		errors.New("operation is disabled within a virtual cluster"),
+		"Feature was disabled by the system operator."),
+		"Feature flag: %s", setting.Name())
 }

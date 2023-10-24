@@ -33,7 +33,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const alterReplicationJobOp = "ALTER VIRTUAL CLUSTER REPLICATION"
+const (
+	alterReplicationJobOp = "ALTER VIRTUAL CLUSTER REPLICATION"
+	createReplicationOp   = "CREATE VIRTUAL CLUSTER FROM REPLICATION"
+)
 
 var alterReplicationCutoverHeader = colinfo.ResultColumns{
 	{Name: "cutover_time", Typ: types.Decimal},
@@ -42,11 +45,17 @@ var alterReplicationCutoverHeader = colinfo.ResultColumns{
 // ResolvedTenantReplicationOptions represents options from an
 // evaluated CREATE VIRTUAL CLUSTER FROM REPLICATION command.
 type resolvedTenantReplicationOptions struct {
-	retention *int32
+	resumeTimestamp hlc.Timestamp
+	retention       *int32
 }
 
 func evalTenantReplicationOptions(
-	ctx context.Context, options tree.TenantReplicationOptions, eval exprutil.Evaluator,
+	ctx context.Context,
+	options tree.TenantReplicationOptions,
+	eval exprutil.Evaluator,
+	evalCtx *eval.Context,
+	semaCtx *tree.SemaContext,
+	op string,
 ) (*resolvedTenantReplicationOptions, error) {
 	r := &resolvedTenantReplicationOptions{}
 	if options.Retention != nil {
@@ -65,6 +74,14 @@ func evalTenantReplicationOptions(
 		retSeconds := int32(retSeconds64)
 		r.retention = &retSeconds
 	}
+	if options.ResumeTimestamp != nil {
+		ts, err := asof.EvalSystemTimeExpr(ctx, evalCtx, semaCtx, options.ResumeTimestamp, op, asof.ReplicationCutover)
+		if err != nil {
+			return nil, err
+		}
+		r.resumeTimestamp = ts
+	}
+
 	return r, nil
 }
 
@@ -89,12 +106,17 @@ func alterReplicationJobTypeCheck(
 	); err != nil {
 		return false, nil, err
 	}
+	if alterStmt.Options.ResumeTimestamp != nil {
+		if _, err := asof.TypeCheckSystemTimeExpr(ctx, p.SemaCtx(),
+			alterStmt.Options.ResumeTimestamp, alterReplicationJobOp); err != nil {
+			return false, nil, err
+		}
+	}
 
 	if cutoverTime := alterStmt.Cutover; cutoverTime != nil {
 		if cutoverTime.Timestamp != nil {
-			evalCtx := &p.ExtendedEvalContext().Context
-			if _, err := typeCheckCutoverTime(ctx, evalCtx,
-				p.SemaCtx(), cutoverTime.Timestamp); err != nil {
+			if _, err := asof.TypeCheckSystemTimeExpr(ctx, p.SemaCtx(),
+				cutoverTime.Timestamp, alterReplicationJobOp); err != nil {
 				return false, nil, err
 			}
 		}
@@ -103,6 +125,16 @@ func alterReplicationJobTypeCheck(
 
 	return true, nil, nil
 }
+
+var physicalReplicationDisabledErr = errors.WithTelemetry(
+	pgerror.WithCandidateCode(
+		errors.WithHint(
+			errors.Newf("physical replication is disabled"),
+			"You can enable physical replication by running `SET CLUSTER SETTING physical_replication.enabled = true`.",
+		),
+		pgcode.ExperimentalFeature,
+	),
+	"physical_replication.enabled")
 
 func alterReplicationJobHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
@@ -113,16 +145,7 @@ func alterReplicationJobHook(
 	}
 
 	if !streamingccl.CrossClusterReplicationEnabled.Get(&p.ExecCfg().Settings.SV) {
-		return nil, nil, nil, false, errors.WithTelemetry(
-			pgerror.WithCandidateCode(
-				errors.WithHint(
-					errors.Newf("cross cluster replication is disabled"),
-					"You can enable cross cluster replication by running `SET CLUSTER SETTING cross_cluster_replication.enabled = true`.",
-				),
-				pgcode.ExperimentalFeature,
-			),
-			"cross_cluster_replication.enabled",
-		)
+		return nil, nil, nil, false, physicalReplicationDisabledErr
 	}
 
 	if !p.ExecCfg().Codec.ForSystemTenant() {
@@ -130,6 +153,11 @@ func alterReplicationJobHook(
 			"only the system tenant can alter tenant")
 	}
 
+	if alterTenantStmt.Options.ResumeTimestamp != nil {
+		return nil, nil, nil, false, pgerror.New(pgcode.InvalidParameterValue, "resume timestamp cannot be altered")
+	}
+
+	evalCtx := &p.ExtendedEvalContext().Context
 	var cutoverTime hlc.Timestamp
 	if alterTenantStmt.Cutover != nil {
 		if !alterTenantStmt.Cutover.Latest {
@@ -137,8 +165,8 @@ func alterReplicationJobHook(
 				return nil, nil, nil, false, errors.AssertionFailedf("unexpected nil cutover expression")
 			}
 
-			evalCtx := &p.ExtendedEvalContext().Context
-			ct, err := evalCutoverTime(ctx, evalCtx, p.SemaCtx(), alterTenantStmt.Cutover.Timestamp)
+			ct, err := asof.EvalSystemTimeExpr(ctx, evalCtx, p.SemaCtx(), alterTenantStmt.Cutover.Timestamp,
+				alterReplicationJobOp, asof.ReplicationCutover)
 			if err != nil {
 				return nil, nil, nil, false, err
 			}
@@ -147,7 +175,7 @@ func alterReplicationJobHook(
 	}
 
 	exprEval := p.ExprEvaluator(alterReplicationJobOp)
-	options, err := evalTenantReplicationOptions(ctx, alterTenantStmt.Options, exprEval)
+	options, err := evalTenantReplicationOptions(ctx, alterTenantStmt.Options, exprEval, evalCtx, p.SemaCtx(), alterReplicationJobOp)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
@@ -168,7 +196,7 @@ func alterReplicationJobHook(
 		if err != nil {
 			return err
 		}
-		if tenInfo.TenantReplicationJobID == 0 {
+		if tenInfo.PhysicalReplicationConsumerJobID == 0 {
 			return errors.Newf("tenant %q (%d) does not have an active replication job",
 				tenInfo.Name, tenInfo.ID)
 		}
@@ -188,11 +216,11 @@ func alterReplicationJobHook(
 		} else {
 			switch alterTenantStmt.Command {
 			case tree.ResumeJob:
-				if err := jobRegistry.Unpause(ctx, p.InternalSQLTxn(), tenInfo.TenantReplicationJobID); err != nil {
+				if err := jobRegistry.Unpause(ctx, p.InternalSQLTxn(), tenInfo.PhysicalReplicationConsumerJobID); err != nil {
 					return err
 				}
 			case tree.PauseJob:
-				if err := jobRegistry.PauseRequested(ctx, p.InternalSQLTxn(), tenInfo.TenantReplicationJobID,
+				if err := jobRegistry.PauseRequested(ctx, p.InternalSQLTxn(), tenInfo.PhysicalReplicationConsumerJobID,
 					"ALTER VIRTUAL CLUSTER PAUSE REPLICATION"); err != nil {
 					return err
 				}
@@ -225,7 +253,7 @@ func alterTenantJobCutover(
 	}
 
 	tenantName := tenInfo.Name
-	job, err := jobRegistry.LoadJobWithTxn(ctx, tenInfo.TenantReplicationJobID, txn)
+	job, err := jobRegistry.LoadJobWithTxn(ctx, tenInfo.PhysicalReplicationConsumerJobID, txn)
 	if err != nil {
 		return hlc.Timestamp{}, err
 	}
@@ -265,7 +293,7 @@ func alterTenantJobCutover(
 				cutoverTime, record.Timestamp)
 		}
 	}
-	if err := applyCutoverTime(ctx, jobRegistry, txn, tenInfo.TenantReplicationJobID, cutoverTime); err != nil {
+	if err := applyCutoverTime(ctx, jobRegistry, txn, tenInfo.PhysicalReplicationConsumerJobID, cutoverTime); err != nil {
 		return hlc.Timestamp{}, err
 	}
 
@@ -279,7 +307,7 @@ func alterTenantOptions(
 	options *resolvedTenantReplicationOptions,
 	tenInfo *mtinfopb.TenantInfo,
 ) error {
-	return jobRegistry.UpdateJobWithTxn(ctx, tenInfo.TenantReplicationJobID, txn, false, /* useReadLock */
+	return jobRegistry.UpdateJobWithTxn(ctx, tenInfo.PhysicalReplicationConsumerJobID, txn, false, /* useReadLock */
 		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			streamIngestionDetails := md.Payload.GetStreamIngestion()
 			if ret, ok := options.GetRetention(); ok {
@@ -289,44 +317,6 @@ func alterTenantOptions(
 			return nil
 		})
 
-}
-
-func typeCheckCutoverTime(
-	ctx context.Context, evalCtx *eval.Context, semaCtx *tree.SemaContext, cutoverExpr tree.Expr,
-) (tree.TypedExpr, error) {
-	typedExpr, err := tree.TypeCheckAndRequire(ctx, cutoverExpr, semaCtx, types.Any, alterReplicationJobOp)
-	if err != nil {
-		return nil, err
-	}
-	// TODO(ssd): AOST and SPLIT are restricted to the use of constant expressions
-	// or particular follower-read related functions. Do we want to do that here as well?
-	// One nice side effect of allowing functions is that users can use NOW().
-
-	// These are the types currently supported by asof.DatumToHLC.
-	switch typedExpr.ResolvedType().Family() {
-	case types.IntervalFamily, types.TimestampTZFamily, types.TimestampFamily, types.StringFamily, types.DecimalFamily, types.IntFamily:
-		return typedExpr, nil
-	default:
-		return nil, errors.Errorf("expected string, timestamp, decimal, interval, or integer, got %s", typedExpr.ResolvedType())
-	}
-}
-
-func evalCutoverTime(
-	ctx context.Context, evalCtx *eval.Context, semaCtx *tree.SemaContext, cutoverExpr tree.Expr,
-) (hlc.Timestamp, error) {
-	typedExpr, err := typeCheckCutoverTime(ctx, evalCtx, semaCtx, cutoverExpr)
-	if err != nil {
-		return hlc.Timestamp{}, err
-	}
-	d, err := eval.Expr(ctx, evalCtx, typedExpr)
-	if err != nil {
-		return hlc.Timestamp{}, err
-	}
-	if d == tree.DNull {
-		return hlc.MaxTimestamp, nil
-	}
-	stmtTimestamp := evalCtx.GetStmtTimestamp()
-	return asof.DatumToHLC(evalCtx, stmtTimestamp, d, asof.ReplicationCutover)
 }
 
 func init() {

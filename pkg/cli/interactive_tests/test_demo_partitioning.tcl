@@ -132,7 +132,7 @@ end_test
 start_test "Expect an error if geo-partitioning is requested with multitenant mode"
 send "$argv demo --no-line-editor --geo-partitioned-replicas --log-dir=logs \r"
 # expect a failure
-eexpect "operation is unsupported within a virtual cluster"
+eexpect "operation is disabled within a virtual cluster"
 eexpect $prompt
 end_test
 

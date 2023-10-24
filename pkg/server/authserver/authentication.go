@@ -95,7 +95,7 @@ var ConfigureOIDC = func(
 
 // WebSessionTimeout is the cluster setting for web session TTL.
 var WebSessionTimeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.web_session_timeout",
 	"the duration that a newly created web session will be valid",
 	7*24*time.Hour,
@@ -467,7 +467,7 @@ func (s *authenticationServer) NewAuthSession(
 ) (int64, []byte, error) {
 	st := s.sqlServer.ExecutorConfig().Settings
 	webSessionsTableHasUserIDCol := st.Version.IsActive(ctx,
-		clusterversion.V23_1WebSessionsTableHasUserIDColumn)
+		clusterversion.TODO_Delete_V23_1WebSessionsTableHasUserIDColumn)
 
 	secret, hashedSecret, err := CreateAuthSecret()
 	if err != nil {

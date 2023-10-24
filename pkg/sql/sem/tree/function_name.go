@@ -23,10 +23,10 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-// ErrFunctionUndefined indicates that the required function is not found. It is
+// ErrRoutineUndefined indicates that the required function is not found. It is
 // used as the cause of the errors thrown when function resolution cannot find a
 // required function.
-var ErrFunctionUndefined = pgerror.Newf(pgcode.UndefinedFunction, "function undefined")
+var ErrRoutineUndefined = pgerror.Newf(pgcode.UndefinedFunction, "routine undefined")
 
 // Function names are used in expressions in the FuncExpr node.
 // General syntax:
@@ -41,7 +41,7 @@ var ErrFunctionUndefined = pgerror.Newf(pgcode.UndefinedFunction, "function unde
 // resolve built-in or user-defined function definitions from unresolved names.
 type FunctionReferenceResolver interface {
 	// ResolveFunction resolves a group of overloads with the given function name
-	// within a search path. An error with ErrFunctionUndefined cause is returned
+	// within a search path. An error with ErrRoutineUndefined cause is returned
 	// if function does not exist.
 	//
 	// TODO(Chengxiong): Consider adding an optional slice of argument types to
@@ -49,7 +49,7 @@ type FunctionReferenceResolver interface {
 	// overloads a bit earlier and decrease the possibility of ambiguous error
 	// on function properties.
 	ResolveFunction(
-		ctx context.Context, name *UnresolvedName, path SearchPath,
+		ctx context.Context, name UnresolvedRoutineName, path SearchPath,
 	) (*ResolvedFunctionDefinition, error)
 
 	// ResolveFunctionByOID looks up a function overload by using a given oid.
@@ -110,7 +110,7 @@ func (ref *ResolvableFunctionReference) Resolve(
 			return fd, nil
 		}
 		// Use the resolver if it is provided.
-		fd, err := resolver.ResolveFunction(ctx, t, path)
+		fd, err := resolver.ResolveFunction(ctx, MakeUnresolvedFunctionName(t), path)
 		if err != nil {
 			return nil, err
 		}

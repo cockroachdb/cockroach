@@ -85,6 +85,7 @@ go_test(
     ],
     args = ["-test.timeout=295s"],
     embed = [":stats"],
+    shard_count = 8,
     deps = [
         "//pkg/base",
         "//pkg/jobs",

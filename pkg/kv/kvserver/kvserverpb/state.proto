@@ -245,6 +245,7 @@ message RangeAppliedState {
   // state simply because we have introduced this field.
   uint64 raft_applied_index_term = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftTerm"];
 }
+
 // MVCCPersistentStats is convertible to MVCCStats, but uses signed variable
 // width encodings for most fields that make it efficient to store positive
 // values but inefficient to store negative values. This makes the encodings
@@ -265,6 +266,7 @@ message MVCCPersistentStats {
   int64 val_count = 9;
   int64 intent_bytes = 10;
   int64 intent_count = 11;
+  int64 lock_bytes = 21;
   int64 lock_count = 16;
   int64 range_key_count = 17;
   int64 range_key_bytes = 18;

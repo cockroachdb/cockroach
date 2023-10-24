@@ -79,7 +79,7 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 		replicationtestutils.RunningStatus(t, c.DestSysSQL, ingestionJobID))
 
 	ts := c.DestCluster.Server(0).Clock().Now()
-	afterPauseFingerprint := replicationtestutils.FingerprintTenantAtTimestampNoHistory(t, c.DestSysSQL, c.Args.DestTenantID.ToUint64(), ts.AsOfSystemTime())
+	afterPauseFingerprint := replicationtestutils.FingerprintTenantAtTimestampNoHistory(t, c.DestSysSQL, c.Args.DestTenantName, ts.AsOfSystemTime())
 	// Make dest cluster to ingest KV events faster.
 	c.SrcSysSQL.ExecMultiple(t, replicationtestutils.ConfigureClusterSettings(map[string]string{
 		`stream_replication.min_checkpoint_frequency`: `'100ms'`,
@@ -381,7 +381,7 @@ func TestTenantStreamingCancelIngestion(t *testing.T) {
 		jobutils.WaitForJobToFail(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 
 		// Check if the producer job has released protected timestamp.
-		requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer.ApplicationLayer(), jobspb.JobID(producerJobID))
+		requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer, jobspb.JobID(producerJobID))
 
 		// Check if dest tenant key ranges are not cleaned up.
 		destTenantSpan := keys.MakeTenantSpan(args.DestTenantID)
@@ -422,6 +422,8 @@ func TestTenantStreamingDropTenantCancelsStream(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "slow test") // takes >1mn under race
+
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
 
@@ -449,7 +451,7 @@ func TestTenantStreamingDropTenantCancelsStream(t *testing.T) {
 		jobutils.WaitForJobToFail(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 
 		// Check if the producer job has released protected timestamp.
-		requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer.ApplicationLayer(), jobspb.JobID(producerJobID))
+		requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer, jobspb.JobID(producerJobID))
 
 		// Wait for the GC job to finish
 		c.DestSysSQL.Exec(t, "SHOW JOBS WHEN COMPLETE SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC'")
@@ -483,17 +485,16 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 
 	skip.UnderDeadlock(t, "multi-node may time out under deadlock")
 	skip.UnderRace(t, "takes too long with multiple nodes")
+	skip.UnderStress(t, "multi node test times out under stress")
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.MultitenantSingleClusterNumNodes = 4
 
-	args.SrcNumNodes = 4
-	args.DestNumNodes = 3
-
-	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
 	defer cleanup()
 
-	replicationtestutils.CreateScatteredTable(t, c, 3)
+	replicationtestutils.CreateScatteredTable(t, c, 4)
 	srcScatteredData := c.SrcTenantSQL.QueryStr(c.T, "SELECT * FROM d.scattered ORDER BY key")
 
 	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
@@ -524,6 +525,9 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	c.SrcTenantServer.AppStopper().Stop(ctx)
 	c.SrcCluster.StopServer(0)
 
+	// Switch the SQL connection to a new node, as node 0 has shutdown-- recall that
+	// the source and destination tenant are on the same cluster.
+	c.DestSysSQL = sqlutils.MakeSQLRunner(c.DestCluster.Conns[1])
 	c.DestSysSQL.Exec(t, `RESUME JOB $1`, ingestionJobID)
 	jobutils.WaitForJobToRun(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
@@ -535,7 +539,7 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	require.Equal(c.T, cutoverTime, cutoverOutput.GoTime())
 	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
-	cleanUpTenant := c.StartDestTenant(ctx)
+	cleanUpTenant := c.StartDestTenant(ctx, nil, 1)
 	defer func() {
 		require.NoError(t, cleanUpTenant())
 	}()
@@ -653,12 +657,11 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderDeadlock(t, "multi-node may time out under deadlock")
-	skip.UnderRace(t, "takes too long with multiple nodes")
+	skip.UnderRace(t, "multi-node test may time out under race")
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
-	args.SrcNumNodes = 4
-	args.DestNumNodes = 3
+	args.MultitenantSingleClusterNumNodes = 3
 
 	// Track the number of unique addresses that were connected to
 	clientAddresses := make(map[string]struct{})
@@ -671,7 +674,7 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 		},
 	}
 
-	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
 	defer cleanup()
 
 	// Make sure we have data on all nodes, so that we will have multiple
@@ -788,6 +791,8 @@ func TestProtectedTimestampManagement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "slow test") // takes >1mn under race.
+
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
 	// Override the replication job details ReplicationTTLSeconds to a small value
@@ -802,7 +807,7 @@ func TestProtectedTimestampManagement(t *testing.T) {
 			// greater or equal to the frontier we know we have replicated up until.
 			waitForProducerProtection := func(c *replicationtestutils.TenantStreamingClusters, frontier hlc.Timestamp, producerJobID int) {
 				testutils.SucceedsSoon(t, func() error {
-					srv := c.SrcSysServer.ApplicationLayer()
+					srv := c.SrcSysServer
 					job, err := srv.JobRegistry().(*jobs.Registry).LoadJob(ctx, jobspb.JobID(producerJobID))
 					if err != nil {
 						return err
@@ -830,7 +835,7 @@ func TestProtectedTimestampManagement(t *testing.T) {
 			// protecting the destination tenant.
 			checkNoDestinationProtection := func(c *replicationtestutils.TenantStreamingClusters, replicationJobID int) {
 				execCfg := c.DestSysServer.ExecutorConfig().(sql.ExecutorConfig)
-				require.NoError(t, c.DestCluster.Server(0).InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				require.NoError(t, c.DestSysServer.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 					j, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobspb.JobID(replicationJobID), txn)
 					require.NoError(t, err)
 					payload := j.Payload()
@@ -844,7 +849,7 @@ func TestProtectedTimestampManagement(t *testing.T) {
 			checkDestinationProtection := func(c *replicationtestutils.TenantStreamingClusters, frontier hlc.Timestamp, replicationJobID int) {
 				execCfg := c.DestSysServer.ExecutorConfig().(sql.ExecutorConfig)
 				ptp := execCfg.ProtectedTimestampProvider
-				require.NoError(t, c.DestCluster.Server(0).InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				require.NoError(t, c.DestSysServer.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 					j, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobspb.JobID(replicationJobID), txn)
 					if err != nil {
 						return err
@@ -886,7 +891,7 @@ func TestProtectedTimestampManagement(t *testing.T) {
 			// startup, and the first progress update (t2) is greater than 1s. This is
 			// important because if `frontier@t2 - ReplicationTTLSeconds < t1` then we
 			// will not update the PTS record.
-			now := c.SrcCluster.Server(0).Clock().Now().Add(int64(time.Second)*2, 0)
+			now := c.SrcCluster.Server(0).SystemLayer().Clock().Now().Add(int64(time.Second)*2, 0)
 			c.WaitUntilReplicatedTime(now, jobspb.JobID(replicationJobID))
 
 			// Check that the producer and replication job have written a protected
@@ -925,7 +930,7 @@ func TestProtectedTimestampManagement(t *testing.T) {
 			}
 
 			// Check if the producer job has released protected timestamp.
-			requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer.ApplicationLayer(), jobspb.JobID(producerJobID))
+			requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer, jobspb.JobID(producerJobID))
 
 			// Check if the replication job has released protected timestamp.
 			checkNoDestinationProtection(c, replicationJobID)
@@ -936,7 +941,7 @@ func TestProtectedTimestampManagement(t *testing.T) {
 
 			// Check if dest tenant key range is cleaned up.
 			destTenantSpan := keys.MakeTenantSpan(args.DestTenantID)
-			rows, err := c.DestCluster.Server(0).DB().
+			rows, err := c.DestSysServer.DB().
 				Scan(ctx, destTenantSpan.Key, destTenantSpan.EndKey, 10)
 			require.NoError(t, err)
 			require.Empty(t, rows)
@@ -954,6 +959,7 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.NoMetamorphicExternalConnection = true
 
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
@@ -1164,7 +1170,6 @@ func TestLoadProducerAndIngestionProgress(t *testing.T) {
 func TestStreamingRegionalConstraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
 	skip.UnderStressRace(t, "takes too long under stress race")
 
 	ctx := context.Background()
@@ -1199,7 +1204,8 @@ func TestStreamingRegionalConstraint(t *testing.T) {
 				for _, desc := range descriptors {
 					for _, replica := range desc.InternalReplicas {
 						if replica.NodeID != marsNodeID {
-							return errors.Newf("found table data located on another node %d", replica.NodeID)
+							return errors.Newf("found table data located on another node %d, desc %v",
+								replica.NodeID, desc)
 						}
 					}
 				}
@@ -1213,11 +1219,13 @@ func TestStreamingRegionalConstraint(t *testing.T) {
 		c.SrcSysServer.DB(), srcCodec, "test", "x")
 	destCodec := keys.MakeSQLCodec(c.Args.DestTenantID)
 
-	testutils.SucceedsSoon(t,
-		checkLocalities(tableDesc.PrimaryIndexSpan(srcCodec), rangedesc.NewScanner(c.SrcSysServer.DB())))
+	testutils.SucceedsWithin(t,
+		checkLocalities(tableDesc.PrimaryIndexSpan(srcCodec), rangedesc.NewScanner(c.SrcSysServer.DB())),
+		time.Second*45*5)
 
-	testutils.SucceedsSoon(t,
-		checkLocalities(tableDesc.PrimaryIndexSpan(destCodec), rangedesc.NewScanner(c.DestSysServer.DB())))
+	testutils.SucceedsWithin(t,
+		checkLocalities(tableDesc.PrimaryIndexSpan(destCodec), rangedesc.NewScanner(c.DestSysServer.DB())),
+		time.Second*45*5)
 
 	tableName := "test"
 	tabledIDQuery := fmt.Sprintf(`SELECT id FROM system.namespace WHERE name ='%s'`, tableName)

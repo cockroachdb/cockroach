@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -66,13 +67,11 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs was chosen
-	// specifically so that all the migrations that introduce and backfill the new
-	// `system.job_info` have run by this point. In the future this startCV should
-	// be changed to V23_2Start and updated to the next Start key everytime the
-	// compatability window moves forward.
-	startCV := clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs
-	endCV := startCV + 1
+	endCV := clusterversion.BinaryVersionKey
+	if clusterversion.ByKey(endCV).Internal == 2 {
+		skip.IgnoreLint(t, "test cannot run until there is a new version key")
+	}
+	startCV := endCV - 1
 
 	ch := make(chan chan error)
 
@@ -85,7 +84,6 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				Server: &server.TestingKnobs{
-					BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
 					BinaryVersionOverride:          clusterversion.ByKey(startCV),
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
@@ -251,7 +249,7 @@ func TestPostJobInfoTableQueryDuplicateJobInfo(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	targetCV := clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs + 1
+	targetCV := clusterversion.V23_2Start + 1
 	targetCVJSON, err := protoreflect.MessageToJSON(&clusterversion.ClusterVersion{Version: clusterversion.ByKey(targetCV)},
 		protoreflect.FmtFlags{EmitDefaults: false})
 	require.NoError(t, err)
@@ -347,7 +345,7 @@ FROM system.job_info WHERE job_id = $1 AND info_key = 'legacy_payload')`, jobID)
 		runTestForDB(t, systemSQLDB)
 	})
 	t.Run("tenant", func(t *testing.T) {
-		tenant, err := ts.StartTenant(ctx, base.TestTenantArgs{
+		tenant, err := ts.TenantController().StartTenant(ctx, base.TestTenantArgs{
 			TenantID: roachpb.MustMakeTenantID(10),
 			TestingKnobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
@@ -362,7 +360,7 @@ FROM system.job_info WHERE job_id = $1 AND info_key = 'legacy_payload')`, jobID)
 			Settings: settingsForUpgrade(),
 		})
 		require.NoError(t, err)
-		tenantSQLDB := tenant.SQLConn(t, "")
+		tenantSQLDB := tenant.SQLConn(t)
 		runTestForDB(t, tenantSQLDB)
 	})
 }
@@ -372,7 +370,7 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// We're going to be migrating from startCV to endCV.
-	startCVKey := clusterversion.V22_2
+	startCVKey := clusterversion.V23_1
 	startCV := clusterversion.ByKey(startCVKey)
 	endCVKey := startCVKey + 1
 	endCV := clusterversion.ByKey(endCVKey)
@@ -386,7 +384,6 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
 					BinaryVersionOverride:          startCV,
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
@@ -561,13 +558,8 @@ func TestPauseMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs was chosen
-	// specifically so that all the migrations that introduce and backfill the new
-	// `system.job_info` have run by this point. In the future this startCV should
-	// be changed to V23_2Start and updated to the next Start key everytime the
-	// compatability window moves forward.
-	startCV := clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs
-	endCV := startCV + 1
+	endCV := clusterversion.BinaryVersionKey
+	startCV := endCV - 1
 
 	type migrationEvent struct {
 		unblock  chan<- error
@@ -584,7 +576,6 @@ func TestPauseMigration(t *testing.T) {
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				Server: &server.TestingKnobs{
 					BinaryVersionOverride:          clusterversion.ByKey(startCV),
-					BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 				UpgradeManager: &upgradebase.TestingKnobs{
@@ -688,7 +679,7 @@ func TestPrecondition(t *testing.T) {
 		version.Internal += 1
 		return version
 	}
-	v0 := clusterversion.ByKey(clusterversion.TODODelete_V22_1)
+	v0 := clusterversion.TestingBinaryMinSupportedVersion
 	v0_fence := fence(v0)
 	v1 := next(v0)
 	v1_fence := fence(v1)
@@ -870,7 +861,6 @@ func TestMigrationFailure(t *testing.T) {
 		TestingKnobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BootstrapVersionKeyOverride:    startVersionKey,
 				BinaryVersionOverride:          startVersion,
 			},
 			UpgradeManager: &upgradebase.TestingKnobs{

@@ -438,6 +438,14 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 func TestConsistencyQueueRecomputeStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	// This test relies on repeated sequential storage.EventuallyFileOnlySnapshot
+	// acquisitions. Reduce the max wait time for each acquisition to speed up
+	// this test.
+	origEFOSWait := storage.MaxEFOSWait
+	storage.MaxEFOSWait = 30 * time.Millisecond
+	defer func() {
+		storage.MaxEFOSWait = origEFOSWait
+	}()
 	testutils.RunTrueAndFalse(t, "hadEstimates", testConsistencyQueueRecomputeStatsImpl)
 }
 

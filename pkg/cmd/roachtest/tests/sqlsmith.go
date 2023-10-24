@@ -123,7 +123,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 		t.L().Printf("setup:\n%s", strings.Join(setup, "\n"))
 		for _, stmt := range setup {
 			if _, err := conn.Exec(stmt); err != nil {
-				t.Fatal(err)
+				t.Fatalf("error: %s\nstatement: %s", err.Error(), stmt)
 			} else {
 				logStmt(stmt)
 			}
@@ -319,7 +319,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			// NB: sqlsmith failures should never block a release.
 			NonReleaseBlocker: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Spec().Cloud != spec.GCE && !c.IsLocal() {
+				if c.Cloud() != spec.GCE && !c.IsLocal() {
 					t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")
 				}
 				runSQLSmith(ctx, t, c, setup, setting)

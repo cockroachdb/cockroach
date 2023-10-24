@@ -80,7 +80,7 @@ build:crosslinuxfips '--workspace_status_command=./build/bazelutil/stamp.sh x86_
 build:crosslinuxfips --config=crosslinuxfipsbase
 build:crosslinuxfipsbase --platforms=//build/toolchains:cross_linux
 build:crosslinuxfipsbase --config=cross
-build:crosslinuxfipsbase --@io_bazel_rules_go//go/toolchain:sdk_version=1.20.7fips
+build:crosslinuxfipsbase --@io_bazel_rules_go//go/toolchain:sdk_version=1.21.3fips
 build:crosswindows '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32'
 build:crosswindows --config=crosswindowsbase
 build:crosswindowsbase --platforms=//build/toolchains:cross_windows
@@ -124,6 +124,8 @@ build:engflowbase --grpc_keepalive_time=30s
 build:engflowbase --experimental_remote_cache_compression=true
 build:engflowbase --action_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
 build:engflowbase --extra_execution_platforms=//build/toolchains:cross_linux
+build:engflowbase --remote_upload_local_results=false
+build:engflowbase --remote_download_toplevel
 test:engflowbase --test_env=REMOTE_EXEC=1
 build:engflow --config=engflowbase
 build:engflow --remote_cache=grpcs://tanzanite.cluster.engflow.com

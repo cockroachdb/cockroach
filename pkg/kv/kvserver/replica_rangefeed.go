@@ -47,7 +47,7 @@ import (
 // ranges and ranges covering tables in the system database); this setting
 // covers everything else.
 var RangefeedEnabled = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"kv.rangefeed.enabled",
 	"if set, rangefeed registration is enabled",
 	false,
@@ -56,7 +56,7 @@ var RangefeedEnabled = settings.RegisterBoolSetting(
 // RangeFeedRefreshInterval controls the frequency with which we deliver closed
 // timestamp updates to rangefeeds.
 var RangeFeedRefreshInterval = settings.RegisterDurationSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"kv.rangefeed.closed_timestamp_refresh_interval",
 	"the interval at which closed-timestamp updates"+
 		"are delivered to rangefeeds; set to 0 to use kv.closed_timestamp.side_transport_interval",
@@ -273,7 +273,8 @@ func (r *Replica) RangeFeed(
 	// Register the stream with a catch-up iterator.
 	var catchUpIter *rangefeed.CatchUpIterator
 	if usingCatchUpIter {
-		catchUpIter, err = rangefeed.NewCatchUpIterator(r.store.TODOEngine(), rSpan.AsRawSpanWithNoLocals(),
+		catchUpIter, err = rangefeed.NewCatchUpIterator(
+			ctx, r.store.TODOEngine(), rSpan.AsRawSpanWithNoLocals(),
 			args.Timestamp, iterSemRelease, pacer)
 		if err != nil {
 			r.raftMu.Unlock()
@@ -466,7 +467,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		// waiting for the Register call below to return.
 		r.raftMu.AssertHeld()
 
-		scanner, err := rangefeed.NewSeparatedIntentScanner(r.store.TODOEngine(), desc.RSpan())
+		scanner, err := rangefeed.NewSeparatedIntentScanner(ctx, r.store.TODOEngine(), desc.RSpan())
 		if err != nil {
 			done.Set(err)
 			return nil
@@ -676,7 +677,8 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 			if vhf == nil {
 				continue
 			}
-			valBytes, err := storage.MVCCLookupRangeKeyValue(reader, t.StartKey, t.EndKey, t.Timestamp)
+			valBytes, err := storage.MVCCLookupRangeKeyValue(
+				ctx, reader, t.StartKey, t.EndKey, t.Timestamp)
 			if err != nil {
 				panic(err)
 			}

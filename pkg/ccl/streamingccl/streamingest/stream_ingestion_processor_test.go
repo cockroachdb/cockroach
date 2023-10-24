@@ -70,7 +70,7 @@ var _ streamclient.Client = &mockStreamClient{}
 
 // Create implements the Client interface.
 func (m *mockStreamClient) Create(
-	_ context.Context, _ roachpb.TenantName,
+	_ context.Context, _ roachpb.TenantName, _ streampb.ReplicationProducerRequest,
 ) (streampb.ReplicationProducerSpec, error) {
 	panic("unimplemented")
 }
@@ -187,7 +187,13 @@ func TestStreamIngestionProcessor(t *testing.T) {
 	ctx := context.Background()
 
 	tc := testcluster.StartTestCluster(t, 1 /* nodes */, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled},
+		ServerArgs: base.TestServerArgs{
+			// Perhaps it would be possible to make this
+			// run in a secondary tenant, but the test
+			// would need to be completely rewritten to be
+			// even further from real-world operation.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 	})
 	defer tc.Stopper().Stop(ctx)
 	db := tc.Server(0).InternalDB().(descs.DB)
@@ -579,7 +585,7 @@ func assertEqualKVs(
 	// Iterate over the store.
 	store, err := srv.StorageLayer().GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
 	require.NoError(t, err)
-	it, err := store.TODOEngine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+	it, err := store.TODOEngine().NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 		LowerBound: targetSpan.Key,
 		UpperBound: targetSpan.EndKey,
 	})
@@ -682,7 +688,7 @@ func TestRandomClientGeneration(t *testing.T) {
 
 	randomStreamClient, ok := streamClient.(*streamclient.RandomStreamClient)
 	require.True(t, ok)
-	rps, err := randomStreamClient.Create(ctx, tenantName)
+	rps, err := randomStreamClient.Create(ctx, tenantName, streampb.ReplicationProducerRequest{})
 	require.NoError(t, err)
 
 	topo, err := randomStreamClient.Plan(ctx, rps.StreamID)

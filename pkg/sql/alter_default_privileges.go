@@ -35,7 +35,7 @@ var targetObjectToPrivilegeObject = map[privilege.TargetObjectType]privilege.Obj
 	privilege.Sequences: privilege.Sequence,
 	privilege.Types:     privilege.Type,
 	privilege.Schemas:   privilege.Schema,
-	privilege.Functions: privilege.Function,
+	privilege.Routines:  privilege.Routine,
 }
 
 type alterDefaultPrivilegesNode struct {
@@ -231,9 +231,9 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 
 			eventDetails := eventpb.CommonSQLPrivilegeEventDetails{}
 			if n.n.IsGrant {
-				eventDetails.GrantedPrivileges = privileges.SortedNames()
+				eventDetails.GrantedPrivileges = privileges.SortedDisplayNames()
 			} else {
-				eventDetails.RevokedPrivileges = privileges.SortedNames()
+				eventDetails.RevokedPrivileges = privileges.SortedDisplayNames()
 			}
 			event := eventpb.AlterDefaultPrivileges{
 				CommonSQLEventDetails: eventpb.CommonSQLEventDetails{
@@ -314,9 +314,9 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForDatabase(
 
 		eventDetails := eventpb.CommonSQLPrivilegeEventDetails{}
 		if n.n.IsGrant {
-			eventDetails.GrantedPrivileges = privileges.SortedNames()
+			eventDetails.GrantedPrivileges = privileges.SortedDisplayNames()
 		} else {
-			eventDetails.RevokedPrivileges = privileges.SortedNames()
+			eventDetails.RevokedPrivileges = privileges.SortedDisplayNames()
 		}
 		event := eventpb.AlterDefaultPrivileges{
 			CommonSQLEventDetails: eventpb.CommonSQLEventDetails{

@@ -17,6 +17,8 @@ import (
 	"math"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -289,6 +291,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 
 	case *memo.DeleteExpr:
 		ep, err = b.buildDelete(t)
+
+	case *memo.LockExpr:
+		ep, err = b.buildLock(t)
 
 	case *memo.CreateTableExpr:
 		ep, err = b.buildCreateTable(t)
@@ -623,6 +628,7 @@ func (b *Builder) scanParams(
 	}
 
 	locking, err := b.buildLocking(scan.Locking)
+
 	if err != nil {
 		return exec.ScanParams{}, opt.ColMap{}, err
 	}
@@ -1207,7 +1213,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 				// Enhance the error with the EXPLAIN (OPT, VERBOSE) of the inner
 				// expression.
 				fmtFlags := memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes |
-					memo.ExprFmtHideNotVisibleIndexInfo
+					memo.ExprFmtHideNotVisibleIndexInfo | memo.ExprFmtHideFastPathChecks
 				explainOpt := o.FormatExpr(newRightSide, fmtFlags, false /* redactableValues */)
 				err = errors.WithDetailf(err, "newRightSide:\n%s", explainOpt)
 			}
@@ -2908,13 +2914,28 @@ func (b *Builder) buildLocking(locking opt.Locking) (opt.Locking, error) {
 		// Raise error if row-level locking is part of a read-only transaction.
 		if b.evalCtx.TxnReadOnly {
 			return opt.Locking{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
-				"cannot execute %s in a read-only transaction", locking.Strength.String(),
+				"cannot execute SELECT %s in a read-only transaction", locking.Strength.String(),
 			)
 		}
-		if locking.Durability == tree.LockDurabilityGuaranteed {
+		if locking.Form == tree.LockPredicate {
 			return opt.Locking{}, unimplemented.NewWithIssuef(
-				100193, "guaranteed-durable locking not yet implemented",
+				110873, "explicit unique checks are not yet supported under read committed isolation",
 			)
+		}
+		// Check if we can actually use shared locks here, or we need to use
+		// non-locking reads instead.
+		if locking.Strength == tree.ForShare || locking.Strength == tree.ForKeyShare {
+			// Shared locks weren't a thing prior to v23.2, so we must use non-locking
+			// reads.
+			if !b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V23_2) ||
+				// And in >= v23.2, their locking behavior for serializable transactions
+				// is dictated by session setting.
+				(b.evalCtx.TxnIsoLevel == isolation.Serializable &&
+					!b.evalCtx.SessionData().SharedLockingForSerializable) {
+				// Reset locking information as we've determined we're going to be
+				// performing a non-locking read.
+				return opt.Locking{}, nil // early return; do not set b.ContainsNonDefaultKeyLocking
+			}
 		}
 		b.ContainsNonDefaultKeyLocking = true
 	}
@@ -3162,7 +3183,8 @@ func (b *Builder) buildCall(c *memo.CallExpr) (execPlan, error) {
 		udf.Def.SetReturning,
 		udf.TailCall,
 		true, /* procedure */
-		nil,  /* exceptionHandler */
+		nil,  /* blockState */
+		nil,  /* cursorDeclaration */
 	)
 
 	var ep execPlan
@@ -3607,7 +3629,8 @@ func (b *Builder) statementTag(expr memo.RelExpr) string {
 	switch expr.Op() {
 	case opt.OpaqueRelOp, opt.OpaqueMutationOp, opt.OpaqueDDLOp:
 		return expr.Private().(*memo.OpaqueRelPrivate).Metadata.String()
-
+	case opt.LockOp:
+		return "SELECT " + expr.Private().(*memo.LockPrivate).Locking.Strength.String()
 	default:
 		return expr.Op().SyntaxTag()
 	}

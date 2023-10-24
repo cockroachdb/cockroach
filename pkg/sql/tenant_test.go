@@ -13,7 +13,6 @@ package sql_test
 import (
 	"context"
 	gosql "database/sql"
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -51,7 +50,7 @@ func TestDropTenantSynchronous(t *testing.T) {
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						DisableAutomaticVersionUpgrade: make(chan struct{}),
-						BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2),
+						BinaryVersionOverride:          clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey),
 					},
 				},
 			},
@@ -130,27 +129,4 @@ func TestGetTenantIds(t *testing.T) {
 		roachpb.MustMakeTenantID(3),
 	}
 	require.Equal(t, expectedIds, ids)
-}
-
-func TestAlterTenantCapabilityMixedVersion22_2_23_1(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2),
-				},
-			},
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
-
-	systemTenant := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-
-	const tenantID = 5
-	systemTenant.Exec(t, fmt.Sprintf("SELECT crdb_internal.create_tenant(%d)", tenantID))
-	systemTenant.ExpectErr(t, "cannot alter tenant capabilities until version is finalized", "ALTER TENANT $1 GRANT CAPABILITY can_admin_split", tenantID)
 }

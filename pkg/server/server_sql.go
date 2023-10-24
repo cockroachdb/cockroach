@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangestats"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -62,7 +63,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
-	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -97,6 +97,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -257,6 +258,13 @@ type sqlServerOptionalKVArgs struct {
 	// inspectzServer is used to power various crdb_internal vtables, exposing
 	// the equivalent of /inspectz but through SQL.
 	inspectzServer inspectzpb.InspectzServer
+
+	// notifyChangeToSystemVisibleSettings is called by the settings
+	// watcher when one or more TenandReadOnly setting is updated via
+	// SET CLUSTER SETTING (i.e. updated in system.settings).
+	//
+	// The second argument must be sorted by setting key already.
+	notifyChangeToSystemVisibleSettings func(context.Context, []kvpb.TenantSetting)
 }
 
 // sqlServerOptionalTenantArgs are the arguments supplied to newSQLServer which
@@ -426,7 +434,7 @@ type monitorAndMetricsOptions struct {
 }
 
 var vmoduleSetting = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.debug.default_vmodule",
 	"vmodule string (ignored by any server with an explicit one provided at start)",
 	"",
@@ -568,8 +576,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	var settingsWatcher *settingswatcher.SettingsWatcher
 	if codec.ForSystemTenant() {
-		settingsWatcher = settingswatcher.New(
-			cfg.clock, codec, cfg.Settings, cfg.rangeFeedFactory, cfg.stopper, cfg.settingsStorage,
+		settingsWatcher = settingswatcher.NewWithNotifier(ctx,
+			cfg.clock, codec, cfg.Settings, cfg.rangeFeedFactory, cfg.stopper, cfg.notifyChangeToSystemVisibleSettings, cfg.settingsStorage,
 		)
 	} else {
 		// Create the tenant settings watcher, using the tenant connector as the
@@ -637,7 +645,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			jobsKnobs = cfg.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs)
 		}
 
-		td := tracedumper.NewTraceDumper(ctx, cfg.InflightTraceDirName, cfg.Settings)
 		*jobRegistry = *jobs.MakeRegistry(
 			ctx,
 			cfg.AmbientCtx,
@@ -654,7 +661,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 				return sql.MakeJobExecContext(ctx, opName, user, &sql.MemoryMetrics{}, execCfg)
 			},
 			jobAdoptionStopFile,
-			td,
 			jobsKnobs,
 		)
 	}
@@ -1032,6 +1038,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		AutoConfigProvider:         cfg.AutoConfigProvider,
 	}
 
+	if codec.ForSystemTenant() {
+		execCfg.VirtualClusterName = catconstants.SystemTenantName
+	}
+
 	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
 		execCfg.SchemaChangerTestingKnobs = sqlSchemaChangerTestingKnobs.(*sql.SchemaChangerTestingKnobs)
 	} else {
@@ -1260,44 +1270,40 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.UpgradeTestingKnobs = knobs
 	}
 
-	if !codec.ForSystemTenant() || !cfg.SpanConfigsDisabled {
-		// Instantiate a span config manager. If we're the host tenant we'll
-		// only do it unless COCKROACH_DISABLE_SPAN_CONFIGS is set.
-		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
-		spanConfig.sqlTranslatorFactory = spanconfigsqltranslator.NewFactory(
-			execCfg.ProtectedTimestampProvider, codec, spanConfigKnobs,
-		)
-		spanConfig.sqlWatcher = spanconfigsqlwatcher.New(
-			codec,
-			cfg.Settings,
-			cfg.rangeFeedFactory,
-			1<<20, /* 1 MB bufferMemLimit */
-			cfg.stopper,
-			// TODO(irfansharif): What should this no-op cadence be?
-			30*time.Second, /* checkpointNoopsEvery */
-			spanConfigKnobs,
-		)
-		spanConfigReconciler := spanconfigreconciler.New(
-			spanConfig.sqlWatcher,
-			spanConfig.sqlTranslatorFactory,
-			cfg.spanConfigAccessor,
-			execCfg,
-			codec,
-			cfg.TenantID,
-			cfg.Settings,
-			spanConfigKnobs,
-		)
-		spanConfig.manager = spanconfigmanager.New(
-			cfg.internalDB,
-			jobRegistry,
-			cfg.stopper,
-			cfg.Settings,
-			spanConfigReconciler,
-			spanConfigKnobs,
-		)
+	// Instantiate a span config manager.
+	spanConfig.sqlTranslatorFactory = spanconfigsqltranslator.NewFactory(
+		execCfg.ProtectedTimestampProvider, codec, spanConfigKnobs,
+	)
+	spanConfig.sqlWatcher = spanconfigsqlwatcher.New(
+		codec,
+		cfg.Settings,
+		cfg.rangeFeedFactory,
+		4<<20, /* 4 MB bufferMemLimit */
+		cfg.stopper,
+		// TODO(irfansharif): What should this no-op cadence be?
+		30*time.Second, /* checkpointNoopsEvery */
+		spanConfigKnobs,
+	)
+	spanConfigReconciler := spanconfigreconciler.New(
+		spanConfig.sqlWatcher,
+		spanConfig.sqlTranslatorFactory,
+		cfg.spanConfigAccessor,
+		execCfg,
+		codec,
+		cfg.TenantID,
+		cfg.Settings,
+		spanConfigKnobs,
+	)
+	spanConfig.manager = spanconfigmanager.New(
+		cfg.internalDB,
+		jobRegistry,
+		cfg.stopper,
+		cfg.Settings,
+		spanConfigReconciler,
+		spanConfigKnobs,
+	)
 
-		execCfg.SpanConfigReconciler = spanConfigReconciler
-	}
+	execCfg.SpanConfigReconciler = spanConfigReconciler
 	execCfg.SpanConfigKVAccessor = cfg.spanConfigAccessor
 	execCfg.SpanConfigLimiter = spanConfig.limiter
 	execCfg.SpanConfigSplitter = spanConfig.splitter
@@ -1434,6 +1440,7 @@ func (s *SQLServer) preStart(
 		// from KV (or elsewhere).
 		if entry, _ := s.tenantConnect.TenantInfo(); entry.Name != "" {
 			s.cfg.idProvider.SetTenantName(entry.Name)
+			s.execCfg.VirtualClusterName = entry.Name
 		}
 		if err := s.startCheckService(ctx, stopper); err != nil {
 			return err
@@ -1659,6 +1666,16 @@ func (s *SQLServer) preStart(
 			"use a tenant binary whose version is at least %v", tenantActiveVersion.Version)
 	}
 
+	// Prevent the server from starting if its minimum supported binary version is too high
+	// for the tenant cluster version.
+	if tenantActiveVersion.Version.Less(s.execCfg.Settings.Version.BinaryMinSupportedVersion()) {
+		return errors.WithHintf(errors.Newf("preventing SQL server from starting because its executable "+
+			"version is too new to run the current active logical version of the virtual cluster"),
+			"finalize the virtual cluster version to at least %v or downgrade the"+
+				"executable version to at most %v", s.execCfg.Settings.Version.BinaryMinSupportedVersion(), tenantActiveVersion.Version,
+		)
+	}
+
 	// Delete all orphaned table leases created by a prior instance of this
 	// node. This also uses SQL.
 	s.leaseMgr.DeleteOrphanedLeases(ctx, orphanedLeasesTimeThresholdNanos)
@@ -1719,6 +1736,12 @@ func (s *SQLServer) preStart(
 			sk.DrainReportCh <- struct{}{}
 		}
 	}))
+
+	if !s.execCfg.Codec.ForSystemTenant() && (s.serviceMode != mtinfopb.ServiceModeExternal) {
+		if err := s.startTenantAutoUpgradeLoop(ctx); err != nil {
+			return errors.Wrap(err, "cannot start tenant auto upgrade checker task")
+		}
+	}
 
 	return nil
 }

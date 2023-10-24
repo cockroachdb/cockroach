@@ -111,26 +111,44 @@ func TestDB_GetForUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db := setup(t)
-	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
 
-	result, err := db.GetForUpdate(context.Background(), "aa")
-	if err != nil {
-		t.Fatal(err)
-	}
-	checkResult(t, []byte(""), result.ValueBytes())
+	testutils.RunTrueAndFalse(t, "durability-guaranteed", func(t *testing.T, durabilityGuaranteed bool) {
+		var result kv.KeyValue
+		var err error
+		if durabilityGuaranteed {
+			result, err = db.GetForUpdate(ctx, "aa", kvpb.GuaranteedDurability)
+		} else {
+			result, err = db.GetForUpdate(ctx, "aa", kvpb.BestEffort)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		checkResult(t, []byte(""), result.ValueBytes())
+	})
 }
 
 func TestDB_GetForShare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db := setup(t)
-	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
 
-	result, err := db.GetForShare(context.Background(), "aa")
-	if err != nil {
-		t.Fatal(err)
-	}
-	checkResult(t, []byte(""), result.ValueBytes())
+	testutils.RunTrueAndFalse(t, "durability-guaranteed", func(t *testing.T, durabilityGuaranteed bool) {
+		var result kv.KeyValue
+		var err error
+		if durabilityGuaranteed {
+			result, err = db.GetForShare(ctx, "aa", kvpb.GuaranteedDurability)
+		} else {
+			result, err = db.GetForShare(ctx, "aa", kvpb.BestEffort)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		checkResult(t, []byte(""), result.ValueBytes())
+	})
 }
 
 func TestDB_Put(t *testing.T) {
@@ -363,52 +381,70 @@ func TestDB_ScanForUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db := setup(t)
-	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
 
-	b := &kv.Batch{}
-	b.Put("aa", "1")
-	b.Put("ab", "2")
-	b.Put("bb", "3")
-	if err := db.Run(context.Background(), b); err != nil {
-		t.Fatal(err)
-	}
-	rows, err := db.ScanForUpdate(context.Background(), "a", "b", 100)
-	if err != nil {
-		t.Fatal(err)
-	}
-	expected := map[string][]byte{
-		"aa": []byte("1"),
-		"ab": []byte("2"),
-	}
+	testutils.RunTrueAndFalse(t, "durability-guaranteed", func(t *testing.T, durabilityGuaranteed bool) {
+		b := &kv.Batch{}
+		b.Put("aa", "1")
+		b.Put("ab", "2")
+		b.Put("bb", "3")
+		if err := db.Run(context.Background(), b); err != nil {
+			t.Fatal(err)
+		}
+		var rows []kv.KeyValue
+		var err error
+		if durabilityGuaranteed {
+			rows, err = db.ScanForUpdate(ctx, "a", "b", 100, kvpb.GuaranteedDurability)
+		} else {
+			rows, err = db.ScanForUpdate(ctx, "a", "b", 100, kvpb.BestEffort)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		expected := map[string][]byte{
+			"aa": []byte("1"),
+			"ab": []byte("2"),
+		}
 
-	checkRows(t, expected, rows)
-	checkLen(t, len(expected), len(rows))
+		checkRows(t, expected, rows)
+		checkLen(t, len(expected), len(rows))
+	})
 }
 
 func TestDB_ScanForShare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db := setup(t)
-	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
 
-	b := &kv.Batch{}
-	b.Put("aa", "1")
-	b.Put("ab", "2")
-	b.Put("bb", "3")
-	if err := db.Run(context.Background(), b); err != nil {
-		t.Fatal(err)
-	}
-	rows, err := db.ScanForShare(context.Background(), "a", "b", 100)
-	if err != nil {
-		t.Fatal(err)
-	}
-	expected := map[string][]byte{
-		"aa": []byte("1"),
-		"ab": []byte("2"),
-	}
+	testutils.RunTrueAndFalse(t, "durability-guaranteed", func(t *testing.T, durabilityGuaranteed bool) {
+		b := &kv.Batch{}
+		b.Put("aa", "1")
+		b.Put("ab", "2")
+		b.Put("bb", "3")
+		if err := db.Run(ctx, b); err != nil {
+			t.Fatal(err)
+		}
+		var rows []kv.KeyValue
+		var err error
+		if durabilityGuaranteed {
+			rows, err = db.ScanForShare(ctx, "a", "b", 100, kvpb.GuaranteedDurability)
+		} else {
+			rows, err = db.ScanForShare(ctx, "a", "b", 100, kvpb.BestEffort)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		expected := map[string][]byte{
+			"aa": []byte("1"),
+			"ab": []byte("2"),
+		}
 
-	checkRows(t, expected, rows)
-	checkLen(t, len(expected), len(rows))
+		checkRows(t, expected, rows)
+		checkLen(t, len(expected), len(rows))
+	})
 }
 
 func TestDB_ReverseScan(t *testing.T) {
@@ -441,52 +477,72 @@ func TestDB_ReverseScanForUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db := setup(t)
-	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
 
-	b := &kv.Batch{}
-	b.Put("aa", "1")
-	b.Put("ab", "2")
-	b.Put("bb", "3")
-	if err := db.Run(context.Background(), b); err != nil {
-		t.Fatal(err)
-	}
-	rows, err := db.ReverseScanForUpdate(context.Background(), "ab", "c", 100)
-	if err != nil {
-		t.Fatal(err)
-	}
-	expected := map[string][]byte{
-		"bb": []byte("3"),
-		"ab": []byte("2"),
-	}
+	testutils.RunTrueAndFalse(t, "durability-guaranteed", func(t *testing.T, durabilityGuaranteed bool) {
+		b := &kv.Batch{}
+		b.Put("aa", "1")
+		b.Put("ab", "2")
+		b.Put("bb", "3")
+		if err := db.Run(ctx, b); err != nil {
+			t.Fatal(err)
+		}
+		var rows []kv.KeyValue
+		var err error
 
-	checkRows(t, expected, rows)
-	checkLen(t, len(expected), len(rows))
+		if durabilityGuaranteed {
+			rows, err = db.ReverseScanForUpdate(ctx, "ab", "c", 100, kvpb.GuaranteedDurability)
+		} else {
+			rows, err = db.ReverseScanForUpdate(ctx, "ab", "c", 100, kvpb.BestEffort)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		expected := map[string][]byte{
+			"bb": []byte("3"),
+			"ab": []byte("2"),
+		}
+
+		checkRows(t, expected, rows)
+		checkLen(t, len(expected), len(rows))
+	})
 }
 
 func TestDB_ReverseScanForShare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db := setup(t)
-	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
 
-	b := &kv.Batch{}
-	b.Put("aa", "1")
-	b.Put("ab", "2")
-	b.Put("bb", "3")
-	if err := db.Run(context.Background(), b); err != nil {
-		t.Fatal(err)
-	}
-	rows, err := db.ReverseScanForShare(context.Background(), "ab", "c", 100)
-	if err != nil {
-		t.Fatal(err)
-	}
-	expected := map[string][]byte{
-		"bb": []byte("3"),
-		"ab": []byte("2"),
-	}
+	testutils.RunTrueAndFalse(t, "durability-guaranteed", func(t *testing.T, durabilityGuaranteed bool) {
+		b := &kv.Batch{}
+		b.Put("aa", "1")
+		b.Put("ab", "2")
+		b.Put("bb", "3")
+		if err := db.Run(ctx, b); err != nil {
+			t.Fatal(err)
+		}
+		var rows []kv.KeyValue
+		var err error
 
-	checkRows(t, expected, rows)
-	checkLen(t, len(expected), len(rows))
+		if durabilityGuaranteed {
+			rows, err = db.ReverseScanForShare(ctx, "ab", "c", 100, kvpb.GuaranteedDurability)
+		} else {
+			rows, err = db.ReverseScanForShare(ctx, "ab", "c", 100, kvpb.BestEffort)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		expected := map[string][]byte{
+			"bb": []byte("3"),
+			"ab": []byte("2"),
+		}
+
+		checkRows(t, expected, rows)
+		checkLen(t, len(expected), len(rows))
+	})
 }
 
 func TestDB_TxnIterate(t *testing.T) {
@@ -762,7 +818,7 @@ func TestDBDecommissionedOperations(t *testing.T) {
 			return err
 		}},
 		{"GetForUpdate", func() error {
-			_, err := db.GetForUpdate(ctx, key)
+			_, err := db.GetForUpdate(ctx, key, kvpb.BestEffort)
 			return err
 		}},
 		{"Put", func() error {

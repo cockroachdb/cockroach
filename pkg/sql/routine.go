@@ -15,13 +15,15 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -74,7 +76,7 @@ func (p *planner) EvalRoutineExpr(
 
 	if expr.TailCall && !expr.Generator && p.EvalContext().RoutineSender != nil {
 		// This is a nested routine in tail-call position.
-		if !p.curPlan.flags.IsDistributed() && tailCallOptimizationEnabled {
+		if tailCallOptimizationEnabled {
 			// Tail-call optimizations are enabled. Send the information needed to
 			// evaluate this routine to the parent routine, then return. It is safe to
 			// return NULL here because the parent is guaranteed not to perform any
@@ -206,6 +208,13 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 	}
 	g.rch.Init(ctx, retTypes, g.p.ExtendedEvalContext(), "routine" /* opName */)
 
+	// If this is the start of a PLpgSQL block with an exception handler, create a
+	// savepoint.
+	err = g.maybeInitBlockState(ctx)
+	if err != nil {
+		return err
+	}
+
 	// Configure stepping for volatile routines so that mutations made by the
 	// invoking statement are visible to the routine.
 	if g.expr.EnableStepping {
@@ -226,23 +235,30 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 	stmtIdx := 0
 	ef := newExecFactory(ctx, g.p)
 	rrw := NewRowResultWriter(&g.rch)
+	var cursorHelper *plpgsqlCursorHelper
 	err = g.expr.ForEachPlan(ctx, ef, g.args, func(plan tree.RoutinePlan, isFinalPlan bool) error {
 		stmtIdx++
 		opName := "udf-stmt-" + g.expr.Name + "-" + strconv.Itoa(stmtIdx)
 		ctx, sp := tracing.ChildSpan(ctx, opName)
 		defer sp.Finish()
 
-		// If this is the last statement and it is not a procedure, use the
-		// rowResultWriter created above. Otherwise, use a rowResultWriter that
-		// drops all rows added to it.
-		//
-		// We can use a droppingResultWriter for all statements in a procedure
-		// because we do not yet allow OUT or INOUT parameters, so a procedure
-		// never returns values.
 		var w rowResultWriter
+		openCursor := stmtIdx == 1 && g.expr.CursorDeclaration != nil
 		if isFinalPlan && !g.expr.Procedure {
+			// The result of this statement is the routine's output. This is never the
+			// case for a procedure, which does not output any rows (since we do not
+			// yet support OUT or INOUT parameters).
 			w = rrw
+		} else if openCursor {
+			// The result of the first statement will be used to open a SQL cursor.
+			cursorHelper, err = g.newCursorHelper(plan.(*planComponents))
+			if err != nil {
+				return err
+			}
+			w = NewRowResultWriter(&cursorHelper.container)
 		} else {
+			// The result of this statement is not needed. Use a rowResultWriter that
+			// drops all rows added to it.
 			w = &droppingResultWriter{}
 		}
 
@@ -259,12 +275,19 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 		if err != nil {
 			return err
 		}
+		if openCursor {
+			return cursorHelper.createCursor(g.p, g.expr.BlockState)
+		}
 		return nil
 	})
 	if err != nil {
+		if cursorHelper != nil && !cursorHelper.addedCursor {
+			// The cursor wasn't successfully added to the list, so we clean it up
+			// here.
+			err = errors.CombineErrors(err, cursorHelper.Close())
+		}
 		return g.handleException(ctx, err)
 	}
-
 	g.rci = newRowContainerIterator(ctx, g.rch)
 	return nil
 }
@@ -272,34 +295,99 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 // handleException attempts to match the code of the given error to an exception
 // handler for the routine. If the error finds a match, the corresponding branch
 // for the exception handler is executed as a routine.
-// TODO(drewk): When there is an exception block, we need to nest the body of
-// the routine in a sub-transaction, probably using savepoints. If an error
-// occurs in the body of a block with an exception handler, changes to the
-// database that happened within the block should be rolled back, but not those
-// that occurred outside the block.
+//
+// handleException uses the current set of arguments for the routine to ensure
+// that the exception handler sees up-to-date PLpgSQL variables.
+//
+// If an error is matched, handleException will roll back the database state
+// using the current PLpgSQL block's savepoint. Otherwise, it will do nothing,
+// in which case the savepoint will be rolled back either by a parent PLpgSQL
+// block (if the error is eventually caught), or when the transaction aborts.
 func (g *routineGenerator) handleException(ctx context.Context, err error) error {
-	if plpgsql.IsCaughtRoutineException(err) {
-		// This error has already been through handleException in a nested call.
+	blockState := g.expr.BlockState
+	if err == nil || blockState == nil || blockState.ExceptionHandler == nil {
 		return err
 	}
 	caughtCode := pgerror.GetPGCode(err)
 	if caughtCode == pgcode.Uncategorized {
+		// It is not safe to catch an uncategorized error.
 		return err
 	}
-	if handler := g.expr.ExceptionHandler; handler != nil {
-		for i, code := range handler.Codes {
-			if code == caughtCode {
-				g.reset(ctx, g.p, handler.Actions[i], g.args)
-				err = g.startInternal(ctx, g.p.Txn())
-				break
-			}
+	if !g.p.Txn().CanUseSavepoint(ctx, blockState.SavepointTok.(kv.SavepointToken)) {
+		// The current transaction state does not allow roll-back.
+		// TODO(111446): some retryable errors allow the transaction to be rolled
+		// back partially (e.g. for read committed). We should be able to take
+		// advantage of that mechanism here as well.
+		return err
+	}
+	// Unset the exception handler to indicate that it has already encountered an
+	// error.
+	exceptionHandler := blockState.ExceptionHandler
+	blockState.ExceptionHandler = nil
+	for i, code := range exceptionHandler.Codes {
+		caughtException := code == caughtCode
+		if code.String() == "OTHERS" {
+			// The special OTHERS condition matches any error code apart from
+			// query_canceled and assert_failure (though they can still be caught
+			// explicitly).
+			caughtException = caughtCode != pgcode.QueryCanceled && caughtCode != pgcode.AssertFailure
 		}
-		if err != nil {
-			return plpgsql.NewCaughtRoutineException(err)
+		if caughtException {
+			cursErr := g.closeCursors(blockState)
+			if cursErr != nil {
+				return errors.CombineErrors(err, cursErr)
+			}
+			spErr := g.p.Txn().RollbackToSavepoint(ctx, blockState.SavepointTok.(kv.SavepointToken))
+			if spErr != nil {
+				return errors.CombineErrors(err, spErr)
+			}
+			g.reset(ctx, g.p, exceptionHandler.Actions[i], g.args)
+			return g.startInternal(ctx, g.p.Txn())
 		}
 	}
-	// No exception handler matched.
 	return err
+}
+
+// closeCursors closes any cursors that were opened within the scope of the
+// current block. It is used for PLpgSQL exception handling.
+func (g *routineGenerator) closeCursors(blockState *tree.BlockState) error {
+	if blockState == nil {
+		return nil
+	}
+	var err error
+	for _, name := range blockState.Cursors {
+		if g.p.sqlCursors.getCursor(name) == nil {
+			// This cursor has already been closed.
+			continue
+		}
+		if curErr := g.p.sqlCursors.closeCursor(name); curErr != nil {
+			// Attempt to close all cursors in the block, even if one throws an error.
+			err = errors.CombineErrors(err, curErr)
+		}
+	}
+	return err
+}
+
+// maybeInitBlockState creates a savepoint if all the following are true:
+//  1. The current routine is within a PLpgSQL exception block.
+//  2. The current block has an exception handler
+//  3. The savepoint hasn't already been created for this block.
+//
+// Note that it is not necessary to explicitly release the savepoint at any
+// point, because it does not add any overhead.
+func (g *routineGenerator) maybeInitBlockState(ctx context.Context) error {
+	blockState := g.expr.BlockState
+	if blockState == nil {
+		return nil
+	}
+	if blockState.ExceptionHandler != nil && blockState.SavepointTok == nil {
+		// Drop down a savepoint for the current scope.
+		var err error
+		if blockState.SavepointTok, err = g.p.Txn().CreateSavepoint(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Next is part of the ValueGenerator interface.
@@ -358,4 +446,125 @@ func (d *droppingResultWriter) SetError(err error) {
 // Err is part of the rowResultWriter interface.
 func (d *droppingResultWriter) Err() error {
 	return d.err
+}
+
+func (g *routineGenerator) newCursorHelper(plan *planComponents) (*plpgsqlCursorHelper, error) {
+	open := g.expr.CursorDeclaration
+	if open.NameArgIdx < 0 || open.NameArgIdx >= len(g.args) {
+		panic(errors.AssertionFailedf("unexpected name argument index: %d", open.NameArgIdx))
+	}
+	if g.args[open.NameArgIdx] == tree.DNull {
+		return nil, errors.AssertionFailedf("expected non-null cursor name")
+	}
+	cursorName := tree.Name(tree.MustBeDString(g.args[open.NameArgIdx]))
+	if cursorName == "" {
+		// Specifying the empty string as a cursor name conflicts with the
+		// "unnamed" portal, which always exists.
+		return nil, pgerror.Newf(pgcode.DuplicateCursor, "cursor \"\" already in use")
+	}
+	// Use context.Background(), since the cursor can outlive the context in which
+	// it was created.
+	planCols := plan.main.planColumns()
+	cursorHelper := &plpgsqlCursorHelper{
+		ctx:        context.Background(),
+		cursorName: cursorName,
+		resultCols: make(colinfo.ResultColumns, len(planCols)),
+	}
+	copy(cursorHelper.resultCols, planCols)
+	cursorHelper.container.Init(
+		cursorHelper.ctx,
+		getTypesFromResultColumns(planCols),
+		g.p.ExtendedEvalContextCopy(),
+		"routine_open_cursor", /* opName */
+	)
+	return cursorHelper, nil
+}
+
+// plpgsqlCursorHelper wraps a row container in order to feed the results of
+// executing a SQL statement to a SQL cursor. Note that the SQL statement is not
+// lazily executed; its entire result is written to the container.
+// TODO(drewk): while the row container can spill to disk, we should default to
+// lazy execution for cursors for performance reasons.
+type plpgsqlCursorHelper struct {
+	ctx         context.Context
+	cursorName  tree.Name
+	cursorSql   string
+	addedCursor bool
+
+	// Fields related to implementing the isql.Rows interface.
+	container    rowContainerHelper
+	iter         *rowContainerIterator
+	resultCols   colinfo.ResultColumns
+	lastRow      tree.Datums
+	rowsAffected int
+}
+
+func (h *plpgsqlCursorHelper) createCursor(p *planner, blockState *tree.BlockState) error {
+	h.iter = newRowContainerIterator(h.ctx, h.container)
+	cursor := &sqlCursor{
+		Rows:           h,
+		readSeqNum:     p.txn.GetReadSeqNum(),
+		txn:            p.txn,
+		statement:      h.cursorSql,
+		created:        timeutil.Now(),
+		eagerExecution: true,
+	}
+	if err := p.checkIfCursorExists(h.cursorName); err != nil {
+		return err
+	}
+	if err := p.sqlCursors.addCursor(h.cursorName, cursor); err != nil {
+		return err
+	}
+	if blockState != nil {
+		// Add the cursor name to the block's state. This allows the exception handler
+		// to close it, if necessary.
+		blockState.Cursors = append(blockState.Cursors, h.cursorName)
+	}
+	h.addedCursor = true
+	return nil
+}
+
+var _ isql.Rows = &plpgsqlCursorHelper{}
+
+// Next implements the isql.Rows interface.
+func (h *plpgsqlCursorHelper) Next(_ context.Context) (bool, error) {
+	var err error
+	h.lastRow, err = h.iter.Next()
+	if err != nil {
+		return false, err
+	}
+	if h.lastRow != nil {
+		h.rowsAffected++
+	}
+	return h.lastRow != nil, nil
+}
+
+// Cur implements the isql.Rows interface.
+func (h *plpgsqlCursorHelper) Cur() tree.Datums {
+	return h.lastRow
+}
+
+// RowsAffected implements the isql.Rows interface.
+func (h *plpgsqlCursorHelper) RowsAffected() int {
+	return h.rowsAffected
+}
+
+// Close implements the isql.Rows interface.
+func (h *plpgsqlCursorHelper) Close() error {
+	if h.iter != nil {
+		h.iter.Close()
+		h.iter = nil
+	}
+	h.container.Close(h.ctx)
+	return nil
+}
+
+// Types implements the isql.Rows interface.
+func (h *plpgsqlCursorHelper) Types() colinfo.ResultColumns {
+	return h.resultCols
+}
+
+// HasResults implements the isql.Rows interface.
+func (h *plpgsqlCursorHelper) HasResults() bool {
+	return h.lastRow != nil
 }

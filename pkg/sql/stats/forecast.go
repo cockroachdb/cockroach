@@ -36,7 +36,7 @@ import (
 // UseStatisticsForecasts controls whether statistics forecasts are generated in
 // the stats cache.
 var UseStatisticsForecasts = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.forecasts.enabled",
 	"when true, enables generation of statistics forecasts by default for all tables",
 	true,

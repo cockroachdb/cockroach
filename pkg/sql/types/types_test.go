@@ -364,6 +364,10 @@ func TestTypes(t *testing.T) {
 		{Oid, MakeScalar(OidFamily, oid.T_oid, 0, 0, emptyLocale)},
 		{RegClass, MakeScalar(OidFamily, oid.T_regclass, 0, 0, emptyLocale)},
 
+		{RefCursor, &T{InternalType: InternalType{
+			Family: RefCursorFamily, Oid: oid.T_refcursor, Locale: &emptyLocale}}},
+		{RefCursor, MakeScalar(RefCursorFamily, oid.T_refcursor, 0, 0, emptyLocale)},
+
 		// STRING
 		{MakeString(0), String},
 		{MakeString(0), &T{InternalType: InternalType{
@@ -769,6 +773,9 @@ func TestMarshalCompat(t *testing.T) {
 		{Float, InternalType{Family: FloatFamily, Oid: oid.T_float8, Width: 64}},
 		{Float4, InternalType{Family: FloatFamily, Oid: oid.T_float4, Width: 32, VisibleType: visibleREAL}},
 
+		// REFCURSOR
+		{RefCursor, InternalType{Family: RefCursorFamily, Oid: oid.T_refcursor}},
+
 		// STRING
 		{MakeString(10), InternalType{Family: StringFamily, Oid: oid.T_text, Width: 10}},
 		{VarChar, InternalType{Family: StringFamily, Oid: oid.T_varchar, VisibleType: visibleVARCHAR}},
@@ -831,6 +838,9 @@ func TestUnmarshalCompat(t *testing.T) {
 		{InternalType{Family: IntFamily, VisibleType: visibleBIT}, Int},
 		{InternalType{Family: IntFamily, Width: 20}, Int},
 		{InternalType{Family: IntFamily}, Int},
+
+		// REFCURSOR
+		{InternalType{Family: RefCursorFamily, Oid: oid.T_refcursor}, RefCursor},
 
 		// STRING
 		{InternalType{Family: StringFamily}, String},
@@ -1113,6 +1123,7 @@ func TestWithoutTypeModifiers(t *testing.T) {
 		{Jsonb, Jsonb},
 		{Name, Name},
 		{Uuid, Uuid},
+		{RefCursor, RefCursor},
 	}
 
 	for _, tc := range testCases {
@@ -1142,6 +1153,7 @@ func TestDelimiter(t *testing.T) {
 		{VarChar, ","},
 		{QChar, ","},
 		{Name, ","},
+		{RefCursor, ","},
 		{Bytes, ","},
 		{Date, ","},
 		{Time, ","},

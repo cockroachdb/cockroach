@@ -37,9 +37,10 @@ func declareKeysTruncateLog(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
+) error {
 	prefix := keys.RaftLogPrefix(rs.GetRangeID())
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
+	return nil
 }
 
 // TruncateLog discards a prefix of the raft log. Truncating part of a log that
@@ -120,7 +121,7 @@ func TruncateLog(
 	// are not tracked in the raft log delta. The delta will be adjusted below
 	// raft.
 	// We can pass zero as nowNanos because we're only interested in SysBytes.
-	ms, err := storage.ComputeStats(readWriter, start, end, 0 /* nowNanos */)
+	ms, err := storage.ComputeStats(ctx, readWriter, start, end, 0 /* nowNanos */)
 	if err != nil {
 		return result.Result{}, errors.Wrap(err, "while computing stats of Raft log freed by truncation")
 	}

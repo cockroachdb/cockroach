@@ -22,7 +22,7 @@ Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD CO
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j-), IndexID: 5}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j-), IndexID: 2 (tbl_j_key-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_j_key-)}
-      │    │    ├── MERGE_ONLY            → DELETE_ONLY SecondaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_j_key-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4 (tbl_pkey-)}
+      │    │    ├── MERGE_ONLY            → DELETE_ONLY SecondaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_j_key-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4 (tbl_pkey-), RecreateSourceIndexID: 0}
       │    │    ├── PUBLIC                → ABSENT      IndexName:{DescID: 106 (tbl), Name: "tbl_j_key", IndexID: 2 (tbl_j_key-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j-), IndexID: 3}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 3}
@@ -51,7 +51,7 @@ Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD CO
       │    │    ├── VALIDATED   → DELETE_ONLY PrimaryIndex:{DescID: 106 (tbl), IndexID: 4 (tbl_pkey-), ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1 (tbl_pkey+)}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 4 (tbl_pkey-)}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j-), IndexID: 4 (tbl_pkey-)}
-      │    │    ├── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_j_key-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4 (tbl_pkey-)}
+      │    │    ├── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_j_key-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4 (tbl_pkey-), RecreateSourceIndexID: 0}
       │    │    └── DELETE_ONLY → ABSENT      TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 4 (tbl_pkey-)}
       │    └── 7 Mutation operations
       │         ├── MakeIndexAbsent {"IndexID":2,"TableID":106}

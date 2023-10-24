@@ -93,7 +93,7 @@ var allowedDebugPauseOnValues = map[string]struct{}{
 
 // featureRestoreEnabled is used to enable and disable the RESTORE feature.
 var featureRestoreEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"feature.restore.enabled",
 	"set to true to enable restore, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,
@@ -1077,10 +1077,17 @@ func resolveOptionsForRestoreJobDescription(
 		SkipMissingViews:                 opts.SkipMissingViews,
 		SkipMissingUDFs:                  opts.SkipMissingUDFs,
 		Detached:                         opts.Detached,
+		SkipLocalitiesCheck:              opts.SkipLocalitiesCheck,
+		DebugPauseOn:                     opts.DebugPauseOn,
+		IncludeAllSecondaryTenants:       opts.IncludeAllSecondaryTenants,
+		AsTenant:                         opts.AsTenant,
+		ForceTenantID:                    opts.ForceTenantID,
 		SchemaOnly:                       opts.SchemaOnly,
 		VerifyData:                       opts.VerifyData,
 		UnsafeRestoreIncompatibleVersion: opts.UnsafeRestoreIncompatibleVersion,
+		ExecutionLocality:                opts.ExecutionLocality,
 		ExperimentalOnline:               opts.ExperimentalOnline,
+		RemoveRegions:                    opts.RemoveRegions,
 	}
 
 	if opts.EncryptionPassphrase != nil {
@@ -1221,6 +1228,11 @@ func restorePlanHook(
 		"RESTORE",
 	); err != nil {
 		return nil, nil, nil, false, err
+	}
+
+	if restoreStmt.Options.RemoveRegions && !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V23_2) {
+		return nil, nil, nil, false,
+			errors.Newf("to set the remove_regions option, cluster version must be >= %s", clusterversion.V23_2.String())
 	}
 
 	if !restoreStmt.Options.SchemaOnly && restoreStmt.Options.VerifyData {
@@ -2029,6 +2041,14 @@ func doRestorePlan(
 		}
 	}
 
+	if restoreStmt.Options.RemoveRegions {
+		for _, t := range tablesByID {
+			if t.LocalityConfig.GetRegionalByRow() != nil {
+				return errors.Newf("cannot perform a remove_regions RESTORE with region by row enabled table %s in BACKUP target", t.Name)
+			}
+		}
+	}
+
 	if !restoreStmt.Options.SkipLocalitiesCheck {
 		if err := checkClusterRegions(ctx, p, typesByID); err != nil {
 			return err
@@ -2068,6 +2088,15 @@ func doRestorePlan(
 	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
 		if err := dropDefaultUserDBs(ctx, p.InternalSQLTxn()); err != nil {
 			return err
+		}
+	}
+
+	// If we are stripping localities, wipe tables of their LocalityConfig before we allocate
+	// descriptor rewrites - as validation in remapTables compares these tables with the non-mr
+	// database and fails otherwise
+	if restoreStmt.Options.RemoveRegions {
+		for _, t := range filteredTablesByID {
+			t.TableDesc().LocalityConfig = nil
 		}
 	}
 
@@ -2187,6 +2216,7 @@ func doRestorePlan(
 		SkipLocalitiesCheck: restoreStmt.Options.SkipLocalitiesCheck,
 		ExecutionLocality:   execLocality,
 		ExperimentalOnline:  restoreStmt.Options.ExperimentalOnline,
+		RemoveRegions:       restoreStmt.Options.RemoveRegions,
 	}
 
 	jr := jobs.Record{

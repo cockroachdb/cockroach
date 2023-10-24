@@ -35,13 +35,11 @@ import (
 func hashRange(t *testing.T, reader storage.Reader, start, end roachpb.Key) []byte {
 	t.Helper()
 	h := sha256.New()
-	require.NoError(t, reader.MVCCIterate(
-		start, end, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
-		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
-			h.Write(kv.Key.Key)
-			h.Write(kv.Value)
-			return nil
-		}))
+	require.NoError(t, reader.MVCCIterate(context.Background(), start, end, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly, func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+		h.Write(kv.Key.Key)
+		h.Write(kv.Value)
+		return nil
+	}))
 	return h.Sum(nil)
 }
 
@@ -55,7 +53,7 @@ func TestCmdRevertRange(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Run this test on both RocksDB and Pebble. Regression test for:
+	// Regression test for:
 	// https://github.com/cockroachdb/cockroach/pull/42386
 	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
@@ -111,17 +109,18 @@ func TestCmdRevertRange(t *testing.T) {
 	cArgs := batcheval.CommandArgs{Header: kvpb.Header{RangeID: desc.RangeID, Timestamp: tsReq, MaxSpanRequestKeys: 2}}
 	evalCtx := &batcheval.MockEvalCtx{Desc: &desc, Clock: hlc.NewClockForTesting(nil), Stats: stats}
 	cArgs.EvalCtx = evalCtx.EvalContext()
-	afterStats, err := storage.ComputeStats(eng, keys.LocalMax, keys.MaxKey, 0)
+	afterStats, err := storage.ComputeStats(ctx, eng, keys.LocalMax, keys.MaxKey, 0)
 	require.NoError(t, err)
 	for _, tc := range []struct {
 		name     string
 		ts       hlc.Timestamp
 		expected []byte
 		resumes  int
+		empty    bool
 	}{
-		{"revert revert to time A", tsA, sumA, 4},
-		{"revert revert to time B", tsB, sumB, 4},
-		{"revert revert to time C (nothing)", tsC, sumC, 0},
+		{"revert revert to time A", tsA, sumA, 4, false},
+		{"revert revert to time B", tsB, sumB, 4, false},
+		{"revert revert to time C (nothing)", tsC, sumC, 0, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			batch := &wrappedBatch{Batch: eng.NewBatch()}
@@ -140,9 +139,13 @@ func TestCmdRevertRange(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				require.NotNil(t, result.Replicated.MVCCHistoryMutation)
-				require.Equal(t, result.Replicated.MVCCHistoryMutation.Spans,
-					[]roachpb.Span{{Key: req.RequestHeader.Key, EndKey: req.RequestHeader.EndKey}})
+				// If there's nothing to revert and the fast-path is hit,
+				// MVCCHistoryMutation will be empty.
+				if !tc.empty {
+					require.NotNil(t, result.Replicated.MVCCHistoryMutation)
+					require.Equal(t, result.Replicated.MVCCHistoryMutation.Spans,
+						[]roachpb.Span{{Key: req.RequestHeader.Key, EndKey: req.RequestHeader.EndKey}})
+				}
 				if reply.ResumeSpan == nil {
 					break
 				}
@@ -161,7 +164,7 @@ func TestCmdRevertRange(t *testing.T) {
 			}
 			evalStats := afterStats
 			evalStats.Add(*cArgs.Stats)
-			realStats, err := storage.ComputeStats(batch, keys.LocalMax, keys.MaxKey, evalStats.LastUpdateNanos)
+			realStats, err := storage.ComputeStats(ctx, batch, keys.LocalMax, keys.MaxKey, evalStats.LastUpdateNanos)
 			require.NoError(t, err)
 			require.Equal(t, realStats, evalStats)
 		})

@@ -1,0 +1,207 @@
+# LogicTest: !local-mixed-23.1
+
+statement ok
+SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true
+
+statement ok
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX (b), FAMILY (a, b, c))
+
+statement ok
+INSERT INTO abc VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
+
+statement ok
+CREATE TABLE bcd (b INT PRIMARY KEY, c INT, d INT, INDEX (c), FAMILY (b, c, d))
+
+statement ok
+INSERT INTO bcd VALUES (20, 200, 2000), (30, 300, 3000), (40, 400, 4000)
+
+statement ok
+GRANT ALL on abc TO testuser
+
+statement ok
+GRANT ALL on bcd TO testuser
+
+# First, hold locks on some rows of abc and bcd. We'll update abc at the end.
+
+user testuser
+
+statement ok
+BEGIN ISOLATION LEVEL READ COMMITTED
+
+query III rowsort
+SELECT * FROM abc WHERE a != 3 FOR UPDATE
+----
+1  10  100
+2  20  200
+
+query III
+SELECT * FROM bcd ORDER BY c DESC LIMIT 2 FOR SHARE
+----
+40  400  4000
+30  300  3000
+
+# Then ensure we wait on the locks and see the updated rows after commit.
+
+user root
+
+# Normal reads do not block.
+
+query III rowsort
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT * FROM abc;
+COMMIT;
+----
+1  10  100
+2  20  200
+3  30  300
+
+query III rowsort
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT * FROM bcd;
+COMMIT;
+----
+20  200  2000
+30  300  3000
+40  400  4000
+
+# SKIP LOCKED reads do not block.
+
+query III rowsort
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT * FROM abc FOR UPDATE SKIP LOCKED;
+COMMIT;
+----
+3  30  300
+
+query III rowsort
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT * FROM bcd FOR UPDATE SKIP LOCKED;
+COMMIT;
+----
+20  200  2000
+
+# Shared reads block on exclusive locks but not on shared locks.
+
+query III async,rowsort q00
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT * FROM abc FOR SHARE;
+COMMIT;
+----
+1  11  101
+2  21  201
+3  30  300
+
+query III rowsort
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT * FROM bcd FOR SHARE;
+COMMIT;
+----
+20  200  2000
+30  300  3000
+40  400  4000
+
+# Exclusive reads block on both.
+
+query III async,rowsort q01
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT * FROM abc FOR UPDATE;
+COMMIT;
+----
+1  11  101
+2  21  201
+3  30  300
+
+query III async,rowsort q02
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT * FROM bcd FOR UPDATE;
+COMMIT;
+----
+20  200  2000
+30  300  3000
+40  400  4000
+
+# Try more exclusive-locking queries.
+
+query I async q03
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT a FROM abc WHERE a = 2 FOR UPDATE;
+COMMIT;
+----
+2
+
+query I async q04
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT b FROM abc WHERE a = 2 FOR UPDATE;
+COMMIT;
+----
+21
+
+query I async q05
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT c FROM abc WHERE a = 2 FOR UPDATE;
+COMMIT;
+----
+201
+
+query I async q06
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT c FROM abc ORDER BY a DESC LIMIT 2 FOR UPDATE;
+COMMIT;
+----
+300
+201
+
+query I async,rowsort q07
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT a + b + c FROM abc FOR UPDATE;
+COMMIT;
+----
+113
+224
+333
+
+# Try some joins
+
+query IIIII async,rowsort q08
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT * FROM abc JOIN bcd USING (b) FOR SHARE;
+COMMIT;
+----
+30  3  300  300  3000
+
+query IIIII async,rowsort q09
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT * FROM abc JOIN bcd USING (c) FOR UPDATE;
+COMMIT;
+----
+300  3  30  30  3000
+
+user testuser
+
+statement ok
+UPDATE abc SET b = b + 1, c = c + 1 WHERE a != 3
+
+statement ok
+COMMIT
+
+user root
+
+awaitquery q00
+
+awaitquery q01
+
+awaitquery q02
+
+awaitquery q03
+
+awaitquery q04
+
+awaitquery q05
+
+awaitquery q06
+
+awaitquery q07
+
+awaitquery q08
+
+awaitquery q09

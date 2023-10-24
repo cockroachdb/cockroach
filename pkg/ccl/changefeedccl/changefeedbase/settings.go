@@ -22,7 +22,7 @@ import (
 // NB: The more generic name of this setting precedes its current
 // interpretation. It used to control additional polling rates.
 var TableDescriptorPollInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.experimental_poll_interval",
 	"polling interval for the table descriptors",
 	1*time.Second,
@@ -44,7 +44,7 @@ func TestingSetDefaultMinCheckpointFrequency(f time.Duration) func() {
 // PerChangefeedMemLimit controls how much data can be buffered by
 // a single changefeed.
 var PerChangefeedMemLimit = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.memory.per_changefeed_limit",
 	"controls amount of data that can be buffered per changefeed",
 	1<<29, // 512MiB
@@ -52,7 +52,7 @@ var PerChangefeedMemLimit = settings.RegisterByteSizeSetting(
 
 // SlowSpanLogThreshold controls when we will log slow spans.
 var SlowSpanLogThreshold = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.slow_span_log_threshold",
 	"a changefeed will log spans with resolved timestamps this far behind the current wall-clock time; if 0, a default value is calculated based on other cluster settings",
 	0,
@@ -62,7 +62,7 @@ var SlowSpanLogThreshold = settings.RegisterDurationSetting(
 // IdleTimeout controls how long the changefeed will wait for a new KV being
 // emitted before marking itself as idle.
 var IdleTimeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.idle_timeout",
 	"a changefeed will mark itself idle if no changes have been emitted for greater than this duration; if 0, the changefeed will never be marked idle",
 	10*time.Minute,
@@ -72,7 +72,7 @@ var IdleTimeout = settings.RegisterDurationSetting(
 
 // FrontierCheckpointFrequency controls the frequency of frontier checkpoints.
 var FrontierCheckpointFrequency = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.frontier_checkpoint_frequency",
 	"controls the frequency with which span level checkpoints will be written; if 0, disabled",
 	10*time.Minute,
@@ -83,7 +83,7 @@ var FrontierCheckpointFrequency = settings.RegisterDurationSetting(
 // mark is allowed to lag behind the leading edge of the frontier before we
 // begin to attempt checkpointing spans above the high-water mark
 var FrontierHighwaterLagCheckpointThreshold = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.frontier_highwater_lag_checkpoint_threshold",
 	"controls the maximum the high-water mark is allowed to lag behind the leading spans of the frontier before per-span checkpointing is enabled; if 0, checkpointing due to high-water lag is disabled",
 	10*time.Minute,
@@ -105,7 +105,7 @@ var FrontierHighwaterLagCheckpointThreshold = settings.RegisterDurationSetting(
 // Therefore, we should write at most 6 MB of checkpoint/hour; OR, based on the default
 // FrontierCheckpointFrequency setting, 1 MB per checkpoint.
 var FrontierCheckpointMaxBytes = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.frontier_checkpoint_max_bytes",
 	"controls the maximum size of the checkpoint as a total size of key bytes",
 	1<<20, // 1 MiB
@@ -115,7 +115,7 @@ var FrontierCheckpointMaxBytes = settings.RegisterByteSizeSetting(
 // Scan requests are issued when changefeed performs the backfill.
 // If set to 0, a reasonable default will be chosen.
 var ScanRequestLimit = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.backfill.concurrent_scan_requests",
 	"number of concurrent scan requests per node issued during a backfill",
 	0,
@@ -126,7 +126,7 @@ var ScanRequestLimit = settings.RegisterIntSetting(
 // TODO(cdc,yevgeniy,irfansharif): 16 MiB is too large for "elastic" work such
 // as this; reduce the default. Evaluate this as part of #90089.
 var ScanRequestSize = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.backfill.scan_request_size",
 	"the maximum number of bytes returned by each scan request",
 	1<<19, // 1/2 MiB
@@ -151,7 +151,7 @@ type SinkThrottleConfig struct {
 
 // NodeSinkThrottleConfig is the node wide throttling configuration for changefeeds.
 var NodeSinkThrottleConfig = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.node_throttle_config",
 	"specifies node level throttling configuration for all changefeeeds",
 	"",
@@ -171,7 +171,7 @@ func validateSinkThrottleConfig(values *settings.Values, configStr string) error
 // MinHighWaterMarkCheckpointAdvance specifies the minimum amount of time the
 // changefeed high water mark must advance for it to be eligible for checkpointing.
 var MinHighWaterMarkCheckpointAdvance = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.min_highwater_advance",
 	"minimum amount of time the changefeed high water mark must advance "+
 		"for it to be eligible for checkpointing; Default of 0 will checkpoint every time frontier "+
@@ -187,7 +187,7 @@ var MinHighWaterMarkCheckpointAdvance = settings.RegisterDurationSetting(
 // with complex schemes to accurately measure and adjust current memory usage,
 // we'll request the amount of memory multiplied by this fudge factor.
 var EventMemoryMultiplier = settings.RegisterFloatSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.event_memory_multiplier",
 	"the amount of memory required to process an event is multiplied by this factor",
 	3,
@@ -196,7 +196,7 @@ var EventMemoryMultiplier = settings.RegisterFloatSetting(
 
 // ProtectTimestampInterval controls the frequency of protected timestamp record updates
 var ProtectTimestampInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.protect_timestamp_interval",
 	"controls how often the changefeed forwards its protected timestamp to the resolved timestamp",
 	10*time.Minute,
@@ -205,7 +205,7 @@ var ProtectTimestampInterval = settings.RegisterDurationSetting(
 
 // MaxProtectedTimestampAge controls the frequency of protected timestamp record updates
 var MaxProtectedTimestampAge = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.protect_timestamp.max_age",
 	"fail the changefeed if the protected timestamp age exceeds this threshold; 0 disables expiration",
 	4*24*time.Hour,
@@ -214,7 +214,7 @@ var MaxProtectedTimestampAge = settings.RegisterDurationSetting(
 
 // BatchReductionRetryEnabled enables the temporary reduction of batch sizes upon kafka message too large errors
 var BatchReductionRetryEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.batch_reduction_retry_enabled",
 	"if true, kafka changefeeds upon erroring on an oversized batch will attempt to resend the messages with progressively lower batch sizes",
 	false,
@@ -223,7 +223,7 @@ var BatchReductionRetryEnabled = settings.RegisterBoolSetting(
 
 // UseMuxRangeFeed enables the use of MuxRangeFeed RPC.
 var UseMuxRangeFeed = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.mux_rangefeed.enabled",
 	"if true, changefeed uses multiplexing rangefeed RPC",
 	util.ConstantWithMetamorphicTestBool("changefeed.mux_rangefeed.enabled", false),
@@ -232,7 +232,7 @@ var UseMuxRangeFeed = settings.RegisterBoolSetting(
 // EventConsumerWorkers specifies the maximum number of workers to use when
 // processing  events.
 var EventConsumerWorkers = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.event_consumer_workers",
 	"the number of workers to use when processing events: <0 disables, "+
 		"0 assigns a reasonable default, >0 assigns the setting value. for experimental/core "+
@@ -242,7 +242,7 @@ var EventConsumerWorkers = settings.RegisterIntSetting(
 
 // EventConsumerWorkerQueueSize specifies the maximum number of events a worker buffer.
 var EventConsumerWorkerQueueSize = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.event_consumer_worker_queue_size",
 	"if changefeed.event_consumer_workers is enabled, this setting sets the maxmimum number of events "+
 		"which a worker can buffer",
@@ -255,7 +255,7 @@ var EventConsumerWorkerQueueSize = settings.RegisterIntSetting(
 // For example, every N milliseconds of CPU work, request N more
 // milliseconds of CPU time.
 var EventConsumerPacerRequestSize = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.cpu.per_event_consumer_worker_allocation",
 	"an event consumer worker will perform a blocking request for CPU time "+
 		"before consuming events. after fully utilizing this CPU time, it will "+
@@ -267,7 +267,7 @@ var EventConsumerPacerRequestSize = settings.RegisterDurationSetting(
 // PerEventElasticCPUControlEnabled determines whether changefeed event
 // processing integrates with elastic CPU control.
 var PerEventElasticCPUControlEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.cpu.per_event_elastic_control.enabled",
 	"determines whether changefeed event processing integrates with elastic CPU control",
 	true,
@@ -276,7 +276,7 @@ var PerEventElasticCPUControlEnabled = settings.RegisterBoolSetting(
 // RequireExternalConnectionSink is used to restrict non-admins with the CHANGEFEED privilege
 // to create changefeeds to external connections only.
 var RequireExternalConnectionSink = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.permissions.require_external_connection_sink",
 	"if enabled, this settings restricts users with the CHANGEFEED privilege"+
 		" to create changefeeds with external connection sinks only."+
@@ -288,7 +288,7 @@ var RequireExternalConnectionSink = settings.RegisterBoolSetting(
 // SinkIOWorkers controls the number of IO workers used by sinks that use
 // parallelIO to be able to send multiple requests in parallel.
 var SinkIOWorkers = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.sink_io_workers",
 	"the number of workers used by changefeeds when sending requests to the sink "+
 		"(currently webhook only): <0 disables, 0 assigns a reasonable default, >0 assigns the setting value",
@@ -300,7 +300,7 @@ var SinkIOWorkers = settings.RegisterIntSetting(
 // example, every N milliseconds of CPU work, request N more milliseconds of CPU
 // time.
 var SinkPacerRequestSize = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.cpu.sink_encoding_allocation",
 	"an event consumer worker will perform a blocking request for CPU time "+
 		"before consuming events. after fully utilizing this CPU time, it will "+

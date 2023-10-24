@@ -52,7 +52,7 @@ func TestStringifyWriteBatch(t *testing.T) {
 	wb.Data = batch.Repr()
 	s, err = decodeWriteBatch(wb)
 	require.NoError(t, err)
-	require.Equal(t, "Single Delete: /Local/Lock/Intent/Table/56/1/1169/5/3054/0 "+
+	require.Equal(t, "Single Delete: /Local/Lock/Table/56/1/1169/5/3054/0 "+
 		"03623a9318c0384d07a6f22b858594df60 (0x017a6b12c089f704918df70bee8800010003623a9318c0384d07a6f22b858594df6012): \n",
 		s)
 

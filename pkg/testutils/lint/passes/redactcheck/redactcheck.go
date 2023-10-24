@@ -151,8 +151,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"FormatCode": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/privilege": {
-						"Kind":       {},
-						"ObjectType": {},
+						"KindInternalKey": {},
+						"KindDisplayName": {},
+						"ObjectType":      {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants": {
 						"ConstraintType": {},
@@ -187,6 +188,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"ClockTimestamp":  {},
 						"LegacyTimestamp": {},
 						"Timestamp":       {},
+					},
+					"github.com/cockroachdb/pebble": {
+						"FormatMajorVersion": {},
 					},
 					"github.com/cockroachdb/pebble/internal/humanize": {
 						"FormattedString": {},

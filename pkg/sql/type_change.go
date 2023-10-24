@@ -1086,8 +1086,8 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		var unionUnnests strings.Builder
 		var query strings.Builder
 
-		// Construct a query of the form:
-		// SELECT unnest FROM (
+		// Construct a query of the form to count usage of this enum value:
+		// SELECT COUNT(unnest) FROM (
 		//	SELECT unnest(c1) FROM [SELECT %d AS t]
 		//	UNION
 		//	SELECT unnest(c2) FROM [SELECT %d AS t]
@@ -1119,7 +1119,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		if firstClause {
 			continue
 		}
-		query.WriteString("SELECT unnest FROM (")
+		query.WriteString("SELECT count(unnest) FROM (")
 		query.WriteString(unionUnnests.String())
 
 		sqlPhysRep, err := convertToSQLStringRepresentation(member.PhysicalRepresentation)
@@ -1136,7 +1136,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 			User:     username.RootUserName(),
 			Database: dbDesc.GetName(),
 		}
-		rows, err := txn.QueryRowEx(
+		row, err := txn.QueryRowEx(
 			ctx,
 			"count-array-type-value-usage",
 			txn.KV(),
@@ -1146,7 +1146,10 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		if err != nil {
 			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 		}
-		if len(rows) > 0 {
+		if row == nil {
+			return errors.New("failed to count array type value usage")
+		}
+		if int64(tree.MustBeDInt(row[0])) != 0 {
 			// Use an FQN in the error message.
 			parentSchema, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Schema(ctx, desc.GetParentSchemaID())
 			if err != nil {

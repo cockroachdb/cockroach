@@ -489,6 +489,7 @@ func init() {
 			cliflagcfg.VarFlag(f, &storeSpecs, cliflags.Store)
 			cliflagcfg.VarFlag(f, &serverCfg.StorageEngine, cliflags.StorageEngine)
 			cliflagcfg.StringFlag(f, &serverCfg.SharedStorage, cliflags.SharedStorage)
+			cliflagcfg.VarFlag(f, &serverCfg.SecondaryCache, cliflags.SecondaryCache)
 			cliflagcfg.VarFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
 			cliflagcfg.BoolFlag(f, &serverCfg.DisableMaxOffsetCheck, cliflags.DisableMaxOffsetCheck)
 			cliflagcfg.StringFlag(f, &serverCfg.ClockDevicePath, cliflags.ClockDevice)
@@ -539,10 +540,10 @@ func init() {
 			cliflagcfg.BoolFlag(f, &startBackground, cliflags.Background)
 		}
 
-		// TODO(knz): Remove this port offset mechanism once we implement
+		// TODO(knz): Remove this port configuration mechanism once we implement
 		// a shared listener. See: https://github.com/cockroachdb/cockroach/issues/84585
-		cliflagcfg.IntFlag(f, &baseCfg.SecondaryTenantPortOffset, cliflags.SecondaryTenantPortOffset)
-		_ = f.MarkHidden(cliflags.SecondaryTenantPortOffset.Name)
+		cliflagcfg.VarFlag(f, addr.NewPortRangeSetter(&baseCfg.ApplicationInternalRPCPortMin, &baseCfg.ApplicationInternalRPCPortMax), cliflags.ApplicationInternalRPCPortRange)
+		_ = f.MarkHidden(cliflags.ApplicationInternalRPCPortRange.Name)
 	}
 
 	// Multi-tenancy start-sql command flags.
@@ -701,6 +702,7 @@ func init() {
 		cliflagcfg.IntFlag(f, &zipCtx.concurrency, cliflags.ZipConcurrency)
 		cliflagcfg.BoolFlag(f, &zipCtx.includeRangeInfo, cliflags.ZipIncludeRangeInfo)
 		cliflagcfg.BoolFlag(f, &zipCtx.includeStacks, cliflags.ZipIncludeGoroutineStacks)
+		cliflagcfg.BoolFlag(f, &zipCtx.includeRunningJobTraces, cliflags.ZipIncludeRunningJobTraces)
 	}
 	// List-files + Zip commands.
 	for _, cmd := range []*cobra.Command{debugZipCmd, debugListFilesCmd} {

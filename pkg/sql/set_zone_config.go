@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -35,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -261,11 +262,8 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 		return nil, err
 	}
 
-	if err := execCfg.RequireSystemTenantOrClusterSetting(SecondaryTenantZoneConfigsEnabled); err != nil {
-		// Return an unimplemented error here instead of referencing the cluster
-		// setting here as zone configurations for secondary tenants are intended to
-		// be hidden.
-		return nil, errorutil.UnsupportedUnderClusterVirtualization(MultitenancyZoneCfgIssueNo)
+	if err := requireSystemTenantOrClusterSetting(execCfg.Codec, execCfg.Settings, SecondaryTenantZoneConfigsEnabled); err != nil {
+		return nil, err
 	}
 
 	if err := checkPrivilegeForSetZoneConfig(ctx, p, n.ZoneSpecifier); err != nil {
@@ -967,16 +965,13 @@ func validateNoRepeatKeysInConstraints(constraints []zonepb.Constraint) error {
 func accumulateUniqueConstraints(zone *zonepb.ZoneConfig) []zonepb.Constraint {
 	constraints := make([]zonepb.Constraint, 0)
 	addToValidate := func(c zonepb.Constraint) {
-		var alreadyInList bool
 		for _, val := range constraints {
 			if c == val {
-				alreadyInList = true
-				break
+				// Already in the list, nothing to do.
+				return
 			}
 		}
-		if !alreadyInList {
-			constraints = append(constraints, c)
-		}
+		constraints = append(constraints, c)
 	}
 	for _, constraints := range zone.Constraints {
 		for _, constraint := range constraints.Constraints {
@@ -1004,7 +999,7 @@ func accumulateUniqueConstraints(zone *zonepb.ZoneConfig) []zonepb.Constraint {
 // validateZoneAttrsAndLocalities is tenant aware in its validation. Secondary
 // tenants don't have access to the NodeStatusServer, and as such, aren't
 // allowed to set non-locality attributes in their constraints. Furthermore,
-// their access is validated using the RegionProvider.
+// their access is validated using the descs.RegionProvider.
 func validateZoneAttrsAndLocalities(
 	ctx context.Context,
 	regionProvider descs.RegionProvider,
@@ -1016,13 +1011,15 @@ func validateZoneAttrsAndLocalities(
 		return nil
 	}
 	if execCfg.Codec.ForSystemTenant() {
-		ss, err := execCfg.NodesStatusServer.OptionalNodesStatusServer(MultitenancyZoneCfgIssueNo)
+		ss, err := execCfg.NodesStatusServer.OptionalNodesStatusServer()
 		if err != nil {
 			return err
 		}
 		return validateZoneAttrsAndLocalitiesForSystemTenant(ctx, ss.ListNodesInternal, zone)
 	}
-	return validateZoneLocalitiesForSecondaryTenants(ctx, regionProvider.GetRegions, zone)
+	return validateZoneLocalitiesForSecondaryTenants(
+		ctx, regionProvider.GetRegions, zone, execCfg.Codec, execCfg.Settings,
+	)
 }
 
 // validateZoneAttrsAndLocalitiesForSystemTenant performs all the constraint/
@@ -1077,36 +1074,65 @@ func validateZoneAttrsAndLocalitiesForSystemTenant(
 	return nil
 }
 
+// secondaryTenantsAllZoneConfigsEnabled is an extension of
+// SecondaryTenantZoneConfigsEnabled that allows virtual clusters to modify all
+// type of constraints in zone configs (i.e. not only zones and regions).
+var secondaryTenantsAllZoneConfigsEnabled = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled",
+	"enable unrestricted usage of ALTER CONFIGURE ZONE in virtual clusters",
+	false,
+)
+
 // validateZoneLocalitiesForSecondaryTenants performs all the constraint/lease
-// preferences validation for secondary tenants. Secondary tenants are only
-// allowed to reference locality attributes as they only have access to region
-// information via the serverpb.TenantStatusServer. Even then, they're only
-// allowed to reference the "region" and "zone" tiers.
+// preferences validation for secondary tenants. Unless
+// secondaryTenantsAllZoneConfigsEnabled is set to 'true', secondary tenants are
+// only allowed to reference locality attributes as they only have access to
+// region information via the serverpb.TenantStatusServer. In that case they're
+// only allowed to reference the "region" and "zone" tiers.
 //
 // Unlike the system tenant, we also validate prohibited constraints. This is
 // because secondary tenant must operate in the narrow view exposed via the
 // serverpb.TenantStatusServer and are not allowed to configure arbitrary
 // constraints (required or otherwise).
 func validateZoneLocalitiesForSecondaryTenants(
-	ctx context.Context, getRegions regionsGetter, zone *zonepb.ZoneConfig,
+	ctx context.Context,
+	getRegions regionsGetter,
+	zone *zonepb.ZoneConfig,
+	codec keys.SQLCodec,
+	settings *cluster.Settings,
 ) error {
 	toValidate := accumulateUniqueConstraints(zone)
-	resp, err := getRegions(ctx)
-	if err != nil {
-		return err
-	}
-	regions := make(map[string]struct{})
-	zones := make(map[string]struct{})
-	for regionName, regionMeta := range resp.Regions {
-		regions[regionName] = struct{}{}
-		for _, zone := range regionMeta.Zones {
-			zones[zone] = struct{}{}
+
+	// rs and zs will be lazily populated with regions and zones, respectively.
+	// These should not be accessed directly - use getRegionsAndZones helper
+	// instead.
+	var rs, zs map[string]struct{}
+	getRegionsAndZones := func() (regions, zones map[string]struct{}, _ error) {
+		if rs != nil {
+			return rs, zs, nil
 		}
+		resp, err := getRegions(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		rs, zs = make(map[string]struct{}), make(map[string]struct{})
+		for regionName, regionMeta := range resp.Regions {
+			rs[regionName] = struct{}{}
+			for _, zone := range regionMeta.Zones {
+				zs[zone] = struct{}{}
+			}
+		}
+		return rs, zs, nil
 	}
 
 	for _, constraint := range toValidate {
 		switch constraint.Key {
 		case "zone":
+			_, zones, err := getRegionsAndZones()
+			if err != nil {
+				return err
+			}
 			_, found := zones[constraint.Value]
 			if !found {
 				return pgerror.Newf(
@@ -1116,6 +1142,10 @@ func validateZoneLocalitiesForSecondaryTenants(
 				)
 			}
 		case "region":
+			regions, _, err := getRegionsAndZones()
+			if err != nil {
+				return err
+			}
 			_, found := regions[constraint.Value]
 			if !found {
 				return pgerror.Newf(
@@ -1125,20 +1155,15 @@ func validateZoneLocalitiesForSecondaryTenants(
 				)
 			}
 		default:
-			return errors.WithHint(pgerror.Newf(
-				pgcode.CheckViolation,
-				"invalid constraint attribute: %q",
-				constraint.Key,
-			),
-				`only "zone" and "region" are allowed`,
-			)
+			if err := requireSystemTenantOrClusterSetting(
+				codec, settings, secondaryTenantsAllZoneConfigsEnabled,
+			); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
-
-// MultitenancyZoneCfgIssueNo points to the multitenancy zone config issue number.
-const MultitenancyZoneCfgIssueNo = 49854
 
 type zoneConfigUpdate struct {
 	id         descpb.ID

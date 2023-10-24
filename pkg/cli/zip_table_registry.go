@@ -161,7 +161,6 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"contention",
 			"index_recommendations",
 			"retries",
-			"last_retry_reason",
 			"error_code",
 			"crdb_internal.redact(last_error_redactable) as last_error_redactable",
 		},
@@ -299,6 +298,16 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"crdb_internal.hide_sql_constants(create_statement) as create_statement",
 		},
 	},
+	`"".crdb_internal.create_procedure_statements`: {
+		nonSensitiveCols: NonSensitiveColumns{
+			"database_id",
+			"database_name",
+			"schema_id",
+			"procedure_id",
+			"procedure_name",
+			"crdb_internal.hide_sql_constants(create_statement) as create_statement",
+		},
+	},
 	// The synthetic SQL CREATE statements for all tables.
 	// Note the "". to collect across all databases.
 	`"".crdb_internal.create_schema_statements`: {
@@ -400,9 +409,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 	"crdb_internal.system_jobs": {
 		// `payload` column may contain customer info, such as URI params
 		// containing access keys, encryption salts, etc.
-		customQueryUnredacted: `SELECT *, 
-			to_hex(payload) AS hex_payload, 
-			to_hex(progress) AS hex_progress 
+		customQueryUnredacted: `SELECT *
 			FROM crdb_internal.system_jobs`,
 		customQueryRedacted: `SELECT 
 			"id",
@@ -415,9 +422,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"claim_session_id",
 			"claim_instance_id",
 			"num_runs",
-			"last_run", 
-			'<redacted>' AS "hex_payload", 
-			to_hex(progress) AS "hex_progress"
+			"last_run"
 			FROM crdb_internal.system_jobs`,
 	},
 	"crdb_internal.kv_system_privileges": {
@@ -567,6 +572,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"waiting_txn_fingerprint_id",
 			"contention_duration",
 			"IF(crdb_internal.is_system_table_key(contending_key), crdb_internal.pretty_key(contending_key, 0) ,'redacted') as contending_pretty_key",
+			"contention_type",
 		},
 	},
 	"crdb_internal.zones": {
@@ -1006,13 +1012,11 @@ var zipSystemTables = DebugZipTableRegistry{
 	"system.descriptor": {
 		customQueryUnredacted: `SELECT
 				id,
-				descriptor,
-				to_hex(descriptor) AS hex_descriptor
+				descriptor
 			FROM system.descriptor`,
 		customQueryRedacted: `SELECT
 				id,
-				crdb_internal.redact_descriptor(descriptor) AS descriptor,
-				to_hex(crdb_internal.redact_descriptor(descriptor)) AS hex_descriptor
+				crdb_internal.redact_descriptor(descriptor) AS descriptor
 			FROM system.descriptor`,
 	},
 	"system.eventlog": {
@@ -1037,9 +1041,7 @@ var zipSystemTables = DebugZipTableRegistry{
 	"system.jobs": {
 		// NB: `payload` column may contain customer info, such as URI params
 		// containing access keys, encryption salts, etc.
-		customQueryUnredacted: `SELECT *, 
-			to_hex(payload) AS hex_payload, 
-			to_hex(progress) AS hex_progress 
+		customQueryUnredacted: `SELECT * 
 			FROM system.jobs`,
 		customQueryRedacted: `SELECT id,
 			status,
@@ -1051,16 +1053,13 @@ var zipSystemTables = DebugZipTableRegistry{
 			claim_session_id,
 			claim_instance_id,
 			num_runs,
-			last_run,
-			'<redacted>' AS hex_payload,
-			to_hex(progress) AS hex_progress
+			last_run
 			FROM system.jobs`,
 	},
 	"system.job_info": {
 		// `value` column may contain customer info, such as URI params
 		// containing access keys, encryption salts, etc.
-		customQueryUnredacted: `SELECT *,
-			to_hex(value) AS hex_value
+		customQueryUnredacted: `SELECT *
 			FROM system.job_info`,
 		customQueryRedacted: `SELECT job_id,
 			info_key,
@@ -1215,16 +1214,15 @@ var zipSystemTables = DebugZipTableRegistry{
 		},
 	},
 	"system.settings": {
-		customQueryUnredacted: `SELECT *, to_hex(value) as hex_value FROM system.settings`,
+		customQueryUnredacted: `SELECT * FROM system.settings`,
 		customQueryRedacted: `SELECT * FROM (
-    		SELECT *, to_hex(value) as hex_value
+    		SELECT *
     		FROM system.settings
 			WHERE "valueType" <> 's'
     	) UNION (
 			SELECT name, '<redacted>' as value,
 			"lastUpdated",
-			"valueType",
-			to_hex('redacted') as hex_value
+			"valueType"
 			FROM system.settings
 			WHERE "valueType"  = 's'
     	)`,

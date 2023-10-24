@@ -28,6 +28,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -432,7 +433,15 @@ func SQL(
 	if len(c.Nodes) == 1 {
 		return c.ExecOrInteractiveSQL(ctx, l, tenantName, tenantInstance, cmdArray)
 	}
-	return c.ExecSQL(ctx, l, c.Nodes, tenantName, tenantInstance, cmdArray)
+	results, err := c.ExecSQL(ctx, l, c.Nodes, tenantName, tenantInstance, cmdArray)
+	if err != nil {
+		return err
+	}
+
+	for _, r := range results {
+		l.Printf("node %d:\n%s", r.Node, r.CombinedOut)
+	}
+	return nil
 }
 
 // IP gets the ip addresses of the nodes in a cluster.
@@ -666,8 +675,10 @@ func DefaultStartOpts() install.StartOpts {
 		ScheduleBackups:    false,
 		ScheduleBackupArgs: "",
 		InitTarget:         1,
-		SQLPort:            config.DefaultSQLPort,
-		AdminUIPort:        config.DefaultAdminUIPort,
+		// TODO(renato): change the defaults below to `0` (i.e., pick a
+		// random available port) once #111052 is addressed.
+		SQLPort:     config.DefaultSQLPort,
+		AdminUIPort: config.DefaultAdminUIPort,
 	}
 }
 
@@ -710,6 +721,11 @@ type StopOpts struct {
 	// If MaxWait is set, roachprod waits that approximate number of seconds
 	// until the PID disappears.
 	MaxWait int
+
+	// Options that only apply to StopServiceForVirtualCluster
+	VirtualClusterID   int
+	VirtualClusterName string
+	SQLInstance        int
 }
 
 // DefaultStopOpts returns StopOpts populated with the default values used by Stop.
@@ -731,7 +747,7 @@ func Stop(ctx context.Context, l *logger.Logger, clusterName string, opts StopOp
 	if err != nil {
 		return err
 	}
-	return c.Stop(ctx, l, opts.Sig, opts.Wait, opts.MaxWait)
+	return c.Stop(ctx, l, opts.Sig, opts.Wait, opts.MaxWait, "")
 }
 
 // Signal sends a signal to nodes in the cluster.
@@ -934,7 +950,7 @@ func PgURL(
 		if ip == "" {
 			return nil, errors.Errorf("empty ip: %v", ips)
 		}
-		urls = append(urls, c.NodeURL(ip, desc.Port, opts.VirtualClusterName))
+		urls = append(urls, c.NodeURL(ip, desc.Port, opts.VirtualClusterName, desc.ServiceMode))
 	}
 	if len(urls) != len(nodes) {
 		return nil, errors.Errorf("have nodes %v, but urls %v from ips %v", nodes, urls, ips)
@@ -943,13 +959,13 @@ func PgURL(
 }
 
 type urlConfig struct {
-	path           string
-	usePublicIP    bool
-	openInBrowser  bool
-	secure         bool
-	port           int
-	tenantName     string
-	tenantInstance int
+	path               string
+	usePublicIP        bool
+	openInBrowser      bool
+	secure             bool
+	port               int
+	virtualClusterName string
+	sqlInstance        int
 }
 
 func urlGenerator(
@@ -963,10 +979,15 @@ func urlGenerator(
 	for i, node := range nodes {
 		host := vm.Name(c.Name, int(node)) + "." + gce.Subdomain
 
+		// There are no DNS entries for local clusters.
+		if c.IsLocal() {
+			uConfig.usePublicIP = true
+		}
+
 		// verify DNS is working / fallback to IPs if not.
 		if i == 0 && !uConfig.usePublicIP {
 			if _, err := net.LookupHost(host); err != nil {
-				l.Errorf("no valid DNS (yet?). might need to re-run `sync`?")
+				l.Errorf("host %s is unreachable, falling back to public IPs. DNS entries might be outdated, run `roachprod sync`.", host)
 				uConfig.usePublicIP = true
 			}
 		}
@@ -976,7 +997,9 @@ func urlGenerator(
 		}
 		port := uConfig.port
 		if port == 0 {
-			desc, err := c.DiscoverService(ctx, node, uConfig.tenantName, install.ServiceTypeUI, uConfig.tenantInstance)
+			desc, err := c.DiscoverService(
+				ctx, node, uConfig.virtualClusterName, install.ServiceTypeUI, uConfig.sqlInstance,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -1022,8 +1045,8 @@ func browserCmd(url string) *exec.Cmd {
 func AdminURL(
 	ctx context.Context,
 	l *logger.Logger,
-	clusterName, tenantName string,
-	tenantInstance int,
+	clusterName, virtualClusterName string,
+	sqlInstance int,
 	path string,
 	usePublicIP, openInBrowser, secure bool,
 ) ([]string, error) {
@@ -1035,12 +1058,12 @@ func AdminURL(
 		return nil, err
 	}
 	uConfig := urlConfig{
-		path:           path,
-		usePublicIP:    usePublicIP,
-		openInBrowser:  openInBrowser,
-		secure:         secure,
-		tenantName:     tenantName,
-		tenantInstance: tenantInstance,
+		path:               path,
+		usePublicIP:        usePublicIP,
+		openInBrowser:      openInBrowser,
+		secure:             secure,
+		virtualClusterName: virtualClusterName,
+		sqlInstance:        sqlInstance,
 	}
 	return urlGenerator(ctx, c, l, c.TargetNodes(), uConfig)
 }
@@ -1379,7 +1402,7 @@ func Create(
 			if err := cleanupFailedCreate(l, clusterName); err != nil {
 				l.Errorf("Error while cleaning up partially-created cluster: %s\n", err)
 			} else {
-				l.Errorf("Cleaning up OK\n")
+				l.Printf("Cleaning up OK\n")
 			}
 		}()
 	} else {
@@ -1413,18 +1436,53 @@ func Create(
 	return SetupSSH(ctx, l, clusterName)
 }
 
-// GC garbage-collects expired clusters and unused SSH keypairs in AWS.
+// GC garbage-collects expired clusters, unused SSH key pairs in AWS, and unused
+// DNS records.
 func GC(l *logger.Logger, dryrun bool) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
-	cld, err := cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true})
-	if err == nil {
-		// GCClusters depends on ListCloud so only call it if ListCloud runs without errors
-		err = cloud.GCClusters(l, cld, dryrun)
+
+	// Use the `addOpFn` helper to run GC operations concurrently and collect
+	// errors.
+	errorsChan := make(chan error, 8)
+	var wg sync.WaitGroup
+	addOpFn := func(fn func() error) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errorsChan <- fn()
+		}()
 	}
-	otherErr := cloud.GCAWSKeyPairs(l, dryrun)
-	return errors.CombineErrors(err, otherErr)
+
+	// GCAwsKeyPairs has no dependencies and can start immediately.
+	addOpFn(func() error {
+		return cloud.GCAWSKeyPairs(l, dryrun)
+	})
+
+	// The operations below depend on ListCloud so only call it if ListCloud runs
+	// without errors.
+	cld, listErr := cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true})
+	errorsChan <- listErr
+	if listErr == nil {
+		addOpFn(func() error {
+			return cloud.GCClusters(l, cld, dryrun)
+		})
+		addOpFn(func() error {
+			return cloud.GCDNS(l, cld, dryrun)
+		})
+	}
+
+	// Wait for all operations to finish and combine all errors.
+	go func() {
+		wg.Wait()
+		close(errorsChan)
+	}()
+	var combinedErrors error
+	for err := range errorsChan {
+		combinedErrors = errors.CombineErrors(combinedErrors, err)
+	}
+	return combinedErrors
 }
 
 // LogsOpts TODO

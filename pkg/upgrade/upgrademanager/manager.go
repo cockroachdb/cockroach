@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradecluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradejob"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -396,6 +397,11 @@ func (m *Manager) Migrate(
 	clusterVersions := m.listBetween(from.Version, to.Version)
 	log.Infof(ctx, "migrating cluster from %s to %s (stepping through %s)", from, to, clusterVersions)
 	if len(clusterVersions) == 0 {
+		if buildutil.CrdbTestBuild && from.Version != to.Version {
+			// This suggests a test is using bogus versions and didn't set up
+			// ListBetweenOverride properly.
+			panic(errors.AssertionFailedf("no valid versions in (%s, %s]", from.Version, to.Version))
+		}
 		return nil
 	}
 
@@ -702,6 +708,7 @@ func (m *Manager) runMigration(
 				InternalExecutor: m.ie,
 				JobRegistry:      m.jr,
 				TestingKnobs:     &m.knobs,
+				ClusterID:        m.clusterID,
 			}); err != nil {
 				return err
 			}
@@ -824,7 +831,7 @@ func (m *Manager) getRunningMigrationJob(
 	// Payload proto has inside.
 	cv := clusterversion.ClusterVersion{Version: version}
 	var query string
-	if m.settings.Version.IsActive(ctx, clusterversion.V23_1JobInfoTableIsBackfilled) {
+	if m.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1JobInfoTableIsBackfilled) {
 		query = PostJobInfoTableQuery
 	} else {
 		query = preJobInfoTableQuery
@@ -889,6 +896,7 @@ func (m *Manager) checkPreconditions(ctx context.Context, versions []roachpb.Ver
 			LeaseManager:     m.lm,
 			InternalExecutor: m.ie,
 			JobRegistry:      m.jr,
+			ClusterID:        m.clusterID,
 		}); err != nil {
 			return errors.Wrapf(
 				err,

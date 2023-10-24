@@ -59,6 +59,12 @@ func WithVisibility(v Visibility) SettingOption {
 	}}
 }
 
+// WithUnsafe indicates that the setting is unsafe.
+// Unsafe settings need an interlock to be updated. They also cannot be public.
+var WithUnsafe SettingOption = SettingOption{commonOpt: func(c *common) {
+	c.setUnsafe()
+}}
+
 // WithPublic sets public visibility.
 var WithPublic SettingOption = WithVisibility(Public)
 

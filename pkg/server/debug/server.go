@@ -57,7 +57,7 @@ const Endpoint = "/debug/"
 // This setting definition still exists so as to not break
 // deployment scripts that set it unconditionally.
 var _ = settings.RegisterStringSetting(
-	settings.TenantWritable, "server.remote_debugging.mode", "unused", "local",
+	settings.ApplicationLevel, "server.remote_debugging.mode", "unused", "local",
 	settings.Retired)
 
 // Server serves the /debug/* family of tools.

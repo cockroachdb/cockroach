@@ -22,7 +22,7 @@ import (
 // which the CPU will be considered overloaded, when running in a node that
 // executes KV operations.
 var KVSlotAdjusterOverloadThreshold = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"admission.kv_slot_adjuster.overload_threshold",
 	"when the number of runnable goroutines per CPU is greater than this threshold, the "+
 		"slot adjuster considers the cpu to be overloaded",

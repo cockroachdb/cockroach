@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -17,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -32,10 +32,71 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/slices"
 )
+
+// TestRestoreResolveOptionsForJobDescription tests that
+// resolveOptionsForRestoreJobDescription handles every field in the
+// RestoreOptions struct.
+func TestRestoreResolveOptionsForJobDescription(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// The input struct must have a non-zero value for every
+	// element of the struct.
+	input := tree.RestoreOptions{
+		SkipMissingFKs:                   true,
+		SkipMissingSequences:             true,
+		SkipMissingSequenceOwners:        true,
+		SkipMissingViews:                 true,
+		SkipMissingUDFs:                  true,
+		Detached:                         true,
+		SkipLocalitiesCheck:              true,
+		DebugPauseOn:                     tree.NewDString("test expr"),
+		IncludeAllSecondaryTenants:       tree.DBoolTrue,
+		AsTenant:                         tree.NewDString("test expr"),
+		ForceTenantID:                    tree.NewDInt(42),
+		SchemaOnly:                       true,
+		VerifyData:                       true,
+		UnsafeRestoreIncompatibleVersion: true,
+		ExecutionLocality:                tree.NewDString("test expr"),
+		ExperimentalOnline:               true,
+		RemoveRegions:                    true,
+
+		IntoDB:               tree.NewDString("test expr"),
+		NewDBName:            tree.NewDString("test expr"),
+		IncrementalStorage:   []tree.Expr{tree.NewDString("http://example.com")},
+		DecryptionKMSURI:     []tree.Expr{tree.NewDString("http://example.com")},
+		EncryptionPassphrase: tree.NewDString("test expr"),
+	}
+
+	ensureAllStructFieldsSet := func(s tree.RestoreOptions, name string) {
+		structType := reflect.TypeOf(s)
+		require.Equal(t, reflect.Struct, structType.Kind())
+
+		sv := reflect.ValueOf(s)
+		for i := 0; i < sv.NumField(); i++ {
+			field := sv.Field(i)
+			fieldName := structType.Field(i).Name
+			require.True(t, field.IsValid(), "RestoreOptions field %s in %s is not valid", fieldName, name)
+			require.False(t, field.IsZero(), "RestoreOptions field %s in %s is not non-zero", fieldName, name)
+		}
+	}
+
+	ensureAllStructFieldsSet(input, "input")
+	output, err := resolveOptionsForRestoreJobDescription(
+		context.Background(),
+		input,
+		"into_db",
+		"newDBName",
+		[]string{"http://example.com"},
+		[]string{"http://example.com"})
+	require.NoError(t, err)
+	ensureAllStructFieldsSet(output, "output")
+
+}
 
 func TestBackupManifestVersionCompatibility(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -114,13 +175,12 @@ func TestBackupManifestVersionCompatibility(t *testing.T) {
 
 func TestAllocateDescriptorRewrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	opName := "allocate-descriptor-rewrites"
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-	})
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 
 	var defaultDB *dbdesc.Mutable
 	var db1 *dbdesc.Mutable
@@ -138,10 +198,12 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 
 	var planner sql.PlanHookState
 
+	srv := s.ApplicationLayer()
+	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
 	setupPlanner := func() {
 		plannerAsInterface, cleanup := sql.NewInternalPlanner(
 			opName,
-			kv.NewTxn(ctx, kvDB, s.NodeID()),
+			srv.DB().NewTxn(ctx, "test-allocate-descriptor-rewrite"),
 			username.RootUserName(),
 			&sql.MemoryMetrics{},
 			&execCfg,
@@ -179,7 +241,7 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 
 		txn := planner.InternalSQLTxn()
 		col := txn.Descriptors()
-		cat, err := col.GetAll(ctx, kv.NewTxn(ctx, kvDB, s.NodeID()))
+		cat, err := col.GetAll(ctx, kvDB.NewTxn(ctx, "test-get-all"))
 		require.NoError(t, err)
 		sqlDescs := cat.OrderedDescriptors()
 
@@ -219,9 +281,9 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 				type1array = asMutable(sqlDesc).(*typedesc.Mutable)
 			case nameAndType{name: "_type2", objType: "type"}:
 				type2array = asMutable(sqlDesc).(*typedesc.Mutable)
-			case nameAndType{name: "func1", objType: "function"}:
+			case nameAndType{name: "func1", objType: "routine"}:
 				func1 = asMutable(sqlDesc).(*funcdesc.Mutable)
-			case nameAndType{name: "func2", objType: "function"}:
+			case nameAndType{name: "func2", objType: "routine"}:
 				func2 = asMutable(sqlDesc).(*funcdesc.Mutable)
 			}
 		}

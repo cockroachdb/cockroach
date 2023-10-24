@@ -22,6 +22,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
+// This is used by docs automation to produce a list of supported versions for ORM's.
 const supportedKnexTag = "2.5.1"
 
 // This test runs one of knex's test suite against a single cockroach
@@ -39,7 +41,7 @@ func registerKnex(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		require.NoError(t, err)

@@ -184,7 +184,7 @@ func (c *Context) MakeConn(url string) (clisqlclient.Conn, error) {
 	// By default, all connections will use the underlying driver to infer
 	// result types. This should be set back to false for any use case where the
 	// results are only shown for textual display.
-	conn.SetAlwaysInferResultTypes(true)
+	_ = conn.SetAlwaysInferResultTypes(true)
 
 	return conn, nil
 }
@@ -198,7 +198,7 @@ func (c *Context) Run(ctx context.Context, conn clisqlclient.Conn) error {
 	// Anything using a SQL shell (e.g. `cockroach sql` or `demo`), only needs
 	// to show results in text format, so the underlying driver doesn't need to
 	// infer types.
-	conn.SetAlwaysInferResultTypes(false)
+	_ = conn.SetAlwaysInferResultTypes(false)
 
 	// Open the connection to make sure everything is OK before running any
 	// statements. Performs authentication.

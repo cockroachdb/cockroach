@@ -99,7 +99,7 @@ const ShowRangesDeprecatedBehaviorSettingName = "sql.show_ranges_deprecated_beha
 // ShowRangesDeprecatedBehaviorSetting is the setting that controls
 // the behavior. Exported for use in tests.
 var ShowRangesDeprecatedBehaviorSetting = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	ShowRangesDeprecatedBehaviorSettingName,
 	"if set, SHOW RANGES and crdb_internal.ranges{_no_leases} behave with deprecated pre-v23.1 semantics."+
 		" NB: the new SHOW RANGES interface has richer WITH options "+

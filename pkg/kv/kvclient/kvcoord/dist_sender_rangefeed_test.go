@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -29,8 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -44,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/sasha-s/go-deadlock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -258,76 +256,14 @@ func channelWaitWithTimeout(t *testing.T, ch chan struct{}) {
 	if util.RaceEnabled {
 		timeOut *= 10
 	}
+	if syncutil.DeadlockEnabled {
+		timeOut = 2 * deadlock.Opts.DeadlockTimeout
+	}
 	select {
 	case <-ch:
 	case <-time.After(timeOut):
 		t.Fatal("test timed out")
 	}
-}
-func TestBiDirectionalRangefeedNotUsedUntilUpgradeFinalilzed(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-
-	startServerAtVer := func(ver roachpb.Version) (*testcluster.TestCluster, func()) {
-		st := cluster.MakeTestingClusterSettingsWithVersions(ver, ver, true)
-		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual, // Turn off replication queues.
-			ServerArgs: base.TestServerArgs{
-				Settings: st,
-				Knobs: base.TestingKnobs{
-					KVClient: &kvcoord.ClientTestingKnobs{
-						TransportFactory: makeTransportFactory(false, nil, nil),
-					},
-
-					Server: &server.TestingKnobs{
-						DisableAutomaticVersionUpgrade: make(chan struct{}),
-						BinaryVersionOverride:          ver,
-					},
-				},
-			},
-		})
-		return tc, func() { tc.Stopper().Stop(ctx) }
-	}
-
-	// Create a small table; run rangefeed.  The transport factory we injected above verifies
-	// that we use the old rangefeed implementation.
-	runRangeFeed := func(tc *testcluster.TestCluster, opts ...kvcoord.RangeFeedOption) {
-		ts := tc.Server(0)
-
-		sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-		startTime := ts.Clock().Now()
-
-		sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-		sqlDB.Exec(t, `CREATE TABLE foo (key INT PRIMARY KEY)`)
-		sqlDB.Exec(t, `INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000)`)
-
-		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
-			ts.DB(), keys.SystemSQLCodec, "defaultdb", "foo")
-		fooSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
-
-		allSeen, onValue := observeNValues(1000)
-		closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startTime, onValue, false)
-		defer closeFeed()
-		channelWaitWithTimeout(t, allSeen)
-	}
-
-	t.Run("rangefeed-stream-disabled-prior-to-version-upgrade", func(t *testing.T) {
-		noRfStreamVer := clusterversion.ByKey(clusterversion.TODODelete_V22_2RangefeedUseOneStreamPerNode - 1)
-		tc, cleanup := startServerAtVer(noRfStreamVer)
-		defer cleanup()
-		runRangeFeed(tc)
-	})
-
-	t.Run("rangefeed-stream-disabled-via-environment", func(t *testing.T) {
-		defer kvcoord.TestingSetEnableMuxRangeFeed(false)()
-		// Even though we could use rangefeed stream, it's disabled via kill switch.
-		rfStreamVer := clusterversion.ByKey(clusterversion.TODODelete_V22_2RangefeedUseOneStreamPerNode)
-		tc, cleanup := startServerAtVer(rfStreamVer)
-		defer cleanup()
-		runRangeFeed(tc, kvcoord.WithMuxRangeFeed())
-	})
 }
 
 func TestMuxRangeFeedConnectsToNodeOnce(t *testing.T) {
@@ -1051,4 +987,64 @@ func TestMuxRangeFeedCanCloseStream(t *testing.T) {
 		// When we close the stream(s), the rangefeed server responds with a retryable error.
 		// Mux rangefeed should retry, and thus we expect frontier to keep advancing.
 	}
+}
+
+// TestMuxRangeFeedDoesNotDeadlockWithLocalStreams verifies mux rangefeed does not
+// deadlock when running against many local ranges.  Local ranges use local RPC
+// bypass (rpc/context.go) which utilize buffered channels for client/server streaming
+// RPC communication.
+func TestMuxRangeFeedDoesNotDeadlockWithLocalStreams(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	if !syncutil.DeadlockEnabled {
+		t.Log("skipping test: it requires deadlock detection enabled.")
+		return
+	}
+
+	// Lower syncutil deadlock timeout.
+	deadlock.Opts.DeadlockTimeout = 2 * time.Minute
+
+	// Make deadlock more likely: use unbuffered channel.
+	defer rpc.TestingSetLocalStreamChannelBufferSize(0)()
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	ts := tc.Server(0).ApplicationLayer()
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+	// Insert 1000 rows, and split them into many ranges.
+	sqlDB.ExecMultiple(t,
+		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
+		`SET CLUSTER SETTING kv.closed_timestamp.target_duration='100ms'`,
+		`ALTER DATABASE defaultdb  CONFIGURE ZONE USING num_replicas = 1`,
+		`CREATE TABLE foo (key INT PRIMARY KEY)`,
+	)
+
+	startFrom := ts.Clock().Now()
+
+	sqlDB.ExecMultiple(t,
+		`INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000)`,
+		`ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(100, 900, 20))`,
+	)
+
+	fooDesc := desctestutils.TestingGetPublicTableDescriptor(
+		ts.DB(), keys.SystemSQLCodec, "defaultdb", "foo")
+	fooSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+
+	allSeen, onValue := observeNValues(1000)
+	closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startFrom, onValue, true,
+		kvcoord.WithMuxRangeFeed(),
+		kvcoord.TestingWithBeforeSendRequest(func() {
+			// Prior to sending rangefeed request, block for just a bit
+			// to make deadlock more likely.
+			time.Sleep(100 * time.Millisecond)
+		}),
+	)
+	defer closeFeed()
+	channelWaitWithTimeout(t, allSeen)
 }

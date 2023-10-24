@@ -74,6 +74,7 @@ func TestRowFetcherCache(t *testing.T) {
 		serverCfg.LeaseManager.(*lease.Manager),
 		serverCfg.CollectionFactory,
 		serverCfg.DB.KV(),
+		serverCfg.Settings,
 		targets)
 	if err != nil {
 		t.Fatal(err)

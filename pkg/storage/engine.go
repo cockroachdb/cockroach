@@ -420,38 +420,22 @@ type IterOptions struct {
 	// the iterator. UpperBound must be provided unless Prefix is true, in which
 	// case the end of the prefix will be used as the upper bound.
 	UpperBound roachpb.Key
-	// MinTimestampHint and MaxTimestampHint, if set, indicate that keys outside
-	// of the time range formed by [MinTimestampHint, MaxTimestampHint] do not
-	// need to be presented by the iterator. The underlying iterator may be able
-	// to efficiently skip over keys outside of the hinted time range, e.g., when
-	// an SST indicates that it contains no keys within the time range. Intents
+	// MinTimestamp and MaxTimestamp, if set, indicate that only keys
+	// within the time range formed by [MinTimestamp, MaxTimestamp] should be
+	// returned. The underlying iterator may be able to efficiently skip over
+	// keys outside of the hinted time range, e.g., when a block handle
+	// indicates that the block contains no keys within the time range. Intents
 	// will not be visible to such iterators at all. This is only relevant for
 	// MVCCIterators.
 	//
-	// Note that time bound hints are strictly a performance optimization, and
-	// iterators with time bounds hints will frequently return keys outside of the
-	// [start, end] time range. If you must guarantee that you never see a key
-	// outside of the time bounds, perform your own filtering.
-	//
-	// NB: The iterator may surface stale data. Pebble range tombstones do not have
-	// timestamps and thus may be ignored entirely depending on whether their SST
-	// happens to satisfy the filter. Furthermore, keys outside the timestamp
-	// range may be stale and must be ignored -- for example, consider a key foo@5
-	// written in an SST with timestamp range [3-7], and then a non-MVCC removal
-	// or update of this key in a different SST with timestamp range [3-5]. Using
-	// an iterator with range [6-9] would surface the old foo@5 key because it
-	// would return all keys in the old [3-7] SST but not take into account the
-	// separate [3-5] SST where foo@5 was removed or updated. See also:
-	// https://github.com/cockroachdb/pebble/issues/1786
+	// Note that time-bound iterators previously were only a performance
+	// optimization but now guarantee that no keys outside of the [start, end]
+	// time range will be returned.
 	//
 	// NB: Range keys are not currently subject to timestamp filtering due to
 	// complications with MVCCIncrementalIterator. See:
 	// https://github.com/cockroachdb/cockroach/issues/86260
-	//
-	// Currently, the only way to correctly use such an iterator is to use it in
-	// concert with an iterator without timestamp hints, as done by
-	// MVCCIncrementalIterator.
-	MinTimestampHint, MaxTimestampHint hlc.Timestamp
+	MinTimestamp, MaxTimestamp hlc.Timestamp
 	// KeyTypes specifies the types of keys to surface: point and/or range keys.
 	// Use HasPointAndRange() to determine which key type is present at a given
 	// iterator position, and RangeBounds() and RangeKeys() to access range keys.
@@ -568,8 +552,10 @@ type Reader interface {
 	// Note that this method is not expected take into account the timestamp of
 	// the end key; all MVCCKeys at end.Key are considered excluded in the
 	// iteration.
-	MVCCIterate(start, end roachpb.Key, iterKind MVCCIterKind, keyTypes IterKeyType,
-		f func(MVCCKeyValue, MVCCRangeKeyStack) error) error
+	MVCCIterate(
+		ctx context.Context, start, end roachpb.Key, iterKind MVCCIterKind, keyTypes IterKeyType,
+		f func(MVCCKeyValue, MVCCRangeKeyStack) error,
+	) error
 	// NewMVCCIterator returns a new instance of an MVCCIterator over this engine.
 	// The caller must invoke Close() on it when done to free resources.
 	//
@@ -589,12 +575,13 @@ type Reader interface {
 	//
 	// 4. Iterators on indexed batches see all batch writes as of their creation
 	//    time, but they satisfy ConsistentIterators for engine writes.
-	NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) (MVCCIterator, error)
+	NewMVCCIterator(
+		ctx context.Context, iterKind MVCCIterKind, opts IterOptions) (MVCCIterator, error)
 	// NewEngineIterator returns a new instance of an EngineIterator over this
 	// engine. The caller must invoke EngineIterator.Close() when finished
 	// with the iterator to free resources. The caller can change IterOptions
 	// after this function returns.
-	NewEngineIterator(opts IterOptions) (EngineIterator, error)
+	NewEngineIterator(ctx context.Context, opts IterOptions) (EngineIterator, error)
 	// ScanInternal allows a caller to inspect the underlying engine's InternalKeys
 	// using a visitor pattern, while also allowing for keys in shared files to be
 	// skipped if a visitor is provided for visitSharedFiles. Useful for
@@ -1036,6 +1023,7 @@ type Engine interface {
 	// files. These files can be referred to by multiple stores, but are not
 	// modified or deleted by the Engine doing the ingestion.
 	IngestExternalFiles(ctx context.Context, external []pebble.ExternalFile) (pebble.IngestOperationStats, error)
+
 	// PreIngestDelay offers an engine the chance to backpressure ingestions.
 	// When called, it may choose to block if the engine determines that it is in
 	// or approaching a state where further ingestions may risk its health.
@@ -1044,7 +1032,21 @@ type Engine interface {
 	// counts for the given key span, along with how many of those bytes are on
 	// remote, as well as specifically external remote, storage.
 	ApproximateDiskBytes(from, to roachpb.Key) (total, remote, external uint64, _ error)
-
+	// ConvertFilesToBatchAndCommit converts local files with the given paths to
+	// a WriteBatch and commits the batch with sync=true. The files represented
+	// in paths must not be overlapping -- this is the same contract as
+	// IngestLocalFiles*. Additionally, clearedSpans represents the spans which
+	// must be deleted before writing the data contained in these paths.
+	//
+	// This method is expected to be used instead of IngestLocalFiles* or
+	// IngestAndExciseFiles when the sum of the file sizes is small.
+	//
+	// TODO(sumeer): support this as an alternative to IngestAndExciseFiles.
+	// This should be easy since we use NewSSTEngineIterator to read the ssts,
+	// which supports multiple levels.
+	ConvertFilesToBatchAndCommit(
+		ctx context.Context, paths []string, clearedSpans []roachpb.Span,
+	) error
 	// CompactRange ensures that the specified range of key value pairs is
 	// optimized for space efficiency.
 	CompactRange(start, end roachpb.Key) error
@@ -1370,19 +1372,22 @@ type EncryptionRegistries struct {
 // GetIntent will look up an intent given a key. It there is no intent for a
 // key, it will return nil rather than an error. Errors are returned for problem
 // at the storage layer, problem decoding the key, problem unmarshalling the
-// intent, missing transaction on the intent or multiple intents for this key.
-func GetIntent(reader Reader, key roachpb.Key) (*roachpb.Intent, error) {
-	// Translate this key from a regular key to one in the lock space so it can be
-	// used for queries.
-	lbKey, _ := keys.LockTableSingleKey(key, nil)
-
-	iter, err := reader.NewEngineIterator(IterOptions{Prefix: true, LowerBound: lbKey})
+// intent, missing transaction on the intent, or multiple intents for this key.
+func GetIntent(ctx context.Context, reader Reader, key roachpb.Key) (*roachpb.Intent, error) {
+	// Probe the lock table at key using a lock-table iterator.
+	opts := LockTableIteratorOptions{
+		Prefix: true,
+		// Ignore Exclusive and Shared locks. We only care about intents.
+		MatchMinStr: lock.Intent,
+	}
+	iter, err := NewLockTableIterator(ctx, reader, opts)
 	if err != nil {
 		return nil, err
 	}
 	defer iter.Close()
 
-	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: lbKey})
+	seekKey, _ := keys.LockTableSingleKey(key, nil)
+	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: seekKey})
 	if err != nil {
 		return nil, err
 	}
@@ -1394,21 +1399,20 @@ func GetIntent(reader Reader, key roachpb.Key) (*roachpb.Intent, error) {
 	if err != nil {
 		return nil, err
 	}
-	checkKey, err := keys.DecodeLockTableSingleKey(engineKey.Key)
+	ltKey, err := engineKey.ToLockTableKey()
 	if err != nil {
 		return nil, err
 	}
-	if !checkKey.Equal(key) {
+	if !ltKey.Key.Equal(key) {
 		// This should not be possible, a key and using prefix match means that it
 		// must match.
-		return nil, errors.AssertionFailedf("key does not match expected %v != %v", checkKey, key)
+		return nil, errors.AssertionFailedf("key does not match expected %v != %v", ltKey.Key, key)
+	}
+	if ltKey.Strength != lock.Intent {
+		return nil, errors.AssertionFailedf("unexpected strength for LockTableKey %s: %v", ltKey.Strength, ltKey)
 	}
 	var meta enginepb.MVCCMetadata
-	v, err := iter.UnsafeValue()
-	if err != nil {
-		return nil, err
-	}
-	if err = protoutil.Unmarshal(v, &meta); err != nil {
+	if err = iter.ValueProto(&meta); err != nil {
 		return nil, err
 	}
 	if meta.Txn == nil {
@@ -1440,9 +1444,11 @@ func GetIntent(reader Reader, key roachpb.Key) (*roachpb.Intent, error) {
 // intentInterleavingIter for details.
 //
 // NB: This function ignores MVCC range keys. It should only be used for tests.
-func Scan(reader Reader, start, end roachpb.Key, max int64) ([]MVCCKeyValue, error) {
+func Scan(
+	ctx context.Context, reader Reader, start, end roachpb.Key, max int64,
+) ([]MVCCKeyValue, error) {
 	var kvs []MVCCKeyValue
-	err := reader.MVCCIterate(start, end, MVCCKeyAndIntentsIterKind, IterKeyTypePointsOnly,
+	err := reader.MVCCIterate(ctx, start, end, MVCCKeyAndIntentsIterKind, IterKeyTypePointsOnly,
 		func(kv MVCCKeyValue, _ MVCCRangeKeyStack) error {
 			if max != 0 && int64(len(kvs)) >= max {
 				return iterutil.StopIteration()
@@ -1466,7 +1472,7 @@ func ScanLocks(
 
 	ltStart, _ := keys.LockTableSingleKey(start, nil)
 	ltEnd, _ := keys.LockTableSingleKey(end, nil)
-	iter, err := NewLockTableIterator(reader, LockTableIteratorOptions{
+	iter, err := NewLockTableIterator(ctx, reader, LockTableIteratorOptions{
 		LowerBound:  ltStart,
 		UpperBound:  ltEnd,
 		MatchMinStr: lock.Shared, // all locks
@@ -1546,10 +1552,14 @@ func WriteSyncNoop(eng Engine) error {
 // too, by doing a SeekLT when we reach the threshold. It's unclear whether it's
 // really worth it.
 func ClearRangeWithHeuristic(
-	r Reader, w Writer, start, end roachpb.Key, pointKeyThreshold, rangeKeyThreshold int,
+	ctx context.Context,
+	r Reader,
+	w Writer,
+	start, end roachpb.Key,
+	pointKeyThreshold, rangeKeyThreshold int,
 ) error {
 	clearPointKeys := func(r Reader, w Writer, start, end roachpb.Key, threshold int) error {
-		iter, err := r.NewEngineIterator(IterOptions{
+		iter, err := r.NewEngineIterator(ctx, IterOptions{
 			KeyTypes:   IterKeyTypePointsOnly,
 			LowerBound: start,
 			UpperBound: end,
@@ -1597,7 +1607,7 @@ func ClearRangeWithHeuristic(
 	}
 
 	clearRangeKeys := func(r Reader, w Writer, start, end roachpb.Key, threshold int) error {
-		iter, err := r.NewEngineIterator(IterOptions{
+		iter, err := r.NewEngineIterator(ctx, IterOptions{
 			KeyTypes:   IterKeyTypeRangesOnly,
 			LowerBound: start,
 			UpperBound: end,
@@ -1658,14 +1668,14 @@ func ClearRangeWithHeuristic(
 }
 
 var ingestDelayL0Threshold = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"rocksdb.ingest_backpressure.l0_file_count_threshold",
 	"number of L0 files after which to backpressure SST ingestions",
 	20,
 )
 
 var ingestDelayTime = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"rocksdb.ingest_backpressure.max_delay",
 	"maximum amount of time to backpressure a single SST ingestion",
 	time.Second*5,
@@ -1732,6 +1742,7 @@ func calculatePreIngestDelay(settings *cluster.Settings, metrics *pebble.Metrics
 
 // Helper function to implement Reader.MVCCIterate().
 func iterateOnReader(
+	ctx context.Context,
 	reader Reader,
 	start, end roachpb.Key,
 	iterKind MVCCIterKind,
@@ -1745,7 +1756,7 @@ func iterateOnReader(
 		return nil
 	}
 
-	it, err := reader.NewMVCCIterator(iterKind, IterOptions{
+	it, err := reader.NewMVCCIterator(ctx, iterKind, IterOptions{
 		KeyTypes:   keyTypes,
 		LowerBound: start,
 		UpperBound: end,
@@ -2019,7 +2030,7 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 		ltEnd, _ := keys.LockTableSingleKey(end, nil)
 		opts.UpperBound = ltEnd
 	}
-	iter, err := NewLockTableIterator(reader, opts)
+	iter, err := NewLockTableIterator(ctx, reader, opts)
 	if err != nil {
 		return false, err
 	}

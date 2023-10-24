@@ -169,6 +169,7 @@ func (ef *execFactory) ConstructScan(
 	scan.estimatedRowCount = uint64(params.EstimatedRowCount)
 	scan.lockingStrength = descpb.ToScanLockingStrength(params.Locking.Strength)
 	scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
+	scan.lockingDurability = descpb.ToScanLockingDurability(params.Locking.Durability)
 	scan.localityOptimized = params.LocalityOptimized
 	if !ef.isExplain && !ef.planner.SessionData().Internal {
 		idxUsageKey := roachpb.IndexUsageKey{
@@ -665,6 +666,7 @@ func (ef *execFactory) ConstructIndexJoin(
 	tableScan.disableBatchLimit()
 	tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
 	tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	tableScan.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
 	if !ef.isExplain && !ef.planner.SessionData().Internal {
 		idxUsageKey := roachpb.IndexUsageKey{
@@ -725,6 +727,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	tableScan.index = idx
 	tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
 	tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	tableScan.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
 	if !ef.isExplain && !ef.planner.SessionData().Internal {
 		idxUsageKey := roachpb.IndexUsageKey{
@@ -865,6 +868,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 	tableScan.index = idx
 	tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
 	tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	tableScan.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
 	if !ef.isExplain && !ef.planner.SessionData().Internal {
 		idxUsageKey := roachpb.IndexUsageKey{
@@ -945,6 +949,7 @@ func (ef *execFactory) constructScanForZigzag(
 	scan.index = idxDesc
 	scan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
 	scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	scan.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
 	return scan, eqColOrdinals, nil
 }
@@ -1407,7 +1412,8 @@ func (ef *execFactory) ConstructInsertFastPath(
 	insertColOrdSet exec.TableColumnOrdinalSet,
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	checkOrdSet exec.CheckOrdinalSet,
-	fkChecks []exec.InsertFastPathFKCheck,
+	fkChecks []exec.InsertFastPathCheck,
+	uniqChecks []exec.InsertFastPathCheck,
 	autoCommit bool,
 ) (exec.Node, error) {
 	// Derive insert table and column descriptors.
@@ -1447,10 +1453,17 @@ func (ef *execFactory) ConstructInsertFastPath(
 
 	ins.run.regionLocalInfo.setupEnforceHomeRegion(ef.planner, table, cols, ins.run.ti.ri.InsertColIDtoRowIndex)
 
+	if len(uniqChecks) > 0 {
+		ins.run.uniqChecks = make([]insertFastPathCheck, len(uniqChecks))
+		for i := range uniqChecks {
+			ins.run.uniqChecks[i].InsertFastPathCheck = uniqChecks[i]
+		}
+	}
+
 	if len(fkChecks) > 0 {
-		ins.run.fkChecks = make([]insertFastPathFKCheck, len(fkChecks))
+		ins.run.fkChecks = make([]insertFastPathCheck, len(fkChecks))
 		for i := range fkChecks {
-			ins.run.fkChecks[i].InsertFastPathFKCheck = fkChecks[i]
+			ins.run.fkChecks[i].InsertFastPathCheck = fkChecks[i]
 		}
 	}
 
@@ -1974,7 +1987,7 @@ func (ef *execFactory) ConstructAlterTableSplit(
 		return nil, err
 	}
 
-	if err := execCfg.RequireSystemTenantOrClusterSetting(SecondaryTenantSplitAtEnabled); err != nil {
+	if err := requireSystemTenantOrClusterSetting(execCfg.Codec, execCfg.Settings, SecondaryTenantSplitAtEnabled); err != nil {
 		return nil, err
 	}
 

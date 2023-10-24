@@ -15,9 +15,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -120,4 +123,37 @@ func TestPauseUnpauseJob(t *testing.T) {
 	// Running schedules have nextRun set to non-null value
 	require.False(t, loaded.IsPaused())
 	require.False(t, loaded.NextRun().Equal(time.Time{}))
+}
+
+// TestScheduleMustHaveClusterVersionAndID tests that the ClusterID and version
+// in the cluster details can be accessed. Further it tests that a schedule
+// cannot be created without these fields.
+func TestScheduleMustHaveClusterVersionAndID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	h, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	sj := h.newScheduledJob(t, "test_job", "test sql")
+	schedules := ScheduledJobDB(h.cfg.DB)
+
+	// Fail without a Cluster version
+	sj.SetScheduleDetails(jobspb.ScheduleDetails{ClusterID: jobstest.DummyClusterID})
+	require.ErrorContains(t, schedules.Create(ctx, sj), "scheduled job created without a cluster version")
+
+	// Fail without a Cluster ID
+	sj.SetScheduleDetails(jobspb.ScheduleDetails{
+		CreationClusterVersion: jobstest.DummyClusterVersion,
+		ClusterID:              uuid.UUID{},
+	})
+	require.ErrorContains(t, schedules.Create(ctx, sj), "scheduled job created without a cluster ID")
+
+	// Succeed with both.
+	sj.SetScheduleDetails(jobstest.AddDummyScheduleDetails(jobspb.ScheduleDetails{}))
+	require.NoError(t, schedules.Create(ctx, sj))
+	loaded := h.loadSchedule(t, sj.ScheduleID())
+	require.EqualValues(t, jobstest.DummyClusterID, loaded.ScheduleDetails().ClusterID)
+	require.EqualValues(t, jobstest.DummyClusterVersion, loaded.ScheduleDetails().CreationClusterVersion)
 }

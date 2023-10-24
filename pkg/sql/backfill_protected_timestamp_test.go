@@ -75,7 +75,7 @@ func TestValidationWithProtectedTS(t *testing.T) {
 	protectedts.PollInterval.Override(ctx, &tenantSettings.SV, time.Millisecond)
 	r := sqlutils.MakeSQLRunner(db)
 
-	systemSqlDb := s.SystemLayer().SQLConn(t, "system")
+	systemSqlDb := s.SystemLayer().SQLConn(t, serverutils.DBName("system"))
 	rSys := sqlutils.MakeSQLRunner(systemSqlDb)
 
 	// Refreshes the in-memory protected timestamp state to asOf.
@@ -105,11 +105,8 @@ func TestValidationWithProtectedTS(t *testing.T) {
 
 	for _, sql := range []string{
 		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'",
-		"ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'",
 		"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval ='10ms'",
-		"ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval ='10ms'",
 		"SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval ='10ms'",
-		"ALTER TENANT ALL SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval ='10ms'",
 	} {
 		rSys.Exec(t, sql)
 	}

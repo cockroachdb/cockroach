@@ -67,3 +67,21 @@ func TestPkgsFromDiff(t *testing.T) {
 		})
 	}
 }
+
+func TestUpTo5TestsPerPackage(t *testing.T) {
+	fileName := datapathutils.TestDataPath(t, "five_tests.diff")
+	f, err := os.Open(fileName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	pkgs, err := pkgsFromDiff(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, pkg := range pkgs {
+		if len(pkg.tests) > 5 {
+			t.Fatal("more than 5 tests in package")
+		}
+	}
+}

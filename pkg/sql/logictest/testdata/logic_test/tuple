@@ -1201,11 +1201,10 @@ SELECT (CASE WHEN b THEN NULL ELSE ((ROW(1) AS a)) END).a from t78159
 ----
 1
 
-# TODO(rytaft): Uncomment this case once #109105 is fixed.
-# query B
-# SELECT (CASE WHEN b THEN ((ROW(1) AS a)) ELSE NULL END).a from t78159
-# ----
-# NULL
+query B
+SELECT (CASE WHEN b THEN ((ROW(1) AS a)) ELSE NULL END).a from t78159
+----
+NULL
 
 # Regression test for #78515. Propagate tuple labels when type-checking
 # expressions with multiple matching tuple types.
@@ -1259,3 +1258,28 @@ SELECT (ROW() AS a) IS NOT UNKNOWN
 
 statement error pgcode 42601 mismatch in tuple definition: 0 expressions, 1 labels
 SELECT CASE WHEN False THEN ROW() ELSE (ROW() AS a) END
+
+subtest 109105
+
+statement ok
+CREATE TABLE t109105 (a int);
+
+statement ok
+INSERT INTO t109105 VALUES (1),(2),(3),(4),(5),(6);
+
+# This should CAST the nulls in the rows to the types of the constant values
+# instead of erroring out.
+query T
+SELECT (CASE WHEN a = 1 THEN NULL
+             WHEN a = 2 THEN ROW(NULL, NULL, 1.1e3::FLOAT)
+             WHEN a = 3 THEN ROW(NULL, 1.1::DECIMAL, NULL)
+             WHEN a = 4 THEN ROW(1::INT, null, NULL)
+             WHEN a = 5 THEN NULL
+             ELSE NULL END) FROM t109105 ORDER BY 1;
+----
+NULL
+NULL
+NULL
+(,,1100)
+(,1.1,)
+(1,,)

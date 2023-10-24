@@ -1,5 +1,5 @@
 load("@rules_proto//proto:defs.bzl", "proto_library")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 
 proto_library(
@@ -27,7 +27,10 @@ go_proto_library(
 
 go_library(
     name = "bulkpb",
-    srcs = ["ingestion_performance_stats.go"],
+    srcs = [
+        "bulk.go",
+        "ingestion_performance_stats.go",
+    ],
     embed = [":bulkpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/bulk/bulkpb",
     visibility = ["//visibility:public"],
@@ -38,7 +41,24 @@ go_library(
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_codahale_hdrhistogram//:hdrhistogram",
         "@com_github_gogo_protobuf//proto",
         "@io_opentelemetry_go_otel//attribute",
+    ],
+)
+
+go_test(
+    name = "bulkpb_test",
+    srcs = ["ingestion_performance_stats_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":bulkpb"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/util/bulk",
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
+        "@com_github_codahale_hdrhistogram//:hdrhistogram",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_stretchr_testify//require",
     ],
 )

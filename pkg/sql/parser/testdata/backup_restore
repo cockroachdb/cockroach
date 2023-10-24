@@ -71,6 +71,14 @@ BACKUP TABLE foo INTO $1 IN $1 -- literals removed
 BACKUP TABLE _ INTO $1 IN $2 -- identifiers removed
 
 parse
+BACKUP TABLE foo INTO LATEST IN 'bar' WITH updates_cluster_monitoring_metrics
+----
+BACKUP TABLE foo INTO LATEST IN 'bar' WITH OPTIONS (updates_cluster_monitoring_metrics = true) -- normalized!
+BACKUP TABLE (foo) INTO LATEST IN ('bar') WITH OPTIONS (updates_cluster_monitoring_metrics = (true)) -- fully parenthesized
+BACKUP TABLE foo INTO LATEST IN '_' WITH OPTIONS (updates_cluster_monitoring_metrics = _) -- literals removed
+BACKUP TABLE _ INTO LATEST IN 'bar' WITH OPTIONS (updates_cluster_monitoring_metrics = true) -- identifiers removed
+
+parse
 EXPLAIN BACKUP TABLE foo TO 'bar'
 ----
 EXPLAIN BACKUP TABLE foo TO 'bar'
@@ -816,6 +824,14 @@ RESTORE TABLE foo FROM '_' WITH OPTIONS (skip_missing_foreign_keys, skip_missing
 RESTORE TABLE _ FROM 'bar' WITH OPTIONS (skip_missing_foreign_keys, skip_missing_sequences, detached) -- identifiers removed
 
 parse
+RESTORE TABLE foo FROM 'bar' WITH remove_regions
+----
+RESTORE TABLE foo FROM 'bar' WITH OPTIONS (skip_localities_check, remove_regions) -- normalized!
+RESTORE TABLE (foo) FROM ('bar') WITH OPTIONS (skip_localities_check, remove_regions) -- fully parenthesized
+RESTORE TABLE foo FROM '_' WITH OPTIONS (skip_localities_check, remove_regions) -- literals removed
+RESTORE TABLE _ FROM 'bar' WITH OPTIONS (skip_localities_check, remove_regions) -- identifiers removed
+
+parse
 BACKUP INTO 'bar' WITH include_all_virtual_clusters = $1, detached
 ----
 BACKUP INTO 'bar' WITH OPTIONS (detached, include_all_virtual_clusters = $1) -- normalized!
@@ -935,6 +951,14 @@ at or near "EOF": syntax error: include_all_virtual_clusters specified multiple 
 DETAIL: source SQL:
 BACKUP TO 'bar' WITH include_all_virtual_clusters=false, include_all_secondary_tenants
                                                                                       ^
+
+error
+BACKUP foo TO 'bar' WITH updates_cluster_monitoring_metrics=false, updates_cluster_monitoring_metrics, detached
+----
+at or near ",": syntax error: updates_cluster_monitoring_metrics option specified multiple times
+DETAIL: source SQL:
+BACKUP foo TO 'bar' WITH updates_cluster_monitoring_metrics=false, updates_cluster_monitoring_metrics, detached
+                                                                                                     ^
 
 error
 BACKUP foo TO 'bar' WITH detached=$1, revision_history

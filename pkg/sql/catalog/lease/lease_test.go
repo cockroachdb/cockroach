@@ -98,12 +98,13 @@ func init() {
 
 func newLeaseTest(tb testing.TB, params base.TestClusterArgs) *leaseTest {
 	c := serverutils.StartCluster(tb, 3, params)
+	s := c.Server(0).ApplicationLayer()
 	lt := &leaseTest{
 		TB:      tb,
 		cluster: c,
-		server:  c.Server(0).ApplicationLayer(),
-		db:      c.ServerConn(0),
-		kvDB:    c.Server(0).DB(),
+		server:  s,
+		db:      s.SQLConn(tb, serverutils.DBName("")),
+		kvDB:    s.DB(),
 		nodes:   map[uint32]*lease.Manager{},
 	}
 
@@ -385,7 +386,7 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 	params.ServerArgs.Settings = cluster.MakeTestingClusterSettings()
 	// Set the lease duration such that the next lease acquisition will
 	// require the lease to be reacquired.
-	lease.LeaseDuration.Override(ctx, &params.ServerArgs.SV, 0)
+	lease.LeaseDuration.Override(ctx, &params.ServerArgs.Settings.SV, 0)
 
 	removalTracker := lease.NewLeaseRemovalTracker()
 	params.ServerArgs.Knobs = base.TestingKnobs{
@@ -1264,11 +1265,11 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 	params.ServerArgs.Settings = cluster.MakeTestingClusterSettings()
 	// The lease jitter is set to ensure newer leases have higher
 	// expiration timestamps.
-	lease.LeaseJitterFraction.Override(ctx, &params.ServerArgs.SV, 0)
+	lease.LeaseJitterFraction.Override(ctx, &params.ServerArgs.Settings.SV, 0)
 	// The renewal timeout is set to be the duration, so background
 	// renewal should begin immediately after accessing a lease.
-	lease.LeaseRenewalDuration.Override(ctx, &params.ServerArgs.SV,
-		lease.LeaseDuration.Get(&params.ServerArgs.SV))
+	lease.LeaseRenewalDuration.Override(ctx, &params.ServerArgs.Settings.SV,
+		lease.LeaseDuration.Get(&params.ServerArgs.Settings.SV))
 
 	t := newLeaseTest(testingT, params)
 	defer t.cleanup()
@@ -1864,12 +1865,12 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 
 	// The lease jitter is set to ensure newer leases have higher
 	// expiration timestamps.
-	lease.LeaseJitterFraction.Override(ctx, &params.ServerArgs.SV, 0)
+	lease.LeaseJitterFraction.Override(ctx, &params.ServerArgs.Settings.SV, 0)
 	// Lease duration to something small.
-	lease.LeaseDuration.Override(ctx, &params.ServerArgs.SV, 50*time.Millisecond)
+	lease.LeaseDuration.Override(ctx, &params.ServerArgs.Settings.SV, 50*time.Millisecond)
 	// Renewal timeout to 0 saying that the lease will get renewed only
 	// after the lease expires when a request requests the descriptor.
-	lease.LeaseRenewalDuration.Override(ctx, &params.ServerArgs.SV, 0)
+	lease.LeaseRenewalDuration.Override(ctx, &params.ServerArgs.Settings.SV, 0)
 
 	t := newLeaseTest(testingT, params)
 	defer t.cleanup()
@@ -2020,7 +2021,7 @@ func TestTableCreationPushesTxnsInRecentPast(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(context.Background())
-	sqlDB := tc.ApplicationLayer(0).SQLConn(t, "")
+	sqlDB := tc.ApplicationLayer(0).SQLConn(t)
 
 	if _, err := sqlDB.Exec(`
  CREATE DATABASE t;
@@ -2037,7 +2038,7 @@ func TestTableCreationPushesTxnsInRecentPast(t *testing.T) {
 
 	// Create a transaction before the table is created. Use a different
 	// node so that clock uncertainty is presumed and it gets pushed.
-	tx1, err := tc.ApplicationLayer(1).SQLConn(t, "t").Begin()
+	tx1, err := tc.ApplicationLayer(1).SQLConn(t, serverutils.DBName("t")).Begin()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2959,7 +2960,7 @@ func TestLeaseTxnDeadlineExtension(t *testing.T) {
 	params.Settings = cluster.MakeTestingClusterSettings()
 	// Set the lease duration such that the next lease acquisition will
 	// require the lease to be reacquired.
-	lease.LeaseDuration.Override(ctx, &params.SV, 0)
+	lease.LeaseDuration.Override(ctx, &params.Settings.SV, 0)
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(ctx context.Context, req *kvpb.BatchRequest) *kvpb.Error {
 			filterMu.Lock()
@@ -3146,7 +3147,7 @@ func TestLeaseBulkInsertWithImplicitTxn(t *testing.T) {
 	params.ServerArgs.Settings = cluster.MakeTestingClusterSettings()
 	// Set the lease duration such that the next lease acquisition will
 	// require the lease to be reacquired.
-	lease.LeaseDuration.Override(ctx, &params.ServerArgs.SV, 0)
+	lease.LeaseDuration.Override(ctx, &params.ServerArgs.Settings.SV, 0)
 	var leaseManager *lease.Manager
 	leaseTableID := uint64(0)
 	params.ServerArgs.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
@@ -3220,8 +3221,8 @@ ALTER TABLE t1 SPLIT AT VALUES (1);
 	t.Run("validate-lease-txn-deadline-ext-update", func(t *testing.T) {
 		updateCompleted := atomic.Value{}
 		updateCompleted.Store(false)
-		conn := s.SQLConn(t, "")
-		updateConn := s.SQLConn(t, "")
+		conn := s.SQLConn(t)
+		updateConn := s.SQLConn(t)
 		resultChan := make(chan error)
 		_, err = conn.ExecContext(ctx, `
 INSERT INTO t1 select a from generate_series(1, 100) g(a);
@@ -3410,7 +3411,7 @@ func TestDescriptorRemovedFromCacheWhenLeaseRenewalForThisDescriptorFails(t *tes
 
 	// Set lease duration to something small so that the periodical lease refresh is kicked off often where the testing
 	// knob will be invoked, and eventually the logic to remove unfound descriptor from cache will be triggered.
-	lease.LeaseDuration.Override(ctx, &params.SV, time.Second)
+	lease.LeaseDuration.Override(ctx, &params.Settings.SV, time.Second)
 
 	srv, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(ctx)

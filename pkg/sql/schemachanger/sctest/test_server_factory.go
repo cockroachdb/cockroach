@@ -69,7 +69,6 @@ func (f SingleNodeTestClusterFactory) WithSchemaChangerKnobs(
 // WithMixedVersion implements the TestServerFactory interface.
 func (f SingleNodeTestClusterFactory) WithMixedVersion() TestServerFactory {
 	f.server = &server.TestingKnobs{
-		BootstrapVersionKeyOverride:    OldVersionKey,
 		BinaryVersionOverride:          clusterversion.ByKey(OldVersionKey),
 		DisableAutomaticVersionUpgrade: make(chan struct{}),
 	}

@@ -79,7 +79,7 @@ const (
 
 var (
 	intervalBaseSetting = settings.RegisterFloatSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		intervalBaseSettingKey,
 		"the base multiplier for other intervals such as adopt, cancel, and gc",
 		defaultIntervalBase,
@@ -87,7 +87,7 @@ var (
 	)
 
 	adoptIntervalSetting = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		adoptIntervalSettingKey,
 		"the interval at which a node (a) claims some of the pending jobs and "+
 			"(b) restart its already claimed jobs that are in running or reverting "+
@@ -97,7 +97,7 @@ var (
 	)
 
 	cancelIntervalSetting = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		cancelIntervalSettingKey,
 		"the interval at which a node cancels the jobs belonging to the known "+
 			"dead sessions",
@@ -108,7 +108,7 @@ var (
 	// PollJobsMetricsInterval is the interval at which a tenant in the cluster
 	// will poll the jobs table for metrics
 	PollJobsMetricsInterval = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		metricsPollingIntervalKey,
 		"the interval at which a node in the cluster will poll the jobs table for metrics",
 		defaultPollForMetricsInterval,
@@ -116,7 +116,7 @@ var (
 	)
 
 	gcIntervalSetting = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		gcIntervalSettingKey,
 		"the interval a node deletes expired job records that have exceeded their "+
 			"retention duration",
@@ -126,7 +126,7 @@ var (
 
 	// RetentionTimeSetting wraps "jobs.retention_timehelpers_test.go".
 	RetentionTimeSetting = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		retentionTimeSettingKey,
 		"the amount of time for which records for completed jobs are retained",
 		defaultRetentionTime,
@@ -134,7 +134,7 @@ var (
 		settings.WithPublic)
 
 	cancellationsUpdateLimitSetting = settings.RegisterIntSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		cancelUpdateLimitKey,
 		"the number of jobs that can be updated when canceling jobs concurrently from dead sessions",
 		defaultCancellationsUpdateLimit,
@@ -142,7 +142,7 @@ var (
 	)
 
 	retryInitialDelaySetting = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		retryInitialDelaySettingKey,
 		"the starting duration of exponential-backoff delay"+
 			" to retry a job which encountered a retryable error or had its coordinator"+
@@ -152,7 +152,7 @@ var (
 	)
 
 	retryMaxDelaySetting = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		retryMaxDelaySettingKey,
 		"the maximum duration by which a job can be delayed to retry",
 		defaultRetryMaxDelay,
@@ -160,7 +160,7 @@ var (
 	)
 
 	executionErrorsMaxEntriesSetting = settings.RegisterIntSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		executionErrorsMaxEntriesKey,
 		"the maximum number of retriable error entries which will be stored for introspection",
 		defaultExecutionErrorsMaxEntries,
@@ -168,7 +168,7 @@ var (
 	)
 
 	executionErrorsMaxEntrySize = settings.RegisterByteSizeSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		executionErrorsMaxEntrySizeKey,
 		"the maximum byte size of individual error entries which will be stored"+
 			" for introspection",
@@ -176,7 +176,7 @@ var (
 	)
 
 	debugPausepoints = settings.RegisterStringSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		debugPausePointsSettingKey,
 		"the list, comma separated, of named pausepoints currently enabled for debugging",
 		"",

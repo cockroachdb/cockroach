@@ -25,7 +25,7 @@ import {
 import ErrorCircle from "assets/error-circle.svg";
 import "./jwtAuthToken.styl";
 
-const OIDC_LOGIN_PATH_WITH_JWT = "/oidc/v1/login?jwt";
+const OIDC_LOGIN_PATH_WITH_JWT = "oidc/v1/login?jwt";
 
 type Params = {
   oidc: string;

@@ -718,6 +718,21 @@ func (h *hasher) HashUniqueChecksExpr(val UniqueChecksExpr) {
 	}
 }
 
+func (h *hasher) HashFastPathUniqueChecksExpr(val FastPathUniqueChecksExpr) {
+	for i := range val {
+		h.HashRelExpr(val[i].Check)
+		h.HashTableID(val[i].ReferencedTableID)
+		h.HashIndexOrdinal(val[i].ReferencedIndexOrdinal)
+		h.HashInt(val[i].CheckOrdinal)
+		h.HashColList(val[i].InsertCols)
+		h.HashLocking(val[i].Locking)
+		for _, scalarListExpr := range val[i].DatumsFromConstraint {
+			tuple := *(scalarListExpr.(*TupleExpr))
+			h.HashScalarListExpr(tuple.Elems)
+		}
+	}
+}
+
 func (h *hasher) HashKVOptionsExpr(val KVOptionsExpr) {
 	for i := range val {
 		h.HashString(val[i].Key)
@@ -1175,6 +1190,41 @@ func (h *hasher) IsUniqueChecksExprEqual(l, r UniqueChecksExpr) bool {
 	return true
 }
 
+func (h *hasher) IsFastPathUniqueChecksExprEqual(l, r FastPathUniqueChecksExpr) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if !h.IsRelExprEqual(l[i].Check, r[i].Check) {
+			return false
+		}
+		if l[i].ReferencedTableID != r[i].ReferencedTableID {
+			return false
+		}
+		if l[i].ReferencedIndexOrdinal != r[i].ReferencedIndexOrdinal {
+			return false
+		}
+		if l[i].CheckOrdinal != r[i].CheckOrdinal {
+			return false
+		}
+		if !h.IsLockingEqual(l[i].Locking, r[i].Locking) {
+			return false
+		}
+		if !h.IsColListEqual(l[i].InsertCols, r[i].InsertCols) {
+			return false
+		}
+		if len(l[i].DatumsFromConstraint) != len(r[i].DatumsFromConstraint) {
+			return false
+		}
+		for j := range l[i].DatumsFromConstraint {
+			if l[i].DatumsFromConstraint[j] != r[i].DatumsFromConstraint[j] {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func (h *hasher) IsKVOptionsExprEqual(l, r KVOptionsExpr) bool {
 	if len(l) != len(r) {
 		return false
@@ -1230,6 +1280,33 @@ func (h *hasher) IsUDFDefinitionEqual(l, r *UDFDefinition) bool {
 		if !h.IsPhysPropsEqual(l.BodyProps[i], r.BodyProps[i]) {
 			return false
 		}
+	}
+	if l.ExceptionBlock != nil {
+		if r.ExceptionBlock == nil || len(l.ExceptionBlock.Actions) != len(r.ExceptionBlock.Actions) {
+			return false
+		}
+		for i := range l.ExceptionBlock.Actions {
+			if !h.IsUDFDefinitionEqual(l.ExceptionBlock.Actions[i], r.ExceptionBlock.Actions[i]) {
+				return false
+			}
+			if l.ExceptionBlock.Codes[i] != r.ExceptionBlock.Codes[i] {
+				return false
+			}
+		}
+	} else if r.ExceptionBlock != nil {
+		return false
+	}
+	if l.CursorDeclaration != nil {
+		if r.CursorDeclaration == nil {
+			return false
+		}
+		if l.CursorDeclaration.NameArgIdx != r.CursorDeclaration.NameArgIdx ||
+			l.CursorDeclaration.Scroll != r.CursorDeclaration.Scroll ||
+			l.CursorDeclaration.CursorSQL != r.CursorDeclaration.CursorSQL {
+			return false
+		}
+	} else if r.CursorDeclaration != nil {
+		return false
 	}
 	return h.IsColListEqual(l.Params, r.Params) && l.IsRecursive == r.IsRecursive
 }

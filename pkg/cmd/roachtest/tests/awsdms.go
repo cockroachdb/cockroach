@@ -210,7 +210,7 @@ func runAWSDMS(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatal("cannot be run in local mode")
 	}
 	// We may not have the requisite certificates to start DMS/RDS on non-AWS invocations.
-	if cloud := c.Spec().Cloud; cloud != spec.AWS {
+	if cloud := c.Cloud(); cloud != spec.AWS {
 		t.Skipf("skipping test on cloud %s", cloud)
 		return
 	}

@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -123,7 +124,7 @@ func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 		switch {
 		case err == nil:
 		case err == io.EOF:
-			return pkgs, nil
+			return chooseFiveTestsPerPackage(pkgs), nil
 		default:
 			return nil, err
 		}
@@ -152,6 +153,33 @@ func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 			}
 		}
 	}
+}
+
+func chooseFiveTestsPerPackage(pkgs map[string]pkg) map[string]pkg {
+
+	scrambleTestOrder := func(pkgTestNames pkg) []string {
+		testNames := make([]string, 0, len(pkgTestNames.tests))
+
+		for testName := range pkgTestNames.tests {
+			testNames = append(testNames, testName)
+		}
+
+		for i := range testNames {
+			j := rand.Intn(i + 1)
+			testNames[i], testNames[j] = testNames[j], testNames[i]
+		}
+		return testNames
+	}
+	croppedPkgs := make(map[string]pkg)
+	for pkgName, tests := range pkgs {
+		randomOrderTests := scrambleTestOrder(tests)
+		cropIdx := 5
+		if len(randomOrderTests) < 5 {
+			cropIdx = len(randomOrderTests)
+		}
+		croppedPkgs[pkgName] = makePkg(randomOrderTests[:cropIdx])
+	}
+	return croppedPkgs
 }
 
 func okToStress(testName string) bool {
@@ -248,7 +276,13 @@ func main() {
 		for name, pkg := range pkgs {
 			// 20 minutes total seems OK, but at least 2 minutes per test.
 			// This should be reduced. See #46941.
-			duration := (20 * time.Minute) / time.Duration(len(pkgs))
+			target, ok := os.LookupEnv(targetEnv)
+			var duration time.Duration
+			if ok && target == "stressrace" {
+				duration = (30 * time.Minute) / time.Duration(len(pkgs))
+			} else {
+				duration = (20 * time.Minute) / time.Duration(len(pkgs))
+			}
 			minDuration := (2 * time.Minute) * time.Duration(len(pkg.tests))
 			if duration < minDuration {
 				duration = minDuration

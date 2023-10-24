@@ -95,7 +95,7 @@ WITH unsafe_restore_incompatible_version;
 		// We additionally open fresh connections for each query.
 		setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", timeout)
 		firstNode := c.Node(1)
-		urls, err := c.ExternalPGUrl(ctx, t.L(), firstNode, "")
+		urls, err := c.ExternalPGUrl(ctx, t.L(), firstNode, "" /* tenant */, 0 /* sqlInstance */)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -193,7 +193,7 @@ WITH unsafe_restore_incompatible_version;
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.Spec().Cloud != spec.GCE && !c.IsLocal() {
+			if c.Cloud() != spec.GCE && !c.IsLocal() {
 				t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")
 			}
 			runTPCDSVec(ctx, t, c)

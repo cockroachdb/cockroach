@@ -302,7 +302,9 @@ func groupByColumns(
 	columns := make(colinfo.ResultColumns, 0, len(groupCols)+len(aggregations))
 	if inputCols != nil {
 		for _, col := range groupCols {
-			columns = append(columns, inputCols[col])
+			if len(inputCols) > int(col) {
+				columns = append(columns, inputCols[col])
+			}
 		}
 	}
 	for _, agg := range aggregations {

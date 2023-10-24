@@ -141,7 +141,7 @@ type systemAdminServer struct {
 var noteworthyAdminMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_ADMIN_MEMORY_USAGE", 100*1024)
 
 var tableStatsMaxFetcherConcurrency = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.admin.table_stats.max_fetcher_concurrency",
 	"maximum number of concurrent table stats fetches to run",
 	64, // arbitrary
@@ -3246,8 +3246,8 @@ func (s *systemAdminServer) EnqueueRange(
 	}
 
 	if err := timeutil.RunWithTimeout(ctx, "enqueue range", time.Minute, func(ctx context.Context) error {
-		return s.server.status.iterateNodes(
-			ctx, fmt.Sprintf("enqueue r%d in queue %s", req.RangeID, req.Queue),
+		return iterateNodes(
+			ctx, s.serverIterator, s.server.stopper, fmt.Sprintf("enqueue r%d in queue %s", req.RangeID, req.Queue),
 			noTimeout,
 			dialFn, nodeFn, responseFn, errorFn,
 		)

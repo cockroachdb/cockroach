@@ -25,6 +25,7 @@ import "sql/schemachanger/scpb/scpb.proto";
 import "sql/types/types.proto";
 import "geo/geoindex/config.proto";
 import "gogoproto/gogo.proto";
+import "roachpb/metadata.proto";
 
 enum ConstraintValidity {
   // The constraint is valid for all rows.
@@ -1289,7 +1290,13 @@ message DatabaseDescriptor {
   // descriptor being changed as part of a declarative schema change.
   optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 12;
 
-  // Next field is 13.
+  // SystemDatabaseSchemaVersion denotes the version of the system
+  // database's schema.
+  //
+  // Note: It should only be set for the system database.
+  optional roachpb.Version system_database_schema_version = 13;
+
+  // Next field is 14.
 }
 
 // SuperRegion stores a super region configuration.

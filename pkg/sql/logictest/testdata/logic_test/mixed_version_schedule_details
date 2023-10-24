@@ -1,0 +1,81 @@
+# LogicTest: cockroach-go-testserver-upgrade-to-master
+
+# This test verifies the scheduleDetails proto in the scheduled job record can
+# be read and written to in a mixed version state, given the 23.2 version has
+# new fields.
+
+# Verify that all nodes are running previous version binaries.
+
+query T nodeidx=0
+SELECT crdb_internal.node_executable_version()
+----
+23.1
+
+query T nodeidx=1
+SELECT crdb_internal.node_executable_version()
+----
+23.1
+
+query T nodeidx=2
+SELECT crdb_internal.node_executable_version()
+----
+23.1
+
+# Upgrade a node and create a schedule through it
+upgrade 0
+
+statement ok nodeidx=0
+CREATE SCHEDULE test FOR BACKUP INTO 'userfile:///1/example' RECURRING '@weekly' FULL BACKUP ALWAYS
+
+# Remember the full backup schedule
+let $fullID
+WITH SCHEDULES AS (SHOW SCHEDULES FOR BACKUP) SELECT id FROM schedules WHERE label='test'
+
+# Read from the scheduleDetails protobuf that stores the clusterID and Version from the updated node
+query TT nodeidx=0
+SELECT on_execution_failure, on_previous_running FROM [SHOW SCHEDULES FOR BACKUP] WHERE id = $fullID;
+----
+RETRY_SCHED WAIT
+
+
+# Read from the protobuf that stores the clusterID and Version an an old node.
+# Note that SHOW SCHEDULES on 23.1 does not read from the ScheduleDetails proto,
+# so we use pb_to_json to validate the read works.
+query T nodeidx=2
+SELECT crdb_internal.pb_to_json('cockroach.jobs.jobspb.ScheduleDetails', schedule_details, true) FROM system.scheduled_jobs WHERE schedule_id=$fullID;
+----
+{"onError": "RETRY_SCHED", "wait": "WAIT"}
+
+# Just for kicks, ensure SHOW SCHEDULES works on 23.1
+query T nodeidx=2
+SELECT schedule_status FROM [SHOW SCHEDULES FOR BACKUP] WHERE id = $fullID;
+----
+ACTIVE
+
+# Verify we can alter the schedule details on the old node and read this from the old and new nodes.
+statement ok nodeidx=2
+ALTER BACKUP SCHEDULE $fullID SET SCHEDULE OPTION on_previous_running = 'skip';
+
+query T nodeidx=2
+SELECT crdb_internal.pb_to_json('cockroach.jobs.jobspb.ScheduleDetails', schedule_details, true) FROM system.scheduled_jobs WHERE schedule_id=$fullID;
+----
+{"onError": "RETRY_SCHED", "wait": "SKIP"}
+
+query TT nodeidx=0
+SELECT on_execution_failure, on_previous_running FROM [SHOW SCHEDULES FOR BACKUP] WHERE id = $fullID;
+----
+RETRY_SCHED SKIP
+
+# Verify we can alter the schedule details on the new node and read it from the old and new nodes.
+statement ok nodeidx=2
+ALTER BACKUP SCHEDULE $fullID SET SCHEDULE OPTION on_previous_running = 'wait';
+
+query T nodeidx=2
+SELECT crdb_internal.pb_to_json('cockroach.jobs.jobspb.ScheduleDetails', schedule_details, true) FROM system.scheduled_jobs WHERE schedule_id=$fullID;
+----
+{"onError": "RETRY_SCHED", "wait": "WAIT"}
+
+query TT nodeidx=0
+SELECT on_execution_failure, on_previous_running FROM [SHOW SCHEDULES FOR BACKUP] WHERE id = $fullID;
+----
+RETRY_SCHED WAIT

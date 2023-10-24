@@ -1113,8 +1113,8 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 			// OpRequiresTxnError. We set the local clock to the timestamp of
 			// just above the first key to verify it's used to read only key "a".
 			for i, request := range []kvpb.Request{
-				kvpb.NewScan(roachpb.Key("a"), roachpb.Key("c"), kvpb.NonLocking),
-				kvpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c"), kvpb.NonLocking),
+				kvpb.NewScan(roachpb.Key("a"), roachpb.Key("c")),
+				kvpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c")),
 			} {
 				// The looping is necessary since the Put above of a may not have been
 				// applied by time we execute the scan. If it has not run, then try the
@@ -1194,7 +1194,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		if _, err := kv.SendWrapped(ctx, tds, put); err != nil {
 			t.Fatal(err)
 		}
-		scan := kvpb.NewScan(writes[0], writes[len(writes)-1].Next(), kvpb.NonLocking)
+		scan := kvpb.NewScan(writes[0], writes[len(writes)-1].Next())
 		reply, err := kv.SendWrapped(ctx, tds, scan)
 		if err != nil {
 			t.Fatal(err)
@@ -1233,7 +1233,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	txnProto := roachpb.MakeTransaction("MyTxn", nil, isolation.Serializable, 0, now.ToTimestamp(), 0, int32(s.SQLInstanceID()), 0)
 	txn := kv.NewTxnFromProto(ctx, db, s.NodeID(), now, kv.RootTxn, &txnProto)
 
-	scan := kvpb.NewScan(writes[0], writes[len(writes)-1].Next(), kvpb.NonLocking)
+	scan := kvpb.NewScan(writes[0], writes[len(writes)-1].Next())
 	ba := &kvpb.BatchRequest{}
 	ba.Header = kvpb.Header{Txn: &txnProto}
 	ba.Add(scan)
@@ -1351,7 +1351,7 @@ func TestMultiRangeScanWithPagination(t *testing.T) {
 			// happens above this.
 			var maxTargetBytes int64
 			{
-				scan := kvpb.NewScan(tc.keys[0], tc.keys[len(tc.keys)-1].Next(), kvpb.NonLocking)
+				scan := kvpb.NewScan(tc.keys[0], tc.keys[len(tc.keys)-1].Next())
 				resp, pErr := kv.SendWrapped(ctx, tds, scan)
 				require.Nil(t, pErr)
 				require.Nil(t, resp.Header().ResumeSpan)
@@ -1392,11 +1392,11 @@ func TestMultiRangeScanWithPagination(t *testing.T) {
 									var req kvpb.Request
 									switch {
 									case span.EndKey == nil:
-										req = kvpb.NewGet(span.Key, kvpb.NonLocking)
+										req = kvpb.NewGet(span.Key)
 									case reverse:
-										req = kvpb.NewReverseScan(span.Key, span.EndKey, kvpb.NonLocking)
+										req = kvpb.NewReverseScan(span.Key, span.EndKey)
 									default:
-										req = kvpb.NewScan(span.Key, span.EndKey, kvpb.NonLocking)
+										req = kvpb.NewScan(span.Key, span.EndKey)
 									}
 									ba.Add(req)
 								}
@@ -3031,12 +3031,12 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 		},
 		{
-			name: "write too old with locking read",
+			name: "write too old with (unreplicated) exclusive locking read",
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
 				return db.Put(ctx, "a", "put")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				_, err := txn.ScanForUpdate(ctx, "a", "a\x00", 0)
+				_, err := txn.ScanForUpdate(ctx, "a", "a\x00", 0, kvpb.BestEffort)
 				return err
 			},
 			allIsoLevels: &expect{
@@ -3045,12 +3045,54 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 		},
 		{
-			name: "write too old with locking read after prior read",
+			name: "write too old with (replicated) exclusive locking read",
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
 				return db.Put(ctx, "a", "put")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				_, err := txn.ScanForUpdate(ctx, "a", "a\x00", 0)
+				_, err := txn.ScanForUpdate(ctx, "a", "a\x00", 0, kvpb.GuaranteedDurability)
+				return err
+			},
+			allIsoLevels: &expect{
+				expServerRefresh:  true,
+				expOnePhaseCommit: true,
+			},
+		},
+		{
+			name: "write too old with (unreplicated) shared locking read",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				_, err := txn.ScanForShare(ctx, "a", "a\x00", 0, kvpb.BestEffort)
+				return err
+			},
+			allIsoLevels: &expect{
+				expServerRefresh:  true,
+				expOnePhaseCommit: true,
+			},
+		},
+		{
+			name: "write too old with (replicated) shared locking read",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				_, err := txn.ScanForShare(ctx, "a", "a\x00", 0, kvpb.GuaranteedDurability)
+				return err
+			},
+			allIsoLevels: &expect{
+				expServerRefresh:  true,
+				expOnePhaseCommit: true,
+			},
+		},
+		{
+			name: "write too old with (unreplicated) exclusive locking read after prior read",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				_, err := txn.ScanForUpdate(ctx, "a", "a\x00", 0, kvpb.BestEffort)
 				return err
 			},
 			priorReads: true,
@@ -3076,12 +3118,105 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 		},
 		{
-			name: "write too old with multi-range locking read (err on first range)",
+			name: "write too old with (replicateed) exclusive locking read after prior read",
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
 				return db.Put(ctx, "a", "put")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				_, err := txn.ScanForUpdate(ctx, "a", "c", 0)
+				_, err := txn.ScanForUpdate(ctx, "a", "a\x00", 0, kvpb.GuaranteedDurability)
+				return err
+			},
+			priorReads: true,
+			perIsoLevel: map[isolation.Level]*expect{
+				// Client-side refresh of prior reads after write-write conflict.
+				isolation.Serializable: {
+					expClientRefreshSuccess:        true,
+					expClientAutoRetryAfterRefresh: true,
+					expOnePhaseCommit:              true,
+				},
+				// Client-side refresh of prior reads after write-write conflict.
+				isolation.Snapshot: {
+					expClientRefreshSuccess:        true,
+					expClientAutoRetryAfterRefresh: true,
+					expOnePhaseCommit:              true,
+				},
+				// Server-side refresh after write-write conflict. Prior reads performed
+				// in earlier batches (from earlier read snapshots) are not refreshed.
+				isolation.ReadCommitted: {
+					expServerRefresh:  true,
+					expOnePhaseCommit: true,
+				},
+			},
+		},
+		{
+			name: "write too old with (unreplicated) shared locking read after prior read",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				_, err := txn.ScanForShare(ctx, "a", "a\x00", 0, kvpb.BestEffort)
+				return err
+			},
+			priorReads: true,
+			perIsoLevel: map[isolation.Level]*expect{
+				// Client-side refresh of prior reads after write-write conflict.
+				isolation.Serializable: {
+					expClientRefreshSuccess:        true,
+					expClientAutoRetryAfterRefresh: true,
+					expOnePhaseCommit:              true,
+				},
+				// Client-side refresh of prior reads after write-write conflict.
+				isolation.Snapshot: {
+					expClientRefreshSuccess:        true,
+					expClientAutoRetryAfterRefresh: true,
+					expOnePhaseCommit:              true,
+				},
+				// Server-side refresh after write-write conflict. Prior reads performed
+				// in earlier batches (from earlier read snapshots) are not refreshed.
+				isolation.ReadCommitted: {
+					expServerRefresh:  true,
+					expOnePhaseCommit: true,
+				},
+			},
+		},
+		{
+			name: "write too old with (replicated) shared locking read after prior read",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				_, err := txn.ScanForShare(ctx, "a", "a\x00", 0, kvpb.GuaranteedDurability)
+				return err
+			},
+			priorReads: true,
+			perIsoLevel: map[isolation.Level]*expect{
+				// Client-side refresh of prior reads after write-write conflict.
+				isolation.Serializable: {
+					expClientRefreshSuccess:        true,
+					expClientAutoRetryAfterRefresh: true,
+					expOnePhaseCommit:              true,
+				},
+				// Client-side refresh of prior reads after write-write conflict.
+				isolation.Snapshot: {
+					expClientRefreshSuccess:        true,
+					expClientAutoRetryAfterRefresh: true,
+					expOnePhaseCommit:              true,
+				},
+				// Server-side refresh after write-write conflict. Prior reads performed
+				// in earlier batches (from earlier read snapshots) are not refreshed.
+				isolation.ReadCommitted: {
+					expServerRefresh:  true,
+					expOnePhaseCommit: true,
+				},
+			},
+		},
+		{
+			name: "write too old with multi-range (unreplicated) exclusive locking read (err on first range)",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				_, err := txn.ScanForUpdate(ctx, "a", "c", 0, kvpb.BestEffort)
 				return err
 			},
 			allIsoLevels: &expect{
@@ -3091,12 +3226,57 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 		},
 		{
-			name: "write too old with multi-range locking read (err on second range)",
+			name: "write too old with multi-range (replicated) exclusive locking read (err on first range)",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				_, err := txn.ScanForUpdate(ctx, "a", "c", 0, kvpb.GuaranteedDurability)
+				return err
+			},
+			allIsoLevels: &expect{
+				expClientRefreshSuccess:        true,
+				expClientAutoRetryAfterRefresh: true,
+				expOnePhaseCommit:              true,
+			},
+		},
+		{
+			name: "write too old with multi-range (unreplicated) shared locking read (err on first range)",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				_, err := txn.ScanForShare(ctx, "a", "c", 0, kvpb.BestEffort)
+				return err
+			},
+			allIsoLevels: &expect{
+				expClientRefreshSuccess:        true,
+				expClientAutoRetryAfterRefresh: true,
+				expOnePhaseCommit:              true,
+			},
+		},
+		{
+			name: "write too old with multi-range (replicated) shared locking read (err on first range)",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				_, err := txn.ScanForShare(ctx, "a", "c", 0, kvpb.GuaranteedDurability)
+				return err
+			},
+			allIsoLevels: &expect{
+				expClientRefreshSuccess:        true,
+				expClientAutoRetryAfterRefresh: true,
+				expOnePhaseCommit:              true,
+			},
+		},
+		{
+			name: "write too old with multi-range (unreplicated) exclusive locking read (err on second range)",
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
 				return db.Put(ctx, "b", "put")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				_, err := txn.ScanForUpdate(ctx, "a", "c", 0)
+				_, err := txn.ScanForUpdate(ctx, "a", "c", 0, kvpb.BestEffort)
 				return err
 			},
 			allIsoLevels: &expect{
@@ -3106,14 +3286,144 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 		},
 		{
-			name: "write too old with multi-range batch of locking reads",
+			name: "write too old with multi-range (replicated) exclusive locking read (err on second range)",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "b", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				_, err := txn.ScanForUpdate(ctx, "a", "c", 0, kvpb.GuaranteedDurability)
+				return err
+			},
+			allIsoLevels: &expect{
+				expClientRefreshSuccess:        true,
+				expClientAutoRetryAfterRefresh: true,
+				expOnePhaseCommit:              true,
+			},
+		},
+		{
+			name: "write too old with multi-range (unreplicated) shared locking read (err on second range)",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "b", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				_, err := txn.ScanForShare(ctx, "a", "c", 0, kvpb.BestEffort)
+				return err
+			},
+			allIsoLevels: &expect{
+				expClientRefreshSuccess:        true,
+				expClientAutoRetryAfterRefresh: true,
+				expOnePhaseCommit:              true,
+			},
+		},
+		{
+			name: "write too old with multi-range (replicated) shared locking read (err on second range)",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "b", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				_, err := txn.ScanForShare(ctx, "a", "c", 0, kvpb.GuaranteedDurability)
+				return err
+			},
+			allIsoLevels: &expect{
+				expClientRefreshSuccess:        true,
+				expClientAutoRetryAfterRefresh: true,
+				expOnePhaseCommit:              true,
+			},
+		},
+		{
+			name: "write too old with multi-range batch of (unreplicated) exclusive locking reads",
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
 				return db.Put(ctx, "a", "put")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
-				b.ScanForUpdate("a", "a\x00")
-				b.ScanForUpdate("b", "b\x00")
+				b.ScanForUpdate("a", "a\x00", kvpb.BestEffort)
+				b.ScanForUpdate("b", "b\x00", kvpb.BestEffort)
+				return txn.Run(ctx, b)
+			},
+			allIsoLevels: &expect{
+				expClientRefreshSuccess:        true,
+				expClientAutoRetryAfterRefresh: true,
+				expOnePhaseCommit:              true,
+			},
+		},
+		{
+			name: "write too old with multi-range batch of (replicated) exclusive locking reads",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				b := txn.NewBatch()
+				b.ScanForUpdate("a", "a\x00", kvpb.GuaranteedDurability)
+				b.ScanForUpdate("b", "b\x00", kvpb.GuaranteedDurability)
+				return txn.Run(ctx, b)
+			},
+			allIsoLevels: &expect{
+				expClientRefreshSuccess:        true,
+				expClientAutoRetryAfterRefresh: true,
+				expOnePhaseCommit:              true,
+			},
+		},
+		{
+			name: "write too old with multi-range batch of (unreplicated) shared locking reads",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				b := txn.NewBatch()
+				b.ScanForShare("a", "a\x00", kvpb.BestEffort)
+				b.ScanForShare("b", "b\x00", kvpb.BestEffort)
+				return txn.Run(ctx, b)
+			},
+			allIsoLevels: &expect{
+				expClientRefreshSuccess:        true,
+				expClientAutoRetryAfterRefresh: true,
+				expOnePhaseCommit:              true,
+			},
+		},
+		{
+			name: "write too old with multi-range batch of (replicated) shared locking reads",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				b := txn.NewBatch()
+				b.ScanForShare("a", "a\x00", kvpb.GuaranteedDurability)
+				b.ScanForShare("b", "b\x00", kvpb.GuaranteedDurability)
+				return txn.Run(ctx, b)
+			},
+			allIsoLevels: &expect{
+				expClientRefreshSuccess:        true,
+				expClientAutoRetryAfterRefresh: true,
+				expOnePhaseCommit:              true,
+			},
+		},
+		{
+			name: "write too old with multi-range batch of (unreplicated) shared,exclusive mixed locking reads",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				b := txn.NewBatch()
+				b.ScanForUpdate("a", "a\x00", kvpb.BestEffort)
+				b.ScanForShare("b", "b\x00", kvpb.BestEffort)
+				return txn.Run(ctx, b)
+			},
+			allIsoLevels: &expect{
+				expClientRefreshSuccess:        true,
+				expClientAutoRetryAfterRefresh: true,
+				expOnePhaseCommit:              true,
+			},
+		},
+		{
+			name: "write too old with multi-range batch of (replicated) shared,exclusive mixed locking reads",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				b := txn.NewBatch()
+				b.ScanForUpdate("a", "a\x00", kvpb.GuaranteedDurability)
+				b.ScanForShare("b", "b\x00", kvpb.GuaranteedDurability)
 				return txn.Run(ctx, b)
 			},
 			allIsoLevels: &expect{
@@ -4347,6 +4657,7 @@ func TestRefreshFailureIncludesConflictingTxn(t *testing.T) {
 			} else {
 				require.NotNil(t, tErr.ConflictingTxn)
 				require.Equal(t, txn2.ID(), tErr.ConflictingTxn.ID)
+				require.Regexp(t, tErr.ConflictingTxn.String(), tErr)
 				require.Equal(t, int32(1), tErr.ConflictingTxn.CoordinatorNodeID)
 			}
 		})

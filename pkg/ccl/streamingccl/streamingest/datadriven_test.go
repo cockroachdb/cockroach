@@ -100,6 +100,11 @@ func TestDataDriven(t *testing.T) {
 
 	ctx := context.Background()
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
+		// Skip the test if it is a .txt file. This is to allow us to have non-test
+		// testdata in the same directory as the test files.
+		if strings.HasSuffix(path, ".txt") {
+			return
+		}
 		ds := newDatadrivenTestState()
 		defer ds.cleanup(t)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -125,10 +130,14 @@ func TestDataDriven(t *testing.T) {
 
 			case "create-replication-clusters":
 				args := replicationtestutils.DefaultTenantStreamingClustersArgs
+				args.NoMetamorphicExternalConnection = d.HasArg("no-external-conn")
+				tempDir, dirCleanup := testutils.TempDir(t)
+				args.ExternalIODir = tempDir
 				var cleanup func()
 				ds.replicationClusters, cleanup = replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 				ds.cleanupFns = append(ds.cleanupFns, func() error {
 					cleanup()
+					dirCleanup()
 					return nil
 				})
 
@@ -145,7 +154,8 @@ func TestDataDriven(t *testing.T) {
 				ds.replicationClusters.WaitUntilReplicatedTime(stringToHLC(t, replicatedTimeTarget),
 					jobspb.JobID(ds.ingestionJobID))
 			case "start-replicated-tenant":
-				cleanupTenant := ds.replicationClusters.StartDestTenant(ctx)
+				testingKnobs := replicationtestutils.DefaultAppTenantTestingKnobs()
+				cleanupTenant := ds.replicationClusters.StartDestTenant(ctx, &testingKnobs, 0)
 				ds.cleanupFns = append(ds.cleanupFns, cleanupTenant)
 			case "let":
 				if len(d.CmdArgs) == 0 {
@@ -220,14 +230,17 @@ func TestDataDriven(t *testing.T) {
 					from = varValue
 				}
 				allRevisions := d.HasArg("with_revisions")
-				fingerprintQuery := `SELECT * FROM crdb_internal.fingerprint(crdb_internal.tenant_span('%s'), '%s'::TIMESTAMPTZ, %t) AS OF SYSTEM TIME '%s'`
+				fingerprintQuery := `SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT '%s'] AS OF SYSTEM TIME '%s'`
+				if allRevisions {
+					fingerprintQuery = `SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT '%s' WITH START TIMESTAMP = '%s'] AS OF SYSTEM TIME '%s'`
+				}
 				var fingerprintSrcTenant int64
 				ds.replicationClusters.SrcSysSQL.QueryRow(t, fmt.Sprintf(fingerprintQuery,
-					ds.replicationClusters.Args.SrcTenantName, from, allRevisions, to)).Scan(&fingerprintSrcTenant)
+					ds.replicationClusters.Args.SrcTenantName, from, to)).Scan(&fingerprintSrcTenant)
 				require.NotZero(t, fingerprintSrcTenant)
 				var fingerprintDestTenant int64
 				ds.replicationClusters.DestSysSQL.QueryRow(t, fmt.Sprintf(fingerprintQuery,
-					ds.replicationClusters.Args.DestTenantName, from, allRevisions, to)).Scan(&fingerprintDestTenant)
+					ds.replicationClusters.Args.DestTenantName, from, to)).Scan(&fingerprintDestTenant)
 				require.NotZero(t, fingerprintDestTenant)
 				if fingerprintSrcTenant != fingerprintDestTenant {
 					require.NoError(t, replicationutils.InvestigateFingerprints(ctx,

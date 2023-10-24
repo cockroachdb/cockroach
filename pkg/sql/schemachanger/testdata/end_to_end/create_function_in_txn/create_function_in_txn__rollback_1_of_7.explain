@@ -21,7 +21,7 @@ Schema change plan for rolling back CREATE UNIQUE INDEX ‹idx› ON ‹defaultd
       │    │    ├── PUBLIC           → ABSENT  SchemaChild:{DescID: 105 (t-), ReferencedDescID: 101 (#101)}
       │    │    ├── PUBLIC           → ABSENT  FunctionName:{DescID: 105 (t-)}
       │    │    ├── PUBLIC           → ABSENT  FunctionBody:{DescID: 105 (t-)}
-      │    │    ├── BACKFILL_ONLY    → ABSENT  SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey)}
+      │    │    ├── BACKFILL_ONLY    → ABSENT  SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
       │    │    ├── PUBLIC           → ABSENT  IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 2 (idx-)}
       │    │    ├── PUBLIC           → ABSENT  IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 2 (idx-)}
       │    │    ├── PUBLIC           → ABSENT  IndexData:{DescID: 104 (t), IndexID: 2 (idx-)}

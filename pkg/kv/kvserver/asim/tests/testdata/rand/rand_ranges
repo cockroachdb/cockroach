@@ -49,7 +49,7 @@ sample1: pass
 sample2: start running
 configurations generated using seed 2643318057788968173
 	loaded cluster with
- 		region:US [zone=US_1(nodes=5,stores=0), zone=US_2(nodes=5,stores=0), zone=US_3(nodes=5,stores=0)]
+ 		region:US [zone=US_1(nodes=5,stores=1), zone=US_2(nodes=5,stores=1), zone=US_3(nodes=5,stores=1)]
 	randomized ranges with placement_type=random, ranges=944, key_space=1357, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
 	number of mutation events=0, number of assertion events=0
@@ -58,7 +58,7 @@ sample2: pass
 sample3: start running
 configurations generated using seed 6972490225919430754
 	loaded cluster with
- 		region:US [zone=US_1(nodes=5,stores=0), zone=US_2(nodes=5,stores=0), zone=US_3(nodes=5,stores=0)]
+ 		region:US [zone=US_1(nodes=5,stores=1), zone=US_2(nodes=5,stores=1), zone=US_3(nodes=5,stores=1)]
 	randomized ranges with placement_type=random, ranges=479, key_space=1003, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
 	number of mutation events=0, number of assertion events=0
@@ -173,7 +173,7 @@ sample1: pass
 sample2: start running
 configurations generated using seed 2643318057788968173
 	loaded cluster with
- 		region:US [zone=US_1(nodes=5,stores=0), zone=US_2(nodes=5,stores=0), zone=US_3(nodes=5,stores=0)]
+ 		region:US [zone=US_1(nodes=5,stores=1), zone=US_2(nodes=5,stores=1), zone=US_3(nodes=5,stores=1)]
 	randomized ranges with placement_type=random, ranges=944, key_space=150098, replication_factor=1, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
 	number of mutation events=0, number of assertion events=0
@@ -205,7 +205,7 @@ over replicated:
 sample3: start running
 configurations generated using seed 6972490225919430754
 	loaded cluster with
- 		region:US [zone=US_1(nodes=5,stores=0), zone=US_2(nodes=5,stores=0), zone=US_3(nodes=5,stores=0)]
+ 		region:US [zone=US_1(nodes=5,stores=1), zone=US_2(nodes=5,stores=1), zone=US_3(nodes=5,stores=1)]
 	randomized ranges with placement_type=random, ranges=479, key_space=199954, replication_factor=1, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
 	number of mutation events=0, number of assertion events=0

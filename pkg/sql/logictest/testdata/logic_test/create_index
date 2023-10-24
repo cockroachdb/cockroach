@@ -96,7 +96,6 @@ CREATE TABLE privs (a INT PRIMARY KEY, b INT)
 user testuser
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
 statement error must be owner of table privs or have CREATE privilege on table privs
 CREATE INDEX foo ON privs (b)
 
@@ -276,7 +275,6 @@ SELECT 'tbl'::regclass::int
 # hold the json text for the resume spans we want. We'll verify them below.
 # This is some really low-level mucking around. Things to know are that 0xfe
 # is the tenant prefix.
-skipif config local-mixed-22.2-23.1
 let $spans
   WITH span AS (
                 SELECT j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->0 AS span
@@ -326,7 +324,6 @@ SELECT json_build_array(
 # spans that both the wrong tenant ID or no tenant ID before resuming it to make
 # sure that on resume it re-keys the spans correctly. We pretty_key these below
 # to confirm/show what is in them.
-skipif config local-mixed-22.2-23.1
 statement ok
 UPDATE system.job_info
   SET value = crdb_internal.json_to_pb(
@@ -341,7 +338,6 @@ WHERE info_key = 'legacy_payload' AND crdb_internal.pb_to_json('cockroach.sql.jo
 
 # confirm we see these bogus start and end keys in the job, both for the wrong
 # tenant and for no tenant.
-skipif config local-mixed-22.2-23.1
 query TTTT
 SELECT
   crdb_internal.pretty_key(decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->0->>'key', 'base64'), 0),

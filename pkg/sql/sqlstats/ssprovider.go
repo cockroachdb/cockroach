@@ -251,4 +251,5 @@ type RecordedTxnStats struct {
 	BytesRead               int64
 	Priority                roachpb.UserPriority
 	SessionData             *sessiondata.SessionData
+	TxnErr                  error
 }

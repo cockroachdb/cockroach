@@ -162,6 +162,22 @@ func (tc *TxnCoordSender) ReleaseSavepoint(ctx context.Context, s kv.SavepointTo
 	return tc.checkSavepointLocked(sp, "release")
 }
 
+// CanUseSavepoint is part of the kv.TxnSender interface.
+func (tc *TxnCoordSender) CanUseSavepoint(ctx context.Context, s kv.SavepointToken) bool {
+	if tc.typ != kv.RootTxn {
+		return false
+	}
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txnState != txnPending {
+		return false
+	}
+	// We swallow the error here because we aren't actually performing any
+	// operation with the savepoint; only checking if we are allowed to do so.
+	sp := s.(*savepoint)
+	return tc.checkSavepointLocked(sp, "release") == nil
+}
+
 type errSavepointOperationInErrorTxn struct{}
 
 // ErrSavepointOperationInErrorTxn is reported when CreateSavepoint()

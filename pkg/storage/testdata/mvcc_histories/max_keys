@@ -163,6 +163,10 @@ with t=A ts=11,0 max=3
   resolve_intent k=m status=COMMITTED
   resolve_intent k=n status=COMMITTED
 ----
+resolve_intent: "k" -> resolved key = true
+resolve_intent: "l" -> resolved key = true
+resolve_intent: "m" -> resolved key = true
+resolve_intent: "n" -> resolved key = true
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
 data: "a"/1.000000000,0 -> /BYTES/val-a

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
@@ -34,12 +35,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 	cron "github.com/robfig/cron/v3"
 )
 
 const (
+	// TODO(msbutler): move these three constants to scheduleBase package to
+	// remove duplication with changefeed schedules.
 	optFirstRun                = "first_run"
 	optOnExecFailure           = "on_execution_failure"
 	optOnPreviousRunning       = "on_previous_running"
@@ -58,7 +62,7 @@ var scheduledBackupOptionExpectValues = map[string]exprutil.KVStringOptValidate{
 // scheduledBackupGCProtectionEnabled is used to enable and disable the chaining
 // of protected timestamps amongst scheduled backups.
 var scheduledBackupGCProtectionEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"schedules.backup.gc_protection.enabled",
 	"enable chaining of GC protection across backups run as part of a schedule",
 	true, /* defaultValue */
@@ -88,9 +92,13 @@ type scheduledBackupSpec struct {
 	incrementalStorage         []string
 	includeAllSecondaryTenants *bool
 	execLoc                    *string
+	updatesMetrics             *bool
 }
 
-func makeScheduleDetails(opts map[string]string) (jobspb.ScheduleDetails, error) {
+// TODO(msbutler): move this function into scheduleBase and remove duplicate function in scheduled changefeeds.
+func makeScheduleDetails(
+	opts map[string]string, clusterID uuid.UUID, version clusterversion.ClusterVersion,
+) (jobspb.ScheduleDetails, error) {
 	var details jobspb.ScheduleDetails
 	if v, ok := opts[optOnExecFailure]; ok {
 		if err := schedulebase.ParseOnError(v, &details); err != nil {
@@ -103,6 +111,8 @@ func makeScheduleDetails(opts map[string]string) (jobspb.ScheduleDetails, error)
 			return details, err
 		}
 	}
+	details.ClusterID = clusterID
+	details.CreationClusterVersion = version
 	return details, nil
 }
 
@@ -301,8 +311,8 @@ func doCreateBackupSchedules(
 	if err != nil {
 		return err
 	}
-
-	details, err := makeScheduleDetails(scheduleOptions)
+	clusterVersion := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
+	details, err := makeScheduleDetails(scheduleOptions, evalCtx.ClusterID, clusterVersion)
 	if err != nil {
 		return err
 	}
@@ -718,6 +728,16 @@ func makeScheduledBackupSpec(
 		spec.includeAllSecondaryTenants = &includeSecondary
 	}
 
+	if schedule.BackupOptions.UpdatesClusterMonitoringMetrics != nil {
+		updatesMetrics, err := exprEval.Bool(
+			ctx, schedule.BackupOptions.UpdatesClusterMonitoringMetrics,
+		)
+		if err != nil {
+			return nil, err
+		}
+		spec.updatesMetrics = &updatesMetrics
+	}
+
 	return spec, nil
 }
 
@@ -799,6 +819,7 @@ func createBackupScheduleTypeCheck(
 	bools := exprutil.Bools{
 		schedule.BackupOptions.CaptureRevisionHistory,
 		schedule.BackupOptions.IncludeAllSecondaryTenants,
+		schedule.BackupOptions.UpdatesClusterMonitoringMetrics,
 	}
 	if err := exprutil.TypeCheck(
 		ctx, scheduleBackupOp, p.SemaCtx(), stringExprs, bools, stringArrays, opts,

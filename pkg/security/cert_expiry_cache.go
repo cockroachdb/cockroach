@@ -33,7 +33,7 @@ const CacheCapacityMax = 65000
 // ClientCertExpirationCacheCapacity is the cluster setting that controls the
 // maximum number of client cert expirations in the cache.
 var ClientCertExpirationCacheCapacity = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.client_cert_expiration_cache.capacity",
 	"the maximum number of client cert expirations stored",
 	1000,

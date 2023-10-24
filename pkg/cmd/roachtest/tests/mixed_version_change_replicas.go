@@ -59,8 +59,9 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 		return rng.Intn(nodeCount) + 1
 	}
 
-	preVersion, err := release.LatestPredecessor(t.BuildVersion())
+	preVersionStr, err := release.LatestPredecessor(t.BuildVersion())
 	require.NoError(t, err)
+	preVersion := clusterupgrade.MustParseVersion(preVersionStr)
 
 	// scanTableStep runs a count(*) scan across a table, asserting the row count.
 	scanTableStep := func(table string, expectRows int) versionStep {
@@ -267,7 +268,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 		},
 
 		// Upgrade n1,n2 to MainVersion, leave n3,n4 at preVersion.
-		binaryUpgradeStep(c.Nodes(1, 2), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Nodes(1, 2), clusterupgrade.CurrentVersion()),
 
 		// Scatter the table's single range, to randomize replica/lease
 		// placement -- in particular, who's responsible for splits.
@@ -317,7 +318,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 
 		// Upgrade n3,n4 (the remaining nodes) to MainVersion, verify that we can
 		// run a table scan, move ranges around, scatter, and scan again.
-		binaryUpgradeStep(c.Nodes(3, 4), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Nodes(3, 4), clusterupgrade.CurrentVersion()),
 		scanTableStep("test", 0),
 		changeReplicasRelocateFromNodeStep("test", 1),
 		changeReplicasZoneConfigFromNodeStep("test", 2),
@@ -340,7 +341,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 		// Upgrade all to MainVersion and finalize the upgrade. Verify that we can
 		// run a table scan, shuffle the ranges, scatter them, and scan again.
 		allowAutoUpgradeStep(1),
-		binaryUpgradeStep(c.All(), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.All(), clusterupgrade.CurrentVersion()),
 		waitForUpgradeStep(c.All()),
 		scanTableStep("test", 0),
 		changeReplicasRelocateFromNodeStep("test", 1),

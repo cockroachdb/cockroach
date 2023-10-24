@@ -171,6 +171,8 @@ type Memo struct {
 	useImprovedJoinElimination                 bool
 	implicitFKLockingForSerializable           bool
 	durableLockingForSerializable              bool
+	sharedLockingForSerializable               bool
+	useLockOpForSerializable                   bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -240,6 +242,8 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		useImprovedJoinElimination:                 evalCtx.SessionData().OptimizerUseImprovedJoinElimination,
 		implicitFKLockingForSerializable:           evalCtx.SessionData().ImplicitFKLockingForSerializable,
 		durableLockingForSerializable:              evalCtx.SessionData().DurableLockingForSerializable,
+		sharedLockingForSerializable:               evalCtx.SessionData().SharedLockingForSerializable,
+		useLockOpForSerializable:                   evalCtx.SessionData().OptimizerUseLockOpForSerializable,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -383,6 +387,8 @@ func (m *Memo) IsStale(
 		m.useImprovedJoinElimination != evalCtx.SessionData().OptimizerUseImprovedJoinElimination ||
 		m.implicitFKLockingForSerializable != evalCtx.SessionData().ImplicitFKLockingForSerializable ||
 		m.durableLockingForSerializable != evalCtx.SessionData().DurableLockingForSerializable ||
+		m.sharedLockingForSerializable != evalCtx.SessionData().SharedLockingForSerializable ||
+		m.useLockOpForSerializable != evalCtx.SessionData().OptimizerUseLockOpForSerializable ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}
@@ -582,3 +588,10 @@ var GetLookupJoinLookupTableDistribution func(
 	required *physical.Required,
 	optimizer interface{},
 ) (physicalDistribution physical.Distribution)
+
+// CopyGroup helps us create a mock LookupJoinExpr in execbuilder during
+// building of LockExpr. Unlike setGroup this does *not* add the LookupJoinExpr
+// to the group.
+func (e *LookupJoinExpr) CopyGroup(expr RelExpr) {
+	e.grp = expr.group()
+}

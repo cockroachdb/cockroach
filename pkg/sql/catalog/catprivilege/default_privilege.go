@@ -335,13 +335,13 @@ func foldPrivileges(
 			return err
 		}
 	}
-	if targetObject == privilege.Functions &&
+	if targetObject == privilege.Routines &&
 		privileges.CheckPrivilege(username.PublicRoleName(), privilege.EXECUTE) {
 		setPublicHasExecuteOnFunctions(defaultPrivilegesForRole, true)
 		if err := privileges.Revoke(
 			username.PublicRoleName(),
 			privilege.List{privilege.EXECUTE},
-			privilege.Function,
+			privilege.Routine,
 			false, /* grantOptionFor */
 		); err != nil {
 			return err
@@ -382,7 +382,7 @@ func expandPrivileges(
 		privileges.Grant(username.PublicRoleName(), privilege.List{privilege.USAGE}, false /* withGrantOption */)
 		setPublicHasUsageOnTypes(defaultPrivilegesForRole, false)
 	}
-	if targetObject == privilege.Functions && GetPublicHasExecuteOnFunctions(defaultPrivilegesForRole) {
+	if targetObject == privilege.Routines && GetPublicHasExecuteOnFunctions(defaultPrivilegesForRole) {
 		privileges.Grant(username.PublicRoleName(), privilege.List{privilege.EXECUTE}, false /* withGrantOption */)
 		setPublicHasExecuteOnFunctions(defaultPrivilegesForRole, false)
 	}
@@ -414,7 +414,7 @@ func GetUserPrivilegesForObject(
 			Privileges: privilege.USAGE.Mask(),
 		})
 	}
-	if GetPublicHasExecuteOnFunctions(&p) && targetObject == privilege.Functions {
+	if GetPublicHasExecuteOnFunctions(&p) && targetObject == privilege.Routines {
 		userPrivileges = append(userPrivileges, catpb.UserPrivileges{
 			UserProto:  username.PublicRoleName().EncodeProto(),
 			Privileges: privilege.EXECUTE.Mask(),
@@ -457,7 +457,7 @@ func GetRoleHasAllPrivilegesOnTargetObject(
 		return defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnTypes
 	case privilege.Schemas:
 		return defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnSchemas
-	case privilege.Functions:
+	case privilege.Routines:
 		return defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnFunctions
 	default:
 		panic(fmt.Sprintf("unknown target object %s", targetObject))
@@ -565,7 +565,7 @@ func setRoleHasAllOnTargetObject(
 		defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnTypes = roleHasAll
 	case privilege.Schemas:
 		defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnSchemas = roleHasAll
-	case privilege.Functions:
+	case privilege.Routines:
 		defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnFunctions = roleHasAll
 	default:
 		panic(fmt.Sprintf("unknown target object %s", targetObject))

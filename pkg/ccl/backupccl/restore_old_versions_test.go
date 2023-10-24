@@ -285,7 +285,7 @@ DROP SCHEMA bar;
 	tdb.CheckQueryResults(t, query, [][]string{{restoredDBName}})
 
 	// Read descriptor without validation.
-	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
 	hasSameNameSchema := func(dbName string) (exists bool) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			// Using this method to avoid validation.
@@ -474,8 +474,8 @@ func fullClusterRestoreWithTenants(exportDir string) func(t *testing.T) {
 		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM LATEST IN '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION, include_all_virtual_clusters", localFoo))
 		sqlDB.CheckQueryResults(t, "SHOW TENANTS", [][]string{
 			{"1", "system", "ready", "shared"},
-			{"5", "tenant-5", "ready", "none"},
-			{"6", "tenant-6", "ready", "none"},
+			{"5", "cluster-5", "ready", "none"},
+			{"6", "cluster-6", "ready", "none"},
 		})
 	}
 }

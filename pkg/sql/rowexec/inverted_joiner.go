@@ -296,6 +296,7 @@ func newInvertedJoiner(
 			Txn:                        flowCtx.Txn,
 			LockStrength:               spec.LockingStrength,
 			LockWaitPolicy:             spec.LockingWaitPolicy,
+			LockDurability:             spec.LockingDurability,
 			LockTimeout:                flowCtx.EvalCtx.SessionData().LockTimeout,
 			Alloc:                      &ij.alloc,
 			MemMonitor:                 flowCtx.Mon,

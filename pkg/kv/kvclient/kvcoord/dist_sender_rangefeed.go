@@ -20,7 +20,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -57,7 +56,7 @@ type singleRangeInfo struct {
 }
 
 var useDedicatedRangefeedConnectionClass = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"kv.rangefeed.use_dedicated_connection_class.enabled",
 	"uses dedicated connection when running rangefeeds",
 	util.ConstantWithMetamorphicTestBool(
@@ -65,7 +64,7 @@ var useDedicatedRangefeedConnectionClass = settings.RegisterBoolSetting(
 )
 
 var catchupStartupRate = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.rangefeed.client.stream_startup_rate",
 	"controls the rate per second the client will initiate new rangefeed stream for a single range; 0 implies unlimited",
 	100, // e.g.: 200 seconds for 20k ranges.
@@ -74,7 +73,7 @@ var catchupStartupRate = settings.RegisterIntSetting(
 )
 
 var rangefeedRangeStuckThreshold = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.rangefeed.range_stuck_threshold",
 	"restart rangefeeds if they don't emit anything for the specified threshold; 0 disables (kv.rangefeed.closed_timestamp_refresh_interval takes precedence)",
 	time.Minute,
@@ -101,6 +100,8 @@ type rangeFeedConfig struct {
 		// captureMuxRangeFeedRequestSender is a callback invoked when mux
 		// rangefeed establishes connection to the node.
 		captureMuxRangeFeedRequestSender func(nodeID roachpb.NodeID, sender func(req *kvpb.RangeFeedRequest) error)
+		// beforeSendRequest is a mux rangefeed callback invoked prior to sending rangefeed request.
+		beforeSendRequest func()
 	}
 }
 
@@ -221,8 +222,7 @@ func (ds *DistSender) RangeFeedSpans(
 
 	rl := newCatchupScanRateLimiter(&ds.st.SV)
 
-	if ds.st.Version.IsActive(ctx, clusterversion.TODODelete_V22_2RangefeedUseOneStreamPerNode) &&
-		enableMuxRangeFeed && cfg.useMuxRangeFeed {
+	if enableMuxRangeFeed && cfg.useMuxRangeFeed {
 		return muxRangeFeed(ctx, cfg, spans, ds, rr, rl, eventCh)
 	}
 
@@ -626,11 +626,10 @@ func handleRangefeedError(
 		// If we got an EOF, treat it as a signal to restart single range feed.
 		return rangefeedErrorInfo{}, nil
 	case errors.HasType(err, (*kvpb.StoreNotFoundError)(nil)):
-		// These errors are likely to be unique to the replica that
-		// reported them, so no action is required before the next
-		// retry.
+		// We shouldn't be seeing these errors if descriptors are correct, but if
+		// we do, we'd rather evict descriptor before retrying.
 		metrics.Errors.StoreNotFound.Inc(1)
-		return rangefeedErrorInfo{}, nil
+		return rangefeedErrorInfo{evict: true}, nil
 	case errors.HasType(err, (*kvpb.NodeUnavailableError)(nil)):
 		// These errors are likely to be unique to the replica that
 		// reported them, so no action is required before the next
@@ -721,7 +720,7 @@ func newTransportForRange(
 	if err != nil {
 		return nil, err
 	}
-	replicas.OptimizeReplicaOrder(ds.getNodeID(), latencyFn, ds.locality)
+	replicas.OptimizeReplicaOrder(ds.nodeIDGetter(), latencyFn, ds.locality)
 	opts := SendOptions{class: connectionClass(&ds.st.SV)}
 	return ds.transportFactory(opts, ds.nodeDialer, replicas)
 }
@@ -973,6 +972,14 @@ func TestingWithMuxRangeFeedRequestSenderCapture(
 	})
 }
 
+// TestingWithBeforeSendRequest returns a test only option that invokes
+// function before sending rangefeed request.
+func TestingWithBeforeSendRequest(fn func()) RangeFeedOption {
+	return optionFunc(func(c *rangeFeedConfig) {
+		c.knobs.beforeSendRequest = fn
+	})
+}
+
 // TestingMakeRangeFeedMetrics exposes makeDistSenderRangeFeedMetrics for test use.
 var TestingMakeRangeFeedMetrics = makeDistSenderRangeFeedMetrics
 
@@ -983,10 +990,15 @@ type catchupScanRateLimiter struct {
 }
 
 func newCatchupScanRateLimiter(sv *settings.Values) *catchupScanRateLimiter {
-	rl := &catchupScanRateLimiter{sv: sv}
-	rl.limit = getCatchupRateLimit(rl.sv)
-	rl.pacer = quotapool.NewRateLimiter("distSenderCatchupLimit", rl.limit, 0 /* smooth rate */)
-	return rl
+	const slowAcquisitionThreshold = 5 * time.Second
+	lim := getCatchupRateLimit(sv)
+	return &catchupScanRateLimiter{
+		sv:    sv,
+		limit: lim,
+		pacer: quotapool.NewRateLimiter(
+			"distSenderCatchupLimit", lim, 0, /* smooth rate limit without burst */
+			quotapool.OnSlowAcquisition(slowAcquisitionThreshold, logSlowCatchupScanAcquisition(slowAcquisitionThreshold))),
+	}
 }
 
 func getCatchupRateLimit(sv *settings.Values) quotapool.Limit {
@@ -1001,8 +1013,28 @@ func (rl *catchupScanRateLimiter) Pace(ctx context.Context) error {
 	// Take opportunity to update limits if they have changed.
 	if lim := getCatchupRateLimit(rl.sv); lim != rl.limit {
 		rl.limit = lim
-		rl.pacer.UpdateLimit(lim, 0)
+		rl.pacer.UpdateLimit(lim, 0 /* smooth rate limit without burst */)
 	}
-
 	return rl.pacer.WaitN(ctx, 1)
+}
+
+// logSlowCatchupScanAcquisition is a function returning a quotapool.SlowAcquisitionFunction.
+// It differs from the quotapool.LogSlowAcquisition in that only some of slow acquisition
+// events are logged to reduce log spam.
+func logSlowCatchupScanAcquisition(loggingMinInterval time.Duration) quotapool.SlowAcquisitionFunc {
+	logSlowAcquire := log.Every(loggingMinInterval)
+
+	return func(ctx context.Context, poolName string, r quotapool.Request, start time.Time) func() {
+		shouldLog := logSlowAcquire.ShouldLog()
+		if shouldLog {
+			log.Warningf(ctx, "have been waiting %s attempting to acquire catchup scan quota",
+				timeutil.Since(start))
+		}
+
+		return func() {
+			if shouldLog {
+				log.Infof(ctx, "acquired catchup quota after %s", timeutil.Since(start))
+			}
+		}
+	}
 }

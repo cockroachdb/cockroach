@@ -36,14 +36,14 @@ import (
 )
 
 var replanRestoreThreshold = settings.RegisterFloatSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.restore.replan_flow_threshold",
 	"fraction of initial flow instances that would be added or updated above which a RESTORE execution plan is restarted from the last checkpoint (0=disabled)",
 	0.0,
 )
 
 var replanRestoreFrequency = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.restore.replan_flow_frequency",
 	"frequency at which RESTORE checks to see if restarting would change its updates its physical execution plan",
 	time.Minute*2,
@@ -51,7 +51,7 @@ var replanRestoreFrequency = settings.RegisterDurationSetting(
 )
 
 var memoryMonitorSSTs = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.restore.memory_monitor_ssts",
 	"if true, restore will limit number of simultaneously open SSTs to keep memory usage under the configured memory fraction",
 	false,
@@ -59,17 +59,16 @@ var memoryMonitorSSTs = settings.RegisterBoolSetting(
 )
 
 type restoreJobMetadata struct {
-	jobID                jobspb.JobID
-	dataToRestore        restorationData
-	restoreTime          hlc.Timestamp
-	encryption           *jobspb.BackupEncryptionOptions
-	kmsEnv               cloud.KMSEnv
-	uris                 []string
-	backupLocalityInfo   []jobspb.RestoreDetails_BackupLocalityInfo
-	spanFilter           spanCoveringFilter
-	numImportSpans       int
-	useSimpleImportSpans bool
-	execLocality         roachpb.Locality
+	jobID              jobspb.JobID
+	dataToRestore      restorationData
+	restoreTime        hlc.Timestamp
+	encryption         *jobspb.BackupEncryptionOptions
+	kmsEnv             cloud.KMSEnv
+	uris               []string
+	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo
+	spanFilter         spanCoveringFilter
+	numImportSpans     int
+	execLocality       roachpb.Locality
 }
 
 // distRestore plans a 2 stage distSQL flow for a distributed restore. It
@@ -204,7 +203,6 @@ func distRestore(
 			ChunkSize:                int64(chunkSize),
 			NumEntries:               int64(md.numImportSpans),
 			NumNodes:                 int64(numNodes),
-			UseSimpleImportSpans:     md.useSimpleImportSpans,
 			UseFrontierCheckpointing: md.spanFilter.useFrontierCheckpointing,
 			JobID:                    int64(md.jobID),
 		}

@@ -1,5 +1,7 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
+# gazelle:follow *.go
+
 # Langgen is a bootstrapping compiler. We symlink the bootstrap sources into
 # this directory in order to regenerate the sources inside the bazel sandbox.
 # This package exists to store the dependencies for langgen in the

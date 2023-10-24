@@ -34,9 +34,9 @@ func newCDCFunctionResolver(wrapped tree.FunctionReferenceResolver) tree.Functio
 
 // ResolveFunction implements FunctionReferenceResolver interface.
 func (rs *cdcFunctionResolver) ResolveFunction(
-	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+	ctx context.Context, name tree.UnresolvedRoutineName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
-	fn, err := name.ToRoutineName()
+	fn, err := name.UnresolvedName().ToRoutineName()
 	if err != nil {
 		return nil, err
 	}

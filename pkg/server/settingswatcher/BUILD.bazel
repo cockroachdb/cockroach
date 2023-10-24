@@ -35,7 +35,6 @@ go_library(
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 

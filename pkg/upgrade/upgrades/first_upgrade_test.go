@@ -184,7 +184,7 @@ func TestFirstUpgradeRepair(t *testing.T) {
 		tbl := tabledesc.NewBuilder(tbl.TableDesc()).BuildExistingMutableTable()
 		tbl.InboundFKs = []descpb.ForeignKeyConstraint{{
 			OriginTableID:       123456789,
-			OriginColumnIDs:     []descpb.ColumnID{1},
+			OriginColumnIDs:     tbl.PublicColumnIDs(), // Used such that len(OriginColumnIDs) == len(PublicColumnIDs)
 			ReferencedColumnIDs: tbl.PublicColumnIDs(),
 			ReferencedTableID:   tbl.GetID(),
 			Name:                "corrupt_fk",

@@ -11,6 +11,7 @@ with t=A
   put        k=a v=abc resolve
   txn_remove
 ----
+resolve_intent: "a" -> resolved key = true
 >> at end:
 data: "a"/11.000000000,0 -> /BYTES/abc
 

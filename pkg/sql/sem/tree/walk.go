@@ -1041,6 +1041,16 @@ func (n *AlterTenantReplication) walkStmt(v Visitor) Statement {
 			ret.Options.Retention = e
 		}
 	}
+	if n.Options.ResumeTimestamp != nil {
+		e, changed := WalkExpr(v, n.Options.ResumeTimestamp)
+		if changed {
+			if ret == n {
+				ret = n.copyNode()
+			}
+			ret.Options.ResumeTimestamp = e
+		}
+	}
+
 	return ret
 }
 
@@ -1104,6 +1114,16 @@ func (n *CreateTenantFromReplication) walkStmt(v Visitor) Statement {
 			ret.Options.Retention = e
 		}
 	}
+	if n.Options.ResumeTimestamp != nil {
+		e, changed := WalkExpr(v, n.Options.ResumeTimestamp)
+		if changed {
+			if ret == n {
+				ret = n.copyNode()
+			}
+			ret.Options.ResumeTimestamp = e
+		}
+	}
+
 	if n.Like.OtherTenant != nil {
 		ts, changed := walkTenantSpec(v, n.TenantSpec)
 		if changed {
@@ -1133,6 +1153,35 @@ func (n *ShowTenant) walkStmt(v Visitor) Statement {
 		}
 		ret.TenantSpec = ts
 	}
+	return ret
+}
+
+// copyNode makes a copy of this Statement without recursing in any child Statements.
+func (n *ShowFingerprints) copyNode() *ShowFingerprints {
+	stmtCopy := *n
+	return &stmtCopy
+}
+
+// walkStmt is part of the walkableStmt interface.
+func (n *ShowFingerprints) walkStmt(v Visitor) Statement {
+	ret := n
+	ts, changed := walkTenantSpec(v, n.TenantSpec)
+	if changed {
+		if ret == n {
+			ret = n.copyNode()
+		}
+		ret.TenantSpec = ts
+	}
+	if n.Options.StartTimestamp != nil {
+		e, changed := WalkExpr(v, n.Options.StartTimestamp)
+		if changed {
+			if ret == n {
+				ret = n.copyNode()
+			}
+			ret.Options.StartTimestamp = e
+		}
+	}
+
 	return ret
 }
 
@@ -1991,6 +2040,7 @@ var _ walkableStmt = &SelectClause{}
 var _ walkableStmt = &Select{}
 var _ walkableStmt = &SetClusterSetting{}
 var _ walkableStmt = &SetVar{}
+var _ walkableStmt = &ShowFingerprints{}
 var _ walkableStmt = &ShowTenantClusterSetting{}
 var _ walkableStmt = &ShowTenant{}
 var _ walkableStmt = &UnionClause{}

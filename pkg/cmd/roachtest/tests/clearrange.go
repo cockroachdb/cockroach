@@ -67,12 +67,16 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 
 	t.Status("restoring fixture")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-
-	// NB: on a 10 node cluster, this should take well below 3h.
-	tBegin := timeutil.Now()
-	c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank",
-		"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank")
-	t.L().Printf("import took %.2fs", timeutil.Since(tBegin).Seconds())
+	m := c.NewMonitor(ctx)
+	m.Go(func(ctx context.Context) error {
+		// NB: on a 10 node cluster, this should take well below 3h.
+		tBegin := timeutil.Now()
+		c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank",
+			"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank")
+		t.L().Printf("import took %.2fs", timeutil.Since(tBegin).Seconds())
+		return nil
+	})
+	m.Wait()
 	c.Stop(ctx, t.L(), option.DefaultStopOpts())
 	t.Status()
 
@@ -86,6 +90,7 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 	}
 
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
+	m = c.NewMonitor(ctx)
 
 	// Also restore a much smaller table. We'll use it to run queries against
 	// the cluster after having dropped the large table above, verifying that
@@ -129,7 +134,6 @@ ORDER BY raw_start_key ASC LIMIT 1`,
 		}
 	}()
 
-	m := c.NewMonitor(ctx)
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, c.Node(1), `./cockroach workload init kv`)
 		c.Run(ctx, c.All(), `./cockroach workload run kv --concurrency=32 --duration=1h --tolerate-errors`)

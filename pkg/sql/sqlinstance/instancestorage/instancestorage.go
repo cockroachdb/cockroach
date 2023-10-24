@@ -48,7 +48,7 @@ import (
 // ReclaimLoopInterval is the interval at which expired instance IDs are
 // reclaimed and new ones will be preallocated.
 var ReclaimLoopInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.instance_id.reclaim_interval",
 	"interval at which instance IDs are reclaimed and preallocated",
 	10*time.Minute,
@@ -58,7 +58,7 @@ var ReclaimLoopInterval = settings.RegisterDurationSetting(
 // PreallocatedCount refers to the number of preallocated instance IDs within
 // the system.sql_instances table.
 var PreallocatedCount = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.instance_id.preallocated_count",
 	"number of preallocated instance IDs within the system.sql_instances table",
 	10,
@@ -375,7 +375,7 @@ func (s *Storage) createInstanceRow(
 func (s *Storage) newInstanceCache(
 	ctx context.Context, stopper *stop.Stopper,
 ) (instanceCache, error) {
-	if !s.settings.Version.IsActive(ctx, clusterversion.V23_1_SystemRbrReadNew) {
+	if !s.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1_SystemRbrReadNew) {
 		oldCache := func(ctx context.Context) (instanceCache, error) {
 			return newRangeFeedCache(ctx, s.oldRowCodec, s.clock, s.f)
 		}
@@ -639,7 +639,7 @@ func (s *Storage) RunInstanceIDReclaimLoop(
 }
 
 func (s *Storage) getReadCodec(version *settingswatcher.VersionGuard) *rowCodec {
-	if version.IsActive(clusterversion.V23_1_SystemRbrReadNew) {
+	if version.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrReadNew) {
 		return &s.newRowCodec
 	}
 	return &s.oldRowCodec
@@ -647,11 +647,11 @@ func (s *Storage) getReadCodec(version *settingswatcher.VersionGuard) *rowCodec 
 
 func (s *Storage) getDualWriteCodec(version *settingswatcher.VersionGuard) *rowCodec {
 	switch {
-	case version.IsActive(clusterversion.V23_1_SystemRbrSingleWrite):
+	case version.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrSingleWrite):
 		return nil
-	case version.IsActive(clusterversion.V23_1_SystemRbrReadNew):
+	case version.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrReadNew):
 		return &s.oldRowCodec
-	case version.IsActive(clusterversion.V23_1_SystemRbrDualWrite):
+	case version.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrDualWrite):
 		return &s.newRowCodec
 	default:
 		return nil
@@ -661,7 +661,7 @@ func (s *Storage) getDualWriteCodec(version *settingswatcher.VersionGuard) *rowC
 func (s *Storage) versionGuard(
 	ctx context.Context, txn *kv.Txn,
 ) (settingswatcher.VersionGuard, error) {
-	return s.settingsWatch.MakeVersionGuard(ctx, txn, clusterversion.V23_1_SystemRbrCleanup)
+	return s.settingsWatch.MakeVersionGuard(ctx, txn, clusterversion.TODO_Delete_V23_1_SystemRbrCleanup)
 }
 
 // generateAvailableInstanceRows allocates available instance IDs, and store

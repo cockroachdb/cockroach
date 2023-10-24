@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/errors"
 )
 
 type createFunctionNode struct {
@@ -149,7 +150,7 @@ func (n *createFunctionNode) createNewFunction(
 			ArgTypes:    paramTypes,
 			ReturnType:  returnType,
 			ReturnSet:   udfDesc.ReturnType.ReturnSet,
-			IsProcedure: udfDesc.IsProcedure,
+			IsProcedure: udfDesc.IsProcedure(),
 		},
 	)
 	if err := params.p.writeSchemaDescChange(params.ctx, scDesc, "Create Function"); err != nil {
@@ -162,6 +163,22 @@ func (n *createFunctionNode) createNewFunction(
 func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params runParams) error {
 	// TODO(chengxiong): add validation that the function is not referenced. This
 	// is needed when we start allowing function references from other objects.
+
+	if n.cf.IsProcedure && !udfDesc.IsProcedure() {
+		return errors.WithDetailf(
+			pgerror.Newf(pgcode.WrongObjectType, "cannot change routine kind"),
+			"%q is a function",
+			udfDesc.Name,
+		)
+	}
+
+	if !n.cf.IsProcedure && udfDesc.IsProcedure() {
+		return errors.WithDetailf(
+			pgerror.Newf(pgcode.WrongObjectType, "cannot change routine kind"),
+			"%q is a procedure",
+			udfDesc.Name,
+		)
+	}
 
 	// Make sure parameter names are not changed.
 	for i := range n.cf.Params {
@@ -249,11 +266,12 @@ func (n *createFunctionNode) getMutableFuncDesc(
 	}
 
 	// Try to look up an existing function.
-	fuObj := tree.FuncObj{
+	routineObj := tree.RoutineObj{
 		FuncName: n.cf.Name,
 		Params:   n.cf.Params,
 	}
-	existing, err := params.p.matchUDF(params.ctx, &fuObj, false /* required */)
+	existing, err := params.p.matchRoutine(params.ctx, &routineObj,
+		false /* required */, tree.UDFRoutine|tree.ProcedureRoutine)
 	if err != nil {
 		return nil, false, err
 	}
@@ -290,7 +308,7 @@ func (n *createFunctionNode) getMutableFuncDesc(
 		scDesc.GetDefaultPrivilegeDescriptor(),
 		n.dbDesc.GetID(),
 		params.SessionData().User(),
-		privilege.Functions,
+		privilege.Routines,
 	)
 	if err != nil {
 		return nil, false, err

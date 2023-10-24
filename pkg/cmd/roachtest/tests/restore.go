@@ -452,7 +452,14 @@ func registerRestore(r registry.Registry) {
 					if err != nil {
 						return errors.Wrapf(err, "failure to run setup statements")
 					}
-					for _, stmt := range sp.setUpStmts {
+					// Run set-up SQL statements. In particular, enable collecting CPU
+					// profiles automatically if CPU usage is high. Historically, we
+					// observed CPU going as high as 100%, e.g. see issue #111160.
+					// TODO(pavelkalinnikov): enable CPU profiling in all roachtests.
+					for _, stmt := range append(sp.setUpStmts,
+						"SET CLUSTER SETTING server.cpu_profile.duration = '2s'",
+						"SET CLUSTER SETTING server.cpu_profile.cpu_usage_combined_threshold = 80",
+					) {
 						_, err := db.Exec(stmt)
 						if err != nil {
 							return errors.Wrapf(err, "error executing setup stmt [%s]", stmt)
@@ -522,22 +529,28 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry, backupCloud string
 		addWorkloadNode++
 	}
 	if len(hw.zones) > 0 {
-		clusterOpts = append(clusterOpts, spec.Zones(strings.Join(hw.zones, ",")))
+		// Each test is set up to run on one specific cloud, so it's ok that the
+		// zones will only make sense for one of them.
+		// TODO(radu): clean this up.
+		clusterOpts = append(clusterOpts, spec.GCEZones(strings.Join(hw.zones, ",")))
+		clusterOpts = append(clusterOpts, spec.AWSZones(strings.Join(hw.zones, ",")))
 		clusterOpts = append(clusterOpts, spec.Geo())
+	}
+	if hw.ebsThroughput != 0 {
+		clusterOpts = append(clusterOpts, spec.AWSVolumeThroughput(hw.ebsThroughput))
 	}
 	s := r.MakeClusterSpec(hw.nodes+addWorkloadNode, clusterOpts...)
 
-	if hw.ebsThroughput != 0 {
-		s.AWSVolumeThroughput = hw.ebsThroughput
-	}
-
-	if backupCloud == spec.AWS && s.Cloud == spec.AWS && s.VolumeSize != 0 {
+	if backupCloud == spec.AWS && s.VolumeSize != 0 {
 		// Work around an issue that RAID0s local NVMe and GP3 storage together:
 		// https://github.com/cockroachdb/cockroach/issues/98783.
 		//
 		// TODO(srosenberg): Remove this workaround when 98783 is addressed.
-		s.InstanceType, _ = spec.AWSMachineType(s.CPUs, s.Mem, vm.ArchAMD64)
-		s.InstanceType = strings.Replace(s.InstanceType, "d.", ".", 1)
+		// TODO(miral): This now returns an error instead of panicking, so even though
+		// we haven't panicked here before, we should handle the error. Moot if this is
+		// removed as per TODO above.
+		s.AWS.MachineType, _, _ = spec.SelectAWSMachineType(s.CPUs, s.Mem, false /* shouldSupportLocalSSD */, vm.ArchAMD64)
+		s.AWS.MachineType = strings.Replace(s.AWS.MachineType, "d.", ".", 1)
 		s.Arch = vm.ArchAMD64
 	}
 	return s
@@ -852,20 +865,13 @@ func makeRestoreDriver(t test.Test, c cluster.Cluster, sp restoreSpecs) restoreD
 }
 
 func (rd *restoreDriver) prepareCluster(ctx context.Context) {
-	if rd.c.Spec().Cloud != rd.sp.backup.cloud {
+	if rd.c.Cloud() != rd.sp.backup.cloud {
 		// For now, only run the test on the cloud provider that also stores the backup.
 		rd.t.Skipf("test configured to run on %s", rd.sp.backup.cloud)
 	}
 	rd.c.Put(ctx, rd.t.Cockroach(), "./cockroach")
 	rd.c.Start(ctx, rd.t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 	rd.getAOST(ctx)
-
-	if rand.Intn(2) == 0 {
-		rd.t.L().Printf("Running non-default makeSimpleImportSpans")
-		conn := rd.c.Conn(ctx, rd.t.L(), 1)
-		_, err := conn.ExecContext(ctx, "SET CLUSTER SETTING bulkio.restore.simple_import_spans.enabled = true")
-		require.NoError(rd.t, err)
-	}
 }
 
 // getAOST gets the AOST to use in the restore cmd.
@@ -891,7 +897,7 @@ func (rd *restoreDriver) run(ctx context.Context, target string) error {
 	if err != nil {
 		return errors.Wrapf(err, "failed to connect to node 1; running restore")
 	}
-	_, err = conn.ExecContext(ctx, rd.restoreCmd(target, ""))
+	_, err = conn.ExecContext(ctx, rd.restoreCmd(target, "WITH unsafe_restore_incompatible_version"))
 	return err
 }
 
@@ -903,7 +909,7 @@ func (rd *restoreDriver) runDetached(
 		return 0, errors.Wrapf(err, "failed to connect to node %d; running restore detached", node)
 	}
 	if _, err = db.ExecContext(ctx, rd.restoreCmd(target,
-		"WITH DETACHED")); err != nil {
+		"WITH DETACHED, unsafe_restore_incompatible_version")); err != nil {
 		return 0, err
 	}
 	var jobID jobspb.JobID

@@ -56,7 +56,7 @@ var testTasks = []testTask{
 				NonTransactionalStatements: []string{
 					// This checks that the non-txn part works properly: SET
 					// CLUSTER SETTING can only be run outside of explicit txns.
-					"SET CLUSTER SETTING cluster.organization = 'woo'",
+					"SET CLUSTER SETTING cluster.label = 'woo'",
 				},
 				TransactionalStatements: []string{
 					"CREATE TABLE IF NOT EXISTS system.foo(x INT)",

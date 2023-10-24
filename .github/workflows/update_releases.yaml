@@ -22,6 +22,7 @@ on:
 name: Update pkg/testutils/release/cockroach_releases.yaml
 jobs:
   update-crdb-releases-yaml:
+    if: github.repository == 'cockroachdb/cockroach'
     strategy:
       matrix:
         branch: ["master", "release-23.1"]

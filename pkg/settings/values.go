@@ -86,6 +86,7 @@ type valuesContainer struct {
 	// tenant). Reading or writing such a setting causes panics in test builds.
 	forbidden [numSlots]bool
 
+	// hasValue contains the origin of the current value of the setting.
 	hasValue [numSlots]uint32
 }
 
@@ -121,9 +122,9 @@ func (c *valuesContainer) checkForbidden(slot slotIdx) bool {
 		if buildutil.CrdbTestBuild {
 			const msg = `programming error: invalid access to SystemOnly setting %s from a virtual cluster!
 
-TIP: use class TenantWritable for settings that configure just 1
+TIP: use class ApplicationLevel for settings that configure just 1
 virtual cluster; SystemOnly for settings that affect only the shared
-storage layer; and TenantReadOnly for settings that affect the storage
+storage layer; and SystemVisible for settings that affect the storage
 layer and also must be visible to all virtual clusters.
 `
 			panic(errors.AssertionFailedf(msg, slotTable[slot].Name()))
@@ -257,14 +258,37 @@ func (sv *Values) setOnChange(slot slotIdx, fn func(ctx context.Context)) {
 // TestingCopyForVirtualCluster makes a copy of the input Values in
 // the target Values for use when initializing a server for a virtual
 // cluster in tests. This is meant to propagate overrides
-// to TenantWritable settings.
+// to ApplicationLevel settings.
 func (sv *Values) TestingCopyForVirtualCluster(input *Values) {
 	for slot := slotIdx(0); slot < slotIdx(len(registry)); slot++ {
 		s := slotTable[slot]
-		if s.Class() != TenantWritable && s.Class() != TenantReadOnly {
+		if s.Class() != ApplicationLevel && s.Class() != SystemVisible {
 			continue
 		}
 
+		// Copy the value.
+		sv.container.intVals[slot] = input.container.intVals[slot]
+		if v := input.container.genericVals[slot].Load(); v != nil {
+			sv.container.genericVals[slot].Store(v)
+		}
+
+		// Copy the default.
+		input.defaultOverridesMu.Lock()
+		v, hasVal := input.defaultOverridesMu.defaultOverrides[slot]
+		input.defaultOverridesMu.Unlock()
+		if !hasVal {
+			continue
+		}
+		sv.setDefaultOverride(slot, v)
+	}
+}
+
+// TestingCopyForServer makes a copy of the input Values in the target Values
+// for use when initializing a server in a test cluster. This is meant to
+// propagate initial values and overrides.
+func (sv *Values) TestingCopyForServer(input *Values, newOpaque interface{}) {
+	sv.opaque = newOpaque
+	for slot := slotIdx(0); slot < slotIdx(len(registry)); slot++ {
 		// Copy the value.
 		sv.container.intVals[slot] = input.container.intVals[slot]
 		if v := input.container.genericVals[slot].Load(); v != nil {

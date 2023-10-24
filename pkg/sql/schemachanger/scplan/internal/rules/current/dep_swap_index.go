@@ -22,7 +22,6 @@ import (
 // old primary index starts getting removed, effectively swapping one for the
 // other. This rule also applies when the schema change gets reverted.
 func init() {
-
 	registerDepRule(
 		"primary index swap",
 		scgraph.SameStagePrecedence,
@@ -124,4 +123,61 @@ func init() {
 			}
 		},
 	)
+}
+
+// This rule ensures that when secondary indexes are re-created after a primary
+// index key is changed, that the secondary indexes are swapped in an atomic
+// manner, so that queries are not impacted by missing indexes.
+func init() {
+	// This ia strict version of the rule that will only work, when a node
+	// is generating a plan on the latest master / 23.1. The StrictRecreate flag
+	// will be used to tag if the existing secondary index was created on a
+	// new enough version.
+	registerDepRule(
+		"replacement secondary index should be validated before the old one becomes invisible",
+		scgraph.Precedence,
+		"new-index", "old-index",
+		func(from, to NodeVars) rel.Clauses {
+			// Detect a potential secondary index recreation because of a ALTER
+			// PRIMARY KEY, and require that the new index should be public,
+			// before the old index can be hidden (i.e. they are swapped
+			// an atomic manner).
+			return append(isPotentialSecondaryIndexSwap("index-id", "table-id"),
+				from.CurrentStatus(scpb.Status_PUBLIC),
+				to.CurrentStatus(scpb.Status_VALIDATED),
+			)
+		},
+	)
+}
+
+// isNotPotentialSecondaryIndexSwap determines if no secondary index recreation
+// is happening because of a primary key alter.
+var isNotPotentialSecondaryIndexSwap = screl.Schema.DefNotJoin2("no secondary index swap is on going",
+	"table-id", "index-id", func(a, b rel.Var) rel.Clauses {
+		return isPotentialSecondaryIndexSwap(b, a)
+	})
+
+// isPotentialSecondaryIndexSwap determines if a secondary index recreate is
+// occurring because of a primary key alter.
+func isPotentialSecondaryIndexSwap(indexIdVar rel.Var, tableIDVar rel.Var) rel.Clauses {
+	oldIndex := MkNodeVars("old-index")
+	newIndex := MkNodeVars("new-index")
+	// This rule detects secondary indexes recreated during a primary index swap,
+	// by doing the following. It will check if the re-create source index
+	// and index ID matches up between an old and new index
+	return rel.Clauses{
+		oldIndex.Type((*scpb.SecondaryIndex)(nil)),
+		newIndex.Type((*scpb.SecondaryIndex)(nil)),
+		oldIndex.TargetStatus(scpb.ToAbsent),
+		newIndex.TargetStatus(scpb.ToPublic, scpb.Transient),
+		JoinOnDescID(oldIndex, newIndex, tableIDVar),
+		newIndex.El.AttrEqVar(screl.IndexID, indexIdVar),
+		JoinOn(oldIndex,
+			screl.IndexID,
+			newIndex,
+			screl.RecreateSourceIndexID,
+			"old-index-id"),
+		oldIndex.JoinTargetNode(),
+		newIndex.JoinTargetNode(),
+	}
 }

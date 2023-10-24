@@ -151,7 +151,7 @@ type tableWriterBase struct {
 }
 
 var maxBatchBytes = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.mutations.mutation_batch_byte_size",
 	"byte size - in key and value lengths -- for mutation batches",
 	4<<20,

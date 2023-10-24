@@ -8,12 +8,12 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
 http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "824f524fed040e3844025a4274ad03523c38aabe1017c52f72e6d721311f07e3",
-    strip_prefix = "cockroachdb-rules_go-310eb8a",
+    sha256 = "7ba72fafdb71abcb48c17520435d968e7bd3fa4a6f99f3e96544a9fa3e411e1c",
+    strip_prefix = "cockroachdb-rules_go-48e8a97",
     urls = [
-        # cockroachdb/rules_go as of 310eb8ab3c7d53c21c8a5805d1ea77e39cf8552b
-        # (upstream release-0.41 plus a few patches).
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-352-g310eb8a.tar.gz",
+        # cockroachdb/rules_go as of 48e8a9727cbf64165ed4c9f895744f3c82d39bc8
+        # (upstream release-0.42 plus a few patches).
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-385-g48e8a97.zip",
     ]
 )
 
@@ -42,9 +42,10 @@ http_archive(
 # repo.
 http_archive(
     name = "bazel_gazelle",
-    sha256 = "5982e5463f171da99e3bdaeff8c0f48283a7a5f396ec5282910b9e8a49c0dd7e",
+    sha256 = "22140e6a7a28df5ec7477f12b286f24dedf8dbef0a12ffbbac10ae80441aa093",
+    strip_prefix = "bazelbuild-bazel-gazelle-061cc37",
     urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel-gazelle-v0.25.0.tar.gz",
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazelbuild-bazel-gazelle-v0.33.0-0-g061cc37.zip",
     ],
 )
 
@@ -162,15 +163,14 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.20.8.darwin-amd64.tar.gz", "35b0ccd50619bb9fd7ad9418ab937fd9304b219b3b6ecbb89baf34b001ef618d"),
-        "darwin_arm64": ("go1.20.8.darwin-arm64.tar.gz", "265b2994e56ef0b2fc3b33cae4cb8bad12c4cbfd9ab24e3a58af14fe857f9476"),
-        "freebsd_amd64": ("go1.20.8.freebsd-amd64.tar.gz", "ea64e0eb4eb0af7ad59d26b9fb6d3facf32393ad6a29d29c34ba7903523443e6"),
-        "linux_amd64": ("go1.20.8.linux-amd64.tar.gz", "1c4e5509ea7a9619b010aece658af0e4b3be35ba7eeb4e2ba2350b4f56b1209a"),
-        "linux_arm64": ("go1.20.8.linux-arm64.tar.gz", "e96cb9d4040e938be85be382aed6b9560ee4a372623861040e5b7935ff838bd9"),
-        "windows_amd64": ("go1.20.8.windows-amd64.tar.gz", "00bf5902a559d2b297a042f87241c2ba4c1139d6bfe02af6e95d4bd6a349f06a"),
+        "darwin_amd64": ("go1.21.3.darwin-amd64.tar.gz", "253d8d4b32a1d7731dff1245f009362858a0c685af8f52b671dd906b2c67d78d"),
+        "darwin_arm64": ("go1.21.3.darwin-arm64.tar.gz", "877543c11149341e4954cb2e625deb7974e94c3c77f5f71a24d35e54cb54fb05"),
+        "linux_amd64": ("go1.21.3.linux-amd64.tar.gz", "3b0307b4e91d6b34870ed1d29366aba77cb864dc93b7098cdfb5d4619cb58566"),
+        "linux_arm64": ("go1.21.3.linux-arm64.tar.gz", "c0d2da5e1b9ff93d0e4262189e59586cc0c17c207578429f716de2d5799ba36a"),
+        "windows_amd64": ("go1.21.3.windows-amd64.tar.gz", "c0e2957014e72056ed1c2c080d772d7c8e96a3143f228f6b511231fc31c07593"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20230906-184959/{}"],
-    version = "1.20.8",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231019-214851/{}"],
+    version = "1.21.3",
 )
 
 # To point to a local SDK path, use the following instead. We'll call the
@@ -213,8 +213,6 @@ http_archive(
 
 http_archive(
     name = "aspect_bazel_lib",
-    patch_args = ["-p1"],
-    patches = ["//build/patches:aspect_bazel_lib.patch"],
     sha256 = "0da75299c5a52737b2ac39458398b3f256e41a1a6748e5457ceb3a6225269485",
     strip_prefix = "bazel-lib-1.31.2",
     url = "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel-lib-v1.31.2.tar.gz",
@@ -311,10 +309,10 @@ load(
 go_repository(
     name = "com_github_bazelbuild_buildtools",
     importpath = "github.com/bazelbuild/buildtools",
-    sha256 = "d71a889e3bc50cc8b9d42c859e15a74f7c8d10b6786f8dd82f08f2bf24e5bdc6",
-    strip_prefix = "bazelbuild-buildtools-b182fc4",
+    sha256 = "7929c8fc174f8ab03361796f1417eb0eb5ae4b2a12707238694bec2954145ce4",
+    strip_prefix = "bazelbuild-buildtools-b163fcf",
     urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/gomod/github.com/bazelbuild/buildtools/v6.1.2-0-gb182fc4/bazelbuild-buildtools-v6.1.2-0-gb182fc4.tar.gz",
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazelbuild-buildtools-v6.3.3-0-gb163fcf.tar.gz",
     ],
 )
 
@@ -548,22 +546,18 @@ register_toolchains(
     "//build/toolchains:cross_arm64_windows_toolchain",
     "//build/toolchains:cross_arm64_macos_toolchain",
     "//build/toolchains:cross_arm64_macos_arm_toolchain",
-    "//build/toolchains:node_freebsd_toolchain",
     "@copy_directory_toolchains//:darwin_amd64_toolchain",
     "@copy_directory_toolchains//:darwin_arm64_toolchain",
-    "@copy_directory_toolchains//:freebsd_amd64_toolchain",
     "@copy_directory_toolchains//:linux_amd64_toolchain",
     "@copy_directory_toolchains//:linux_arm64_toolchain",
     "@copy_directory_toolchains//:windows_amd64_toolchain",
     "@copy_to_directory_toolchains//:darwin_amd64_toolchain",
     "@copy_to_directory_toolchains//:darwin_arm64_toolchain",
-    "@copy_to_directory_toolchains//:freebsd_amd64_toolchain",
     "@copy_to_directory_toolchains//:linux_amd64_toolchain",
     "@copy_to_directory_toolchains//:linux_arm64_toolchain",
     "@copy_to_directory_toolchains//:windows_amd64_toolchain",
     "@nodejs_toolchains//:darwin_amd64_toolchain",
     "@nodejs_toolchains//:darwin_arm64_toolchain",
-    # NB: The freebsd node toolchain is above as //build/toolchains:node_freebsd_toolchain
     "@nodejs_toolchains//:linux_amd64_toolchain",
     "@nodejs_toolchains//:linux_arm64_toolchain",
     "@nodejs_toolchains//:windows_amd64_toolchain",
@@ -614,8 +608,8 @@ distdir_repositories()
 go_download_sdk(
     name = "go_sdk_fips",
     sdks = {
-        "linux_amd64": ("go1.20.7fips.linux-amd64.tar.gz", "9cfd219231beb3cf3c9f0258db0edd9af10dadeaa5d563a9f6029e517e44472d"),
+        "linux_amd64": ("go1.21.3fips.linux-amd64.tar.gz", "216acc2939bf16748ec240ffe1752b442ec098bd9ac5e12ecd44db4ff77e0ab9"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20230906-184959/{}"],
-    version = "1.20.7fips",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231019-214851/{}"],
+    version = "1.21.3fips",
 )

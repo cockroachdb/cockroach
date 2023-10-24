@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/errors"
 )
 
@@ -97,9 +98,12 @@ func TimestampFromV1(u UUID) (Timestamp, error) {
 // String parse helpers.
 var urnPrefix = []byte("urn:uuid:")
 
-// Nil is the nil UUID, as specified in RFC-4122, that has all 128 bits set to
+// Nil is the nil UUID, as specified in RFC-4122, which has all 128 bits set to
 // zero.
 var Nil = UUID{}
+
+// Max is the maximum possible UUID, which has all 128 bits set to 1.
+var Max = FromUint128(uint128.FromInts(math.MaxUint64, math.MaxUint64))
 
 // Predefined namespace UUIDs.
 var (

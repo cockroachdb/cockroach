@@ -36,7 +36,7 @@ func RunningJobExists(
 	cv clusterversion.Handle,
 	jobTypes ...jobspb.Type,
 ) (exists bool, retErr error) {
-	if !cv.IsActive(ctx, clusterversion.V23_1BackfillTypeColumnInJobsTable) {
+	if !cv.IsActive(ctx, clusterversion.TODO_Delete_V23_1BackfillTypeColumnInJobsTable) {
 		return legacyRunningJobExists(ctx, ignoreJobID, txn, jobTypes...)
 	}
 
@@ -58,15 +58,21 @@ func RunningJobExists(
 		typeStrs = s.String()
 	}
 
+	orderBy := " ORDER BY created"
+	if ignoreJobID == jobspb.InvalidJobID {
+		// There is no need to order by the created column if there is no job to
+		// ignore.
+		orderBy = ""
+	}
+
 	stmt := `
 SELECT
   id
 FROM
-  system.jobs
+  system.jobs@jobs_status_created_idx
 WHERE
 	job_type IN ` + typeStrs + ` AND
-  status IN ` + NonTerminalStatusTupleString + `
-ORDER BY created
+  status IN ` + NonTerminalStatusTupleString + orderBy + `
 LIMIT 1`
 	it, err := txn.QueryIterator(
 		ctx,

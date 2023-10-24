@@ -1166,3 +1166,33 @@ AgHQAQIAAwAAAAMLAgYE
     └── • scan
           table: ?@?
           spans: FULL SCAN
+
+# Regression for #111346
+explain-plan-gist
+AgFWBgCPAQIAABNWCgsGBwwHHA0UAXoCBgEFUCJ6AQ==
+----
+• upsert
+│ into: ?()
+│ auto commit
+│
+└── • lookup join (left outer)
+    │ table: ?@?
+    │ equality: (_, _, _) = (?,?,?)
+    │ equality cols are key
+    │
+    └── • distinct
+        │ distinct on
+        │
+        └── • render
+            │
+            └── • render
+                │
+                └── • group (hash)
+                    │ group by: _, _, _
+                    │
+                    └── • index join
+                        │ table: ?@?
+                        │
+                        └── • scan
+                              table: ?@?
+                              spans: 1 span

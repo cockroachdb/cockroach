@@ -20,9 +20,9 @@ acquire_lock t=B k=k1 str=shared
 acquire_lock t=C k=k1 str=shared
 ----
 >> at end:
-lock (Replicated): "k1"/Shared -> txn={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
-lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
-lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k1"/Shared -> txn={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=0} ts=12.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 
 # Perform locking and mutation operations with maxLockConflicts set.
 run error
@@ -54,9 +54,9 @@ run error
 acquire_lock t=D k=k1 str=exclusive maxLockConflicts=2
 ----
 >> at end:
-lock (Replicated): "k1"/Shared -> txn={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
-lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
-lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k1"/Shared -> txn={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=0} ts=12.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 error: (*kvpb.LockConflictError:) conflicting locks on "k1", "k1"
 
 run error

@@ -189,7 +189,9 @@ func TestCmdClearRange(t *testing.T) {
 				// should not cross the range bounds.
 				var latchSpans spanset.SpanSet
 				var lockSpans lockspanset.LockSpanSet
-				declareKeysClearRange(&desc, &cArgs.Header, cArgs.Args, &latchSpans, &lockSpans, 0)
+				require.NoError(t,
+					declareKeysClearRange(&desc, &cArgs.Header, cArgs.Args, &latchSpans, &lockSpans, 0),
+				)
 				batch := &wrappedBatch{Batch: spanset.NewBatchAt(eng.NewBatch(), &latchSpans, cArgs.Header.Timestamp)}
 				defer batch.Close()
 
@@ -205,7 +207,7 @@ func TestCmdClearRange(t *testing.T) {
 				require.Equal(t, tc.expClearIter, batch.clearIterCount == 1)
 
 				// Ensure that the data is gone.
-				iter, err := eng.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+				iter, err := eng.NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 					KeyTypes:   storage.IterKeyTypePointsAndRanges,
 					LowerBound: startKey,
 					UpperBound: endKey,

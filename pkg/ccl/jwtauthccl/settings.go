@@ -29,7 +29,7 @@ const (
 
 // JWTAuthClaim sets the JWT claim that is parsed to get the username.
 var JWTAuthClaim = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	JWTAuthClaimSettingName,
 	"sets the JWT claim that is parsed to get the username",
 	"",
@@ -38,7 +38,7 @@ var JWTAuthClaim = settings.RegisterStringSetting(
 
 // JWTAuthAudience sets accepted audience values for JWT logins over the SQL interface.
 var JWTAuthAudience = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	JWTAuthAudienceSettingName,
 	"sets accepted audience values for JWT logins over the SQL interface",
 	"",
@@ -47,7 +47,7 @@ var JWTAuthAudience = settings.RegisterStringSetting(
 
 // JWTAuthEnabled enables or disabled JWT login over the SQL interface.
 var JWTAuthEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	JWTAuthEnabledSettingName,
 	"enables or disabled JWT login for the SQL interface",
 	false,
@@ -56,7 +56,7 @@ var JWTAuthEnabled = settings.RegisterBoolSetting(
 
 // JWTAuthJWKS is the public key set for JWT logins over the SQL interface.
 var JWTAuthJWKS = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	JWTAuthJWKSSettingName,
 	"sets the public key set for JWT logins over the SQL interface (JWKS format)",
 	"{\"keys\":[]}",
@@ -65,7 +65,7 @@ var JWTAuthJWKS = settings.RegisterStringSetting(
 
 // JWTAuthIssuers is the list of "issuer" values that are accepted for JWT logins over the SQL interface.
 var JWTAuthIssuers = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	JWTAuthIssuersSettingName,
 	"sets accepted issuer values for JWT logins over the SQL interface either as a string or as a JSON "+
 		"string with an array of issuer strings in it",

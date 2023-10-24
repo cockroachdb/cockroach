@@ -101,6 +101,7 @@ func TestStreamerMemoryAccounting(t *testing.T) {
 			nil, /* kvPairsRead */
 			nil, /* batchRequestsIssued */
 			lock.None,
+			lock.Unreplicated,
 		)
 		s.Init(OutOfOrder, Hints{UniqueRequests: true, SingleRowLookup: singleRowLookup}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
 		return s

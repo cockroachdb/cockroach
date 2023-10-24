@@ -40,7 +40,7 @@ import (
 )
 
 var maxConcurrentUploadBuffers = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.azure.concurrent_upload_buffers",
 	"controls the number of concurrent buffers that will be used by the Azure client when uploading chunks."+
 		"Each buffer can buffer up to cloudstorage.write_chunk.size of memory during an upload",

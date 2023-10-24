@@ -106,6 +106,7 @@ var (
 		"columns":         memo.ExprFmtHideColumns,
 		"all":             memo.ExprFmtHideAll,
 		"notvisibleindex": memo.ExprFmtHideNotVisibleIndexInfo,
+		"fastpathchecks":  memo.ExprFmtHideFastPathChecks,
 	}
 )
 

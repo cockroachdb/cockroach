@@ -727,7 +727,7 @@ func (tf *schemaFeed) validateDescriptor(
 }
 
 var highPriorityAfter = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.schema_feed.read_with_priority_after",
 	"retry with high priority if we were not able to read descriptors for too long; 0 disables",
 	time.Minute,

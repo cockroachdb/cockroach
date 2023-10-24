@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	spanUtils "github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -272,7 +273,6 @@ func makeImportSpans(
 	targetSize int64,
 	introducedSpanFrontier *spanUtils.Frontier,
 	completedSpans []jobspb.RestoreProgress_FrontierEntry,
-	useSimpleImportSpans bool,
 ) ([]execinfrapb.RestoreSpanEntry, error) {
 	cover := make([]execinfrapb.RestoreSpanEntry, 0)
 	spanCh := make(chan execinfrapb.RestoreSpanEntry)
@@ -306,7 +306,6 @@ func makeImportSpans(
 		layerToIterFactory,
 		nil,
 		filter,
-		useSimpleImportSpans,
 		spanCh)
 	close(spanCh)
 
@@ -369,6 +368,7 @@ func (c coverutils) paths(names ...string) []execinfrapb.RestoreFileSpec {
 }
 func TestRestoreEntryCoverExample(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
 	ctx := context.Background()
@@ -377,7 +377,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 		InitManualReplication)
 	defer cleanupFn()
 
-	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := tc.Server(0).ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
 	c := makeCoverUtils(ctx, t, &execCfg)
 
 	// Setup and test the example in the comment of makeSimpleImportSpans.
@@ -422,8 +422,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			nil,
 			noSpanTargetSize,
 			emptySpanFrontier,
-			emptyCompletedSpans,
-			false)
+			emptyCompletedSpans)
 		require.NoError(t, err)
 		require.Equal(t, reduce([]execinfrapb.RestoreSpanEntry{
 			{Span: c.sp("a", "b"), Files: c.paths("1", "6")},
@@ -434,24 +433,6 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			{Span: c.sp("h", "i"), Files: c.paths("3", "5", "6", "8")},
 			{Span: c.sp("l", "p"), Files: c.paths("9")},
 		}), reduce(cover))
-		coverSimple, err := makeImportSpans(
-			ctx,
-			spans,
-			backups,
-			layerToIterFactory,
-			nil,
-			noSpanTargetSize,
-			emptySpanFrontier,
-			emptyCompletedSpans,
-			true)
-		require.NoError(t, err)
-		require.Equal(t, reduce([]execinfrapb.RestoreSpanEntry{
-			{Span: c.sp("a", "c"), Files: c.paths("1", "4", "6")},
-			{Span: c.sp("c", "e"), Files: c.paths("1", "2", "4", "6")},
-			{Span: c.sp("e", "f"), Files: c.paths("2", "6")},
-			{Span: c.sp("f", "i"), Files: c.paths("3", "5", "6", "8")},
-			{Span: c.sp("l", "p"), Files: c.paths("9")},
-		}), reduce(coverSimple))
 	})
 
 	t.Run("target-size", func(t *testing.T) {
@@ -463,8 +444,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			nil,
 			2<<20,
 			emptySpanFrontier,
-			emptyCompletedSpans,
-			false)
+			emptyCompletedSpans)
 		require.NoError(t, err)
 		require.Equal(t, reduce([]execinfrapb.RestoreSpanEntry{
 			{Span: c.sp("a", "b"), Files: c.paths("1", "6")},
@@ -474,23 +454,6 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			{Span: c.sp("h", "i"), Files: c.paths("3", "5", "6", "8")},
 			{Span: c.sp("l", "p"), Files: c.paths("9")},
 		}), reduce(coverSized))
-
-		coverSizedSimple, err := makeImportSpans(
-			ctx,
-			spans,
-			backups,
-			layerToIterFactory,
-			nil,
-			2<<20,
-			emptySpanFrontier,
-			emptyCompletedSpans,
-			true)
-		require.NoError(t, err)
-		require.Equal(t, reduce([]execinfrapb.RestoreSpanEntry{
-			{Span: c.sp("a", "f"), Files: c.paths("1", "2", "4", "6")},
-			{Span: c.sp("f", "i"), Files: c.paths("3", "5", "6", "8")},
-			{Span: c.sp("l", "p"), Files: c.paths("9")},
-		}), reduce(coverSizedSimple))
 	})
 
 	t.Run("introduced-spans", func(t *testing.T) {
@@ -505,8 +468,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			nil,
 			noSpanTargetSize,
 			introducedSpanFrontier,
-			emptyCompletedSpans,
-			false)
+			emptyCompletedSpans)
 		require.NoError(t, err)
 		require.Equal(t, reduce([]execinfrapb.RestoreSpanEntry{
 			{Span: c.sp("a", "f"), Files: c.paths("6")},
@@ -515,23 +477,6 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			{Span: c.sp("h", "i"), Files: c.paths("3", "5", "6", "8")},
 			{Span: c.sp("l", "p"), Files: c.paths("9")},
 		}), reduce(coverIntroduced))
-
-		coverIntroducedSimple, err := makeImportSpans(
-			ctx,
-			spans,
-			backups,
-			layerToIterFactory,
-			nil,
-			noSpanTargetSize,
-			introducedSpanFrontier,
-			emptyCompletedSpans,
-			true)
-		require.NoError(t, err)
-		require.Equal(t, reduce([]execinfrapb.RestoreSpanEntry{
-			{Span: c.sp("a", "f"), Files: c.paths("6")},
-			{Span: c.sp("f", "i"), Files: c.paths("3", "5", "6", "8")},
-			{Span: c.sp("l", "p"), Files: c.paths("9")},
-		}), reduce(coverIntroducedSimple))
 	})
 	t.Run("completed-spans", func(t *testing.T) {
 
@@ -552,8 +497,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			nil,
 			noSpanTargetSize,
 			emptySpanFrontier,
-			persistFrontier(frontier, 0),
-			false)
+			persistFrontier(frontier, 0))
 		require.NoError(t, err)
 		require.Equal(t, reduce([]execinfrapb.RestoreSpanEntry{
 			{Span: c.sp("a", "b"), Files: c.paths("1", "6")},
@@ -561,25 +505,6 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			{Span: c.sp("f", "g"), Files: c.paths("6")},
 			{Span: c.sp("l", "p"), Files: c.paths("9")},
 		}), reduce(coverCompleted))
-
-		coverCompletedSimple, err := makeImportSpans(
-			ctx,
-			spans,
-			backups,
-			layerToIterFactory,
-			nil,
-			noSpanTargetSize,
-			emptySpanFrontier,
-			persistFrontier(frontier, 0),
-			true)
-		require.NoError(t, err)
-		require.Equal(t, reduce([]execinfrapb.RestoreSpanEntry{
-			{Span: c.sp("a", "b"), Files: c.paths("1", "6")},
-			{Span: c.sp("c", "e"), Files: c.paths("1", "2", "4", "6")},
-			{Span: c.sp("e", "f"), Files: c.paths("2", "6")},
-			{Span: c.sp("f", "g"), Files: c.paths("6")},
-			{Span: c.sp("l", "p"), Files: c.paths("9")},
-		}), reduce(coverCompletedSimple))
 	})
 	t.Run("zero-size-file-spans", func(t *testing.T) {
 		spans := []roachpb.Span{c.sp("a", "f")}
@@ -600,34 +525,22 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			nil,
 			noSpanTargetSize,
 			emptySpanFrontier,
-			emptyCompletedSpans,
-			false)
+			emptyCompletedSpans)
 		require.NoError(t, err)
 		require.Equal(t, reduce([]execinfrapb.RestoreSpanEntry{
 			{Span: c.sp("a", "f"), Files: c.paths("1")},
 		}), reduce(cover))
-		coverSimple, err := makeImportSpans(
-			ctx,
-			spans,
-			backups,
-			layerToIterFactory,
-			nil,
-			noSpanTargetSize,
-			emptySpanFrontier,
-			emptyCompletedSpans,
-			true)
-		require.NoError(t, err)
-		require.Equal(t, reduce([]execinfrapb.RestoreSpanEntry{
-			{Span: c.sp("a", "f"), Files: c.paths("1")},
-		}), reduce(coverSimple))
 	})
 }
 
 func TestFileSpanStartKeyIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	c := makeCoverUtils(ctx, t, &execCfg)
@@ -738,11 +651,13 @@ func TestFileSpanStartKeyIterator(t *testing.T) {
 // a required span into remaining toDo spans.
 func TestCheckpointFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
 	c := makeCoverUtils(ctx, t, &execCfg)
 
 	requiredSpan := c.sp("b", "e")
@@ -857,11 +772,12 @@ func createMockManifest(
 //     own span.
 func TestRestoreEntryCoverReIntroducedSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
 	defer cleanupFn()
-	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig)
 
 	testCases := []struct {
 		name string
@@ -998,8 +914,7 @@ func TestRestoreEntryCoverReIntroducedSpans(t *testing.T) {
 				nil,
 				0,
 				introducedSpanFrontier,
-				[]jobspb.RestoreProgress_FrontierEntry{},
-				false)
+				[]jobspb.RestoreProgress_FrontierEntry{})
 			require.NoError(t, err)
 
 			for _, reIntroTable := range reIntroducedTables {
@@ -1049,12 +964,12 @@ func sanityCheckFileIterator(
 }
 
 //lint:ignore U1000 unused
-func runTestRestoreEntryCover(t *testing.T, numBackups int, simpleImportSpans bool) {
+func runTestRestoreEntryCover(t *testing.T, numBackups int) {
 	r, _ := randutil.NewTestRand()
 	ctx := context.Background()
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
 	defer cleanupFn()
-	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig)
 
 	// getRandomCompletedSpans randomly gets up to maxNumSpans completed
 	// spans from the cover. A completed span can cover 1 or more
@@ -1103,8 +1018,7 @@ func runTestRestoreEntryCover(t *testing.T, numBackups int, simpleImportSpans bo
 							nil,
 							target<<20,
 							introducedSpanFrontier,
-							[]jobspb.RestoreProgress_FrontierEntry{},
-							simpleImportSpans)
+							[]jobspb.RestoreProgress_FrontierEntry{})
 						require.NoError(t, err)
 						require.NoError(t, checkRestoreCovering(ctx, backups, backups[numBackups-1].Spans,
 							cover, target != noSpanTargetSize, execCfg.DistSQLSrv.ExternalStorage))
@@ -1142,8 +1056,7 @@ func runTestRestoreEntryCover(t *testing.T, numBackups int, simpleImportSpans bo
 									highWater,
 									target<<20,
 									introducedSpanFrontier,
-									frontierEntries,
-									simpleImportSpans)
+									frontierEntries)
 								require.NoError(t, err)
 
 								// Compute the spans that are required on resume by subtracting
@@ -1182,11 +1095,12 @@ func runTestRestoreEntryCover(t *testing.T, numBackups int, simpleImportSpans bo
 // in the presence of files that have zero sized spans.
 func TestRestoreEntryCoverZeroSizeFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
 	defer cleanupFn()
-	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig)
 	c := makeCoverUtils(ctx, t, &execCfg)
 
 	emptySpanFrontier, err := spanUtils.MakeFrontierAt(completedSpanTime)
@@ -1297,31 +1211,25 @@ func TestRestoreEntryCoverZeroSizeFiles(t *testing.T) {
 			layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx, execCfg.DistSQLSrv.ExternalStorage, backups, nil, nil)
 			require.NoError(t, err)
 
-			for _, simple := range []bool{true, false} {
-				expectedCover := tt.expectedCover
-				if len(expectedCover) == 0 && (len(tt.expectedCoverSimple) > 0 || len(tt.expectedCoverGenerated) > 0) {
-					if simple {
-						expectedCover = tt.expectedCoverSimple
-					} else {
-						expectedCover = tt.expectedCoverGenerated
-					}
-				}
-
-				cover, err := makeImportSpans(ctx, tt.requiredSpans, backups, layerToIterFactory, nil, noSpanTargetSize, emptySpanFrontier, emptyCompletedSpans, simple)
-				require.NoError(t, err)
-
-				simpleCover := make([]simpleRestoreSpanEntry, len(cover))
-				for i, entry := range cover {
-					simpleCover[i] = simpleRestoreSpanEntry{
-						span: entry.Span,
-					}
-					for _, file := range entry.Files {
-						simpleCover[i].paths = append(simpleCover[i].paths, file.Path)
-					}
-				}
-
-				require.Equal(t, expectedCover, simpleCover, "simple=%t", simple)
+			expectedCover := tt.expectedCover
+			if len(expectedCover) == 0 && (len(tt.expectedCoverSimple) > 0 || len(tt.expectedCoverGenerated) > 0) {
+				expectedCover = tt.expectedCoverGenerated
 			}
+
+			cover, err := makeImportSpans(ctx, tt.requiredSpans, backups, layerToIterFactory, nil, noSpanTargetSize, emptySpanFrontier, emptyCompletedSpans)
+			require.NoError(t, err)
+
+			simpleCover := make([]simpleRestoreSpanEntry, len(cover))
+			for i, entry := range cover {
+				simpleCover[i] = simpleRestoreSpanEntry{
+					span: entry.Span,
+				}
+				for _, file := range entry.Files {
+					simpleCover[i].paths = append(simpleCover[i].paths, file.Path)
+				}
+			}
+
+			require.Equal(t, expectedCover, simpleCover)
 		})
 	}
 }

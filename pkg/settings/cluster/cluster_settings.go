@@ -174,3 +174,17 @@ func MakeTestingClusterSettingsWithVersions(
 	}
 	return s
 }
+
+// TestingCloneClusterSettings makes a clone of the Settings object. This is to
+// be used for settings objects that are passed as initial parameters for test
+// clusters; the given Settings object should not be in use by any server.
+func TestingCloneClusterSettings(st *Settings) *Settings {
+	result := &Settings{
+		ExternalIODir: st.ExternalIODir,
+	}
+	result.Version = clusterversion.MakeVersionHandleWithOverride(
+		&result.SV, st.Version.BinaryVersion(), st.Version.BinaryMinSupportedVersion(),
+	)
+	result.SV.TestingCopyForServer(&st.SV, result.Version)
+	return result
+}

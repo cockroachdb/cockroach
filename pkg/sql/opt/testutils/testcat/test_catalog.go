@@ -530,8 +530,8 @@ func (tc *Catalog) ExecuteDDLWithIndexVersion(
 		}
 		return ds.(fmt.Stringer).String(), nil
 
-	case *tree.ShowCreateFunction:
-		fn := stmt.Name.FunctionReference.(*tree.UnresolvedName)
+	case *tree.ShowCreateRoutine:
+		fn := tree.MakeUnresolvedFunctionName(stmt.Name.FunctionReference.(*tree.UnresolvedName))
 		def, err := tc.ResolveFunction(context.Background(), fn, tree.EmptySearchPath)
 		if err != nil {
 			return "", err

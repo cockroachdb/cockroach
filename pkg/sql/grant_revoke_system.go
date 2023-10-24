@@ -39,10 +39,10 @@ func (n *changeNonDescriptorBackedPrivilegesNode) ReadingOwnWrites() {}
 
 func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) error {
 	privilegesTableHasUserIDCol := params.p.ExecCfg().Settings.Version.IsActive(params.ctx,
-		clusterversion.V23_1SystemPrivilegesTableHasUserIDColumn)
+		clusterversion.TODO_Delete_V23_1SystemPrivilegesTableHasUserIDColumn)
 	if !params.p.ExecCfg().Settings.Version.IsActive(
 		params.ctx,
-		clusterversion.V23_1AllowNewSystemPrivileges,
+		clusterversion.TODO_Delete_V23_1AllowNewSystemPrivileges,
 	) {
 		if n.desiredprivs.Contains(privilege.MODIFYSQLCLUSTERSETTING) {
 			return pgerror.New(pgcode.FeatureNotSupported, "upgrade must be finalized before using MODIFYSQLCLUSTERSETTING system privilege")
@@ -144,8 +144,8 @@ VALUES ($1, $2, $3, $4, (
 					upsertStmt,
 					user.Normalized(),
 					systemPrivilegeObject.GetPath(),
-					privList.SortedNames(),
-					grantOptionList.SortedNames(),
+					privList.SortedKeys(),
+					grantOptionList.SortedKeys(),
 				); err != nil {
 					return err
 				}
@@ -212,8 +212,8 @@ VALUES ($1, $2, $3, $4, (
 					upsertStmt,
 					user.Normalized(),
 					systemPrivilegeObject.GetPath(),
-					privList.SortedNames(),
-					grantOptionList.SortedNames(),
+					privList.SortedKeys(),
+					grantOptionList.SortedKeys(),
 				); err != nil {
 					return err
 				}
@@ -263,11 +263,6 @@ func (n *changeNonDescriptorBackedPrivilegesNode) makeSystemPrivilegeObject(
 		}
 		return ret, nil
 	case privilege.ExternalConnection:
-		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SystemExternalConnectionsTable) {
-			return nil, errors.Newf("External Connections are not supported until upgrade to version %s is finalized",
-				clusterversion.TODODelete_V22_2SystemExternalConnectionsTable.String())
-		}
-
 		var ret []syntheticprivilege.Object
 		for _, externalConnectionName := range n.targets.ExternalConnections {
 			// Ensure that an External Connection of this name actually exists.

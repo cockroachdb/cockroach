@@ -231,7 +231,7 @@ func StartServer(
 	t TestFataler, params base.TestServerArgs,
 ) (TestServerInterface, *gosql.DB, *kv.DB) {
 	s := StartServerOnly(t, params)
-	goDB := s.ApplicationLayer().SQLConn(t, params.UseDatabase)
+	goDB := s.ApplicationLayer().SQLConn(t, DBName(params.UseDatabase))
 	kvDB := s.ApplicationLayer().DB()
 	return s, goDB, kvDB
 }
@@ -310,14 +310,14 @@ func StartTenant(
 		t.Fatalf("%+v", err)
 	}
 
-	goDB := tenant.SQLConn(t, params.UseDatabase)
+	goDB := tenant.SQLConn(t, DBName(params.UseDatabase))
 	return tenant, goDB
 }
 
 func StartSharedProcessTenant(
 	t TestFataler, ts TestServerInterface, params base.TestSharedProcessTenantArgs,
 ) (ApplicationLayerInterface, *gosql.DB) {
-	tenant, goDB, err := ts.StartSharedProcessTenant(context.Background(), params)
+	tenant, goDB, err := ts.TenantController().StartSharedProcessTenant(context.Background(), params)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -360,8 +360,8 @@ func GetJSONProtoWithAdminOption(
 	if err != nil {
 		return err
 	}
-	u := ts.AdminURL().String()
-	fullURL := u + path
+	u := ts.AdminURL()
+	fullURL := u.WithPath(path).String()
 	log.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
 	return httputil.GetJSON(httpClient, fullURL, response)
 }
@@ -380,8 +380,8 @@ func GetJSONProtoWithAdminAndTimeoutOption(
 		return err
 	}
 	httpClient.Timeout += additionalTimeout
-	u := ts.AdminURL().String()
-	fullURL := u + path
+	u := ts.AdminURL()
+	fullURL := u.WithPath(path).String()
 	log.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
 	log.Infof(context.Background(), "set HTTP client timeout to: %s", httpClient.Timeout)
 	return httputil.GetJSON(httpClient, fullURL, response)

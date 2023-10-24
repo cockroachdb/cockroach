@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -154,14 +153,14 @@ type s3Client struct {
 }
 
 var reuseSession = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.s3.session_reuse.enabled",
 	"persist the last opened s3 session and re-use it when opening a new session with the same arguments",
 	true,
 )
 
 var usePutObject = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.s3.buffer_and_put_uploads.enabled",
 	"construct files in memory before uploading via PutObject (may cause crashes due to memory usage)",
 	false,
@@ -566,10 +565,6 @@ func newClient(
 	}
 
 	if conf.assumeRoleProvider.roleARN != "" {
-		if !settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SupportAssumeRoleAuth) {
-			return s3Client{}, "", errors.New("cannot authenticate to cloud storage via assume role until cluster has fully upgraded to 22.2")
-		}
-
 		for _, delegateProvider := range conf.delegateRoleProviders {
 			intermediateCreds := stscreds.NewCredentials(sess, delegateProvider.roleARN, withExternalID(delegateProvider.externalID))
 			opts.Config.Credentials = intermediateCreds

@@ -25,7 +25,12 @@ import (
 )
 
 var typeORMReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var supportedTypeORMRelease = "0.3.17"
+
+// Use 0.3.18 from the upstream repo once it is released.
+// WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
+// This is used by docs automation to produce a list of supported versions for ORM's.
+const supportedTypeORMRelease = "remove-unsafe-crdb-setting"
+const typeORMRepo = "https://github.com/rafiss/typeorm.git"
 
 // This test runs TypeORM's full test suite against a single cockroach node.
 func registerTypeORM(r registry.Registry) {
@@ -40,7 +45,7 @@ func registerTypeORM(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
 
 		cockroachVersion, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
@@ -78,7 +83,7 @@ func registerTypeORM(r registry.Registry) {
 			c,
 			node,
 			"install dependencies",
-			`sudo apt-get install -y make python3 libpq-dev python-dev gcc g++ `+
+			`sudo apt-get install -y make python3 libpq-dev gcc g++ `+
 				`software-properties-common build-essential`,
 		); err != nil {
 			t.Fatal(err)
@@ -117,7 +122,7 @@ func registerTypeORM(r registry.Registry) {
 			ctx,
 			t,
 			c,
-			"https://github.com/typeorm/typeorm.git",
+			typeORMRepo,
 			"/mnt/data1/typeorm",
 			supportedTypeORMRelease,
 			node,

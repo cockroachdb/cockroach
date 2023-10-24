@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -107,6 +108,7 @@ func MakeBulkAdder(
 			writeAtBatchTS:         opts.WriteAtBatchTimestamp,
 			mem:                    bulkMon.MakeConcurrentBoundAccount(),
 			limiter:                sendLimiter,
+			priority:               admissionpb.BulkNormalPri,
 		},
 		timestamp:      timestamp,
 		maxBufferLimit: opts.MaxBufferSize,

@@ -1,6 +1,6 @@
 op
 ----
-debug declarative-print-rules 1000023.1 op
+debug declarative-print-rules 1000023.2 op
 rules
 ----
 []

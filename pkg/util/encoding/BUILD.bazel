@@ -46,6 +46,7 @@ go_test(
         "//pkg/geo/geographiclib",
         "//pkg/geo/geopb",
         "//pkg/roachpb",
+        "//pkg/testutils/skip",
         "//pkg/util/bitarray",
         "//pkg/util/duration",
         "//pkg/util/ipaddr",

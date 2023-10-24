@@ -666,3 +666,29 @@ CREATE VIEW bar_view AS (SELECT ARRAY['b'::bar])
 
 statement error pq: could not remove enum value "b" as it is being used in view "bar_view"
 ALTER TYPE bar DROP VALUE 'b'
+
+subtest end
+
+# This subtest ensures we receive correct error when dropping a value from an
+# ENUM type when that value is used in a column of type ARRAY of the ENUM type.
+subtest 110827
+
+statement ok
+CREATE TYPE typ_110827 AS ENUM ('a', 'b', 'c');
+
+statement ok
+CREATE TABLE t_110827 (i typ_110827[]);
+
+statement ok
+INSERT INTO t_110827 VALUES (ARRAY['a', 'a', 'b']);
+
+statement ok
+ALTER TYPE typ_110827 DROP VALUE 'c';
+
+statement error pgcode 2BP01 could not remove enum value "a" as it is being used by table ".*t_110827"
+ALTER TYPE typ_110827 DROP VALUE 'a';
+
+statement error pgcode 2BP01 could not remove enum value "b" as it is being used by table ".*t_110827"
+ALTER TYPE typ_110827 DROP VALUE 'b';
+
+subtest end

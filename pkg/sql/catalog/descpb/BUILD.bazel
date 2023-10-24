@@ -55,6 +55,7 @@ proto_library(
     deps = [
         "//pkg/config/zonepb:zonepb_proto",
         "//pkg/geo/geoindex:geoindex_proto",
+        "//pkg/roachpb:roachpb_proto",
         "//pkg/sql/catalog/catenumpb:catenumpb_proto",
         "//pkg/sql/catalog/catpb:catpb_proto",
         "//pkg/sql/schemachanger/scpb:scpb_proto",

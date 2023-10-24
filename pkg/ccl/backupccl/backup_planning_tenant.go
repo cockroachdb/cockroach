@@ -38,7 +38,7 @@ FROM
   LEFT JOIN system.tenant_usage ON
 	  tenants.id = tenant_usage.tenant_id AND tenant_usage.instance_id = 0
 `
-	if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+	if !settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
 		q = `
 SELECT
   tenants.id,                        /* 0 */

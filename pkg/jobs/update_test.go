@@ -54,7 +54,6 @@ func TestUpdaterUpdatesJobInfo(t *testing.T) {
 				SkipJobBootstrap: true,
 			},
 		},
-		DisableSpanConfigs: true,
 	}
 
 	ctx := context.Background()
@@ -197,7 +196,6 @@ func TestUpdateDoesNotReadPayloadFromJobsTable(t *testing.T) {
 				SkipJobBootstrap: true,
 			},
 		},
-		DisableSpanConfigs: true,
 	}
 
 	ctx := context.Background()

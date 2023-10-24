@@ -60,7 +60,7 @@ type Client interface {
 	// Create initializes a stream with the source, potentially reserving any
 	// required resources, such as protected timestamps, and returns an ID which
 	// can be used to interact with this stream in the future.
-	Create(ctx context.Context, tenant roachpb.TenantName) (streampb.ReplicationProducerSpec, error)
+	Create(ctx context.Context, tenant roachpb.TenantName, req streampb.ReplicationProducerRequest) (streampb.ReplicationProducerSpec, error)
 
 	// Destroy informs the source of the stream that it may terminate production
 	// and release resources such as protected timestamps.

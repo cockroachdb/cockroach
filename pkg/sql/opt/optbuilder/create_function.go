@@ -11,8 +11,10 @@
 package optbuilder
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -36,6 +38,11 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		if string(cf.Name.CatalogName) != b.evalCtx.SessionData().Database {
 			panic(unimplemented.New("CREATE FUNCTION", "cross-db references not supported"))
 		}
+	}
+
+	activeVersion := b.evalCtx.Settings.Version.ActiveVersion(b.ctx)
+	if cf.IsProcedure && !activeVersion.IsActive(clusterversion.V23_2) {
+		panic(unimplemented.New("procedures", "procedures are not yet supported"))
 	}
 
 	sch, resName := b.resolveSchemaForCreateFunction(&cf.Name)
@@ -67,7 +74,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		case nil:
 			// No error.
 		case error:
-			if errors.Is(recErr, tree.ErrFunctionUndefined) {
+			if errors.Is(recErr, tree.ErrRoutineUndefined) {
 				panic(
 					errors.WithHint(
 						recErr,
@@ -117,6 +124,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	if !languageFound {
 		panic(pgerror.New(pgcode.InvalidFunctionDefinition, "no language specified"))
 	}
+	if language == tree.RoutineLangPLpgSQL && !activeVersion.IsActive(clusterversion.V23_2) {
+		panic(unimplemented.New("PLpgSQL", "PLpgSQL is not supported until version 23.2"))
+	}
 
 	// Track the dependencies in the arguments, return type, and statements in
 	// the function body.
@@ -146,6 +156,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		if err != nil {
 			panic(err)
 		}
+		// The parameter type must be supported by the current cluster version.
+		checkUnsupportedType(b.ctx, b.semaCtx, typ)
 		if types.IsRecordType(typ) {
 			if language == tree.RoutineLangSQL {
 				panic(pgerror.Newf(pgcode.InvalidFunctionDefinition,
@@ -258,7 +270,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		// TODO(mgartner): stmtScope.cols does not describe the result
 		// columns of the statement. We should use physical.Presentation
 		// instead.
-		err = validateReturnType(funcReturnType, stmtScope.cols)
+		err = validateReturnType(b.ctx, b.semaCtx, funcReturnType, stmtScope.cols)
 		if err != nil {
 			panic(err)
 		}
@@ -301,7 +313,15 @@ func formatFuncBodyStmt(fmtCtx *tree.FmtCtx, ast tree.NodeFormatter, newLine boo
 	fmtCtx.WriteString(";")
 }
 
-func validateReturnType(expected *types.T, cols []scopeColumn) error {
+func validateReturnType(
+	ctx context.Context, semaCtx *tree.SemaContext, expected *types.T, cols []scopeColumn,
+) error {
+	// The return type must be supported by the current cluster version.
+	checkUnsupportedType(ctx, semaCtx, expected)
+	for i := range cols {
+		checkUnsupportedType(ctx, semaCtx, cols[i].typ)
+	}
+
 	// If return type is void, any column types are valid.
 	if expected.Equivalent(types.Void) {
 		return nil
@@ -404,5 +424,11 @@ func checkStmtVolatility(
 		if stmtScope.expr.Relational().VolatilitySet.HasVolatile() {
 			panic(pgerror.Newf(pgcode.InvalidParameterValue, "volatile statement not allowed in stable function: %s", stmt.String()))
 		}
+	}
+}
+
+func checkUnsupportedType(ctx context.Context, semaCtx *tree.SemaContext, typ *types.T) {
+	if err := tree.CheckUnsupportedType(ctx, semaCtx, typ); err != nil {
+		panic(err)
 	}
 }

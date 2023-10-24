@@ -30,9 +30,8 @@ func TestUniqueVersions(t *testing.T) {
 }
 
 // TestFirstUpgradesAfterPreExistingRelease checks that the first internal
-// version following each supported pre-existing release has an upgrade
-// registered for it, which is also in firstUpgradesAfterPreExistingReleases,
-// and vice-versa.
+// version following each supported pre-existing release has an firstUpgrade
+// registered for it.
 func TestFirstUpgradesAfterPreExistingRelease(t *testing.T) {
 	// Compute the set of pre-existing releases supported by this binary.
 	// This excludes the latest release if the binary version is a release.
@@ -54,14 +53,12 @@ func TestFirstUpgradesAfterPreExistingRelease(t *testing.T) {
 		v := roachpb.Version{Major: r.Major, Minor: r.Minor, Internal: 2}
 		m, found := registry[v]
 		require.True(t, found, "missing upgrade for %s in registry", v)
-		require.Contains(t, firstUpgradesAfterPreExistingReleases, m,
-			"missing upgrade for %s in slice", v)
+		require.Contains(t, m.Name(), firstUpgradeDescription(v), "upgrade for %s must use newFirstUpgrade", v)
 	}
 	// Check that for each registered upgrade for a non-primordial version with
 	// internal version 2 is two internal versions ahead of a supported pre-existing
-	// release, and that the upgrade is in the firstUpgradesAfterPreExistingReleases
-	// slice.
-	for v, m := range registry {
+	// release.
+	for v := range registry {
 		if v.Major == 0 || v.Internal != 2 {
 			continue
 		}
@@ -70,13 +67,5 @@ func TestFirstUpgradesAfterPreExistingRelease(t *testing.T) {
 		require.True(t, found,
 			"registered upgrade for %s but %s is not a supported pre-existing release",
 			v, r)
-		require.Contains(t, firstUpgradesAfterPreExistingReleases, m,
-			"missing upgrade for %s in slice", v)
-	}
-	// Check that the firstUpgradesAfterPreExistingReleases slice has no upgrades
-	// which aren't registered. This implies there are no duplicates either.
-	for _, m := range firstUpgradesAfterPreExistingReleases {
-		_, found := registry[m.Version()]
-		require.Truef(t, found, "expected upgrade %s to be registered, but isn't", m.Version())
 	}
 }

@@ -27,8 +27,8 @@ import (
 )
 
 // debugURL returns the root debug URL.
-func debugURL(s serverutils.ApplicationLayerInterface) string {
-	return s.AdminURL().WithPath(debug.Endpoint).String()
+func debugURL(s serverutils.ApplicationLayerInterface, path string) string {
+	return s.AdminURL().WithPath(debug.Endpoint).WithPath(path).String()
 }
 
 // TestAdminDebugExpVar verifies that cmdline and memstats variables are
@@ -41,7 +41,7 @@ func TestAdminDebugExpVar(t *testing.T) {
 
 	ts := s.ApplicationLayer()
 
-	jI, err := srvtestutils.GetJSON(ts, debugURL(ts)+"vars")
+	jI, err := srvtestutils.GetJSON(ts, debugURL(ts, "vars"))
 	if err != nil {
 		t.Fatalf("failed to fetch JSON: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestAdminDebugMetrics(t *testing.T) {
 
 	ts := s.ApplicationLayer()
 
-	jI, err := srvtestutils.GetJSON(ts, debugURL(ts)+"metrics")
+	jI, err := srvtestutils.GetJSON(ts, debugURL(ts, "metrics"))
 	if err != nil {
 		t.Fatalf("failed to fetch JSON: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestAdminDebugPprof(t *testing.T) {
 
 	ts := s.ApplicationLayer()
 
-	body, err := srvtestutils.GetText(ts, debugURL(ts)+"pprof/block?debug=1")
+	body, err := srvtestutils.GetText(ts, debugURL(ts, "pprof/block?debug=1"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestAdminDebugTrace(t *testing.T) {
 	}
 
 	for _, c := range tc {
-		body, err := srvtestutils.GetText(ts, debugURL(ts)+c.segment)
+		body, err := srvtestutils.GetText(ts, debugURL(ts, c.segment))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -132,7 +132,7 @@ func TestAdminDebugAuth(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	ts := s.ApplicationLayer()
 
-	url := debugURL(ts)
+	url := debugURL(ts, "")
 
 	// Unauthenticated.
 	client, err := ts.GetUnauthenticatedHTTPClient()
@@ -186,8 +186,8 @@ func TestAdminDebugRedirect(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	ts := s.ApplicationLayer()
 
-	expURL := debugURL(ts)
-	origURL := expURL + "incorrect"
+	expURL := debugURL(ts, "/")
+	origURL := debugURL(ts, "/incorrect")
 
 	// Must be admin to access debug endpoints
 	client, err := ts.GetAdminHTTPClient()

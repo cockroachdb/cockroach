@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -123,10 +124,9 @@ var (
 //     manner, bypassing any password validation requirements, and redirect them to `/` so they can
 //     enjoy a logged-in experience in the Admin UI.
 type oidcAuthenticationServer struct {
-	mutex        syncutil.RWMutex
-	conf         oidcAuthenticationConf
-	oauth2Config oauth2.Config
-	verifier     *oidc.IDTokenVerifier
+	mutex   syncutil.RWMutex
+	conf    oidcAuthenticationConf
+	manager IOIDCManager
 	// enabled is used to store whether the user has flipped the enabled flag in the cluster settings
 	// if enabled is true and initialized is false, the code will continue to attempt to re-initialize
 	// the OIDC server every time a handler is invoked for the login or callback endpoints. This is
@@ -146,6 +146,7 @@ type oidcAuthenticationConf struct {
 	principalRegex  *regexp.Regexp
 	buttonText      string
 	autoLogin       bool
+	successPath     string
 
 	generateJWTAuthTokenEnabled  bool
 	generateJWTAuthTokenUseToken tokenToUse
@@ -166,6 +167,93 @@ func (s *oidcAuthenticationServer) GetOIDCConf() ui.OIDCUIConf {
 	}
 }
 
+type oidcManager struct {
+	oauth2Config *oauth2.Config
+	verifier     *oidc.IDTokenVerifier
+}
+
+func (o *oidcManager) ExchangeVerifyGetClaims(
+	ctx context.Context, code string, idTokenKey string,
+) (map[string]json.RawMessage, error) {
+	credentials, err := o.Exchange(ctx, code)
+	if err != nil {
+		log.Errorf(ctx, "OIDC: failed to exchange code for token: %v", err)
+		return nil, err
+	}
+
+	rawIDToken, ok := credentials.Extra(idTokenKey).(string)
+	if !ok {
+		err := errors.New("OIDC: failed to extract ID token from the token credentials")
+		log.Error(ctx, "OIDC: failed to extract ID token from the token credentials")
+		return nil, err
+	}
+
+	idToken, err := o.Verify(ctx, rawIDToken)
+	if err != nil {
+		log.Errorf(ctx, "OIDC: unable to verify ID token: %v", err)
+		return nil, err
+	}
+
+	var claims map[string]json.RawMessage
+	if err := idToken.Claims(&claims); err != nil {
+		log.Errorf(ctx, "OIDC: unable to deserialize token claims: %v", err)
+		return nil, err
+	}
+
+	return claims, nil
+}
+
+func (o *oidcManager) Verify(ctx context.Context, s string) (*oidc.IDToken, error) {
+	return o.verifier.Verify(ctx, s)
+}
+
+func (o *oidcManager) Exchange(
+	ctx context.Context, s string, option ...oauth2.AuthCodeOption,
+) (*oauth2.Token, error) {
+	return o.oauth2Config.Exchange(ctx, s, option...)
+}
+
+func (o oidcManager) AuthCodeURL(s string, option ...oauth2.AuthCodeOption) string {
+	return o.oauth2Config.AuthCodeURL(s, option...)
+}
+
+type IOIDCManager interface {
+	Verify(context.Context, string) (*oidc.IDToken, error)
+	Exchange(context.Context, string, ...oauth2.AuthCodeOption) (*oauth2.Token, error)
+	AuthCodeURL(string, ...oauth2.AuthCodeOption) string
+	ExchangeVerifyGetClaims(context.Context, string, string) (map[string]json.RawMessage, error)
+}
+
+var _ IOIDCManager = &oidcManager{}
+
+var NewOIDCManager func(context.Context, oidcAuthenticationConf, string, []string) (IOIDCManager, error) = func(
+	ctx context.Context,
+	conf oidcAuthenticationConf,
+	redirectURL string,
+	scopes []string,
+) (IOIDCManager, error) {
+	provider, err := oidc.NewProvider(ctx, conf.providerURL)
+	if err != nil {
+		return nil, err
+	}
+
+	oauth2Config := &oauth2.Config{
+		ClientID:     conf.clientID,
+		ClientSecret: conf.clientSecret,
+		RedirectURL:  redirectURL,
+
+		Endpoint: provider.Endpoint(),
+		Scopes:   scopes,
+	}
+
+	verifier := provider.Verifier(&oidc.Config{ClientID: conf.clientID})
+
+	return &oidcManager{
+		verifier:     verifier,
+		oauth2Config: oauth2Config,
+	}, nil
+}
+
 func reloadConfig(
 	ctx context.Context,
 	server *oidcAuthenticationServer,
@@ -179,7 +267,7 @@ func reloadConfig(
 
 func reloadConfigLocked(
 	ctx context.Context,
-	server *oidcAuthenticationServer,
+	oidcAuthServer *oidcAuthenticationServer,
 	locality roachpb.Locality,
 	st *cluster.Settings,
 ) {
@@ -195,6 +283,7 @@ func reloadConfigLocked(
 		principalRegex: regexp.MustCompile(OIDCPrincipalRegex.Get(&st.SV)),
 		buttonText:     OIDCButtonText.Get(&st.SV),
 		autoLogin:      OIDCAutoLogin.Get(&st.SV),
+		successPath:    server.ServerHTTPBasePath.Get(&st.SV),
 
 		generateJWTAuthTokenEnabled:  OIDCGenerateClusterSSOTokenEnabled.Get(&st.SV),
 		generateJWTAuthTokenUseToken: tokenToUse(OIDCGenerateClusterSSOTokenUseToken.Get(&st.SV)),
@@ -202,38 +291,29 @@ func reloadConfigLocked(
 		generateJWTAuthTokenSQLPort:  OIDCGenerateClusterSSOTokenSQLPort.Get(&st.SV),
 	}
 
-	if !server.conf.enabled && conf.enabled {
+	if !oidcAuthServer.conf.enabled && conf.enabled {
 		telemetry.Inc(enableUseCounter)
 	}
 
-	server.initialized = false
-	server.conf = conf
-	if server.conf.enabled {
+	oidcAuthServer.initialized = false
+	oidcAuthServer.conf = conf
+	if oidcAuthServer.conf.enabled {
 		// `enabled` stores the configuration state and records the operator's _intent_ that the feature
 		// be enabled. Since the call to `NewProvider` below makes an HTTP request and could fail for
 		// many reasons, we record the successful configuration of a provider using the `initialized`
 		// flag which is set at the bottom of this function.
 		// If `enabled` is true and `initialized` is false, the HTTP handlers for OIDC will attempt
 		// to initialize the OIDC provider.
-		server.enabled = true
+		oidcAuthServer.enabled = true
 	} else {
-		server.enabled = false
-		return
-	}
-
-	provider, err := oidc.NewProvider(ctx, server.conf.providerURL)
-	if err != nil {
-		log.Warningf(ctx, "unable to initialize OIDC server, disabling OIDC: %v", err)
-		if log.V(1) {
-			log.Infof(ctx, "check provider URL OIDC cluster setting: "+OIDCProviderURLSettingName)
-		}
+		oidcAuthServer.enabled = false
 		return
 	}
 
 	// Validation of the scope setting will require that we have the `openid` scope.
-	scopesForOauth := strings.Split(server.conf.scopes, " ")
+	scopesForOauth := strings.Split(oidcAuthServer.conf.scopes, " ")
 
-	redirectURL, err := getRegionSpecificRedirectURL(locality, server.conf.redirectURLConf)
+	redirectURL, err := getRegionSpecificRedirectURL(locality, oidcAuthServer.conf.redirectURLConf)
 	if err != nil {
 		log.Warningf(ctx, "unable to initialize OIDC server, disabling OIDC: %v", err)
 		if log.V(1) {
@@ -242,17 +322,17 @@ func reloadConfigLocked(
 		return
 	}
 
-	server.oauth2Config = oauth2.Config{
-		ClientID:     server.conf.clientID,
-		ClientSecret: server.conf.clientSecret,
-		RedirectURL:  redirectURL,
-
-		Endpoint: provider.Endpoint(),
-		Scopes:   scopesForOauth,
+	manager, err := NewOIDCManager(ctx, oidcAuthServer.conf, redirectURL, scopesForOauth)
+	if err != nil {
+		log.Warningf(ctx, "unable to initialize OIDC server, disabling OIDC: %v", err)
+		if log.V(1) {
+			log.Infof(ctx, "check provider URL OIDC cluster setting: "+OIDCProviderURLSettingName)
+		}
+		return
 	}
 
-	server.verifier = provider.Verifier(&oidc.Config{ClientID: server.conf.clientID})
-	server.initialized = true
+	oidcAuthServer.manager = manager
+	oidcAuthServer.initialized = true
 	log.Infof(ctx, "initialized OIDC server")
 }
 
@@ -364,30 +444,8 @@ var ConfigureOIDC = func(
 			return
 		}
 
-		credentials, err := oidcAuthentication.oauth2Config.Exchange(ctx, r.URL.Query().Get(codeKey))
+		claims, err := oidcAuthentication.manager.ExchangeVerifyGetClaims(ctx, r.URL.Query().Get(codeKey), idTokenKey)
 		if err != nil {
-			log.Errorf(ctx, "OIDC: failed to exchange code for token: %v", err)
-			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
-			return
-		}
-
-		rawIDToken, ok := credentials.Extra(idTokenKey).(string)
-		if !ok {
-			log.Error(ctx, "OIDC: failed to extract ID token from the token credentials")
-			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
-			return
-		}
-
-		idToken, err := oidcAuthentication.verifier.Verify(ctx, rawIDToken)
-		if err != nil {
-			log.Errorf(ctx, "OIDC: unable to verify ID token: %v", err)
-			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
-			return
-		}
-
-		var claims map[string]json.RawMessage
-		if err := idToken.Claims(&claims); err != nil {
-			log.Errorf(ctx, "OIDC: unable to deserialize token claims: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
@@ -422,7 +480,7 @@ var ConfigureOIDC = func(
 		}
 
 		http.SetCookie(w, cookie)
-		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, oidcAuthentication.conf.successPath, http.StatusTemporaryRedirect)
 
 		telemetry.Inc(loginSuccessUseCounter)
 	}))
@@ -479,7 +537,7 @@ var ConfigureOIDC = func(
 			return
 		}
 
-		credentials, err := oidcAuthentication.oauth2Config.Exchange(ctx, r.URL.Query().Get(codeKey))
+		credentials, err := oidcAuthentication.manager.Exchange(ctx, r.URL.Query().Get(codeKey))
 		if err != nil {
 			log.Errorf(ctx, "OIDC: failed to exchange code for token: %v", err)
 			log.Errorf(ctx, "%v", r.URL.Query().Get(codeKey))
@@ -498,7 +556,7 @@ var ConfigureOIDC = func(
 			rawToken = rawIDToken
 		}
 
-		token, err := oidcAuthentication.verifier.Verify(ctx, rawToken)
+		token, err := oidcAuthentication.manager.Verify(ctx, rawToken)
 		if err != nil {
 			log.Errorf(ctx, "OIDC: unable to verify ID token: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
@@ -667,7 +725,7 @@ var ConfigureOIDC = func(
 		}
 
 		http.SetCookie(w, kast.secretKeyCookie)
-		http.Redirect(w, r, oidcAuthentication.oauth2Config.AuthCodeURL(kast.signedTokenEncoded), http.StatusFound)
+		http.Redirect(w, r, oidcAuthentication.manager.AuthCodeURL(kast.signedTokenEncoded), http.StatusFound)
 	}))
 
 	reloadConfig(serverCtx, oidcAuthentication, locality, st)
@@ -700,6 +758,9 @@ var ConfigureOIDC = func(
 		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
 	OIDCAutoLogin.SetOnChange(&st.SV, func(ctx context.Context) {
+		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
+	})
+	server.ServerHTTPBasePath.SetOnChange(&st.SV, func(ctx context.Context) {
 		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
 	OIDCGenerateClusterSSOTokenEnabled.SetOnChange(&st.SV, func(ctx context.Context) {

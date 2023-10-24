@@ -147,7 +147,7 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 		})
 	})
 	t.Run("paused-job", func(t *testing.T) {
-		rps, err := client.Create(ctx, testTenantName)
+		rps, err := client.Create(ctx, testTenantName, streampb.ReplicationProducerRequest{})
 		require.NoError(t, err)
 		targetStreamID := rps.StreamID
 		h.SysSQL.Exec(t, `PAUSE JOB $1`, targetStreamID)
@@ -173,7 +173,7 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 		})
 	})
 	t.Run("cancelled-job", func(t *testing.T) {
-		rps, err := client.Create(ctx, testTenantName)
+		rps, err := client.Create(ctx, testTenantName, streampb.ReplicationProducerRequest{})
 		require.NoError(t, err)
 		targetStreamID := rps.StreamID
 		h.SysSQL.Exec(t, `CANCEL JOB $1`, targetStreamID)
@@ -210,9 +210,7 @@ func TestPartitionedStreamReplicationClient(t *testing.T) {
 
 	h, cleanup := replicationtestutils.NewReplicationHelper(t,
 		base.TestServerArgs{
-			// Need to disable the test tenant until tenant-level restore is
-			// supported. Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
@@ -249,11 +247,11 @@ INSERT INTO d.t2 VALUES (2);
 			[][]string{{string(status)}})
 	}
 
-	rps, err := client.Create(ctx, testTenantName)
+	rps, err := client.Create(ctx, testTenantName, streampb.ReplicationProducerRequest{})
 	require.NoError(t, err)
 	streamID := rps.StreamID
 	// We can create multiple replication streams for the same tenant.
-	_, err = client.Create(ctx, testTenantName)
+	_, err = client.Create(ctx, testTenantName, streampb.ReplicationProducerRequest{})
 	require.NoError(t, err)
 
 	expectStreamState(streamID, jobs.StatusRunning)
@@ -348,7 +346,7 @@ INSERT INTO d.t2 VALUES (2);
 	h.SysSQL.Exec(t, `
 SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '200ms';
 `)
-	rps, err = client.Create(ctx, testTenantName)
+	rps, err = client.Create(ctx, testTenantName, streampb.ReplicationProducerRequest{})
 	require.NoError(t, err)
 	streamID = rps.StreamID
 	require.NoError(t, client.Complete(ctx, streamID, true))

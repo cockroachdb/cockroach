@@ -11,6 +11,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -175,7 +176,7 @@ type MVCCIncrementalIterOptions struct {
 // specified reader and options. The timestamp hint range should not be more
 // restrictive than the start and end time range.
 func NewMVCCIncrementalIterator(
-	reader Reader, opts MVCCIncrementalIterOptions,
+	ctx context.Context, reader Reader, opts MVCCIncrementalIterOptions,
 ) (*MVCCIncrementalIterator, error) {
 	// Default to MaxTimestamp for EndTime, since the code assumes it is set.
 	if opts.EndTime.IsEmpty() {
@@ -196,7 +197,7 @@ func NewMVCCIncrementalIterator(
 	if useTBI {
 		// An iterator without the timestamp hints is created to ensure that the
 		// iterator visits every required version of every key that has changed.
-		iter, err = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		iter, err = reader.NewMVCCIterator(ctx, MVCCKeyAndIntentsIterKind, IterOptions{
 			KeyTypes:             opts.KeyTypes,
 			LowerBound:           opts.StartKey,
 			UpperBound:           opts.EndKey,
@@ -214,14 +215,14 @@ func NewMVCCIncrementalIterator(
 		if tbiRangeKeyMasking.LessEq(opts.StartTime) && opts.KeyTypes == IterKeyTypePointsAndRanges {
 			tbiRangeKeyMasking = opts.StartTime.Next()
 		}
-		timeBoundIter, err = reader.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+		timeBoundIter, err = reader.NewMVCCIterator(ctx, MVCCKeyIterKind, IterOptions{
 			KeyTypes:   opts.KeyTypes,
 			LowerBound: opts.StartKey,
 			UpperBound: opts.EndKey,
 			// The call to startTime.Next() converts our exclusive start bound into
-			// the inclusive start bound that MinTimestampHint expects.
-			MinTimestampHint:     opts.StartTime.Next(),
-			MaxTimestampHint:     opts.EndTime,
+			// the inclusive start bound that MinTimestampt expects.
+			MinTimestamp:         opts.StartTime.Next(),
+			MaxTimestamp:         opts.EndTime,
 			RangeKeyMaskingBelow: tbiRangeKeyMasking,
 		})
 		if err != nil {
@@ -229,7 +230,7 @@ func NewMVCCIncrementalIterator(
 			return nil, err
 		}
 	} else {
-		iter, err = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		iter, err = reader.NewMVCCIterator(ctx, MVCCKeyAndIntentsIterKind, IterOptions{
 			KeyTypes:             opts.KeyTypes,
 			LowerBound:           opts.StartKey,
 			UpperBound:           opts.EndKey,
@@ -783,6 +784,16 @@ func (i *MVCCIncrementalIterator) TryGetIntentError() error {
 	return &kvpb.LockConflictError{
 		Locks: roachpb.AsLocks(i.intents),
 	}
+}
+
+// Stats returns statistics about the iterator.
+func (i *MVCCIncrementalIterator) Stats() IteratorStats {
+	stats := i.iter.Stats()
+	if i.timeBoundIter != nil {
+		tbStats := i.timeBoundIter.Stats()
+		stats.Stats.Merge(tbStats.Stats)
+	}
+	return stats
 }
 
 // assertInvariants asserts iterator invariants. The iterator must be valid.

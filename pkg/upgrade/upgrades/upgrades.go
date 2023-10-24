@@ -85,19 +85,11 @@ var upgrades = []upgradebase.Upgrade{
 		updateSystemLocationData,
 		"update system.locations with default location data", // v22_2StartupMigrationName
 	),
-	// Introduced in v2.1.
-	// TODO(knz): bake this migration into v19.1.
 	upgrade.NewPermanentTenantUpgrade(
 		"create default databases",
 		toCV(clusterversion.VPrimordial6),
 		createDefaultDbs,
 		"create default databases", // v22_2StartupMigrationName
-	),
-	upgrade.NewTenantUpgrade(
-		"add the system.external_connections table",
-		toCV(clusterversion.TODODelete_V22_2SystemExternalConnectionsTable),
-		upgrade.NoPrecondition,
-		systemExternalConnectionsTableMigration,
 	),
 	upgrade.NewPermanentTenantUpgrade(
 		"add default SQL schema telemetry schedule",
@@ -105,213 +97,208 @@ var upgrades = []upgradebase.Upgrade{
 		ensureSQLSchemaTelemetrySchedule,
 		"add default SQL schema telemetry schedule",
 	),
-	firstUpgradeTowardsV23_1,
 	upgrade.NewTenantUpgrade("add columns to system.tenants and populate a system tenant entry",
-		toCV(clusterversion.V23_1TenantNamesStateAndServiceMode),
+		toCV(clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode),
 		upgrade.NoPrecondition,
 		extendTenantsTable,
 	),
 	upgrade.NewTenantUpgrade("set the value or system.descriptor_id_seq for the system tenant",
-		toCV(clusterversion.V23_1DescIDSequenceForSystemTenant),
+		toCV(clusterversion.TODO_Delete_V23_1DescIDSequenceForSystemTenant),
 		upgrade.NoPrecondition,
 		descIDSequenceForSystemTenant,
 	),
 	upgrade.NewTenantUpgrade("add a partial predicate and full statistics ID columns to system.table_statistics",
-		toCV(clusterversion.V23_1AddPartialStatisticsColumns),
+		toCV(clusterversion.TODO_Delete_V23_1AddPartialStatisticsColumns),
 		upgrade.NoPrecondition,
 		alterSystemTableStatisticsAddPartialPredicateAndID,
 	),
 	upgrade.NewTenantUpgrade(
 		"create system.job_info table",
-		toCV(clusterversion.V23_1CreateSystemJobInfoTable),
+		toCV(clusterversion.TODO_Delete_V23_1CreateSystemJobInfoTable),
 		upgrade.NoPrecondition,
 		systemJobInfoTableMigration,
 	),
 	upgrade.NewTenantUpgrade("add role_id and member_id columns to system.role_members",
-		toCV(clusterversion.V23_1RoleMembersTableHasIDColumns),
+		toCV(clusterversion.TODO_Delete_V23_1RoleMembersTableHasIDColumns),
 		upgrade.NoPrecondition,
 		alterSystemRoleMembersAddIDColumns,
 	),
 	upgrade.NewTenantUpgrade("backfill role_id and member_id columns in system.role_members",
-		toCV(clusterversion.V23_1RoleMembersIDColumnsBackfilled),
+		toCV(clusterversion.TODO_Delete_V23_1RoleMembersIDColumnsBackfilled),
 		upgrade.NoPrecondition,
 		backfillSystemRoleMembersIDColumns,
 	),
 	upgrade.NewTenantUpgrade(
 		"add job_type column to system.jobs table",
-		toCV(clusterversion.V23_1AddTypeColumnToJobsTable),
+		toCV(clusterversion.TODO_Delete_V23_1AddTypeColumnToJobsTable),
 		upgrade.NoPrecondition,
 		alterSystemJobsAddJobType,
 	),
 	upgrade.NewTenantUpgrade(
 		"backfill job_type column in system.jobs table",
-		toCV(clusterversion.V23_1BackfillTypeColumnInJobsTable),
+		toCV(clusterversion.TODO_Delete_V23_1BackfillTypeColumnInJobsTable),
 		upgrade.NoPrecondition,
 		backfillJobTypeColumn,
 	),
 	upgrade.NewTenantUpgrade(
 		"create virtual column indexes_usage based on (statistics->'statistics'->'indexes') with index "+
 			"on table system.statement_statistics",
-		toCV(clusterversion.V23_1_AlterSystemStatementStatisticsAddIndexesUsage),
+		toCV(clusterversion.TODO_Delete_V23_1_AlterSystemStatementStatisticsAddIndexesUsage),
 		upgrade.NoPrecondition,
 		createIndexOnIndexUsageOnSystemStatementStatistics,
 	),
 	upgrade.NewTenantUpgrade(
 		"add column sql_addr to table system.sql_instances",
-		toCV(clusterversion.V23_1AlterSystemSQLInstancesAddSQLAddr),
+		toCV(clusterversion.TODO_Delete_V23_1AlterSystemSQLInstancesAddSQLAddr),
 		upgrade.NoPrecondition,
 		alterSystemSQLInstancesAddSqlAddr,
 	),
 	upgrade.NewPermanentSystemUpgrade("add tables and jobs to support persisting key visualizer samples",
-		toCV(clusterversion.V23_1KeyVisualizerTablesAndJobs),
+		toCV(clusterversion.Permanent_V23_1KeyVisualizerTablesAndJobs),
 		keyVisualizerTablesMigration,
 		"initialize key visualizer tables and jobs",
 	),
 	upgrade.NewTenantUpgrade("delete descriptors of dropped functions",
-		toCV(clusterversion.V23_1_DeleteDroppedFunctionDescriptors),
+		toCV(clusterversion.TODO_Delete_V23_1_DeleteDroppedFunctionDescriptors),
 		upgrade.NoPrecondition,
 		deleteDescriptorsOfDroppedFunctions,
 	),
 	upgrade.NewPermanentTenantUpgrade("create jobs metrics polling job",
-		toCV(clusterversion.V23_1_CreateJobsMetricsPollingJob),
+		toCV(clusterversion.Permanent_V23_1_CreateJobsMetricsPollingJob),
 		createJobsMetricsPollingJob,
 		"create jobs metrics polling job",
 	),
 	upgrade.NewTenantUpgrade(
 		"add user_id column to system.privileges table",
-		toCV(clusterversion.V23_1SystemPrivilegesTableHasUserIDColumn),
+		toCV(clusterversion.TODO_Delete_V23_1SystemPrivilegesTableHasUserIDColumn),
 		upgrade.NoPrecondition,
 		alterSystemPrivilegesAddUserIDColumn,
 	),
 	upgrade.NewTenantUpgrade(
 		"backfill user_id column in system.privileges table",
-		toCV(clusterversion.V23_1SystemPrivilegesTableUserIDColumnBackfilled),
+		toCV(clusterversion.TODO_Delete_V23_1SystemPrivilegesTableUserIDColumnBackfilled),
 		upgrade.NoPrecondition,
 		backfillSystemPrivilegesUserIDColumn,
 	),
 	upgrade.NewTenantUpgrade(
 		"add user_id column to system.web_sessions table",
-		toCV(clusterversion.V23_1WebSessionsTableHasUserIDColumn),
+		toCV(clusterversion.TODO_Delete_V23_1WebSessionsTableHasUserIDColumn),
 		upgrade.NoPrecondition,
 		alterWebSessionsTableAddUserIDColumn,
 	),
 	upgrade.NewTenantUpgrade(
 		"backfill user_id column in system.web_sessions table",
-		toCV(clusterversion.V23_1WebSessionsTableUserIDColumnBackfilled),
+		toCV(clusterversion.TODO_Delete_V23_1WebSessionsTableUserIDColumnBackfilled),
 		upgrade.NoPrecondition,
 		backfillWebSessionsTableUserIDColumn,
 	),
 	upgrade.NewTenantUpgrade(
 		"add column sql_addr to table system.sql_instances",
-		toCV(clusterversion.V23_1_SchemaChangerDeprecatedIndexPredicates),
+		toCV(clusterversion.TODO_Delete_V23_1_SchemaChangerDeprecatedIndexPredicates),
 		upgrade.NoPrecondition,
 		waitForSchemaChangerElementMigration,
 	),
 	upgrade.NewTenantUpgrade(
 		"add secondary index on (path,username) to table system.privileges",
-		toCV(clusterversion.V23_1AlterSystemPrivilegesAddIndexOnPathAndUsername),
+		toCV(clusterversion.TODO_Delete_V23_1AlterSystemPrivilegesAddIndexOnPathAndUsername),
 		upgrade.NoPrecondition,
 		alterSystemPrivilegesAddSecondaryIndex,
 	),
 	upgrade.NewTenantUpgrade(
 		"add role_id column to system.database_role_settings table",
-		toCV(clusterversion.V23_1DatabaseRoleSettingsHasRoleIDColumn),
+		toCV(clusterversion.TODO_Delete_V23_1DatabaseRoleSettingsHasRoleIDColumn),
 		upgrade.NoPrecondition,
 		alterDatabaseRoleSettingsTableAddRoleIDColumn,
 	),
 	upgrade.NewTenantUpgrade(
 		"backfill role_id column in system.database_role_settings table",
-		toCV(clusterversion.V23_1DatabaseRoleSettingsRoleIDColumnBackfilled),
+		toCV(clusterversion.TODO_Delete_V23_1DatabaseRoleSettingsRoleIDColumnBackfilled),
 		upgrade.NoPrecondition,
 		backfillDatabaseRoleSettingsTableRoleIDColumn,
 	),
 	upgrade.NewTenantUpgrade(
 		"backfill system tables with regional by row compatible indexes",
-		toCV(clusterversion.V23_1_SystemRbrReadNew),
+		toCV(clusterversion.TODO_Delete_V23_1_SystemRbrReadNew),
 		upgrade.NoPrecondition,
 		backfillRegionalByRowIndex,
 	),
 	upgrade.NewTenantUpgrade(
 		"clean up old indexes for regional by row compatible system tables",
-		toCV(clusterversion.V23_1_SystemRbrCleanup),
+		toCV(clusterversion.TODO_Delete_V23_1_SystemRbrCleanup),
 		upgrade.NoPrecondition,
 		cleanUpRegionalByTableIndex,
 	),
 	upgrade.NewTenantUpgrade(
 		"add owner_id column to system.external_connections table",
-		toCV(clusterversion.V23_1ExternalConnectionsTableHasOwnerIDColumn),
+		toCV(clusterversion.TODO_Delete_V23_1ExternalConnectionsTableHasOwnerIDColumn),
 		upgrade.NoPrecondition,
 		alterExternalConnectionsTableAddOwnerIDColumn,
 	),
 	upgrade.NewTenantUpgrade(
 		"backfill owner_id column in system.external_connections table",
-		toCV(clusterversion.V23_1ExternalConnectionsTableOwnerIDColumnBackfilled),
+		toCV(clusterversion.TODO_Delete_V23_1ExternalConnectionsTableOwnerIDColumnBackfilled),
 		upgrade.NoPrecondition,
 		backfillExternalConnectionsTableOwnerIDColumn,
 	),
 	upgrade.NewTenantUpgrade(
 		"backfill the system.job_info table with the payload and progress of each job in the system.jobs table",
-		toCV(clusterversion.V23_1JobInfoTableIsBackfilled),
+		toCV(clusterversion.TODO_Delete_V23_1JobInfoTableIsBackfilled),
 		upgrade.NoPrecondition,
 		backfillJobInfoTable,
 	),
 	upgrade.NewTenantUpgrade("ensure all GC jobs send DeleteRange requests",
-		toCV(clusterversion.V23_1_UseDelRangeInGCJob),
+		toCV(clusterversion.TODO_Delete_V23_1_UseDelRangeInGCJob),
 		checkForPausedGCJobs,
 		waitForDelRangeInGCJob,
 	),
 	upgrade.NewSystemUpgrade(
 		"create system.tenant_tasks and system.task_payloads",
-		toCV(clusterversion.V23_1_TaskSystemTables),
+		toCV(clusterversion.TODO_Delete_V23_1_TaskSystemTables),
 		createTaskSystemTables,
 	),
 	upgrade.NewPermanentTenantUpgrade("create auto config runner job",
-		toCV(clusterversion.V23_1_CreateAutoConfigRunnerJob),
+		toCV(clusterversion.Permanent_V23_1_CreateAutoConfigRunnerJob),
 		createAutoConfigRunnerJob,
 		"create auto config runner job",
 	),
 	upgrade.NewTenantUpgrade(
 		"create and index new computed columns on system sql stats tables",
-		toCV(clusterversion.V23_1AddSQLStatsComputedIndexes),
+		toCV(clusterversion.TODO_Delete_V23_1AddSQLStatsComputedIndexes),
 		upgrade.NoPrecondition,
 		createComputedIndexesOnSystemSQLStatistics,
 	),
 	upgrade.NewTenantUpgrade(
 		"create statement_activity and transaction_activity tables",
-		toCV(clusterversion.V23_1AddSystemActivityTables),
+		toCV(clusterversion.TODO_Delete_V23_1AddSystemActivityTables),
 		upgrade.NoPrecondition,
 		systemStatisticsActivityTableMigration,
 	),
 	upgrade.NewPermanentSystemUpgrade(
 		"change TTL for SQL Stats system tables",
-		toCV(clusterversion.V23_1ChangeSQLStatsTTL),
+		toCV(clusterversion.Permanent_V23_1ChangeSQLStatsTTL),
 		sqlStatsTTLChange,
 		"change TTL for SQL Stats system tables",
 	),
 	upgrade.NewTenantUpgrade(
 		"stop writing payload and progress to system.jobs",
-		toCV(clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs),
+		toCV(clusterversion.TODO_Delete_V23_1StopWritingPayloadAndProgressToSystemJobs),
 		upgrade.NoPrecondition,
 		alterPayloadColumnToNullable,
 	),
 	upgrade.NewSystemUpgrade(
 		"create system.tenant_id_seq",
-		toCV(clusterversion.V23_1_TenantIDSequence),
+		toCV(clusterversion.TODO_Delete_V23_1_TenantIDSequence),
 		tenantIDSequenceForSystemTenant,
 	),
 	upgrade.NewPermanentTenantUpgrade(
 		"create sql activity updater job",
-		toCV(clusterversion.V23_1CreateSystemActivityUpdateJob),
+		toCV(clusterversion.Permanent_V23_1CreateSystemActivityUpdateJob),
 		createActivityUpdateJobMigration,
 		"create statement_activity and transaction_activity job",
 	),
-	firstUpgradeTowardsV23_2,
-	upgrade.NewTenantUpgrade(
-		"enable partially visible indexes",
-		toCV(clusterversion.V23_2_PartiallyVisibleIndexes),
-		upgrade.NoPrecondition,
-		NoTenantUpgradeFunc,
-	),
+
+	newFirstUpgrade(toCV(clusterversion.V23_2Start)),
+
 	upgrade.NewTenantUpgrade(
 		"update system.statement_diagnostics_requests to support plan gist matching",
 		toCV(clusterversion.V23_2_StmtDiagForPlanGist),
@@ -330,33 +317,24 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		grantExecuteToPublicOnAllFunctions,
 	),
+	upgrade.NewPermanentTenantUpgrade(
+		"create system.mvcc_statistics table and job",
+		toCV(clusterversion.Permanent_V23_2_MVCCStatisticsTable),
+		createMVCCStatisticsTableAndJobMigration,
+		"create system.mvcc_statistics table and job",
+	),
+	upgrade.NewTenantUpgrade(
+		"create transaction_execution_insights and statement_execution_insights tables",
+		toCV(clusterversion.V23_2_AddSystemExecInsightsTable),
+		upgrade.NoPrecondition,
+		systemExecInsightsTableMigration,
+	),
+
+	newFirstUpgrade(toCV(clusterversion.V24_1Start)),
+
+	// Note: when starting a new release version, the first upgrade (for
+	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
-
-var (
-	firstUpgradeTowardsV23_1 = upgrade.NewTenantUpgrade(
-		"prepare upgrade to v23.1 release",
-		toCV(clusterversion.V23_1Start),
-		FirstUpgradeFromReleasePrecondition,
-		NoTenantUpgradeFunc,
-	)
-
-	firstUpgradeTowardsV23_2 = upgrade.NewTenantUpgrade(
-		"prepare upgrade to v23.2 release",
-		toCV(clusterversion.V23_2Start),
-		FirstUpgradeFromReleasePrecondition,
-		FirstUpgradeFromRelease,
-	)
-
-	// This slice must contain all upgrades bound to V??_?Start cluster
-	// version keys. These should have FirstUpgradeFromReleasePrecondition as a
-	// precondition and FirstUpgradeFromRelease as the upgrade function itself,
-	// except for V23_1Start which remains a no-op, due to this functionality
-	// having been added in the 23.2 release cycle.
-	firstUpgradesAfterPreExistingReleases = []upgradebase.Upgrade{
-		firstUpgradeTowardsV23_1,
-		firstUpgradeTowardsV23_2,
-	}
-)
 
 func init() {
 	for _, m := range upgrades {

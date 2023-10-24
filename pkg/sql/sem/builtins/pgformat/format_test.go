@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,6 +59,10 @@ func TestFormat(t *testing.T) {
 			if skipType(typ.ArrayContents()) {
 				return true
 			}
+		}
+		if typ.Oid() == oid.T_refcursor {
+			// REFCURSOR doesn't support comparison operators.
+			return true
 		}
 		return !randgen.IsLegalColumnType(typ)
 	}

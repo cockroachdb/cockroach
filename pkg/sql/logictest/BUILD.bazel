@@ -22,6 +22,7 @@ filegroup(
     visibility = [
         "//pkg/ccl/logictestccl:__subpackages__",
         "//pkg/cmd/generate-logictest:__pkg__",
+        "//pkg/cmd/generate-logictest-corpus:__pkg__",
         "//pkg/sql/logictest:__subpackages__",
     ],
 )
@@ -75,6 +76,7 @@ go_library(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlstats",
         "//pkg/sql/stats",
+        "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/floatcmp",
         "//pkg/testutils/physicalplanutils",
@@ -108,7 +110,7 @@ go_test(
     args = ["-test.timeout=295s"],
     data = [":testdata"],
     embed = [":logictest"],
-    exec_properties = {"Pool": "medium"},
+    exec_properties = {"Pool": "large"},
     deps = [
         "//pkg/base",
         "//pkg/config/zonepb",

@@ -99,6 +99,7 @@ var supportedExternalConnectionTypes = map[string]connectionpb.ConnectionProvide
 	changefeedbase.SinkSchemeKafka:                 connectionpb.ConnectionProvider_kafka,
 	changefeedbase.SinkSchemeWebhookHTTP:           connectionpb.ConnectionProvider_webhookhttp,
 	changefeedbase.SinkSchemeWebhookHTTPS:          connectionpb.ConnectionProvider_webhookhttps,
+	changefeedbase.SinkSchemeConfluentKafka:        connectionpb.ConnectionProvider_kafka,
 	// TODO (zinger): Not including SinkSchemeExperimentalSQL for now because A: it's undocumented
 	// and B, in tests it leaks a *gosql.DB and I can't figure out why.
 }

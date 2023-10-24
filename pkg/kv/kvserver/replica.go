@@ -88,7 +88,7 @@ const (
 // threshold and the current GC TTL (true) or just based on the GC threshold
 // (false).
 var StrictGCEnforcement = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.gc_ttl.strict_enforcement.enabled",
 	"if true, fail to serve requests at timestamps below the TTL even if the data still exists",
 	true,
@@ -946,14 +946,14 @@ func (r *Replica) cleanupFailedProposalLocked(p *ProposalData) {
 }
 
 // GetMinBytes gets the replica's minimum byte threshold.
-func (r *Replica) GetMinBytes() int64 {
+func (r *Replica) GetMinBytes(_ context.Context) int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.conf.RangeMinBytes
 }
 
 // GetMaxBytes gets the replica's maximum byte threshold.
-func (r *Replica) GetMaxBytes() int64 {
+func (r *Replica) GetMaxBytes(_ context.Context) int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.conf.RangeMaxBytes
@@ -1061,17 +1061,23 @@ func (r *Replica) IsQuiescent() bool {
 
 // DescAndSpanConfig returns the authoritative range descriptor as well
 // as the span config for the replica.
-func (r *Replica) DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig) {
+func (r *Replica) DescAndSpanConfig() (*roachpb.RangeDescriptor, *roachpb.SpanConfig) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.state.Desc, r.mu.conf
+	// This method is being removed shortly. We can't pass out a pointer to the
+	// underlying replica's SpanConfig.
+	conf := r.mu.conf
+	return r.mu.state.Desc, &conf
 }
 
-// SpanConfig returns the authoritative span config for the replica.
-func (r *Replica) SpanConfig() roachpb.SpanConfig {
+// LoadSpanConfig loads the authoritative span config for the replica.
+func (r *Replica) LoadSpanConfig(_ context.Context) (*roachpb.SpanConfig, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.conf
+	// This method is being removed shortly. We can't pass out a pointer to the
+	// underlying replica's SpanConfig.
+	conf := r.mu.conf
+	return &conf, nil
 }
 
 // Desc returns the authoritative range descriptor, acquiring a replica lock in
@@ -1171,7 +1177,7 @@ func (r *Replica) GetGCHint() roachpb.GCHint {
 
 // ExcludeDataFromBackup returns whether the replica is to be excluded from a
 // backup.
-func (r *Replica) ExcludeDataFromBackup() bool {
+func (r *Replica) ExcludeDataFromBackup(_ context.Context) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.conf.ExcludeDataFromBackup

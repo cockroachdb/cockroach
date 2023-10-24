@@ -31,7 +31,7 @@ import (
 // ReconcileInterval is the interval between two reconciliations of protected
 // timestamp records.
 var ReconcileInterval = settings.RegisterDurationSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"kv.protectedts.reconciliation.interval",
 	"the frequency for reconciling jobs with protected timestamp records",
 	5*time.Minute,

@@ -1,6 +1,3 @@
-# "schema_locked" can only be set/reset when the cluster version is at least 23.1
-# LogicTest: !local-mixed-22.2-23.1
-
 statement ok
 CREATE TABLE t (i INT PRIMARY KEY) WITH (schema_locked = t);
 

@@ -501,7 +501,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SET application_name = $1", []preparedQueryTest{
 			baseTest.SetArgs("hello world"),
 		}},
-		{"SET CLUSTER SETTING cluster.organization = $1", []preparedQueryTest{
+		{"SET CLUSTER SETTING cluster.label = $1", []preparedQueryTest{
 			baseTest.SetArgs("hello world"),
 		}},
 		{"SHOW DATABASE", []preparedQueryTest{
@@ -1305,7 +1305,7 @@ func TestPGPrepareNameQual(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	db2 := s.ApplicationLayer().SQLConn(t, "testing")
+	db2 := s.ApplicationLayer().SQLConn(t, serverutils.DBName("testing"))
 
 	statements := []string{
 		`CREATE TABLE IF NOT EXISTS f (v INT)`,

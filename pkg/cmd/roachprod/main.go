@@ -279,12 +279,22 @@ hosts file.
 			}
 		} else {
 			machineType := func(clusterVMs vm.List) string {
-				res := clusterVMs[0].MachineType
-				// Display CPU architecture, other than amd64 (default).
-				if arch := clusterVMs[0].Labels["arch"]; arch != "" && arch != string(vm.ArchAMD64) {
-					res += fmt.Sprintf(" [%s]", arch)
+				return clusterVMs[0].MachineType
+			}
+			cpuArch := func(clusterVMs vm.List) string {
+				// Display CPU architecture and family.
+				if clusterVMs[0].CPUArch == "" {
+					// N.B. Either a local cluster or unsupported cloud provider.
+					return ""
 				}
-				return res
+				if clusterVMs[0].CPUFamily != "" {
+					return clusterVMs[0].CPUFamily
+				}
+				if clusterVMs[0].CPUArch != vm.ArchAMD64 {
+					return string(clusterVMs[0].CPUArch)
+				}
+				// AMD64 is the default, so don't display it.
+				return ""
 			}
 			// Align columns left and separate with at least two spaces.
 			tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', tabwriter.AlignRight)
@@ -293,14 +303,14 @@ hosts file.
 			// [1] https://github.com/golang/go/issues/12073
 
 			// Print header.
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n",
-				"Cluster", "Clouds", "Size", "VM",
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n",
+				"Cluster", "Clouds", "Size", "VM", "Arch",
 				color.HiWhiteString("$/hour"), color.HiWhiteString("$ Spent"),
 				color.HiWhiteString("Uptime"), color.HiWhiteString("TTL"),
 				color.HiWhiteString("$/TTL"))
 			// Print separator.
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n",
-				"", "", "",
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n",
+				"", "", "", "",
 				color.HiWhiteString(""), color.HiWhiteString(""),
 				color.HiWhiteString(""), color.HiWhiteString(""),
 				color.HiWhiteString(""))
@@ -312,8 +322,8 @@ hosts file.
 				} else {
 					// N.B. Tabwriter doesn't support per-column alignment. It looks odd to have the cluster names right-aligned,
 					// so we make it left-aligned.
-					fmt.Fprintf(tw, "%s\t%s\t%d\t%s", name+strings.Repeat(" ", maxClusterName-len(name)), c.Clouds(),
-						len(c.VMs), machineType(c.VMs))
+					fmt.Fprintf(tw, "%s\t%s\t%d\t%s\t%s", name+strings.Repeat(" ", maxClusterName-len(name)), c.Clouds(),
+						len(c.VMs), machineType(c.VMs), cpuArch(c.VMs))
 					if !c.IsLocal() {
 						colorByCostBucket := func(cost float64) func(string, ...interface{}) string {
 							switch {
@@ -500,6 +510,7 @@ shutdown cockroach. The --wait flag causes stop to loop waiting for all
 processes with the right ROACHPROD environment variable to exit. Note that stop
 will wait forever if you specify --wait with a non-terminating signal (e.g.
 SIGHUP), unless you also configure --max-wait.
+
 --wait defaults to true for signal 9 (SIGKILL) and false for all other signals.
 ` + tagHelp + `
 `,
@@ -514,33 +525,34 @@ SIGHUP), unless you also configure --max-wait.
 	}),
 }
 
-// TODO(herko/renato): maybe also support adding SQL instances to a
-// shared-process node.
-var startInstanceAsSeparateProcessCmd = &cobra.Command{
-	Use:   "start-sql <virtual-cluster> --storage-cluster <storage-cluster>",
+var startInstanceCmd = &cobra.Command{
+	Use:   "start-sql <name> --storage-cluster <storage-cluster> [--external-cluster <virtual-cluster-nodes]",
 	Short: "start the SQL/HTTP service for a virtual cluster as a separate process",
 	Long: `Start SQL/HTTP instances for a virtual cluster as separate processes.
 
 The --storage-cluster flag must be used to specify a storage cluster
 (with optional node selector) which is already running. The command
 will create the virtual cluster on the storage cluster if it does not
-exist already. The storage cluster and virtual cluster can use the
-same underlying roachprod VM cluster, as long as different subsets of
-nodes are selected.
+exist already.  If creating multiple virtual clusters on the same
+node, the --sql-instance flag must be passed to differentiate them.
 
-The --tenant-id flag can be used to specify the tenant ID; it defaults to 2.
+The instance is started in shared process (in memory) mode by
+default. To start an external process instance, pass the
+--external-cluster flag indicating where the SQL server processes
+should be started.
 
 The --secure flag can be used to start nodes in secure mode (i.e. using
 certs). When specified, there is a one time initialization for the cluster to
 create and distribute the certs. Note that running some modes in secure mode
 and others in insecure mode is not a supported Cockroach configuration.
 
-As a debugging aid, the --sequential flag starts the nodes sequentially so node
-IDs match hostnames. Otherwise nodes are started in parallel.
+As a debugging aid, the --sequential flag starts the services
+sequentially; otherwise services are started in parallel.
 
-The --binary flag specifies the remote binary to run. It is up to the roachprod
-user to ensure this binary exists, usually via "roachprod put". Note that no
-cockroach software is installed by default on a newly created cluster.
+The --binary flag specifies the remote binary to run, if starting
+external services. It is up to the roachprod user to ensure this
+binary exists, usually via "roachprod put". Note that no cockroach
+software is installed by default on a newly created cluster.
 
 The --args and --env flags can be used to pass arbitrary command line flags and
 environment variables to the cockroach process.
@@ -548,7 +560,6 @@ environment variables to the cockroach process.
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		targetRoachprodCluster := args[0]
 		clusterSettingsOpts := []install.ClusterSettingOption{
 			install.TagOption(tag),
 			install.PGUrlCertsDirOption(pgurlCertsDir),
@@ -557,8 +568,59 @@ environment variables to the cockroach process.
 			install.EnvOption(nodeEnv),
 			install.NumRacksOption(numRacks),
 		}
+
+		// Always pick a random available port when starting virtual
+		// clusters. We do not expose the functionality of choosing a
+		// specific port for separate-process deployments; for
+		// shared-process, the port will always be based on the system
+		// tenant service.
+		//
+		// TODO(renato): remove this once #111052 is addressed.
+		startOpts.SQLPort = 0
+		startOpts.AdminUIPort = 0
+
+		startOpts.Target = install.StartSharedProcessForVirtualCluster
+		if externalProcessNodes != "" {
+			startOpts.Target = install.StartServiceForVirtualCluster
+		}
+
+		startOpts.VirtualClusterName = args[0]
 		return roachprod.StartServiceForVirtualCluster(context.Background(),
-			config.Logger, targetRoachprodCluster, storageCluster, startOpts, clusterSettingsOpts...)
+			config.Logger, externalProcessNodes, storageCluster, startOpts, clusterSettingsOpts...)
+	}),
+}
+
+var stopInstanceCmd = &cobra.Command{
+	Use:   "stop-sql <cluster> --cluster <name> --sql-instance <instance> [--sig] [--wait]",
+	Short: "stop sql instances on a cluster",
+	Long: `Stop sql instances on a cluster.
+
+Stop roachprod created virtual clusters (shared or separate process). By default,
+separate processes are killed with signal 9 (SIGKILL) giving them no chance for a
+graceful exit.
+
+The --sig flag will pass a signal to kill to allow us finer control over how we
+shutdown processes. The --wait flag causes stop to loop waiting for all
+processes to exit. Note that stop will wait forever if you specify --wait with a
+non-terminating signal (e.g. SIGHUP), unless you also configure --max-wait.
+
+--wait defaults to true for signal 9 (SIGKILL) and false for all other signals.
+`,
+	Args: cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		wait := waitFlag
+		if sig == 9 /* SIGKILL */ && !cmd.Flags().Changed("wait") {
+			wait = true
+		}
+		stopOpts := roachprod.StopOpts{
+			Wait:               wait,
+			MaxWait:            maxWait,
+			Sig:                sig,
+			VirtualClusterName: virtualClusterName,
+			SQLInstance:        sqlInstance,
+		}
+		clusterName := args[0]
+		return roachprod.StopServiceForVirtualCluster(context.Background(), config.Logger, clusterName, secure, stopOpts)
 	}),
 }
 
@@ -670,7 +732,7 @@ of nodes, outputting a line whenever a change is detected:
 var signalCmd = &cobra.Command{
 	Use:   "signal <cluster> <signal>",
 	Short: "send signal to cluster",
-	Long:  "Send a POSIX signal to the nodes in a cluster, specified by its integer code.",
+	Long:  "Send a POSIX signal, specified by its integer code, to every process started via roachprod in a cluster.",
 	Args:  cobra.ExactArgs(2),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		sig, err := strconv.ParseInt(args[1], 10, 8)
@@ -1351,7 +1413,8 @@ func main() {
 		monitorCmd,
 		startCmd,
 		stopCmd,
-		startInstanceAsSeparateProcessCmd,
+		startInstanceCmd,
+		stopInstanceCmd,
 		initCmd,
 		runCmd,
 		signalCmd,

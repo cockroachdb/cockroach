@@ -8,6 +8,7 @@ go_library(
         "error_code_set.go",
         "error_screening.go",
         "operation_generator.go",
+        "optype.go",
         "schemachange.go",
         "type_resolver.go",
         "watch_dog.go",
@@ -46,6 +47,6 @@ go_library(
 
 stringer(
     name = "gen-optype-stringer",
-    src = "operation_generator.go",
+    src = "optype.go",
     typ = "opType",
 )

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
@@ -27,7 +28,7 @@ func descIDSequenceForSystemTenant(
 		return nil
 	}
 	return d.DB.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		oldEntry, err := txn.GetForUpdate(ctx, keys.LegacyDescIDGenerator)
+		oldEntry, err := txn.GetForUpdate(ctx, keys.LegacyDescIDGenerator, kvpb.BestEffort)
 		if err != nil {
 			return err
 		}

@@ -11,10 +11,12 @@ go_test(
     ],
     args = ["-test.timeout=895s"],
     data = glob(["testdata/**"]),
+    shard_count = 4,
     deps = [
         "//pkg/base",
         "//pkg/cli/clisqlclient",
         "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/kvserverbase",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",

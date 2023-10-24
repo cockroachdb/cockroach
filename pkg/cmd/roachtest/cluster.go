@@ -34,6 +34,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -597,6 +598,9 @@ func MachineTypeToCPUs(s string) int {
 		if _, err := fmt.Sscanf(s, "n2-highcpu-%d", &v); err == nil {
 			return v
 		}
+		if _, err := fmt.Sscanf(s, "n2-custom-%d", &v); err == nil {
+			return v
+		}
 		if _, err := fmt.Sscanf(s, "n2-highmem-%d", &v); err == nil {
 			return v
 		}
@@ -650,9 +654,7 @@ func MachineTypeToCPUs(s string) int {
 
 	// TODO(pbardea): Non-default Azure machine types are not supported
 	// and will return unknown machine type error.
-	fmt.Fprintf(os.Stderr, "unknown machine type: %s\n", s)
-	os.Exit(1)
-	return -1
+	panic(fmt.Sprintf("unknown machine type: %s\n", s))
 }
 
 type nodeSelector interface {
@@ -683,6 +685,9 @@ type clusterImpl struct {
 
 	// clusterSettings are additional cluster settings set on cluster startup.
 	clusterSettings map[string]string
+	// goCoverDir is the directory for Go coverage data (if coverage is enabled).
+	// BAZEL_COVER_DIR will be set to this value when starting a node.
+	goCoverDir string
 
 	os   string     // OS of the cluster
 	arch vm.CPUArch // CPU architecture of the cluster
@@ -781,7 +786,7 @@ type clusterFactory struct {
 	namePrefix string
 	// counter is incremented with every new cluster. It's used as part of the cluster's name.
 	// Accessed atomically.
-	counter uint64
+	counter atomic.Uint64
 	// The registry with whom all clustered will be registered.
 	r *clusterRegistry
 	// artifactsDir is the directory in which the cluster creation log file will be placed.
@@ -827,7 +832,7 @@ func (f *clusterFactory) genName(cfg clusterConfig) string {
 	if cfg.nameOverride != "" {
 		return cfg.nameOverride
 	}
-	count := atomic.AddUint64(&f.counter, 1)
+	count := f.counter.Add(1)
 	return makeClusterName(
 		fmt.Sprintf("%s-%02d-%s", f.namePrefix, count, cfg.spec.String()))
 }
@@ -911,9 +916,18 @@ func (f *clusterFactory) newCluster(
 	defer setStatus("idle")
 
 	providerOptsContainer := vm.CreateProviderOptionsContainer()
+
+	params := spec.RoachprodClusterConfig{
+		UseIOBarrierOnLocalSSD: cfg.useIOBarrier,
+		PreferredArch:          cfg.arch,
+	}
+	params.Defaults.MachineType = instanceType
+	params.Defaults.Zones = zonesF
+	params.Defaults.PreferLocalSSD = localSSDArg
+
 	// The ClusterName is set below in the retry loop to ensure
 	// that each create attempt gets a unique cluster name.
-	createVMOpts, providerOpts, err := cfg.spec.RoachprodOpts("", cfg.useIOBarrier, cfg.arch)
+	createVMOpts, providerOpts, err := cfg.spec.RoachprodOpts(params)
 	if err != nil {
 		// We must release the allocation because cluster creation is not possible at this point.
 		cfg.alloc.Release()
@@ -922,6 +936,10 @@ func (f *clusterFactory) newCluster(
 	}
 	if cfg.spec.Cloud != spec.Local {
 		providerOptsContainer.SetProviderOpts(cfg.spec.Cloud, providerOpts)
+	}
+
+	if cfg.spec.UbuntuVersion.IsOverridden() {
+		createVMOpts.UbuntuVersion = cfg.spec.UbuntuVersion
 	}
 
 	createFlagsOverride(overrideFlagset, &createVMOpts)
@@ -940,12 +958,24 @@ func (f *clusterFactory) newCluster(
 	}
 	// loop assumes maxAttempts is atleast (1).
 	for i := 1; ; i++ {
+		// NB: this intentionally avoids re-using the name across iterations in
+		// the loop. See:
+		//
+		// https://github.com/cockroachdb/cockroach/issues/67906#issuecomment-887477675
+		genName := f.genName(cfg)
+		// Logs for creating a new cluster go to a dedicated log file.
+		var retryStr string
+		if i > 1 {
+			retryStr = "-retry" + strconv.Itoa(i-1)
+		}
+		logPath := filepath.Join(f.artifactsDir, runnerLogsDir, "cluster-create", genName+retryStr+".log")
+		l, err := logger.RootLogger(logPath, teeOpt)
+		if err != nil {
+			log.Fatalf(ctx, "%v", err)
+		}
+
 		c := &clusterImpl{
-			// NB: this intentionally avoids re-using the name across iterations in
-			// the loop. See:
-			//
-			// https://github.com/cockroachdb/cockroach/issues/67906#issuecomment-887477675
-			name:       f.genName(cfg),
+			name:       genName,
 			spec:       cfg.spec,
 			expiration: cfg.spec.Expiration(),
 			r:          f.r,
@@ -955,19 +985,9 @@ func (f *clusterFactory) newCluster(
 				owned: true,
 				alloc: cfg.alloc,
 			},
+			l: l,
 		}
 		c.status("creating cluster")
-
-		// Logs for creating a new cluster go to a dedicated log file.
-		var retryStr string
-		if i > 1 {
-			retryStr = "-retry" + strconv.Itoa(i-1)
-		}
-		logPath := filepath.Join(f.artifactsDir, runnerLogsDir, "cluster-create", c.name+retryStr+".log")
-		l, err := logger.RootLogger(logPath, teeOpt)
-		if err != nil {
-			log.Fatalf(ctx, "%v", err)
-		}
 
 		l.PrintfCtx(ctx, "Attempting cluster creation (attempt #%d/%d)", i, maxAttempts)
 		createVMOpts.ClusterName = c.name
@@ -1328,7 +1348,14 @@ COCKROACH_DEBUG_TS_IMPORT_FILE=tsdump.gob cockroach start-single-node --insecure
 
 // FetchDebugZip downloads the debug zip from the cluster using `roachprod ssh`.
 // The logs will be placed at `dest`, relative to the test's artifacts dir.
-func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger, dest string) error {
+//
+// By default, FetchDebugZip will attempt to download the zip from the first
+// node, and if that fails, it will try subsequent nodes. The caller may pass a
+// list of nodes via opts if they want to target which node(s) to grab the debug
+// zip from.
+func (c *clusterImpl) FetchDebugZip(
+	ctx context.Context, l *logger.Logger, dest string, opts ...option.Option,
+) error {
 	if c.spec.NodeCount == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
 		return nil
@@ -1336,6 +1363,16 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger, dest 
 
 	l.Printf("fetching debug zip\n")
 	c.status("fetching debug zip")
+
+	var nodes option.NodeListOption
+	for _, o := range opts {
+		if s, ok := o.(nodeSelector); ok {
+			nodes = s.Merge(nodes)
+		}
+	}
+	if len(nodes) == 0 {
+		nodes = c.All()
+	}
 
 	// Don't hang forever if we can't fetch the debug zip.
 	return timeutil.RunWithTimeout(ctx, "debug zip", 5*time.Minute, func(ctx context.Context) error {
@@ -1347,7 +1384,7 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger, dest 
 		// Some nodes might be down, so try to find one that works. We make the
 		// assumption that a down node will refuse the connection, so it won't
 		// waste our time.
-		for i := 1; i <= c.spec.NodeCount; i++ {
+		for _, node := range nodes {
 			// `cockroach debug zip` is noisy. Suppress the output unless it fails.
 			//
 			// Ignore the files in the the log directory; we pull the logs separately anyway
@@ -1356,18 +1393,15 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger, dest 
 			cmd := roachtestutil.NewCommand("%s debug zip", test.DefaultCockroachPath).
 				Option("include-range-info").
 				Flag("exclude-files", fmt.Sprintf("'%s'", excludeFiles)).
-				Flag("url", fmt.Sprintf("{pgurl:%d}", i)).
+				Flag("url", fmt.Sprintf("{pgurl:%d}", node)).
 				MaybeFlag(c.IsSecure(), "certs-dir", "certs").
 				Arg(zipName).
 				String()
-			if err := c.RunE(ctx, c.Node(i), cmd); err != nil {
-				l.Printf("%s debug zip failed on node %d: %v", test.DefaultCockroachPath, i, err)
-				if i < c.spec.NodeCount {
-					continue
-				}
-				return err
+			if err := c.RunE(ctx, c.Node(node), cmd); err != nil {
+				l.Printf("%s debug zip failed on node %d: %v", test.DefaultCockroachPath, node, err)
+				continue
 			}
-			return errors.Wrap(c.Get(ctx, c.l, zipName /* src */, path /* dest */, c.Node(i)), "cluster.FetchDebugZip")
+			return errors.Wrap(c.Get(ctx, c.l, zipName /* src */, path /* dest */, c.Node(node)), "cluster.FetchDebugZip")
 		}
 		return nil
 	})
@@ -1390,17 +1424,22 @@ func (c *clusterImpl) assertNoDeadNode(ctx context.Context, t test.Test) error {
 		return err
 	}
 
-	deadNodes := 0
+	deadProcesses := 0
 	for info := range eventsCh {
 		t.L().Printf("%s", info)
 
-		if _, isDeath := info.Event.(install.MonitorNodeDead); isDeath {
-			deadNodes++
+		if _, isDeath := info.Event.(install.MonitorProcessDead); isDeath {
+			deadProcesses++
 		}
 	}
 
-	if deadNodes > 0 {
-		return errors.Newf("%d dead node(s) detected", deadNodes)
+	var plural string
+	if deadProcesses > 1 {
+		plural = "es"
+	}
+
+	if deadProcesses > 0 {
+		return errors.Newf("%d dead cockroach process%s detected", deadProcesses, plural)
 	}
 	return nil
 }
@@ -1736,11 +1775,11 @@ func (c *clusterImpl) removeLabels(labels []string) error {
 func (c *clusterImpl) ListSnapshots(
 	ctx context.Context, vslo vm.VolumeSnapshotListOpts,
 ) ([]vm.VolumeSnapshot, error) {
-	return roachprod.ListSnapshots(ctx, c.l, c.spec.Cloud, vslo)
+	return roachprod.ListSnapshots(ctx, c.l, c.Cloud(), vslo)
 }
 
 func (c *clusterImpl) DeleteSnapshots(ctx context.Context, snapshots ...vm.VolumeSnapshot) error {
-	return roachprod.DeleteSnapshots(ctx, c.l, c.spec.Cloud, snapshots...)
+	return roachprod.DeleteSnapshots(ctx, c.l, c.Cloud(), snapshots...)
 }
 
 func (c *clusterImpl) CreateSnapshot(
@@ -1758,7 +1797,7 @@ func (c *clusterImpl) CreateSnapshot(
 func (c *clusterImpl) ApplySnapshots(ctx context.Context, snapshots []vm.VolumeSnapshot) error {
 	opts := vm.VolumeCreateOpts{
 		Size: c.spec.VolumeSize,
-		Type: c.spec.GCEVolumeType, // TODO(irfansharif): This is only applicable to GCE. Change that.
+		Type: c.spec.GCE.VolumeType, // TODO(irfansharif): This is only applicable to GCE. Change that.
 		Labels: map[string]string{
 			vm.TagUsage: "roachtest",
 		},
@@ -1977,6 +2016,10 @@ func (c *clusterImpl) StartE(
 		settings.Env = append(settings.Env, "COCKROACH_FORCE_DEPRECATED_SHOW_RANGE_BEHAVIOR=false")
 	}
 
+	if c.goCoverDir != "" {
+		settings.Env = append(settings.Env, fmt.Sprintf("BAZEL_COVER_DIR=%s", c.goCoverDir))
+	}
+
 	clusterSettingsOpts := []install.ClusterSettingOption{
 		install.TagOption(settings.Tag),
 		install.PGUrlCertsDirOption(settings.PGUrlCertsDir),
@@ -2167,7 +2210,11 @@ func (c *clusterImpl) RunE(ctx context.Context, nodes option.NodeListOption, arg
 		}
 
 		l.Printf("> result: %s", err)
-		createFailedFile(l.File.Name())
+		var logFileName string
+		if l.File != nil {
+			logFileName = l.File.Name()
+		}
+		createFailedFile(logFileName)
 		return errors.Wrapf(err, "full command output in %s.log", logFile)
 	}
 	l.Printf("> result: <ok>")
@@ -2214,7 +2261,10 @@ func (c *clusterImpl) RunWithDetails(
 	l.Printf("> %s", cmd)
 	results, err := roachprod.RunWithDetails(ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "" /* processTag */, c.IsSecure(), args)
 
-	logFileFull := l.File.Name()
+	var logFileFull string
+	if l.File != nil {
+		logFileFull = l.File.Name()
+	}
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			l.Printf("(note: incoming context was canceled: %s)", err)
@@ -2303,12 +2353,19 @@ func (c *clusterImpl) loggerForCmd(
 // internal IPs and communication from a test driver to nodes in a cluster
 // should use external IPs.
 func (c *clusterImpl) pgURLErr(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption, external bool, tenant string,
+	ctx context.Context,
+	l *logger.Logger,
+	node option.NodeListOption,
+	external bool,
+	tenant string,
+	sqlInstance int,
 ) ([]string, error) {
 	urls, err := roachprod.PgURL(ctx, l, c.MakeNodes(node), c.localCertsDir, roachprod.PGURLOptions{
 		External:           external,
 		Secure:             c.localCertsDir != "",
-		VirtualClusterName: tenant})
+		VirtualClusterName: tenant,
+		SQLInstance:        sqlInstance,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -2320,9 +2377,9 @@ func (c *clusterImpl) pgURLErr(
 
 // InternalPGUrl returns the internal Postgres endpoint for the specified nodes.
 func (c *clusterImpl) InternalPGUrl(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string,
+	ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string, sqlInstance int,
 ) ([]string, error) {
-	return c.pgURLErr(ctx, l, node, false, tenant)
+	return c.pgURLErr(ctx, l, node, false, tenant, sqlInstance)
 }
 
 // Silence unused warning.
@@ -2330,9 +2387,9 @@ var _ = (&clusterImpl{}).InternalPGUrl
 
 // ExternalPGUrl returns the external Postgres endpoint for the specified nodes.
 func (c *clusterImpl) ExternalPGUrl(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string,
+	ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string, sqlInstance int,
 ) ([]string, error) {
-	return c.pgURLErr(ctx, l, node, true, tenant)
+	return c.pgURLErr(ctx, l, node, true, tenant, sqlInstance)
 }
 
 func addrToAdminUIAddr(addr string) (string, error) {
@@ -2441,7 +2498,7 @@ func (c *clusterImpl) addr(
 	ctx context.Context, l *logger.Logger, node option.NodeListOption, external bool,
 ) ([]string, error) {
 	var addrs []string
-	urls, err := c.pgURLErr(ctx, l, node, external, "")
+	urls, err := c.pgURLErr(ctx, l, node, external, "" /* tenant */, 0 /* sqlInstance */)
 	if err != nil {
 		return nil, err
 	}
@@ -2497,7 +2554,7 @@ func (c *clusterImpl) ConnE(
 	for _, opt := range opts {
 		opt(connOptions)
 	}
-	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node), connOptions.TenantName)
+	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node), connOptions.TenantName, connOptions.SQLInstance)
 	if err != nil {
 		return nil, err
 	}
@@ -2538,7 +2595,7 @@ func (c *clusterImpl) ConnE(
 	// for cloud runs, we use the connection pool's default behaviour.
 	//
 	// https://github.com/lib/pq/issues/835
-	if c.spec.Cloud == spec.Local {
+	if c.Cloud() == spec.Local {
 		localConnLifetime := 10 * time.Second
 		db.SetConnMaxLifetime(localConnLifetime)
 	}
@@ -2554,6 +2611,10 @@ func (c *clusterImpl) MakeNodes(opts ...option.Option) string {
 		}
 	}
 	return c.name + r.String()
+}
+
+func (c *clusterImpl) Cloud() string {
+	return c.spec.Cloud
 }
 
 func (c *clusterImpl) IsLocal() bool {
@@ -2601,4 +2662,62 @@ func (c *clusterImpl) StartGrafana(
 
 func (c *clusterImpl) StopGrafana(ctx context.Context, l *logger.Logger, dumpDir string) error {
 	return roachprod.StopGrafana(ctx, l, c.name, dumpDir)
+}
+
+func (c *clusterImpl) WipeForReuse(
+	ctx context.Context, l *logger.Logger, newClusterSpec spec.ClusterSpec,
+) error {
+	l.PrintfCtx(ctx, "Using existing cluster: %s (arch=%q). Wiping", c.name, c.arch)
+	if err := c.WipeE(ctx, l, false /* preserveCerts */); err != nil {
+		return err
+	}
+	if err := c.RunE(ctx, c.All(), fmt.Sprintf("rm -rf %s %s", perfArtifactsDir, goCoverArtifactsDir)); err != nil {
+		return errors.Wrapf(err, "failed to remove perf/gocover artifacts dirs")
+	}
+	if c.localCertsDir != "" {
+		if err := os.RemoveAll(c.localCertsDir); err != nil {
+			return errors.Wrapf(err,
+				"failed to remove local certs in %s", c.localCertsDir)
+		}
+		c.localCertsDir = ""
+	}
+	// Overwrite the spec of the cluster with the one coming from the test. In
+	// particular, this overwrites the reuse policy to reflect what the test
+	// intends to do with it.
+	c.spec = newClusterSpec
+	return nil
+}
+
+// archForTest determines the CPU architecture to use for a test. If the test
+// doesn't specify it, one is chosen randomly depending on flags.
+func archForTest(ctx context.Context, l *logger.Logger, testSpec registry.TestSpec) vm.CPUArch {
+	if testSpec.Cluster.Arch != "" {
+		l.PrintfCtx(ctx, "Using specified arch=%q, %s", testSpec.Cluster.Arch, testSpec.Name)
+		return testSpec.Cluster.Arch
+	}
+
+	if testSpec.Benchmark && testSpec.Cluster.Cloud != spec.Local {
+		// TODO(srosenberg): enable after https://github.com/cockroachdb/cockroach/issues/104213
+		arch := vm.ArchAMD64
+		l.PrintfCtx(ctx, "Disabling arch randomization for benchmark; arch=%q, %s", arch, testSpec.Name)
+		return arch
+	}
+
+	// CPU architecture is unspecified, choose one according to the
+	// probability distribution.
+	var arch vm.CPUArch
+	if prng.Float64() < arm64Probability {
+		arch = vm.ArchARM64
+	} else if prng.Float64() < fipsProbability {
+		// N.B. branch is taken with probability
+		//   (1 - arm64Probability) * fipsProbability
+		// which is P(fips & amd64).
+		// N.B. FIPS is only supported on 'amd64' at this time.
+		arch = vm.ArchFIPS
+	} else {
+		arch = vm.ArchAMD64
+	}
+	l.PrintfCtx(ctx, "Using randomly chosen arch=%q, %s", arch, testSpec.Name)
+
+	return arch
 }

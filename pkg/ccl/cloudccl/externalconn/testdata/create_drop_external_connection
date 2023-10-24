@@ -229,6 +229,14 @@ exec-sql
 CREATE EXTERNAL CONNECTION "foo-azure" AS 'azure-storage://bucket/path?AZURE_ACCOUNT_NAME=foo&AZURE_ACCOUNT_KEY=Zm9vCg==&AZURE_ENVIRONMENT=AzureUSGovernmentCloud'
 ----
 
+exec-sql
+CREATE EXTERNAL CONNECTION "bar-azure" AS 'azure-blob://bucket/path?AZURE_ACCOUNT_NAME=foo&AZURE_ACCOUNT_KEY=Zm9vCg==&AZURE_ENVIRONMENT=AzureUSGovernmentCloud'
+----
+
+exec-sql
+CREATE EXTERNAL CONNECTION "baz-azure" AS 'azure://bucket/path?AZURE_ACCOUNT_NAME=foo&AZURE_ACCOUNT_KEY=Zm9vCg==&AZURE_ENVIRONMENT=AzureUSGovernmentCloud'
+----
+
 # Reject invalid azure external connections.
 exec-sql
 CREATE EXTERNAL CONNECTION "invalid-param-azure" AS 'azure-storage://bucket/path?INVALIDPARAM=baz'
@@ -247,13 +255,55 @@ pq: failed to construct External Connection details: failed to create azure exte
 
 inspect-system-table
 ----
+bar-azure STORAGE {"provider": "azure_storage", "simpleUri": {"uri": "azure-blob://bucket/path?AZURE_ACCOUNT_NAME=foo&AZURE_ACCOUNT_KEY=Zm9vCg==&AZURE_ENVIRONMENT=AzureUSGovernmentCloud"}} root 1
+baz-azure STORAGE {"provider": "azure_storage", "simpleUri": {"uri": "azure://bucket/path?AZURE_ACCOUNT_NAME=foo&AZURE_ACCOUNT_KEY=Zm9vCg==&AZURE_ENVIRONMENT=AzureUSGovernmentCloud"}} root 1
 foo-azure STORAGE {"provider": "azure_storage", "simpleUri": {"uri": "azure-storage://bucket/path?AZURE_ACCOUNT_NAME=foo&AZURE_ACCOUNT_KEY=Zm9vCg==&AZURE_ENVIRONMENT=AzureUSGovernmentCloud"}} root 1
 
 exec-sql
 DROP EXTERNAL CONNECTION "foo-azure";
 ----
 
+exec-sql
+DROP EXTERNAL CONNECTION "bar-azure";
+----
+
+exec-sql
+DROP EXTERNAL CONNECTION "baz-azure";
+----
+
 enable-check-external-storage
+----
+
+disable-check-kms
+----
+
+exec-sql
+CREATE EXTERNAL CONNECTION "foo-kms" AS 'azure-kms:///cmk/id?AUTH=specified&AZURE_VAULT_NAME=vault&AZURE_CLIENT_ID=client&AZURE_CLIENT_SECRET=secret&AZURE_TENANT_ID=tenant';
+----
+
+# Reject invalid KMS URIs.
+exec-sql
+CREATE EXTERNAL CONNECTION "missing-cmk-kms" AS 'azure-kms:///?AUTH=implicit&CREDENTIALS=baz&ASSUME_ROLE=ronaldo,rashford,bruno&BEARER_TOKEN=foo';
+----
+pq: failed to construct External Connection details: failed to create Azure KMS external connection: path component of the KMS cannot be empty; must contain the Customer Managed Key
+
+exec-sql
+CREATE EXTERNAL CONNECTION "invalid-params-kms" AS 'azure-kms:///cmk?AUTH=implicit&INVALIDPARAM=baz';
+----
+pq: failed to construct External Connection details: failed to create Azure KMS external connection: unknown KMS query parameters: INVALIDPARAM
+
+inspect-system-table
+----
+foo-kms KMS {"provider": "azure_kms", "simpleUri": {"uri": "azure-kms:///cmk/id?AUTH=specified&AZURE_VAULT_NAME=vault&AZURE_CLIENT_ID=client&AZURE_CLIENT_SECRET=secret&AZURE_TENANT_ID=tenant"}} root 1
+
+exec-sql
+DROP EXTERNAL CONNECTION "foo-kms";
+----
+
+inspect-system-table
+----
+
+enable-check-kms
 ----
 
 subtest end

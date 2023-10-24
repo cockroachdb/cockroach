@@ -29,6 +29,9 @@ import (
 
 var activerecordResultRegex = regexp.MustCompile(`^(?P<test>[^\s]+#[^\s]+) = (?P<timing>\d+\.\d+ s) = (?P<result>.)$`)
 var railsReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)\.?(?P<subpoint>\d*)$`)
+
+// WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
+// This is used by docs automation to produce a list of supported versions for ORM's.
 var supportedRailsVersion = "7.0.3"
 var activerecordAdapterVersion = "v7.0.2"
 
@@ -46,7 +49,7 @@ func registerActiveRecord(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
@@ -111,11 +114,11 @@ func registerActiveRecord(r registry.Registry) {
 			t,
 			c,
 			node,
-			"install ruby 2.7",
+			"install ruby 3.1",
 			`mkdir -p ruby-install && \
-        curl -fsSL https://github.com/postmodern/ruby-install/archive/v0.6.1.tar.gz | tar --strip-components=1 -C ruby-install -xz && \
+        curl -fsSL https://github.com/postmodern/ruby-install/archive/v0.9.1.tar.gz | tar --strip-components=1 -C ruby-install -xz && \
         sudo make -C ruby-install install && \
-        sudo ruby-install --system ruby 2.7.1 && \
+        sudo ruby-install --system ruby 3.1.4 && \
         sudo gem update --system`,
 		); err != nil {
 			t.Fatal(err)

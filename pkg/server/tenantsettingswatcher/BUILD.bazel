@@ -26,12 +26,15 @@ go_library(
         "//pkg/sql/rowenc/valueside",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/buildutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/startup",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -56,6 +59,7 @@ go_test(
         "//pkg/settings",
         "//pkg/sql",
         "//pkg/sql/catalog",
+        "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",

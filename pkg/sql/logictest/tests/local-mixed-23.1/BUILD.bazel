@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "local-mixed-23_1_test",
+    size = "enormous",
+    srcs = ["generated_test.go"],
+    args = select({
+        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
+        "//conditions:default": ["-test.timeout=3595s"],
+    }),
+    data = [
+        "//c-deps:libgeos",  # keep
+        "//pkg/sql/logictest:testdata",  # keep
+    ],
+    exec_properties = {"Pool": "large"},
+    shard_count = 48,
+    tags = [
+        "cpu:1",
+    ],
+    deps = [
+        "//pkg/base",
+        "//pkg/build/bazel",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/logictest",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+    ],
+)

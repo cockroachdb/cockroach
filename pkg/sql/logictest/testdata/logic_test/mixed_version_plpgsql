@@ -1,0 +1,59 @@
+# LogicTest: cockroach-go-testserver-upgrade-to-master
+
+# ----------------------------------------------------------------------
+# Test PLpgSQL routines with all nodes running old binaries.
+# ----------------------------------------------------------------------
+
+statement error pgcode 0A000 pq: plpgsql not supported in user-defined functions
+CREATE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 0A000 pq: plpgsql not supported in user-defined functions
+CREATE FUNCTION f(x INT) RETURNS INT AS $$
+  BEGIN
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 0A000 pq: plpgsql not supported in user-defined functions
+CREATE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    x INT := 100;
+  BEGIN
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# ----------------------------------------------------------------------
+# Test PLpgSQL routines with only the gateway running 23.2.
+# ----------------------------------------------------------------------
+
+upgrade 0
+
+user root nodeidx=0
+
+statement error pgcode 0A000 pq: unimplemented: PLpgSQL is not supported until version 23.2
+CREATE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 0A000 pq: unimplemented: PLpgSQL is not supported until version 23.2
+CREATE FUNCTION f(x INT) RETURNS INT AS $$
+  BEGIN
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 0A000 pq: unimplemented: PLpgSQL is not supported until version 23.2
+CREATE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    x INT := 100;
+  BEGIN
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;

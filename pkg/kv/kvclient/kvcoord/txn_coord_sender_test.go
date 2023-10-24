@@ -1139,7 +1139,9 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 
 	// Acquire locks on a-b, c, m, u-w before the final batch.
-	_, pErr := txn.ScanForShare(ctx, roachpb.Key("a"), roachpb.Key("b"), 0)
+	_, pErr := txn.ScanForShare(
+		ctx, roachpb.Key("a"), roachpb.Key("b"), 0, kvpb.GuaranteedDurability,
+	)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1147,7 +1149,7 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	_, pErr = txn.GetForUpdate(ctx, roachpb.Key("m"))
+	_, pErr = txn.GetForUpdate(ctx, roachpb.Key("m"), kvpb.GuaranteedDurability)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1161,8 +1163,8 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	b.Put(roachpb.Key("b"), []byte("value"))
 	b.Put(roachpb.Key("c"), []byte("value"))
 	b.Put(roachpb.Key("d"), []byte("value"))
-	b.GetForUpdate(roachpb.Key("n"))
-	b.ReverseScanForShare(roachpb.Key("v"), roachpb.Key("z"))
+	b.GetForUpdate(roachpb.Key("n"), kvpb.GuaranteedDurability)
+	b.ReverseScanForShare(roachpb.Key("v"), roachpb.Key("z"), kvpb.GuaranteedDurability)
 
 	// The expected locks are a-b, c, m, n, and u-z.
 	expectedLockSpans = []roachpb.Span{
@@ -1872,7 +1874,7 @@ func TestOnePCErrorTracking(t *testing.T) {
 	}
 	b := txn.NewBatch()
 	b.Put(keyA, "test value")
-	b.ScanForUpdate(keyB, keyC)
+	b.ScanForUpdate(keyB, keyC, kvpb.BestEffort)
 	if err := txn.CommitInBatch(ctx, b); !testutils.IsError(err, "injected err") {
 		t.Fatal(err)
 	}
@@ -2150,7 +2152,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 					if write {
 						err = txn.Put(ctx, "consider", "phlebas")
 					} else /* locking read */ {
-						_, err = txn.ScanForUpdate(ctx, "a", "b", 0)
+						_, err = txn.ScanForUpdate(ctx, "a", "b", 0, kvpb.BestEffort)
 					}
 					if err == nil {
 						t.Fatal("missing injected retriable error")
@@ -2879,24 +2881,32 @@ func TestTxnTypeCompatibleWithBatchRequest(t *testing.T) {
 
 	// A LeafTxn is not compatible with locking requests.
 	// 1. Locking Get requests.
-	_, err = leafTxn.GetForUpdate(ctx, roachpb.Key("a"))
+	_, err = leafTxn.GetForUpdate(ctx, roachpb.Key("a"), kvpb.GuaranteedDurability)
 	require.Error(t, err)
 	require.Regexp(t, "LeafTxn .* incompatible with locking request .*", err)
-	_, err = leafTxn.GetForShare(ctx, roachpb.Key("a"))
+	_, err = leafTxn.GetForShare(ctx, roachpb.Key("a"), kvpb.GuaranteedDurability)
 	require.Error(t, err)
 	require.Regexp(t, "LeafTxn .* incompatible with locking request .*", err)
 	// 2. Locking Scan requests.
-	_, err = leafTxn.ScanForUpdate(ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */)
+	_, err = leafTxn.ScanForUpdate(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
 	require.Error(t, err)
 	require.Regexp(t, "LeafTxn .* incompatible with locking request .*", err)
-	_, err = leafTxn.ScanForShare(ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */)
+	_, err = leafTxn.ScanForShare(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
 	require.Error(t, err)
 	require.Regexp(t, "LeafTxn .* incompatible with locking request .*", err)
 	// 3. Locking ReverseScan requests.
-	_, err = leafTxn.ReverseScanForUpdate(ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */)
+	_, err = leafTxn.ReverseScanForUpdate(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
 	require.Error(t, err)
 	require.Regexp(t, "LeafTxn .* incompatible with locking request .*", err)
-	_, err = leafTxn.ReverseScanForShare(ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */)
+	_, err = leafTxn.ReverseScanForShare(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
 	require.Error(t, err)
 	require.Regexp(t, "LeafTxn .* incompatible with locking request .*", err)
 	// 4. Writes.
@@ -2913,23 +2923,31 @@ func TestTxnTypeCompatibleWithBatchRequest(t *testing.T) {
 
 	// A RootTxn is compatible with all requests.
 	// 1. All types of Get requests.
-	_, err = rootTxn.GetForUpdate(ctx, roachpb.Key("a"))
+	_, err = rootTxn.GetForUpdate(ctx, roachpb.Key("a"), kvpb.GuaranteedDurability)
 	require.NoError(t, err)
-	_, err = rootTxn.GetForShare(ctx, roachpb.Key("a"))
+	_, err = rootTxn.GetForShare(ctx, roachpb.Key("a"), kvpb.GuaranteedDurability)
 	require.NoError(t, err)
 	_, err = rootTxn.Get(ctx, roachpb.Key("a"))
 	require.NoError(t, err)
 	// 2. All types of Scan requests.
-	_, err = rootTxn.ScanForUpdate(ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */)
+	_, err = rootTxn.ScanForUpdate(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
 	require.NoError(t, err)
-	_, err = rootTxn.ScanForShare(ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */)
+	_, err = rootTxn.ScanForShare(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
 	require.NoError(t, err)
 	_, err = rootTxn.Scan(ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */)
 	require.NoError(t, err)
-	// 3. All types of ReverseScan requets.
-	_, err = rootTxn.ReverseScanForUpdate(ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */)
+	// 3. All types of ReverseScan requests.
+	_, err = rootTxn.ReverseScanForUpdate(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
 	require.NoError(t, err)
-	_, err = rootTxn.ReverseScanForShare(ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */)
+	_, err = rootTxn.ReverseScanForShare(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
 	require.NoError(t, err)
 	_, err = rootTxn.ReverseScan(ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */)
 	require.NoError(t, err)

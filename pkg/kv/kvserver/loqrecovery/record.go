@@ -75,11 +75,10 @@ func RegisterOfflineRecoveryEvents(
 	successCount := 0
 	var processingErrors error
 
-	iter, err := readWriter.NewMVCCIterator(
-		storage.MVCCKeyIterKind, storage.IterOptions{
-			LowerBound: keys.LocalStoreUnsafeReplicaRecoveryKeyMin,
-			UpperBound: keys.LocalStoreUnsafeReplicaRecoveryKeyMax,
-		})
+	iter, err := readWriter.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
+		LowerBound: keys.LocalStoreUnsafeReplicaRecoveryKeyMin,
+		UpperBound: keys.LocalStoreUnsafeReplicaRecoveryKeyMax,
+	})
 	if err != nil {
 		return 0, err
 	}

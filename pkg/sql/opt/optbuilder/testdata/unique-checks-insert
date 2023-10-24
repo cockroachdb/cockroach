@@ -388,22 +388,32 @@ insert uniq
  │         │    └── column4:11
  │         └── first-agg [as=column5:12]
  │              └── column5:12
- └── unique-checks
-      └── unique-checks-item: uniq(x,y)
-           └── project
-                ├── columns: x:30!null y:31!null
-                └── semi-join (hash)
-                     ├── columns: k:27!null v:28!null w:29!null x:30!null y:31!null
-                     ├── values
-                     │    ├── columns: k:27!null v:28!null w:29!null x:30!null y:31!null
-                     │    └── (1, 2, 3, 4, 5)
-                     ├── scan uniq
-                     │    ├── columns: uniq.k:20!null uniq.v:21 uniq.w:22 uniq.x:23 uniq.y:24
-                     │    └── flags: disabled not visible index feature
-                     └── filters
-                          ├── x:30 = uniq.x:23
-                          ├── y:31 = uniq.y:24
-                          └── k:27 != uniq.k:20
+ ├── unique-checks
+ │    └── unique-checks-item: uniq(x,y)
+ │         └── project
+ │              ├── columns: x:30!null y:31!null
+ │              └── semi-join (hash)
+ │                   ├── columns: k:27!null v:28!null w:29!null x:30!null y:31!null
+ │                   ├── values
+ │                   │    ├── columns: k:27!null v:28!null w:29!null x:30!null y:31!null
+ │                   │    └── (1, 2, 3, 4, 5)
+ │                   ├── scan uniq
+ │                   │    ├── columns: uniq.k:20!null uniq.v:21 uniq.w:22 uniq.x:23 uniq.y:24
+ │                   │    └── flags: disabled not visible index feature
+ │                   └── filters
+ │                        ├── x:30 = uniq.x:23
+ │                        ├── y:31 = uniq.y:24
+ │                        └── k:27 != uniq.k:20
+ └── fast-path-unique-checks
+      └── fast-path-unique-checks-item: uniq(x,y)
+           └── select
+                ├── columns: uniq.k:32!null uniq.v:33 uniq.w:34 uniq.x:35!null uniq.y:36!null
+                ├── scan uniq
+                │    ├── columns: uniq.k:32!null uniq.v:33 uniq.w:34 uniq.x:35 uniq.y:36
+                │    └── flags: disabled not visible index feature
+                └── filters
+                     ├── uniq.x:35 = 4
+                     └── uniq.y:36 = 5
 
 # On conflict clause references unique without index constraint. The insert
 # values are not inlined because they are not constant.
@@ -500,22 +510,32 @@ insert uniq
  │         │    └── column4:11
  │         └── first-agg [as=column5:12]
  │              └── column5:12
- └── unique-checks
-      └── unique-checks-item: uniq(x,y)
-           └── project
-                ├── columns: x:30!null y:31!null
-                └── semi-join (hash)
-                     ├── columns: k:27!null v:28!null w:29!null x:30!null y:31!null
-                     ├── values
-                     │    ├── columns: k:27!null v:28!null w:29!null x:30!null y:31!null
-                     │    └── (1, 2, 3, 4, 5)
-                     ├── scan uniq
-                     │    ├── columns: uniq.k:20!null uniq.v:21 uniq.w:22 uniq.x:23 uniq.y:24
-                     │    └── flags: disabled not visible index feature
-                     └── filters
-                          ├── x:30 = uniq.x:23
-                          ├── y:31 = uniq.y:24
-                          └── k:27 != uniq.k:20
+ ├── unique-checks
+ │    └── unique-checks-item: uniq(x,y)
+ │         └── project
+ │              ├── columns: x:30!null y:31!null
+ │              └── semi-join (hash)
+ │                   ├── columns: k:27!null v:28!null w:29!null x:30!null y:31!null
+ │                   ├── values
+ │                   │    ├── columns: k:27!null v:28!null w:29!null x:30!null y:31!null
+ │                   │    └── (1, 2, 3, 4, 5)
+ │                   ├── scan uniq
+ │                   │    ├── columns: uniq.k:20!null uniq.v:21 uniq.w:22 uniq.x:23 uniq.y:24
+ │                   │    └── flags: disabled not visible index feature
+ │                   └── filters
+ │                        ├── x:30 = uniq.x:23
+ │                        ├── y:31 = uniq.y:24
+ │                        └── k:27 != uniq.k:20
+ └── fast-path-unique-checks
+      └── fast-path-unique-checks-item: uniq(x,y)
+           └── select
+                ├── columns: uniq.k:32!null uniq.v:33 uniq.w:34 uniq.x:35!null uniq.y:36!null
+                ├── scan uniq
+                │    ├── columns: uniq.k:32!null uniq.v:33 uniq.w:34 uniq.x:35 uniq.y:36
+                │    └── flags: disabled not visible index feature
+                └── filters
+                     ├── uniq.x:35 = 4
+                     └── uniq.y:36 = 5
 
 exec-ddl
 CREATE TABLE other (k INT, v INT, w INT NOT NULL, x INT, y INT)
@@ -1745,20 +1765,807 @@ insert uniq_default
  ├── values
  │    ├── columns: column1:6!null column2:7!null a_default:8!null
  │    └── (1, 100, 10)
+ ├── unique-checks
+ │    └── unique-checks-item: uniq_default(a,b)
+ │         └── semi-join (cross)
+ │              ├── columns: a:15!null b:16!null
+ │              ├── values
+ │              │    ├── columns: a:15!null b:16!null
+ │              │    └── (10, 100)
+ │              ├── select
+ │              │    ├── columns: uniq_default.k:9!null uniq_default.a:10!null uniq_default.b:11!null
+ │              │    ├── scan uniq_default
+ │              │    │    ├── columns: uniq_default.k:9!null uniq_default.a:10 uniq_default.b:11
+ │              │    │    └── flags: disabled not visible index feature
+ │              │    └── filters
+ │              │         ├── uniq_default.a:10 = 10
+ │              │         ├── uniq_default.b:11 = 100
+ │              │         └── uniq_default.k:9 != 1
+ │              └── filters (true)
+ └── fast-path-unique-checks
+      └── fast-path-unique-checks-item: uniq_default(a,b)
+           └── select
+                ├── columns: uniq_default.k:17!null uniq_default.a:18!null uniq_default.b:19!null
+                ├── scan uniq_default
+                │    ├── columns: uniq_default.k:17!null uniq_default.a:18 uniq_default.b:19
+                │    └── flags: disabled not visible index feature
+                └── filters
+                     ├── uniq_default.a:18 = 10
+                     └── uniq_default.b:19 = 100
+
+exec-ddl
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  r STRING NOT NULL,
+  a INT,
+  b INT,
+  INDEX (r, a) WHERE k != 1,
+  UNIQUE WITHOUT INDEX (a) WHERE k != 1,
+  CHECK (r IN ('east', 'west'))
+)
+----
+
+# Fast path checks should not be built when there is a UNIQUE WITHOUT INDEX
+# with a partial index predicate.
+build
+INSERT INTO t VALUES (1, 'east', 10, 100)
+----
+insert t
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => t.k:1
+ │    ├── column2:8 => t.r:2
+ │    ├── column3:9 => t.a:3
+ │    └── column4:10 => t.b:4
+ ├── check columns: check1:11
+ ├── partial index put columns: partial_index_put1:12
+ ├── project
+ │    ├── columns: partial_index_put1:12!null column1:7!null column2:8!null column3:9!null column4:10!null check1:11!null
+ │    ├── project
+ │    │    ├── columns: check1:11!null column1:7!null column2:8!null column3:9!null column4:10!null
+ │    │    ├── values
+ │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
+ │    │    │    └── (1, 'east', 10, 100)
+ │    │    └── projections
+ │    │         └── column2:8 IN ('east', 'west') [as=check1:11]
+ │    └── projections
+ │         └── column1:7 != 1 [as=partial_index_put1:12]
  └── unique-checks
-      └── unique-checks-item: uniq_default(a,b)
-           └── semi-join (cross)
-                ├── columns: a:15!null b:16!null
-                ├── values
-                │    ├── columns: a:15!null b:16!null
-                │    └── (10, 100)
-                ├── select
-                │    ├── columns: uniq_default.k:9!null uniq_default.a:10!null uniq_default.b:11!null
-                │    ├── scan uniq_default
-                │    │    ├── columns: uniq_default.k:9!null uniq_default.a:10 uniq_default.b:11
-                │    │    └── flags: disabled not visible index feature
-                │    └── filters
-                │         ├── uniq_default.a:10 = 10
-                │         ├── uniq_default.b:11 = 100
-                │         └── uniq_default.k:9 != 1
-                └── filters (true)
+      └── unique-checks-item: t(a)
+           └── project
+                ├── columns: a:21!null
+                └── semi-join (hash)
+                     ├── columns: k:19!null r:20!null a:21!null b:22!null
+                     ├── values
+                     │    ├── columns: k:19!null r:20!null a:21!null b:22!null
+                     │    └── (1, 'east', 10, 100)
+                     ├── scan t
+                     │    ├── columns: t.k:13!null t.r:14!null t.a:15 t.b:16
+                     │    ├── check constraint expressions
+                     │    │    └── t.r:14 IN ('east', 'west')
+                     │    ├── partial index predicates
+                     │    │    └── t_r_a_idx: filters
+                     │    │         └── t.k:13 != 1
+                     │    └── flags: disabled not visible index feature
+                     └── filters
+                          ├── a:21 = t.a:15
+                          ├── k:19 != 1
+                          ├── t.k:13 != 1
+                          └── k:19 != t.k:13
+
+exec-ddl
+DROP TABLE t
+----
+
+exec-ddl
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  r STRING NOT NULL,
+  a INT,
+  b INT AS (k % 9) STORED,
+  INDEX (b, r, a),
+  UNIQUE WITHOUT INDEX (a),
+  CHECK (r IN ('east', 'west'))
+)
+----
+
+# This should build a fast path uniqueness checks with a=10.
+# This case generates a WithScanExpr internally.
+build
+INSERT INTO t (k, r, a) VALUES (2, 'east', 10)
+----
+insert t
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => t.k:1
+ │    ├── column2:8 => t.r:2
+ │    ├── column3:9 => t.a:3
+ │    └── b_comp:10 => t.b:4
+ ├── check columns: check1:11
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: check1:11!null column1:7!null column2:8!null column3:9!null b_comp:10!null
+ │    ├── project
+ │    │    ├── columns: b_comp:10!null column1:7!null column2:8!null column3:9!null
+ │    │    ├── values
+ │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null
+ │    │    │    └── (2, 'east', 10)
+ │    │    └── projections
+ │    │         └── column1:7 % 9 [as=b_comp:10]
+ │    └── projections
+ │         └── column2:8 IN ('east', 'west') [as=check1:11]
+ ├── unique-checks
+ │    └── unique-checks-item: t(a)
+ │         └── project
+ │              ├── columns: a:20!null
+ │              └── semi-join (hash)
+ │                   ├── columns: k:18!null r:19!null a:20!null b:21!null
+ │                   ├── with-scan &1
+ │                   │    ├── columns: k:18!null r:19!null a:20!null b:21!null
+ │                   │    └── mapping:
+ │                   │         ├──  column1:7 => k:18
+ │                   │         ├──  column2:8 => r:19
+ │                   │         ├──  column3:9 => a:20
+ │                   │         └──  b_comp:10 => b:21
+ │                   ├── scan t
+ │                   │    ├── columns: t.k:12!null t.r:13!null t.a:14 t.b:15
+ │                   │    ├── check constraint expressions
+ │                   │    │    └── t.r:13 IN ('east', 'west')
+ │                   │    ├── computed column expressions
+ │                   │    │    └── t.b:15
+ │                   │    │         └── t.k:12 % 9
+ │                   │    └── flags: disabled not visible index feature
+ │                   └── filters
+ │                        ├── a:20 = t.a:14
+ │                        └── k:18 != t.k:12
+ └── fast-path-unique-checks
+      └── fast-path-unique-checks-item: t(a)
+           └── select
+                ├── columns: t.k:22!null t.r:23!null t.a:24!null t.b:25
+                ├── scan t
+                │    ├── columns: t.k:22!null t.r:23!null t.a:24 t.b:25
+                │    ├── check constraint expressions
+                │    │    └── t.r:23 IN ('east', 'west')
+                │    ├── computed column expressions
+                │    │    └── t.b:25
+                │    │         └── t.k:22 % 9
+                │    └── flags: disabled not visible index feature
+                └── filters
+                     └── t.a:24 = 10
+
+exec-ddl
+DROP TABLE t
+----
+
+exec-ddl
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  r STRING NOT NULL,
+  a INT,
+  b INT AS (k % 9) STORED,
+  INDEX (a),
+  INDEX (r, a, b),
+  INDEX (b, a),
+  UNIQUE WITHOUT INDEX (a),
+  UNIQUE WITHOUT INDEX (b),
+  CHECK (r IN ('east', 'west'))
+)
+----
+
+# We currently do not build a fast path check on computed column unique
+# constraints.
+build
+INSERT INTO t (k, r, a) VALUES (2, 'east', 10)
+----
+insert t
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => t.k:1
+ │    ├── column2:8 => t.r:2
+ │    ├── column3:9 => t.a:3
+ │    └── b_comp:10 => t.b:4
+ ├── check columns: check1:11
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: check1:11!null column1:7!null column2:8!null column3:9!null b_comp:10!null
+ │    ├── project
+ │    │    ├── columns: b_comp:10!null column1:7!null column2:8!null column3:9!null
+ │    │    ├── values
+ │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null
+ │    │    │    └── (2, 'east', 10)
+ │    │    └── projections
+ │    │         └── column1:7 % 9 [as=b_comp:10]
+ │    └── projections
+ │         └── column2:8 IN ('east', 'west') [as=check1:11]
+ └── unique-checks
+      ├── unique-checks-item: t(a)
+      │    └── project
+      │         ├── columns: a:20!null
+      │         └── semi-join (hash)
+      │              ├── columns: k:18!null r:19!null a:20!null b:21!null
+      │              ├── with-scan &1
+      │              │    ├── columns: k:18!null r:19!null a:20!null b:21!null
+      │              │    └── mapping:
+      │              │         ├──  column1:7 => k:18
+      │              │         ├──  column2:8 => r:19
+      │              │         ├──  column3:9 => a:20
+      │              │         └──  b_comp:10 => b:21
+      │              ├── scan t
+      │              │    ├── columns: t.k:12!null t.r:13!null t.a:14 t.b:15
+      │              │    ├── check constraint expressions
+      │              │    │    └── t.r:13 IN ('east', 'west')
+      │              │    ├── computed column expressions
+      │              │    │    └── t.b:15
+      │              │    │         └── t.k:12 % 9
+      │              │    └── flags: disabled not visible index feature
+      │              └── filters
+      │                   ├── a:20 = t.a:14
+      │                   └── k:18 != t.k:12
+      └── unique-checks-item: t(b)
+           └── project
+                ├── columns: b:37!null
+                └── semi-join (hash)
+                     ├── columns: k:34!null r:35!null a:36!null b:37!null
+                     ├── with-scan &1
+                     │    ├── columns: k:34!null r:35!null a:36!null b:37!null
+                     │    └── mapping:
+                     │         ├──  column1:7 => k:34
+                     │         ├──  column2:8 => r:35
+                     │         ├──  column3:9 => a:36
+                     │         └──  b_comp:10 => b:37
+                     ├── scan t
+                     │    ├── columns: t.k:28!null t.r:29!null t.a:30 t.b:31
+                     │    ├── check constraint expressions
+                     │    │    └── t.r:29 IN ('east', 'west')
+                     │    ├── computed column expressions
+                     │    │    └── t.b:31
+                     │    │         └── t.k:28 % 9
+                     │    └── flags: disabled not visible index feature
+                     └── filters
+                          ├── b:37 = t.b:31
+                          └── k:34 != t.k:28
+
+exec-ddl
+DROP TABLE t
+----
+
+exec-ddl
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  r STRING NOT NULL,
+  a INT,
+  b INT,
+  INDEX (a),
+  INDEX (r, a, b),
+  INDEX (b, a),
+  UNIQUE WITHOUT INDEX (a),
+  UNIQUE WITHOUT INDEX (b),
+  UNIQUE WITHOUT INDEX (r, a, b),
+  UNIQUE WITHOUT INDEX (a, b),
+  CHECK (r IN ('east', 'west'))
+)
+----
+
+# An insert to a table with multiple unique without index checks can build
+# all fast path checks in this case as there are no computed columns.
+build
+INSERT INTO t (k, r, a, b) VALUES (2, 'east', 10, 100)
+----
+insert t
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => t.k:1
+ │    ├── column2:8 => t.r:2
+ │    ├── column3:9 => t.a:3
+ │    └── column4:10 => t.b:4
+ ├── check columns: check1:11
+ ├── project
+ │    ├── columns: check1:11!null column1:7!null column2:8!null column3:9!null column4:10!null
+ │    ├── values
+ │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
+ │    │    └── (2, 'east', 10, 100)
+ │    └── projections
+ │         └── column2:8 IN ('east', 'west') [as=check1:11]
+ ├── unique-checks
+ │    ├── unique-checks-item: t(a)
+ │    │    └── project
+ │    │         ├── columns: a:20!null
+ │    │         └── semi-join (hash)
+ │    │              ├── columns: k:18!null r:19!null a:20!null b:21!null
+ │    │              ├── values
+ │    │              │    ├── columns: k:18!null r:19!null a:20!null b:21!null
+ │    │              │    └── (2, 'east', 10, 100)
+ │    │              ├── scan t
+ │    │              │    ├── columns: t.k:12!null t.r:13!null t.a:14 t.b:15
+ │    │              │    ├── check constraint expressions
+ │    │              │    │    └── t.r:13 IN ('east', 'west')
+ │    │              │    └── flags: disabled not visible index feature
+ │    │              └── filters
+ │    │                   ├── a:20 = t.a:14
+ │    │                   └── k:18 != t.k:12
+ │    ├── unique-checks-item: t(b)
+ │    │    └── project
+ │    │         ├── columns: b:37!null
+ │    │         └── semi-join (hash)
+ │    │              ├── columns: k:34!null r:35!null a:36!null b:37!null
+ │    │              ├── values
+ │    │              │    ├── columns: k:34!null r:35!null a:36!null b:37!null
+ │    │              │    └── (2, 'east', 10, 100)
+ │    │              ├── scan t
+ │    │              │    ├── columns: t.k:28!null t.r:29!null t.a:30 t.b:31
+ │    │              │    ├── check constraint expressions
+ │    │              │    │    └── t.r:29 IN ('east', 'west')
+ │    │              │    └── flags: disabled not visible index feature
+ │    │              └── filters
+ │    │                   ├── b:37 = t.b:31
+ │    │                   └── k:34 != t.k:28
+ │    ├── unique-checks-item: t(r,a,b)
+ │    │    └── project
+ │    │         ├── columns: r:51!null a:52!null b:53!null
+ │    │         └── semi-join (hash)
+ │    │              ├── columns: k:50!null r:51!null a:52!null b:53!null
+ │    │              ├── values
+ │    │              │    ├── columns: k:50!null r:51!null a:52!null b:53!null
+ │    │              │    └── (2, 'east', 10, 100)
+ │    │              ├── scan t
+ │    │              │    ├── columns: t.k:44!null t.r:45!null t.a:46 t.b:47
+ │    │              │    ├── check constraint expressions
+ │    │              │    │    └── t.r:45 IN ('east', 'west')
+ │    │              │    └── flags: disabled not visible index feature
+ │    │              └── filters
+ │    │                   ├── r:51 = t.r:45
+ │    │                   ├── a:52 = t.a:46
+ │    │                   ├── b:53 = t.b:47
+ │    │                   └── k:50 != t.k:44
+ │    └── unique-checks-item: t(a,b)
+ │         └── project
+ │              ├── columns: a:68!null b:69!null
+ │              └── semi-join (hash)
+ │                   ├── columns: k:66!null r:67!null a:68!null b:69!null
+ │                   ├── values
+ │                   │    ├── columns: k:66!null r:67!null a:68!null b:69!null
+ │                   │    └── (2, 'east', 10, 100)
+ │                   ├── scan t
+ │                   │    ├── columns: t.k:60!null t.r:61!null t.a:62 t.b:63
+ │                   │    ├── check constraint expressions
+ │                   │    │    └── t.r:61 IN ('east', 'west')
+ │                   │    └── flags: disabled not visible index feature
+ │                   └── filters
+ │                        ├── a:68 = t.a:62
+ │                        ├── b:69 = t.b:63
+ │                        └── k:66 != t.k:60
+ └── fast-path-unique-checks
+      ├── fast-path-unique-checks-item: t(a)
+      │    └── select
+      │         ├── columns: t.k:22!null t.r:23!null t.a:24!null t.b:25
+      │         ├── scan t
+      │         │    ├── columns: t.k:22!null t.r:23!null t.a:24 t.b:25
+      │         │    ├── check constraint expressions
+      │         │    │    └── t.r:23 IN ('east', 'west')
+      │         │    └── flags: disabled not visible index feature
+      │         └── filters
+      │              └── t.a:24 = 10
+      ├── fast-path-unique-checks-item: t(b)
+      │    └── select
+      │         ├── columns: t.k:38!null t.r:39!null t.a:40 t.b:41!null
+      │         ├── scan t
+      │         │    ├── columns: t.k:38!null t.r:39!null t.a:40 t.b:41
+      │         │    ├── check constraint expressions
+      │         │    │    └── t.r:39 IN ('east', 'west')
+      │         │    └── flags: disabled not visible index feature
+      │         └── filters
+      │              └── t.b:41 = 100
+      ├── fast-path-unique-checks-item: t(r,a,b)
+      │    └── select
+      │         ├── columns: t.k:54!null t.r:55!null t.a:56!null t.b:57!null
+      │         ├── scan t
+      │         │    ├── columns: t.k:54!null t.r:55!null t.a:56 t.b:57
+      │         │    ├── check constraint expressions
+      │         │    │    └── t.r:55 IN ('east', 'west')
+      │         │    └── flags: disabled not visible index feature
+      │         └── filters
+      │              ├── t.r:55 = 'east'
+      │              ├── t.a:56 = 10
+      │              └── t.b:57 = 100
+      └── fast-path-unique-checks-item: t(a,b)
+           └── select
+                ├── columns: t.k:70!null t.r:71!null t.a:72!null t.b:73!null
+                ├── scan t
+                │    ├── columns: t.k:70!null t.r:71!null t.a:72 t.b:73
+                │    ├── check constraint expressions
+                │    │    └── t.r:71 IN ('east', 'west')
+                │    └── flags: disabled not visible index feature
+                └── filters
+                     ├── t.a:72 = 10
+                     └── t.b:73 = 100
+
+# Test building of multiple fast path checks with placeholders.
+assign-placeholders-build query-args=(2, 'east', 10, 100)
+INSERT INTO t (k, r, a, b) VALUES ($1, $2, $3, $4)
+----
+insert t
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => t.k:1
+ │    ├── column2:8 => t.r:2
+ │    ├── column3:9 => t.a:3
+ │    └── column4:10 => t.b:4
+ ├── check columns: check1:11
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: check1:11!null column1:7!null column2:8!null column3:9!null column4:10!null
+ │    ├── values
+ │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
+ │    │    └── (2, 'east', 10, 100)
+ │    └── projections
+ │         └── column2:8 IN ('east', 'west') [as=check1:11]
+ ├── unique-checks
+ │    ├── unique-checks-item: t(a)
+ │    │    └── project
+ │    │         ├── columns: a:20!null
+ │    │         └── semi-join (hash)
+ │    │              ├── columns: k:18!null r:19!null a:20!null b:21!null
+ │    │              ├── with-scan &1
+ │    │              │    ├── columns: k:18!null r:19!null a:20!null b:21!null
+ │    │              │    └── mapping:
+ │    │              │         ├──  column1:7 => k:18
+ │    │              │         ├──  column2:8 => r:19
+ │    │              │         ├──  column3:9 => a:20
+ │    │              │         └──  column4:10 => b:21
+ │    │              ├── scan t
+ │    │              │    ├── columns: t.k:12!null t.r:13!null t.a:14 t.b:15
+ │    │              │    ├── check constraint expressions
+ │    │              │    │    └── t.r:13 IN ('east', 'west')
+ │    │              │    └── flags: disabled not visible index feature
+ │    │              └── filters
+ │    │                   ├── a:20 = t.a:14
+ │    │                   └── k:18 != t.k:12
+ │    ├── unique-checks-item: t(b)
+ │    │    └── project
+ │    │         ├── columns: b:37!null
+ │    │         └── semi-join (hash)
+ │    │              ├── columns: k:34!null r:35!null a:36!null b:37!null
+ │    │              ├── with-scan &1
+ │    │              │    ├── columns: k:34!null r:35!null a:36!null b:37!null
+ │    │              │    └── mapping:
+ │    │              │         ├──  column1:7 => k:34
+ │    │              │         ├──  column2:8 => r:35
+ │    │              │         ├──  column3:9 => a:36
+ │    │              │         └──  column4:10 => b:37
+ │    │              ├── scan t
+ │    │              │    ├── columns: t.k:28!null t.r:29!null t.a:30 t.b:31
+ │    │              │    ├── check constraint expressions
+ │    │              │    │    └── t.r:29 IN ('east', 'west')
+ │    │              │    └── flags: disabled not visible index feature
+ │    │              └── filters
+ │    │                   ├── b:37 = t.b:31
+ │    │                   └── k:34 != t.k:28
+ │    ├── unique-checks-item: t(r,a,b)
+ │    │    └── project
+ │    │         ├── columns: r:51!null a:52!null b:53!null
+ │    │         └── semi-join (hash)
+ │    │              ├── columns: k:50!null r:51!null a:52!null b:53!null
+ │    │              ├── with-scan &1
+ │    │              │    ├── columns: k:50!null r:51!null a:52!null b:53!null
+ │    │              │    └── mapping:
+ │    │              │         ├──  column1:7 => k:50
+ │    │              │         ├──  column2:8 => r:51
+ │    │              │         ├──  column3:9 => a:52
+ │    │              │         └──  column4:10 => b:53
+ │    │              ├── scan t
+ │    │              │    ├── columns: t.k:44!null t.r:45!null t.a:46 t.b:47
+ │    │              │    ├── check constraint expressions
+ │    │              │    │    └── t.r:45 IN ('east', 'west')
+ │    │              │    └── flags: disabled not visible index feature
+ │    │              └── filters
+ │    │                   ├── r:51 = t.r:45
+ │    │                   ├── a:52 = t.a:46
+ │    │                   ├── b:53 = t.b:47
+ │    │                   └── k:50 != t.k:44
+ │    └── unique-checks-item: t(a,b)
+ │         └── project
+ │              ├── columns: a:68!null b:69!null
+ │              └── semi-join (hash)
+ │                   ├── columns: k:66!null r:67!null a:68!null b:69!null
+ │                   ├── with-scan &1
+ │                   │    ├── columns: k:66!null r:67!null a:68!null b:69!null
+ │                   │    └── mapping:
+ │                   │         ├──  column1:7 => k:66
+ │                   │         ├──  column2:8 => r:67
+ │                   │         ├──  column3:9 => a:68
+ │                   │         └──  column4:10 => b:69
+ │                   ├── scan t
+ │                   │    ├── columns: t.k:60!null t.r:61!null t.a:62 t.b:63
+ │                   │    ├── check constraint expressions
+ │                   │    │    └── t.r:61 IN ('east', 'west')
+ │                   │    └── flags: disabled not visible index feature
+ │                   └── filters
+ │                        ├── a:68 = t.a:62
+ │                        ├── b:69 = t.b:63
+ │                        └── k:66 != t.k:60
+ └── fast-path-unique-checks
+      ├── fast-path-unique-checks-item: t(a)
+      │    └── select
+      │         ├── columns: t.k:22!null t.r:23!null t.a:24!null t.b:25
+      │         ├── scan t
+      │         │    ├── columns: t.k:22!null t.r:23!null t.a:24 t.b:25
+      │         │    ├── check constraint expressions
+      │         │    │    └── t.r:23 IN ('east', 'west')
+      │         │    └── flags: disabled not visible index feature
+      │         └── filters
+      │              └── t.a:24 = 10
+      ├── fast-path-unique-checks-item: t(b)
+      │    └── select
+      │         ├── columns: t.k:38!null t.r:39!null t.a:40 t.b:41!null
+      │         ├── scan t
+      │         │    ├── columns: t.k:38!null t.r:39!null t.a:40 t.b:41
+      │         │    ├── check constraint expressions
+      │         │    │    └── t.r:39 IN ('east', 'west')
+      │         │    └── flags: disabled not visible index feature
+      │         └── filters
+      │              └── t.b:41 = 100
+      ├── fast-path-unique-checks-item: t(r,a,b)
+      │    └── select
+      │         ├── columns: t.k:54!null t.r:55!null t.a:56!null t.b:57!null
+      │         ├── scan t
+      │         │    ├── columns: t.k:54!null t.r:55!null t.a:56 t.b:57
+      │         │    ├── check constraint expressions
+      │         │    │    └── t.r:55 IN ('east', 'west')
+      │         │    └── flags: disabled not visible index feature
+      │         └── filters
+      │              ├── t.r:55 = 'east'
+      │              ├── t.a:56 = 10
+      │              └── t.b:57 = 100
+      └── fast-path-unique-checks-item: t(a,b)
+           └── select
+                ├── columns: t.k:70!null t.r:71!null t.a:72!null t.b:73!null
+                ├── scan t
+                │    ├── columns: t.k:70!null t.r:71!null t.a:72 t.b:73
+                │    ├── check constraint expressions
+                │    │    └── t.r:71 IN ('east', 'west')
+                │    └── flags: disabled not visible index feature
+                └── filters
+                     ├── t.a:72 = 10
+                     └── t.b:73 = 100
+
+exec-ddl
+CREATE TABLE parent (p INT PRIMARY KEY, other INT)
+----
+
+exec-ddl
+CREATE TABLE child (
+  c INT PRIMARY KEY,
+  p INT NOT NULL REFERENCES parent(p),
+  a INT,
+  b INT,
+  r STRING,
+  UNIQUE WITHOUT INDEX (a),
+  UNIQUE WITHOUT INDEX (b),
+  UNIQUE WITHOUT INDEX (r, a, b),
+  UNIQUE WITHOUT INDEX (a, b),
+  CHECK (r IN ('east', 'west')))
+----
+
+# Test fast path check building when there is a foreign key constraint.
+build
+INSERT INTO child VALUES (100, 1, 2, 3, 'east')
+----
+insert child
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => child.c:1
+ │    ├── column2:9 => child.p:2
+ │    ├── column3:10 => child.a:3
+ │    ├── column4:11 => child.b:4
+ │    └── column5:12 => child.r:5
+ ├── check columns: check1:13
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: check1:13!null column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
+ │    ├── values
+ │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
+ │    │    └── (100, 1, 2, 3, 'east')
+ │    └── projections
+ │         └── column5:12 IN ('east', 'west') [as=check1:13]
+ ├── unique-checks
+ │    ├── unique-checks-item: child(a)
+ │    │    └── project
+ │    │         ├── columns: a:23!null
+ │    │         └── semi-join (hash)
+ │    │              ├── columns: c:21!null p:22!null a:23!null b:24!null r:25!null
+ │    │              ├── values
+ │    │              │    ├── columns: c:21!null p:22!null a:23!null b:24!null r:25!null
+ │    │              │    └── (100, 1, 2, 3, 'east')
+ │    │              ├── scan child
+ │    │              │    ├── columns: child.c:14!null child.p:15!null child.a:16 child.b:17 child.r:18
+ │    │              │    └── flags: disabled not visible index feature
+ │    │              └── filters
+ │    │                   ├── a:23 = child.a:16
+ │    │                   └── c:21 != child.c:14
+ │    ├── unique-checks-item: child(b)
+ │    │    └── project
+ │    │         ├── columns: b:43!null
+ │    │         └── semi-join (hash)
+ │    │              ├── columns: c:40!null p:41!null a:42!null b:43!null r:44!null
+ │    │              ├── values
+ │    │              │    ├── columns: c:40!null p:41!null a:42!null b:43!null r:44!null
+ │    │              │    └── (100, 1, 2, 3, 'east')
+ │    │              ├── scan child
+ │    │              │    ├── columns: child.c:33!null child.p:34!null child.a:35 child.b:36 child.r:37
+ │    │              │    └── flags: disabled not visible index feature
+ │    │              └── filters
+ │    │                   ├── b:43 = child.b:36
+ │    │                   └── c:40 != child.c:33
+ │    ├── unique-checks-item: child(a,b,r)
+ │    │    └── project
+ │    │         ├── columns: a:61!null b:62!null r:63!null
+ │    │         └── semi-join (hash)
+ │    │              ├── columns: c:59!null p:60!null a:61!null b:62!null r:63!null
+ │    │              ├── values
+ │    │              │    ├── columns: c:59!null p:60!null a:61!null b:62!null r:63!null
+ │    │              │    └── (100, 1, 2, 3, 'east')
+ │    │              ├── scan child
+ │    │              │    ├── columns: child.c:52!null child.p:53!null child.a:54 child.b:55 child.r:56
+ │    │              │    └── flags: disabled not visible index feature
+ │    │              └── filters
+ │    │                   ├── a:61 = child.a:54
+ │    │                   ├── b:62 = child.b:55
+ │    │                   ├── r:63 = child.r:56
+ │    │                   └── c:59 != child.c:52
+ │    └── unique-checks-item: child(a,b)
+ │         └── project
+ │              ├── columns: a:80!null b:81!null
+ │              └── semi-join (hash)
+ │                   ├── columns: c:78!null p:79!null a:80!null b:81!null r:82!null
+ │                   ├── values
+ │                   │    ├── columns: c:78!null p:79!null a:80!null b:81!null r:82!null
+ │                   │    └── (100, 1, 2, 3, 'east')
+ │                   ├── scan child
+ │                   │    ├── columns: child.c:71!null child.p:72!null child.a:73 child.b:74 child.r:75
+ │                   │    └── flags: disabled not visible index feature
+ │                   └── filters
+ │                        ├── a:80 = child.a:73
+ │                        ├── b:81 = child.b:74
+ │                        └── c:78 != child.c:71
+ ├── fast-path-unique-checks
+ │    ├── fast-path-unique-checks-item: child(a)
+ │    │    └── select
+ │    │         ├── columns: child.c:26!null child.p:27!null child.a:28!null child.b:29 child.r:30
+ │    │         ├── scan child
+ │    │         │    ├── columns: child.c:26!null child.p:27!null child.a:28 child.b:29 child.r:30
+ │    │         │    └── flags: disabled not visible index feature
+ │    │         └── filters
+ │    │              └── child.a:28 = 2
+ │    ├── fast-path-unique-checks-item: child(b)
+ │    │    └── select
+ │    │         ├── columns: child.c:45!null child.p:46!null child.a:47 child.b:48!null child.r:49
+ │    │         ├── scan child
+ │    │         │    ├── columns: child.c:45!null child.p:46!null child.a:47 child.b:48 child.r:49
+ │    │         │    └── flags: disabled not visible index feature
+ │    │         └── filters
+ │    │              └── child.b:48 = 3
+ │    ├── fast-path-unique-checks-item: child(a,b,r)
+ │    │    └── select
+ │    │         ├── columns: child.c:64!null child.p:65!null child.a:66!null child.b:67!null child.r:68!null
+ │    │         ├── scan child
+ │    │         │    ├── columns: child.c:64!null child.p:65!null child.a:66 child.b:67 child.r:68
+ │    │         │    └── flags: disabled not visible index feature
+ │    │         └── filters
+ │    │              ├── child.a:66 = 2
+ │    │              ├── child.b:67 = 3
+ │    │              └── child.r:68 = 'east'
+ │    └── fast-path-unique-checks-item: child(a,b)
+ │         └── select
+ │              ├── columns: child.c:83!null child.p:84!null child.a:85!null child.b:86!null child.r:87
+ │              ├── scan child
+ │              │    ├── columns: child.c:83!null child.p:84!null child.a:85 child.b:86 child.r:87
+ │              │    └── flags: disabled not visible index feature
+ │              └── filters
+ │                   ├── child.a:85 = 2
+ │                   └── child.b:86 = 3
+ └── f-k-checks
+      └── f-k-checks-item: child(p) -> parent(p)
+           └── anti-join (hash)
+                ├── columns: p:90!null
+                ├── with-scan &1
+                │    ├── columns: p:90!null
+                │    └── mapping:
+                │         └──  column2:9 => p:90
+                ├── scan parent
+                │    ├── columns: parent.p:91!null
+                │    └── flags: disabled not visible index feature
+                └── filters
+                     └── p:90 = parent.p:91
+
+exec-ddl
+CREATE TABLE t1 (
+  k INT PRIMARY KEY,
+  r STRING NOT NULL,
+  a INT,
+  b INT AS (a % 9) STORED,
+  c INT,
+  INDEX (b, a),
+  INDEX (r, c),
+  UNIQUE WITHOUT INDEX (a),
+  UNIQUE WITHOUT INDEX (c),
+  CHECK (r IN ('east', 'west'))
+)
+----
+
+# Fast-path uniqueness checking is not allowed on volatile expressions, such as
+# random() because the evaluation used in the check relation may differ from the
+# value used in the insert row. The following should not display any fast path
+# checks.
+build
+INSERT INTO t1 (k, r, a, c) VALUES (2, 'east', (random() * 10)::INT, 20)
+----
+insert t1
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => t1.k:1
+ │    ├── column2:9 => t1.r:2
+ │    ├── column3:10 => t1.a:3
+ │    ├── b_comp:12 => t1.b:4
+ │    └── column4:11 => t1.c:5
+ ├── check columns: check1:13
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: check1:13!null column1:8!null column2:9!null column3:10 column4:11!null b_comp:12
+ │    ├── project
+ │    │    ├── columns: b_comp:12 column1:8!null column2:9!null column3:10 column4:11!null
+ │    │    ├── values
+ │    │    │    ├── columns: column1:8!null column2:9!null column3:10 column4:11!null
+ │    │    │    └── (2, 'east', (random() * 10.0)::INT8, 20)
+ │    │    └── projections
+ │    │         └── column3:10 % 9 [as=b_comp:12]
+ │    └── projections
+ │         └── column2:9 IN ('east', 'west') [as=check1:13]
+ └── unique-checks
+      ├── unique-checks-item: t1(a)
+      │    └── project
+      │         ├── columns: a:23
+      │         └── semi-join (hash)
+      │              ├── columns: k:21!null r:22!null a:23 b:24 c:25!null
+      │              ├── with-scan &1
+      │              │    ├── columns: k:21!null r:22!null a:23 b:24 c:25!null
+      │              │    └── mapping:
+      │              │         ├──  column1:8 => k:21
+      │              │         ├──  column2:9 => r:22
+      │              │         ├──  column3:10 => a:23
+      │              │         ├──  b_comp:12 => b:24
+      │              │         └──  column4:11 => c:25
+      │              ├── scan t1
+      │              │    ├── columns: t1.k:14!null t1.r:15!null t1.a:16 t1.b:17 t1.c:18
+      │              │    ├── check constraint expressions
+      │              │    │    └── t1.r:15 IN ('east', 'west')
+      │              │    ├── computed column expressions
+      │              │    │    └── t1.b:17
+      │              │    │         └── t1.a:16 % 9
+      │              │    └── flags: disabled not visible index feature
+      │              └── filters
+      │                   ├── a:23 = t1.a:16
+      │                   └── k:21 != t1.k:14
+      └── unique-checks-item: t1(c)
+           └── project
+                ├── columns: c:37!null
+                └── semi-join (hash)
+                     ├── columns: k:33!null r:34!null a:35 b:36 c:37!null
+                     ├── with-scan &1
+                     │    ├── columns: k:33!null r:34!null a:35 b:36 c:37!null
+                     │    └── mapping:
+                     │         ├──  column1:8 => k:33
+                     │         ├──  column2:9 => r:34
+                     │         ├──  column3:10 => a:35
+                     │         ├──  b_comp:12 => b:36
+                     │         └──  column4:11 => c:37
+                     ├── scan t1
+                     │    ├── columns: t1.k:26!null t1.r:27!null t1.a:28 t1.b:29 t1.c:30
+                     │    ├── check constraint expressions
+                     │    │    └── t1.r:27 IN ('east', 'west')
+                     │    ├── computed column expressions
+                     │    │    └── t1.b:29
+                     │    │         └── t1.a:28 % 9
+                     │    └── flags: disabled not visible index feature
+                     └── filters
+                          ├── c:37 = t1.c:30
+                          └── k:33 != t1.k:26

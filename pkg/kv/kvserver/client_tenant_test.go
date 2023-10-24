@@ -91,12 +91,12 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 		var aggregateStats enginepb.MVCCStats
 		var seen int
 		store.VisitReplicas(func(replica *kvserver.Replica) (wantMore bool) {
-			ri := replica.State(ctx)
-			if ri.TenantID != tenantID.ToUint64() {
+			id, _ := replica.TenantID() // now initialized
+			if id != tenantID {
 				return true
 			}
 			seen++
-			aggregateStats.Add(*ri.Stats)
+			aggregateStats.Add(replica.GetMVCCStats())
 			return true
 		})
 		ex := metric.MakePrometheusExporter()
@@ -127,6 +127,8 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 			"rangevalcount": aggregateStats.RangeValCount,
 			"intentbytes":   aggregateStats.IntentBytes,
 			"intentcount":   aggregateStats.IntentCount,
+			"lockbytes":     aggregateStats.LockBytes,
+			"lockcount":     aggregateStats.LockCount,
 			"sysbytes":      aggregateStats.SysBytes,
 			"syscount":      aggregateStats.SysCount,
 		}
@@ -187,7 +189,7 @@ func TestTenantRateLimiter(t *testing.T) {
 	})
 	ctx := context.Background()
 	tenantID := serverutils.TestTenantID()
-	ts, err := s.StartTenant(ctx, base.TestTenantArgs{
+	ts, err := s.TenantController().StartTenant(ctx, base.TestTenantArgs{
 		TenantID: tenantID,
 		TestingKnobs: base.TestingKnobs{
 			JobsTestingKnobs: &jobs.TestingKnobs{
@@ -383,7 +385,7 @@ func TestTenantCtx(t *testing.T) {
 		var tsql *gosql.DB
 		if sharedProcess {
 			var err error
-			_, tsql, err = s.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
+			_, tsql, err = s.TenantController().StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
 				TenantName: "test",
 				TenantID:   tenantID,
 			})

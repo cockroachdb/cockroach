@@ -57,4 +57,6 @@ func TestRegionLivenessTableMigration(t *testing.T) {
 
 	_, err := db.Exec("SELECT * FROM system.region_liveness")
 	assert.NoError(t, err, "system.region_liveness exists")
+
+	upgrades.ValidateSystemDatabaseSchemaVersionBumped(t, db, clusterversion.V23_2_RegionaLivenessTable)
 }

@@ -91,10 +91,10 @@ const maxCutoverTimeoutDefault = 5 * time.Minute
 var c2cPromMetrics = map[string]clusterstats.ClusterStat{
 	"LogicalMegabytes": {
 		LabelName: "node",
-		Query:     "replication_logical_bytes / 1e6"},
+		Query:     "physical_replication_logical_bytes / 1e6"},
 	"PhysicalMegabytes": {
 		LabelName: "node",
-		Query:     "replication_sst_bytes / 1e6"},
+		Query:     "physical_replication_sst_bytes / 1e6"},
 	"PhysicalReplicatedMegabytes": {
 		LabelName: "node",
 		Query:     "capacity_used / 1e6"},
@@ -330,11 +330,11 @@ func (kv replicateKV) checkRegionalConstraints(
 	t.L().Printf("Checking replica localities in destination side kv table, id %d and table prefix %s", kvTableID, tablePrefix)
 
 	distinctQuery := fmt.Sprintf(`
-SELECT 
+SELECT
   DISTINCT replica_localities
-FROM 
+FROM
   [SHOW CLUSTER RANGES]
-WHERE 
+WHERE
   start_key ~ '%s'
 `, tablePrefix)
 
@@ -418,11 +418,6 @@ type replicationSpec struct {
 	// maxLatency override the maxAcceptedLatencyDefault.
 	maxAcceptedLatency time.Duration
 
-	// TODO(msbutler): this knob only exists because the revision history
-	// fingerprint can encounter a gc ttl error for large fingerprints. Delete
-	// this knob once we lay a pts during fingerprinting.
-	nonRevisionHistoryFingerprint bool
-
 	// skipNodeDistributionCheck removes the requirement that multiple source and
 	// destination nodes must participate in the replication stream. This should
 	// be set if the roachtest runs on single node clusters or if the
@@ -484,7 +479,9 @@ func makeReplicationDriver(t test.Test, c cluster.Cluster, rs replicationSpec) *
 	}
 }
 
-func (rd *replicationDriver) setupC2C(ctx context.Context, t test.Test, c cluster.Cluster) {
+func (rd *replicationDriver) setupC2C(
+	ctx context.Context, t test.Test, c cluster.Cluster,
+) (cleanup func()) {
 	if len(rd.rs.multiregion.srcLocalities) != 0 {
 		nodeCount := rd.rs.srcNodes + rd.rs.dstNodes
 		localityCount := len(rd.rs.multiregion.srcLocalities) + len(rd.rs.multiregion.destLocalities)
@@ -513,7 +510,7 @@ func (rd *replicationDriver) setupC2C(ctx context.Context, t test.Test, c cluste
 	srcNode := srcCluster.SeededRandNode(rd.rng)
 	destNode := dstCluster.SeededRandNode(rd.rng)
 
-	addr, err := c.ExternalPGUrl(ctx, t.L(), srcNode, "")
+	addr, err := c.ExternalPGUrl(ctx, t.L(), srcNode, "" /* tenant */, 0 /* sqlInstance */)
 	t.L().Printf("Randomly chosen src node %d for gateway with address %s", srcNode, addr)
 	t.L().Printf("Randomly chosen dst node %d for gateway", destNode)
 
@@ -584,6 +581,27 @@ func (rd *replicationDriver) setupC2C(ctx context.Context, t test.Test, c cluste
 		}
 		require.NoError(rd.t, rd.c.StartGrafana(ctx, promLog, rd.setup.promCfg))
 		rd.t.L().Printf("Prom has started")
+	}
+	return func() {
+		backgroundCtx := context.Background()
+		if t.Failed() {
+			// Use a new context to grab the debug zips, as the parent context may
+			// have already been cancelled by the roachtest test infra.
+			debugCtx, cancel := context.WithTimeout(backgroundCtx, time.Minute*5)
+			defer cancel()
+			rd.fetchDebugZip(debugCtx, rd.setup.src.nodes, "source_debug.zip")
+			rd.fetchDebugZip(debugCtx, rd.setup.dst.nodes, "dest_debug.zip")
+		}
+		srcDB.Close()
+		destDB.Close()
+	}
+}
+
+func (rd *replicationDriver) fetchDebugZip(
+	ctx context.Context, nodes option.NodeListOption, filename string,
+) {
+	if err := rd.c.FetchDebugZip(ctx, rd.t.L(), filename, nodes); err != nil {
+		rd.t.L().Printf("Failed to download debug zip to %s from node %s", filename, nodes)
 	}
 }
 
@@ -734,21 +752,13 @@ func (rd *replicationDriver) compareTenantFingerprintsAtTimestamp(
 	rd.t.Status(fmt.Sprintf("comparing tenant fingerprints between start time %s and end time %s",
 		startTime, endTime))
 	fingerprintQuery := fmt.Sprintf(`
-SELECT *
-FROM crdb_internal.fingerprint(crdb_internal.tenant_span($1::INT), '%s'::DECIMAL, true)
-AS OF SYSTEM TIME '%s'`, startTime.AsOfSystemTime(), endTime.AsOfSystemTime())
-
-	if rd.rs.nonRevisionHistoryFingerprint {
-		fingerprintQuery = fmt.Sprintf(`
-SELECT *
-FROM crdb_internal.fingerprint(crdb_internal.tenant_span($1::INT), 0::DECIMAL, false)
-AS OF SYSTEM TIME '%s'`, endTime.AsOfSystemTime())
-	}
+SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER $1 WITH START TIMESTAMP = '%s'] AS OF SYSTEM TIME '%s'`,
+		startTime.AsOfSystemTime(), endTime.AsOfSystemTime())
 
 	var srcFingerprint int64
 	fingerPrintMonitor := rd.newMonitor(ctx)
 	fingerPrintMonitor.Go(func(ctx context.Context) error {
-		rd.setup.src.sysSQL.QueryRow(rd.t, fingerprintQuery, rd.setup.src.ID).Scan(&srcFingerprint)
+		rd.setup.src.sysSQL.QueryRow(rd.t, fingerprintQuery, rd.setup.src.name).Scan(&srcFingerprint)
 		rd.t.L().Printf("finished fingerprinting source tenant")
 		return nil
 	})
@@ -756,7 +766,7 @@ AS OF SYSTEM TIME '%s'`, endTime.AsOfSystemTime())
 	fingerPrintMonitor.Go(func(ctx context.Context) error {
 		// TODO(adityamaru): Measure and record fingerprinting throughput.
 		rd.metrics.fingerprintingStart = timeutil.Now()
-		rd.setup.dst.sysSQL.QueryRow(rd.t, fingerprintQuery, rd.setup.dst.ID).Scan(&destFingerprint)
+		rd.setup.dst.sysSQL.QueryRow(rd.t, fingerprintQuery, rd.setup.dst.name).Scan(&destFingerprint)
 		rd.metrics.fingerprintingEnd = timeutil.Now()
 		fingerprintingDuration := rd.metrics.fingerprintingEnd.Sub(rd.metrics.fingerprintingStart).String()
 		rd.t.L().Printf("fingerprinting the destination tenant took %s", fingerprintingDuration)
@@ -776,7 +786,9 @@ func (rd *replicationDriver) onFingerprintMismatch(
 ) {
 	rd.t.L().Printf("conducting table level fingerprints")
 	srcTenantConn := rd.c.Conn(ctx, rd.t.L(), 1, option.TenantName(rd.setup.src.name))
+	defer srcTenantConn.Close()
 	dstTenantConn := rd.c.Conn(ctx, rd.t.L(), rd.rs.srcNodes+1, option.TenantName(rd.setup.dst.name))
+	defer dstTenantConn.Close()
 	fingerprintBisectErr := replicationutils.InvestigateFingerprints(ctx, srcTenantConn, dstTenantConn,
 		startTime,
 		endTime)
@@ -810,7 +822,7 @@ func (rd *replicationDriver) backupAfterFingerprintMismatch(
 		return nil
 	}
 	prefix := "gs"
-	if rd.c.Spec().Cloud == spec.AWS {
+	if rd.c.Cloud() == spec.AWS {
 		prefix = "s3"
 	}
 	collection := fmt.Sprintf("%s://%s/c2c-fingerprint-mismatch/%s/%s/%s?AUTH=implicit", prefix, testutils.BackupTestingBucketLongTTL(), rd.rs.name, rd.c.Name(), tenantName)
@@ -912,7 +924,7 @@ func (rd *replicationDriver) main(ctx context.Context) {
 
 	latencyMonitor := rd.newMonitor(ctx)
 	latencyMonitor.Go(func(ctx context.Context) error {
-		return lv.pollLatency(ctx, rd.setup.dst.db, ingestionJobID, time.Second, workloadDoneCh)
+		return lv.pollLatencyUntilJobSucceeds(ctx, rd.setup.dst.db, ingestionJobID, time.Second, workloadDoneCh)
 	})
 	defer latencyMonitor.Wait()
 
@@ -957,7 +969,8 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	rd.metrics.cutoverEnd = newMetricSnapshot(metricSnapper, timeutil.Now())
 
 	rd.t.L().Printf("starting the destination tenant")
-	startInMemoryTenant(ctx, rd.t, rd.c, rd.setup.dst.name, rd.setup.dst.gatewayNodes)
+	conn := startInMemoryTenant(ctx, rd.t, rd.c, rd.setup.dst.name, rd.setup.dst.gatewayNodes)
+	conn.Close()
 
 	rd.metrics.export(rd.t, len(rd.setup.src.nodes))
 
@@ -993,7 +1006,7 @@ func c2cRegisterWrapper(
 		allZones = append(allZones, sp.multiregion.srcLocalities...)
 		allZones = append(allZones, sp.multiregion.destLocalities...)
 		allZones = append(allZones, sp.multiregion.workloadNodeZone)
-		clusterOps = append(clusterOps, spec.Zones(strings.Join(allZones, ",")))
+		clusterOps = append(clusterOps, spec.GCEZones(strings.Join(allZones, ",")))
 		clusterOps = append(clusterOps, spec.Geo())
 	}
 
@@ -1030,7 +1043,8 @@ func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster
 		suites:                    registry.Suites("nightly"),
 	}
 	rd := makeReplicationDriver(t, c, sp)
-	rd.setupC2C(ctx, t, c)
+	cleanup := rd.setupC2C(ctx, t, c)
+	defer cleanup()
 
 	// Spin up a monitor to capture any node deaths.
 	m := rd.newMonitor(ctx)
@@ -1113,20 +1127,19 @@ func registerClusterToCluster(r registry.Registry) {
 			// Write ~50GB total (~12.5GB per node).
 			workload:           replicateKV{readPercent: 0, initRows: 50000000, maxBlockBytes: 2048},
 			timeout:            1 * time.Hour,
-			additionalDuration: 1 * time.Minute,
+			additionalDuration: 5 * time.Minute,
 			cutover:            0,
 			clouds:             registry.AllExceptAWS,
 			suites:             registry.Suites("nightly"),
 		},
 		{
 			// Large workload to test our 23.2 perf goals.
-			name:                          "c2c/weekly/kv50",
-			benchmark:                     true,
-			srcNodes:                      8,
-			dstNodes:                      8,
-			cpus:                          8,
-			pdSize:                        1000,
-			nonRevisionHistoryFingerprint: true,
+			name:      "c2c/weekly/kv50",
+			benchmark: true,
+			srcNodes:  8,
+			dstNodes:  8,
+			cpus:      8,
+			pdSize:    1000,
 
 			workload: replicateKV{
 				// Write a ~2TB initial scan.
@@ -1165,7 +1178,7 @@ func registerClusterToCluster(r registry.Registry) {
 				destLocalities:   []string{"us-central1-b", "us-west1-b", "us-west1-b", "us-west1-b"},
 				workloadNodeZone: "us-west1-b",
 			},
-			clouds: registry.AllExceptAWS,
+			clouds: registry.OnlyGCE,
 			suites: registry.Suites("nightly"),
 		},
 		{
@@ -1227,7 +1240,8 @@ func registerClusterToCluster(r registry.Registry) {
 		c2cRegisterWrapper(r, sp,
 			func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				rd := makeReplicationDriver(t, c, sp)
-				rd.setupC2C(ctx, t, c)
+				cleanup := rd.setupC2C(ctx, t, c)
+				defer cleanup()
 				// Spin up a monitor to capture any node deaths.
 				m := rd.newMonitor(ctx)
 				m.Go(func(ctx context.Context) error {
@@ -1499,7 +1513,8 @@ func registerClusterReplicationResilience(r registry.Registry) {
 
 				rrd := makeReplShutdownDriver(t, c, rsp)
 				rrd.t.L().Printf("Planning to shut down node during %s phase", rrd.phase)
-				rrd.setupC2C(ctx, t, c)
+				cleanup := rrd.setupC2C(ctx, t, c)
+				defer cleanup()
 
 				shutdownSetupDone := make(chan struct{})
 
@@ -1609,7 +1624,8 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 	}
 	c2cRegisterWrapper(r, sp, func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		rd := makeReplicationDriver(t, c, sp)
-		rd.setupC2C(ctx, t, c)
+		cleanup := rd.setupC2C(ctx, t, c)
+		defer cleanup()
 
 		shutdownSetupDone := make(chan struct{})
 
@@ -1662,7 +1678,7 @@ func getIngestionJobID(t test.Test, dstSQL *sqlutils.SQLRunner, dstTenantName st
 	dstSQL.QueryRow(t, "SELECT info FROM system.tenants WHERE name=$1",
 		dstTenantName).Scan(&tenantInfoBytes)
 	require.NoError(t, protoutil.Unmarshal(tenantInfoBytes, &tenantInfo))
-	return int(tenantInfo.TenantReplicationJobID)
+	return int(tenantInfo.PhysicalReplicationConsumerJobID)
 }
 
 type streamIngesitonJobInfo struct {

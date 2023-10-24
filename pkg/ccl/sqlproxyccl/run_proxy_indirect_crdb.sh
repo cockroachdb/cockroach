@@ -55,9 +55,6 @@ mv "$TENANT"/ca-client-tenant.crt "$TENANT"/ca.crt
 cp "$TENANT"/ca.crt "$HOST"/ca-client-tenant.crt
 cat "$HOST"/ca.crt >> "$TENANT"/ca.crt
 
-echo Create client tenant root cert
-COCKROACH_CA_KEY=$TENANT/ca.key COCKROACH_CERTS_DIR=$TENANT $COCKROACH cert create-client root
-
 echo Start KV layer
 $COCKROACH start-single-node --listen-addr=localhost:$HOST_P --http-addr=:$HOST_HTTP_P --background --certs-dir="$HOST" --store="$HOST"/store
 
@@ -72,6 +69,6 @@ $COCKROACH mt start-proxy  --listen-addr=localhost:$PROXY_P --listen-cert=* --li
 
 echo "All files are in $BASE"
 echo "To connect to a specific tenant (123 for example):"
-echo "  $COCKROACH sql --url=\"postgresql://root:secret@127.0.0.1:$PROXY_P?sslmode=require&sslrootcert=a&options=--cluster%3Dtenant-cluster-123\""
+echo "  $COCKROACH sql --url=\"postgresql://root:secret@127.0.0.1:$PROXY_P?sslmode=require&options=--cluster=tenant-cluster-123\""
 echo "Press any key to shutdown all processes and cleanup."
 read -r

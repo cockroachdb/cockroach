@@ -81,8 +81,8 @@ var localityCfgs = map[string]roachpb.Locality{
 }
 
 var clusterVersionKeys = map[string]clusterversion.Key{
-	"23_1_Start":          clusterversion.V23_1Start,
-	"23_1_MVCCTombstones": clusterversion.V23_1_MVCCRangeTombstonesUnconditionallyEnabled,
+	"23_2_Start": clusterversion.V23_2Start,
+	"23_2":       clusterversion.V23_2,
 }
 
 type sqlDBKey struct {
@@ -179,7 +179,6 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 		params.ServerArgs.Knobs.Server = &server.TestingKnobs{
 			BinaryVersionOverride:          clusterversion.ByKey(beforeKey),
 			DisableAutomaticVersionUpgrade: make(chan struct{}),
-			BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
 		}
 	}
 
@@ -435,6 +434,7 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 	defer ds.cleanup(ctx, t)
 	datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 		execWithTagAndPausePoint := func(jobType jobspb.Type) string {
+			ds.noticeBuffer = nil
 			const user = "root"
 			sqlDB := ds.getSQLDB(t, lastCreatedCluster, user)
 			// First, run the schema change.
@@ -917,7 +917,7 @@ func handleKVRequest(
 			},
 			UseRangeTombstone: true,
 		}
-		if _, err := kv.SendWrapped(ctx, ds.firstNode[cluster].DistSenderI().(*kvcoord.DistSender), &dr); err != nil {
+		if _, err := kv.SendWrapped(ctx, ds.firstNode[cluster].SystemLayer().DistSenderI().(*kvcoord.DistSender), &dr); err != nil {
 			t.Fatal(err)
 		}
 	} else {

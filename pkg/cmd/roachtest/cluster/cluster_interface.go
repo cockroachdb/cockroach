@@ -69,8 +69,8 @@ type Cluster interface {
 
 	// SQL connection strings.
 
-	InternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string) ([]string, error)
-	ExternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string) ([]string, error)
+	InternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string, sqlInstance int) ([]string, error)
+	ExternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string, sqlInstance int) ([]string, error)
 
 	// SQL clients to nodes.
 
@@ -108,6 +108,7 @@ type Cluster interface {
 
 	Spec() spec.ClusterSpec
 	Name() string
+	Cloud() string
 	IsLocal() bool
 	// IsSecure returns true iff the cluster uses TLS.
 	IsSecure() bool
@@ -135,7 +136,7 @@ type Cluster interface {
 	) error
 
 	FetchTimeseriesData(ctx context.Context, l *logger.Logger) error
-	FetchDebugZip(ctx context.Context, l *logger.Logger, dest string) error
+	FetchDebugZip(ctx context.Context, l *logger.Logger, dest string, opts ...option.Option) error
 	RefetchCertsFromNode(ctx context.Context, node int) error
 
 	StartGrafana(ctx context.Context, l *logger.Logger, promCfg *prometheus.Config) error

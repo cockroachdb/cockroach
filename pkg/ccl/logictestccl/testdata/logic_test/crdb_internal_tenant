@@ -42,6 +42,7 @@ crdb_internal  cluster_transaction_statistics          table  node  NULL  NULL
 crdb_internal  cluster_transactions                    table  node  NULL  NULL
 crdb_internal  cluster_txn_execution_insights          table  node  NULL  NULL
 crdb_internal  create_function_statements              table  node  NULL  NULL
+crdb_internal  create_procedure_statements             table  node  NULL  NULL
 crdb_internal  create_schema_statements                table  node  NULL  NULL
 crdb_internal  create_statements                       table  node  NULL  NULL
 crdb_internal  create_type_statements                  table  node  NULL  NULL
@@ -192,7 +193,7 @@ ClusterID
 Organization
 Version
 Channel
-
+VirtualClusterName
 
 # The validity of the rows in this table are tested elsewhere; we merely assert the columns.
 query ITTTTTTTTTTTRTTIITTITT colnames
@@ -350,12 +351,12 @@ txn_id  txn_fingerprint_id  query  implicit_txn  session_id  start_time  end_tim
 query ITTI
 SELECT range_id, start_pretty, end_pretty, lease_holder FROM crdb_internal.ranges
 ----
-65  /Tenant/10  /Tenant/11  1
+68  /Tenant/10  /Tenant/11  1
 
 query ITT
 SELECT range_id, start_pretty, end_pretty FROM crdb_internal.ranges_no_leases
 ----
-65  /Tenant/10  /Tenant/11
+68  /Tenant/10  /Tenant/11
 
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
@@ -399,7 +400,7 @@ select crdb_internal.get_vmodule()
 query T
 select regexp_replace(regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', ''), '10000', '');
 ----
-23.1
+23.2
 
 query ITTT colnames,rowsort
 select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
@@ -489,7 +490,7 @@ select * from crdb_internal.gossip_alerts
 query T
 select regexp_replace(regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', ''), '10000', '');
 ----
-23.1
+23.2
 
 user root
 

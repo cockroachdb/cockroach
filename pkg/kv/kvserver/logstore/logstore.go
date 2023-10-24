@@ -38,7 +38,8 @@ import (
 	"go.etcd.io/raft/v3/raftpb"
 )
 
-var disableSyncRaftLog = settings.RegisterBoolSetting(
+// DisableSyncRaftLog disables raft log synchronization and can cause data loss.
+var DisableSyncRaftLog = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.raft_log.disable_synchronization_unsafe",
 	"disables synchronization of Raft log writes to persistent storage. "+
@@ -46,7 +47,8 @@ var disableSyncRaftLog = settings.RegisterBoolSetting(
 		"This not only disables fsync, but also disables flushing writes to the OS buffer. "+
 		"The setting is meant for internal testing only and SHOULD NOT be used in production.",
 	envutil.EnvOrDefaultBool("COCKROACH_DISABLE_RAFT_LOG_SYNCHRONIZATION_UNSAFE", false),
-	settings.WithName("kv.raft_log.synchronization.disabled"),
+	settings.WithName("kv.raft_log.synchronization.unsafe.disabled"),
+	settings.WithUnsafe,
 )
 
 var enableNonBlockingRaftLogSync = settings.RegisterBoolSetting(
@@ -232,7 +234,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	stats.PebbleBegin = timeutil.Now()
 	stats.PebbleBytes = int64(batch.Len())
 	wantsSync := len(m.Responses) > 0
-	willSync := wantsSync && !disableSyncRaftLog.Get(&s.Settings.SV)
+	willSync := wantsSync && !DisableSyncRaftLog.Get(&s.Settings.SV)
 	// Use the non-blocking log sync path if we are performing a log sync ...
 	nonBlockingSync := willSync &&
 		// and the cluster setting is enabled ...
@@ -444,7 +446,7 @@ func LoadTerm(
 	reader := eng.NewReadOnly(storage.StandardDurability)
 	defer reader.Close()
 
-	if err := raftlog.Visit(reader, rangeID, index, index+1, func(ent raftpb.Entry) error {
+	if err := raftlog.Visit(ctx, reader, rangeID, index, index+1, func(ent raftpb.Entry) error {
 		if found {
 			return errors.Errorf("found more than one entry in [%d,%d)", index, index+1)
 		}
@@ -576,7 +578,7 @@ func LoadEntries(
 
 	reader := eng.NewReadOnly(storage.StandardDurability)
 	defer reader.Close()
-	if err := raftlog.Visit(reader, rangeID, expectedIndex, hi, scanFunc); err != nil {
+	if err := raftlog.Visit(ctx, reader, rangeID, expectedIndex, hi, scanFunc); err != nil {
 		return nil, 0, 0, err
 	}
 	eCache.Add(rangeID, ents, false /* truncate */)
