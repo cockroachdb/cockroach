@@ -24,11 +24,11 @@
         "ami_id_arm64": "ami-09b23e84684bb7149",
         "ami_id_fips": "ami-09bfd307c31e4669c",
         "region": "ap-northeast-1",
-        "security_group": "sg-05ab4b547f9ab7d4d",
+        "security_group": "sg-0826710bcdbabf181",
         "subnets": {
-          "ap-northeast-1a": "subnet-01c12840a09b589dd",
-          "ap-northeast-1c": "subnet-0b2c542334bbfeec1",
-          "ap-northeast-1d": "subnet-075d8e5225b2f33de"
+          "ap-northeast-1a": "subnet-0f4e144c9c0bdfbdc",
+          "ap-northeast-1c": "subnet-0381dc085a8c253f4",
+          "ap-northeast-1d": "subnet-098fc81ccdf5a774b"
         }
       },
       {
@@ -36,12 +36,12 @@
         "ami_id_arm64": "ami-0f8536fc6ad2ba267",
         "ami_id_fips": "ami-0dd93e9ad24d01f62",
         "region": "ap-northeast-2",
-        "security_group": "sg-0830cc9735e5c8ba9",
+        "security_group": "sg-0696349cd5e2e6f9d",
         "subnets": {
-          "ap-northeast-2a": "subnet-09616ba053dcf01ae",
-          "ap-northeast-2b": "subnet-03ddfbab86c40cb20",
-          "ap-northeast-2c": "subnet-0a8311dd953f70ec3",
-          "ap-northeast-2d": "subnet-082bd8f4021a77da9"
+          "ap-northeast-2a": "subnet-0d396dd4f49dbfd07",
+          "ap-northeast-2b": "subnet-0d28774cc400979bd",
+          "ap-northeast-2c": "subnet-0a799a95ff0bf24b7",
+          "ap-northeast-2d": "subnet-089f233f6d2d562cc"
         }
       },
       {
@@ -49,11 +49,11 @@
         "ami_id_arm64": "ami-0b6581fde9e6e7779",
         "ami_id_fips": "ami-04ea778eedaf3a8df",
         "region": "ap-south-1",
-        "security_group": "sg-01efad44634ab8fe4",
+        "security_group": "sg-01f4b51a7c2e80f25",
         "subnets": {
-          "ap-south-1a": "subnet-095c3d3f8bf2ca848",
-          "ap-south-1b": "subnet-06b33291e4a3afda2",
-          "ap-south-1c": "subnet-035114dbfd9520a53"
+          "ap-south-1a": "subnet-0b06259b7e28ec743",
+          "ap-south-1b": "subnet-0169cb2d84e67c3ef",
+          "ap-south-1c": "subnet-08ea8f18dafa3ab47"
         }
       },
       {
@@ -61,11 +61,11 @@
         "ami_id_arm64": "ami-0977667a17a0fa88c",
         "ami_id_fips": "ami-0145aa2d8188220bc",
         "region": "ap-southeast-1",
-        "security_group": "sg-083edfd46fceb1253",
+        "security_group": "sg-08c17f232dc8d1eef",
         "subnets": {
-          "ap-southeast-1a": "subnet-0c65c145593aa5d03",
-          "ap-southeast-1b": "subnet-0223276834c21c554",
-          "ap-southeast-1c": "subnet-06367aac2c2bbf205"
+          "ap-southeast-1a": "subnet-0296a8a840e8dfaab",
+          "ap-southeast-1b": "subnet-04a0f6453e9fa8069",
+          "ap-southeast-1c": "subnet-00be10e84b5950ed5"
         }
       },
       {
@@ -73,11 +73,11 @@
         "ami_id_arm64": "ami-0c595b8bc24551ef4",
         "ami_id_fips": "ami-066f9bd76e75011be",
         "region": "ap-southeast-2",
-        "security_group": "sg-095d6c8fccf08e948",
+        "security_group": "sg-06167826e397062a5",
         "subnets": {
-          "ap-southeast-2a": "subnet-03decc6865bc74da5",
-          "ap-southeast-2b": "subnet-0c7c1188406b8c21b",
-          "ap-southeast-2c": "subnet-0bf4ff119b235638c"
+          "ap-southeast-2a": "subnet-03897ea33a4c99b5f",
+          "ap-southeast-2b": "subnet-0fdb98127be9fe703",
+          "ap-southeast-2c": "subnet-0bcacad83516c37bf"
         }
       },
       {
@@ -85,11 +85,11 @@
         "ami_id_arm64": "ami-01a786eb497a27d2a",
         "ami_id_fips": "ami-0713fd833b63915e3",
         "region": "ca-central-1",
-        "security_group": "sg-0dcf7eede3017b0aa",
+        "security_group": "sg-0d9555c72ae29a146",
         "subnets": {
-          "ca-central-1a": "subnet-00096e4d45fcd7cd5",
-          "ca-central-1b": "subnet-0c0e1cf25e564df91",
-          "ca-central-1d": "subnet-0e222d35b978eb76c"
+          "ca-central-1a": "subnet-02e58279abc77ef7d",
+          "ca-central-1b": "subnet-017a28ebadc9f939a",
+          "ca-central-1d": "subnet-01e21d223888707d0"
         }
       },
       {
@@ -97,11 +97,11 @@
         "ami_id_arm64": "ami-0479653c00e0a5e59",
         "ami_id_fips": "ami-02cc4114e1c012f9c",
         "region": "eu-central-1",
-        "security_group": "sg-0276f961a8324e3eb",
+        "security_group": "sg-0f0d0cbf8c476a6dd",
         "subnets": {
-          "eu-central-1a": "subnet-02684c5c3de4a9cad",
-          "eu-central-1b": "subnet-0d87f296184a906f7",
-          "eu-central-1c": "subnet-0bc52385bea055213"
+          "eu-central-1a": "subnet-03855a391ed8807a3",
+          "eu-central-1b": "subnet-0ee92d4a19427a5fd",
+          "eu-central-1c": "subnet-04ac53a4be605b8c1"
         }
       },
       {
@@ -109,11 +109,11 @@
         "ami_id_arm64": "ami-0d3407241b2b6ec62",
         "ami_id_fips": "ami-014603057f9da7d50",
         "region": "eu-west-1",
-        "security_group": "sg-0a087a28f17cfcbd8",
+        "security_group": "sg-0a35dca6bb42260f7",
         "subnets": {
-          "eu-west-1a": "subnet-0da087e986d8dadff",
-          "eu-west-1b": "subnet-0aceaf476f90b6649",
-          "eu-west-1c": "subnet-05d998c6fd257856e"
+          "eu-west-1a": "subnet-09aa96b00e8f54139",
+          "eu-west-1b": "subnet-06bb7b8a049526b8f",
+          "eu-west-1c": "subnet-0d151a9c9d5433ecd"
         }
       },
       {
@@ -121,11 +121,11 @@
         "ami_id_arm64": "ami-025db40ba9581d621",
         "ami_id_fips": "ami-0fcf0f89559d79e80",
         "region": "eu-west-2",
-        "security_group": "sg-00d75d0d2b71ac876",
+        "security_group": "sg-02fa4521661171f5f",
         "subnets": {
-          "eu-west-2a": "subnet-0124b2bb23beee340",
-          "eu-west-2b": "subnet-0c9509cfb4ee9f8f2",
-          "eu-west-2c": "subnet-055a2eeea9d5e7386"
+          "eu-west-2a": "subnet-048caa83138321697",
+          "eu-west-2b": "subnet-0d1608e228d29f05b",
+          "eu-west-2c": "subnet-08fddc3f57eda0491"
         }
       },
       {
@@ -133,11 +133,11 @@
         "ami_id_arm64": "ami-07461eab9cc80a86e",
         "ami_id_fips": "ami-03ecf0588cc1bd0f4",
         "region": "eu-west-3",
-        "security_group": "sg-0c763f12b1308c24d",
+        "security_group": "sg-03d5b961880930b19",
         "subnets": {
-          "eu-west-3a": "subnet-02d0a9af3b8e44023",
-          "eu-west-3b": "subnet-0f305009c9c68ad84",
-          "eu-west-3c": "subnet-02e7085c60820f35e"
+          "eu-west-3a": "subnet-01bbd3c74dfb48af2",
+          "eu-west-3b": "subnet-045cd5952bdb44362",
+          "eu-west-3c": "subnet-090cdeee39340ce02"
         }
       },
       {
@@ -145,11 +145,11 @@
         "ami_id_arm64": "ami-04c2ca7ffc29a0b58",
         "ami_id_fips": "ami-0977da93caf83799e",
         "region": "sa-east-1",
-        "security_group": "sg-030f43c863595e7b0",
+        "security_group": "sg-09b61c9e8e1dd2fa3",
         "subnets": {
-          "sa-east-1a": "subnet-021bd19df012184d7",
-          "sa-east-1b": "subnet-0c7694071842eb61b",
-          "sa-east-1c": "subnet-017058cce79c06633"
+          "sa-east-1a": "subnet-0787fad24f7715383",
+          "sa-east-1b": "subnet-056f171df21997d81",
+          "sa-east-1c": "subnet-040d0a3c2badd65ad"
         }
       },
       {
@@ -157,14 +157,14 @@
         "ami_id_arm64": "ami-016485166ec7fa705",
         "ami_id_fips": "ami-03cf7ddd346310b5f",
         "region": "us-east-1",
-        "security_group": "sg-0dd4865c73fd585c2",
+        "security_group": "sg-0dccf07e76e64eedf",
         "subnets": {
-          "us-east-1a": "subnet-0560d7062fb02e276",
-          "us-east-1b": "subnet-0bfa201907daab558",
-          "us-east-1c": "subnet-0f879ea6843a7c630",
-          "us-east-1d": "subnet-03eaf37f7018998c1",
-          "us-east-1e": "subnet-06d483faf560526a1",
-          "us-east-1f": "subnet-0b26d5a46d11af17c"
+          "us-east-1a": "subnet-0c5c01ec54d5293fa",
+          "us-east-1b": "subnet-0487cf4152063359d",
+          "us-east-1c": "subnet-0fd45895146de08e0",
+          "us-east-1d": "subnet-03e3ebf2db3d0685c",
+          "us-east-1e": "subnet-0fd112ce608982eac",
+          "us-east-1f": "subnet-0701695b5a7c69653"
         }
       },
       {
@@ -172,11 +172,11 @@
         "ami_id_arm64": "ami-05983a09f7dc1c18f",
         "ami_id_fips": "ami-08692707dfc6f8b64",
         "region": "us-east-2",
-        "security_group": "sg-04d72b57e29d671f1",
+        "security_group": "sg-0ed5094d512dbf3b4",
         "subnets": {
-          "us-east-2a": "subnet-0258dc9d1b6473d84",
-          "us-east-2b": "subnet-0e3d146e87ebc5a2c",
-          "us-east-2c": "subnet-0e71591c1fe06645e"
+          "us-east-2a": "subnet-036f4d8eb11a9c0aa",
+          "us-east-2b": "subnet-0c687c87e13cb995b",
+          "us-east-2c": "subnet-03fea3ba4bc8d864e"
         }
       },
       {
@@ -184,10 +184,10 @@
         "ami_id_arm64": "ami-0728ec0041b1d38ac",
         "ami_id_fips": "ami-026c3cf51388880d6",
         "region": "us-west-1",
-        "security_group": "sg-04d73ccef8fff27f2",
+        "security_group": "sg-048c0546ff28d84ce",
         "subnets": {
-          "us-west-1a": "subnet-0250e0ff075aa008e",
-          "us-west-1c": "subnet-098cbc8a194a7ed05"
+          "us-west-1a": "subnet-0b4314fc3cbfc53f4",
+          "us-west-1b": "subnet-023c0f148d8efcc23"
         }
       },
       {
@@ -195,12 +195,12 @@
         "ami_id_arm64": "ami-03fd0aa14bd102718",
         "ami_id_fips": "ami-0dc12dcaaa9dcf99d",
         "region": "us-west-2",
-        "security_group": "sg-091c4d21907a35150",
+        "security_group": "sg-0b3a14daeee6fb40d",
         "subnets": {
-          "us-west-2a": "subnet-067f0e23115a07de7",
-          "us-west-2b": "subnet-07f5ae40e74ae789c",
-          "us-west-2c": "subnet-02b83a44fefb4341d",
-          "us-west-2d": "subnet-0ad4e5f30ba9f5c0a"
+          "us-west-2a": "subnet-0744aac88dbed0f8d",
+          "us-west-2b": "subnet-05c0f376e14b10088",
+          "us-west-2c": "subnet-010bf6dee7d8a6927",
+          "us-west-2d": "subnet-0ea3102124d7ddc68"
         }
       }
     ]
