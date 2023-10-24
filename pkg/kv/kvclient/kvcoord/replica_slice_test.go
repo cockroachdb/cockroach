@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -182,7 +183,7 @@ func locality(t *testing.T, locStrs []string) roachpb.Locality {
 func info(t *testing.T, nid roachpb.NodeID, sid roachpb.StoreID, locStrs []string) ReplicaInfo {
 	return ReplicaInfo{
 		ReplicaDescriptor: desc(nid, sid),
-		Tiers:             locality(t, locStrs).Tiers,
+		Locality:          locality(t, locStrs),
 	}
 }
 
@@ -202,7 +203,8 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 		// only identified by their node. If multiple replicas are on different
 		// stores of the same node, the node only appears once in this list (as the
 		// ordering between replicas on the same node is not deterministic).
-		expOrdered []roachpb.NodeID
+		expOrdered      []roachpb.NodeID
+		disableLocality bool
 	}{
 		{
 			name:     "order by locality matching",
@@ -218,7 +220,24 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 			expOrdered: []roachpb.NodeID{1, 2, 4, 3},
 		},
 		{
-			name:     "order by latency",
+			name:     "order by latency only",
+			nodeID:   1,
+			locality: locality(t, []string{"country=us"}),
+			latencies: map[roachpb.NodeID]time.Duration{
+				2: time.Hour,
+				3: time.Minute,
+				4: time.Second,
+			},
+			slice: ReplicaSlice{
+				info(t, 2, 2, []string{"country=us"}),
+				info(t, 4, 4, []string{"country=us"}),
+				info(t, 4, 44, []string{"country=us"}),
+				info(t, 3, 3, []string{"country=us"}),
+			},
+			expOrdered: []roachpb.NodeID{4, 3, 2},
+		},
+		{
+			name:     "order by locality then latency",
 			nodeID:   1,
 			locality: locality(t, []string{"country=us", "region=west", "city=la"}),
 			latencies: map[roachpb.NodeID]time.Duration{
@@ -232,7 +251,25 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 				info(t, 4, 44, []string{"country=us", "region=east", "city=ny"}),
 				info(t, 3, 3, []string{"country=uk", "city=london"}),
 			},
-			expOrdered: []roachpb.NodeID{4, 3, 2},
+			expOrdered: []roachpb.NodeID{2, 4, 3},
+		},
+		{
+			name:     "disable locality setting",
+			nodeID:   1,
+			locality: locality(t, []string{"country=us", "region=west", "city=la"}),
+			latencies: map[roachpb.NodeID]time.Duration{
+				2: time.Hour,
+				3: time.Minute,
+				4: time.Second,
+			},
+			slice: ReplicaSlice{
+				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
+				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
+				info(t, 4, 44, []string{"country=us", "region=east", "city=ny"}),
+				info(t, 3, 3, []string{"country=uk", "city=london"}),
+			},
+			expOrdered:      []roachpb.NodeID{4, 3, 2},
+			disableLocality: true,
 		},
 		{
 			// Test that replicas on the local node sort first, regardless of factors
@@ -259,6 +296,11 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 	}
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
+			st := cluster.MakeTestingClusterSettings()
+			if test.disableLocality {
+				sortByLocalityFirst.Override(context.Background(), &st.SV, false)
+			}
+
 			var latencyFn LatencyFunc
 			if test.latencies != nil {
 				latencyFn = func(id roachpb.NodeID) (time.Duration, bool) {
@@ -268,7 +310,7 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 			}
 			// Randomize the input order, as it's not supposed to matter.
 			shuffle.Shuffle(test.slice)
-			test.slice.OptimizeReplicaOrder(test.nodeID, latencyFn, test.locality)
+			test.slice.OptimizeReplicaOrder(st, test.nodeID, latencyFn, test.locality)
 			var sortedNodes []roachpb.NodeID
 			sortedNodes = append(sortedNodes, test.slice[0].NodeID)
 			for i := 1; i < len(test.slice); i++ {
