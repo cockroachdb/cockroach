@@ -43,8 +43,12 @@ func TestDockerCSharp(t *testing.T) {
 	defer s.Close(t)
 
 	ctx := context.Background()
-	testDockerSuccess(ctx, t, "csharp", []string{"sh", "-c", "cd /mnt/data/csharp && dotnet run"})
-	testDockerFail(ctx, t, "csharp", []string{"sh", "-c", "cd /mnt/data/csharp && dotnet notacommand"})
+	t.Run("Success", func(t *testing.T) {
+		testDockerSuccess(ctx, t, "csharp", []string{"sh", "-c", "cd /mnt/data/csharp && dotnet run"})
+	})
+	t.Run("Fail", func(t *testing.T) {
+		testDockerFail(ctx, t, "csharp", []string{"sh", "-c", "cd /mnt/data/csharp && dotnet notacommand"})
+	})
 }
 
 func TestDockerJava(t *testing.T) {
@@ -52,8 +56,12 @@ func TestDockerJava(t *testing.T) {
 	defer s.Close(t)
 
 	ctx := context.Background()
-	testDockerSuccess(ctx, t, "java", []string{"sh", "-c", "cd /mnt/data/java && mvn -o test"})
-	testDockerFail(ctx, t, "java", []string{"sh", "-c", "cd /mnt/data/java && mvn -o foobar"})
+	t.Run("Success", func(t *testing.T) {
+		testDockerSuccess(ctx, t, "java", []string{"sh", "-c", "cd /mnt/data/java && mvn -o test"})
+	})
+	t.Run("Fail", func(t *testing.T) {
+		testDockerFail(ctx, t, "java", []string{"sh", "-c", "cd /mnt/data/java && mvn -o foobar"})
+	})
 }
 
 func TestDockerElixir(t *testing.T) {
@@ -63,8 +71,12 @@ func TestDockerElixir(t *testing.T) {
 	defer s.Close(t)
 
 	ctx := context.Background()
-	testDockerSuccess(ctx, t, "elixir", []string{"sh", "-c", "cd /mnt/data/elixir/test_crdb && mix local.hex --force && mix deps.get && psql -c 'CREATE DATABASE IF NOT EXISTS testdb' && mix test"})
-	testDockerFail(ctx, t, "elixir", []string{"sh", "-c", "cd /mnt/data/elixir/test_crdb && mix local.hex --force && mix deps.get && mix thisshouldfail"})
+	t.Run("Success", func(t *testing.T) {
+		testDockerSuccess(ctx, t, "elixir", []string{"sh", "-c", "cd /mnt/data/elixir/test_crdb && mix local.hex --force && mix deps.get && psql -c 'CREATE DATABASE IF NOT EXISTS testdb' && mix test"})
+	})
+	t.Run("Fail", func(t *testing.T) {
+		testDockerFail(ctx, t, "elixir", []string{"sh", "-c", "cd /mnt/data/elixir/test_crdb && mix local.hex --force && mix deps.get && mix thisshouldfail"})
+	})
 }
 
 func TestDockerNodeJS(t *testing.T) {
@@ -82,7 +94,9 @@ func TestDockerNodeJS(t *testing.T) {
 	`
 
 	ctx := context.Background()
-	testDockerSuccess(ctx, t, "node.js", []string{"/bin/sh", "-c", strings.Replace(nodeJS, "%v", "", 1)})
+	t.Run("Success", func(t *testing.T) {
+		testDockerSuccess(ctx, t, "node.js", []string{"/bin/sh", "-c", strings.Replace(nodeJS, "%v", "", 1)})
+	})
 	testDockerFail(ctx, t, "node.js", []string{"/bin/sh", "-c", strings.Replace(nodeJS, "%v", "fail", 1)})
 }
 
@@ -91,8 +105,12 @@ func TestDockerPHP(t *testing.T) {
 	defer s.Close(t)
 
 	ctx := context.Background()
-	testDockerSuccess(ctx, t, "php", []string{"sh", "-c", "cd /mnt/data/php && php test.php 3"})
-	testDockerFail(ctx, t, "php", []string{"sh", "-c", "cd /mnt/data/php && php test.php 1"})
+	t.Run("Success", func(t *testing.T) {
+		testDockerSuccess(ctx, t, "php", []string{"sh", "-c", "cd /mnt/data/php && php test.php 3"})
+	})
+	t.Run("Fail", func(t *testing.T) {
+		testDockerFail(ctx, t, "php", []string{"sh", "-c", "cd /mnt/data/php && php test.php 1"})
+	})
 }
 
 func TestDockerPSQL(t *testing.T) {
@@ -100,7 +118,9 @@ func TestDockerPSQL(t *testing.T) {
 	defer s.Close(t)
 
 	ctx := context.Background()
-	testDockerSuccess(ctx, t, "psql", []string{"/mnt/data/psql/test-psql.sh"})
+	t.Run("Success", func(t *testing.T) {
+		testDockerSuccess(ctx, t, "psql", []string{"/mnt/data/psql/test-psql.sh"})
+	})
 }
 
 func TestDockerPython(t *testing.T) {
@@ -108,8 +128,12 @@ func TestDockerPython(t *testing.T) {
 	defer s.Close(t)
 
 	ctx := context.Background()
-	testDockerSuccess(ctx, t, "python", []string{"sh", "-c", "cd /mnt/data/python && python test.py 3"})
-	testDockerFail(ctx, t, "python", []string{"sh", "-c", "cd /mnt/data/python && python test.py 2"})
+	t.Run("Success", func(t *testing.T) {
+		testDockerSuccess(ctx, t, "python", []string{"sh", "-c", "cd /mnt/data/python && python test.py 3"})
+	})
+	t.Run("Fail", func(t *testing.T) {
+		testDockerFail(ctx, t, "python", []string{"sh", "-c", "cd /mnt/data/python && python test.py 2"})
+	})
 }
 
 func TestDockerRuby(t *testing.T) {
@@ -117,6 +141,10 @@ func TestDockerRuby(t *testing.T) {
 	defer s.Close(t)
 
 	ctx := context.Background()
-	testDockerSuccess(ctx, t, "ruby", []string{"sh", "-c", "cd /mnt/data/ruby && ruby test.rb 3"})
-	testDockerFail(ctx, t, "ruby", []string{"sh", "-c", "cd /mnt/data/ruby && ruby test.rb 1"})
+	t.Run("Success", func(t *testing.T) {
+		testDockerSuccess(ctx, t, "ruby", []string{"sh", "-c", "cd /mnt/data/ruby && ruby test.rb 3"})
+	})
+	t.Run("Fail", func(t *testing.T) {
+		testDockerFail(ctx, t, "ruby", []string{"sh", "-c", "cd /mnt/data/ruby && ruby test.rb 1"})
+	})
 }
