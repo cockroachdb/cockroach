@@ -1354,7 +1354,15 @@ func mergeTrigger(
 		if err != nil {
 			return result.Result{}, err
 		}
-		if lhsHint.Merge(rhsHint, rec.GetMVCCStats().HasNoUserData(), merge.RightMVCCStats.HasNoUserData()) {
+		updated := false
+		leftEmpty, rightEmpty := rec.GetMVCCStats().HasNoUserData(), merge.RightMVCCStats.HasNoUserData()
+		if enableStickyGCHint.Get(&rec.ClusterSettings().SV) {
+			updated = lhsHint.Merge(rhsHint, leftEmpty, rightEmpty)
+		} else {
+			updated = lhsHint.MergeLatestRangeDeleteTimestamp(rhsHint, leftEmpty, rightEmpty)
+		}
+
+		if updated {
 			if err := lhsLoader.SetGCHint(ctx, batch, ms, lhsHint); err != nil {
 				return result.Result{}, err
 			}
