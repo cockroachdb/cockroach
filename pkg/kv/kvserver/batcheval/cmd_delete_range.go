@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -146,7 +147,10 @@ func DeleteRange(
 			}
 
 			updated := false
-			if enableStickyGCHint.Get(&cArgs.EvalCtx.ClusterSettings().SV) {
+			// TODO(pavelkalinnikov): deprecate the cluster setting and call
+			// ScheduleGCFor unconditionally when min supported version is 23.2.
+			if cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_2) ||
+				enableStickyGCHint.Get(&cArgs.EvalCtx.ClusterSettings().SV) {
 				// Add the timestamp to GCHint to guarantee that GC eventually clears it.
 				updated = hint.ScheduleGCFor(h.Timestamp)
 			}
