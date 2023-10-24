@@ -1074,6 +1074,77 @@ func identityMapInPlace(slice []int) []int {
 	return slice
 }
 
+// SpanPartitionReason is the reason why a span was assigned to a particular
+// node or SQL Instance ID.
+type SpanPartitionReason int32
+
+const (
+	// SpanPartitionReason_UNSPECIFIED is reported when the reason is unspecified.
+	SpanPartitionReason_UNSPECIFIED SpanPartitionReason = 0
+	// SpanPartitionReason_GATEWAY_TARGET_UNHEALTHY is reported when the target
+	// node is unhealthy and so we default to the gateway node.
+	SpanPartitionReason_GATEWAY_TARGET_UNHEALTHY SpanPartitionReason = 1
+	// SpanPartitionReason_GATEWAY_NO_HEALTHY_INSTANCES is reported when there are
+	// no healthy instances and so we default to the gateway node.
+	SpanPartitionReason_GATEWAY_NO_HEALTHY_INSTANCES SpanPartitionReason = 2
+	// SpanPartitionReason_GATEWAY_ON_ERROR is reported when there is an error and
+	// so we default to the gateway node.
+	SpanPartitionReason_GATEWAY_ON_ERROR SpanPartitionReason = 3
+	// SpanPartitionReason_TARGET_HEALTHY is reported when the target node is
+	// healthy.
+	SpanPartitionReason_TARGET_HEALTHY SpanPartitionReason = 4
+	// SpanPartitionReason_CLOSEST_LOCALITY_MATCH is reported when we picked an
+	// instance with the closest match to the provided locality filter.
+	SpanPartitionReason_CLOSEST_LOCALITY_MATCH SpanPartitionReason = 5
+	// SpanPartitionReason_GATEWAY_NO_LOCALITY_MATCH is reported when there is no
+	// match to the provided locality filter and so we default to the gateway.
+	SpanPartitionReason_GATEWAY_NO_LOCALITY_MATCH SpanPartitionReason = 6
+	// SpanPartitionReason_LOCALITY_AWARE_RANDOM is reported when there is no
+	// match to the provided locality filter and the gateway is not eligible. In
+	// this case we pick a random available instance.
+	SpanPartitionReason_LOCALITY_AWARE_RANDOM SpanPartitionReason = 7
+	// SpanPartitionReason_ROUND_ROBIN is reported when there is no locality info
+	// on any of the instances and so we default to a naive round-robin strategy.
+	SpanPartitionReason_ROUND_ROBIN SpanPartitionReason = 8
+
+	// SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY is reported when the
+	// target node retrieved via gossip is deemed unhealthy. In this case we
+	// default to the gateway node.
+	SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY SpanPartitionReason = 9
+	// SpanPartitionReason_GOSSIP_TARGET_HEALTHY is reported when the
+	// target node retrieved via gossip is deemed healthy.
+	SpanPartitionReason_GOSSIP_TARGET_HEALTHY SpanPartitionReason = 10
+)
+
+func (r SpanPartitionReason) String() string {
+	switch r {
+	case SpanPartitionReason_UNSPECIFIED:
+		return "unspecified"
+	case SpanPartitionReason_GATEWAY_TARGET_UNHEALTHY:
+		return "gateway-target-unhealthy"
+	case SpanPartitionReason_GATEWAY_NO_HEALTHY_INSTANCES:
+		return "gateway-no-healthy-instances"
+	case SpanPartitionReason_GATEWAY_ON_ERROR:
+		return "gateway-on-error"
+	case SpanPartitionReason_TARGET_HEALTHY:
+		return "target-healthy"
+	case SpanPartitionReason_CLOSEST_LOCALITY_MATCH:
+		return "closest-locality-match"
+	case SpanPartitionReason_GATEWAY_NO_LOCALITY_MATCH:
+		return "gateway-no-locality-match"
+	case SpanPartitionReason_LOCALITY_AWARE_RANDOM:
+		return "locality-aware-random"
+	case SpanPartitionReason_ROUND_ROBIN:
+		return "round-robin"
+	case SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY:
+		return "gossip-gateway-target-unhealthy"
+	case SpanPartitionReason_GOSSIP_TARGET_HEALTHY:
+		return "gossip-target-healthy"
+	default:
+		return "unknown"
+	}
+}
+
 // SpanPartition associates a subset of spans with a specific SQL instance,
 // chosen to have the most efficient access to those spans. In the single-tenant
 // case, the instance is the one running on the same node as the leaseholder for
@@ -1236,7 +1307,7 @@ func (dsp *DistSQLPlanner) partitionSpan(
 	span roachpb.Span,
 	partitions []SpanPartition,
 	nodeMap map[base.SQLInstanceID]int,
-	getSQLInstanceIDForKVNodeID func(roachpb.NodeID) base.SQLInstanceID,
+	getSQLInstanceIDForKVNodeID func(roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason),
 	ignoreMisplannedRanges *bool,
 ) (_ []SpanPartition, lastPartitionIdx int, _ error) {
 	it := planCtx.spanIter
@@ -1278,7 +1349,7 @@ func (dsp *DistSQLPlanner) partitionSpan(
 			)
 		}
 
-		sqlInstanceID := getSQLInstanceIDForKVNodeID(replDesc.NodeID)
+		sqlInstanceID, reason := getSQLInstanceIDForKVNodeID(replDesc.NodeID)
 		partitionIdx, inNodeMap := nodeMap[sqlInstanceID]
 		if !inNodeMap {
 			partitionIdx = len(partitions)
@@ -1294,6 +1365,10 @@ func (dsp *DistSQLPlanner) partitionSpan(
 			// Thus, we include the span into partition.Spans without trying to
 			// merge it with the last span.
 			partition.Spans = append(partition.Spans, span)
+			if log.ExpensiveLogEnabled(ctx, 2) {
+				log.VEventf(ctx, 2, "partition span: %s, instance ID: %d, reason: %s",
+					span, sqlInstanceID, reason)
+			}
 			break
 		}
 
@@ -1303,14 +1378,17 @@ func (dsp *DistSQLPlanner) partitionSpan(
 			endKey = rSpan.EndKey
 		}
 
+		partitionedSpan := roachpb.Span{Key: lastKey.AsRawKey(), EndKey: endKey.AsRawKey()}
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			log.VEventf(ctx, 2, "partition span: %s, instance ID: %d, reason: %s",
+				partitionedSpan.String(), sqlInstanceID, reason.String())
+		}
+
 		if lastSQLInstanceID == sqlInstanceID {
 			// Two consecutive ranges on the same node, merge the spans.
 			partition.Spans[len(partition.Spans)-1].EndKey = endKey.AsRawKey()
 		} else {
-			partition.Spans = append(partition.Spans, roachpb.Span{
-				Key:    lastKey.AsRawKey(),
-				EndKey: endKey.AsRawKey(),
-			})
+			partition.Spans = append(partition.Spans, partitionedSpan)
 		}
 
 		if !endKey.Less(rSpan.EndKey) {
@@ -1330,8 +1408,8 @@ func (dsp *DistSQLPlanner) deprecatedPartitionSpansSystem(
 	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
 ) (partitions []SpanPartition, ignoreMisplannedRanges bool, _ error) {
 	nodeMap := make(map[base.SQLInstanceID]int)
-	resolver := func(nodeID roachpb.NodeID) base.SQLInstanceID {
-		return dsp.healthySQLInstanceIDForKVNodeIDSystem(ctx, planCtx, nodeID)
+	resolver := func(nodeID roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason) {
+		return dsp.deprecatedHealthySQLInstanceIDForKVNodeIDSystem(ctx, planCtx, nodeID)
 	}
 	for _, span := range spans {
 		var err error
@@ -1386,28 +1464,30 @@ func (dsp *DistSQLPlanner) partitionSpans(
 	return partitions, ignoreMisplannedRanges, nil
 }
 
-// healthySQLInstanceIDForKVNodeIDSystem returns the SQL instance that
-// should handle the range with the given node ID when planning is
-// done on behalf of the system tenant. It ensures that the chosen SQL
-// instance is healthy and of the compatible DistSQL version.
-func (dsp *DistSQLPlanner) healthySQLInstanceIDForKVNodeIDSystem(
+// deprecatedHealthySQLInstanceIDForKVNodeIDSystem returns the SQL instance that
+// should handle the range with the given node ID when planning is done on
+// behalf of the system tenant. It ensures that the chosen SQL instance is
+// healthy and of the compatible DistSQL version.
+func (dsp *DistSQLPlanner) deprecatedHealthySQLInstanceIDForKVNodeIDSystem(
 	ctx context.Context, planCtx *PlanningCtx, nodeID roachpb.NodeID,
-) base.SQLInstanceID {
+) (base.SQLInstanceID, SpanPartitionReason) {
 	sqlInstanceID := base.SQLInstanceID(nodeID)
 	status := dsp.checkInstanceHealthAndVersionSystem(ctx, planCtx, sqlInstanceID)
 	// If the node is unhealthy or its DistSQL version is incompatible, use the
 	// gateway to process this span instead of the unhealthy host. An empty
 	// address indicates an unhealthy host.
+	reason := SpanPartitionReason_GOSSIP_TARGET_HEALTHY
 	if status != NodeOK {
-		log.Eventf(ctx, "not planning on node %d: %s", sqlInstanceID, status)
+		log.VEventf(ctx, 2, "not planning on node %d: %s", sqlInstanceID, status)
 		sqlInstanceID = dsp.gatewaySQLInstanceID
+		reason = SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY
 	}
-	return sqlInstanceID
+	return sqlInstanceID, reason
 }
 
-// healthySQLInstanceIDForKVNodeHostedInstanceResolver returns the SQL instance ID for
-// an instance that is hosted in the process of a KV node. Currently SQL
-// instances run in KV node processes have IDs fixed to be equal to the KV
+// healthySQLInstanceIDForKVNodeHostedInstanceResolver returns the SQL instance
+// ID for an instance that is hosted in the process of a KV node. Currently SQL
+// instances that run in KV node processes have IDs fixed to be equal to the KV
 // nodes' IDs, and all of the SQL instances for a given tenant are _either_ run
 // in this mixed mode or standalone, meaning if this server is in mixed mode, we
 // can safely assume every other server is as well, and thus has IDs matching
@@ -1415,12 +1495,16 @@ func (dsp *DistSQLPlanner) healthySQLInstanceIDForKVNodeIDSystem(
 //
 // If the given node is not healthy, the gateway node is returned.
 func (dsp *DistSQLPlanner) healthySQLInstanceIDForKVNodeHostedInstanceResolver(
-	ctx context.Context, planCtx *PlanningCtx,
-) func(nodeID roachpb.NodeID) base.SQLInstanceID {
+	ctx context.Context,
+) func(nodeID roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason) {
 	allHealthy, err := dsp.sqlAddressResolver.GetAllInstances(ctx)
 	if err != nil {
 		log.Warningf(ctx, "could not get all instances: %v", err)
-		return dsp.alwaysUseGateway
+		return dsp.alwaysUseGatewayWithReason(SpanPartitionReason_GATEWAY_ON_ERROR)
+	}
+
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.VEventf(ctx, 2, "healthy SQL instances available for distributed planning: %v", allHealthy)
 	}
 
 	healthyNodes := make(map[base.SQLInstanceID]struct{}, len(allHealthy))
@@ -1428,18 +1512,22 @@ func (dsp *DistSQLPlanner) healthySQLInstanceIDForKVNodeHostedInstanceResolver(
 		healthyNodes[n.InstanceID] = struct{}{}
 	}
 
-	return func(nodeID roachpb.NodeID) base.SQLInstanceID {
+	return func(nodeID roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason) {
 		sqlInstance := base.SQLInstanceID(nodeID)
 		if _, ok := healthyNodes[sqlInstance]; ok {
-			return sqlInstance
+			return sqlInstance, SpanPartitionReason_TARGET_HEALTHY
 		}
 		log.Warningf(ctx, "not planning on node %d", sqlInstance)
-		return dsp.gatewaySQLInstanceID
+		return dsp.gatewaySQLInstanceID, SpanPartitionReason_GATEWAY_TARGET_UNHEALTHY
 	}
 }
 
-func (dsp *DistSQLPlanner) alwaysUseGateway(roachpb.NodeID) base.SQLInstanceID {
-	return dsp.gatewaySQLInstanceID
+func (dsp *DistSQLPlanner) alwaysUseGatewayWithReason(
+	reason SpanPartitionReason,
+) func(nodeID roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason) {
+	return func(nodeID roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason) {
+		return dsp.gatewaySQLInstanceID, reason
+	}
 }
 
 var noInstancesMatchingLocalityFilterErr = errors.New(
@@ -1450,13 +1538,13 @@ var noInstancesMatchingLocalityFilterErr = errors.New(
 // for a provided KV node ID.
 func (dsp *DistSQLPlanner) makeInstanceResolver(
 	ctx context.Context, planCtx *PlanningCtx,
-) (func(roachpb.NodeID) base.SQLInstanceID, error) {
+) (func(roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason), error) {
 	_, mixedProcessMode := dsp.distSQLSrv.NodeID.OptionalNodeID()
 	locFilter := planCtx.localityFilter
 
-	var mixedProcessSameNodeResolver func(nodeID roachpb.NodeID) base.SQLInstanceID
+	var mixedProcessSameNodeResolver func(nodeID roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason)
 	if mixedProcessMode {
-		mixedProcessSameNodeResolver = dsp.healthySQLInstanceIDForKVNodeHostedInstanceResolver(ctx, planCtx)
+		mixedProcessSameNodeResolver = dsp.healthySQLInstanceIDForKVNodeHostedInstanceResolver(ctx)
 	}
 
 	if mixedProcessMode && locFilter.Empty() {
@@ -1477,7 +1565,7 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 			return nil, noInstancesMatchingLocalityFilterErr
 		}
 		log.Warningf(ctx, "no healthy sql instances available for planning, only using the gateway")
-		return dsp.alwaysUseGateway, nil
+		return dsp.alwaysUseGatewayWithReason(SpanPartitionReason_GATEWAY_NO_HEALTHY_INSTANCES), nil
 	}
 
 	rng, _ := randutil.NewPseudoRand()
@@ -1510,15 +1598,19 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 		gatewayIsEligible = true
 	}
 
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.VEventf(ctx, 2, "healthy SQL instances available for distributed planning: %v", instances)
+	}
+
 	// If we were able to determine the locality information for at least some
 	// instances, use the locality-aware resolver.
 	if instancesHaveLocality {
-		resolver := func(nodeID roachpb.NodeID) base.SQLInstanceID {
+		resolver := func(nodeID roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason) {
 			// Lookup the node localities to compare to the instance localities.
 			nodeDesc, err := dsp.nodeDescs.GetNodeDescriptor(nodeID)
 			if err != nil {
 				log.Eventf(ctx, "unable to get node descriptor for KV node %s", nodeID)
-				return dsp.gatewaySQLInstanceID
+				return dsp.gatewaySQLInstanceID, SpanPartitionReason_GATEWAY_ON_ERROR
 			}
 
 			// If we're in mixed-mode, check if the picked node already matches the
@@ -1537,16 +1629,16 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 			// TODO(dt): Pre-compute / cache this result, e.g. in the instance reader.
 			if closest, _ := ClosestInstances(instances,
 				nodeDesc.Locality); len(closest) > 0 {
-				return closest[rng.Intn(len(closest))]
+				return closest[rng.Intn(len(closest))], SpanPartitionReason_CLOSEST_LOCALITY_MATCH
 			}
 
 			// No instances had any locality tiers in common with the node locality so
 			// just return the gateway if it is eligible. If it isn't, just pick a
 			// random instance from the eligible instances.
 			if gatewayIsEligible {
-				return dsp.gatewaySQLInstanceID
+				return dsp.gatewaySQLInstanceID, SpanPartitionReason_GATEWAY_NO_LOCALITY_MATCH
 			}
-			return instances[rng.Intn(len(instances))].InstanceID
+			return instances[rng.Intn(len(instances))].InstanceID, SpanPartitionReason_LOCALITY_AWARE_RANDOM
 		}
 		return resolver, nil
 	}
@@ -1559,10 +1651,10 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 		instances[i], instances[j] = instances[j], instances[i]
 	})
 	var i int
-	resolver := func(roachpb.NodeID) base.SQLInstanceID {
+	resolver := func(roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason) {
 		id := instances[i%len(instances)].InstanceID
 		i++
-		return id
+		return id, SpanPartitionReason_ROUND_ROBIN
 	}
 	return resolver, nil
 }
@@ -1644,13 +1736,15 @@ func (dsp *DistSQLPlanner) getInstanceIDForScan(
 	}
 
 	if dsp.useGossipPlanning(ctx, planCtx) && planCtx.localityFilter.Empty() {
-		return dsp.healthySQLInstanceIDForKVNodeIDSystem(ctx, planCtx, replDesc.NodeID), nil
+		sqlInstanceID, _ := dsp.deprecatedHealthySQLInstanceIDForKVNodeIDSystem(ctx, planCtx, replDesc.NodeID)
+		return sqlInstanceID, nil
 	}
 	resolver, err := dsp.makeInstanceResolver(ctx, planCtx)
 	if err != nil {
 		return 0, err
 	}
-	return resolver(replDesc.NodeID), nil
+	sqlInstanceID, _ := resolver(replDesc.NodeID)
+	return sqlInstanceID, nil
 }
 
 func (dsp *DistSQLPlanner) useGossipPlanning(ctx context.Context, planCtx *PlanningCtx) bool {
