@@ -540,7 +540,7 @@ func (s *Storage) Insert(
 		s.metrics.WriteFailures.Inc(1)
 		return errors.Wrapf(err, "could not insert session %s", sid)
 	}
-	log.Infof(ctx, "inserted sqlliveness session %s", sid)
+	log.Infof(ctx, "inserted sqlliveness session %s with expiry %s", sid, expiration)
 	s.metrics.WriteSuccesses.Inc(1)
 	return nil
 }
