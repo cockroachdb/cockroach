@@ -3830,6 +3830,7 @@ func MVCCPredicateDeleteRange(
 			// current key we're about to delete.
 			iter.NextKeyIgnoringTime()
 		} else {
+
 			// This key does not match. Flush the run of matching keys,
 			// to prevent issuing tombstones on keys that do not match the predicates.
 			if err := flushDeleteKeys(); err != nil {
