@@ -3575,6 +3575,10 @@ func (m *sessionDataMutator) SetUnboundedParallelScans(val bool) {
 	m.data.UnboundedParallelScans = val
 }
 
+func (m *sessionDataMutator) SetOptimizerUseProvidedOrderingFix(val bool) {
+	m.data.OptimizerUseProvidedOrderingFix = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

@@ -5344,6 +5344,7 @@ optimizer_use_improved_split_disjunction_for_joins         on
 optimizer_use_limit_ordering_for_streaming_group_by        on
 optimizer_use_multicol_stats                               on
 optimizer_use_not_visible_indexes                          off
+optimizer_use_provided_ordering_fix                        on
 override_multi_region_zone_config                          off
 parallelize_multi_key_lookup_joins_enabled                 off
 password_encryption                                        scram-sha-256
