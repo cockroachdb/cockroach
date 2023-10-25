@@ -1546,3 +1546,19 @@ query III
 SELECT k3, v3, w3 FROM t108489_1 INNER LOOKUP JOIN t108489_3 ON i3 = k1 AND u3 = 1 WHERE k1 = 1;
 ----
 1 1 1
+
+# Regression test for incorrectly using OutOfOrder mode of the streamer with
+# multiple column families (#113013).
+
+statement ok
+CREATE TABLE l_113013 (r_id INT, l_id INT, PRIMARY KEY (r_id, l_id), INDEX l_id_idx(l_id));
+CREATE TABLE r_113013 (id INT PRIMARY KEY, c1 STRING NOT NULL, c2 STRING NOT NULL, c3 STRING NOT NULL, FAMILY f1 (id, c1), FAMILY f2 (c2), FAMILY f3 (c3));
+ALTER TABLE r_113013 SPLIT AT VALUES (2);
+INSERT INTO l_113013 VALUES (1, 1), (2, 1);
+INSERT INTO r_113013 VALUES (1, 'c1', 'c2', repeat('c3', 2000)), (2, 'c1', 'c2', 'c3');
+
+query II rowsort
+SELECT length(c1), length(c3) FROM l_113013 l INNER JOIN r_113013 r ON l.r_id = r.id WHERE l.l_id = 1;
+----
+2  4000
+2  2
