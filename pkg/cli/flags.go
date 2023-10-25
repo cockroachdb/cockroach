@@ -11,8 +11,10 @@
 package cli
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
@@ -988,7 +990,11 @@ func (w *tenantIDWrapper) Type() string {
 // tenantIDFromFile will look for the given file and read the full first
 // line of the file that should contain the `<TenantID>`.
 func tenantIDFromFile(
-	fileName string, watcherWaitCount *atomic.Uint32, watcherEventCount *atomic.Uint32,
+	ctx context.Context,
+	fileName string,
+	watcherWaitCount *atomic.Uint32,
+	watcherEventCount *atomic.Uint32,
+	watcherReadCount *atomic.Uint32,
 ) (roachpb.TenantID, error) {
 	// Start watching the file for changes as the typical case is that the file
 	// will not have yet the tenant id at startup.
@@ -997,21 +1003,49 @@ func tenantIDFromFile(
 		return roachpb.TenantID{}, errors.Wrapf(err, "creating new watcher")
 	}
 	defer func() { _ = watcher.Close() }()
-	if err = watcher.Add(fileName); err != nil {
+
+	// Watch the directory for changes instead of the file itself. This has a
+	// few benefits:
+	//   1. We can avoid needing to pre-create the file for the watcher to work.
+	//   2. We could atomically write the file via the rename(2) approach.
+	//      Watching on the file would cause the watcher to break for such an
+	//      operation.
+	if err = watcher.Add(filepath.Dir(fileName)); err != nil {
 		return roachpb.TenantID{}, errors.Wrapf(err, "adding %q to watcher", fileName)
 	}
 
-	for {
+	tryReadTenantID := func() (roachpb.TenantID, error) {
+		if watcherReadCount != nil {
+			watcherReadCount.Add(1)
+		}
 		headBuf, err := os.ReadFile(fileName)
-		if err != nil {
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return roachpb.TenantID{}, errors.Wrapf(err, "reading %q file", fileName)
 		}
-		if line, _, foundNewLine := strings.Cut(string(headBuf), "\n"); foundNewLine {
-			cfgTenantID, err := tenantID(line)
-			if err != nil {
-				return roachpb.TenantID{}, errors.Wrapf(err, "setting tenant id from line %q", line)
+		if err == nil {
+			// Ignore everything after the first newline character. If we
+			// don't see a newline, that means we have partial writes, so
+			// we'll continue waiting.
+			if line, _, foundNewLine := strings.Cut(string(headBuf), "\n"); foundNewLine {
+				cfgTenantID, err := tenantID(line)
+				if err != nil {
+					return roachpb.TenantID{}, errors.Wrapf(err, "setting tenant id from line %q", line)
+				}
+				return cfgTenantID, nil
 			}
-			return cfgTenantID, nil
+		}
+		// We either have partial writes here, or that the file does not exist.
+		return roachpb.TenantID{}, nil
+	}
+
+	// Perform an initial read.
+	if tid, err := tryReadTenantID(); err != nil || tid != (roachpb.TenantID{}) {
+		return tid, err
+	}
+
+	for {
+		if ctx.Err() != nil {
+			return roachpb.TenantID{}, ctx.Err()
 		}
 
 		// Wait for file notification.
@@ -1019,7 +1053,7 @@ func tenantIDFromFile(
 			watcherWaitCount.Add(1)
 		}
 		select {
-		case _, ok := <-watcher.Events:
+		case e, ok := <-watcher.Events:
 			if watcherEventCount != nil {
 				watcherEventCount.Add(1)
 			}
@@ -1027,12 +1061,27 @@ func tenantIDFromFile(
 				return roachpb.TenantID{},
 					errors.Newf("fsnotify.Watcher got Events channel closed while waiting on %q", fileName)
 			}
+
+			// Since we're watching the directory of the file, it is possible to
+			// get events for files that we don't care. Omit those events.
+			if e.Name != fileName {
+				continue
+			}
+
+			// Either we get an error, or we found the tenant ID.
+			if tid, err := tryReadTenantID(); err != nil || tid != (roachpb.TenantID{}) {
+				return tid, err
+			}
+
 		case err, ok := <-watcher.Errors:
 			if !ok {
 				return roachpb.TenantID{},
 					errors.Newf("fsnotify.Watcher got Errors channel closed while waiting on %q", fileName)
 			}
 			return roachpb.TenantID{}, errors.Wrapf(err, "watcher error while waiting on %q", fileName)
+
+		case <-ctx.Done():
+			return roachpb.TenantID{}, ctx.Err()
 		}
 	}
 }

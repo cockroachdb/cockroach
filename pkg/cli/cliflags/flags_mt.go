@@ -20,11 +20,10 @@ var (
 
 	TenantIDFile = FlagInfo{
 		Name: "tenant-id-file",
-		Description: `Allows sourcing the tenant id from a file. The tenant id will
-be expected to be by itself on the first line of the file. The file has to exist
-on startup but may be empty or have partial id without ending newline. In this 
-case the tenant server will block and wait for the tenant id to be fully written 
-to the file.`,
+		Description: `Allows sourcing the tenant id from a file. The tenant id
+will be expected to be by itself on the first line of the file. If the file does
+not exist, or if the tenant id is incomplete, the tenant server will block, and
+wait for the tenant id to be fully written to the file (with a newline character).`,
 	}
 
 	KVAddrs = FlagInfo{
