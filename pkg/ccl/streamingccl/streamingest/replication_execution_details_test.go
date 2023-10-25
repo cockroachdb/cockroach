@@ -45,7 +45,7 @@ func TestConstructFrontierExecutionDetailFile(t *testing.T) {
 	clearTimestamps := func(executionDetails []frontierExecutionDetails) []frontierExecutionDetails {
 		res := make([]frontierExecutionDetails, len(executionDetails))
 		for i, ed := range executionDetails {
-			ed.frontierTS = ""
+			ed.frontierTS = hlc.Timestamp{}
 			ed.behindBy = ""
 			res[i] = ed
 		}

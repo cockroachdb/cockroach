@@ -35,7 +35,7 @@ type frontierExecutionDetails struct {
 	srcInstanceID  base.SQLInstanceID
 	destInstanceID base.SQLInstanceID
 	span           string
-	frontierTS     string
+	frontierTS     hlc.Timestamp
 	behindBy       redact.SafeString
 }
 
@@ -47,6 +47,9 @@ type frontierExecutionDetails struct {
 // initial partitioned set of spans. To account for this, for each span in the
 // initial partition set we want to output all the intersecting sub-spans in the
 // frontier along with their timestamps.
+//
+// TODO (msbutler): consider pushing frontier construction to the caller, so we
+// don't have two functions with long names.
 func constructSpanFrontierExecutionDetails(
 	partitionSpecs execinfrapb.StreamIngestionPartitionSpecs,
 	frontierSpans execinfrapb.FrontierEntries,
@@ -60,7 +63,12 @@ func constructSpanFrontierExecutionDetails(
 			return nil, err
 		}
 	}
+	return constructSpanFrontierExecutionDetailsWithFrontier(partitionSpecs, f), nil
+}
 
+func constructSpanFrontierExecutionDetailsWithFrontier(
+	partitionSpecs execinfrapb.StreamIngestionPartitionSpecs, f *span.Frontier,
+) []frontierExecutionDetails {
 	now := timeutil.Now()
 	res := make([]frontierExecutionDetails, 0)
 	for _, spec := range partitionSpecs.Specs {
@@ -70,7 +78,7 @@ func constructSpanFrontierExecutionDetails(
 					srcInstanceID:  spec.SrcInstanceID,
 					destInstanceID: spec.DestInstanceID,
 					span:           r.String(),
-					frontierTS:     timestamp.GoTime().String(),
+					frontierTS:     timestamp,
 					behindBy:       humanizeutil.Duration(now.Sub(timestamp.GoTime())),
 				})
 				return span.ContinueMatch
@@ -89,7 +97,7 @@ func constructSpanFrontierExecutionDetails(
 		})
 	}
 
-	return res, nil
+	return res
 }
 
 // generateSpanFrontierExecutionDetailFile generates and writes a file to the
@@ -151,10 +159,10 @@ func generateSpanFrontierExecutionDetailFile(
 		for _, ed := range executionDetails {
 			if skipBehindBy {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
-					ed.srcInstanceID, ed.destInstanceID, ed.span, ed.frontierTS)
+					ed.srcInstanceID, ed.destInstanceID, ed.span, ed.frontierTS.GoTime())
 			} else {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-					ed.srcInstanceID, ed.destInstanceID, ed.span, ed.frontierTS, ed.behindBy)
+					ed.srcInstanceID, ed.destInstanceID, ed.span, ed.frontierTS.GoTime(), ed.behindBy)
 			}
 		}
 
@@ -164,6 +172,19 @@ func generateSpanFrontierExecutionDetailFile(
 		}
 		return jobs.WriteExecutionDetailFile(ctx, filename, sb.Bytes(), txn, ingestionJobID, cv)
 	})
+}
+
+func repackagePartitionSpecs(
+	streamIngestionSpecs map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
+) execinfrapb.StreamIngestionPartitionSpecs {
+	specs := make([]*execinfrapb.StreamIngestionPartitionSpec, 0)
+	partitionSpecs := execinfrapb.StreamIngestionPartitionSpecs{Specs: specs}
+	for _, d := range streamIngestionSpecs {
+		for _, partitionSpec := range d.PartitionSpecs {
+			partitionSpecs.Specs = append(partitionSpecs.Specs, &partitionSpec)
+		}
+	}
+	return partitionSpecs
 }
 
 // persistStreamIngestionPartitionSpecs persists all
@@ -177,22 +198,18 @@ func persistStreamIngestionPartitionSpecs(
 	streamIngestionSpecs map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
 	cv clusterversion.Handle,
 ) error {
-	err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		specs := make([]*execinfrapb.StreamIngestionPartitionSpec, 0)
-		partitionSpecs := execinfrapb.StreamIngestionPartitionSpecs{Specs: specs}
-		for _, d := range streamIngestionSpecs {
-			for _, partitionSpec := range d.PartitionSpecs {
-				partitionSpecs.Specs = append(partitionSpecs.Specs, &partitionSpec)
-			}
-		}
-		specBytes, err := protoutil.Marshal(&partitionSpecs)
-		if err != nil {
-			return err
-		}
+	partitionSpecs := repackagePartitionSpecs(streamIngestionSpecs)
+	specBytes, err := protoutil.Marshal(&partitionSpecs)
+	if err != nil {
+		return err
+	}
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return jobs.WriteChunkedFileToJobInfo(ctx, replicationPartitionInfoFilename, specBytes, txn, ingestionJobID, cv)
-	})
+	}); err != nil {
+		return err
+	}
 	if knobs := execCfg.StreamingTestingKnobs; knobs != nil && knobs.AfterPersistingPartitionSpecs != nil {
 		knobs.AfterPersistingPartitionSpecs()
 	}
-	return err
+	return nil
 }
