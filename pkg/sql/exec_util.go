@@ -3636,6 +3636,10 @@ func (m *sessionDataMutator) SetStreamerEnabled(val bool) {
 	m.data.StreamerEnabled = val
 }
 
+func (m *sessionDataMutator) SetStreamerAlwaysMaintainOrdering(val bool) {
+	m.data.StreamerAlwaysMaintainOrdering = val
+}
+
 func (m *sessionDataMutator) SetMultipleActivePortalsEnabled(val bool) {
 	m.data.MultipleActivePortalsEnabled = val
 }
