@@ -149,6 +149,7 @@ sql_safe_updates                                           off
 ssl                                                        on
 standard_conforming_strings                                on
 statement_timeout                                          0
+streamer_always_maintain_ordering                          off
 streamer_enabled                                           on
 strict_ddl_atomicity                                       off
 stub_catalog_tables                                        on
