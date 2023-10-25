@@ -2797,6 +2797,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`streamer_always_maintain_ordering`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`streamer_always_maintain_ordering`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("streamer_always_maintain_ordering", s)
+			if err != nil {
+				return err
+			}
+			m.SetStreamerAlwaysMaintainOrdering(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().StreamerAlwaysMaintainOrdering), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
 	`multiple_active_portals_enabled`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`multiple_active_portals_enabled`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
