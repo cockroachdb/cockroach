@@ -130,6 +130,11 @@ func startDistIngestion(
 		func() time.Duration { return streamingccl.ReplanFrequency.Get(execCtx.ExecCfg().SV()) },
 	)
 
+	laggingNodeStopper := make(chan struct{})
+	laggingNodeDetector := func(ctx context.Context) error {
+		return checkLaggingNodesLoop(ctx, execCtx.ExecCfg(), ingestionJob.ID(), laggingNodeStopper)
+	}
+
 	tracingAggCh := make(chan *execinfrapb.TracingAggregatorEvents)
 	tracingAggLoop := func(ctx context.Context) error {
 		for agg := range tracingAggCh {
@@ -167,6 +172,7 @@ func startDistIngestion(
 			stopReplanner()
 			close(tracingAggCh)
 			close(spanConfigIngestStopper)
+			close(laggingNodeStopper)
 		}()
 		ctx = logtags.AddTag(ctx, "stream-ingest-distsql", nil)
 
@@ -221,7 +227,7 @@ func startDistIngestion(
 		return err
 	}
 
-	err = ctxgroup.GoAndWait(ctx, execInitialPlan, replanner, tracingAggLoop, streamSpanConfigs)
+	err = ctxgroup.GoAndWait(ctx, execInitialPlan, replanner, laggingNodeDetector, tracingAggLoop, streamSpanConfigs)
 	if errors.Is(err, sql.ErrPlanChanged) {
 		execCtx.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplanCount.Inc(1)
 	}

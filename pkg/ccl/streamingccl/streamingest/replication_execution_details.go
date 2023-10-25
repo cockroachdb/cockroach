@@ -34,7 +34,7 @@ type frontierExecutionDetails struct {
 	srcInstanceID  base.SQLInstanceID
 	destInstanceID base.SQLInstanceID
 	span           string
-	frontierTS     string
+	frontierTS     hlc.Timestamp
 	behindBy       redact.SafeString
 }
 
@@ -69,7 +69,7 @@ func constructSpanFrontierExecutionDetails(
 					srcInstanceID:  spec.SrcInstanceID,
 					destInstanceID: spec.DestInstanceID,
 					span:           r.String(),
-					frontierTS:     timestamp.GoTime().String(),
+					frontierTS:     timestamp,
 					behindBy:       humanizeutil.Duration(now.Sub(timestamp.GoTime())),
 				})
 				return span.ContinueMatch
@@ -91,6 +91,35 @@ func constructSpanFrontierExecutionDetails(
 	return res, nil
 }
 
+func getExecutionDetails(
+	ctx context.Context, txn isql.Txn, ingestionJobID jobspb.JobID,
+) ([]frontierExecutionDetails, error) {
+	// Read the StreamIngestionPartitionSpecs to get a mapping from spans to
+	// their source and destination SQL instance IDs.
+	specs, err := jobs.ReadChunkedFileToJobInfo(ctx, replicationPartitionInfoFilename, txn, ingestionJobID)
+	if err != nil {
+		return nil, err
+	}
+
+	var partitionSpecs execinfrapb.StreamIngestionPartitionSpecs
+	if err := protoutil.Unmarshal(specs, &partitionSpecs); err != nil {
+		return nil, err
+	}
+
+	// Now, read the latest snapshot of the frontier that tells us what
+	// timestamp each span has been replicated up to.
+	frontierEntries, err := jobs.ReadChunkedFileToJobInfo(ctx, frontierEntriesFilename, txn, ingestionJobID)
+	if err != nil {
+		return nil, err
+	}
+
+	var frontierSpans execinfrapb.FrontierEntries
+	if err := protoutil.Unmarshal(frontierEntries, &frontierSpans); err != nil {
+		return nil, err
+	}
+	return constructSpanFrontierExecutionDetails(partitionSpecs, frontierSpans)
+}
+
 // generateSpanFrontierExecutionDetailFile generates and writes a file to the
 // job_info table that captures the mapping from:
 //
@@ -109,31 +138,7 @@ func generateSpanFrontierExecutionDetailFile(
 	return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		var sb bytes.Buffer
 		w := tabwriter.NewWriter(&sb, 0, 0, 1, ' ', tabwriter.TabIndent)
-
-		// Read the StreamIngestionPartitionSpecs to get a mapping from spans to
-		// their source and destination SQL instance IDs.
-		specs, err := jobs.ReadChunkedFileToJobInfo(ctx, replicationPartitionInfoFilename, txn, ingestionJobID)
-		if err != nil {
-			return err
-		}
-
-		var partitionSpecs execinfrapb.StreamIngestionPartitionSpecs
-		if err := protoutil.Unmarshal(specs, &partitionSpecs); err != nil {
-			return err
-		}
-
-		// Now, read the latest snapshot of the frontier that tells us what
-		// timestamp each span has been replicated up to.
-		frontierEntries, err := jobs.ReadChunkedFileToJobInfo(ctx, frontierEntriesFilename, txn, ingestionJobID)
-		if err != nil {
-			return err
-		}
-
-		var frontierSpans execinfrapb.FrontierEntries
-		if err := protoutil.Unmarshal(frontierEntries, &frontierSpans); err != nil {
-			return err
-		}
-		executionDetails, err := constructSpanFrontierExecutionDetails(partitionSpecs, frontierSpans)
+		executionDetails, err := getExecutionDetails(ctx, txn, ingestionJobID)
 		if err != nil {
 			return err
 		}
@@ -146,10 +151,10 @@ func generateSpanFrontierExecutionDetailFile(
 		for _, ed := range executionDetails {
 			if skipBehindBy {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
-					ed.srcInstanceID, ed.destInstanceID, ed.span, ed.frontierTS)
+					ed.srcInstanceID, ed.destInstanceID, ed.span, ed.frontierTS.GoTime())
 			} else {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-					ed.srcInstanceID, ed.destInstanceID, ed.span, ed.frontierTS, ed.behindBy)
+					ed.srcInstanceID, ed.destInstanceID, ed.span, ed.frontierTS.GoTime(), ed.behindBy)
 			}
 		}
 

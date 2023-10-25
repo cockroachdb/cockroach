@@ -99,6 +99,15 @@ var ReplanFrequency = settings.RegisterDurationSetting(
 	settings.WithName("physical_replication.consumer.replan_flow_frequency"),
 )
 
+var InterNodeLag = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"stream_replication.inter_node_lag",
+	"the maximum difference in lag tolerated across two nodes",
+	10*time.Minute,
+	settings.PositiveDuration,
+	settings.WithName("physical_replication.consumer.inter_node_lage"),
+)
+
 // DumpFrontierEntries controls the frequency at which we persist the entries in
 // the frontier to the `system.job_info` table.
 //
