@@ -500,8 +500,8 @@ func runStartInternal(
 	// Check the --tenant-id-file flag.
 	if fl := cliflagcfg.FlagSetForCmd(cmd).Lookup(cliflags.TenantIDFile.Name); fl != nil && fl.Changed {
 		fileName := fl.Value.String()
-		serverCfg.DelayedSetTenantID = func() (roachpb.TenantID, error) {
-			return tenantIDFromFile(fileName, nil, nil)
+		serverCfg.DelayedSetTenantID = func(ctx context.Context) (roachpb.TenantID, error) {
+			return tenantIDFromFile(ctx, fileName, nil, nil, nil)
 		}
 	}
 

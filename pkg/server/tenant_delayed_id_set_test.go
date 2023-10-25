@@ -64,7 +64,7 @@ func TestStartTenantWithDelayedID(t *testing.T) {
 	listenerReady.Add(1)
 
 	var timeTenantIDSet time.Time
-	sqlCfg.DelayedSetTenantID = func() (roachpb.TenantID, error) {
+	sqlCfg.DelayedSetTenantID = func(ctx context.Context) (roachpb.TenantID, error) {
 		// Unblock the connect code bellow, so it can try to connect.
 		listenerReady.Done()
 		// Wait until getting a go ahead with setting the tenant id.
