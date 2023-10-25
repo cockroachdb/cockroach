@@ -79,6 +79,7 @@ func runMultiTenantUpgrade(
 	// Update this map with every new release.
 	versionToMinSupportedVersion := map[string]string{
 		"23.2": "23.1",
+		"24.1": "23.1",
 	}
 	curBinaryMajorAndMinorVersion := getMajorAndMinorVersionOnly(v)
 	currentBinaryMinSupportedVersion, ok := versionToMinSupportedVersion[curBinaryMajorAndMinorVersion]
