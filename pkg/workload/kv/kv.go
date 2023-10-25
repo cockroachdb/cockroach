@@ -96,6 +96,7 @@ type kv struct {
 	keySize                              int
 	insertCount                          int
 	useBackgroundTxnQoS                  bool
+	followerReadPercent                  int
 }
 
 func init() {
@@ -181,6 +182,8 @@ var kvMeta = workload.Meta{
 			`Delay before sfu write transaction commits or aborts`)
 		g.flags.BoolVar(&g.useBackgroundTxnQoS, `background-qos`, false,
 			`Set default_transaction_quality_of_service session variable to "background".`)
+		g.flags.IntVar(&g.followerReadPercent, `follower-read-percent`, 0,
+			`Percent (0-100) of read operations that are follower reads.`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -449,25 +452,27 @@ func (w *kv) Ops(
 
 	// Read statement
 	var buf strings.Builder
+	var folBuf strings.Builder
 	if w.enum {
 		buf.WriteString(`SELECT k, v, e FROM kv WHERE k IN (`)
-		for i := 0; i < w.batchSize; i++ {
-			if i > 0 {
-				buf.WriteString(", ")
-			}
-			fmt.Fprintf(&buf, `$%d`, i+1)
-		}
+		folBuf.WriteString(`SELECT k, v, e FROM kv AS OF SYSTEM TIME follower_read_timestamp() WHERE k IN (`)
 	} else {
 		buf.WriteString(`SELECT k, v FROM kv WHERE k IN (`)
-		for i := 0; i < w.batchSize; i++ {
-			if i > 0 {
-				buf.WriteString(", ")
-			}
-			fmt.Fprintf(&buf, `$%d`, i+1)
+		folBuf.WriteString(`SELECT k, v FROM kv AS OF SYSTEM TIME follower_read_timestamp() WHERE k IN (`)
+	}
+	for i := 0; i < w.batchSize; i++ {
+		if i > 0 {
+			buf.WriteString(", ")
+			folBuf.WriteString(", ")
 		}
+		fmt.Fprintf(&buf, `$%d`, i+1)
+		fmt.Fprintf(&folBuf, `$%d`, i+1)
 	}
 	buf.WriteString(`)`)
+	folBuf.WriteString(`)`)
+
 	readStmtStr := buf.String()
+	followerReadStmtStr := folBuf.String()
 
 	// Write statement
 	buf.Reset()
@@ -531,6 +536,7 @@ func (w *kv) Ops(
 			numEmptyResults: &numEmptyResults,
 		}
 		op.readStmt = op.sr.Define(readStmtStr)
+		op.followerReadStmt = op.sr.Define(followerReadStmtStr)
 		op.writeStmt = op.sr.Define(writeStmtStr)
 		if len(sfuStmtStr) > 0 {
 			op.sfuStmt = op.sr.Define(sfuStmtStr)
@@ -554,19 +560,20 @@ func (w *kv) Ops(
 }
 
 type kvOp struct {
-	config          *kv
-	hists           *histogram.Histograms
-	sr              workload.SQLRunner
-	mcp             *workload.MultiConnPool
-	qosStmt         *workload.StmtHandle
-	readStmt        workload.StmtHandle
-	writeStmt       workload.StmtHandle
-	spanStmt        workload.StmtHandle
-	sfuStmt         workload.StmtHandle
-	delStmt         workload.StmtHandle
-	g               keyGenerator
-	t               keyTransformer
-	numEmptyResults *atomic.Int64
+	config           *kv
+	hists            *histogram.Histograms
+	sr               workload.SQLRunner
+	mcp              *workload.MultiConnPool
+	qosStmt          *workload.StmtHandle
+	readStmt         workload.StmtHandle
+	followerReadStmt workload.StmtHandle
+	writeStmt        workload.StmtHandle
+	spanStmt         workload.StmtHandle
+	sfuStmt          workload.StmtHandle
+	delStmt          workload.StmtHandle
+	g                keyGenerator
+	t                keyTransformer
+	numEmptyResults  *atomic.Int64
 }
 
 func (o *kvOp) run(ctx context.Context) (retErr error) {
@@ -589,7 +596,13 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 			args[i] = o.t.getKey(o.g.readKey())
 		}
 		start := timeutil.Now()
-		rows, err := o.readStmt.Query(ctx, args...)
+		readStmt := o.readStmt
+
+		if o.config.followerReadPercent > 0 &&
+			o.g.rand().Intn(100) < o.config.followerReadPercent {
+			readStmt = o.followerReadStmt
+		}
+		rows, err := readStmt.Query(ctx, args...)
 		if err != nil {
 			return err
 		}
