@@ -140,6 +140,31 @@ func ColumnInSwappedInPrimaryIndex(
 	return columnInSwappedInPrimaryIndexUntyped(indexColumn.El, index.El, relationIDVar, columnIDVar, indexIDVar)
 }
 
+// IsPotentialSecondaryIndexSwap determines if a secondary index recreate is
+// occurring because of a primary key alter.
+func IsPotentialSecondaryIndexSwap(indexIdVar rel.Var, tableIDVar rel.Var) rel.Clauses {
+	oldIndex := MkNodeVars("old-index")
+	newIndex := MkNodeVars("new-index")
+	// This rule detects secondary indexes recreated during a primary index swap,
+	// by doing the following. It will check if the re-create source index
+	// and index ID matches up between an old and new index
+	return rel.Clauses{
+		oldIndex.Type((*scpb.SecondaryIndex)(nil)),
+		newIndex.Type((*scpb.SecondaryIndex)(nil)),
+		oldIndex.TargetStatus(scpb.ToAbsent),
+		newIndex.TargetStatus(scpb.ToPublic, scpb.Transient),
+		JoinOnDescID(oldIndex, newIndex, tableIDVar),
+		newIndex.El.AttrEqVar(screl.IndexID, indexIdVar),
+		JoinOn(oldIndex,
+			screl.IndexID,
+			newIndex,
+			screl.RecreateSourceIndexID,
+			"old-index-id"),
+		oldIndex.JoinTargetNode(),
+		newIndex.JoinTargetNode(),
+	}
+}
+
 var (
 	toPublicOrTransientUntyped = screl.Schema.Def2(
 		"ToPublicOrTransient",
@@ -264,6 +289,13 @@ var (
 				),
 				sourceIndexIsSetUntyped(index),
 			}
+		})
+
+	// IsNotPotentialSecondaryIndexSwap determines if no secondary index recreation
+	// is happening because of a primary key alter.
+	IsNotPotentialSecondaryIndexSwap = screl.Schema.DefNotJoin2("no secondary index swap is on going",
+		"table-id", "index-id", func(a, b rel.Var) rel.Clauses {
+			return IsPotentialSecondaryIndexSwap(b, a)
 		})
 )
 
