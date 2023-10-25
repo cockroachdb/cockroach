@@ -22,7 +22,7 @@ type2,mundo
         Attributes:             nil,
         DroppedAttributesCount: 0x0,
     },
-    LogRecord: v1.LogRecord{
+    LogRecord: &v1.LogRecord{
         TimeUnixNano:         0x176c33b203521680,
         ObservedTimeUnixNano: 0x176c33bffb00d800,
         SeverityNumber:       0,
@@ -62,7 +62,7 @@ type2,mundo
         Attributes:             nil,
         DroppedAttributesCount: 0x0,
     },
-    LogRecord: v1.LogRecord{
+    LogRecord: &v1.LogRecord{
         TimeUnixNano:         0x176c33b204834380,
         ObservedTimeUnixNano: 0x176c33bffb00d800,
         SeverityNumber:       0,
@@ -102,7 +102,7 @@ type2,mundo
         Attributes:             nil,
         DroppedAttributesCount: 0x0,
     },
-    LogRecord: v1.LogRecord{
+    LogRecord: &v1.LogRecord{
         TimeUnixNano:         0x176c33b203eaad00,
         ObservedTimeUnixNano: 0x176c33bffb00d800,
         SeverityNumber:       0,
@@ -142,7 +142,7 @@ type2,mundo
         Attributes:             nil,
         DroppedAttributesCount: 0x0,
     },
-    LogRecord: v1.LogRecord{
+    LogRecord: &v1.LogRecord{
         TimeUnixNano:         0x176c33b2051bda00,
         ObservedTimeUnixNano: 0x176c33bffb00d800,
         SeverityNumber:       0,

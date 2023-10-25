@@ -34,5 +34,5 @@ message Event {
   opentelemetry.proto.common.v1.InstrumentationScope scope = 2;
 
   // The LogRecord containing the specific event information.
-  opentelemetry.proto.logs.v1.LogRecord log_record = 3 [(gogoproto.nullable) = false ];
+  opentelemetry.proto.logs.v1.LogRecord log_record = 3;
 }
