@@ -93,7 +93,7 @@ type reqBuilder struct {
 
 type scopeLogs struct {
 	eventType string
-	logs      []v1.LogRecord
+	logs      []*v1.LogRecord
 }
 
 func newReqBuilder(resource *otel_res_pb.Resource) *reqBuilder {
@@ -119,13 +119,13 @@ func (r *reqBuilder) withLogEvent(eventType string, data string) *reqBuilder {
 	if sl == nil {
 		sl = &scopeLogs{
 			eventType: eventType,
-			logs:      make([]v1.LogRecord, 0),
+			logs:      make([]*v1.LogRecord, 0),
 		}
 		r.scopeLogs = append(r.scopeLogs, sl)
 	}
 	timestamp := r.lastTimestamp + 10000000
 	r.lastTimestamp = timestamp
-	sl.logs = append(sl.logs, v1.LogRecord{
+	sl.logs = append(sl.logs, &v1.LogRecord{
 		TimeUnixNano: uint64(timestamp),
 		Body:         &v12.AnyValue{Value: &v12.AnyValue_StringValue{StringValue: data}},
 		Attributes: []*v12.KeyValue{{
@@ -138,7 +138,7 @@ func (r *reqBuilder) withLogEvent(eventType string, data string) *reqBuilder {
 
 func (r *reqBuilder) build() *logspb.ExportLogsServiceRequest {
 	for _, sl := range r.scopeLogs {
-		r.req.ResourceLogs[0].ScopeLogs = append(r.req.ResourceLogs[0].ScopeLogs, v1.ScopeLogs{
+		r.req.ResourceLogs[0].ScopeLogs = append(r.req.ResourceLogs[0].ScopeLogs, &v1.ScopeLogs{
 			Scope: &v12.InstrumentationScope{
 				Name:    sl.eventType,
 				Version: "1.0",
