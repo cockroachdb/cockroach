@@ -1776,6 +1776,9 @@ type StreamingTestingKnobs struct {
 	// a single event has been received.
 	RunAfterReceivingEvent func(ctx context.Context) error
 
+	// ElideCheckpointEvent elides checkpoint event ingestion if this returns true
+	ElideCheckpointEvent func(nodeId base.SQLInstanceID, frontier hlc.Timestamp) bool
+
 	// BeforeClientSubscribe allows observation of parameters about to be passed
 	// to a streaming client
 	BeforeClientSubscribe func(addr string, token string, startTime hlc.Timestamp)
