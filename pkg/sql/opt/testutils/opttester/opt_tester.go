@@ -292,6 +292,7 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	ot.evalCtx.SessionData().OptSplitScanLimit = tabledesc.MaxBucketAllowed
 	ot.evalCtx.SessionData().VariableInequalityLookupJoinEnabled = true
 	ot.evalCtx.SessionData().OptimizerUseImprovedSplitDisjunctionForJoins = true
+	ot.evalCtx.SessionData().OptimizerUseProvidedOrderingFix = true
 
 	return ot
 }
