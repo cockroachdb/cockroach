@@ -452,6 +452,9 @@ func applyBatchOp(
 	for i := range o.Ops {
 		switch subO := o.Ops[i].GetValue().(type) {
 		case *GetOperation:
+			if subO.SkipLocked {
+				panic(errors.AssertionFailedf(`SkipLocked cannot be used in batches`))
+			}
 			dur := kvpb.BestEffort
 			if subO.GuaranteedDurability {
 				dur = kvpb.GuaranteedDurability
@@ -467,6 +470,9 @@ func applyBatchOp(
 			b.Put(subO.Key, subO.Value())
 			setLastReqSeq(b, subO.Seq)
 		case *ScanOperation:
+			if subO.SkipLocked {
+				panic(errors.AssertionFailedf(`SkipLocked cannot be used in batches`))
+			}
 			dur := kvpb.BestEffort
 			if subO.GuaranteedDurability {
 				dur = kvpb.GuaranteedDurability
