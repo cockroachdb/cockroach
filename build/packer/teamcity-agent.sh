@@ -62,8 +62,8 @@ apt-get install --yes \
 apt-get install --yes qemu binfmt-support qemu-user-static
 
 # Verify that both of the platforms we support Docker for can be built.
-docker run --attach=stdout --attach=stderr --platform=linux/amd64 --rm --pull=always registry.access.redhat.com/ubi8/ubi-minimal uname -p
-docker run --attach=stdout --attach=stderr --platform=linux/arm64 --rm --pull=always registry.access.redhat.com/ubi8/ubi-minimal uname -p
+docker run --attach=stdout --attach=stderr --platform=linux/amd64 --rm --pull=always registry.access.redhat.com/ubi9/ubi-minimal uname -p
+docker run --attach=stdout --attach=stderr --platform=linux/arm64 --rm --pull=always registry.access.redhat.com/ubi9/ubi-minimal uname -p
 
 case $ARCH in
     x86_64) WHICH=x86_64; SHASUM=97bf730372f9900b2dfb9206fccbcf92f5c7f3b502148b832e77451aa0f9e0e6 ;;
