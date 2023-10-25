@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
@@ -134,15 +135,21 @@ type joinReader struct {
 		unlimitedMemMonitor *mon.BytesMonitor
 		budgetAcc           mon.BoundAccount
 		// maintainOrdering indicates whether the ordering of the input stream
-		// needs to be maintained AND that we rely on the streamer for that.
-		// We currently only rely on the streamer in two cases:
-		//   1. We are performing an index join and joinReader.maintainOrdering is
+		// needs to be maintained AND that we rely on the streamer for that. We
+		// currently rely on the streamer in the following cases:
+		//   1. When spec.SplitFamilyIDs is set and the table has at least 3
+		//      column families, for both index and lookup joins (this is needed
+		//      to ensure that all KVs for a single row are returned
+		//      contiguously).
+		//   2. We are performing an index join and spec.MaintainOrdering is
 		//      true.
-		//   2. We are performing a lookup join and maintainLookupOrdering is true.
-		// Except for case (2), we don't rely on the streamer for maintaining
-		// the ordering for lookup joins due to implementation details (since we
-		// still buffer all looked up rows and restore the ordering explicitly via
-		// the joinReaderOrderingStrategy).
+		//   3. We are performing a lookup join and spec.MaintainLookupOrdering
+		//      is true.
+		// Note that in case (3), we don't rely on the streamer for maintaining
+		// the ordering for lookup joins when spec.MaintainOrdering is true due
+		// to implementation details (since we still buffer all looked up rows
+		// and restore the ordering explicitly via the
+		// joinReaderOrderingStrategy).
 		maintainOrdering    bool
 		diskMonitor         *mon.BytesMonitor
 		txnKVStreamerMemAcc mon.BoundAccount
@@ -511,13 +518,37 @@ func newJoinReader(
 		jr.streamerInfo.unlimitedMemMonitor.StartNoReserved(ctx, flowCtx.Mon)
 		jr.streamerInfo.budgetAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
 		jr.streamerInfo.txnKVStreamerMemAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
-		// The index joiner can rely on the streamer to maintain the input ordering,
-		// but the lookup joiner currently handles this logic itself, so the
-		// streamer can operate in OutOfOrder mode. The exception is when the
-		// results of each lookup need to be returned in index order - in this case,
-		// InOrder mode must be used for the streamer.
-		jr.streamerInfo.maintainOrdering = (jr.maintainOrdering && readerType == indexJoinReaderType) ||
-			spec.MaintainLookupOrdering
+		// When we have SplitFamilyIDs set and the table has at least 3 column
+		// families, then it's possible for a single lookup span to be split
+		// into multiple "family" spans, and in order to preserve the invariant
+		// that all KVs for a single SQL row are contiguous we must ask the
+		// streamer to preserve the ordering. See #113013 for an example.
+		//
+		// With 1 column family, SplitFamilyIDs can be set, but then we only
+		// have a single Get request for the full SQL row. With 2 column
+		// families, SplitFamilyIDs must contain exactly 1 if set (if both were
+		// needed, SplitFamilyIDs must have remained unset).
+		if buildutil.CrdbTestBuild {
+			if len(spec.SplitFamilyIDs) == 2 && spec.FetchSpec.MaxKeysPerRow == 2 {
+				return nil, errors.AssertionFailedf("SplitFamilyIDs has 2 IDs with MaxKeysPerRow = 2, spec = %v", spec)
+			}
+		}
+		jr.streamerInfo.maintainOrdering = len(spec.SplitFamilyIDs) > 0 && spec.FetchSpec.MaxKeysPerRow >= 3
+		if readerType == indexJoinReaderType {
+			if spec.MaintainOrdering {
+				// The index join can rely on the streamer to maintain the input
+				// ordering.
+				jr.streamerInfo.maintainOrdering = true
+			}
+		} else {
+			// Due to implementation details (the join reader strategy restores
+			// the desired order when spec.MaintainOrdering is set) we only need
+			// to ask the streamer to maintain ordering if the results of each
+			// lookup need to be returned in index order.
+			if spec.MaintainLookupOrdering {
+				jr.streamerInfo.maintainOrdering = true
+			}
+		}
 
 		var diskBuffer kvstreamer.ResultDiskBuffer
 		if jr.streamerInfo.maintainOrdering {

@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -499,8 +500,8 @@ func getIndexJoinBatchSize(
 
 // NewColIndexJoin creates a new ColIndexJoin operator.
 //
-// If spec.MaintainOrdering is true, then the diskMonitor argument must be
-// non-nil.
+// If spec.MaintainOrdering is true, or spec.SplitFamilyIDs is set and
+// MaxKeysPerRow is at least 3, then the diskMonitor argument must be non-nil.
 func NewColIndexJoin(
 	ctx context.Context,
 	allocator *colmem.Allocator,
@@ -547,15 +548,31 @@ func NewColIndexJoin(
 		if streamerBudgetAcc == nil {
 			return nil, errors.AssertionFailedf("streamer budget account is nil when the Streamer API is desired")
 		}
-		if spec.MaintainOrdering && diskMonitor == nil {
-			return nil, errors.AssertionFailedf("diskMonitor is nil when ordering needs to be maintained")
-		}
 		// Keep 1/16th of the memory limit for the output batch of the cFetcher,
 		// another 1/16th of the limit for the input tuples buffered by the index
 		// joiner, and we'll give the remaining memory to the streamer budget
 		// below.
 		cFetcherMemoryLimit = int64(math.Ceil(float64(totalMemoryLimit) / 16.0))
 		streamerBudgetLimit := 14 * cFetcherMemoryLimit
+		// When we have SplitFamilyIDs set and the table has at least 3 column
+		// families, then it's possible for a single lookup span to be split
+		// into multiple "family" spans, and in order to preserve the invariant
+		// that all KVs for a single SQL row are contiguous we must ask the
+		// streamer to preserve the ordering. See #113013 for an example.
+		//
+		// With 1 column family, SplitFamilyIDs can be set, but then we only
+		// have a single Get request for the full SQL row. With 2 column
+		// families, SplitFamilyIDs must contain exactly 1 if set (if both were
+		// needed, SplitFamilyIDs must have remained unset).
+		if buildutil.CrdbTestBuild {
+			if len(spec.SplitFamilyIDs) == 2 && spec.FetchSpec.MaxKeysPerRow == 2 {
+				return nil, errors.AssertionFailedf("SplitFamilyIDs has 2 IDs with MaxKeysPerRow = 2, spec = %v", spec)
+			}
+		}
+		maintainOrdering := spec.MaintainOrdering || (len(spec.SplitFamilyIDs) > 0 && spec.FetchSpec.MaxKeysPerRow >= 3)
+		if maintainOrdering && diskMonitor == nil {
+			return nil, errors.AssertionFailedf("diskMonitor is nil when ordering needs to be maintained")
+		}
 		kvFetcher = row.NewStreamingKVFetcher(
 			flowCtx.Cfg.DistSender,
 			flowCtx.Stopper(),
@@ -566,7 +583,7 @@ func NewColIndexJoin(
 			spec.LockingDurability,
 			streamerBudgetLimit,
 			streamerBudgetAcc,
-			spec.MaintainOrdering,
+			maintainOrdering,
 			true, /* singleRowLookup */
 			int(spec.FetchSpec.MaxKeysPerRow),
 			rowcontainer.NewKVStreamerResultDiskBuffer(
