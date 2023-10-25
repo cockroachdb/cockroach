@@ -512,10 +512,13 @@ func listFailuresFromTestXML(
 					pkg:  pkg,
 					name: testCase.Name,
 				}
-				elapsed, err := strconv.ParseFloat(testCase.Time, 64)
-				if err != nil {
-					fmt.Printf("couldn't parse time %s as float64: %+v\n", testCase.Time, err)
-					elapsed = 0.0
+				elapsed := 0.0
+				if testCase.Time != "" {
+					var err error
+					elapsed, err = strconv.ParseFloat(testCase.Time, 64)
+					if err != nil {
+						fmt.Printf("couldn't parse time %s as float64: %+v\n", testCase.Time, err)
+					}
 				}
 				event := testEvent{
 					Action:  "fail",
