@@ -137,7 +137,7 @@ func (cv *clusterVersionSetting) activeVersionOrEmpty(
 		return ClusterVersion{}
 	}
 	var curVer ClusterVersion
-	if err := protoutil.Unmarshal(encoded.([]byte), &curVer); err != nil {
+	if err := curVer.Unmarshal(encoded.([]byte)); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
 	return curVer
