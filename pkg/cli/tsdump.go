@@ -85,28 +85,7 @@ will then convert it to the --format requested in the current invocation.
 		case tsDumpText:
 			w = defaultTSWriter{w: os.Stdout}
 		case tsDumpOpenMetrics:
-			// construct labels
-			labelMap := make(map[string]string)
-			// Hardcoded values
-			labelMap["cluster_type"] = "SELF_HOSTED"
-			labelMap["job"] = "cockroachdb"
-			labelMap["region"] = "local"
-			// Zero values
-			labelMap["instance"] = ""
-			labelMap["node"] = ""
-			labelMap["organization_id"] = ""
-			labelMap["organization_label"] = ""
-			labelMap["sla_type"] = ""
-			labelMap["tenant_id"] = ""
-			// Command values
-			if debugTimeSeriesDumpOpts.clusterLabel != "" {
-				labelMap["cluster"] = debugTimeSeriesDumpOpts.clusterLabel
-			} else if serverCfg.ClusterName != "" {
-				labelMap["cluster"] = serverCfg.ClusterName
-			} else {
-				labelMap["cluster"] = "cluster-debug-" + time.Now().String()
-			}
-			w = &openMetricsWriter{out: os.Stdout, labels: labelMap}
+			w = makeOpenMetricsWriter(os.Stdout)
 		default:
 			return errors.Newf("unknown output format: %v", debugTimeSeriesDumpOpts.format)
 		}
@@ -221,6 +200,31 @@ type openMetricsWriter struct {
 	labels map[string]string
 }
 
+func makeOpenMetricsWriter(out io.Writer) *openMetricsWriter {
+	// construct labels
+	labelMap := make(map[string]string)
+	// Hardcoded values
+	labelMap["cluster_type"] = "SELF_HOSTED"
+	labelMap["job"] = "cockroachdb"
+	labelMap["region"] = "local"
+	// Zero values
+	labelMap["instance"] = ""
+	labelMap["node"] = ""
+	labelMap["organization_id"] = ""
+	labelMap["organization_label"] = ""
+	labelMap["sla_type"] = ""
+	labelMap["tenant_id"] = ""
+	// Command values
+	if debugTimeSeriesDumpOpts.clusterLabel != "" {
+		labelMap["cluster"] = debugTimeSeriesDumpOpts.clusterLabel
+	} else if serverCfg.ClusterName != "" {
+		labelMap["cluster"] = serverCfg.ClusterName
+	} else {
+		labelMap["cluster"] = fmt.Sprintf("cluster-debug-%d", timeutil.Now().Unix())
+	}
+	return &openMetricsWriter{out: out, labels: labelMap}
+}
+
 var reCrStoreNode = regexp.MustCompile(`^cr\.([^\.]+)\.(.*)$`)
 var rePromTSName = regexp.MustCompile(`[^a-z0-9]`)
 
@@ -250,7 +254,9 @@ func (w *openMetricsWriter) Emit(data *tspb.TimeSeriesData) error {
 			name,
 			labels,
 			pt.Value,
-			pt.TimestampNanos/1e9, pt.TimestampNanos%1e6,
+			// Convert to Unix Epoch in seconds with preserved precision
+			// (https://github.com/OpenObservability/OpenMetrics/blob/main/specification/OpenMetrics.md#timestamps).
+			pt.TimestampNanos/1e9, pt.TimestampNanos%1e9,
 		); err != nil {
 			return err
 		}
