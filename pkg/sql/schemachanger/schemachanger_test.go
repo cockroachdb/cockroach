@@ -838,6 +838,8 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"DROP TABLE IF EXISTS t1, t2;",
 			"CREATE TABLE t1 (rowid INT NOT NULL);",
 			"ALTER TABLE t1 ALTER PRIMARY KEY USING COLUMNS (rowid); -- special case where column name `rowid` is used",
+			"CREATE TABLE t8 (i INT PRIMARY KEY, j STRING);",
+			"CREATE INVERTED INDEX ON t8 (j gin_trgm_ops);",
 
 			// Statements expected to fail.
 			"CREATE TABLE t1 (); -- expect a DuplicateRelation error",
