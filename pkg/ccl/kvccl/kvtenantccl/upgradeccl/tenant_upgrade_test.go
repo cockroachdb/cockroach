@@ -486,7 +486,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 								) error {
 									t.Logf("v1 migration running")
 									return nil
-								}), true
+								}, "test"), true
 						case v2:
 							return upgrade.NewTenantUpgrade("testing next",
 								v2,
@@ -509,7 +509,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 										}
 									}
 									return nil
-								}), true
+								}, "test"), true
 						default:
 							return nil, false
 						}
