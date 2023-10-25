@@ -15,12 +15,17 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -73,9 +78,25 @@ func initTest(ctx context.Context, t test.Test, c cluster.Cluster, sf int) {
 }
 
 func runTest(ctx context.Context, t test.Test, c cluster.Cluster, pg string) {
-	start := timeutil.Now()
-	det, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1), fmt.Sprintf(`cat /tmp/lineitem-table.csv | %s -c "COPY lineitem FROM STDIN WITH CSV DELIMITER '|';"`, pg))
-	if err != nil {
+	var err error
+	var start time.Time
+	var det install.RunResultDetails
+
+	rOpts := base.DefaultRetryOptions()
+	rOpts.MaxRetries = 5
+	rOpts.MaxBackoff = 10 * time.Second
+	r := retry.StartWithCtx(ctx, rOpts)
+	for r.Next() {
+		start = timeutil.Now()
+		det, err = c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1), fmt.Sprintf(`cat /tmp/lineitem-table.csv | %s -c "COPY lineitem FROM STDIN WITH CSV DELIMITER '|';"`, pg))
+		if err == nil {
+			// The run was successful; break out of the retry loop.
+			break
+		}
+		if pgerror.GetPGCode(err) == pgcode.SerializationFailure {
+			t.L().Printf("Retrying due to retryable error: \n%s\n", err)
+			continue
+		}
 		t.L().Printf("stdout:\n%v\n", det.Stdout)
 		t.L().Printf("stderr:\n%v\n", det.Stderr)
 		t.Fatal(err)
