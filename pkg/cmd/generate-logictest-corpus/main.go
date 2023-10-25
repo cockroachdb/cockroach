@@ -13,6 +13,7 @@ package main
 import (
 	"bufio"
 	"flag"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -26,6 +27,8 @@ import (
 
 var outDir = flag.String("out-dir", "",
 	"directory path in which corpus files of logic tests stmts are stored")
+var shardCount = flag.Int("shard-count", 1,
+	"number of files to shard the corpus into")
 
 func collectLogicTestsStmts() error {
 	err := createOutDirIfNotExists()
@@ -37,11 +40,13 @@ func collectLogicTestsStmts() error {
 		return err
 	}
 
-	corpus := scpb.LogicTestStmtsCorpus{}
+	corpusShards := make([]scpb.LogicTestStmtsCorpus, *shardCount)
+	shard := 0
 	err = filepath.WalkDir(logicTestDir, func(inPath string, d fs.DirEntry, err error) error {
 		if inPath == logicTestDir || err != nil || d.IsDir() {
 			return err
 		}
+		corpus := corpusShards[shard]
 		stmts, err := collectCorpusEntryFrom(inPath)
 		if err != nil {
 			return err
@@ -50,14 +55,27 @@ func collectLogicTestsStmts() error {
 			Name:       d.Name(),
 			Statements: stmts,
 		})
+		shard++
+		if shard == *shardCount {
+			shard = 0
+		}
 		return nil
 	})
 	if err != nil {
 		return err
 	}
 
-	// Serialize corpus to output file.
-	corpusFilePath := filepath.Join(*outDir, "logictest-stmts-corpus")
+	// Serialize corpus to output files.
+	for i, corpus := range corpusShards {
+		corpusFilePath := filepath.Join(*outDir, fmt.Sprintf("logictest-stmts-corpus-%d", i))
+		if err := writeCorpusFile(corpusFilePath, corpus); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeCorpusFile(corpusFilePath string, corpus scpb.LogicTestStmtsCorpus) error {
 	corpusFile, err := os.OpenFile(corpusFilePath, os.O_WRONLY|os.O_CREATE, os.ModePerm)
 	if err != nil {
 		return err
