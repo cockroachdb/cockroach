@@ -88,13 +88,13 @@ func (q *MemoryQueue[T]) Enqueue(e T) error {
 
 // Dequeue removes and returns the oldest element from this
 // MemoryQueue. If this MemoryQueue is empty, nil is returned.
-func (q *MemoryQueue[T]) Dequeue() T {
+func (q *MemoryQueue[T]) Dequeue() (T, bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	// NB: The value of ret is nil unless assigned.
+	// NB: The value of ret is the zero value of T, unless assigned.
 	var ret T
 	if q.mu.queue.Len() == 0 {
-		return ret
+		return ret, false
 	}
 	e := q.mu.queue.Front()
 	q.mu.queue.Remove(e)
@@ -108,7 +108,7 @@ func (q *MemoryQueue[T]) Dequeue() T {
 	}
 	// TODO(abarganier): Gauge metric(s) to track queue size & length.
 	q.mu.curSize = q.mu.curSize - size
-	return ret
+	return ret, true
 }
 
 func (q *MemoryQueue[T]) Len() int {

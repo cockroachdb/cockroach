@@ -135,6 +135,14 @@ func TestMemoryQueue_Dequeue(t *testing.T) {
 			expByteSize: 10,
 			expLen:      1,
 		},
+		{
+			name:        "nothing in, nothing out",
+			maxBytes:    20,
+			toEnqueue:   []*testElement{},
+			expected:    nil,
+			expByteSize: 0,
+			expLen:      0,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -143,9 +151,14 @@ func TestMemoryQueue_Dequeue(t *testing.T) {
 				// Expected returns of Enqueue are tested separately.
 				_ = q.Enqueue(el)
 			}
-			actual := q.Dequeue()
-			require.Equalf(t, q.Len(), tc.expLen, "unexpected queue length")
+			actual, ok := q.Dequeue()
 			require.Equal(t, tc.expected, actual)
+			if tc.expected != nil {
+				require.True(t, ok)
+			} else {
+				require.False(t, ok)
+			}
+			require.Equalf(t, q.Len(), tc.expLen, "unexpected queue length")
 			func() {
 				q.mu.Lock()
 				defer q.mu.Unlock()
