@@ -777,6 +777,7 @@ go_test(
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/kv/kvserver/protectedts/ptstorage",
         "//pkg/multitenant/tenantcapabilities",
+        "//pkg/obs",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
