@@ -76,6 +76,8 @@ type streamIngestionFrontier struct {
 	lastPartitionUpdate time.Time
 	lastFrontierDump    time.Time
 	partitionProgress   map[string]jobspb.StreamIngestionProgress_PartitionProgress
+
+	lastNodeLagCheck time.Time
 }
 
 var _ execinfra.Processor = &streamIngestionFrontier{}
@@ -306,6 +308,11 @@ func (sf *streamIngestionFrontier) Next() (
 			log.Errorf(sf.Ctx(), "failed to persist frontier entries: %+v", err)
 		}
 
+		if err := sf.maybeCheckForLaggingNodes(); err != nil {
+			sf.MoveToDraining(err)
+			break
+		}
+
 		// Send back a row to the job so that it can update the progress.
 		select {
 		case <-sf.Ctx().Done():
@@ -525,4 +532,51 @@ func (sf *streamIngestionFrontier) maybePersistFrontierEntries() error {
 
 	sf.lastFrontierDump = timeutil.Now()
 	return nil
+}
+
+func (sf *streamIngestionFrontier) maybeCheckForLaggingNodes() error {
+	defer func() {
+		sf.lastNodeLagCheck = timeutil.Now()
+	}()
+	checkFreq := streamingccl.ReplanFrequency.Get(&sf.FlowCtx.Cfg.Settings.SV)
+	maxLag := streamingccl.InterNodeLag.Get(&sf.FlowCtx.Cfg.Settings.SV)
+	if checkFreq == 0 || maxLag == 0 || timeutil.Since(sf.lastNodeLagCheck) < checkFreq {
+		return nil
+	}
+	ctx := sf.Ctx()
+	// Don't check for lagging nodes if the hwm has yet to advance.
+	if sf.replicatedTimeAtStart.Equal(sf.persistedReplicatedTime) {
+		log.VEventf(ctx, 2, "skipping lagging nodes check as hwm has yet to advance past %s", sf.replicatedTimeAtStart)
+		return nil
+	}
+	executionDetails, err := sf.gatherLaggingNodeInfo(ctx)
+	if err != nil {
+		log.Warningf(ctx, "could not gather information to check for lagging nodes: %s", err.Error())
+		return nil
+	}
+	return checkLaggingNodes(
+		executionDetails,
+		maxLag,
+	)
+}
+
+func (sf *streamIngestionFrontier) gatherLaggingNodeInfo(
+	ctx context.Context,
+) ([]frontierExecutionDetails, error) {
+	jobID := jobspb.JobID(sf.spec.JobID)
+
+	var specs []byte
+	if err := sf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		var err error
+		specs, err = jobs.ReadChunkedFileToJobInfo(ctx, replicationPartitionInfoFilename, txn, jobID)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	var partitionSpecs execinfrapb.StreamIngestionPartitionSpecs
+	if err := protoutil.Unmarshal(specs, &partitionSpecs); err != nil {
+		return nil, err
+	}
+
+	return constructSpanFrontierExecutionDetailsWithFrontier(partitionSpecs, sf.frontier), nil
 }
