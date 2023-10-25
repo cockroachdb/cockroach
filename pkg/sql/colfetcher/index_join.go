@@ -498,9 +498,6 @@ func getIndexJoinBatchSize(
 }
 
 // NewColIndexJoin creates a new ColIndexJoin operator.
-//
-// If spec.MaintainOrdering is true, or spec.SplitFamilyIDs has more than one
-// family, then the diskMonitor argument must be non-nil.
 func NewColIndexJoin(
 	ctx context.Context,
 	allocator *colmem.Allocator,
@@ -561,6 +558,9 @@ func NewColIndexJoin(
 		maintainOrdering := spec.MaintainOrdering || len(spec.SplitFamilyIDs) > 1
 		if maintainOrdering && diskMonitor == nil {
 			return nil, errors.AssertionFailedf("diskMonitor is nil when ordering needs to be maintained")
+		}
+		if flowCtx.EvalCtx.SessionData().StreamerAlwaysMaintainOrdering {
+			maintainOrdering = true
 		}
 		kvFetcher = row.NewStreamingKVFetcher(
 			flowCtx.Cfg.DistSender,
