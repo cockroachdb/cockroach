@@ -284,6 +284,9 @@ message StreamIngestionFrontierSpec {
 
   // StreamAddresses are the addresses that can be connected to to interact with the source job
   repeated string stream_addresses = 8;
+
+  // PartitionSpecs contains the topology of the physical replication stream.
+  optional StreamIngestionPartitionSpecs partition_specs = 9 [(gogoproto.nullable) = false];
 }
 
 message BackupDataSpec {
