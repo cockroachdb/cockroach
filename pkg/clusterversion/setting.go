@@ -154,7 +154,7 @@ func (cv *clusterVersionSetting) isActive(
 // Decode is part of the VersionSettingImpl interface.
 func (cv *clusterVersionSetting) Decode(val []byte) (settings.ClusterVersionImpl, error) {
 	var clusterVersion ClusterVersion
-	if err := protoutil.Unmarshal(val, &clusterVersion); err != nil {
+	if err := clusterVersion.Unmarshal(val); err != nil {
 		return nil, err
 	}
 	return clusterVersion, nil
@@ -165,7 +165,7 @@ func (cv *clusterVersionSetting) ValidateVersionUpgrade(
 	_ context.Context, sv *settings.Values, curRawProto, newRawProto []byte,
 ) error {
 	var newCV ClusterVersion
-	if err := protoutil.Unmarshal(newRawProto, &newCV); err != nil {
+	if err := newCV.Unmarshal(newRawProto); err != nil {
 		return err
 	}
 
@@ -174,7 +174,7 @@ func (cv *clusterVersionSetting) ValidateVersionUpgrade(
 	}
 
 	var oldCV ClusterVersion
-	if err := protoutil.Unmarshal(curRawProto, &oldCV); err != nil {
+	if err := oldCV.Unmarshal(curRawProto); err != nil {
 		return err
 	}
 
@@ -210,7 +210,7 @@ func (cv *clusterVersionSetting) ValidateBinaryVersions(
 	}()
 
 	var ver ClusterVersion
-	if err := protoutil.Unmarshal(rawProto, &ver); err != nil {
+	if err := ver.Unmarshal(rawProto); err != nil {
 		return err
 	}
 	return cv.validateBinaryVersions(ver.Version, sv)
