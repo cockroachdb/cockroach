@@ -538,6 +538,9 @@ func newJoinReader(
 				jr.streamerInfo.maintainOrdering = true
 			}
 		}
+		if jr.FlowCtx.EvalCtx.SessionData().StreamerAlwaysMaintainOrdering {
+			jr.streamerInfo.maintainOrdering = true
+		}
 
 		var diskBuffer kvstreamer.ResultDiskBuffer
 		if jr.streamerInfo.maintainOrdering {
