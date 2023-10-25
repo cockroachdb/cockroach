@@ -13,10 +13,8 @@ package schemachanger_test
 import (
 	"context"
 	"encoding/hex"
-	"flag"
 	"fmt"
 	"math/rand"
-	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -38,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/sctest"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -794,22 +791,6 @@ func isPQErrWithCode(err error, codes ...pgcode.Code) bool {
 	return false
 }
 
-var _ sctest.StmtLineReader = (*staticSQLStmtLineProvider)(nil)
-
-type staticSQLStmtLineProvider struct {
-	stmts []string
-	next  int
-}
-
-func (ss *staticSQLStmtLineProvider) HasNextLine() bool {
-	return ss.next != len(ss.stmts)
-}
-
-func (ss *staticSQLStmtLineProvider) NextLine() string {
-	ss.next++
-	return ss.stmts[ss.next-1]
-}
-
 // TestCompareLegacyAndDeclarative tests that when processing a sequence of
 // DDL statements, legacy and declarative schema change should transition the
 // descriptors into the same final state.
@@ -903,65 +884,4 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 	}
 
 	sctest.CompareLegacyAndDeclarative(t, ss)
-}
-
-var logictestStmtsCorpusFile = flag.String("logictest-stmt-corpus-path", "", "path to logictest stmts corpus")
-
-func TestComparatorFromLogicTests(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	if *logictestStmtsCorpusFile == "" {
-		skip.IgnoreLint(t, "require `--logictest-stmt-corpus-path` to be set")
-	}
-
-	bytes, err := os.ReadFile(*logictestStmtsCorpusFile)
-	require.NoError(t, err)
-	corpus := scpb.LogicTestStmtsCorpus{}
-	err = protoutil.Unmarshal(bytes, &corpus)
-	require.NoError(t, err)
-
-	// Shuffle entries so the order of execution is different each time. It might
-	// speed up finding bugs.
-	rand.Shuffle(len(corpus.Entries), func(i, j int) {
-		corpus.Entries[i], corpus.Entries[j] = corpus.Entries[j], corpus.Entries[i]
-	})
-
-	for _, entry := range corpus.Entries {
-		subtestName := entry.Name
-		subtestStatements := entry.Statements
-
-		t.Run(subtestName, func(t *testing.T) {
-			if skipEntry, skipReason := shouldSkipLogicTestCorpusEntry(subtestName); skipEntry {
-				skip.IgnoreLint(t, skipReason)
-			}
-
-			t.Logf("running schema changer comparator testing on statements collected from logic test %q\n", subtestName)
-			ss := &staticSQLStmtLineProvider{
-				stmts: subtestStatements,
-			}
-			sctest.CompareLegacyAndDeclarative(t, ss)
-			t.Logf("schema changer comparator testing succeeded on logic test %q\n", subtestName)
-		})
-	}
-}
-
-// shouldSkipLogicTestCorpusEntry is the place where we blacklist entries in the
-// logictest stmts corpus. Each blacklisted entry should be justified with
-// comments.
-func shouldSkipLogicTestCorpusEntry(entryName string) (skip bool, skipReason string) {
-	switch entryName {
-	case "crdb_internal":
-		// `crdb_internal` contains stmts like `SELECT crdb_internal.force_panic('foo')`
-		// that will cause the framework to crash. Also, in general, we don't care about
-		// crdb_internal functions for purpose of schema changer comparator testing.
-		return true, `"crdb_internal" contains statement like "crdb_internal.force_panic()" that would crash the testing framework`
-	case "schema_repair":
-		// `schema_repair` contains stmts like `SELECT crdb_internal.unsafe_delete_descriptor(id)`
-		// that will corrupt descriptors. This subsequently would fail the query that
-		// attempts to fetch all descriptors during the post-execution metadata
-		// identity check.
-		return true, `"schema_repair" contains statement like "crdb_internal.unsafe_delete_descriptor(id)" that would cause descriptor corruptions, which would subsequently fail the query to fetch descriptors during the metadata identity check`
-	default:
-		return false, ""
-	}
 }
