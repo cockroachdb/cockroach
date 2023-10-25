@@ -55,6 +55,18 @@ joinTargetNode($element, $target, $node):
     - joinTarget($element, $target)
     - $node[Type] = '*screl.Node'
     - $node[Target] = $target
+no secondary index swap is on going($table-id, $index-id):
+    not-join:
+        - $old-index[Type] = '*scpb.SecondaryIndex'
+        - $new-index[Type] = '*scpb.SecondaryIndex'
+        - $old-index-Target[TargetStatus] = ABSENT
+        - $new-index-Target[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
+        - joinOnDescID($old-index, $new-index, $table-id)
+        - $new-index[IndexID] = $index-id
+        - $old-index[IndexID] = $old-index-id
+        - $new-index[RecreateSourceIndexID] = $old-index-id
+        - joinTargetNode($old-index, $old-index-Target, $old-index-Node)
+        - joinTargetNode($new-index, $new-index-Target, $new-index-Node)
 nodeHasNoPublicStatus($n):
     not-join:
         - $public = PUBLIC
