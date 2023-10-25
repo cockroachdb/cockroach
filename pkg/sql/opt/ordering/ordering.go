@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -83,12 +84,16 @@ func BuildChildRequired(
 //
 // This function assumes that the provided orderings have already been set in
 // the children of the expression.
-func BuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
+func BuildProvided(
+	evalCtx *eval.Context, expr memo.RelExpr, required *props.OrderingChoice,
+) opt.Ordering {
 	if required.Any() {
 		return nil
 	}
 	provided := funcMap[expr.Op()].buildProvidedOrdering(expr, required)
-	provided = finalizeProvided(provided, required, expr.Relational().OutputCols)
+	if evalCtx.SessionData().OptimizerUseProvidedOrderingFix {
+		provided = finalizeProvided(provided, required, expr.Relational().OutputCols)
+	}
 
 	if buildutil.CrdbTestBuild {
 		checkProvided(expr, required, provided)

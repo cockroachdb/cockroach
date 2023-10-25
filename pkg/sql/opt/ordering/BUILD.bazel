@@ -30,6 +30,7 @@ go_library(
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/props",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/util/buildutil",
         "@com_github_cockroachdb_errors//:errors",
