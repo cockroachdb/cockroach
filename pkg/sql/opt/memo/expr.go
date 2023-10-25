@@ -1083,7 +1083,7 @@ func (prj *ProjectExpr) initUnexportedFields(mem *Memo) {
 			// This does not necessarily hold for "composite" types like decimals or
 			// collated strings. For example if d is a decimal, d::TEXT can have
 			// different values for equal values of d, like 1 and 1.0.
-			if !CanBeCompositeSensitive(mem.Metadata(), item.Element) {
+			if !CanBeCompositeSensitive(item.Element) {
 				prj.internalFuncDeps.AddSynthesizedCol(from, item.Col)
 			}
 		}

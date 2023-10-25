@@ -21,7 +21,7 @@ import (
 // CanMapOnSetOp determines whether the filter can be mapped to either
 // side of a set operator.
 func (c *CustomFuncs) CanMapOnSetOp(filter *memo.FiltersItem) bool {
-	if memo.CanBeCompositeSensitive(c.mem.Metadata(), filter) {
+	if memo.CanBeCompositeSensitive(filter) {
 		// In general, it is not safe to remap a composite-sensitive filter.
 		// For example:
 		//  - the set operation is Except

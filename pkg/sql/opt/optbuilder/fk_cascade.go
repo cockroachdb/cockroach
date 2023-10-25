@@ -189,7 +189,7 @@ func tryNewOnDeleteFastCascadeBuilder(
 		if !p.OuterCols.SubsetOf(fkCols.ToSet()) {
 			return nil, false
 		}
-		if memo.CanBeCompositeSensitive(md, &sel.Filters) {
+		if memo.CanBeCompositeSensitive(&sel.Filters) {
 			return nil, false
 		}
 		if sel.Relational().HasSubquery {

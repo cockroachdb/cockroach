@@ -1022,7 +1022,7 @@ func (c *CustomFuncs) tryFoldComputedCol(
 	}
 
 	computedCol := ComputedCols[computedColID]
-	if memo.CanBeCompositeSensitive(c.f.mem.Metadata(), computedCol) {
+	if memo.CanBeCompositeSensitive(computedCol) {
 		// The computed column expression can return different values for logically
 		// equal outer columns (e.g. d::STRING where d is a DECIMAL).
 		return false
