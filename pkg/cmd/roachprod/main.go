@@ -531,7 +531,7 @@ non-terminating signal (e.g. SIGHUP), unless you also configure --max-wait.
 			SQLInstance:        sqlInstance,
 		}
 		clusterName := args[0]
-		return roachprod.StopServiceForVirtualCluster(context.Background(), config.Logger, clusterName, stopOpts)
+		return roachprod.StopServiceForVirtualCluster(context.Background(), config.Logger, clusterName, secure, stopOpts)
 	}),
 }
 
