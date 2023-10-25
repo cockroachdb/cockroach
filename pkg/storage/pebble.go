@@ -602,23 +602,18 @@ const MinimumSupportedFormatVersion = pebble.FormatPrePebblev1Marked
 
 // DefaultPebbleOptions returns the default pebble options.
 func DefaultPebbleOptions() *pebble.Options {
-	// In RocksDB, the concurrency setting corresponds to both flushes and
-	// compactions. In Pebble, there is always a slot for a flush, and
-	// compactions are counted separately.
-	maxConcurrentCompactions := rocksdbConcurrency - 1
-	if maxConcurrentCompactions < 1 {
-		maxConcurrentCompactions = 1
-	}
-
 	opts := &pebble.Options{
 		Comparer: EngineComparer,
 		FS:       vfs.Default,
 		// A value of 2 triggers a compaction when there is 1 sub-level.
-		L0CompactionThreshold:       2,
-		L0StopWritesThreshold:       1000,
-		LBaseMaxBytes:               64 << 20, // 64 MB
-		Levels:                      make([]pebble.LevelOptions, 7),
-		MaxConcurrentCompactions:    func() int { return maxConcurrentCompactions },
+		L0CompactionThreshold: 2,
+		L0StopWritesThreshold: 1000,
+		LBaseMaxBytes:         64 << 20, // 64 MB
+		Levels:                make([]pebble.LevelOptions, 7),
+		// NB: Options.MaxConcurrentCompactions may be overidden in NewPebble to
+		// allow overriding the max at runtime through
+		// Engine.SetCompactionConcurrency.
+		MaxConcurrentCompactions:    getMaxConcurrentCompactions,
 		MemTableSize:                64 << 20, // 64 MB
 		MemTableStopWritesThreshold: 4,
 		Merger:                      MVCCMerger,
@@ -1341,12 +1336,12 @@ func (p *Pebble) writePreventStartupFile(ctx context.Context, corruptionError er
 
 	preventStartupMsg := fmt.Sprintf(`ATTENTION:
 
-  this node is terminating because of sstable corruption. 
-	Corruption may be a consequence of a hardware error. 
+  this node is terminating because of sstable corruption.
+	Corruption may be a consequence of a hardware error.
 
-	Error: %s 
+	Error: %s
 
-  A file preventing this node from restarting was placed at: 
+  A file preventing this node from restarting was placed at:
   %s`, corruptionError.Error(), path)
 
 	if err := fs.WriteFile(p.unencryptedFS, path, []byte(preventStartupMsg)); err != nil {
