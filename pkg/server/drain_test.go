@@ -343,3 +343,27 @@ func TestServerShutdownReleasesSession(t *testing.T) {
 	require.False(t, sessionExists(*session), "expected session %s to be deleted from the sqlliveness table, but it still exists", *session)
 	require.Nil(t, queryOwner(tmpSQLInstance), "expected sql_instance %d to have no owning session_id", tmpSQLInstance)
 }
+
+// Verify that drain works correctly even if we don't start the sql instance.
+func TestNoSQLServer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 2,
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+				DisableSQLServer:  true,
+			},
+		})
+
+	defer tc.Stopper().Stop(ctx)
+	req := serverpb.DrainRequest{Shutdown: false, DoDrain: true, NodeId: "2"}
+	drainStream, err := tc.Server(0).ApplicationLayer().GetAdminClient(t).Drain(ctx, &req)
+	require.NoError(t, err)
+	// When we get this next response the drain has started - check the error.
+	drainResp, err := drainStream.Recv()
+	require.NoError(t, err)
+	require.True(t, drainResp.IsDraining)
+}
