@@ -3601,56 +3601,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "com_github_golang_commonmark_html",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/golang-commonmark/html",
-        sha256 = "7f6687aa6ce780217750ee31711506bc919e140d205fd1693bfb5c81b5ab5a5d",
-        strip_prefix = "github.com/golang-commonmark/html@v0.0.0-20180910111043-7d7c804e1d46",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/golang-commonmark/html/com_github_golang_commonmark_html-v0.0.0-20180910111043-7d7c804e1d46.zip",
-        ],
-    )
-    go_repository(
-        name = "com_github_golang_commonmark_linkify",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/golang-commonmark/linkify",
-        sha256 = "03d5797db955119a0d607167509727a60884ba2ebf7590732a262cd153ca14a9",
-        strip_prefix = "github.com/golang-commonmark/linkify@v0.0.0-20180910111149-f05efb453a0e",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/golang-commonmark/linkify/com_github_golang_commonmark_linkify-v0.0.0-20180910111149-f05efb453a0e.zip",
-        ],
-    )
-    go_repository(
-        name = "com_github_golang_commonmark_markdown",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/golang-commonmark/markdown",
-        sha256 = "86887f9a455d8c2a48dd7b2d69352cde7730c35bab2c9edfd347886a106f5e89",
-        strip_prefix = "github.com/golang-commonmark/markdown@v0.0.0-20180910011815-a8f139058164",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/golang-commonmark/markdown/com_github_golang_commonmark_markdown-v0.0.0-20180910011815-a8f139058164.zip",
-        ],
-    )
-    go_repository(
-        name = "com_github_golang_commonmark_mdurl",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/golang-commonmark/mdurl",
-        sha256 = "b7386081771d71200f34972369cf4bcea3eb1dc6dcb1cf3906b692c586c22557",
-        strip_prefix = "github.com/golang-commonmark/mdurl@v0.0.0-20180910110917-8d018c6567d6",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/golang-commonmark/mdurl/com_github_golang_commonmark_mdurl-v0.0.0-20180910110917-8d018c6567d6.zip",
-        ],
-    )
-    go_repository(
-        name = "com_github_golang_commonmark_puny",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/golang-commonmark/puny",
-        sha256 = "1296aef61f597df70d851197dacc258fc8f3e80d0a7180e7470bd1a2f2dcbd08",
-        strip_prefix = "github.com/golang-commonmark/puny@v0.0.0-20180910110745-050be392d8b8",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/golang-commonmark/puny/com_github_golang_commonmark_puny-v0.0.0-20180910110745-050be392d8b8.zip",
-        ],
-    )
-    go_repository(
         name = "com_github_golang_freetype",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/golang/freetype",
@@ -6974,16 +6924,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "com_github_opennota_wd",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/opennota/wd",
-        sha256 = "f7976f0639a473690c38576162f76c9b253e0867e6dea81257375baa56cf79e9",
-        strip_prefix = "github.com/opennota/wd@v0.0.0-20180911144301-b446539ab1e7",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/opennota/wd/com_github_opennota_wd-v0.0.0-20180911144301-b446539ab1e7.zip",
-        ],
-    )
-    go_repository(
         name = "com_github_opentracing_basictracer_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/opentracing/basictracer-go",
@@ -7684,10 +7624,10 @@ def go_deps():
         name = "com_github_russross_blackfriday",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/russross/blackfriday",
-        sha256 = "8dbd018a896577afef870d49adc9a7cbdcef54f6edd97dcbbe1b53e7cd6d66d4",
-        strip_prefix = "github.com/russross/blackfriday@v1.6.0",
+        sha256 = "ba3408459608d91f693cffe853d2169116b8327c0f3c5d42e3818f43e41d1c87",
+        strip_prefix = "github.com/russross/blackfriday@v1.5.2",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/russross/blackfriday/com_github_russross_blackfriday-v1.6.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/russross/blackfriday/com_github_russross_blackfriday-v1.5.2.zip",
         ],
     )
     go_repository(
@@ -8968,6 +8908,66 @@ def go_deps():
         strip_prefix = "github.com/ziutek/mymysql@v1.5.4",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/ziutek/mymysql/com_github_ziutek_mymysql-v1.5.4.zip",
+        ],
+    )
+    go_repository(
+        name = "com_gitlab_golang_commonmark_html",
+        build_file_proto_mode = "disable_global",
+        importpath = "gitlab.com/golang-commonmark/html",
+        sha256 = "f2ba8985dc9d6be347a17d9200a0be0cee5ab3bce4dc601c0651a77ef2bbffc3",
+        strip_prefix = "gitlab.com/golang-commonmark/html@v0.0.0-20191124015941-a22733972181",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/gitlab.com/golang-commonmark/html/com_gitlab_golang_commonmark_html-v0.0.0-20191124015941-a22733972181.zip",
+        ],
+    )
+    go_repository(
+        name = "com_gitlab_golang_commonmark_linkify",
+        build_file_proto_mode = "disable_global",
+        importpath = "gitlab.com/golang-commonmark/linkify",
+        sha256 = "50d4fbb914621091b04bbcba9af9300d485b5725dcefd05caaf4dd1c9300ad3b",
+        strip_prefix = "gitlab.com/golang-commonmark/linkify@v0.0.0-20191026162114-a0c2df6c8f82",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/gitlab.com/golang-commonmark/linkify/com_gitlab_golang_commonmark_linkify-v0.0.0-20191026162114-a0c2df6c8f82.zip",
+        ],
+    )
+    go_repository(
+        name = "com_gitlab_golang_commonmark_markdown",
+        build_file_proto_mode = "disable_global",
+        importpath = "gitlab.com/golang-commonmark/markdown",
+        sha256 = "c97b7da7402ab96a7324290cda71693207b144224e217b3a3d9beb575a4a6fa7",
+        strip_prefix = "gitlab.com/golang-commonmark/markdown@v0.0.0-20211110145824-bf3e522c626a",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/gitlab.com/golang-commonmark/markdown/com_gitlab_golang_commonmark_markdown-v0.0.0-20211110145824-bf3e522c626a.zip",
+        ],
+    )
+    go_repository(
+        name = "com_gitlab_golang_commonmark_mdurl",
+        build_file_proto_mode = "disable_global",
+        importpath = "gitlab.com/golang-commonmark/mdurl",
+        sha256 = "436553e0c28755f3d98886302b0b9557aa7233276cfdc22f902b6057165e0cc3",
+        strip_prefix = "gitlab.com/golang-commonmark/mdurl@v0.0.0-20191124015652-932350d1cb84",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/gitlab.com/golang-commonmark/mdurl/com_gitlab_golang_commonmark_mdurl-v0.0.0-20191124015652-932350d1cb84.zip",
+        ],
+    )
+    go_repository(
+        name = "com_gitlab_golang_commonmark_puny",
+        build_file_proto_mode = "disable_global",
+        importpath = "gitlab.com/golang-commonmark/puny",
+        sha256 = "0ac6f2c07aa5acf9e5c2ed99a858dc7c2b8e4c0aa52517d6671310073305cf6f",
+        strip_prefix = "gitlab.com/golang-commonmark/puny@v0.0.0-20191124015043-9f83538fa04f",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/gitlab.com/golang-commonmark/puny/com_gitlab_golang_commonmark_puny-v0.0.0-20191124015043-9f83538fa04f.zip",
+        ],
+    )
+    go_repository(
+        name = "com_gitlab_opennota_wd",
+        build_file_proto_mode = "disable_global",
+        importpath = "gitlab.com/opennota/wd",
+        sha256 = "fba4d5252f66ecf65d0be5226c76a40ffb21bc60fda1695980da9c564548ac9e",
+        strip_prefix = "gitlab.com/opennota/wd@v0.0.0-20180912061657-c5d65f63c638",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/gitlab.com/opennota/wd/com_gitlab_opennota_wd-v0.0.0-20180912061657-c5d65f63c638.zip",
         ],
     )
     go_repository(

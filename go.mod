@@ -142,7 +142,6 @@ require (
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/go-swagger/go-swagger v0.26.1
 	github.com/gogo/status v1.1.0
-	github.com/golang-commonmark/markdown v0.0.0-20180910011815-a8f139058164
 	github.com/google/flatbuffers v2.0.8+incompatible
 	github.com/google/go-cmp v0.5.9
 	github.com/google/go-github v17.0.0+incompatible
@@ -218,6 +217,7 @@ require (
 	github.com/xdg-go/scram v1.1.2
 	github.com/xdg-go/stringprep v1.0.4
 	github.com/zabawaba99/go-gitignore v0.0.0-20200117185801-39e6bddfb292
+	gitlab.com/golang-commonmark/markdown v0.0.0-20211110145824-bf3e522c626a
 	go.etcd.io/raft/v3 v3.0.0-20230717153924-72a6e6c9f3ee
 	go.opentelemetry.io/otel v1.3.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.3.0
@@ -369,7 +369,6 @@ require (
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
 	github.com/rs/xid v1.3.0 // indirect
-	github.com/russross/blackfriday v1.6.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sahilm/fuzzy v0.1.0 // indirect
 	github.com/sirupsen/logrus v1.9.0 // indirect
@@ -387,6 +386,10 @@ require (
 	github.com/urfave/cli/v2 v2.3.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
+	gitlab.com/golang-commonmark/html v0.0.0-20191124015941-a22733972181 // indirect
+	gitlab.com/golang-commonmark/linkify v0.0.0-20191026162114-a0c2df6c8f82 // indirect
+	gitlab.com/golang-commonmark/mdurl v0.0.0-20191124015652-932350d1cb84 // indirect
+	gitlab.com/golang-commonmark/puny v0.0.0-20191124015043-9f83538fa04f // indirect
 	go.mongodb.org/mongo-driver v1.5.1 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.3.0 // indirect
@@ -406,17 +409,12 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.1 // indirect
 	github.com/dgryski/go-metro v0.0.0-20180109044635-280f6062b5bc // indirect
 	github.com/envoyproxy/protoc-gen-validate v0.9.1 // indirect
-	github.com/golang-commonmark/html v0.0.0-20180910111043-7d7c804e1d46 // indirect
-	github.com/golang-commonmark/linkify v0.0.0-20180910111149-f05efb453a0e // indirect
-	github.com/golang-commonmark/mdurl v0.0.0-20180910110917-8d018c6567d6 // indirect
-	github.com/golang-commonmark/puny v0.0.0-20180910110745-050be392d8b8 // indirect
 	github.com/golang/glog v1.0.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-zglob v0.0.3 // indirect
 	github.com/muesli/ansi v0.0.0-20211031195517-c9f0611b6c70 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/reflow v0.3.0 // indirect
-	github.com/opennota/wd v0.0.0-20180911144301-b446539ab1e7 // indirect
 	// The indicated commit is required on top of v1.0.0-RC3 because
 	// it fixes an import comment that otherwise breaks our prereqs tool.
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.3.0 // indirect

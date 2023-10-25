@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
-	"github.com/golang-commonmark/markdown"
 	"github.com/spf13/cobra"
+	"gitlab.com/golang-commonmark/markdown"
 )
 
 func init() {
