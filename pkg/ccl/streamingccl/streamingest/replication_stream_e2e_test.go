@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl"
@@ -688,7 +689,7 @@ func TestStreamingAutoReplan(t *testing.T) {
 	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_threshold", 0.1)
 
 	// The ingestion job should eventually retry because it detects new nodes to add to the plan.
-	require.Error(t, <-retryErrorChan, sql.ErrPlanChanged)
+	require.ErrorContains(t, <-retryErrorChan, sql.ErrPlanChanged.Error())
 
 	// Prevent continuous replanning to reduce test runtime. dsp.PartitionSpans()
 	// on the src cluster may return a different set of src nodes that can
@@ -703,6 +704,79 @@ func TestStreamingAutoReplan(t *testing.T) {
 	c.WaitUntilReplicatedTime(cutoverTime, jobspb.JobID(ingestionJobID))
 
 	require.Greater(t, len(clientAddresses), 1)
+}
+
+// TestStreamingReplanOnLag asserts that the c2c job retries if a node lags far
+// behind other nodes. To do this, the test spins up a multi node c2c job, waits
+// for the initial scan to complete, then elides checkpoints on node 1's stream
+// ingestion processor, triggering a lagging node error.
+func TestStreamingReplanOnLag(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.MultitenantSingleClusterNumNodes = 3
+
+	retryErrorChan := make(chan error)
+	turnOffReplanning := make(chan struct{})
+	var alreadyReplanned atomic.Bool
+
+	// Track the number of unique addresses that we're connected to, to ensure
+	// that all destination nodes participate in the replication stream.
+	clientAddresses := make(map[string]struct{})
+	var addressesMu syncutil.Mutex
+	args.TestingKnobs = &sql.StreamingTestingKnobs{
+		BeforeClientSubscribe: func(addr string, token string, clientStartTime hlc.Timestamp) {
+			addressesMu.Lock()
+			defer addressesMu.Unlock()
+			clientAddresses[addr] = struct{}{}
+		},
+		AfterRetryIteration: func(err error) {
+			// Surface the job level retry error.
+			if err != nil && !alreadyReplanned.Load() {
+				retryErrorChan <- err
+				<-turnOffReplanning
+				alreadyReplanned.Swap(true)
+			}
+		},
+		ElideCheckpointEvent: func(nodeID base.SQLInstanceID, frontier hlc.Timestamp) bool {
+			if nodeID == base.SQLInstanceID(1) && !frontier.IsEmpty() && !alreadyReplanned.Load() {
+				// Elide checkpoints on Node 1 after the initial scan has complete and
+				// before the automatic replanning event.
+				return true
+			}
+			return false
+		},
+	}
+	c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
+	defer cleanup()
+	// Don't allow for replanning based on node participation.
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_threshold", 0)
+
+	replicationtestutils.CreateScatteredTable(t, c, 3)
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
+	require.Greater(t, len(clientAddresses), 1)
+
+	// Configure the ingestion job to replan eagerly based on node lagging.
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.inter_node_lag", time.Second)
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_frequency", time.Millisecond*500)
+
+	// The ingestion job should eventually retry because it detects a lagging node.
+	require.ErrorContains(t, <-retryErrorChan, ErrNodeLagging.Error())
+
+	// Prevent continuous replanning to reduce test runtime.
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.inter_node_lag", time.Minute*10)
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_frequency", time.Minute*10)
+	close(turnOffReplanning)
+
+	cutoverTime := c.DestSysServer.Clock().Now()
+	c.WaitUntilReplicatedTime(cutoverTime, jobspb.JobID(ingestionJobID))
 }
 
 // TestProtectedTimestampManagement tests the active protected
