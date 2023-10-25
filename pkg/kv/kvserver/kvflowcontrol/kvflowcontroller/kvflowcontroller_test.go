@@ -13,6 +13,8 @@ package kvflowcontroller
 import (
 	"context"
 	"fmt"
+	"math"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -442,6 +444,248 @@ func TestInspectController(t *testing.T) {
 	require.Len(t, controller.Inspect(ctx), 2)
 	require.Equal(t, controller.Inspect(ctx)[1],
 		makeInspectStream(2, 8<<20 /* 8MiB */, 16<<20 /* 16 MiB */))
+}
+
+func TestControllerLogging(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := log.ScopeWithoutShowLogs(t)
+	// Causes every call to retrieve the elastic metric to log.
+	prevVModule := log.GetVModule()
+	_ = log.SetVModule("kvflowcontroller_metrics=2")
+	defer func() { _ = log.SetVModule(prevVModule) }()
+	defer s.Close(t)
+
+	ctx := context.Background()
+	testStartTs := timeutil.Now()
+
+	makeStream := func(id uint64) kvflowcontrol.Stream {
+		return kvflowcontrol.Stream{
+			TenantID: roachpb.MustMakeTenantID(id),
+			StoreID:  roachpb.StoreID(id),
+		}
+	}
+	makeConnectedStream := func(id uint64) kvflowcontrol.ConnectedStream {
+		return &mockConnectedStream{
+			stream: makeStream(id),
+		}
+	}
+
+	st := cluster.MakeTestingClusterSettings()
+	const numTokens = 1 << 20 /* 1 MiB */
+	elasticTokensPerStream.Override(ctx, &st.SV, numTokens)
+	regularTokensPerStream.Override(ctx, &st.SV, numTokens)
+	kvflowcontrol.Mode.Override(ctx, &st.SV, int64(kvflowcontrol.ApplyToAll))
+	controller := New(metric.NewRegistry(), st, hlc.NewClockForTesting(nil))
+
+	numBlocked := 0
+	createStreamAndExhaustTokens := func(id uint64, checkMetric bool) {
+		admitted, err := controller.Admit(
+			ctx, admissionpb.NormalPri, time.Time{}, makeConnectedStream(id))
+		require.NoError(t, err)
+		require.True(t, admitted)
+		controller.DeductTokens(
+			ctx, admissionpb.BulkNormalPri, kvflowcontrol.Tokens(numTokens), makeStream(id))
+		controller.DeductTokens(
+			ctx, admissionpb.NormalPri, kvflowcontrol.Tokens(numTokens), makeStream(id))
+		if checkMetric {
+			// This first call will also log.
+			require.Equal(t, int64(numBlocked+1), controller.metrics.BlockedStreamCount[elastic].Value())
+			require.Equal(t, int64(numBlocked+1), controller.metrics.BlockedStreamCount[regular].Value())
+		}
+		numBlocked++
+	}
+	// 1 stream that is blocked.
+	id := uint64(1)
+	createStreamAndExhaustTokens(id, true)
+	// Total 24 streams are blocked.
+	for id++; id < 25; id++ {
+		createStreamAndExhaustTokens(id, false)
+	}
+	// 25th stream will also be blocked. The detailed stats will only cover an
+	// arbitrary subset of 20 streams.
+	log.Infof(ctx, "creating stream id %d", id)
+	createStreamAndExhaustTokens(id, true)
+
+	// Total 104 streams are blocked.
+	for id++; id < 105; id++ {
+		createStreamAndExhaustTokens(id, false)
+	}
+	// 105th stream will also be blocked. The blocked stream names will only
+	// list 100 streams.
+	log.Infof(ctx, "creating stream id %d", id)
+	createStreamAndExhaustTokens(id, true)
+
+	log.FlushFiles()
+	entries, err := log.FetchEntriesFromFiles(testStartTs.UnixNano(),
+		math.MaxInt64, 2000,
+		regexp.MustCompile(`kvflowcontroller_metrics\.go|kvflowcontroller_test\.go`),
+		log.WithMarkedSensitiveData)
+	require.NoError(t, err)
+	/*
+		Log output is:
+
+		stream t1/s1 was blocked: durations: regular 16.083µs elastic 17.875µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		1 blocked elastic replication stream(s): t1/s1
+		1 blocked regular replication stream(s): t1/s1
+		creating stream id 25
+		stream t18/s18 was blocked: durations: regular 39.708µs elastic 40.208µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t2/s2 was blocked: durations: regular 113.75µs elastic 219.792µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t14/s14 was blocked: durations: regular 77.625µs elastic 78.167µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t24/s24 was blocked: durations: regular 56.166µs elastic 56.708µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t12/s12 was blocked: durations: regular 107.792µs elastic 108.334µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t3/s3 was blocked: durations: regular 150.916µs elastic 151.5µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t10/s10 was blocked: durations: regular 134.167µs elastic 134.667µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t17/s17 was blocked: durations: regular 121.583µs elastic 122.125µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t4/s4 was blocked: durations: regular 178.417µs elastic 179µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t16/s16 was blocked: durations: regular 146.667µs elastic 147.208µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t1/s1 was blocked: durations: regular 809.833µs elastic 809.833µs tokens deducted: regular 0 B elastic 0 B
+		stream t20/s20 was blocked: durations: regular 154.083µs elastic 154.625µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t7/s7 was blocked: durations: regular 209.208µs elastic 209.708µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t13/s13 was blocked: durations: regular 199µs elastic 199.583µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t21/s21 was blocked: durations: regular 182.667µs elastic 183.25µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t23/s23 was blocked: durations: regular 188.042µs elastic 188.583µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t5/s5 was blocked: durations: regular 263.75µs elastic 264.375µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t8/s8 was blocked: durations: regular 262µs elastic 262.541µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t19/s19 was blocked: durations: regular 233.334µs elastic 233.875µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t22/s22 was blocked: durations: regular 235µs elastic 235.542µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		skipped logging some streams that were blocked
+		25 blocked elastic replication stream(s): t18/s18, t2/s2, t14/s14, t24/s24, t12/s12, t3/s3, t10/s10, t17/s17, t4/s4, t16/s16, t1/s1, t20/s20, t7/s7, t13/s13, t21/s21, t23/s23, t5/s5, t8/s8, t19/s19, t22/s22, t25/s25, t11/s11, t6/s6, t9/s9, t15/s15
+		25 blocked regular replication stream(s): t14/s14, t24/s24, t12/s12, t3/s3, t18/s18, t2/s2, t4/s4, t16/s16, t1/s1, t20/s20, t7/s7, t13/s13, t10/s10, t17/s17, t21/s21, t23/s23, t19/s19, t22/s22, t25/s25, t11/s11, t6/s6, t5/s5, t8/s8, t9/s9, t15/s15
+		creating stream id 105
+		stream t104/s104 was blocked: durations: regular 14.416µs elastic 14.916µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t3/s3 was blocked: durations: regular 535.75µs elastic 535.75µs tokens deducted: regular 0 B elastic 0 B
+		stream t90/s90 was blocked: durations: regular 76.25µs elastic 76.834µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t1/s1 was blocked: durations: regular 500.667µs elastic 500.667µs tokens deducted: regular 0 B elastic 0 B
+		stream t105/s105 was blocked: durations: regular 43.708µs elastic 44.416µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t54/s54 was blocked: durations: regular 239.542µs elastic 240.083µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t96/s96 was blocked: durations: regular 100.708µs elastic 101.25µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t97/s97 was blocked: durations: regular 109.416µs elastic 110µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t68/s68 was blocked: durations: regular 222.417µs elastic 223µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t45/s45 was blocked: durations: regular 320.25µs elastic 320.792µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t94/s94 was blocked: durations: regular 153.167µs elastic 153.75µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t65/s65 was blocked: durations: regular 266.916µs elastic 267.458µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t14/s14 was blocked: durations: regular 690.875µs elastic 690.875µs tokens deducted: regular 0 B elastic 0 B
+		stream t8/s8 was blocked: durations: regular 547.167µs elastic 547.167µs tokens deducted: regular 0 B elastic 0 B
+		stream t6/s6 was blocked: durations: regular 517.875µs elastic 517.875µs tokens deducted: regular 0 B elastic 0 B
+		stream t55/s55 was blocked: durations: regular 360.583µs elastic 361.166µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		stream t5/s5 was blocked: durations: regular 600.042µs elastic 600.042µs tokens deducted: regular 0 B elastic 0 B
+		stream t15/s15 was blocked: durations: regular 566.875µs elastic 566.875µs tokens deducted: regular 0 B elastic 0 B
+		stream t13/s13 was blocked: durations: regular 674.459µs elastic 674.459µs tokens deducted: regular 0 B elastic 0 B
+		stream t32/s32 was blocked: durations: regular 517µs elastic 517.542µs tokens deducted: regular 1.0 MiB elastic 2.0 MiB
+		skipped logging some streams that were blocked
+		105 blocked elastic replication stream(s): t104/s104, t3/s3, t90/s90, t1/s1, t105/s105, t54/s54, t96/s96, t97/s97, t68/s68, t45/s45, t94/s94, t65/s65, t14/s14, t8/s8, t6/s6, t55/s55, t5/s5, t15/s15, t13/s13, t32/s32, t79/s79, t20/s20, t11/s11, t24/s24, t48/s48, t84/s84, t99/s99, t46/s46, t37/s37, t12/s12, t26/s26, t44/s44, t75/s75, t21/s21, t49/s49, t82/s82, t91/s91, t81/s81, t51/s51, t74/s74, t22/s22, t19/s19, t25/s25, t83/s83, t47/s47, t58/s58, t76/s76, t9/s9, t103/s103, t33/s33, t62/s62, t38/s38, t95/s95, t52/s52, t85/s85, t53/s53, t72/s72, t102/s102, t10/s10, t59/s59, t73/s73, t42/s42, t66/s66, t29/s29, t92/s92, t100/s100, t27/s27, t86/s86, t2/s2, t63/s63, t43/s43, t101/s101, t69/s69, t39/s39, t28/s28, t36/s36, t35/s35, t93/s93, t87/s87, t57/s57, t56/s56, t98/s98, t41/s41, t50/s50, t78/s78, t88/s88, t89/s89, t4/s4, t60/s60, t70/s70, t67/s67, t23/s23, t71/s71, t34/s34, t16/s16, t64/s64, t17/s17, t40/s40, t7/s7, t61/s61 omitted some due to overflow
+		105 blocked regular replication stream(s): t11/s11, t84/s84, t24/s24, t48/s48, t99/s99, t37/s37, t12/s12, t46/s46, t21/s21, t49/s49, t82/s82, t26/s26, t44/s44, t75/s75, t91/s91, t51/s51, t81/s81, t74/s74, t25/s25, t83/s83, t47/s47, t22/s22, t19/s19, t58/s58, t76/s76, t9/s9, t103/s103, t62/s62, t33/s33, t52/s52, t85/s85, t38/s38, t95/s95, t10/s10, t59/s59, t53/s53, t72/s72, t102/s102, t66/s66, t29/s29, t73/s73, t42/s42, t100/s100, t27/s27, t92/s92, t2/s2, t86/s86, t43/s43, t101/s101, t69/s69, t63/s63, t28/s28, t36/s36, t35/s35, t39/s39, t87/s87, t93/s93, t57/s57, t56/s56, t41/s41, t98/s98, t78/s78, t88/s88, t89/s89, t4/s4, t50/s50, t60/s60, t70/s70, t67/s67, t34/s34, t16/s16, t64/s64, t17/s17, t23/s23, t71/s71, t7/s7, t61/s61, t40/s40, t18/s18, t30/s30, t31/s31, t77/s77, t80/s80, t104/s104, t3/s3, t90/s90, t1/s1, t105/s105, t97/s97, t68/s68, t54/s54, t96/s96, t65/s65, t45/s45, t94/s94, t6/s6, t14/s14, t8/s8, t15/s15, t13/s13 omitted some due to overflow
+	*/
+
+	blockedStreamRegexp, err := regexp.Compile(
+		"stream .* was blocked: durations: regular .* elastic .* tokens deducted: regular .* elastic .*")
+	require.NoError(t, err)
+	blockedStreamSkippedRegexp, err := regexp.Compile(
+		"skipped logging some streams that were blocked")
+	require.NoError(t, err)
+	const blockedCountElasticRegexp = "%d blocked elastic replication stream"
+	const blockedCountRegularRegexp = "%d blocked regular replication stream"
+	blocked1ElasticRegexp, err := regexp.Compile(fmt.Sprintf(blockedCountElasticRegexp, 1))
+	require.NoError(t, err)
+	blocked1RegularRegexp, err := regexp.Compile(fmt.Sprintf(blockedCountRegularRegexp, 1))
+	require.NoError(t, err)
+	blocked25ElasticRegexp, err := regexp.Compile(fmt.Sprintf(blockedCountElasticRegexp, 25))
+	require.NoError(t, err)
+	blocked25RegularRegexp, err := regexp.Compile(fmt.Sprintf(blockedCountRegularRegexp, 25))
+	require.NoError(t, err)
+	blocked105ElasticRegexp, err := regexp.Compile(
+		"105 blocked elastic replication stream.* omitted some due to overflow")
+	require.NoError(t, err)
+	blocked105RegularRegexp, err := regexp.Compile(
+		"105 blocked regular replication stream.* omitted some due to overflow")
+	require.NoError(t, err)
+
+	const creatingRegexp = "creating stream id %d"
+	creating25Regexp, err := regexp.Compile(fmt.Sprintf(creatingRegexp, 25))
+	require.NoError(t, err)
+	creating105Regexp, err := regexp.Compile(fmt.Sprintf(creatingRegexp, 105))
+	require.NoError(t, err)
+
+	blockedStreamCount := 0
+	foundBlockedElastic := false
+	foundBlockedRegular := false
+	foundBlockedStreamSkipped := false
+	// First section of the log where 1 stream blocked. Entries are in reverse
+	// chronological order.
+	index := len(entries) - 1
+	for ; index >= 0; index-- {
+		entry := entries[index]
+		if creating25Regexp.MatchString(entry.Message) {
+			break
+		}
+		if blockedStreamRegexp.MatchString(entry.Message) {
+			blockedStreamCount++
+		}
+		if blocked1ElasticRegexp.MatchString(entry.Message) {
+			foundBlockedElastic = true
+		}
+		if blocked1RegularRegexp.MatchString(entry.Message) {
+			foundBlockedRegular = true
+		}
+		if blockedStreamSkippedRegexp.MatchString(entry.Message) {
+			foundBlockedStreamSkipped = true
+		}
+	}
+	require.Equal(t, 1, blockedStreamCount)
+	require.True(t, foundBlockedElastic)
+	require.True(t, foundBlockedRegular)
+	require.False(t, foundBlockedStreamSkipped)
+
+	blockedStreamCount = 0
+	foundBlockedElastic = false
+	foundBlockedRegular = false
+	// Second section of the log where 25 streams blocked.
+	for ; index >= 0; index-- {
+		entry := entries[index]
+		if creating105Regexp.MatchString(entry.Message) {
+			break
+		}
+		if blockedStreamRegexp.MatchString(entry.Message) {
+			blockedStreamCount++
+		}
+		if blocked25ElasticRegexp.MatchString(entry.Message) {
+			foundBlockedElastic = true
+		}
+		if blocked25RegularRegexp.MatchString(entry.Message) {
+			foundBlockedRegular = true
+		}
+		if blockedStreamSkippedRegexp.MatchString(entry.Message) {
+			foundBlockedStreamSkipped = true
+		}
+	}
+	require.Equal(t, 20, blockedStreamCount)
+	require.True(t, foundBlockedElastic)
+	require.True(t, foundBlockedRegular)
+	require.True(t, foundBlockedStreamSkipped)
+
+	blockedStreamCount = 0
+	foundBlockedElastic = false
+	foundBlockedRegular = false
+	// Third section of the log where 105 streams blocked.
+	for ; index >= 0; index-- {
+		entry := entries[index]
+		if blockedStreamRegexp.MatchString(entry.Message) {
+			blockedStreamCount++
+		}
+		if blocked105ElasticRegexp.MatchString(entry.Message) {
+			foundBlockedElastic = true
+		}
+		if blocked105RegularRegexp.MatchString(entry.Message) {
+			foundBlockedRegular = true
+		}
+		if blockedStreamSkippedRegexp.MatchString(entry.Message) {
+			foundBlockedStreamSkipped = true
+		}
+	}
+	require.Equal(t, 20, blockedStreamCount)
+	require.True(t, foundBlockedElastic)
+	require.True(t, foundBlockedRegular)
+	require.True(t, foundBlockedStreamSkipped)
 }
 
 type mockConnectedStream struct {

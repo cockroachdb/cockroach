@@ -161,8 +161,6 @@ func newMetrics(c *Controller) *metrics {
 			annotateMetricTemplateWithWorkClass(wc, flowTokensAvailable),
 			func() int64 {
 				sum := int64(0)
-				c.mu.Lock()
-				defer c.mu.Unlock()
 				c.mu.buckets.Range(func(key, value any) bool {
 					b := value.(*bucket)
 					sum += int64(b.tokens(wc))
@@ -221,16 +219,16 @@ func newMetrics(c *Controller) *metrics {
 			},
 		)
 
+		// blockedStreamLogger controls periodic logging of blocked streams in
+		// WorkClass wc.
 		var blockedStreamLogger = log.Every(30 * time.Second)
 		var buf strings.Builder
 		m.BlockedStreamCount[wc] = metric.NewFunctionalGauge(
 			annotateMetricTemplateWithWorkClass(wc, blockedStreamCount),
 			func() int64 {
-				shouldLog := blockedStreamLogger.ShouldLog()
-
+				shouldLogBlocked := blockedStreamLogger.ShouldLog()
+				// count is the metric value.
 				count := int64(0)
-				c.mu.Lock()
-				defer c.mu.Unlock()
 
 				streamStatsCount := 0
 				// TODO(sumeer): this cap is not ideal. Consider dynamically reducing
@@ -241,47 +239,62 @@ func newMetrics(c *Controller) *metrics {
 					b := value.(*bucket)
 
 					if b.tokens(wc) <= 0 {
-						count += 1
+						count++
 
-						if shouldLog {
-							if count > 100 {
-								// TODO(sumeer): this cap is not ideal.
-								return false // cap output to 100 blocked streams
-							}
+						if shouldLogBlocked {
+							// TODO(sumeer): this cap is not ideal.
+							const blockedStreamCountCap = 100
 							if count == 1 {
 								buf.Reset()
-							}
-							if count > 1 {
+								buf.WriteString(stream.String())
+							} else if count <= blockedStreamCountCap {
 								buf.WriteString(", ")
+								buf.WriteString(stream.String())
+							} else if count == blockedStreamCountCap+1 {
+								buf.WriteString(" omitted some due to overflow")
 							}
-							buf.WriteString(stream.String())
 						}
 					}
-					if shouldLog {
+					// Log stats, which reflect both elastic and regular, when handling
+					// the elastic metric. The choice of wc == elastic is arbitrary.
+					// Every 30s this predicate will evaluate to true, and we will log
+					// all the streams (elastic and regular) that experienced some
+					// blocking since the last time such logging was done. If a
+					// high-enough log verbosity is specified, shouldLogBacked will
+					// always be true, but since this method executes at the frequency
+					// of scraping the metric, we will still log at a reasonable rate.
+					if shouldLogBlocked && wc == elastic {
+						// Get and reset stats regardless of whether we will log this
+						// stream or not. We want stats to reflect only the last metric
+						// interval.
 						regularStats, elasticStats := b.getAndResetStats(c.clock.PhysicalTime())
+						logStream := false
 						if regularStats.noTokenDuration > 0 || elasticStats.noTokenDuration > 0 {
+							logStream = true
 							streamStatsCount++
 						}
-						if streamStatsCount <= streamStatsCountCap {
-							var b strings.Builder
-							fmt.Fprintf(&b, "stream %s was blocked: durations:", stream.String())
-							if regularStats.noTokenDuration > 0 {
-								fmt.Fprintf(&b, " regular %s", regularStats.noTokenDuration.String())
+						if logStream {
+							if streamStatsCount <= streamStatsCountCap {
+								var b strings.Builder
+								fmt.Fprintf(&b, "stream %s was blocked: durations:", stream.String())
+								if regularStats.noTokenDuration > 0 {
+									fmt.Fprintf(&b, " regular %s", regularStats.noTokenDuration.String())
+								}
+								if elasticStats.noTokenDuration > 0 {
+									fmt.Fprintf(&b, " elastic %s", elasticStats.noTokenDuration.String())
+								}
+								fmt.Fprintf(&b, " tokens deducted: regular %s elastic %s",
+									humanize.IBytes(uint64(regularStats.tokensDeducted)),
+									humanize.IBytes(uint64(elasticStats.tokensDeducted)))
+								log.Infof(context.Background(), "%s", redact.SafeString(b.String()))
+							} else if streamStatsCount == streamStatsCountCap+1 {
+								log.Infof(context.Background(), "skipped logging some streams that were blocked")
 							}
-							if elasticStats.noTokenDuration > 0 {
-								fmt.Fprintf(&b, " elastic %s", elasticStats.noTokenDuration.String())
-							}
-							fmt.Fprintf(&b, " tokens deducted: regular %s elastic %s",
-								humanize.Bytes(uint64(regularStats.tokensDeducted)),
-								humanize.Bytes(uint64(elasticStats.tokensDeducted)))
-							log.Infof(context.Background(), "%s", redact.SafeString(b.String()))
-						} else if streamStatsCount == streamStatsCountCap+1 {
-							log.Infof(context.Background(), "skipped logging some streams that were blocked")
 						}
 					}
 					return true
 				})
-				if shouldLog && count > 0 {
+				if shouldLogBlocked && count > 0 {
 					log.Warningf(context.Background(), "%d blocked %s replication stream(s): %s",
 						count, wc, redact.SafeString(buf.String()))
 				}
