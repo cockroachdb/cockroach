@@ -4,7 +4,7 @@
 # rows eagerly in the presence of limit hints.
 
 statement ok
-CREATE TABLE a (x INT PRIMARY KEY, y INT, z INT, INDEX (y));
+CREATE TABLE a (x INT PRIMARY KEY, y INT, z INT, INDEX (y), FAMILY (x, y, z));
 CREATE TABLE b (x INT PRIMARY KEY);
 INSERT INTO a VALUES (1, 1, 1), (2, 1, 1), (3, 2, 2), (4, 2, 2);
 INSERT INTO b VALUES (1), (2), (3), (4);
