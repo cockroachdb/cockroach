@@ -3415,6 +3415,10 @@ func (m *sessionDataMutator) SetStreamerEnabled(val bool) {
 	m.data.StreamerEnabled = val
 }
 
+func (m *sessionDataMutator) SetStreamerAlwaysMaintainOrdering(val bool) {
+	m.data.StreamerAlwaysMaintainOrdering = val
+}
+
 func (m *sessionDataMutator) SetUnboundedParallelScans(val bool) {
 	m.data.UnboundedParallelScans = val
 }
