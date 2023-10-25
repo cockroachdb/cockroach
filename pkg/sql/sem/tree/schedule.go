@@ -130,8 +130,9 @@ func (node *ScheduledChangefeed) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.SinkURI)
 
 	if node.Options != nil {
-		ctx.WriteString(" WITH ")
+		ctx.WriteString(" WITH OPTIONS (")
 		ctx.FormatNode(&node.Options)
+		ctx.WriteString(" )")
 	}
 
 	if node.Select != nil {
