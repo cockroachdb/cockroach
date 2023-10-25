@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -90,17 +91,22 @@ type PersistedSQLStats struct {
 
 	// The last time the size was checked before doing a flush.
 	lastSizeCheck time.Time
+
+	eventsExporter obs.EventsExporterInterface
 }
 
 var _ sqlstats.Provider = &PersistedSQLStats{}
 
 // New returns a new instance of the PersistedSQLStats.
-func New(cfg *Config, memSQLStats *sslocal.SQLStats) *PersistedSQLStats {
+func New(
+	cfg *Config, memSQLStats *sslocal.SQLStats, eventsExporter obs.EventsExporterInterface,
+) *PersistedSQLStats {
 	p := &PersistedSQLStats{
 		SQLStats:             memSQLStats,
 		cfg:                  cfg,
 		memoryPressureSignal: make(chan struct{}),
 		drain:                make(chan struct{}),
+		eventsExporter:       eventsExporter,
 	}
 
 	p.jobMonitor = jobMonitor{
