@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -186,6 +188,10 @@ func TestSQLStatCollection(t *testing.T) {
 	sqlServer.GetReportedSQLStatsController().ResetLocalSQLStats(ctx)
 
 	// Execute some queries against the sqlDB to build up some stats.
+	// As we are scrubbing the stats, we want to make sure the app name
+	// is properly hashed.
+	hashedAppName := "hashed app name"
+	sqlRunner.Exec(t, `SET application_name = $1;`, hashedAppName)
 	sqlRunner.Exec(t, `CREATE DATABASE t`)
 	sqlRunner.Exec(t, `CREATE TABLE t.test (x INT PRIMARY KEY);`)
 	sqlRunner.Exec(t, `INSERT INTO t.test VALUES (1);`)
@@ -222,10 +228,18 @@ func TestSQLStatCollection(t *testing.T) {
 	foundStat = false
 	for _, stat := range stats {
 		if stat.Key.Query == "INSERT INTO _ VALUES (_)" {
+			require.NotEqual(t, hashedAppName, stat.Key.App,
+				"expected app name to be hashed")
+			require.NotEqual(t, sql.FailedHashedValue, stat.Key.App)
 			foundStat = true
 			if !stat.Stats.AlmostEqual(&sqlStatData, epsilon) {
 				t.Fatal("expected stats", sqlStatData.String(), "found", stat.Stats.String())
 			}
+		} else if strings.HasPrefix(stat.Key.App,
+			catconstants.DelegatedAppNamePrefix) {
+			require.NotEqual(t, catconstants.DelegatedAppNamePrefix+hashedAppName,
+				stat.Key.App, "expected app name to be hashed")
+			require.NotEqual(t, sql.FailedHashedValue, stat.Key.App)
 		}
 	}
 	if !foundStat {
@@ -245,9 +259,17 @@ func TestSQLStatCollection(t *testing.T) {
 	foundStat = false
 	for _, stat := range stats {
 		if stat.Key.Query == "INSERT INTO _ VALUES (_)" {
+			require.NotEqual(t, hashedAppName, stat.Key.App,
+				"expected app name to be hashed")
+			require.NotEqual(t, sql.FailedHashedValue, stat.Key.App)
 			foundStat = true
 			// Add into the current stat data the collected data.
 			sqlStatData.Add(&stat.Stats)
+		} else if strings.HasPrefix(stat.Key.App,
+			catconstants.DelegatedAppNamePrefix) {
+			require.NotEqual(t, catconstants.DelegatedAppNamePrefix+hashedAppName,
+				stat.Key.App, "expected app name to be hashed")
+			require.NotEqual(t, sql.FailedHashedValue, stat.Key.App)
 		}
 	}
 	if !foundStat {
@@ -264,6 +286,9 @@ func TestSQLStatCollection(t *testing.T) {
 	foundStat = false
 	for _, stat := range stats {
 		if stat.Key.Query == "INSERT INTO _ VALUES (_)" {
+			require.NotEqual(t, hashedAppName, stat.Key.App,
+				"expected app name to be hashed")
+			require.NotEqual(t, sql.FailedHashedValue, stat.Key.App)
 			foundStat = true
 			// The new value for the stat should be the aggregate of the previous stat
 			// value, and the old stat value. Additionally, zero out the timestamps for
@@ -273,6 +298,11 @@ func TestSQLStatCollection(t *testing.T) {
 			if !stat.Stats.AlmostEqual(&sqlStatData, epsilon) {
 				t.Fatal("expected stats", sqlStatData, "found", stat.Stats)
 			}
+		} else if strings.HasPrefix(stat.Key.App,
+			catconstants.DelegatedAppNamePrefix) {
+			require.NotEqual(t, catconstants.DelegatedAppNamePrefix+hashedAppName,
+				stat.Key.App, "expected app name to be hashed")
+			require.NotEqual(t, sql.FailedHashedValue, stat.Key.App)
 		}
 	}
 
