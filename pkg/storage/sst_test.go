@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -35,18 +36,20 @@ func TestCheckSSTConflictsMaxLockConflicts(t *testing.T) {
 
 	keys := []string{"aa", "bb", "cc", "dd"}
 	intents := []string{"a", "b", "c"}
+	locks := []string{"d", "e"}
 	start, end := "a", "z"
 
 	testcases := []struct {
-		maxLockConflicts int64
-		expectIntents    []string
+		maxLockConflicts    int64
+		expectLockConflicts []string
 	}{
-		{maxLockConflicts: -1, expectIntents: []string{"a"}},
-		{maxLockConflicts: 0, expectIntents: []string{"a"}},
-		{maxLockConflicts: 1, expectIntents: []string{"a"}},
-		{maxLockConflicts: 2, expectIntents: []string{"a", "b"}},
-		{maxLockConflicts: 3, expectIntents: []string{"a", "b", "c"}},
-		{maxLockConflicts: 4, expectIntents: []string{"a", "b", "c"}},
+		{maxLockConflicts: 0, expectLockConflicts: []string{"a", "b", "c", "d", "e"}}, // 0 means no limit
+		{maxLockConflicts: 1, expectLockConflicts: []string{"a"}},
+		{maxLockConflicts: 2, expectLockConflicts: []string{"a", "b"}},
+		{maxLockConflicts: 3, expectLockConflicts: []string{"a", "b", "c"}},
+		{maxLockConflicts: 4, expectLockConflicts: []string{"a", "b", "c", "d"}},
+		{maxLockConflicts: 5, expectLockConflicts: []string{"a", "b", "c", "d", "e"}},
+		{maxLockConflicts: 6, expectLockConflicts: []string{"a", "b", "c", "d", "e"}},
 	}
 
 	// Create SST with keys equal to intents at txn2TS.
@@ -81,6 +84,14 @@ func TestCheckSSTConflictsMaxLockConflicts(t *testing.T) {
 	for _, key := range intents {
 		require.NoError(t, MVCCPut(ctx, batch, roachpb.Key(key), txn1TS, roachpb.MakeValueFromString("intent"), MVCCWriteOptions{Txn: txn1}))
 	}
+	// Also write some replicated locks held by txn1.
+	for i, key := range locks {
+		str := lock.Shared
+		if i%2 != 0 {
+			str = lock.Exclusive
+		}
+		require.NoError(t, MVCCAcquireLock(ctx, batch, txn1, str, roachpb.Key(key), nil, 0))
+	}
 	require.NoError(t, batch.Commit(true))
 	batch.Close()
 	require.NoError(t, engine.Flush())
@@ -101,7 +112,7 @@ func TestCheckSSTConflictsMaxLockConflicts(t *testing.T) {
 					for _, i := range lcErr.Locks {
 						actual = append(actual, string(i.Key))
 					}
-					require.Equal(t, tc.expectIntents, actual)
+					require.Equal(t, tc.expectLockConflicts, actual)
 				})
 			}
 		})
