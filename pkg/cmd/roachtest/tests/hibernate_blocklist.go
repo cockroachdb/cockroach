@@ -36,7 +36,7 @@ var hibernateSpatialBlockList21_2 = blocklist{}
 
 var hibernateSpatialBlockList21_1 = blocklist{}
 
-var hibernateBlockList22_2 = hibernateBlockList22_1
+var hibernateBlockList22_2 = blocklist{}
 
 var hibernateBlockList22_1 = blocklist{
 	"org.hibernate.jpa.test.graphs.FetchGraphTest.testCollectionEntityGraph":                                                "unknown",
