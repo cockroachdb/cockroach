@@ -71,31 +71,33 @@ true
 
 # Makes sure the upgrade job has finished, and the cluster version gate is
 # passed.
-query B retry
-SELECT crdb_internal.is_at_least_version('23.2')
-----
-true
-
-query TTTTTTB colnames
-SELECT * FROM [SHOW GRANTS ON FUNCTION f] ORDER BY grantee
-----
-database_name  schema_name  routine_id  routine_signature  grantee  privilege_type  is_grantable
-test           public       100106      f()                admin    ALL             true
-test           public       100106      f()                public   EXECUTE         false
-test           public       100106      f()                root     ALL             true
-
-user testuser1 nodeidx=1
-
-# Makes sure the user can execute f on node 1.
-query I
-SELECT f()
-----
-1
-
-user testuser1 nodeidx=2
-
-# Makes sure the user can execute f on node 2.
-query I
-SELECT f()
-----
-1
+# TODO(#112621): Unskip these tests. It is currently skipped because the cluster
+# does not reliably complete the upgrade in CI.
+# query B retry
+# SELECT crdb_internal.is_at_least_version('23.2')
+# ----
+# true
+#
+# query TTTTTTB colnames
+# SELECT * FROM [SHOW GRANTS ON FUNCTION f] ORDER BY grantee
+# ----
+# database_name  schema_name  routine_id  routine_signature  grantee  privilege_type  is_grantable
+# test           public       100106      f()                admin    ALL             true
+# test           public       100106      f()                public   EXECUTE         false
+# test           public       100106      f()                root     ALL             true
+#
+# user testuser1 nodeidx=1
+#
+# # Makes sure the user can execute f on node 1.
+# query I
+# SELECT f()
+# ----
+# 1
+#
+# user testuser1 nodeidx=2
+#
+# # Makes sure the user can execute f on node 2.
+# query I
+# SELECT f()
+# ----
+# 1

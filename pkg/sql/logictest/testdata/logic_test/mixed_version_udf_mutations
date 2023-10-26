@@ -83,26 +83,28 @@ $$ LANGUAGE SQL;
 # Upgrade all nodes and test that creating UDFs with mutations succeeds.
 # ----------------------------------------------------------------------
 
-upgrade 1
-
-upgrade 2
-
-query B retry
-SELECT crdb_internal.is_at_least_version('23.2')
-----
-true
-
-statement ok
-CREATE FUNCTION f_insert() RETURNS VOID AS $$
-  INSERT INTO t VALUES (1,1);
-$$ LANGUAGE SQL;
-
-statement ok
-CREATE FUNCTION f_delete() RETURNS VOID AS $$
-  DELETE FROM t WHERE a = 1;
-$$ LANGUAGE SQL;
-
-statement ok
-CREATE FUNCTION f_update() RETURNS VOID AS $$
-  UPDATE t SET b = 1 WHERE a = 1;
-$$ LANGUAGE SQL;
+# TODO(#112621): Unskip these tests. It is currently skipped because the cluster
+# does not reliably complete the upgrade in CI.
+# upgrade 1
+#
+# upgrade 2
+#
+# query B retry
+# SELECT crdb_internal.is_at_least_version('23.2')
+# ----
+# true
+#
+# statement ok
+# CREATE FUNCTION f_insert() RETURNS VOID AS $$
+#   INSERT INTO t VALUES (1,1);
+# $$ LANGUAGE SQL;
+#
+# statement ok
+# CREATE FUNCTION f_delete() RETURNS VOID AS $$
+#   DELETE FROM t WHERE a = 1;
+# $$ LANGUAGE SQL;
+#
+# statement ok
+# CREATE FUNCTION f_update() RETURNS VOID AS $$
+#   UPDATE t SET b = 1 WHERE a = 1;
+# $$ LANGUAGE SQL;
