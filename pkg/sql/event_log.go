@@ -670,7 +670,7 @@ func asyncWriteToOtelAndSystemEventsTable(
 }
 
 func sendEventsToObsService(
-	ctx context.Context, execCfg *ExecutorConfig, events []otel_logs_pb.LogRecord,
+	ctx context.Context, execCfg *ExecutorConfig, events []*otel_logs_pb.LogRecord,
 ) {
 	for i := range events {
 		execCfg.EventsExporter.SendEvent(ctx, obspb.EventlogEvent, events[i])
@@ -679,7 +679,7 @@ func sendEventsToObsService(
 
 func prepareEventWrite(
 	ctx context.Context, execCfg *ExecutorConfig, entries []logpb.EventPayload,
-) (query string, args []interface{}, events []otel_logs_pb.LogRecord) {
+) (query string, args []interface{}, events []*otel_logs_pb.LogRecord) {
 	reportingID := execCfg.NodeInfo.NodeID.SQLInstanceID()
 	const colsPerEvent = 4
 	// Note: we insert the value zero as targetID because sadly this
@@ -692,7 +692,7 @@ INSERT INTO system.eventlog (
 VALUES($1, $2, $3, $4, 0)`
 	args = make([]interface{}, 0, len(entries)*colsPerEvent)
 
-	events = make([]otel_logs_pb.LogRecord, len(entries))
+	events = make([]*otel_logs_pb.LogRecord, len(entries))
 	sp := tracing.SpanFromContext(ctx)
 	var traceID [16]byte
 	var spanID [8]byte
@@ -724,7 +724,7 @@ VALUES($1, $2, $3, $4, 0)`
 			string(infoBytes),
 		)
 
-		events[i] = otel_logs_pb.LogRecord{
+		events[i] = &otel_logs_pb.LogRecord{
 			TimeUnixNano: uint64(nowNanos),
 			Body:         &v1.AnyValue{Value: &v1.AnyValue_StringValue{StringValue: args[len(args)-1].(string)}},
 			Attributes: []*v1.KeyValue{{

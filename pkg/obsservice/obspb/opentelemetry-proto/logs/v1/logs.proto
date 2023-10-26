@@ -55,7 +55,7 @@ message ResourceLogs {
   opentelemetry.proto.resource.v1.Resource resource = 1;
 
   // A list of ScopeLogs that originate from a resource.
-  repeated ScopeLogs scope_logs = 2 [(gogoproto.nullable) = false ];
+  repeated ScopeLogs scope_logs = 2;
 
   // This schema_url applies to the data in the "resource" field. It does not apply
   // to the data in the "scope_logs" field which have their own schema_url field.
@@ -70,7 +70,7 @@ message ScopeLogs {
   opentelemetry.proto.common.v1.InstrumentationScope scope = 1;
 
   // A list of log records.
-  repeated LogRecord log_records = 2 [(gogoproto.nullable) = false ];
+  repeated LogRecord log_records = 2;
 
   // This schema_url applies to all logs in the "logs" field.
   string schema_url = 3;

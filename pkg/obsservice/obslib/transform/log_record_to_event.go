@@ -27,7 +27,7 @@ func LogRecordToEvent(
 	ingestTime time.Time,
 	resource *resourcev1.Resource,
 	scope *commonv1.InstrumentationScope,
-	logRecord logsv1.LogRecord,
+	logRecord *logsv1.LogRecord,
 ) *obspb.Event {
 	logRecord.ObservedTimeUnixNano = uint64(ingestTime.UnixNano())
 	return &obspb.Event{

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,6 +35,7 @@ func FuzzServeConn(data []byte) int {
 		sql.MemoryMetrics{},
 		&mon.BytesMonitor{},
 		time.Minute,
+		obs.NoopEventsExporter{},
 		&sql.ExecutorConfig{
 			Settings: &cluster.Settings{},
 		},
