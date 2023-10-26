@@ -142,7 +142,7 @@ set default_transaction_read_only = off;
 
 user testuser
 
-statement error user testuser does not have MANAGETENANT system privilege
+statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
 CREATE TENANT four
 
 subtest drop_tenant
@@ -195,19 +195,19 @@ set default_transaction_read_only = off;
 
 user testuser
 
-statement error user testuser does not have MANAGETENANT system privilege
+statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
 DROP TENANT three
 
-statement error user testuser does not have MANAGETENANT system privilege
+statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
 SHOW TENANTS
 
-statement error user testuser does not have MANAGETENANT system privilege
+statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
 SHOW TENANT 'two'
 
 user root
 
 statement ok
-GRANT SYSTEM MANAGETENANT TO testuser
+GRANT SYSTEM MANAGEVIRTUALCLUSTER TO testuser
 
 user testuser
 
@@ -225,6 +225,21 @@ SHOW TENANT two
 ----
 id  name        data_state  service_mode
 3   two         ready       none
+
+user root
+
+statement ok
+REVOKE SYSTEM MANAGEVIRTUALCLUSTER FROM testuser
+
+# Sanity check that using the original "internal key" privilege name is
+# respected.
+statement ok
+GRANT SYSTEM MANAGETENANT TO testuser
+
+user testuser
+
+statement ok
+SHOW TENANTS
 
 user root
 

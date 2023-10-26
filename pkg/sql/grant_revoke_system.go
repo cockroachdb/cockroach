@@ -53,8 +53,8 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 		if n.desiredprivs.Contains(privilege.REPLICATION) {
 			return pgerror.New(pgcode.FeatureNotSupported, "upgrade must be finalized before using REPLICATION system privilege")
 		}
-		if n.desiredprivs.Contains(privilege.MANAGETENANT) {
-			return pgerror.New(pgcode.FeatureNotSupported, "upgrade must be finalized before using MANAGETENANT system privilege")
+		if n.desiredprivs.Contains(privilege.MANAGEVIRTUALCLUSTER) {
+			return pgerror.New(pgcode.FeatureNotSupported, "upgrade must be finalized before using MANAGEVIRTUALCLUSTER system privilege")
 		}
 
 	}
@@ -144,8 +144,8 @@ VALUES ($1, $2, $3, $4, (
 					upsertStmt,
 					user.Normalized(),
 					systemPrivilegeObject.GetPath(),
-					privList.SortedNames(),
-					grantOptionList.SortedNames(),
+					privList.SortedKeys(),
+					grantOptionList.SortedKeys(),
 				); err != nil {
 					return err
 				}
@@ -212,8 +212,8 @@ VALUES ($1, $2, $3, $4, (
 					upsertStmt,
 					user.Normalized(),
 					systemPrivilegeObject.GetPath(),
-					privList.SortedNames(),
-					grantOptionList.SortedNames(),
+					privList.SortedKeys(),
+					grantOptionList.SortedKeys(),
 				); err != nil {
 					return err
 				}
