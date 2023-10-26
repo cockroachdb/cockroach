@@ -1,25 +1,36 @@
 # Tests for the fallback rate.
 
-init
+reconfigure
+limit: 1000
 rate: 1000
-initial: 0
+current: 0
 ----
+Burst Limit: 1000
+Refill Rate: 1000
 Current RUs: 0
+Average RUs: 0
 
 # Fallback rate should be just the base rate 1000.
 request
 ru: 10
 ----
 Granted: 10 RU
-Trickle duration: 10ms
+Trickle duration: 10s
 Fallback rate: 1000 RU/s
+Burst Limit: 1000
+Refill Rate: 1000
 Current RUs: -10
+Average RUs: 0
 
-init
+reconfigure
+limit: 5000000
 rate: 500
-initial: 3600000
+current: 3600000
 ----
+Burst Limit: 5000000
+Refill Rate: 500
 Current RUs: 3600000
+Average RUs: 0
 
 # Fallback rate should be the base rate 500 plus 1000.
 request
@@ -28,4 +39,7 @@ ru: 10
 Granted: 10 RU
 Trickle duration: 0s
 Fallback rate: 1500 RU/s
+Burst Limit: 5000000
+Refill Rate: 500
 Current RUs: 3599990
+Average RUs: 900000

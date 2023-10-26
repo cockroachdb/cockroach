@@ -1,8 +1,12 @@
-init
+reconfigure
+limit: 1000
 rate: 100
-initial: 1000
+current: 1000
 ----
+Burst Limit: 1000
+Refill Rate: 100
 Current RUs: 1000
+Average RUs: 0
 
 request
 ru: 10
@@ -10,7 +14,10 @@ ru: 10
 Granted: 10 RU
 Trickle duration: 0s
 Fallback rate: 100.2777778 RU/s
+Burst Limit: 1000
+Refill Rate: 100
 Current RUs: 990
+Average RUs: 250
 
 request
 ru: 890
@@ -18,17 +25,22 @@ ru: 890
 Granted: 890 RU
 Trickle duration: 0s
 Fallback rate: 100.275 RU/s
+Burst Limit: 1000
+Refill Rate: 100
 Current RUs: 100
+Average RUs: 435
 
-# We have 100 available, and it will take 1s for another 100 to become
-# available.
+# Go into debt.
 request
 ru: 200
 ----
 Granted: 200 RU
-Trickle duration: 1s
+Trickle duration: 10s
 Fallback rate: 100.0277778 RU/s
+Burst Limit: 1000
+Refill Rate: 100
 Current RUs: -100
+Average RUs: 351.25
 
 # Request a very large value. We only grant what we get over the next request
 # period (10s by default).
@@ -38,47 +50,115 @@ ru: 10000
 Granted: 1000 RU
 Trickle duration: 10s
 Fallback rate: 100 RU/s
+Burst Limit: 1000
+Refill Rate: 100
 Current RUs: -1100
+Average RUs: 238.4375
 
-# If we keep requesting, we will enter into debt and less will be granted.
+# Try to request enough that we hit max debt levels. Note that we're temporarily
+# giving out more than the configured rate while Average RUs stabilizes.
 request
 ru: 1000
 ----
-Granted: 900 RU
+Granted: 400 RU
 Trickle duration: 10s
 Fallback rate: 100 RU/s
-Current RUs: -2000
+Burst Limit: 1000
+Refill Rate: 100
+Current RUs: -1500
+Average RUs: -96.171875
 
-request
-ru: 1000
-----
-Granted: 50 RU
-Trickle duration: 10s
-Fallback rate: 100 RU/s
-Current RUs: -2050
-
+# Fast-forward 10 seconds.
 update
 10s
 ----
-Current RUs: -1050
+Burst Limit: 1000
+Refill Rate: 100
+Current RUs: -500
+Average RUs: -96.171875
+
+# Make a request that is limited by average RUs.
+request
+ru: 1000
+----
+Granted: 802.8710938 RU
+Trickle duration: 10s
+Fallback rate: 100 RU/s
+Burst Limit: 1000
+Refill Rate: 100
+Current RUs: -1302.871094
+Average RUs: -197.1289062
+
+# Make another request that should be granted.
+request
+ru: 100
+----
+Granted: 100 RU
+Trickle duration: 10s
+Fallback rate: 100 RU/s
+Burst Limit: 1000
+Refill Rate: 100
+Current RUs: -1402.871094
+Average RUs: -473.5644531
+
+# Fast-forward 10 seconds.
+update
+10s
+----
+Burst Limit: 1000
+Refill Rate: 100
+Current RUs: -402.8710938
+Average RUs: -473.5644531
 
 request
 ru: 100
 ----
 Granted: 100 RU
-Trickle duration: 1.052631578s
+Trickle duration: 10s
 Fallback rate: 100 RU/s
-Current RUs: -1150
+Burst Limit: 1000
+Refill Rate: 100
+Current RUs: -502.8710938
+Average RUs: -455.8911133
 
 update
 10s
 ----
-Current RUs: -150
+Burst Limit: 1000
+Refill Rate: 100
+Current RUs: 497.1289062
+Average RUs: -455.8911133
 
+request
+ru: 500
+----
+Granted: 500 RU
+Trickle duration: 10s
+Fallback rate: 100.1380914 RU/s
+Burst Limit: 1000
+Refill Rate: 100
+Current RUs: -2.87109375
+Average RUs: -217.6361084
+
+# No token refill, don't update current RUs.
+reconfigure
+limit: 1000
+rate: 0
+current: -1
+----
+Burst Limit: 1000
+Refill Rate: 0
+Current RUs: -2.87109375
+Average RUs: -217.6361084
+
+# Try to request tokens, expect 0 grant.
 request
 ru: 100
 ----
-Granted: 100 RU
-Trickle duration: 1s
-Fallback rate: 100 RU/s
-Current RUs: -250
+Granted: 0 RU
+Trickle duration: 0s
+Fallback rate: 0 RU/s
+Burst Limit: 1000
+Refill Rate: 0
+Current RUs: -2.87109375
+Average RUs: -163.9448547
