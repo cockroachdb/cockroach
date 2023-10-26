@@ -386,8 +386,9 @@ func setZipContextDefaults() {
 	// which impacts performance and SQL service latency.
 	zipCtx.includeStacks = true
 	// Job traces for running Traceable jobs involves fetching cluster wide traces
-	// for each job.
-	zipCtx.includeRunningJobTraces = false
+	// for each job. The number of such jobs is expected to be small, and so this
+	// flag is opt-out, not opt-in.
+	zipCtx.includeRunningJobTraces = true
 	zipCtx.cpuProfDuration = 5 * time.Second
 	zipCtx.concurrency = 15
 

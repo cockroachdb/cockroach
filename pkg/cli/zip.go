@@ -397,8 +397,7 @@ type jobTrace struct {
 // dumpTraceableJobTraces collects the traces for some "traceable" jobs that are
 // in a running state. The job types in this list are the ones that have
 // explicitly implemented the TraceableJob interface.
-func (zc *debugZipContext) dumpTraceableJobTraces() error {
-	ctx := context.Background()
+func (zc *debugZipContext) dumpTraceableJobTraces(ctx context.Context) error {
 	rows, err := zc.firstNodeSQLConn.Query(ctx,
 		`WITH
 latestprogress AS (
@@ -426,13 +425,6 @@ INNER JOIN latestprogress ON j.id = latestprogress.job_id;`,
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if rows != nil {
-			if err := rows.Close(); err != nil {
-				log.Warningf(ctx, "failed to close with error: %v", err)
-			}
-		}
-	}()
 	vals := make([]driver.Value, 2)
 	jobTraces := make([]jobTrace, 0)
 	for err = rows.Next(vals); err == nil; err = rows.Next(vals) {
@@ -449,6 +441,12 @@ INNER JOIN latestprogress ON j.id = latestprogress.job_id;`,
 			return err
 		}
 		jobTraces = append(jobTraces, jobTrace{jobID: jobspb.JobID(jobID), traceID: progress.TraceID})
+	}
+	if err != io.EOF {
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
 	}
 
 	func() {

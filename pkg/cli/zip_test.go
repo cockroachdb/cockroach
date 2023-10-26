@@ -962,7 +962,7 @@ func TestZipJobTrace(t *testing.T) {
 			timeout:          3 * time.Second,
 			firstNodeSQLConn: sqlConn,
 		}
-		if err := zc.dumpTraceableJobTraces(); err != nil {
+		if err := zc.dumpTraceableJobTraces(context.Background()); err != nil {
 			t.Fatal(err)
 		}
 	}()
