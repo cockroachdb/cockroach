@@ -12,7 +12,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math"
 	"math/rand"
 	"time"
 
@@ -173,14 +172,16 @@ func (h *sysTableHelper) readTenantAndInstanceState(
 		instanceID := base.SQLInstanceID(tree.MustBeDInt(r[0]))
 		if instanceID == 0 {
 			// Tenant state.
+			// NOTE: The current_share_sum column is mapped to the RUCurrentAvg
+			// field.
 			tenant.Present = true
 			tenant.LastUpdate = tree.MustBeDTimestamp(r[2])
 			tenant.FirstInstance = base.SQLInstanceID(tree.MustBeDInt(r[1]))
 			tenant.Bucket = tenanttokenbucket.State{
-				RUBurstLimit:    float64(tree.MustBeDFloat(r[3])),
-				RURefillRate:    float64(tree.MustBeDFloat(r[4])),
-				RUCurrent:       float64(tree.MustBeDFloat(r[5])),
-				CurrentShareSum: float64(tree.MustBeDFloat(r[6])),
+				RUBurstLimit: float64(tree.MustBeDFloat(r[3])),
+				RURefillRate: float64(tree.MustBeDFloat(r[4])),
+				RUCurrent:    float64(tree.MustBeDFloat(r[5])),
+				RUCurrentAvg: float64(tree.MustBeDFloat(r[6])),
 			}
 			if consumption := r[7]; consumption != tree.DNull {
 				// total_consumption can be NULL because of an upgrade of the
@@ -213,6 +214,7 @@ func (h *sysTableHelper) updateTenantState(txn isql.Txn, tenant tenantState) err
 	}
 	// Note: it is important that this UPSERT specifies all columns of the
 	// table, to allow it to perform "blind" writes.
+	// Note: The RUCurrentAvg field is mapped to the current_share_sum column.
 	_, err = txn.ExecEx(
 		h.ctx, "tenant-usage-upsert", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
@@ -237,7 +239,7 @@ func (h *sysTableHelper) updateTenantState(txn isql.Txn, tenant tenantState) err
 		tenant.Bucket.RUBurstLimit,               // $4
 		tenant.Bucket.RURefillRate,               // $5
 		tenant.Bucket.RUCurrent,                  // $6
-		tenant.Bucket.CurrentShareSum,            // $7
+		tenant.Bucket.RUCurrentAvg,               // $7
 		tree.NewDBytes(tree.DBytes(consumption)), // $8
 	)
 	return err
@@ -253,6 +255,7 @@ func (h *sysTableHelper) updateTenantAndInstanceState(
 	}
 	// Note: it is important that this UPSERT specifies all columns of the
 	// table, to allow it to perform "blind" writes.
+	// Note: The RUCurrentAvg field is mapped to the current_share_sum column.
 	_, err = txn.ExecEx(
 		h.ctx, "tenant-usage-insert", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
@@ -279,7 +282,7 @@ func (h *sysTableHelper) updateTenantAndInstanceState(
 		tenant.Bucket.RUBurstLimit,               // $4
 		tenant.Bucket.RURefillRate,               // $5
 		tenant.Bucket.RUCurrent,                  // $6
-		tenant.Bucket.CurrentShareSum,            // $7
+		tenant.Bucket.RUCurrentAvg,               // $7
 		tree.NewDBytes(tree.DBytes(consumption)), // $8
 		int64(instance.ID),                       // $9
 		int64(instance.NextInstance),             // $10
@@ -530,26 +533,6 @@ func (h *sysTableHelper) checkInvariants(txn isql.Txn) error {
 		}
 	}
 
-	// Verify the shares sum.
-	sharesSum := float64(tree.MustBeDFloat(rows[0][6]))
-	var expSharesSum float64
-	for _, r := range rows[1:] {
-		expSharesSum += float64(tree.MustBeDFloat(r[10]))
-	}
-
-	a, b := sharesSum, expSharesSum
-	if a > b {
-		a, b = b, a
-	}
-	// We use "units of least precision" for similarity: this is the number of
-	// representable floating point numbers in-between the two values. This is
-	// better than a fixed epsilon because the allowed error is proportional to
-	// the magnitude of the numbers. Because the mantissa is in the low bits, we
-	// can just use the bit representations as integers.
-	const ulpTolerance = 1000
-	if math.Float64bits(a)+ulpTolerance <= math.Float64bits(b) {
-		return errors.Errorf("expected shares sum %g, have %g", expSharesSum, sharesSum)
-	}
 	return nil
 }
 
@@ -569,11 +552,11 @@ func InspectTenantMetadata(
 	}
 
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "Bucket state: ru-burst-limit=%g  ru-refill-rate=%g  ru-current=%.12g  current-share-sum=%.12g\n",
+	fmt.Fprintf(&buf, "Bucket state: ru-burst-limit=%g  ru-refill-rate=%g  ru-current=%.12g  ru-current-avg=%.12g\n",
 		tenant.Bucket.RUBurstLimit,
 		tenant.Bucket.RURefillRate,
 		tenant.Bucket.RUCurrent,
-		tenant.Bucket.CurrentShareSum,
+		tenant.Bucket.RUCurrentAvg,
 	)
 	fmt.Fprintf(&buf, "Consumption: ru=%.12g kvru=%.12g  reads=%d in %d batches (%d bytes)  writes=%d in %d batches (%d bytes)  pod-cpu-usage: %g secs  pgwire-egress=%d bytes  external-egress=%d bytes  external-ingress=%d bytes\n",
 		tenant.Consumption.RU,
