@@ -289,6 +289,9 @@ func (tb *tokenBucket) AvailableTokens(now time.Time) tenantcostmodel.RU {
 func (tb *tokenBucket) String(now time.Time) string {
 	tb.update(now)
 	s := fmt.Sprintf("%.2f RU filling @ %.2f RU/s", tb.available, tb.rate)
+	if tb.limit > 0 {
+		s += fmt.Sprintf(" (limited to %.2f RU)", tb.limit)
+	}
 	if tb.waitingDebt > 0 {
 		s += fmt.Sprintf(" (%.2f waiting debt @ %.2f RU/s)", tb.waitingDebt, tb.waitingDebtRate)
 	}

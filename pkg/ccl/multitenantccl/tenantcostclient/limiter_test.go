@@ -171,5 +171,5 @@ func TestLimiterNotify(t *testing.T) {
 	}
 	lim.Reconfigure(ts.Now(), args)
 	checkNoNotification()
-	check("50.00 RU filling @ 0.00 RU/s")
+	check("50.00 RU filling @ 0.00 RU/s (limited to 50.00 RU)")
 }
