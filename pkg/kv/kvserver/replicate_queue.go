@@ -1415,6 +1415,12 @@ func (rq *replicateQueue) findRemoveVoter(
 		}
 		raftStatus := repl.RaftStatus()
 		if raftStatus == nil || raftStatus.RaftState != raft.StateLeader {
+			// If requested, assume all replicas are up-to-date.
+			if rq.store.TestingKnobs().AllowVoterRemovalWhenNotLeader {
+				candidates = allocatorimpl.FilterUnremovableReplicasWithoutRaftStatus(
+					ctx, existingVoters, existingVoters, lastReplAdded)
+				break
+			}
 			// If we've lost raft leadership, we're unlikely to regain it so give up immediately.
 			return roachpb.ReplicationTarget{}, "", &benignError{errors.Errorf("not raft leader while range needs removal")}
 		}

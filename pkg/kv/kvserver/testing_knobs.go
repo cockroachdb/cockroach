@@ -151,6 +151,9 @@ type StoreTestingKnobs struct {
 	// DisableReplicaRebalancing disables rebalancing of replicas but otherwise
 	// leaves the replicate queue operational.
 	DisableReplicaRebalancing bool
+	// AllowVoterRemovalWhenNotLeader allows the replicate queue to remove
+	// voters when this replica is not the leader.
+	AllowVoterRemovalWhenNotLeader bool
 	// DisableLoadBasedSplitting turns off LBS so no splits happen because of load.
 	DisableLoadBasedSplitting bool
 	// LoadBasedSplittingOverrideKey returns a key which should be used for load

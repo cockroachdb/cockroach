@@ -1219,6 +1219,7 @@ func (sc *StoreConfig) SetDefaults(numStores int) {
 			sc.TestingKnobs.AllocatorKnobs = &allocator.TestingKnobs{}
 		}
 		sc.TestingKnobs.AllocatorKnobs.AllowLeaseTransfersToReplicasNeedingSnapshots = true
+		sc.TestingKnobs.ReplicaPlannerKnobs.AllowVoterRemovalWhenNotLeader = true // downreplication
 	}
 }
 
