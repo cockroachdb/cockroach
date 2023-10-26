@@ -286,6 +286,9 @@ func (f *replicaFlowControlIntegrationImpl) handle() (kvflowcontrol.Handle, bool
 // reconnect previously disconnected streams if we're able.
 func (f *replicaFlowControlIntegrationImpl) refreshStreams(ctx context.Context, reason string) {
 	f.disconnectStreams(ctx, f.notActivelyReplicatingTo(), reason)
+	// TODO(sumeer): we call notActivelyReplicatingTo() again in tryReconnect(),
+	// which is wasteful, since refreshStreams is called on every raft tick.
+	// Simply pass the return value from the call above to the following method.
 	f.tryReconnect(ctx)
 }
 
