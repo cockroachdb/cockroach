@@ -675,10 +675,7 @@ func (ts *testServer) startSharedProcessDefaultTestTenant(
 
 // maybeStartDefaultTestTenant might start a test tenant. This can then be used
 // for multi-tenant testing, where the default SQL connection will be made to
-// this tenant instead of to the system tenant. Note that we will
-// currently only attempt to start a test tenant if we're running in an
-// enterprise enabled build. This is due to licensing restrictions on the MT
-// capabilities.
+// this tenant instead of to the system tenant.
 func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 	if ts.params.DefaultTestTenant.TestTenantNoDecisionMade() {
 		return errors.WithHint(
