@@ -973,3 +973,32 @@ SELECT * FROM test_49144 WHERE ("test_49144"."value" -> 'c') > '2.33' ORDER BY 1
 ----
 {"c": 2.5}
 {"c": 3}
+
+# Regression test for #113103. Expressions with JSON values are
+# composite-sensitive. The optimizer should not assume otherwise and perform
+# optimizations that produce incorrect results.
+subtest regression_113103
+
+# Order three text values that are cast from logically equivalent JSON values.
+query T
+SELECT j::TEXT
+FROM (VALUES ('1.0'::JSON), ('1'::JSON), ('1.00'::JSON)) v(j)
+ORDER BY 1
+----
+1
+1.0
+1.00
+
+# Add a filter that holds the JSON values constant to 1. The output should be
+# the same as above.
+query T
+SELECT j::TEXT
+FROM (VALUES ('1.0'::JSON), ('1'::JSON), ('1.00'::JSON)) v(j)
+WHERE j = '1'::JSON
+ORDER BY 1
+----
+1
+1.0
+1.00
+
+subtest end
