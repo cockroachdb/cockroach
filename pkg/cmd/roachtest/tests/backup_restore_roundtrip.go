@@ -30,29 +30,66 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+var (
+	// maxRangeSizeBytes defines the possible non default (default is 512 MiB) maximum range
+	// sizes that may get set for all user databases.
+	maxRangeSizeBytes = []int64{4 << 20 /* 4 MiB*/, 32 << 20 /* 32 MiB */, 128 << 20}
+
+	// SystemSettingsValuesBoundOnRangeSize defines the cluster settings that
+	// should scale in proportion to the range size. For example, if the range
+	// size is halved, all the values of these cluster settings should also be
+	// halved.
+	systemSettingsScaledOnRangeSize = []string{
+		"backup.restore_span.target_size",
+		"bulkio.backup.file_size",
+		"kv.bulk_sst.target_size",
+	}
+)
+
 const numFullBackups = 5
 
-func registerBackupRestoreRoundTrip(r registry.Registry) {
-	// backup-restore/round-trip tests that a round trip of creating a backup and
-	// restoring the created backup create the same objects.
-	r.Add(registry.TestSpec{
-		Name:              "backup-restore/round-trip",
-		Timeout:           8 * time.Hour,
-		Owner:             registry.OwnerDisasterRecovery,
-		Cluster:           r.MakeClusterSpec(4),
-		EncryptionSupport: registry.EncryptionMetamorphic,
-		RequiresLicense:   true,
-		CompatibleClouds:  registry.AllExceptAWS,
-		Suites:            registry.Suites(registry.Nightly),
-		Run:               backupRestoreRoundTrip,
-	})
+type roundTripSpecs struct {
+	name                 string
+	metamorphicRangeSize bool
 }
 
-func backupRestoreRoundTrip(ctx context.Context, t test.Test, c cluster.Cluster) {
+func registerBackupRestoreRoundTrip(r registry.Registry) {
+
+	for _, sp := range []roundTripSpecs{
+		{
+			name:                 "backup-restore/round-trip",
+			metamorphicRangeSize: false,
+		},
+		{
+			name:                 "backup-restore/small-ranges",
+			metamorphicRangeSize: true,
+		},
+	} {
+		sp := sp
+		r.Add(registry.TestSpec{
+			Name:              sp.name,
+			Timeout:           4 * time.Hour,
+			Owner:             registry.OwnerDisasterRecovery,
+			Cluster:           r.MakeClusterSpec(4),
+			EncryptionSupport: registry.EncryptionMetamorphic,
+			RequiresLicense:   true,
+			CompatibleClouds:  registry.AllExceptAWS,
+			Suites:            registry.Suites(registry.Nightly),
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				backupRestoreRoundTrip(ctx, t, c, sp.metamorphicRangeSize)
+			},
+		})
+	}
+}
+
+// backup-restore/round-trip tests that a round trip of creating a backup and
+// restoring the created backup create the same objects.
+func backupRestoreRoundTrip(
+	ctx context.Context, t test.Test, c cluster.Cluster, metamorphicRangeSize bool,
+) {
 	if c.Spec().Cloud != spec.GCE {
 		t.Skip("uses gs://cockroachdb-backup-testing; see https://github.com/cockroachdb/cockroach/issues/105968")
 	}
-
 	pauseProbability := 0.2
 	roachNodes := c.Range(1, c.Spec().NodeCount-1)
 	workloadNode := c.Node(c.Spec().NodeCount)
@@ -62,7 +99,11 @@ func backupRestoreRoundTrip(ctx context.Context, t test.Test, c cluster.Cluster)
 	// Upload binaries and start cluster.
 	uploadVersion(ctx, t, c, c.All(), clusterupgrade.CurrentVersion())
 
-	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(install.SecureOption(true)), roachNodes)
+	envOption := install.EnvOption([]string{
+		"COCKROACH_MIN_RANGE_MAX_BYTES=1",
+	})
+
+	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(install.SecureOption(true), envOption), roachNodes)
 	m := c.NewMonitor(ctx, roachNodes)
 
 	m.Go(func(ctx context.Context) error {
@@ -77,24 +118,25 @@ func backupRestoreRoundTrip(ctx context.Context, t test.Test, c cluster.Cluster)
 		if err != nil {
 			return err
 		}
-
 		tables, err := testUtils.loadTablesForDBs(ctx, t.L(), testRNG, dbs...)
 		if err != nil {
 			return err
 		}
-
 		d, err := newBackupRestoreTestDriver(ctx, t, c, testUtils, roachNodes, dbs, tables)
 		if err != nil {
 			return err
 		}
-
 		if err := testUtils.setShortJobIntervals(ctx, testRNG); err != nil {
 			return err
 		}
 		if err := testUtils.setClusterSettings(ctx, t.L(), testRNG); err != nil {
 			return err
 		}
-
+		if metamorphicRangeSize {
+			if err := testUtils.setMaxRangeSizeAndDependentSettings(ctx, t, testRNG, dbs); err != nil {
+				return err
+			}
+		}
 		stopBackgroundCommands, err := runBackgroundWorkload()
 		if err != nil {
 			return err
@@ -146,7 +188,6 @@ func backupRestoreRoundTrip(ctx context.Context, t test.Test, c cluster.Cluster)
 				}
 			}
 		}
-
 		stopBackgroundCommands()
 		return nil
 	})

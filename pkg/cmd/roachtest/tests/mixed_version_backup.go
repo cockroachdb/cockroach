@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -143,6 +144,14 @@ var (
 		"kv.bulk_io_write.max_rate":                      {"250MiB", "500MiB", "2TiB"},
 		"kv.bulk_sst.max_allowed_overage":                {"16MiB", "256MiB"},
 		"kv.bulk_sst.target_size":                        {"4MiB", "64MiB", "128MiB"},
+		// The default is currently 384 MB, which was set to be about 75% of a
+		// range's worth of data. This configuration will reduce the size of this
+		// setting to test restore_span_covering correctness, at the cost of a
+		// performance dip.
+		//
+		// Note that a size of 0 indicates that target_size will not be used while
+		// constructing restore span entries.
+		"backup.restore_span.target_size": {"0 B", "4 MiB", "32 MiB", "128 MiB"},
 	}
 
 	systemSettingNames = func() []string {
@@ -1285,6 +1294,53 @@ func (u *CommonTestUtils) loadTablesForDBs(
 	return allTables, nil
 }
 
+// setMaxRangeSizeAndDependentSettings chooses a random default range size from
+// maxRangeSize bytes and scales the cluster settings in
+// systemSettingsScaledOnRangeSize such that rangeSize/settingValue remains the
+// same.
+func (u *CommonTestUtils) setMaxRangeSizeAndDependentSettings(
+	ctx context.Context, t test.Test, rng *rand.Rand, dbs []string,
+) error {
+	const defaultRangeMinBytes = 1024
+	const defaultRangeSize int64 = 512 << 20
+
+	rangeSize := maxRangeSizeBytes[rng.Intn(len(maxRangeSizeBytes))]
+	t.L().Printf("Set max range rangeSize to %s", humanizeutil.IBytes(rangeSize))
+
+	scale := func(current int64) int64 {
+		currentF := float64(current)
+		ratio := float64(rangeSize) / float64(defaultRangeSize)
+		return int64(currentF * ratio)
+	}
+	for _, dbName := range dbs {
+		query := fmt.Sprintf("ALTER DATABASE %s CONFIGURE ZONE USING range_max_bytes=%d, range_min_bytes=%d",
+			dbName, rangeSize, defaultRangeMinBytes)
+		if err := u.Exec(ctx, rng, query); err != nil {
+			return err
+		}
+	}
+
+	for _, setting := range systemSettingsScaledOnRangeSize {
+		var humanizedCurrentValue string
+		if err := u.QueryRow(ctx, rng, fmt.Sprintf("SHOW CLUSTER SETTING %s", setting)).Scan(&humanizedCurrentValue); err != nil {
+			return err
+		}
+		currentValue, err := humanizeutil.ParseBytes(humanizedCurrentValue)
+		if err != nil {
+			return err
+		}
+		newValue := scale(currentValue)
+		t.L().Printf("changing cluster setting %s from %s to %s", setting, humanizedCurrentValue, humanizeutil.IBytes(newValue))
+		stmt := fmt.Sprintf("SET CLUSTER SETTING %s = '%d'", setting, newValue)
+		if err := u.Exec(ctx, rng, stmt); err != nil {
+			return err
+		}
+	}
+	// Ensure ranges have been properly replicated.
+	_, dbConn := u.RandomDB(rng, u.roachNodes)
+	return WaitFor3XReplication(ctx, t, dbConn)
+}
+
 // setClusterSettings may set up to numCustomSettings cluster settings
 // as defined in `systemSettingValues`. The system settings changed
 // are logged. This function should be called *before* the upgrade
@@ -1573,6 +1629,7 @@ func (d *BackupRestoreTestDriver) computeTableContents(
 				return err
 			}
 			result[j] = contents
+			l.Printf("loaded contents for %s", table)
 			return nil
 		})
 	}
@@ -2131,6 +2188,7 @@ func (bc *backupCollection) verifyBackupCollection(
 	restoredContents, err := d.computeTableContents(
 		ctx, l, rng, restoredTables, bc.contents, "", /* timestamp */
 	)
+
 	if err != nil {
 		return fmt.Errorf("backup %s: error loading restored contents: %w", bc.name, err)
 	}
