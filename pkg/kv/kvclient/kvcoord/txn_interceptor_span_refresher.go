@@ -420,6 +420,10 @@ func (sr *txnSpanRefresher) splitEndTxnAndRetrySend(
 	if err := br.Combine(ctx, brSuffix, []int{etIdx}, ba); err != nil {
 		return nil, kvpb.NewError(err)
 	}
+	if br.Txn == nil || !br.Txn.Status.IsFinalized() {
+		return nil, kvpb.NewError(errors.AssertionFailedf(
+			"txn status not finalized after successful retried EndTxn: %v", br.Txn))
+	}
 	return br, nil
 }
 
