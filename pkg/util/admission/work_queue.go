@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
@@ -759,6 +760,9 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	}
 
 	// Start waiting for admission.
+	var span *tracing.Span
+	ctx, span = tracing.ChildSpan(ctx, "admissionWorkQueueWait")
+	defer span.Finish()
 	defer releaseWaitingWork(work)
 	select {
 	case <-ctx.Done():
@@ -799,8 +803,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		q.metrics.incErrored(info.Priority)
 		q.metrics.recordFinishWait(info.Priority, waitDur)
 		deadline, _ := ctx.Deadline()
-		log.Eventf(ctx, "deadline expired, waited in %s queue for %v",
-			workKindString(q.workKind), waitDur)
+		recordAdmissionWorkQueueStats(span, waitDur, q.workKind, true)
 		return true,
 			errors.Newf("work %s deadline expired while waiting: deadline: %v, start: %v, dur: %v",
 				workKindString(q.workKind), deadline, startTime, waitDur)
@@ -814,10 +817,23 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		if work.heapIndex != -1 {
 			panic(errors.AssertionFailedf("grantee should be removed from heap"))
 		}
-		log.Eventf(ctx, "admitted, waited in %s queue for %v", workKindString(q.workKind), waitDur)
+		recordAdmissionWorkQueueStats(span, waitDur, q.workKind, false)
 		q.granter.continueGrantChain(chainID)
 		return true, nil
 	}
+}
+
+func recordAdmissionWorkQueueStats(
+	span *tracing.Span, waitDur time.Duration, workKind WorkKind, deadlineExceeded bool,
+) {
+	if span == nil {
+		return
+	}
+	span.RecordStructured(&admissionpb.AdmissionWorkQueueStats{
+		WaitDurationNanos: waitDur,
+		WorkKind:          workKindString(workKind),
+		DeadlineExceeded:  deadlineExceeded,
+	})
 }
 
 // AdmittedWorkDone is used to inform the WorkQueue that some admitted work is
