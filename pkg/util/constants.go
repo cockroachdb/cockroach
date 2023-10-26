@@ -14,7 +14,9 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -96,6 +98,10 @@ const DisableMetamorphicEnvVar = "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING
 // initialization of the test module and its dependencies.
 func metamorphicEligible() bool {
 	if !buildutil.CrdbTestBuild {
+		return false
+	}
+	// Bail out if we are running a non-test binary which also happens to be non-cockroach, e.g., roachprod, roachtest.
+	if !bazel.InBazelTest() && !strings.Contains(build.GetInfo().BinaryName, "cockroach") {
 		return false
 	}
 

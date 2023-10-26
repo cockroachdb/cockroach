@@ -34,6 +34,7 @@ var (
 	utcTime          string // Build time in UTC (year/month/day hour:min:sec)
 	rev              string // SHA-1 of this build (git rev-parse)
 	buildTagOverride string
+	binaryName       string // Name of the binary that was built, e.g., cockroach, roachtest, roachprod.
 	cgoCompiler      = cgoVersion()
 	cgoTargetTriple  string
 	platform         = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
@@ -130,6 +131,7 @@ func (b Info) Long() string {
 	fmt.Fprintf(tw, "C Compiler:       %s\n", b.CgoCompiler)
 	fmt.Fprintf(tw, "Build Commit ID:  %s\n", b.Revision)
 	fmt.Fprintf(tw, "Build Type:       %s\n", b.Type)
+	fmt.Fprintf(tw, "Binary Name:			%s\n", b.BinaryName)
 	fmt.Fprintf(tw, "Enabled Assertions: %t", b.EnabledAssertions) // No final newline: cobra prints one for us.
 	_ = tw.Flush()
 	return buf.String()
@@ -159,6 +161,7 @@ func GetInfo() Info {
 	if ch == "" {
 		ch = "unknown"
 	}
+
 	return Info{
 		GoVersion:         runtime.Version(),
 		Tag:               binaryVersion,
@@ -171,6 +174,7 @@ func GetInfo() Info {
 		Type:              typ,
 		Channel:           ch,
 		EnvChannel:        envChannel,
+		BinaryName:        binaryName,
 		EnabledAssertions: enabledAssertions,
 	}
 }
