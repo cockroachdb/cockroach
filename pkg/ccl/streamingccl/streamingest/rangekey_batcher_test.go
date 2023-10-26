@@ -50,6 +50,7 @@ func TestRangeKeyBatcherSplitSST(t *testing.T) {
 		full  string
 		lhs   string
 		rhs   string
+		err   string
 	}
 
 	testCases := []testCase{
@@ -143,6 +144,107 @@ func TestRangeKeyBatcherSplitSST(t *testing.T) {
 {e-f}[0.000000001,0=]`,
 			rhs: `{f-g}[0.000000001,0=]`,
 		},
+		{
+			name:  "empty-lhs-with-split-left-of-start",
+			start: roachpb.Key("b"),
+			end:   roachpb.Key("g"),
+			split: roachpb.Key("a"),
+			keys: []storage.MVCCRangeKey{
+				{
+					StartKey:  roachpb.Key("b"),
+					EndKey:    roachpb.Key("c"),
+					Timestamp: hlc.Timestamp{WallTime: 1},
+				},
+				{
+					StartKey:  roachpb.Key("e"),
+					EndKey:    roachpb.Key("g"),
+					Timestamp: hlc.Timestamp{WallTime: 1},
+				},
+			},
+			full: `{b-c}[0.000000001,0=]
+{e-g}[0.000000001,0=]`,
+			lhs: ``,
+			rhs: `{b-c}[0.000000001,0=]
+{e-g}[0.000000001,0=]`,
+		},
+		{
+			name:  "empty-rhs-with-split-right-of-end",
+			start: roachpb.Key("a"),
+			end:   roachpb.Key("g"),
+			split: roachpb.Key("h"),
+			keys: []storage.MVCCRangeKey{
+				{
+					StartKey:  roachpb.Key("a"),
+					EndKey:    roachpb.Key("c"),
+					Timestamp: hlc.Timestamp{WallTime: 1},
+				},
+				{
+					StartKey:  roachpb.Key("e"),
+					EndKey:    roachpb.Key("g"),
+					Timestamp: hlc.Timestamp{WallTime: 1},
+				},
+			},
+			full: `{a-c}[0.000000001,0=]
+{e-g}[0.000000001,0=]`,
+
+			lhs: `{a-c}[0.000000001,0=]
+{e-g}[0.000000001,0=]`,
+			rhs: ``,
+		},
+		{
+			name:  "empty-rhs-with-split at end",
+			start: roachpb.Key("a"),
+			end:   roachpb.Key("g"),
+			split: roachpb.Key("g"),
+			keys: []storage.MVCCRangeKey{
+				{
+					StartKey:  roachpb.Key("a"),
+					EndKey:    roachpb.Key("c"),
+					Timestamp: hlc.Timestamp{WallTime: 1},
+				},
+				{
+					StartKey:  roachpb.Key("e"),
+					EndKey:    roachpb.Key("g"),
+					Timestamp: hlc.Timestamp{WallTime: 1},
+				},
+			},
+			full: `{a-c}[0.000000001,0=]
+{e-g}[0.000000001,0=]`,
+
+			lhs: `{a-c}[0.000000001,0=]
+{e-g}[0.000000001,0=]`,
+			rhs: ``,
+		},
+		{
+			name:  "error-on-bad-bounds-rhs-empty",
+			start: roachpb.Key("a"),
+			end:   roachpb.Key("e"),
+			split: roachpb.Key("d"),
+			keys: []storage.MVCCRangeKey{
+				{
+					StartKey:  roachpb.Key("a"),
+					EndKey:    roachpb.Key("c"),
+					Timestamp: hlc.Timestamp{WallTime: 1},
+				},
+			},
+			full: `{a-c}[0.000000001,0=]`,
+			err:  "not found in SST",
+		},
+		{
+			name:  "error-on-bad-bounds-lhs-empty",
+			start: roachpb.Key("a"),
+			end:   roachpb.Key("d"),
+			split: roachpb.Key("b"),
+			keys: []storage.MVCCRangeKey{
+				{
+					StartKey:  roachpb.Key("c"),
+					EndKey:    roachpb.Key("d"),
+					Timestamp: hlc.Timestamp{WallTime: 1},
+				},
+			},
+			full: `{c-d}[0.000000001,0=]`,
+			err:  "invalid SST bounds",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -151,13 +253,27 @@ func TestRangeKeyBatcherSplitSST(t *testing.T) {
 			actualStart := rangeKeysInSSTToString(t, data)
 			require.Equal(t, tc.full, actualStart)
 			left, right, err := splitRangeKeySSTAtKey(ctx, st, tc.start, tc.end, tc.split, data)
-			require.True(t, len(left.start) > 0, "lhs start should be non-empty")
-			require.True(t, len(left.end) > 0, "lhs end should be non-empty")
-			require.True(t, len(right.start) > 0, "rhs start should be non-empty")
-			require.True(t, len(right.end) > 0, "rhs end should be non-empty")
-			require.NoError(t, err)
-			require.Equal(t, strings.TrimSpace(tc.lhs), rangeKeysInSSTToString(t, left.data))
-			require.Equal(t, strings.TrimSpace(tc.rhs), rangeKeysInSSTToString(t, right.data))
+			if tc.err != "" {
+				require.ErrorContains(t, err, tc.err)
+			} else {
+				require.NoError(t, err)
+			}
+
+			if tc.lhs == "" {
+				require.Nil(t, left)
+			} else {
+				require.True(t, len(left.start) > 0, "lhs start should be non-empty")
+				require.True(t, len(left.end) > 0, "lhs end should be non-empty")
+				require.Equal(t, strings.TrimSpace(tc.lhs), rangeKeysInSSTToString(t, left.data))
+			}
+
+			if tc.rhs == "" {
+				require.Nil(t, right)
+			} else {
+				require.True(t, len(right.start) > 0, "rhs start should be non-empty")
+				require.True(t, len(right.end) > 0, "rhs end should be non-empty")
+				require.Equal(t, strings.TrimSpace(tc.rhs), rangeKeysInSSTToString(t, right.data))
+			}
 		})
 	}
 }
