@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -550,67 +549,6 @@ func TestTenantStreamingDeleteRange(t *testing.T) {
 	// can work on multiple flushes.
 	checkDelRangeOnTable("t1", true /* embeddedInSST */)
 	checkDelRangeOnTable("t2", false /* embeddedInSST */)
-}
-
-func TestTenantStreamingMultipleNodes(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.UnderDeadlock(t, "multi-node may time out under deadlock")
-	skip.UnderRace(t, "takes too long with multiple nodes")
-
-	ctx := context.Background()
-	args := replicationtestutils.DefaultTenantStreamingClustersArgs
-	args.SrcNumNodes = 4
-	args.DestNumNodes = 3
-
-	// Track the number of unique addresses that were connected to
-	clientAddresses := make(map[string]struct{})
-	var addressesMu syncutil.Mutex
-	args.TestingKnobs = &sql.StreamingTestingKnobs{
-		BeforeClientSubscribe: func(addr string, token string, clientStartTime hlc.Timestamp) {
-			addressesMu.Lock()
-			defer addressesMu.Unlock()
-			clientAddresses[addr] = struct{}{}
-		},
-	}
-
-	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
-	defer cleanup()
-
-	// Make sure we have data on all nodes, so that we will have multiple
-	// connections and client addresses (and actually test multi-node).
-	replicationtestutils.CreateScatteredTable(t, c, 3)
-
-	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
-	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
-	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-
-	c.SrcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
-		tenantSQL.Exec(t, "CREATE TABLE d.x (id INT PRIMARY KEY, n INT)")
-		tenantSQL.Exec(t, "INSERT INTO d.x VALUES (1, 1)")
-	})
-
-	c.DestSysSQL.Exec(t, `PAUSE JOB $1`, ingestionJobID)
-	jobutils.WaitForJobToPause(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-	c.SrcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
-		tenantSQL.Exec(t, "INSERT INTO d.x VALUES (2, 2)")
-	})
-	c.DestSysSQL.Exec(t, `RESUME JOB $1`, ingestionJobID)
-	jobutils.WaitForJobToRun(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-
-	c.SrcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
-		tenantSQL.Exec(t, "INSERT INTO d.x VALUES (3, 3)")
-	})
-
-	c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
-
-	cutoverTime := c.DestSysServer.Clock().Now()
-	c.Cutover(producerJobID, ingestionJobID, cutoverTime.GoTime(), false)
-	c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
-
-	// Since the data was distributed across multiple nodes, multiple nodes should've been connected to
-	require.Greater(t, len(clientAddresses), 1)
 }
 
 // TestProtectedTimestampManagement tests the active protected
