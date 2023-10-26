@@ -1,18 +1,13 @@
 # Tests in this file verify the enacting of the fallback rate when token bucket
 # requests start erroring out while we are being throttled.
 
-# Wait for initial 10K RUs to be granted.
-wait-for-event
-token-bucket-response
-----
-
 configure
 throttle: 100
 fallback_rate: 1000
 ----
 
-# Issue an 8K write that triggers fetch of more RU and also sets fallback rate.
-write bytes=8189952
+# Issue a 3K write that triggers fetch of more RU and also sets fallback rate.
+write bytes=3069952
 ----
 
 wait-for-event

@@ -1,10 +1,5 @@
 # Test that the controller reports consumption as expected.
 
-# Wait for initial 10K RUs to be granted.
-wait-for-event
-token-bucket-response
-----
-
 # With no usage, consumption gets reported only every 40s.
 advance
 40s

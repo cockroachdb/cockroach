@@ -1,11 +1,6 @@
 # Tests in this file verify the enacting of the fallback rate when token bucket
 # requests are erroring out.
 
-# Wait for initial 10K RUs to be granted.
-wait-for-event
-token-bucket-response
-----
-
 configure
 fallback_rate: 1000
 ----

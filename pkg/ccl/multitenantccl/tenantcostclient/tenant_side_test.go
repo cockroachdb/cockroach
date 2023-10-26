@@ -129,6 +129,7 @@ func (ts *testState) start(t *testing.T) {
 	// Fix settings so that the defaults can be changed without updating the test.
 	tenantcostclient.TargetPeriodSetting.Override(ctx, &ts.settings.SV, 10*time.Second)
 	tenantcostclient.CPUUsageAllowance.Override(ctx, &ts.settings.SV, 10*time.Millisecond)
+	tenantcostclient.InitialRequestSetting.Override(ctx, &ts.settings.SV, 10000)
 
 	ts.stopper = stop.NewStopper()
 	var err error
@@ -158,6 +159,12 @@ func (ts *testState) start(t *testing.T) {
 		ctx, ts.stopper, instanceID, sessionID, externalUsageFn, nextLiveInstanceIDFn,
 	); err != nil {
 		t.Fatal(err)
+	}
+
+	// Wait for main loop to start in order to avoid race conditions where a test
+	// starts before the main loop has been initialized.
+	if !ts.eventWait.WaitForEvent(tenantcostclient.MainLoopStarted) {
+		t.Fatal("did not receive event MainLoopStarted")
 	}
 }
 
@@ -785,9 +792,9 @@ func TestWaitingRU(t *testing.T) {
 		st, tenantID, testProvider, timeSource, eventWait)
 	require.NoError(t, err)
 
-	// Immediately consume the initial 10K RUs.
+	// Immediately consume the initial 5K RUs.
 	require.NoError(t, ctrl.OnResponseWait(ctx,
-		tenantcostmodel.TestingRequestInfo(1, 1, 10237952, 0), tenantcostmodel.ResponseInfo{}))
+		tenantcostmodel.TestingRequestInfo(1, 1, 5117952, 0), tenantcostmodel.ResponseInfo{}))
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
