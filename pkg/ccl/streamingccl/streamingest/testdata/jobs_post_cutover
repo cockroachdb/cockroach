@@ -1,0 +1,48 @@
+
+create-replication-clusters
+----
+
+start-replication-stream
+----
+
+exec-sql as=source-tenant
+SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.after.write_first_checkpoint';
+----
+
+query-sql as=source-tenant regex-error=(backup.after.write_first_checkpoint)
+BACKUP INTO 'nodelocal://1/example-schedule';
+----
+
+let $backupID as=source-tenant
+WITH jobs AS (SHOW JOBS) SELECT job_id FROM jobs WHERE job_type='BACKUP';
+----
+
+query-sql retry as=source-tenant
+WITH jobs AS (SHOW JOBS) SELECT status FROM jobs WHERE job_id=$backupID;
+----
+paused
+
+let $ts as=source-system
+SELECT clock_timestamp()::timestamp::string
+----
+
+cutover ts=$ts
+----
+
+start-replicated-tenant
+----
+
+exec-sql as=destination-tenant
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+----
+
+exec-sql as=destination-tenant
+RESUME JOB $backupID
+----
+
+
+query-sql retry as=destination-tenant
+WITH jobs AS (SHOW JOBS) SELECT status FROM jobs WHERE job_id=$backupID;
+----
+failed
+
