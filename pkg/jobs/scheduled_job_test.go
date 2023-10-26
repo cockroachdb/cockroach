@@ -17,8 +17,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -156,4 +160,108 @@ func TestScheduleMustHaveClusterVersionAndID(t *testing.T) {
 	loaded := h.loadSchedule(t, sj.ScheduleID())
 	require.EqualValues(t, jobstest.DummyClusterID, loaded.ScheduleDetails().ClusterID)
 	require.EqualValues(t, jobstest.DummyClusterVersion, loaded.ScheduleDetails().CreationClusterVersion)
+}
+
+func TestInitFromDatums(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var sj ScheduledJob
+
+	testCases := []struct {
+		Datums []tree.Datum
+		Cols   []colinfo.ResultColumn
+		Err    string
+	}{
+		{
+			Datums: []tree.Datum{},
+			Cols:   []colinfo.ResultColumn{},
+			Err:    "no fields initialized",
+		},
+		{
+			Datums: []tree.Datum{
+				tree.DNull,
+				tree.DNull,
+			},
+			Cols: []colinfo.ResultColumn{
+				{Name: "schedule_id"},
+				{Name: "schedule_name"},
+			},
+			Err: "no fields initialized",
+		},
+		{
+			Datums: []tree.Datum{
+				tree.MakeDBool(false),
+			},
+			Cols: []colinfo.ResultColumn{
+				{Name: "schedule_name"},
+			},
+			Err: `expected "schedule_name" to be *tree.DString got *tree.DBool`,
+		},
+		{
+			Datums: []tree.Datum{
+				tree.NewDBytes(tree.DBytes("\x00")),
+			},
+			Cols: []colinfo.ResultColumn{
+				{Name: "execution_args"},
+			},
+			Err: `proto: ExecutionArguments: illegal tag 0 (wire type 0)`,
+		},
+	}
+
+	for _, tc := range testCases {
+		require.EqualError(t, sj.InitFromDatums(tc.Datums, tc.Cols), tc.Err)
+	}
+
+	mustMarshal := func(pb protoutil.Message) *tree.DBytes {
+		b, err := protoutil.Marshal(pb)
+		require.NoError(t, err)
+		return tree.NewDBytes(tree.DBytes(b))
+	}
+
+	now := timeutil.Now()
+
+	require.NoError(t, sj.InitFromDatums([]tree.Datum{
+		tree.NewDInt(1),
+		tree.NewDString("the label"),
+		tree.NewDString("cyrilfiggis"),
+		tree.MustMakeDTimestampTZ(now, time.Second),
+		mustMarshal(&jobspb.ScheduleState{
+			Status: "some status",
+		}),
+		tree.NewDString("this is a cron tab"),
+		mustMarshal(&jobspb.ScheduleDetails{
+			Wait: jobspb.ScheduleDetails_NO_WAIT,
+		}),
+		tree.NewDString("executor type"),
+		mustMarshal(&jobspb.ExecutionArguments{}),
+		tree.DNull,
+	}, []colinfo.ResultColumn{
+		{Name: "schedule_id"},
+		{Name: "schedule_name"},
+		{Name: "owner"},
+		{Name: "next_run"},
+		{Name: "schedule_state"},
+		{Name: "schedule_expr"},
+		{Name: "schedule_details"},
+		{Name: "executor_type"},
+		{Name: "execution_args"},
+		{Name: "ignored_column"},
+	}))
+
+	require.Equal(t, scheduledJobRecord{
+		ScheduleID:    1,
+		ScheduleLabel: "the label",
+		Owner:         username.MakeSQLUsernameFromPreNormalizedString("cyrilfiggis"),
+		NextRun:       now.Round(time.Second),
+		ScheduleState: jobspb.ScheduleState{Status: "some status"},
+		ScheduleExpr:  "this is a cron tab",
+		ScheduleDetails: jobspb.ScheduleDetails{
+			Wait: jobspb.ScheduleDetails_NO_WAIT,
+		},
+		ExecutorType:  "executor type",
+		ExecutionArgs: jobspb.ExecutionArguments{},
+	}, sj.rec)
+	// Assert that scheduledTime was initialized appropriately.
+	require.Equal(t, now.Round(time.Second), sj.ScheduledRunTime())
 }

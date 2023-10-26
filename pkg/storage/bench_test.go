@@ -1265,6 +1265,53 @@ func runMVCCDeleteRangeUsingTombstone(
 	}
 }
 
+// runMVCCDeleteRangeWithPredicate issues a predicate based delete range that
+// deletes all keys created after the `deleteAfterLayer` (0 indexed).
+func runMVCCDeleteRangeWithPredicate(
+	ctx context.Context,
+	b *testing.B,
+	config mvccImportedData,
+	deleteAfterLayer int64,
+	rangeTombstoneThreshold int64,
+) {
+	b.SetBytes(int64(config.layers*config.keyCount) * int64(overhead+config.valueBytes))
+	b.StopTimer()
+	b.ResetTimer()
+
+	// Since the db engine creates mvcc versions at 5 ns increments, multiply the
+	// deleteAtVersion by 5 to compute the delete range timestamp predicate.
+	predicates := kvpb.DeleteRangePredicates{
+		StartTime: hlc.Timestamp{WallTime: (deleteAfterLayer+1)*5 + 1},
+	}
+	var leftPeekBound, rightPeekBound roachpb.Key
+	for i := 0; i < b.N; i++ {
+		func() {
+			eng := getInitialStateEngine(ctx, b, config, false)
+			defer eng.Close()
+			b.StartTimer()
+			resumeSpan, err := MVCCPredicateDeleteRange(
+				ctx,
+				eng,
+				&enginepb.MVCCStats{},
+				keys.LocalMax,
+				roachpb.KeyMax,
+				hlc.MaxTimestamp,
+				hlc.ClockTimestamp{},
+				leftPeekBound,
+				rightPeekBound,
+				predicates,
+				0,
+				math.MaxInt64,
+				rangeTombstoneThreshold,
+				0,
+			)
+			b.StopTimer()
+			require.NoError(b, err)
+			require.Nil(b, resumeSpan)
+		}()
+	}
+}
+
 func runClearRange(
 	ctx context.Context, b *testing.B, clearRange func(e Engine, b Batch, start, end MVCCKey) error,
 ) {
