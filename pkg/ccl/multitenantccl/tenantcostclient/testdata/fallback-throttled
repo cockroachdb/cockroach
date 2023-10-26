@@ -29,15 +29,11 @@ error: true
 ----
 
 # Advance time to 90% of the trickle rate duration (10s), which will trigger a
-# low RU notification and token bucket request (which will fail).
+# token bucket request (which will fail).
 advance
 9s
 ----
 00:00:09.000
-
-wait-for-event
-low-ru
-----
 
 # Expect failure of the token bucket request.
 wait-for-event

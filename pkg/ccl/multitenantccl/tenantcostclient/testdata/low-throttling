@@ -51,10 +51,6 @@ advance
 00:00:09.000
 
 wait-for-event
-low-ru
-----
-
-wait-for-event
 token-bucket-response
 ----
 

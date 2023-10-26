@@ -328,11 +328,6 @@ type tenantSideCostController struct {
 		// If the server directly granted RUs with no trickle deadline, then this
 		// is zero-valued.
 		trickleDeadline time.Time
-		// trickleThreshold is the level below which a low RU notification should
-		// be sent. However, it is only applied once the trickle timer has expired,
-		// since there's no reason to request more RUs from the server until that
-		// happens.
-		trickleThreshold tenantcostmodel.RU
 
 		// fallbackRate is the refill rate we fall back to if the token bucket
 		// requests don't complete or take a long time.
@@ -460,7 +455,8 @@ func (c *tenantSideCostController) onTick(ctx context.Context, newTime time.Time
 	c.limiter.RemoveRU(newTime, ru)
 
 	// Switch to the fallback rate if needed.
-	if !c.run.fallbackRateStart.IsZero() && !newTime.Before(c.run.fallbackRateStart) {
+	if !c.run.fallbackRateStart.IsZero() && !newTime.Before(c.run.fallbackRateStart) &&
+		c.run.fallbackRate != 0 {
 		log.Infof(ctx, "switching to fallback rate %.10g", c.run.fallbackRate)
 		c.limiter.Reconfigure(c.timeSource.Now(), limiterReconfigureArgs{
 			NewRate:   tenantcostmodel.RU(c.run.fallbackRate),
@@ -504,7 +500,7 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 
 	deltaConsumption := c.run.consumption
 	deltaConsumption.Sub(&c.run.lastReportedConsumption)
-	var requested float64
+	var requested tenantcostmodel.RU
 	now := c.timeSource.Now()
 
 	if c.run.trickleTimer != nil {
@@ -514,16 +510,20 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 	} else {
 		// Request what we expect to need over the next target period plus the
 		// buffer amount.
-		requested = c.run.avgRUPerSec*c.run.targetPeriod.Seconds() + bufferRUs
+		requested = tenantcostmodel.RU(c.run.avgRUPerSec*c.run.targetPeriod.Seconds()) + bufferRUs
 
-		// Adjust by the currently available amount. If we are in debt, we request
-		// more to cover the debt.
-		requested -= float64(c.limiter.AvailableRU(now))
+		// Requested RUs are adjusted by what's still left in the burst buffer.
+		// Note that this can be negative, which indicates we are in debt. In that
+		// case, enough RUs should be added to the request to cover the debt.
+		requested -= c.limiter.AvailableRU(now)
 		if requested < 0 {
 			// We don't need more RUs right now, but we still want to report
 			// consumption.
 			requested = 0
 		}
+
+		// Switch to fallback rate if the response takes too long.
+		c.run.fallbackRateStart = now.Add(anticipation)
 	}
 
 	req := &kvpb.TokenBucketRequest{
@@ -533,7 +533,7 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 		NextLiveInstanceID:          uint32(c.nextLiveInstanceIDFn(ctx)),
 		SeqNum:                      c.run.requestSeqNum,
 		ConsumptionSinceLastRequest: deltaConsumption,
-		RequestedRU:                 requested,
+		RequestedRU:                 float64(requested),
 		TargetRequestPeriod:         c.run.targetPeriod,
 	}
 	c.run.requestInProgress = req
@@ -557,7 +557,7 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 		} else if (resp.Error != errorspb.EncodedError{}) {
 			// This is a "logic" error which indicates a configuration problem on the
 			// host side. We will keep retrying periodically.
-			err := errors.DecodeError(ctx, resp.Error)
+			err = errors.DecodeError(ctx, resp.Error)
 			log.Warningf(ctx, "TokenBucket error: %v", err)
 			resp = nil
 		}
@@ -612,7 +612,6 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 			granted += tenantcostmodel.RU(c.run.lastRate * since.Seconds())
 		}
 		c.run.trickleDeadline = time.Time{}
-		c.run.trickleThreshold = 0
 	}
 
 	// If zero tokens were granted, then the token bucket server is completely
@@ -648,7 +647,6 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 			c.run.trickleTimer.Reset(timerDuration)
 			c.run.trickleCh = c.run.trickleTimer.Ch()
 			c.run.trickleDeadline = now.Add(resp.TrickleDuration)
-			c.run.trickleThreshold = notifyThreshold
 
 			cfg.NewRate = granted / tenantcostmodel.RU(resp.TrickleDuration.Seconds())
 			cfg.MaxTokens = bufferRUs + granted
@@ -733,17 +731,15 @@ func (c *tenantSideCostController) mainLoop(ctx context.Context) {
 			// bucket gets low (or is already low).
 			c.run.trickleTimer = nil
 			c.run.trickleCh = nil
-			c.limiter.SetupNotification(c.timeSource.Now(), c.run.trickleThreshold)
+			c.sendTokenBucketRequest(ctx)
 
 		case <-c.lowRUNotifyChan:
 			// Switch to fallback rate if we don't get a token bucket response
 			// soon enough.
-			now := c.timeSource.Now()
-			c.run.fallbackRateStart = now.Add(anticipation)
 			c.sendTokenBucketRequest(ctx)
 
 			if c.testInstr != nil {
-				c.testInstr.Event(now, LowRUNotification)
+				c.testInstr.Event(c.timeSource.Now(), LowRUNotification)
 			}
 
 		case <-c.stopper.ShouldQuiesce():
