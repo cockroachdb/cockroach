@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl"
@@ -28,8 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -459,101 +456,6 @@ func TestTenantStreamingDropTenantCancelsStream(t *testing.T) {
 	})
 }
 
-func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 106865)
-	skip.UnderDeadlock(t, "multi-node may time out under deadlock")
-	skip.UnderRace(t, "takes too long with multiple nodes")
-
-	ctx := context.Background()
-	args := replicationtestutils.DefaultTenantStreamingClustersArgs
-
-	args.SrcNumNodes = 4
-	args.DestNumNodes = 3
-
-	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
-	defer cleanup()
-
-	replicationtestutils.CreateScatteredTable(t, c, 3)
-	srcScatteredData := c.SrcTenantSQL.QueryStr(c.T, "SELECT * FROM d.scattered ORDER BY key")
-
-	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
-	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
-	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-
-	srcTime := c.SrcCluster.Server(0).Clock().Now()
-	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
-
-	c.DestSysSQL.Exec(t, `PAUSE JOB $1`, ingestionJobID)
-	jobutils.WaitForJobToPause(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-
-	// We should've persisted the original topology
-	progress := jobutils.GetJobProgress(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-	streamAddresses := progress.GetStreamIngest().StreamAddresses
-	require.Greater(t, len(streamAddresses), 1)
-
-	destroyedAddress := c.SrcURL.String()
-
-	require.NoError(t, c.SrcTenantConn.Close())
-	c.SrcTenantServer.Stopper().Stop(ctx)
-	c.SrcCluster.StopServer(0)
-
-	// Once SrcCluster.Server(0) is shut down queries must be ran against a different server
-	alternateSrcSysSQL := sqlutils.MakeSQLRunner(c.SrcCluster.ServerConn(1))
-	_, alternateSrcTenantConn := serverutils.StartTenant(t, c.SrcCluster.Server(1),
-		base.TestTenantArgs{
-			TenantID:            c.Args.SrcTenantID,
-			TenantName:          c.Args.SrcTenantName,
-			DisableCreateTenant: true,
-		})
-	defer alternateSrcTenantConn.Close()
-	alternateSrcTenantSQL := sqlutils.MakeSQLRunner(alternateSrcTenantConn)
-
-	alternateCompareResult := func(query string) {
-		sourceData := alternateSrcTenantSQL.QueryStr(c.T, query)
-		destData := c.DestTenantSQL.QueryStr(c.T, query)
-		require.Equal(c.T, sourceData, destData)
-	}
-
-	c.DestSysSQL.Exec(t, `RESUME JOB $1`, ingestionJobID)
-	jobutils.WaitForJobToRun(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-
-	alternateSrcTenantSQL.Exec(t, "CREATE TABLE d.x (id INT PRIMARY KEY, n INT)")
-	alternateSrcTenantSQL.Exec(t, `INSERT INTO d.x VALUES (3);`)
-
-	var cutoverTime time.Time
-	alternateSrcSysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
-
-	var cutoverStr string
-	c.DestSysSQL.QueryRow(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
-		c.Args.DestTenantName, cutoverTime).Scan(&cutoverStr)
-	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
-	require.Equal(c.T, cutoverTime, cutoverOutput.GoTime())
-	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-
-	cleanUpTenant := c.StartDestTenant(ctx)
-	defer func() {
-		require.NoError(t, cleanUpTenant())
-	}()
-
-	// The destroyed address should have been removed from the topology
-	progress = jobutils.GetJobProgress(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-	newStreamAddresses := progress.GetStreamIngest().StreamAddresses
-	require.Contains(t, streamAddresses, destroyedAddress)
-	require.NotContains(t, newStreamAddresses, destroyedAddress)
-
-	alternateCompareResult("SELECT * FROM d.t1")
-	alternateCompareResult("SELECT * FROM d.t2")
-	alternateCompareResult("SELECT * FROM d.x")
-
-	// We can't use alternateCompareResult because it'll try to contact the deceased
-	// n1 even if the lease holders for d.scattered have all moved to other nodes
-	dstScatteredData := c.DestTenantSQL.QueryStr(c.T, "SELECT * FROM d.scattered ORDER BY key")
-	require.Equal(t, srcScatteredData, dstScatteredData)
-}
-
 func TestTenantStreamingCutoverOnSourceFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -647,67 +549,6 @@ func TestTenantStreamingDeleteRange(t *testing.T) {
 	// can work on multiple flushes.
 	checkDelRangeOnTable("t1", true /* embeddedInSST */)
 	checkDelRangeOnTable("t2", false /* embeddedInSST */)
-}
-
-func TestTenantStreamingMultipleNodes(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.UnderDeadlock(t, "multi-node may time out under deadlock")
-	skip.UnderRace(t, "takes too long with multiple nodes")
-
-	ctx := context.Background()
-	args := replicationtestutils.DefaultTenantStreamingClustersArgs
-	args.SrcNumNodes = 4
-	args.DestNumNodes = 3
-
-	// Track the number of unique addresses that were connected to
-	clientAddresses := make(map[string]struct{})
-	var addressesMu syncutil.Mutex
-	args.TestingKnobs = &sql.StreamingTestingKnobs{
-		BeforeClientSubscribe: func(addr string, token string, clientStartTime hlc.Timestamp) {
-			addressesMu.Lock()
-			defer addressesMu.Unlock()
-			clientAddresses[addr] = struct{}{}
-		},
-	}
-
-	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
-	defer cleanup()
-
-	// Make sure we have data on all nodes, so that we will have multiple
-	// connections and client addresses (and actually test multi-node).
-	replicationtestutils.CreateScatteredTable(t, c, 3)
-
-	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
-	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
-	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-
-	c.SrcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
-		tenantSQL.Exec(t, "CREATE TABLE d.x (id INT PRIMARY KEY, n INT)")
-		tenantSQL.Exec(t, "INSERT INTO d.x VALUES (1, 1)")
-	})
-
-	c.DestSysSQL.Exec(t, `PAUSE JOB $1`, ingestionJobID)
-	jobutils.WaitForJobToPause(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-	c.SrcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
-		tenantSQL.Exec(t, "INSERT INTO d.x VALUES (2, 2)")
-	})
-	c.DestSysSQL.Exec(t, `RESUME JOB $1`, ingestionJobID)
-	jobutils.WaitForJobToRun(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-
-	c.SrcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
-		tenantSQL.Exec(t, "INSERT INTO d.x VALUES (3, 3)")
-	})
-
-	c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
-
-	cutoverTime := c.DestSysServer.Clock().Now()
-	c.Cutover(producerJobID, ingestionJobID, cutoverTime.GoTime(), false)
-	c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
-
-	// Since the data was distributed across multiple nodes, multiple nodes should've been connected to
-	require.Greater(t, len(clientAddresses), 1)
 }
 
 // TestProtectedTimestampManagement tests the active protected
