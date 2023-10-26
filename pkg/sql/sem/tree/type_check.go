@@ -1580,8 +1580,15 @@ func (expr *ParenExpr) TypeCheck(
 	if err != nil {
 		return nil, err
 	}
-	// Parentheses are semantically unimportant and can be removed/replaced
-	// with its nested expression in our plan. This makes type checking cleaner.
+	// Parentheses are semantically unimportant and in most cases can be
+	// removed/replaced with its nested expression in our plan. This makes type
+	// checking cleaner. Collated string expressions need the parentheses to
+	// parse correctly in some cases.
+	if _, ok := exprTyped.(*CollateExpr); ok {
+		expr.Expr = exprTyped
+		expr.typ = exprTyped.ResolvedType()
+		return expr, nil
+	}
 	return exprTyped, nil
 }
 
