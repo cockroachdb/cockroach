@@ -2938,6 +2938,18 @@ func FilterUnremovableReplicas(
 	brandNewReplicaID roachpb.ReplicaID,
 ) []roachpb.ReplicaDescriptor {
 	upToDateReplicas := FilterBehindReplicas(ctx, raftStatus, replicas)
+	return FilterUnremovableReplicasWithoutRaftStatus(
+		ctx, replicas, upToDateReplicas, brandNewReplicaID)
+}
+
+// FilterUnremovableReplicasWithoutRaftStatus is like FilterUnremovableReplicas,
+// but takes an upToDateReplicas slice to avoid the Raft status dependency.
+func FilterUnremovableReplicasWithoutRaftStatus(
+	ctx context.Context,
+	replicas []roachpb.ReplicaDescriptor,
+	upToDateReplicas []roachpb.ReplicaDescriptor,
+	brandNewReplicaID roachpb.ReplicaID,
+) []roachpb.ReplicaDescriptor {
 	oldQuorum := computeQuorum(len(replicas))
 	if len(upToDateReplicas) < oldQuorum {
 		// The number of up-to-date replicas is less than the old quorum. No
