@@ -103,7 +103,7 @@ func TestCompositeSensitive(t *testing.T) {
 		if err != nil {
 			d.Fatalf(t, "error building: %v", err)
 		}
-		return fmt.Sprintf("%v", memo.CanBeCompositeSensitive(md, scalar))
+		return fmt.Sprintf("%v", memo.CanBeCompositeSensitive(scalar))
 	})
 }
 
