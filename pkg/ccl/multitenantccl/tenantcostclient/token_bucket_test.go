@@ -125,15 +125,15 @@ func TestTokenBucket(t *testing.T) {
 	}
 	check("-30.00 RU filling @ +Inf RU/s")
 	tb.Reconfigure(ts.Now(), args)
-	check("50.00 RU filling @ 10.00 RU/s")
+	check("50.00 RU filling @ 10.00 RU/s (limited to 50.00 RU)")
 	ts.Advance(time.Second)
-	check("50.00 RU filling @ 10.00 RU/s")
+	check("50.00 RU filling @ 10.00 RU/s (limited to 50.00 RU)")
 	ts.Advance(time.Second)
 	tb.RemoveTokens(ts.Now(), 15)
-	check("35.00 RU filling @ 10.00 RU/s")
+	check("35.00 RU filling @ 10.00 RU/s (limited to 50.00 RU)")
 	ts.Advance(2 * time.Second)
 	fulfill(10)
-	check("40.00 RU filling @ 10.00 RU/s")
+	check("40.00 RU filling @ 10.00 RU/s (limited to 50.00 RU)")
 
 	// Fulfill amount > limit.
 	if ok, tryAgainAfter := tb.TryToFulfill(ts.Now(), 60); ok {
@@ -141,10 +141,10 @@ func TestTokenBucket(t *testing.T) {
 	} else if exp := 2 * time.Second; tryAgainAfter.Round(time.Millisecond) != exp {
 		t.Fatalf("tryAgainAfter: expected %s, got %s", exp, tryAgainAfter)
 	}
-	check("40.00 RU filling @ 10.00 RU/s")
+	check("40.00 RU filling @ 10.00 RU/s (limited to 50.00 RU)")
 	ts.Advance(1 * time.Second)
 	fulfill(60)
-	check("0.00 RU filling @ 10.00 RU/s (10.00 waiting debt @ 5.00 RU/s)")
+	check("0.00 RU filling @ 10.00 RU/s (limited to 50.00 RU) (10.00 waiting debt @ 5.00 RU/s)")
 	ts.Advance(8 * time.Second)
 	if available := tb.AvailableTokens(ts.Now()); available != 50.0 {
 		t.Fatalf("AvailableTokens: expected %.2f, got %.2f", 50.0, available)

@@ -465,7 +465,8 @@ func (c *tenantSideCostController) onTick(ctx context.Context, newTime time.Time
 	if !c.run.fallbackRateStart.IsZero() && !newTime.Before(c.run.fallbackRateStart) {
 		log.Infof(ctx, "switching to fallback rate %.10g", c.run.fallbackRate)
 		c.limiter.Reconfigure(c.timeSource.Now(), limiterReconfigureArgs{
-			NewRate: tenantcostmodel.RU(c.run.fallbackRate),
+			NewRate:   tenantcostmodel.RU(c.run.fallbackRate),
+			MaxTokens: bufferRUs + tenantcostmodel.RU(c.run.fallbackRate*c.run.targetPeriod.Seconds()),
 		})
 		c.run.fallbackRateStart = time.Time{}
 	}
@@ -591,7 +592,7 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 
 	// Process granted RUs.
 	now := c.timeSource.Now()
-	granted := resp.GrantedRU
+	granted := tenantcostmodel.RU(resp.GrantedRU)
 
 	// Shut down any trickle previously in-progress trickle.
 	if c.run.trickleTimer != nil {
@@ -610,7 +611,7 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 		// and even if it occurs, the usage is still counted. The only effect is
 		// some extra debt accumulation, which is fine.
 		if since := c.run.trickleDeadline.Sub(now); since > 0 {
-			granted += c.run.lastRate * since.Seconds()
+			granted += tenantcostmodel.RU(c.run.lastRate * since.Seconds())
 		}
 		c.run.trickleDeadline = time.Time{}
 		c.run.trickleThreshold = 0
@@ -624,7 +625,7 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 	var cfg limiterReconfigureArgs
 	if granted > 0 {
 		// Calculate the threshold at which a low RU notification will be sent.
-		notifyThreshold := tenantcostmodel.RU(granted * notifyFraction)
+		notifyThreshold := granted * notifyFraction
 		if notifyThreshold < bufferRUs {
 			notifyThreshold = bufferRUs
 		}
@@ -634,7 +635,7 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 		if resp.TrickleDuration == 0 {
 			// We received a batch of tokens to use as needed. Set up the token
 			// bucket to notify us when the tokens are running low.
-			cfg.NewTokens = tenantcostmodel.RU(granted)
+			cfg.NewTokens = granted
 			cfg.NewRate = 0
 			cfg.NotifyThreshold = notifyThreshold
 		} else {
@@ -651,7 +652,8 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 			c.run.trickleDeadline = now.Add(resp.TrickleDuration)
 			c.run.trickleThreshold = notifyThreshold
 
-			cfg.NewRate = tenantcostmodel.RU(granted / resp.TrickleDuration.Seconds())
+			cfg.NewRate = granted / tenantcostmodel.RU(resp.TrickleDuration.Seconds())
+			cfg.MaxTokens = bufferRUs + granted
 		}
 	}
 	c.limiter.Reconfigure(now, cfg)
