@@ -286,6 +286,9 @@ func (f *replicaFlowControlIntegrationImpl) handle() (kvflowcontrol.Handle, bool
 // reconnect previously disconnected streams if we're able.
 func (f *replicaFlowControlIntegrationImpl) refreshStreams(ctx context.Context, reason string) {
 	f.disconnectStreams(ctx, f.notActivelyReplicatingTo(), reason)
+	// TODO(sumeer): we call notActivelyReplicatingTo() again in tryReconnect(),
+	// which is wasteful, since refreshStreams is called on every raft tick.
+	// Simply pass the return value from the call above to the following method.
 	f.tryReconnect(ctx)
 }
 
@@ -296,6 +299,11 @@ func (f *replicaFlowControlIntegrationImpl) refreshStreams(ctx context.Context, 
 // than its last position (I4), replicas on dead nodes (I2), replicas we're not
 // connected to via the raft transport (I1), and paused followers (I3).
 func (f *replicaFlowControlIntegrationImpl) notActivelyReplicatingTo() []roachpb.ReplicaDescriptor {
+	// These methods return maps, which are mostly lazily allocated, since they
+	// are expected to be empty. If we need to avoid even the lazy allocation,
+	// we could use the fact that the contents of these maps are used while
+	// holding replicaFlowControl.mu, so the allocations could be done once, and
+	// kept as members of replicaFlowControl.
 	pausedFollowers := f.replicaForFlowControl.getPausedFollowers()
 	behindFollowers := f.replicaForFlowControl.getBehindFollowers()
 	inactiveFollowers := f.replicaForFlowControl.getInactiveFollowers()
