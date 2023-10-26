@@ -86,6 +86,7 @@ var requireConstFmt = map[string]bool{
 
 	"(github.com/cockroachdb/cockroach/pkg/storage.pebbleLogger).Infof":  true,
 	"(github.com/cockroachdb/cockroach/pkg/storage.pebbleLogger).Fatalf": true,
+	"(github.com/cockroachdb/cockroach/pkg/storage.pebbleLogger).Errorf": true,
 	"(github.com/cockroachdb/cockroach/pkg/storage.pebbleLogger).Eventf": true,
 
 	"(*github.com/cockroachdb/cockroach/pkg/util/grpcutil.grpcLogger).Infof":    true,
