@@ -31,7 +31,7 @@ not-completed label=w1
 
 token-bucket
 ----
-5000.00 RU filling @ 1000.00 RU/s (15000.00 waiting RU)
+5000.00 RU filling @ 1000.00 RU/s (limited to 15000.00 RU) (15000.00 waiting RU)
 
 # Advance time to just short of trickle renewal and trigger tick event.
 advance wait=true
@@ -41,7 +41,7 @@ advance wait=true
 
 token-bucket
 ----
-13750.00 RU filling @ 1000.00 RU/s (15000.00 waiting RU)
+13750.00 RU filling @ 1000.00 RU/s (limited to 15000.00 RU) (15000.00 waiting RU)
 
 # Now advance time to trigger trickle renewal (but do not trigger tick in order
 # to avoid a race that makes test non-deterministic).
@@ -65,7 +65,7 @@ timers
 
 token-bucket
 ----
-14000.00 RU filling @ 1100.00 RU/s (15000.00 waiting RU)
+14000.00 RU filling @ 1100.00 RU/s (limited to 16000.00 RU) (15000.00 waiting RU)
 
 # One more second to fulfill waiting write.
 advance
@@ -78,7 +78,7 @@ await label=w1
 
 token-bucket
 ----
-100.00 RU filling @ 1100.00 RU/s
+100.00 RU filling @ 1100.00 RU/s (limited to 16000.00 RU)
 
 # Un-throttle central token bucket and ensure that another large write goes
 # through after requesting more RUs.

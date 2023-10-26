@@ -21,7 +21,7 @@ token-bucket-response
 # Response sets up throttled rate of 100 RU/s.
 token-bucket
 ----
-2000.00 RU filling @ 100.00 RU/s
+2000.00 RU filling @ 100.00 RU/s (limited to 6000.00 RU)
 
 # Force error on next fetch.
 configure
@@ -52,7 +52,7 @@ advance wait=true
 
 token-bucket
 ----
-3100.00 RU filling @ 1000.00 RU/s
+3100.00 RU filling @ 1000.00 RU/s (limited to 15000.00 RU)
 
 # Advance 1 second and ensure bucket is replenished at fallback rate.
 advance wait=true
@@ -62,7 +62,7 @@ advance wait=true
 
 token-bucket
 ----
-4100.00 RU filling @ 1000.00 RU/s
+4100.00 RU filling @ 1000.00 RU/s (limited to 15000.00 RU)
 
 wait-for-event
 token-bucket-response-error

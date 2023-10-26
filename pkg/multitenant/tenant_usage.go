@@ -36,10 +36,11 @@ type TenantUsageServer interface {
 	// Arguments:
 	//
 	//  - availableRU is the amount of Request Units that the tenant can consume at
-	//    will. Also known as "burst RUs".
+	//    will. Also known as "burst RUs". If this is -1 (or any negative number),
+	//    the bucket's available tokens are not updated.
 	//
 	//  - refillRate is the amount of Request Units per second that the tenant
-	//    receives.
+	//    receives. If this is 0, the bucket does not refill on its own.
 	//
 	//  - maxBurstRU is the maximum amount of Request Units that can be accumulated
 	//    from the refill rate, or 0 if there is no limit.

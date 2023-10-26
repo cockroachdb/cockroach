@@ -15,7 +15,7 @@ token-bucket-response
 
 token-bucket
 ----
-2000.00 RU filling @ 1.00 RU/s
+2000.00 RU filling @ 1.00 RU/s (limited to 5010.00 RU)
 
 # Issue another 4K RU write that should block.
 write bytes=4093952 label=w1
@@ -39,7 +39,7 @@ not-completed label=w1
 
 token-bucket
 ----
-2008.00 RU filling @ 1.00 RU/s (4000.00 waiting RU)
+2008.00 RU filling @ 1.00 RU/s (limited to 5010.00 RU) (4000.00 waiting RU)
 
 # Advance 1 more second, which should trigger a token bucket request to extend
 # the trickle duration. Note that the trickle grant will not have been fully
@@ -60,7 +60,7 @@ token-bucket-response
 
 token-bucket
 ----
-2009.00 RU filling @ 1.10 RU/s (4000.00 waiting RU)
+2009.00 RU filling @ 1.10 RU/s (limited to 5011.00 RU) (4000.00 waiting RU)
 
 advance
 1991s
