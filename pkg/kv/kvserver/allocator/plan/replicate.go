@@ -119,6 +119,9 @@ type ReplicaPlannerTestingKnobs struct {
 	// DisableReplicaRebalancing disables rebalancing of replicas but otherwise
 	// leaves the replicate queue operational.
 	DisableReplicaRebalancing bool
+	// AllowVoterRemovalWhenNotLeader allows removing voters when this replica is
+	// not the leader.
+	AllowVoterRemovalWhenNotLeader bool
 }
 
 var _ ReplicationPlanner = &ReplicaPlanner{}
@@ -570,6 +573,12 @@ func (rp ReplicaPlanner) findRemoveVoter(
 		}
 		raftStatus := repl.RaftStatus()
 		if raftStatus == nil || raftStatus.RaftState != raft.StateLeader {
+			// If requested, assume all replicas are up-to-date.
+			if rp.knobs.AllowVoterRemovalWhenNotLeader {
+				candidates = allocatorimpl.FilterUnremovableReplicasWithoutRaftStatus(
+					ctx, existingVoters, existingVoters, lastReplAdded)
+				break
+			}
 			// If we've lost raft leadership, we're unlikely to regain it so give up immediately.
 			return roachpb.ReplicationTarget{}, "",
 				benignerror.New(errors.Errorf("not raft leader while range needs removal"))
