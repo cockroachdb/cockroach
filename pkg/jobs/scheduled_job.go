@@ -13,7 +13,6 @@ package jobs
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"strings"
 	"time"
 
@@ -294,73 +293,101 @@ func (j *ScheduledJob) InitFromDatums(datums []tree.Datum, cols []colinfo.Result
 			"datums length != columns length: %d != %d", len(datums), len(cols))
 	}
 
-	record := reflect.ValueOf(&j.rec).Elem()
+	modified := false
 
-	numInitialized := 0
 	for i, col := range cols {
-		native, err := datumToNative(datums[i])
-		if err != nil {
-			return err
-		}
-
-		if native == nil {
+		datum := tree.UnwrapDOidWrapper(datums[i])
+		if datum == tree.DNull {
+			// Skip over any null values
 			continue
 		}
 
-		fieldNum, ok := columnNameToField[col.Name]
-		if !ok {
-			// Table contains columns we don't care about (e.g. created)
+		switch col.Name {
+		case "schedule_id":
+			dint, ok := datum.(*tree.DInt)
+			if !ok {
+				return errors.Newf("expected %q to be %T got %T", col.Name, dint, datum)
+			}
+			j.rec.ScheduleID = int64(*dint)
+
+		case "schedule_name":
+			dstring, ok := datum.(*tree.DString)
+			if !ok {
+				return errors.Newf("expected %q to be %T got %T", col.Name, dstring, datum)
+			}
+			j.rec.ScheduleLabel = string(*dstring)
+
+		case "owner":
+			dstring, ok := datum.(*tree.DString)
+			if !ok {
+				return errors.Newf("expected %q to be %T got %T", col.Name, dstring, datum)
+			}
+			j.rec.Owner = username.MakeSQLUsernameFromPreNormalizedString(string(*dstring))
+
+		case "next_run":
+			dtime, ok := datum.(*tree.DTimestampTZ)
+			if !ok {
+				return errors.Newf("expected %q to be %T got %T", col.Name, dtime, datum)
+			}
+			j.rec.NextRun = dtime.Time
+
+		case "schedule_state":
+			dbytes, ok := datum.(*tree.DBytes)
+			if !ok {
+				return errors.Newf("expected %q to be %T got %T", col.Name, dbytes, datum)
+			}
+			if err := protoutil.Unmarshal([]byte(*dbytes), &j.rec.ScheduleState); err != nil {
+				return err
+			}
+
+		case "schedule_expr":
+			dstring, ok := datum.(*tree.DString)
+			if !ok {
+				return errors.Newf("expected %q to be %T got %T", col.Name, dstring, datum)
+			}
+			j.rec.ScheduleExpr = string(*dstring)
+
+		case "schedule_details":
+			dbytes, ok := datum.(*tree.DBytes)
+			if !ok {
+				return errors.Newf("expected %q to be %T got %T", col.Name, dbytes, datum)
+			}
+			if err := protoutil.Unmarshal([]byte(*dbytes), &j.rec.ScheduleDetails); err != nil {
+				return err
+			}
+
+		case "executor_type":
+			dstring, ok := datum.(*tree.DString)
+			if !ok {
+				return errors.Newf("expected %q to be %T got %T", col.Name, dstring, datum)
+			}
+			j.rec.ExecutorType = string(*dstring)
+
+		case "execution_args":
+			dbytes, ok := datum.(*tree.DBytes)
+			if !ok {
+				return errors.Newf("expected %q to be %T got %T", col.Name, dbytes, datum)
+			}
+			if err := protoutil.Unmarshal([]byte(*dbytes), &j.rec.ExecutionArgs); err != nil {
+				return err
+			}
+
+		default:
+			// Ignore any unrecognized fields. This behavior is historical and tested
+			// but it's unclear why unrecognized fields would appear.
 			continue
 		}
 
-		field := record.Field(fieldNum)
+		modified = true
 
-		if data, ok := native.([]byte); ok {
-			// []byte == protocol message.
-			if pb, ok := field.Addr().Interface().(protoutil.Message); ok {
-				if err := protoutil.Unmarshal(data, pb); err != nil {
-					return err
-				}
-			} else {
-				return errors.Newf(
-					"field %s with value of type %T is does not appear to be a protocol message",
-					field.String(), field.Addr().Interface())
-			}
-		} else {
-			// We ought to be able to assign native directly to our field.
-			// But, be paranoid and double check.
-			rv := reflect.ValueOf(native)
-			if !rv.Type().AssignableTo(field.Type()) {
-				// Is this the owner field? This needs special treatment.
-				ok := false
-				if col.Name == "owner" {
-					// The owner field has type SQLUsername, but the datum is a
-					// simple string.  So we need to convert.
-					//
-					// TODO(someone): We need a more generic mechanism than this
-					// naive go reflect stuff here.
-					var s string
-					s, ok = native.(string)
-					if ok {
-						// Replace the value by one of the right type.
-						rv = reflect.ValueOf(username.MakeSQLUsernameFromPreNormalizedString(s))
-					}
-				}
-				if !ok {
-					return errors.Newf("value of type %T cannot be assigned to %s",
-						native, field.Type().String())
-				}
-			}
-			field.Set(rv)
-		}
-		numInitialized++
 	}
 
-	if numInitialized == 0 {
-		return errors.New("did not initialize any schedule field")
+	if !modified {
+		return errors.Newf("no fields initialized")
 	}
 
 	j.scheduledTime = j.rec.NextRun
+
 	return nil
 }
 
@@ -627,40 +654,4 @@ func marshalProto(message protoutil.Message) (tree.Datum, error) {
 		return nil, err
 	}
 	return tree.NewDBytes(tree.DBytes(data)), nil
-}
-
-// datumToNative is a helper to convert tree.Datum into Go native
-// types.  We only care about types stored in the system.scheduled_jobs table.
-func datumToNative(datum tree.Datum) (interface{}, error) {
-	datum = tree.UnwrapDOidWrapper(datum)
-	if datum == tree.DNull {
-		return nil, nil
-	}
-	switch d := datum.(type) {
-	case *tree.DString:
-		return string(*d), nil
-	case *tree.DInt:
-		return int64(*d), nil
-	case *tree.DTimestampTZ:
-		return d.Time, nil
-	case *tree.DBytes:
-		return []byte(*d), nil
-	}
-	return nil, errors.Newf("cannot handle type %T", datum)
-}
-
-var columnNameToField = make(map[string]int)
-
-func init() {
-	// Initialize columnNameToField map, mapping system.schedule_job columns
-	// to the appropriate fields int he scheduledJobRecord.
-	j := reflect.TypeOf(scheduledJobRecord{})
-
-	for f := 0; f < j.NumField(); f++ {
-		field := j.Field(f)
-		col := field.Tag.Get("col")
-		if col != "" {
-			columnNameToField[col] = f
-		}
-	}
 }

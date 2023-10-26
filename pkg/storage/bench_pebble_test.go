@@ -448,6 +448,31 @@ func BenchmarkMVCCDeleteRangeUsingTombstone_Pebble(b *testing.B) {
 	}
 }
 
+// BenchmarkMVCCDeleteRangeWithPredicate_Pebble benchmarks predicate based
+// delete range under certain configs. A lower streak bound simulates sequential
+// imports with more interspersed keys, leading to fewer range tombstones and
+// more point tombstones.
+func BenchmarkMVCCDeleteRangeWithPredicate_Pebble(b *testing.B) {
+	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+	for _, streakBound := range []int{10, 100, 200, 500} {
+		b.Run(fmt.Sprintf("streakBound=%d", streakBound), func(b *testing.B) {
+			for _, rangeKeyThreshold := range []int64{64} {
+				b.Run(fmt.Sprintf("rangeKeyThreshold=%d", rangeKeyThreshold), func(b *testing.B) {
+					config := mvccImportedData{
+						streakBound: streakBound,
+						keyCount:    2000,
+						valueBytes:  64,
+						layers:      2,
+					}
+					runMVCCDeleteRangeWithPredicate(ctx, b, config, 0, rangeKeyThreshold)
+				})
+			}
+		})
+	}
+}
+
 func BenchmarkClearMVCCVersions_Pebble(b *testing.B) {
 	skip.UnderShort(b)
 	defer log.Scope(b).Close(b)
