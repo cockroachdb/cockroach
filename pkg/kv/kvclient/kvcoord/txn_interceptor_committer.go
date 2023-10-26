@@ -196,9 +196,7 @@ func (tc *txnCommitter) SendLocked(
 		// of STAGING, we know that the transaction failed to implicitly commit,
 		// so interceptors above the txnCommitter in the stack don't need to be
 		// made aware that the record is staging.
-		if txn := pErr.GetTxn(); txn != nil && txn.Status == roachpb.STAGING {
-			pErr.SetTxn(cloneWithStatus(txn, roachpb.PENDING))
-		}
+		pErr = maybeRemoveStagingStatusInErr(pErr)
 		return nil, pErr
 	}
 
@@ -457,6 +455,13 @@ func (tc *txnCommitter) retryTxnCommitAfterFailedParallelCommit(
 	}
 	brSuffix, pErr := tc.wrapped.SendLocked(ctx, baSuffix)
 	if pErr != nil {
+		// If the request determined that the transaction record had been staging,
+		// but then fails to commit the transaction, downgrade the status back to
+		// PENDING. We issued the request with a PENDING status, so we typically
+		// don't expect this to happen. However, it can happen if the error is
+		// constructed using the proto from the transaction record, as is the case
+		// for TransactionRetryErrors returned from request evaluation.
+		pErr = maybeRemoveStagingStatusInErr(pErr)
 		return nil, pErr
 	}
 
@@ -569,4 +574,11 @@ func cloneWithStatus(txn *roachpb.Transaction, s roachpb.TransactionStatus) *roa
 	clone := txn.Clone()
 	clone.Status = s
 	return clone
+}
+
+func maybeRemoveStagingStatusInErr(pErr *kvpb.Error) *kvpb.Error {
+	if txn := pErr.GetTxn(); txn != nil && txn.Status == roachpb.STAGING {
+		pErr.SetTxn(cloneWithStatus(txn, roachpb.PENDING))
+	}
+	return pErr
 }
