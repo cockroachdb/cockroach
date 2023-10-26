@@ -458,6 +458,11 @@ message LocalOnlySessionData {
   // implements SELECT FOR UPDATE and SELECT FOR SHARE using the Lock operator,
   // regardless of this setting.
   bool optimizer_use_lock_op_for_serializable = 114;
+  // OptimizerUseProvidedOrderingFix, when true, causes the optimizer to
+  // reconcile provided orderings with required ordering choices. This prevents
+  // internal errors due to incomplete functional dependencies, and also
+  // fixes a bug that incorrectly truncated the provided ordering (see #113072).
+  bool optimizer_use_provided_ordering_fix = 115;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
