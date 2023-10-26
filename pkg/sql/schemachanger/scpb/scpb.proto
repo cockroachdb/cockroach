@@ -206,16 +206,3 @@ message CorpusState {
 message CorpusDisk {
   repeated CorpusState corpus_array = 1;
 }
-
-// LogicTestStmtsCorpus is used to serialize statements collected from logic
-// tests. Each entry in the corpus corresponds to statements collected from one
-// logic test.
-message LogicTestStmtsCorpus {
-  message Entry {
-    string name = 1;
-    repeated string statements = 2;
-  }
-
-  repeated Entry entries = 1;
-}
-

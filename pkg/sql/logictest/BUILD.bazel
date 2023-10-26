@@ -22,8 +22,8 @@ filegroup(
     visibility = [
         "//pkg/ccl/logictestccl:__subpackages__",
         "//pkg/cmd/generate-logictest:__pkg__",
-        "//pkg/cmd/generate-logictest-corpus:__pkg__",
         "//pkg/sql/logictest:__subpackages__",
+        "//pkg/sql/schemachanger:__pkg__",
     ],
 )
 
