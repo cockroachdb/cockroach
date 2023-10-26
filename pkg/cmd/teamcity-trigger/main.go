@@ -173,9 +173,9 @@ func runTC(queueBuild func(string, map[string]string)) {
 		// Run non-race build.
 		bazelFlags, ok := opts["env.EXTRA_BAZEL_FLAGS"]
 		if ok {
-			opts["env.EXTRA_BAZEL_FLAGS"] = fmt.Sprintf("%s --test_sharding_strategy=disabled --jobs %d", bazelFlags, parallelism)
+			opts["env.EXTRA_BAZEL_FLAGS"] = fmt.Sprintf("%s --test_sharding_strategy=disabled", bazelFlags)
 		} else {
-			opts["env.EXTRA_BAZEL_FLAGS"] = fmt.Sprintf("--test_sharding_strategy=disabled --jobs %d", parallelism)
+			opts["env.EXTRA_BAZEL_FLAGS"] = "--test_sharding_strategy=disabled"
 		}
 
 		opts["env.STRESSFLAGS"] = fmt.Sprintf("-maxruns %d -maxtime %s -maxfails %d -p %d",
