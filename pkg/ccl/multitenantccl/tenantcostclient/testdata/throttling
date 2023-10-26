@@ -1,18 +1,13 @@
 # By default, the test provider grants all RUs immediately. Test cases where it
 # instead throttles usage to a limited rate.
 
-# Wait for initial 10K RUs to be granted.
-wait-for-event
-token-bucket-response
-----
-
 # Set up throttling at 1K RU/s.
 configure
 throttle: 1000
 ----
 
-# Issue 8K RU write to consume all tokens in the bucket and create 2K debt.
-write bytes=8189952
+# Issue 3K RU write to consume all tokens in the bucket and create 2K debt.
+write bytes=3069952
 ----
 
 wait-for-event
