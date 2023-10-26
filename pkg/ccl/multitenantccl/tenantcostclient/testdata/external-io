@@ -1,10 +1,5 @@
 # Test external IO ingress and egress.
 
-# Wait for initial 10K RUs to be granted.
-wait-for-event
-token-bucket-response
-----
-
 # Set up throttling at 1K RU/s.
 configure
 throttle: 1000
@@ -12,7 +7,7 @@ throttle: 1000
 
 # Perform external IO egress that triggers fetch of more RU and sets up
 # throttling.
-external-egress bytes=6144000
+external-egress bytes=1024000
 ----
 
 wait-for-event
