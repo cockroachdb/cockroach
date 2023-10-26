@@ -1,17 +1,12 @@
 # Test token bucket that has gone into debt.
 
-# Wait for initial 10K RUs to be granted.
-wait-for-event
-token-bucket-response
-----
-
 # Set up throttling at 1000 RU/s.
 configure
 throttle: 1000
 ----
 
-# Issue 6K write that triggers fetch of more RU and also sets throttle rate.
-write bytes=6141952
+# Issue 2K RU write that triggers fetch of more RU and also sets throttle rate.
+write bytes=2045952
 ----
 
 wait-for-event
@@ -20,11 +15,11 @@ token-bucket-response
 
 token-bucket
 ----
-4000.00 RU filling @ 1000.00 RU/s
+3000.00 RU filling @ 1000.00 RU/s
 
-# Consume 6K RUs that causes bucket to go into debt.
+# Consume 5K RUs that causes bucket to go into debt.
 cpu
-18s
+15s
 ----
 
 advance wait=true

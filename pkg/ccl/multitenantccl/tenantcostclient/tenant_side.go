@@ -33,6 +33,15 @@ import (
 	"github.com/cockroachdb/errors/errorspb"
 )
 
+// InitialRequestSetting is exported for testing purposes.
+var InitialRequestSetting = settings.RegisterFloatSetting(
+	settings.TenantReadOnly,
+	"tenant_initial_request",
+	"number of request units to get from server on first request (requires restart)",
+	bufferRUs/5,
+	checkFloat64InRange(0, bufferRUs/5),
+)
+
 // TargetPeriodSetting is exported for testing purposes.
 var TargetPeriodSetting = settings.RegisterDurationSetting(
 	settings.TenantReadOnly,
@@ -100,6 +109,19 @@ func externalIORUAccountingModeFromString(s string) externalIORUAccountingMode {
 	}
 }
 
+// checkFloat64InRange returns a function used to validate float64 cluster
+// settings. Because these values are currently settable by the tenant, we need
+// to restrict the allowed values to avoid possible sabotage of the cost control
+// mechanisms.
+func checkFloat64InRange(min, max float64) func(v float64) error {
+	return func(v float64) error {
+		if v < min || v > max {
+			return errors.Errorf("value %g out of range (%g, %g)", v, min, max)
+		}
+		return nil
+	}
+}
+
 // checkDurationInRange returns a function used to validate duration cluster
 // settings. Because these values are currently settable by the tenant, we need
 // to restrict the allowed values to avoid possible sabotage of the cost control
@@ -112,14 +134,6 @@ func checkDurationInRange(min, max time.Duration) func(v time.Duration) error {
 		return nil
 	}
 }
-
-// Initial settings for the local token bucket. They are used only until the
-// first TokenBucket request returns. We allow immediate use of the initial RUs
-// (we essentially borrow them and pay them back in the first TokenBucket
-// request). The intention is to avoid any throttling during start-up in normal
-// circumstances.
-const initialRUs = 10000
-const initialRate = 100
 
 // defaultTickInterval is the default period at which we collect CPU usage and
 // evaluate whether we need to send a new token request.
@@ -177,8 +191,8 @@ func newTenantSideCostController(
 	}
 	c.limiter.Init(timeSource, c.lowRUNotifyChan)
 	c.limiter.Reconfigure(timeSource.Now(), limiterReconfigureArgs{
-		NewTokens: initialRUs,
-		NewRate:   initialRate,
+		NewTokens:       bufferRUs,
+		NotifyThreshold: bufferRUs,
 	})
 
 	tenantcostmodel.SetOnChange(&st.SV, func(ctx context.Context) {
@@ -303,11 +317,8 @@ type tenantSideCostController struct {
 		targetPeriod time.Duration
 
 		// requestSeqNum is an increasing sequence number that is included in token
-		// bucket requests.
+		// bucket requests to prevent duplicate consumption reporting.
 		requestSeqNum int64
-		// initialRequestCompleted is set to true when the first token bucket
-		// request completes successfully.
-		initialRequestCompleted bool
 		// requestInProgress is the token bucket request that is in progress, or
 		// nil if there is no call in progress. It gets set to nil when we process
 		// the response (in the main loop), even in error cases.
@@ -395,7 +406,7 @@ func (c *tenantSideCostController) initRunState(ctx context.Context) {
 	c.run.lastTick = now
 	c.run.externalUsage = c.externalUsageFn(ctx)
 	c.run.lastRequestTime = now
-	c.run.avgRUPerSec = initialRUs / c.run.targetPeriod.Seconds()
+	c.run.avgRUPerSec = InitialRequestSetting.Get(&c.settings.SV) / c.run.targetPeriod.Seconds()
 	c.run.requestSeqNum = 1
 }
 
@@ -511,9 +522,7 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 	var requested float64
 	now := c.timeSource.Now()
 
-	if !c.run.initialRequestCompleted {
-		requested = initialRUs
-	} else if c.run.trickleTimer != nil {
+	if c.run.trickleTimer != nil {
 		// Don't request additional RUs if we're in the middle of a trickle
 		// that was started recently.
 		requested = 0
@@ -662,15 +671,6 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 	c.limiter.Reconfigure(now, cfg)
 	c.run.lastRate = float64(cfg.NewRate)
 
-	// Wait until reconfigure is done before removing the initial RUs to avoid
-	// triggering an unnecessary low RU notification.
-	if !c.run.initialRequestCompleted {
-		c.run.initialRequestCompleted = true
-		// This is the first successful request. Take back the initial RUs that we
-		// used to pre-fill the bucket.
-		c.limiter.RemoveRU(now, initialRUs)
-	}
-
 	if log.ExpensiveLogEnabled(ctx, 1) {
 		log.Infof(ctx, "Limiter: %s", c.limiter.String(now))
 	}
@@ -688,7 +688,10 @@ func (c *tenantSideCostController) mainLoop(ctx context.Context) {
 	tickerCh := ticker.Ch()
 
 	c.initRunState(ctx)
-	c.sendTokenBucketRequest(ctx)
+
+	if c.testInstr != nil {
+		c.testInstr.Event(c.timeSource.Now(), MainLoopStarted)
+	}
 
 	// The main loop should never block. The remote requests run in separate
 	// goroutines.
