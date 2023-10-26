@@ -1056,8 +1056,6 @@ GO_TARGETS = [
     "//pkg/cmd/generate-cgo:generate-cgo_lib",
     "//pkg/cmd/generate-distdir:generate-distdir",
     "//pkg/cmd/generate-distdir:generate-distdir_lib",
-    "//pkg/cmd/generate-logictest-corpus:generate-logictest-corpus",
-    "//pkg/cmd/generate-logictest-corpus:generate-logictest-corpus_lib",
     "//pkg/cmd/generate-logictest:generate-logictest",
     "//pkg/cmd/generate-logictest:generate-logictest_lib",
     "//pkg/cmd/generate-metadata-tables/rdbms:generate-metadata-tables-rdbms_lib",
