@@ -778,10 +778,8 @@ func TestWaitingRU(t *testing.T) {
 
 	// Disable CPU consumption so that it doesn't interfere with test.
 	st := cluster.MakeTestingClusterSettings()
-	tenantcostclient.CPUUsageAllowance.Override(context.Background(), &st.SV, time.Second)
+	tenantcostclient.CPUUsageAllowance.Override(ctx, &st.SV, time.Second)
 
-	// Refill the token bucket at a fixed 100 RU/s so that we can limit
-	// non-determinism in the test.
 	testProvider := newTestProvider()
 	testProvider.configure(testProviderConfig{ProviderError: true})
 
@@ -816,6 +814,8 @@ func TestWaitingRU(t *testing.T) {
 	resp := tenantcostmodel.TestingResponseInfo(false, 0, 0, 0)
 
 	testutils.SucceedsWithin(t, func() error {
+		// Refill the token bucket at a fixed 100 RU/s so that we can limit
+		// non-determinism in the test.
 		tenantcostclient.TestingSetRate(ctrl, fillRate)
 
 		var doneCount int64
