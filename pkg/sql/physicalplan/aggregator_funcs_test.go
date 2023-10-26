@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -72,7 +71,6 @@ func runTestFlow(
 		t.Fatal(err)
 	}
 	req := execinfrapb.SetupFlowRequest{
-		Version:           execinfra.Version,
 		LeafTxnInputState: leafInputState,
 		Flow: execinfrapb.FlowSpec{
 			FlowID:     execinfrapb.FlowID{UUID: uuid.FastMakeV4()},

@@ -373,6 +373,13 @@ func (c *cancelFlowsCoordinator) addFlowsToCancel(
 	}
 }
 
+// The last bump of DistSQL version occurred in 23.1, and we were at version 71.
+// Starting in 24.1 we no longer check the DistSQL version, but for
+// compatibility with 23.1 and 23.2 we still need to set the last version used.
+// TODO(yuzefovich): remove this once compatibility with 23.2 is no longer
+// needed.
+const lastDistSQLVersion = execinfrapb.DistSQLVersion(71)
+
 // setupFlows sets up all the flows specified in flows using the provided state.
 // It will first attempt to set up the gateway flow (whose output is the
 // DistSQLReceiver provided) and - if successful - will proceed to setting up
@@ -424,7 +431,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		// TODO(yuzefovich): avoid populating some fields of the SetupFlowRequest
 		// for local plans.
 		LeafTxnInputState: leafInputState,
-		Version:           execinfra.Version,
+		Version:           lastDistSQLVersion,
 		EvalContext:       execinfrapb.MakeEvalContext(&evalCtx.Context),
 		TraceKV:           evalCtx.Tracing.KVTracingEnabled(),
 		CollectStats:      planCtx.collectExecStats,

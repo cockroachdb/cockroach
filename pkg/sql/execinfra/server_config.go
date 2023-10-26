@@ -141,8 +141,7 @@ type ServerConfig struct {
 	// to package dependency cycles
 	LeaseManager interface{}
 
-	// A handle to gossip used to broadcast the node's DistSQL version and
-	// draining state.
+	// A handle to gossip used to broadcast the node's draining state.
 	Gossip gossip.OptionalGossip
 
 	// Dialer for communication between SQL instances.

@@ -113,23 +113,6 @@ func NewServer(
 // initialized. For example, the initialization of the flow runner has to
 // happen in NewServer.
 func (ds *ServerImpl) Start() {
-	// Gossip the version info so that other nodes don't plan incompatible flows
-	// for us.
-	if g, ok := ds.ServerConfig.Gossip.Optional(MultiTenancyIssueNo); ok {
-		if nodeID, ok := ds.ServerConfig.NodeID.OptionalNodeID(); ok {
-			if err := g.AddInfoProto(
-				gossip.MakeDistSQLNodeVersionKey(base.SQLInstanceID(nodeID)),
-				&execinfrapb.DistSQLVersionGossipInfo{
-					Version:            execinfra.Version,
-					MinAcceptedVersion: execinfra.MinAcceptedVersion,
-				},
-				0, // ttl - no expiration
-			); err != nil {
-				panic(err)
-			}
-		}
-	}
-
 	if err := ds.setDraining(false); err != nil {
 		panic(err)
 	}
@@ -185,14 +168,6 @@ func (ds *ServerImpl) setDraining(drain bool) error {
 	return nil
 }
 
-// FlowVerIsCompatible checks a flow's version is compatible with this node's
-// DistSQL version.
-func FlowVerIsCompatible(
-	flowVer, minAcceptedVersion, serverVersion execinfrapb.DistSQLVersion,
-) bool {
-	return flowVer >= minAcceptedVersion && flowVer <= serverVersion
-}
-
 // setupFlow creates a Flow.
 //
 // Args:
@@ -240,15 +215,6 @@ func (ds *ServerImpl) setupFlow(
 			retCtx = tracing.ContextWithSpan(ctx, nil)
 		}
 	}()
-
-	if !FlowVerIsCompatible(req.Version, execinfra.MinAcceptedVersion, execinfra.Version) {
-		err := errors.Errorf(
-			"version mismatch in flow request: %d; this node accepts %d through %d",
-			req.Version, execinfra.MinAcceptedVersion, execinfra.Version,
-		)
-		log.Warningf(ctx, "%v", err)
-		return ctx, nil, nil, err
-	}
 
 	const opName = "flow"
 	if parentSpan == nil {

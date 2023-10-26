@@ -12,23 +12,18 @@ package flowinfra_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -45,7 +40,6 @@ func TestServer(t *testing.T) {
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
-	conn := s.RPCClientConn(t, username.RootUserName())
 
 	r := sqlutils.MakeSQLRunner(sqlDB)
 
@@ -72,10 +66,7 @@ func TestServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req := &execinfrapb.SetupFlowRequest{
-		Version:           execinfra.Version,
-		LeafTxnInputState: leafInputState,
-	}
+	req := &execinfrapb.SetupFlowRequest{LeafTxnInputState: leafInputState}
 	req.Flow = execinfrapb.FlowSpec{
 		Processors: []execinfrapb.ProcessorSpec{{
 			Core: execinfrapb.ProcessorCoreUnion{TableReader: &ts},
@@ -95,67 +86,6 @@ func TestServer(t *testing.T) {
 	expected := "[[1 10] [2 20] [3 30]]"
 	if str != expected {
 		t.Errorf("invalid results: %s, expected %s'", str, expected)
-	}
-
-	// Verify version handling.
-	t.Run("version", func(t *testing.T) {
-		testCases := []struct {
-			version     execinfrapb.DistSQLVersion
-			expectedErr string
-		}{
-			{
-				version:     execinfra.Version + 1,
-				expectedErr: "version mismatch",
-			},
-			{
-				version:     execinfra.MinAcceptedVersion - 1,
-				expectedErr: "version mismatch",
-			},
-			// TODO(yuzefovich): figure out what setup to perform to simulate
-			// running a flow with acceptable version on a remote node.
-			// Currently, the flow is scheduled correctly, but then encounters a
-			// panic in a separate goroutine because there is no RowReceiver set
-			// up for the table reader.
-			//{
-			//	version:     execinfra.MinAcceptedVersion,
-			//	expectedErr: "",
-			//},
-		}
-		for _, tc := range testCases {
-			t.Run(fmt.Sprintf("%d", tc.version), func(t *testing.T) {
-				req := *req
-				req.Version = tc.version
-				distSQLClient := execinfrapb.NewDistSQLClient(conn)
-				resp, err := distSQLClient.SetupFlow(ctx, &req)
-				if err == nil && resp.Error != nil {
-					err = resp.Error.ErrorDetail(ctx)
-				}
-				if !testutils.IsError(err, tc.expectedErr) {
-					t.Errorf("expected error '%s', got %v", tc.expectedErr, err)
-				}
-			})
-		}
-	})
-}
-
-// Test that a node gossips its DistSQL version information.
-func TestDistSQLServerGossipsVersion(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-
-	var v execinfrapb.DistSQLVersionGossipInfo
-	if err := s.GossipI().(*gossip.Gossip).GetInfoProto(
-		gossip.MakeDistSQLNodeVersionKey(base.SQLInstanceID(s.NodeID())), &v,
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	if v.Version != execinfra.Version || v.MinAcceptedVersion != execinfra.MinAcceptedVersion {
-		t.Fatalf("node is gossipping the wrong version. Expected: [%d-%d], got [%d-%d",
-			execinfra.Version, execinfra.MinAcceptedVersion, v.Version, v.MinAcceptedVersion)
 	}
 }
 

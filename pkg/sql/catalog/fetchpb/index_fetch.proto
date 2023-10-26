@@ -71,7 +71,7 @@ message IndexFetchSpec {
 
   // Version is used to allow providing backward compatibility if this spec
   // changes. The intention is that one day this proto will be passed to KV scan
-  // requests, in which case the DistSQL versioning will not suffice.
+  // requests, in which case the cluster versioning might not suffice.
   optional uint32 version = 1 [(gogoproto.nullable) = false];
 
   optional uint32 table_id = 2 [(gogoproto.nullable) = false,
