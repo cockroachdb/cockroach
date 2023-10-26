@@ -25,10 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
@@ -801,6 +803,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		deadline, _ := ctx.Deadline()
 		log.Eventf(ctx, "deadline expired, waited in %s queue for %v",
 			workKindString(q.workKind), waitDur)
+		recordAdmissionWorkQueueStats(ctx, startTime, waitDur, q.workKind, true)
 		return true,
 			errors.Newf("work %s deadline expired while waiting: deadline: %v, start: %v, dur: %v",
 				workKindString(q.workKind), deadline, startTime, waitDur)
@@ -815,9 +818,29 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 			panic(errors.AssertionFailedf("grantee should be removed from heap"))
 		}
 		log.Eventf(ctx, "admitted, waited in %s queue for %v", workKindString(q.workKind), waitDur)
+		recordAdmissionWorkQueueStats(ctx, startTime, waitDur, q.workKind, false)
 		q.granter.continueGrantChain(chainID)
 		return true, nil
 	}
+}
+
+func recordAdmissionWorkQueueStats(
+	ctx context.Context,
+	startTime time.Time,
+	waitDur time.Duration,
+	workKind WorkKind,
+	deadlineExceeded bool,
+) {
+	sp := tracing.SpanFromContext(ctx)
+	if sp == nil {
+		return
+	}
+	sp.RecordStructured(&admissionpb.AdmissionWorkQueueStats{
+		StartTime:       hlc.Timestamp{WallTime: startTime.UnixNano()},
+		WaitDuration:    waitDur,
+		WorkKind:        workKindString(workKind),
+		DeadlineExpired: deadlineExceeded,
+	})
 }
 
 // AdmittedWorkDone is used to inform the WorkQueue that some admitted work is
