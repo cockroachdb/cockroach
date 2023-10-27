@@ -14,7 +14,7 @@ BAZEL_BIN=$(bazel info bazel-bin --config=ci)
 # Run schema changer comparator test.
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
   //pkg/sql/schemachanger:schemachanger_test \
-  --test_filter='^TestComparatorFromLogicTests' \
+  --test_filter='^TestSchemaChangeComparator' \
   --test_env=GO_TEST_WRAP_TESTV=1 \
   --test_env=GO_TEST_WRAP=1 \
   --test_env=COCKROACH_SCHEMA_CHANGE_COMPARATOR_SKIP=false \
