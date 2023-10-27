@@ -666,10 +666,6 @@ func (ts *testServer) startSharedProcessDefaultTestTenant(
 		return nil, err
 	}
 
-	if err = ts.grantDefaultSharedProcessCapabilities(ctx, params.TenantID); err != nil {
-		return nil, err
-	}
-
 	return tenant, err
 }
 
@@ -737,8 +733,8 @@ func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 	return nil
 }
 
-func (ts *testServer) grantDefaultSharedProcessCapabilities(
-	ctx context.Context, tenID roachpb.TenantID,
+func (ts *testServer) grantDefaultTenantCapabilities(
+	ctx context.Context, tenantID roachpb.TenantID, skipTenantCheck bool,
 ) error {
 	ie := ts.InternalExecutor().(*sql.InternalExecutor)
 	for _, setting := range []settings.Setting{
@@ -747,29 +743,44 @@ func (ts *testServer) grantDefaultSharedProcessCapabilities(
 		sql.SecondaryTenantZoneConfigsEnabled,
 		sql.SecondaryTenantsMultiRegionAbstractionsEnabled,
 	} {
+		// Update the override for this setting. We need to do this
+		// instead of calling .Override() on the setting directly: certain
+		// tests expect to be able to change the value afterwards using
+		// another ALTER VC SET CLUSTER SETTING statement, which is not
+		// possible with regular overrides.
 		_, err := ie.Exec(ctx, "testserver-alter-tenant-cap", nil,
-			fmt.Sprintf("ALTER VIRTUAL CLUSTER [$1] SET CLUSTER SETTING %s = true", setting.Name()), tenID.ToUint64())
+			fmt.Sprintf("ALTER VIRTUAL CLUSTER [$1] SET CLUSTER SETTING %s = true", setting.Name()), tenantID.ToUint64())
 		if err != nil {
-			return err
+			if skipTenantCheck {
+				log.Infof(ctx, "ignoring error changing setting because SkipTenantCheck is true: %v", err)
+			} else {
+				return err
+			}
 		}
 	}
-	execSQL := func(opName, stmt string, qargs ...interface{}) error {
-		_, err := ie.ExecEx(ctx, opName, nil /* txn */, sessiondata.NodeUserSessionDataOverride, stmt, qargs...)
-		return err
-	}
-	err := execSQL("set-tenant-capability",
-		`ALTER TENANT [$1] GRANT CAPABILITY can_debug_process=true,can_use_nodelocal_storage=true,can_admin_split=true`,
-		tenID.ToUint64(),
-	)
-	if err != nil {
-		return err
-	}
-	if err := ts.WaitForTenantCapabilities(ctx, tenID, map[tenantcapabilities.ID]string{
-		tenantcapabilities.CanDebugProcess:        "true",
-		tenantcapabilities.CanUseNodelocalStorage: "true",
-		tenantcapabilities.CanAdminSplit:          "true",
-	}, ""); err != nil {
-		return err
+
+	// Waiting for capabilities can time To avoid paying this cost in all
+	// cases, we only set the nodelocal storage capability if the caller has
+	// configured an ExternalIODir since nodelocal storage only works with
+	// that configured.
+	shouldGrantNodelocalCap := ts.params.ExternalIODir != ""
+	canGrantNodelocalCap := ts.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_1TenantCapabilities)
+	if canGrantNodelocalCap && shouldGrantNodelocalCap {
+		_, err := ie.Exec(ctx, "testserver-alter-tenant-cap", nil,
+			"ALTER TENANT [$1] GRANT CAPABILITY can_use_nodelocal_storage", tenantID.ToUint64())
+		if err != nil {
+			if skipTenantCheck {
+				log.Infof(ctx, "ignoring error granting capability because SkipTenantCheck is true: %v", err)
+			} else {
+				return err
+			}
+		} else {
+			if err := ts.WaitForTenantCapabilities(ctx, tenantID, map[tenantcapabilities.ID]string{
+				tenantcapabilities.CanUseNodelocalStorage: "true",
+			}, ""); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -1381,6 +1392,10 @@ func (ts *testServer) StartSharedProcessTenant(
 		drain:          sqlServerWrapper.drainServer,
 	}
 
+	if err = ts.grantDefaultTenantCapabilities(ctx, tenantID, args.SkipTenantCheck); err != nil {
+		return nil, nil, err
+	}
+
 	sqlDB, err := ts.SQLConnE(serverutils.DBName("cluster:" + string(args.TenantName) + "/" + args.UseDatabase))
 	if err != nil {
 		return nil, nil, err
@@ -1674,53 +1689,9 @@ func (ts *testServer) StartTenant(
 	baseCfg.HeapProfileDirName = ts.Cfg.BaseConfig.HeapProfileDirName
 	baseCfg.GoroutineDumpDirName = ts.Cfg.BaseConfig.GoroutineDumpDirName
 
-	for _, setting := range []settings.Setting{
-		sql.SecondaryTenantScatterEnabled,
-		sql.SecondaryTenantSplitAtEnabled,
-		sql.SecondaryTenantZoneConfigsEnabled,
-		sql.SecondaryTenantsMultiRegionAbstractionsEnabled,
-	} {
-		// Update the override for this setting. We need to do this
-		// instead of calling .Override() on the setting directly: certain
-		// tests expect to be able to change the value afterwards using
-		// another ALTER VC SET CLUSTER SETTING statement, which is not
-		// possible with regular overrides.
-		_, err := ie.Exec(ctx, "testserver-alter-tenant-cap", nil,
-			fmt.Sprintf("ALTER VIRTUAL CLUSTER [$1] SET CLUSTER SETTING %s = true", setting.Name()), params.TenantID.ToUint64())
-		if err != nil {
-			if params.SkipTenantCheck {
-				log.Infof(ctx, "ignoring error changing setting because SkipTenantCheck is true: %v", err)
-			} else {
-				return nil, err
-			}
-		}
-	}
-
-	// Waiting for capabilities can time To avoid paying this cost in all
-	// cases, we only set the nodelocal storage capability if the caller has
-	// configured an ExternalIODir since nodelocal storage only works with
-	// that configured.
-	//
-	// TODO(ssd): We do not set this capability in
-	// StartSharedProcessTenant.
-	shouldGrantNodelocalCap := ts.params.ExternalIODir != ""
-	canGrantNodelocalCap := ts.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_1TenantCapabilities)
-	if canGrantNodelocalCap && shouldGrantNodelocalCap {
-		_, err := ie.Exec(ctx, "testserver-alter-tenant-cap", nil,
-			"ALTER TENANT [$1] GRANT CAPABILITY can_use_nodelocal_storage", params.TenantID.ToUint64())
-		if err != nil {
-			if params.SkipTenantCheck {
-				log.Infof(ctx, "ignoring error granting capability because SkipTenantCheck is true: %v", err)
-			} else {
-				return nil, err
-			}
-		} else {
-			if err := ts.WaitForTenantCapabilities(ctx, params.TenantID, map[tenantcapabilities.ID]string{
-				tenantcapabilities.CanUseNodelocalStorage: "true",
-			}, ""); err != nil {
-				return nil, err
-			}
-		}
+	// Grant the tenant the default capabilities.
+	if err := ts.grantDefaultTenantCapabilities(ctx, params.TenantID, params.SkipTenantCheck); err != nil {
+		return nil, err
 	}
 
 	// For now, we don't support split RPC/SQL ports for secondary tenants
