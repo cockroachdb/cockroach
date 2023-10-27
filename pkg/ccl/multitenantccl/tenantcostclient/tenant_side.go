@@ -585,11 +585,6 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 	c.run.fallbackRate = resp.FallbackRate
 	c.run.fallbackRateStart = time.Time{}
 
-	// Don't process granted RUs if none were requested.
-	if req.RequestedRU == 0 {
-		return
-	}
-
 	// Process granted RUs.
 	now := c.timeSource.Now()
 	granted := tenantcostmodel.RU(resp.GrantedRU)
@@ -616,44 +611,46 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 		c.run.trickleDeadline = time.Time{}
 	}
 
-	// If zero tokens were granted, then the token bucket server is completely
-	// dry. Configure the token bucket to have a zero rate and to not send low RU
-	// notifications (since that would just spam the server). The local token
-	// bucket won't be refilled until the next regularly scheduled consumption
-	// reporting interval.
 	var cfg limiterReconfigureArgs
-	if granted > 0 {
+
+	// Directly add tokens to the bucket if they're immediately available.
+	// Configure a token trickle if the tokens are only available over time.
+	if resp.TrickleDuration == 0 {
 		// Calculate the threshold at which a low RU notification will be sent.
 		notifyThreshold := granted * notifyFraction
 		if notifyThreshold < bufferRUs {
 			notifyThreshold = bufferRUs
 		}
 
-		// Directly add tokens to the bucket if they're immediately available.
-		// Configure a token trickle if the tokens are only available over time.
-		if resp.TrickleDuration == 0 {
-			// We received a batch of tokens to use as needed. Set up the token
-			// bucket to notify us when the tokens are running low.
-			cfg.NewTokens = granted
-			cfg.NewRate = 0
-			cfg.NotifyThreshold = notifyThreshold
-		} else {
-			// We received a batch of tokens that can only be used over the
-			// TrickleDuration. Set up the token bucket to notify us a bit before
-			// this period elapses.
-			timerDuration := resp.TrickleDuration - anticipation
-			if timerDuration <= 0 {
-				timerDuration = (resp.TrickleDuration + 1) / 2
-			}
-			c.run.trickleTimer = c.timeSource.NewTimer()
-			c.run.trickleTimer.Reset(timerDuration)
-			c.run.trickleCh = c.run.trickleTimer.Ch()
-			c.run.trickleDeadline = now.Add(resp.TrickleDuration)
+		// We received a batch of tokens to use as needed. Set up the token
+		// bucket to notify us when the tokens are running low.
+		cfg.NewTokens = granted
+		cfg.NewRate = 0
 
-			cfg.NewRate = granted / tenantcostmodel.RU(resp.TrickleDuration.Seconds())
-			cfg.MaxTokens = bufferRUs + granted
+		// Configure the low RU notification threshold. However, if the server
+		// could not even grant the RUs that were requested, then avoid triggering
+		// extra calls to the server. The next call to the server will be made by
+		// the next regularly scheduled consumption reporting interval.
+		if req.RequestedRU == resp.GrantedRU {
+			cfg.NotifyThreshold = notifyThreshold
 		}
+	} else {
+		// We received a batch of tokens that can only be used over the
+		// TrickleDuration. Set up the token bucket to notify us a bit before
+		// this period elapses.
+		timerDuration := resp.TrickleDuration - anticipation
+		if timerDuration <= 0 {
+			timerDuration = (resp.TrickleDuration + 1) / 2
+		}
+		c.run.trickleTimer = c.timeSource.NewTimer()
+		c.run.trickleTimer.Reset(timerDuration)
+		c.run.trickleCh = c.run.trickleTimer.Ch()
+		c.run.trickleDeadline = now.Add(resp.TrickleDuration)
+
+		cfg.NewRate = granted / tenantcostmodel.RU(resp.TrickleDuration.Seconds())
+		cfg.MaxTokens = bufferRUs + granted
 	}
+
 	c.limiter.Reconfigure(now, cfg)
 	c.run.lastRate = float64(cfg.NewRate)
 
