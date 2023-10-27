@@ -143,6 +143,12 @@ func TestDBClientScan(t *testing.T) {
 			db, ts.Codec(), "defaultdb", "foo")
 		fooSpan := fooDesc.PrimaryIndexSpan(ts.Codec())
 
+		// Refresh the DistSender range cache. ScanWithOptions will split the scan
+		// requests itself based on the range cache and assert on that split, before
+		// sending the requests to the DistSender.
+		_, err := db.Scan(ctx, fooSpan.Key, fooSpan.EndKey, 0)
+		require.NoError(t, err)
+
 		// We expect 4 splits -- we'll start the scan with parallelism set to 3.
 		// We will block these scans from completion until we know that we have 3
 		// concurrently running scan requests.
