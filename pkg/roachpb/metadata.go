@@ -698,7 +698,7 @@ func (l Locality) getFirstRegionFirstZone() (
 // iteration.
 func (l Locality) CompareWithLocality(
 	other Locality,
-) (_ LocalityComparisonType, regionErr error, zoneErr error) {
+) (_ LocalityComparisonType, regionValid bool, zoneValid bool) {
 	firstRegionValue, hasRegion, firstZoneKey, firstZone, hasZone := l.getFirstRegionFirstZone()
 	firstRegionValueOther, hasRegionOther, firstZoneKeyOther, firstZoneOther, hasZoneOther := other.getFirstRegionFirstZone()
 
@@ -707,21 +707,23 @@ func (l Locality) CompareWithLocality(
 
 	if !hasRegion || !hasRegionOther {
 		isCrossRegion = false
-		regionErr = errors.Errorf("localities must have a valid region tier key for cross-region comparison")
+	} else {
+		regionValid = true
 	}
 
 	if (!hasZone || !hasZoneOther) || (firstZoneKey != firstZoneKeyOther) {
 		isCrossZone = false
-		zoneErr = errors.Errorf("localities must have a valid zone tier key for cross-zone comparison")
+	} else {
+		zoneValid = true
 	}
 
 	if isCrossRegion {
-		return LocalityComparisonType_CROSS_REGION, regionErr, zoneErr
+		return LocalityComparisonType_CROSS_REGION, regionValid, zoneValid
 	} else {
 		if isCrossZone {
-			return LocalityComparisonType_SAME_REGION_CROSS_ZONE, regionErr, zoneErr
+			return LocalityComparisonType_SAME_REGION_CROSS_ZONE, regionValid, zoneValid
 		} else {
-			return LocalityComparisonType_SAME_REGION_SAME_ZONE, regionErr, zoneErr
+			return LocalityComparisonType_SAME_REGION_SAME_ZONE, regionValid, zoneValid
 		}
 	}
 }
