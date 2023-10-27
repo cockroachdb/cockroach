@@ -27,11 +27,21 @@ const bundleChunkSize = 1 << 20 // 1 MiB
 const finalChunkSuffix = "#_final"
 
 // WriteChunkedFileToJobInfo will break up data into chunks of a fixed size, and
-// gzip compress them before writing them to the job_info table
+// gzip compress them before writing them to the job_info table. This method
+// clears any existing chunks with the same filename before writing the new
+// chunks and so if the caller wishes to preserve history they must use a
+// unique filename.
 func WriteChunkedFileToJobInfo(
 	ctx context.Context, filename string, data []byte, txn isql.Txn, jobID jobspb.JobID,
 ) error {
+	finalChunkName := filename + finalChunkSuffix
 	jobInfo := InfoStorageForJob(txn, jobID)
+
+	// Clear any existing chunks with the same filename before writing new chunks.
+	// We clear all rows that with info keys in [filename, filename#_final~).
+	if err := jobInfo.DeleteRange(ctx, filename, finalChunkName+"~"); err != nil {
+		return err
+	}
 
 	var chunkCounter int
 	var chunkName string
@@ -46,7 +56,7 @@ func WriteChunkedFileToJobInfo(
 			chunk = chunk[:chunkSize]
 		} else {
 			// This is the last chunk we will write, assign it a sentinel file name.
-			chunkName = filename + finalChunkSuffix
+			chunkName = finalChunkName
 		}
 		data = data[len(chunk):]
 		var err error
