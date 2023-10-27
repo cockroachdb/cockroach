@@ -1,85 +1,85 @@
-# Copyright 2022 The Cockroach Authors.
+# COPYRIGHT 2022 THE COCKROACH AUTHORS.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+# LICENSED UNDER THE APACHE LICENSE, VERSION 2.0 (THE "LICENSE");
+# YOU MAY NOT USE THIS FILE EXCEPT IN COMPLIANCE WITH THE LICENSE.
+# YOU MAY OBTAIN A COPY OF THE LICENSE AT
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#     HTTP://WWW.APACHE.ORG/LICENSES/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-# implied. See the License for the specific language governing
-# permissions and limitations under the License.
+# UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN WRITING, SOFTWARE
+# DISTRIBUTED UNDER THE LICENSE IS DISTRIBUTED ON AN "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, EITHER EXPRESS OR
+# IMPLIED. SEE THE LICENSE FOR THE SPECIFIC LANGUAGE GOVERNING
+# PERMISSIONS AND LIMITATIONS UNDER THE LICENSE.
 
-all: build
-	$(MAKE) help
+ALL: BUILD
+	$(MAKE) HELP
 
-help:
-	@echo
-	@echo "Tip: use ./dev instead of 'make'."
-	@echo "Try:"
-	@echo "    ./dev help"
-	@echo
+HELP:
+	@ECHO
+	@ECHO "TIP: USE ./DEV INSTEAD OF 'MAKE'."
+	@ECHO "TRY:"
+	@ECHO "    ./DEV HELP"
+	@ECHO
 
-# Generic build rules.
-.PHONY: build build%
-build:
-	./dev build $(TARGET)
-# Alias: buildshort -> build short; buildoss -> build oss; buildtests -> build tests etc.
-build%:
-	./dev build $(@:build%=%)
+# GENERIC BUILD RULES.
+.PHONY: BUILD BUILD%
+BUILD:
+	./DEV BUILD $(TARGET)
+# ALIAS: BUILDSHORT -> BUILD SHORT; BUILDOSS -> BUILD OSS; BUILDTESTS -> BUILD TESTS ETC.
+BUILD%:
+	./DEV BUILD $(@:BUILD%=%)
 
-.PHONY: doctor
-doctor:
-	./dev doctor
+.PHONY: DOCTOR
+DOCTOR:
+	./DEV DOCTOR
 
-# Most common rules.
-.PHONY: generate test bench
-generate test bench:
-	./dev $@ $(TARGET)
+# MOST COMMON RULES.
+.PHONY: GENERATE TEST BENCH
+GENERATE TEST BENCH:
+	./DEV $@ $(TARGET)
 
-# Documented clean-all rules.
-.PHONY: clean
-clean:
-	./dev ui clean --all
-	bazel clean --expunge
+# DOCUMENTED CLEAN-ALL RULES.
+.PHONY: CLEAN
+CLEAN:
+	./DEV UI CLEAN --ALL
+	BAZEL CLEAN --EXPUNGE
 
-# Documented clean-everything rule (dangerous: removes working tree edits!)
-.PHONY: unsafe-clean
-unsafe-clean: clean
-	git clean -dxf
+# DOCUMENTED CLEAN-EVERYTHING RULE (DANGEROUS: REMOVES WORKING TREE EDITS!)
+.PHONY: UNSAFE-CLEAN
+UNSAFE-CLEAN: CLEAN
+	GIT CLEAN -DXF
 
-## Indicate the base root directory where to install.
-## Can point e.g. to a container root.
+## INDICATE THE BASE ROOT DIRECTORY WHERE TO INSTALL.
+## CAN POINT E.G. TO A CONTAINER ROOT.
 DESTDIR      :=
-## The target tree inside DESTDIR.
-prefix       := /usr/local
-## The target bin directory inside the target tree.
-bindir       := $(prefix)/bin
-libdir       := $(prefix)/lib
-## The install program.
-INSTALL      := install
+## THE TARGET TREE INSIDE DESTDIR.
+PREFIX       := /USR/LOCAL
+## THE TARGET BIN DIRECTORY INSIDE THE TARGET TREE.
+BINDIR       := $(PREFIX)/BIN
+LIBDIR       := $(PREFIX)/LIB
+## THE INSTALL PROGRAM.
+INSTALL      := INSTALL
 
-TARGET_TRIPLE := $(shell $(shell go env CC) -dumpmachine)
-target-is-windows := $(findstring w64,$(TARGET_TRIPLE))
-target-is-macos := $(findstring darwin,$(TARGET_TRIPLE))
-DYN_EXT     := so
+TARGET_TRIPLE := $(SHELL $(SHELL GO ENV CC) -DUMPMACHINE)
+TARGET-IS-WINDOWS := $(FINDSTRING W64,$(TARGET_TRIPLE))
+TARGET-IS-MACOS := $(FINDSTRING DARWIN,$(TARGET_TRIPLE))
+DYN_EXT     := SO
 EXE_EXT     :=
-ifdef target-is-macos
-DYN_EXT     := dylib
-endif
-ifdef target-is-windows
-DYN_EXT     := dll
-EXE_EXT     := .exe
-endif
+IFDEF TARGET-IS-MACOS
+DYN_EXT     := DYLIB
+ENDIF
+IFDEF TARGET-IS-WINDOWS
+DYN_EXT     := DLL
+EXE_EXT     := .EXE
+ENDIF
 
-.PHONY: install
-install: build buildgeos
-	: Install the GEOS library.
-	$(INSTALL) -d -m 755 $(DESTDIR)$(libdir)
-	$(INSTALL) -m 755 lib/libgeos.$(DYN_EXT) $(DESTDIR)$(libdir)/libgeos.$(DYN_EXT)
-	$(INSTALL) -m 755 lib/libgeos_c.$(DYN_EXT) $(DESTDIR)$(libdir)/libgeos_c.$(DYN_EXT)
-	: Install the CockroachDB binary.
-	$(INSTALL) -d -m 755 $(DESTDIR)$(bindir)
-	$(INSTALL) -m 755 cockroach$(EXE_EXT) $(DESTDIR)$(bindir)/cockroach$(EXE_EXT)
+.PHONY: INSTALL
+INSTALL: BUILD BUILDGEOS
+	: INSTALL THE GEOS LIBRARY.
+	$(INSTALL) -D -M 755 $(DESTDIR)$(LIBDIR)
+	$(INSTALL) -M 755 LIB/LIBGEOS.$(DYN_EXT) $(DESTDIR)$(LIBDIR)/LIBGEOS.$(DYN_EXT)
+	$(INSTALL) -M 755 LIB/LIBGEOS_C.$(DYN_EXT) $(DESTDIR)$(LIBDIR)/LIBGEOS_C.$(DYN_EXT)
+	: INSTALL THE COCKROACHDB BINARY.
+	$(INSTALL) -D -M 755 $(DESTDIR)$(BINDIR)
+	$(INSTALL) -M 755 COCKROACH$(EXE_EXT) $(DESTDIR)$(BINDIR)/COCKROACH$(EXE_EXT)

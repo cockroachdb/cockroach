@@ -1,1457 +1,1457 @@
-# About
-
-This document is an updated version of the original design documents
-by Spencer Kimball from early 2014. It may not always be completely up to date.
-For a more approachable explanation of how CockroachDB works, consider reading
-the [Architecture docs](https://www.cockroachlabs.com/docs/stable/architecture/overview.html).
-
-# Overview
-
-CockroachDB is a distributed SQL database. The primary design goals
-are **scalability**, **strong consistency** and **survivability**
-(hence the name). CockroachDB aims to tolerate disk, machine, rack, and
-even **datacenter failures** with minimal latency disruption and **no
-manual intervention**. CockroachDB nodes are symmetric; a design goal is
-**homogeneous deployment** (one binary) with minimal configuration and
-no required external dependencies.
-
-The entry point for database clients is the SQL interface. Every node
-in a CockroachDB cluster can act as a client SQL gateway. A SQL
-gateway transforms and executes client SQL statements to key-value
-(KV) operations, which the gateway distributes across the cluster as
-necessary and returns results to the client. CockroachDB implements a
-**single, monolithic sorted map** from key to value where both keys
-and values are byte strings.
-
-The KV map is logically composed of smaller segments of the keyspace called
-ranges. Each range is backed by data stored in a local KV storage engine (we
-use [RocksDB](http://rocksdb.org/), a variant of
-[LevelDB](https://github.com/google/leveldb)). Range data is replicated to a
-configurable number of additional CockroachDB nodes. Ranges are merged and
-split to maintain a target size, by default `64M`. The relatively small size
-facilitates quick repair and rebalancing to address node failures, new capacity
-and even read/write load. However, the size must be balanced against the
-pressure on the system from having more ranges to manage.
-
-CockroachDB achieves horizontally scalability:
-- adding more nodes increases the capacity of the cluster by the
-  amount of storage on each node (divided by a configurable
-  replication factor), theoretically up to 4 exabytes (4E) of logical
-  data;
-- client queries can be sent to any node in the cluster, and queries
-  can operate independently (w/o conflicts), meaning that overall
-  throughput is a linear factor of the number of nodes in the cluster.
-- queries are distributed (ref: distributed SQL) so that the overall
-  throughput of single queries can be increased by adding more nodes.
-
-CockroachDB achieves strong consistency:
-- uses a distributed consensus protocol for synchronous replication of
-  data in each key value range. We’ve chosen to use the [Raft
-  consensus algorithm](https://raftconsensus.github.io); all consensus
-  state is stored in RocksDB.
-- single or batched mutations to a single range are mediated via the
-  range's Raft instance. Raft guarantees ACID semantics.
-- logical mutations which affect multiple ranges employ distributed
-  transactions for ACID semantics. CockroachDB uses an efficient
-  **non-locking distributed commit** protocol.
-
-CockroachDB achieves survivability:
-- range replicas can be co-located within a single datacenter for low
-  latency replication and survive disk or machine failures. They can
-  be distributed across racks to survive some network switch failures.
-- range replicas can be located in datacenters spanning increasingly
-  disparate geographies to survive ever-greater failure scenarios from
-  datacenter power or networking loss to regional power failures
-  (e.g. `{ US-East-1a, US-East-1b, US-East-1c }`, `{ US-East, US-West,
-  Japan }`, `{ Ireland, US-East, US-West}`, `{ Ireland, US-East,
-  US-West, Japan, Australia }`).
-
-CockroachDB provides [snapshot
-isolation](http://en.wikipedia.org/wiki/Snapshot_isolation) (SI) and
-serializable snapshot isolation (SSI) semantics, allowing **externally
-consistent, lock-free reads and writes**--both from a historical snapshot
-timestamp and from the current wall clock time. SI provides lock-free reads
-and writes but still allows write skew. SSI eliminates write skew, but
-introduces a performance hit in the case of a contentious system. SSI is the
-default isolation; clients must consciously decide to trade correctness for
-performance. CockroachDB implements [a limited form of linearizability
-](#strict-serializability-linearizability), providing ordering for any
-observer or chain of observers.
-
-Similar to
-[Spanner](http://static.googleusercontent.com/media/research.google.com/en/us/archive/spanner-osdi2012.pdf)
-directories, CockroachDB allows configuration of arbitrary zones of data.
-This allows replication factor, storage device type, and/or datacenter
-location to be chosen to optimize performance and/or availability.
-Unlike Spanner, zones are monolithic and don’t allow movement of fine
-grained data on the level of entity groups.
-
-# Architecture
-
-CockroachDB implements a layered architecture. The highest level of
-abstraction is the SQL layer (currently unspecified in this document).
-It depends directly on the [*SQL layer*](#sql),
-which provides familiar relational concepts
-such as schemas, tables, columns, and indexes. The SQL layer
-in turn depends on the [distributed key value store](#key-value-api),
-which handles the details of range addressing to provide the abstraction
-of a single, monolithic key value store. The distributed KV store
-communicates with any number of physical cockroach nodes. Each node
-contains one or more stores, one per physical device.
-
-![Architecture](media/architecture.png)
-
-Each store contains potentially many ranges, the lowest-level unit of
-key-value data. Ranges are replicated using the Raft consensus protocol.
-The diagram below is a blown up version of stores from four of the five
-nodes in the previous diagram. Each range is replicated three ways using
-raft. The color coding shows associated range replicas.
-
-![Ranges](media/ranges.png)
-
-Each physical node exports two RPC-based key value APIs: one for
-external clients and one for internal clients (exposing sensitive
-operational features). Both services accept batches of requests and
-return batches of responses. Nodes are symmetric in capabilities and
-exported interfaces; each has the same binary and may assume any
-role.
-
-Nodes and the ranges they provide access to can be arranged with various
-physical network topologies to make trade offs between reliability and
-performance. For example, a triplicated (3-way replica) range could have
-each replica located on different:
-
--   disks within a server to tolerate disk failures.
--   servers within a rack to tolerate server failures.
--   servers on different racks within a datacenter to tolerate rack power/network failures.
--   servers in different datacenters to tolerate large scale network or power outages.
-
-Up to `F` failures can be tolerated, where the total number of replicas `N = 2F + 1` (e.g. with 3x replication, one failure can be tolerated; with 5x replication, two failures, and so on).
-
-# Keys
-
-Cockroach keys are arbitrary byte arrays. Keys come in two flavors:
-system keys and table data keys. System keys are used by Cockroach for
-internal data structures and metadata. Table data keys contain SQL
-table data (as well as index data). System and table data keys are
-prefixed in such a way that all system keys sort before any table data
-keys.
-
-System keys come in several subtypes:
-
-- **Global** keys store cluster-wide data such as the "meta1" and
-    "meta2" keys as well as various other system-wide keys such as the
-    node and store ID allocators.
-- **Store local** keys are used for unreplicated store metadata
-    (e.g. the `StoreIdent` structure). "Unreplicated" indicates that
-    these values are not replicated across multiple stores because the
-    data they hold is tied to the lifetime of the store they are
-    present on.
-- **Range local** keys store range metadata that is associated with a
-    global key. Range local keys have a special prefix followed by a
-    global key and a special suffix. For example, transaction records
-    are range local keys which look like:
-    `\x01k<global-key>txn-<txnID>`.
-- **Replicated Range ID local** keys store range metadata that is
-    present on all of the replicas for a range. These keys are updated
-    via Raft operations. Examples include the range lease state and
-    abort span entries.
-- **Unreplicated Range ID local** keys store range metadata that is
-    local to a replica. The primary examples of such keys are the Raft
-    state and Raft log.
-
-Table data keys are used to store all SQL data. Table data keys
-contain internal structure as described in the section on [mapping
-data between the SQL model and
-KV](#data-mapping-between-the-sql-model-and-kv).
-
-# Versioned Values
-
-Cockroach maintains historical versions of values by storing them with
-associated commit timestamps. Reads and scans can specify a snapshot
-time to return the most recent writes prior to the snapshot timestamp.
-Older versions of values are garbage collected by the system during
-compaction according to a user-specified expiration interval. In order
-to support long-running scans (e.g. for MapReduce), all versions have a
-minimum expiration.
-
-Versioned values are supported via modifications to RocksDB to record
-commit timestamps and GC expirations per key.
-
-# Lock-Free Distributed Transactions
-
-Cockroach provides distributed transactions without locks. Cockroach
-transactions support two isolation levels:
-
-- snapshot isolation (SI) and
-- *serializable* snapshot isolation (SSI).
-
-*SI* is simple to implement, highly performant, and correct for all but a
-handful of anomalous conditions (e.g. write skew). *SSI* requires just a touch
-more complexity, is still highly performant (less so with contention), and has
-no anomalous conditions. Cockroach’s SSI implementation is based on ideas from
-the literature and some possibly novel insights.
-
-SSI is the default level, with SI provided for application developers
-who are certain enough of their need for performance and the absence of
-write skew conditions to consciously elect to use it. In a lightly
-contended system, our implementation of SSI is just as performant as SI,
-requiring no locking or additional writes. With contention, our
-implementation of SSI still requires no locking, but will end up
-aborting more transactions. Cockroach’s SI and SSI implementations
-prevent starvation scenarios even for arbitrarily long transactions.
-
-See the [Cahill paper](https://ses.library.usyd.edu.au/bitstream/handle/2123/5353/michael-cahill-2009-thesis.pdf)
-for one possible implementation of SSI. This is another [great paper](http://cs.yale.edu/homes/thomson/publications/calvin-sigmod12.pdf).
-For a discussion of SSI implemented by preventing read-write conflicts
-(in contrast to detecting them, called write-snapshot isolation), see
-the [Yabandeh paper](https://courses.cs.washington.edu/courses/cse444/10sp/544M/READING-LIST/fekete-sigmod2008.pdf),
-which is the source of much inspiration for Cockroach’s SSI.
-
-Both SI and SSI require that the outcome of reads must be preserved, i.e.
-a write of a key at a lower timestamp than a previous read must not succeed. To
-this end, each range maintains a bounded *in-memory* cache from key range to
-the latest timestamp at which it was read.
-
-Most updates to this *timestamp cache* correspond to keys being read, though
-the timestamp cache also protects the outcome of some writes (notably range
-deletions) which consequently must also populate the cache. The cache’s entries
-are evicted oldest timestamp first, updating the low water mark of the cache
-appropriately.
-
-Each Cockroach transaction is assigned a random priority and a
-"candidate timestamp" at start. The candidate timestamp is the
-provisional timestamp at which the transaction will commit, and is
-chosen as the current clock time of the node coordinating the
-transaction. This means that a transaction without conflicts will
-usually commit with a timestamp that, in absolute time, precedes the
-actual work done by that transaction.
-
-In the course of coordinating a transaction between one or more
-distributed nodes, the candidate timestamp may be increased, but will
-never be decreased. The core difference between the two isolation levels
-SI and SSI is that the former allows the transaction's candidate
-timestamp to increase and the latter does not.
-
-**Hybrid Logical Clock**
-
-Each cockroach node maintains a hybrid logical clock (HLC) as discussed
-in the [Hybrid Logical Clock paper](http://www.cse.buffalo.edu/tech-reports/2014-04.pdf).
-HLC time uses timestamps which are composed of a physical component (thought of
-as and always close to local wall time) and a logical component (used to
-distinguish between events with the same physical component). It allows us to
-track causality for related events similar to vector clocks, but with less
-overhead. In practice, it works much like other logical clocks: When events
-are received by a node, it informs the local HLC about the timestamp supplied
-with the event by the sender, and when events are sent a timestamp generated by
-the local HLC is attached.
-
-For a more in depth description of HLC please read the paper. Our
-implementation is [here](https://github.com/cockroachdb/cockroach/blob/master/pkg/util/hlc/hlc.go).
-
-Cockroach picks a Timestamp for a transaction using HLC time. Throughout this
-document, *timestamp* always refers to the HLC time which is a singleton
-on each node. The HLC is updated by every read/write event on the node, and
-the HLC time >= wall time. A read/write timestamp received in a cockroach request
-from another node is not only used to version the operation, but also updates
-the HLC on the node. This is useful in guaranteeing that all data read/written
-on a node is at a timestamp < next HLC time.
-
-**Transaction execution flow**
-
-Transactions are executed in two phases:
-
-1. Start the transaction by selecting a range which is likely to be
-   heavily involved in the transaction and writing a new transaction
-   record to a reserved area of that range with state "PENDING". In
-   parallel write an "intent" value for each datum being written as part
-   of the transaction. These are normal MVCC values, with the addition of
-   a special flag (i.e. “intent”) indicating that the value may be
-   committed after the transaction itself commits. In addition,
-   the transaction id (unique and chosen at txn start time by client)
-   is stored with intent values. The txn id is used to refer to the
-   transaction record when there are conflicts and to make
-   tie-breaking decisions on ordering between identical timestamps.
-   Each node returns the timestamp used for the write (which is the
-   original candidate timestamp in the absence of read/write conflicts);
-   the client selects the maximum from amongst all write timestamps as the
-   final commit timestamp.
-
-2. Commit the transaction by updating its transaction record. The value
-   of the commit entry contains the candidate timestamp (increased as
-   necessary to accommodate any latest read timestamps). Note that the
-   transaction is considered fully committed at this point and control
-   may be returned to the client.
-
-   In the case of an SI transaction, a commit timestamp which was
-   increased to accommodate concurrent readers is perfectly
-   acceptable and the commit may continue. For SSI transactions,
-   however, a gap between candidate and commit timestamps
-   necessitates transaction restart (note: restart is different than
-   abort--see below).
-
-   After the transaction is committed, all written intents are upgraded
-   in parallel by removing the “intent” flag. The transaction is
-   considered fully committed before this step and does not wait for
-   it to return control to the transaction coordinator.
-
-In the absence of conflicts, this is the end. Nothing else is necessary
-to ensure the correctness of the system.
-
-**Conflict Resolution**
-
-Things get more interesting when a reader or writer encounters an intent
-record or newly-committed value in a location that it needs to read or
-write. This is a conflict, usually causing either of the transactions to
-abort or restart depending on the type of conflict.
-
-***Transaction restart:***
-
-This is the usual (and more efficient) type of behaviour and is used
-except when the transaction was aborted (for instance by another
-transaction).
-In effect, that reduces to two cases; the first being the one outlined
-above: An SSI transaction that finds upon attempting to commit that
-its commit timestamp has been pushed. The second case involves a transaction
-actively encountering a conflict, that is, one of its readers or writers
-encounter data that necessitate conflict resolution
-(see transaction interactions below).
-
-When a transaction restarts, it changes its priority and/or moves its
-timestamp forward depending on data tied to the conflict, and
-begins anew reusing the same txn id. The prior run of the transaction might
-have written some write intents, which need to be deleted before the
-transaction commits, so as to not be included as part of the transaction.
-These stale write intent deletions are done during the reexecution of the
-transaction, either implicitly, through writing new intents to
-the same keys as part of the reexecution of the transaction, or explicitly,
-by cleaning up stale intents that are not part of the reexecution of the
-transaction. Since most transactions will end up writing to the same keys,
-the explicit cleanup run just before committing the transaction is usually
-a NOOP.
-
-***Transaction abort:***
-
-This is the case in which a transaction, upon reading its transaction
-record, finds that it has been aborted. In this case, the transaction
-can not reuse its intents; it returns control to the client before
-cleaning them up (other readers and writers would clean up dangling
-intents as they encounter them) but will make an effort to clean up
-after itself. The next attempt (if applicable) then runs as a new
-transaction with **a new txn id**.
-
-***Transaction interactions:***
-
-There are several scenarios in which transactions interact:
-
-- **Reader encounters write intent or value with newer timestamp far
-  enough in the future**: This is not a conflict. The reader is free
-  to proceed; after all, it will be reading an older version of the
-  value and so does not conflict. Recall that the write intent may
-  be committed with a later timestamp than its candidate; it will
-  never commit with an earlier one. 
-
-- **Reader encounters write intent or value with newer timestamp in the
-  near future:** In this case, we have to be careful. The newer
-  intent may, in absolute terms, have happened in our read's past if
-  the clock of the writer is ahead of the node serving the values.
-  In that case, we would need to take this value into account, but
-  we just don't know. Hence the transaction restarts, using instead
-  a future timestamp (but remembering a maximum timestamp used to
-  limit the uncertainty window to the maximum clock offset). In fact,
-  this is optimized further; see the details under "choosing a time
-  stamp" below.
-
-- **Reader encounters write intent with older timestamp**: the reader
-  must follow the intent’s transaction id to the transaction record.
-  If the transaction has already been committed, then the reader can
-  just read the value. If the write transaction has not yet been
-  committed, then the reader has two options. If the write conflict
-  is from an SI transaction, the reader can *push that transaction's
-  commit timestamp into the future* (and consequently not have to
-  read it). This is simple to do: the reader just updates the
-  transaction’s commit timestamp to indicate that when/if the
-  transaction does commit, it should use a timestamp *at least* as
-  high. However, if the write conflict is from an SSI transaction,
-  the reader must compare priorities. If the reader has the higher priority,
-  it pushes the transaction’s commit timestamp (that
-  transaction will then notice its timestamp has been pushed, and
-  restart). If it has the lower or same priority, it retries itself using as
-  a new priority `max(new random priority, conflicting txn’s
-  priority - 1)`.
-
-- **Writer encounters uncommitted write intent**:
-  If the other write intent has been written by a transaction with a lower
-  priority, the writer aborts the conflicting transaction. If the write
-  intent has a higher or equal priority the transaction retries, using as a new
-  priority *max(new random priority, conflicting txn’s priority - 1)*;
-  the retry occurs after a short, randomized backoff interval.
-
-- **Writer encounters newer committed value**:
-  The committed value could also be an unresolved write intent made by a
-  transaction that has already committed. The transaction restarts. On restart,
-  the same priority is reused, but the candidate timestamp is moved forward
-  to the encountered value's timestamp.
-
-- **Writer encounters more recently read key**:
-  The *read timestamp cache* is consulted on each write at a node. If the write’s
-  candidate timestamp is earlier than the low water mark on the cache itself
-  (i.e. its last evicted timestamp) or if the key being written has a read
-  timestamp later than the write’s candidate timestamp, this later timestamp
-  value is returned with the write. A new timestamp forces a transaction
-  restart only if it is serializable.
-
-**Transaction management**
-
-Transactions are managed by the client proxy (or gateway in SQL Azure
-parlance). Unlike in Spanner, writes are not buffered but are sent
-directly to all implicated ranges. This allows the transaction to abort
-quickly if it encounters a write conflict. The client proxy keeps track
-of all written keys in order to resolve write intents asynchronously upon
-transaction completion. If a transaction commits successfully, all intents
-are upgraded to committed. In the event a transaction is aborted, all written
-intents are deleted. The client proxy doesn’t guarantee it will resolve intents.
-
-In the event the client proxy restarts before the pending transaction is
-committed, the dangling transaction would continue to "live" until
-aborted by another transaction. Transactions periodically heartbeat
-their transaction record to maintain liveness.
-Transactions encountered by readers or writers with dangling intents
-which haven’t been heartbeat within the required interval are aborted.
-In the event the proxy restarts after a transaction commits but before
-the asynchronous resolution is complete, the dangling intents are upgraded
-when encountered by future readers and writers and the system does
-not depend on their timely resolution for correctness.
-
-An exploration of retries with contention and abort times with abandoned
-transaction is
-[here](https://docs.google.com/document/d/1kBCu4sdGAnvLqpT-_2vaTbomNmX3_saayWEGYu1j7mQ/edit?usp=sharing).
-
-**Transaction Records**
-
-Please see [pkg/roachpb/data.proto](https://github.com/cockroachdb/cockroach/blob/master/pkg/roachpb/data.proto) for the up-to-date structures, the best entry point being `message Transaction`.
-
-**Pros**
-
-- No requirement for reliable code execution to prevent stalled 2PC
-  protocol.
-- Readers never block with SI semantics; with SSI semantics, they may
-  abort.
-- Lower latency than traditional 2PC commit protocol (w/o contention)
-  because second phase requires only a single write to the
-  transaction record instead of a synchronous round to all
-  transaction participants.
-- Priorities avoid starvation for arbitrarily long transactions and
-  always pick a winner from between contending transactions (no
-  mutual aborts).
-- Writes not buffered at client; writes fail fast.
-- No read-locking overhead required for *serializable* SI (in contrast
-  to other SSI implementations).
-- Well-chosen (i.e. less random) priorities can flexibly give
-  probabilistic guarantees on latency for arbitrary transactions
-  (for example: make OLTP transactions 10x less likely to abort than
-  low priority transactions, such as asynchronously scheduled jobs).
-
-**Cons**
-
-- Reads from non-lease holder replicas still require a ping to the lease holder
-  to update the *read timestamp cache*.
-- Abandoned transactions may block contending writers for up to the
-  heartbeat interval, though average wait is likely to be
-  considerably shorter (see [graph in link](https://docs.google.com/document/d/1kBCu4sdGAnvLqpT-_2vaTbomNmX3_saayWEGYu1j7mQ/edit?usp=sharing)).
-  This is likely considerably more performant than detecting and
-  restarting 2PC in order to release read and write locks.
-- Behavior different than other SI implementations: no first writer
-  wins, and shorter transactions do not always finish quickly.
-  Element of surprise for OLTP systems may be a problematic factor.
-- Aborts can decrease throughput in a contended system compared with
-  two phase locking. Aborts and retries increase read and write
-  traffic, increase latency and decrease throughput.
-
-**Choosing a Timestamp**
-
-A key challenge of reading data in a distributed system with clock offset
-is choosing a timestamp guaranteed to be greater than the latest
-timestamp of any committed transaction (in absolute time). No system can
-claim consistency and fail to read already-committed data.
-
-Accomplishing consistency for transactions (or just single operations)
-accessing a single node is easy. The timestamp is assigned by the node
-itself, so it is guaranteed to be at a greater timestamp than all the
-existing timestamped data on the node.
-
-For multiple nodes, the timestamp of the node coordinating the
-transaction `t` is used. In addition, a maximum timestamp `t+ε` is
-supplied to provide an upper bound on timestamps for already-committed
-data (`ε` is the maximum clock offset). As the transaction progresses, any
-data read which have timestamps greater than `t` but less than `t+ε`
-cause the transaction to abort and retry with the conflicting timestamp
-t<sub>c</sub>, where t<sub>c</sub> \> t. The maximum timestamp `t+ε` remains
-the same. This implies that transaction restarts due to clock uncertainty
-can only happen on a time interval of length `ε`.
-
-We apply another optimization to reduce the restarts caused
-by uncertainty. Upon restarting, the transaction not only takes
-into account t<sub>c</sub>, but the timestamp of the node at the time
-of the uncertain read t<sub>node</sub>. The larger of those two timestamps
-t<sub>c</sub> and t<sub>node</sub> (likely equal to the latter) is used
-to increase the read timestamp. Additionally, the conflicting node is
-marked as “certain”. Then, for future reads to that node within the
-transaction, we set `MaxTimestamp = Read Timestamp`, preventing further
-uncertainty restarts.
-
-Correctness follows from the fact that we know that at the time of the read,
-there exists no version of any key on that node with a higher timestamp than
-t<sub>node</sub>. Upon a restart caused by the node, if the transaction
-encounters a key with a higher timestamp, it knows that in absolute time,
-the value was written after t<sub>node</sub> was obtained, i.e. after the
-uncertain read. Hence the transaction can move forward reading an older version
-of the data (at the transaction's timestamp). This limits the time uncertainty
-restarts attributed to a node to at most one. The tradeoff is that we might
-pick a timestamp larger than the optimal one (> highest conflicting timestamp),
-resulting in the possibility of a few more conflicts.
-
-We expect retries will be rare, but this assumption may need to be
-revisited if retries become problematic. Note that this problem does not
-apply to historical reads. An alternate approach which does not require
-retries makes a round to all node participants in advance and
-chooses the highest reported node wall time as the timestamp. However,
-knowing which nodes will be accessed in advance is difficult and
-potentially limiting. Cockroach could also potentially use a global
-clock (Google did this with [Percolator](https://www.usenix.org/legacy/event/osdi10/tech/full_papers/Peng.pdf)),
-which would be feasible for smaller, geographically-proximate clusters.
-
-# Strict Serializability (Linearizability)
-
-Roughly speaking, the gap between <i>strict serializability</i> (which we use
-interchangeably with <i>linearizability</i>) and CockroachDB's default
-isolation level (<i>serializable</i>) is that with linearizable transactions,
-causality is preserved. That is, if one transaction (say, creating a posting
-for a user) waits for its predecessor (creating the user in the first place)
-to complete, one would hope that the logical timestamp assigned to the former
-is larger than that of the latter.
-In practice, in distributed databases this may not hold, the reason typically
-being that clocks across a distributed system are not perfectly synchronized
-and the "later" transaction touches a part disjoint from that on which the
-first transaction ran, resulting in clocks with disjoint information to decide
-on the commit timestamps.
-
-In practice, in CockroachDB many transactional workloads are actually
-linearizable, though the precise conditions are too involved to outline them
-here.
-
-Causality is typically not required for many transactions, and so it is
-advantageous to pay for it only when it *is* needed. CockroachDB implements
-this via <i>causality tokens</i>: When committing a transaction, a causality
-token can be retrieved and passed to the next transaction, ensuring that these
-two transactions get assigned increasing logical timestamps.
-
-Additionally, as better synchronized clocks become a standard commodity offered
-by cloud providers, CockroachDB can provide global linearizability by doing
-much the same that [Google's
-Spanner](http://research.google.com/archive/spanner.html) does: wait out the
-maximum clock offset after committing, but before returning to the client.
-
-See the blog post below for much more in-depth information.
-
-https://www.cockroachlabs.com/blog/living-without-atomic-clocks/
-
-# Logical Map Content
-
-Logically, the map contains a series of reserved system key/value
-pairs preceding the actual user data (which is managed by the SQL
-subsystem).
-
-- `\x02<key1>`: Range metadata for range ending `\x03<key1>`. This a "meta1" key.
+# ABOUT
+
+THIS DOCUMENT IS AN UPDATED VERSION OF THE ORIGINAL DESIGN DOCUMENTS
+BY SPENCER KIMBALL FROM EARLY 2014. IT MAY NOT ALWAYS BE COMPLETELY UP TO DATE.
+FOR A MORE APPROACHABLE EXPLANATION OF HOW COCKROACHDB WORKS, CONSIDER READING
+THE [ARCHITECTURE DOCS](HTTPS://WWW.COCKROACHLABS.COM/DOCS/STABLE/ARCHITECTURE/OVERVIEW.HTML).
+
+# OVERVIEW
+
+COCKROACHDB IS A DISTRIBUTED SQL DATABASE. THE PRIMARY DESIGN GOALS
+ARE **SCALABILITY**, **STRONG CONSISTENCY** AND **SURVIVABILITY**
+(HENCE THE NAME). COCKROACHDB AIMS TO TOLERATE DISK, MACHINE, RACK, AND
+EVEN **DATACENTER FAILURES** WITH MINIMAL LATENCY DISRUPTION AND **NO
+MANUAL INTERVENTION**. COCKROACHDB NODES ARE SYMMETRIC; A DESIGN GOAL IS
+**HOMOGENEOUS DEPLOYMENT** (ONE BINARY) WITH MINIMAL CONFIGURATION AND
+NO REQUIRED EXTERNAL DEPENDENCIES.
+
+THE ENTRY POINT FOR DATABASE CLIENTS IS THE SQL INTERFACE. EVERY NODE
+IN A COCKROACHDB CLUSTER CAN ACT AS A CLIENT SQL GATEWAY. A SQL
+GATEWAY TRANSFORMS AND EXECUTES CLIENT SQL STATEMENTS TO KEY-VALUE
+(KV) OPERATIONS, WHICH THE GATEWAY DISTRIBUTES ACROSS THE CLUSTER AS
+NECESSARY AND RETURNS RESULTS TO THE CLIENT. COCKROACHDB IMPLEMENTS A
+**SINGLE, MONOLITHIC SORTED MAP** FROM KEY TO VALUE WHERE BOTH KEYS
+AND VALUES ARE BYTE STRINGS.
+
+THE KV MAP IS LOGICALLY COMPOSED OF SMALLER SEGMENTS OF THE KEYSPACE CALLED
+RANGES. EACH RANGE IS BACKED BY DATA STORED IN A LOCAL KV STORAGE ENGINE (WE
+USE [ROCKSDB](HTTP://ROCKSDB.ORG/), A VARIANT OF
+[LEVELDB](HTTPS://GITHUB.COM/GOOGLE/LEVELDB)). RANGE DATA IS REPLICATED TO A
+CONFIGURABLE NUMBER OF ADDITIONAL COCKROACHDB NODES. RANGES ARE MERGED AND
+SPLIT TO MAINTAIN A TARGET SIZE, BY DEFAULT `64M`. THE RELATIVELY SMALL SIZE
+FACILITATES QUICK REPAIR AND REBALANCING TO ADDRESS NODE FAILURES, NEW CAPACITY
+AND EVEN READ/WRITE LOAD. HOWEVER, THE SIZE MUST BE BALANCED AGAINST THE
+PRESSURE ON THE SYSTEM FROM HAVING MORE RANGES TO MANAGE.
+
+COCKROACHDB ACHIEVES HORIZONTALLY SCALABILITY:
+- ADDING MORE NODES INCREASES THE CAPACITY OF THE CLUSTER BY THE
+  AMOUNT OF STORAGE ON EACH NODE (DIVIDED BY A CONFIGURABLE
+  REPLICATION FACTOR), THEORETICALLY UP TO 4 EXABYTES (4E) OF LOGICAL
+  DATA;
+- CLIENT QUERIES CAN BE SENT TO ANY NODE IN THE CLUSTER, AND QUERIES
+  CAN OPERATE INDEPENDENTLY (W/O CONFLICTS), MEANING THAT OVERALL
+  THROUGHPUT IS A LINEAR FACTOR OF THE NUMBER OF NODES IN THE CLUSTER.
+- QUERIES ARE DISTRIBUTED (REF: DISTRIBUTED SQL) SO THAT THE OVERALL
+  THROUGHPUT OF SINGLE QUERIES CAN BE INCREASED BY ADDING MORE NODES.
+
+COCKROACHDB ACHIEVES STRONG CONSISTENCY:
+- USES A DISTRIBUTED CONSENSUS PROTOCOL FOR SYNCHRONOUS REPLICATION OF
+  DATA IN EACH KEY VALUE RANGE. WE’VE CHOSEN TO USE THE [RAFT
+  CONSENSUS ALGORITHM](HTTPS://RAFTCONSENSUS.GITHUB.IO); ALL CONSENSUS
+  STATE IS STORED IN ROCKSDB.
+- SINGLE OR BATCHED MUTATIONS TO A SINGLE RANGE ARE MEDIATED VIA THE
+  RANGE'S RAFT INSTANCE. RAFT GUARANTEES ACID SEMANTICS.
+- LOGICAL MUTATIONS WHICH AFFECT MULTIPLE RANGES EMPLOY DISTRIBUTED
+  TRANSACTIONS FOR ACID SEMANTICS. COCKROACHDB USES AN EFFICIENT
+  **NON-LOCKING DISTRIBUTED COMMIT** PROTOCOL.
+
+COCKROACHDB ACHIEVES SURVIVABILITY:
+- RANGE REPLICAS CAN BE CO-LOCATED WITHIN A SINGLE DATACENTER FOR LOW
+  LATENCY REPLICATION AND SURVIVE DISK OR MACHINE FAILURES. THEY CAN
+  BE DISTRIBUTED ACROSS RACKS TO SURVIVE SOME NETWORK SWITCH FAILURES.
+- RANGE REPLICAS CAN BE LOCATED IN DATACENTERS SPANNING INCREASINGLY
+  DISPARATE GEOGRAPHIES TO SURVIVE EVER-GREATER FAILURE SCENARIOS FROM
+  DATACENTER POWER OR NETWORKING LOSS TO REGIONAL POWER FAILURES
+  (E.G. `{ US-EAST-1A, US-EAST-1B, US-EAST-1C }`, `{ US-EAST, US-WEST,
+  JAPAN }`, `{ IRELAND, US-EAST, US-WEST}`, `{ IRELAND, US-EAST,
+  US-WEST, JAPAN, AUSTRALIA }`).
+
+COCKROACHDB PROVIDES [SNAPSHOT
+ISOLATION](HTTP://EN.WIKIPEDIA.ORG/WIKI/SNAPSHOT_ISOLATION) (SI) AND
+SERIALIZABLE SNAPSHOT ISOLATION (SSI) SEMANTICS, ALLOWING **EXTERNALLY
+CONSISTENT, LOCK-FREE READS AND WRITES**--BOTH FROM A HISTORICAL SNAPSHOT
+TIMESTAMP AND FROM THE CURRENT WALL CLOCK TIME. SI PROVIDES LOCK-FREE READS
+AND WRITES BUT STILL ALLOWS WRITE SKEW. SSI ELIMINATES WRITE SKEW, BUT
+INTRODUCES A PERFORMANCE HIT IN THE CASE OF A CONTENTIOUS SYSTEM. SSI IS THE
+DEFAULT ISOLATION; CLIENTS MUST CONSCIOUSLY DECIDE TO TRADE CORRECTNESS FOR
+PERFORMANCE. COCKROACHDB IMPLEMENTS [A LIMITED FORM OF LINEARIZABILITY
+](#STRICT-SERIALIZABILITY-LINEARIZABILITY), PROVIDING ORDERING FOR ANY
+OBSERVER OR CHAIN OF OBSERVERS.
+
+SIMILAR TO
+[SPANNER](HTTP://STATIC.GOOGLEUSERCONTENT.COM/MEDIA/RESEARCH.GOOGLE.COM/EN/US/ARCHIVE/SPANNER-OSDI2012.PDF)
+DIRECTORIES, COCKROACHDB ALLOWS CONFIGURATION OF ARBITRARY ZONES OF DATA.
+THIS ALLOWS REPLICATION FACTOR, STORAGE DEVICE TYPE, AND/OR DATACENTER
+LOCATION TO BE CHOSEN TO OPTIMIZE PERFORMANCE AND/OR AVAILABILITY.
+UNLIKE SPANNER, ZONES ARE MONOLITHIC AND DON’T ALLOW MOVEMENT OF FINE
+GRAINED DATA ON THE LEVEL OF ENTITY GROUPS.
+
+# ARCHITECTURE
+
+COCKROACHDB IMPLEMENTS A LAYERED ARCHITECTURE. THE HIGHEST LEVEL OF
+ABSTRACTION IS THE SQL LAYER (CURRENTLY UNSPECIFIED IN THIS DOCUMENT).
+IT DEPENDS DIRECTLY ON THE [*SQL LAYER*](#SQL),
+WHICH PROVIDES FAMILIAR RELATIONAL CONCEPTS
+SUCH AS SCHEMAS, TABLES, COLUMNS, AND INDEXES. THE SQL LAYER
+IN TURN DEPENDS ON THE [DISTRIBUTED KEY VALUE STORE](#KEY-VALUE-API),
+WHICH HANDLES THE DETAILS OF RANGE ADDRESSING TO PROVIDE THE ABSTRACTION
+OF A SINGLE, MONOLITHIC KEY VALUE STORE. THE DISTRIBUTED KV STORE
+COMMUNICATES WITH ANY NUMBER OF PHYSICAL COCKROACH NODES. EACH NODE
+CONTAINS ONE OR MORE STORES, ONE PER PHYSICAL DEVICE.
+
+![ARCHITECTURE](MEDIA/ARCHITECTURE.PNG)
+
+EACH STORE CONTAINS POTENTIALLY MANY RANGES, THE LOWEST-LEVEL UNIT OF
+KEY-VALUE DATA. RANGES ARE REPLICATED USING THE RAFT CONSENSUS PROTOCOL.
+THE DIAGRAM BELOW IS A BLOWN UP VERSION OF STORES FROM FOUR OF THE FIVE
+NODES IN THE PREVIOUS DIAGRAM. EACH RANGE IS REPLICATED THREE WAYS USING
+RAFT. THE COLOR CODING SHOWS ASSOCIATED RANGE REPLICAS.
+
+![RANGES](MEDIA/RANGES.PNG)
+
+EACH PHYSICAL NODE EXPORTS TWO RPC-BASED KEY VALUE APIS: ONE FOR
+EXTERNAL CLIENTS AND ONE FOR INTERNAL CLIENTS (EXPOSING SENSITIVE
+OPERATIONAL FEATURES). BOTH SERVICES ACCEPT BATCHES OF REQUESTS AND
+RETURN BATCHES OF RESPONSES. NODES ARE SYMMETRIC IN CAPABILITIES AND
+EXPORTED INTERFACES; EACH HAS THE SAME BINARY AND MAY ASSUME ANY
+ROLE.
+
+NODES AND THE RANGES THEY PROVIDE ACCESS TO CAN BE ARRANGED WITH VARIOUS
+PHYSICAL NETWORK TOPOLOGIES TO MAKE TRADE OFFS BETWEEN RELIABILITY AND
+PERFORMANCE. FOR EXAMPLE, A TRIPLICATED (3-WAY REPLICA) RANGE COULD HAVE
+EACH REPLICA LOCATED ON DIFFERENT:
+
+-   DISKS WITHIN A SERVER TO TOLERATE DISK FAILURES.
+-   SERVERS WITHIN A RACK TO TOLERATE SERVER FAILURES.
+-   SERVERS ON DIFFERENT RACKS WITHIN A DATACENTER TO TOLERATE RACK POWER/NETWORK FAILURES.
+-   SERVERS IN DIFFERENT DATACENTERS TO TOLERATE LARGE SCALE NETWORK OR POWER OUTAGES.
+
+UP TO `F` FAILURES CAN BE TOLERATED, WHERE THE TOTAL NUMBER OF REPLICAS `N = 2F + 1` (E.G. WITH 3X REPLICATION, ONE FAILURE CAN BE TOLERATED; WITH 5X REPLICATION, TWO FAILURES, AND SO ON).
+
+# KEYS
+
+COCKROACH KEYS ARE ARBITRARY BYTE ARRAYS. KEYS COME IN TWO FLAVORS:
+SYSTEM KEYS AND TABLE DATA KEYS. SYSTEM KEYS ARE USED BY COCKROACH FOR
+INTERNAL DATA STRUCTURES AND METADATA. TABLE DATA KEYS CONTAIN SQL
+TABLE DATA (AS WELL AS INDEX DATA). SYSTEM AND TABLE DATA KEYS ARE
+PREFIXED IN SUCH A WAY THAT ALL SYSTEM KEYS SORT BEFORE ANY TABLE DATA
+KEYS.
+
+SYSTEM KEYS COME IN SEVERAL SUBTYPES:
+
+- **GLOBAL** KEYS STORE CLUSTER-WIDE DATA SUCH AS THE "META1" AND
+    "META2" KEYS AS WELL AS VARIOUS OTHER SYSTEM-WIDE KEYS SUCH AS THE
+    NODE AND STORE ID ALLOCATORS.
+- **STORE LOCAL** KEYS ARE USED FOR UNREPLICATED STORE METADATA
+    (E.G. THE `STOREIDENT` STRUCTURE). "UNREPLICATED" INDICATES THAT
+    THESE VALUES ARE NOT REPLICATED ACROSS MULTIPLE STORES BECAUSE THE
+    DATA THEY HOLD IS TIED TO THE LIFETIME OF THE STORE THEY ARE
+    PRESENT ON.
+- **RANGE LOCAL** KEYS STORE RANGE METADATA THAT IS ASSOCIATED WITH A
+    GLOBAL KEY. RANGE LOCAL KEYS HAVE A SPECIAL PREFIX FOLLOWED BY A
+    GLOBAL KEY AND A SPECIAL SUFFIX. FOR EXAMPLE, TRANSACTION RECORDS
+    ARE RANGE LOCAL KEYS WHICH LOOK LIKE:
+    `\X01K<GLOBAL-KEY>TXN-<TXNID>`.
+- **REPLICATED RANGE ID LOCAL** KEYS STORE RANGE METADATA THAT IS
+    PRESENT ON ALL OF THE REPLICAS FOR A RANGE. THESE KEYS ARE UPDATED
+    VIA RAFT OPERATIONS. EXAMPLES INCLUDE THE RANGE LEASE STATE AND
+    ABORT SPAN ENTRIES.
+- **UNREPLICATED RANGE ID LOCAL** KEYS STORE RANGE METADATA THAT IS
+    LOCAL TO A REPLICA. THE PRIMARY EXAMPLES OF SUCH KEYS ARE THE RAFT
+    STATE AND RAFT LOG.
+
+TABLE DATA KEYS ARE USED TO STORE ALL SQL DATA. TABLE DATA KEYS
+CONTAIN INTERNAL STRUCTURE AS DESCRIBED IN THE SECTION ON [MAPPING
+DATA BETWEEN THE SQL MODEL AND
+KV](#DATA-MAPPING-BETWEEN-THE-SQL-MODEL-AND-KV).
+
+# VERSIONED VALUES
+
+COCKROACH MAINTAINS HISTORICAL VERSIONS OF VALUES BY STORING THEM WITH
+ASSOCIATED COMMIT TIMESTAMPS. READS AND SCANS CAN SPECIFY A SNAPSHOT
+TIME TO RETURN THE MOST RECENT WRITES PRIOR TO THE SNAPSHOT TIMESTAMP.
+OLDER VERSIONS OF VALUES ARE GARBAGE COLLECTED BY THE SYSTEM DURING
+COMPACTION ACCORDING TO A USER-SPECIFIED EXPIRATION INTERVAL. IN ORDER
+TO SUPPORT LONG-RUNNING SCANS (E.G. FOR MAPREDUCE), ALL VERSIONS HAVE A
+MINIMUM EXPIRATION.
+
+VERSIONED VALUES ARE SUPPORTED VIA MODIFICATIONS TO ROCKSDB TO RECORD
+COMMIT TIMESTAMPS AND GC EXPIRATIONS PER KEY.
+
+# LOCK-FREE DISTRIBUTED TRANSACTIONS
+
+COCKROACH PROVIDES DISTRIBUTED TRANSACTIONS WITHOUT LOCKS. COCKROACH
+TRANSACTIONS SUPPORT TWO ISOLATION LEVELS:
+
+- SNAPSHOT ISOLATION (SI) AND
+- *SERIALIZABLE* SNAPSHOT ISOLATION (SSI).
+
+*SI* IS SIMPLE TO IMPLEMENT, HIGHLY PERFORMANT, AND CORRECT FOR ALL BUT A
+HANDFUL OF ANOMALOUS CONDITIONS (E.G. WRITE SKEW). *SSI* REQUIRES JUST A TOUCH
+MORE COMPLEXITY, IS STILL HIGHLY PERFORMANT (LESS SO WITH CONTENTION), AND HAS
+NO ANOMALOUS CONDITIONS. COCKROACH’S SSI IMPLEMENTATION IS BASED ON IDEAS FROM
+THE LITERATURE AND SOME POSSIBLY NOVEL INSIGHTS.
+
+SSI IS THE DEFAULT LEVEL, WITH SI PROVIDED FOR APPLICATION DEVELOPERS
+WHO ARE CERTAIN ENOUGH OF THEIR NEED FOR PERFORMANCE AND THE ABSENCE OF
+WRITE SKEW CONDITIONS TO CONSCIOUSLY ELECT TO USE IT. IN A LIGHTLY
+CONTENDED SYSTEM, OUR IMPLEMENTATION OF SSI IS JUST AS PERFORMANT AS SI,
+REQUIRING NO LOCKING OR ADDITIONAL WRITES. WITH CONTENTION, OUR
+IMPLEMENTATION OF SSI STILL REQUIRES NO LOCKING, BUT WILL END UP
+ABORTING MORE TRANSACTIONS. COCKROACH’S SI AND SSI IMPLEMENTATIONS
+PREVENT STARVATION SCENARIOS EVEN FOR ARBITRARILY LONG TRANSACTIONS.
+
+SEE THE [CAHILL PAPER](HTTPS://SES.LIBRARY.USYD.EDU.AU/BITSTREAM/HANDLE/2123/5353/MICHAEL-CAHILL-2009-THESIS.PDF)
+FOR ONE POSSIBLE IMPLEMENTATION OF SSI. THIS IS ANOTHER [GREAT PAPER](HTTP://CS.YALE.EDU/HOMES/THOMSON/PUBLICATIONS/CALVIN-SIGMOD12.PDF).
+FOR A DISCUSSION OF SSI IMPLEMENTED BY PREVENTING READ-WRITE CONFLICTS
+(IN CONTRAST TO DETECTING THEM, CALLED WRITE-SNAPSHOT ISOLATION), SEE
+THE [YABANDEH PAPER](HTTPS://COURSES.CS.WASHINGTON.EDU/COURSES/CSE444/10SP/544M/READING-LIST/FEKETE-SIGMOD2008.PDF),
+WHICH IS THE SOURCE OF MUCH INSPIRATION FOR COCKROACH’S SSI.
+
+BOTH SI AND SSI REQUIRE THAT THE OUTCOME OF READS MUST BE PRESERVED, I.E.
+A WRITE OF A KEY AT A LOWER TIMESTAMP THAN A PREVIOUS READ MUST NOT SUCCEED. TO
+THIS END, EACH RANGE MAINTAINS A BOUNDED *IN-MEMORY* CACHE FROM KEY RANGE TO
+THE LATEST TIMESTAMP AT WHICH IT WAS READ.
+
+MOST UPDATES TO THIS *TIMESTAMP CACHE* CORRESPOND TO KEYS BEING READ, THOUGH
+THE TIMESTAMP CACHE ALSO PROTECTS THE OUTCOME OF SOME WRITES (NOTABLY RANGE
+DELETIONS) WHICH CONSEQUENTLY MUST ALSO POPULATE THE CACHE. THE CACHE’S ENTRIES
+ARE EVICTED OLDEST TIMESTAMP FIRST, UPDATING THE LOW WATER MARK OF THE CACHE
+APPROPRIATELY.
+
+EACH COCKROACH TRANSACTION IS ASSIGNED A RANDOM PRIORITY AND A
+"CANDIDATE TIMESTAMP" AT START. THE CANDIDATE TIMESTAMP IS THE
+PROVISIONAL TIMESTAMP AT WHICH THE TRANSACTION WILL COMMIT, AND IS
+CHOSEN AS THE CURRENT CLOCK TIME OF THE NODE COORDINATING THE
+TRANSACTION. THIS MEANS THAT A TRANSACTION WITHOUT CONFLICTS WILL
+USUALLY COMMIT WITH A TIMESTAMP THAT, IN ABSOLUTE TIME, PRECEDES THE
+ACTUAL WORK DONE BY THAT TRANSACTION.
+
+IN THE COURSE OF COORDINATING A TRANSACTION BETWEEN ONE OR MORE
+DISTRIBUTED NODES, THE CANDIDATE TIMESTAMP MAY BE INCREASED, BUT WILL
+NEVER BE DECREASED. THE CORE DIFFERENCE BETWEEN THE TWO ISOLATION LEVELS
+SI AND SSI IS THAT THE FORMER ALLOWS THE TRANSACTION'S CANDIDATE
+TIMESTAMP TO INCREASE AND THE LATTER DOES NOT.
+
+**HYBRID LOGICAL CLOCK**
+
+EACH COCKROACH NODE MAINTAINS A HYBRID LOGICAL CLOCK (HLC) AS DISCUSSED
+IN THE [HYBRID LOGICAL CLOCK PAPER](HTTP://WWW.CSE.BUFFALO.EDU/TECH-REPORTS/2014-04.PDF).
+HLC TIME USES TIMESTAMPS WHICH ARE COMPOSED OF A PHYSICAL COMPONENT (THOUGHT OF
+AS AND ALWAYS CLOSE TO LOCAL WALL TIME) AND A LOGICAL COMPONENT (USED TO
+DISTINGUISH BETWEEN EVENTS WITH THE SAME PHYSICAL COMPONENT). IT ALLOWS US TO
+TRACK CAUSALITY FOR RELATED EVENTS SIMILAR TO VECTOR CLOCKS, BUT WITH LESS
+OVERHEAD. IN PRACTICE, IT WORKS MUCH LIKE OTHER LOGICAL CLOCKS: WHEN EVENTS
+ARE RECEIVED BY A NODE, IT INFORMS THE LOCAL HLC ABOUT THE TIMESTAMP SUPPLIED
+WITH THE EVENT BY THE SENDER, AND WHEN EVENTS ARE SENT A TIMESTAMP GENERATED BY
+THE LOCAL HLC IS ATTACHED.
+
+FOR A MORE IN DEPTH DESCRIPTION OF HLC PLEASE READ THE PAPER. OUR
+IMPLEMENTATION IS [HERE](HTTPS://GITHUB.COM/COCKROACHDB/COCKROACH/BLOB/MASTER/PKG/UTIL/HLC/HLC.GO).
+
+COCKROACH PICKS A TIMESTAMP FOR A TRANSACTION USING HLC TIME. THROUGHOUT THIS
+DOCUMENT, *TIMESTAMP* ALWAYS REFERS TO THE HLC TIME WHICH IS A SINGLETON
+ON EACH NODE. THE HLC IS UPDATED BY EVERY READ/WRITE EVENT ON THE NODE, AND
+THE HLC TIME >= WALL TIME. A READ/WRITE TIMESTAMP RECEIVED IN A COCKROACH REQUEST
+FROM ANOTHER NODE IS NOT ONLY USED TO VERSION THE OPERATION, BUT ALSO UPDATES
+THE HLC ON THE NODE. THIS IS USEFUL IN GUARANTEEING THAT ALL DATA READ/WRITTEN
+ON A NODE IS AT A TIMESTAMP < NEXT HLC TIME.
+
+**TRANSACTION EXECUTION FLOW**
+
+TRANSACTIONS ARE EXECUTED IN TWO PHASES:
+
+1. START THE TRANSACTION BY SELECTING A RANGE WHICH IS LIKELY TO BE
+   HEAVILY INVOLVED IN THE TRANSACTION AND WRITING A NEW TRANSACTION
+   RECORD TO A RESERVED AREA OF THAT RANGE WITH STATE "PENDING". IN
+   PARALLEL WRITE AN "INTENT" VALUE FOR EACH DATUM BEING WRITTEN AS PART
+   OF THE TRANSACTION. THESE ARE NORMAL MVCC VALUES, WITH THE ADDITION OF
+   A SPECIAL FLAG (I.E. “INTENT”) INDICATING THAT THE VALUE MAY BE
+   COMMITTED AFTER THE TRANSACTION ITSELF COMMITS. IN ADDITION,
+   THE TRANSACTION ID (UNIQUE AND CHOSEN AT TXN START TIME BY CLIENT)
+   IS STORED WITH INTENT VALUES. THE TXN ID IS USED TO REFER TO THE
+   TRANSACTION RECORD WHEN THERE ARE CONFLICTS AND TO MAKE
+   TIE-BREAKING DECISIONS ON ORDERING BETWEEN IDENTICAL TIMESTAMPS.
+   EACH NODE RETURNS THE TIMESTAMP USED FOR THE WRITE (WHICH IS THE
+   ORIGINAL CANDIDATE TIMESTAMP IN THE ABSENCE OF READ/WRITE CONFLICTS);
+   THE CLIENT SELECTS THE MAXIMUM FROM AMONGST ALL WRITE TIMESTAMPS AS THE
+   FINAL COMMIT TIMESTAMP.
+
+2. COMMIT THE TRANSACTION BY UPDATING ITS TRANSACTION RECORD. THE VALUE
+   OF THE COMMIT ENTRY CONTAINS THE CANDIDATE TIMESTAMP (INCREASED AS
+   NECESSARY TO ACCOMMODATE ANY LATEST READ TIMESTAMPS). NOTE THAT THE
+   TRANSACTION IS CONSIDERED FULLY COMMITTED AT THIS POINT AND CONTROL
+   MAY BE RETURNED TO THE CLIENT.
+
+   IN THE CASE OF AN SI TRANSACTION, A COMMIT TIMESTAMP WHICH WAS
+   INCREASED TO ACCOMMODATE CONCURRENT READERS IS PERFECTLY
+   ACCEPTABLE AND THE COMMIT MAY CONTINUE. FOR SSI TRANSACTIONS,
+   HOWEVER, A GAP BETWEEN CANDIDATE AND COMMIT TIMESTAMPS
+   NECESSITATES TRANSACTION RESTART (NOTE: RESTART IS DIFFERENT THAN
+   ABORT--SEE BELOW).
+
+   AFTER THE TRANSACTION IS COMMITTED, ALL WRITTEN INTENTS ARE UPGRADED
+   IN PARALLEL BY REMOVING THE “INTENT” FLAG. THE TRANSACTION IS
+   CONSIDERED FULLY COMMITTED BEFORE THIS STEP AND DOES NOT WAIT FOR
+   IT TO RETURN CONTROL TO THE TRANSACTION COORDINATOR.
+
+IN THE ABSENCE OF CONFLICTS, THIS IS THE END. NOTHING ELSE IS NECESSARY
+TO ENSURE THE CORRECTNESS OF THE SYSTEM.
+
+**CONFLICT RESOLUTION**
+
+THINGS GET MORE INTERESTING WHEN A READER OR WRITER ENCOUNTERS AN INTENT
+RECORD OR NEWLY-COMMITTED VALUE IN A LOCATION THAT IT NEEDS TO READ OR
+WRITE. THIS IS A CONFLICT, USUALLY CAUSING EITHER OF THE TRANSACTIONS TO
+ABORT OR RESTART DEPENDING ON THE TYPE OF CONFLICT.
+
+***TRANSACTION RESTART:***
+
+THIS IS THE USUAL (AND MORE EFFICIENT) TYPE OF BEHAVIOUR AND IS USED
+EXCEPT WHEN THE TRANSACTION WAS ABORTED (FOR INSTANCE BY ANOTHER
+TRANSACTION).
+IN EFFECT, THAT REDUCES TO TWO CASES; THE FIRST BEING THE ONE OUTLINED
+ABOVE: AN SSI TRANSACTION THAT FINDS UPON ATTEMPTING TO COMMIT THAT
+ITS COMMIT TIMESTAMP HAS BEEN PUSHED. THE SECOND CASE INVOLVES A TRANSACTION
+ACTIVELY ENCOUNTERING A CONFLICT, THAT IS, ONE OF ITS READERS OR WRITERS
+ENCOUNTER DATA THAT NECESSITATE CONFLICT RESOLUTION
+(SEE TRANSACTION INTERACTIONS BELOW).
+
+WHEN A TRANSACTION RESTARTS, IT CHANGES ITS PRIORITY AND/OR MOVES ITS
+TIMESTAMP FORWARD DEPENDING ON DATA TIED TO THE CONFLICT, AND
+BEGINS ANEW REUSING THE SAME TXN ID. THE PRIOR RUN OF THE TRANSACTION MIGHT
+HAVE WRITTEN SOME WRITE INTENTS, WHICH NEED TO BE DELETED BEFORE THE
+TRANSACTION COMMITS, SO AS TO NOT BE INCLUDED AS PART OF THE TRANSACTION.
+THESE STALE WRITE INTENT DELETIONS ARE DONE DURING THE REEXECUTION OF THE
+TRANSACTION, EITHER IMPLICITLY, THROUGH WRITING NEW INTENTS TO
+THE SAME KEYS AS PART OF THE REEXECUTION OF THE TRANSACTION, OR EXPLICITLY,
+BY CLEANING UP STALE INTENTS THAT ARE NOT PART OF THE REEXECUTION OF THE
+TRANSACTION. SINCE MOST TRANSACTIONS WILL END UP WRITING TO THE SAME KEYS,
+THE EXPLICIT CLEANUP RUN JUST BEFORE COMMITTING THE TRANSACTION IS USUALLY
+A NOOP.
+
+***TRANSACTION ABORT:***
+
+THIS IS THE CASE IN WHICH A TRANSACTION, UPON READING ITS TRANSACTION
+RECORD, FINDS THAT IT HAS BEEN ABORTED. IN THIS CASE, THE TRANSACTION
+CAN NOT REUSE ITS INTENTS; IT RETURNS CONTROL TO THE CLIENT BEFORE
+CLEANING THEM UP (OTHER READERS AND WRITERS WOULD CLEAN UP DANGLING
+INTENTS AS THEY ENCOUNTER THEM) BUT WILL MAKE AN EFFORT TO CLEAN UP
+AFTER ITSELF. THE NEXT ATTEMPT (IF APPLICABLE) THEN RUNS AS A NEW
+TRANSACTION WITH **A NEW TXN ID**.
+
+***TRANSACTION INTERACTIONS:***
+
+THERE ARE SEVERAL SCENARIOS IN WHICH TRANSACTIONS INTERACT:
+
+- **READER ENCOUNTERS WRITE INTENT OR VALUE WITH NEWER TIMESTAMP FAR
+  ENOUGH IN THE FUTURE**: THIS IS NOT A CONFLICT. THE READER IS FREE
+  TO PROCEED; AFTER ALL, IT WILL BE READING AN OLDER VERSION OF THE
+  VALUE AND SO DOES NOT CONFLICT. RECALL THAT THE WRITE INTENT MAY
+  BE COMMITTED WITH A LATER TIMESTAMP THAN ITS CANDIDATE; IT WILL
+  NEVER COMMIT WITH AN EARLIER ONE. 
+
+- **READER ENCOUNTERS WRITE INTENT OR VALUE WITH NEWER TIMESTAMP IN THE
+  NEAR FUTURE:** IN THIS CASE, WE HAVE TO BE CAREFUL. THE NEWER
+  INTENT MAY, IN ABSOLUTE TERMS, HAVE HAPPENED IN OUR READ'S PAST IF
+  THE CLOCK OF THE WRITER IS AHEAD OF THE NODE SERVING THE VALUES.
+  IN THAT CASE, WE WOULD NEED TO TAKE THIS VALUE INTO ACCOUNT, BUT
+  WE JUST DON'T KNOW. HENCE THE TRANSACTION RESTARTS, USING INSTEAD
+  A FUTURE TIMESTAMP (BUT REMEMBERING A MAXIMUM TIMESTAMP USED TO
+  LIMIT THE UNCERTAINTY WINDOW TO THE MAXIMUM CLOCK OFFSET). IN FACT,
+  THIS IS OPTIMIZED FURTHER; SEE THE DETAILS UNDER "CHOOSING A TIME
+  STAMP" BELOW.
+
+- **READER ENCOUNTERS WRITE INTENT WITH OLDER TIMESTAMP**: THE READER
+  MUST FOLLOW THE INTENT’S TRANSACTION ID TO THE TRANSACTION RECORD.
+  IF THE TRANSACTION HAS ALREADY BEEN COMMITTED, THEN THE READER CAN
+  JUST READ THE VALUE. IF THE WRITE TRANSACTION HAS NOT YET BEEN
+  COMMITTED, THEN THE READER HAS TWO OPTIONS. IF THE WRITE CONFLICT
+  IS FROM AN SI TRANSACTION, THE READER CAN *PUSH THAT TRANSACTION'S
+  COMMIT TIMESTAMP INTO THE FUTURE* (AND CONSEQUENTLY NOT HAVE TO
+  READ IT). THIS IS SIMPLE TO DO: THE READER JUST UPDATES THE
+  TRANSACTION’S COMMIT TIMESTAMP TO INDICATE THAT WHEN/IF THE
+  TRANSACTION DOES COMMIT, IT SHOULD USE A TIMESTAMP *AT LEAST* AS
+  HIGH. HOWEVER, IF THE WRITE CONFLICT IS FROM AN SSI TRANSACTION,
+  THE READER MUST COMPARE PRIORITIES. IF THE READER HAS THE HIGHER PRIORITY,
+  IT PUSHES THE TRANSACTION’S COMMIT TIMESTAMP (THAT
+  TRANSACTION WILL THEN NOTICE ITS TIMESTAMP HAS BEEN PUSHED, AND
+  RESTART). IF IT HAS THE LOWER OR SAME PRIORITY, IT RETRIES ITSELF USING AS
+  A NEW PRIORITY `MAX(NEW RANDOM PRIORITY, CONFLICTING TXN’S
+  PRIORITY - 1)`.
+
+- **WRITER ENCOUNTERS UNCOMMITTED WRITE INTENT**:
+  IF THE OTHER WRITE INTENT HAS BEEN WRITTEN BY A TRANSACTION WITH A LOWER
+  PRIORITY, THE WRITER ABORTS THE CONFLICTING TRANSACTION. IF THE WRITE
+  INTENT HAS A HIGHER OR EQUAL PRIORITY THE TRANSACTION RETRIES, USING AS A NEW
+  PRIORITY *MAX(NEW RANDOM PRIORITY, CONFLICTING TXN’S PRIORITY - 1)*;
+  THE RETRY OCCURS AFTER A SHORT, RANDOMIZED BACKOFF INTERVAL.
+
+- **WRITER ENCOUNTERS NEWER COMMITTED VALUE**:
+  THE COMMITTED VALUE COULD ALSO BE AN UNRESOLVED WRITE INTENT MADE BY A
+  TRANSACTION THAT HAS ALREADY COMMITTED. THE TRANSACTION RESTARTS. ON RESTART,
+  THE SAME PRIORITY IS REUSED, BUT THE CANDIDATE TIMESTAMP IS MOVED FORWARD
+  TO THE ENCOUNTERED VALUE'S TIMESTAMP.
+
+- **WRITER ENCOUNTERS MORE RECENTLY READ KEY**:
+  THE *READ TIMESTAMP CACHE* IS CONSULTED ON EACH WRITE AT A NODE. IF THE WRITE’S
+  CANDIDATE TIMESTAMP IS EARLIER THAN THE LOW WATER MARK ON THE CACHE ITSELF
+  (I.E. ITS LAST EVICTED TIMESTAMP) OR IF THE KEY BEING WRITTEN HAS A READ
+  TIMESTAMP LATER THAN THE WRITE’S CANDIDATE TIMESTAMP, THIS LATER TIMESTAMP
+  VALUE IS RETURNED WITH THE WRITE. A NEW TIMESTAMP FORCES A TRANSACTION
+  RESTART ONLY IF IT IS SERIALIZABLE.
+
+**TRANSACTION MANAGEMENT**
+
+TRANSACTIONS ARE MANAGED BY THE CLIENT PROXY (OR GATEWAY IN SQL AZURE
+PARLANCE). UNLIKE IN SPANNER, WRITES ARE NOT BUFFERED BUT ARE SENT
+DIRECTLY TO ALL IMPLICATED RANGES. THIS ALLOWS THE TRANSACTION TO ABORT
+QUICKLY IF IT ENCOUNTERS A WRITE CONFLICT. THE CLIENT PROXY KEEPS TRACK
+OF ALL WRITTEN KEYS IN ORDER TO RESOLVE WRITE INTENTS ASYNCHRONOUSLY UPON
+TRANSACTION COMPLETION. IF A TRANSACTION COMMITS SUCCESSFULLY, ALL INTENTS
+ARE UPGRADED TO COMMITTED. IN THE EVENT A TRANSACTION IS ABORTED, ALL WRITTEN
+INTENTS ARE DELETED. THE CLIENT PROXY DOESN’T GUARANTEE IT WILL RESOLVE INTENTS.
+
+IN THE EVENT THE CLIENT PROXY RESTARTS BEFORE THE PENDING TRANSACTION IS
+COMMITTED, THE DANGLING TRANSACTION WOULD CONTINUE TO "LIVE" UNTIL
+ABORTED BY ANOTHER TRANSACTION. TRANSACTIONS PERIODICALLY HEARTBEAT
+THEIR TRANSACTION RECORD TO MAINTAIN LIVENESS.
+TRANSACTIONS ENCOUNTERED BY READERS OR WRITERS WITH DANGLING INTENTS
+WHICH HAVEN’T BEEN HEARTBEAT WITHIN THE REQUIRED INTERVAL ARE ABORTED.
+IN THE EVENT THE PROXY RESTARTS AFTER A TRANSACTION COMMITS BUT BEFORE
+THE ASYNCHRONOUS RESOLUTION IS COMPLETE, THE DANGLING INTENTS ARE UPGRADED
+WHEN ENCOUNTERED BY FUTURE READERS AND WRITERS AND THE SYSTEM DOES
+NOT DEPEND ON THEIR TIMELY RESOLUTION FOR CORRECTNESS.
+
+AN EXPLORATION OF RETRIES WITH CONTENTION AND ABORT TIMES WITH ABANDONED
+TRANSACTION IS
+[HERE](HTTPS://DOCS.GOOGLE.COM/DOCUMENT/D/1KBCU4SDGANVLQPT-_2VATBOMNMX3_SAAYWEGYU1J7MQ/EDIT?USP=SHARING).
+
+**TRANSACTION RECORDS**
+
+PLEASE SEE [PKG/ROACHPB/DATA.PROTO](HTTPS://GITHUB.COM/COCKROACHDB/COCKROACH/BLOB/MASTER/PKG/ROACHPB/DATA.PROTO) FOR THE UP-TO-DATE STRUCTURES, THE BEST ENTRY POINT BEING `MESSAGE TRANSACTION`.
+
+**PROS**
+
+- NO REQUIREMENT FOR RELIABLE CODE EXECUTION TO PREVENT STALLED 2PC
+  PROTOCOL.
+- READERS NEVER BLOCK WITH SI SEMANTICS; WITH SSI SEMANTICS, THEY MAY
+  ABORT.
+- LOWER LATENCY THAN TRADITIONAL 2PC COMMIT PROTOCOL (W/O CONTENTION)
+  BECAUSE SECOND PHASE REQUIRES ONLY A SINGLE WRITE TO THE
+  TRANSACTION RECORD INSTEAD OF A SYNCHRONOUS ROUND TO ALL
+  TRANSACTION PARTICIPANTS.
+- PRIORITIES AVOID STARVATION FOR ARBITRARILY LONG TRANSACTIONS AND
+  ALWAYS PICK A WINNER FROM BETWEEN CONTENDING TRANSACTIONS (NO
+  MUTUAL ABORTS).
+- WRITES NOT BUFFERED AT CLIENT; WRITES FAIL FAST.
+- NO READ-LOCKING OVERHEAD REQUIRED FOR *SERIALIZABLE* SI (IN CONTRAST
+  TO OTHER SSI IMPLEMENTATIONS).
+- WELL-CHOSEN (I.E. LESS RANDOM) PRIORITIES CAN FLEXIBLY GIVE
+  PROBABILISTIC GUARANTEES ON LATENCY FOR ARBITRARY TRANSACTIONS
+  (FOR EXAMPLE: MAKE OLTP TRANSACTIONS 10X LESS LIKELY TO ABORT THAN
+  LOW PRIORITY TRANSACTIONS, SUCH AS ASYNCHRONOUSLY SCHEDULED JOBS).
+
+**CONS**
+
+- READS FROM NON-LEASE HOLDER REPLICAS STILL REQUIRE A PING TO THE LEASE HOLDER
+  TO UPDATE THE *READ TIMESTAMP CACHE*.
+- ABANDONED TRANSACTIONS MAY BLOCK CONTENDING WRITERS FOR UP TO THE
+  HEARTBEAT INTERVAL, THOUGH AVERAGE WAIT IS LIKELY TO BE
+  CONSIDERABLY SHORTER (SEE [GRAPH IN LINK](HTTPS://DOCS.GOOGLE.COM/DOCUMENT/D/1KBCU4SDGANVLQPT-_2VATBOMNMX3_SAAYWEGYU1J7MQ/EDIT?USP=SHARING)).
+  THIS IS LIKELY CONSIDERABLY MORE PERFORMANT THAN DETECTING AND
+  RESTARTING 2PC IN ORDER TO RELEASE READ AND WRITE LOCKS.
+- BEHAVIOR DIFFERENT THAN OTHER SI IMPLEMENTATIONS: NO FIRST WRITER
+  WINS, AND SHORTER TRANSACTIONS DO NOT ALWAYS FINISH QUICKLY.
+  ELEMENT OF SURPRISE FOR OLTP SYSTEMS MAY BE A PROBLEMATIC FACTOR.
+- ABORTS CAN DECREASE THROUGHPUT IN A CONTENDED SYSTEM COMPARED WITH
+  TWO PHASE LOCKING. ABORTS AND RETRIES INCREASE READ AND WRITE
+  TRAFFIC, INCREASE LATENCY AND DECREASE THROUGHPUT.
+
+**CHOOSING A TIMESTAMP**
+
+A KEY CHALLENGE OF READING DATA IN A DISTRIBUTED SYSTEM WITH CLOCK OFFSET
+IS CHOOSING A TIMESTAMP GUARANTEED TO BE GREATER THAN THE LATEST
+TIMESTAMP OF ANY COMMITTED TRANSACTION (IN ABSOLUTE TIME). NO SYSTEM CAN
+CLAIM CONSISTENCY AND FAIL TO READ ALREADY-COMMITTED DATA.
+
+ACCOMPLISHING CONSISTENCY FOR TRANSACTIONS (OR JUST SINGLE OPERATIONS)
+ACCESSING A SINGLE NODE IS EASY. THE TIMESTAMP IS ASSIGNED BY THE NODE
+ITSELF, SO IT IS GUARANTEED TO BE AT A GREATER TIMESTAMP THAN ALL THE
+EXISTING TIMESTAMPED DATA ON THE NODE.
+
+FOR MULTIPLE NODES, THE TIMESTAMP OF THE NODE COORDINATING THE
+TRANSACTION `T` IS USED. IN ADDITION, A MAXIMUM TIMESTAMP `T+Ε` IS
+SUPPLIED TO PROVIDE AN UPPER BOUND ON TIMESTAMPS FOR ALREADY-COMMITTED
+DATA (`Ε` IS THE MAXIMUM CLOCK OFFSET). AS THE TRANSACTION PROGRESSES, ANY
+DATA READ WHICH HAVE TIMESTAMPS GREATER THAN `T` BUT LESS THAN `T+Ε`
+CAUSE THE TRANSACTION TO ABORT AND RETRY WITH THE CONFLICTING TIMESTAMP
+T<SUB>C</SUB>, WHERE T<SUB>C</SUB> \> T. THE MAXIMUM TIMESTAMP `T+Ε` REMAINS
+THE SAME. THIS IMPLIES THAT TRANSACTION RESTARTS DUE TO CLOCK UNCERTAINTY
+CAN ONLY HAPPEN ON A TIME INTERVAL OF LENGTH `Ε`.
+
+WE APPLY ANOTHER OPTIMIZATION TO REDUCE THE RESTARTS CAUSED
+BY UNCERTAINTY. UPON RESTARTING, THE TRANSACTION NOT ONLY TAKES
+INTO ACCOUNT T<SUB>C</SUB>, BUT THE TIMESTAMP OF THE NODE AT THE TIME
+OF THE UNCERTAIN READ T<SUB>NODE</SUB>. THE LARGER OF THOSE TWO TIMESTAMPS
+T<SUB>C</SUB> AND T<SUB>NODE</SUB> (LIKELY EQUAL TO THE LATTER) IS USED
+TO INCREASE THE READ TIMESTAMP. ADDITIONALLY, THE CONFLICTING NODE IS
+MARKED AS “CERTAIN”. THEN, FOR FUTURE READS TO THAT NODE WITHIN THE
+TRANSACTION, WE SET `MAXTIMESTAMP = READ TIMESTAMP`, PREVENTING FURTHER
+UNCERTAINTY RESTARTS.
+
+CORRECTNESS FOLLOWS FROM THE FACT THAT WE KNOW THAT AT THE TIME OF THE READ,
+THERE EXISTS NO VERSION OF ANY KEY ON THAT NODE WITH A HIGHER TIMESTAMP THAN
+T<SUB>NODE</SUB>. UPON A RESTART CAUSED BY THE NODE, IF THE TRANSACTION
+ENCOUNTERS A KEY WITH A HIGHER TIMESTAMP, IT KNOWS THAT IN ABSOLUTE TIME,
+THE VALUE WAS WRITTEN AFTER T<SUB>NODE</SUB> WAS OBTAINED, I.E. AFTER THE
+UNCERTAIN READ. HENCE THE TRANSACTION CAN MOVE FORWARD READING AN OLDER VERSION
+OF THE DATA (AT THE TRANSACTION'S TIMESTAMP). THIS LIMITS THE TIME UNCERTAINTY
+RESTARTS ATTRIBUTED TO A NODE TO AT MOST ONE. THE TRADEOFF IS THAT WE MIGHT
+PICK A TIMESTAMP LARGER THAN THE OPTIMAL ONE (> HIGHEST CONFLICTING TIMESTAMP),
+RESULTING IN THE POSSIBILITY OF A FEW MORE CONFLICTS.
+
+WE EXPECT RETRIES WILL BE RARE, BUT THIS ASSUMPTION MAY NEED TO BE
+REVISITED IF RETRIES BECOME PROBLEMATIC. NOTE THAT THIS PROBLEM DOES NOT
+APPLY TO HISTORICAL READS. AN ALTERNATE APPROACH WHICH DOES NOT REQUIRE
+RETRIES MAKES A ROUND TO ALL NODE PARTICIPANTS IN ADVANCE AND
+CHOOSES THE HIGHEST REPORTED NODE WALL TIME AS THE TIMESTAMP. HOWEVER,
+KNOWING WHICH NODES WILL BE ACCESSED IN ADVANCE IS DIFFICULT AND
+POTENTIALLY LIMITING. COCKROACH COULD ALSO POTENTIALLY USE A GLOBAL
+CLOCK (GOOGLE DID THIS WITH [PERCOLATOR](HTTPS://WWW.USENIX.ORG/LEGACY/EVENT/OSDI10/TECH/FULL_PAPERS/PENG.PDF)),
+WHICH WOULD BE FEASIBLE FOR SMALLER, GEOGRAPHICALLY-PROXIMATE CLUSTERS.
+
+# STRICT SERIALIZABILITY (LINEARIZABILITY)
+
+ROUGHLY SPEAKING, THE GAP BETWEEN <I>STRICT SERIALIZABILITY</I> (WHICH WE USE
+INTERCHANGEABLY WITH <I>LINEARIZABILITY</I>) AND COCKROACHDB'S DEFAULT
+ISOLATION LEVEL (<I>SERIALIZABLE</I>) IS THAT WITH LINEARIZABLE TRANSACTIONS,
+CAUSALITY IS PRESERVED. THAT IS, IF ONE TRANSACTION (SAY, CREATING A POSTING
+FOR A USER) WAITS FOR ITS PREDECESSOR (CREATING THE USER IN THE FIRST PLACE)
+TO COMPLETE, ONE WOULD HOPE THAT THE LOGICAL TIMESTAMP ASSIGNED TO THE FORMER
+IS LARGER THAN THAT OF THE LATTER.
+IN PRACTICE, IN DISTRIBUTED DATABASES THIS MAY NOT HOLD, THE REASON TYPICALLY
+BEING THAT CLOCKS ACROSS A DISTRIBUTED SYSTEM ARE NOT PERFECTLY SYNCHRONIZED
+AND THE "LATER" TRANSACTION TOUCHES A PART DISJOINT FROM THAT ON WHICH THE
+FIRST TRANSACTION RAN, RESULTING IN CLOCKS WITH DISJOINT INFORMATION TO DECIDE
+ON THE COMMIT TIMESTAMPS.
+
+IN PRACTICE, IN COCKROACHDB MANY TRANSACTIONAL WORKLOADS ARE ACTUALLY
+LINEARIZABLE, THOUGH THE PRECISE CONDITIONS ARE TOO INVOLVED TO OUTLINE THEM
+HERE.
+
+CAUSALITY IS TYPICALLY NOT REQUIRED FOR MANY TRANSACTIONS, AND SO IT IS
+ADVANTAGEOUS TO PAY FOR IT ONLY WHEN IT *IS* NEEDED. COCKROACHDB IMPLEMENTS
+THIS VIA <I>CAUSALITY TOKENS</I>: WHEN COMMITTING A TRANSACTION, A CAUSALITY
+TOKEN CAN BE RETRIEVED AND PASSED TO THE NEXT TRANSACTION, ENSURING THAT THESE
+TWO TRANSACTIONS GET ASSIGNED INCREASING LOGICAL TIMESTAMPS.
+
+ADDITIONALLY, AS BETTER SYNCHRONIZED CLOCKS BECOME A STANDARD COMMODITY OFFERED
+BY CLOUD PROVIDERS, COCKROACHDB CAN PROVIDE GLOBAL LINEARIZABILITY BY DOING
+MUCH THE SAME THAT [GOOGLE'S
+SPANNER](HTTP://RESEARCH.GOOGLE.COM/ARCHIVE/SPANNER.HTML) DOES: WAIT OUT THE
+MAXIMUM CLOCK OFFSET AFTER COMMITTING, BUT BEFORE RETURNING TO THE CLIENT.
+
+SEE THE BLOG POST BELOW FOR MUCH MORE IN-DEPTH INFORMATION.
+
+HTTPS://WWW.COCKROACHLABS.COM/BLOG/LIVING-WITHOUT-ATOMIC-CLOCKS/
+
+# LOGICAL MAP CONTENT
+
+LOGICALLY, THE MAP CONTAINS A SERIES OF RESERVED SYSTEM KEY/VALUE
+PAIRS PRECEDING THE ACTUAL USER DATA (WHICH IS MANAGED BY THE SQL
+SUBSYSTEM).
+
+- `\X02<KEY1>`: RANGE METADATA FOR RANGE ENDING `\X03<KEY1>`. THIS A "META1" KEY.
 - ...
-- `\x02<keyN>`: Range metadata for range ending `\x03<keyN>`. This a "meta1" key.
-- `\x03<key1>`: Range metadata for range ending `<key1>`. This a "meta2" key.
+- `\X02<KEYN>`: RANGE METADATA FOR RANGE ENDING `\X03<KEYN>`. THIS A "META1" KEY.
+- `\X03<KEY1>`: RANGE METADATA FOR RANGE ENDING `<KEY1>`. THIS A "META2" KEY.
 - ...
-- `\x03<keyN>`: Range metadata for range ending `<keyN>`. This a "meta2" key.
-- `\x04{desc,node,range,store}-idegen`: ID generation oracles for various component types.
-- `\x04status-node-<varint encoded Store ID>`: Store runtime metadata.
-- `\x04tsd<key>`: Time-series data key.
-- `<key>`: A user key. In practice, these keys are managed by the SQL
-  subsystem, which employs its own key anatomy.
+- `\X03<KEYN>`: RANGE METADATA FOR RANGE ENDING `<KEYN>`. THIS A "META2" KEY.
+- `\X04{DESC,NODE,RANGE,STORE}-IDEGEN`: ID GENERATION ORACLES FOR VARIOUS COMPONENT TYPES.
+- `\X04STATUS-NODE-<VARINT ENCODED STORE ID>`: STORE RUNTIME METADATA.
+- `\X04TSD<KEY>`: TIME-SERIES DATA KEY.
+- `<KEY>`: A USER KEY. IN PRACTICE, THESE KEYS ARE MANAGED BY THE SQL
+  SUBSYSTEM, WHICH EMPLOYS ITS OWN KEY ANATOMY.
 
-# Stores and Storage
+# STORES AND STORAGE
 
-Nodes contain one or more stores. Each store should be placed on a unique disk.
-Internally, each store contains a single instance of RocksDB with a block cache
-shared amongst all of the stores in a node. And these stores in turn have
-a collection of range replicas. More than one replica for a range will never
-be placed on the same store or even the same node.
+NODES CONTAIN ONE OR MORE STORES. EACH STORE SHOULD BE PLACED ON A UNIQUE DISK.
+INTERNALLY, EACH STORE CONTAINS A SINGLE INSTANCE OF ROCKSDB WITH A BLOCK CACHE
+SHARED AMONGST ALL OF THE STORES IN A NODE. AND THESE STORES IN TURN HAVE
+A COLLECTION OF RANGE REPLICAS. MORE THAN ONE REPLICA FOR A RANGE WILL NEVER
+BE PLACED ON THE SAME STORE OR EVEN THE SAME NODE.
 
-Early on, when a cluster is first initialized, the few default starting ranges
-will only have a single replica, but as soon as other nodes are available they
-will replicate to them until they've reached their desired replication factor,
-the default being 3.
+EARLY ON, WHEN A CLUSTER IS FIRST INITIALIZED, THE FEW DEFAULT STARTING RANGES
+WILL ONLY HAVE A SINGLE REPLICA, BUT AS SOON AS OTHER NODES ARE AVAILABLE THEY
+WILL REPLICATE TO THEM UNTIL THEY'VE REACHED THEIR DESIRED REPLICATION FACTOR,
+THE DEFAULT BEING 3.
 
-Zone configs can be used to control a range's replication factor and add
-constraints as to where the range's replicas can be located. When there is a
-change in a range's zone config, the range will up or down replicate to the
-appropriate number of replicas and move its replicas to the appropriate stores
-based on zone config's constraints.
+ZONE CONFIGS CAN BE USED TO CONTROL A RANGE'S REPLICATION FACTOR AND ADD
+CONSTRAINTS AS TO WHERE THE RANGE'S REPLICAS CAN BE LOCATED. WHEN THERE IS A
+CHANGE IN A RANGE'S ZONE CONFIG, THE RANGE WILL UP OR DOWN REPLICATE TO THE
+APPROPRIATE NUMBER OF REPLICAS AND MOVE ITS REPLICAS TO THE APPROPRIATE STORES
+BASED ON ZONE CONFIG'S CONSTRAINTS.
 
-# Self Repair
+# SELF REPAIR
 
-If a store has not been heard from (gossiped their descriptors) in some time,
-the default setting being 5 minutes, the cluster will consider this store to be
-dead. When this happens, all ranges that have replicas on that store are
-determined to be unavailable and removed. These ranges will then upreplicate
-themselves to other available stores until their desired replication factor is
-again met. If 50% or more of the replicas are unavailable at the same time,
-there is no quorum and the whole range will be considered unavailable until at
-least greater than 50% of the replicas are again available.
+IF A STORE HAS NOT BEEN HEARD FROM (GOSSIPED THEIR DESCRIPTORS) IN SOME TIME,
+THE DEFAULT SETTING BEING 5 MINUTES, THE CLUSTER WILL CONSIDER THIS STORE TO BE
+DEAD. WHEN THIS HAPPENS, ALL RANGES THAT HAVE REPLICAS ON THAT STORE ARE
+DETERMINED TO BE UNAVAILABLE AND REMOVED. THESE RANGES WILL THEN UPREPLICATE
+THEMSELVES TO OTHER AVAILABLE STORES UNTIL THEIR DESIRED REPLICATION FACTOR IS
+AGAIN MET. IF 50% OR MORE OF THE REPLICAS ARE UNAVAILABLE AT THE SAME TIME,
+THERE IS NO QUORUM AND THE WHOLE RANGE WILL BE CONSIDERED UNAVAILABLE UNTIL AT
+LEAST GREATER THAN 50% OF THE REPLICAS ARE AGAIN AVAILABLE.
 
-# Rebalancing
+# REBALANCING
 
-As more data are added to the system, some stores may grow faster than others.
-To combat this and to spread the overall load across the full cluster, replicas
-will be moved between stores maintaining the desired replication factor. The
-heuristics used to perform this rebalancing include:
+AS MORE DATA ARE ADDED TO THE SYSTEM, SOME STORES MAY GROW FASTER THAN OTHERS.
+TO COMBAT THIS AND TO SPREAD THE OVERALL LOAD ACROSS THE FULL CLUSTER, REPLICAS
+WILL BE MOVED BETWEEN STORES MAINTAINING THE DESIRED REPLICATION FACTOR. THE
+HEURISTICS USED TO PERFORM THIS REBALANCING INCLUDE:
 
-- the number of replicas per store
-- the total size of the data used per store
-- free space available per store
+- THE NUMBER OF REPLICAS PER STORE
+- THE TOTAL SIZE OF THE DATA USED PER STORE
+- FREE SPACE AVAILABLE PER STORE
 
-In the future, some other factors that might be considered include:
+IN THE FUTURE, SOME OTHER FACTORS THAT MIGHT BE CONSIDERED INCLUDE:
 
-- cpu/network load per store
-- ranges that are used together often in queries
-- number of active ranges per store
-- number of range leases held per store
+- CPU/NETWORK LOAD PER STORE
+- RANGES THAT ARE USED TOGETHER OFTEN IN QUERIES
+- NUMBER OF ACTIVE RANGES PER STORE
+- NUMBER OF RANGE LEASES HELD PER STORE
 
-# Range Metadata
+# RANGE METADATA
 
-The default approximate size of a range is 64M (2\^26 B). In order to
-support 1P (2\^50 B) of logical data, metadata is needed for roughly
-2\^(50 - 26) = 2\^24 ranges. A reasonable upper bound on range metadata
-size is roughly 256 bytes (3\*12 bytes for the triplicated node
-locations and 220 bytes for the range key itself). 2\^24 ranges \* 2\^8
-B would require roughly 4G (2\^32 B) to store--too much to duplicate
-between machines. Our conclusion is that range metadata must be
-distributed for large installations.
+THE DEFAULT APPROXIMATE SIZE OF A RANGE IS 64M (2\^26 B). IN ORDER TO
+SUPPORT 1P (2\^50 B) OF LOGICAL DATA, METADATA IS NEEDED FOR ROUGHLY
+2\^(50 - 26) = 2\^24 RANGES. A REASONABLE UPPER BOUND ON RANGE METADATA
+SIZE IS ROUGHLY 256 BYTES (3\*12 BYTES FOR THE TRIPLICATED NODE
+LOCATIONS AND 220 BYTES FOR THE RANGE KEY ITSELF). 2\^24 RANGES \* 2\^8
+B WOULD REQUIRE ROUGHLY 4G (2\^32 B) TO STORE--TOO MUCH TO DUPLICATE
+BETWEEN MACHINES. OUR CONCLUSION IS THAT RANGE METADATA MUST BE
+DISTRIBUTED FOR LARGE INSTALLATIONS.
 
-To keep key lookups relatively fast in the presence of distributed metadata,
-we store all the top-level metadata in a single range (the first range). These
-top-level metadata keys are known as *meta1* keys, and are prefixed such that
-they sort to the beginning of the key space. Given the metadata size of 256
-bytes given above, a single 64M range would support 64M/256B = 2\^18 ranges,
-which gives a total storage of 64M \* 2\^18 = 16T. To support the 1P quoted
-above, we need two levels of indirection, where the first level addresses the
-second, and the second addresses user data. With two levels of indirection, we
-can address 2\^(18 + 18) = 2\^36 ranges; each range addresses 2\^26 B, and
-altogether we address 2\^(36+26) B = 2\^62 B = 4E of user data.
+TO KEEP KEY LOOKUPS RELATIVELY FAST IN THE PRESENCE OF DISTRIBUTED METADATA,
+WE STORE ALL THE TOP-LEVEL METADATA IN A SINGLE RANGE (THE FIRST RANGE). THESE
+TOP-LEVEL METADATA KEYS ARE KNOWN AS *META1* KEYS, AND ARE PREFIXED SUCH THAT
+THEY SORT TO THE BEGINNING OF THE KEY SPACE. GIVEN THE METADATA SIZE OF 256
+BYTES GIVEN ABOVE, A SINGLE 64M RANGE WOULD SUPPORT 64M/256B = 2\^18 RANGES,
+WHICH GIVES A TOTAL STORAGE OF 64M \* 2\^18 = 16T. TO SUPPORT THE 1P QUOTED
+ABOVE, WE NEED TWO LEVELS OF INDIRECTION, WHERE THE FIRST LEVEL ADDRESSES THE
+SECOND, AND THE SECOND ADDRESSES USER DATA. WITH TWO LEVELS OF INDIRECTION, WE
+CAN ADDRESS 2\^(18 + 18) = 2\^36 RANGES; EACH RANGE ADDRESSES 2\^26 B, AND
+ALTOGETHER WE ADDRESS 2\^(36+26) B = 2\^62 B = 4E OF USER DATA.
 
-For a given user-addressable `key1`, the associated *meta1* record is found
-at the successor key to `key1` in the *meta1* space. Since the *meta1* space
-is sparse, the successor key is defined as the next key which is present. The
-*meta1* record identifies the range containing the *meta2* record, which is
-found using the same process. The *meta2* record identifies the range
-containing `key1`, which is again found the same way (see examples below).
+FOR A GIVEN USER-ADDRESSABLE `KEY1`, THE ASSOCIATED *META1* RECORD IS FOUND
+AT THE SUCCESSOR KEY TO `KEY1` IN THE *META1* SPACE. SINCE THE *META1* SPACE
+IS SPARSE, THE SUCCESSOR KEY IS DEFINED AS THE NEXT KEY WHICH IS PRESENT. THE
+*META1* RECORD IDENTIFIES THE RANGE CONTAINING THE *META2* RECORD, WHICH IS
+FOUND USING THE SAME PROCESS. THE *META2* RECORD IDENTIFIES THE RANGE
+CONTAINING `KEY1`, WHICH IS AGAIN FOUND THE SAME WAY (SEE EXAMPLES BELOW).
 
-Concretely, metadata keys are prefixed by `\x02` (meta1) and `\x03`
-(meta2); the prefixes `\x02` and `\x03` provide for the desired
-sorting behaviour. Thus, `key1`'s *meta1* record will reside at the
-successor key to `\x02<key1>`.
+CONCRETELY, METADATA KEYS ARE PREFIXED BY `\X02` (META1) AND `\X03`
+(META2); THE PREFIXES `\X02` AND `\X03` PROVIDE FOR THE DESIRED
+SORTING BEHAVIOUR. THUS, `KEY1`'S *META1* RECORD WILL RESIDE AT THE
+SUCCESSOR KEY TO `\X02<KEY1>`.
 
-Note: we append the end key of each range to meta{1,2} records because
-the RocksDB iterator only supports a Seek() interface which acts as a
-Ceil(). Using the start key of the range would cause Seek() to find the
-key *after* the meta indexing record we’re looking for, which would
-result in having to back the iterator up, an option which is both less
-efficient and not available in all cases.
+NOTE: WE APPEND THE END KEY OF EACH RANGE TO META{1,2} RECORDS BECAUSE
+THE ROCKSDB ITERATOR ONLY SUPPORTS A SEEK() INTERFACE WHICH ACTS AS A
+CEIL(). USING THE START KEY OF THE RANGE WOULD CAUSE SEEK() TO FIND THE
+KEY *AFTER* THE META INDEXING RECORD WE’RE LOOKING FOR, WHICH WOULD
+RESULT IN HAVING TO BACK THE ITERATOR UP, AN OPTION WHICH IS BOTH LESS
+EFFICIENT AND NOT AVAILABLE IN ALL CASES.
 
-The following example shows the directory structure for a map with
-three ranges worth of data. Ellipses indicate additional key/value
-pairs to fill an entire range of data. For clarity, the examples use
-`meta1` and `meta2` to refer to the prefixes `\x02` and `\x03`. Except
-for the fact that splitting ranges requires updates to the range
-metadata with knowledge of the metadata layout, the range metadata
-itself requires no special treatment or bootstrapping.
+THE FOLLOWING EXAMPLE SHOWS THE DIRECTORY STRUCTURE FOR A MAP WITH
+THREE RANGES WORTH OF DATA. ELLIPSES INDICATE ADDITIONAL KEY/VALUE
+PAIRS TO FILL AN ENTIRE RANGE OF DATA. FOR CLARITY, THE EXAMPLES USE
+`META1` AND `META2` TO REFER TO THE PREFIXES `\X02` AND `\X03`. EXCEPT
+FOR THE FACT THAT SPLITTING RANGES REQUIRES UPDATES TO THE RANGE
+METADATA WITH KNOWLEDGE OF THE METADATA LAYOUT, THE RANGE METADATA
+ITSELF REQUIRES NO SPECIAL TREATMENT OR BOOTSTRAPPING.
 
-**Range 0** (located on servers `dcrama1:8000`, `dcrama2:8000`,
-  `dcrama3:8000`)
+**RANGE 0** (LOCATED ON SERVERS `DCRAMA1:8000`, `DCRAMA2:8000`,
+  `DCRAMA3:8000`)
 
-- `meta1\xff`: `dcrama1:8000`, `dcrama2:8000`, `dcrama3:8000`
-- `meta2<lastkey0>`: `dcrama1:8000`, `dcrama2:8000`, `dcrama3:8000`
-- `meta2<lastkey1>`: `dcrama4:8000`, `dcrama5:8000`, `dcrama6:8000`
-- `meta2\xff`: `dcrama7:8000`, `dcrama8:8000`, `dcrama9:8000`
+- `META1\XFF`: `DCRAMA1:8000`, `DCRAMA2:8000`, `DCRAMA3:8000`
+- `META2<LASTKEY0>`: `DCRAMA1:8000`, `DCRAMA2:8000`, `DCRAMA3:8000`
+- `META2<LASTKEY1>`: `DCRAMA4:8000`, `DCRAMA5:8000`, `DCRAMA6:8000`
+- `META2\XFF`: `DCRAMA7:8000`, `DCRAMA8:8000`, `DCRAMA9:8000`
 - ...
-- `<lastkey0>`: `<lastvalue0>`
+- `<LASTKEY0>`: `<LASTVALUE0>`
 
-**Range 1** (located on servers `dcrama4:8000`, `dcrama5:8000`,
-`dcrama6:8000`)
-
-- ...
-- `<lastkey1>`: `<lastvalue1>`
-
-**Range 2** (located on servers `dcrama7:8000`, `dcrama8:8000`,
-`dcrama9:8000`)
+**RANGE 1** (LOCATED ON SERVERS `DCRAMA4:8000`, `DCRAMA5:8000`,
+`DCRAMA6:8000`)
 
 - ...
-- `<lastkey2>`: `<lastvalue2>`
+- `<LASTKEY1>`: `<LASTVALUE1>`
 
-Consider a simpler example of a map containing less than a single
-range of data. In this case, all range metadata and all data are
-located in the same range:
+**RANGE 2** (LOCATED ON SERVERS `DCRAMA7:8000`, `DCRAMA8:8000`,
+`DCRAMA9:8000`)
 
-**Range 0** (located on servers `dcrama1:8000`, `dcrama2:8000`,
-`dcrama3:8000`)*
+- ...
+- `<LASTKEY2>`: `<LASTVALUE2>`
 
-- `meta1\xff`: `dcrama1:8000`, `dcrama2:8000`, `dcrama3:8000`
-- `meta2\xff`: `dcrama1:8000`, `dcrama2:8000`, `dcrama3:8000`
-- `<key0>`: `<value0>`
+CONSIDER A SIMPLER EXAMPLE OF A MAP CONTAINING LESS THAN A SINGLE
+RANGE OF DATA. IN THIS CASE, ALL RANGE METADATA AND ALL DATA ARE
+LOCATED IN THE SAME RANGE:
+
+**RANGE 0** (LOCATED ON SERVERS `DCRAMA1:8000`, `DCRAMA2:8000`,
+`DCRAMA3:8000`)*
+
+- `META1\XFF`: `DCRAMA1:8000`, `DCRAMA2:8000`, `DCRAMA3:8000`
+- `META2\XFF`: `DCRAMA1:8000`, `DCRAMA2:8000`, `DCRAMA3:8000`
+- `<KEY0>`: `<VALUE0>`
 - `...`
 
-Finally, a map large enough to need both levels of indirection would
-look like (note that instead of showing range replicas, this
-example is simplified to just show range indexes):
+FINALLY, A MAP LARGE ENOUGH TO NEED BOTH LEVELS OF INDIRECTION WOULD
+LOOK LIKE (NOTE THAT INSTEAD OF SHOWING RANGE REPLICAS, THIS
+EXAMPLE IS SIMPLIFIED TO JUST SHOW RANGE INDEXES):
 
-**Range 0**
+**RANGE 0**
 
-- `meta1<lastkeyN-1>`: Range 0
-- `meta1\xff`: Range 1
-- `meta2<lastkey1>`:  Range 1
-- `meta2<lastkey2>`:  Range 2
-- `meta2<lastkey3>`:  Range 3
+- `META1<LASTKEYN-1>`: RANGE 0
+- `META1\XFF`: RANGE 1
+- `META2<LASTKEY1>`:  RANGE 1
+- `META2<LASTKEY2>`:  RANGE 2
+- `META2<LASTKEY3>`:  RANGE 3
 - ...
-- `meta2<lastkeyN-1>`: Range 262143
+- `META2<LASTKEYN-1>`: RANGE 262143
 
-**Range 1**
+**RANGE 1**
 
-- `meta2<lastkeyN>`: Range 262144
-- `meta2<lastkeyN+1>`: Range 262145
+- `META2<LASTKEYN>`: RANGE 262144
+- `META2<LASTKEYN+1>`: RANGE 262145
 - ...
-- `meta2\xff`: Range 500,000
+- `META2\XFF`: RANGE 500,000
 - ...
-- `<lastkey1>`: `<lastvalue1>`
+- `<LASTKEY1>`: `<LASTVALUE1>`
 
-**Range 2**
-
-- ...
-- `<lastkey2>`: `<lastvalue2>`
-
-**Range 3**
+**RANGE 2**
 
 - ...
-- `<lastkey3>`: `<lastvalue3>`
+- `<LASTKEY2>`: `<LASTVALUE2>`
 
-**Range 262144**
-
-- ...
-- `<lastkeyN>`: `<lastvalueN>`
-
-**Range 262145**
+**RANGE 3**
 
 - ...
-- `<lastkeyN+1>`: `<lastvalueN+1>`
+- `<LASTKEY3>`: `<LASTVALUE3>`
 
-Note that the choice of range `262144` is just an approximation. The
-actual number of ranges addressable via a single metadata range is
-dependent on the size of the keys. If efforts are made to keep key sizes
-small, the total number of addressable ranges would increase and vice
-versa.
+**RANGE 262144**
 
-From the examples above it’s clear that key location lookups require at
-most three reads to get the value for `<key>`:
+- ...
+- `<LASTKEYN>`: `<LASTVALUEN>`
 
-1. lower bound of `meta1<key>`
-2. lower bound of `meta2<key>`,
-3. `<key>`.
+**RANGE 262145**
 
-For small maps, the entire lookup is satisfied in a single RPC to Range 0. Maps
-containing less than 16T of data would require two lookups. Clients cache both
-levels of range metadata, and we expect that data locality for individual
-clients will be high. Clients may end up with stale cache entries. If on a
-lookup, the range consulted does not match the client’s expectations, the
-client evicts the stale entries and possibly does a new lookup.
+- ...
+- `<LASTKEYN+1>`: `<LASTVALUEN+1>`
 
-# Raft - Consistency of Range Replicas
+NOTE THAT THE CHOICE OF RANGE `262144` IS JUST AN APPROXIMATION. THE
+ACTUAL NUMBER OF RANGES ADDRESSABLE VIA A SINGLE METADATA RANGE IS
+DEPENDENT ON THE SIZE OF THE KEYS. IF EFFORTS ARE MADE TO KEEP KEY SIZES
+SMALL, THE TOTAL NUMBER OF ADDRESSABLE RANGES WOULD INCREASE AND VICE
+VERSA.
 
-Each range is configured to consist of three or more replicas, as specified by
-their ZoneConfig. The replicas in a range maintain their own instance of a
-distributed consensus algorithm. We use the [*Raft consensus algorithm*](https://raftconsensus.github.io)
-as it is simpler to reason about and includes a reference implementation
-covering important details.
-[ePaxos](https://www.cs.cmu.edu/~dga/papers/epaxos-sosp2013.pdf) has
-promising performance characteristics for WAN-distributed replicas, but
-it does not guarantee a consistent ordering between replicas.
+FROM THE EXAMPLES ABOVE IT’S CLEAR THAT KEY LOCATION LOOKUPS REQUIRE AT
+MOST THREE READS TO GET THE VALUE FOR `<KEY>`:
 
-Raft elects a relatively long-lived leader which must be involved to
-propose commands. It heartbeats followers periodically and keeps their logs
-replicated. In the absence of heartbeats, followers become candidates
-after randomized election timeouts and proceed to hold new leader
-elections. Cockroach weights random timeouts such that the replicas with
-shorter round trip times to peers are more likely to hold elections
-first (not implemented yet). Only the Raft leader may propose commands;
-followers will simply relay commands to the last known leader.
+1. LOWER BOUND OF `META1<KEY>`
+2. LOWER BOUND OF `META2<KEY>`,
+3. `<KEY>`.
 
-Our Raft implementation was developed together with CoreOS, but adds an extra
-layer of optimization to account for the fact that a single Node may have
-millions of consensus groups (one for each Range). Areas of optimization
-are chiefly coalesced heartbeats (so that the number of nodes dictates the
-number of heartbeats as opposed to the much larger number of ranges) and
-batch processing of requests.
-Future optimizations may include two-phase elections and quiescent ranges
-(i.e. stopping traffic completely for inactive ranges).
+FOR SMALL MAPS, THE ENTIRE LOOKUP IS SATISFIED IN A SINGLE RPC TO RANGE 0. MAPS
+CONTAINING LESS THAN 16T OF DATA WOULD REQUIRE TWO LOOKUPS. CLIENTS CACHE BOTH
+LEVELS OF RANGE METADATA, AND WE EXPECT THAT DATA LOCALITY FOR INDIVIDUAL
+CLIENTS WILL BE HIGH. CLIENTS MAY END UP WITH STALE CACHE ENTRIES. IF ON A
+LOOKUP, THE RANGE CONSULTED DOES NOT MATCH THE CLIENT’S EXPECTATIONS, THE
+CLIENT EVICTS THE STALE ENTRIES AND POSSIBLY DOES A NEW LOOKUP.
 
-# Range Leases
+# RAFT - CONSISTENCY OF RANGE REPLICAS
 
-As outlined in the Raft section, the replicas of a Range are organized as a
-Raft group and execute commands from their shared commit log. Going through
-Raft is an expensive operation though, and there are tasks which should only be
-carried out by a single replica at a time (as opposed to all of them).
-In particular, it is desirable to serve authoritative reads from a single
-Replica (ideally from more than one, but that is far more difficult).
+EACH RANGE IS CONFIGURED TO CONSIST OF THREE OR MORE REPLICAS, AS SPECIFIED BY
+THEIR ZONECONFIG. THE REPLICAS IN A RANGE MAINTAIN THEIR OWN INSTANCE OF A
+DISTRIBUTED CONSENSUS ALGORITHM. WE USE THE [*RAFT CONSENSUS ALGORITHM*](HTTPS://RAFTCONSENSUS.GITHUB.IO)
+AS IT IS SIMPLER TO REASON ABOUT AND INCLUDES A REFERENCE IMPLEMENTATION
+COVERING IMPORTANT DETAILS.
+[EPAXOS](HTTPS://WWW.CS.CMU.EDU/~DGA/PAPERS/EPAXOS-SOSP2013.PDF) HAS
+PROMISING PERFORMANCE CHARACTERISTICS FOR WAN-DISTRIBUTED REPLICAS, BUT
+IT DOES NOT GUARANTEE A CONSISTENT ORDERING BETWEEN REPLICAS.
 
-For these reasons, Cockroach introduces the concept of **Range Leases**:
-This is a lease held for a slice of (database, i.e. hybrid logical) time.
-A replica establishes itself as owning the lease on a range by committing
-a special lease acquisition log entry through raft. The log entry contains
-the replica node's epoch from the node liveness table--a system
-table containing an epoch and an expiration time for each node. A node is
-responsible for continuously updating the expiration time for its entry
-in the liveness table. Once the lease has been committed through raft
-the replica becomes the lease holder as soon as it applies the lease
-acquisition command, guaranteeing that when it uses the lease it has
-already applied all prior writes on the replica and can see them locally.
+RAFT ELECTS A RELATIVELY LONG-LIVED LEADER WHICH MUST BE INVOLVED TO
+PROPOSE COMMANDS. IT HEARTBEATS FOLLOWERS PERIODICALLY AND KEEPS THEIR LOGS
+REPLICATED. IN THE ABSENCE OF HEARTBEATS, FOLLOWERS BECOME CANDIDATES
+AFTER RANDOMIZED ELECTION TIMEOUTS AND PROCEED TO HOLD NEW LEADER
+ELECTIONS. COCKROACH WEIGHTS RANDOM TIMEOUTS SUCH THAT THE REPLICAS WITH
+SHORTER ROUND TRIP TIMES TO PEERS ARE MORE LIKELY TO HOLD ELECTIONS
+FIRST (NOT IMPLEMENTED YET). ONLY THE RAFT LEADER MAY PROPOSE COMMANDS;
+FOLLOWERS WILL SIMPLY RELAY COMMANDS TO THE LAST KNOWN LEADER.
 
-To prevent two nodes from acquiring the lease, the requestor includes a copy
-of the lease that it believes to be valid at the time it requests the lease.
-If that lease is still valid when the new lease is applied, it is granted,
-or another lease is granted in the interim and the requested lease is
-ignored. A lease can move from node A to node B only after node A's
-liveness record has expired and its epoch has been incremented.
+OUR RAFT IMPLEMENTATION WAS DEVELOPED TOGETHER WITH COREOS, BUT ADDS AN EXTRA
+LAYER OF OPTIMIZATION TO ACCOUNT FOR THE FACT THAT A SINGLE NODE MAY HAVE
+MILLIONS OF CONSENSUS GROUPS (ONE FOR EACH RANGE). AREAS OF OPTIMIZATION
+ARE CHIEFLY COALESCED HEARTBEATS (SO THAT THE NUMBER OF NODES DICTATES THE
+NUMBER OF HEARTBEATS AS OPPOSED TO THE MUCH LARGER NUMBER OF RANGES) AND
+BATCH PROCESSING OF REQUESTS.
+FUTURE OPTIMIZATIONS MAY INCLUDE TWO-PHASE ELECTIONS AND QUIESCENT RANGES
+(I.E. STOPPING TRAFFIC COMPLETELY FOR INACTIVE RANGES).
 
-Note: range leases for ranges within the node liveness table keyspace and
-all ranges that precede it, including meta1 and meta2, are not managed using
-the above mechanism to prevent circular dependencies.
+# RANGE LEASES
 
-A replica holding a lease at a specific epoch can use the lease as long as
-the node epoch hasn't changed and the expiration time hasn't passed.
-The replica holding the lease may satisfy reads locally, without incurring the
-overhead of going through Raft, and is in charge or involved in handling
-Range-specific maintenance tasks such as splitting, merging and rebalancing
+AS OUTLINED IN THE RAFT SECTION, THE REPLICAS OF A RANGE ARE ORGANIZED AS A
+RAFT GROUP AND EXECUTE COMMANDS FROM THEIR SHARED COMMIT LOG. GOING THROUGH
+RAFT IS AN EXPENSIVE OPERATION THOUGH, AND THERE ARE TASKS WHICH SHOULD ONLY BE
+CARRIED OUT BY A SINGLE REPLICA AT A TIME (AS OPPOSED TO ALL OF THEM).
+IN PARTICULAR, IT IS DESIRABLE TO SERVE AUTHORITATIVE READS FROM A SINGLE
+REPLICA (IDEALLY FROM MORE THAN ONE, BUT THAT IS FAR MORE DIFFICULT).
 
-All Reads and writes are generally addressed to the replica holding
-the lease; if none does, any replica may be addressed, causing it to try
-to obtain the lease synchronously. Requests received by a non-lease holder
-(for the HLC timestamp specified in the request's header) fail with an
-error pointing at the replica's last known lease holder. These requests
-are retried transparently with the updated lease by the gateway node and
-never reach the client.
+FOR THESE REASONS, COCKROACH INTRODUCES THE CONCEPT OF **RANGE LEASES**:
+THIS IS A LEASE HELD FOR A SLICE OF (DATABASE, I.E. HYBRID LOGICAL) TIME.
+A REPLICA ESTABLISHES ITSELF AS OWNING THE LEASE ON A RANGE BY COMMITTING
+A SPECIAL LEASE ACQUISITION LOG ENTRY THROUGH RAFT. THE LOG ENTRY CONTAINS
+THE REPLICA NODE'S EPOCH FROM THE NODE LIVENESS TABLE--A SYSTEM
+TABLE CONTAINING AN EPOCH AND AN EXPIRATION TIME FOR EACH NODE. A NODE IS
+RESPONSIBLE FOR CONTINUOUSLY UPDATING THE EXPIRATION TIME FOR ITS ENTRY
+IN THE LIVENESS TABLE. ONCE THE LEASE HAS BEEN COMMITTED THROUGH RAFT
+THE REPLICA BECOMES THE LEASE HOLDER AS SOON AS IT APPLIES THE LEASE
+ACQUISITION COMMAND, GUARANTEEING THAT WHEN IT USES THE LEASE IT HAS
+ALREADY APPLIED ALL PRIOR WRITES ON THE REPLICA AND CAN SEE THEM LOCALLY.
 
-## Colocation with Raft leadership
+TO PREVENT TWO NODES FROM ACQUIRING THE LEASE, THE REQUESTOR INCLUDES A COPY
+OF THE LEASE THAT IT BELIEVES TO BE VALID AT THE TIME IT REQUESTS THE LEASE.
+IF THAT LEASE IS STILL VALID WHEN THE NEW LEASE IS APPLIED, IT IS GRANTED,
+OR ANOTHER LEASE IS GRANTED IN THE INTERIM AND THE REQUESTED LEASE IS
+IGNORED. A LEASE CAN MOVE FROM NODE A TO NODE B ONLY AFTER NODE A'S
+LIVENESS RECORD HAS EXPIRED AND ITS EPOCH HAS BEEN INCREMENTED.
 
-The range lease is completely separate from Raft leadership, and so without
-further efforts, Raft leadership and the Range lease might not be held by the
-same Replica. Since it's expensive to not have these two roles colocated (the
-lease holder has to forward each proposal to the leader, adding costly RPC
-round-trips), each lease renewal or transfer also attempts to colocate them.
-In practice, that means that the mismatch is rare and self-corrects quickly.
+NOTE: RANGE LEASES FOR RANGES WITHIN THE NODE LIVENESS TABLE KEYSPACE AND
+ALL RANGES THAT PRECEDE IT, INCLUDING META1 AND META2, ARE NOT MANAGED USING
+THE ABOVE MECHANISM TO PREVENT CIRCULAR DEPENDENCIES.
 
-## Command Execution Flow
+A REPLICA HOLDING A LEASE AT A SPECIFIC EPOCH CAN USE THE LEASE AS LONG AS
+THE NODE EPOCH HASN'T CHANGED AND THE EXPIRATION TIME HASN'T PASSED.
+THE REPLICA HOLDING THE LEASE MAY SATISFY READS LOCALLY, WITHOUT INCURRING THE
+OVERHEAD OF GOING THROUGH RAFT, AND IS IN CHARGE OR INVOLVED IN HANDLING
+RANGE-SPECIFIC MAINTENANCE TASKS SUCH AS SPLITTING, MERGING AND REBALANCING
 
-This subsection describes how a lease holder replica processes a
-read/write command in more details. Each command specifies (1) a key
-(or a range of keys) that the command accesses and (2) the ID of a
-range which the key(s) belongs to. When receiving a command, a node
-looks up a range by the specified Range ID and checks if the range is
-still responsible for the supplied keys. If any of the keys do not
-belong to the range, the node returns an error so that the client will
-retry and send a request to a correct range.
+ALL READS AND WRITES ARE GENERALLY ADDRESSED TO THE REPLICA HOLDING
+THE LEASE; IF NONE DOES, ANY REPLICA MAY BE ADDRESSED, CAUSING IT TO TRY
+TO OBTAIN THE LEASE SYNCHRONOUSLY. REQUESTS RECEIVED BY A NON-LEASE HOLDER
+(FOR THE HLC TIMESTAMP SPECIFIED IN THE REQUEST'S HEADER) FAIL WITH AN
+ERROR POINTING AT THE REPLICA'S LAST KNOWN LEASE HOLDER. THESE REQUESTS
+ARE RETRIED TRANSPARENTLY WITH THE UPDATED LEASE BY THE GATEWAY NODE AND
+NEVER REACH THE CLIENT.
 
-When all the keys belong to the range, the node attempts to
-process the command. If the command is an inconsistent read-only
-command, it is processed immediately. If the command is a consistent
-read or a write, the command is executed when both of the following
-conditions hold:
+## COLOCATION WITH RAFT LEADERSHIP
 
-- The range replica has a range lease.
-- There are no other running commands whose keys overlap with
-the submitted command and cause read/write conflict.
+THE RANGE LEASE IS COMPLETELY SEPARATE FROM RAFT LEADERSHIP, AND SO WITHOUT
+FURTHER EFFORTS, RAFT LEADERSHIP AND THE RANGE LEASE MIGHT NOT BE HELD BY THE
+SAME REPLICA. SINCE IT'S EXPENSIVE TO NOT HAVE THESE TWO ROLES COLOCATED (THE
+LEASE HOLDER HAS TO FORWARD EACH PROPOSAL TO THE LEADER, ADDING COSTLY RPC
+ROUND-TRIPS), EACH LEASE RENEWAL OR TRANSFER ALSO ATTEMPTS TO COLOCATE THEM.
+IN PRACTICE, THAT MEANS THAT THE MISMATCH IS RARE AND SELF-CORRECTS QUICKLY.
 
-When the first condition is not met, the replica attempts to acquire
-a lease or returns an error so that the client will redirect the
-command to the current lease holder. The second condition guarantees that
-consistent read/write commands for a given key are sequentially
-executed.
+## COMMAND EXECUTION FLOW
 
-When the above two conditions are met, the lease holder replica processes the
-command. Consistent reads are processed on the lease holder immediately.
-Write commands are committed into the Raft log so that every replica
-will execute the same commands. All commands produce deterministic
-results so that the range replicas keep consistent states among them.
+THIS SUBSECTION DESCRIBES HOW A LEASE HOLDER REPLICA PROCESSES A
+READ/WRITE COMMAND IN MORE DETAILS. EACH COMMAND SPECIFIES (1) A KEY
+(OR A RANGE OF KEYS) THAT THE COMMAND ACCESSES AND (2) THE ID OF A
+RANGE WHICH THE KEY(S) BELONGS TO. WHEN RECEIVING A COMMAND, A NODE
+LOOKS UP A RANGE BY THE SPECIFIED RANGE ID AND CHECKS IF THE RANGE IS
+STILL RESPONSIBLE FOR THE SUPPLIED KEYS. IF ANY OF THE KEYS DO NOT
+BELONG TO THE RANGE, THE NODE RETURNS AN ERROR SO THAT THE CLIENT WILL
+RETRY AND SEND A REQUEST TO A CORRECT RANGE.
 
-When a write command completes, all the replica updates their response
-cache to ensure idempotency. When a read command completes, the lease holder
-replica updates its timestamp cache to keep track of the latest read
-for a given key.
+WHEN ALL THE KEYS BELONG TO THE RANGE, THE NODE ATTEMPTS TO
+PROCESS THE COMMAND. IF THE COMMAND IS AN INCONSISTENT READ-ONLY
+COMMAND, IT IS PROCESSED IMMEDIATELY. IF THE COMMAND IS A CONSISTENT
+READ OR A WRITE, THE COMMAND IS EXECUTED WHEN BOTH OF THE FOLLOWING
+CONDITIONS HOLD:
 
-There is a chance that a range lease gets expired while a command is
-executed. Before executing a command, each replica checks if a replica
-proposing the command has a still lease. When the lease has been
-expired, the command will be rejected by the replica.
+- THE RANGE REPLICA HAS A RANGE LEASE.
+- THERE ARE NO OTHER RUNNING COMMANDS WHOSE KEYS OVERLAP WITH
+THE SUBMITTED COMMAND AND CAUSE READ/WRITE CONFLICT.
+
+WHEN THE FIRST CONDITION IS NOT MET, THE REPLICA ATTEMPTS TO ACQUIRE
+A LEASE OR RETURNS AN ERROR SO THAT THE CLIENT WILL REDIRECT THE
+COMMAND TO THE CURRENT LEASE HOLDER. THE SECOND CONDITION GUARANTEES THAT
+CONSISTENT READ/WRITE COMMANDS FOR A GIVEN KEY ARE SEQUENTIALLY
+EXECUTED.
+
+WHEN THE ABOVE TWO CONDITIONS ARE MET, THE LEASE HOLDER REPLICA PROCESSES THE
+COMMAND. CONSISTENT READS ARE PROCESSED ON THE LEASE HOLDER IMMEDIATELY.
+WRITE COMMANDS ARE COMMITTED INTO THE RAFT LOG SO THAT EVERY REPLICA
+WILL EXECUTE THE SAME COMMANDS. ALL COMMANDS PRODUCE DETERMINISTIC
+RESULTS SO THAT THE RANGE REPLICAS KEEP CONSISTENT STATES AMONG THEM.
+
+WHEN A WRITE COMMAND COMPLETES, ALL THE REPLICA UPDATES THEIR RESPONSE
+CACHE TO ENSURE IDEMPOTENCY. WHEN A READ COMMAND COMPLETES, THE LEASE HOLDER
+REPLICA UPDATES ITS TIMESTAMP CACHE TO KEEP TRACK OF THE LATEST READ
+FOR A GIVEN KEY.
+
+THERE IS A CHANCE THAT A RANGE LEASE GETS EXPIRED WHILE A COMMAND IS
+EXECUTED. BEFORE EXECUTING A COMMAND, EACH REPLICA CHECKS IF A REPLICA
+PROPOSING THE COMMAND HAS A STILL LEASE. WHEN THE LEASE HAS BEEN
+EXPIRED, THE COMMAND WILL BE REJECTED BY THE REPLICA.
 
 
-# Splitting / Merging Ranges
+# SPLITTING / MERGING RANGES
 
-Nodes split or merge ranges based on whether they exceed maximum or
-minimum thresholds for capacity or load. Ranges exceeding maximums for
-either capacity or load are split; ranges below minimums for *both*
-capacity and load are merged.
+NODES SPLIT OR MERGE RANGES BASED ON WHETHER THEY EXCEED MAXIMUM OR
+MINIMUM THRESHOLDS FOR CAPACITY OR LOAD. RANGES EXCEEDING MAXIMUMS FOR
+EITHER CAPACITY OR LOAD ARE SPLIT; RANGES BELOW MINIMUMS FOR *BOTH*
+CAPACITY AND LOAD ARE MERGED.
 
-Ranges maintain the same accounting statistics as accounting key
-prefixes. These boil down to a time series of data points with minute
-granularity. Everything from number of bytes to read/write queue sizes.
-Arbitrary distillations of the accounting stats can be determined as the
-basis for splitting / merging. Two sensible metrics for use with
-split/merge are range size in bytes and IOps. A good metric for
-rebalancing a replica from one node to another would be total read/write
-queue wait times. These metrics are gossipped, with each range / node
-passing along relevant metrics if they’re in the bottom or top of the
-range it’s aware of.
+RANGES MAINTAIN THE SAME ACCOUNTING STATISTICS AS ACCOUNTING KEY
+PREFIXES. THESE BOIL DOWN TO A TIME SERIES OF DATA POINTS WITH MINUTE
+GRANULARITY. EVERYTHING FROM NUMBER OF BYTES TO READ/WRITE QUEUE SIZES.
+ARBITRARY DISTILLATIONS OF THE ACCOUNTING STATS CAN BE DETERMINED AS THE
+BASIS FOR SPLITTING / MERGING. TWO SENSIBLE METRICS FOR USE WITH
+SPLIT/MERGE ARE RANGE SIZE IN BYTES AND IOPS. A GOOD METRIC FOR
+REBALANCING A REPLICA FROM ONE NODE TO ANOTHER WOULD BE TOTAL READ/WRITE
+QUEUE WAIT TIMES. THESE METRICS ARE GOSSIPPED, WITH EACH RANGE / NODE
+PASSING ALONG RELEVANT METRICS IF THEY’RE IN THE BOTTOM OR TOP OF THE
+RANGE IT’S AWARE OF.
 
-A range finding itself exceeding either capacity or load threshold
-splits. To this end, the range lease holder computes an appropriate split key
-candidate and issues the split through Raft. In contrast to splitting,
-merging requires a range to be below the minimum threshold for both
-capacity *and* load. A range being merged chooses the smaller of the
-ranges immediately preceding and succeeding it.
+A RANGE FINDING ITSELF EXCEEDING EITHER CAPACITY OR LOAD THRESHOLD
+SPLITS. TO THIS END, THE RANGE LEASE HOLDER COMPUTES AN APPROPRIATE SPLIT KEY
+CANDIDATE AND ISSUES THE SPLIT THROUGH RAFT. IN CONTRAST TO SPLITTING,
+MERGING REQUIRES A RANGE TO BE BELOW THE MINIMUM THRESHOLD FOR BOTH
+CAPACITY *AND* LOAD. A RANGE BEING MERGED CHOOSES THE SMALLER OF THE
+RANGES IMMEDIATELY PRECEDING AND SUCCEEDING IT.
 
-Splitting, merging, rebalancing and recovering all follow the same basic
-algorithm for moving data between roach nodes. New target replicas are
-created and added to the replica set of source range. Then each new
-replica is brought up to date by either replaying the log in full or
-copying a snapshot of the source replica data and then replaying the log
-from the timestamp of the snapshot to catch up fully. Once the new
-replicas are fully up to date, the range metadata is updated and old,
-source replica(s) deleted if applicable.
+SPLITTING, MERGING, REBALANCING AND RECOVERING ALL FOLLOW THE SAME BASIC
+ALGORITHM FOR MOVING DATA BETWEEN ROACH NODES. NEW TARGET REPLICAS ARE
+CREATED AND ADDED TO THE REPLICA SET OF SOURCE RANGE. THEN EACH NEW
+REPLICA IS BROUGHT UP TO DATE BY EITHER REPLAYING THE LOG IN FULL OR
+COPYING A SNAPSHOT OF THE SOURCE REPLICA DATA AND THEN REPLAYING THE LOG
+FROM THE TIMESTAMP OF THE SNAPSHOT TO CATCH UP FULLY. ONCE THE NEW
+REPLICAS ARE FULLY UP TO DATE, THE RANGE METADATA IS UPDATED AND OLD,
+SOURCE REPLICA(S) DELETED IF APPLICABLE.
 
-**Coordinator** (lease holder replica)
+**COORDINATOR** (LEASE HOLDER REPLICA)
 
 ```
-if splitting
-  SplitRange(split_key): splits happen locally on range replicas and
-  only after being completed locally, are moved to new target replicas.
-else if merging
-  Choose new replicas on same servers as target range replicas;
-  add to replica set.
-else if rebalancing || recovering
-  Choose new replica(s) on least loaded servers; add to replica set.
+IF SPLITTING
+  SPLITRANGE(SPLIT_KEY): SPLITS HAPPEN LOCALLY ON RANGE REPLICAS AND
+  ONLY AFTER BEING COMPLETED LOCALLY, ARE MOVED TO NEW TARGET REPLICAS.
+ELSE IF MERGING
+  CHOOSE NEW REPLICAS ON SAME SERVERS AS TARGET RANGE REPLICAS;
+  ADD TO REPLICA SET.
+ELSE IF REBALANCING || RECOVERING
+  CHOOSE NEW REPLICA(S) ON LEAST LOADED SERVERS; ADD TO REPLICA SET.
 ```
 
-**New Replica**
+**NEW REPLICA**
 
-*Bring replica up to date:*
+*BRING REPLICA UP TO DATE:*
 
 ```
-if all info can be read from replicated log
-  copy replicated log
-else
-  snapshot source replica
-  send successive ReadRange requests to source replica
-  referencing snapshot
+IF ALL INFO CAN BE READ FROM REPLICATED LOG
+  COPY REPLICATED LOG
+ELSE
+  SNAPSHOT SOURCE REPLICA
+  SEND SUCCESSIVE READRANGE REQUESTS TO SOURCE REPLICA
+  REFERENCING SNAPSHOT
 
-if merging
-  combine ranges on all replicas
-else if rebalancing || recovering
-  remove old range replica(s)
+IF MERGING
+  COMBINE RANGES ON ALL REPLICAS
+ELSE IF REBALANCING || RECOVERING
+  REMOVE OLD RANGE REPLICA(S)
 ```
 
-Nodes split ranges when the total data in a range exceeds a
-configurable maximum threshold. Similarly, ranges are merged when the
-total data falls below a configurable minimum threshold.
+NODES SPLIT RANGES WHEN THE TOTAL DATA IN A RANGE EXCEEDS A
+CONFIGURABLE MAXIMUM THRESHOLD. SIMILARLY, RANGES ARE MERGED WHEN THE
+TOTAL DATA FALLS BELOW A CONFIGURABLE MINIMUM THRESHOLD.
 
-**TBD: flesh this out**: Especially for merges (but also rebalancing) we have a
-range disappearing from the local node; that range needs to disappear
-gracefully, with a smooth handoff of operation to the new owner of its data.
+**TBD: FLESH THIS OUT**: ESPECIALLY FOR MERGES (BUT ALSO REBALANCING) WE HAVE A
+RANGE DISAPPEARING FROM THE LOCAL NODE; THAT RANGE NEEDS TO DISAPPEAR
+GRACEFULLY, WITH A SMOOTH HANDOFF OF OPERATION TO THE NEW OWNER OF ITS DATA.
 
-Ranges are rebalanced if a node determines its load or capacity is one
-of the worst in the cluster based on gossipped load stats. A node with
-spare capacity is chosen in the same datacenter and a special-case split
-is done which simply duplicates the data 1:1 and resets the range
-configuration metadata.
+RANGES ARE REBALANCED IF A NODE DETERMINES ITS LOAD OR CAPACITY IS ONE
+OF THE WORST IN THE CLUSTER BASED ON GOSSIPPED LOAD STATS. A NODE WITH
+SPARE CAPACITY IS CHOSEN IN THE SAME DATACENTER AND A SPECIAL-CASE SPLIT
+IS DONE WHICH SIMPLY DUPLICATES THE DATA 1:1 AND RESETS THE RANGE
+CONFIGURATION METADATA.
 
-# Node Allocation (via Gossip)
+# NODE ALLOCATION (VIA GOSSIP)
 
-New nodes must be allocated when a range is split. Instead of requiring
-every node to know about the status of all or even a large number
-of peer nodes --or-- alternatively requiring a specialized curator or
-master with sufficiently global knowledge, we use a gossip protocol to
-efficiently communicate only interesting information between all of the
-nodes in the cluster. What’s interesting information? One example would
-be whether a particular node has a lot of spare capacity. Each node,
-when gossiping, compares each topic of gossip to its own state. If its
-own state is somehow “more interesting” than the least interesting item
-in the topic it’s seen recently, it includes its own state as part of
-the next gossip session with a peer node. In this way, a node with
-capacity sufficiently in excess of the mean quickly becomes discovered
-by the entire cluster. To avoid piling onto outliers, nodes from the
-high capacity set are selected at random for allocation.
+NEW NODES MUST BE ALLOCATED WHEN A RANGE IS SPLIT. INSTEAD OF REQUIRING
+EVERY NODE TO KNOW ABOUT THE STATUS OF ALL OR EVEN A LARGE NUMBER
+OF PEER NODES --OR-- ALTERNATIVELY REQUIRING A SPECIALIZED CURATOR OR
+MASTER WITH SUFFICIENTLY GLOBAL KNOWLEDGE, WE USE A GOSSIP PROTOCOL TO
+EFFICIENTLY COMMUNICATE ONLY INTERESTING INFORMATION BETWEEN ALL OF THE
+NODES IN THE CLUSTER. WHAT’S INTERESTING INFORMATION? ONE EXAMPLE WOULD
+BE WHETHER A PARTICULAR NODE HAS A LOT OF SPARE CAPACITY. EACH NODE,
+WHEN GOSSIPING, COMPARES EACH TOPIC OF GOSSIP TO ITS OWN STATE. IF ITS
+OWN STATE IS SOMEHOW “MORE INTERESTING” THAN THE LEAST INTERESTING ITEM
+IN THE TOPIC IT’S SEEN RECENTLY, IT INCLUDES ITS OWN STATE AS PART OF
+THE NEXT GOSSIP SESSION WITH A PEER NODE. IN THIS WAY, A NODE WITH
+CAPACITY SUFFICIENTLY IN EXCESS OF THE MEAN QUICKLY BECOMES DISCOVERED
+BY THE ENTIRE CLUSTER. TO AVOID PILING ONTO OUTLIERS, NODES FROM THE
+HIGH CAPACITY SET ARE SELECTED AT RANDOM FOR ALLOCATION.
 
-The gossip protocol itself contains two primary components:
+THE GOSSIP PROTOCOL ITSELF CONTAINS TWO PRIMARY COMPONENTS:
 
-- **Peer Selection**: each node maintains up to N peers with which it
-  regularly communicates. It selects peers with an eye towards
-  maximizing fanout. A peer node which itself communicates with an
-  array of otherwise unknown nodes will be selected over one which
-  communicates with a set containing significant overlap. Each time
-  gossip is initiated, each nodes’ set of peers is exchanged. Each
-  node is then free to incorporate the other’s peers as it sees fit.
-  To avoid any node suffering from excess incoming requests, a node
-  may refuse to answer a gossip exchange. Each node is biased
-  towards answering requests from nodes without significant overlap
-  and refusing requests otherwise.
+- **PEER SELECTION**: EACH NODE MAINTAINS UP TO N PEERS WITH WHICH IT
+  REGULARLY COMMUNICATES. IT SELECTS PEERS WITH AN EYE TOWARDS
+  MAXIMIZING FANOUT. A PEER NODE WHICH ITSELF COMMUNICATES WITH AN
+  ARRAY OF OTHERWISE UNKNOWN NODES WILL BE SELECTED OVER ONE WHICH
+  COMMUNICATES WITH A SET CONTAINING SIGNIFICANT OVERLAP. EACH TIME
+  GOSSIP IS INITIATED, EACH NODES’ SET OF PEERS IS EXCHANGED. EACH
+  NODE IS THEN FREE TO INCORPORATE THE OTHER’S PEERS AS IT SEES FIT.
+  TO AVOID ANY NODE SUFFERING FROM EXCESS INCOMING REQUESTS, A NODE
+  MAY REFUSE TO ANSWER A GOSSIP EXCHANGE. EACH NODE IS BIASED
+  TOWARDS ANSWERING REQUESTS FROM NODES WITHOUT SIGNIFICANT OVERLAP
+  AND REFUSING REQUESTS OTHERWISE.
 
-  Peers are efficiently selected using a heuristic as described in
-  [Agarwal & Trachtenberg (2006)](https://drive.google.com/file/d/0B9GCVTp_FHJISmFRTThkOEZSM1U/edit?usp=sharing).
+  PEERS ARE EFFICIENTLY SELECTED USING A HEURISTIC AS DESCRIBED IN
+  [AGARWAL & TRACHTENBERG (2006)](HTTPS://DRIVE.GOOGLE.COM/FILE/D/0B9GCVTP_FHJISMFRTTHKOEZSM1U/EDIT?USP=SHARING).
 
-  **TBD**: how to avoid partitions? Need to work out a simulation of
-  the protocol to tune the behavior and see empirically how well it
-  works.
+  **TBD**: HOW TO AVOID PARTITIONS? NEED TO WORK OUT A SIMULATION OF
+  THE PROTOCOL TO TUNE THE BEHAVIOR AND SEE EMPIRICALLY HOW WELL IT
+  WORKS.
 
-- **Gossip Selection**: what to communicate. Gossip is divided into
-  topics. Load characteristics (capacity per disk, cpu load, and
-  state [e.g. draining, ok, failure]) are used to drive node
-  allocation. Range statistics (range read/write load, missing
-  replicas, unavailable ranges) and network topology (inter-rack
-  bandwidth/latency, inter-datacenter bandwidth/latency, subnet
-  outages) are used for determining when to split ranges, when to
-  recover replicas vs. wait for network connectivity, and for
-  debugging / sysops. In all cases, a set of minimums and a set of
-  maximums is propagated; each node applies its own view of the
-  world to augment the values. Each minimum and maximum value is
-  tagged with the reporting node and other accompanying contextual
-  information. Each topic of gossip has its own protobuf to hold the
-  structured data. The number of items of gossip in each topic is
-  limited by a configurable bound.
+- **GOSSIP SELECTION**: WHAT TO COMMUNICATE. GOSSIP IS DIVIDED INTO
+  TOPICS. LOAD CHARACTERISTICS (CAPACITY PER DISK, CPU LOAD, AND
+  STATE [E.G. DRAINING, OK, FAILURE]) ARE USED TO DRIVE NODE
+  ALLOCATION. RANGE STATISTICS (RANGE READ/WRITE LOAD, MISSING
+  REPLICAS, UNAVAILABLE RANGES) AND NETWORK TOPOLOGY (INTER-RACK
+  BANDWIDTH/LATENCY, INTER-DATACENTER BANDWIDTH/LATENCY, SUBNET
+  OUTAGES) ARE USED FOR DETERMINING WHEN TO SPLIT RANGES, WHEN TO
+  RECOVER REPLICAS VS. WAIT FOR NETWORK CONNECTIVITY, AND FOR
+  DEBUGGING / SYSOPS. IN ALL CASES, A SET OF MINIMUMS AND A SET OF
+  MAXIMUMS IS PROPAGATED; EACH NODE APPLIES ITS OWN VIEW OF THE
+  WORLD TO AUGMENT THE VALUES. EACH MINIMUM AND MAXIMUM VALUE IS
+  TAGGED WITH THE REPORTING NODE AND OTHER ACCOMPANYING CONTEXTUAL
+  INFORMATION. EACH TOPIC OF GOSSIP HAS ITS OWN PROTOBUF TO HOLD THE
+  STRUCTURED DATA. THE NUMBER OF ITEMS OF GOSSIP IN EACH TOPIC IS
+  LIMITED BY A CONFIGURABLE BOUND.
 
-  For efficiency, nodes assign each new item of gossip a sequence
-  number and keep track of the highest sequence number each peer
-  node has seen. Each round of gossip communicates only the delta
-  containing new items.
+  FOR EFFICIENCY, NODES ASSIGN EACH NEW ITEM OF GOSSIP A SEQUENCE
+  NUMBER AND KEEP TRACK OF THE HIGHEST SEQUENCE NUMBER EACH PEER
+  NODE HAS SEEN. EACH ROUND OF GOSSIP COMMUNICATES ONLY THE DELTA
+  CONTAINING NEW ITEMS.
 
-# Node and Cluster Metrics
+# NODE AND CLUSTER METRICS
 
-Every component of the system is responsible for exporting interesting
-metrics about itself. These could be histograms, throughput counters, or
-gauges.
+EVERY COMPONENT OF THE SYSTEM IS RESPONSIBLE FOR EXPORTING INTERESTING
+METRICS ABOUT ITSELF. THESE COULD BE HISTOGRAMS, THROUGHPUT COUNTERS, OR
+GAUGES.
 
-These metrics are exported for external monitoring systems (such as Prometheus)
-via a HTTP endpoint, but CockroachDB also implements an internal timeseries
-database which is stored in the replicated key-value map.
+THESE METRICS ARE EXPORTED FOR EXTERNAL MONITORING SYSTEMS (SUCH AS PROMETHEUS)
+VIA A HTTP ENDPOINT, BUT COCKROACHDB ALSO IMPLEMENTS AN INTERNAL TIMESERIES
+DATABASE WHICH IS STORED IN THE REPLICATED KEY-VALUE MAP.
 
-Time series are stored at Store granularity and allow the admin dashboard
-to efficiently gain visibility into a universe of information at the Cluster,
-Node or Store level. A [periodic background process](RFCS/20160901_time_series_culling.md)
-culls older timeseries data, downsampling and eventually discarding it.
+TIME SERIES ARE STORED AT STORE GRANULARITY AND ALLOW THE ADMIN DASHBOARD
+TO EFFICIENTLY GAIN VISIBILITY INTO A UNIVERSE OF INFORMATION AT THE CLUSTER,
+NODE OR STORE LEVEL. A [PERIODIC BACKGROUND PROCESS](RFCS/20160901_TIME_SERIES_CULLING.MD)
+CULLS OLDER TIMESERIES DATA, DOWNSAMPLING AND EVENTUALLY DISCARDING IT.
 
-# Zones
+# ZONES
 
-Zones provide a method for configuring the replication of portions of the
-keyspace. Zone values specify a protobuf containing
-the datacenters from which replicas for ranges which fall under
-the zone must be chosen.
+ZONES PROVIDE A METHOD FOR CONFIGURING THE REPLICATION OF PORTIONS OF THE
+KEYSPACE. ZONE VALUES SPECIFY A PROTOBUF CONTAINING
+THE DATACENTERS FROM WHICH REPLICAS FOR RANGES WHICH FALL UNDER
+THE ZONE MUST BE CHOSEN.
 
-Please see
-[pkg/config/zone.proto](https://github.com/cockroachdb/cockroach/blob/master/pkg/config/zone.proto)
-for up-to-date data structures used, the best entry point being
-`message ZoneConfig`.
+PLEASE SEE
+[PKG/CONFIG/ZONE.PROTO](HTTPS://GITHUB.COM/COCKROACHDB/COCKROACH/BLOB/MASTER/PKG/CONFIG/ZONE.PROTO)
+FOR UP-TO-DATE DATA STRUCTURES USED, THE BEST ENTRY POINT BEING
+`MESSAGE ZONECONFIG`.
 
-If zones are modified in situ, each node verifies the
-existing zones for its ranges against the zone configuration. If
-it discovers differences, it reconfigures ranges in the same way
-that it rebalances away from busy nodes, via special-case 1:1
-split to a duplicate range comprising the new configuration.
+IF ZONES ARE MODIFIED IN SITU, EACH NODE VERIFIES THE
+EXISTING ZONES FOR ITS RANGES AGAINST THE ZONE CONFIGURATION. IF
+IT DISCOVERS DIFFERENCES, IT RECONFIGURES RANGES IN THE SAME WAY
+THAT IT REBALANCES AWAY FROM BUSY NODES, VIA SPECIAL-CASE 1:1
+SPLIT TO A DUPLICATE RANGE COMPRISING THE NEW CONFIGURATION.
 
 # SQL
 
-Each node in a cluster can accept SQL client connections. CockroachDB
-supports the PostgreSQL wire protocol, to enable reuse of native
-PostgreSQL client drivers. Connections using SSL and authenticated
-using client certificates are supported and even encouraged over
-unencrypted (insecure) and password-based connections.
+EACH NODE IN A CLUSTER CAN ACCEPT SQL CLIENT CONNECTIONS. COCKROACHDB
+SUPPORTS THE POSTGRESQL WIRE PROTOCOL, TO ENABLE REUSE OF NATIVE
+POSTGRESQL CLIENT DRIVERS. CONNECTIONS USING SSL AND AUTHENTICATED
+USING CLIENT CERTIFICATES ARE SUPPORTED AND EVEN ENCOURAGED OVER
+UNENCRYPTED (INSECURE) AND PASSWORD-BASED CONNECTIONS.
 
-Each connection is associated with a SQL session which holds the
-server-side state of the connection. Over the lifespan of a session
-the client can send SQL to open/close transactions, issue statements
-or queries or configure session parameters, much like with any other
-SQL database.
+EACH CONNECTION IS ASSOCIATED WITH A SQL SESSION WHICH HOLDS THE
+SERVER-SIDE STATE OF THE CONNECTION. OVER THE LIFESPAN OF A SESSION
+THE CLIENT CAN SEND SQL TO OPEN/CLOSE TRANSACTIONS, ISSUE STATEMENTS
+OR QUERIES OR CONFIGURE SESSION PARAMETERS, MUCH LIKE WITH ANY OTHER
+SQL DATABASE.
 
-## Language support
+## LANGUAGE SUPPORT
 
-CockroachDB also attempts to emulate the flavor of SQL supported by
-PostgreSQL, although it also diverges in significant ways:
+COCKROACHDB ALSO ATTEMPTS TO EMULATE THE FLAVOR OF SQL SUPPORTED BY
+POSTGRESQL, ALTHOUGH IT ALSO DIVERGES IN SIGNIFICANT WAYS:
 
-- CockroachDB exclusively implements MVCC-based consistency for
-  transactions, and thus only supports SQL's isolation levels SNAPSHOT
-  and SERIALIZABLE.  The other traditional SQL isolation levels are
-  internally mapped to either SNAPSHOT or SERIALIZABLE.
+- COCKROACHDB EXCLUSIVELY IMPLEMENTS MVCC-BASED CONSISTENCY FOR
+  TRANSACTIONS, AND THUS ONLY SUPPORTS SQL'S ISOLATION LEVELS SNAPSHOT
+  AND SERIALIZABLE.  THE OTHER TRADITIONAL SQL ISOLATION LEVELS ARE
+  INTERNALLY MAPPED TO EITHER SNAPSHOT OR SERIALIZABLE.
 
-- CockroachDB implements its own [SQL type system](RFCS/20160203_typing.md)
-  which only supports a limited form of implicit coercions between
-  types compared to PostgreSQL. The rationale is to keep the
-  implementation simple and efficient, capitalizing on the observation
-  that 1) most SQL code in clients is automatically generated with
-  coherent typing already and 2) existing SQL code for other databases
-  will need to be massaged for CockroachDB anyway.
+- COCKROACHDB IMPLEMENTS ITS OWN [SQL TYPE SYSTEM](RFCS/20160203_TYPING.MD)
+  WHICH ONLY SUPPORTS A LIMITED FORM OF IMPLICIT COERCIONS BETWEEN
+  TYPES COMPARED TO POSTGRESQL. THE RATIONALE IS TO KEEP THE
+  IMPLEMENTATION SIMPLE AND EFFICIENT, CAPITALIZING ON THE OBSERVATION
+  THAT 1) MOST SQL CODE IN CLIENTS IS AUTOMATICALLY GENERATED WITH
+  COHERENT TYPING ALREADY AND 2) EXISTING SQL CODE FOR OTHER DATABASES
+  WILL NEED TO BE MASSAGED FOR COCKROACHDB ANYWAY.
 
-## SQL architecture
+## SQL ARCHITECTURE
 
-Client connections over the network are handled in each node by a
-pgwire server process (goroutine). This handles the stream of incoming
-commands and sends back responses including query/statement results.
-The pgwire server also handles pgwire-level prepared statements,
-binding prepared statements to arguments and looking up prepared
-statements for execution.
+CLIENT CONNECTIONS OVER THE NETWORK ARE HANDLED IN EACH NODE BY A
+PGWIRE SERVER PROCESS (GOROUTINE). THIS HANDLES THE STREAM OF INCOMING
+COMMANDS AND SENDS BACK RESPONSES INCLUDING QUERY/STATEMENT RESULTS.
+THE PGWIRE SERVER ALSO HANDLES PGWIRE-LEVEL PREPARED STATEMENTS,
+BINDING PREPARED STATEMENTS TO ARGUMENTS AND LOOKING UP PREPARED
+STATEMENTS FOR EXECUTION.
 
-Meanwhile the state of a SQL connection is maintained by a Session
-object and a monolithic `planner` object (one per connection) which
-coordinates execution between the session, the current SQL transaction
-state and the underlying KV store.
+MEANWHILE THE STATE OF A SQL CONNECTION IS MAINTAINED BY A SESSION
+OBJECT AND A MONOLITHIC `PLANNER` OBJECT (ONE PER CONNECTION) WHICH
+COORDINATES EXECUTION BETWEEN THE SESSION, THE CURRENT SQL TRANSACTION
+STATE AND THE UNDERLYING KV STORE.
 
-Upon receiving a query/statement (either directly or via an execute
-command for a previously prepared statement) the pgwire server forwards
-the SQL text to the `planner` associated with the connection. The SQL
-code is then transformed into a SQL query plan.
-The query plan is implemented as a tree of objects which describe the
-high-level data operations needed to resolve the query, for example
-"join", "index join", "scan", "group", etc.
+UPON RECEIVING A QUERY/STATEMENT (EITHER DIRECTLY OR VIA AN EXECUTE
+COMMAND FOR A PREVIOUSLY PREPARED STATEMENT) THE PGWIRE SERVER FORWARDS
+THE SQL TEXT TO THE `PLANNER` ASSOCIATED WITH THE CONNECTION. THE SQL
+CODE IS THEN TRANSFORMED INTO A SQL QUERY PLAN.
+THE QUERY PLAN IS IMPLEMENTED AS A TREE OF OBJECTS WHICH DESCRIBE THE
+HIGH-LEVEL DATA OPERATIONS NEEDED TO RESOLVE THE QUERY, FOR EXAMPLE
+"JOIN", "INDEX JOIN", "SCAN", "GROUP", ETC.
 
-The query plan objects currently also embed the run-time state needed
-for the execution of the query plan. Once the SQL query plan is ready,
-methods on these objects then carry the execution out in the fashion
-of "generators" in other programming languages: each node *starts* its
-children nodes and from that point forward each child node serves as a
-*generator* for a stream of result rows, which the parent node can
-consume and transform incrementally and present to its own parent node
-also as a generator.
+THE QUERY PLAN OBJECTS CURRENTLY ALSO EMBED THE RUN-TIME STATE NEEDED
+FOR THE EXECUTION OF THE QUERY PLAN. ONCE THE SQL QUERY PLAN IS READY,
+METHODS ON THESE OBJECTS THEN CARRY THE EXECUTION OUT IN THE FASHION
+OF "GENERATORS" IN OTHER PROGRAMMING LANGUAGES: EACH NODE *STARTS* ITS
+CHILDREN NODES AND FROM THAT POINT FORWARD EACH CHILD NODE SERVES AS A
+*GENERATOR* FOR A STREAM OF RESULT ROWS, WHICH THE PARENT NODE CAN
+CONSUME AND TRANSFORM INCREMENTALLY AND PRESENT TO ITS OWN PARENT NODE
+ALSO AS A GENERATOR.
 
-The top-level planner consumes the data produced by the top node of
-the query plan and returns it to the client via pgwire.
+THE TOP-LEVEL PLANNER CONSUMES THE DATA PRODUCED BY THE TOP NODE OF
+THE QUERY PLAN AND RETURNS IT TO THE CLIENT VIA PGWIRE.
 
-## Data mapping between the SQL model and KV
+## DATA MAPPING BETWEEN THE SQL MODEL AND KV
 
-Every SQL table has a primary key in CockroachDB. (If a table is created
-without one, an implicit primary key is provided automatically.)
-The table identifier, followed by the value of the primary key for
-each row, are encoded as the *prefix* of a key in the underlying KV
-store.
+EVERY SQL TABLE HAS A PRIMARY KEY IN COCKROACHDB. (IF A TABLE IS CREATED
+WITHOUT ONE, AN IMPLICIT PRIMARY KEY IS PROVIDED AUTOMATICALLY.)
+THE TABLE IDENTIFIER, FOLLOWED BY THE VALUE OF THE PRIMARY KEY FOR
+EACH ROW, ARE ENCODED AS THE *PREFIX* OF A KEY IN THE UNDERLYING KV
+STORE.
 
-Each remaining column or *column family* in the table is then encoded
-as a value in the underlying KV store, and the column/family identifier
-is appended as *suffix* to the KV key.
+EACH REMAINING COLUMN OR *COLUMN FAMILY* IN THE TABLE IS THEN ENCODED
+AS A VALUE IN THE UNDERLYING KV STORE, AND THE COLUMN/FAMILY IDENTIFIER
+IS APPENDED AS *SUFFIX* TO THE KV KEY.
 
-For example:
+FOR EXAMPLE:
 
-- after table `customers` is created in a database `mydb` with a
-primary key column `name` and normal columns `address` and `URL`, the KV pairs
-to store the schema would be:
+- AFTER TABLE `CUSTOMERS` IS CREATED IN A DATABASE `MYDB` WITH A
+PRIMARY KEY COLUMN `NAME` AND NORMAL COLUMNS `ADDRESS` AND `URL`, THE KV PAIRS
+TO STORE THE SCHEMA WOULD BE:
 
-| Key                          | Values |
+| KEY                          | VALUES |
 | ---------------------------- | ------ |
-| `/system/databases/mydb/id`  | 51     |
-| `/system/tables/customer/id` | 42     |
-| `/system/desc/51/42/address` | 69     |
-| `/system/desc/51/42/url`     | 66     |
+| `/SYSTEM/DATABASES/MYDB/ID`  | 51     |
+| `/SYSTEM/TABLES/CUSTOMER/ID` | 42     |
+| `/SYSTEM/DESC/51/42/ADDRESS` | 69     |
+| `/SYSTEM/DESC/51/42/URL`     | 66     |
 
-(The numeric values on the right are chosen arbitrarily for the
-example; the structure of the schema keys on the left is simplified
-for the example and subject to change.)  Each database/table/column
-name is mapped to a spontaneously generated identifier, so as to
-simplify renames.
+(THE NUMERIC VALUES ON THE RIGHT ARE CHOSEN ARBITRARILY FOR THE
+EXAMPLE; THE STRUCTURE OF THE SCHEMA KEYS ON THE LEFT IS SIMPLIFIED
+FOR THE EXAMPLE AND SUBJECT TO CHANGE.)  EACH DATABASE/TABLE/COLUMN
+NAME IS MAPPED TO A SPONTANEOUSLY GENERATED IDENTIFIER, SO AS TO
+SIMPLIFY RENAMES.
 
-Then for a single row in this table:
+THEN FOR A SINGLE ROW IN THIS TABLE:
 
-| Key               | Values                           |
+| KEY               | VALUES                           |
 | ----------------- | -------------------------------- |
-| `/51/42/Apple/69` | `1 Infinite Loop, Cupertino, CA` |
-| `/51/42/Apple/66` | `http://apple.com/`              |
+| `/51/42/APPLE/69` | `1 INFINITE LOOP, CUPERTINO, CA` |
+| `/51/42/APPLE/66` | `HTTP://APPLE.COM/`              |
 
-Each key has the table prefix `/51/42` followed by the primary key
-prefix `/Apple` followed by the column/family suffix (`/66`,
-`/69`). The KV value is directly encoded from the SQL value.
+EACH KEY HAS THE TABLE PREFIX `/51/42` FOLLOWED BY THE PRIMARY KEY
+PREFIX `/APPLE` FOLLOWED BY THE COLUMN/FAMILY SUFFIX (`/66`,
+`/69`). THE KV VALUE IS DIRECTLY ENCODED FROM THE SQL VALUE.
 
-Efficient storage for the keys is guaranteed by the underlying RocksDB engine
-by means of prefix compression.
+EFFICIENT STORAGE FOR THE KEYS IS GUARANTEED BY THE UNDERLYING ROCKSDB ENGINE
+BY MEANS OF PREFIX COMPRESSION.
 
-Finally, for SQL indexes, the KV key is formed using the SQL value of the
-indexed columns, and the KV value is the KV key prefix of the rest of
-the indexed row.
+FINALLY, FOR SQL INDEXES, THE KV KEY IS FORMED USING THE SQL VALUE OF THE
+INDEXED COLUMNS, AND THE KV VALUE IS THE KV KEY PREFIX OF THE REST OF
+THE INDEXED ROW.
 
-## Distributed SQL
+## DISTRIBUTED SQL
 
-Dist-SQL is a new execution framework being developed as of Q3 2016 with the
-goal of distributing the processing of SQL queries.
-See the [Distributed SQL
-RFC](RFCS/20160421_distributed_sql.md)
-for a detailed design of the subsystem; this section will serve as a summary.
+DIST-SQL IS A NEW EXECUTION FRAMEWORK BEING DEVELOPED AS OF Q3 2016 WITH THE
+GOAL OF DISTRIBUTING THE PROCESSING OF SQL QUERIES.
+SEE THE [DISTRIBUTED SQL
+RFC](RFCS/20160421_DISTRIBUTED_SQL.MD)
+FOR A DETAILED DESIGN OF THE SUBSYSTEM; THIS SECTION WILL SERVE AS A SUMMARY.
 
-Distributing the processing is desirable for multiple reasons:
-- Remote-side filtering: when querying for a set of rows that match a filtering
-  expression, instead of querying all the keys in certain ranges and processing
-  the filters after receiving the data on the gateway node over the network,
-  we'd like the filtering expression to be processed by the lease holder or
-  remote node, saving on network traffic and related processing.
-- For statements like `UPDATE .. WHERE` and `DELETE .. WHERE` we want to
-  perform the query and the updates on the node which has the data (as opposed
-  to receiving results at the gateway over the network, and then performing the
-  update or deletion there, which involves additional round-trips).
-- Parallelize SQL computation: when significant computation is required, we
-  want to distribute it to multiple node, so that it scales with the amount of
-  data involved. This applies to `JOIN`s, aggregation, sorting.
+DISTRIBUTING THE PROCESSING IS DESIRABLE FOR MULTIPLE REASONS:
+- REMOTE-SIDE FILTERING: WHEN QUERYING FOR A SET OF ROWS THAT MATCH A FILTERING
+  EXPRESSION, INSTEAD OF QUERYING ALL THE KEYS IN CERTAIN RANGES AND PROCESSING
+  THE FILTERS AFTER RECEIVING THE DATA ON THE GATEWAY NODE OVER THE NETWORK,
+  WE'D LIKE THE FILTERING EXPRESSION TO BE PROCESSED BY THE LEASE HOLDER OR
+  REMOTE NODE, SAVING ON NETWORK TRAFFIC AND RELATED PROCESSING.
+- FOR STATEMENTS LIKE `UPDATE .. WHERE` AND `DELETE .. WHERE` WE WANT TO
+  PERFORM THE QUERY AND THE UPDATES ON THE NODE WHICH HAS THE DATA (AS OPPOSED
+  TO RECEIVING RESULTS AT THE GATEWAY OVER THE NETWORK, AND THEN PERFORMING THE
+  UPDATE OR DELETION THERE, WHICH INVOLVES ADDITIONAL ROUND-TRIPS).
+- PARALLELIZE SQL COMPUTATION: WHEN SIGNIFICANT COMPUTATION IS REQUIRED, WE
+  WANT TO DISTRIBUTE IT TO MULTIPLE NODE, SO THAT IT SCALES WITH THE AMOUNT OF
+  DATA INVOLVED. THIS APPLIES TO `JOIN`S, AGGREGATION, SORTING.
 
-The approach we took  was originally inspired by
-[Sawzall](https://cloud.google.com/dataflow/model/programming-model) - a
-project by Rob Pike et al. at Google that proposes a "shell" (high-level
-language interpreter) to ease the exploitation of MapReduce. It provides a
-clear separation between "local" processes which process a limited amount of
-data and distributed computations, which are abstracted away behind a
-restricted set of conceptual constructs.
+THE APPROACH WE TOOK  WAS ORIGINALLY INSPIRED BY
+[SAWZALL](HTTPS://CLOUD.GOOGLE.COM/DATAFLOW/MODEL/PROGRAMMING-MODEL) - A
+PROJECT BY ROB PIKE ET AL. AT GOOGLE THAT PROPOSES A "SHELL" (HIGH-LEVEL
+LANGUAGE INTERPRETER) TO EASE THE EXPLOITATION OF MAPREDUCE. IT PROVIDES A
+CLEAR SEPARATION BETWEEN "LOCAL" PROCESSES WHICH PROCESS A LIMITED AMOUNT OF
+DATA AND DISTRIBUTED COMPUTATIONS, WHICH ARE ABSTRACTED AWAY BEHIND A
+RESTRICTED SET OF CONCEPTUAL CONSTRUCTS.
 
-To run SQL statements in a distributed fashion, we introduce a couple of concepts:
-- _logical plan_ - similar on the surface to the `planNode` tree described in
-  the [SQL](#sql) section, it represents the abstract (non-distributed) data flow
-  through computation stages.
-- _physical plan_ - a physical plan is conceptually a mapping of the _logical
-  plan_ nodes to CockroachDB nodes. Logical plan nodes are replicated and
-  specialized depending on the cluster topology. The components of the physical
-  plan are scheduled and run on the cluster.
+TO RUN SQL STATEMENTS IN A DISTRIBUTED FASHION, WE INTRODUCE A COUPLE OF CONCEPTS:
+- _LOGICAL PLAN_ - SIMILAR ON THE SURFACE TO THE `PLANNODE` TREE DESCRIBED IN
+  THE [SQL](#SQL) SECTION, IT REPRESENTS THE ABSTRACT (NON-DISTRIBUTED) DATA FLOW
+  THROUGH COMPUTATION STAGES.
+- _PHYSICAL PLAN_ - A PHYSICAL PLAN IS CONCEPTUALLY A MAPPING OF THE _LOGICAL
+  PLAN_ NODES TO COCKROACHDB NODES. LOGICAL PLAN NODES ARE REPLICATED AND
+  SPECIALIZED DEPENDING ON THE CLUSTER TOPOLOGY. THE COMPONENTS OF THE PHYSICAL
+  PLAN ARE SCHEDULED AND RUN ON THE CLUSTER.
 
-## Logical planning
+## LOGICAL PLANNING
 
-The logical plan is made up of _aggregators_. Each _aggregator_ consumes an
-_input stream_ of rows (or multiple streams for joins) and produces an _output
-stream_ of rows. Both the input and the output streams have a set schema. The
-streams are a logical concept and might not map to a single data stream in the
-actual computation. Aggregators will be potentially distributed when converting
-the *logical plan* to a *physical plan*; to express what distribution and
-parallelization is allowed, an aggregator defines a _grouping_ on the data that
-flows through it, expressing which rows need to be processed on the same node
-(this mechanism constraints rows matching in a subset of columns to be
-processed on the same node). This concept is useful for aggregators that need
-to see some set of rows for producing output - e.g. the SQL aggregation
-functions. An aggregator with no grouping is a special but important case in
-which we are not aggregating multiple pieces of data, but we may be filtering,
-transforming, or reordering individual pieces of data.
+THE LOGICAL PLAN IS MADE UP OF _AGGREGATORS_. EACH _AGGREGATOR_ CONSUMES AN
+_INPUT STREAM_ OF ROWS (OR MULTIPLE STREAMS FOR JOINS) AND PRODUCES AN _OUTPUT
+STREAM_ OF ROWS. BOTH THE INPUT AND THE OUTPUT STREAMS HAVE A SET SCHEMA. THE
+STREAMS ARE A LOGICAL CONCEPT AND MIGHT NOT MAP TO A SINGLE DATA STREAM IN THE
+ACTUAL COMPUTATION. AGGREGATORS WILL BE POTENTIALLY DISTRIBUTED WHEN CONVERTING
+THE *LOGICAL PLAN* TO A *PHYSICAL PLAN*; TO EXPRESS WHAT DISTRIBUTION AND
+PARALLELIZATION IS ALLOWED, AN AGGREGATOR DEFINES A _GROUPING_ ON THE DATA THAT
+FLOWS THROUGH IT, EXPRESSING WHICH ROWS NEED TO BE PROCESSED ON THE SAME NODE
+(THIS MECHANISM CONSTRAINTS ROWS MATCHING IN A SUBSET OF COLUMNS TO BE
+PROCESSED ON THE SAME NODE). THIS CONCEPT IS USEFUL FOR AGGREGATORS THAT NEED
+TO SEE SOME SET OF ROWS FOR PRODUCING OUTPUT - E.G. THE SQL AGGREGATION
+FUNCTIONS. AN AGGREGATOR WITH NO GROUPING IS A SPECIAL BUT IMPORTANT CASE IN
+WHICH WE ARE NOT AGGREGATING MULTIPLE PIECES OF DATA, BUT WE MAY BE FILTERING,
+TRANSFORMING, OR REORDERING INDIVIDUAL PIECES OF DATA.
 
-Special **table reader** aggregators with no inputs are used as data sources; a
-table reader can be configured to output only certain columns, as needed.
-A special **final** aggregator with no outputs is used for the results of the
-query/statement.
+SPECIAL **TABLE READER** AGGREGATORS WITH NO INPUTS ARE USED AS DATA SOURCES; A
+TABLE READER CAN BE CONFIGURED TO OUTPUT ONLY CERTAIN COLUMNS, AS NEEDED.
+A SPECIAL **FINAL** AGGREGATOR WITH NO OUTPUTS IS USED FOR THE RESULTS OF THE
+QUERY/STATEMENT.
 
-To reflect the result ordering that a query has to produce, some aggregators
-(`final`, `limit`) are configured with an **ordering requirement** on the input
-stream (a list of columns with corresponding ascending/descending
-requirements). Some aggregators (like `table readers`) can guarantee a certain
-ordering on their output stream, called an **ordering guarantee**. All
-aggregators have an associated **ordering characterization** function
-`ord(input_order) -> output_order` that maps `input_order` (an ordering
-guarantee on the input stream) into `output_order` (an ordering guarantee for
-the output stream) - meaning that if the rows in the input stream are ordered
-according to `input_order`, then the rows in the output stream will be ordered
-according to `output_order`.
+TO REFLECT THE RESULT ORDERING THAT A QUERY HAS TO PRODUCE, SOME AGGREGATORS
+(`FINAL`, `LIMIT`) ARE CONFIGURED WITH AN **ORDERING REQUIREMENT** ON THE INPUT
+STREAM (A LIST OF COLUMNS WITH CORRESPONDING ASCENDING/DESCENDING
+REQUIREMENTS). SOME AGGREGATORS (LIKE `TABLE READERS`) CAN GUARANTEE A CERTAIN
+ORDERING ON THEIR OUTPUT STREAM, CALLED AN **ORDERING GUARANTEE**. ALL
+AGGREGATORS HAVE AN ASSOCIATED **ORDERING CHARACTERIZATION** FUNCTION
+`ORD(INPUT_ORDER) -> OUTPUT_ORDER` THAT MAPS `INPUT_ORDER` (AN ORDERING
+GUARANTEE ON THE INPUT STREAM) INTO `OUTPUT_ORDER` (AN ORDERING GUARANTEE FOR
+THE OUTPUT STREAM) - MEANING THAT IF THE ROWS IN THE INPUT STREAM ARE ORDERED
+ACCORDING TO `INPUT_ORDER`, THEN THE ROWS IN THE OUTPUT STREAM WILL BE ORDERED
+ACCORDING TO `OUTPUT_ORDER`.
 
-The ordering guarantee of the table readers along with the characterization
-functions can be used to propagate ordering information across the logical plan.
-When there is a mismatch (an aggregator has an ordering requirement that is not
-matched by a guarantee), we insert a **sorting aggregator**.
+THE ORDERING GUARANTEE OF THE TABLE READERS ALONG WITH THE CHARACTERIZATION
+FUNCTIONS CAN BE USED TO PROPAGATE ORDERING INFORMATION ACROSS THE LOGICAL PLAN.
+WHEN THERE IS A MISMATCH (AN AGGREGATOR HAS AN ORDERING REQUIREMENT THAT IS NOT
+MATCHED BY A GUARANTEE), WE INSERT A **SORTING AGGREGATOR**.
 
-### Types of aggregators
+### TYPES OF AGGREGATORS
 
-- `TABLE READER` is a special aggregator, with no input stream. It's configured
-  with spans of a table or index and the schema that it needs to read.
-  Like every other aggregator, it can be configured with a programmable output
-  filter.
-- `JOIN` performs a join on two streams, with equality constraints between
-  certain columns. The aggregator is grouped on the columns that are
-  constrained to be equal.
-- `JOIN READER` performs point-lookups for rows with the keys indicated by the
-  input stream. It can do so by performing (potentially remote) KV reads, or by
-  setting up remote flows.
-- `SET OPERATION` takes several inputs and performs set arithmetic on them
-  (union, difference).
-- `AGGREGATOR` is the one that does "aggregation" in the SQL sense. It groups
-  rows and computes an aggregate for each group. The group is configured using
-  the group key. `AGGREGATOR` can be configured with one or more aggregation
-  functions:
+- `TABLE READER` IS A SPECIAL AGGREGATOR, WITH NO INPUT STREAM. IT'S CONFIGURED
+  WITH SPANS OF A TABLE OR INDEX AND THE SCHEMA THAT IT NEEDS TO READ.
+  LIKE EVERY OTHER AGGREGATOR, IT CAN BE CONFIGURED WITH A PROGRAMMABLE OUTPUT
+  FILTER.
+- `JOIN` PERFORMS A JOIN ON TWO STREAMS, WITH EQUALITY CONSTRAINTS BETWEEN
+  CERTAIN COLUMNS. THE AGGREGATOR IS GROUPED ON THE COLUMNS THAT ARE
+  CONSTRAINED TO BE EQUAL.
+- `JOIN READER` PERFORMS POINT-LOOKUPS FOR ROWS WITH THE KEYS INDICATED BY THE
+  INPUT STREAM. IT CAN DO SO BY PERFORMING (POTENTIALLY REMOTE) KV READS, OR BY
+  SETTING UP REMOTE FLOWS.
+- `SET OPERATION` TAKES SEVERAL INPUTS AND PERFORMS SET ARITHMETIC ON THEM
+  (UNION, DIFFERENCE).
+- `AGGREGATOR` IS THE ONE THAT DOES "AGGREGATION" IN THE SQL SENSE. IT GROUPS
+  ROWS AND COMPUTES AN AGGREGATE FOR EACH GROUP. THE GROUP IS CONFIGURED USING
+  THE GROUP KEY. `AGGREGATOR` CAN BE CONFIGURED WITH ONE OR MORE AGGREGATION
+  FUNCTIONS:
   - `SUM`
   - `COUNT`
   - `COUNT DISTINCT`
   - `DISTINCT`
 
-  An optional output filter has access to the group key and all the
-  aggregated values (i.e. it can use even values that are not ultimately
-  outputted).
-- `SORT` sorts the input according to a configurable set of columns.
-  This is a no-grouping aggregator, hence it can be distributed arbitrarily to
-  the data producers. This means that it doesn't produce a global ordering,
-  instead it just guarantees an intra-stream ordering on each physical output
-  streams). The global ordering, when needed, is achieved by an input
-  synchronizer of a grouped processor (such as `LIMIT` or `FINAL`).
-- `LIMIT` is a single-group aggregator that stops after reading so many input
-  rows.
-- `FINAL` is a single-group aggregator, scheduled on the gateway, that collects
-  the results of the query. This aggregator will be hooked up to the pgwire
-  connection to the client.
+  AN OPTIONAL OUTPUT FILTER HAS ACCESS TO THE GROUP KEY AND ALL THE
+  AGGREGATED VALUES (I.E. IT CAN USE EVEN VALUES THAT ARE NOT ULTIMATELY
+  OUTPUTTED).
+- `SORT` SORTS THE INPUT ACCORDING TO A CONFIGURABLE SET OF COLUMNS.
+  THIS IS A NO-GROUPING AGGREGATOR, HENCE IT CAN BE DISTRIBUTED ARBITRARILY TO
+  THE DATA PRODUCERS. THIS MEANS THAT IT DOESN'T PRODUCE A GLOBAL ORDERING,
+  INSTEAD IT JUST GUARANTEES AN INTRA-STREAM ORDERING ON EACH PHYSICAL OUTPUT
+  STREAMS). THE GLOBAL ORDERING, WHEN NEEDED, IS ACHIEVED BY AN INPUT
+  SYNCHRONIZER OF A GROUPED PROCESSOR (SUCH AS `LIMIT` OR `FINAL`).
+- `LIMIT` IS A SINGLE-GROUP AGGREGATOR THAT STOPS AFTER READING SO MANY INPUT
+  ROWS.
+- `FINAL` IS A SINGLE-GROUP AGGREGATOR, SCHEDULED ON THE GATEWAY, THAT COLLECTS
+  THE RESULTS OF THE QUERY. THIS AGGREGATOR WILL BE HOOKED UP TO THE PGWIRE
+  CONNECTION TO THE CLIENT.
 
-## Physical planning
+## PHYSICAL PLANNING
 
-Logical plans are transformed into physical plans in a *physical planning
-phase*. See the [corresponding
-section](RFCS/20160421_distributed_sql.md#from-logical-to-physical) of the Distributed SQL RFC
-for details.  To summarize, each aggregator is planned as one or more
-*processors*, which we distribute starting from the data layout - `TABLE
-READER`s have multiple instances, split according to the ranges - each instance
-is planned on the lease holder of the relevant range. From that point on,
-subsequent processors are generally either colocated with their inputs, or
-planned as singletons, usually on the final destination node.
+LOGICAL PLANS ARE TRANSFORMED INTO PHYSICAL PLANS IN A *PHYSICAL PLANNING
+PHASE*. SEE THE [CORRESPONDING
+SECTION](RFCS/20160421_DISTRIBUTED_SQL.MD#FROM-LOGICAL-TO-PHYSICAL) OF THE DISTRIBUTED SQL RFC
+FOR DETAILS.  TO SUMMARIZE, EACH AGGREGATOR IS PLANNED AS ONE OR MORE
+*PROCESSORS*, WHICH WE DISTRIBUTE STARTING FROM THE DATA LAYOUT - `TABLE
+READER`S HAVE MULTIPLE INSTANCES, SPLIT ACCORDING TO THE RANGES - EACH INSTANCE
+IS PLANNED ON THE LEASE HOLDER OF THE RELEVANT RANGE. FROM THAT POINT ON,
+SUBSEQUENT PROCESSORS ARE GENERALLY EITHER COLOCATED WITH THEIR INPUTS, OR
+PLANNED AS SINGLETONS, USUALLY ON THE FINAL DESTINATION NODE.
 
-### Processors
+### PROCESSORS
 
-When turning a _logical plan_ into a _physical plan_, its nodes are turned into
-_processors_. Processors are generally made up of three components:
+WHEN TURNING A _LOGICAL PLAN_ INTO A _PHYSICAL PLAN_, ITS NODES ARE TURNED INTO
+_PROCESSORS_. PROCESSORS ARE GENERALLY MADE UP OF THREE COMPONENTS:
 
-![Processor](RFCS/images/distributed_sql_processor.png?raw=true "Processor")
+![PROCESSOR](RFCS/IMAGES/DISTRIBUTED_SQL_PROCESSOR.PNG?RAW=TRUE "PROCESSOR")
 
-1. The *input synchronizer* merges the input streams into a single stream of
-   data. Types:
-   * single-input (pass-through)
-   * unsynchronized: passes rows from all input streams, arbitrarily
-     interleaved.
-   * ordered: the input physical streams have an ordering guarantee (namely the
-     guarantee of the corresponding logical stream); the synchronizer is careful
-     to interleave the streams so that the merged stream has the same guarantee.
+1. THE *INPUT SYNCHRONIZER* MERGES THE INPUT STREAMS INTO A SINGLE STREAM OF
+   DATA. TYPES:
+   * SINGLE-INPUT (PASS-THROUGH)
+   * UNSYNCHRONIZED: PASSES ROWS FROM ALL INPUT STREAMS, ARBITRARILY
+     INTERLEAVED.
+   * ORDERED: THE INPUT PHYSICAL STREAMS HAVE AN ORDERING GUARANTEE (NAMELY THE
+     GUARANTEE OF THE CORRESPONDING LOGICAL STREAM); THE SYNCHRONIZER IS CAREFUL
+     TO INTERLEAVE THE STREAMS SO THAT THE MERGED STREAM HAS THE SAME GUARANTEE.
 
-2. The *data processor* core implements the data transformation or aggregation
-   logic (and in some cases performs KV operations).
+2. THE *DATA PROCESSOR* CORE IMPLEMENTS THE DATA TRANSFORMATION OR AGGREGATION
+   LOGIC (AND IN SOME CASES PERFORMS KV OPERATIONS).
 
-3. The *output router* splits the data processor's output to multiple streams;
-   types:
-   * single-output (pass-through)
-   * mirror: every row is sent to all output streams
-   * hashing: each row goes to a single output stream, chosen according
-     to a hash function applied on certain elements of the data tuples.
-   * by range: the router is configured with range information (relating to a
-     certain table) and is able to send rows to the nodes that are lease holders for
-     the respective ranges (useful for `JoinReader` nodes (taking index values
-     to the node responsible for the PK) and `INSERT` (taking new rows to their
-     lease holder-to-be)).
+3. THE *OUTPUT ROUTER* SPLITS THE DATA PROCESSOR'S OUTPUT TO MULTIPLE STREAMS;
+   TYPES:
+   * SINGLE-OUTPUT (PASS-THROUGH)
+   * MIRROR: EVERY ROW IS SENT TO ALL OUTPUT STREAMS
+   * HASHING: EACH ROW GOES TO A SINGLE OUTPUT STREAM, CHOSEN ACCORDING
+     TO A HASH FUNCTION APPLIED ON CERTAIN ELEMENTS OF THE DATA TUPLES.
+   * BY RANGE: THE ROUTER IS CONFIGURED WITH RANGE INFORMATION (RELATING TO A
+     CERTAIN TABLE) AND IS ABLE TO SEND ROWS TO THE NODES THAT ARE LEASE HOLDERS FOR
+     THE RESPECTIVE RANGES (USEFUL FOR `JOINREADER` NODES (TAKING INDEX VALUES
+     TO THE NODE RESPONSIBLE FOR THE PK) AND `INSERT` (TAKING NEW ROWS TO THEIR
+     LEASE HOLDER-TO-BE)).
 
-To illustrate with an example from the Distributed SQL RFC, the query:
+TO ILLUSTRATE WITH AN EXAMPLE FROM THE DISTRIBUTED SQL RFC, THE QUERY:
 ```
-TABLE Orders (OId INT PRIMARY KEY, CId INT, Value DECIMAL, Date DATE)
+TABLE ORDERS (OID INT PRIMARY KEY, CID INT, VALUE DECIMAL, DATE DATE)
 
-SELECT CID, SUM(VALUE) FROM Orders
+SELECT CID, SUM(VALUE) FROM ORDERS
   WHERE DATE > 2015
   GROUP BY CID
-  ORDER BY 1 - SUM(Value)
+  ORDER BY 1 - SUM(VALUE)
 ```
 
-produces the following logical plan:
+PRODUCES THE FOLLOWING LOGICAL PLAN:
 
-![Logical plan](RFCS/images/distributed_sql_logical_plan.png?raw=true "Logical Plan")
+![LOGICAL PLAN](RFCS/IMAGES/DISTRIBUTED_SQL_LOGICAL_PLAN.PNG?RAW=TRUE "LOGICAL PLAN")
 
-This logical plan above could be transformed into either one of the following
-physical plans:
+THIS LOGICAL PLAN ABOVE COULD BE TRANSFORMED INTO EITHER ONE OF THE FOLLOWING
+PHYSICAL PLANS:
 
-![Physical plan](RFCS/images/distributed_sql_physical_plan.png?raw=true "Physical Plan")
+![PHYSICAL PLAN](RFCS/IMAGES/DISTRIBUTED_SQL_PHYSICAL_PLAN.PNG?RAW=TRUE "PHYSICAL PLAN")
 
-or
+OR
 
-![Alternate physical plan](RFCS/images/distributed_sql_physical_plan_2.png?raw=true "Alternate physical Plan")
+![ALTERNATE PHYSICAL PLAN](RFCS/IMAGES/DISTRIBUTED_SQL_PHYSICAL_PLAN_2.PNG?RAW=TRUE "ALTERNATE PHYSICAL PLAN")
 
 
-## Execution infrastructure
+## EXECUTION INFRASTRUCTURE
 
-Once a physical plan has been generated, the system needs to divvy it up
-between the nodes and send it around for execution. Each node is responsible
-for locally scheduling data processors and input synchronizers. Nodes also
-communicate with each other for connecting output routers to input
-synchronizers through a streaming interface.
+ONCE A PHYSICAL PLAN HAS BEEN GENERATED, THE SYSTEM NEEDS TO DIVVY IT UP
+BETWEEN THE NODES AND SEND IT AROUND FOR EXECUTION. EACH NODE IS RESPONSIBLE
+FOR LOCALLY SCHEDULING DATA PROCESSORS AND INPUT SYNCHRONIZERS. NODES ALSO
+COMMUNICATE WITH EACH OTHER FOR CONNECTING OUTPUT ROUTERS TO INPUT
+SYNCHRONIZERS THROUGH A STREAMING INTERFACE.
 
-### Creating a local plan: the `ScheduleFlows` RPC
+### CREATING A LOCAL PLAN: THE `SCHEDULEFLOWS` RPC
 
-Distributed execution starts with the gateway making a request to every node
-that's supposed to execute part of the plan asking the node to schedule the
-sub-plan(s) it's responsible for (except for "on-the-fly" flows, see design
-doc). A node might be responsible for multiple disparate pieces of the overall
-DAG - let's call each of them a *flow*. A flow is described by the sequence of
-physical plan nodes in it, the connections between them (input synchronizers,
-output routers) plus identifiers for the input streams of the top node in the
-plan and the output streams of the (possibly multiple) bottom nodes. A node
-might be responsible for multiple heterogeneous flows. More commonly, when a
-node is the lease holder for multiple ranges from the same table involved in
-the query, it will run a `TableReader` configured with all the spans to be
-read across all the ranges local to the node.
+DISTRIBUTED EXECUTION STARTS WITH THE GATEWAY MAKING A REQUEST TO EVERY NODE
+THAT'S SUPPOSED TO EXECUTE PART OF THE PLAN ASKING THE NODE TO SCHEDULE THE
+SUB-PLAN(S) IT'S RESPONSIBLE FOR (EXCEPT FOR "ON-THE-FLY" FLOWS, SEE DESIGN
+DOC). A NODE MIGHT BE RESPONSIBLE FOR MULTIPLE DISPARATE PIECES OF THE OVERALL
+DAG - LET'S CALL EACH OF THEM A *FLOW*. A FLOW IS DESCRIBED BY THE SEQUENCE OF
+PHYSICAL PLAN NODES IN IT, THE CONNECTIONS BETWEEN THEM (INPUT SYNCHRONIZERS,
+OUTPUT ROUTERS) PLUS IDENTIFIERS FOR THE INPUT STREAMS OF THE TOP NODE IN THE
+PLAN AND THE OUTPUT STREAMS OF THE (POSSIBLY MULTIPLE) BOTTOM NODES. A NODE
+MIGHT BE RESPONSIBLE FOR MULTIPLE HETEROGENEOUS FLOWS. MORE COMMONLY, WHEN A
+NODE IS THE LEASE HOLDER FOR MULTIPLE RANGES FROM THE SAME TABLE INVOLVED IN
+THE QUERY, IT WILL RUN A `TABLEREADER` CONFIGURED WITH ALL THE SPANS TO BE
+READ ACROSS ALL THE RANGES LOCAL TO THE NODE.
 
-A node therefore implements a `ScheduleFlows` RPC which takes a set of flows,
-sets up the input and output [mailboxes](#mailboxes), creates the local
-processors and starts their execution.
+A NODE THEREFORE IMPLEMENTS A `SCHEDULEFLOWS` RPC WHICH TAKES A SET OF FLOWS,
+SETS UP THE INPUT AND OUTPUT [MAILBOXES](#MAILBOXES), CREATES THE LOCAL
+PROCESSORS AND STARTS THEIR EXECUTION.
 
-### Local scheduling of flows
+### LOCAL SCHEDULING OF FLOWS
 
-The simplest way to schedule the different processors locally on a node is
-concurrently: each data processor, synchronizer and router runs as a goroutine,
-with channels between them. The channels are buffered to synchronize producers
-and consumers to a controllable degree.
+THE SIMPLEST WAY TO SCHEDULE THE DIFFERENT PROCESSORS LOCALLY ON A NODE IS
+CONCURRENTLY: EACH DATA PROCESSOR, SYNCHRONIZER AND ROUTER RUNS AS A GOROUTINE,
+WITH CHANNELS BETWEEN THEM. THE CHANNELS ARE BUFFERED TO SYNCHRONIZE PRODUCERS
+AND CONSUMERS TO A CONTROLLABLE DEGREE.
 
-### Mailboxes
+### MAILBOXES
 
-Flows on different nodes communicate with each other over gRPC streams. To
-allow the producer and the consumer to start at different times,
-`ScheduleFlows` creates named mailboxes for all the input and output streams.
-These message boxes will hold some number of tuples in an internal queue until
-a gRPC stream is established for transporting them. From that moment on, gRPC
-flow control is used to synchronize the producer and consumer. A gRPC stream is
-established by the consumer using the `StreamMailbox` RPC, taking a mailbox id
-(the same one that's been already used in the flows passed to `ScheduleFlows`).
+FLOWS ON DIFFERENT NODES COMMUNICATE WITH EACH OTHER OVER GRPC STREAMS. TO
+ALLOW THE PRODUCER AND THE CONSUMER TO START AT DIFFERENT TIMES,
+`SCHEDULEFLOWS` CREATES NAMED MAILBOXES FOR ALL THE INPUT AND OUTPUT STREAMS.
+THESE MESSAGE BOXES WILL HOLD SOME NUMBER OF TUPLES IN AN INTERNAL QUEUE UNTIL
+A GRPC STREAM IS ESTABLISHED FOR TRANSPORTING THEM. FROM THAT MOMENT ON, GRPC
+FLOW CONTROL IS USED TO SYNCHRONIZE THE PRODUCER AND CONSUMER. A GRPC STREAM IS
+ESTABLISHED BY THE CONSUMER USING THE `STREAMMAILBOX` RPC, TAKING A MAILBOX ID
+(THE SAME ONE THAT'S BEEN ALREADY USED IN THE FLOWS PASSED TO `SCHEDULEFLOWS`).
 
-A diagram of a simple query using mailboxes for its execution:
-![Mailboxes](RFCS/images/distributed_sql_mailboxes.png?raw=true)
+A DIAGRAM OF A SIMPLE QUERY USING MAILBOXES FOR ITS EXECUTION:
+![MAILBOXES](RFCS/IMAGES/DISTRIBUTED_SQL_MAILBOXES.PNG?RAW=TRUE)
 
-## A complex example: Daily Promotion
+## A COMPLEX EXAMPLE: DAILY PROMOTION
 
-To give a visual intuition of all the concepts presented, we draw the physical plan of a relatively involved query. The
-point of the query is to help with a promotion that goes out daily, targeting
-customers that have spent over $1000 in the last year. We'll insert into the
-`DailyPromotion` table rows representing each such customer and the sum of her
-recent orders.
+TO GIVE A VISUAL INTUITION OF ALL THE CONCEPTS PRESENTED, WE DRAW THE PHYSICAL PLAN OF A RELATIVELY INVOLVED QUERY. THE
+POINT OF THE QUERY IS TO HELP WITH A PROMOTION THAT GOES OUT DAILY, TARGETING
+CUSTOMERS THAT HAVE SPENT OVER $1000 IN THE LAST YEAR. WE'LL INSERT INTO THE
+`DAILYPROMOTION` TABLE ROWS REPRESENTING EACH SUCH CUSTOMER AND THE SUM OF HER
+RECENT ORDERS.
 
 ```SQL
-TABLE DailyPromotion (
-  Email TEXT,
-  Name TEXT,
-  OrderCount INT
+TABLE DAILYPROMOTION (
+  EMAIL TEXT,
+  NAME TEXT,
+  ORDERCOUNT INT
 )
 
-TABLE Customers (
-  CustomerID INT PRIMARY KEY,
-  Email TEXT,
-  Name TEXT
+TABLE CUSTOMERS (
+  CUSTOMERID INT PRIMARY KEY,
+  EMAIL TEXT,
+  NAME TEXT
 )
 
-TABLE Orders (
-  CustomerID INT,
-  Date DATETIME,
-  Value INT,
+TABLE ORDERS (
+  CUSTOMERID INT,
+  DATE DATETIME,
+  VALUE INT,
 
-  PRIMARY KEY (CustomerID, Date),
-  INDEX date (Date)
+  PRIMARY KEY (CUSTOMERID, DATE),
+  INDEX DATE (DATE)
 )
 
-INSERT INTO DailyPromotion
-(SELECT c.Email, c.Name, os.OrderCount FROM
-      Customers AS c
+INSERT INTO DAILYPROMOTION
+(SELECT C.EMAIL, C.NAME, OS.ORDERCOUNT FROM
+      CUSTOMERS AS C
     INNER JOIN
-      (SELECT CustomerID, COUNT(*) as OrderCount FROM Orders
-        WHERE Date >= '2015-01-01'
-        GROUP BY CustomerID HAVING SUM(Value) >= 1000) AS os
-    ON c.CustomerID = os.CustomerID)
+      (SELECT CUSTOMERID, COUNT(*) AS ORDERCOUNT FROM ORDERS
+        WHERE DATE >= '2015-01-01'
+        GROUP BY CUSTOMERID HAVING SUM(VALUE) >= 1000) AS OS
+    ON C.CUSTOMERID = OS.CUSTOMERID)
 ```
 
-A possible physical plan:
-![Physical plan](RFCS/images/distributed_sql_daily_promotion_physical_plan.png?raw=true)
+A POSSIBLE PHYSICAL PLAN:
+![PHYSICAL PLAN](RFCS/IMAGES/DISTRIBUTED_SQL_DAILY_PROMOTION_PHYSICAL_PLAN.PNG?RAW=TRUE)

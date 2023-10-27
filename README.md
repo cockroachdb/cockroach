@@ -4,117 +4,117 @@
 
 ---
 
-CockroachDB is a cloud-native distributed SQL database designed to build,
+cockroachdb is a cloud-native distributed sql database designed to build,
 scale, and manage modern, data-intensive applications. 
 
-- [What is CockroachDB?](#what-is-cockroachdb)
-- [Docs](#docs)
-- [Starting with Cockroach Cloud](#starting-with-cockroachcloud)
-- [Starting with CockroachDB](#starting-with-cockroachdb)
-- [Client Drivers](#client-drivers)
-- [Deployment](#deployment)
-- [Need Help?](#need-help)
-- [Contributing](#contributing)
-- [Design](#design)
-- [Comparison with Other Databases](#comparison-with-other-databases)
-- [See Also](#see-also)
+- [what is cockroachdb?](#what-is-cockroachdb)
+- [docs](#docs)
+- [starting with cockroach cloud](#starting-with-cockroachcloud)
+- [starting with cockroachdb](#starting-with-cockroachdb)
+- [client drivers](#client-drivers)
+- [deployment](#deployment)
+- [need help?](#need-help)
+- [contributing](#contributing)
+- [design](#design)
+- [comparison with other databases](#comparison-with-other-databases)
+- [see also](#see-also)
 
-## What is CockroachDB?
+## what is cockroachdb?
 
-CockroachDB is a distributed SQL database built on a transactional and
-strongly-consistent key-value store. It **scales** horizontally;
+cockroachdb is a distributed sql database built on a transactional and
+strongly-consistent key-value store. it **scales** horizontally;
 **survives** disk, machine, rack, and even datacenter failures with
 minimal latency disruption and no manual intervention; supports
-**strongly-consistent** ACID transactions; and provides a familiar
-**SQL** API for structuring, manipulating, and querying data.
+**strongly-consistent** acid transactions; and provides a familiar
+**sql** api for structuring, manipulating, and querying data.
 
-For more details, see our [FAQ](https://cockroachlabs.com/docs/stable/frequently-asked-questions.html) or [architecture document](
+for more details, see our [faq](https://cockroachlabs.com/docs/stable/frequently-asked-questions.html) or [architecture document](
 https://www.cockroachlabs.com/docs/stable/architecture/overview.html).
 
 <p align="center">
-  <a href='https://www.youtube.com/watch?v=VgXiMcbGwzQ'> <img src='docs/media/explainer-video-preview.png' width='70%'> </a>
+  <a href='https://www.youtube.com/watch?v=vgximcbgwzq'> <img src='docs/media/explainer-video-preview.png' width='70%'> </a>
 </p>
 
-## Docs
+## docs
 
-For guidance on installation, development, deployment, and administration, see our [User Documentation](https://cockroachlabs.com/docs/stable/).
+for guidance on installation, development, deployment, and administration, see our [user documentation](https://cockroachlabs.com/docs/stable/).
 
-## Starting with CockroachCloud
+## starting with cockroachcloud
 
-We can run CockroachDB for you, so you don't have to run your own cluster.
+we can run cockroachdb for you, so you don't have to run your own cluster.
 
-See our online documentation: [Quickstart with CockroachCloud](https://www.cockroachlabs.com/docs/cockroachcloud/quickstart.html)
+see our online documentation: [quickstart with cockroachcloud](https://www.cockroachlabs.com/docs/cockroachcloud/quickstart.html)
 
-## Starting with CockroachDB
+## starting with cockroachdb
 
-1. Install CockroachDB:  [using a pre-built executable](https://www.cockroachlabs.com/docs/stable/install-cockroachdb.html) or [build it from source](https://www.cockroachlabs.com/docs/v21.1/install-cockroachdb-linux#build-from-source).
-2. [Start a local cluster](https://www.cockroachlabs.com/docs/stable/start-a-local-cluster.html) and connect to it via the [built-in SQL client](https://www.cockroachlabs.com/docs/stable/use-the-built-in-sql-client.html).
-3. [Learn more about CockroachDB SQL](https://www.cockroachlabs.com/docs/stable/learn-cockroachdb-sql.html).
-4. Use a PostgreSQL-compatible driver or ORM to [build an app with CockroachDB](https://www.cockroachlabs.com/docs/stable/hello-world-example-apps.html).
-5. [Explore core features](https://www.cockroachlabs.com/docs/stable/demo-data-replication.html), such as data replication, automatic rebalancing, and fault tolerance and recovery.
+1. install cockroachdb:  [using a pre-built executable](https://www.cockroachlabs.com/docs/stable/install-cockroachdb.html) or [build it from source](https://www.cockroachlabs.com/docs/v21.1/install-cockroachdb-linux#build-from-source).
+2. [start a local cluster](https://www.cockroachlabs.com/docs/stable/start-a-local-cluster.html) and connect to it via the [built-in sql client](https://www.cockroachlabs.com/docs/stable/use-the-built-in-sql-client.html).
+3. [learn more about cockroachdb sql](https://www.cockroachlabs.com/docs/stable/learn-cockroachdb-sql.html).
+4. use a postgresql-compatible driver or orm to [build an app with cockroachdb](https://www.cockroachlabs.com/docs/stable/hello-world-example-apps.html).
+5. [explore core features](https://www.cockroachlabs.com/docs/stable/demo-data-replication.html), such as data replication, automatic rebalancing, and fault tolerance and recovery.
 
-## Client Drivers
+## client drivers
 
-CockroachDB supports the PostgreSQL wire protocol, so you can use any available PostgreSQL client drivers to connect from various languages.
+cockroachdb supports the postgresql wire protocol, so you can use any available postgresql client drivers to connect from various languages.
 
-- For recommended drivers that we've tested, see [Install Client Drivers](https://www.cockroachlabs.com/docs/stable/install-client-drivers.html).
-- For tutorials using these drivers, as well as supported ORMs, see [Example Apps](https://www.cockroachlabs.com/docs/stable/example-apps.html).
+- for recommended drivers that we've tested, see [install client drivers](https://www.cockroachlabs.com/docs/stable/install-client-drivers.html).
+- for tutorials using these drivers, as well as supported orms, see [example apps](https://www.cockroachlabs.com/docs/stable/example-apps.html).
 
-## Deployment
+## deployment
 
-- [CockroachCloud](https://www.cockroachlabs.com/docs/cockroachcloud/quickstart) - Steps to create a [free CockroachCloud cluster](https://cockroachlabs.cloud/signup?referralId=githubquickstart) on your preferred Cloud platform.
-- [Manual](https://www.cockroachlabs.com/docs/stable/manual-deployment.html) - Steps to deploy a CockroachDB cluster manually on multiple machines.
-- [Cloud](https://www.cockroachlabs.com/docs/stable/cloud-deployment.html) - Guides for deploying CockroachDB on various cloud platforms.
-- [Orchestration](https://www.cockroachlabs.com/docs/stable/orchestration.html) - Guides for running CockroachDB with popular open-source orchestration systems.
+- [cockroachcloud](https://www.cockroachlabs.com/docs/cockroachcloud/quickstart) - steps to create a [free cockroachcloud cluster](https://cockroachlabs.cloud/signup?referralid=githubquickstart) on your preferred cloud platform.
+- [manual](https://www.cockroachlabs.com/docs/stable/manual-deployment.html) - steps to deploy a cockroachdb cluster manually on multiple machines.
+- [cloud](https://www.cockroachlabs.com/docs/stable/cloud-deployment.html) - guides for deploying cockroachdb on various cloud platforms.
+- [orchestration](https://www.cockroachlabs.com/docs/stable/orchestration.html) - guides for running cockroachdb with popular open-source orchestration systems.
 
-## Need Help?
+## need help?
 
-- [CockroachDB Community Slack](https://go.crdb.dev/p/slack) - Join our slack to connect with our engineers and other users running CockroachDB.
-- [CockroachDB Forum](https://forum.cockroachlabs.com/) and [Stack Overflow](https://stackoverflow.com/questions/tagged/cockroachdb) - Ask questions, find answers, and help other users.
-- [Troubleshooting documentation](https://www.cockroachlabs.com/docs/stable/troubleshooting-overview.html) - Learn how to troubleshoot common errors, cluster setup, and SQL query behavior.
-- For filing bugs, suggesting improvements, or requesting new features, help us out by [opening an issue](https://github.com/cockroachdb/cockroach/issues/new).
+- [cockroachdb community slack](https://go.crdb.dev/p/slack) - join our slack to connect with our engineers and other users running cockroachdb.
+- [cockroachdb forum](https://forum.cockroachlabs.com/) and [stack overflow](https://stackoverflow.com/questions/tagged/cockroachdb) - ask questions, find answers, and help other users.
+- [troubleshooting documentation](https://www.cockroachlabs.com/docs/stable/troubleshooting-overview.html) - learn how to troubleshoot common errors, cluster setup, and sql query behavior.
+- for filing bugs, suggesting improvements, or requesting new features, help us out by [opening an issue](https://github.com/cockroachdb/cockroach/issues/new).
 
-## Building from source
+## building from source
 
-See [our wiki](https://wiki.crdb.io/wiki/spaces/CRDB/pages/181338446/Getting+and+building+from+source) for more details.
+see [our wiki](https://wiki.crdb.io/wiki/spaces/crdb/pages/181338446/getting+and+building+from+source) for more details.
 
-## Contributing
+## contributing
 
-We welcome your contributions! If you're looking for issues to work on, try looking at the [good first issue list](https://github.com/cockroachdb/cockroach/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22). We do our best to tag issues suitable for new external contributors with that label, so it's a great way to find something you can help with!
+we welcome your contributions! if you're looking for issues to work on, try looking at the [good first issue list](https://github.com/cockroachdb/cockroach/issues?q=is%3aopen+is%3aissue+label%3a%22good+first+issue%22). we do our best to tag issues suitable for new external contributors with that label, so it's a great way to find something you can help with!
 
-See [our wiki](https://wiki.crdb.io/wiki/spaces/CRDB/pages/73204033/Contributing+to+CockroachDB) for more details.
+see [our wiki](https://wiki.crdb.io/wiki/spaces/crdb/pages/73204033/contributing+to+cockroachdb) for more details.
 
-Engineering discussions take place on our public mailing list, [cockroach-db@googlegroups.com](https://groups.google.com/forum/#!forum/cockroach-db). Also please join our [Community Slack](https://go.crdb.dev/p/slack) (there's a dedicated #contributors channel!) to ask questions, discuss your ideas, and connect with other contributors.
+engineering discussions take place on our public mailing list, [cockroach-db@googlegroups.com](https://groups.google.com/forum/#!forum/cockroach-db). also please join our [community slack](https://go.crdb.dev/p/slack) (there's a dedicated #contributors channel!) to ask questions, discuss your ideas, and connect with other contributors.
 
-## Design
+## design
 
-For an in-depth discussion of the CockroachDB architecture, see our
-[Architecture
-Guide](https://www.cockroachlabs.com/docs/stable/architecture/overview.html).
-For the original design motivation, see our [design
+for an in-depth discussion of the cockroachdb architecture, see our
+[architecture
+guide](https://www.cockroachlabs.com/docs/stable/architecture/overview.html).
+for the original design motivation, see our [design
 doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md).
 
-## Licensing
+## licensing
 
-Current CockroachDB code is released under a combination of two licenses, the [Business Source License (BSL)](https://www.cockroachlabs.com/docs/stable/licensing-faqs.html#bsl) and the [Cockroach Community License (CCL)](https://www.cockroachlabs.com/docs/stable/licensing-faqs.html#ccl).
+current cockroachdb code is released under a combination of two licenses, the [business source license (bsl)](https://www.cockroachlabs.com/docs/stable/licensing-faqs.html#bsl) and the [cockroach community license (ccl)](https://www.cockroachlabs.com/docs/stable/licensing-faqs.html#ccl).
 
-When contributing to a CockroachDB feature, you can find the relevant license in the comments at the top of each file.
+when contributing to a cockroachdb feature, you can find the relevant license in the comments at the top of each file.
 
-For more information, see the [Licensing FAQs](https://www.cockroachlabs.com/docs/stable/licensing-faqs.html).
+for more information, see the [licensing faqs](https://www.cockroachlabs.com/docs/stable/licensing-faqs.html).
 
-## Comparison with Other Databases
+## comparison with other databases
 
-To see how key features of CockroachDB stack up against other databases,
-check out [CockroachDB in Comparison](https://www.cockroachlabs.com/docs/stable/cockroachdb-in-comparison.html).
+to see how key features of cockroachdb stack up against other databases,
+check out [cockroachdb in comparison](https://www.cockroachlabs.com/docs/stable/cockroachdb-in-comparison.html).
 
-## See Also
+## see also
 
-- [Tech Talks](https://www.cockroachlabs.com/community/tech-talks/) (by CockroachDB founders, engineers, and customers!)
-- [CockroachDB User Documentation](https://cockroachlabs.com/docs/stable/)
-- [The CockroachDB Blog](https://www.cockroachlabs.com/blog/)
-- Key design documents
-  - [Serializable, Lockless, Distributed: Isolation in CockroachDB](https://www.cockroachlabs.com/blog/serializable-lockless-distributed-isolation-cockroachdb/)
-  - [Consensus, Made Thrive](https://www.cockroachlabs.com/blog/consensus-made-thrive/)
-  - [Trust, But Verify: How CockroachDB Checks Replication](https://www.cockroachlabs.com/blog/trust-but-verify-cockroachdb-checks-replication/)
-  - [Living Without Atomic Clocks](https://www.cockroachlabs.com/blog/living-without-atomic-clocks/)
-  - [The CockroachDB Architecture Document](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md)
+- [tech talks](https://www.cockroachlabs.com/community/tech-talks/) (by cockroachdb founders, engineers, and customers!)
+- [cockroachdb user documentation](https://cockroachlabs.com/docs/stable/)
+- [the cockroachdb blog](https://www.cockroachlabs.com/blog/)
+- key design documents
+  - [serializable, lockless, distributed: isolation in cockroachdb](https://www.cockroachlabs.com/blog/serializable-lockless-distributed-isolation-cockroachdb/)
+  - [consensus, made thrive](https://www.cockroachlabs.com/blog/consensus-made-thrive/)
+  - [trust, but verify: how cockroachdb checks replication](https://www.cockroachlabs.com/blog/trust-but-verify-cockroachdb-checks-replication/)
+  - [living without atomic clocks](https://www.cockroachlabs.com/blog/living-without-atomic-clocks/)
+  - [the cockroachdb architecture document](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md)
