@@ -60,12 +60,15 @@ func (rf *replicaFlowControl) getPausedFollowers() map[roachpb.ReplicaID]struct{
 
 func (rf *replicaFlowControl) getBehindFollowers() map[roachpb.ReplicaID]struct{} {
 	rf.assertLocked()
-	behindFollowers := make(map[roachpb.ReplicaID]struct{})
+	// Lazily allocate the map, since expected to be empty.
+	var behindFollowers map[roachpb.ReplicaID]struct{}
 	rf.mu.internalRaftGroup.WithProgress(func(id uint64, _ raft.ProgressType, progress rafttracker.Progress) {
 		if progress.State == rafttracker.StateReplicate {
 			return
 		}
-
+		if behindFollowers == nil {
+			behindFollowers = make(map[roachpb.ReplicaID]struct{})
+		}
 		replID := roachpb.ReplicaID(id)
 		behindFollowers[replID] = struct{}{}
 
@@ -90,12 +93,16 @@ func (rf *replicaFlowControl) getBehindFollowers() map[roachpb.ReplicaID]struct{
 
 func (rf *replicaFlowControl) getInactiveFollowers() map[roachpb.ReplicaID]struct{} {
 	rf.assertLocked()
-	inactiveFollowers := make(map[roachpb.ReplicaID]struct{})
+	// Lazily allocate the map, since expected to be empty.
+	var inactiveFollowers map[roachpb.ReplicaID]struct{}
 	for _, desc := range rf.getDescriptor().Replicas().Descriptors() {
 		if desc.ReplicaID == rf.getReplicaID() {
 			continue
 		}
 		if !rf.mu.lastUpdateTimes.isFollowerActiveSince(desc.ReplicaID, timeutil.Now(), rf.store.cfg.RangeLeaseDuration) {
+			if inactiveFollowers == nil {
+				inactiveFollowers = make(map[roachpb.ReplicaID]struct{})
+			}
 			inactiveFollowers[desc.ReplicaID] = struct{}{}
 		}
 	}
@@ -104,12 +111,16 @@ func (rf *replicaFlowControl) getInactiveFollowers() map[roachpb.ReplicaID]struc
 
 func (rf *replicaFlowControl) getDisconnectedFollowers() map[roachpb.ReplicaID]struct{} {
 	rf.assertLocked()
-	disconnectedFollowers := make(map[roachpb.ReplicaID]struct{})
+	// Lazily allocate the map, since expected to be empty.
+	var disconnectedFollowers map[roachpb.ReplicaID]struct{}
 	for _, desc := range rf.getDescriptor().Replicas().Descriptors() {
 		if desc.ReplicaID == rf.getReplicaID() {
 			continue
 		}
 		if !rf.store.raftTransportForFlowControl.isConnectedTo(desc.StoreID) {
+			if disconnectedFollowers == nil {
+				disconnectedFollowers = make(map[roachpb.ReplicaID]struct{})
+			}
 			disconnectedFollowers[desc.ReplicaID] = struct{}{}
 		}
 	}
