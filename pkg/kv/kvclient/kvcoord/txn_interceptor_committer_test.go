@@ -411,6 +411,10 @@ func TestTxnCommitterAsyncExplicitCommitTask(t *testing.T) {
 func TestTxnCommitterRetryAfterStaging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	testutils.RunTrueAndFalse(t, "errorOnRetry", testTxnCommitterRetryAfterStaging)
+}
+
+func testTxnCommitterRetryAfterStaging(t *testing.T, errorOnRetry bool) {
 	ctx := context.Background()
 	tc, mockSender := makeMockTxnCommitter()
 	defer tc.stopper.Stop(ctx)
@@ -465,6 +469,14 @@ func TestTxnCommitterRetryAfterStaging(t *testing.T) {
 		require.Len(t, et.LockSpans, 1)
 		require.Equal(t, roachpb.Span{Key: keyA}, et.LockSpans[0])
 
+		if errorOnRetry {
+			err := kvpb.NewTransactionRetryError(kvpb.RETRY_COMMIT_DEADLINE_EXCEEDED, "")
+			errTxn := ba.Txn.Clone()
+			// Return a STAGING transaction status to verify that the txnCommitter
+			// downgrades this status to PENDING before propagating the error.
+			errTxn.Status = roachpb.STAGING
+			return nil, kvpb.NewErrorWithTxn(err, errTxn)
+		}
 		br := ba.CreateReply()
 		br.Txn = ba.Txn.Clone()
 		br.Txn.Status = roachpb.COMMITTED
@@ -473,10 +485,19 @@ func TestTxnCommitterRetryAfterStaging(t *testing.T) {
 	mockSender.ChainMockSend(onFirstSend, onRetry)
 
 	br, pErr := tc.SendLocked(ctx, ba)
-	require.Nil(t, pErr)
-	require.NotNil(t, br)
-	require.NotNil(t, br.Txn)
-	require.Equal(t, roachpb.COMMITTED, br.Txn.Status)
-	require.True(t, sawRetry)
-	require.Equal(t, int64(1), tc.metrics.ParallelCommitAutoRetries.Count())
+	if errorOnRetry {
+		require.Nil(t, br)
+		require.NotNil(t, pErr)
+		require.NotNil(t, pErr.GetTxn())
+		require.Equal(t, roachpb.PENDING, pErr.GetTxn().Status)
+		require.True(t, sawRetry)
+		require.Equal(t, int64(1), tc.metrics.ParallelCommitAutoRetries.Count())
+	} else {
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+		require.NotNil(t, br.Txn)
+		require.Equal(t, roachpb.COMMITTED, br.Txn.Status)
+		require.True(t, sawRetry)
+		require.Equal(t, int64(1), tc.metrics.ParallelCommitAutoRetries.Count())
+	}
 }
