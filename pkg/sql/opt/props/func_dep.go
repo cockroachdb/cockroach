@@ -1761,10 +1761,15 @@ func (f *FuncDepSet) inClosureOf(cols, in opt.ColSet, strict bool) bool {
 	}
 
 	// Now continue with full transitive closure of strict dependencies.
+	var skippedFrom opt.ColSet
 	for i := 0; i < len(f.deps); i++ {
 		fd := &f.deps[i]
 
-		if fd.strict && fd.from.SubsetOf(in) && !fd.to.SubsetOf(in) {
+		if !fd.strict {
+			continue
+		}
+
+		if fd.from.SubsetOf(in) && !fd.to.SubsetOf(in) {
 			in.UnionWith(fd.to)
 
 			// Short-circuit if the "in" set now contains all the columns.
@@ -1772,8 +1777,19 @@ func (f *FuncDepSet) inClosureOf(cols, in opt.ColSet, strict bool) bool {
 				return true
 			}
 
-			// Restart iteration to get transitive closure.
-			i = -1
+			// Restart iteration to get the transitive closure if, during the
+			// current pass, we've previously skipped some strict FDs that have
+			// "from" sets that intersect with the newly added columns. If not,
+			// then those skipped FDs will not expand the closure further, so
+			// there is no need to restart iteration.
+			if fd.to.Intersects(skippedFrom) {
+				i = -1
+				skippedFrom = opt.ColSet{}
+			}
+		} else {
+			// Keep track of the set of all "from" columns of strict FDs that
+			// did not expand "in" in this pass.
+			skippedFrom.UnionWith(fd.from)
 		}
 	}
 	return false
