@@ -185,5 +185,8 @@ func persistStreamIngestionPartitionSpecs(
 		}
 		return jobs.WriteChunkedFileToJobInfo(ctx, replicationPartitionInfoFilename, specBytes, txn, ingestionJobID)
 	})
+	if knobs := execCfg.StreamingTestingKnobs; knobs != nil && knobs.AfterPersistingPartitionSpecs != nil {
+		knobs.AfterPersistingPartitionSpecs()
+	}
 	return err
 }
