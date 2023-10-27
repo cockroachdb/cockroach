@@ -11,11 +11,14 @@
 package insights
 
 import (
+	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
 )
 
@@ -191,4 +194,89 @@ func newRegistry(st *cluster.Settings, detector detector, sink sink) *lockingReg
 		causes:     &causes{st: st},
 		sink:       sink,
 	}
+}
+
+func (s *Statement) CopyTo(
+	ctx context.Context,
+	txn *Transaction,
+	sessionID clusterunique.ID,
+	other *obspb.StatementInsightsStatistics,
+) {
+	other.ApplicationName = txn.ApplicationName
+	other.AutoRetryReason = s.AutoRetryReason
+	other.Contention = s.Contention
+	other.CPUSQLNanos = s.CPUSQLNanos
+	other.Database = s.Database
+	other.EndTime = &s.EndTime
+	other.ErrorCode = s.ErrorCode
+	other.FingerprintID = uint64(s.FingerprintID)
+	other.FullScan = s.FullScan
+	other.ImplicitTxn = txn.ImplicitTxn
+	other.IndexRecommendations = s.IndexRecommendations
+	other.Nodes = s.Nodes
+	other.PlanGist = s.PlanGist
+	other.Query = s.Query
+	other.Retries = s.Retries
+	other.RowsRead = s.RowsRead
+	other.RowsWritten = s.RowsWritten
+	other.ServiceLatSeconds = s.LatencyInSeconds
+	other.StartTime = &s.StartTime
+	other.TxnFingerprintID = uint64(txn.FingerprintID)
+	other.User = txn.User
+	other.UserPriority = txn.UserPriority
+
+	var err error
+	other.ID, err = s.ID.MarshalJSON()
+	if err != nil {
+		log.Errorf(ctx, "marshalling statement insights ID for Insights exporter")
+	}
+	other.TransactionID, err = txn.ID.MarshalJSON()
+	if err != nil {
+		log.Errorf(ctx, "marshalling transaction insights ID for Insights exporter")
+	}
+	other.SessionID, err = sessionID.MarshalJSON()
+	if err != nil {
+		log.Errorf(ctx, "marshalling sessions ID for Insights exporter")
+	}
+
+	switch s.Status {
+	case Statement_Completed:
+		other.Status = obspb.Status_Completed
+	case Statement_Failed:
+		other.Status = obspb.Status_Failed
+	default:
+		other.Status = obspb.Status_Completed
+	}
+
+	switch s.Problem {
+	case Problem_FailedExecution:
+		other.Problem = obspb.Problem_FailedExecution
+	case Problem_SlowExecution:
+		other.Problem = obspb.Problem_SlowExecution
+	default:
+		other.Problem = obspb.Problem_None
+	}
+
+	other.Causes = []obspb.Cause{}
+	for c := range s.Causes {
+		switch int32(c) {
+		case Cause_value["SuboptimalPlan"]:
+			other.Causes = append(other.Causes, obspb.Cause_SuboptimalPlan)
+		case Cause_value["HighRetryCount"]:
+			other.Causes = append(other.Causes, obspb.Cause_HighRetryCount)
+		case Cause_value["PlanRegression"]:
+			other.Causes = append(other.Causes, obspb.Cause_PlanRegression)
+		case Cause_value["HighContention"]:
+			other.Causes = append(other.Causes, obspb.Cause_HighContention)
+		default:
+			other.Causes = append(other.Causes, obspb.Cause_Unset)
+		}
+	}
+
+	// TODO(maryliag): add information about Contention Events
+	// and Idle/Parse/Run Latencies.
+	//other.ContentionEvents
+	//other.IdleLatSeconds
+	//other.ParseLatSeconds
+	//other.RunLatSeconds
 }
