@@ -15,24 +15,7 @@ package tests
 // in the test log.
 var hibernateSpatialBlockList = blocklist{}
 
-var hibernateBlockList = blocklist{
-	"org.hibernate.jpa.test.graphs.FetchGraphTest.testCollectionEntityGraph":                                                "unknown",
-	"org.hibernate.jpa.test.packaging.PackagedEntityManagerTest.testConfiguration":                                          "unknown",
-	"org.hibernate.jpa.test.packaging.PackagedEntityManagerTest.testDefaultPar":                                             "unknown",
-	"org.hibernate.jpa.test.packaging.PackagedEntityManagerTest.testDefaultParForPersistence_1_0":                           "unknown",
-	"org.hibernate.jpa.test.packaging.PackagedEntityManagerTest.testExcludeHbmPar":                                          "unknown",
-	"org.hibernate.jpa.test.packaging.PackagedEntityManagerTest.testExplodedPar":                                            "unknown",
-	"org.hibernate.jpa.test.packaging.PackagedEntityManagerTest.testExtendedEntityManager":                                  "unknown",
-	"org.hibernate.jpa.test.packaging.PackagedEntityManagerTest.testExternalJar":                                            "unknown",
-	"org.hibernate.jpa.test.packaging.PackagedEntityManagerTest.testListeners":                                              "unknown",
-	"org.hibernate.jpa.test.packaging.PackagedEntityManagerTest.testListenersDefaultPar":                                    "unknown",
-	"org.hibernate.jpa.test.packaging.PackagedEntityManagerTest.testORMFileOnMainAndExplicitJars":                           "unknown",
-	"org.hibernate.jpa.test.packaging.PackagedEntityManagerTest.testRelativeJarReferences":                                  "unknown",
-	"org.hibernate.jpa.test.packaging.PackagedEntityManagerTest.testSpacePar":                                               "unknown",
-	"org.hibernate.jpa.test.packaging.ScannerTest.testCustomScanner":                                                        "unknown",
-	"org.hibernate.test.bytecode.enhancement.lazy.proxy.inlinedirtychecking.DirtyCheckPrivateUnMappedCollectionTest.testIt": "unknown",
-	"org.hibernate.test.hql.BulkManipulationTest.testUpdateWithSubquery":                                                    "unknown",
-}
+var hibernateBlockList = blocklist{}
 
 var hibernateSpatialIgnoreList = blocklist{
 	"org.hibernate.serialization.SessionFactorySerializationTest.testUnNamedSessionFactorySerialization": "flaky",
