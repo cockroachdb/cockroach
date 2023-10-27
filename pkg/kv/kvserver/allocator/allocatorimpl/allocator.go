@@ -100,7 +100,7 @@ var leaseRebalancingAggressiveness = settings.RegisterFloatSetting(
 		"or between 0 and 1.0 to be more conservative about rebalancing leases",
 	1.0,
 	settings.NonNegativeFloat,
-)
+	settings.WithPublic)
 
 // recoveryStoreSelector controls the strategy for choosing a store to recover
 // replicas to: either to any valid store ("good") or to a store that has low
