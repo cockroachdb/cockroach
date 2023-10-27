@@ -24,6 +24,7 @@ go_test(
     name = "schemachanger_test",
     size = "enormous",
     srcs = [
+        "comparator_test.go",
         "dml_injection_test.go",
         "main_test.go",
         "schemachanger_test.go",
@@ -38,6 +39,7 @@ go_test(
     shard_count = 16,
     deps = [
         "//pkg/base",
+        "//pkg/build/bazel",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
@@ -54,7 +56,6 @@ go_test(
         "//pkg/sql/rowenc",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scop",
-        "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan",
         "//pkg/sql/schemachanger/sctest",  # keep
         "//pkg/sql/sessiondatapb",
@@ -64,6 +65,7 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/ctxgroup",
+        "//pkg/util/envutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/protoutil",
@@ -93,6 +95,26 @@ sctest_gen(
         "Pause",
         "PauseMixedVersion",
         "Rollback",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+genrule(
+    name = "gen-comparator-tests",
+    srcs = [
+        "//pkg/sql/logictest:testdata",
+    ],
+    outs = [
+        "comparator_generated_test.go",
+    ],
+    cmd = """
+        $(location //pkg/sql/schemachanger/sctest/sccomparatortestgen) -out-file=$(location comparator_generated_test.go)
+    """,
+    exec_tools = [
+        "//pkg/sql/schemachanger/sctest/sccomparatortestgen",
     ],
     visibility = [
         ":__pkg__",
