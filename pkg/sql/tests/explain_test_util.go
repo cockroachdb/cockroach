@@ -95,6 +95,10 @@ func GenerateAndCheckRedactedExplainsForPII(
 									msg := err.Error()
 									if strings.Contains(msg, "internal error") {
 										t.Error(err)
+									} else if !strings.Contains(msg, "syntax error") {
+										// Skip logging syntax errors, since they're expected to be
+										// common and uninteresting.
+										t.Logf("encountered non-internal error: %s\n", err)
 									}
 									continue
 								}
