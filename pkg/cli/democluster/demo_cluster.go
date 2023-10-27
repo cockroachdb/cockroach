@@ -1060,6 +1060,13 @@ func (c *transientCluster) DrainAndShutdown(ctx context.Context, nodeID int32) e
 	if err := c.drainAndShutdown(ctx, c.servers[serverIdx].adminClient); err != nil {
 		return err
 	}
+
+	select {
+	case <-c.servers[serverIdx].Stopper().IsStopped():
+	case <-time.After(10 * time.Second):
+		return errors.Errorf("server stopper not stopped after 10 seconds")
+	}
+
 	c.servers[serverIdx].TestServerInterface = nil
 	c.servers[serverIdx].adminClient = nil
 	if c.demoCtx.Multitenant {
