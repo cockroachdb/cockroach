@@ -1418,6 +1418,12 @@ cache will already have moved on to newer entries.
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaRaftStorageError = metric.Metadata{
+		Name:        "raft.storage.error",
+		Help:        "Number of Raft storage errors",
+		Measurement: "Error Count",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Raft message metrics.
 	metaRaftRcvdProp = metric.Metadata{
@@ -2503,6 +2509,7 @@ type StoreMetrics struct {
 	RaftSchedulerLatency       metric.IHistogram
 	RaftTimeoutCampaign        *metric.Counter
 	RaftStorageReadBytes       *metric.Counter
+	RaftStorageError           *metric.Counter
 	WALBytesWritten            *metric.Gauge
 	WALBytesIn                 *metric.Gauge
 
@@ -3205,6 +3212,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		}),
 		RaftTimeoutCampaign:  metric.NewCounter(metaRaftTimeoutCampaign),
 		RaftStorageReadBytes: metric.NewCounter(metaRaftStorageReadBytes),
+		RaftStorageError:     metric.NewCounter(metaRaftStorageError),
 
 		// Raft message metrics.
 		RaftRcvdMessages: [maxRaftMsgType + 1]*metric.Counter{
