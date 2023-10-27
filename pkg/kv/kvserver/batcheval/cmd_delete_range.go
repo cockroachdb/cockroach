@@ -27,8 +27,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// enableStickyGCHint controls whether the sticky GCHint is enabled.
-var enableStickyGCHint = settings.RegisterBoolSetting(
+// EnableStickyGCHint controls whether the sticky GCHint is enabled.
+var EnableStickyGCHint = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.gc.sticky_hint.enabled",
 	"enable writing sticky GC hints which expedite garbage collection after schema changes",
@@ -137,7 +137,7 @@ func DeleteRange(
 			}
 
 			updated := false
-			if enableStickyGCHint.Get(&cArgs.EvalCtx.ClusterSettings().SV) {
+			if EnableStickyGCHint.Get(&cArgs.EvalCtx.ClusterSettings().SV) {
 				// Add the timestamp to GCHint to guarantee that GC eventually clears it.
 				updated = hint.ScheduleGCFor(h.Timestamp)
 			}

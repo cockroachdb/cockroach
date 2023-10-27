@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -5253,6 +5254,7 @@ func TestStoreMergeGCHint(t *testing.T) {
 		name                string
 		dataLeft, dataRight bool
 		delLeft, delRight   bool
+		enableStickyGC      bool
 
 		wantRangeDelete bool // the hint must indicate a whole range deletion
 		wantGCTimestamp bool // the hint must indicate a pending GC timestamp
@@ -5260,60 +5262,77 @@ func TestStoreMergeGCHint(t *testing.T) {
 		name:     "merge empty ranges",
 		dataLeft: false, dataRight: false,
 		delLeft: false, delRight: false,
+		enableStickyGC:  true,
 		wantRangeDelete: false,
 		wantGCTimestamp: false,
 	}, {
 		name:     "merge after deleting empty left",
 		dataLeft: false, dataRight: false,
 		delLeft: true, delRight: false,
+		enableStickyGC:  true,
 		wantRangeDelete: true,
 		wantGCTimestamp: true,
 	}, {
 		name:     "merge after deleting empty right",
 		dataLeft: false, dataRight: false,
 		delLeft: false, delRight: true,
+		enableStickyGC:  true,
 		wantRangeDelete: true,
 		wantGCTimestamp: true,
 	}, {
 		name:     "merge after deleting both empty",
 		dataLeft: false, dataRight: false,
 		delLeft: true, delRight: true,
+		enableStickyGC:  true,
 		wantRangeDelete: true,
 		wantGCTimestamp: true,
 	}, {
 		name:     "merge similar ranges",
 		dataLeft: true, dataRight: true,
 		delLeft: true, delRight: true,
+		enableStickyGC:  true,
 		wantRangeDelete: true,
 		wantGCTimestamp: true,
+	}, {
+		name:     "merge similar ranges no-sticky",
+		dataLeft: true, dataRight: true,
+		delLeft: true, delRight: true,
+		enableStickyGC:  false,
+		wantRangeDelete: true,
+		wantGCTimestamp: false, // NB: not written because the cluster setting is off
 	}, {
 		name:     "merge with data on right",
 		dataLeft: true, dataRight: true,
 		delLeft: true, delRight: false,
+		enableStickyGC:  true,
 		wantRangeDelete: false,
 		wantGCTimestamp: true,
 	}, {
 		name:     "merge with data on left",
 		dataLeft: true, dataRight: true,
 		delLeft: false, delRight: true,
+		enableStickyGC:  true,
 		wantRangeDelete: false,
 		wantGCTimestamp: true,
 	}, {
 		name:     "merge with no deletes",
 		dataLeft: true, dataRight: true,
 		delLeft: false, delRight: false,
+		enableStickyGC:  true,
 		wantRangeDelete: false,
 		wantGCTimestamp: false,
 	}, {
 		name:     "merge with empty on left",
 		dataLeft: false, dataRight: true,
 		delLeft: false, delRight: true,
+		enableStickyGC:  true,
 		wantRangeDelete: true,
 		wantGCTimestamp: true,
 	}, {
 		name:     "merge with empty on right",
 		dataLeft: true, dataRight: false,
 		delLeft: true, delRight: false,
+		enableStickyGC:  true,
 		wantRangeDelete: true,
 		wantGCTimestamp: true,
 	},
@@ -5332,6 +5351,8 @@ func TestStoreMergeGCHint(t *testing.T) {
 			defer s.Stopper().Stop(ctx)
 			store, err := s.Stores().GetStore(s.GetFirstStoreID())
 			require.NoError(t, err)
+
+			batcheval.EnableStickyGCHint.Override(ctx, &s.ClusterSettings().SV, d.enableStickyGC)
 
 			leftKey := roachpb.Key("a")
 			splitKey := roachpb.Key("b")
