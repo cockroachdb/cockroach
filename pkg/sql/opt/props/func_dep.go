@@ -1761,10 +1761,27 @@ func (f *FuncDepSet) inClosureOf(cols, in opt.ColSet, strict bool) bool {
 	}
 
 	// Now continue with full transitive closure of strict dependencies.
+	var recentlyAdded opt.ColSet
+	restartedAt := -1
 	for i := 0; i < len(f.deps); i++ {
 		fd := &f.deps[i]
 
-		if fd.strict && fd.from.SubsetOf(in) && !fd.to.SubsetOf(in) {
+		if !fd.strict {
+			continue
+		}
+
+		previouslySeen := i <= restartedAt
+		if previouslySeen && !fd.from.Intersects(recentlyAdded) {
+			// If the FD was seen in the last iteration before restarting and
+			// the columns most recently added to "in" do not intersect the
+			// "from" set, then the FD will not grow the closure, so it can be
+			// skipped. This is an optimization using the cheaper
+			// set-intersection operation (compare to the set-subset operations
+			// below), which is unnecessary for correctness.
+			continue
+		}
+
+		if fd.from.SubsetOf(in) && !fd.to.SubsetOf(in) {
 			in.UnionWith(fd.to)
 
 			// Short-circuit if the "in" set now contains all the columns.
@@ -1773,7 +1790,9 @@ func (f *FuncDepSet) inClosureOf(cols, in opt.ColSet, strict bool) bool {
 			}
 
 			// Restart iteration to get transitive closure.
+			restartedAt = i
 			i = -1
+			recentlyAdded = fd.to
 		}
 	}
 	return false
