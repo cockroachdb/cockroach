@@ -628,6 +628,23 @@ func (f *FuncDepSet) ReduceCols(cols opt.ColSet) opt.ColSet {
 	var removed opt.ColSet
 	cols = cols.Copy()
 	for i, ok := cols.Next(0); ok; i, ok = cols.Next(i + 1) {
+		// First check if the column is present in any "to" set of a dependency.
+		// If not, then it is not redundant and must remain in the set. This is
+		// a fast-path to avoid the more expensive functional-dependency-closure
+		// test below, when possible.
+		inToSet := false
+		for j := range f.deps {
+			if f.deps[j].to.Contains(i) {
+				inToSet = true
+				break
+			}
+		}
+		if !inToSet {
+			continue
+		}
+
+		// Determine if the column is functionally determined by the other
+		// columns.
 		cols.Remove(i)
 		removed.Add(i)
 		if !f.inClosureOf(removed, cols, true /* strict */) {
