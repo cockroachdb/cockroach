@@ -26,7 +26,7 @@ var hibernateReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d
 
 // WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
 // This is used by docs automation to produce a list of supported versions for ORM's.
-var supportedHibernateTag = "5.6.15"
+var supportedHibernateTag = "6.3.1"
 
 type hibernateOptions struct {
 	testName string
@@ -42,7 +42,7 @@ var (
 		testName: "hibernate",
 		testDir:  "hibernate-core",
 		buildCmd: `cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroachdb ` +
-			`--tests org.hibernate.jdbc.util.BasicFormatterTest.*`,
+			`--tests org.hibernate.orm.test.jdbc.util.BasicFormatterTest.*`,
 		testCmd: "cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroachdb",
 		listWithName: listWithName{
 			blocklistName:  "hibernateBlockList",
@@ -55,10 +55,10 @@ var (
 	hibernateSpatialOpts = hibernateOptions{
 		testName: "hibernate-spatial",
 		testDir:  "hibernate-spatial",
-		buildCmd: `cd /mnt/data1/hibernate/hibernate-spatial/ && ./../gradlew test -Pdb=cockroachdb_spatial ` +
+		buildCmd: `cd /mnt/data1/hibernate/hibernate-spatial/ && ./../gradlew test -Pdb=cockroachdb ` +
 			`--tests org.hibernate.spatial.dialect.postgis.*`,
 		testCmd: `cd /mnt/data1/hibernate/hibernate-spatial && ` +
-			`HIBERNATE_CONNECTION_LEAK_DETECTION=true ./../gradlew test -Pdb=cockroachdb_spatial`,
+			`HIBERNATE_CONNECTION_LEAK_DETECTION=true ./../gradlew test -Pdb=cockroachdb`,
 		listWithName: listWithName{
 			blocklistName:  "hibernateSpatialBlockList",
 			blocklist:      hibernateSpatialBlockList,
@@ -124,14 +124,13 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 			t.Fatal(err)
 		}
 
-		// TODO(rafi): use openjdk-11-jdk-headless once we are off of Ubuntu 16.
 		if err := repeatRunE(
 			ctx,
 			t,
 			c,
 			node,
 			"install dependencies",
-			`sudo apt-get -qq install default-jre openjdk-8-jdk-headless gradle`,
+			`sudo apt-get -qq install openjdk-11-jre-headless openjdk-11-jdk-headless`,
 		); err != nil {
 			t.Fatal(err)
 		}
