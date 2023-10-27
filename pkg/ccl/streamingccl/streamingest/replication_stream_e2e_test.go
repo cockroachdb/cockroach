@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -630,6 +632,44 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 
 	// Since the data was distributed across multiple nodes, multiple nodes should've been connected to
 	require.Greater(t, len(clientAddresses), 1)
+}
+
+func TestSpecsPersistedOnlyAfterInitialPlan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	var persistedPhysicalSpecsCount int
+	var replanCandidateCount int
+	replannedThreeTimes := make(chan struct{})
+	args.TestingKnobs = &sql.StreamingTestingKnobs{
+		AfterReplicationFlowPlan: func(ingestionSpecs map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
+			frontierSpec *execinfrapb.StreamIngestionFrontierSpec) {
+			replanCandidateCount++
+			if replanCandidateCount > 2 {
+				close(replannedThreeTimes)
+			}
+		},
+		AfterPersistingPartitionSpecs: func() {
+			persistedPhysicalSpecsCount++
+		},
+	}
+
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	// Make the replanner generate candidates frequently, but never actually induce a replanning event
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_frequency", time.Millisecond*500)
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_threshold", 0)
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	// Wait for a couple replan candidates to generate and then check there's only one persisted plan.
+	<-replannedThreeTimes
+	require.Equal(t, 1, persistedPhysicalSpecsCount)
 }
 
 // TestStreamingAutoReplan asserts that if a new node can participate in the

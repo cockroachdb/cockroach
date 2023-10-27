@@ -1790,6 +1790,8 @@ type StreamingTestingKnobs struct {
 	AfterReplicationFlowPlan func(map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
 		*execinfrapb.StreamIngestionFrontierSpec)
 
+	AfterPersistingPartitionSpecs func()
+
 	// OverrideRevertRangeBatchSize allows overriding the `MaxSpanRequestKeys`
 	// used when sending a RevertRange request.
 	OverrideRevertRangeBatchSize int64
