@@ -434,7 +434,7 @@ func (tc *testConfig) checkAPIs(fd *FuncDepSet, tr testRelation) error {
 			return errors.Wrapf(err, "ComputeClosure%s incorrectly returns %s", cols, closure)
 		}
 
-		reduced := fd.ReduceCols(cols)
+		reduced, _ := fd.ReduceCols(cols)
 		if err := tr.checkFD(funcDep{
 			from:   reduced,
 			to:     cols,

@@ -877,7 +877,7 @@ func getJoinKeyAndEquijoinCols(
 ) (tableKeyCols opt.ColSet, reducedTableJoinCols, reducedInputRelJoinCols opt.ColList, ok bool) {
 	parentTableJoinColSet := tableJoinCols.ToSet()
 	if funcDeps.ColsAreStrictKey(parentTableJoinColSet) {
-		tableKeyCols = funcDeps.ReduceCols(parentTableJoinColSet)
+		tableKeyCols, _ = funcDeps.ReduceCols(parentTableJoinColSet)
 		reducedInputRelJoinCols = make(opt.ColList, 0, tableKeyCols.Len())
 		reducedTableJoinCols = make(opt.ColList, 0, tableKeyCols.Len())
 		for i, tableJoinCol := range tableJoinCols {

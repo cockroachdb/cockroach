@@ -4539,7 +4539,7 @@ func (sb *statisticsBuilder) selectivityFromUnappliedConjuncts(
 func (sb *statisticsBuilder) tryReduceCols(
 	cols opt.ColSet, s *props.Statistics, fd *props.FuncDepSet,
 ) opt.ColSet {
-	reducedCols := fd.ReduceCols(cols)
+	reducedCols, _ := fd.ReduceCols(cols)
 	if reducedCols.Empty() {
 		// There are no reduced columns so we return the original column set.
 		return cols

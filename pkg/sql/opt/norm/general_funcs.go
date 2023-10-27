@@ -274,7 +274,7 @@ func (c *CustomFuncs) SingleColFromSet(s opt.ColSet) opt.ColumnID {
 // grouping columns), these columns can be dropped. The input expression's
 // functional dependencies are used to make the decision.
 func (c *CustomFuncs) RedundantCols(input memo.RelExpr, cols opt.ColSet) opt.ColSet {
-	reducedCols := input.Relational().FuncDeps.ReduceCols(cols)
+	reducedCols, _ := input.Relational().FuncDeps.ReduceCols(cols)
 	if reducedCols.Equals(cols) {
 		return opt.ColSet{}
 	}

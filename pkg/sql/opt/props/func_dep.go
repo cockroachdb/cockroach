@@ -624,10 +624,37 @@ func (f *FuncDepSet) ConstantCols() opt.ColSet {
 // and then tests to see if the closure still includes the removed column. If
 // so, then the column is redundant. This algorithm has decent running time, but
 // will not necessarily find the candidate key with the fewest columns.
-func (f *FuncDepSet) ReduceCols(cols opt.ColSet) opt.ColSet {
+//
+// ReduceCols may return the unaltered, given set along with newSet=false if the
+// columns cannot be reduced. Otherwise, a new set will be returned along with
+// newSet=true.
+func (f *FuncDepSet) ReduceCols(cols opt.ColSet) (reduced opt.ColSet, newSet bool) {
 	var removed opt.ColSet
-	cols = cols.Copy()
 	for i, ok := cols.Next(0); ok; i, ok = cols.Next(i + 1) {
+		// First check if the column is present in any "to" set of a dependency.
+		// If not, then it is not redundant and must remain in the set. This is
+		// a fast-path to avoid the more expensive functional-dependency-closure
+		// test below, when possible.
+		inToSet := false
+		for j := range f.deps {
+			if f.deps[j].to.Contains(i) {
+				inToSet = true
+				break
+			}
+		}
+		if !inToSet {
+			continue
+		}
+
+		// Copy the given set if we haven't already so that we can safely mutate
+		// it.
+		if !newSet {
+			cols = cols.Copy()
+			newSet = true
+		}
+
+		// Determine if the column is functionally determined by the other
+		// columns.
 		cols.Remove(i)
 		removed.Add(i)
 		if !f.inClosureOf(removed, cols, true /* strict */) {
@@ -637,7 +664,7 @@ func (f *FuncDepSet) ReduceCols(cols opt.ColSet) opt.ColSet {
 		}
 		removed.Remove(i)
 	}
-	return cols
+	return cols, newSet
 }
 
 // InClosureOf returns true if the given columns are functionally determined by
@@ -740,7 +767,7 @@ func (f *FuncDepSet) AddStrictKey(keyCols, allCols opt.ColSet) {
 
 	// Ensure we have candidate key (i.e. has no columns that are functionally
 	// determined by other columns).
-	keyCols = f.ReduceCols(keyCols)
+	keyCols, _ = f.ReduceCols(keyCols)
 	f.addDependency(keyCols, allCols, true /* strict */, false /* equiv */)
 
 	// Try to use the new FD to reduce any existing key first.
@@ -1623,7 +1650,7 @@ func (f *FuncDepSet) Verify() {
 
 	if f.hasKey != noKey {
 		if f.hasKey == strictKey {
-			if reduced := f.ReduceCols(f.key); !reduced.Equals(f.key) {
+			if reduced, _ := f.ReduceCols(f.key); !reduced.Equals(f.key) {
 				panic(errors.AssertionFailedf("expected FD to have candidate key %s: %s", reduced, f))
 			}
 
@@ -1796,7 +1823,7 @@ func (f *FuncDepSet) addDependency(from, to opt.ColSet, strict, equiv bool) {
 
 	if strict {
 		// Reducing the columns yields a "stronger" dependency.
-		from = f.ReduceCols(from)
+		from, _ = f.ReduceCols(from)
 	}
 
 	// Delegate constant dependency.
@@ -1954,14 +1981,14 @@ func (f *FuncDepSet) tryToReduceKey(notNullCols opt.ColSet) {
 				// All key columns are not-null; we can upgrade the key to strict.
 				f.AddStrictKey(f.key, f.ColSet())
 			} else {
-				reduced := f.ReduceCols(f.key)
+				reduced, _ := f.ReduceCols(f.key)
 				reduced.UnionWith(nullableKeyCols)
 				f.key = reduced
 			}
 		}
 
 	case strictKey:
-		f.key = f.ReduceCols(f.key)
+		f.key, _ = f.ReduceCols(f.key)
 	}
 }
 

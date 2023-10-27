@@ -142,7 +142,7 @@ func (c *CustomFuncs) CanConvertUnionToDistinctUnionAll(
 		// The columns must form a strict key over the base table.
 		return opt.ColSet{}, false
 	}
-	keyCols = leftFDs.ReduceCols(leftColSet)
+	keyCols, _ = leftFDs.ReduceCols(leftColSet)
 	if keyCols.Empty() {
 		// The key columns set must not be empty
 		return opt.ColSet{}, false
