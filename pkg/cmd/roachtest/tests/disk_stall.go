@@ -150,11 +150,11 @@ func runDiskStalledDetection(
 
 	stallAt := timeutil.Now()
 	response := mustGetMetrics(t, adminURL, workloadStartAt, stallAt, []tsQuery{
-		{name: "cr.node.txn.commits", queryType: total},
+		{name: "cr.node.sql.query.count", queryType: total},
 	})
 	cum := response.Results[0].Datapoints
-	totalTxnsPreStall := cum[len(cum)-1].Value - cum[0].Value
-	t.L().PrintfCtx(ctx, "%.2f transactions completed before stall", totalTxnsPreStall)
+	totalQueriesPreStall := cum[len(cum)-1].Value - cum[0].Value
+	t.L().PrintfCtx(ctx, "%.2f queries completed before stall", totalQueriesPreStall)
 
 	t.Status("inducing write stall")
 	if doStall {
@@ -202,16 +202,16 @@ func runDiskStalledDetection(
 	{
 		now := timeutil.Now()
 		response := mustGetMetrics(t, adminURL, workloadStartAt, now, []tsQuery{
-			{name: "cr.node.txn.commits", queryType: total},
+			{name: "cr.node.sql.query.count", queryType: total},
 		})
 		cum := response.Results[0].Datapoints
-		totalTxnsPostStall := cum[len(cum)-1].Value - totalTxnsPreStall
-		preStallTPS := totalTxnsPreStall / stallAt.Sub(workloadStartAt).Seconds()
-		postStallTPS := totalTxnsPostStall / workloadAfterDur.Seconds()
-		t.L().PrintfCtx(ctx, "%.2f total transactions committed after stall\n", totalTxnsPostStall)
-		t.L().PrintfCtx(ctx, "pre-stall tps: %.2f, post-stall tps: %.2f\n", preStallTPS, postStallTPS)
-		if postStallTPS < preStallTPS/2 {
-			t.Fatalf("post-stall TPS %.2f is less than 50%% of pre-stall TPS %.2f", postStallTPS, preStallTPS)
+		totalQueriesPostStall := cum[len(cum)-1].Value - totalQueriesPreStall
+		preStallQPS := totalQueriesPreStall / stallAt.Sub(workloadStartAt).Seconds()
+		postStallQPS := totalQueriesPostStall / workloadAfterDur.Seconds()
+		t.L().PrintfCtx(ctx, "%.2f total queries committed after stall\n", totalQueriesPostStall)
+		t.L().PrintfCtx(ctx, "pre-stall qps: %.2f, post-stall qps: %.2f\n", preStallQPS, postStallQPS)
+		if postStallQPS < preStallQPS/2 {
+			t.Fatalf("post-stall QPS %.2f is less than 50%% of pre-stall QPS %.2f", postStallQPS, preStallQPS)
 		}
 	}
 
