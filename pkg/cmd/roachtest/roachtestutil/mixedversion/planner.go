@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
 type (
@@ -150,7 +151,13 @@ func (p *testPlanner) testSetupSteps() []testStep {
 
 	p.startClusterID = p.nextID()
 	steps = append(steps,
-		startStep{id: p.startClusterID, version: initialVersion, rt: p.rt, crdbNodes: p.crdbNodes},
+		startStep{
+			id:        p.startClusterID,
+			version:   initialVersion,
+			rt:        p.rt,
+			crdbNodes: p.crdbNodes,
+			settings:  p.clusterSettings(),
+		},
 		waitForStableClusterVersionStep{id: p.nextID(), nodes: p.crdbNodes, timeout: p.options.upgradeTimeout},
 	)
 
@@ -208,7 +215,8 @@ func (p *testPlanner) changeVersionSteps(
 	var steps []testStep
 	nodeOrder := append(option.NodeListOption{}, oldVersionNodes...)
 	for _, node := range nodeOrder {
-		steps = append(steps, restartWithNewBinaryStep{id: p.nextID(), version: to, node: node, rt: p.rt})
+		steps = append(steps, restartWithNewBinaryStep{
+			id: p.nextID(), version: to, node: node, rt: p.rt, settings: p.clusterSettings()})
 		oldVersionNodes = oldVersionNodes[1:]
 		newVersionNodes = append(newVersionNodes, node)
 
@@ -252,6 +260,13 @@ func (p *testPlanner) shouldRollback(toVersion *clusterupgrade.Version) bool {
 func (p *testPlanner) nextID() int {
 	p.stepCount++
 	return p.stepCount
+}
+
+func (p *testPlanner) clusterSettings() []install.ClusterSettingOption {
+	cs := []install.ClusterSettingOption{}
+	cs = append(cs, defaultClusterSettings...)
+	cs = append(cs, p.options.settings...)
+	return cs
 }
 
 func (p *testPlanner) newRNG() *rand.Rand {
