@@ -185,7 +185,9 @@ func TestTenantHTTP(t *testing.T) {
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		// This test is specific to secondary tenants; no need to run it
 		// using the system tenant.
-		DefaultTestTenant: base.TestTenantAlwaysEnabled,
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
+			base.TestTenantAlwaysEnabled, 113187,
+		),
 	})
 	defer s.Stopper().Stop(ctx)
 
