@@ -31,8 +31,7 @@ import (
 var enableStickyGCHint = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.gc.sticky_hint.enabled",
-	"enable writing sticky GC hints which expedite garbage collection after schema changes"+
-		" (ignored and assumed 'true' in 23.2)",
+	"enable writing sticky GC hints which expedite garbage collection after schema changes",
 	false,
 )
 
