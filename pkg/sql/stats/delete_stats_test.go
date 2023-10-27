@@ -708,10 +708,12 @@ func TestStatsAreDeletedForDroppedTables(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
 		// Lower the garbage collection interval to speed up the test.
 		runner.Exec(t, "SET CLUSTER SETTING sql.stats.garbage_collection_interval = '1s';")
-		// Create a table with short TTL and collect stats on it.
+		// Create the table and collect stats on it. Set a short TTL interval after
+		// the stats collection to ensure that the stats job doesn't exceed the gc
+		// threshold and fail.
 		runner.Exec(t, "CREATE TABLE t (k PRIMARY KEY) AS SELECT 1;")
-		runner.Exec(t, "ALTER TABLE t CONFIGURE ZONE USING gc.ttlseconds = 1;")
 		runner.Exec(t, "ANALYZE t;")
+		runner.Exec(t, "ALTER TABLE t CONFIGURE ZONE USING gc.ttlseconds = 1;")
 
 		r := runner.QueryRow(t, "SELECT 't'::regclass::oid")
 		var tableID int
@@ -746,9 +748,11 @@ func TestStatsAreDeletedForDroppedTables(t *testing.T) {
 		const numTables = 5
 		countStatisticsQuery := `SELECT count(*) FROM system.table_statistics WHERE "tableID"  IN (`
 		for i := 1; i <= numTables; i++ {
+			// Analyze the table before setting the gc.ttl to avoid hitting the gc
+			// threshold.
 			runner.Exec(t, fmt.Sprintf("CREATE TABLE t%d (k PRIMARY KEY) AS SELECT 1;", i))
-			runner.Exec(t, fmt.Sprintf("ALTER TABLE t%d CONFIGURE ZONE USING gc.ttlseconds = 1;", i))
 			runner.Exec(t, fmt.Sprintf("ANALYZE t%d;", i))
+			runner.Exec(t, fmt.Sprintf("ALTER TABLE t%d CONFIGURE ZONE USING gc.ttlseconds = 1;", i))
 			r := runner.QueryRow(t, fmt.Sprintf("SELECT 't%d'::regclass::oid", i))
 			var tableID int
 			r.Scan(&tableID)
