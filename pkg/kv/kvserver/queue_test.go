@@ -110,7 +110,13 @@ func makeTestBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfi
 	cfg.pending = metric.NewGauge(metric.Metadata{Name: "pending"})
 	cfg.processingNanos = metric.NewCounter(metric.Metadata{Name: "processingnanos"})
 	cfg.purgatory = metric.NewGauge(metric.Metadata{Name: "purgatory"})
-	cfg.disabledConfig = &settings.BoolSetting{}
+	// N.B. Each ClusterSetting has a unique slot index into the _global_ registry.
+	// Thus, to avoid aliasing another cluster settings registered during init(),
+	// we must create a _fresh_ cluster setting.
+	cfg.enabledConfig = settings.RegisterBoolSetting(settings.SystemOnly,
+		settings.InternalKey(fmt.Sprintf("makeTestBaseQueue.%s.enabledConfig", name)), "", true)
+	cfg.enabledConfig.Override(context.Background(), &store.cfg.Settings.SV, true)
+
 	return newBaseQueue(name, impl, store, cfg)
 }
 
@@ -661,7 +667,7 @@ func TestNeedsSystemConfig(t *testing.T) {
 
 	// Now check that a queue which doesn't require the system config can
 	// successfully add and process a replica.
-	bqNoSysCfg := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{
+	bqNoSysCfg := makeTestBaseQueue("test2", testQueue, tc.store, queueConfig{
 		needsSpanConfigs:     false,
 		acceptsUnsplitRanges: true,
 		maxSize:              1,

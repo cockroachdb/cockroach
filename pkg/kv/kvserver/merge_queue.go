@@ -124,7 +124,7 @@ func newMergeQueue(store *Store, db *kv.DB) *mergeQueue {
 			pending:              store.metrics.MergeQueuePending,
 			processingNanos:      store.metrics.MergeQueueProcessingNanos,
 			purgatory:            store.metrics.MergeQueuePurgatory,
-			disabledConfig:       kvserverbase.MergeQueueEnabled,
+			enabledConfig:        kvserverbase.MergeQueueEnabled,
 		},
 	)
 	return mq

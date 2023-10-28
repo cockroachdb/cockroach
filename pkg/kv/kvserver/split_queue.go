@@ -127,7 +127,7 @@ func newSplitQueue(store *Store, db *kv.DB) *splitQueue {
 			pending:              store.metrics.SplitQueuePending,
 			processingNanos:      store.metrics.SplitQueueProcessingNanos,
 			purgatory:            store.metrics.SplitQueuePurgatory,
-			disabledConfig:       kvserverbase.SplitQueueEnabled,
+			enabledConfig:        kvserverbase.SplitQueueEnabled,
 		},
 	)
 	return sq

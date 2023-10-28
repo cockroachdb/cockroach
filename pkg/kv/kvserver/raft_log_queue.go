@@ -183,7 +183,7 @@ func newRaftLogQueue(store *Store, db *kv.DB) *raftLogQueue {
 			storeFailures:        store.metrics.StoreFailures,
 			pending:              store.metrics.RaftLogQueuePending,
 			processingNanos:      store.metrics.RaftLogQueueProcessingNanos,
-			disabledConfig:       kvserverbase.RaftLogQueueEnabled,
+			enabledConfig:        kvserverbase.RaftLogQueueEnabled,
 		},
 	)
 	return rlq

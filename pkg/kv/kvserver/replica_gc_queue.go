@@ -108,7 +108,7 @@ func newReplicaGCQueue(store *Store, db *kv.DB) *replicaGCQueue {
 			storeFailures:            store.metrics.StoreFailures,
 			pending:                  store.metrics.ReplicaGCQueuePending,
 			processingNanos:          store.metrics.ReplicaGCQueueProcessingNanos,
-			disabledConfig:           kvserverbase.ReplicaGCQueueEnabled,
+			enabledConfig:            kvserverbase.ReplicaGCQueueEnabled,
 		},
 	)
 	return rgcq

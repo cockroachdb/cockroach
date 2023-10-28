@@ -59,7 +59,7 @@ func newRaftSnapshotQueue(store *Store) *raftSnapshotQueue {
 			storeFailures:        store.metrics.StoreFailures,
 			pending:              store.metrics.RaftSnapshotQueuePending,
 			processingNanos:      store.metrics.RaftSnapshotQueueProcessingNanos,
-			disabledConfig:       kvserverbase.RaftSnapshotQueueEnabled,
+			enabledConfig:        kvserverbase.RaftSnapshotQueueEnabled,
 		},
 	)
 	return rq
