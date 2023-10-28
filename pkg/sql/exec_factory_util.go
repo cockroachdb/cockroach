@@ -106,6 +106,9 @@ func constructPlan(
 	if flags.IsSet(exec.PlanFlagCheckContainsLocking) {
 		res.flags.Set(planFlagCheckContainsLocking)
 	}
+	if flags.IsSet(exec.PlanFlagMustUseRootTxn) {
+		res.flags.Set(planFlagMustUseRootTxn)
+	}
 
 	return res, nil
 }

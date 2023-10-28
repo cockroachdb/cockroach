@@ -362,3 +362,113 @@ vectorized: true
   columns: (f88259)
   size: 1 column, 1 row
   row 0, expr 0: f88259(333, 444)
+
+# Regression test for #112188 - disable concurrency in the presence of a volatile
+# routine.
+subtest prevent_leaf_txn
+
+statement ok
+CREATE TABLE t1_112188 (a INT, b INT, c INT);
+
+statement ok
+CREATE TABLE t2_112188 (d INT PRIMARY KEY);
+
+statement ok
+CREATE FUNCTION fn_vol_112188(c INT) RETURNS t1_112188 LANGUAGE SQL AS $$
+  SELECT * FROM t1_112188 te
+$$;
+
+statement ok
+CREATE FUNCTION fn_non_vol_112188(c INT) RETURNS t1_112188 IMMUTABLE LANGUAGE SQL AS $$
+  SELECT ROW(1, 2, 3);
+$$;
+
+# The streamer uses a leaf txn, so it should be disabled when the query
+# has a volatile UDF.
+query T
+EXPLAIN ANALYZE
+SELECT 1 FROM fn_vol_112188(1) AS tmp
+INNER JOIN t2_112188 ON tmp.a = t2_112188.d;
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• render
+│
+└── • lookup join
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 0
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows decoded: 0
+    │ KV bytes read: 0 B
+    │ KV gRPC calls: 0
+    │ estimated max memory allocated: 0 B
+    │ table: t2_112188@t2_112188_pkey
+    │ equality: (a) = (d)
+    │ equality cols are key
+    │
+    └── • project set
+        │ nodes: <hidden>
+        │ regions: <hidden>
+        │ actual row count: 0
+        │ estimated row count: 1
+        │
+        └── • emptyrow
+              nodes: <hidden>
+              regions: <hidden>
+              actual row count: 1
+
+query T
+EXPLAIN ANALYZE
+SELECT 1 FROM fn_non_vol_112188(1) AS tmp
+INNER JOIN t2_112188 ON tmp.a = t2_112188.d;
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• render
+│
+└── • lookup join (streamer)
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 0
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows decoded: 0
+    │ KV bytes read: 0 B
+    │ KV gRPC calls: 0
+    │ estimated max memory allocated: 0 B
+    │ table: t2_112188@t2_112188_pkey
+    │ equality: (a) = (d)
+    │ equality cols are key
+    │
+    └── • project set
+        │ nodes: <hidden>
+        │ regions: <hidden>
+        │ actual row count: 1
+        │ estimated row count: 1
+        │
+        └── • emptyrow
+              nodes: <hidden>
+              regions: <hidden>
+              actual row count: 1
+
+subtest end
