@@ -103,7 +103,7 @@ func newConsistencyQueue(store *Store) *consistencyQueue {
 			pending:              store.metrics.ConsistencyQueuePending,
 			processingNanos:      store.metrics.ConsistencyQueueProcessingNanos,
 			processTimeoutFunc:   makeRateLimitedTimeoutFunc(consistencyCheckRate),
-			disabledConfig:       kvserverbase.ConsistencyQueueEnabled,
+			enabledConfig:        kvserverbase.ConsistencyQueueEnabled,
 		},
 	)
 	return q
