@@ -289,7 +289,7 @@ func newTenantServer(
 	// case, DelayedSetTenantID will be set and should be used to populate
 	// TenantID in the config. We call it here as we need a valid TenantID below.
 	if sqlCfg.DelayedSetTenantID != nil {
-		cfgTenantID, err := sqlCfg.DelayedSetTenantID()
+		cfgTenantID, err := sqlCfg.DelayedSetTenantID(ctx)
 		if err != nil {
 			return nil, err
 		}
