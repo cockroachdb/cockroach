@@ -659,6 +659,12 @@ func (f *FuncDepSet) InClosureOf(cols, in opt.ColSet) bool {
 // will be duplicates, since all other columns will be equal.
 func (f *FuncDepSet) ComputeClosure(cols opt.ColSet) opt.ColSet {
 	cols = cols.Copy()
+	return f.ComputeClosureNoCopy(cols)
+}
+
+// ComputeClosureNoCopy is similar to ComputeClosure, but avoids allocations
+// when it is safe to mutate the given ColSet.
+func (f *FuncDepSet) ComputeClosureNoCopy(cols opt.ColSet) opt.ColSet {
 	for i := 0; i < len(f.deps); i++ {
 		fd := &f.deps[i]
 

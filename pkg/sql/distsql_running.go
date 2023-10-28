@@ -708,12 +708,28 @@ func (dsp *DistSQLPlanner) Run(
 	// to be on the safe side and mark 'noMutations' as 'false'.
 	noMutations := planCtx.planner != nil && !planCtx.planner.curPlan.flags.IsSet(planFlagContainsMutation)
 
+	// canUseLeafTxn indicates whether the plan contains an expression that
+	// cannot tolerate a concurrent leaf transaction.
+	canUseLeafTxn := true
+	if planCtx.planner != nil {
+		canUseLeafTxn = canUseLeafTxn && !planCtx.planner.curPlan.flags.IsSet(planFlagMustUseRootTxn)
+		canUseLeafTxn = canUseLeafTxn && !planCtx.planner.curPlan.flags.IsSet(planFlagContainsMutation)
+	}
+	if canUseLeafTxn {
+		for _, p := range plan.Processors {
+			if p.Spec.Core.LocalPlanNode != nil {
+				canUseLeafTxn = false
+				break
+			}
+		}
+	}
+
 	if txn == nil {
 		// Txn can be nil in some cases, like BulkIO flows. In such a case, we
 		// cannot create a LeafTxn, so we cannot parallelize scans.
 		planCtx.parallelizeScansIfLocal = false
 	} else {
-		if planCtx.isLocal && noMutations && planCtx.parallelizeScansIfLocal {
+		if planCtx.isLocal && planCtx.parallelizeScansIfLocal && canUseLeafTxn {
 			// Even though we have a single flow on the gateway node, we might
 			// have decided to parallelize the scans. If that's the case, we
 			// will need to use the Leaf txn.
@@ -761,15 +777,7 @@ func (dsp *DistSQLPlanner) Run(
 			// which are using the internal executor is error-prone, so we just
 			// disable the Streamer API for the "super-set" of problematic
 			// cases.
-			mustUseRootTxn := func() bool {
-				for _, p := range plan.Processors {
-					if p.Spec.Core.LocalPlanNode != nil {
-						return true
-					}
-				}
-				return false
-			}()
-			if !containsNonDefaultLocking && !mustUseRootTxn {
+			if !containsNonDefaultLocking && canUseLeafTxn {
 				if evalCtx.SessionData().StreamerEnabled {
 					for _, proc := range plan.Processors {
 						if jr := proc.Spec.Core.JoinReader; jr != nil {

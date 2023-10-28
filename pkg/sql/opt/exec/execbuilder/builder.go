@@ -149,6 +149,10 @@ type Builder struct {
 	// least one check query plan uses non-default key locking strength.
 	CheckContainsNonDefaultKeyLocking bool
 
+	// MustUseRootTxn is set to true if at least one expression in the plan
+	// prevents the use of leaf transactions.
+	MustUseRootTxn bool
+
 	// MaxFullScanRows is the maximum number of rows scanned by a full scan, as
 	// estimated by the optimizer.
 	MaxFullScanRows float64

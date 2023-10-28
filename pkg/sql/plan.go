@@ -629,6 +629,12 @@ const (
 	// planFlagCheckContainsNonDefaultLocking is set if at least one check plan
 	// has a node with non-default key locking strength.
 	planFlagCheckContainsNonDefaultLocking
+
+	// planFlagUseRootTxn is used to prevent usage of leaf transactions. This is
+	// necessary because some expressions cannot be executed in the presence of
+	// concurrency. Note that planFlagUseRootTxn is not the only condition that
+	// forces use of the root transaction.
+	planFlagMustUseRootTxn
 )
 
 func (pf planFlags) IsSet(flag planFlags) bool {
