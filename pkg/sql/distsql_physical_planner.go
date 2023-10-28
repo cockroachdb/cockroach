@@ -4857,6 +4857,7 @@ func (dsp *DistSQLPlanner) NewPlanningCtxWithOracle(
 	if !distribute {
 		if planner == nil ||
 			evalCtx.SessionData().Internal ||
+			planner.curPlan.flags.IsSet(planFlagMustUseRootTxn) ||
 			planner.curPlan.flags.IsSet(planFlagContainsMutation) ||
 			planner.curPlan.flags.IsSet(planFlagContainsLocking) {
 			// Don't parallelize the scans if we have a local plan if
@@ -4867,6 +4868,7 @@ func (dsp *DistSQLPlanner) NewPlanningCtxWithOracle(
 			// and returning early in this function allows us to avoid the race
 			// on dsp.spanResolver in fakedist logic test configs without adding
 			// any synchronization (see #116039);
+			// - a node (e.g. volatile routine) explicitly requires the RootTxn.
 			// - the plan contains a mutation operation - we currently don't
 			// support any parallelism when mutations are present;
 			// - the plan uses locking (see #94290).

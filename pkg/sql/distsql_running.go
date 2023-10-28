@@ -701,19 +701,52 @@ func (dsp *DistSQLPlanner) Run(
 		localState.Collection = planCtx.planner.Descriptors()
 	}
 
-	// noMutations indicates whether we know for sure that the plan doesn't have
-	// any mutations. If we don't have the access to the planner (which can be
-	// the case not on the main query execution path, i.e. BulkIO, CDC, etc),
-	// then we are ignorant of the details of the execution plan, so we choose
-	// to be on the safe side and mark 'noMutations' as 'false'.
-	noMutations := planCtx.planner != nil && !planCtx.planner.curPlan.flags.IsSet(planFlagContainsMutation)
+	// canUseLeafTxn indicates whether the plan contains an expression that
+	// cannot tolerate a concurrent LeafTxn. This is the case if the expression
+	// must use a RootTxn.
+	//
+	// Txn can be nil in some cases, like BulkIO flows. In such a case, we cannot
+	// create a LeafTxn.
+	canUseLeafTxn := txn != nil
+	if planCtx.planner != nil {
+		// Some plan nodes (e.g. volatile UDFs) explicitly require RootTxn use.
+		canUseLeafTxn = canUseLeafTxn && !planCtx.planner.curPlan.flags.IsSet(planFlagMustUseRootTxn)
+		// Mutations use the RootTxn, and so they disallow LeafTxns.
+		// TODO(yuzefovich): we could be smarter here and allow the usage of
+		// the RootTxn by the mutations while still using the Streamer (that
+		// gets a LeafTxn) iff the plan is such that there is no concurrency
+		// between the root and the leaf txns.
+		canUseLeafTxn = canUseLeafTxn && !planCtx.planner.curPlan.flags.IsSet(planFlagContainsMutation)
+		// At the moment, we disable the usage of the Streamer API for local plans
+		// when locking is used by any of the processors. This is the case since
+		// the lock spans propagation doesn't happen for the leaf txns which can
+		// result in excessive contention for future reads (since the acquired
+		// locks are not cleaned up properly when the txn commits).
+		// TODO(yuzefovich): fix the propagation of the lock spans with the leaf
+		// txns and remove this check. See #94290.
+		canUseLeafTxn = canUseLeafTxn && !planCtx.planner.curPlan.flags.IsSet(planFlagContainsLocking)
+	}
+	if canUseLeafTxn {
+		// We also currently disable concurrency whenever we have a wrapped
+		// planNode. This is done to prevent scenarios where some of planNodes will
+		// use the RootTxn (via the internal executor) which prohibits the usage of
+		// the LeafTxn for this flow.
+		//
+		// Note that we're disallowing concurrency (e.g. the Streamer API) in more
+		// cases than strictly necessary, since there are planNodes that don't use
+		// the txn at all. However, auditing each planNode implementation to see
+		// which are using the internal executor is error-prone, so we just disable
+		// the Streamer API for the "super-set" of problematic cases.
+		for _, p := range plan.Processors {
+			if p.Spec.Core.LocalPlanNode != nil {
+				canUseLeafTxn = false
+				break
+			}
+		}
+	}
 
-	if txn == nil {
-		// Txn can be nil in some cases, like BulkIO flows. In such a case, we
-		// cannot create a LeafTxn, so we cannot parallelize scans.
-		planCtx.parallelizeScansIfLocal = false
-	} else {
-		if planCtx.isLocal && noMutations && planCtx.parallelizeScansIfLocal {
+	if canUseLeafTxn {
+		if planCtx.isLocal && planCtx.parallelizeScansIfLocal {
 			// Even though we have a single flow on the gateway node, we might
 			// have decided to parallelize the scans. If that's the case, we
 			// will need to use the Leaf txn.
@@ -721,64 +754,26 @@ func (dsp *DistSQLPlanner) Run(
 				localState.HasConcurrency = localState.HasConcurrency || execinfra.HasParallelProcessors(flow)
 			}
 		}
-		if noMutations {
-			// Even if planCtx.isLocal is false (which is the case when we think
-			// it's worth distributing the query), we need to go through the
-			// processors to figure out whether any of them have concurrency.
-			//
-			// However, the concurrency requires the usage of LeafTxns which is
-			// only acceptable if we don't have any mutations in the plan.
-			// TODO(yuzefovich): we could be smarter here and allow the usage of
-			// the RootTxn by the mutations while still using the Streamer (that
-			// gets a LeafTxn) iff the plan is such that there is no concurrency
-			// between the root and the leaf txns.
-			//
-			// At the moment of writing, this is only relevant whenever the
-			// Streamer API might be used by some of the processors. The
-			// Streamer internally can have concurrency, so it expects to be
-			// given a LeafTxn. In order for that LeafTxn to be created later,
-			// during the flow setup, we need to populate leafInputState below,
-			// so we tell the localState that there is concurrency.
-
-			// At the moment, we disable the usage of the Streamer API for local plans
-			// when locking is used by any of the processors. This is the case since
-			// the lock spans propagation doesn't happen for the leaf txns which can
-			// result in excessive contention for future reads (since the acquired
-			// locks are not cleaned up properly when the txn commits).
-			// TODO(yuzefovich): fix the propagation of the lock spans with the leaf
-			// txns and remove this check. See #94290.
-			containsLocking := planCtx.planner != nil && planCtx.planner.curPlan.flags.IsSet(planFlagContainsLocking)
-
-			// We also currently disable the usage of the Streamer API whenever
-			// we have a wrapped planNode. This is done to prevent scenarios
-			// where some of planNodes will use the RootTxn (via the internal
-			// executor) which prohibits the usage of the LeafTxn for this flow.
-			//
-			// Note that we're disallowing the Streamer API in more cases than
-			// strictly necessary (i.e. there are planNodes that don't use the
-			// txn at all), but auditing each planNode implementation to see
-			// which are using the internal executor is error-prone, so we just
-			// disable the Streamer API for the "super-set" of problematic
-			// cases.
-			mustUseRootTxn := func() bool {
-				for _, p := range plan.Processors {
-					if p.Spec.Core.LocalPlanNode != nil {
-						return true
-					}
-				}
-				return false
-			}()
-			if !containsLocking && !mustUseRootTxn {
-				if evalCtx.SessionData().StreamerEnabled {
-					for _, proc := range plan.Processors {
-						if jr := proc.Spec.Core.JoinReader; jr != nil {
-							// Both index and lookup joins, with and without
-							// ordering, are executed via the Streamer API that has
-							// concurrency.
-							localState.HasConcurrency = true
-							break
-						}
-					}
+		// Even if planCtx.isLocal is false (which is the case when we think
+		// it's worth distributing the query), we need to go through the
+		// processors to figure out whether any of them have concurrency.
+		// However, the concurrency requires the usage of LeafTxns, so we have
+		// to check whether LeafTxns are acceptable for the plan.
+		//
+		// At the moment of writing, this is only relevant whenever the
+		// Streamer API might be used by some of the processors. The
+		// Streamer internally can have concurrency, so it expects to be
+		// given a LeafTxn. In order for that LeafTxn to be created later,
+		// during the flow setup, we need to populate leafInputState below,
+		// so we tell the localState that there is concurrency.
+		if evalCtx.SessionData().StreamerEnabled {
+			for _, proc := range plan.Processors {
+				if jr := proc.Spec.Core.JoinReader; jr != nil {
+					// Both index and lookup joins, with and without
+					// ordering, are executed via the Streamer API that has
+					// concurrency.
+					localState.HasConcurrency = true
+					break
 				}
 			}
 		}
@@ -797,6 +792,16 @@ func (dsp *DistSQLPlanner) Run(
 				return
 			}
 			leafInputState = tis
+		}
+	} else {
+		// We cannot use a LeafTxn, so we cannot parallelize scans.
+		planCtx.parallelizeScansIfLocal = false
+		if buildutil.CrdbTestBuild {
+			if localState.MustUseLeafTxn() {
+				recv.SetError(errors.AssertionFailedf(
+					"MustUseLeafTxn() returned true when canUseLeafTxn is false",
+				))
+			}
 		}
 	}
 

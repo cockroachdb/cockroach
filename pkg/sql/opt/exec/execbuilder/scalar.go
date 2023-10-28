@@ -953,6 +953,12 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		}
 	}
 
+	// Volatile routines step the transaction, and routines with an exception
+	// block use internal savepoints.
+	if udf.Def.Volatility == volatility.Volatile || udf.Def.ExceptionBlock != nil {
+		b.flags.Set(exec.PlanFlagMustUseRootTxn)
+	}
+
 	if udf.Def.BlockState != nil {
 		b.initRoutineExceptionHandler(udf.Def.BlockState, udf.Def.ExceptionBlock)
 	}

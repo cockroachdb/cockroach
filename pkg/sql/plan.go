@@ -629,6 +629,12 @@ const (
 	// planFlagSessionMigration is set if the plan is being created during
 	// a session migration.
 	planFlagSessionMigration
+
+	// planFlagUseRootTxn is used to prevent usage of leaf transactions. This is
+	// necessary because some expressions cannot be executed in the presence of
+	// concurrency. Note that planFlagUseRootTxn is not the only condition that
+	// forces use of the root transaction.
+	planFlagMustUseRootTxn
 )
 
 func (pf planFlags) IsSet(flag planFlags) bool {
