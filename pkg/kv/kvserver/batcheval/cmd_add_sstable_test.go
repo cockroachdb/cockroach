@@ -1142,7 +1142,8 @@ func TestEvalAddSSTable(t *testing.T) {
 								kv.Key.Timestamp.WallTime *= 1e9
 								v, err := storage.DecodeMVCCValue(kv.Value)
 								require.NoError(t, err)
-								require.NoError(t, storage.MVCCPut(ctx, b, kv.Key.Key, kv.Key.Timestamp, v.Value, storage.MVCCWriteOptions{Txn: txn}))
+								_, err = storage.MVCCPut(ctx, b, kv.Key.Key, kv.Key.Timestamp, v.Value, storage.MVCCWriteOptions{Txn: txn})
+								require.NoError(t, err)
 							case storage.MVCCRangeKeyValue:
 								v, err := storage.DecodeMVCCValue(kv.Value)
 								require.NoError(t, err)

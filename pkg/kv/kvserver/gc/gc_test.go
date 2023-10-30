@@ -149,7 +149,8 @@ func TestLockAgeThresholdSetting(t *testing.T) {
 	txn1, txn2 := makeTxn(), makeTxn()
 	for _, local := range []bool{false, true} {
 		// Write two intents -- one for a global key, and another for a local key.
-		require.NoError(t, storage.MVCCPut(ctx, eng, makeKey(local, lock.Intent), intentHlc, value, storage.MVCCWriteOptions{Txn: &txn1}))
+		_, err := storage.MVCCPut(ctx, eng, makeKey(local, lock.Intent), intentHlc, value, storage.MVCCWriteOptions{Txn: &txn1})
+		require.NoError(t, err)
 		// Acquire some shared and exclusive locks as well.
 		for _, txn := range []*roachpb.Transaction{&txn1, &txn2} {
 			require.NoError(t, storage.MVCCAcquireLock(ctx, eng, txn, lock.Shared, makeKey(local, lock.Shared), nil, 0))
@@ -225,7 +226,8 @@ func TestIntentCleanupBatching(t *testing.T) {
 			case 1:
 				require.NoError(t, storage.MVCCAcquireLock(ctx, eng, &txn, lock.Exclusive, key, nil, 0))
 			case 2:
-				require.NoError(t, storage.MVCCPut(ctx, eng, key, intentHlc, value, storage.MVCCWriteOptions{Txn: &txn}))
+				_, err := storage.MVCCPut(ctx, eng, key, intentHlc, value, storage.MVCCWriteOptions{Txn: &txn})
+				require.NoError(t, err)
 			default:
 				t.Fatal("unexpected")
 			}
