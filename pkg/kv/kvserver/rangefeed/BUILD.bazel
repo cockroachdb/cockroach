@@ -19,6 +19,7 @@ go_library(
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util/admission",

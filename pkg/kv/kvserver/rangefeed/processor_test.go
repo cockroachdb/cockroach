@@ -67,6 +67,10 @@ func writeIntentOpWithDetails(
 	})
 }
 
+func writeIntentOpFromMeta(txn enginepb.TxnMeta) enginepb.MVCCLogicalOp {
+	return writeIntentOpWithDetails(txn.ID, txn.Key, txn.MinTimestamp, txn.WriteTimestamp)
+}
+
 func writeIntentOpWithKey(txnID uuid.UUID, key []byte, ts hlc.Timestamp) enginepb.MVCCLogicalOp {
 	return writeIntentOpWithDetails(txnID, key, ts /* minTS */, ts)
 }
@@ -137,7 +141,7 @@ func rangeFeedCheckpoint(span roachpb.Span, ts hlc.Timestamp) *roachpb.RangeFeed
 const testProcessorEventCCap = 16
 
 func newTestProcessorWithTxnPusher(
-	t *testing.T, rtsIter storage.SimpleMVCCIterator, txnPusher TxnPusher,
+	t *testing.T, rtsIter storage.SimpleMVCCIterator, txnPusher TxnPusher, st *cluster.Settings,
 ) (*Processor, *stop.Stopper) {
 	t.Helper()
 	stopper := stop.NewStopper()
@@ -147,8 +151,12 @@ func newTestProcessorWithTxnPusher(
 		pushTxnInterval = 10 * time.Millisecond
 		pushTxnAge = 50 * time.Millisecond
 	}
+	if st == nil {
+		st = cluster.MakeTestingClusterSettings()
+	}
 	p := NewProcessor(Config{
 		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
+		Settings:             st,
 		Clock:                hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */),
 		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 		TxnPusher:            txnPusher,
@@ -172,7 +180,7 @@ func newTestProcessor(
 	t *testing.T, rtsIter storage.SimpleMVCCIterator,
 ) (*Processor, *stop.Stopper) {
 	t.Helper()
-	return newTestProcessorWithTxnPusher(t, rtsIter, nil /* pusher */)
+	return newTestProcessorWithTxnPusher(t, rtsIter, nil /* pusher */, nil /* settings */)
 }
 
 func TestProcessorBasic(t *testing.T) {
@@ -544,6 +552,7 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
 	p := NewProcessor(Config{
 		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
+		Settings:             cluster.MakeTestingClusterSettings(),
 		Clock:                hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */),
 		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 		PushTxnsInterval:     pushTxnInterval,
@@ -612,6 +621,7 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
 	p := NewProcessor(Config{
 		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
+		Settings:             cluster.MakeTestingClusterSettings(),
 		Clock:                hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */),
 		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 		PushTxnsInterval:     pushTxnInterval,
@@ -856,14 +866,11 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 		return nil
 	})
 
-	p, stopper := newTestProcessorWithTxnPusher(t, nil /* rtsIter */, &tp)
+	p, stopper := newTestProcessorWithTxnPusher(t, nil /* rtsIter */, &tp, nil /* settings */)
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 
 	// Add a few intents and move the closed timestamp forward.
-	writeIntentOpFromMeta := func(txn enginepb.TxnMeta) enginepb.MVCCLogicalOp {
-		return writeIntentOpWithDetails(txn.ID, txn.Key, txn.MinTimestamp, txn.WriteTimestamp)
-	}
 	p.ConsumeLogicalOps(ctx,
 		writeIntentOpFromMeta(txn1Meta),
 		writeIntentOpFromMeta(txn2Meta),
@@ -932,6 +939,56 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 
 	// Release push attempt to avoid deadlock.
 	resumePushAttemptsC <- struct{}{}
+}
+
+// TestProcessorTxnPushDisabled tests that processors don't attempt txn pushes
+// when disabled.
+func TestProcessorTxnPushDisabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const pushInterval = 10 * time.Millisecond
+
+	// Set up a txn to write intents.
+	ts := hlc.Timestamp{WallTime: 10}
+	txnID := uuid.MakeV4()
+	txnMeta := enginepb.TxnMeta{
+		ID:             txnID,
+		Key:            keyA,
+		WriteTimestamp: ts,
+		MinTimestamp:   ts,
+	}
+
+	// Disable txn pushes.
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	PushTxnsEnabled.Override(ctx, &st.SV, false)
+
+	// Set up a txn pusher and processor that errors on any pushes.
+	var tp testTxnPusher
+	tp.mockPushTxns(func(txns []enginepb.TxnMeta, ts hlc.Timestamp) ([]*roachpb.Transaction, error) {
+		err := errors.Errorf("unexpected txn push for txns=%v ts=%s", txns, ts)
+		t.Errorf("%v", err)
+		return nil, err
+	})
+
+	p, stopper := newTestProcessorWithTxnPusher(t, nil /* rtsIter */, &tp, st)
+	defer stopper.Stop(ctx)
+
+	// Move the resolved ts forward to just before the txn timestamp.
+	rts := ts.Add(-1, 0)
+	require.True(t, p.ForwardClosedTS(ctx, rts))
+	p.syncEventC()
+	require.Equal(t, rts, p.rts.Get())
+
+	// Add a few intents and move the closed timestamp forward.
+	p.ConsumeLogicalOps(ctx, writeIntentOpFromMeta(txnMeta))
+	p.ForwardClosedTS(ctx, ts)
+	p.syncEventC()
+	require.Equal(t, rts, p.rts.Get())
+
+	// Wait for 10x the push txns interval, to make sure pushes are disabled.
+	// Waiting for something to not happen is a bit smelly, but gets the job done.
+	time.Sleep(10 * pushInterval)
 }
 
 // TestProcessorConcurrentStop tests that all methods in Processor's API
@@ -1089,6 +1146,7 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
 	p := NewProcessor(Config{
 		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
+		Settings:             cluster.MakeTestingClusterSettings(),
 		Clock:                hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */),
 		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 		PushTxnsInterval:     pushTxnInterval,
@@ -1177,6 +1235,7 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
 	p := NewProcessor(Config{
 		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
+		Settings:             cluster.MakeTestingClusterSettings(),
 		Clock:                hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */),
 		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 		PushTxnsInterval:     pushTxnInterval,
@@ -1254,6 +1313,7 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
 	p := NewProcessor(Config{
 		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
+		Settings:             cluster.MakeTestingClusterSettings(),
 		Clock:                hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */),
 		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 		PushTxnsInterval:     pushTxnInterval,

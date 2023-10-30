@@ -374,6 +374,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	cfg := rangefeed.Config{
 		AmbientContext:   r.AmbientContext,
 		Clock:            r.Clock(),
+		Settings:         r.store.ClusterSettings(),
 		RangeID:          r.RangeID,
 		Span:             desc.RSpan(),
 		TxnPusher:        &tp,
