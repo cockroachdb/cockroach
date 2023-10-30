@@ -18,6 +18,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/importer"
@@ -29,9 +30,79 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+func TestBackupSharedProcessTenantNodeDown(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	skip.UnderRace(t, "multi-node, multi-tenant test too slow under race")
+	params := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DisableDefaultTestTenant: true,
+		},
+	}
+	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+	tc, hostDB, _, cleanup := backupRestoreTestSetupWithParams(t, multiNode, 0, /* numAccounts */
+		InitManualReplication, params)
+	defer cleanup()
+
+	hostDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING sql.split_at.allow_for_secondary_tenant.enabled=true")
+	hostDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING sql.scatter.allow_for_secondary_tenant.enabled=true")
+	hostDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING server.sqlliveness.ttl='2s'")
+	hostDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING server.sqlliveness.heartbeat='250ms'")
+
+	testTenantID := roachpb.MustMakeTenantID(11)
+	_, tenantDB, err := tc.Server(0).StartSharedProcessTenant(ctx,
+		base.TestSharedProcessTenantArgs{
+			TenantID:   testTenantID,
+			TenantName: "test",
+			Knobs:      base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+		})
+	require.NoError(t, err)
+
+	hostDB.Exec(t, "ALTER TENANT test GRANT ALL CAPABILITIES")
+	tc.WaitForTenantCapabilities(t, testTenantID, map[tenantcapabilities.ID]string{
+		tenantcapabilities.CanUseNodelocalStorage: "true",
+		tenantcapabilities.CanAdminSplit:          "true",
+		tenantcapabilities.CanAdminScatter:        "true",
+	})
+	require.NoError(t, err)
+
+	tenantSQL := sqlutils.MakeSQLRunner(tenantDB)
+	tenantSQL.Exec(t, "CREATE TABLE foo AS SELECT generate_series(1, 4000)")
+	tenantSQL.Exec(t, "ALTER TABLE foo SPLIT AT VALUES (500), (1000), (1500), (2000), (2500), (3000)")
+	tenantSQL.Exec(t, "ALTER TABLE foo SCATTER")
+
+	t.Log("waiting for SQL instances")
+	waitStart := timeutil.Now()
+	for i := 1; i < multiNode; i++ {
+		sqlAddr := tc.Server(i).ServingSQLAddr()
+		testutils.SucceedsSoon(t, func() error {
+			t.Logf("waiting for server %d", i)
+			db, err := serverutils.OpenDBConnE(sqlAddr, "cluster:test/defaultdb", false, tc.Stopper())
+			if err != nil {
+				return err
+			}
+			return db.Ping()
+		})
+	}
+	t.Logf("all SQL instances (took %s)", timeutil.Since(waitStart))
+
+	// Shut down a node.
+	t.Log("shutting down server 2 (n3)")
+	tc.StopServer(2)
+
+	tenantRunner := sqlutils.MakeSQLRunner(tenantDB)
+	var jobID jobspb.JobID
+	tenantRunner.QueryRow(t, "BACKUP INTO 'nodelocal://1/worker-failure' WITH detached").Scan(&jobID)
+	jobutils.WaitForJobToSucceed(t, tenantRunner, jobID)
+}
 
 func TestBackupTenantImportingTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
