@@ -57,6 +57,14 @@ var StreamReplicationMinCheckpointFrequency = settings.RegisterDurationSetting(
 	settings.WithName("physical_replication.producer.min_checkpoint_frequency"),
 )
 
+// StreamProducerMuxRangefeeds controls whether we start event streams using the mux rangefeeds.
+var StreamProducerMuxRangefeeds = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"physical_replication.producer.mux_rangefeeds.enabled",
+	"controls whether rangefeeds used for physical replication use mux rangefeeds",
+	true,
+)
+
 // StreamReplicationConsumerHeartbeatFrequency controls frequency the stream replication
 // destination cluster sends heartbeat to the source cluster to keep the stream alive.
 var StreamReplicationConsumerHeartbeatFrequency = settings.RegisterDurationSetting(
