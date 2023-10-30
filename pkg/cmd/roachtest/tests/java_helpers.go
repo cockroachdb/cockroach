@@ -191,15 +191,17 @@ func parseAndSummarizeJavaORMTestsResults(
 	}
 	for i, file := range files {
 		t.L().Printf("Parsing %d of %d: %s\n", i+1, len(files), file)
-		// NB: It is necessary to single quote the file name to prevent
-		// unintentional variable interpolation if the name contains $'s.
+		// NB: It is necessary to escape `$` in case the name contains them so they
+		// aren't treated as environment variables. We avoid using single quotes
+		// because we still want `~` to be expanded to the home directory.
+		file = strings.ReplaceAll(file, "$", "\\$")
 		result, err := repeatRunWithDetailsSingleNode(
 			ctx,
 			c,
 			t,
 			node,
 			fmt.Sprintf("fetching results file %s", file),
-			fmt.Sprintf("cat '%s'", file),
+			fmt.Sprintf("cat %s", file),
 		)
 		if err != nil {
 			t.Fatal(err)
