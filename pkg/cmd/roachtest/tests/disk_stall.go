@@ -296,6 +296,10 @@ func (s *dmsetupDiskStaller) device() string { return getDevice(s.t, s.c) }
 
 func (s *dmsetupDiskStaller) Setup(ctx context.Context) {
 	dev := s.device()
+	// snapd will run "snapd auto-import /dev/dm-0" via udev triggers when
+	// /dev/dm-0 is created. This possibly interferes with the dmsetup create
+	// reload, so uninstall snapd.
+	s.c.Run(ctx, s.c.All(), `sudo apt-get purge -y snapd`)
 	s.c.Run(ctx, s.c.All(), `sudo umount -f /mnt/data1 || true`)
 	s.c.Run(ctx, s.c.All(), `sudo dmsetup remove_all`)
 	err := s.c.RunE(ctx, s.c.All(), `echo "0 $(sudo blockdev --getsz `+dev+`) linear `+dev+` 0" | `+
