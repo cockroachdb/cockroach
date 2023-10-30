@@ -18,6 +18,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
@@ -38,6 +40,15 @@ var (
 	// consider a transaction old enough to push.
 	defaultPushTxnsAge = envutil.EnvOrDefaultDuration(
 		"COCKROACH_RANGEFEED_PUSH_TXNS_AGE", 10*time.Second)
+
+	// PushTxnsEnabled can be used to disable rangefeed txn pushes, typically to
+	// temporarily alleviate contention.
+	PushTxnsEnabled = settings.RegisterBoolSetting(
+		settings.SystemOnly,
+		"kv.rangefeed.push_txns.enabled",
+		"periodically push txn write timestamps to advance rangefeed resolved timestamps",
+		true,
+	)
 )
 
 // newErrBufferCapacityExceeded creates an error that is returned to subscribers
@@ -52,10 +63,11 @@ func newErrBufferCapacityExceeded() *kvpb.Error {
 // Config encompasses the configuration required to create a Processor.
 type Config struct {
 	log.AmbientContext
-	Clock   *hlc.Clock
-	Stopper *stop.Stopper
-	RangeID roachpb.RangeID
-	Span    roachpb.RSpan
+	Clock    *hlc.Clock
+	Stopper  *stop.Stopper
+	Settings *cluster.Settings
+	RangeID  roachpb.RangeID
+	Span     roachpb.RSpan
 
 	TxnPusher TxnPusher
 	// PushTxnsInterval specifies the interval at which a Processor will push
@@ -463,9 +475,9 @@ func (p *LegacyProcessor) run(
 
 		// Check whether any unresolved intents need a push.
 		case <-txnPushTickerC:
-			// Don't perform transaction push attempts until the resolved timestamp
-			// has been initialized, or if we're not tracking any intents.
-			if !p.rts.IsInit() || p.rts.intentQ.Len() == 0 {
+			// Don't perform transaction push attempts if disabled, until the resolved
+			// timestamp has been initialized, or if we're not tracking any intents.
+			if !PushTxnsEnabled.Get(&p.Settings.SV) || !p.rts.IsInit() || p.rts.intentQ.Len() == 0 {
 				continue
 			}
 
