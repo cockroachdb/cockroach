@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -3595,6 +3596,11 @@ func MVCCPredicateDeleteRange(
 
 	var runStart, runEnd roachpb.Key
 
+	// buf holds keys that we might need to issue point deletes
+	// for. We copy the keys using keyAlloc, truncating keyAlloc
+	// if we don't send the point deletes and creating a new
+	// keyAlloc if we do send the point deletes.
+	var keyAlloc bufalloc.ByteAllocator
 	buf := make([]roachpb.Key, 0, rangeTombstoneThreshold)
 
 	if ms == nil {
@@ -3712,6 +3718,7 @@ func MVCCPredicateDeleteRange(
 			}
 			batchByteSize += int64(MVCCRangeKey{StartKey: runStart, EndKey: runEnd, Timestamp: endTime}.EncodedSize())
 			batchSize++
+			keyAlloc.Truncate()
 		} else {
 			// Use Point tombstones
 			for i := int64(0); i < runSize; i++ {
@@ -3722,6 +3729,7 @@ func MVCCPredicateDeleteRange(
 			}
 			batchByteSize += runByteSize
 			batchSize += runSize
+			keyAlloc = bufalloc.ByteAllocator{}
 		}
 
 		runSize = 0
@@ -3817,12 +3825,9 @@ func MVCCPredicateDeleteRange(
 
 			if runSize < rangeTombstoneThreshold {
 				// Only buffer keys if there's a possibility of issuing point tombstones.
-				//
-				// TODO(ssd): It would be nice to avoid unnecessary allocations
-				// here. We copy the end key because when mvccInternalPut publishes
-				// the logical operation related to the delete, it currenty assumes
-				// that the key will not be subsequently modified.
-				buf = append(buf, runEnd.Clone())
+				var keyCopy roachpb.Key
+				keyAlloc, keyCopy = keyAlloc.Copy(runEnd, 0)
+				buf = append(buf, keyCopy)
 			}
 
 			runSize++
