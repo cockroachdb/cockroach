@@ -422,8 +422,13 @@ FROM %s %s`, table, whereClause)
 	}
 	// We return statement info for both req modes (statements only and transactions only),
 	// since statements are also returned for transactions only mode.
+	// Note that the stmts query for txns can't use the activity table.
+	// We shouldn't ever run into sitautions where fetchmode isn't specified, but if for some
+	// reason it is and we fetch both stmt and txns info, the stmts source table returned will
+	// describe what is used for the stmts overview query. In a future commit, we will swap
+	// to using one source table for all stmts returned in a request.
 	stmtsRuntime = 0
-	if activityTableHasAllData {
+	if activityTableHasAllData && (req.FetchMode == nil || req.FetchMode.StatsType == serverpb.CombinedStatementsStatsRequest_StmtStatsOnly) {
 		stmtSourceTable = crdbInternalStmtStatsCached
 		stmtsRuntime, err = getRuntime(stmtSourceTable, createActivityTableQuery)
 		if err != nil {
