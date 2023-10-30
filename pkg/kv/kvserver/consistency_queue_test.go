@@ -341,8 +341,9 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	var val roachpb.Value
 	val.SetInt(42)
 	// Put an inconsistent key "e" to s2, and have s1 and s3 still agree.
-	require.NoError(t, storage.MVCCPut(context.Background(), s2.TODOEngine(),
-		roachpb.Key("e"), tc.Server(0).Clock().Now(), val, storage.MVCCWriteOptions{}))
+	_, err := storage.MVCCPut(context.Background(), s2.TODOEngine(),
+		roachpb.Key("e"), tc.Server(0).Clock().Now(), val, storage.MVCCWriteOptions{})
+	require.NoError(t, err)
 
 	// Run consistency check again, this time it should find something.
 	resp = runConsistencyCheck()

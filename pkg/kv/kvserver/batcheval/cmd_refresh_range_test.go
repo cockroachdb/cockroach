@@ -39,10 +39,12 @@ func TestRefreshRange(t *testing.T) {
 
 	// Write an MVCC point key at b@3, MVCC point tombstone at b@5, and MVCC range
 	// tombstone at [d-f)@7.
-	require.NoError(t, storage.MVCCPut(
-		ctx, eng, roachpb.Key("b"), hlc.Timestamp{WallTime: 3}, roachpb.MakeValueFromString("value"), storage.MVCCWriteOptions{}))
-	require.NoError(t, storage.MVCCPut(
-		ctx, eng, roachpb.Key("c"), hlc.Timestamp{WallTime: 5}, roachpb.Value{}, storage.MVCCWriteOptions{}))
+	_, err := storage.MVCCPut(
+		ctx, eng, roachpb.Key("b"), hlc.Timestamp{WallTime: 3}, roachpb.MakeValueFromString("value"), storage.MVCCWriteOptions{})
+	require.NoError(t, err)
+	_, err = storage.MVCCPut(
+		ctx, eng, roachpb.Key("c"), hlc.Timestamp{WallTime: 5}, roachpb.Value{}, storage.MVCCWriteOptions{})
+	require.NoError(t, err)
 	require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(
 		ctx, eng, nil, roachpb.Key("d"), roachpb.Key("f"), hlc.Timestamp{WallTime: 7}, hlc.ClockTimestamp{}, nil, nil, false, 0, nil))
 
@@ -156,10 +158,14 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 		},
 		ReadTimestamp: ts1,
 	}
-	if err := storage.MVCCPut(ctx, db, k, txn.ReadTimestamp, v, storage.MVCCWriteOptions{Txn: txn}); err != nil {
+	if _, err := storage.MVCCPut(
+		ctx, db, k, txn.ReadTimestamp, v, storage.MVCCWriteOptions{Txn: txn},
+	); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.MVCCPut(ctx, db, roachpb.Key("unused1"), ts4, v, storage.MVCCWriteOptions{}); err != nil {
+	if _, err := storage.MVCCPut(
+		ctx, db, roachpb.Key("unused1"), ts4, v, storage.MVCCWriteOptions{},
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Flush(); err != nil {
@@ -180,7 +186,9 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.MVCCPut(ctx, db, roachpb.Key("unused2"), ts1, v, storage.MVCCWriteOptions{}); err != nil {
+	if _, err := storage.MVCCPut(
+		ctx, db, roachpb.Key("unused2"), ts1, v, storage.MVCCWriteOptions{},
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Flush(); err != nil {
@@ -273,7 +281,9 @@ func TestRefreshRangeError(t *testing.T) {
 				},
 				ReadTimestamp: ts2,
 			}
-			if err := storage.MVCCPut(ctx, db, k, txn.ReadTimestamp, v, storage.MVCCWriteOptions{Txn: txn}); err != nil {
+			if _, err := storage.MVCCPut(
+				ctx, db, k, txn.ReadTimestamp, v, storage.MVCCWriteOptions{Txn: txn},
+			); err != nil {
 				t.Fatal(err)
 			}
 

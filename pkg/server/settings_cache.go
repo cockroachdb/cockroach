@@ -101,7 +101,7 @@ func storeCachedSettingsKVs(ctx context.Context, eng storage.Engine, kvs []roach
 	defer batch.Close()
 
 	// Remove previous entries -- they are now stale.
-	if _, _, _, err := storage.MVCCDeleteRange(ctx, batch,
+	if _, _, _, _, err := storage.MVCCDeleteRange(ctx, batch,
 		keys.LocalStoreCachedSettingsKeyMin,
 		keys.LocalStoreCachedSettingsKeyMax,
 		0 /* no limit */, hlc.Timestamp{}, storage.MVCCWriteOptions{}, false /* returnKeys */); err != nil {
@@ -114,7 +114,7 @@ func storeCachedSettingsKVs(ctx context.Context, eng storage.Engine, kvs []roach
 		cachedSettingsKey := keys.StoreCachedSettingsKey(kv.Key)
 		// A new value is added, or an existing value is updated.
 		log.VEventf(ctx, 1, "storing cached setting: %s -> %+v", cachedSettingsKey, kv.Value)
-		if err := storage.MVCCPut(
+		if _, err := storage.MVCCPut(
 			ctx, batch, cachedSettingsKey, hlc.Timestamp{}, kv.Value, storage.MVCCWriteOptions{},
 		); err != nil {
 			return err

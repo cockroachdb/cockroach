@@ -305,7 +305,7 @@ func (cws *cachedWriteSimulator) multiKey(
 		Txn:   txn,
 		Stats: &eachMS,
 	}
-	if err := storage.MVCCPut(ctx, eng, key, ts, value, opts); err != nil {
+	if _, err := storage.MVCCPut(ctx, eng, key, ts, value, opts); err != nil {
 		t.Fatal(err)
 	}
 	for i := 1; i < numOps; i++ {
@@ -334,7 +334,7 @@ func (cws *cachedWriteSimulator) singleKeySteady(
 		for i := 0; i < qps; i++ {
 			now := initialNow.Add(elapsed.Nanoseconds(), int32(i))
 
-			if err := storage.MVCCPut(ctx, eng, key, now, value, storage.MVCCWriteOptions{Stats: ms}); err != nil {
+			if _, err := storage.MVCCPut(ctx, eng, key, now, value, storage.MVCCWriteOptions{Stats: ms}); err != nil {
 				t.Fatal(err)
 			}
 			if len(firstSl) < cacheFirstLen {
@@ -529,9 +529,10 @@ func TestFullRangeDeleteHeuristic(t *testing.T) {
 			if rng.Float32() > 0.5 {
 				value.SetBytes(make([]byte, 20))
 			}
-			require.NoError(t, storage.MVCCPut(ctx, rw, key,
+			_, err := storage.MVCCPut(ctx, rw, key,
 				hlc.Timestamp{WallTime: time.Millisecond.Nanoseconds() * int64(i)},
-				value, storage.MVCCWriteOptions{Stats: &ms}))
+				value, storage.MVCCWriteOptions{Stats: &ms})
+			require.NoError(t, err)
 		}
 		return ms, hlc.Timestamp{WallTime: time.Millisecond.Nanoseconds() * int64(valCount)}
 	}
@@ -542,7 +543,8 @@ func TestFullRangeDeleteHeuristic(t *testing.T) {
 	}
 	deleteWithPoints := func(rw storage.ReadWriter, delTime hlc.Timestamp, ms *enginepb.MVCCStats) {
 		for _, key := range keys {
-			require.NoError(t, storage.MVCCPut(ctx, rw, key, delTime, roachpb.Value{}, storage.MVCCWriteOptions{Stats: ms}))
+			_, err := storage.MVCCPut(ctx, rw, key, delTime, roachpb.Value{}, storage.MVCCWriteOptions{Stats: ms})
+			require.NoError(t, err)
 		}
 	}
 

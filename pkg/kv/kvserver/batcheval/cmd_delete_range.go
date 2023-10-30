@@ -262,7 +262,7 @@ func DeleteRange(
 	// written if we're evaluating the DeleteRange for a transaction so that we
 	// can update the Result's AcquiredLocks field.
 	returnKeys := args.ReturnKeys || h.Txn != nil
-	deleted, resumeSpan, num, err := storage.MVCCDeleteRange(
+	deleted, resumeSpan, num, _, err := storage.MVCCDeleteRange(
 		ctx, readWriter, args.Key, args.EndKey,
 		h.MaxSpanRequestKeys, timestamp,
 		opts, returnKeys)

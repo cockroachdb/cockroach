@@ -46,10 +46,10 @@ func InitPut(
 
 	var err error
 	if args.Blind {
-		err = storage.MVCCBlindInitPut(
+		_, err = storage.MVCCBlindInitPut(
 			ctx, readWriter, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, opts)
 	} else {
-		err = storage.MVCCInitPut(
+		_, err = storage.MVCCInitPut(
 			ctx, readWriter, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, opts)
 	}
 	if err != nil {

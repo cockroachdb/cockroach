@@ -310,7 +310,7 @@ func setupData(
 		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, opts.valueBytes))
 		value.InitChecksum(key)
 		ts := hlc.Timestamp{WallTime: int64((pos + 1) * 5)}
-		if err := storage.MVCCPut(ctx, batch, key, ts, value, storage.MVCCWriteOptions{}); err != nil {
+		if _, err := storage.MVCCPut(ctx, batch, key, ts, value, storage.MVCCWriteOptions{}); err != nil {
 			b.Fatal(err)
 		}
 	}

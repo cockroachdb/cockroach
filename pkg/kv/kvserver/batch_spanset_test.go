@@ -558,7 +558,7 @@ func TestSpanSetMVCCResolveWriteIntentRange(t *testing.T) {
 	defer eng.Close()
 	ctx := context.Background()
 	value := roachpb.MakeValueFromString("irrelevant")
-	if err := storage.MVCCPut(
+	if _, err := storage.MVCCPut(
 		ctx,
 		eng,
 		roachpb.Key("b"),

@@ -29,6 +29,7 @@ with t=A
   txn_begin k=b ts=3
   put k=b v=b3
 ----
+put: lock acquisition = {b id=00000001 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
 txn: "A" meta={id=00000001 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
 rangekey: {a-b}/[1.000000000,0=/<empty>]
@@ -57,6 +58,7 @@ with t=A
   txn_begin k=b ts=3
   put k=b v=b3
 ----
+put: lock acquisition = {b id=00000002 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
 txn: "A" meta={id=00000002 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
 rangekey: {a-b}/[2.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -92,6 +94,7 @@ with t=A
   txn_begin k=b ts=1
   put k=b v=b1
 ----
+put: lock acquisition = {b id=00000003 key="b" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
 txn: "A" meta={id=00000003 key="b" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
 rangekey: {a-b}/[4.000000000,0=/<empty> 2.000000000,0=/<empty>]
@@ -143,6 +146,7 @@ with t=A
   txn_begin k=b ts=1
   put k=b v=b1
 ----
+put: lock acquisition = {b id=00000004 key="b" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
 txn: "A" meta={id=00000004 key="b" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
 rangekey: {a-b}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]

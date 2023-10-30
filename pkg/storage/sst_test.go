@@ -82,7 +82,8 @@ func TestCheckSSTConflictsMaxLockConflicts(t *testing.T) {
 		require.NoError(t, batch.PutMVCC(mvccKey, mvccValue))
 	}
 	for _, key := range intents {
-		require.NoError(t, MVCCPut(ctx, batch, roachpb.Key(key), txn1TS, roachpb.MakeValueFromString("intent"), MVCCWriteOptions{Txn: txn1}))
+		_, err := MVCCPut(ctx, batch, roachpb.Key(key), txn1TS, roachpb.MakeValueFromString("intent"), MVCCWriteOptions{Txn: txn1})
+		require.NoError(t, err)
 	}
 	// Also write some replicated locks held by txn1.
 	for i, key := range locks {

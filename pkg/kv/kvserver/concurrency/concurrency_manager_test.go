@@ -451,7 +451,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 				mon.runSync("acquire lock", func(ctx context.Context) {
 					log.Eventf(ctx, "txn %s @ %s", txn.Short(), key)
-					acq := roachpb.MakeLockAcquisition(txnAcquire, roachpb.Key(key), dur, str)
+					acq := roachpb.MakeLockAcquisition(txnAcquire.TxnMeta, roachpb.Key(key), dur, str, nil)
 					m.OnLockAcquired(ctx, &acq)
 				})
 				return c.waitAndCollect(t, mon)
