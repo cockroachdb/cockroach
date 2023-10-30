@@ -743,6 +743,10 @@ func (l pebbleLogger) IsTracingEnabled(ctx context.Context) bool {
 	return log.HasSpanOrEvent(ctx)
 }
 
+func (l pebbleLogger) Errorf(format string, args ...interface{}) {
+	log.Storage.ErrorfDepth(l.ctx, l.depth, format, args...)
+}
+
 // PebbleConfig holds all configuration parameters and knobs used in setting up
 // a new Pebble instance.
 type PebbleConfig struct {
