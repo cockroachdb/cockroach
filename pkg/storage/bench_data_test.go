@@ -60,9 +60,7 @@ type engineWithLocation struct {
 	Location
 }
 
-var previousReleaseFormatMajorVersion = pebbleFormatVersion(
-	clusterversion.ByKey(clusterversion.PreviousReleaseVersionKey),
-)
+var previousReleaseFormatMajorVersion = pebbleFormatVersion(clusterversion.PreviousRelease.Version())
 
 var previousReleaseFormatMajorVersionOpt ConfigOption = func(cfg *engineConfig) error {
 	cfg.PebbleConfig.Opts.FormatMajorVersion = previousReleaseFormatMajorVersion

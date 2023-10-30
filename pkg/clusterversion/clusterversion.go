@@ -171,7 +171,7 @@ var _ Handle = (*handleImpl)(nil)
 // supported versions initialized to this binary's build and it's minimum
 // supported versions respectively.
 func MakeVersionHandle(sv *settings.Values) Handle {
-	return MakeVersionHandleWithOverride(sv, binaryVersion, binaryMinSupportedVersion)
+	return MakeVersionHandleWithOverride(sv, Latest.Version(), MinSupported.Version())
 }
 
 // MakeVersionHandleWithOverride returns a Handle that has its

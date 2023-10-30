@@ -34,7 +34,7 @@ func TestClusterVersionOnChange(t *testing.T) {
 		"test description",
 		&cvs.VersionSetting)
 
-	handle := newHandleImpl(cvs, &sv, binaryVersion, binaryMinSupportedVersion)
+	handle := newHandleImpl(cvs, &sv, Latest.Version(), MinSupported.Version())
 	newCV := ClusterVersion{
 		Version: roachpb.Version{
 			Major:    1,
