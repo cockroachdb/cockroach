@@ -452,3 +452,23 @@ func TestSetEnv(t TB, name string, value string) func() {
 		ClearEnvCache()
 	}
 }
+
+// TestUnsetEnv unsets an environment variable and the cleanup function
+// resets it to the original value.
+func TestUnsetEnv(t TB, name string) func() {
+	t.Helper()
+	ClearEnvCache()
+	before, exists := os.LookupEnv(name)
+	if !exists {
+		return func() {}
+	}
+	if err := os.Unsetenv(name); err != nil {
+		t.Fatal(err)
+	}
+	return func() {
+		if err := os.Setenv(name, before); err != nil {
+			t.Fatal(err)
+		}
+		ClearEnvCache()
+	}
+}
