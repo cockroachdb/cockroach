@@ -644,13 +644,6 @@ func updateStatsOnResolve(
 		return ms
 	}
 
-	// An intent can't turn from deleted to non-deleted and vice versa while being
-	// resolved.
-	if orig.Deleted != meta.Deleted {
-		log.Fatalf(context.TODO(), "on resolve, original meta was deleted=%t, but new one is deleted=%t",
-			orig.Deleted, meta.Deleted)
-	}
-
 	// In the main case, we had an old intent at orig.Timestamp, and a new intent
 	// or value at meta.Timestamp. We'll walk through the contributions below,
 	// taking special care for LockAge and GCBytesAge.
@@ -669,12 +662,13 @@ func updateStatsOnResolve(
 	ms.KeyBytes -= origMetaKeySize + orig.KeyBytes
 	ms.ValBytes -= origMetaValSize + orig.ValBytes
 
-	// If the old intent is a deletion, then the key already isn't tracked
-	// in LiveBytes any more (and the new intent/value is also a deletion).
-	// If we're looking at a non-deletion intent/value, update the live
-	// bytes to account for the difference between the previous intent and
-	// the new intent/value.
-	if !meta.Deleted {
+	// Next, we adjust LiveBytes based on meta.Deleted and orig.Deleted.
+	// Note that LiveBytes here corresponds to ts = orig.Timestamp.WallTime.
+	// LiveBytes at ts = meta.Timestamp.WallTime is adjusted below.
+	// If the original value was deleted, there is no need to adjust the
+	// contribution of the original key and value to LiveBytes. Otherwise, we need
+	// to subtract the original key and value's contribution from LiveBytes.
+	if !orig.Deleted {
 		ms.LiveBytes -= origMetaKeySize + origMetaValSize
 		ms.LiveBytes -= orig.KeyBytes + orig.ValBytes
 	}
@@ -713,6 +707,14 @@ func updateStatsOnResolve(
 	// The new meta key appears.
 	if !meta.Deleted {
 		ms.LiveBytes += (metaKeySize + metaValSize) + (meta.KeyBytes + meta.ValBytes)
+	}
+
+	// If the value is deleted or a delete was rolled back, adjust LiveCount.
+	if !meta.Deleted && orig.Deleted {
+		ms.LiveCount++
+	}
+	if meta.Deleted && !orig.Deleted {
+		ms.LiveCount--
 	}
 
 	if !commit {
@@ -5077,13 +5079,15 @@ func mvccResolveWriteIntent(
 	// remains, the rolledBackVal is set to a non-nil value.
 	var rolledBackVal *MVCCValue
 	var err error
+	buf.newMeta = *meta
+	newMeta := &buf.newMeta
 	if len(intent.IgnoredSeqNums) > 0 {
 		// NOTE: mvccMaybeRewriteIntentHistory mutates its meta argument.
 		// TODO(nvanbenschoten): this is an awkward interface. We shouldn't
 		// be mutating meta and we shouldn't be restoring the previous value
 		// here. Instead, this should all be handled down below.
 		var removeIntent bool
-		removeIntent, rolledBackVal, err = mvccMaybeRewriteIntentHistory(ctx, writer, intent.IgnoredSeqNums, meta, latestKey)
+		removeIntent, rolledBackVal, err = mvccMaybeRewriteIntentHistory(ctx, writer, intent.IgnoredSeqNums, newMeta, latestKey)
 		if err != nil {
 			return false, err
 		}
@@ -5125,9 +5129,6 @@ func mvccResolveWriteIntent(
 	// is because removeIntent implies rolledBackVal == nil, pushed == false, and
 	// commit == false.
 	if commit || pushed || rolledBackVal != nil {
-		buf.newMeta = *meta
-		newMeta := &buf.newMeta
-
 		// The intent might be committing at a higher timestamp, or it might be
 		// getting pushed.
 		newTimestamp := intent.Txn.WriteTimestamp
