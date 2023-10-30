@@ -759,10 +759,10 @@ func (ts *testServer) grantDefaultTenantCapabilities(
 		}
 	}
 
-	// Waiting for capabilities can time To avoid paying this cost in all
+	// Waiting for capabilities can take time. To avoid paying this cost in all
 	// cases, we only set the nodelocal storage capability if the caller has
-	// configured an ExternalIODir since nodelocal storage only works with
-	// that configured.
+	// configured an ExternalIODir since nodelocal storage only works with that
+	// configured.
 	shouldGrantNodelocalCap := ts.params.ExternalIODir != ""
 	canGrantNodelocalCap := ts.ClusterSettings().Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantCapabilities)
 	if canGrantNodelocalCap && shouldGrantNodelocalCap {
