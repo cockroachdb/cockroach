@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 )
@@ -95,6 +96,8 @@ func ShouldStartDefaultTestTenant(
 	}
 
 	// Determine if the default test tenant should be run as a shared process.
+	// TODO(herko): We should add an environment variable override for this.
+	// See also: https://github.com/cockroachdb/cockroach/issues/113294
 	var shared bool
 	switch {
 	case baseArg.SharedProcessMode():
@@ -102,7 +105,9 @@ func ShouldStartDefaultTestTenant(
 	case baseArg.ExternalProcessMode():
 		shared = false
 	default:
-		shared = util.ConstantWithMetamorphicTestBoolWithoutLogging("test-tenant-shared-process", false)
+		// If no explicit process mode was selected, then randomly select one.
+		rng, _ := randutil.NewTestRand()
+		shared = rng.Intn(2) == 0
 	}
 
 	// Explicit case for enabling the default test tenant, but with a
