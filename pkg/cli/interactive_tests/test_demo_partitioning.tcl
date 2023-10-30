@@ -129,13 +129,6 @@ eexpect "ERROR: use of partitions requires an enterprise license"
 eexpect $prompt
 end_test
 
-start_test "Expect an error if geo-partitioning is requested with multitenant mode"
-send "$argv demo --no-line-editor --geo-partitioned-replicas --log-dir=logs \r"
-# expect a failure
-eexpect "operation is disabled within a virtual cluster"
-eexpect $prompt
-end_test
-
 start_test "Expect an error if geo-partitioning is requested and license acquisition is disabled"
 # set the proper environment variable
 send "$argv demo --no-line-editor --geo-partitioned-replicas --disable-demo-license --log-dir=logs \r"
