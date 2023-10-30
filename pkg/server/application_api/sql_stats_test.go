@@ -27,12 +27,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -40,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1134,4 +1137,59 @@ func TestUnprivilegedUserResetIndexUsageStats(t *testing.T) {
 	)
 
 	require.Contains(t, err.Error(), "requires admin privilege")
+}
+
+// TestCombinedStatementsSourceTableForTxnFetchMode tests that the
+// CombinedStatements api returns the correct source table for the
+// TxnStatsOnly fetch mode. For TxnStatsOnly mode, we should not be
+// able to query from crdb_internal.statement_activity to get the
+// statements portion of the response.
+func TestCombinedStatementsSourceTableForTxnFetchMode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	settings := cluster.MakeTestingClusterSettings()
+	statsKnobs := sqlstats.CreateTestingKnobs()
+	// Make the interval small. This will ensure our data gets flushed and
+	// that the updater job for sql activity tables runs, as this is also
+	// the interval used by the updater job.
+	persistedsqlstats.SQLStatsFlushInterval.Override(ctx, &settings.SV, time.Millisecond*100)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Settings: settings,
+		Knobs: base.TestingKnobs{
+			SQLStatsKnobs: statsKnobs,
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
+
+	conn := sqlutils.MakeSQLRunner(ts.SQLConn(t, ""))
+
+	// Verify that there are rows in the activity table.
+	testutils.SucceedsWithin(t, func() error {
+		conn.Exec(t, "SELECT 1")
+		row := conn.QueryRow(t, "SELECT count(*) FROM crdb_internal.statement_activity")
+		var count int
+		row.Scan(&count)
+		if count == 0 {
+			return errors.New("no rows in crdb_internal.statement_activity")
+		}
+		return nil
+	}, time.Minute)
+
+	client := ts.GetStatusClient(t)
+
+	resp, err := client.CombinedStatementStats(ctx, &serverpb.CombinedStatementsStatsRequest{
+		FetchMode: &serverpb.CombinedStatementsStatsRequest_FetchMode{
+			StatsType: serverpb.CombinedStatementsStatsRequest_TxnStatsOnly,
+		},
+	})
+	require.NoError(t, err)
+
+	// Even though there are rows in statement_activity table, we should see that the
+	// the request used the persisted table since the activity table is not allowed
+	// for the TxnStatsOnly mode.
+	require.Equal(t, "crdb_internal.statement_statistics_persisted", resp.StmtsSourceTable)
 }
