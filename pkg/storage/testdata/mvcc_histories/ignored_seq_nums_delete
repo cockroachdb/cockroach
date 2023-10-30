@@ -1,0 +1,183 @@
+# When a write is rolled back and either the rolled back or preceding value is a
+# delete, there are 3 cases to consider:
+# 0. Rolled back put with a previous put (no actual delete; this is tested in
+# ignored_seq_nums_commit).
+# 1. Rolled back delete with a previous put.
+# 2. Rolled back put with a preceding delete.
+# 3. Rolled back delete with a preceding delete.
+# We also test a case where the rolled back writes are surrounded by other puts.
+
+# Rolled back delete with a previous put.
+run stats ok
+with t=A
+  txn_begin ts=11
+  txn_step  seq=10
+  put       k=k  v=a
+  txn_step  seq=20
+  del       k=k
+  txn_step  seq=30
+  txn_ignore_seqs seqs=(19-21)
+  resolve_intent k=k
+----
+>> put k=k v=a t=A
+put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 Replicated Intent []}
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+56 live_count=+1 live_bytes=+70 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+89
+>> del k=k t=A
+del: "k": found key true
+del: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 Replicated Intent []}
+stats: val_bytes=+4 live_count=-1 live_bytes=-70 gc_bytes_age=+6586 intent_bytes=-6
+>> resolve_intent k=k t=A
+resolve_intent: "k" -> resolved key = true
+stats: val_bytes=-54 live_count=+1 live_bytes=+20 gc_bytes_age=-6586 intent_count=-1 intent_bytes=-12 lock_count=-1 lock_age=-89
+>> at end:
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+data: "k"/11.000000000,0 -> /BYTES/a
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=6 live_count=1 live_bytes=20
+
+run ok
+scan k=k end=-k
+get  k=k
+----
+scan: "k"-"l" -> <no data>
+get: "k" -> <no data>
+
+run ok
+clear_range k=k end=-k
+txn_remove t=A
+----
+>> at end:
+<no data>
+
+# Rolled back put with a preceding delete.
+run stats ok
+with t=A
+  txn_begin ts=11
+  txn_step  seq=10
+  del       k=k
+  txn_step  seq=20
+  put       k=k  v=a
+  txn_step  seq=30
+  txn_ignore_seqs seqs=(19-21)
+  resolve_intent k=k
+----
+>> del k=k t=A
+del: "k": found key false
+del: lock acquisition = {k id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 Replicated Intent []}
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+50 gc_bytes_age=+5696 intent_count=+1 intent_bytes=+12 lock_count=+1 lock_age=+89
+>> put k=k v=a t=A
+put: lock acquisition = {k id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 Replicated Intent []}
+stats: val_bytes=+10 live_count=+1 live_bytes=+74 gc_bytes_age=-5696 intent_bytes=+6
+>> resolve_intent k=k t=A
+resolve_intent: "k" -> resolved key = true
+stats: val_bytes=-60 live_count=-1 live_bytes=-74 gc_bytes_age=+1246 intent_count=-1 intent_bytes=-18 lock_count=-1 lock_age=-89
+>> at end:
+txn: "A" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+data: "k"/11.000000000,0 -> /<empty>
+stats: key_count=1 key_bytes=14 val_count=1 gc_bytes_age=1246
+
+run ok
+scan k=k end=-k
+get  k=k
+----
+scan: "k"-"l" -> <no data>
+get: "k" -> <no data>
+
+run ok
+clear_range k=k end=-k
+txn_remove t=A
+----
+>> at end:
+<no data>
+
+# Rolled back delete with a preceding delete.
+run stats ok
+with t=A
+  txn_begin ts=11
+  txn_step  seq=10
+  del       k=k
+  txn_step  seq=20
+  del       k=k
+  txn_step  seq=30
+  txn_ignore_seqs seqs=(19-21)
+  resolve_intent k=k
+----
+>> del k=k t=A
+del: "k": found key false
+del: lock acquisition = {k id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 Replicated Intent []}
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+50 gc_bytes_age=+5696 intent_count=+1 intent_bytes=+12 lock_count=+1 lock_age=+89
+>> del k=k t=A
+del: "k": found key false
+del: lock acquisition = {k id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 Replicated Intent []}
+stats: val_bytes=+4 gc_bytes_age=+356
+>> resolve_intent k=k t=A
+resolve_intent: "k" -> resolved key = true
+stats: val_bytes=-54 gc_bytes_age=-4806 intent_count=-1 intent_bytes=-12 lock_count=-1 lock_age=-89
+>> at end:
+txn: "A" meta={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+data: "k"/11.000000000,0 -> /<empty>
+stats: key_count=1 key_bytes=14 val_count=1 gc_bytes_age=1246
+
+run ok
+scan k=k end=-k
+get  k=k
+----
+scan: "k"-"l" -> <no data>
+get: "k" -> <no data>
+
+run ok
+clear_range k=k end=-k
+txn_remove t=A
+----
+>> at end:
+<no data>
+
+# Rolled back delete and put with a previous values.
+run stats ok
+with t=A
+  txn_begin ts=11
+  txn_step  seq=10
+  put       k=k  v=a
+  txn_step  seq=20
+  del       k=k
+  txn_step  seq=30
+  put       k=k v=b
+  txn_step  seq=40
+  put       k=k  v=c
+  txn_step  seq=50
+  txn_ignore_seqs seqs=(19-31)
+  resolve_intent k=k
+----
+>> put k=k v=a t=A
+put: lock acquisition = {k id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 Replicated Intent []}
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+56 live_count=+1 live_bytes=+70 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+89
+>> del k=k t=A
+del: "k": found key true
+del: lock acquisition = {k id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 Replicated Intent []}
+stats: val_bytes=+4 live_count=-1 live_bytes=-70 gc_bytes_age=+6586 intent_bytes=-6
+>> put k=k v=b t=A
+put: lock acquisition = {k id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30 Replicated Intent []}
+stats: val_bytes=+12 live_count=+1 live_bytes=+86 gc_bytes_age=-6586 intent_bytes=+6
+>> put k=k v=c t=A
+put: lock acquisition = {k id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40 Replicated Intent []}
+stats: val_bytes=+12 live_bytes=+12
+>> resolve_intent k=k t=A
+resolve_intent: "k" -> resolved key = true
+stats: val_bytes=-78 live_bytes=-78 intent_count=-1 intent_bytes=-18 lock_count=-1 lock_age=-89
+>> at end:
+txn: "A" meta={id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=50} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+data: "k"/11.000000000,0 -> /BYTES/c
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=6 live_count=1 live_bytes=20
+
+run ok
+scan k=k end=-k
+get  k=k
+----
+scan: "k"-"l" -> <no data>
+get: "k" -> <no data>
+
+run ok
+clear_range k=k end=-k
+txn_remove t=A
+----
+>> at end:
+<no data>
