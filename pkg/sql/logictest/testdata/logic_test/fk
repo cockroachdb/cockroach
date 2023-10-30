@@ -3880,6 +3880,14 @@ select * from "".crdb_internal.cross_db_references ORDER BY object_name
 db2  public  child   db1  public  parent  table foreign key reference
 db2  public  child2  db1  public  parent  table foreign key reference
 
+# Ensure later tests only operate on the test database to avoid
+# confusion.
+statement ok
+USE test;
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_fks.enabled = FALSE
+
 
 # Test that foreign keys cannot reference columns that are indexed by a partial
 # unique index or a partial unique constraint. Partial unique indexes and
@@ -4166,3 +4174,15 @@ create table t104546_fk_src (a int primary key, b int);
 
 statement error pgcode 42703 column "b" does not exist
 alter table t104546 add constraint con foreign key (b) references t104546_fk_src(b);
+
+statement ok
+create schema sc1;
+create schema sc2;
+create table sc1.parent (p int primary key);
+create table sc2.child(p int primary key, r int REFERENCES sc1.parent (p));
+
+query TTTTTT rowsort
+SELECT constraint_catalog, constraint_schema, constraint_name, unique_constraint_catalog, unique_constraint_schema, unique_constraint_name
+FROM  information_schema.referential_constraints WHERE unique_constraint_schema='sc1';
+----
+test  sc2  child_r_fkey  test  sc1  parent_pkey

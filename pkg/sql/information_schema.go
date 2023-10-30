@@ -960,12 +960,22 @@ https://www.postgresql.org/docs/9.5/infoschema-referential-constraints.html`,
 				if err != nil {
 					return err
 				}
+				// Note: Cross DB references are deprecated, but this should be
+				// a cached look up when they don't exist.
+				refDB, err := p.Descriptors().ByID(p.Txn()).Get().Database(ctx, refTable.GetParentID())
+				if err != nil {
+					return err
+				}
+				refSchema, err := p.Descriptors().ByID(p.Txn()).Get().Schema(ctx, refTable.GetParentSchemaID())
+				if err != nil {
+					return err
+				}
 				if err := addRow(
 					dbNameStr,                                // constraint_catalog
 					scNameStr,                                // constraint_schema
 					tree.NewDString(fk.GetName()),            // constraint_name
-					dbNameStr,                                // unique_constraint_catalog
-					scNameStr,                                // unique_constraint_schema
+					tree.NewDString(refDB.GetName()),         // unique_constraint_catalog
+					tree.NewDString(refSchema.GetName()),     // unique_constraint_schema
 					tree.NewDString(refConstraint.GetName()), // unique_constraint_name
 					matchType,                                // match_option
 					dStringForFKAction(fk.OnUpdate()),        // update_rule
