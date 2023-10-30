@@ -1272,12 +1272,12 @@ func (s *Store) getLocalityComparison(
 ) roachpb.LocalityComparisonType {
 	firstLocality := s.cfg.StorePool.GetNodeLocality(fromNodeID)
 	secLocality := s.cfg.StorePool.GetNodeLocality(toNodeID)
-	comparisonResult, regionErr, zoneErr := firstLocality.CompareWithLocality(secLocality)
-	if regionErr != nil {
-		log.VEventf(ctx, 5, "unable to determine if the given nodes are cross region %v", regionErr)
+	comparisonResult, regionValid, zoneValid := firstLocality.CompareWithLocality(secLocality)
+	if !regionValid {
+		log.VEventf(ctx, 5, "unable to determine if the given nodes are cross region")
 	}
-	if zoneErr != nil {
-		log.VEventf(ctx, 5, "unable to determine if the given nodes are cross zone %v", zoneErr)
+	if !zoneValid {
+		log.VEventf(ctx, 5, "unable to determine if the given nodes are cross zone")
 	}
 	return comparisonResult
 }
