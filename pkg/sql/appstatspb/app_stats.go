@@ -188,26 +188,29 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.Nodes = util.CombineUnique(s.Nodes, other.Nodes)
 	s.Regions = util.CombineUnique(s.Regions, other.Regions)
 	s.PlanGists = util.CombineUnique(s.PlanGists, other.PlanGists)
-	s.IndexRecommendations = other.IndexRecommendations
 	s.Indexes = util.CombineUnique(s.Indexes, other.Indexes)
-
 	s.ExecStats.Add(other.ExecStats)
 	s.LatencyInfo.Add(other.LatencyInfo)
-
-	if other.SensitiveInfo.LastErr != "" {
-		s.SensitiveInfo.LastErr = other.SensitiveInfo.LastErr
-	}
-
-	if other.LastErrorCode != "" {
-		s.LastErrorCode = other.LastErrorCode
-	}
 
 	if s.SensitiveInfo.MostRecentPlanTimestamp.Before(other.SensitiveInfo.MostRecentPlanTimestamp) {
 		s.SensitiveInfo = other.SensitiveInfo
 	}
 
+	// Use the LastExecTimestamp to decide which object has the last error.
 	if s.LastExecTimestamp.Before(other.LastExecTimestamp) {
 		s.LastExecTimestamp = other.LastExecTimestamp
+
+		if other.SensitiveInfo.LastErr != "" {
+			s.SensitiveInfo.LastErr = other.SensitiveInfo.LastErr
+		}
+
+		if other.LastErrorCode != "" {
+			s.LastErrorCode = other.LastErrorCode
+		}
+	}
+
+	if len(other.IndexRecommendations) > 0 {
+		s.IndexRecommendations = other.IndexRecommendations
 	}
 
 	s.Count += other.Count
