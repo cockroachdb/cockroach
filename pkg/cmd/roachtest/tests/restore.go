@@ -321,7 +321,7 @@ func registerRestore(r registry.Registry) {
 			hardware: makeHardwareSpecs(hardwareSpecs{
 				nodes: 9, ebsThroughput: 250, /* MB/s */
 				zones: []string{"us-east-2b", "us-west-2b", "eu-west-1b"}}), // These zones are AWS-specific.
-			backup:                 makeRestoringBackupSpecs(backupSpecs{cloud: spec.AWS}),
+			backup:                 makeRestoringBackupSpecs(backupSpecs{}),
 			timeout:                90 * time.Minute,
 			clouds:                 registry.AllClouds,
 			suites:                 registry.Suites(registry.Nightly),
@@ -428,8 +428,9 @@ func registerRestore(r registry.Registry) {
 				backupSpecs{workload: tpceRestore{customers: 1000},
 					version: "v22.2.1"}),
 			timeout:                3 * time.Hour,
-			clouds:                 registry.AllExceptAWS,
+			clouds:                 registry.AllClouds,
 			suites:                 registry.Suites(registry.Nightly),
+			tags:                   registry.Tags("aws"),
 			fingerprint:            8445446819555404274,
 			restoreUptoIncremental: defaultRestoreUptoIncremental,
 		},
@@ -469,6 +470,7 @@ func registerRestore(r registry.Registry) {
 					if err != nil {
 						return errors.Wrapf(err, "failure to run setup statements")
 					}
+					defer db.Close()
 					// Run set-up SQL statements. In particular, enable collecting CPU
 					// profiles automatically if CPU usage is high. Historically, we
 					// observed CPU going as high as 100%, e.g. see issue #111160.
@@ -894,6 +896,7 @@ func (rd *restoreDriver) prepareCluster(ctx context.Context) {
 func (rd *restoreDriver) getAOST(ctx context.Context) {
 	var aost string
 	conn := rd.c.Conn(ctx, rd.t.L(), 1)
+	defer conn.Close()
 	err := conn.QueryRowContext(ctx, rd.sp.getAostCmd()).Scan(&aost)
 	require.NoError(rd.t, err)
 	rd.aost = aost
@@ -913,6 +916,7 @@ func (rd *restoreDriver) run(ctx context.Context, target string) error {
 	if err != nil {
 		return errors.Wrapf(err, "failed to connect to node 1; running restore")
 	}
+	defer conn.Close()
 	_, err = conn.ExecContext(ctx, rd.restoreCmd(target, "WITH unsafe_restore_incompatible_version"))
 	return err
 }
@@ -924,6 +928,7 @@ func (rd *restoreDriver) runDetached(
 	if err != nil {
 		return 0, errors.Wrapf(err, "failed to connect to node %d; running restore detached", node)
 	}
+	defer db.Close()
 	if _, err = db.ExecContext(ctx, rd.restoreCmd(target,
 		"WITH DETACHED, unsafe_restore_incompatible_version")); err != nil {
 		return 0, err
@@ -975,6 +980,7 @@ func (rd *restoreDriver) checkFingerprint(ctx context.Context) {
 
 	conn, err := rd.c.ConnE(ctx, rd.t.L(), rd.c.Node(1)[0])
 	require.NoError(rd.t, err)
+	defer conn.Close()
 	sql := sqlutils.MakeSQLRunner(conn)
 
 	var minUserTableID, maxUserTableID uint32
