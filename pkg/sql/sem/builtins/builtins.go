@@ -8560,7 +8560,9 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
-					return nil, errors.AssertionFailedf("expected non-null argument for plpgsql_close")
+					return nil, pgerror.New(
+						pgcode.NullValueNotAllowed, "cursor name for CLOSE statement cannot be null",
+					)
 				}
 				return tree.DNull, evalCtx.Planner.PLpgSQLCloseCursor(tree.Name(tree.MustBeDString(args[0])))
 			},
@@ -8582,6 +8584,13 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			},
 			ReturnType: tree.IdentityReturnType(3),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				for i := range args {
+					if args[i] == tree.DNull {
+						return nil, pgerror.New(
+							pgcode.NullValueNotAllowed, "FETCH statement option cannot be null",
+						)
+					}
+				}
 				cursorName := tree.MustBeDString(args[0])
 				cursorDir := tree.MustBeDInt(args[1])
 				cursorCount := tree.MustBeDInt(args[2])
