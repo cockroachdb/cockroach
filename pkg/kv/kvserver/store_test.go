@@ -378,7 +378,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 		for _, opIdx := range rng.Perm(len(ops))[:rng.Intn(1+len(ops))] {
 			key := ops[opIdx](rangeID)
 			t.Logf("writing op=%d rangeID=%d", opIdx, rangeID)
-			if err := storage.MVCCPut(
+			if _, err := storage.MVCCPut(
 				ctx,
 				eng,
 				key,

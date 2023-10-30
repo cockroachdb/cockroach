@@ -151,7 +151,7 @@ func makeTestEngineWithData(ops []storeOp) (storage.Engine, error) {
 	engine := storage.NewDefaultInMemForTesting()
 	for _, op := range ops {
 		kv := op.kv
-		err := storage.MVCCPut(ctx, engine, kv.Key.Key, kv.Key.Timestamp, roachpb.Value{RawBytes: kv.Value}, storage.MVCCWriteOptions{Txn: op.txn})
+		_, err := storage.MVCCPut(ctx, engine, kv.Key.Key, kv.Key.Timestamp, roachpb.Value{RawBytes: kv.Value}, storage.MVCCWriteOptions{Txn: op.txn})
 		if err != nil {
 			engine.Close()
 			return nil, err

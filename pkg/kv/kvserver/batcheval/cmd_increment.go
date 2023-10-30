@@ -41,7 +41,7 @@ func Increment(
 	}
 
 	var err error
-	reply.NewValue, err = storage.MVCCIncrement(
+	reply.NewValue, _, err = storage.MVCCIncrement(
 		ctx, readWriter, args.Key, h.Timestamp, opts, args.Increment)
 	if err != nil {
 		return result.Result{}, err
