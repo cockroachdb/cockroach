@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -192,7 +193,9 @@ func parseAndSummarizeJavaORMTestsResults(
 	for i, file := range files {
 		t.L().Printf("Parsing %d of %d: %s\n", i+1, len(files), file)
 		// NB: It is necessary to single quote the file name to prevent
-		// unintentional variable interpolation if the name contains $'s.
+		// unintentional variable interpolation if the name contains $'s. The
+		// special `~` character is handled explicitly.
+		file = strings.ReplaceAll(file, "~/", os.Getenv("HOME")+"/")
 		result, err := repeatRunWithDetailsSingleNode(
 			ctx,
 			c,
