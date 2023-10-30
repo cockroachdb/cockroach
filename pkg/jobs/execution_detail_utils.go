@@ -60,6 +60,9 @@ func WriteProtobinExecutionDetailFile(
 // `~profiler/` prefix. Files written using this method can be read using the
 // `ReadExecutionDetailFile` and will show up in the list of files displayed on
 // the jobs' Advanced Debugging DBConsole page.
+//
+// This method clears any existing file with the same filename before writing a
+// new one.
 func WriteExecutionDetailFile(
 	ctx context.Context, filename string, data []byte, txn isql.Txn, jobID jobspb.JobID,
 ) error {
