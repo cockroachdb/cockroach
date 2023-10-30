@@ -299,6 +299,7 @@ go_test(
         "blocklist_test.go",
         "drt_test.go",
         "query_comparison_util_test.go",
+        "restore_test.go",
         "tpcc_test.go",
         "util_load_group_test.go",
         ":mocks_drt",  # keep
@@ -307,6 +308,7 @@ go_test(
     embed = [":tests"],
     deps = [
         "//pkg/cmd/roachtest/option",
+        "//pkg/cmd/roachtest/registry",
         "//pkg/cmd/roachtest/spec",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/prometheus",
@@ -315,6 +317,7 @@ go_test(
         "//pkg/util/version",
         "@com_github_golang_mock//gomock",
         "@com_github_google_go_github//github",
+        "@com_github_prometheus_client_golang//prometheus/promauto",
         "@com_github_prometheus_common//model",
         "@com_github_stretchr_testify//require",
         "@org_golang_x_oauth2//:oauth2",
