@@ -11,10 +11,12 @@ with k=k
 ----
 >> increment ts=0,1 inc=0 k=k
 inc: current value = 0
+inc: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+6 live_count=+1 live_bytes=+20
 get: "k" -> /INT/0 @0,1
 >> increment ts=0,2 inc=2 k=k
 inc: current value = 2
+inc: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_bytes=+12 val_count=+1 val_bytes=+6 gc_bytes_age=+1800
 >> at end:
 data: "k"/0,2 -> /INT/2
@@ -38,9 +40,11 @@ with k=k t=a ts=0,1
 ----
 >> increment k=k t=a ts=0,1
 inc: current value = 1
+inc: lock acquisition = {k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=1 Replicated Intent []}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+51 live_count=+1 live_bytes=+65 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+100
 >> increment k=k t=a ts=0,1
 inc: current value = 2
+inc: lock acquisition = {k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2 Replicated Intent []}
 stats: val_bytes=+10 live_bytes=+10
 >> at end:
 txn: "a" meta={id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} lock=true stat=PENDING rts=0,1 wto=false gul=0,0
@@ -57,7 +61,9 @@ with k=r
   increment ts=3
 ----
 inc: current value = 1
+inc: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 inc: current value = 2
+inc: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 >> at end:
 meta: "k"/0,0 -> txn={id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} ts=0,1 del=false klen=12 vlen=6 ih={{1 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/0,1 -> /INT/2

@@ -7,6 +7,9 @@ put k=b ts=1 v=b1
 del_range_ts k=a end=+a ts=5
 del_range_ts k=+a end=b ts=4
 ----
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 >> at end:
 rangekey: a{-\x00}/[5.000000000,0=/<empty>]
 rangekey: {a\x00-b}/[4.000000000,0=/<empty>]

@@ -19,25 +19,34 @@ put k=f ts=3 v=f3
 put k=g ts=3 v=g3
 ----
 >> put k=b ts=1 v=b1
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> put k=c ts=1 v=c1
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> del k=b ts=2 localTs=1
 del: "b": found key true
+del: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_bytes=+12 val_count=+1 val_bytes=+13 live_count=-1 live_bytes=-21 gc_bytes_age=+4508
 >> del k=c ts=2 localTs=1
 del: "c": found key true
+del: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_bytes=+12 val_count=+1 val_bytes=+13 live_count=-1 live_bytes=-21 gc_bytes_age=+4508
 >> del k=e ts=2 localTs=1
 del: "e": found key false
+del: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+13 gc_bytes_age=+2646
 >> put k=a ts=3 v=a3
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> put k=d ts=3 v=d3
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> put k=f ts=3 v=f3
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> put k=g ts=3 v=g3
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> at end:
 data: "a"/3.000000000,0 -> /BYTES/a3

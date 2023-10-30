@@ -1260,9 +1260,11 @@ func cmdCPut(e *evalCtx) error {
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
 		}
-		if err := storage.MVCCConditionalPut(e.ctx, rw, key, ts, val, expVal, behavior, opts); err != nil {
+		acq, err := storage.MVCCConditionalPut(e.ctx, rw, key, ts, val, expVal, behavior, opts)
+		if err != nil {
 			return err
 		}
+		e.results.buf.Printf("cput: lock acquisition = %v\n", acq)
 		if resolve {
 			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
 		}
@@ -1288,9 +1290,11 @@ func cmdInitPut(e *evalCtx) error {
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
 		}
-		if err := storage.MVCCInitPut(e.ctx, rw, key, ts, val, failOnTombstones, opts); err != nil {
+		acq, err := storage.MVCCInitPut(e.ctx, rw, key, ts, val, failOnTombstones, opts)
+		if err != nil {
 			return err
 		}
+		e.results.buf.Printf("initput: lock acquisition = %v\n", acq)
 		if resolve {
 			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
 		}
@@ -1312,7 +1316,7 @@ func cmdDelete(e *evalCtx) error {
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
 		}
-		foundKey, err := storage.MVCCDelete(e.ctx, rw, key, ts, opts)
+		foundKey, acq, err := storage.MVCCDelete(e.ctx, rw, key, ts, opts)
 		if err == nil || errors.HasType(err, &kvpb.WriteTooOldError{}) {
 			// We want to output foundKey even if a WriteTooOldError is returned,
 			// since the error may be swallowed/deferred during evaluation.
@@ -1321,6 +1325,7 @@ func cmdDelete(e *evalCtx) error {
 		if err != nil {
 			return err
 		}
+		e.results.buf.Printf("del: lock acquisition = %v\n", acq)
 		if resolve {
 			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
 		}
@@ -1348,11 +1353,12 @@ func cmdDeleteRange(e *evalCtx) error {
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
 		}
-		deleted, resumeSpan, num, err := storage.MVCCDeleteRange(
+		deleted, resumeSpan, num, acqs, err := storage.MVCCDeleteRange(
 			e.ctx, rw, key, endKey, int64(max), ts, opts, returnKeys)
 		if err != nil {
 			return err
 		}
+		e.results.buf.Printf("del_range: lock acquisitions = %v\n", acqs)
 		e.results.buf.Printf("del_range: %v-%v -> deleted %d key(s)\n", key, endKey, num)
 		for _, key := range deleted {
 			e.results.buf.Printf("del_range: returned %v\n", key)
@@ -1511,11 +1517,12 @@ func cmdIncrement(e *evalCtx) error {
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
 		}
-		curVal, err := storage.MVCCIncrement(e.ctx, rw, key, ts, opts, inc)
+		curVal, acq, err := storage.MVCCIncrement(e.ctx, rw, key, ts, opts, inc)
 		if err != nil {
 			return err
 		}
 		e.results.buf.Printf("inc: current value = %d\n", curVal)
+		e.results.buf.Printf("inc: lock acquisition = %v\n", acq)
 		if resolve {
 			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
 		}
@@ -1554,9 +1561,11 @@ func cmdPut(e *evalCtx) error {
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
 		}
-		if err := storage.MVCCPut(e.ctx, rw, key, ts, val, opts); err != nil {
+		acq, err := storage.MVCCPut(e.ctx, rw, key, ts, val, opts)
+		if err != nil {
 			return err
 		}
+		e.results.buf.Printf("put: lock acquisition = %v\n", acq)
 		if resolve {
 			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
 		}

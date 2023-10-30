@@ -30,6 +30,8 @@ with k=k1
   put v=v1 ts=10,0
   put v=v2 ts=20,0
 ----
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 >> at end:
 data: "k1"/20.000000000,0 -> /BYTES/v2
 data: "k1"/10.000000000,0 -> /BYTES/v1
@@ -39,6 +41,8 @@ with k=k2
   put v=v3 ts=10,0 localTs=5,0
   put v=v4 ts=20,0
 ----
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 >> at end:
 data: "k1"/20.000000000,0 -> /BYTES/v2
 data: "k1"/10.000000000,0 -> /BYTES/v1
@@ -50,6 +54,8 @@ with k=k3
   put v=v5 ts=10,0
   put v=v6 ts=20,0 localTs=10,0
 ----
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 >> at end:
 data: "k1"/20.000000000,0 -> /BYTES/v2
 data: "k1"/10.000000000,0 -> /BYTES/v1
@@ -63,6 +69,8 @@ with k=k4
   put v=v7 ts=10,0 localTs=5,0
   put v=v8 ts=20,0 localTs=10,0
 ----
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 >> at end:
 data: "k1"/20.000000000,0 -> /BYTES/v2
 data: "k1"/10.000000000,0 -> /BYTES/v1
@@ -79,6 +87,8 @@ with k=k5
   txn_begin t=A ts=20,0
   put t=A v=v10
 ----
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
+put: lock acquisition = {k5 id=00000001 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
 txn: "A" meta={id=00000001 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
 data: "k1"/20.000000000,0 -> /BYTES/v2
@@ -99,6 +109,8 @@ with k=k6
   txn_begin t=B ts=20,0
   put t=B v=v12
 ----
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
+put: lock acquisition = {k6 id=00000002 key="k6" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
 txn: "B" meta={id=00000002 key="k6" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
 data: "k1"/20.000000000,0 -> /BYTES/v2
@@ -122,6 +134,8 @@ with k=k7
   txn_begin t=C ts=20,0
   put t=C v=v14 localTs=10,0
 ----
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
+put: lock acquisition = {k7 id=00000003 key="k7" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
 txn: "C" meta={id=00000003 key="k7" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
 data: "k1"/20.000000000,0 -> /BYTES/v2
@@ -148,6 +162,8 @@ with k=k8
   txn_begin t=D ts=20,0
   put t=D v=v16 localTs=10,0
 ----
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
+put: lock acquisition = {k8 id=00000004 key="k8" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
 txn: "D" meta={id=00000004 key="k8" iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
 data: "k1"/20.000000000,0 -> /BYTES/v2

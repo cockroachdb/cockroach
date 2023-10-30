@@ -1,6 +1,7 @@
 run ok
 put k=A v=B ts=10
 ----
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 >> at end:
 data: "A"/10.000000000,0 -> /BYTES/B
 
@@ -16,6 +17,7 @@ run ok
 del k=A ts=30
 ----
 del: "A": found key true
+del: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 >> at end:
 data: "A"/30.000000000,0 -> /<empty>
 data: "A"/10.000000000,0 -> /BYTES/B
@@ -65,6 +67,7 @@ run ok
 put k=A v=B ts=10
 del_range_ts k=A endKey=D ts=20
 ----
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 >> at end:
 rangekey: A{-\x00}/[20.000000000,0=/<empty>]
 data: "A"/10.000000000,0 -> /BYTES/B
@@ -83,6 +86,7 @@ run ok
 put k=A v=B ts=5
 del_range_ts k=C endKey=Z ts=6
 ----
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 >> at end:
 rangekey: C{-\x00}/[6.000000000,0=/<empty>]
 data: "A"/5.000000000,0 -> /BYTES/B
@@ -107,6 +111,7 @@ with t=A
   txn_begin ts=10
   put k=B v=O
 ----
+put: lock acquisition = {B id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
 meta: "B"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true

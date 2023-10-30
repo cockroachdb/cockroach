@@ -6,8 +6,10 @@ put k=%sys v=system
 put k=i v=value
 ----
 >> put k=%sys v=system
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: sys_bytes=+31 sys_count=+1
 >> put k=i v=value
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_count=+1 key_bytes=+2 val_count=+1 val_bytes=+24 live_count=+1 live_bytes=+26
 >> at end:
 meta: /Local/Range/"sys"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/system mergeTs=<nil> txnDidNotUpdateMeta=false

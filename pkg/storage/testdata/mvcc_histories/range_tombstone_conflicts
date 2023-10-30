@@ -24,27 +24,35 @@ with t=A ts=7
   put k=g v=7
 ----
 >> put k=d ts=1 v=d1
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> put k=e ts=1 v=e1
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> del k=e ts=2
 del: "e": found key true
+del: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+3234
 >> put k=f ts=1 v=f1
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> put k=g ts=1 v=g1
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> increment k=i ts=1
 inc: current value = 1
+inc: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+6 live_count=+1 live_bytes=+20
 >> increment k=j ts=1
 inc: current value = 1
+inc: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+6 live_count=+1 live_bytes=+20
 >> del_range_ts k=a end=k ts=3
 stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 live_count=-5 live_bytes=-103 gc_bytes_age=+11252
 >> del_range_ts k=c end=k ts=5
 stats: range_key_count=+1 range_key_bytes=+22 range_val_count=+2 gc_bytes_age=+2108
 >> put k=g v=7 t=A ts=7
+put: lock acquisition = {g id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
 stats: key_bytes=+12 val_count=+1 val_bytes=+54 live_count=+1 live_bytes=+68 gc_bytes_age=-194 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+93
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
@@ -281,6 +289,7 @@ run stats ok
 initput k=f ts=7 v=f7
 ----
 >> initput k=f ts=7 v=f7
+initput: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-194
 >> at end:
 rangekey: {a-c}/[3.000000000,0=/<empty>]
@@ -325,6 +334,7 @@ increment k=j ts=7
 ----
 >> increment k=j ts=7
 inc: current value = 1
+inc: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_bytes=+12 val_count=+1 val_bytes=+6 live_count=+1 live_bytes=+20 gc_bytes_age=-194
 >> at end:
 rangekey: {a-c}/[3.000000000,0=/<empty>]

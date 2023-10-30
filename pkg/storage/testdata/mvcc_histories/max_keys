@@ -15,7 +15,18 @@ with ts=1,0
   put      k=/row3/4 v=r3e # column family 1-3 omitted (e.g. if all NULLs)
 del        k=aa ts=2,0
 ----
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 del: "aa": found key true
+del: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 >> at end:
 data: "a"/1.000000000,0 -> /BYTES/val-a
 data: "aa"/2.000000000,0 -> /<empty>
@@ -125,6 +136,18 @@ with t=A ts=11,0 max=3
   scan      k=k end=o
   scan      k=k end=o reverse=true
 ----
+put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 Replicated Intent []}
+put: lock acquisition = {l id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 Replicated Intent []}
+put: lock acquisition = {m id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 Replicated Intent []}
+put: lock acquisition = {n id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 Replicated Intent []}
+put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 Replicated Intent []}
+put: lock acquisition = {l id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 Replicated Intent []}
+put: lock acquisition = {m id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 Replicated Intent []}
+put: lock acquisition = {n id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 Replicated Intent []}
+put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30 Replicated Intent []}
+put: lock acquisition = {l id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30 Replicated Intent []}
+put: lock acquisition = {m id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30 Replicated Intent []}
+put: lock acquisition = {n id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30 Replicated Intent []}
 scan: "k" -> /BYTES/b @11.000000000,0
 scan: "l" -> /BYTES/b @11.000000000,0
 scan: "m" -> /BYTES/b @11.000000000,0
@@ -205,6 +228,15 @@ with t=B ts=12,0 max=3
   txn_step  seq=20
   scan      k=k end=o
 ----
+put: lock acquisition = {k id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=10 Replicated Intent []}
+put: lock acquisition = {l id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=10 Replicated Intent []}
+put: lock acquisition = {m id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=10 Replicated Intent []}
+put: lock acquisition = {k id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=20 Replicated Intent []}
+put: lock acquisition = {l id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=20 Replicated Intent []}
+put: lock acquisition = {m id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=20 Replicated Intent []}
+put: lock acquisition = {k id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=30 Replicated Intent []}
+put: lock acquisition = {l id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=30 Replicated Intent []}
+put: lock acquisition = {m id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=30 Replicated Intent []}
 scan: "k" -> /BYTES/b @12.000000000,0
 scan: "l" -> /BYTES/b @12.000000000,0
 scan: "m" -> /BYTES/b @12.000000000,0

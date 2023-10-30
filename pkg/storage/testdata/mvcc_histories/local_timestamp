@@ -7,10 +7,13 @@ with ts=20
   put localTs=30 k=k3 v=v
 ----
 >> put localTs=10 k=k1 v=v ts=20
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+19 live_count=+1 live_bytes=+34
 >> put localTs=20 k=k2 v=v ts=20
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+6 live_count=+1 live_bytes=+21
 >> put localTs=30 k=k3 v=v ts=20
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+6 live_count=+1 live_bytes=+21
 >> at end:
 data: "k1"/20.000000000,0 -> {localTs=10.000000000,0}/BYTES/v
@@ -25,10 +28,13 @@ with ts=30
   cput localTs=20 k=k3 v=v cond=v
 ----
 >> cput localTs=40 k=k1 v=v cond=v ts=30
+cput: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_bytes=+12 val_count=+1 val_bytes=+6 live_bytes=-13 gc_bytes_age=+2170
 >> cput localTs=30 k=k2 v=v cond=v ts=30
+cput: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_bytes=+12 val_count=+1 val_bytes=+6 gc_bytes_age=+1260
 >> cput localTs=20 k=k3 v=v cond=v ts=30
+cput: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_bytes=+12 val_count=+1 val_bytes=+19 live_bytes=+13 gc_bytes_age=+1260
 >> at end:
 data: "k1"/30.000000000,0 -> /BYTES/v
@@ -47,12 +53,15 @@ with ts=40
 ----
 >> del localTs=30 k=k1 ts=40
 del: "k1": found key true
+del: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_bytes=+12 val_count=+1 val_bytes=+13 live_count=-1 live_bytes=-21 gc_bytes_age=+2760
 >> del localTs=40 k=k2 ts=40
 del: "k2": found key true
+del: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+1980
 >> del localTs=50 k=k3 ts=40
 del: "k3": found key true
+del: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-34 gc_bytes_age=+2760
 >> at end:
 data: "k1"/40.000000000,0 -> {localTs=30.000000000,0}/<empty>
@@ -74,12 +83,15 @@ with ts=50
 ----
 >> increment localTs=60 k=k1 ts=50
 inc: current value = 1
+inc: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_bytes=+12 val_count=+1 val_bytes=+6 live_count=+1 live_bytes=+21 gc_bytes_age=-180
 >> increment localTs=50 k=k2 ts=50
 inc: current value = 1
+inc: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_bytes=+12 val_count=+1 val_bytes=+6 live_count=+1 live_bytes=+21 gc_bytes_age=-180
 >> increment localTs=40 k=k3 ts=50
 inc: current value = 1
+inc: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_bytes=+12 val_count=+1 val_bytes=+20 live_count=+1 live_bytes=+35 gc_bytes_age=-180
 >> at end:
 data: "k1"/50.000000000,0 -> /INT/1
@@ -103,12 +115,15 @@ with ts=60
   del_range localTs=70 k=k3 end=k4
 ----
 >> del_range localTs=50 k=k1 end=k2 ts=60
+del_range: lock acquisitions = []
 del_range: "k1"-"k2" -> deleted 1 key(s)
 stats: key_bytes=+12 val_count=+1 val_bytes=+14 live_count=-1 live_bytes=-21 gc_bytes_age=+1880
 >> del_range localTs=60 k=k2 end=k3 ts=60
+del_range: lock acquisitions = []
 del_range: "k2"-"k3" -> deleted 1 key(s)
 stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+1320
 >> del_range localTs=70 k=k3 end=k4 ts=60
+del_range: lock acquisitions = []
 del_range: "k3"-"k4" -> deleted 1 key(s)
 stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-35 gc_bytes_age=+1880
 >> at end:
@@ -255,28 +270,40 @@ with t=A ts=20 localTs=10
   put k=k12 v=v
 ----
 >> put k=k1 v=v t=A ts=20 localTs=10
+put: lock acquisition = {k1 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
 stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> put k=k2 v=v t=A ts=20 localTs=10
+put: lock acquisition = {k2 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
 stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> put k=k3 v=v t=A ts=20 localTs=10
+put: lock acquisition = {k3 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
 stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> put k=k4 v=v t=A ts=20 localTs=10
+put: lock acquisition = {k4 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
 stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> put k=k5 v=v t=A ts=20 localTs=10
+put: lock acquisition = {k5 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
 stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> put k=k6 v=v t=A ts=20 localTs=10
+put: lock acquisition = {k6 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
 stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> put k=k7 v=v t=A ts=20 localTs=10
+put: lock acquisition = {k7 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
 stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> put k=k8 v=v t=A ts=20 localTs=10
+put: lock acquisition = {k8 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
 stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> put k=k9 v=v t=A ts=20 localTs=10
+put: lock acquisition = {k9 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
 stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> put k=k10 v=v t=A ts=20 localTs=10
+put: lock acquisition = {k10 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
 stats: key_count=+1 key_bytes=+16 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+83 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> put k=k11 v=v t=A ts=20 localTs=10
+put: lock acquisition = {k11 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
 stats: key_count=+1 key_bytes=+16 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+83 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> put k=k12 v=v t=A ts=20 localTs=10
+put: lock acquisition = {k12 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0 Replicated Intent []}
 stats: key_count=+1 key_bytes=+16 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+83 intent_count=+1 intent_bytes=+31 lock_count=+1 lock_age=+80
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
@@ -330,28 +357,40 @@ with t=A localTs=20
   put k=k12 v=v2
 ----
 >> put k=k1 v=v2 t=A localTs=20
+put: lock acquisition = {k1 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
 stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> put k=k2 v=v2 t=A localTs=20
+put: lock acquisition = {k2 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
 stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> put k=k3 v=v2 t=A localTs=20
+put: lock acquisition = {k3 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
 stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> put k=k4 v=v2 t=A localTs=20
+put: lock acquisition = {k4 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
 stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> put k=k5 v=v2 t=A localTs=20
+put: lock acquisition = {k5 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
 stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> put k=k6 v=v2 t=A localTs=20
+put: lock acquisition = {k6 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
 stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> put k=k7 v=v2 t=A localTs=20
+put: lock acquisition = {k7 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
 stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> put k=k8 v=v2 t=A localTs=20
+put: lock acquisition = {k8 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
 stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> put k=k9 v=v2 t=A localTs=20
+put: lock acquisition = {k9 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
 stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> put k=k10 v=v2 t=A localTs=20
+put: lock acquisition = {k10 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
 stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> put k=k11 v=v2 t=A localTs=20
+put: lock acquisition = {k11 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
 stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> put k=k12 v=v2 t=A localTs=20
+put: lock acquisition = {k12 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1 Replicated Intent []}
 stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 lock_age=-10
 >> at end:
 meta: "k1"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 {localTs=10.000000000,0}/BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false

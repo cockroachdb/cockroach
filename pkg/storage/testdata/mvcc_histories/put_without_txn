@@ -6,6 +6,7 @@ with k=k
  get  ts=1
 ----
 >> put v=v ts=0,1 k=k
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+6 live_count=+1 live_bytes=+20
 get: "k" -> /BYTES/v @0,1
 get: "k" -> /BYTES/v @0,1

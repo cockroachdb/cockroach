@@ -6,6 +6,7 @@
 run ok
 put ts=10 k=k v=v1
 ----
+put: lock acquisition = {/Min id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0 Unreplicated None []}
 >> at end:
 data: "k"/10.000000000,0 -> /BYTES/v1
 

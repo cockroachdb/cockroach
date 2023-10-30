@@ -328,7 +328,8 @@ func (d mvccBenchData) Build(ctx context.Context, b *testing.B, eng Engine) erro
 			txn.ReadTimestamp = ts
 			txn.WriteTimestamp = ts
 		}
-		require.NoError(b, MVCCPut(ctx, batch, key, ts, value, MVCCWriteOptions{Txn: txn}))
+		_, err := MVCCPut(ctx, batch, key, ts, value, MVCCWriteOptions{Txn: txn})
+		require.NoError(b, err)
 	}
 
 	resolveLastIntent := func(batch Batch, idx int) {
@@ -510,7 +511,7 @@ func (i mvccImportedData) writeLayer(
 		ts := hlc.Timestamp{WallTime: int64((layer + 1) * 5)}
 		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, i.valueBytes))
 		value.InitChecksum(key)
-		if err := MVCCPut(ctx, batch, key, ts, value, MVCCWriteOptions{}); err != nil {
+		if _, err := MVCCPut(ctx, batch, key, ts, value, MVCCWriteOptions{}); err != nil {
 			return err
 		}
 	}

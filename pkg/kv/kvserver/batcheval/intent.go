@@ -201,7 +201,7 @@ func acquireLockOnKey(
 	default:
 		panic("unexpected lock durability")
 	}
-	acq := roachpb.MakeLockAcquisition(txn, key, dur, str)
+	acq := roachpb.MakeLockAcquisition(txn.TxnMeta, key, dur, str, txn.IgnoredSeqNums)
 	return acq, nil
 }
 

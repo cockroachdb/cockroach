@@ -181,13 +181,20 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 
 		// Put a value so that the deletion below finds a value to seek
 		// to.
-		if err := MVCCPut(context.Background(), batch, key, hlc.Timestamp{}, roachpb.MakeValueFromString("x"), MVCCWriteOptions{}); err != nil {
+		if _, err := MVCCPut(
+			context.Background(),
+			batch,
+			key,
+			hlc.Timestamp{},
+			roachpb.MakeValueFromString("x"),
+			MVCCWriteOptions{},
+		); err != nil {
 			t.Fatal(err)
 		}
 
 		// Seek the iterator to `key` and clear the value (but without
 		// telling the iterator about that).
-		if _, err := MVCCDelete(context.Background(), batch, key, hlc.Timestamp{}, MVCCWriteOptions{}); err != nil {
+		if _, _, err := MVCCDelete(context.Background(), batch, key, hlc.Timestamp{}, MVCCWriteOptions{}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1513,7 +1520,7 @@ func TestGetIntent(t *testing.T) {
 	txn2 := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: keyA, ID: txn2ID, Epoch: 2, WriteTimestamp: txn2TS, MinTimestamp: txn2TS, CoordinatorNodeID: 2}, ReadTimestamp: txn2TS}
 
 	// Key "a" only has an intent from txn1.
-	err = MVCCPut(ctx, eng, keyA, txn1.ReadTimestamp, val, MVCCWriteOptions{Txn: txn1})
+	_, err = MVCCPut(ctx, eng, keyA, txn1.ReadTimestamp, val, MVCCWriteOptions{Txn: txn1})
 	require.NoError(t, err)
 
 	// Key "b" has an intent, an exclusive lock, and a shared lock from txn1.
@@ -1523,11 +1530,11 @@ func TestGetIntent(t *testing.T) {
 	require.NoError(t, err)
 	err = MVCCAcquireLock(ctx, eng, txn1, lock.Exclusive, keyB, nil, 0)
 	require.NoError(t, err)
-	err = MVCCPut(ctx, eng, keyB, txn1.ReadTimestamp, val, MVCCWriteOptions{Txn: txn1})
+	_, err = MVCCPut(ctx, eng, keyB, txn1.ReadTimestamp, val, MVCCWriteOptions{Txn: txn1})
 	require.NoError(t, err)
 
 	// Key "c" only has an intent from txn2.
-	err = MVCCPut(ctx, eng, keyC, txn2.ReadTimestamp, val, MVCCWriteOptions{Txn: txn2})
+	_, err = MVCCPut(ctx, eng, keyC, txn2.ReadTimestamp, val, MVCCWriteOptions{Txn: txn2})
 	require.NoError(t, err)
 
 	// Key "d" has an exclusive lock and a shared lock from txn2.
@@ -1625,7 +1632,7 @@ func TestScanLocks(t *testing.T) {
 	for k, str := range locks {
 		var err error
 		if str == lock.Intent {
-			err = MVCCPut(ctx, eng, roachpb.Key(k), txn1.ReadTimestamp, roachpb.Value{RawBytes: roachpb.Key(k)}, MVCCWriteOptions{Txn: txn1})
+			_, err = MVCCPut(ctx, eng, roachpb.Key(k), txn1.ReadTimestamp, roachpb.Value{RawBytes: roachpb.Key(k)}, MVCCWriteOptions{Txn: txn1})
 		} else {
 			err = MVCCAcquireLock(ctx, eng, txn1, str, roachpb.Key(k), nil, 0)
 		}
@@ -1678,20 +1685,30 @@ func TestEngineClearRange(t *testing.T) {
 	// However, certain clearers cannot clear intents, range keys, or point keys.
 	writeInitialData := func(t *testing.T, rw ReadWriter) {
 		txn := roachpb.MakeTransaction("test", nil, isolation.Serializable, roachpb.NormalUserPriority, wallTS(6), 1, 1, 0)
-		require.NoError(t, MVCCPut(ctx, rw, roachpb.Key("c"), wallTS(1), stringValue("c1").Value, MVCCWriteOptions{}))
+		_, err := MVCCPut(ctx, rw, roachpb.Key("c"), wallTS(1), stringValue("c1").Value, MVCCWriteOptions{})
+		require.NoError(t, err)
 		require.NoError(t, rw.PutMVCCRangeKey(rangeKey("d", "h", 1), MVCCValue{}))
 		require.NoError(t, rw.PutMVCCRangeKey(rangeKey("a", "f", 2), MVCCValue{}))
-		require.NoError(t, MVCCPut(ctx, rw, roachpb.Key("g"), wallTS(2), stringValue("g2").Value, MVCCWriteOptions{}))
-		require.NoError(t, MVCCPut(ctx, rw, roachpb.Key("e"), wallTS(3), stringValue("e3").Value, MVCCWriteOptions{}))
+		_, err = MVCCPut(ctx, rw, roachpb.Key("g"), wallTS(2), stringValue("g2").Value, MVCCWriteOptions{})
+		require.NoError(t, err)
+		_, err = MVCCPut(ctx, rw, roachpb.Key("e"), wallTS(3), stringValue("e3").Value, MVCCWriteOptions{})
+		require.NoError(t, err)
 		require.NoError(t, rw.PutMVCCRangeKey(rangeKey("a", "f", 4), MVCCValue{}))
 		require.NoError(t, rw.PutMVCCRangeKey(rangeKey("g", "h", 4), MVCCValue{}))
-		require.NoError(t, MVCCPut(ctx, rw, roachpb.Key("a"), wallTS(5), stringValue("a2").Value, MVCCWriteOptions{}))
-		require.NoError(t, MVCCPut(ctx, rw, roachpb.Key("b"), wallTS(5), stringValue("b2").Value, MVCCWriteOptions{}))
-		require.NoError(t, MVCCPut(ctx, rw, roachpb.Key("c"), wallTS(5), stringValue("c2").Value, MVCCWriteOptions{}))
-		require.NoError(t, MVCCPut(ctx, rw, roachpb.Key("a"), wallTS(6), stringValue("a6").Value, MVCCWriteOptions{Txn: &txn}))
-		require.NoError(t, MVCCPut(ctx, rw, roachpb.Key("b"), wallTS(6), stringValue("b6").Value, MVCCWriteOptions{Txn: &txn}))
-		require.NoError(t, MVCCPut(ctx, rw, roachpb.Key("e"), wallTS(6), stringValue("e6").Value, MVCCWriteOptions{Txn: &txn}))
-		require.NoError(t, MVCCPut(ctx, rw, roachpb.Key("g"), wallTS(6), stringValue("g6").Value, MVCCWriteOptions{Txn: &txn}))
+		_, err = MVCCPut(ctx, rw, roachpb.Key("a"), wallTS(5), stringValue("a2").Value, MVCCWriteOptions{})
+		require.NoError(t, err)
+		_, err = MVCCPut(ctx, rw, roachpb.Key("b"), wallTS(5), stringValue("b2").Value, MVCCWriteOptions{})
+		require.NoError(t, err)
+		_, err = MVCCPut(ctx, rw, roachpb.Key("c"), wallTS(5), stringValue("c2").Value, MVCCWriteOptions{})
+		require.NoError(t, err)
+		_, err = MVCCPut(ctx, rw, roachpb.Key("a"), wallTS(6), stringValue("a6").Value, MVCCWriteOptions{Txn: &txn})
+		require.NoError(t, err)
+		_, err = MVCCPut(ctx, rw, roachpb.Key("b"), wallTS(6), stringValue("b6").Value, MVCCWriteOptions{Txn: &txn})
+		require.NoError(t, err)
+		_, err = MVCCPut(ctx, rw, roachpb.Key("e"), wallTS(6), stringValue("e6").Value, MVCCWriteOptions{Txn: &txn})
+		require.NoError(t, err)
+		_, err = MVCCPut(ctx, rw, roachpb.Key("g"), wallTS(6), stringValue("g6").Value, MVCCWriteOptions{Txn: &txn})
+		require.NoError(t, err)
 	}
 	start, end := roachpb.Key("b"), roachpb.Key("g")
 
@@ -2165,7 +2182,7 @@ func TestScanConflictingIntentsForDroppingLatchesEarly(t *testing.T) {
 			name: "conflicting txn intent at lower timestamp",
 			setup: func(t *testing.T, rw ReadWriter, _ *roachpb.Transaction) {
 				conflictingTxn := newTxn(belowTxnTS) // test txn should see this intent
-				err := MVCCPut(
+				_, err := MVCCPut(
 					ctx, rw, keyA, conflictingTxn.WriteTimestamp, val, MVCCWriteOptions{Txn: conflictingTxn},
 				)
 				require.NoError(t, err)
@@ -2179,7 +2196,7 @@ func TestScanConflictingIntentsForDroppingLatchesEarly(t *testing.T) {
 			name: "conflicting txn intent at higher timestamp",
 			setup: func(t *testing.T, rw ReadWriter, _ *roachpb.Transaction) {
 				conflictingTxn := newTxn(aboveTxnTS) // test txn shouldn't see this intent
-				err := MVCCPut(
+				_, err := MVCCPut(
 					ctx, rw, keyA, conflictingTxn.WriteTimestamp, val, MVCCWriteOptions{Txn: conflictingTxn},
 				)
 				require.NoError(t, err)
@@ -2192,7 +2209,7 @@ func TestScanConflictingIntentsForDroppingLatchesEarly(t *testing.T) {
 		{
 			name: "bounds do not include (latest) own write",
 			setup: func(t *testing.T, rw ReadWriter, txn *roachpb.Transaction) {
-				err := MVCCPut(ctx, rw, keyA, txn.WriteTimestamp, val, MVCCWriteOptions{Txn: txn})
+				_, err := MVCCPut(ctx, rw, keyA, txn.WriteTimestamp, val, MVCCWriteOptions{Txn: txn})
 				require.NoError(t, err)
 			},
 			start:                 keyB,
@@ -2245,7 +2262,7 @@ func TestScanConflictingIntentsForDroppingLatchesEarly(t *testing.T) {
 				err = MVCCAcquireLock(ctx, rw, txnA, lock.Exclusive, keyB, nil /*ms*/, 0 /*maxConflicts*/)
 				require.NoError(t, err)
 				require.NoError(t, err)
-				err = MVCCPut(ctx, rw, keyC, txnA.WriteTimestamp, val, MVCCWriteOptions{Txn: txnA})
+				_, err = MVCCPut(ctx, rw, keyC, txnA.WriteTimestamp, val, MVCCWriteOptions{Txn: txnA})
 				require.NoError(t, err)
 			},
 			start:                 keyA,
@@ -2264,7 +2281,7 @@ func TestScanConflictingIntentsForDroppingLatchesEarly(t *testing.T) {
 				require.NoError(t, err)
 				err = MVCCAcquireLock(ctx, rw, txnA, lock.Exclusive, keyB, nil /*ms*/, 0 /*maxConflicts*/)
 				require.NoError(t, err)
-				err = MVCCPut(ctx, rw, keyC, txn.WriteTimestamp, val, MVCCWriteOptions{Txn: txn})
+				_, err = MVCCPut(ctx, rw, keyC, txn.WriteTimestamp, val, MVCCWriteOptions{Txn: txn})
 				require.NoError(t, err)
 			},
 			start:                 keyA,
@@ -2495,7 +2512,7 @@ func TestScanConflictingIntentsForDroppingLatchesEarlyReadYourOwnWrites(t *testi
 			txn.Sequence = tc.intentSequenceNumber
 			txn.ReadTimestamp = tc.intentTS
 			txn.WriteTimestamp = tc.intentTS
-			err := MVCCPut(ctx, eng, keyA, txn.WriteTimestamp, val, MVCCWriteOptions{Txn: txn})
+			_, err := MVCCPut(ctx, eng, keyA, txn.WriteTimestamp, val, MVCCWriteOptions{Txn: txn})
 			require.NoError(t, err)
 
 			// Set up the read.
