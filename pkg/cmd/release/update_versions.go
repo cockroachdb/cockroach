@@ -372,7 +372,7 @@ func generateRepoList(
 
 	// 1. Bump the version. Branches we need to bump the version on:
 	// stable releases: release-major.minor and all RC branches of the same release series.
-	// alpha, beta, rc: master or all RC branches for the same release series
+	// alpha, beta, rc: 1) master or 2) release-major.minor and all RC branches for the same release series
 	maybeVersionBumpBranches, err := listRemoteBranches(fmt.Sprintf("release-%d.%d.*", releasedVersion.Major(), releasedVersion.Minor()))
 	if err != nil {
 		return []prRepo{}, fmt.Errorf("listing staging branches: %w", err)
@@ -381,7 +381,19 @@ func generateRepoList(
 		maybeVersionBumpBranches = append(maybeVersionBumpBranches, fmt.Sprintf("release-%d.%d", releasedVersion.Major(), releasedVersion.Minor()))
 	} else {
 		// For alpha/betas/rc releases, if we have not created the dot-zero branch
-		// (which is covered by the `release-major.minor.*` pattern), then use the master branch for version bump.
+		// (which is covered by the `release-major.minor.*` pattern), then use either the `release-major.minor` or the master branch for version bump.
+		// First, try to find the `release-major.minor` branch.
+		maybeReleaseBranches, err := listRemoteBranches(fmt.Sprintf("release-%d.%d", releasedVersion.Major(), releasedVersion.Minor()))
+		if err != nil {
+			return []prRepo{}, fmt.Errorf("listing release branches: %w", err)
+		}
+		if len(maybeReleaseBranches) > 1 {
+			return []prRepo{}, fmt.Errorf("more than one release branch found: %q", maybeReleaseBranches)
+		}
+		if len(maybeReleaseBranches) == 1 {
+			maybeVersionBumpBranches = append(maybeVersionBumpBranches, maybeReleaseBranches[0])
+		}
+		// if no staging/release branches found, fall back to the master branch.
 		if len(maybeVersionBumpBranches) == 0 {
 			maybeVersionBumpBranches = []string{"master"}
 		}
