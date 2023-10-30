@@ -533,6 +533,39 @@ rules_pkg_dependencies()
 # end rules_pkg dependencies #
 ##############################
 
+################################
+# begin rules_oci dependencies #
+################################
+
+http_archive(
+    name = "rules_oci",
+    sha256 = "21a7d14f6ddfcb8ca7c5fc9ffa667c937ce4622c7d2b3e17aea1ffbc90c96bed",
+    strip_prefix = "rules_oci-1.4.0",
+    url = "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_oci-v1.4.0.tar.gz",
+)
+
+# bazel_skylib handled above.
+# aspect_bazel_lib handled above.
+
+load("@rules_oci//oci:dependencies.bzl", "rules_oci_dependencies")
+
+rules_oci_dependencies()
+
+# TODO: This will pull from an upstream location: specifically it will download
+# `crane` from https://github.com/google/go-containerregistry/... Before this is
+# used in CI or anything production-ready, this should be mirrored. rules_oci
+# doesn't support this mirroring yet so we'd have to submit a patch.
+load("@rules_oci//oci:repositories.bzl", "LATEST_CRANE_VERSION", "oci_register_toolchains")
+
+oci_register_toolchains(
+    name = "oci",
+    crane_version = LATEST_CRANE_VERSION,
+)
+
+##############################
+# end rules_oci dependencies #
+##############################
+
 register_toolchains(
     "//build/toolchains:cross_x86_64_linux_toolchain",
     "//build/toolchains:cross_x86_64_linux_arm_toolchain",

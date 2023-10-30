@@ -50,10 +50,10 @@ var defaultBackupFixtureSpecs = scheduledBackupSpecs{
 	ignoreExistingBackups: false,
 
 	backupSpecs: backupSpecs{
-		version:         "v23.1.1",
-		cloud:           spec.AWS,
-		fullBackupDir:   "LATEST",
-		backupsIncluded: 48,
+		version:           "v23.1.1",
+		cloud:             spec.AWS,
+		fullBackupDir:     "LATEST",
+		numBackupsInChain: 48,
 		workload: tpceRestore{
 			customers: 25000,
 		},
@@ -217,7 +217,7 @@ func (bd *backupDriver) monitorBackups(ctx context.Context) {
 		backupCountQuery := fmt.Sprintf(`SELECT count(DISTINCT end_time) FROM [SHOW BACKUP FROM LATEST IN %s]`, bd.sp.backup.backupCollection())
 		sql.QueryRow(bd.t, backupCountQuery).Scan(&backupCount)
 		bd.t.L().Printf(`%d scheduled backups taken`, backupCount)
-		if backupCount >= bd.sp.backup.backupsIncluded {
+		if backupCount >= bd.sp.backup.numBackupsInChain {
 			pauseSchedulesQuery := fmt.Sprintf(`PAUSE SCHEDULES WITH x AS (SHOW SCHEDULES) SELECT id FROM x WHERE label = '%s'`, scheduleLabel)
 			sql.QueryRow(bd.t, pauseSchedulesQuery)
 			break
@@ -260,9 +260,9 @@ func registerBackupFixtures(r registry.Registry) {
 					incrementalBackupCrontab: "*/2 * * * *",
 					ignoreExistingBackups:    true,
 					backupSpecs: backupSpecs{
-						backupsIncluded: 4,
-						workload:        tpceRestore{customers: 1000}}}),
-			initFromBackupSpecs: backupSpecs{version: "v22.2.1", backupProperties: "inc-count=48"},
+						numBackupsInChain: 4,
+						workload:          tpceRestore{customers: 1000}}}),
+			initFromBackupSpecs: backupSpecs{version: "v22.2.1", numBackupsInChain: 48},
 			timeout:             2 * time.Hour,
 			clouds:              registry.AllClouds,
 			suites:              registry.Suites(registry.Weekly),
@@ -275,7 +275,7 @@ func registerBackupFixtures(r registry.Registry) {
 				backupSpecs: backupSpecs{
 					workload: tpceRestore{customers: 500000}}}),
 			timeout:             25 * time.Hour,
-			initFromBackupSpecs: backupSpecs{version: "v22.2.1", backupProperties: "inc-count=48"},
+			initFromBackupSpecs: backupSpecs{version: "v22.2.1", numBackupsInChain: 48},
 			clouds:              registry.AllClouds,
 			suites:              registry.Suites(registry.Weekly),
 			// add the weekly tags to allow an over 24 hour timeout.
@@ -288,7 +288,7 @@ func registerBackupFixtures(r registry.Registry) {
 			backup: makeBackupFixtureSpecs(scheduledBackupSpecs{
 				backupSpecs: backupSpecs{
 					workload: tpceRestore{customers: 2000000}}}),
-			initFromBackupSpecs: backupSpecs{version: "v22.2.1", backupProperties: "inc-count=48"},
+			initFromBackupSpecs: backupSpecs{version: "v22.2.1", numBackupsInChain: 48},
 			timeout:             48 * time.Hour,
 			clouds:              registry.AllClouds,
 			suites:              registry.Suites(registry.Weekly),
