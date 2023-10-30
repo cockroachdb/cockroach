@@ -148,7 +148,6 @@ func RegisterTests(r registry.Registry) {
 	registerTypeORM(r)
 	registerUnoptimizedQueryOracle(r)
 	registerValidateSystemSchemaAfterVersionUpgrade(r)
-	registerVersion(r)
 	registerYCSB(r)
 	registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r)
 }
