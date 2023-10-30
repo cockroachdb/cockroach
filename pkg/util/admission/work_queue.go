@@ -799,8 +799,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		q.metrics.incErrored(info.Priority)
 		q.metrics.recordFinishWait(info.Priority, waitDur)
 		deadline, _ := ctx.Deadline()
-		// Don't use the cancelled context.
-		log.Eventf(q.ambientCtx, "deadline expired, waited in %s queue for %v",
+		log.Eventf(ctx, "deadline expired, waited in %s queue for %v",
 			workKindString(q.workKind), waitDur)
 		return true,
 			errors.Newf("work %s deadline expired while waiting: deadline: %v, start: %v, dur: %v",
