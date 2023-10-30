@@ -48,45 +48,62 @@ stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 gc_bytes_age=+1
 >> del_range_ts k=l end=o ts=5
 stats: range_key_count=+1 range_key_bytes=+22 range_val_count=+2 gc_bytes_age=+2082
 >> put k=a ts=2 v=a2
+put: lock acquisition = empty
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> del k=a ts=4
 del: "a": found key true
+del: lock acquisition = empty
 stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+3168
 >> del k=b ts=4
 del: "b": found key false
+del: lock acquisition = empty
 stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+1344
 >> put k=d ts=2 v=d2
+put: lock acquisition = empty
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> put k=d ts=4 v=d4
+put: lock acquisition = empty
 stats: key_bytes=+12 val_count=+1 val_bytes=+7 gc_bytes_age=+1824
 >> put k=e ts=3 v=e3
+put: lock acquisition = empty
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> put k=f ts=2 v=f2
+put: lock acquisition = empty
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> put k=g ts=2 v=g2
+put: lock acquisition = empty
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> put k=i ts=5 v=i5
+put: lock acquisition = empty
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> put k=j ts=2 v=j2
+put: lock acquisition = empty
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> del k=j ts=6
 del: "j": found key true
+del: lock acquisition = empty
 stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+3102
 >> put k=k ts=2 v=k2
+put: lock acquisition = empty
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> del_range_ts k=f end=h ts=3 localTs=4
 stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 live_count=-2 live_bytes=-42 gc_bytes_age=+5335
 >> put k=f ts=4 v=f4
+put: lock acquisition = empty
 stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-194
 >> put k=g ts=4 v=g4
+put: lock acquisition = empty
 stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-194
 >> del_range_ts k=c end=h ts=5
 stats: range_key_count=+1 range_key_bytes=+49 range_val_count=+5 live_count=-4 live_bytes=-84 gc_bytes_age=+12665
 >> put k=f ts=6 v=f6
+put: lock acquisition = empty
 stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-190
 >> put k=h ts=3 v=h3
+put: lock acquisition = empty
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> put k=p ts=6 v=p6
+put: lock acquisition = empty
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]

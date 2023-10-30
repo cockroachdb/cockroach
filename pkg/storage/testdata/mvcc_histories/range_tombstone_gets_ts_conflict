@@ -40,6 +40,32 @@ put_rangekey k=c end=g ts=1
 put_rangekey k=c end=p ts=3
 put_rangekey k=m end=p ts=5
 ----
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
 >> at end:
 rangekey: {c-g}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {g-m}/[3.000000000,0=/<empty>]

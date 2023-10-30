@@ -1,6 +1,7 @@
 run ok
 put k=k v=v ts=1,1
 ----
+put: lock acquisition = empty
 >> at end:
 data: "k"/1.000000000,1 -> /BYTES/v
 

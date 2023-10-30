@@ -31,8 +31,14 @@ del_range_ts k=c end=d ts=3
 del_range_ts k=c end=e ts=4
 del_range_ts k=c end=d ts=5
 ----
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
 del: "b": found key true
+del: lock acquisition = empty
+put: lock acquisition = empty
 del: "b": found key true
+del: lock acquisition = empty
 >> at end:
 rangekey: {c-d}/[5.000000000,0=/<empty> 4.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {d-e}/[4.000000000,0=/<empty> 1.000000000,0=/<empty>]

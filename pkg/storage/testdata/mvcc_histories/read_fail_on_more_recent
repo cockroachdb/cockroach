@@ -5,6 +5,7 @@
 run ok
 put k=k1 v=v ts=10,0
 ----
+put: lock acquisition = empty
 >> at end:
 data: "k1"/10.000000000,0 -> /BYTES/v
 
@@ -13,6 +14,7 @@ with t=A
   txn_begin ts=10,0
   put k=k2 v=v
 ----
+put: lock acquisition = {k2 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
 data: "k1"/10.000000000,0 -> /BYTES/v
@@ -229,6 +231,9 @@ put k=a v=v ts=11,0
 put k=b v=v ts=13,0
 put k=c v=v ts=12,0
 ----
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
 >> at end:
 data: "a"/11.000000000,0 -> /BYTES/v
 data: "b"/13.000000000,0 -> /BYTES/v

@@ -7,6 +7,9 @@ put k=b ts=1 v=b1
 del_range_ts k=a end=+a ts=5
 del_range_ts k=+a end=b ts=4
 ----
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
 >> at end:
 rangekey: a{-\x00}/[5.000000000,0=/<empty>]
 rangekey: {a\x00-b}/[4.000000000,0=/<empty>]

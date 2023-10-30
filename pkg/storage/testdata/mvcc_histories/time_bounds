@@ -5,6 +5,10 @@ with k=k1
 put k=k2 v=k2v1 ts=5,0
 put k=k3 v=k3v1 ts=5,0
 ----
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
 >> at end:
 data: "k1"/20.000000000,0 -> /BYTES/k1v2
 data: "k1"/10.000000000,0 -> /BYTES/k1v1

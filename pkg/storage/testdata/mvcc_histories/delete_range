@@ -11,6 +11,14 @@ with ts=44 v=abc
   put  k=d
   put  k=d/123
 ----
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
 >> at end:
 data: "a"/44.000000000,0 -> /BYTES/abc
 data: "a/123"/44.000000000,0 -> /BYTES/abc
@@ -29,6 +37,7 @@ run stats ok
 del_range k=a end=b ts=45
 ----
 >> del_range k=a end=b ts=45
+del_range: lock acquisitions = empty
 del_range: "a"-"b" -> deleted 2 key(s)
 stats: key_bytes=+24 val_count=+2 live_count=-2 live_bytes=-48 gc_bytes_age=+3960
 >> at end:
@@ -56,6 +65,7 @@ with t=A
   txn_remove
 ----
 >> del_range k=b end=c returnKeys t=A
+del_range: lock acquisitions = [{b id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0 Replicated Intent []} {b/123 id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0 Replicated Intent []}]
 del_range: "b"-"c" -> deleted 2 key(s)
 del_range: returned "b"
 del_range: returned "b/123"
@@ -86,6 +96,7 @@ run stats ok
 del_range k=c end=z ts=47 max=2 returnKeys
 ----
 >> del_range k=c end=z ts=47 max=2 returnKeys
+del_range: lock acquisitions = empty
 del_range: "c"-"z" -> deleted 2 key(s)
 del_range: returned "c"
 del_range: returned "c/123"
@@ -154,6 +165,7 @@ with t=A
   txn_remove
 ----
 >> del_range k=c end=z returnKeys t=A
+del_range: lock acquisitions = [{d id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=48.000000000,0 min=0,0 seq=0 Replicated Intent []} {d/123 id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=48.000000000,0 min=0,0 seq=0 Replicated Intent []}]
 del_range: "c"-"z" -> deleted 2 key(s)
 del_range: returned "d"
 del_range: returned "d/123"

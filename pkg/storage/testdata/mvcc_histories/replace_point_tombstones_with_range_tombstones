@@ -35,17 +35,36 @@ with t=A
   put k=f v=f5
   del k=g
 ----
+put: lock acquisition = empty
 del: "c": found key false
+del: lock acquisition = empty
 del: "d": found key false
+del: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
 del: "e": found key true
+del: lock acquisition = empty
 del: "e": found key false
+del: lock acquisition = empty
 del: "f": found key false
+del: lock acquisition = empty
 del: "g": found key false
+del: lock acquisition = empty
+put: lock acquisition = empty
 del: "i": found key false
+del: lock acquisition = empty
 del: "k": found key false
+del: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
 del: "l": found key false
+del: lock acquisition = empty
+put: lock acquisition = empty
 del: "n": found key false
+del: lock acquisition = empty
+put: lock acquisition = {f id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 Replicated Intent []}
 del: "g": found key false
+del: lock acquisition = {g id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
 rangekey: {h-o}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
@@ -133,17 +152,36 @@ with t=A
   put k=f v=f5
   del k=g
 ----
+put: lock acquisition = empty
 del: "c": found key false
+del: lock acquisition = empty
 del: "d": found key false
+del: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
 del: "e": found key true
+del: lock acquisition = empty
 del: "e": found key false
+del: lock acquisition = empty
 del: "f": found key false
+del: lock acquisition = empty
 del: "g": found key false
+del: lock acquisition = empty
+put: lock acquisition = empty
 del: "i": found key false
+del: lock acquisition = empty
 del: "k": found key false
+del: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
 del: "l": found key false
+del: lock acquisition = empty
+put: lock acquisition = empty
 del: "n": found key false
+del: lock acquisition = empty
+put: lock acquisition = {f id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 Replicated Intent []}
 del: "g": found key false
+del: lock acquisition = {g id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
 txn: "A" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
 rangekey: {h-o}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]

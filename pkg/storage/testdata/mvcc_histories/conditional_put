@@ -20,6 +20,7 @@ run stats ok
 cput k=k v=v ts=123,2
 ----
 >> cput k=k v=v ts=123,2
+cput: lock acquisition = empty
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+6 live_count=+1 live_bytes=+20
 >> at end:
 data: "k"/123.000000000,2 -> /BYTES/v
@@ -49,6 +50,7 @@ run stats ok
 cput k=k v= cond=v ts=123,5
 ----
 >> cput k=k v= cond=v ts=123,5
+cput: lock acquisition = empty
 stats: key_bytes=+12 val_count=+1 val_bytes=+5 live_bytes=-1 gc_bytes_age=-414
 >> at end:
 data: "k"/123.000000000,5 -> /BYTES/
@@ -73,6 +75,7 @@ run stats ok
 cput k=k2 v=v2 cond=v ts=123,7 allow_missing
 ----
 >> cput k=k2 v=v2 cond=v ts=123,7 allow_missing
+cput: lock acquisition = empty
 stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+22
 >> at end:
 data: "k"/123.000000000,5 -> /BYTES/
@@ -97,6 +100,7 @@ run stats ok
 cput k=k2 v= cond=v2 allow_missing ts=123,9
 ----
 >> cput k=k2 v= cond=v2 allow_missing ts=123,9
+cput: lock acquisition = empty
 stats: key_bytes=+12 val_count=+1 val_bytes=+5 live_bytes=-2 gc_bytes_age=-437
 >> at end:
 data: "k"/123.000000000,5 -> /BYTES/
@@ -111,6 +115,7 @@ run stats ok
 cput k=k v=v2 cond= ts=123,10
 ----
 >> cput k=k v=v2 cond= ts=123,10
+cput: lock acquisition = empty
 stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_bytes=+2 gc_bytes_age=-391
 >> at end:
 data: "k"/123.000000000,10 -> /BYTES/v2

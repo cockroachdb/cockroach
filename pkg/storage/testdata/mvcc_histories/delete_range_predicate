@@ -28,8 +28,19 @@ with t=A
   txn_begin ts=7
   put k=i v=i7
 ----
+put: lock acquisition = empty
 del: "a": found key true
+del: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
 del: "g": found key true
+del: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = {i id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
 rangekey: {k-p}/[4.000000000,0=/<empty>]
@@ -128,6 +139,7 @@ put k=c ts=2 v=c2
 del_range_pred k=c end=f ts=5 startTime=1
 ----
 >> put k=c ts=2 v=c2
+put: lock acquisition = empty
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> del_range_pred k=c end=f ts=5 startTime=1
 stats: no change
@@ -160,8 +172,10 @@ put k=q ts=2 v=q2
 del_range_pred k=j end=r ts=4 startTime=1 rangeThreshold=2
 ----
 >> put k=j ts=2 v=j2
+put: lock acquisition = empty
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> put k=q ts=2 v=q2
+put: lock acquisition = empty
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> del_range_pred k=j end=r ts=4 startTime=1 rangeThreshold=2
 stats: no change
@@ -300,6 +314,7 @@ put k=f ts=6 v=f6
 del_range_pred k=c end=i ts=7 startTime=1 max=1
 ----
 >> put k=f ts=6 v=f6
+put: lock acquisition = empty
 stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-190
 >> del_range_pred k=c end=i ts=7 startTime=1 max=1
 del_range_pred: resume span ["f","i")
@@ -372,8 +387,10 @@ put k=b ts=5 v=a5
 del_range_pred k=a end=c ts=6 startTime=1
 ----
 >> put k=a ts=5 v=a5
+put: lock acquisition = empty
 stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-192
 >> put k=b ts=5 v=a5
+put: lock acquisition = empty
 stats: key_bytes=+12 val_count=+1 val_bytes=+7 gc_bytes_age=+1805
 >> del_range_pred k=a end=c ts=6 startTime=1
 stats: key_bytes=+24 val_count=+2 live_count=-2 live_bytes=-42 gc_bytes_age=+6204

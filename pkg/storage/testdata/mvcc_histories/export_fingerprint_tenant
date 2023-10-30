@@ -14,6 +14,14 @@ put k=/c ts=2 v=c tenant-prefix=11 init-checksum
 put k=/d ts=2 v=d tenant-prefix=11 init-checksum
 del_range_ts k=/b end=/d ts=3 tenant-prefix=11
 ----
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
 >> at end:
 rangekey: /Tenant/10/Table/1/1/"{b"/0-d"/0}/[3.000000000,0=/<empty>]
 rangekey: /Tenant/11/Table/1/1/"{b"/0-d"/0}/[3.000000000,0=/<empty>]

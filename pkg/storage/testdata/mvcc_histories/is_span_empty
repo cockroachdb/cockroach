@@ -17,7 +17,11 @@ with t=A
   put  k=c v=c10
 del_range_ts k=d end=f ts=2
 ----
+put: lock acquisition = empty
+put: lock acquisition = empty
 del: "b": found key false
+del: lock acquisition = empty
+put: lock acquisition = {c id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
 rangekey: {d-f}/[2.000000000,0=/<empty>]

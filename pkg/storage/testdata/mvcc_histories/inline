@@ -5,6 +5,9 @@ put k=i1 v=inline1
 put k=i2 v=inline2
 put k=i3 v=inline3
 ----
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
 >> at end:
 meta: "i1"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline1 mergeTs=<nil> txnDidNotUpdateMeta=false
 meta: "i2"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline2 mergeTs=<nil> txnDidNotUpdateMeta=false
@@ -30,6 +33,7 @@ run ok
 del k=i1
 ----
 del: "i1": found key true
+del: lock acquisition = empty
 >> at end:
 meta: "i2"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline2 mergeTs=<nil> txnDidNotUpdateMeta=false
 meta: "i3"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline3 mergeTs=<nil> txnDidNotUpdateMeta=false
@@ -45,6 +49,7 @@ error: (*kvpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\000\0
 run ok
 cput k=i2 v=inline2b cond=inline2
 ----
+cput: lock acquisition = empty
 >> at end:
 meta: "i2"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline2b mergeTs=<nil> txnDidNotUpdateMeta=false
 meta: "i3"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline3 mergeTs=<nil> txnDidNotUpdateMeta=false
@@ -60,6 +65,7 @@ error: (*kvpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\000\0
 run ok
 initput k=i3 v=inline3
 ----
+initput: lock acquisition = empty
 >> at end:
 meta: "i2"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline2b mergeTs=<nil> txnDidNotUpdateMeta=false
 meta: "i3"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline3 mergeTs=<nil> txnDidNotUpdateMeta=false
@@ -75,6 +81,7 @@ error: (*withstack.withStack:) key "i3" does not contain an integer value
 run ok
 del_range k=i1 end=i4
 ----
+del_range: lock acquisitions = empty
 del_range: "i1"-"i4" -> deleted 2 key(s)
 >> at end:
 <no data>
@@ -83,6 +90,7 @@ del_range: "i1"-"i4" -> deleted 2 key(s)
 run ok
 put k=i4 v=v4 ts=5,0
 ----
+put: lock acquisition = empty
 >> at end:
 data: "i4"/5.000000000,0 -> /BYTES/v4
 
@@ -98,6 +106,7 @@ error: (*withstack.withStack:) "i4"/0,0: put is inline=true, but existing value 
 run ok
 put k=i5 v=inline5
 ----
+put: lock acquisition = empty
 >> at end:
 data: "i4"/5.000000000,0 -> /BYTES/v4
 meta: "i5"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline5 mergeTs=<nil> txnDidNotUpdateMeta=false

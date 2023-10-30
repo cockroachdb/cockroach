@@ -5,6 +5,8 @@ run ok
 put k=a v=a ts=1
 put k=b v=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb ts=1
 ----
+put: lock acquisition = empty
+put: lock acquisition = empty
 >> at end:
 data: "a"/1.000000000,0 -> /BYTES/a
 data: "b"/1.000000000,0 -> /BYTES/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb

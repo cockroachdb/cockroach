@@ -6,6 +6,7 @@
 run ok
 put ts=10 k=k v=v1
 ----
+put: lock acquisition = empty
 >> at end:
 data: "k"/10.000000000,0 -> /BYTES/v1
 

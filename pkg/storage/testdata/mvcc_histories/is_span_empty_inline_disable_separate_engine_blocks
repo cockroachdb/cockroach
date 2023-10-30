@@ -3,6 +3,7 @@
 run ok
 put k=i v=inline
 ----
+put: lock acquisition = empty
 >> at end:
 meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 

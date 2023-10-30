@@ -66,11 +66,25 @@ del k=i ts=4
 put k=k ts=5 v=k5
 del_range_ts k=m end=n ts=3 localTs=2
 ----
+put: lock acquisition = empty
 del: "a": found key true
+del: lock acquisition = empty
+put: lock acquisition = empty
 del: "b": found key false
+del: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
 del: "f": found key true
+del: lock acquisition = empty
+put: lock acquisition = empty
 del: "g": found key false
+del: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
 del: "i": found key true
+del: lock acquisition = empty
+put: lock acquisition = empty
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -126,11 +140,25 @@ del k=i ts=4
 put k=k ts=5 v=k5
 del_range_ts k=m end=n ts=3 localTs=2
 ----
+put: lock acquisition = empty
 del: "a": found key true
+del: lock acquisition = empty
+put: lock acquisition = empty
 del: "b": found key false
+del: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
 del: "f": found key true
+del: lock acquisition = empty
+put: lock acquisition = empty
 del: "g": found key false
+del: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
 del: "i": found key true
+del: lock acquisition = empty
+put: lock acquisition = empty
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -314,11 +342,25 @@ del k=i ts=4
 put k=k ts=5 v=k5
 del_range_ts k=m end=n ts=3 localTs=2
 ----
+put: lock acquisition = empty
 del: "a": found key true
+del: lock acquisition = empty
+put: lock acquisition = empty
 del: "b": found key false
+del: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
 del: "f": found key true
+del: lock acquisition = empty
+put: lock acquisition = empty
 del: "g": found key false
+del: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
 del: "i": found key true
+del: lock acquisition = empty
+put: lock acquisition = empty
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -882,11 +924,25 @@ del k=i ts=4
 put k=k ts=5 v=k5
 del_range_ts k=m end=n ts=3 localTs=2
 ----
+put: lock acquisition = empty
 del: "a": found key true
+del: lock acquisition = empty
+put: lock acquisition = empty
 del: "b": found key false
+del: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
 del: "f": found key true
+del: lock acquisition = empty
+put: lock acquisition = empty
 del: "g": found key false
+del: lock acquisition = empty
+put: lock acquisition = empty
+put: lock acquisition = empty
 del: "i": found key true
+del: lock acquisition = empty
+put: lock acquisition = empty
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]

@@ -207,7 +207,7 @@ func (m mvccPutOp) run(ctx context.Context) string {
 	txn.Sequence++
 	writer := m.m.getReadWriter(m.writer)
 
-	err := storage.MVCCPut(ctx, writer, m.key, txn.ReadTimestamp, m.value, storage.MVCCWriteOptions{Txn: txn})
+	_, err := storage.MVCCPut(ctx, writer, m.key, txn.ReadTimestamp, m.value, storage.MVCCWriteOptions{Txn: txn})
 	if err != nil {
 		if writeTooOldErr := (*kvpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
 			txn.WriteTimestamp.Forward(writeTooOldErr.ActualTimestamp)
@@ -236,7 +236,7 @@ func (m mvccCPutOp) run(ctx context.Context) string {
 	writer := m.m.getReadWriter(m.writer)
 	txn.Sequence++
 
-	err := storage.MVCCConditionalPut(ctx, writer, m.key,
+	_, err := storage.MVCCConditionalPut(ctx, writer, m.key,
 		txn.ReadTimestamp, m.value, m.expVal, true, storage.MVCCWriteOptions{Txn: txn})
 	if err != nil {
 		if writeTooOldErr := (*kvpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
@@ -265,7 +265,7 @@ func (m mvccInitPutOp) run(ctx context.Context) string {
 	writer := m.m.getReadWriter(m.writer)
 	txn.Sequence++
 
-	err := storage.MVCCInitPut(ctx, writer, m.key, txn.ReadTimestamp, m.value, false, storage.MVCCWriteOptions{Txn: txn})
+	_, err := storage.MVCCInitPut(ctx, writer, m.key, txn.ReadTimestamp, m.value, false, storage.MVCCWriteOptions{Txn: txn})
 	if err != nil {
 		if writeTooOldErr := (*kvpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
 			txn.WriteTimestamp.Forward(writeTooOldErr.ActualTimestamp)
@@ -298,7 +298,7 @@ func (m mvccDeleteRangeOp) run(ctx context.Context) string {
 
 	txn.Sequence++
 
-	keys, _, _, err := storage.MVCCDeleteRange(ctx, writer, m.key, m.endKey,
+	keys, _, _, _, err := storage.MVCCDeleteRange(ctx, writer, m.key, m.endKey,
 		0, txn.WriteTimestamp, storage.MVCCWriteOptions{Txn: txn}, true)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
@@ -377,7 +377,7 @@ func (m mvccDeleteOp) run(ctx context.Context) string {
 	writer := m.m.getReadWriter(m.writer)
 	txn.Sequence++
 
-	_, err := storage.MVCCDelete(ctx, writer, m.key, txn.ReadTimestamp, storage.MVCCWriteOptions{Txn: txn})
+	_, _, err := storage.MVCCDelete(ctx, writer, m.key, txn.ReadTimestamp, storage.MVCCWriteOptions{Txn: txn})
 	if err != nil {
 		if writeTooOldErr := (*kvpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
 			txn.WriteTimestamp.Forward(writeTooOldErr.ActualTimestamp)
