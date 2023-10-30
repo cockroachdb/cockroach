@@ -1260,7 +1260,7 @@ func cmdCPut(e *evalCtx) error {
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
 		}
-		if err := storage.MVCCConditionalPut(e.ctx, rw, key, ts, val, expVal, behavior, opts); err != nil {
+		if _, err := storage.MVCCConditionalPut(e.ctx, rw, key, ts, val, expVal, behavior, opts); err != nil {
 			return err
 		}
 		if resolve {
@@ -1288,7 +1288,7 @@ func cmdInitPut(e *evalCtx) error {
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
 		}
-		if err := storage.MVCCInitPut(e.ctx, rw, key, ts, val, failOnTombstones, opts); err != nil {
+		if _, err := storage.MVCCInitPut(e.ctx, rw, key, ts, val, failOnTombstones, opts); err != nil {
 			return err
 		}
 		if resolve {
@@ -1312,7 +1312,7 @@ func cmdDelete(e *evalCtx) error {
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
 		}
-		foundKey, err := storage.MVCCDelete(e.ctx, rw, key, ts, opts)
+		foundKey, _, err := storage.MVCCDelete(e.ctx, rw, key, ts, opts)
 		if err == nil || errors.HasType(err, &kvpb.WriteTooOldError{}) {
 			// We want to output foundKey even if a WriteTooOldError is returned,
 			// since the error may be swallowed/deferred during evaluation.
@@ -1348,7 +1348,7 @@ func cmdDeleteRange(e *evalCtx) error {
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
 		}
-		deleted, resumeSpan, num, err := storage.MVCCDeleteRange(
+		deleted, resumeSpan, num, _, err := storage.MVCCDeleteRange(
 			e.ctx, rw, key, endKey, int64(max), ts, opts, returnKeys)
 		if err != nil {
 			return err
@@ -1420,7 +1420,7 @@ func cmdDeleteRangePredicate(e *evalCtx) error {
 	maxLockConflicts := e.getMaxLockConflicts()
 	return e.withWriter("del_range_pred", func(rw storage.ReadWriter) error {
 		rw, leftPeekBound, rightPeekBound := e.metamorphicPeekBounds(rw, key, endKey)
-		resumeSpan, err := storage.MVCCPredicateDeleteRange(e.ctx, rw, e.ms, key, endKey, ts, localTs,
+		resumeSpan, _, err := storage.MVCCPredicateDeleteRange(e.ctx, rw, e.ms, key, endKey, ts, localTs,
 			leftPeekBound, rightPeekBound, predicates, int64(max), int64(maxBytes), int64(rangeThreshold), maxLockConflicts)
 
 		if resumeSpan != nil {
@@ -1511,7 +1511,7 @@ func cmdIncrement(e *evalCtx) error {
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
 		}
-		curVal, err := storage.MVCCIncrement(e.ctx, rw, key, ts, opts, inc)
+		curVal, _, err := storage.MVCCIncrement(e.ctx, rw, key, ts, opts, inc)
 		if err != nil {
 			return err
 		}
@@ -1554,7 +1554,7 @@ func cmdPut(e *evalCtx) error {
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
 		}
-		if err := storage.MVCCPut(e.ctx, rw, key, ts, val, opts); err != nil {
+		if _, err := storage.MVCCPut(e.ctx, rw, key, ts, val, opts); err != nil {
 			return err
 		}
 		if resolve {

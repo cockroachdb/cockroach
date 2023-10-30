@@ -217,7 +217,7 @@ func DeleteRange(
 		// TODO (msbutler): Tune the threshold once DeleteRange and DeleteRangeUsingTombstone have
 		// been further optimized.
 		defaultRangeTombstoneThreshold := int64(64)
-		resumeSpan, err := storage.MVCCPredicateDeleteRange(ctx, readWriter, cArgs.Stats,
+		resumeSpan, _, err := storage.MVCCPredicateDeleteRange(ctx, readWriter, cArgs.Stats,
 			args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound,
 			args.Predicates, h.MaxSpanRequestKeys, maxDeleteRangeBatchBytes,
 			defaultRangeTombstoneThreshold, maxLockConflicts)
@@ -262,7 +262,7 @@ func DeleteRange(
 	// written if we're evaluating the DeleteRange for a transaction so that we
 	// can update the Result's AcquiredLocks field.
 	returnKeys := args.ReturnKeys || h.Txn != nil
-	deleted, resumeSpan, num, err := storage.MVCCDeleteRange(
+	deleted, resumeSpan, num, _, err := storage.MVCCDeleteRange(
 		ctx, readWriter, args.Key, args.EndKey,
 		h.MaxSpanRequestKeys, timestamp,
 		opts, returnKeys)

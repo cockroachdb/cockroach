@@ -2047,6 +2047,11 @@ func MakeLockAcquisition(
 	}
 }
 
+// Empty returns true if the lock acquisition is empty.
+func (m *LockAcquisition) Empty() bool {
+	return m.Span.Equal(Span{})
+}
+
 // MakeLockUpdate makes a lock update from the given txn and span.
 //
 // See also txn.LocksAsLockUpdates().
