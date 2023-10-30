@@ -1401,12 +1401,12 @@ func (n *Node) getLocalityComparison(
 		return roachpb.LocalityComparisonType_UNDEFINED
 	}
 
-	comparisonResult, regionErr, zoneErr := n.Descriptor.Locality.CompareWithLocality(gatewayNodeDesc.Locality)
-	if regionErr != nil {
-		log.VInfof(ctx, 5, "unable to determine if the given nodes are cross region %v", regionErr)
+	comparisonResult, regionValid, zoneValid := n.Descriptor.Locality.CompareWithLocality(gatewayNodeDesc.Locality)
+	if !regionValid {
+		log.VInfof(ctx, 5, "unable to determine if the given nodes are cross region")
 	}
-	if zoneErr != nil {
-		log.VInfof(ctx, 5, "unable to determine if the given nodes are cross zone %v", zoneErr)
+	if !zoneValid {
+		log.VInfof(ctx, 5, "unable to determine if the given nodes are cross zone")
 	}
 
 	return comparisonResult
