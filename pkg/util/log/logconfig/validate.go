@@ -172,10 +172,6 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	}
 	propagateCommonDefaults(&c.Sinks.Stderr.CommonSinkConfig, c.FileDefaults.CommonSinkConfig)
 	if c.Sinks.Stderr.Auditable != nil && *c.Sinks.Stderr.Auditable {
-		if *c.Sinks.Stderr.Format == "crdb-v1-tty" {
-			f := "crdb-v1-tty-count"
-			c.Sinks.Stderr.Format = &f
-		}
 		c.Sinks.Stderr.Criticality = &bt
 	}
 	c.Sinks.Stderr.Auditable = nil
