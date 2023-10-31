@@ -104,6 +104,7 @@ func RegisterTests(r registry.Registry) {
 	registerPebbleWriteThroughput(r)
 	registerPebbleYCSB(r)
 	registerPgjdbc(r)
+	registerPGRegress(r)
 	registerPgx(r)
 	registerPointTombstone(r)
 	registerPop(r)
