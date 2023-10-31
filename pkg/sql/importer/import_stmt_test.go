@@ -4649,7 +4649,9 @@ func TestImportDefaultNextVal(t *testing.T) {
 					if util.RaceEnabled {
 						expectedVal = test.seqToNumNextval[seqName].expectedImportChunkAllocsUnderRace
 					}
-					require.Equal(t, expectedVal, seqVal)
+					// The seqVal may have advanced further due to retries, so it may be
+					// greater than the expectedVal.
+					require.LessOrEqual(t, expectedVal, seqVal)
 				}
 			})
 		}
