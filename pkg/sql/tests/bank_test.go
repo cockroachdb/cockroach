@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/bench"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // maxTransfer is the maximum amount to transfer in one transaction.
@@ -72,6 +73,7 @@ UPDATE bench.bank
 }
 
 func BenchmarkBank(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	bench.ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
 		for _, numAccounts := range []int{2, 4, 8, 32, 64} {
 			b.Run(fmt.Sprintf("numAccounts=%d", numAccounts), func(b *testing.B) {
