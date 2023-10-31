@@ -65,7 +65,7 @@ func RegisterTests(r registry.Registry) {
 	registerHotSpotSplits(r)
 	registerImportCancellation(r)
 	registerImportDecommissioned(r)
-	registerImportMixedVersion(r)
+	registerImportMixedVersions(r)
 	registerImportNodeShutdown(r)
 	registerImportTPCC(r)
 	registerImportTPCH(r)
