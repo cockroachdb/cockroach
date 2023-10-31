@@ -1823,8 +1823,9 @@ func TestOptimizePuts(t *testing.T) {
 			require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(ctx, tc.engine, nil,
 				c.exKey, c.exEndKey, hlc.MinTimestamp, hlc.ClockTimestamp{}, nil, nil, false, 0, nil))
 		} else if c.exKey != nil {
-			require.NoError(t, storage.MVCCPut(ctx, tc.engine, c.exKey,
-				hlc.Timestamp{}, roachpb.MakeValueFromString("foo"), storage.MVCCWriteOptions{}))
+			_, err := storage.MVCCPut(ctx, tc.engine, c.exKey,
+				hlc.Timestamp{}, roachpb.MakeValueFromString("foo"), storage.MVCCWriteOptions{})
+			require.NoError(t, err)
 		}
 		batch := kvpb.BatchRequest{}
 		for _, r := range c.reqs {
@@ -3535,7 +3536,7 @@ func TestReplicaAbortSpanReadError(t *testing.T) {
 
 	// Overwrite Abort span entry with garbage for the last op.
 	key := keys.AbortSpanKey(tc.repl.RangeID, txn.ID)
-	err := storage.MVCCPut(ctx, tc.engine, key, hlc.Timestamp{}, roachpb.MakeValueFromString("never read in this test"), storage.MVCCWriteOptions{})
+	_, err := storage.MVCCPut(ctx, tc.engine, key, hlc.Timestamp{}, roachpb.MakeValueFromString("never read in this test"), storage.MVCCWriteOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -11072,7 +11073,7 @@ func TestReplicaPushed1PC(t *testing.T) {
 	// Write a value outside the transaction.
 	tc.manualClock.Advance(10)
 	ts2 := tc.Clock().Now()
-	if err := storage.MVCCPut(ctx, tc.engine, k, ts2, roachpb.MakeValueFromString("one"), storage.MVCCWriteOptions{}); err != nil {
+	if _, err := storage.MVCCPut(ctx, tc.engine, k, ts2, roachpb.MakeValueFromString("one"), storage.MVCCWriteOptions{}); err != nil {
 		t.Fatalf("writing interfering value: %+v", err)
 	}
 
@@ -13585,7 +13586,8 @@ func setMockPutWithEstimates(containsEstimatesDelta int64) (undo func()) {
 		opts := storage.MVCCWriteOptions{Txn: cArgs.Header.Txn, Stats: cArgs.Stats}
 		opts.Stats.ContainsEstimates += containsEstimatesDelta
 		ts := cArgs.Header.Timestamp
-		return result.Result{}, storage.MVCCBlindPut(ctx, readWriter, args.Key, ts, args.Value, opts)
+		_, err := storage.MVCCBlindPut(ctx, readWriter, args.Key, ts, args.Value, opts)
+		return result.Result{}, err
 	}
 
 	batcheval.UnregisterCommand(kvpb.Put)

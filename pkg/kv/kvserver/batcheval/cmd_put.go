@@ -64,9 +64,9 @@ func Put(
 
 	var err error
 	if args.Blind {
-		err = storage.MVCCBlindPut(ctx, readWriter, args.Key, ts, args.Value, opts)
+		_, err = storage.MVCCBlindPut(ctx, readWriter, args.Key, ts, args.Value, opts)
 	} else {
-		err = storage.MVCCPut(ctx, readWriter, args.Key, ts, args.Value, opts)
+		_, err = storage.MVCCPut(ctx, readWriter, args.Key, ts, args.Value, opts)
 	}
 	if err != nil {
 		return result.Result{}, err

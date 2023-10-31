@@ -24,7 +24,9 @@ func FromAcquiredLocks(txn *roachpb.Transaction, keys ...roachpb.Key) Result {
 	}
 	pd.Local.AcquiredLocks = make([]roachpb.LockAcquisition, len(keys))
 	for i := range pd.Local.AcquiredLocks {
-		pd.Local.AcquiredLocks[i] = roachpb.MakeLockAcquisition(txn, keys[i], lock.Replicated, lock.Intent)
+		pd.Local.AcquiredLocks[i] = roachpb.MakeLockAcquisition(
+			txn.TxnMeta, keys[i], lock.Replicated, lock.Intent, txn.IgnoredSeqNums,
+		)
 	}
 	return pd
 }

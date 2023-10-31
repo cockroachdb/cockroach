@@ -400,7 +400,7 @@ func TestPebbleEncryption2(t *testing.T) {
 		require.True(t, validateKeys(db))
 
 		keys[key] = true
-		err = storage.MVCCPut(
+		_, err = storage.MVCCPut(
 			context.Background(),
 			db,
 			roachpb.Key(key),

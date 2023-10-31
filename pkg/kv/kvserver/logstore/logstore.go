@@ -399,9 +399,9 @@ func logAppend(
 		value.InitChecksum(key)
 		var err error
 		if kvpb.RaftIndex(ent.Index) > prev.LastIndex {
-			err = storage.MVCCBlindPut(ctx, rw, key, hlc.Timestamp{}, *value, opts)
+			_, err = storage.MVCCBlindPut(ctx, rw, key, hlc.Timestamp{}, *value, opts)
 		} else {
-			err = storage.MVCCPut(ctx, rw, key, hlc.Timestamp{}, *value, opts)
+			_, err = storage.MVCCPut(ctx, rw, key, hlc.Timestamp{}, *value, opts)
 		}
 		if err != nil {
 			return RaftState{}, err
@@ -414,7 +414,7 @@ func logAppend(
 		for i := newLastIndex + 1; i <= prev.LastIndex; i++ {
 			// Note that the caller is in charge of deleting any sideloaded payloads
 			// (which they must only do *after* the batch has committed).
-			_, err := storage.MVCCDelete(ctx, rw, keys.RaftLogKeyFromPrefix(raftLogPrefix, i),
+			_, _, err := storage.MVCCDelete(ctx, rw, keys.RaftLogKeyFromPrefix(raftLogPrefix, i),
 				hlc.Timestamp{}, opts)
 			if err != nil {
 				return RaftState{}, err
