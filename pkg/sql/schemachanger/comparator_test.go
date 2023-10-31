@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/sctest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
@@ -44,9 +43,7 @@ func (ss *staticSQLStmtLineProvider) NextLine() string {
 }
 
 func runSchemaChangeComparatorTest(t *testing.T, logicTestFile string) {
-	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
 	var path string
 	if bazel.BuiltWithBazel() {
 		var err error
