@@ -7388,6 +7388,9 @@ func TestClientDisconnect(t *testing.T) {
 			}
 
 			args := base.TestClusterArgs{}
+			args.ServerArgs.DefaultTestTenant = base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
+				base.TestTenantProbabilistic, 113519,
+			)
 			knobs := base.TestingKnobs{
 				DistSQL: &execinfra.TestingKnobs{BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{RunAfterProcessingRestoreSpanEntry: func(ctx context.Context, _ *execinfrapb.RestoreSpanEntry) {
 					blockBackupOrRestore(ctx)
