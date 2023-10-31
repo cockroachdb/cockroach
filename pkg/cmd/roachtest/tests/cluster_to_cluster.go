@@ -400,6 +400,10 @@ type replicationSpec struct {
 	// multiregion specifies multiregion cluster specs
 	multiregion multiRegionSpecs
 
+	// overrideTenantTTL specifies the TTL that will be applied by the system tenant on
+	// both the source and destination tenant range.
+	overrideTenantTTL time.Duration
+
 	// additionalDuration specifies how long the workload will run after the initial scan
 	//completes. If the time out is set to 0, it will run until completion.
 	additionalDuration time.Duration
@@ -523,6 +527,8 @@ func (rd *replicationDriver) setupC2C(
 
 	srcClusterSettings(t, srcSQL)
 	destClusterSettings(t, destSQL, rd.rs.additionalDuration)
+
+	overrideSrcAndDestTenantTTL(t, srcSQL, destSQL, rd.rs.overrideTenantTTL)
 
 	createTenantAdminRole(t, "src-system", srcSQL)
 	createTenantAdminRole(t, "dst-system", destSQL)
@@ -1148,7 +1154,11 @@ func registerClusterToCluster(r registry.Registry) {
 				maxBlockBytes: 4096,
 				maxQPS:        2000,
 			},
-			timeout:            12 * time.Hour,
+			timeout: 12 * time.Hour,
+			// We bump the TTL on the source and destination tenants to 12h to give
+			// the fingerprinting post cutover adequate time to complete before GC
+			// kicks in.
+			overrideTenantTTL:  12 * time.Hour,
 			additionalDuration: 2 * time.Hour,
 			cutover:            0,
 			clouds:             registry.AllClouds,
@@ -1742,6 +1752,17 @@ func destClusterSettings(t test.Test, db *sqlutils.SQLRunner, additionalDuration
 		db.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING stream_replication.replan_flow_frequency = '%s'`,
 			replanFrequency))
 	}
+}
+
+func overrideSrcAndDestTenantTTL(
+	t test.Test, srcSQL *sqlutils.SQLRunner, destSQL *sqlutils.SQLRunner, overrideTTL time.Duration,
+) {
+	if overrideTTL == 0 {
+		return
+	}
+	t.L().Printf("overriding dest and src tenant TTL to %s", overrideTTL)
+	srcSQL.Exec(t, `ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = $1`, overrideTTL.Seconds())
+	destSQL.Exec(t, `ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = $1`, overrideTTL.Seconds())
 }
 
 func copyPGCertsAndMakeURL(
