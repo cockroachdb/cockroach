@@ -1388,14 +1388,6 @@ func maybeSwapErrorIndex(pErr *kvpb.Error, a, b int) {
 	}
 }
 
-// maybeRemapErrorIndex checks whether the error contains an index that needs to
-// be remapped according to positions slice. This is used in sendPartialBatch.
-func maybeRemapErrorIndex(pErr *kvpb.Error, positions []int) {
-	if pErr != nil && pErr.Index != nil && pErr.Index.Index != -1 && positions != nil {
-		pErr.Index.Index = int32(positions[pErr.Index.Index])
-	}
-}
-
 // mergeErrors merges the two errors, combining their transaction state and
 // returning the error with the highest priority.
 func mergeErrors(pErr1, pErr2 *kvpb.Error) *kvpb.Error {
@@ -1542,6 +1534,11 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		for _, responseCh := range responseChs {
 			resp := <-responseCh
 			if resp.pErr != nil {
+				// Re-map the error index within this partial batch back to its
+				// position in the encompassing batch.
+				if resp.pErr.Index != nil && resp.pErr.Index.Index != -1 && resp.positions != nil {
+					resp.pErr.Index.Index = int32(resp.positions[resp.pErr.Index.Index])
+				}
 				if pErr == nil {
 					pErr = resp.pErr
 					// Update the error's transaction with any new information from
@@ -1880,7 +1877,6 @@ func (ds *DistSender) sendPartialBatch(
 			if !intersection.Equal(rs) {
 				log.Eventf(ctx, "range shrunk; sub-dividing the request")
 				reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, isReverse, withCommit, batchIdx)
-				maybeRemapErrorIndex(pErr, positions)
 				return response{reply: reply, positions: positions, pErr: pErr}
 			}
 		}
@@ -1946,10 +1942,6 @@ func (ds *DistSender) sendPartialBatch(
 		pErr = reply.Error
 		reply.Error = nil // scrub the response error
 
-		// Re-map the error index within this partial batch back to its position
-		// in the encompassing batch.
-		maybeRemapErrorIndex(pErr, positions)
-
 		log.VErrEventf(ctx, 2, "reply error %s: %s", ba, pErr)
 
 		// Error handling: If the error indicates that our range
@@ -1986,7 +1978,6 @@ func (ds *DistSender) sendPartialBatch(
 			// with unknown mapping to our truncated reply).
 			log.VEventf(ctx, 1, "likely split; will resend. Got new descriptors: %s", tErr.Ranges)
 			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, isReverse, withCommit, batchIdx)
-			maybeRemapErrorIndex(pErr, positions)
 			return response{reply: reply, positions: positions, pErr: pErr}
 		}
 		break
@@ -2002,7 +1993,7 @@ func (ds *DistSender) sendPartialBatch(
 		}
 	}
 
-	return response{pErr: pErr}
+	return response{pErr: pErr, positions: positions}
 }
 
 func (ds *DistSender) deduceRetryEarlyExitError(ctx context.Context) error {
