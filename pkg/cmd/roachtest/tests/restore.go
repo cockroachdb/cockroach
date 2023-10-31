@@ -759,8 +759,10 @@ func (rd *restoreDriver) prepareCluster(ctx context.Context) {
 }
 
 func (rd *restoreDriver) restoreCmd(target, opts string) string {
-	return fmt.Sprintf(`./cockroach sql --insecure -e "RESTORE %s FROM %s IN %s AS OF SYSTEM TIME '%s' %s"`,
+	cmd := fmt.Sprintf(`./cockroach sql --insecure -e "RESTORE %s FROM %s IN %s AS OF SYSTEM TIME '%s' %s"`,
 		target, rd.sp.backup.fullBackupDir, rd.sp.backup.backupCollection(), rd.aost, opts)
+	rd.t.L().Printf("Running restore cmd: %s", cmd)
+	return cmd
 }
 
 // run executes the restore, where target injects a restore target into the restore command.
