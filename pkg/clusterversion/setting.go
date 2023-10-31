@@ -137,7 +137,10 @@ func (cv *clusterVersionSetting) activeVersionOrEmpty(
 		return ClusterVersion{}
 	}
 	var curVer ClusterVersion
-	if err := protoutil.Unmarshal(encoded.([]byte), &curVer); err != nil {
+	// NB: our linter requires using protoutil.Unmarshal here, but it causes an
+	// unnecessary allocation. This and other uses in this file are exceptions.
+	// TODO(pavelkalinnikov): don't parse proto on each time reading this setting.
+	if err := curVer.Unmarshal(encoded.([]byte)); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
 	return curVer
@@ -154,7 +157,7 @@ func (cv *clusterVersionSetting) isActive(
 // Decode is part of the VersionSettingImpl interface.
 func (cv *clusterVersionSetting) Decode(val []byte) (settings.ClusterVersionImpl, error) {
 	var clusterVersion ClusterVersion
-	if err := protoutil.Unmarshal(val, &clusterVersion); err != nil {
+	if err := clusterVersion.Unmarshal(val); err != nil {
 		return nil, err
 	}
 	return clusterVersion, nil
@@ -165,7 +168,7 @@ func (cv *clusterVersionSetting) ValidateVersionUpgrade(
 	_ context.Context, sv *settings.Values, curRawProto, newRawProto []byte,
 ) error {
 	var newCV ClusterVersion
-	if err := protoutil.Unmarshal(newRawProto, &newCV); err != nil {
+	if err := newCV.Unmarshal(newRawProto); err != nil {
 		return err
 	}
 
@@ -174,7 +177,7 @@ func (cv *clusterVersionSetting) ValidateVersionUpgrade(
 	}
 
 	var oldCV ClusterVersion
-	if err := protoutil.Unmarshal(curRawProto, &oldCV); err != nil {
+	if err := oldCV.Unmarshal(curRawProto); err != nil {
 		return err
 	}
 
@@ -210,7 +213,7 @@ func (cv *clusterVersionSetting) ValidateBinaryVersions(
 	}()
 
 	var ver ClusterVersion
-	if err := protoutil.Unmarshal(rawProto, &ver); err != nil {
+	if err := ver.Unmarshal(rawProto); err != nil {
 		return err
 	}
 	return cv.validateBinaryVersions(ver.Version, sv)
