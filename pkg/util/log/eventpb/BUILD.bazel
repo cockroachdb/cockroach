@@ -23,6 +23,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/log/eventpb",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/appstatspb",  # keep
         "//pkg/util/jsonbytes",  # keep
         "//pkg/util/log/logpb",
         "@com_github_cockroachdb_errors//:errors",
