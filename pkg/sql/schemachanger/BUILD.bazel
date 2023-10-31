@@ -24,6 +24,7 @@ go_test(
     name = "schemachanger_test",
     size = "enormous",
     srcs = [
+        "comparator_generated_test.go",  # keep
         "comparator_test.go",
         "dml_injection_test.go",
         "main_test.go",
@@ -34,7 +35,9 @@ go_test(
         "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
         "//conditions:default": ["-test.timeout=3595s"],
     }),
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + [
+        "//pkg/sql/logictest:testdata",
+    ],
     exec_properties = {"Pool": "large"},
     shard_count = 16,
     deps = [
