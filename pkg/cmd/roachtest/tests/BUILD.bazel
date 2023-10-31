@@ -126,6 +126,7 @@ go_library(
         "parsing_helpers.go",
         "pebble_write_throughput.go",
         "pebble_ycsb.go",
+        "pg_regress.go",
         "pgjdbc.go",
         "pgjdbc_blocklist.go",
         "pgx.go",
