@@ -137,7 +137,11 @@ func runCopyFromPG(ctx context.Context, t test.Test, c cluster.Cluster, sf int) 
 
 func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int, atomic bool) {
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+	startOpts := option.DefaultStartOpts()
+	// Enable the verbose logging on relevant files to have better understanding
+	// in case the test fails.
+	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=copy_from=2,insert=2")
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
 	initTest(ctx, t, c, sf)
 	db, err := c.ConnE(ctx, t.L(), 1)
 	require.NoError(t, err)
