@@ -62,6 +62,7 @@ exp,benchmark
 16,GrantRole/grant_1_role
 21,GrantRole/grant_2_roles
 4,ORMQueries/activerecord_type_introspection_query
+1,ORMQueries/asyncpg_types
 1,ORMQueries/column_descriptions_json_agg
 5,ORMQueries/django_column_introspection_1_table
 5,ORMQueries/django_column_introspection_4_tables
