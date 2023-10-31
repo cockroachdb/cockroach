@@ -950,6 +950,10 @@ func (TransactionStatus) SafeValue() {}
 //
 // baseKey can be nil, in which case it will be set when sending the first
 // write.
+//
+// omitInRangefeeds controls whether the transaction's writes are exposed via
+// rangefeeds. When set to true, all of the transaction's writes will be
+// filtered out by rangefeeds, and will not be available in changefeeds.
 func MakeTransaction(
 	name string,
 	baseKey Key,
@@ -959,6 +963,7 @@ func MakeTransaction(
 	maxOffsetNs int64,
 	coordinatorNodeID int32,
 	admissionPriority admissionpb.WorkPriority,
+	omitInRangefeeds bool,
 ) Transaction {
 	u := uuid.FastMakeV4()
 	// TODO(nvanbenschoten): technically, gul should be a synthetic timestamp.
@@ -982,6 +987,7 @@ func MakeTransaction(
 		ReadTimestamp:          now,
 		GlobalUncertaintyLimit: gul,
 		AdmissionPriority:      int32(admissionPriority),
+		OmitInRangefeeds:       omitInRangefeeds,
 	}
 }
 
@@ -1347,6 +1353,8 @@ func (t *Transaction) Update(o *Transaction) {
 	// handled the case of t being uninitialized at the beginning of this
 	// function.
 	t.AdmissionPriority = o.AdmissionPriority
+	// OmitInRangefeeds doesn't change.
+	t.OmitInRangefeeds = o.OmitInRangefeeds
 }
 
 // UpgradePriority sets transaction priority to the maximum of current
