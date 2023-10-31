@@ -789,15 +789,17 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 			require.GreaterOrEqual(t, maxDelay, delay, "delay exceeds the max")
 			// Advance the clock such that it is before the next expected retry time.
 			bti.clock.AdvanceTo(lastRun.Add(delay - unitTime))
-			// This allows adopt-loops to run for a few times, which ensures that
-			// adopt-loops do not resume jobs without correctly following the job
-			// schedules.
-			waitUntilCount(t, bti.adopted, bti.adopted.Count()+2)
 			if bti.expectImmediateRetry && i > 0 {
-				// Validate that the job did not wait to resume on retry.
+				// Validate that the job does not wait to resume on retry.
+				waitUntilCount(t, bti.resumed, expectedResumed+1)
 				require.Equal(t, expectedResumed+1, bti.resumed.Count(), "unexpected number of jobs resumed in retry %d", i)
 			} else {
 				// Validate that the job is not resumed yet.
+
+				// This allows adopt-loops to run for a few times, which ensures that
+				// adopt-loops do not resume jobs without correctly following the job
+				// schedules.
+				waitUntilCount(t, bti.adopted, bti.adopted.Count()+2)
 				require.Equal(t, expectedResumed, bti.resumed.Count(), "unexpected number of jobs resumed in retry %d", i)
 			}
 			// Advance the clock by delta from the expected time of next retry.
