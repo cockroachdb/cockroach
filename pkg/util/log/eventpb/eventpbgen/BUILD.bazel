@@ -15,12 +15,6 @@ go_library(
     ],
 )
 
-go_binary(
-    name = "eventpbgen",
-    embed = [":eventpbgen_lib"],
-    visibility = ["//visibility:public"],
-)
-
 # The code generator
 
 genrule(
@@ -37,4 +31,10 @@ genrule(
         ":__pkg__",
         "//pkg/gen:__pkg__",
     ],
+)
+
+go_binary(
+    name = "eventpbgen",
+    embed = [":eventpbgen_lib"],
+    visibility = ["//visibility:public"],
 )
