@@ -407,6 +407,7 @@ go_library(
         "//pkg/sql/contention",
         "//pkg/sql/contention/txnidcache",
         "//pkg/sql/contentionpb",
+        "//pkg/sql/copy",
         "//pkg/sql/covering",
         "//pkg/sql/decodeusername",
         "//pkg/sql/delegate",
