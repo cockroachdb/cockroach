@@ -91,6 +91,7 @@ alter backup schedule $fullID set schedule option updates_cluster_last_backup_ti
 alter backup schedule $fullID set schedule option updates_cluster_last_backup_time_metric = 'TRUE';
 alter backup schedule $fullID set schedule option updates_cluster_last_backup_time_metric = 'False';
 alter backup schedule $fullID set schedule option updates_cluster_last_backup_time_metric = 't';
+alter backup schedule $fullID set schedule option updates_cluster_last_backup_time_metric;
 ----
 
 exec-sql expect-error-regex=(unexpected value)
