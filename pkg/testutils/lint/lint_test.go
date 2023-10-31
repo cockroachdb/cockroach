@@ -175,7 +175,7 @@ func TestLint(t *testing.T) {
 
 		cmd, stderr, filter, err := dirCmd(crdbDir,
 			"git", "grep", "-nE", fmt.Sprintf(`[^_a-zA-Z](%s)\(`, strings.Join(names, "|")),
-			"--", "pkg")
+			"--", "pkg", ":!pkg/cmd/roachtest/testdata/regression.diffs")
 		if err != nil {
 			t.Fatal(err)
 		}

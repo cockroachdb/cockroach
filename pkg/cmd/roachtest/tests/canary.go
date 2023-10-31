@@ -246,8 +246,8 @@ func repeatGetLatestTag(
 			return "", fmt.Errorf("no tags found at %s", url)
 		}
 		var releaseTags []releaseTag
-		for _, t := range tags {
-			match := releaseRegex.FindStringSubmatch(t.Name)
+		for _, tag := range tags {
+			match := releaseRegex.FindStringSubmatch(tag.Name)
 			if match == nil {
 				continue
 			}
@@ -259,7 +259,7 @@ func repeatGetLatestTag(
 				continue
 			}
 			releaseTags = append(releaseTags, releaseTag{
-				tag:      t.Name,
+				tag:      tag.Name,
 				major:    atoiOrZero(groups, "major"),
 				minor:    atoiOrZero(groups, "minor"),
 				point:    atoiOrZero(groups, "point"),
