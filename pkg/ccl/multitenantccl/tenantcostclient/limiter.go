@@ -36,6 +36,9 @@ import (
 //
 // limiter's methods are thread-safe.
 type limiter struct {
+	// metrics manages the set of metrics that are tracked by the cost client.
+	metrics *metrics
+
 	// notifyCh gets a (non-blocking) send when available RUs falls below the
 	// notifyThreshold.
 	notifyCh chan struct{}
@@ -59,12 +62,13 @@ type limiter struct {
 	}
 }
 
-func (l *limiter) Init(timeSource timeutil.TimeSource, notifyCh chan struct{}) {
-	*l = limiter{notifyCh: notifyCh}
+func (l *limiter) Init(metrics *metrics, timeSource timeutil.TimeSource, notifyCh chan struct{}) {
+	*l = limiter{metrics: metrics, notifyCh: notifyCh}
 
 	onWaitStartFn := func(ctx context.Context, poolName string, r quotapool.Request) {
 		// Add to the waiting RU total if this request has not already been added
 		// to it in Acquire.
+		l.metrics.CurrentBlocked.Inc(1)
 		l.qp.Update(func(quotapool.Resource) (shouldNotify bool) {
 			l.maybeAddWaitingRULocked(r.(*waitRequest))
 			return false
@@ -78,6 +82,7 @@ func (l *limiter) Init(timeSource timeutil.TimeSource, notifyCh chan struct{}) {
 			l.maybeRemoveWaitingRULocked(r.(*waitRequest))
 			return false
 		})
+		l.metrics.CurrentBlocked.Dec(1)
 
 		// Log a trace event for requests that waited for a long time.
 		if waitDuration := timeSource.Since(start); waitDuration > time.Second {
