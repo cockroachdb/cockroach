@@ -14,6 +14,7 @@ import (
 	"runtime/pprof"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -108,6 +109,8 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 
 	s.doneChan = make(chan struct{})
 
+	useMux := streamingccl.StreamProducerMuxRangefeeds.Get(&s.execCfg.Settings.SV)
+
 	// Common rangefeed options.
 	opts := []rangefeed.Option{
 		rangefeed.WithPProfLabel("job", fmt.Sprintf("id=%d", s.streamID)),
@@ -120,7 +123,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 		rangefeed.WithMemoryMonitor(s.mon),
 
 		rangefeed.WithOnSSTable(s.onSSTable),
-		rangefeed.WithMuxRangefeed(true),
+		rangefeed.WithMuxRangefeed(useMux),
 		rangefeed.WithOnDeleteRange(s.onDeleteRange),
 	}
 
