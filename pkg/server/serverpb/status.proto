@@ -1999,6 +1999,20 @@ message TransactionContentionEventsResponse {
   ];
 }
 
+ message TransactionContentionEventsWithDetailsRequest {
+   string node_id = 1 [(gogoproto.customname) = "NodeID"];
+ }
+
+ message TransactionContentionEventsWithDetailsResponse {
+   repeated ContentionEvent events = 1;
+   // errors contains any errors that occurred during fan-out calls to other nodes.
+   map<int32, string> errors_by_node_id = 2 [
+     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
+     (gogoproto.customname) = "ErrorsByNodeID",
+     (gogoproto.nullable) = false
+   ];
+ }
+
 message ListExecutionInsightsRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
@@ -2020,6 +2034,103 @@ message ListExecutionInsightsResponse {
   ];
 }
 
+// StatementExecutionInsightsRequest requests a list of statement execution insights that match
+// specified statement ID or fingerprint ID in case they're specified.
+message StatementExecutionInsightsRequest {
+  bytes statement_id = 1 [(gogoproto.customname) = "StatementID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID"];
+  uint64 stmt_fingerprint_id = 2 [(gogoproto.customname) = "StmtFingerprintID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.StmtFingerprintID"];
+  google.protobuf.Timestamp start_time = 3 [(gogoproto.stdtime) = true];
+  google.protobuf.Timestamp end_time = 4 [(gogoproto.stdtime) = true];
+}
+
+// StatementExecutionInsightsResponse returns list of requested statement execution insights.
+message StatementExecutionInsightsResponse {
+  message Statement {
+    bytes id = 1 [(gogoproto.customname) = "ID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID"];
+    uint64 fingerprint_id = 2 [(gogoproto.customname) = "FingerprintID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.StmtFingerprintID"];
+    bytes transaction_id = 3 [(gogoproto.customname) = "TransactionID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+    uint64 txn_fingerprint_id = 4 [(gogoproto.customname) = "TxnFingerprintID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.TransactionFingerprintID"];
+    bytes session_id = 5 [(gogoproto.customname) = "SessionID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID"];
+    string query = 6;
+    cockroach.sql.insights.Statement.Status status = 7;
+    google.protobuf.Timestamp start_time = 8 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp end_time = 9 [(gogoproto.stdtime) = true];
+    bool full_scan = 10;
+    bool implicit_txn = 11;
+    string user = 12;
+    string user_priority = 13;
+    string application_name = 14;
+    string database = 15;
+    string plan_gist = 16;
+    int64 rows_read = 17;
+    int64 rows_written = 18;
+    int64 retries = 19;
+    string auto_retry_reason = 20;
+    // Nodes is the ordered list of nodes ids on which the statement was executed.
+    repeated int64 nodes = 21;
+    google.protobuf.Duration contention = 22 [(gogoproto.stdduration) = true];
+    repeated string index_recommendations = 23;
+    cockroach.sql.insights.Problem problem = 24;
+    repeated cockroach.sql.insights.Cause causes = 25;
+    int64 cpu_sql_nanos = 26 [(gogoproto.customname) = "CPUSQLNanos"];
+    string error_code = 27;
+    string last_error_msg = 28;
+    // IdleLatSeconds is the time spent in seconds in an open transaction waiting
+    // for the client to send the statement.
+    double idle_lat_seconds = 29;
+    // ParseLat is the time in seconds to transform the SQL string into an AST.
+    double parse_lat_seconds = 30;
+    // PlanLatSeconds is the time spent in seconds to transform the AST into a logical query plan.
+    double plan_lat_seconds = 31;
+    // RunLatSeconds is the time in seconds to run the query and fetch/compute the result rows.
+    double run_lat_seconds = 32;
+    // ServiceLatSeconds is the time in seconds to service the query, from start of parse to end of execute.
+    double service_lat_seconds = 33;
+    repeated ContentionEvent contention_events = 34 [(gogoproto.nullable) = true];
+  }
+  repeated Statement statements = 1;
+}
+
+ message ContentionEvent {
+   // Key is the key that this and the other transaction conflicted on.
+   bytes key = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+   string pretty_key = 2;
+   bytes id = 3 [(gogoproto.customname) = "BlockingTxnID",
+     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+     (gogoproto.nullable) = false];
+   uint64 blocking_txn_fingerprint_id = 4 [
+     (gogoproto.customname) = "BlockingTxnFingerprintID",
+     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.TransactionFingerprintID"
+   ];
+   // Duration spent contending against the other transaction.
+   google.protobuf.Duration duration = 5 [(gogoproto.stdduration) = true];
+   bytes waiting_txn_id = 6 [
+     (gogoproto.customname) = "WaitingTxnID",
+     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+   ];
+   uint64 waiting_txn_fingerprint_id = 7 [
+     (gogoproto.customname) = "WaitingTxnFingerprintID",
+     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.TransactionFingerprintID"
+   ];
+   google.protobuf.Timestamp collection_ts = 8 [(gogoproto.stdtime) = true];
+   uint64 waiting_stmt_fingerprint_id = 9 [
+     (gogoproto.customname) = "WaitingStmtFingerprintID",
+     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.StmtFingerprintID"
+   ];
+   bytes waiting_stmt_id = 10 [(gogoproto.customname) = "WaitingStmtID",
+     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID"];
+   string database_name = 11;
+   string schema_name = 12;
+   string index_name = 13;
+   string table_name = 14;
+ }
 
 message CriticalNodesRequest {}
 message CriticalNodesResponse {
@@ -2559,6 +2670,14 @@ service Status {
     };
   }
 
+  // TransactionContentionEventsWithDetails returns a list of un-aggregated contention
+  // events sorted by the collection timestamp and include information about contended table object. .
+  rpc TransactionContentionEventsWithDetails(TransactionContentionEventsWithDetailsRequest) returns (TransactionContentionEventsWithDetailsResponse) {
+    option (google.api.http) = {
+      get: "/_status/transactioncontentioneventsextended"
+    };
+  }
+
   // ListExecutionInsights returns potentially problematic statements cluster-wide,
   // along with actions we suggest the application developer might take to remedy them.
   rpc ListExecutionInsights(ListExecutionInsightsRequest) returns (ListExecutionInsightsResponse) {}
@@ -2586,6 +2705,13 @@ service Status {
     (ListJobProfilerExecutionDetailsResponse) {
     option (google.api.http) = {
       get: "/_status/list_job_profiler_execution_details/{job_id}"
+    };
+  }
+
+  rpc StatementExecutionInsights(StatementExecutionInsightsRequest) returns (StatementExecutionInsightsResponse) {
+    option (google.api.http) = {
+      post: "/_status/insights/statements"
+      body: "*"
     };
   }
 }

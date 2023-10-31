@@ -119,3 +119,60 @@ func TestTimeLayout(t *testing.T) {
 		require.Equal(t, stdlibF.Offset, ourF.Offset)
 	}
 }
+
+func TestIsOverlappingTimeRanges(t *testing.T) {
+	var nilTime time.Time
+	testCases := []struct {
+		name                                       string
+		expected                                   bool
+		startTimeA, endTimeA, startTimeB, endTimeB time.Time
+	}{
+		{
+			"identical ranges",
+			true,
+			time.Date(2000, 1, 1, 0, 0, 0, 1, time.UTC),
+			time.Date(2000, 1, 1, 1, 0, 0, 1, time.UTC),
+			time.Date(2000, 1, 1, 0, 0, 0, 1, time.UTC),
+			time.Date(2000, 1, 1, 1, 0, 0, 1, time.UTC),
+		},
+		{
+			"intersecting ranges",
+			true,
+			time.Date(2000, 1, 1, 0, 0, 0, 1, time.UTC),
+			time.Date(2000, 1, 1, 2, 0, 0, 1, time.UTC),
+			time.Date(2000, 1, 1, 1, 0, 0, 1, time.UTC),
+			time.Date(2000, 1, 1, 3, 0, 0, 1, time.UTC),
+		},
+		{
+			"not overlapping ranges",
+			false,
+			time.Date(2000, 1, 1, 0, 0, 0, 1, time.UTC),
+			time.Date(2000, 1, 1, 1, 0, 0, 1, time.UTC),
+			time.Date(2000, 1, 1, 2, 0, 0, 1, time.UTC),
+			time.Date(2000, 1, 1, 3, 0, 0, 1, time.UTC),
+		},
+		{
+			"exclusive time when endTimeA == startTimeB",
+			false,
+			time.Date(2000, 1, 1, 0, 0, 0, 1, time.UTC),
+			time.Date(2000, 1, 1, 1, 0, 0, 1, time.UTC),
+			time.Date(2000, 1, 1, 1, 0, 0, 1, time.UTC),
+			time.Date(2000, 1, 1, 2, 0, 0, 1, time.UTC),
+		},
+		{
+			"endTimeA and startTimeB are nullable values",
+			false,
+			nilTime,
+			nilTime,
+			nilTime,
+			nilTime,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if actual := IsOverlappingTimeRanges(tc.startTimeA, tc.endTimeA, tc.startTimeB, tc.endTimeB); actual != tc.expected {
+				t.Errorf("expected %v, but got %v", tc.expected, actual)
+			}
+		})
+	}
+}
