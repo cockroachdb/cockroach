@@ -3970,6 +3970,9 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 		// If not enabled, don't track any locks.
 		return nil
 	}
+	if acq.Empty() {
+		return errors.AssertionFailedf("unexpected empty lock acquisition %s", acq)
+	}
 	switch acq.Strength {
 	case lock.Intent:
 		assert(acq.Durability == lock.Replicated, "incorrect durability")
