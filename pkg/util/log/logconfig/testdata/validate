@@ -254,6 +254,93 @@ capture-stray-errors:
   dir: /default-dir
   max-group-size: 100MiB
 
+# Check that file-defaults format options are transferred to stderr if using a crdb-v2 format.
+yaml
+file-defaults:
+  format: crdb-v2
+  format-options: {timezone: america/new_york}
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+      format-options:
+        timezone: america/new_york
+  stderr:
+    filter: NONE
+    format-options:
+      timezone: america/new_york
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that file-defaults format options are NOT transferred to stderr if NOT using a crdb-v2 format.
+yaml
+file-defaults:
+  format: json
+  format-options: {datetime-format: rfc3339, datetime-timezone: America/New_York}
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+      format: json
+      format-options:
+        datetime-format: rfc3339
+        datetime-timezone: America/New_York
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that file-defaults format options do NOT overwrite format-options if explicitly defined in stderr.
+yaml
+file-defaults:
+  format: crdb-v2
+  format-options: {timezone: america/new_york}
+sinks:
+  stderr:
+    format-options: {timezone: america/chicago}
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+      format-options:
+        timezone: america/new_york
+  stderr:
+    filter: NONE
+    format-options:
+      timezone: america/chicago
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that stderr always uses crdb-v2-tty format, even if we try to set it to an invalid format
+yaml
+sinks:
+  stderr:
+    format: crdb-v1-tty
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+  stderr:
+    filter: NONE
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
 # Check that NONE filter elides files.
 yaml
 file-defaults: {filter: NONE}
