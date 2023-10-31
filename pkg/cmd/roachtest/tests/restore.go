@@ -420,6 +420,7 @@ func registerRestore(r registry.Registry) {
 				`SET CLUSTER SETTING backup.restore_span.target_size = '0'`,
 			},
 			restoreUptoIncremental: 400,
+			skip:                   "a recent gcp pricing policy makes this test very expensive. unskip after #111371 is addressed",
 		},
 		{
 			// A teeny weeny 15GB restore that could be used to bisect scale agnostic perf regressions.
@@ -453,6 +454,7 @@ func registerRestore(r registry.Registry) {
 			CompatibleClouds:  sp.clouds,
 			Suites:            sp.suites,
 			Tags:              sp.tags,
+			Skip:              sp.skip,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 				rd := makeRestoreDriver(t, c, sp)
@@ -825,6 +827,9 @@ type restoreSpecs struct {
 
 	testName   string
 	setUpStmts []string
+
+	// skip, if non-empty, skips the test with the given reason.
+	skip string
 }
 
 func (sp *restoreSpecs) initTestName() {
