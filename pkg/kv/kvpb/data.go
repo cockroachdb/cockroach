@@ -71,6 +71,7 @@ func PrepareTransactionForRetry(
 			clock.MaxOffset().Nanoseconds(),
 			txn.CoordinatorNodeID,
 			admissionpb.WorkPriority(txn.AdmissionPriority),
+			false,
 		)
 		// Use the priority communicated back by the server.
 		txn.Priority = errTxnPri

@@ -91,16 +91,7 @@ func runTestClusterFlow(
 	// that doesn't matter for the purposes of this test.
 
 	now := servers[0].Clock().NowAsClockTimestamp()
-	txnProto := roachpb.MakeTransaction(
-		"cluster-test",
-		nil, // baseKey
-		isolation.Serializable,
-		roachpb.NormalUserPriority,
-		now.ToTimestamp(),
-		0, // maxOffsetNs
-		int32(servers[0].SQLInstanceID()),
-		0,
-	)
+	txnProto := roachpb.MakeTransaction("cluster-test", nil /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority, now.ToTimestamp(), 0 /* maxOffsetNs */, int32(servers[0].SQLInstanceID()), 0, false)
 	txn := kv.NewTxnFromProto(ctx, kvDB, roachpb.NodeID(servers[0].SQLInstanceID()), now, kv.RootTxn, &txnProto)
 	leafInputState, err := txn.GetLeafTxnInputState(ctx)
 	require.NoError(t, err)
@@ -404,16 +395,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	}
 
 	now := tc.Server(0).Clock().NowAsClockTimestamp()
-	txnProto := roachpb.MakeTransaction(
-		"deadlock-test",
-		nil, // baseKey
-		isolation.Serializable,
-		roachpb.NormalUserPriority,
-		now.ToTimestamp(),
-		0, // maxOffsetNs
-		int32(tc.Server(0).SQLInstanceID()),
-		0,
-	)
+	txnProto := roachpb.MakeTransaction("deadlock-test", nil /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority, now.ToTimestamp(), 0 /* maxOffsetNs */, int32(tc.Server(0).SQLInstanceID()), 0, false)
 	txn := kv.NewTxnFromProto(
 		context.Background(), tc.Server(0).DB(), tc.Server(0).NodeID(),
 		now, kv.RootTxn, &txnProto)
@@ -710,16 +692,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 						return execinfrapb.StreamEndpointSpec_REMOTE
 					}
 					now := tc.Server(0).Clock().NowAsClockTimestamp()
-					txnProto := roachpb.MakeTransaction(
-						"cluster-test",
-						nil, // baseKey
-						isolation.Serializable,
-						roachpb.NormalUserPriority,
-						now.ToTimestamp(),
-						0, // maxOffsetNs
-						int32(tc.Server(0).SQLInstanceID()),
-						0,
-					)
+					txnProto := roachpb.MakeTransaction("cluster-test", nil /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority, now.ToTimestamp(), 0 /* maxOffsetNs */, int32(tc.Server(0).SQLInstanceID()), 0, false)
 					txn := kv.NewTxnFromProto(
 						context.Background(), tc.Server(0).DB(), tc.Server(0).NodeID(),
 						now, kv.RootTxn, &txnProto)

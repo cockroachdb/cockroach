@@ -387,10 +387,7 @@ func TestRefreshSpanIterateSkipLocked(t *testing.T) {
 func TestBatchResponseCombine(t *testing.T) {
 	br := &BatchResponse{}
 	{
-		txn := roachpb.MakeTransaction(
-			"test", nil /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority,
-			hlc.Timestamp{WallTime: 123}, 0 /* baseKey */, 99 /* coordinatorNodeID */, 0,
-		)
+		txn := roachpb.MakeTransaction("test", nil /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority, hlc.Timestamp{WallTime: 123}, 0 /* maxOffsetNs */, 99 /* coordinatorNodeID */, 0, false)
 		brTxn := &BatchResponse{
 			BatchResponse_Header: BatchResponse_Header{
 				Txn: &txn,
