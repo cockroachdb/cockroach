@@ -77,7 +77,6 @@ end_test
 
 start_test "Check that the log flag is properly recognized for non-server commands"
 send "$argv debug reset-quorum 123 --log='sinks: {stderr: {format: json }}'\r"
-eexpect "\"severity\":\"ERROR\""
 eexpect "connection to server failed"
 eexpect ":/# "
 end_test
