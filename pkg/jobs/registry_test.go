@@ -591,6 +591,9 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		cancel = false
 	)
 
+	restoreConstructors := TestingClearConstructors()
+	defer restoreConstructors()
+
 	// createJob creates a mock job.
 	createJob := func(
 		t *testing.T, ctx context.Context, s serverutils.ApplicationLayerInterface, r *Registry, tdb *sqlutils.SQLRunner, db isql.DB,
