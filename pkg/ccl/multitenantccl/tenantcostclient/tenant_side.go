@@ -39,7 +39,7 @@ var InitialRequestSetting = settings.RegisterFloatSetting(
 	"tenant_initial_request",
 	"number of request units to get from server on first request (requires restart)",
 	bufferRUs/5,
-	checkFloat64InRange(0, bufferRUs/5),
+	checkFloat64InRange(0, bufferRUs*10),
 )
 
 // TargetPeriodSetting is exported for testing purposes.
@@ -189,7 +189,12 @@ func newTenantSideCostController(
 		responseChan:    make(chan *kvpb.TokenBucketResponse, 1),
 		lowRUNotifyChan: make(chan struct{}, 1),
 	}
-	c.limiter.Init(timeSource, c.lowRUNotifyChan)
+
+	// Initialize metrics.
+	c.metrics.Init()
+
+	// Start with filled burst buffer.
+	c.limiter.Init(&c.metrics, timeSource, c.lowRUNotifyChan)
 	c.limiter.Reconfigure(timeSource.Now(), limiterReconfigureArgs{
 		NewTokens:       bufferRUs,
 		NotifyThreshold: bufferRUs,
@@ -261,6 +266,7 @@ func init() {
 }
 
 type tenantSideCostController struct {
+	metrics              metrics
 	timeSource           timeutil.TimeSource
 	testInstr            TestInstrumentation
 	settings             *cluster.Settings

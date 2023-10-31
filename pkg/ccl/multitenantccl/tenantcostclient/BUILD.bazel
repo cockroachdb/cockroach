@@ -4,6 +4,7 @@ go_library(
     name = "tenantcostclient",
     srcs = [
         "limiter.go",
+        "metrics.go",
         "tenant_side.go",
         "test_utils.go",
         "token_bucket.go",
@@ -22,6 +23,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/sqlliveness",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/quotapool",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
@@ -86,6 +88,7 @@ go_test(
         "//pkg/util/ioctx",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/stop",
