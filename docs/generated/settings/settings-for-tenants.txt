@@ -30,6 +30,7 @@ cloudstorage.timeout	duration	10m0s	the timeout for import/export storage operat
 cluster.auto_upgrade.enabled	boolean	true	disable automatic cluster version upgrade until reset	application
 cluster.organization	string		organization name	system-visible
 cluster.preserve_downgrade_option	string		disable (automatic or manual) cluster version upgrade from the specified version until reset	application
+diagnostics.active_query_dumps.enabled	boolean	true	experimental: enable dumping of anonymized active queries to disk when node is under memory pressure	system-visible
 diagnostics.forced_sql_stat_reset.interval	duration	2h0m0s	interval after which the reported SQL Stats are reset even if not collected by telemetry reporter. It has a max value of 24H.	application
 diagnostics.reporting.enabled	boolean	true	enable reporting diagnostic metrics to cockroach labs	application
 diagnostics.reporting.interval	duration	1h0m0s	interval at which diagnostics data should be reported	application
