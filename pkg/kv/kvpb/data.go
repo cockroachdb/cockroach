@@ -60,18 +60,7 @@ func PrepareTransactionForRetry(
 		// The local hlc should have been advanced to at least the error's
 		// timestamp already.
 		now := clock.NowAsClockTimestamp()
-		txn = roachpb.MakeTransaction(
-			txn.Name,
-			nil, // baseKey
-			txn.IsoLevel,
-			// We have errTxnPri, but this wants a roachpb.UserPriority. So
-			// we're going to overwrite the priority below.
-			roachpb.NormalUserPriority,
-			now.ToTimestamp(),
-			clock.MaxOffset().Nanoseconds(),
-			txn.CoordinatorNodeID,
-			admissionpb.WorkPriority(txn.AdmissionPriority),
-		)
+		txn = roachpb.MakeTransaction(txn.Name, nil, txn.IsoLevel, roachpb.NormalUserPriority, now.ToTimestamp(), clock.MaxOffset().Nanoseconds(), txn.CoordinatorNodeID, admissionpb.WorkPriority(txn.AdmissionPriority), false)
 		// Use the priority communicated back by the server.
 		txn.Priority = errTxnPri
 	case *ReadWithinUncertaintyIntervalError:

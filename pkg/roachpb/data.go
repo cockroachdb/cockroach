@@ -959,6 +959,7 @@ func MakeTransaction(
 	maxOffsetNs int64,
 	coordinatorNodeID int32,
 	admissionPriority admissionpb.WorkPriority,
+	disableRangefeed bool,
 ) Transaction {
 	u := uuid.FastMakeV4()
 	// TODO(nvanbenschoten): technically, gul should be a synthetic timestamp.
@@ -982,6 +983,7 @@ func MakeTransaction(
 		ReadTimestamp:          now,
 		GlobalUncertaintyLimit: gul,
 		AdmissionPriority:      int32(admissionPriority),
+		DisableRangefeed:       disableRangefeed,
 	}
 }
 
@@ -1347,6 +1349,8 @@ func (t *Transaction) Update(o *Transaction) {
 	// handled the case of t being uninitialized at the beginning of this
 	// function.
 	t.AdmissionPriority = o.AdmissionPriority
+	// DisableRangefeed doesn't change.
+	t.DisableRangefeed = o.DisableRangefeed
 }
 
 // UpgradePriority sets transaction priority to the maximum of current

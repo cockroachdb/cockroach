@@ -131,16 +131,7 @@ func NewTxnWithAdmissionControl(
 	}
 
 	now := db.clock.NowAsClockTimestamp()
-	kvTxn := roachpb.MakeTransaction(
-		"unnamed",
-		nil, // baseKey
-		isolation.Serializable,
-		roachpb.NormalUserPriority,
-		now.ToTimestamp(),
-		db.clock.MaxOffset().Nanoseconds(),
-		int32(db.ctx.NodeID.SQLInstanceID()),
-		priority,
-	)
+	kvTxn := roachpb.MakeTransaction("unnamed", nil, isolation.Serializable, roachpb.NormalUserPriority, now.ToTimestamp(), db.clock.MaxOffset().Nanoseconds(), int32(db.ctx.NodeID.SQLInstanceID()), priority, false)
 	txn := NewTxnFromProto(ctx, db, gatewayNodeID, now, RootTxn, &kvTxn)
 	txn.admissionHeader = kvpb.AdmissionHeader{
 		CreateTime: db.clock.PhysicalNow(),

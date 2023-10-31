@@ -138,7 +138,7 @@ func TestStoreSplitAbortSpan(t *testing.T) {
 	left, middle, right := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
 
 	txn := func(key roachpb.Key, ts hlc.Timestamp) *roachpb.Transaction {
-		txn := roachpb.MakeTransaction("test", key, 0, 0, ts, 0, int32(s.SQLInstanceID()), 0)
+		txn := roachpb.MakeTransaction("test", key, 0, 0, ts, 0, int32(s.SQLInstanceID()), 0, false)
 		return &txn
 	}
 
@@ -457,16 +457,7 @@ func TestQueryLocksAcrossRanges(t *testing.T) {
 	require.NoError(t, err)
 
 	now := s.Clock().NowAsClockTimestamp()
-	txn3Proto := roachpb.MakeTransaction(
-		"waiter",
-		nil, // baseKey
-		isolation.Serializable,
-		roachpb.NormalUserPriority,
-		s.Clock().NowAsClockTimestamp().ToTimestamp(),
-		s.Clock().MaxOffset().Nanoseconds(),
-		int32(s.SQLInstanceID()),
-		0,
-	)
+	txn3Proto := roachpb.MakeTransaction("waiter", nil, isolation.Serializable, roachpb.NormalUserPriority, s.Clock().NowAsClockTimestamp().ToTimestamp(), s.Clock().MaxOffset().Nanoseconds(), int32(s.SQLInstanceID()), 0, false)
 	txn3ID := txn3Proto.ID
 
 	// Execute a scan request that includes the locked keys, such that this
@@ -636,7 +627,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	// Increments are a good way of testing idempotency. Up here, we
 	// address them to the original range, then later to the one that
 	// contains the key.
-	txn := roachpb.MakeTransaction("test", []byte("c"), isolation.Serializable, 10, store.Clock().Now(), 0, int32(s.SQLInstanceID()), 0)
+	txn := roachpb.MakeTransaction("test", []byte("c"), isolation.Serializable, 10, store.Clock().Now(), 0, int32(s.SQLInstanceID()), 0, false)
 	lIncArgs := incrementArgs([]byte("apoptosis"), 100)
 	lTxn := txn
 	lTxn.Sequence++
@@ -3236,7 +3227,7 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	txn := roachpb.MakeTransaction("test", key2, isolation.Serializable, 1, store.Clock().Now(), store.Clock().MaxOffset().Nanoseconds(), int32(s.SQLInstanceID()), 0)
+	txn := roachpb.MakeTransaction("test", key2, isolation.Serializable, 1, store.Clock().Now(), store.Clock().MaxOffset().Nanoseconds(), int32(s.SQLInstanceID()), 0, false)
 	// Officially begin the transaction. If not for this, the intent resolution
 	// machinery would simply remove the intent we write below, see #3020.
 	// We send directly to Replica throughout this test, so there's no danger
