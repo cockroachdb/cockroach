@@ -1129,7 +1129,11 @@ func (ds *DistSender) incrementBatchCounters(ba *kvpb.BatchRequest) {
 }
 
 type response struct {
-	reply     *kvpb.BatchResponse
+	reply *kvpb.BatchResponse
+	// positions argument describes how the given batch request corresponds to
+	// the original, un-truncated one, and allows us to combine the response
+	// later via BatchResponse.Combine. (nil positions should be used when the
+	// original batch request is fully contained within a single range.)
 	positions []int
 	pErr      *kvpb.Error
 }
@@ -1449,8 +1453,10 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// Take the fast path if this batch fits within a single range.
 	if !ri.NeedAnother(rs) {
 		resp := ds.sendPartialBatch(
-			ctx, ba, rs, isReverse, withCommit, batchIdx, ri.Token(), nil, /* positions */
+			ctx, ba, rs, isReverse, withCommit, batchIdx, ri.Token(),
 		)
+		// resp.positions remains nil since the original batch is fully
+		// contained within a single range.
 		return resp.reply, resp.pErr
 	}
 
@@ -1534,6 +1540,11 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		for _, responseCh := range responseChs {
 			resp := <-responseCh
 			if resp.pErr != nil {
+				// Re-map the error index within this partial batch back to its
+				// position in the encompassing batch.
+				if resp.pErr.Index != nil && resp.pErr.Index.Index != -1 && resp.positions != nil {
+					resp.pErr.Index.Index = int32(resp.positions[resp.pErr.Index.Index])
+				}
 				if pErr == nil {
 					pErr = resp.pErr
 					// Update the error's transaction with any new information from
@@ -1647,8 +1658,9 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			// Sent the batch asynchronously.
 		} else {
 			resp := ds.sendPartialBatch(
-				ctx, curRangeBatch, curRangeRS, isReverse, withCommit, batchIdx, ri.Token(), positions,
+				ctx, curRangeBatch, curRangeRS, isReverse, withCommit, batchIdx, ri.Token(),
 			)
+			resp.positions = positions
 			responseCh <- resp
 			if resp.pErr != nil {
 				return
@@ -1749,9 +1761,9 @@ func (ds *DistSender) sendPartialBatchAsync(
 		},
 		func(ctx context.Context) {
 			ds.metrics.AsyncSentCount.Inc(1)
-			responseCh <- ds.sendPartialBatch(
-				ctx, ba, rs, isReverse, withCommit, batchIdx, routing, positions,
-			)
+			resp := ds.sendPartialBatch(ctx, ba, rs, isReverse, withCommit, batchIdx, routing)
+			resp.positions = positions
+			responseCh <- resp
 		},
 	); err != nil {
 		ds.metrics.AsyncThrottledCount.Inc(1)
@@ -1789,11 +1801,7 @@ func slowRangeRPCReturnWarningStr(s *redact.StringBuilder, dur time.Duration, at
 // request are limited to the range's key span. The rs argument corresponds to
 // the span encompassing the key ranges of all requests in the truncated batch.
 // It should be entirely contained within the range descriptor of the supplied
-// routing token. The positions argument describes how the given batch request
-// corresponds to the original, un-truncated one, and allows us to combine the
-// response later via BatchResponse.Combine. (nil positions argument should be
-// used when the original batch request is fully contained within a single
-// range.)
+// routing token.
 //
 // The send occurs in a retry loop to handle send failures. On failure to send
 // to any replicas, we backoff and retry by refetching the range descriptor. If
@@ -1809,7 +1817,6 @@ func (ds *DistSender) sendPartialBatch(
 	withCommit bool,
 	batchIdx int,
 	routingTok rangecache.EvictionToken,
-	positions []int,
 ) response {
 	if batchIdx == 1 {
 		ds.metrics.PartialBatchCount.Inc(2) // account for first batch
@@ -1872,7 +1879,7 @@ func (ds *DistSender) sendPartialBatch(
 			if !intersection.Equal(rs) {
 				log.Eventf(ctx, "range shrunk; sub-dividing the request")
 				reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, isReverse, withCommit, batchIdx)
-				return response{reply: reply, positions: positions, pErr: pErr}
+				return response{reply: reply, pErr: pErr}
 			}
 		}
 
@@ -1930,18 +1937,12 @@ func (ds *DistSender) sendPartialBatch(
 
 		// If sending succeeded, return immediately.
 		if reply.Error == nil {
-			return response{reply: reply, positions: positions}
+			return response{reply: reply}
 		}
 
 		// Untangle the error from the received response.
 		pErr = reply.Error
 		reply.Error = nil // scrub the response error
-
-		// Re-map the error index within this partial batch back
-		// to its position in the encompassing batch.
-		if pErr.Index != nil && pErr.Index.Index != -1 && positions != nil {
-			pErr.Index.Index = int32(positions[pErr.Index.Index])
-		}
 
 		log.VErrEventf(ctx, 2, "reply error %s: %s", ba, pErr)
 
@@ -1979,7 +1980,7 @@ func (ds *DistSender) sendPartialBatch(
 			// with unknown mapping to our truncated reply).
 			log.VEventf(ctx, 1, "likely split; will resend. Got new descriptors: %s", tErr.Ranges)
 			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, isReverse, withCommit, batchIdx)
-			return response{reply: reply, positions: positions, pErr: pErr}
+			return response{reply: reply, pErr: pErr}
 		}
 		break
 	}
