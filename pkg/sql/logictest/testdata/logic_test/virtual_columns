@@ -1366,10 +1366,7 @@ ALTER TABLE t81675 ADD COLUMN j INT GENERATED ALWAYS AS (i+1) VIRTUAL;
 statement ok
 ALTER TABLE t81675 DROP COLUMN j;
 
-# Note that the pgcode here ought to be 23502 (not null violation) but is
-# instead 23514 (check constraint violation) because of implementation details.
-onlyif config local-legacy-schema-changer
-statement error pgcode 23514 validation of NOT NULL constraint failed
+statement error pgcode 23502 validation of column "j" NOT NULL failed on row: i=NULL, rowid=\d+, j=NULL
 ALTER TABLE t81675 ADD COLUMN j INT GENERATED ALWAYS AS (i+1) VIRTUAL NOT NULL;
 
 statement ok

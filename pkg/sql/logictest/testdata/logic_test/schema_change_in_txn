@@ -1434,7 +1434,7 @@ ALTER TABLE t ADD COLUMN c INT
 statement ok
 ALTER TABLE t ALTER COLUMN c SET NOT NULL
 
-statement error pgcode XXA00 validation of NOT NULL constraint failed: validation of CHECK "c IS NOT NULL" failed
+statement error pgcode XXA00 validation of column "c" NOT NULL failed
 COMMIT
 
 statement ok
@@ -1868,7 +1868,7 @@ CREATE TABLE t_52501_invalid(a INT)
 statement ok
 INSERT INTO t_52501_invalid VALUES (NULL)
 
-statement error pgcode 23514 validation of CHECK "a IS NOT NULL" failed
+statement error pgcode 23502 validation of column "a" NOT NULL failed on row: a=NULL, rowid=\d+
 ALTER TABLE t_52501_invalid ALTER COLUMN a SET NOT NULL
 
 statement ok
