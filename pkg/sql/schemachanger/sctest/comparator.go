@@ -359,7 +359,8 @@ func requireNoErrOrSameErrCode(t *testing.T, line string, errLegacy, errDeclarat
 		t.Fatalf("executing statement %q results in non-PQ error:  legacy=%v, declarative=%v ", line, errLegacy, errDeclarative)
 	}
 	if errLegacyPQCode != errDeclarativePQCode {
-		t.Fatalf("executing statement %q results in different error code: legacy=%v, declarative=%v", line, errLegacyPQCode, errDeclarativePQCode)
+		t.Fatalf("executing statement %q results in different error code: legacy=%v (%v), declarative=%v (%v)", line,
+			errLegacyPQCode.Name(), errLegacyPQCode, errDeclarativePQCode.Name(), errDeclarativePQCode)
 	}
 }
 
