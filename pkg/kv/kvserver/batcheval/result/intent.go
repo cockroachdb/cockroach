@@ -10,23 +10,30 @@
 
 package result
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-)
+import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
-// FromAcquiredLocks creates a Result communicating that the locks were
-// acquired or re-acquired by the given transaction and should be handled.
-func FromAcquiredLocks(txn *roachpb.Transaction, keys ...roachpb.Key) Result {
+// WithAcquiredLocks creates a Result communicating that the supplied lock
+// acquisitions (or re-acquisitions) were performed by the caller and they
+// should be handled.
+//
+// If any empty lock acquisitions are supplied by the caller they will not be
+// attached to the returned Result.
+func WithAcquiredLocks(acqs ...roachpb.LockAcquisition) Result {
 	var pd Result
-	if txn == nil {
+	numAcqs := 0
+	for _, acq := range acqs {
+		if !acq.Empty() {
+			numAcqs++
+		}
+	}
+	if numAcqs == 0 { // only allocate if there is at least 1 non-empty acquisition
 		return pd
 	}
-	pd.Local.AcquiredLocks = make([]roachpb.LockAcquisition, len(keys))
-	for i := range pd.Local.AcquiredLocks {
-		pd.Local.AcquiredLocks[i] = roachpb.MakeLockAcquisition(
-			txn.TxnMeta, keys[i], lock.Replicated, lock.Intent, txn.IgnoredSeqNums,
-		)
+	pd.Local.AcquiredLocks = make([]roachpb.LockAcquisition, 0, numAcqs)
+	for _, acq := range acqs {
+		if !acq.Empty() {
+			pd.Local.AcquiredLocks = append(pd.Local.AcquiredLocks, acq)
+		}
 	}
 	return pd
 }
