@@ -671,6 +671,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		// expectImmediateRetry is true if the test should expect immediate
 		// resumption on retry, such as after pausing and resuming job.
 		expectImmediateRetry bool
+		allowCompletion      func()
 	}
 	testInfraSetUp := func(t *testing.T, ctx context.Context, bti *BackoffTestInfra) func() {
 		// We use a manual clock to control and evaluate job execution times.
@@ -819,9 +820,13 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 			}
 			lastRun = bti.clock.Now()
 		}
-		bti.done.Store(true)
-		// Let the job be retried one more time.
-		bti.clock.Advance(nextDelay(retryCnt, initialDelay, maxDelay))
+
+		if bti.allowCompletion != nil {
+			bti.allowCompletion()
+		} else {
+			bti.done.Store(true)
+			bti.clock.Advance(nextDelay(retryCnt, initialDelay, maxDelay))
+		}
 		// Wait until the job completes.
 		testutils.SucceedsSoon(t, func() error {
 			var found Status
@@ -862,6 +867,11 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 	t.Run("pause running", func(t *testing.T) {
 		ctx := context.Background()
 		bti := BackoffTestInfra{expectImmediateRetry: true}
+		bti.allowCompletion = func() {
+			<-bti.resumeCh
+			bti.errCh <- nil
+			<-bti.transitionCh
+		}
 		bti.afterJobStateMachineKnob = func() {
 			if bti.done.Load().(bool) {
 				return
@@ -942,7 +952,11 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 	t.Run("pause reverting", func(t *testing.T) {
 		ctx := context.Background()
 		bti := BackoffTestInfra{expectImmediateRetry: true}
-
+		bti.allowCompletion = func() {
+			<-bti.failOrCancelCh
+			bti.errCh <- nil
+			<-bti.transitionCh
+		}
 		bti.afterJobStateMachineKnob = func() {
 			if bti.done.Load().(bool) {
 				return
