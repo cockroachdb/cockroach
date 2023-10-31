@@ -59,6 +59,11 @@ func NewMemoryQueue[T any](maxBytes int, sizeFn SizeFn[T], alias string) *Memory
 	return q
 }
 
+// Alias returns this MemoryQueue's alias, provided at initialization. Useful for logging.
+func (q *MemoryQueue[T]) Alias() string {
+	return q.alias
+}
+
 // Enqueue adds the provided element to the MemoryQueue, so long
 // as it would not exceed the configured max size for this
 // MemoryQueue in bytes. FIFO order is maintained.
@@ -82,14 +87,16 @@ func (q *MemoryQueue[T]) Enqueue(e T) error {
 }
 
 // Dequeue removes and returns the oldest element from this
-// MemoryQueue. If this MemoryQueue is empty, nil is returned.
-func (q *MemoryQueue[T]) Dequeue() T {
+// MemoryQueue. If this MemoryQueue is empty, false is returned along
+// with the zero-value of T, else true is returned along with the dequeued
+// element.
+func (q *MemoryQueue[T]) Dequeue() (T, bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	// NB: The value of ret is nil unless assigned.
+	// NB: The value of ret is the zero value of T, unless assigned.
 	var ret T
 	if q.mu.queue.Len() == 0 {
-		return ret
+		return ret, false
 	}
 	e := q.mu.queue.Front()
 	q.mu.queue.Remove(e)
@@ -103,7 +110,7 @@ func (q *MemoryQueue[T]) Dequeue() T {
 	}
 	// TODO(abarganier): Gauge metric(s) to track queue size & length.
 	q.mu.curSize = q.mu.curSize - size
-	return ret
+	return ret, true
 }
 
 func (q *MemoryQueue[T]) Len() int {
