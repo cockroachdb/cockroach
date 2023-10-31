@@ -191,6 +191,8 @@ var (
 		3,
 		5,
 	}
+
+	schemaChangeDB = "schemachange"
 )
 
 // sanitizeVersionForBackup takes the string representation of a
@@ -513,7 +515,9 @@ func newTableBackup(rng *rand.Rand, dbs []string, tables [][]string) *tableBacku
 	// have foreign keys to other tables, making restoring them
 	// difficult. We could pass the `skip_missing_foreign_keys` option,
 	// but that would be a less interesting test.
-	for targetDB == "" || targetDB == "tpcc" {
+	//
+	// Avoid creating table backups for the schemachange database, as it inits with 0 tables.
+	for targetDB == "" || targetDB == "tpcc" || targetDB == "schemachange" {
 		targetDBIdx = rng.Intn(len(dbs))
 		targetDB = dbs[targetDBIdx]
 	}
@@ -2301,6 +2305,10 @@ func (bc *backupCollection) verifyBackupCollection(
 			return fmt.Errorf("backup %s: %w", bc.name, err)
 		}
 	}
+	_, db := d.testUtils.RandomDB(rng, d.testUtils.roachNodes)
+	if err := roachtestutil.CheckInvalidDescriptors(ctx, db); err != nil {
+		return fmt.Errorf("failed descriptor check: %w", err)
+	}
 
 	l.Printf("%s: OK", bc.name)
 	return nil
@@ -2600,6 +2608,20 @@ func bankWorkloadCmd(
 	l.Printf("bank init: %s", init)
 	l.Printf("bank run: %s", run)
 	return init, run
+}
+
+func schemaChangeWorkloadCmd(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	roachNodes, workloadNode option.NodeListOption,
+) (init *roachtestutil.Command, run *roachtestutil.Command) {
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
+	initCmd := roachtestutil.NewCommand("./workload init schemachange").Arg("{pgurl%s}", roachNodes)
+	runCmd := roachtestutil.NewCommand("./workload run schemachange").Flag("verbose", 1).Flag("max-ops", 10).Flag("concurrency", 2).Arg("{pgurl%s}", roachNodes)
+	t.L().Printf("sc init: %s", initCmd)
+	t.L().Printf("sc run: %s", runCmd)
+	return initCmd, runCmd
 }
 
 type CommonTestUtils struct {

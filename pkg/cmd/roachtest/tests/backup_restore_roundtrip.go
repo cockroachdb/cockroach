@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -122,7 +123,7 @@ func backupRestoreRoundTrip(
 		}
 		defer testUtils.CloseConnections()
 
-		dbs := []string{"bank", "tpcc"}
+		dbs := []string{"bank", "tpcc", schemaChangeDB}
 		runBackgroundWorkload, err := startBackgroundWorkloads(ctx, t.L(), c, m, testRNG, roachNodes, workloadNode, testUtils, dbs)
 		if err != nil {
 			return err
@@ -226,6 +227,16 @@ func startBackgroundWorkloads(
 	}
 	tpccInit, tpccRun := tpccWorkloadCmd(l, testRNG, numWarehouses, roachNodes)
 	bankInit, bankRun := bankWorkloadCmd(l, testRNG, roachNodes, testUtils.mock)
+	scInit, scRun := schemaChangeWorkloadCmd(ctx, testUtils.t, c, roachNodes, workloadNode)
+	if err := testUtils.Exec(ctx, testRNG, fmt.Sprintf("CREATE DATABASE %s", schemaChangeDB)); err != nil {
+		return nil, err
+	}
+	if err := testUtils.Exec(ctx, testRNG, fmt.Sprintf("CREATE TABLE %s.%s (x INT)", schemaChangeDB, "dummy")); err != nil {
+		return nil, err
+	}
+	if err := testUtils.Exec(ctx, testRNG, fmt.Sprintf("INSERT INTO %s.%s VALUES (1)", schemaChangeDB, "dummy")); err != nil {
+		return nil, err
+	}
 
 	err := c.RunE(ctx, workloadNode, bankInit.String())
 	if err != nil {
@@ -233,6 +244,10 @@ func startBackgroundWorkloads(
 	}
 
 	err = c.RunE(ctx, workloadNode, tpccInit.String())
+	if err != nil {
+		return nil, err
+	}
+	err = c.RunE(ctx, workloadNode, scInit.String())
 	if err != nil {
 		return nil, err
 	}
@@ -250,6 +265,9 @@ func startBackgroundWorkloads(
 		stopTPCC := workloadWithCancel(m, func(ctx context.Context) error {
 			return c.RunE(ctx, workloadNode, tpccRun.String())
 		})
+		stopSC := workloadWithCancel(m, func(ctx context.Context) error {
+			return c.RunE(ctx, workloadNode, scRun.String())
+		})
 
 		stopSystemWriter := workloadWithCancel(m, func(ctx context.Context) error {
 			// We use a separate RNG for the system table writer to avoid
@@ -263,6 +281,7 @@ func startBackgroundWorkloads(
 		stopBackgroundCommands := func() {
 			stopBank()
 			stopTPCC()
+			stopSC()
 			stopSystemWriter()
 		}
 
