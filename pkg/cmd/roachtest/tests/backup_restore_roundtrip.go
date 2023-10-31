@@ -73,7 +73,7 @@ func registerBackupRestoreRoundTrip(r registry.Registry) {
 			Cluster:           r.MakeClusterSpec(4),
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			RequiresLicense:   true,
-			CompatibleClouds:  registry.AllExceptAWS,
+			CompatibleClouds:  registry.OnlyGCE,
 			Suites:            registry.Suites(registry.Nightly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				backupRestoreRoundTrip(ctx, t, c, sp.metamorphicRangeSize)
@@ -87,7 +87,7 @@ func registerBackupRestoreRoundTrip(r registry.Registry) {
 func backupRestoreRoundTrip(
 	ctx context.Context, t test.Test, c cluster.Cluster, metamorphicRangeSize bool,
 ) {
-	if c.Spec().Cloud != spec.GCE {
+	if c.Cloud() != spec.GCE {
 		t.Skip("uses gs://cockroachdb-backup-testing; see https://github.com/cockroachdb/cockroach/issues/105968")
 	}
 	pauseProbability := 0.2

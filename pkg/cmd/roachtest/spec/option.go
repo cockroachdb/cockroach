@@ -19,13 +19,6 @@ import (
 // Option for MakeClusterSpec.
 type Option func(spec *ClusterSpec)
 
-// Cloud controls what cloud is used to create the cluster.
-func Cloud(s string) Option {
-	return func(spec *ClusterSpec) {
-		spec.Cloud = s
-	}
-}
-
 // Arch requests a specific CPU architecture.
 //
 // Note that it is not guaranteed that this architecture will be used (e.g. if

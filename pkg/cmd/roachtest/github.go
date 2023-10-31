@@ -205,7 +205,7 @@ func (g *githubIssues) createPostRequest(
 	artifacts := fmt.Sprintf("/%s", testName)
 
 	clusterParams := map[string]string{
-		roachtestPrefix("cloud"): spec.Cluster.Cloud,
+		roachtestPrefix("cloud"): cloud,
 		roachtestPrefix("cpu"):   fmt.Sprintf("%d", spec.Cluster.CPUs),
 		roachtestPrefix("ssd"):   fmt.Sprintf("%d", spec.Cluster.SSDs),
 	}
@@ -245,7 +245,7 @@ func (g *githubIssues) createPostRequest(
 		Artifacts:            artifacts,
 		ExtraLabels:          labels,
 		ExtraParams:          clusterParams,
-		HelpCommand:          generateHelpCommand(testName, issueClusterName, spec.Cluster.Cloud, start, end),
+		HelpCommand:          generateHelpCommand(testName, issueClusterName, cloud, start, end),
 	}, nil
 }
 

@@ -666,10 +666,11 @@ type nodeSelector interface {
 
 // It is safe for concurrent use by multiple goroutines.
 type clusterImpl struct {
-	name string
-	tag  string
-	spec spec.ClusterSpec
-	t    test.Test
+	name  string
+	tag   string
+	cloud string
+	spec  spec.ClusterSpec
+	t     test.Test
 	// r is the registry tracking this cluster. Destroying the cluster will
 	// unregister it.
 	r *clusterRegistry
@@ -918,6 +919,7 @@ func (f *clusterFactory) newCluster(
 	providerOptsContainer := vm.CreateProviderOptionsContainer()
 
 	params := spec.RoachprodClusterConfig{
+		Cloud:                  cloud,
 		UseIOBarrierOnLocalSSD: cfg.useIOBarrier,
 		PreferredArch:          cfg.arch,
 	}
@@ -934,8 +936,8 @@ func (f *clusterFactory) newCluster(
 
 		return nil, nil, err
 	}
-	if cfg.spec.Cloud != spec.Local {
-		providerOptsContainer.SetProviderOpts(cfg.spec.Cloud, providerOpts)
+	if cloud != spec.Local {
+		providerOptsContainer.SetProviderOpts(cloud, providerOpts)
 	}
 
 	if cfg.spec.UbuntuVersion.IsOverridden() {
@@ -975,6 +977,7 @@ func (f *clusterFactory) newCluster(
 		}
 
 		c := &clusterImpl{
+			cloud:      cloud,
 			name:       genName,
 			spec:       cfg.spec,
 			expiration: cfg.spec.Expiration(),
@@ -2614,7 +2617,7 @@ func (c *clusterImpl) MakeNodes(opts ...option.Option) string {
 }
 
 func (c *clusterImpl) Cloud() string {
-	return c.spec.Cloud
+	return c.cloud
 }
 
 func (c *clusterImpl) IsLocal() bool {
@@ -2696,7 +2699,7 @@ func archForTest(ctx context.Context, l *logger.Logger, testSpec registry.TestSp
 		return testSpec.Cluster.Arch
 	}
 
-	if testSpec.Benchmark && testSpec.Cluster.Cloud != spec.Local {
+	if testSpec.Benchmark && cloud != spec.Local {
 		// TODO(srosenberg): enable after https://github.com/cockroachdb/cockroach/issues/104213
 		arch := vm.ArchAMD64
 		l.PrintfCtx(ctx, "Disabling arch randomization for benchmark; arch=%q, %s", arch, testSpec.Name)

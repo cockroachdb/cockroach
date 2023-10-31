@@ -21,5 +21,4 @@ type Registry interface {
 	MakeClusterSpec(nodeCount int, opts ...spec.Option) spec.ClusterSpec
 	Add(TestSpec)
 	PromFactory() promauto.Factory
-	Cloud() string
 }
