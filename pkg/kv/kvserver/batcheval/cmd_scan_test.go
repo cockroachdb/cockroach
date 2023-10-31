@@ -88,7 +88,9 @@ func testScanReverseScanInner(
 
 	// Write to k1 and k2.
 	for _, k := range []roachpb.Key{k1, k2} {
-		err := storage.MVCCPut(ctx, eng, k, ts, roachpb.MakeValueFromString("value-"+string(k)), storage.MVCCWriteOptions{})
+		_, err := storage.MVCCPut(
+			ctx, eng, k, ts, roachpb.MakeValueFromString("value-"+string(k)), storage.MVCCWriteOptions{},
+		)
 		require.NoError(t, err)
 	}
 
@@ -185,7 +187,9 @@ func TestScanReverseScanWholeRows(t *testing.T) {
 	for r := 0; r < 2; r++ {
 		for cf := uint32(0); cf < 3; cf++ {
 			key := makeRowKey(t, r, cf)
-			err := storage.MVCCPut(ctx, eng, key, ts, roachpb.MakeValueFromString("value"), storage.MVCCWriteOptions{})
+			_, err := storage.MVCCPut(
+				ctx, eng, key, ts, roachpb.MakeValueFromString("value"), storage.MVCCWriteOptions{},
+			)
 			require.NoError(t, err)
 			rowKeys = append(rowKeys, key)
 		}

@@ -825,7 +825,9 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 			valueSize := randutil.RandIntInRange(rnd, averageValueSize-100, averageValueSize+100)
 			value := roachpb.MakeValueFromBytes(randutil.RandBytes(rnd, valueSize))
 			value.InitChecksum(key)
-			if err := storage.MVCCPut(ctx, batch, key, ts, value, storage.MVCCWriteOptions{}); err != nil {
+			if _, err := storage.MVCCPut(
+				ctx, batch, key, ts, value, storage.MVCCWriteOptions{},
+			); err != nil {
 				t.Fatal(err)
 			}
 
@@ -836,7 +838,9 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 				ts = hlc.Timestamp{WallTime: int64(curWallTime), Logical: int32(curLogical)}
 				value = roachpb.MakeValueFromBytes(randutil.RandBytes(rnd, 200))
 				value.InitChecksum(key)
-				if err := storage.MVCCPut(ctx, batch, key, ts, value, storage.MVCCWriteOptions{}); err != nil {
+				if _, err := storage.MVCCPut(
+					ctx, batch, key, ts, value, storage.MVCCWriteOptions{},
+				); err != nil {
 					t.Fatal(err)
 				}
 			}

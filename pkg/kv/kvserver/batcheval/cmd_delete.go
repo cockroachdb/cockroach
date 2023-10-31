@@ -40,7 +40,7 @@ func Delete(
 	}
 
 	var err error
-	reply.FoundKey, err = storage.MVCCDelete(
+	reply.FoundKey, _, err = storage.MVCCDelete(
 		ctx, readWriter, args.Key, h.Timestamp, opts,
 	)
 	if err != nil {

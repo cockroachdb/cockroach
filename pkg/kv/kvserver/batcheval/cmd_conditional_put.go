@@ -68,10 +68,10 @@ func ConditionalPut(
 
 	var err error
 	if args.Blind {
-		err = storage.MVCCBlindConditionalPut(
+		_, err = storage.MVCCBlindConditionalPut(
 			ctx, readWriter, args.Key, ts, args.Value, args.ExpBytes, handleMissing, opts)
 	} else {
-		err = storage.MVCCConditionalPut(
+		_, err = storage.MVCCConditionalPut(
 			ctx, readWriter, args.Key, ts, args.Value, args.ExpBytes, handleMissing, opts)
 	}
 	if err != nil {

@@ -126,7 +126,8 @@ func createRangeData(
 	})
 
 	for _, pk := range ps {
-		require.NoError(t, storage.MVCCPut(ctx, eng, pk.Key, pk.Timestamp, value, storage.MVCCWriteOptions{LocalTimestamp: localTS}))
+		_, err := storage.MVCCPut(ctx, eng, pk.Key, pk.Timestamp, value, storage.MVCCWriteOptions{LocalTimestamp: localTS})
+		require.NoError(t, err)
 	}
 	for _, rk := range rs {
 		require.NoError(t, eng.PutMVCCRangeKey(rk, storage.MVCCValue{}))

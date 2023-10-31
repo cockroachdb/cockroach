@@ -318,7 +318,8 @@ func setupKeysWithIntent(
 				putTxn = &otherTxn
 			}
 			key := makeKey(nil, j)
-			require.NoError(b, MVCCPut(context.Background(), batch, key, ts, value, MVCCWriteOptions{Txn: putTxn}))
+			_, err := MVCCPut(context.Background(), batch, key, ts, value, MVCCWriteOptions{Txn: putTxn})
+			require.NoError(b, err)
 		}
 		require.NoError(b, batch.Commit(true))
 		batch.Close()
@@ -723,7 +724,7 @@ func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int
 		timestamp := hlc.Timestamp{WallTime: minWallTime + rng.Int63n(int64(batchTimeSpan))}
 		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueBytes))
 		value.InitChecksum(key)
-		if err := MVCCPut(ctx, batch, key, timestamp, value, MVCCWriteOptions{}); err != nil {
+		if _, err := MVCCPut(ctx, batch, key, timestamp, value, MVCCWriteOptions{}); err != nil {
 			return nil, err
 		}
 	}
@@ -898,7 +899,7 @@ func runMVCCPut(
 		for j := 0; j < versions; j++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			if err := MVCCPut(ctx, rw, key, ts, value, MVCCWriteOptions{}); err != nil {
+			if _, err := MVCCPut(ctx, rw, key, ts, value, MVCCWriteOptions{}); err != nil {
 				b.Fatalf("failed put: %+v", err)
 			}
 		}
@@ -921,7 +922,7 @@ func runMVCCBlindPut(ctx context.Context, b *testing.B, emk engineMaker, valueSi
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		if err := MVCCBlindPut(ctx, eng, key, ts, value, MVCCWriteOptions{}); err != nil {
+		if _, err := MVCCBlindPut(ctx, eng, key, ts, value, MVCCWriteOptions{}); err != nil {
 			b.Fatalf("failed put: %+v", err)
 		}
 	}
@@ -945,7 +946,7 @@ func runMVCCConditionalPut(
 		for i := 0; i < b.N; i++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			if err := MVCCPut(ctx, eng, key, ts, value, MVCCWriteOptions{}); err != nil {
+			if _, err := MVCCPut(ctx, eng, key, ts, value, MVCCWriteOptions{}); err != nil {
 				b.Fatalf("failed put: %+v", err)
 			}
 		}
@@ -957,7 +958,7 @@ func runMVCCConditionalPut(
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		if err := MVCCConditionalPut(ctx, eng, key, ts, value, expected, CPutFailIfMissing, MVCCWriteOptions{}); err != nil {
+		if _, err := MVCCConditionalPut(ctx, eng, key, ts, value, expected, CPutFailIfMissing, MVCCWriteOptions{}); err != nil {
 			b.Fatalf("failed put: %+v", err)
 		}
 	}
@@ -979,7 +980,7 @@ func runMVCCBlindConditionalPut(ctx context.Context, b *testing.B, emk engineMak
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		if err := MVCCBlindConditionalPut(
+		if _, err := MVCCBlindConditionalPut(
 			ctx, eng, key, ts, value, nil, CPutFailIfMissing, MVCCWriteOptions{},
 		); err != nil {
 			b.Fatalf("failed put: %+v", err)
@@ -1003,7 +1004,7 @@ func runMVCCInitPut(ctx context.Context, b *testing.B, emk engineMaker, valueSiz
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		if err := MVCCInitPut(ctx, eng, key, ts, value, false, MVCCWriteOptions{}); err != nil {
+		if _, err := MVCCInitPut(ctx, eng, key, ts, value, false, MVCCWriteOptions{}); err != nil {
 			b.Fatalf("failed put: %+v", err)
 		}
 	}
@@ -1025,7 +1026,7 @@ func runMVCCBlindInitPut(ctx context.Context, b *testing.B, emk engineMaker, val
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		if err := MVCCBlindInitPut(ctx, eng, key, ts, value, false, MVCCWriteOptions{}); err != nil {
+		if _, err := MVCCBlindInitPut(ctx, eng, key, ts, value, false, MVCCWriteOptions{}); err != nil {
 			b.Fatalf("failed put: %+v", err)
 		}
 	}
@@ -1055,7 +1056,7 @@ func runMVCCBatchPut(ctx context.Context, b *testing.B, emk engineMaker, valueSi
 		for j := i; j < end; j++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(j)))
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			if err := MVCCPut(ctx, batch, key, ts, value, MVCCWriteOptions{}); err != nil {
+			if _, err := MVCCPut(ctx, batch, key, ts, value, MVCCWriteOptions{}); err != nil {
 				b.Fatalf("failed put: %+v", err)
 			}
 		}
@@ -1185,7 +1186,7 @@ func runMVCCDeleteRange(ctx context.Context, b *testing.B, valueBytes int) {
 			defer eng.Close()
 
 			b.StartTimer()
-			if _, _, _, err := MVCCDeleteRange(
+			if _, _, _, _, err := MVCCDeleteRange(
 				ctx,
 				eng,
 				keys.LocalMax,
@@ -1493,7 +1494,7 @@ func runMVCCGarbageCollect(
 				break
 			}
 			for _, key := range pointKeys {
-				if err := MVCCPut(ctx, batch, key, pts, val, MVCCWriteOptions{}); err != nil {
+				if _, err := MVCCPut(ctx, batch, key, pts, val, MVCCWriteOptions{}); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -1553,7 +1554,7 @@ func runBatchApplyBatchRepr(
 		for i := 0; i < batchSize; i++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(order[i])))
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			if err := MVCCBlindPut(ctx, batch, key, ts, value, MVCCWriteOptions{}); err != nil {
+			if _, err := MVCCBlindPut(ctx, batch, key, ts, value, MVCCWriteOptions{}); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -1962,7 +1963,8 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 		// Put the keys for this iteration.
 		for j := 0; j < numKeys; j++ {
 			key := makeKey(nil, j)
-			require.NoError(b, MVCCPut(ctx, batch, key, ts, value, MVCCWriteOptions{Txn: &txn}))
+			_, err := MVCCPut(ctx, batch, key, ts, value, MVCCWriteOptions{Txn: &txn})
+			require.NoError(b, err)
 		}
 		numPrevKeys = numKeys
 		// Read the keys from the Batch and write them to a sstable to ingest.
