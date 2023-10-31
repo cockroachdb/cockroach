@@ -10,23 +10,21 @@
 
 package result
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-)
+import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
-// FromAcquiredLocks creates a Result communicating that the locks were
-// acquired or re-acquired by the given transaction and should be handled.
-func FromAcquiredLocks(txn *roachpb.Transaction, keys ...roachpb.Key) Result {
+// WithAcquiredLocks creates a Result communicating that the supplied lock
+// acquisitions were acquired or re-acquired by the caller and they should be
+// handled.
+func WithAcquiredLocks(acqs ...roachpb.LockAcquisition) Result {
 	var pd Result
-	if txn == nil {
+	if len(acqs) == 0 {
 		return pd
 	}
-	pd.Local.AcquiredLocks = make([]roachpb.LockAcquisition, len(keys))
-	for i := range pd.Local.AcquiredLocks {
-		pd.Local.AcquiredLocks[i] = roachpb.MakeLockAcquisition(
-			txn.TxnMeta, keys[i], lock.Replicated, lock.Intent, txn.IgnoredSeqNums,
-		)
+	pd.Local.AcquiredLocks = make([]roachpb.LockAcquisition, 0, len(acqs))
+	for _, acq := range acqs {
+		if !acq.Empty() {
+			pd.Local.AcquiredLocks = append(pd.Local.AcquiredLocks, acq)
+		}
 	}
 	return pd
 }
