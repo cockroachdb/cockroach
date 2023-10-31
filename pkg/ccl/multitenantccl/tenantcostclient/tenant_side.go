@@ -166,7 +166,12 @@ func newTenantSideCostController(
 		responseChan:    make(chan *kvpb.TokenBucketResponse, 1),
 		lowRUNotifyChan: make(chan struct{}, 1),
 	}
-	c.limiter.Init(timeSource, c.lowRUNotifyChan)
+
+	// Initialize metrics.
+	c.metrics.Init()
+
+	// Start with filled burst buffer.
+	c.limiter.Init(&c.metrics, timeSource, c.lowRUNotifyChan)
 	c.limiter.Reconfigure(timeSource.Now(), limiterReconfigureArgs{
 		NewTokens: initialRUs,
 		NewRate:   initialRate,
@@ -238,6 +243,7 @@ func init() {
 }
 
 type tenantSideCostController struct {
+	metrics              metrics
 	timeSource           timeutil.TimeSource
 	testInstr            TestInstrumentation
 	settings             *cluster.Settings
