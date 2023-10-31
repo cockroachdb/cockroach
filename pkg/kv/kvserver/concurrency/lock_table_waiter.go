@@ -137,7 +137,7 @@ type IntentResolver interface {
 // WaitOn implements the lockTableWaiter interface.
 func (w *lockTableWaiterImpl) WaitOn(
 	ctx context.Context, req Request, guard lockTableGuard,
-) (err *Error) {
+) *Error {
 	newStateC := guard.NewStateChan()
 	ctxDoneC := ctx.Done()
 	shouldQuiesceC := w.stopper.ShouldQuiesce()
@@ -351,25 +351,6 @@ func (w *lockTableWaiterImpl) WaitOn(
 
 			// push with the option to wait on the conflict if active.
 			pushWait := func(ctx context.Context) *Error {
-				// If the request is conflicting with a held lock then it pushes its
-				// holder synchronously - there is no way it will be able to proceed
-				// until the lock's transaction undergoes a state transition (either
-				// completing or being pushed) and then updates the lock's state
-				// through intent resolution. The request has a dependency on the
-				// entire conflicting transaction.
-				//
-				// However, if the request is conflicting with another request (that has
-				// claimed the lock, but not yet acquired it) then it pushes the
-				// claimant transaction asynchronously while continuing to listen to
-				// state transition in the lockTable. This allows the request to cancel
-				// its push if the conflicting claimant transaction exits the lock
-				// wait-queue without leaving behind a lock. In this case, the request
-				// has a dependency on the conflicting request but not necessarily the
-				// entire conflicting transaction.
-				if timerWaitingState.held {
-					return w.pushLockTxn(ctx, req, timerWaitingState)
-				}
-
 				// It would be more natural to launch an async task for the push and
 				// continue listening on this goroutine for lockTable state transitions,
 				// but doing so is harder to test against. Instead, we launch an async
@@ -379,15 +360,62 @@ func (w *lockTableWaiterImpl) WaitOn(
 				pushCtx, pushCancel := context.WithCancel(ctx)
 				defer pushCancel()
 				go watchForNotifications(pushCtx, pushCancel, newStateC)
-				err := w.pushRequestTxn(pushCtx, req, timerWaitingState)
-				if errors.Is(pushCtx.Err(), context.Canceled) {
-					// Ignore the context canceled error. If this was for the
-					// parent context then we'll notice on the next select.
+
+				var err *Error
+				if timerWaitingState.held {
+					// Note that even though the request has a dependency on the
+					// transaction that holds the lock, this dependency can be broken
+					// without the holder's transaction getting finalized[1] such that the
+					// pusher can proceed before the synchronous push below returns. The
+					// pusher must detect such cases (watchForNotifications) and cancel
+					// its push in such cases.
 					//
-					// NOTE: we look at pushCtx.Err() and not err to avoid the
-					// potential for bugs if context cancellation is not
-					// propagated correctly on some error paths.
-					err = nil
+					// [1] This can happen for a few reasons:
+					// 1. The pusher may not conflict with the lock holder itself, but one
+					// of the waiting requests instead. If the waiting request drops out
+					// of the lock's wait queue the pusher should be allowed to proceed.
+					// Concretely, a construction like follows:
+					//   - holder: shared
+					//     - wait-queue: exclusive, shared
+					// In this case, the waiting shared lock request will push the
+					// holder[*] However, if the waiting exclusive locking request drops
+					// out of the wait queue, the shared locking request no longer needs
+					// to wait/push the holder.
+					// 2. The lock may be rolled back because of savepoints even if the
+					// transaction isn't finalized/pushed successfully.
+					// 3. The lock may no longer be tracked by the lock table even though
+					// the holder's transaction is still pending. This can happen if it's
+					// an intent that's pushed to a higher timestamp by a different
+					// request. In such cases, the lock table will simply forget the lock
+					// when the intent is resolved. Note that in such cases, the pusher
+					// may still conflict with the intent and rediscover it -- that's
+					// okay.
+					//
+					// [*] The shared locking request will push the lock holder (strength
+					// shared) instead of the exclusive lock requesting (the one it
+					// actually conflicts with) because it transitively depends on the
+					// shared locking request. In doing so, it is essentially collapsing
+					// edges in the local portion of its dependency graph for deadlock
+					// detection, as doing so is cheaper that finding out the same
+					// information using (QueryTxnRequest) RPCs.
+					err = w.pushLockTxn(pushCtx, req, timerWaitingState)
+				} else {
+					// The request conflicts with another request that's claimed an unheld
+					// lock. The conflicting request may exit the lock table without
+					// actually acquiring the lock. If that happens, we may be able to
+					// proceed without needing to wait for the push to successfully
+					// complete. Such cases will be detected by listening for lock state
+					// transitions (watchForNotifications).
+					err = w.pushRequestTxn(pushCtx, req, timerWaitingState)
+				}
+				// Ignore the context canceled error. If this was for the parent context
+				// then we'll notice on the next select.
+				//
+				// NOTE: we look at pushCtx.Err() and not err to avoid the potential for
+				// bugs if context cancellation is not propagated correctly on some
+				// error paths.
+				if errors.Is(pushCtx.Err(), context.Canceled) {
+					return nil
 				}
 				return err
 			}
@@ -402,6 +430,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 			// We push with or without the option to wait on the conflict,
 			// depending on the state of the lock timeout, if one exists,
 			// and depending on the wait policy.
+			var err *Error
 			if req.WaitPolicy == lock.WaitPolicy_Error {
 				err = w.pushLockTxn(ctx, req, timerWaitingState)
 			} else if !lockDeadline.IsZero() {
