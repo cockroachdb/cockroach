@@ -136,6 +136,9 @@ func (cv *clusterVersionSetting) activeVersionOrEmpty(
 		return ClusterVersion{}
 	}
 	var curVer ClusterVersion
+	// NB: our linter requires using protoutil.Unmarshal here, but it causes an
+	// unnecessary allocation. This and other uses in this file are exceptions.
+	// TODO(pavelkalinnikov): don't parse proto on each time reading this setting.
 	if err := curVer.Unmarshal(encoded.([]byte)); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}

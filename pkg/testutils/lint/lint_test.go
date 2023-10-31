@@ -1193,6 +1193,7 @@ func TestLint(t *testing.T) {
 			"--",
 			"*.go",
 			":!*.pb.go",
+			":!clusterversion/setting.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
 			":!util/encoding/encoding.go",
