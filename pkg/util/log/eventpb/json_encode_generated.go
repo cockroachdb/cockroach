@@ -3394,6 +3394,103 @@ func (m *LevelStats) AppendJSONFields(printComma bool, b redact.RedactableBytes)
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *MVCCIteratorStats) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"StepCount\":"...)
+	b = strconv.AppendInt(b, int64(m.StepCount), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"StepCountInternal\":"...)
+	b = strconv.AppendInt(b, int64(m.StepCountInternal), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"SeekCount\":"...)
+	b = strconv.AppendInt(b, int64(m.SeekCount), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"SeekCountInternal\":"...)
+	b = strconv.AppendInt(b, int64(m.SeekCountInternal), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"BlockBytes\":"...)
+	b = strconv.AppendInt(b, int64(m.BlockBytes), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"BlockBytesInCache\":"...)
+	b = strconv.AppendInt(b, int64(m.BlockBytesInCache), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"KeyBytes\":"...)
+	b = strconv.AppendInt(b, int64(m.KeyBytes), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"ValueBytes\":"...)
+	b = strconv.AppendInt(b, int64(m.ValueBytes), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"PointCount\":"...)
+	b = strconv.AppendInt(b, int64(m.PointCount), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"PointsCoveredByRangeTombstones\":"...)
+	b = strconv.AppendInt(b, int64(m.PointsCoveredByRangeTombstones), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"RangeKeyCount\":"...)
+	b = strconv.AppendInt(b, int64(m.RangeKeyCount), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"RangeKeyContainedPoints\":"...)
+	b = strconv.AppendInt(b, int64(m.RangeKeyContainedPoints), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"RangeKeySkippedPoints\":"...)
+	b = strconv.AppendInt(b, int64(m.RangeKeySkippedPoints), 10)
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *NodeDecommissioned) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
@@ -4192,6 +4289,67 @@ func (m *RuntimeStats) AppendJSONFields(printComma bool, b redact.RedactableByte
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *SampledExecStats) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"NetworkBytes\":"...)
+	b = strconv.AppendInt(b, int64(m.NetworkBytes), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"MaxMemUsage\":"...)
+	b = strconv.AppendInt(b, int64(m.MaxMemUsage), 10)
+
+	if m.ContentionTime != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ContentionTime\":"...)
+		b = strconv.AppendInt(b, int64(m.ContentionTime), 10)
+	}
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"NetworkMessages\":"...)
+	b = strconv.AppendInt(b, int64(m.NetworkMessages), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"MaxDiskUsage\":"...)
+	b = strconv.AppendInt(b, int64(m.MaxDiskUsage), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"CPUSQLNanos\":"...)
+	b = strconv.AppendInt(b, int64(m.CPUSQLNanos), 10)
+
+	if m.MVCCIteratorStats != nil {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MVCCIteratorStats\":"...)
+		b = append(b, '{')
+		printComma, b = m.MVCCIteratorStats.AppendJSONFields(false, b)
+		b = append(b, '}')
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
@@ -4883,6 +5041,224 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 			b = strconv.AppendInt(b, int64(v), 10)
 		}
 		b = append(b, ']')
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
+func (m *SampledTransaction) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"User\":\""...)
+
+	if safeRe1.MatchString(m.User) {
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.User)))))
+	} else {
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.User)))))
+		b = append(b, redact.EndMarker()...)
+	}
+	b = append(b, '"')
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"ApplicationName\":\""...)
+	b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.ApplicationName)))
+	b = append(b, '"')
+
+	if m.TxnCounter != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TxnCounter\":"...)
+		b = strconv.AppendUint(b, uint64(m.TxnCounter), 10)
+	}
+
+	if m.SessionID != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SessionID\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.SessionID)))
+		b = append(b, '"')
+	}
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"TransactionID\":\""...)
+	b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.TransactionID)))
+	b = append(b, '"')
+
+	if m.TransactionFingerprintID != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TransactionFingerprintID\":"...)
+		b = strconv.AppendUint(b, uint64(m.TransactionFingerprintID), 10)
+	}
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"Committed\":"...)
+	b = strconv.AppendBool(b, m.Committed)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"ImplicitTxn\":"...)
+	b = strconv.AppendBool(b, m.ImplicitTxn)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"StartTimeUnixNanos\":"...)
+	b = strconv.AppendInt(b, int64(m.StartTimeUnixNanos), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"EndTimeUnixNanos\":"...)
+	b = strconv.AppendInt(b, int64(m.EndTimeUnixNanos), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"ServiceLatNanos\":"...)
+	b = strconv.AppendInt(b, int64(m.ServiceLatNanos), 10)
+
+	if m.SQLSTATE != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SQLSTATE\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.SQLSTATE)))
+		b = append(b, '"')
+	}
+
+	if m.ErrorText != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ErrorText\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.ErrorText)))
+		b = append(b, '"')
+	}
+
+	if m.NumRetries != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NumRetries\":"...)
+		b = strconv.AppendInt(b, int64(m.NumRetries), 10)
+	}
+
+	if m.LastAutoRetryReason != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"LastAutoRetryReason\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.LastAutoRetryReason)))
+		b = append(b, '"')
+	}
+
+	if len(m.StatementFingerprintIDs) > 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"StatementFingerprintIDs\":["...)
+		for i, v := range m.StatementFingerprintIDs {
+			if i > 0 {
+				b = append(b, ',')
+			}
+			b = strconv.AppendUint(b, uint64(v), 10)
+		}
+		b = append(b, ']')
+	}
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"NumRows\":"...)
+	b = strconv.AppendInt(b, int64(m.NumRows), 10)
+
+	if m.RetryLatNanos != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RetryLatNanos\":"...)
+		b = strconv.AppendInt(b, int64(m.RetryLatNanos), 10)
+	}
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"CommitLatNanos\":"...)
+	b = strconv.AppendInt(b, int64(m.CommitLatNanos), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"IdleLatNanos\":"...)
+	b = strconv.AppendInt(b, int64(m.IdleLatNanos), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"BytesRead\":"...)
+	b = strconv.AppendInt(b, int64(m.BytesRead), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"RowsRead\":"...)
+	b = strconv.AppendInt(b, int64(m.RowsRead), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"RowsWritten\":"...)
+	b = strconv.AppendInt(b, int64(m.RowsWritten), 10)
+
+	if m.SampledExecStats != nil {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SampledExecStats\":"...)
+		b = append(b, '{')
+		printComma, b = m.SampledExecStats.AppendJSONFields(false, b)
+		b = append(b, '}')
 	}
 
 	return printComma, b
