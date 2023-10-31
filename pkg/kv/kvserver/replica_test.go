@@ -1085,15 +1085,21 @@ func TestReplicaLeaseCounters(t *testing.T) {
 	var tc testContext
 	cfg := TestStoreConfig(nil)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
+	cache := liveness.NewCache(
+		gossip.NewTest(roachpb.NodeID(1), stopper, metric.NewRegistry()),
+		cfg.Clock,
+		cfg.Settings,
+		cfg.NodeDialer,
+	)
+
 	cfg.NodeLiveness = liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
 		AmbientCtx:        log.AmbientContext{},
 		Stopper:           stopper,
-		Settings:          cfg.Settings,
 		Clock:             cfg.Clock,
+		Cache:             cache,
 		LivenessThreshold: nlActive,
 		RenewalDuration:   nlRenewal,
 		Engines:           []storage.Engine{},
-		NodeDialer:        cfg.NodeDialer,
 	})
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
