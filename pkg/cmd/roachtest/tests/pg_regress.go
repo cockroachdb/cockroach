@@ -1080,7 +1080,7 @@ index a460f82fb7..a9f7b99b84 100644
  INSERT INTO foo (f2,f3)
    VALUES ('"'"'test'"'"', DEFAULT), ('"'"'More'"'"', 11), (upper('"'"'more'"'"'), 7+9)
 `},
-// Serial is non-deterministic.
+	// Serial is non-deterministic.
 	{"rangefuncs.sql", `diff --git a/src/test/regress/sql/rangefuncs.sql b/src/test/regress/sql/rangefuncs.sql
 index 63351e1412..737592d874 100644
 --- a/src/test/regress/sql/rangefuncs.sql
