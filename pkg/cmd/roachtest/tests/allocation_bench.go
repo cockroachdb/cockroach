@@ -48,7 +48,6 @@ type allocationBenchSpec struct {
 	nodes, cpus int
 	load        allocBenchLoad
 
-	nodeAttrs   map[int]string
 	startRecord time.Duration
 	samples     int
 }
@@ -294,10 +293,6 @@ func setupAllocationBench(
 	for i := 1; i <= spec.nodes; i++ {
 		// Don't start a backup schedule as this test reports to roachperf.
 		startOpts := option.DefaultStartOptsNoBackups()
-		if attr, ok := spec.nodeAttrs[i]; ok {
-			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
-				fmt.Sprintf("--attrs=%s", attr))
-		}
 		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 			"--vmodule=store_rebalancer=2,allocator=2,replicate_queue=2")
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
