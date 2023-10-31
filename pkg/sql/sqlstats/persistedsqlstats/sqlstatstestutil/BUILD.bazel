@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sqlstatstestutil",
+    srcs = ["testutils.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/sql",
+        "//pkg/sql/appstatspb",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
+    ],
+)
