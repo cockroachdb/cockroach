@@ -2682,7 +2682,7 @@ ALTER TABLE t_add_column_not_null ADD COLUMN j INT GENERATED ALWAYS AS (NULL:::I
 statement error pgcode 23502 null value in column "j" violates not-null constraint
 ALTER TABLE t_add_column_not_null ADD COLUMN j INT GENERATED ALWAYS AS (NULL::INT) VIRTUAL NOT NULL UNIQUE;
 
-statement error validation of NOT NULL constraint failed: validation of CHECK "j IS NOT NULL" failed on row: i=1, j=NULL
+statement error pgcode 23502 validation of column "j" NOT NULL failed on row: i=1, j=NULL
 ALTER TABLE t_add_column_not_null ADD COLUMN j INT GENERATED ALWAYS AS (NULL::INT) VIRTUAL NOT NULL;
 
 statement ok
