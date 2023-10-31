@@ -84,6 +84,9 @@ sequence req=reqSecondLock
 on-lock-acquired req=reqSecondLock key=k2 dur=u
 ----
 [-] acquire lock: txn 00000001 @ ‹k2›
+[4] sequence reqWaiter: lock wait-queue event: wait elsewhere for txn 00000001 @ key ‹"k"›
+[4] sequence reqWaiter: pushing txn 00000001 to abort
+[4] sequence reqWaiter: blocked on select in concurrency_test.(*cluster).PushTransaction
 
 finish req=reqSecondLock
 ----
@@ -94,14 +97,11 @@ debug-advance-clock ts=123
 
 # Abort the writing txn. This will cause the blocked request to unblock. Note
 # that we expect the "conflicted with" contention event after the push. This
-# shows that the event is emitted only after the request exits both the waitFor
-# and the waitElsewhere states.
+# shows that the event is emitted only after the request exits the waitFor
+# state.
 on-txn-updated txn=txnWriter status=aborted
 ----
 [-] update txn: aborting txnWriter
-[4] sequence reqWaiter: resolving intent ‹"k"› for txn 00000001 with ABORTED status
-[4] sequence reqWaiter: lock wait-queue event: wait elsewhere for txn 00000001 @ key ‹"k"›
-[4] sequence reqWaiter: pushing txn 00000001 to abort
 [4] sequence reqWaiter: resolving intent ‹"k"› for txn 00000001 with ABORTED status
 [4] sequence reqWaiter: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 123.000s
 [4] sequence reqWaiter: acquiring latches
@@ -256,13 +256,13 @@ num=1
 on-txn-updated txn=txnThreeKeyWriter status=pending ts=20,2
 ----
 [-] update txn: increasing timestamp of txnThreeKeyWriter
-[10] sequence reqTwoKeyWaiter: resolving intent ‹"k1"› for txn 00000003 with PENDING status and clock observation {1 246.000000000,2}
+[10] sequence reqTwoKeyWaiter: resolving intent ‹"k1"› for txn 00000003 with PENDING status and clock observation {1 246.000000000,1}
 [10] sequence reqTwoKeyWaiter: lock wait-queue event: done waiting
 [10] sequence reqTwoKeyWaiter: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"k1"› for 0.000s
 [10] sequence reqTwoKeyWaiter: acquiring latches
 [10] sequence reqTwoKeyWaiter: scanning lock table for conflicting locks
 [10] sequence reqTwoKeyWaiter: sequencing complete, returned guard
-[12] sequence reqThreeKeyWaiter: resolving intent ‹"k1"› for txn 00000003 with PENDING status and clock observation {1 246.000000000,4}
+[12] sequence reqThreeKeyWaiter: resolving intent ‹"k1"› for txn 00000003 with PENDING status and clock observation {1 246.000000000,3}
 [12] sequence reqThreeKeyWaiter: lock wait-queue event: done waiting
 [12] sequence reqThreeKeyWaiter: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"k1"› for 0.000s
 [12] sequence reqThreeKeyWaiter: acquiring latches
