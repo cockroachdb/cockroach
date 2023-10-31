@@ -14,7 +14,8 @@ type EventType string
 const (
 	// EventlogEvent represents general events about the cluster that historically
 	// have been persisted inside CRDB in the system.eventlog table.
-	EventlogEvent EventType = "eventlog"
+	EventlogEvent               EventType = "eventlog"
+	StatementInsightsStatsEvent EventType = "stmtinsightsstats"
 )
 
 // EventlogEventTypeAttribute represents the key of the attribute containing
