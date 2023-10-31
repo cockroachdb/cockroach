@@ -665,10 +665,11 @@ func (c *copyMachine) processCopyData(ctx context.Context, data string, final bo
 		// them. Only set finalBatch to true if this is the last
 		// CopyData segment AND we have no more data in the buffer.
 		if length := c.currentBatchSize(); length > 0 && (c.rowsMemAcc.Used() > c.maxRowMem || length >= c.copyBatchRowSize || batchDone) {
-			if length != c.copyBatchRowSize {
-				log.VEventf(ctx, 2, "copy batch of %d rows flushing due to memory usage %d > %d", length, c.rowsMemAcc.Used(), c.maxRowMem)
-			}
-			if err := c.processRows(ctx, final && len(c.buf) == 0); err != nil {
+			log.VEventf(
+				ctx, 2, "flushing copy batch of %d rows (rowsMemAcc=%s, maxRowMem=%s, batchDone=%t)",
+				length, humanize.IBytes(uint64(c.rowsMemAcc.Used())), humanize.IBytes(uint64(c.maxRowMem)), batchDone,
+			)
+			if err = c.processRows(ctx, final && len(c.buf) == 0); err != nil {
 				return err
 			}
 		}
@@ -679,6 +680,10 @@ func (c *copyMachine) processCopyData(ctx context.Context, data string, final bo
 	// If we're done, process any remainder, if we're not done let more rows
 	// accumulate.
 	if final {
+		log.VEventf(
+			ctx, 2, "flushing final copy batch of %d rows (rowsMemAcc=%s, maxRowMem=%s)",
+			c.currentBatchSize(), humanize.IBytes(uint64(c.rowsMemAcc.Used())), humanize.IBytes(uint64(c.maxRowMem)),
+		)
 		return c.processRows(ctx, final)
 	}
 	return nil
