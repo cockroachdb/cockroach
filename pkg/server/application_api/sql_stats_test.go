@@ -24,15 +24,19 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -1134,4 +1138,248 @@ func TestUnprivilegedUserResetIndexUsageStats(t *testing.T) {
 	)
 
 	require.Contains(t, err.Error(), "requires admin privilege")
+}
+
+// TestCombinedStatementUsesCorrectSourceTable tests that requests read from
+// the expected crdb_internal table given the table states. We have a lot of
+// different tables that requests could potentially read from (in-memory, cached,
+// system tables etc.), so we should sanity check that we are using the expected ones.
+// given some simple table states.
+func TestCombinedStatementUsesCorrectSourceTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Disable flushing sql stats so we can manually set the table states
+	// without worrying about unexpected stats appearing.
+	settings := cluster.MakeTestingClusterSettings()
+	statsKnobs := sqlstats.CreateTestingKnobs()
+	defaultMockInsertedAggTs := timeutil.Unix(1696906800, 0)
+	statsKnobs.StubTimeNow = func() time.Time { return defaultMockInsertedAggTs }
+	persistedsqlstats.SQLStatsFlushEnabled.Override(ctx, &settings.SV, false)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Settings: settings,
+		Knobs: base.TestingKnobs{
+			SQLStatsKnobs: statsKnobs,
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	conn := sqlutils.MakeSQLRunner(srv.ApplicationLayer().SQLConn(t))
+	conn.Exec(t, "SET application_name = $1", server.CrdbInternalStmtStatsCombined)
+	conn.Exec(t, "SET CLUSTER SETTING sql.stats.activity.flush.enabled = 'f'")
+	// Clear the in-memory stats so we only have the above app name.
+	// Then populate it with 1 query.
+	conn.Exec(t, "SELECT crdb_internal.reset_sql_stats()")
+	conn.Exec(t, "SELECT 1")
+
+	type testCase struct {
+		name               string
+		tableSetupFn       func() error
+		expectedStmtsTable string
+		expectedTxnsTable  string
+		reqs               []serverpb.CombinedStatementsStatsRequest
+		isEmpty            bool
+	}
+
+	ie := srv.InternalExecutor().(*sql.InternalExecutor)
+
+	defaultMockOneEach := func() error {
+		startTs := defaultMockInsertedAggTs
+		stmt := sqlstatstestutil.GetRandomizedCollectedStatementStatisticsForTest(t)
+		stmt.ID = 1
+		stmt.AggregatedTs = startTs
+		stmt.Key.App = server.CrdbInternalStmtStatsPersisted
+		stmt.Key.TransactionFingerprintID = 1
+		require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemStmtStats(ctx, ie, &stmt, 1 /* nodeId */, nil))
+
+		stmt.Key.App = server.CrdbInternalStmtStatsCached
+		require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemStmtActivity(ctx, ie, &stmt, nil))
+
+		txn := sqlstatstestutil.GetRandomizedCollectedTransactionStatisticsForTest(t)
+		txn.StatementFingerprintIDs = []appstatspb.StmtFingerprintID{1}
+		txn.TransactionFingerprintID = 1
+		txn.AggregatedTs = startTs
+		txn.App = server.CrdbInternalTxnStatsPersisted
+		require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemTxnStats(ctx, ie, &txn, 1, nil))
+		txn.App = server.CrdbInternalTxnStatsCached
+		require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemTxnActivity(ctx, ie, &txn, nil))
+
+		return nil
+	}
+	testCases := []testCase{
+		{
+			name:         "activity and persisted tables empty",
+			tableSetupFn: func() error { return nil },
+			// We should attempt to read from the in-memory tables, since
+			// they are the last resort.
+			expectedStmtsTable: server.CrdbInternalStmtStatsCombined,
+			expectedTxnsTable:  server.CrdbInternalTxnStatsCombined,
+			reqs: []serverpb.CombinedStatementsStatsRequest{
+				{FetchMode: createTxnFetchMode(0)},
+			},
+		},
+		{
+			name:               "all tables have data in selected range",
+			tableSetupFn:       defaultMockOneEach,
+			expectedStmtsTable: server.CrdbInternalStmtStatsCached,
+			expectedTxnsTable:  server.CrdbInternalTxnStatsCached,
+			reqs: []serverpb.CombinedStatementsStatsRequest{
+				{Start: defaultMockInsertedAggTs.Unix()},
+				{
+					Start: defaultMockInsertedAggTs.Unix(),
+					End:   defaultMockInsertedAggTs.Unix(),
+				},
+			},
+		},
+		{
+			name:         "all tables have data but no start range is provided",
+			tableSetupFn: defaultMockOneEach,
+			// When no date range is provided, we should default to reading from
+			// persisted or in-memory (whichever has data first). In this case the
+			// persisted table has data.
+			expectedStmtsTable: server.CrdbInternalStmtStatsPersisted,
+			expectedTxnsTable:  server.CrdbInternalTxnStatsPersisted,
+			reqs: []serverpb.CombinedStatementsStatsRequest{
+				{},
+				{End: defaultMockInsertedAggTs.Unix()},
+			},
+		},
+		{
+			name:               "all tables have data but not in the selected range",
+			tableSetupFn:       defaultMockOneEach,
+			expectedStmtsTable: server.CrdbInternalStmtStatsCombined,
+			expectedTxnsTable:  server.CrdbInternalTxnStatsCombined,
+			reqs: []serverpb.CombinedStatementsStatsRequest{
+				{Start: defaultMockInsertedAggTs.Add(time.Hour).Unix()},
+				{End: defaultMockInsertedAggTs.Truncate(time.Hour * 2).Unix()},
+			},
+			isEmpty: true,
+		},
+		{
+			name:         "activity table has data in range with specified sort, fetchmode=txns",
+			tableSetupFn: defaultMockOneEach,
+			// For txn mode, we should not use the activity table for stmts.
+			expectedStmtsTable: server.CrdbInternalStmtStatsPersisted,
+			expectedTxnsTable:  server.CrdbInternalTxnStatsCached,
+			// These sort options do exist on the activity table.
+			reqs: []serverpb.CombinedStatementsStatsRequest{
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(0)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(1)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(2)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(3)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(4)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(5)},
+			},
+		},
+		{
+			name:               "activity table has data in range with specified sort, fetchmode=stmts",
+			tableSetupFn:       defaultMockOneEach,
+			expectedStmtsTable: server.CrdbInternalStmtStatsCached,
+			expectedTxnsTable:  "",
+			// These sort options do exist on the activity table.
+			reqs: []serverpb.CombinedStatementsStatsRequest{
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(0)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(1)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(2)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(3)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(4)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(5)},
+			},
+		},
+		{
+			name:               "activity table has data in range, but selected sort is not on it, fetchmode=txns",
+			tableSetupFn:       defaultMockOneEach,
+			expectedStmtsTable: server.CrdbInternalStmtStatsPersisted,
+			expectedTxnsTable:  server.CrdbInternalTxnStatsPersisted,
+			// These sort options do not exist on the activity table.
+			reqs: []serverpb.CombinedStatementsStatsRequest{
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(6)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(7)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(8)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(9)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(10)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(11)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(12)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(13)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(14)},
+			},
+		},
+		{
+			name:               "activity table has data in range, but selected sort is not on it, fetchmode=stmts",
+			tableSetupFn:       defaultMockOneEach,
+			expectedStmtsTable: server.CrdbInternalStmtStatsPersisted,
+			expectedTxnsTable:  "",
+			// These sort options do not exist on the activity table.
+			reqs: []serverpb.CombinedStatementsStatsRequest{
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(6)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(7)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(8)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(9)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(10)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(11)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(12)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(13)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(14)},
+			},
+		},
+	}
+
+	client := srv.ApplicationLayer().GetStatusClient(t)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, tc.tableSetupFn())
+
+			defer func() {
+				// Reset tables.
+				conn.Exec(t, "SELECT crdb_internal.reset_sql_stats()")
+				conn.Exec(t, "SELECT crdb_internal.reset_activity_tables()")
+				conn.Exec(t, "SELECT 1")
+			}()
+
+			for _, r := range tc.reqs {
+				resp, err := client.CombinedStatementStats(ctx, &r)
+				require.NoError(t, err)
+
+				require.Equal(t, tc.expectedStmtsTable, resp.StmtsSourceTable, "req: %v", r)
+				require.Equal(t, tc.expectedTxnsTable, resp.TxnsSourceTable, "req: %v", r)
+
+				if tc.isEmpty {
+					continue
+				}
+
+				require.NotZero(t, len(resp.Statements), "req: %v", r)
+				// Verify we used the correct queries to return data.
+				require.Equal(t, tc.expectedStmtsTable, resp.Statements[0].Key.KeyData.App, "req: %v", r)
+				if tc.expectedTxnsTable == server.CrdbInternalTxnStatsCombined {
+					// For the combined query, we're using in-mem data and we set the
+					// app name there to the in-memory stmts table.
+					require.Equal(t, server.CrdbInternalStmtStatsCombined, resp.Transactions[0].StatsData.App, "req: %v", r)
+				} else if tc.expectedTxnsTable != "" {
+					require.NotZero(t, len(resp.Transactions))
+					require.Equal(t, tc.expectedTxnsTable, resp.Transactions[0].StatsData.App, "req: %v", r)
+				}
+			}
+
+		})
+	}
+}
+
+func createStmtFetchMode(
+	sort serverpb.StatsSortOptions,
+) *serverpb.CombinedStatementsStatsRequest_FetchMode {
+	return &serverpb.CombinedStatementsStatsRequest_FetchMode{
+		StatsType: serverpb.CombinedStatementsStatsRequest_StmtStatsOnly,
+		Sort:      sort,
+	}
+}
+func createTxnFetchMode(
+	sort serverpb.StatsSortOptions,
+) *serverpb.CombinedStatementsStatsRequest_FetchMode {
+	return &serverpb.CombinedStatementsStatsRequest_FetchMode{
+		StatsType: serverpb.CombinedStatementsStatsRequest_TxnStatsOnly,
+		Sort:      sort,
+	}
 }

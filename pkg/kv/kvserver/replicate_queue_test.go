@@ -1774,8 +1774,6 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
 			ServerArgs: base.TestServerArgs{
-				ScanMinIdleTime: time.Millisecond,
-				ScanMaxIdleTime: time.Millisecond,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						DefaultZoneConfigOverride: &zcfg,
@@ -1788,11 +1786,12 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 
 	// We're going to create a table with many versions of a big row and a small
 	// row. We'll split the table in between the rows, to produce a large range
-	// and a small one. Then we'll increase the replication factor to 5 and check
-	// that both ranges behave the same - i.e. they both get up-replicated. For
-	// the purposes of this test we're only worried about the large one
-	// up-replicating, but we test the small one as a control so that we don't
-	// fool ourselves.
+	// and a small one. We'll also split the first row into its own range, to
+	// avoid the range inheriting 5 replicas from the system ranges. Then we'll
+	// increase the replication factor to 5 and check that both ranges behave the
+	// same - i.e. they both get up-replicated. For the purposes of this test
+	// we're only worried about the large one up-replicating, but we test the
+	// small one as a control so that we don't fool ourselves.
 
 	// Disable the queues so they don't mess with our manual relocation. We'll
 	// re-enable them later.
@@ -1805,26 +1804,13 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 
 	_, err = db.Exec(`ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2,3], 1)`)
 	require.NoError(t, err)
+	_, err = db.Exec(`ALTER TABLE t SPLIT AT VALUES (1)`)
+	require.NoError(t, err)
 	_, err = db.Exec(`ALTER TABLE t SPLIT AT VALUES (2)`)
 	require.NoError(t, err)
 
 	toggleReplicationQueues(tc, true /* active */)
 	toggleSplitQueues(tc, true /* active */)
-
-	// Check that the two ranges exist for table t.
-	testutils.SucceedsSoon(t, func() error {
-		r := db.QueryRow(
-			"SELECT count(*) FROM [SHOW RANGES FROM TABLE t]")
-		var count int
-		if err := r.Scan(&count); err != nil {
-			return err
-		}
-		if count != 2 {
-			return fmt.Errorf(
-				"splits not created, expected %d ranges, found %d", 2, count)
-		}
-		return nil
-	})
 
 	// We're going to create a large row, but now large enough that write
 	// back-pressuring kicks in and refuses it.
@@ -1877,7 +1863,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		forceProcess()
 		r := db.QueryRow(
-			"SELECT replicas FROM [SHOW RANGES FROM TABLE t] WHERE start_key LIKE '%TableMin%'")
+			"SELECT replicas FROM [SHOW RANGES FROM TABLE t] WHERE start_key LIKE '%/1'")
 		var repl string
 		if err := r.Scan(&repl); err != nil {
 			return err
