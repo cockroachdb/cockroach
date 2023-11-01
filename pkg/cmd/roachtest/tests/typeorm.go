@@ -94,14 +94,19 @@ func registerTypeORM(r registry.Registry) {
 			t,
 			c,
 			node,
-			"add nodesource repository",
-			`sudo apt install ca-certificates && curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -`,
+			"add nodesource key and deb repository",
+			`
+sudo apt-get update && \
+sudo apt-get install -y ca-certificates curl gnupg && \
+sudo mkdir -p /etc/apt/keyrings && \
+curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
+echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_18.x nodistro main" | sudo tee /etc/apt/sources.list.d/nodesource.list`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatRunE(
-			ctx, t, c, node, "install nodejs and npm", `sudo apt-get install -y nodejs`,
+			ctx, t, c, node, "install nodejs and npm", `sudo apt-get update && sudo apt-get -qq install nodejs`,
 		); err != nil {
 			t.Fatal(err)
 		}
