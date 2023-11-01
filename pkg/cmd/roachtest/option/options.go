@@ -58,6 +58,8 @@ func DefaultStartSingleNodeOpts() StartOpts {
 
 // StopOpts is a type that combines the stop options needed by roachprod and roachtest.
 type StopOpts struct {
+	// TODO(radu): we should use a higher-level abstraction instead of
+	// roachprod.StopOpts so we don't have to pass around signal values etc.
 	RoachprodOpts roachprod.StopOpts
 	RoachtestOpts struct {
 		Worker bool
