@@ -12,10 +12,18 @@ package insights
 
 import (
 	"context"
+	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/obs"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
+	v1 "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/common/v1"
+	otel_logs_pb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/logs/v1"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 type lockingStore struct {
@@ -39,6 +47,47 @@ func (s *lockingStore) IterateInsights(
 	s.mu.insights.Do(func(e *cache.Entry) {
 		visitor(ctx, e.Value.(*Insight))
 	})
+}
+
+func (s *lockingStore) ExportInsights(
+	ctx context.Context, pool *sync.Pool, eventsExporter *obs.EventsExporterInterface,
+) error {
+	s.mu.Lock()
+	var err error
+	defer s.mu.Unlock()
+	var keysToDelete []uuid.UUID
+
+	s.mu.insights.Do(func(e *cache.Entry) {
+		insight := e.Value.(*Insight)
+
+		if insight == nil {
+			return
+		}
+		var fromPool *obspb.StatementInsightsStatistics
+		defer pool.Put(fromPool)
+		for _, stmt := range insight.Statements {
+			fromPool = pool.Get().(*obspb.StatementInsightsStatistics)
+			stmt.CopyTo(ctx, insight.Transaction, &insight.Session, fromPool)
+			statBytes, e := protoutil.Marshal(fromPool)
+			pool.Put(fromPool)
+			if e != nil {
+				err = e
+				return
+			}
+			(*eventsExporter).SendEvent(ctx, obspb.StatementInsightsStatsEvent, &otel_logs_pb.LogRecord{
+				TimeUnixNano: uint64(timeutil.Now().UnixNano()),
+				Body:         &v1.AnyValue{Value: &v1.AnyValue_BytesValue{BytesValue: statBytes}},
+			})
+		}
+
+		keysToDelete = append(keysToDelete, insight.Transaction.ID)
+	})
+
+	for _, key := range keysToDelete {
+		s.mu.insights.Del(key)
+	}
+
+	return err
 }
 
 var _ Reader = &lockingStore{}

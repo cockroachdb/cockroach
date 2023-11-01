@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -192,7 +193,7 @@ type Storage interface {
 type Provider interface {
 	Storage
 
-	Start(ctx context.Context, stopper *stop.Stopper)
+	Start(ctx context.Context, stopper *stop.Stopper, insightsProvider *insights.Provider)
 }
 
 // RecordedStmtStats stores the statistics of a statement to be recorded.

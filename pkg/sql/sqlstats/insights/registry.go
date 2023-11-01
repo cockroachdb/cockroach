@@ -199,7 +199,10 @@ func newRegistry(st *cluster.Settings, detector detector, sink sink) *lockingReg
 func (s *Statement) CopyTo(
 	ctx context.Context, t *Transaction, session *Session, other *obspb.StatementInsightsStatistics,
 ) {
-	other.ApplicationName = t.ApplicationName
+	if other == nil {
+		other = &obspb.StatementInsightsStatistics{}
+	}
+
 	other.AutoRetryReason = s.AutoRetryReason
 	other.Contention = s.Contention
 	other.CPUSQLNanos = s.CPUSQLNanos
@@ -208,7 +211,6 @@ func (s *Statement) CopyTo(
 	other.ErrorCode = s.ErrorCode
 	other.FingerprintID = uint64(s.FingerprintID)
 	other.FullScan = s.FullScan
-	other.ImplicitTxn = t.ImplicitTxn
 	other.IndexRecommendations = s.IndexRecommendations
 	other.Nodes = s.Nodes
 	other.PlanGist = s.PlanGist
@@ -218,15 +220,18 @@ func (s *Statement) CopyTo(
 	other.RowsWritten = s.RowsWritten
 	other.ServiceLatSeconds = s.LatencyInSeconds
 	other.StartTime = &s.StartTime
-	other.TxnFingerprintID = uint64(t.FingerprintID)
-	other.User = t.User
-	other.UserPriority = t.UserPriority
-
 	var err error
 	other.ID, err = s.ID.MarshalJSON()
 	if err != nil {
 		log.Errorf(ctx, "marshalling statement insights ID for Insights exporter")
 	}
+
+	other.ApplicationName = t.ApplicationName
+	other.ImplicitTxn = t.ImplicitTxn
+	other.TxnFingerprintID = uint64(t.FingerprintID)
+	other.User = t.User
+	other.UserPriority = t.UserPriority
+
 	other.TransactionID, err = t.ID.MarshalJSON()
 	if err != nil {
 		log.Errorf(ctx, "marshalling transaction insights ID for Insights exporter")

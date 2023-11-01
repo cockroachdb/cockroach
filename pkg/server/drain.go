@@ -442,7 +442,7 @@ func (s *drainServer) drainClients(
 
 	// Flush in-memory SQL stats into the statement stats system table.
 	statsProvider := s.sqlServer.pgServer.SQLServer.GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
-	statsProvider.Flush(ctx)
+	statsProvider.Flush(ctx, s.sqlServer.pgServer.SQLServer.GetInsightsProvider())
 	statsProvider.Stop(ctx)
 
 	// Inform the async tasks for table stats that the node is draining

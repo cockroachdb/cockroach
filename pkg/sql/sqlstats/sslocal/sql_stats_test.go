@@ -333,7 +333,8 @@ WHERE
 `, [][]string{{"SELECT _ WHERE _", "1"}})
 
 	server.SQLServer().(*sql.Server).
-		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx,
+		server.SQLServer().(*sql.Server).GetInsightsProvider())
 
 	sqlDB.CheckQueryResults(t, `
 SELECT
