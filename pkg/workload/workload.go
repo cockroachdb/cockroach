@@ -389,11 +389,11 @@ type QueryLoad struct {
 	WorkerFns []func(context.Context) error
 
 	// Close, if set, is called before the process exits, giving workloads a
-	// chance to print some information.
+	// chance to print some information or perform cleanup.
 	// It's guaranteed that the ctx passed to WorkerFns (if they're still running)
 	// has been canceled by the time this is called (so an implementer can
 	// synchronize with the WorkerFns if need be).
-	Close func(context.Context)
+	Close func(context.Context) error
 
 	// ResultHist is the name of the NamedHistogram to use for the benchmark
 	// formatted results output at the end of `./workload run`. The empty string
