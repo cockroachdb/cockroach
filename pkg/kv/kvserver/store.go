@@ -2450,6 +2450,9 @@ func (s *Store) startRangefeedTxnPushNotifier(ctx context.Context) {
 		for {
 			select {
 			case <-ticker.C:
+				if !rangefeed.PushTxnsEnabled.Get(&s.ClusterSettings().SV) {
+					continue
+				}
 				batch := makeSchedulerBatch()
 				s.rangefeedScheduler.EnqueueBatch(batch, rangefeed.PushTxnQueued)
 				batch.Close()
