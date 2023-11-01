@@ -76,6 +76,13 @@ func registerAcceptance(r registry.Registry) {
 				numNodes: 3,
 			},
 		},
+		registry.OwnerSQLFoundations: {
+			{
+				name:    "validate-system-schema-after-version-upgrade",
+				fn:      runValidateSystemSchemaAfterVersionUpgrade,
+				timeout: 30 * time.Minute,
+			},
+		},
 	}
 	for owner, tests := range testCases {
 		for _, tc := range tests {
