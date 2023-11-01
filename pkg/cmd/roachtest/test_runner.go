@@ -1276,18 +1276,8 @@ func (r *testRunner) teardownTest(
 
 	// Test was successful. If we are collecting code coverage, copy the files now.
 	if t.goCoverEnabled {
-		// Go cover data is dumped when the cockroach process exits; send SIGUSR1 to
-		// make it exit immediately.
-		//
-		// TODO(radu): many tests stop the nodes with the default options (SIGKILL)
-		// during the test, which means some coverage data will be lost. Consider
-		// updating the default options.
 		t.L().Printf("Stopping all nodes to obtain go cover artifacts")
-		stopOpts := option.DefaultStopOpts()
-		stopOpts.RoachprodOpts.Sig = 10 // SIGUSR1
-		stopOpts.RoachprodOpts.Wait = true
-		stopOpts.RoachprodOpts.MaxWait = 10
-		if err := c.StopE(ctx, t.L(), stopOpts, c.All()); err != nil {
+		if err := c.StopE(ctx, t.L(), option.DefaultStopOpts(), c.All()); err != nil {
 			t.L().PrintfCtx(ctx, "error stopping cluster: %v", err)
 		}
 
