@@ -479,6 +479,21 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		rampDone = make(chan struct{})
 	}
 
+	// Now that we've logged the start time, ensure that PostRun get's run via a
+	// defer.
+	if h, ok := gen.(workload.Hookser); ok && h.Hooks().PostRun != nil {
+		defer func() {
+			if err := h.Hooks().PostRun(timeutil.Since(start)); err != nil {
+				fmt.Printf("failed post-run hook: %v\n", err)
+			}
+		}()
+	}
+
+	// If ops.Close is specified, defer it as well.
+	if ops.Close != nil {
+		defer ops.Close(ctx)
+	}
+
 	workersCtx, cancelWorkers := context.WithCancel(ctx)
 	defer cancelWorkers()
 	var wg sync.WaitGroup
@@ -586,9 +601,6 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 
 		case <-done:
 			cancelWorkers()
-			if ops.Close != nil {
-				ops.Close(ctx)
-			}
 
 			startElapsed := timeutil.Since(start)
 			resultTick := histogram.Tick{Name: ops.ResultHist}
@@ -612,14 +624,6 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				}
 			})
 			formatter.outputResult(startElapsed, resultTick)
-
-			if h, ok := gen.(workload.Hookser); ok {
-				if h.Hooks().PostRun != nil {
-					if err := h.Hooks().PostRun(startElapsed); err != nil {
-						fmt.Printf("failed post-run hook: %v\n", err)
-					}
-				}
-			}
 
 			return nil
 		}
