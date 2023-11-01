@@ -1246,6 +1246,81 @@ num=1
     active: true req: 63, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
    distinguished req: 63
 
+# ------------------------------------------------------------------------------
+# Test when a locking request drops out of a wait queue and makes other actively
+# waiting requests compatible as a result. They should be able to proceed.
+# Serves as a regression test for
+# https://github.com/cockroachdb/cockroach/issues/111144.
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req66 txn=txn1 ts=10 spans=shared@a
+----
+
+scan r=req66
+----
+start-waiting: false
+
+acquire r=req66 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req67 txn=txn2 ts=10 spans=exclusive@a
+----
+
+scan r=req67
+----
+start-waiting: true
+
+new-request r=req68 txn=txn3 ts=10 spans=shared@a
+----
+
+scan r=req68
+----
+start-waiting: true
+
+new-request r=req69 txn=txn4 ts=10 spans=shared@a
+----
+
+scan r=req69
+----
+start-waiting: true
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 67, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 68, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 69, strength: Shared, txn: 00000000-0000-0000-0000-000000000004
+   distinguished req: 67
+
+dequeue r=req67
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: false req: 68, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: false req: 69, strength: Shared, txn: 00000000-0000-0000-0000-000000000004
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: false req: 68, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: false req: 69, strength: Shared, txn: 00000000-0000-0000-0000-000000000004
+
+
 # TODO(arul): (non-exhaustive list) of shared lock state transitions that aren't
 # currently supported (and we need to add support for):
 #
