@@ -12,8 +12,11 @@ package schemachange
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgx/v5"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -44,4 +47,30 @@ func EndSpan(span trace.Span, err error) {
 		}
 	}
 	span.End()
+}
+
+type PGXTracer struct {
+	tracer trace.Tracer
+}
+
+func (l *PGXTracer) TraceQueryStart(ctx context.Context, conn *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	stringifiedArgs := util.Map(data.Args, func(arg any) string {
+		return fmt.Sprintf("%#v", arg)
+	})
+
+	ctx, span := l.tracer.Start(ctx, "Query")
+	span.SetAttributes(
+		attribute.String("sql", data.SQL),
+		attribute.StringSlice("args", stringifiedArgs),
+	)
+
+	return ctx
+}
+
+func (*PGXTracer) TraceQueryEnd(ctx context.Context, conn *pgx.Conn, data pgx.TraceQueryEndData) {
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		attribute.String("command_tag", data.CommandTag.String()),
+	)
+	EndSpan(span, data.Err)
 }
