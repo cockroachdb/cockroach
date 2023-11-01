@@ -35,6 +35,7 @@ import (
 func BenchmarkSequenceIncrement(b *testing.B) {
 	runSubBenchMark := func(b *testing.B, cacheSize int, parallelism int) {
 		subBenchMark := func(b *testing.B) {
+			defer log.Scope(b).Close(b)
 			cluster := serverutils.StartCluster(b, 3, base.TestClusterArgs{})
 			defer cluster.Stopper().Stop(context.Background())
 
@@ -79,6 +80,7 @@ func BenchmarkSequenceIncrement(b *testing.B) {
 }
 
 func BenchmarkUniqueRowID(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	cluster := serverutils.StartCluster(b, 3, base.TestClusterArgs{})
 	defer cluster.Stopper().Stop(context.Background())
 
