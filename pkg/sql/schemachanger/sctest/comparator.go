@@ -85,7 +85,7 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 		// Execution: `line` must be executed in both clusters with the same error
 		// code.
 		_, errLegacy := legacyConn.ExecContext(ctx, line)
-		if pgcode.MakeCode(string(getPQErrCode(errLegacy))) == pgcode.FeatureNotSupported {
+		if pgcode.MakeCode(string(getPQErrCode(errLegacy))) == pgcode.FeatureNotSupported && !containsCommit(line) {
 			continue
 		}
 		_, errDeclarative := declarativeConn.ExecContext(ctx, line)
@@ -103,6 +103,19 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 			}
 		}
 	}
+}
+
+func containsCommit(line string) bool {
+	stmts, err := parser.Parse(line)
+	if err != nil {
+		return false
+	}
+	for _, stmt := range stmts {
+		if _, ok := stmt.AST.(*tree.CommitTransaction); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // currentDatabaseExist returns false if current database (tracked by session
