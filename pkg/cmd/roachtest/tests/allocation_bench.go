@@ -80,8 +80,6 @@ type kvAllocBenchEventRunner struct {
 	insertCount int
 
 	name string
-
-	replFactor int
 }
 
 var (
@@ -153,19 +151,8 @@ func (r kvAllocBenchEventRunner) run(ctx context.Context, c cluster.Cluster, t t
 		return err
 	}
 
-	if r.replFactor == 0 {
-		r.replFactor = 3
-	}
-
 	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
-
-	// Set the replication factor of the database to match the spec.
-	stmt := fmt.Sprintf("alter database %s configure zone using num_replicas=%d",
-		name, r.replFactor)
-	if _, err = db.ExecContext(ctx, stmt); err != nil {
-		return err
-	}
 
 	runCmd := fmt.Sprintf(
 		"./workload run kv --db=%s --read-percent=%d --min-block-bytes=%d --max-block-bytes=%d --max-rate=%d",
