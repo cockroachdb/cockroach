@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -52,10 +51,9 @@ func TestCopyOutTransaction(t *testing.T) {
 	`)
 	require.NoError(t, err)
 
-	pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
-		s.AdvSQLAddr(),
-		"StartServer", /* prefix */
-		url.User(username.RootUser),
+	pgURL, cleanupGoDB, err := s.PGUrlE(
+		serverutils.CertsDirPrefix("StartServer"),
+		serverutils.User(username.RootUser),
 	)
 	require.NoError(t, err)
 	s.AppStopper().AddCloser(stop.CloserFn(func() { cleanupGoDB() }))
@@ -120,10 +118,9 @@ func TestCopyOutRandom(t *testing.T) {
 
 	// Use pgx for this next bit as it allows selecting rows by raw values.
 	// Furthermore, it handles CopyTo!
-	pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
-		s.AdvSQLAddr(),
-		"StartServer", /* prefix */
-		url.User(username.RootUser),
+	pgURL, cleanupGoDB, err := s.PGUrlE(
+		serverutils.CertsDirPrefix("StartServer"),
+		serverutils.User(username.RootUser),
 	)
 	require.NoError(t, err)
 	s.AppStopper().AddCloser(stop.CloserFn(func() { cleanupGoDB() }))

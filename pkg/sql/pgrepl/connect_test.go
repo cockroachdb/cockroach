@@ -13,7 +13,6 @@ package pgrepl_test
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -91,11 +90,12 @@ func TestReplicationConnect(t *testing.T) {
 				sqlDB.Exec(t, `GRANT ADMIN TO testuser`)
 			}
 
-			u := url.User(username.TestUser)
+			u := username.TestUser
 			if tc.useRoot {
-				u = url.User(username.RootUser)
+				u = username.RootUser
 			}
-			pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "pgrepl_conn_test", u)
+
+			pgURL, cleanup := s.PGUrl(t, serverutils.CertsDirPrefix("pgrepl_conn_test"), serverutils.User(u))
 			defer cleanup()
 
 			cfg, err := pgx.ParseConfig(pgURL.String())

@@ -12,7 +12,6 @@ package pgrepl
 
 import (
 	"context"
-	"net/url"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -40,7 +39,9 @@ func TestExtendedProtocolDisabled(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE USER testuser LOGIN REPLICATION`)
 
-	pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "pgrepl_extended_protocol_test", url.User(username.TestUser))
+	pgURL, cleanup := s.PGUrl(
+		t, serverutils.CertsDirPrefix("pgrepl_extended_protocol_test"), serverutils.User(username.TestUser),
+	)
 	defer cleanup()
 
 	cfg, err := pgconn.ParseConfig(pgURL.String())

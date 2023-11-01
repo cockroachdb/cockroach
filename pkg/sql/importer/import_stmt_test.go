@@ -1693,11 +1693,10 @@ func TestImportRowLimit(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	// Also create a pgx connection so we can check notices.
-	pgURL, cleanup := sqlutils.PGUrl(
+	pgURL, cleanup := tc.ApplicationLayer(0).PGUrl(
 		t,
-		tc.ApplicationLayer(0).AdvSQLAddr(),
-		"TestImportRowLimit",
-		url.User(username.RootUser),
+		serverutils.CertsDirPrefix("TestImportRowLimit"),
+		serverutils.User(username.RootUser),
 	)
 	defer cleanup()
 	config, err := pgx.ParseConfig(pgURL.String())
@@ -6785,8 +6784,9 @@ func TestImportClientDisconnect(t *testing.T) {
 	// Make credentials for the new connection.
 	runner.Exec(t, `CREATE USER testuser`)
 	runner.Exec(t, `GRANT admin TO testuser`)
-	pgURL, cleanup := sqlutils.PGUrl(t, tc.ApplicationLayer(0).AdvSQLAddr(),
-		"TestImportClientDisconnect-testuser", url.User("testuser"))
+	pgURL, cleanup := tc.ApplicationLayer(0).PGUrl(t,
+		serverutils.CertsDirPrefix("TestImportClientDisconnect-testuser"), serverutils.User("testuser"),
+	)
 	defer cleanup()
 	runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v STRING)")
 

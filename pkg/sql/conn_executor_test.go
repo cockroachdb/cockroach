@@ -1194,7 +1194,7 @@ func TestTransactionDeadline(t *testing.T) {
 		},
 	}
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantAlwaysEnabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		Knobs:             knobs,
 	})
 	defer s.Stopper().Stop(ctx)

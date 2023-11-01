@@ -1,15 +1,15 @@
 # Ensure that we respect tenant span config limits, rejecting schema change
 # operations that take us past it.
 
-initialize tenant=10
+initialize tenant=11
 ----
 
-exec-sql tenant=10
+exec-sql tenant=11
 CREATE DATABASE db;
 CREATE TABLE db.t1(i INT PRIMARY KEY);
 ----
 
-query-sql tenant=10
+query-sql tenant=11
 SELECT span_count FROM system.span_count;
 ----
 3
@@ -17,35 +17,35 @@ SELECT span_count FROM system.span_count;
 override limit=3
 ----
 
-exec-sql tenant=10
+exec-sql tenant=11
 CREATE TABLE db.t2(i INT PRIMARY KEY);
 ----
 err: pq: exceeded limit for number of table spans
 
-query-sql tenant=10
+query-sql tenant=11
 SELECT span_count FROM system.span_count;
 ----
 3
 
-query-sql tenant=10
+query-sql tenant=11
 SELECT table_name FROM [SHOW TABLES FROM db];
 ----
 t1
 
-exec-sql tenant=10
+exec-sql tenant=11
 DROP TABLE db.t1;
 ----
 
-exec-sql tenant=10
+exec-sql tenant=11
 CREATE TABLE db.t2(i INT PRIMARY KEY);
 ----
 
-query-sql tenant=10
+query-sql tenant=11
 SELECT span_count FROM system.span_count;
 ----
 3
 
-query-sql tenant=10
+query-sql tenant=11
 SELECT table_name FROM [SHOW TABLES FROM db];
 ----
 t2

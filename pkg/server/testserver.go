@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -499,6 +500,35 @@ func (ts *testServer) SQLConnE(opts ...serverutils.SQLConnOption) (*gosql.DB, er
 		ts.cfg.SQLAdvertiseAddr,
 		ts.cfg.Insecure,
 		options.ClientCerts,
+		options.CertsDirPrefix,
+	)
+}
+
+// PGUrl is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) PGUrl(
+	test serverutils.TestFataler, opts ...serverutils.SQLConnOption,
+) (url.URL, func()) {
+	u, cleanupFn, err := ts.PGUrlE(opts...)
+	if err != nil {
+		test.Fatal(err)
+	}
+	return u, cleanupFn
+}
+
+// PGUrlE is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) PGUrlE(opts ...serverutils.SQLConnOption) (url.URL, func(), error) {
+	options := serverutils.DefaultSQLConnOptions()
+	for _, opt := range opts {
+		opt(options)
+	}
+	return pgURL(
+		options.DBName,
+		options.User,
+		catconstants.SystemTenantName,
+		ts.cfg.SQLAdvertiseAddr,
+		ts.cfg.Insecure,
+		options.ClientCerts,
+		options.CertsDirPrefix,
 	)
 }
 
@@ -566,30 +596,9 @@ func (ts *testServer) TestTenant() serverutils.ApplicationLayerInterface {
 	return ts.testTenants[0]
 }
 
-// maybeStartDefaultTestTenant might start a test tenant. This can then be used
-// for multi-tenant testing, where the default SQL connection will be made to
-// this tenant instead of to the system tenant. Note that we will
-// currently only attempt to start a test tenant if we're running in an
-// enterprise enabled build. This is due to licensing restrictions on the MT
-// capabilities.
-func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
-	if !(ts.params.DefaultTestTenant.TestTenantAlwaysDisabled() ||
-		ts.params.DefaultTestTenant.TestTenantAlwaysEnabled()) {
-		return errors.WithHint(
-			errors.AssertionFailedf("programming error: no decision taken about the default test tenant"),
-			"Maybe add the missing call to serverutils.ShouldStartDefaultTestTenant()?")
-	}
-
-	// If the flag has been set to disable the default test tenant, don't start
-	// it here.
-	if ts.params.DefaultTestTenant.TestTenantAlwaysDisabled() {
-		return nil
-	}
-
-	if ts.params.DisableSQLServer {
-		return serverutils.PreventDisableSQLForTenantError()
-	}
-
+func (ts *testServer) startDefaultTestTenant(
+	ctx context.Context,
+) (serverutils.ApplicationLayerInterface, error) {
 	tenantSettings := cluster.MakeTestingClusterSettings()
 	if st := ts.params.Settings; st != nil {
 		// Copy overrides and other test-specific configuration,
@@ -634,6 +643,52 @@ func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 	if ts.params.Knobs.Server != nil {
 		params.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs = ts.params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
 	}
+	return ts.StartTenant(ctx, params)
+}
+
+func (ts *testServer) startSharedProcessDefaultTestTenant(
+	ctx context.Context,
+) (serverutils.ApplicationLayerInterface, error) {
+	params := base.TestSharedProcessTenantArgs{
+		TenantName:  "test-tenant",
+		TenantID:    serverutils.TestTenantID(),
+		Knobs:       ts.params.Knobs,
+		UseDatabase: ts.params.UseDatabase,
+	}
+	// See comment above on separate process tenant regarding the testing knobs.
+	params.Knobs.Server = &TestingKnobs{}
+	if ts.params.Knobs.Server != nil {
+		params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs = ts.params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
+	}
+
+	tenant, _, err := ts.StartSharedProcessTenant(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	return tenant, err
+}
+
+// maybeStartDefaultTestTenant might start a test tenant. This can then be used
+// for multi-tenant testing, where the default SQL connection will be made to
+// this tenant instead of to the system tenant.
+func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
+	if ts.params.DefaultTestTenant.TestTenantNoDecisionMade() {
+		return errors.WithHint(
+			errors.AssertionFailedf(
+				"programming error: no decision taken about starting the default test tenant or which mode to use",
+			), "Maybe add the missing call to serverutils.ShouldStartDefaultTestTenant()?")
+	}
+
+	// If the flag has been set to disable the default test tenant, don't start
+	// it here.
+	if ts.params.DefaultTestTenant.TestTenantAlwaysDisabled() {
+		return nil
+	}
+
+	if ts.params.DisableSQLServer {
+		return serverutils.PreventDisableSQLForTenantError()
+	}
 
 	// Temporarily disable the error that is returned if a tenant should not be started manually,
 	// so that we can start the default test tenant internally here.
@@ -647,7 +702,17 @@ func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 		}
 	}()
 
-	tenant, err := ts.StartTenant(ctx, params)
+	var startTenantFn func(context.Context) (serverutils.ApplicationLayerInterface, error)
+	switch {
+	case ts.params.DefaultTestTenant.ExternalProcessMode():
+		startTenantFn = ts.startDefaultTestTenant
+	case ts.params.DefaultTestTenant.SharedProcessMode():
+		startTenantFn = ts.startSharedProcessDefaultTestTenant
+	default:
+		return errors.AssertionFailedf("invalid default test tenant mode %v", ts.params.DefaultTestTenant)
+	}
+
+	tenant, err := startTenantFn(ctx)
 	if err != nil {
 		return err
 	}
@@ -664,6 +729,58 @@ func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 		// test tenants, in which case, you should evaluate what to do about
 		// returning a default SQL address in AdvSQLAddr().
 		return errors.AssertionFailedf("invalid number of test SQL servers %d", len(ts.testTenants))
+	}
+	return nil
+}
+
+func (ts *testServer) grantDefaultTenantCapabilities(
+	ctx context.Context, tenantID roachpb.TenantID, skipTenantCheck bool,
+) error {
+	ie := ts.InternalExecutor().(*sql.InternalExecutor)
+	for _, setting := range []settings.Setting{
+		sql.SecondaryTenantScatterEnabled,
+		sql.SecondaryTenantSplitAtEnabled,
+		sql.SecondaryTenantZoneConfigsEnabled,
+		sql.SecondaryTenantsMultiRegionAbstractionsEnabled,
+	} {
+		// Update the override for this setting. We need to do this
+		// instead of calling .Override() on the setting directly: certain
+		// tests expect to be able to change the value afterwards using
+		// another ALTER VC SET CLUSTER SETTING statement, which is not
+		// possible with regular overrides.
+		_, err := ie.Exec(ctx, "testserver-alter-tenant-cap", nil,
+			fmt.Sprintf("ALTER VIRTUAL CLUSTER [$1] SET CLUSTER SETTING %s = true", setting.Name()), tenantID.ToUint64())
+		if err != nil {
+			if skipTenantCheck {
+				log.Infof(ctx, "ignoring error changing setting because SkipTenantCheck is true: %v", err)
+			} else {
+				return err
+			}
+		}
+	}
+
+	// Waiting for capabilities can take time. To avoid paying this cost in all
+	// cases, we only set the nodelocal storage capability if the caller has
+	// configured an ExternalIODir since nodelocal storage only works with that
+	// configured.
+	shouldGrantNodelocalCap := ts.params.ExternalIODir != ""
+	canGrantNodelocalCap := ts.ClusterSettings().Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantCapabilities)
+	if canGrantNodelocalCap && shouldGrantNodelocalCap {
+		_, err := ie.Exec(ctx, "testserver-alter-tenant-cap", nil,
+			"ALTER TENANT [$1] GRANT CAPABILITY can_use_nodelocal_storage", tenantID.ToUint64())
+		if err != nil {
+			if skipTenantCheck {
+				log.Infof(ctx, "ignoring error granting capability because SkipTenantCheck is true: %v", err)
+			} else {
+				return err
+			}
+		} else {
+			if err := ts.WaitForTenantCapabilities(ctx, tenantID, map[tenantcapabilities.ID]string{
+				tenantcapabilities.CanUseNodelocalStorage: "true",
+			}, ""); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -850,6 +967,41 @@ func (t *testTenant) SQLConnE(opts ...serverutils.SQLConnOption) (*gosql.DB, err
 		t.Cfg.SQLAdvertiseAddr,
 		t.Cfg.Insecure,
 		options.ClientCerts,
+		options.CertsDirPrefix,
+	)
+}
+
+// PGUrl is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) PGUrl(
+	test serverutils.TestFataler, opts ...serverutils.SQLConnOption,
+) (url.URL, func()) {
+	u, cleanupFn, err := t.PGUrlE(opts...)
+	if err != nil {
+		test.Fatal(err)
+	}
+	return u, cleanupFn
+}
+
+// PGUrlE is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) PGUrlE(opts ...serverutils.SQLConnOption) (url.URL, func(), error) {
+	options := serverutils.DefaultSQLConnOptions()
+	for _, opt := range opts {
+		opt(options)
+	}
+	tenantName := t.t.tenantName
+	if !t.Cfg.DisableSQLListener {
+		// This tenant server has its own SQL listener. It will not accept
+		// a "cluster" connection parameter.
+		tenantName = ""
+	}
+	return pgURL(
+		options.DBName,
+		options.User,
+		tenantName,
+		t.Cfg.SQLAdvertiseAddr,
+		t.Cfg.Insecure,
+		options.ClientCerts,
+		options.CertsDirPrefix,
 	)
 }
 
@@ -1138,7 +1290,12 @@ func (ts *testServer) StartSharedProcessTenant(
 	if err := args.TenantName.IsValid(); err != nil {
 		return nil, nil, err
 	}
-
+	// Helper function to execute SQL statements.
+	ie := ts.InternalExecutor().(*sql.InternalExecutor)
+	execSQL := func(opName, stmt string, qargs ...interface{}) error {
+		_, err := ie.ExecEx(ctx, opName, nil /* txn */, sessiondata.NodeUserSessionDataOverride, stmt, qargs...)
+		return err
+	}
 	// Save the args for use if the server needs to be created.
 	func() {
 		ts.topLevelServer.serverController.mu.Lock()
@@ -1146,7 +1303,7 @@ func (ts *testServer) StartSharedProcessTenant(
 		ts.topLevelServer.serverController.mu.testArgs[args.TenantName] = args
 	}()
 
-	tenantRow, err := ts.InternalExecutor().(*sql.InternalExecutor).QueryRow(
+	tenantRow, err := ie.QueryRow(
 		ctx, "testserver-check-tenant-active", nil, /* txn */
 		"SELECT id FROM system.tenants WHERE name=$1 AND active=true",
 		args.TenantName,
@@ -1170,13 +1327,8 @@ func (ts *testServer) StartSharedProcessTenant(
 		// The tenant doesn't exist; let's create it.
 		if args.TenantID.IsSet() {
 			// Create with name and ID.
-			_, err := ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
-				ctx,
-				"create-tenant",
-				nil, /* txn */
-				sessiondata.NodeUserSessionDataOverride,
-				"SELECT crdb_internal.create_tenant($1,$2)",
-				args.TenantID.ToUint64(), args.TenantName,
+			err := execSQL(
+				"create-tenant", "SELECT crdb_internal.create_tenant($1,$2)", args.TenantID.ToUint64(), args.TenantName,
 			)
 			if err != nil {
 				return nil, nil, err
@@ -1184,7 +1336,7 @@ func (ts *testServer) StartSharedProcessTenant(
 			tenantID = args.TenantID
 		} else {
 			// Create with name alone; allocate an ID automatically.
-			row, err := ts.InternalExecutor().(*sql.InternalExecutor).QueryRowEx(
+			row, err := ie.QueryRowEx(
 				ctx,
 				"create-tenant",
 				nil, /* txn */
@@ -1201,11 +1353,8 @@ func (ts *testServer) StartSharedProcessTenant(
 	}
 
 	// Also mark it for shared-process execution.
-	_, err = ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
-		ctx,
+	err = execSQL(
 		"start-tenant-shared-service",
-		nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
 		"ALTER TENANT $1 START SERVICE SHARED",
 		args.TenantName,
 	)
@@ -1241,6 +1390,10 @@ func (ts *testServer) StartSharedProcessTenant(
 		pgL:            sqlServerWrapper.loopbackPgL,
 		httpTestServer: hts,
 		drain:          sqlServerWrapper.drainServer,
+	}
+
+	if err = ts.grantDefaultTenantCapabilities(ctx, tenantID, args.SkipTenantCheck); err != nil {
+		return nil, nil, err
 	}
 
 	sqlDB, err := ts.SQLConnE(serverutils.DBName("cluster:" + string(args.TenantName) + "/" + args.UseDatabase))
@@ -1536,53 +1689,9 @@ func (ts *testServer) StartTenant(
 	baseCfg.HeapProfileDirName = ts.Cfg.BaseConfig.HeapProfileDirName
 	baseCfg.GoroutineDumpDirName = ts.Cfg.BaseConfig.GoroutineDumpDirName
 
-	for _, setting := range []settings.Setting{
-		sql.SecondaryTenantScatterEnabled,
-		sql.SecondaryTenantSplitAtEnabled,
-		sql.SecondaryTenantZoneConfigsEnabled,
-		sql.SecondaryTenantsMultiRegionAbstractionsEnabled,
-	} {
-		// Update the override for this setting. We need to do this
-		// instead of calling .Override() on the setting directly: certain
-		// tests expect to be able to change the value afterwards using
-		// another ALTER VC SET CLUSTER SETTING statement, which is not
-		// possible with regular overrides.
-		_, err := ie.Exec(ctx, "testserver-alter-tenant-cap", nil,
-			fmt.Sprintf("ALTER VIRTUAL CLUSTER [$1] SET CLUSTER SETTING %s = true", setting.Name()), params.TenantID.ToUint64())
-		if err != nil {
-			if params.SkipTenantCheck {
-				log.Infof(ctx, "ignoring error changing setting because SkipTenantCheck is true: %v", err)
-			} else {
-				return nil, err
-			}
-		}
-	}
-
-	// Waiting for capabilities can time To avoid paying this cost in all
-	// cases, we only set the nodelocal storage capability if the caller has
-	// configured an ExternalIODir since nodelocal storage only works with
-	// that configured.
-	//
-	// TODO(ssd): We do not set this capability in
-	// StartSharedProcessTenant.
-	shouldGrantNodelocalCap := ts.params.ExternalIODir != ""
-	canGrantNodelocalCap := ts.ClusterSettings().Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantCapabilities)
-	if canGrantNodelocalCap && shouldGrantNodelocalCap {
-		_, err := ie.Exec(ctx, "testserver-alter-tenant-cap", nil,
-			"ALTER TENANT [$1] GRANT CAPABILITY can_use_nodelocal_storage", params.TenantID.ToUint64())
-		if err != nil {
-			if params.SkipTenantCheck {
-				log.Infof(ctx, "ignoring error granting capability because SkipTenantCheck is true: %v", err)
-			} else {
-				return nil, err
-			}
-		} else {
-			if err := ts.WaitForTenantCapabilities(ctx, params.TenantID, map[tenantcapabilities.ID]string{
-				tenantcapabilities.CanUseNodelocalStorage: "true",
-			}, ""); err != nil {
-				return nil, err
-			}
-		}
+	// Grant the tenant the default capabilities.
+	if err := ts.grantDefaultTenantCapabilities(ctx, params.TenantID, params.SkipTenantCheck); err != nil {
+		return nil, err
 	}
 
 	// For now, we don't support split RPC/SQL ports for secondary tenants
