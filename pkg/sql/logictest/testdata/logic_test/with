@@ -1319,3 +1319,21 @@ SELECT t3.c2, t3.c1 FROM t3, t100561b t2
 WHERE t3.c2 = t2.k
 ----
 1  NULL
+
+# Regression test for #113625
+statement error pgcode 42P19 pq: aggregate functions are not allowed in a recursive query's recursive term
+WITH RECURSIVE
+  x(n) AS (SELECT 1 UNION ALL SELECT count(*) FROM x)
+SELECT * FROM x;
+
+statement ok
+CREATE TABLE t113625 (a INT);
+INSERT INTO t113625 VALUES (1),(2),(3);
+
+# Aggregate functions are allowed if they are in the non-recursive term.
+query I
+WITH RECURSIVE
+  x(n) AS (SELECT count(*) from t UNION ALL SELECT n FROM x WHERE n < 0)
+SELECT * FROM x;
+----
+3

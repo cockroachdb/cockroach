@@ -150,6 +150,9 @@ type Builder struct {
 	// insideDataSource is true when we are processing a data source.
 	insideDataSource bool
 
+	// insideRecursiveCTE is true when we are processing a recursive CTE.
+	insideRecursiveCTE bool
+
 	// If set, we are collecting view dependencies in schemaDeps. This can only
 	// happen inside view/function definitions.
 	//

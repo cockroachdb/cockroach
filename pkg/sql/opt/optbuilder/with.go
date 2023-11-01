@@ -251,6 +251,12 @@ func (b *Builder) buildCTE(
 		return b.buildCTE(cte, cteScope, false /* recursive */)
 	}
 
+	insideRecursiveCTE := b.insideRecursiveCTE
+	b.insideRecursiveCTE = true
+	defer func() {
+		b.insideRecursiveCTE = insideRecursiveCTE
+	}()
+
 	// Set up an error if the initial part has a recursive reference.
 	cteSrc.onRef = func() {
 		panic(pgerror.Newf(
