@@ -386,7 +386,7 @@ func (s *Container) RecordTransaction(
 		status = insights.Transaction_Completed
 	}
 
-	s.insights.ObserveTransaction(value.SessionID, &insights.Transaction{
+	s.insights.ObserveTransaction(ctx, value.SessionID, &insights.Transaction{
 		ID:              value.TransactionID,
 		FingerprintID:   key,
 		UserPriority:    value.Priority.String(),

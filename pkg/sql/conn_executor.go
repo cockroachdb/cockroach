@@ -414,7 +414,7 @@ func NewServer(
 ) *Server {
 	metrics := makeMetrics(false /* internal */)
 	serverMetrics := makeServerMetrics(cfg)
-	insightsProvider := insights.New(cfg.Settings, serverMetrics.InsightsMetrics)
+	insightsProvider := insights.New(cfg.Settings, serverMetrics.InsightsMetrics, eventsExporter)
 	reportedSQLStats := sslocal.New(
 		cfg.Settings,
 		sqlstats.MaxMemReportedSQLStatsStmtFingerprints,
@@ -480,7 +480,7 @@ func NewServer(
 		FlushCounter:   serverMetrics.StatsMetrics.SQLStatsFlushStarted,
 		FailureCounter: serverMetrics.StatsMetrics.SQLStatsFlushFailure,
 		FlushDuration:  serverMetrics.StatsMetrics.SQLStatsFlushDuration,
-	}, memSQLStats, eventsExporter)
+	}, memSQLStats)
 
 	s.sqlStats = persistedSQLStats
 	s.sqlStatsController = persistedSQLStats.GetController(cfg.SQLStatusServer)
@@ -605,6 +605,7 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	// should be accounted for in their costs.
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 
+	s.insights.Start(ctx, stopper)
 	s.sqlStats.Start(ctx, stopper)
 
 	s.schemaTelemetryController.Start(ctx, stopper)
@@ -613,8 +614,6 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	// accumulated in the reporter when the telemetry server fails.
 	// Usually it is telemetry's reporter's job to clear the reporting SQL Stats.
 	s.reportedStats.Start(ctx, stopper)
-
-	s.insights.Start(ctx, stopper)
 
 	s.txnIDCache.Start(ctx, stopper)
 }

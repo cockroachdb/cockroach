@@ -26,8 +26,6 @@ go_library(
         "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
-        "//pkg/obs",
-        "//pkg/obsservice/obspb",
         "//pkg/scheduledjobs",
         "//pkg/security/username",
         "//pkg/server/serverpb",
