@@ -3495,13 +3495,16 @@ func (kl *keyLocks) requestDone(g *lockTableGuardImpl) (gc bool) {
 		}
 	}
 
-	if !kl.isLocked() && doneRemoval {
-		// The first request in the queuedLockingRequests should always be an
-		// inactive, transactional locking request if the lock isn't held. That may
-		// no longer be true if the guy we removed above was serving this purpose;
-		// the call to maybeReleaseCompatibleLockingRequests should fix that. And if
-		// it wasn't serving that purpose, it'll be a no-op.
-		kl.maybeReleaseCompatibleLockingRequests()
+	if doneRemoval {
+		// If a locking request is removed from the receiver's wait queues without
+		// actually acquiring a lock other locking requests may be able to proceed.
+		// This is because locking requests must actively wait if they conflict with
+		// either the lock holder or any lower sequence numbered locking requests.
+		// In cases where request(s) were waiting just because they conflicted with
+		// the request we just removed, and they are compatible with all lock
+		// holders (if any), we need to let them go. A call to recomputeWaitQueues
+		// will do exactly that, and will be a no-op otherwise.
+		kl.recomputeWaitQueues(g.lt.settings)
 	}
 
 	if !doneRemoval {
