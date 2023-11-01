@@ -758,9 +758,9 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 		COALESCE(insight.contention, 0::INTERVAL)::FLOAT,
 		COALESCE(sum(txn_contention.contention_duration), 0::INTERVAL)::FLOAT AS durationMs,
 		COALESCE(txn_contention.schema_name, ''::STRING)::STRING AS schema_name,
-		txn_contention.database_name,
-		txn_contention.table_name,
-		txn_contention.index_name,
+		COALESCE(txn_contention.database_name, ''::STRING)::STRING AS database_name,
+		COALESCE(txn_contention.table_name, ''::STRING)::STRING AS table_name,
+		COALESCE(txn_contention.index_name, ''::STRING)::STRING AS index_name,
 		encode(txn_contention.waiting_txn_fingerprint_id, 'hex') AS waiting_txn_fingerprint_id
 		FROM crdb_internal.cluster_execution_insights insight
 		left join crdb_internal.transaction_contention_events txn_contention on  insight.stmt_id = txn_contention.waiting_stmt_id
