@@ -147,15 +147,6 @@ func (s *schemaChange) Tables() []workload.Table {
 	return nil
 }
 
-// Hooks implements the workload.Hookser interface.
-func (s *schemaChange) Hooks() workload.Hooks {
-	return workload.Hooks{
-		PostRun: func(_ time.Duration) error {
-			return s.closeJSONLogFile()
-		},
-	}
-}
-
 // Ops implements the workload.Opser interface.
 func (s *schemaChange) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
@@ -199,7 +190,13 @@ func (s *schemaChange) Ops(
 	}
 	declarativeOps := newDeck(rng, declarativeOpWeights...)
 
-	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	ql := workload.QueryLoad{
+		SQLDatabase: sqlDatabase,
+		Close: func(ctx context.Context) error {
+			pool.Close()
+			return s.closeJSONLogFile()
+		},
+	}
 
 	var artifactsLog *atomicLog
 	if s.logFilePath != "" {
@@ -251,9 +248,6 @@ func (s *schemaChange) Ops(
 		s.workers = append(s.workers, w)
 
 		ql.WorkerFns = append(ql.WorkerFns, w.run)
-		ql.Close = func(ctx2 context.Context) {
-			pool.Close()
-		}
 	}
 	return ql, nil
 }
