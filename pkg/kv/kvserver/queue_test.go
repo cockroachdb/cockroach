@@ -65,7 +65,7 @@ func (tq *testQueueImpl) shouldQueue(
 func (tq *testQueueImpl) process(
 	_ context.Context, _ *Replica, _ spanconfig.StoreReader,
 ) (bool, error) {
-	atomic.AddInt32(&tq.processed, 1)
+	defer atomic.AddInt32(&tq.processed, 1)
 	if tq.err != nil {
 		return false, tq.err
 	}
