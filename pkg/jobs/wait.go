@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -118,6 +119,13 @@ func (r *Registry) waitForJobsToBeTerminalOrPaused(
 			query,
 		)
 		if err != nil {
+			// While polling, we could encounter retryable errors, which may
+			// not get internally retried in the connection executor. So retry,
+			// here. When querying for jobs we will restart with a new transaction,
+			// which will hopefully not hit this retryable error.
+			if errors.HasInterface(err, (*pgerror.ClientVisibleRetryError)(nil)) {
+				continue
+			}
 			return errors.Wrap(err, "polling for queued jobs to complete")
 		}
 		if row == nil {
