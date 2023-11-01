@@ -14,6 +14,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -89,6 +91,16 @@ var HighRetryCountThreshold = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 	settings.WithPublic)
 
+var SQLInsightsStatsExportEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.insights.export.enabled",
+	"controls whether statement and transaction insights statistics are exported to "+
+		"the address pointed to by the CLI flag, --"+cliflags.ObsServiceAddr.Name+
+		". Insights are exported as soon as they're detected. Note that if the --"+
+		cliflags.ObsServiceAddr.Name+" was not set at node startup, enabling this setting will "+
+		"have no effect until the node is restarted with the flag set.",
+	false)
+
 // Metrics holds running measurements of various insights-related runtime stats.
 type Metrics struct {
 	// Fingerprints measures the number of statement fingerprints being monitored for
@@ -141,7 +153,7 @@ type Writer interface {
 	ObserveStatement(sessionID clusterunique.ID, statement *Statement)
 
 	// ObserveTransaction notifies the registry of the end of a transaction.
-	ObserveTransaction(sessionID clusterunique.ID, transaction *Transaction)
+	ObserveTransaction(ctx context.Context, sessionID clusterunique.ID, transaction *Transaction)
 }
 
 // WriterProvider offers a Writer.
@@ -182,8 +194,10 @@ type Provider interface {
 }
 
 // New builds a new Provider.
-func New(st *cluster.Settings, metrics Metrics) Provider {
-	store := newStore(st)
+func New(
+	st *cluster.Settings, metrics Metrics, eventsExporter obs.EventsExporterInterface,
+) Provider {
+	store := newStore(st, eventsExporter)
 	anomalyDetector := newAnomalyDetector(st, metrics)
 
 	return &defaultProvider{
@@ -192,9 +206,7 @@ func New(st *cluster.Settings, metrics Metrics) Provider {
 			newRegistry(st, &compositeDetector{detectors: []detector{
 				&latencyThresholdDetector{st: st},
 				anomalyDetector,
-			}}, &compositeSink{sinks: []sink{
-				store,
-			}}),
+			}}, store),
 		),
 		anomalyDetector: anomalyDetector,
 	}
