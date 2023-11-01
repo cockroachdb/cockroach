@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/redact"
 	"github.com/spf13/cobra"
 )
@@ -63,6 +64,17 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	}
 
 	newServerFn := func(ctx context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverctl.ServerStartupInterface, error) {
+		// The context passed into NewSeparateProcessTenantServer will be
+		// captured in makeTenantSQLServerArgs by a few users that will hold on
+		// to it. Those users can log something into the current tracing span
+		// (created in runStartInternal) after the span has been Finish()'ed
+		// which is disallowed. To go around this issue, in this code path we
+		// create a new tracing span that is never finished since those users
+		// stay alive until the tenant server is up.
+		// TODO(yuzefovich): consider changing NewSeparateProcessTenantServer to
+		// not take in a context and - akin to NewServer - to construct its own
+		// from context.Background.
+		ctx, _ = tracing.ChildSpan(ctx, "mt-start-sql" /* opName */)
 		// Beware of not writing simply 'return server.NewServer()'. This is
 		// because it would cause the serverStartupInterface reference to
 		// always be non-nil, even if NewServer returns a nil pointer (and
