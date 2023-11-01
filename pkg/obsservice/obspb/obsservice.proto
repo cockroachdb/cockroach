@@ -120,7 +120,7 @@ message StatementInsightsStatistics {
   double run_lat_seconds = 31;
   // ServiceLatSeconds is the time in seconds to service the query, from start of parse to end of execute.
   double service_lat_seconds = 32;
-  repeated ContentionEvent contention_events = 33 [(gogoproto.nullable) = true];
+  repeated ContentionEvent contention_events = 33;
 }
 
 message ContentionEvent {

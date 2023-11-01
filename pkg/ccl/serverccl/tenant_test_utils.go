@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -46,6 +47,7 @@ type testTenant struct {
 	tenantStatus             serverpb.SQLStatusServer
 	tenantSQLStats           *persistedsqlstats.PersistedSQLStats
 	tenantContentionRegistry *contention.Registry
+	tenantInsightsProvider   *insights.Provider
 }
 
 func (h *testTenant) GetRPCContext() *rpc.Context {
@@ -68,6 +70,10 @@ func (h *testTenant) TenantContentionRegistry() *contention.Registry {
 	return h.tenantContentionRegistry
 }
 
+func (h *testTenant) TenantInsightsProvider() *insights.Provider {
+	return h.tenantInsightsProvider
+}
+
 func (h *testTenant) GetTenant() serverutils.ApplicationLayerInterface {
 	return h.tenant
 }
@@ -84,6 +90,7 @@ type TestTenant interface {
 	TenantSQLStats() *persistedsqlstats.PersistedSQLStats
 	TenantStatusSrv() serverpb.SQLStatusServer
 	TenantContentionRegistry() *contention.Registry
+	TenantInsightsProvider() *insights.Provider
 	GetRPCContext() *rpc.Context
 	Cleanup(t *testing.T)
 }
@@ -101,6 +108,7 @@ func newTestTenant(
 	sqlStats := tenant.SQLServer().(*sql.Server).
 		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
 	contentionRegistry := tenant.ExecutorConfig().(sql.ExecutorConfig).ContentionRegistry
+	insightsProvider := tenant.SQLServer().(*sql.Server).GetInsightsProvider()
 
 	return &testTenant{
 		tenant:                   tenant,
@@ -109,6 +117,7 @@ func newTestTenant(
 		tenantStatus:             status,
 		tenantSQLStats:           sqlStats,
 		tenantContentionRegistry: contentionRegistry,
+		tenantInsightsProvider:   insightsProvider,
 	}
 }
 
@@ -204,6 +213,7 @@ type TenantClusterHelper interface {
 	TenantSQLStats(idx serverIdx) *persistedsqlstats.PersistedSQLStats
 	TenantStatusSrv(idx serverIdx) serverpb.SQLStatusServer
 	TenantContentionRegistry(idx serverIdx) *contention.Registry
+	TenantInsightsProvider(idx serverIdx) *insights.Provider
 	Cleanup(t *testing.T)
 }
 
@@ -263,6 +273,10 @@ func (c tenantCluster) TenantStatusSrv(idx serverIdx) serverpb.SQLStatusServer {
 
 func (c tenantCluster) TenantContentionRegistry(idx serverIdx) *contention.Registry {
 	return c.Tenant(idx).TenantContentionRegistry()
+}
+
+func (c tenantCluster) TenantInsightsProvider(idx serverIdx) *insights.Provider {
+	return c.Tenant(idx).TenantInsightsProvider()
 }
 
 func (c tenantCluster) Cleanup(t *testing.T) {

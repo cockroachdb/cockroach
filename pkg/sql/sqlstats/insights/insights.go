@@ -12,8 +12,11 @@ package insights
 
 import (
 	"context"
+	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -89,6 +92,17 @@ var HighRetryCountThreshold = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 	settings.WithPublic)
 
+var SQLInsightsStatsExportEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.insights.export.enabled",
+	"controls whether statement and transaction insights statistics are exported to "+
+		"the address pointed to by the CLI flag, --"+cliflags.ObsServiceAddr.Name+
+		". The frequency at which the stats are exported is determined by the "+
+		"sql.stats.flush.interval setting. Note that if the --"+cliflags.ObsServiceAddr.Name+
+		" was not set at node startup, enabling this setting will have no effect until the "+
+		"node is restarted with the flag set.",
+	false)
+
 // Metrics holds running measurements of various insights-related runtime stats.
 type Metrics struct {
 	// Fingerprints measures the number of statement fingerprints being monitored for
@@ -152,6 +166,9 @@ type WriterProvider func(internal bool) Writer
 type Reader interface {
 	// IterateInsights calls visitor with each of the currently retained set of insights.
 	IterateInsights(context.Context, func(context.Context, *Insight))
+
+	// ExportInsights export the Insights to obsservice and remove it from the registry.
+	ExportInsights(context.Context, *sync.Pool, *obs.EventsExporterInterface, *cluster.Settings) error
 }
 
 type LatencyInformation interface {
