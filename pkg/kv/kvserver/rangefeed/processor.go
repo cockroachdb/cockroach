@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -27,19 +28,21 @@ import (
 )
 
 const (
-	// defaultPushTxnsInterval is the default interval at which a Processor will
-	// push all transactions in the unresolvedIntentQueue that are above the age
-	// specified by PushTxnsAge.
-	defaultPushTxnsInterval = 250 * time.Millisecond
-	// defaultPushTxnsAge is the default age at which a Processor will begin to
-	// consider a transaction old enough to push.
-	defaultPushTxnsAge = 10 * time.Second
 	// defaultCheckStreamsInterval is the default interval at which a Processor
 	// will check all streams to make sure they have not been canceled.
 	defaultCheckStreamsInterval = 1 * time.Second
 )
 
 var (
+	// defaultPushTxnsInterval is the default interval at which a Processor will
+	// push all transactions in the unresolvedIntentQueue that are above the age
+	// specified by PushTxnsAge.
+	defaultPushTxnsInterval = envutil.EnvOrDefaultDuration(
+		"COCKROACH_RANGEFEED_PUSH_TXNS_INTERVAL", 250*time.Millisecond)
+	// defaultPushTxnsAge is the default age at which a Processor will begin to
+	// consider a transaction old enough to push.
+	defaultPushTxnsAge = envutil.EnvOrDefaultDuration(
+		"COCKROACH_RANGEFEED_PUSH_TXNS_AGE", 10*time.Second)
 	// PushTxnsEnabled can be used to disable rangefeed txn pushes, typically to
 	// temporarily alleviate contention.
 	PushTxnsEnabled = settings.RegisterBoolSetting(
