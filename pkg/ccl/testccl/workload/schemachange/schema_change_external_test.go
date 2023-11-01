@@ -110,5 +110,5 @@ func TestWorkload(t *testing.T) {
 		g.Go(workerFn(gCtx, ql.WorkerFns[i]))
 	}
 	require.NoError(t, g.Wait())
-	ql.Close(ctx)
+	require.NoError(t, ql.Close(ctx))
 }

@@ -203,8 +203,8 @@ func (b *bank) Ops(
 
 	ql := workload.QueryLoad{
 		SQLDatabase: sqlDatabase,
-		Close: func(_ context.Context) {
-			_ = db.Close()
+		Close: func(_ context.Context) error {
+			return db.Close()
 		},
 	}
 	for i := 0; i < b.connFlags.Concurrency; i++ {
