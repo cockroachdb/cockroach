@@ -78,3 +78,35 @@ del_range k=i1 end=i4
 del_range: "i1"-"i4" -> deleted 2 key(s)
 >> at end:
 <no data>
+
+# Non-inline put.
+run ok
+put k=i4 v=v4 ts=5,0
+----
+>> at end:
+data: "i4"/5.000000000,0 -> /BYTES/v4
+
+# Inline put for a key that is not inline.
+run error
+put k=i4 v=inline4
+----
+>> at end:
+data: "i4"/5.000000000,0 -> /BYTES/v4
+error: (*withstack.withStack:) "i4"/0,0: put is inline=true, but existing value is inline=false
+
+# Inline put.
+run ok
+put k=i5 v=inline5
+----
+>> at end:
+data: "i4"/5.000000000,0 -> /BYTES/v4
+meta: "i5"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline5 mergeTs=<nil> txnDidNotUpdateMeta=false
+
+# Non-inline put for a key that is inline.
+run error
+put notxn k=i5 v=v5 ts=5,0
+----
+>> at end:
+data: "i4"/5.000000000,0 -> /BYTES/v4
+meta: "i5"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline5 mergeTs=<nil> txnDidNotUpdateMeta=false
+error: (*withstack.withStack:) "i5"/0,0: put is inline=false, but existing value is inline=true
