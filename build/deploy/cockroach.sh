@@ -298,7 +298,8 @@ _main() {
 set_env_var "COCKROACH_ARGS"
 
 if [[ -n "$COCKROACH_ARGS" ]]; then
-  _main "$COCKROACH_ARGS"
-else
-  _main "$@"
+  # override positional parameters
+  IFS=' ' eval set -- "$COCKROACH_ARGS"
 fi
+
+_main "$@"
