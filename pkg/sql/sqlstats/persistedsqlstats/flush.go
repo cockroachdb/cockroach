@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -32,7 +33,7 @@ import (
 
 // Flush flushes in-memory sql stats into a system table. Any errors encountered
 // during the flush will be logged as warning.
-func (s *PersistedSQLStats) Flush(ctx context.Context) {
+func (s *PersistedSQLStats) Flush(ctx context.Context, insightsProvider *insights.Provider) {
 	now := s.getTimeNow()
 
 	allowDiscardWhenDisabled := DiscardInMemoryStatsWhenFlushDisabled.Get(&s.cfg.Settings.SV)
@@ -102,6 +103,15 @@ func (s *PersistedSQLStats) Flush(ctx context.Context) {
 		}()
 
 		wg.Wait()
+	}
+
+	// Exporting Insights to Observability Service.
+	exportInsights := insights.SQLInsightsStatsExportEnabled.Get(&s.SQLStats.GetClusterSettings().SV)
+	if exportInsights {
+		err = (*insightsProvider).Reader().ExportInsights(ctx, &s.exportedStmtInsightsStatsPool, &s.eventsExporter)
+		if err != nil {
+			log.Errorf(ctx, "encountered an error at insights export: %v", err)
+		}
 	}
 }
 

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -41,7 +42,7 @@ func TestPersistedSQLStatsReadMemory(t *testing.T) {
 
 	testCluster, ctx := createCluster(t)
 	defer testCluster.Stopper().Stop(ctx)
-	_, sqlStats, expectedStmtsNoConst := insertData(t, testCluster)
+	_, sqlStats, expectedStmtsNoConst, _ := insertData(t, testCluster)
 
 	verifyInMemoryStmtFingerprints(t, expectedStmtsNoConst, "TestPersistedSQLStatsRead", sqlStats)
 	verifyStoredStmtFingerprints(t, expectedStmtsNoConst, sqlStats)
@@ -54,9 +55,9 @@ func TestPersistedSQLStatsReadDisk(t *testing.T) {
 
 	testCluster, ctx := createCluster(t)
 	defer testCluster.Stopper().Stop(ctx)
-	sqlConn, sqlStats, expectedStmtsNoConst := insertData(t, testCluster)
+	sqlConn, sqlStats, expectedStmtsNoConst, insightsProvider := insertData(t, testCluster)
 
-	sqlStats.Flush(ctx)
+	sqlStats.Flush(ctx, insightsProvider)
 	verifyDiskStmtFingerprints(t, sqlConn, expectedStmtsNoConst)
 	verifyStoredStmtFingerprints(t, expectedStmtsNoConst, sqlStats)
 }
@@ -69,8 +70,8 @@ func TestPersistedSQLStatsReadHybrid(t *testing.T) {
 	testCluster, ctx := createCluster(t)
 	defer testCluster.Stopper().Stop(ctx)
 
-	sqlConn, sqlStats, expectedStmtsNoConst := insertData(t, testCluster)
-	sqlStats.Flush(ctx)
+	sqlConn, sqlStats, expectedStmtsNoConst, insightsProvider := insertData(t, testCluster)
+	sqlStats.Flush(ctx, insightsProvider)
 	// We execute each test queries one more time without flushing the stats.
 	// This means that we should see the exact same result as previous subtest
 	// except the execution count field will be incremented. We should not
@@ -140,7 +141,12 @@ func TestPersistedSQLStatsReadHybrid(t *testing.T) {
 
 func insertData(
 	t *testing.T, testCluster serverutils.TestClusterInterface,
-) (*sqlutils.SQLRunner, *persistedsqlstats.PersistedSQLStats, map[string]int64) {
+) (
+	*sqlutils.SQLRunner,
+	*persistedsqlstats.PersistedSQLStats,
+	map[string]int64,
+	*insights.Provider,
+) {
 	server1 := testCluster.Server(0 /* idx */)
 	sqlConn := sqlutils.MakeSQLRunner(server1.SQLConn(t))
 	sqlStats := server1.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
@@ -153,7 +159,7 @@ func insertData(
 			sqlConn.Exec(t, tc.query)
 		}
 	}
-	return sqlConn, sqlStats, expectedStmtsNoConst
+	return sqlConn, sqlStats, expectedStmtsNoConst, server1.SQLServer().(*sql.Server).GetInsightsProvider()
 }
 
 func createCluster(t *testing.T) (serverutils.TestClusterInterface, context.Context) {
