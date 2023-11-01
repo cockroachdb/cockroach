@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -114,7 +115,7 @@ func New(
 		eventsExporter:       eventsExporter,
 		exportedStmtInsightsStatsPool: sync.Pool{
 			New: func() interface{} {
-				return new(obspb.StatementInsightsStatistics)
+				return &obspb.StatementInsightsStatistics{}
 			},
 		},
 	}
@@ -134,8 +135,10 @@ func New(
 }
 
 // Start implements sqlstats.Provider interface.
-func (s *PersistedSQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
-	s.startSQLStatsFlushLoop(ctx, stopper)
+func (s *PersistedSQLStats) Start(
+	ctx context.Context, stopper *stop.Stopper, insightsProvider *insights.Provider,
+) {
+	s.startSQLStatsFlushLoop(ctx, stopper, insightsProvider)
 	s.jobMonitor.start(ctx, stopper, s.drain, &s.tasksDoneWG)
 	stopper.AddCloser(stop.CloserFn(func() {
 		// TODO(knz,yahor): This really should be just Stop(), but there
@@ -169,7 +172,9 @@ func (s *PersistedSQLStats) GetController(server serverpb.SQLStatusServer) *Cont
 	return NewController(s, server, s.cfg.DB)
 }
 
-func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper *stop.Stopper) {
+func (s *PersistedSQLStats) startSQLStatsFlushLoop(
+	ctx context.Context, stopper *stop.Stopper, insightsProvider *insights.Provider,
+) {
 	s.tasksDoneWG.Add(1)
 	err := stopper.RunAsyncTask(ctx, "sql-stats-worker", func(ctx context.Context) {
 		defer s.tasksDoneWG.Done()
@@ -208,7 +213,7 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 				return
 			}
 
-			s.Flush(ctx)
+			s.Flush(ctx, insightsProvider)
 
 			// Tell the local activity translator job, if any, that we've
 			// performed a round of flush.
