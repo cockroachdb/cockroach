@@ -35,7 +35,7 @@ func TestDropTableLowersSpanCount(t *testing.T) {
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantProbabilistic,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	}})
 
 	defer tc.Stopper().Stop(ctx)

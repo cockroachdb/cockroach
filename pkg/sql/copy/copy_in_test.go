@@ -309,8 +309,9 @@ func TestCopyFromBinary(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
-	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, s.AdvSQLAddr(), "StartServer" /* prefix */, url.User(username.RootUser))
+	pgURL, cleanupGoDB := s.PGUrl(
+		t, serverutils.CertsDirPrefix("StartServer"), serverutils.User(username.RootUser),
+	)
 	defer cleanupGoDB()
 	conn, err := pgx.Connect(ctx, pgURL.String())
 	if err != nil {
@@ -520,8 +521,9 @@ func TestCopyFromRetries(t *testing.T) {
 			ctx := context.Background()
 
 			// Use pgx instead of lib/pq as pgx doesn't require copy to be in a txn.
-			pgURL, cleanupGoDB := sqlutils.PGUrl(
-				t, s.AdvSQLAddr(), "StartServer" /* prefix */, url.User(username.RootUser))
+			pgURL, cleanupGoDB := s.PGUrl(
+				t, serverutils.CertsDirPrefix("StartServer"), serverutils.User(username.RootUser),
+			)
 			defer cleanupGoDB()
 			pgxConn, err := pgx.Connect(ctx, pgURL.String())
 			require.NoError(t, err)
@@ -678,9 +680,11 @@ func TestCopyInReleasesLeases(t *testing.T) {
 	tdb.Exec(t, `CREATE USER foo WITH PASSWORD 'testabc'`)
 	tdb.Exec(t, `GRANT admin TO foo`)
 
-	userURL, cleanupFn := sqlutils.PGUrlWithOptionalClientCerts(t,
-		s.AdvSQLAddr(), t.Name(), url.UserPassword("foo", "testabc"),
-		false /* withClientCerts */)
+	userURL, cleanupFn := s.PGUrl(t,
+		serverutils.CertsDirPrefix(t.Name()),
+		serverutils.UserPassword("foo", "testabc"),
+		serverutils.ClientCerts(false),
+	)
 	defer cleanupFn()
 	conn, err := sqltestutils.PGXConn(t, userURL)
 	require.NoError(t, err)

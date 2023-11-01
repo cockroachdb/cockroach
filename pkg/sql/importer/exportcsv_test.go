@@ -19,7 +19,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -535,10 +534,10 @@ func populateRangeCache(t *testing.T, db *gosql.DB, tableName string) {
 }
 
 func getPGXConnAndCleanupFunc(
-	ctx context.Context, t *testing.T, servingSQLAddr string,
+	ctx context.Context, t *testing.T, app serverutils.ApplicationLayerInterface,
 ) (*pgx.Conn, func()) {
 	t.Helper()
-	pgURL, cleanup := sqlutils.PGUrl(t, servingSQLAddr, t.Name(), url.User(username.RootUser))
+	pgURL, cleanup := app.PGUrl(t, serverutils.CertsDirPrefix(t.Name()), serverutils.User(username.RootUser))
 	pgURL.Path = "test"
 	pgxConfig, err := pgx.ParseConfig(pgURL.String())
 	require.NoError(t, err)
@@ -710,7 +709,7 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 		_, err := origDB0.Exec("SET CLUSTER SETTING sql.defaults.results_buffer.size = '0'")
 		require.NoError(t, err)
 		// Create a new connection that will use the new result buffer size.
-		defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.ApplicationLayer(0).AdvSQLAddr())
+		defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.ApplicationLayer(0))
 		defer cleanup()
 
 		atomic.StoreInt64(&trapRead, 1)
@@ -756,7 +755,7 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 		_, err := origDB0.Exec("SET CLUSTER SETTING sql.defaults.results_buffer.size = '524288'")
 		require.NoError(t, err)
 		// Create a new connection that will use the new results buffer size.
-		defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.ApplicationLayer(0).AdvSQLAddr())
+		defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.ApplicationLayer(0))
 		defer cleanup()
 
 		// Reads are trapped but not blocked, so node 1 should immediately return a

@@ -16,7 +16,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -283,12 +281,7 @@ func TestNodelocalNotAdmin(t *testing.T) {
 	_, err := rootDB.Exec("CREATE USER " + smithUser)
 	require.NoError(t, err)
 
-	pgURL, cleanupGoDB := sqlutils.PGUrlWithOptionalClientCerts(
-		t, s.ApplicationLayer().AdvSQLAddr(), "notAdmin", url.User(smithUser), false, /* withCerts */
-	)
-	defer cleanupGoDB()
-	pgURL.RawQuery = "sslmode=disable"
-	userDB, err := gosql.Open("postgres", pgURL.String())
+	userDB, err := s.ApplicationLayer().SQLConnE(serverutils.User(smithUser), serverutils.CertsDirPrefix("notAdmin"), serverutils.ClientCerts(false))
 	require.NoError(t, err)
 	defer userDB.Close()
 
@@ -326,12 +319,7 @@ func TestUserfileNotAdmin(t *testing.T) {
 	_, err = rootDB.Exec("GRANT CREATE ON DATABASE defaultdb TO " + smithUser)
 	require.NoError(t, err)
 
-	pgURL, cleanupGoDB := sqlutils.PGUrlWithOptionalClientCerts(
-		t, s.ApplicationLayer().AdvSQLAddr(), "notAdmin", url.User(smithUser), false, /* withCerts */
-	)
-	defer cleanupGoDB()
-	pgURL.RawQuery = "sslmode=disable"
-	userDB, err := gosql.Open("postgres", pgURL.String())
+	userDB, err := s.ApplicationLayer().SQLConnE(serverutils.User(smithUser), serverutils.CertsDirPrefix("notAdmin"), serverutils.ClientCerts(false))
 	require.NoError(t, err)
 	defer userDB.Close()
 

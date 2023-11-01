@@ -38,6 +38,9 @@ func TestPGTest(t *testing.T) {
 		newServer := func() (addr, user string, cleanup func()) {
 			ctx := context.Background()
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+				DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
+					base.TestTenantProbabilistic, 112960,
+				),
 				Insecure: true,
 			})
 			cleanup = func() {
