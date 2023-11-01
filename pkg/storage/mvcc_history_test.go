@@ -71,7 +71,7 @@ var (
 //
 // The input files use the following DSL:
 //
-// run            [ok|trace|stats|error]
+// run            [ok|trace|stats|error|log-ops]
 //
 // txn_begin      t=<name> [ts=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
 // txn_remove     t=<name>
@@ -471,11 +471,13 @@ func TestMVCCHistories(t *testing.T) {
 				// Options:
 				// - trace: emit intermediate results after each operation.
 				// - stats: emit MVCC statistics for each operation and at the end.
+				// - log-ops: emit any MVCC Logical operations at the end.
 				// - error: expect an error to occur. The specific error type/ message
 				//   to expect is spelled out in the expected output.
 				//
 				trace := e.hasArg("trace")
 				stats := e.hasArg("stats")
+				logOps := e.hasArg("log-ops")
 				expectError := e.hasArg("error")
 
 				// buf will accumulate the actual output, which the
@@ -484,6 +486,9 @@ func TestMVCCHistories(t *testing.T) {
 				var buf redact.StringBuilder
 				e.results.buf = &buf
 				e.results.traceClearKey = trace
+
+				e.logOps = logOps
+				e.opLog = nil
 
 				// We reset the stats such that they accumulate for all commands
 				// in a single test.
@@ -548,6 +553,21 @@ func TestMVCCHistories(t *testing.T) {
 							} else {
 								buf.Printf("error reading locks: (%T:) %v\n", err, err)
 							}
+						}
+					}
+					if logOps {
+						prettyPrintOp := func(op enginepb.MVCCLogicalOp) string {
+							switch t := op.GetValue().(type) {
+							case *enginepb.MVCCWriteValueOp:
+								return fmt.Sprintf("write_value: key=%s, ts=%s", roachpb.Key(t.Key), t.Timestamp)
+							case *enginepb.MVCCDeleteRangeOp:
+								return fmt.Sprintf("delete_range: startKey=%s endKey=%s ts=%s", roachpb.Key(t.StartKey), roachpb.Key(t.EndKey), t.Timestamp)
+							default:
+								return fmt.Sprintf("%T", t)
+							}
+						}
+						for _, op := range e.opLog {
+							buf.Printf("logical op: %s\n", prettyPrintOp(op))
 						}
 					}
 				}
@@ -2399,6 +2419,9 @@ type evalCtx struct {
 	sstWriter         *storage.SSTWriter
 	sstFile           *storage.MemObject
 	ssts              [][]byte
+
+	logOps bool
+	opLog  []enginepb.MVCCLogicalOp
 }
 
 func newEvalCtx(ctx context.Context, engine storage.Engine) *evalCtx {
@@ -2553,10 +2576,29 @@ func (e *evalCtx) withReader(fn func(storage.Reader) error) error {
 	return fn(r)
 }
 
+type opLoggerWriter struct {
+	storage.ReadWriter
+
+	// TODO(ssd): I reused OpLoggerBatch here to avoid having two
+	// implementations of the operation handling. We can't use
+	// OpLoggerBatch directly because we don't always have a
+	// batch. We could modify OpLoggerBatch so it was usable in
+	// any case without a wrapper, but I didn't want to add
+	// conditionals or indirection into the production path just
+	// for testing.
+	logger *storage.OpLoggerBatch
+}
+
+func (ol *opLoggerWriter) LogLogicalOp(
+	op storage.MVCCLogicalOpType, details storage.MVCCLogicalOpDetails,
+) {
+	ol.logger.LogLogicalOpOnly(op, details)
+}
+
 // withWriter calls the given closure with a writer. The writer is
 // metamorphically chosen to be a batch, which will be committed and closed when
 // done.
-func (e *evalCtx) withWriter(cmd string, fn func(_ storage.ReadWriter) error) error {
+func (e *evalCtx) withWriter(cmd string, fn func(storage.ReadWriter) error) error {
 	var rw storage.ReadWriter
 	rw = e.engine
 	var batch storage.Batch
@@ -2565,7 +2607,17 @@ func (e *evalCtx) withWriter(cmd string, fn func(_ storage.ReadWriter) error) er
 		defer batch.Close()
 		rw = batch
 	}
+
+	opLogger := &storage.OpLoggerBatch{}
+	if e.logOps {
+		rw = &opLoggerWriter{
+			ReadWriter: rw,
+			logger:     opLogger,
+		}
+	}
+
 	rw = e.tryWrapForClearKeyPrinting(rw)
+
 	err := fn(rw)
 	if e.hasArg("batched") {
 		batchStatus := "non-empty"
@@ -2582,6 +2634,9 @@ func (e *evalCtx) withWriter(cmd string, fn func(_ storage.ReadWriter) error) er
 				return err
 			}
 		}
+	}
+	if e.logOps {
+		e.opLog = append(e.opLog, opLogger.LogicalOps()...)
 	}
 	return err
 }
