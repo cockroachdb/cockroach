@@ -72,6 +72,11 @@ func writeIntentOpWithDetails(
 	})
 }
 
+func writeIntentOpFromMeta(txn enginepb.TxnMeta) enginepb.MVCCLogicalOp {
+	return writeIntentOpWithDetails(
+		txn.ID, txn.Key, txn.IsoLevel, txn.MinTimestamp, txn.WriteTimestamp)
+}
+
 func writeIntentOpWithKey(
 	txnID uuid.UUID, key []byte, iso isolation.Level, ts hlc.Timestamp,
 ) enginepb.MVCCLogicalOp {
@@ -291,6 +296,19 @@ func withSpan(span roachpb.RSpan) option {
 	}
 }
 
+func withSettings(st *cluster.Settings) option {
+	return func(config *testConfig) {
+		config.Settings = st
+	}
+}
+
+func withPushTxnsIntervalAge(interval, age time.Duration) option {
+	return func(config *testConfig) {
+		config.PushTxnsInterval = interval
+		config.PushTxnsAge = age
+	}
+}
+
 // blockingScanner is a test intent scanner that allows test to track lifecycle
 // of tasks.
 //  1. it will always block on startup and will wait for block to be closed to
@@ -344,11 +362,13 @@ func newTestProcessor(
 ) (Processor, *processorTestHelper, *stop.Stopper) {
 	t.Helper()
 	stopper := stop.NewStopper()
+	st := cluster.MakeTestingClusterSettings()
 
 	cfg := testConfig{
 		Config: Config{
 			RangeID:          2,
 			Stopper:          stopper,
+			Settings:         st,
 			AmbientContext:   log.MakeTestingAmbientCtxWithNewTracer(),
 			Clock:            hlc.NewClockForTesting(nil),
 			Span:             roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
@@ -1096,10 +1116,6 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 		defer stopper.Stop(ctx)
 
 		// Add a few intents and move the closed timestamp forward.
-		writeIntentOpFromMeta := func(txn enginepb.TxnMeta) enginepb.MVCCLogicalOp {
-			return writeIntentOpWithDetails(txn.ID, txn.Key, txn.IsoLevel, txn.MinTimestamp,
-				txn.WriteTimestamp)
-		}
 		p.ConsumeLogicalOps(ctx,
 			writeIntentOpFromMeta(txn1Meta),
 			writeIntentOpFromMeta(txn2Meta),
@@ -1169,6 +1185,64 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 		// Release push attempt to avoid deadlock.
 		resumePushAttemptsC <- struct{}{}
 	})
+}
+
+// TestProcessorTxnPushDisabled tests that processors don't attempt txn pushes
+// when disabled.
+func TestProcessorTxnPushDisabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const pushInterval = 10 * time.Millisecond
+
+	// Set up a txn to write intents.
+	ts := hlc.Timestamp{WallTime: 10}
+	txnID := uuid.MakeV4()
+	txnMeta := enginepb.TxnMeta{
+		ID:             txnID,
+		Key:            keyA,
+		IsoLevel:       isolation.Serializable,
+		WriteTimestamp: ts,
+		MinTimestamp:   ts,
+	}
+
+	// Disable txn pushes.
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	PushTxnsEnabled.Override(ctx, &st.SV, false)
+
+	// Set up a txn pusher and processor that errors on any pushes.
+	//
+	// TODO(kv): We don't test the scheduled processor here, since the setting
+	// instead controls the Store.startRangefeedTxnPushNotifier() loop which sits
+	// outside of the processor and can't be tested with this test harness. Write
+	// a new test when the legacy processor is removed and the scheduled processor
+	// is used by default.
+	var tp testTxnPusher
+	tp.mockPushTxns(func(txns []enginepb.TxnMeta, ts hlc.Timestamp) ([]*roachpb.Transaction, error) {
+		err := errors.Errorf("unexpected txn push for txns=%v ts=%s", txns, ts)
+		t.Errorf("%v", err)
+		return nil, err
+	})
+
+	p, h, stopper := newTestProcessor(t, withSettings(st), withPusher(&tp),
+		withPushTxnsIntervalAge(pushInterval, time.Millisecond))
+	defer stopper.Stop(ctx)
+
+	// Move the resolved ts forward to just before the txn timestamp.
+	rts := ts.Add(-1, 0)
+	require.True(t, p.ForwardClosedTS(ctx, rts))
+	h.syncEventC()
+	require.Equal(t, rts, h.rts.Get())
+
+	// Add a few intents and move the closed timestamp forward.
+	p.ConsumeLogicalOps(ctx, writeIntentOpFromMeta(txnMeta))
+	p.ForwardClosedTS(ctx, ts)
+	h.syncEventC()
+	require.Equal(t, rts, h.rts.Get())
+
+	// Wait for 10x the push txns interval, to make sure pushes are disabled.
+	// Waiting for something to not happen is a bit smelly, but gets the job done.
+	time.Sleep(10 * pushInterval)
 }
 
 // TestProcessorConcurrentStop tests that all methods in Processor's API
