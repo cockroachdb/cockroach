@@ -900,6 +900,11 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"CREATE MATERIALIZED VIEW v AS (xlsd);  -- ditto",
 			"CREATE FUNCTION f1() RETURNS INT LANGUAGE SQL AS $$ SELECT $$vsd $$;  -- ditto",
 			"CREATE FUNCTION f1() RETURNS INT LANGUAGE SQL AS $funcTag$ SELECT $$vsd $funcTag$;  -- ditto",
+			"CREATE TABLE t9 (i INT PRIMARY KEY);",
+			"BEGIN;",
+			"ALTER TABLE t9 DROP CONSTRAINT t9_pkey;",
+			"COMMIT; -- expect a FeatureNotSupported error but should be executed on both clusters",
+			"ALTER t9 ADD COLUMN j INT DEFAULT 30;  -- ensure we did not silently skip COMMIT on DSC cluster",
 
 			// Statements with TCL commands or empty content.
 			"",
