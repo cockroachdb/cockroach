@@ -11,6 +11,7 @@
 package insights
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -19,12 +20,13 @@ import (
 )
 
 func TestProvider_WriterIgnoresInternalExecutorObservations(t *testing.T) {
+	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettings()
 	store := newStore(settings)
 	ingester := newConcurrentBufferIngester(newRegistry(settings, &fakeDetector{stubEnabled: true}, store))
 	provider := &defaultProvider{store: store, ingester: ingester}
 	writer := provider.Writer(true /* internal */)
 	writer.ObserveStatement(clusterunique.ID{}, &Statement{})
-	writer.ObserveTransaction(clusterunique.ID{}, &Transaction{})
+	writer.ObserveTransaction(ctx, clusterunique.ID{}, &Transaction{})
 	require.Equal(t, event{}, ingester.guard.eventBuffer[0])
 }
