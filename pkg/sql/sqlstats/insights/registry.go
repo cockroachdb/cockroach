@@ -14,6 +14,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -90,7 +91,13 @@ func addProblem(arr []Problem, n Problem) []Problem {
 	return append(arr, n)
 }
 
-func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transaction *Transaction) {
+func (r *lockingRegistry) ObserveTransaction(
+	ctx context.Context,
+	sessionID clusterunique.ID,
+	transaction *Transaction,
+	insightsReader Reader,
+	eventsExporter obs.EventsExporterInterface,
+) {
 	if !r.enabled() {
 		return
 	}
@@ -175,6 +182,13 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 	}
 
 	r.sink.AddInsight(insight)
+	// Exporting Insights to Observability Service.
+	if SQLInsightsStatsExportEnabled.Get(&r.causes.st.SV) {
+		err := insightsReader.ExportInsight(ctx, insight, &eventsExporter)
+		if err != nil {
+			log.Errorf(ctx, "encountered an error at insights export: %v", err)
+		}
+	}
 }
 
 // TODO(todd):
@@ -199,7 +213,11 @@ func newRegistry(st *cluster.Settings, detector detector, sink sink) *lockingReg
 func (s *Statement) CopyTo(
 	ctx context.Context, t *Transaction, session *Session, other *obspb.StatementInsightsStatistics,
 ) {
-	other.ApplicationName = t.ApplicationName
+	if other == nil {
+		log.Errorf(ctx, "no object passed from pool for Insights exporter")
+		return
+	}
+
 	other.AutoRetryReason = s.AutoRetryReason
 	other.Contention = s.Contention
 	other.CPUSQLNanos = s.CPUSQLNanos
@@ -208,7 +226,6 @@ func (s *Statement) CopyTo(
 	other.ErrorCode = s.ErrorCode
 	other.FingerprintID = uint64(s.FingerprintID)
 	other.FullScan = s.FullScan
-	other.ImplicitTxn = t.ImplicitTxn
 	other.IndexRecommendations = s.IndexRecommendations
 	other.Nodes = s.Nodes
 	other.PlanGist = s.PlanGist
@@ -218,15 +235,18 @@ func (s *Statement) CopyTo(
 	other.RowsWritten = s.RowsWritten
 	other.ServiceLatSeconds = s.LatencyInSeconds
 	other.StartTime = &s.StartTime
-	other.TxnFingerprintID = uint64(t.FingerprintID)
-	other.User = t.User
-	other.UserPriority = t.UserPriority
-
 	var err error
 	other.ID, err = s.ID.MarshalJSON()
 	if err != nil {
 		log.Errorf(ctx, "marshalling statement insights ID for Insights exporter")
 	}
+
+	other.ApplicationName = t.ApplicationName
+	other.ImplicitTxn = t.ImplicitTxn
+	other.TxnFingerprintID = uint64(t.FingerprintID)
+	other.User = t.User
+	other.UserPriority = t.UserPriority
+
 	other.TransactionID, err = t.ID.MarshalJSON()
 	if err != nil {
 		log.Errorf(ctx, "marshalling transaction insights ID for Insights exporter")
@@ -272,7 +292,7 @@ func (s *Statement) CopyTo(
 
 	// TODO(maryliag): add information about Contention Events
 	// and Idle/Parse/Run Latencies.
-	//other.ContentionEvents
+	other.ContentionEvents = []*obspb.ContentionEvent{}
 	//other.IdleLatSeconds
 	//other.ParseLatSeconds
 	//other.RunLatSeconds

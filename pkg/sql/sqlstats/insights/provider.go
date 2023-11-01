@@ -13,6 +13,7 @@ package insights
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -25,8 +26,10 @@ type defaultProvider struct {
 
 var _ Provider = &defaultProvider{}
 
-func (p *defaultProvider) Start(ctx context.Context, stopper *stop.Stopper) {
-	p.ingester.Start(ctx, stopper)
+func (p *defaultProvider) Start(
+	ctx context.Context, stopper *stop.Stopper, eventsExporter obs.EventsExporterInterface,
+) {
+	p.ingester.Start(ctx, stopper, p.Reader(), eventsExporter)
 }
 
 func (p *defaultProvider) Writer(internal bool) Writer {
@@ -50,7 +53,9 @@ type nullWriter struct{}
 func (n *nullWriter) ObserveStatement(_ clusterunique.ID, _ *Statement) {
 }
 
-func (n *nullWriter) ObserveTransaction(_ clusterunique.ID, _ *Transaction) {
+func (n *nullWriter) ObserveTransaction(
+	_ context.Context, _ clusterunique.ID, _ *Transaction, _ Reader, _ obs.EventsExporterInterface,
+) {
 }
 
 var nullWriterInstance Writer = &nullWriter{}

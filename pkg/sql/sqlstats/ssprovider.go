@@ -17,6 +17,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -45,7 +47,12 @@ type Writer interface {
 	ShouldSample(fingerprint string, implicitTxn bool, database string) (previouslySampled, savePlanForStats bool)
 
 	// RecordTransaction records statistics for a transaction.
-	RecordTransaction(ctx context.Context, key appstatspb.TransactionFingerprintID, value RecordedTxnStats) error
+	RecordTransaction(ctx context.Context,
+		key appstatspb.TransactionFingerprintID,
+		value RecordedTxnStats,
+		insightsReader insights.Reader,
+		eventsExporter obs.EventsExporterInterface,
+	) error
 }
 
 // Reader provides methods to retrieve transaction/statement statistics from
@@ -192,7 +199,7 @@ type Storage interface {
 type Provider interface {
 	Storage
 
-	Start(ctx context.Context, stopper *stop.Stopper)
+	Start(ctx context.Context, stopper *stop.Stopper, insightsProvider *insights.Provider)
 }
 
 // RecordedStmtStats stores the statistics of a statement to be recorded.

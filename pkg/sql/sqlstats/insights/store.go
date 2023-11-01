@@ -12,10 +12,17 @@ package insights
 
 import (
 	"context"
+	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/obs"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
+	v1 "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/common/v1"
+	otel_logs_pb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/logs/v1"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 type lockingStore struct {
@@ -23,6 +30,10 @@ type lockingStore struct {
 		syncutil.RWMutex
 		insights *cache.UnorderedCache
 	}
+
+	// exportedStmtInsightsStatsPool is an object pool used to recycle
+	// obspb.StatementInsightsStatistics to cut down on allocations.
+	exportedStmtInsightsStatsPool sync.Pool
 }
 
 func (s *lockingStore) AddInsight(insight *Insight) {
@@ -41,6 +52,30 @@ func (s *lockingStore) IterateInsights(
 	})
 }
 
+func (s *lockingStore) ExportInsight(
+	ctx context.Context, insight *Insight, eventsExporter *obs.EventsExporterInterface,
+) error {
+	var err error
+
+	for _, stmt := range insight.Statements {
+		func() {
+			fromPool := s.exportedStmtInsightsStatsPool.Get().(*obspb.StatementInsightsStatistics)
+			defer s.exportedStmtInsightsStatsPool.Put(fromPool)
+			stmt.CopyTo(ctx, insight.Transaction, &insight.Session, fromPool)
+			statBytes, e := protoutil.Marshal(fromPool)
+			if e != nil {
+				err = e
+				return
+			}
+			(*eventsExporter).SendEvent(ctx, obspb.StatementInsightsStatsEvent, &otel_logs_pb.LogRecord{
+				TimeUnixNano: uint64(timeutil.Now().UnixNano()),
+				Body:         &v1.AnyValue{Value: &v1.AnyValue_BytesValue{BytesValue: statBytes}},
+			})
+		}()
+	}
+	return err
+}
+
 var _ Reader = &lockingStore{}
 var _ sink = &lockingStore{}
 
@@ -55,7 +90,13 @@ func newStore(st *cluster.Settings) *lockingStore {
 		},
 	}
 
-	s := &lockingStore{}
+	s := &lockingStore{
+		exportedStmtInsightsStatsPool: sync.Pool{
+			New: func() interface{} {
+				return new(obspb.StatementInsightsStatistics)
+			},
+		},
+	}
 	s.mu.insights = cache.NewUnorderedCache(config)
 	return s
 }

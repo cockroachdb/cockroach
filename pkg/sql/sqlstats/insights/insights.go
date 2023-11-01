@@ -14,6 +14,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -89,6 +91,16 @@ var HighRetryCountThreshold = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 	settings.WithPublic)
 
+var SQLInsightsStatsExportEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.insights.export.enabled",
+	"controls whether statement and transaction insights statistics are exported to "+
+		"the address pointed to by the CLI flag, --"+cliflags.ObsServiceAddr.Name+
+		". Insights are exported as soon as they're detected. Note that if the --"+
+		cliflags.ObsServiceAddr.Name+" was not set at node startup, enabling this setting will "+
+		"have no effect until the node is restarted with the flag set.",
+	false)
+
 // Metrics holds running measurements of various insights-related runtime stats.
 type Metrics struct {
 	// Fingerprints measures the number of statement fingerprints being monitored for
@@ -141,7 +153,13 @@ type Writer interface {
 	ObserveStatement(sessionID clusterunique.ID, statement *Statement)
 
 	// ObserveTransaction notifies the registry of the end of a transaction.
-	ObserveTransaction(sessionID clusterunique.ID, transaction *Transaction)
+	ObserveTransaction(
+		ctx context.Context,
+		sessionID clusterunique.ID,
+		transaction *Transaction,
+		insightsReader Reader,
+		eventsExporter obs.EventsExporterInterface,
+	)
 }
 
 // WriterProvider offers a Writer.
@@ -152,6 +170,9 @@ type WriterProvider func(internal bool) Writer
 type Reader interface {
 	// IterateInsights calls visitor with each of the currently retained set of insights.
 	IterateInsights(context.Context, func(context.Context, *Insight))
+
+	// ExportInsight export an Insight to obsservice.
+	ExportInsight(context.Context, *Insight, *obs.EventsExporterInterface) error
 }
 
 type LatencyInformation interface {
@@ -167,7 +188,7 @@ type PercentileValues struct {
 // Provider offers access to the insights subsystem.
 type Provider interface {
 	// Start launches the background tasks necessary for processing insights.
-	Start(ctx context.Context, stopper *stop.Stopper)
+	Start(ctx context.Context, stopper *stop.Stopper, eventsExporter obs.EventsExporterInterface)
 
 	// Writer returns an object that observes statement and transaction executions.
 	// Pass true for internal when called by the internal executor.

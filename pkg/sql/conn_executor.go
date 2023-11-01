@@ -605,16 +605,15 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	// should be accounted for in their costs.
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 
-	s.sqlStats.Start(ctx, stopper)
+	s.insights.Start(ctx, stopper, s.sqlStats.GetEventsExporter())
+	s.sqlStats.Start(ctx, stopper, &s.insights)
 
 	s.schemaTelemetryController.Start(ctx, stopper)
 
 	// reportedStats is periodically cleared to prevent too many SQL Stats
 	// accumulated in the reporter when the telemetry server fails.
 	// Usually it is telemetry's reporter's job to clear the reporting SQL Stats.
-	s.reportedStats.Start(ctx, stopper)
-
-	s.insights.Start(ctx, stopper)
+	s.reportedStats.Start(ctx, stopper, &s.insights)
 
 	s.txnIDCache.Start(ctx, stopper)
 }

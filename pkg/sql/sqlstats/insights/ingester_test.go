@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -78,13 +79,15 @@ func TestIngester(t *testing.T) {
 					stubIsSlow:  true,
 				}, store),
 			)
+			provider := New(st, NewMetrics())
+			provider.Start(ctx, stopper, obs.NoopEventsExporter{})
 
-			ingester.Start(ctx, stopper)
+			ingester.Start(ctx, stopper, provider.Reader(), obs.NoopEventsExporter{})
 			for _, e := range tc.observations {
 				if e.statementID != 0 {
 					ingester.ObserveStatement(e.SessionID(), &Statement{ID: e.StatementID()})
 				} else {
-					ingester.ObserveTransaction(e.SessionID(), &Transaction{ID: e.TransactionID()})
+					ingester.ObserveTransaction(ctx, e.SessionID(), &Transaction{ID: e.TransactionID()}, provider.Reader(), obs.NoopEventsExporter{})
 				}
 			}
 
@@ -122,10 +125,17 @@ func TestIngester_Disabled(t *testing.T) {
 	// should something go wrong. Here we peek at the internals of the ingester
 	// to make sure it doesn't hold onto any statement or transaction info if
 	// the underlying registry is currently disabled.
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
 	st := cluster.MakeTestingClusterSettings()
+	provider := New(st, NewMetrics())
+	provider.Start(ctx, stopper, obs.NoopEventsExporter{})
+
 	ingester := newConcurrentBufferIngester(newRegistry(st, &fakeDetector{}, newStore(st)))
 	ingester.ObserveStatement(clusterunique.ID{}, &Statement{})
-	ingester.ObserveTransaction(clusterunique.ID{}, &Transaction{})
+	ingester.ObserveTransaction(ctx, clusterunique.ID{}, &Transaction{}, provider.Reader(), obs.NoopEventsExporter{})
 	require.Equal(t, event{}, ingester.guard.eventBuffer[0])
 }
 
@@ -137,11 +147,14 @@ func TestIngester_DoesNotBlockWhenReceivingManyObservationsAfterShutdown(t *test
 	// - https://github.com/cockroachdb/cockroach/issues/88087
 	ctx := context.Background()
 	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 
 	st := cluster.MakeTestingClusterSettings()
+	provider := New(st, NewMetrics())
+	provider.Start(ctx, stopper, obs.NoopEventsExporter{})
 	registry := newRegistry(st, &fakeDetector{stubEnabled: true}, newStore(st))
 	ingester := newConcurrentBufferIngester(registry)
-	ingester.Start(ctx, stopper)
+	ingester.Start(ctx, stopper, provider.Reader(), obs.NoopEventsExporter{})
 
 	// Simulate a shutdown and wait for the consumer of the ingester's channel to stop.
 	stopper.Stop(ctx)

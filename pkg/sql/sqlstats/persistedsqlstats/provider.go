@@ -23,11 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/obs"
-	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -94,10 +94,6 @@ type PersistedSQLStats struct {
 	lastSizeCheck time.Time
 
 	eventsExporter obs.EventsExporterInterface
-
-	// exportedStmtInsightsStatsPool is an object pool used to recycle
-	// obspb.StatementInsightsStatistics to cut down on allocations.
-	exportedStmtInsightsStatsPool sync.Pool
 }
 
 var _ sqlstats.Provider = &PersistedSQLStats{}
@@ -112,11 +108,6 @@ func New(
 		memoryPressureSignal: make(chan struct{}),
 		drain:                make(chan struct{}),
 		eventsExporter:       eventsExporter,
-		exportedStmtInsightsStatsPool: sync.Pool{
-			New: func() interface{} {
-				return new(obspb.StatementInsightsStatistics)
-			},
-		},
 	}
 
 	p.jobMonitor = jobMonitor{
@@ -134,8 +125,10 @@ func New(
 }
 
 // Start implements sqlstats.Provider interface.
-func (s *PersistedSQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
-	s.startSQLStatsFlushLoop(ctx, stopper)
+func (s *PersistedSQLStats) Start(
+	ctx context.Context, stopper *stop.Stopper, insightsProvider *insights.Provider,
+) {
+	s.startSQLStatsFlushLoop(ctx, stopper, insightsProvider)
 	s.jobMonitor.start(ctx, stopper, s.drain, &s.tasksDoneWG)
 	stopper.AddCloser(stop.CloserFn(func() {
 		// TODO(knz,yahor): This really should be just Stop(), but there
@@ -169,7 +162,9 @@ func (s *PersistedSQLStats) GetController(server serverpb.SQLStatusServer) *Cont
 	return NewController(s, server, s.cfg.DB)
 }
 
-func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper *stop.Stopper) {
+func (s *PersistedSQLStats) startSQLStatsFlushLoop(
+	ctx context.Context, stopper *stop.Stopper, insightsProvider *insights.Provider,
+) {
 	s.tasksDoneWG.Add(1)
 	err := stopper.RunAsyncTask(ctx, "sql-stats-worker", func(ctx context.Context) {
 		defer s.tasksDoneWG.Done()
@@ -256,6 +251,10 @@ func (s *PersistedSQLStats) GetEnabledSQLInstanceID() base.SQLInstanceID {
 		return s.cfg.SQLIDContainer.SQLInstanceID()
 	}
 	return 0
+}
+
+func (s *PersistedSQLStats) GetEventsExporter() obs.EventsExporterInterface {
+	return s.eventsExporter
 }
 
 // nextFlushInterval calculates the wait interval that is between:

@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -46,7 +47,7 @@ func BenchmarkInsights(b *testing.B) {
 	for _, numSessions := range []int{1, 10, 100, 1000, 10000} {
 		b.Run(fmt.Sprintf("numSessions=%d", numSessions), func(b *testing.B) {
 			provider := insights.New(settings, insights.NewMetrics())
-			provider.Start(ctx, stopper)
+			provider.Start(ctx, stopper, obs.NoopEventsExporter{})
 
 			// Spread the b.N work across the simulated SQL sessions, so that we
 			// can make apples-to-apples comparisons in the benchmark reports:
@@ -79,7 +80,7 @@ func BenchmarkInsights(b *testing.B) {
 					for j := 0; j < numTransactionsPerSession; j++ {
 						idx := numTransactionsPerSession*i + j
 						writer.ObserveStatement(sessionID, &statements[idx])
-						writer.ObserveTransaction(sessionID, &transactions[idx])
+						writer.ObserveTransaction(ctx, sessionID, &transactions[idx], provider.Reader(), obs.NoopEventsExporter{})
 					}
 				}(i)
 			}

@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/contentionutils"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -60,7 +61,12 @@ type event struct {
 	statement   *Statement
 }
 
-func (i *concurrentBufferIngester) Start(ctx context.Context, stopper *stop.Stopper) {
+func (i *concurrentBufferIngester) Start(
+	ctx context.Context,
+	stopper *stop.Stopper,
+	insightsReader Reader,
+	eventsExporter obs.EventsExporterInterface,
+) {
 	// This task pulls buffers from the channel and forwards them along to the
 	// underlying registry.
 	_ = stopper.RunAsyncTask(ctx, "insights-ingester", func(ctx context.Context) {
@@ -69,7 +75,7 @@ func (i *concurrentBufferIngester) Start(ctx context.Context, stopper *stop.Stop
 		for {
 			select {
 			case events := <-i.eventBufferCh:
-				i.ingest(events) // note that injest clears the buffer
+				i.ingest(ctx, events, insightsReader, eventsExporter) // note that injest clears the buffer
 				eventBufferPool.Put(events)
 			case <-stopper.ShouldQuiesce():
 				atomic.StoreUint64(&i.running, 0)
@@ -95,7 +101,12 @@ func (i *concurrentBufferIngester) Start(ctx context.Context, stopper *stop.Stop
 	})
 }
 
-func (i *concurrentBufferIngester) ingest(events *eventBuffer) {
+func (i *concurrentBufferIngester) ingest(
+	ctx context.Context,
+	events *eventBuffer,
+	insightsReader Reader,
+	eventsExporter obs.EventsExporterInterface,
+) {
 	for idx, e := range events {
 		// Because an eventBuffer is a fixed-size array, rather than a slice,
 		// we do not know how full it is until we hit a nil entry.
@@ -105,7 +116,7 @@ func (i *concurrentBufferIngester) ingest(events *eventBuffer) {
 		if e.statement != nil {
 			i.registry.ObserveStatement(e.sessionID, e.statement)
 		} else {
-			i.registry.ObserveTransaction(e.sessionID, e.transaction)
+			i.registry.ObserveTransaction(ctx, e.sessionID, e.transaction, insightsReader, eventsExporter)
 		}
 		events[idx] = event{}
 	}
@@ -126,7 +137,11 @@ func (i *concurrentBufferIngester) ObserveStatement(
 }
 
 func (i *concurrentBufferIngester) ObserveTransaction(
-	sessionID clusterunique.ID, transaction *Transaction,
+	_ context.Context,
+	sessionID clusterunique.ID,
+	transaction *Transaction,
+	_ Reader,
+	_ obs.EventsExporterInterface,
 ) {
 	if !i.registry.enabled() {
 		return

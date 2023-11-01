@@ -15,6 +15,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -275,7 +276,11 @@ func (s *Container) ShouldSample(
 // RecordTransaction implements sqlstats.Writer interface and saves
 // per-transaction statistics.
 func (s *Container) RecordTransaction(
-	ctx context.Context, key appstatspb.TransactionFingerprintID, value sqlstats.RecordedTxnStats,
+	ctx context.Context,
+	key appstatspb.TransactionFingerprintID,
+	value sqlstats.RecordedTxnStats,
+	insightsReader insights.Reader,
+	eventsExporter obs.EventsExporterInterface,
 ) error {
 	s.recordTransactionHighLevelStats(value.TransactionTimeSec, value.Committed, value.ImplicitTxn)
 
@@ -386,7 +391,7 @@ func (s *Container) RecordTransaction(
 		status = insights.Transaction_Completed
 	}
 
-	s.insights.ObserveTransaction(value.SessionID, &insights.Transaction{
+	s.insights.ObserveTransaction(ctx, value.SessionID, &insights.Transaction{
 		ID:              value.TransactionID,
 		FingerprintID:   key,
 		UserPriority:    value.Priority.String(),
@@ -404,7 +409,7 @@ func (s *Container) RecordTransaction(
 		LastErrorCode:   errorCode,
 		LastErrorMsg:    errorMsg,
 		Status:          status,
-	})
+	}, insightsReader, eventsExporter)
 	return nil
 }
 

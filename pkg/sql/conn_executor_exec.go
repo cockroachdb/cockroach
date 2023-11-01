@@ -3201,6 +3201,8 @@ func (ex *connExecutor) recordTransactionFinish(
 		ctx,
 		transactionFingerprintID,
 		recordedTxnStats,
+		ex.server.insights.Reader(),
+		ex.server.sqlStats.GetEventsExporter(),
 	)
 }
 

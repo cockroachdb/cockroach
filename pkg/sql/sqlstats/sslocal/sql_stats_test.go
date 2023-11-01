@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -477,7 +478,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 								ApplicationName: "appname_findme",
 							},
 						},
-					}))
+					}, insightsProvider.Reader(), obs.NoopEventsExporter{}))
 		}()
 		for _, fingerprint := range testCase.fingerprints {
 			stmtFingerprintID, err := statsCollector.RecordStatement(
@@ -616,7 +617,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 						ApplicationName: "appname_findme",
 					},
 				},
-			})
+			}, insightsProvider.Reader(), obs.NoopEventsExporter{})
 			require.NoError(t, err)
 
 			// Gather the collected stats so that we can assert on them.

@@ -13,8 +13,10 @@ package persistedsqlstats
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/errors"
 )
@@ -54,10 +56,14 @@ func (s *ApplicationStats) ShouldSample(
 // RecordTransaction implements sqlstats.ApplicationStats interface and saves
 // per-transaction statistics.
 func (s *ApplicationStats) RecordTransaction(
-	ctx context.Context, key appstatspb.TransactionFingerprintID, value sqlstats.RecordedTxnStats,
+	ctx context.Context,
+	key appstatspb.TransactionFingerprintID,
+	value sqlstats.RecordedTxnStats,
+	insightsReader insights.Reader,
+	eventsExporter obs.EventsExporterInterface,
 ) error {
 	return s.recordStatsOrSendMemoryPressureSignal(func() error {
-		return s.ApplicationStats.RecordTransaction(ctx, key, value)
+		return s.ApplicationStats.RecordTransaction(ctx, key, value, insightsReader, eventsExporter)
 	})
 }
 
