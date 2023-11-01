@@ -12,15 +12,19 @@ package tests
 
 import (
 	"context"
+	"math/rand"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/testutils/release"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/errors"
 	"github.com/pmezard/go-difflib/difflib"
 )
 
@@ -37,16 +41,10 @@ func registerValidateSystemSchemaAfterVersionUpgrade(r registry.Registry) {
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			predecessorVersionStr, err := release.LatestPredecessor(t.BuildVersion())
-			if err != nil {
-				t.Fatal(err)
-			}
-			predecessorVersion := clusterupgrade.MustParseVersion(predecessorVersionStr)
-
 			// Obtain system table definitions with `SHOW CREATE ALL TABLES` in the SYSTEM db.
-			obtainSystemSchema := func(ctx context.Context, t test.Test, u *versionUpgradeTest, node int) string {
+			obtainSystemSchema := func(ctx context.Context, l *logger.Logger, c cluster.Cluster, node int) string {
 				// Create a connection to the database cluster.
-				db := u.conn(ctx, t, node)
+				db := c.Conn(ctx, l, node)
 				sqlRunner := sqlutils.MakeSQLRunner(db)
 
 				// Prepare the SQL query.
@@ -68,67 +66,46 @@ func registerValidateSystemSchemaAfterVersionUpgrade(r registry.Registry) {
 			// expected and actual output of `SHOW CREATE ALL TABLES;`.
 			var expected, actual string
 
-			// Query node `SHOW CREATE ALL TABLES` and store return in output.
-			obtainSystemSchemaStep := func(node int, output *string) versionStep {
-				return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-					*output = obtainSystemSchema(ctx, t, u, node)
-				}
-			}
-
-			// Wipe nodes in this test's cluster.
-			wipeClusterStep := func(nodes option.NodeListOption) versionStep {
-				return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-					u.c.Wipe(ctx, false /* preserveCerts */, nodes)
-				}
-			}
-
 			// Compare whether two strings are equal -- used to compare expected and actual.
-			validateEquivalenceStep := func(str1, str2 *string) versionStep {
-				return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-					if *str1 != *str2 {
-						diff, diffErr := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
-							A:       difflib.SplitLines(*str1),
-							B:       difflib.SplitLines(*str2),
-							Context: 5,
-						})
-						if diffErr != nil {
-							diff = diffErr.Error()
-							t.Errorf("failed to produce diff: %v", diffErr)
-						}
-						t.Fatalf("After upgrading, `USE system; SHOW CREATE ALL TABLES;` "+
-							"does not match expected output after version upgrade."+
-							"\nDiff:\n%s", diff)
+			validateEquivalence := func(str1, str2 string) error {
+				if str1 != str2 {
+					diff, diffErr := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+						A:       difflib.SplitLines(str1),
+						B:       difflib.SplitLines(str2),
+						Context: 5,
+					})
+					if diffErr != nil {
+						return errors.Newf("failed to produce diff: %v", diffErr)
 					}
-					t.L().Printf("validating succeeded:\n%v", *str1)
+					return errors.Newf("After upgrading, `USE system; SHOW CREATE ALL TABLES;` "+
+						"does not match expected output after version upgrade."+
+						"\nDiff:\n%s", diff)
 				}
+				return nil
 			}
 
-			u := newVersionUpgradeTest(c,
-				// Start the node with the latest binary version.
-				uploadAndStart(c.Node(1), clusterupgrade.CurrentVersion()),
+			binary := uploadVersion(ctx, t, c, c.All(), clusterupgrade.CurrentVersion())
+			if err := clusterupgrade.StartWithSettings(
+				ctx, t.L(), c, c.All(), option.DefaultStartOpts(), install.BinaryOption(binary),
+			); err != nil {
+				t.Fatal(err)
+			}
+			expected = obtainSystemSchema(ctx, t.L(), c, 1)
+			c.Wipe(ctx, false /* preserveCerts */, c.All())
 
-				// Obtain expected output from the node.
-				obtainSystemSchemaStep(1, &expected),
-
-				// Wipe the node.
-				wipeClusterStep(c.Node(1)),
-
-				// Restart the node with a previous binary version.
-				uploadAndStart(c.Node(1), predecessorVersion),
-
-				// Upgrade the node version.
-				binaryUpgradeStep(c.Node(1), clusterupgrade.CurrentVersion()),
-
-				// Wait for the cluster version to also bump up to make sure the migration logic is run.
-				waitForUpgradeStep(c.Node(1)),
-
-				// Obtain the actual output on the upgraded version.
-				obtainSystemSchemaStep(1, &actual),
-
-				// Compare the results.
-				validateEquivalenceStep(&expected, &actual),
+			mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(), mixedversion.NeverUseFixtures)
+			mvt.AfterUpgradeFinalized(
+				"obtain system schema from the upgraded cluster",
+				func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+					actual = obtainSystemSchema(ctx, l, c, 1)
+					if err := validateEquivalence(expected, actual); err != nil {
+						return err
+					}
+					l.Printf("validating succeeded:\n%v", expected)
+					return nil
+				},
 			)
-			u.run(ctx, t)
+			mvt.Run()
 		},
 	})
 }
