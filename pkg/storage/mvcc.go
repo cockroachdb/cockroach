@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -3661,7 +3662,12 @@ func MVCCPredicateDeleteRange(
 
 	var runStart, runEnd roachpb.Key
 
-	buf := make([]roachpb.Key, rangeTombstoneThreshold)
+	// buf holds keys that we might need to issue point deletes
+	// for. We copy the keys using keyAlloc, truncating keyAlloc
+	// if we don't send the point deletes and creating a new
+	// keyAlloc if we do send the point deletes.
+	var keyAlloc bufalloc.ByteAllocator
+	buf := make([]roachpb.Key, 0, rangeTombstoneThreshold)
 
 	if ms == nil {
 		return nil, errors.AssertionFailedf(
@@ -3778,6 +3784,7 @@ func MVCCPredicateDeleteRange(
 			}
 			batchByteSize += int64(MVCCRangeKey{StartKey: runStart, EndKey: runEnd, Timestamp: endTime}.EncodedSize())
 			batchSize++
+			keyAlloc.Truncate()
 		} else {
 			// Use Point tombstones
 			for i := int64(0); i < runSize; i++ {
@@ -3794,9 +3801,13 @@ func MVCCPredicateDeleteRange(
 			}
 			batchByteSize += runByteSize
 			batchSize += runSize
+			keyAlloc = bufalloc.ByteAllocator{}
 		}
+
 		runSize = 0
 		runStart = roachpb.Key{}
+		runEnd = roachpb.Key{}
+		buf = buf[:0]
 		return nil
 	}
 
@@ -3886,11 +3897,9 @@ func MVCCPredicateDeleteRange(
 
 			if runSize < rangeTombstoneThreshold {
 				// Only buffer keys if there's a possibility of issuing point tombstones.
-				//
-				// To avoid unecessary memory allocation, overwrite the previous key at
-				// buffer's current position. No data corruption occurs because the
-				// buffer is flushed up to runSize.
-				buf[runSize] = append(buf[runSize][:0], runEnd...)
+				var keyCopy roachpb.Key
+				keyAlloc, keyCopy = keyAlloc.Copy(runEnd, 0)
+				buf = append(buf, keyCopy)
 			}
 
 			runSize++
