@@ -33,5 +33,6 @@
     PlanLatSeconds:       0,
     RunLatSeconds:        0,
     ServiceLatSeconds:    2,
-    ContentionEvents:     nil,
+    ContentionEvents:     {
+    },
 }

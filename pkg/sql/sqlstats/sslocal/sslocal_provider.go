@@ -65,7 +65,7 @@ func (s *SQLStats) GetController(server serverpb.SQLStatusServer) *Controller {
 }
 
 // Start implements sqlstats.Provider interface.
-func (s *SQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
+func (s *SQLStats) Start(ctx context.Context, stopper *stop.Stopper, _ *insights.Provider) {
 	// We run a periodic async job to clean up the in-memory stats.
 	_ = stopper.RunAsyncTask(ctx, "sql-stats-clearer", func(ctx context.Context) {
 		var timer timeutil.Timer

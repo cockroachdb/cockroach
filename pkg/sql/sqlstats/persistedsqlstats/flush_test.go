@@ -117,8 +117,8 @@ func TestSQLStatsFlush(t *testing.T) {
 		verifyInMemoryStatsCorrectness(t, testQueries, firstServerSQLStats)
 		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
 
-		firstServerSQLStats.Flush(ctx)
-		secondServerSQLStats.Flush(ctx)
+		firstServerSQLStats.Flush(ctx, firstServer.SQLServer().(*sql.Server).GetInsightsProvider())
+		secondServerSQLStats.Flush(ctx, secondServer.SQLServer().(*sql.Server).GetInsightsProvider())
 
 		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
 		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
@@ -148,8 +148,8 @@ func TestSQLStatsFlush(t *testing.T) {
 		verifyInMemoryStatsCorrectness(t, testQueries, firstServerSQLStats)
 		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
 
-		firstServerSQLStats.Flush(ctx)
-		secondServerSQLStats.Flush(ctx)
+		firstServerSQLStats.Flush(ctx, firstServer.SQLServer().(*sql.Server).GetInsightsProvider())
+		secondServerSQLStats.Flush(ctx, secondServer.SQLServer().(*sql.Server).GetInsightsProvider())
 
 		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
 		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
@@ -179,8 +179,8 @@ func TestSQLStatsFlush(t *testing.T) {
 		verifyInMemoryStatsCorrectness(t, testQueries, firstServerSQLStats)
 		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
 
-		firstServerSQLStats.Flush(ctx)
-		secondServerSQLStats.Flush(ctx)
+		firstServerSQLStats.Flush(ctx, firstServer.SQLServer().(*sql.Server).GetInsightsProvider())
+		secondServerSQLStats.Flush(ctx, secondServer.SQLServer().(*sql.Server).GetInsightsProvider())
 
 		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
 		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
@@ -207,8 +207,8 @@ func TestSQLStatsFlush(t *testing.T) {
 		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
 		verifyInMemoryStatsCorrectness(t, testQueries, secondServerSQLStats)
 
-		firstServerSQLStats.Flush(ctx)
-		secondServerSQLStats.Flush(ctx)
+		firstServerSQLStats.Flush(ctx, firstServer.SQLServer().(*sql.Server).GetInsightsProvider())
+		secondServerSQLStats.Flush(ctx, secondServer.SQLServer().(*sql.Server).GetInsightsProvider())
 
 		verifyInMemoryStatsEmpty(t, testQueries, firstServerSQLStats)
 		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
@@ -342,7 +342,8 @@ func TestSQLStatsMinimumFlushInterval(t *testing.T) {
 	sqlConn.Exec(t, "SELECT 1")
 
 	s.SQLServer().(*sql.Server).
-		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).
+		Flush(ctx, s.SQLServer().(*sql.Server).GetInsightsProvider())
 
 	sqlConn.CheckQueryResults(t, `
 		SELECT count(*)
@@ -359,7 +360,8 @@ func TestSQLStatsMinimumFlushInterval(t *testing.T) {
 	// Since by default, the minimum flush interval is 10 minutes, a subsequent
 	// flush should be no-op.
 	s.SQLServer().(*sql.Server).
-		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).
+		Flush(ctx, s.SQLServer().(*sql.Server).GetInsightsProvider())
 
 	sqlConn.CheckQueryResults(t, `
 		SELECT count(*)
@@ -378,7 +380,8 @@ func TestSQLStatsMinimumFlushInterval(t *testing.T) {
 	fakeTime.setTime(fakeTime.Now().Add(time.Hour))
 
 	s.SQLServer().(*sql.Server).
-		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).
+		Flush(ctx, s.SQLServer().(*sql.Server).GetInsightsProvider())
 
 	sqlConn.CheckQueryResults(t, `
 		SELECT count(*) > 1
@@ -420,7 +423,8 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 		`, [][]string{{"1"}})
 
 		s.SQLServer().(*sql.Server).
-			GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+			GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).
+			Flush(ctx, s.SQLServer().(*sql.Server).GetInsightsProvider())
 
 		observerConn.CheckQueryResults(t, `
 		SELECT count(*)
@@ -452,7 +456,8 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 
 		// First flush should flush everything into the system tables.
 		s.SQLServer().(*sql.Server).
-			GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+			GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).
+			Flush(ctx, s.SQLServer().(*sql.Server).GetInsightsProvider())
 
 		observerConn.CheckQueryResults(t, `
 		SELECT count(*)
@@ -471,7 +476,8 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 		// Second flush should be aborted due to violating the minimum flush
 		// interval requirement. Though the data should still remain in-memory.
 		s.SQLServer().(*sql.Server).
-			GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+			GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).
+			Flush(ctx, s.SQLServer().(*sql.Server).GetInsightsProvider())
 
 		observerConn.CheckQueryResults(t, `
 		SELECT count(*)
@@ -515,7 +521,8 @@ func TestSQLStatsGatewayNodeSetting(t *testing.T) {
 	sqlConn.Exec(t, "SET application_name = 'gateway_enabled'")
 	sqlConn.Exec(t, "SELECT 1")
 	s.SQLServer().(*sql.Server).
-		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).
+		Flush(ctx, s.SQLServer().(*sql.Server).GetInsightsProvider())
 
 	verifyNodeID(t, sqlConn, "SELECT _", true, "gateway_enabled")
 
@@ -525,7 +532,8 @@ func TestSQLStatsGatewayNodeSetting(t *testing.T) {
 	sqlConn.Exec(t, "SET application_name = 'gateway_disabled'")
 	sqlConn.Exec(t, "SELECT 1")
 	s.SQLServer().(*sql.Server).
-		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).
+		Flush(ctx, s.SQLServer().(*sql.Server).GetInsightsProvider())
 
 	verifyNodeID(t, sqlConn, "SELECT _", false, "gateway_disabled")
 }
@@ -557,7 +565,7 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 	pss := s.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
 
 	// 1. Flush then count to get the initial number of rows.
-	pss.Flush(ctx)
+	pss.Flush(ctx, s.SQLServer().(*sql.Server).GetInsightsProvider())
 	stmtStatsCount, txnStatsCount := countStats(t, sqlConn)
 
 	// The size check is done at the shard level. Execute enough so all the shards
@@ -569,7 +577,7 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 		sqlConn.Exec(t, `SET application_name = $1`, appName)
 		sqlConn.Exec(t, "SELECT 1")
 		additionalStatements += 2
-		pss.Flush(ctx)
+		pss.Flush(ctx, s.SQLServer().(*sql.Server).GetInsightsProvider())
 	}
 
 	stmtStatsCountFlush2, txnStatsCountFlush2 := countStats(t, sqlConn)
@@ -626,7 +634,7 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 		t.Run("enforce-limit-"+boolStr, func(t *testing.T) {
 			sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.limit_table_size.enabled = "+boolStr)
 
-			pss.Flush(ctx)
+			pss.Flush(ctx, s.SQLServer().(*sql.Server).GetInsightsProvider())
 
 			stmtStatsCountFlush3, txnStatsCountFlush3 := countStats(t, sqlConn)
 
@@ -672,7 +680,7 @@ func TestSQLStatsReadLimitSizeOnLockedTable(t *testing.T) {
 		sqlConn.Exec(t, "SELECT 1")
 	}
 
-	pss.Flush(ctx)
+	pss.Flush(ctx, s.SQLServer().(*sql.Server).GetInsightsProvider())
 	stmtStatsCountFlush, _ := countStats(t, sqlConn)
 
 	// Ensure we have some rows in system.statement_statistics
@@ -1072,4 +1080,75 @@ func smallestStatsCountAcrossAllShards(
 	}
 
 	return numStmtStats
+}
+
+func TestExportStatementInsights(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	sqlConn := sqlutils.MakeSQLRunner(conn)
+
+	const appName = "TestExportStatementInsights"
+
+	sqlConn.CheckQueryResults(t, fmt.Sprintf(`
+		SELECT count(*)
+		FROM crdb_internal.cluster_execution_insights
+		WHERE app_name = '%s'
+		`, appName), [][]string{{"0"}})
+
+	sqlConn.Exec(t, fmt.Sprintf("SET application_name = '%s'", appName))
+	sqlConn.Exec(t, "SELECT pg_sleep(0.11)")
+	sqlConn.Exec(t, "SELECT pg_sleep(0.11) WHERE 1=1")
+	sqlConn.Exec(t, "SET application_name = 'randomIgnore'")
+
+	testutils.SucceedsSoon(t, func() error {
+		var insightsCount int
+		row := sqlConn.QueryRow(t, fmt.Sprintf(`
+		SELECT count(*)
+		FROM crdb_internal.cluster_execution_insights
+		WHERE app_name = '%s'
+		`, appName))
+		row.Scan(&insightsCount)
+		if insightsCount != 2 {
+			return errors.Newf("waiting for slow executions to complete")
+		}
+		return nil
+	})
+
+	s.SQLServer().(*sql.Server).
+		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).
+		Flush(ctx, s.SQLServer().(*sql.Server).GetInsightsProvider())
+
+	// With export disable, there should be no change on insights.
+	sqlConn.CheckQueryResults(t, fmt.Sprintf(`
+		SELECT count(*)
+		FROM crdb_internal.cluster_execution_insights
+		WHERE app_name = '%s'
+		`, appName), [][]string{{"2"}})
+
+	// Enable export to Observability Service.
+	sqlConn.Exec(t, "SET CLUSTER SETTING sql.insights.export.enabled = true")
+
+	s.SQLServer().(*sql.Server).
+		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).
+		Flush(ctx, s.SQLServer().(*sql.Server).GetInsightsProvider())
+
+	// With export enable, insights should be removed from memory.
+	testutils.SucceedsSoon(t, func() error {
+		var insightsCount int
+		row := sqlConn.QueryRow(t, fmt.Sprintf(`
+		SELECT count(*)
+		FROM crdb_internal.cluster_execution_insights
+		WHERE app_name = '%s'
+		`, appName))
+		row.Scan(&insightsCount)
+		if insightsCount != 0 {
+			return errors.Newf("waiting for flush to complete")
+		}
+		return nil
+	})
 }
