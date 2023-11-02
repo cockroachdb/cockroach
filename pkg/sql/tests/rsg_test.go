@@ -297,6 +297,9 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 		if strings.HasPrefix(s, "SET SESSION CHARACTERISTICS AS TRANSACTION") {
 			return errors.New("setting session characteristics is unsupported")
 		}
+		if strings.HasPrefix(s, "DROP DATABASE ident") {
+			return errors.New("dropping the database is likely to timeout since it needs to drop a lot of dependent objects")
+		}
 		if strings.Contains(s, "READ ONLY") || strings.Contains(s, "read_only") {
 			return errors.New("READ ONLY settings are unsupported")
 		}
@@ -306,7 +309,7 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 		if strings.Contains(s, "EXPERIMENTAL SCRUB DATABASE SYSTEM") {
 			return errors.New("See #43693")
 		}
-		// Recreate the database on every run in case it was dropped or renamed in
+		// Recreate the database on every run in case it was renamed in
 		// a previous run. Should always succeed.
 		if err := db.exec(t, ctx, `CREATE DATABASE IF NOT EXISTS ident`); err != nil {
 			return err
