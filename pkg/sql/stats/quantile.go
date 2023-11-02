@@ -824,6 +824,16 @@ func (q quantile) fixMalformed() (quantile, error) {
 	return fixed, nil
 }
 
+// isInvalid returns true if q contains NaN values.
+func (q quantile) isInvalid() bool {
+	for i := range q {
+		if math.IsNaN(q[i].p) || math.IsNaN(q[i].v) {
+			return true
+		}
+	}
+	return false
+}
+
 // isWellFormed returns true if q is well-formed (i.e. is non-decreasing in v).
 func (q quantile) isWellFormed() bool {
 	for i := 1; i < len(q); i++ {

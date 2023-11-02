@@ -413,6 +413,9 @@ func predictHistogram(
 	// Construct a linear regression model of quantile functions over time, and
 	// use it to predict a quantile function at the given time.
 	yₙ, r2 := quantileSimpleLinearRegression(createdAts, quantiles, forecastAt)
+	if yₙ.isInvalid() {
+		return histogram{}, errors.Newf("predicted histogram contains NaN values")
+	}
 	var err error
 	yₙ, err = yₙ.fixMalformed()
 	if err != nil {
