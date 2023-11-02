@@ -643,6 +643,9 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 		} else {
 			_, err = o.spanStmt.Exec(ctx)
 		}
+		if err != nil {
+			return err
+		}
 		elapsed := timeutil.Since(start)
 		o.hists.Get(`span`).Record(elapsed)
 		return err
@@ -699,6 +702,9 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 		}
 	} else {
 		_, err = o.writeStmt.Exec(ctx, writeArgs...)
+	}
+	if err != nil {
+		return err
 	}
 	elapsed := timeutil.Since(start)
 	o.hists.Get(`write`).Record(elapsed)
