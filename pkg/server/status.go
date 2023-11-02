@@ -1315,6 +1315,12 @@ func (s *statusServer) LogFile(
 			if err == io.EOF {
 				break
 			}
+			if errors.Is(err, log.ErrMalformedLogEntry) {
+				resp.Errors = append(resp.Errors, err.Error())
+				// Proceed decoding next entry, as we want to retrieve as mach logs
+				// as possible.
+				continue
+			}
 			return nil, srverrors.ServerError(ctx, err)
 		}
 		if tenantIDFilter != "" && entry.TenantID != tenantIDFilter {

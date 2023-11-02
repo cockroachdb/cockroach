@@ -472,6 +472,13 @@ func (zc *debugZipContext) collectPerNodeData(
 				if err := zc.z.createError(sf, name, requestErr); err != nil {
 					return err
 				}
+				// Log out the list of errors that occurred during log entries request.
+				if len(entries.Errors) > 0 {
+					sf.shout("%d errors occurred:", len(entries.Errors))
+					for _, err := range entries.Errors {
+						sf.shout("%s", err)
+					}
+				}
 				continue
 			}
 			sf.progress("writing output: %s", name)
