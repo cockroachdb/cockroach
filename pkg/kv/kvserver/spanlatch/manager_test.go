@@ -97,7 +97,7 @@ func testLatchBlocks(t *testing.T, a Attempt) {
 // MustAcquire is like Acquire, except it can't return context cancellation
 // errors.
 func (m *Manager) MustAcquire(spans *spanset.SpanSet) *Guard {
-	lg, err := m.Acquire(context.Background(), spans, poison.Policy_Error, nil)
+	lg, err := m.Acquire(context.Background(), spans, poison.Policy_Error, nil, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -125,7 +125,7 @@ func (m *Manager) MustAcquireChExt(
 	ctx context.Context, spans *spanset.SpanSet, pp poison.Policy,
 ) Attempt {
 	errCh := make(chan error, 1)
-	lg, snap := m.sequence(spans, pp, nil)
+	lg, snap := m.sequence(spans, pp, nil, nil)
 	go func() {
 		err := m.wait(ctx, lg, snap)
 		if err != nil {
@@ -617,13 +617,13 @@ func TestLatchManagerOptimistic(t *testing.T) {
 
 	ctx := context.Background()
 	// Acquire latches, no conflict.
-	lg1 := m.AcquireOptimistic(spans("d", "f", write, zeroTS), poison.Policy_Error, nil)
+	lg1 := m.AcquireOptimistic(spans("d", "f", write, zeroTS), poison.Policy_Error, nil, nil)
 	require.True(t, m.CheckOptimisticNoConflicts(lg1, spans("d", "f", write, zeroTS)), poison.Policy_Error)
 	lg1, err := m.WaitUntilAcquired(ctx, lg1)
 	require.NoError(t, err)
 
 	// Optimistic acquire encounters conflict in some cases.
-	lg2 := m.AcquireOptimistic(spans("a", "e", read, zeroTS), poison.Policy_Error, nil)
+	lg2 := m.AcquireOptimistic(spans("a", "e", read, zeroTS), poison.Policy_Error, nil, nil)
 	require.False(t, m.CheckOptimisticNoConflicts(lg2, spans("a", "e", read, zeroTS)))
 	require.True(t, m.CheckOptimisticNoConflicts(lg2, spans("a", "d", read, zeroTS)))
 	waitUntilAcquiredCh := func(g *Guard) Attempt {
@@ -640,7 +640,7 @@ func TestLatchManagerOptimistic(t *testing.T) {
 	testLatchSucceeds(t, a2)
 
 	// Optimistic acquire encounters conflict.
-	lg3 := m.AcquireOptimistic(spans("a", "e", write, zeroTS), poison.Policy_Error, nil)
+	lg3 := m.AcquireOptimistic(spans("a", "e", write, zeroTS), poison.Policy_Error, nil, nil)
 	require.False(t, m.CheckOptimisticNoConflicts(lg3, spans("a", "e", write, zeroTS)))
 	m.Release(ctx, lg2)
 	// There is still a conflict even though lg2 has been released.
@@ -652,7 +652,7 @@ func TestLatchManagerOptimistic(t *testing.T) {
 	// Optimistic acquire for read below write encounters no conflict.
 	oneTS, twoTS := hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}
 	lg4 := m.MustAcquire(spans("c", "e", write, twoTS))
-	lg5 := m.AcquireOptimistic(spans("a", "e", read, oneTS), poison.Policy_Error, nil)
+	lg5 := m.AcquireOptimistic(spans("a", "e", read, oneTS), poison.Policy_Error, nil, nil)
 	require.True(t, m.CheckOptimisticNoConflicts(lg5, spans("a", "e", read, oneTS)))
 	require.True(t, m.CheckOptimisticNoConflicts(lg5, spans("a", "c", read, oneTS)))
 	lg5, err = m.WaitUntilAcquired(ctx, lg5)
@@ -667,14 +667,14 @@ func TestLatchManagerWaitFor(t *testing.T) {
 
 	ctx := context.Background()
 	// Acquire latches, no conflict.
-	lg1, err := m.Acquire(ctx, spans("d", "f", write, zeroTS), poison.Policy_Error, nil)
+	lg1, err := m.Acquire(ctx, spans("d", "f", write, zeroTS), poison.Policy_Error, nil, nil)
 	require.NoError(t, err)
 
 	// See if WaitFor waits for above latch.
 	waitForCh := func() Attempt {
 		errCh := make(chan error)
 		go func() {
-			errCh <- m.WaitFor(ctx, spans("a", "e", read, zeroTS), poison.Policy_Error, nil)
+			errCh <- m.WaitFor(ctx, spans("a", "e", read, zeroTS), poison.Policy_Error, nil, nil)
 		}()
 		return Attempt{errCh: errCh}
 	}
@@ -685,7 +685,7 @@ func TestLatchManagerWaitFor(t *testing.T) {
 
 	// Optimistic acquire should _not_ encounter conflict - as WaitFor should
 	// not lay any latches.
-	lg3 := m.AcquireOptimistic(spans("a", "e", write, zeroTS), poison.Policy_Error, nil)
+	lg3 := m.AcquireOptimistic(spans("a", "e", write, zeroTS), poison.Policy_Error, nil, nil)
 	require.True(t, m.CheckOptimisticNoConflicts(lg3, spans("a", "e", write, zeroTS)))
 	lg3, err = m.WaitUntilAcquired(ctx, lg3)
 	require.NoError(t, err)
@@ -734,7 +734,7 @@ func BenchmarkLatchManagerReadWriteMix(b *testing.B) {
 
 			b.ResetTimer()
 			for i := range spans {
-				lg, snap := m.sequence(&spans[i], poison.Policy_Error, nil)
+				lg, snap := m.sequence(&spans[i], poison.Policy_Error, nil, nil)
 				snap.close()
 				if len(lgBuf) == cap(lgBuf) {
 					m.Release(ctx, <-lgBuf)
