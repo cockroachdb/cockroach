@@ -269,7 +269,7 @@ var _ Subscription = (*partitionedStreamSubscription)(nil)
 
 // Subscribe implements the Subscription interface.
 func (p *partitionedStreamSubscription) Subscribe(ctx context.Context) error {
-	ctx, sp := tracing.ChildSpan(ctx, "Subscription.Subscribe")
+	ctx, sp := tracing.ChildSpan(ctx, "partitionedStreamSubscription.Subscribe")
 	defer sp.Finish()
 
 	defer close(p.eventsChan)
