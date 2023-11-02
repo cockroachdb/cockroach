@@ -666,7 +666,6 @@ func Extend(l *logger.Logger, clusterName string, lifetime time.Duration) error 
 // DefaultStartOpts returns a StartOpts populated with default values.
 func DefaultStartOpts() install.StartOpts {
 	return install.StartOpts{
-		Sequential:         true,
 		EncryptedStores:    false,
 		NumFilesLimit:      config.DefaultNumFilesLimit,
 		SkipInit:           false,

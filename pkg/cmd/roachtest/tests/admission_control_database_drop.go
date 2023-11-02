@@ -199,7 +199,6 @@ func registerDatabaseDrop(r registry.Registry) {
 				start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 					startOpts := option.DefaultStartOptsNoBackups()
-					startOpts.RoachprodOpts.Sequential = false // the cluster's already bootstrapped
 					settings := install.MakeClusterSettings(install.NumRacksOption(crdbNodes))
 					if err := c.StartE(ctx, t.L(), startOpts, settings, c.Range(1, crdbNodes)); err != nil {
 						t.Fatal(err)
