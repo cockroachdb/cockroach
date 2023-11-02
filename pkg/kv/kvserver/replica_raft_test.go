@@ -165,7 +165,12 @@ func testProposalsWithInjectedLeaseIndexAndReproposalError(t *testing.T, pipelin
 		if ba == nil {
 			return "", false // not local proposal
 		}
-		inc := ba.Requests[0].GetIncrement()
+		var inc *kvpb.IncrementRequest
+		for i := range ba.Requests {
+			if inc = ba.Requests[i].GetIncrement(); inc != nil {
+				break
+			}
+		}
 		if inc == nil {
 			return "", false
 		}
