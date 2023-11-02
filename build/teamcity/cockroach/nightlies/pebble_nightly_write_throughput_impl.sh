@@ -25,7 +25,8 @@ timeout -s INT 12h bin/roachtest run \
   --parallelism 2 \
   --teamcity \
   --cpu-quota=384 \
-  pebble tag:pebble_nightly_write
+  --suite pebble_nightly_write \
+  pebble
 
 exit_status=$?
 

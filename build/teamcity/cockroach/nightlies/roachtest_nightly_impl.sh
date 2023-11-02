@@ -30,4 +30,5 @@ build/teamcity-roachtest-invoke.sh \
   --artifacts=/artifacts \
   --artifacts-literal="${LITERAL_ARTIFACTS_DIR:-}" \
   --slack-token="${SLACK_TOKEN}" \
-  "${TESTS}" ${FILTER}
+  --suite nightly \
+  "${TESTS}"

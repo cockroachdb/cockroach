@@ -24,7 +24,8 @@ timeout -s INT $((1000*60)) bin/roachtest run \
   --parallelism 3 \
   --teamcity \
   --cpu-quota=384 \
-  pebble tag:pebble_nightly_ycsb_race
+  --suite pebble_nightly_ycsb_race \
+  pebble
 
 exit_status=$?
 
