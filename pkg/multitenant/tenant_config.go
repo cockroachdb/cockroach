@@ -11,6 +11,8 @@
 package multitenant
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 )
@@ -39,4 +41,24 @@ var VerifyTenantService = settings.RegisterBoolSetting(
 	"verify that the service mode is coherently set with the value of "+DefaultClusterSelectSettingName,
 	true,
 	settings.WithName(DefaultClusterSelectSettingName+".check_service.enabled"),
+)
+
+// WaitForClusterStart, if enabled, instructs the tenant controller to
+// wait up to WaitForClusterStartTimeout for the defuault virtual
+// cluster to have an active SQL server.
+var WaitForClusterStart = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"server.controller.mux_virtual_cluster_wait.enabled",
+	"wait up to server.controller_mux_virtual_cluster_wait.timeout for the default virtual cluster to become available for SQL connections",
+	false,
+)
+
+// WaitForClusterStartTimeout is the amoutn of time the the tenant
+// controller will wait for the default virtual cluster to have an
+// active SQL server, if WaitForClusterStart is true.
+var WaitForClusterStartTimeout = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"server.controller.mux_virtual_cluster_wait.timeout",
+	"amount of time to wait for a default virtual cluster to become available when serving SQL connections",
+	10*time.Second,
 )
