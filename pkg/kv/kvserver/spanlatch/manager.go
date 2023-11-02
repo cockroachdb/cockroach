@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -67,6 +69,9 @@ type Manager struct {
 	settings           *cluster.Settings
 	everySecondLogger  log.EveryN
 	latchWaitDurations metric.IHistogram
+
+	// clock is used to provide predictable timestamps for testing.
+	clock *hlc.Clock
 }
 
 // scopedManager is a latch manager scoped to either local or global keys.
@@ -83,6 +88,7 @@ func Make(
 	slowReqs *metric.Gauge,
 	settings *cluster.Settings,
 	latchWaitDurations metric.IHistogram,
+	clock *hlc.Clock,
 ) Manager {
 	return Manager{
 		stopper:            stopper,
@@ -90,6 +96,7 @@ func Make(
 		settings:           settings,
 		everySecondLogger:  log.Every(1 * time.Second),
 		latchWaitDurations: latchWaitDurations,
+		clock:              clock,
 	}
 }
 
@@ -115,9 +122,9 @@ func (la *latch) String() string {
 // SafeFormat implements the redact.SafeFormatter interface.
 func (la *latch) SafeFormat(w redact.SafePrinter, verb rune) {
 	w.Printf("%s@%s", la.span, la.ts)
-	if la.g != nil && la.g.baFmt != nil {
+	if la.g != nil && la.g.ba != nil {
 		w.Printf(" for request ")
-		la.g.baFmt.SafeFormat(w, verb)
+		la.g.ba.SafeFormat(w, verb)
 	}
 }
 
@@ -141,8 +148,8 @@ type signals struct {
 // Manager.Acquire and accepted by Manager.Release.
 type Guard struct {
 	signals
-	pp    poison.Policy
-	baFmt redact.SafeFormatter
+	pp poison.Policy
+	ba *kvpb.BatchRequest
 	// latches [spanset.NumSpanScope][spanset.NumSpanAccess][]latch, but half the size.
 	latchesPtrs [spanset.NumSpanScope][spanset.NumSpanAccess]unsafe.Pointer
 	latchesLens [spanset.NumSpanScope][spanset.NumSpanAccess]int32
@@ -164,6 +171,13 @@ func (lg *Guard) latches(s spanset.SpanScope, a spanset.SpanAccess) []latch {
 func (lg *Guard) setLatches(s spanset.SpanScope, a spanset.SpanAccess, latches []latch) {
 	lg.latchesPtrs[s][a] = unsafe.Pointer(&latches[0])
 	lg.latchesLens[s][a] = int32(len(latches))
+}
+
+func (lg *Guard) maybeGetTxnMeta() *enginepb.TxnMeta {
+	if lg.ba == nil || lg.ba.Txn == nil {
+		return nil
+	}
+	return &lg.ba.Txn.TxnMeta
 }
 
 func allocGuardAndLatches(nLatches int) (*Guard, []latch) {
@@ -200,11 +214,11 @@ func allocGuardAndLatches(nLatches int) (*Guard, []latch) {
 	return new(Guard), make([]latch, nLatches)
 }
 
-func newGuard(spans *spanset.SpanSet, pp poison.Policy, baFmt redact.SafeFormatter) *Guard {
+func newGuard(spans *spanset.SpanSet, pp poison.Policy, ba *kvpb.BatchRequest) *Guard {
 	nLatches := spans.Len()
 	guard, latches := allocGuardAndLatches(nLatches)
 	guard.pp = pp
-	guard.baFmt = baFmt
+	guard.ba = ba
 	for s := spanset.SpanScope(0); s < spanset.NumSpanScope; s++ {
 		for a := spanset.SpanAccess(0); a < spanset.NumSpanAccess; a++ {
 			ss := spans.GetSpans(a, s)
@@ -240,9 +254,9 @@ func newGuard(spans *spanset.SpanSet, pp poison.Policy, baFmt redact.SafeFormatt
 //
 // It returns a Guard which must be provided to Release.
 func (m *Manager) Acquire(
-	ctx context.Context, spans *spanset.SpanSet, pp poison.Policy, baFmt redact.SafeFormatter,
+	ctx context.Context, spans *spanset.SpanSet, pp poison.Policy, ba *kvpb.BatchRequest,
 ) (*Guard, error) {
-	lg, snap := m.sequence(spans, pp, baFmt)
+	lg, snap := m.sequence(spans, pp, ba)
 	defer snap.close()
 
 	err := m.wait(ctx, lg, snap)
@@ -266,9 +280,9 @@ func (m *Manager) Acquire(
 // The method returns a Guard which must be provided to the
 // CheckOptimisticNoConflicts, Release methods.
 func (m *Manager) AcquireOptimistic(
-	spans *spanset.SpanSet, pp poison.Policy, baFmt redact.SafeFormatter,
+	spans *spanset.SpanSet, pp poison.Policy, ba *kvpb.BatchRequest,
 ) *Guard {
-	lg, snap := m.sequence(spans, pp, baFmt)
+	lg, snap := m.sequence(spans, pp, ba)
 	lg.snap = &snap
 	return lg
 }
@@ -277,11 +291,11 @@ func (m *Manager) AcquireOptimistic(
 // any latches itself. Fast path for operations that only require past latches
 // to be released without blocking new latches.
 func (m *Manager) WaitFor(
-	ctx context.Context, spans *spanset.SpanSet, pp poison.Policy, baFmt redact.SafeFormatter,
+	ctx context.Context, spans *spanset.SpanSet, pp poison.Policy, ba *kvpb.BatchRequest,
 ) error {
 	// The guard is only used to store latches by this request. These latches
 	// are not actually inserted using insertLocked.
-	lg := newGuard(spans, pp, baFmt)
+	lg := newGuard(spans, pp, ba)
 
 	m.mu.Lock()
 	snap := m.snapshotLocked(spans)
@@ -378,9 +392,9 @@ func (m *Manager) WaitUntilAcquired(ctx context.Context, lg *Guard) (*Guard, err
 // unlocks the manager. The role of the method is to sequence latch acquisition
 // attempts.
 func (m *Manager) sequence(
-	spans *spanset.SpanSet, pp poison.Policy, baFmt redact.SafeFormatter,
+	spans *spanset.SpanSet, pp poison.Policy, ba *kvpb.BatchRequest,
 ) (*Guard, snapshot) {
-	lg := newGuard(spans, pp, baFmt)
+	lg := newGuard(spans, pp, ba)
 
 	m.mu.Lock()
 	snap := m.snapshotLocked(spans)
@@ -572,11 +586,10 @@ func (m *Manager) waitForSignal(
 	waitType, heldType spanset.SpanAccess,
 	wait, held *latch,
 ) error {
-	if m.latchWaitDurations != nil {
+	sp := tracing.SpanFromContext(ctx)
+	if sp != nil || m.latchWaitDurations != nil {
 		tBegin := crtime.NowMono()
-		defer func() {
-			m.latchWaitDurations.RecordValue(tBegin.Elapsed().Nanoseconds())
-		}()
+		defer m.logWaitTime(sp, tBegin, wait, held)
 	}
 	log.Eventf(ctx, "waiting to acquire %s latch %s, held by %s latch %s", waitType, wait, heldType, held)
 	poisonCh := held.g.poison.signalChan()
@@ -623,6 +636,29 @@ func (m *Manager) waitForSignal(
 	}
 }
 
+// logWaitTime records the amount of time spent waiting for a latch held by the
+// transaction with the given ID.213
+func (m *Manager) logWaitTime(sp *tracing.Span, startTime crtime.Mono, wait, held *latch) {
+	elapsed := startTime.Elapsed()
+	if m.latchWaitDurations != nil {
+		// Track the wait time in the "per-store" metrics.
+		m.latchWaitDurations.RecordValue(elapsed.Nanoseconds())
+	}
+	if sp != nil {
+		// Emit a contention event if the waiting transaction is different from the
+		// holding transaction. TODO(#124068): consider adding a metric for the case
+		// when the transaction is the same.
+		waitTxn, heldTxn := wait.g.ba.Txn, held.g.ba.Txn
+		if waitTxn != nil && (heldTxn == nil || waitTxn.ID != heldTxn.ID) {
+			ev := &kvpb.ContentionEvent{Key: held.span.Key, Duration: elapsed, IsLatch: true}
+			if heldTxn != nil {
+				ev.TxnMeta = heldTxn.TxnMeta
+			}
+			sp.RecordStructured(ev)
+		}
+	}
+}
+
 // Poison marks the Guard as poisoned, meaning that the request will not be
 // expected to be releasing its latches (any time soon). This gives requests
 // blocking on the Guard's latches an opportunity to fail fast, according to
@@ -649,9 +685,9 @@ func (m *Manager) Release(ctx context.Context, lg *Guard) {
 		const msg = "%s has held latch for %s. Some possible causes are " +
 			"slow disk reads, slow raft replication, and expensive request processing."
 		if m.everySecondLogger.ShouldLog() {
-			log.Warningf(ctx, msg, lg.baFmt, humanizeutil.Duration(held))
+			log.Warningf(ctx, msg, lg.ba, humanizeutil.Duration(held))
 		} else {
-			log.VEventf(ctx, 2, msg, lg.baFmt, humanizeutil.Duration(held))
+			log.VEventf(ctx, 2, msg, lg.ba, humanizeutil.Duration(held))
 		}
 	}
 }

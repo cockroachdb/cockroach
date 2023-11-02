@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // ShouldCollectStats is a helper function used to determine if a processor
@@ -31,9 +32,21 @@ func ShouldCollectStats(ctx context.Context, collectStats bool) bool {
 // kvpb.ContentionEvents seen by the listener.
 type ContentionEventsListener struct {
 	cumulativeContentionTime int64 // atomic
+
+	// txnID is the ID of the transaction that this listener is associated with.
+	// This is used to distinguish self-induced latch wait time
+	// (e.g. for QueryIntent) from contention-induced latch wait time.
+	txnID uuid.UUID
 }
 
 var _ tracing.EventListener = &ContentionEventsListener{}
+
+// Init initializes the listener with the current transaction ID. This is used
+// to distinguish self-induced latch wait time (e.g. for QueryIntent) from
+// contention-induced latch wait time.
+func (c *ContentionEventsListener) Init(txnID uuid.UUID) {
+	c.txnID = txnID
+}
 
 // Notify is part of the tracing.EventListener interface.
 func (c *ContentionEventsListener) Notify(event tracing.Structured) tracing.EventConsumptionStatus {
@@ -41,7 +54,12 @@ func (c *ContentionEventsListener) Notify(event tracing.Structured) tracing.Even
 	if !ok {
 		return tracing.EventNotConsumed
 	}
-	atomic.AddInt64(&c.cumulativeContentionTime, int64(ce.Duration))
+	// Avoid counting this event as contention time if the current transaction
+	// (if any) waited on itself. This can happen when a QueryIntent request
+	// waits for a pipelined write to finish replication.
+	if c.txnID == uuid.Nil || c.txnID != ce.TxnMeta.ID {
+		atomic.AddInt64(&c.cumulativeContentionTime, int64(ce.Duration))
+	}
 	return tracing.EventConsumed
 }
 

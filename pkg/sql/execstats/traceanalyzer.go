@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -374,7 +375,9 @@ func (a *TraceAnalyzer) GetQueryLevelStats() QueryLevelStats {
 
 // getAllContentionEvents returns all contention events that are found in the
 // given trace.
-func getAllContentionEvents(trace []tracingpb.RecordedSpan) []kvpb.ContentionEvent {
+func getAllContentionEvents(
+	evalCtx *eval.Context, trace []tracingpb.RecordedSpan,
+) []kvpb.ContentionEvent {
 	var contentionEvents []kvpb.ContentionEvent
 	var ev kvpb.ContentionEvent
 	for i := range trace {
@@ -383,6 +386,11 @@ func getAllContentionEvents(trace []tracingpb.RecordedSpan) []kvpb.ContentionEve
 				return
 			}
 			if err := pbtypes.UnmarshalAny(any, &ev); err != nil {
+				return
+			}
+			if ev.IsLatch && !evalCtx.SessionData().RegisterLatchWaitContentionEvents {
+				// This event should be included in the trace and contention time
+				// metrics, but not registered with the *_contention_events tables.
 				return
 			}
 			contentionEvents = append(contentionEvents, ev)
@@ -396,7 +404,10 @@ func getAllContentionEvents(trace []tracingpb.RecordedSpan) []kvpb.ContentionEve
 // errors occur while processing stats, GetQueryLevelStats returns the combined
 // errors to the caller but continues calculating other stats.
 func GetQueryLevelStats(
-	trace []tracingpb.RecordedSpan, deterministicExplainAnalyze bool, flowsMetadata []*FlowsMetadata,
+	evalCtx *eval.Context,
+	trace []tracingpb.RecordedSpan,
+	deterministicExplainAnalyze bool,
+	flowsMetadata []*FlowsMetadata,
 ) (QueryLevelStats, error) {
 	var queryLevelStats QueryLevelStats
 	var errs error
@@ -410,6 +421,6 @@ func GetQueryLevelStats(
 		analyzer.ProcessStats()
 		queryLevelStats.Accumulate(analyzer.GetQueryLevelStats())
 	}
-	queryLevelStats.ContentionEvents = getAllContentionEvents(trace)
+	queryLevelStats.ContentionEvents = getAllContentionEvents(evalCtx, trace)
 	return queryLevelStats, errs
 }

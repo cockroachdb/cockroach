@@ -15,11 +15,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -390,7 +392,9 @@ func TestGetQueryLevelStatsAccumulates(t *testing.T) {
 		},
 	)
 
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	queryLevelStats, err := execstats.GetQueryLevelStats(
+		&evalCtx,
 		nil,   /* trace */
 		false, /* deterministicExplainAnalyze */
 		[]*execstats.FlowsMetadata{&f1, &f2},
