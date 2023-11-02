@@ -31,6 +31,11 @@ func (c *PostDeserializationChanges) Add(change PostDeserializationChangeType) {
 	c.s.Add(int(change))
 }
 
+// Len returns length of the set of changes.
+func (c PostDeserializationChanges) Len() int {
+	return c.s.Len()
+}
+
 // ForEach calls f for every change in the set of changes.
 func (c PostDeserializationChanges) ForEach(f func(change PostDeserializationChangeType)) {
 	c.s.ForEach(func(i int) { f(PostDeserializationChangeType(i)) })
