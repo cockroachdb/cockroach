@@ -59,8 +59,6 @@ func runMultiTenantDistSQL(
 	bundle bool,
 	timeoutMillis int,
 ) {
-	// This test fails when runtime assertions are enabled.
-	// See: https://github.com/cockroachdb/cockroach/issues/113170
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	// This test sets a smaller default range size than the default due to
 	// performance and resource limitations. We set the minimum range max bytes to

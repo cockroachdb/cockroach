@@ -69,7 +69,7 @@ func registerPgjdbc(r registry.Registry) {
 			}
 		}
 
-		if usingRuntimeAssertions(t) {
+		if UsingRuntimeAssertions(t) {
 			// This test assumes that multiple_active_portals_enabled is false, but through
 			// metamorphic constants, it is possible for them to be enabled.
 			if _, err = db.ExecContext(ctx, "SET multiple_active_portals_enabled=false"); err != nil {

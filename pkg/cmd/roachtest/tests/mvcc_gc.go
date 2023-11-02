@@ -79,7 +79,7 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 	const gcRetryTimeout = 7 * time.Minute
 
 	var randomSeed int64
-	if usingRuntimeAssertions(t) {
+	if UsingRuntimeAssertions(t) {
 		// Do not use `0` as that is reserved to mean that we are running
 		// without runtime assertions.
 		for randomSeed == 0 {
