@@ -286,11 +286,7 @@ func TestQuantileSimpleLinearRegression(t *testing.T) {
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			yn, r2 := quantileSimpleLinearRegression(tc.x, tc.y, tc.xn)
-			var err error
-			yn, err = yn.fixMalformed()
-			if err != nil {
-				t.Errorf("test case %d had an unexpected error: %s", i, err)
-			}
+			yn = yn.fixMalformed()
 			if !reflect.DeepEqual(yn, tc.yn) {
 				t.Errorf("test case %d incorrect yn %v expected %v", i, yn, tc.yn)
 			}

@@ -656,10 +656,10 @@ func (q quantile) integrateSquared() float64 {
 // This function fixes the negative slope pieces by "moving" p from the
 // overlapping places to where it should be. No p is lost in the making of these
 // calculations.
-func (q quantile) fixMalformed() (quantile, error) {
+func (q quantile) fixMalformed() quantile {
 	// Check for the happy case where q is already well-formed.
 	if q.isWellFormed() {
-		return q, nil
+		return q
 	}
 
 	// To fix a malformed quantile function, we recalculate p for each distinct
@@ -804,7 +804,7 @@ func (q quantile) fixMalformed() (quantile, error) {
 		// (> v) and we always add two intersectionPs for "double roots" touching
 		// our line from above (one endpoint > v, one endpoint = v).
 		if len(intersectionPs) == 0 {
-			return q, errors.New("unable to fix malformed stats quantile")
+			return q
 		}
 		lessEqP := intersectionPs[0]
 		for j := 1; j < len(intersectionPs); j += 2 {
@@ -821,7 +821,17 @@ func (q quantile) fixMalformed() (quantile, error) {
 			fixed = append(fixed, quantilePoint{p: lessEqP, v: val})
 		}
 	}
-	return fixed, nil
+	return fixed
+}
+
+// isInvalid returns true if q contains NaN or Inf values.
+func (q quantile) isInvalid() bool {
+	for i := range q {
+		if math.IsNaN(q[i].v) || math.IsInf(q[i].v, 0) {
+			return true
+		}
+	}
+	return false
 }
 
 // isWellFormed returns true if q is well-formed (i.e. is non-decreasing in v).
