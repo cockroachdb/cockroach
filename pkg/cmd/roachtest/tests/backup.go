@@ -194,7 +194,7 @@ func runImportBankDataSplit(ctx context.Context, rows, ranges int, t test.Test, 
 }
 
 func importBankData(ctx context.Context, rows int, t test.Test, c cluster.Cluster) string {
-	return importBankDataSplit(ctx, rows, 0, t, c)
+	return importBankDataSplit(ctx, rows, 0 /* ranges */, t, c)
 }
 
 func registerBackupNodeShutdown(r registry.Registry) {

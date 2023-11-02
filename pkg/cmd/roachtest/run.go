@@ -183,7 +183,6 @@ func addBenchFlags(benchCmd *cobra.Command) {
 // Assumes initRunFlagsBinariesAndLibraries was called.
 func runTests(register func(registry.Registry), args []string, benchOnly bool) error {
 	r := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg, benchOnly)
-	//lint:ignore SA1019 deprecated
 	rand.Seed(globalSeed)
 
 	// actual registering of tests

@@ -60,7 +60,7 @@ func registerCopy(r registry.Registry) {
 		// Make sure the copy commands have sufficient time to finish when
 		// runtime assertions are enabled.
 		copyTimeout := 10 * time.Minute
-		if usingRuntimeAssertions(t) {
+		if UsingRuntimeAssertions(t) {
 			copyTimeout = 20 * time.Minute
 		}
 
