@@ -13,7 +13,6 @@ package server
 import (
 	"context"
 	"net"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -21,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -71,7 +70,7 @@ func (c *serverController) sqlMux(
 			tenantName = roachpb.TenantName(multitenant.DefaultTenantSelect.Get(&c.st.SV))
 		}
 
-		s, err := c.getServer(ctx, tenantName)
+		s, _, err := c.getServer(ctx, tenantName)
 		if err != nil && c.shouldWaitForTenantServer(tenantName) {
 			s, err = c.waitForTenantServer(ctx, tenantName)
 		}
@@ -117,35 +116,28 @@ func (c *serverController) shouldWaitForTenantServer(name roachpb.TenantName) bo
 func (c *serverController) waitForTenantServer(
 	ctx context.Context, name roachpb.TenantName,
 ) (onDemandServer, error) {
-	// Note that requests that come in after the first request may
-	// time out in less time than the
-	// WaitForClusterStartTimeout. This seems fine for now since
-	// cluster startup should be relatively quick and if it isn't
-	// often waiting longer isn't going to help.
+	// Note that requests that come in after the first request may time out
+	// in less time than the WaitForClusterStartTimeout. This seems fine for
+	// now since cluster startup should be relatively quick and if it isn't,
+	// waiting longer isn't going to help.
 	s, _, err := c.tenantWaiter.Do(ctx, string(name), func(ctx context.Context) (interface{}, error) {
-		// TODO(ssd): Ideally, we could avoid this polling by having
-		// the tenant controller hand us a channel that it will close
-		// when the tenant becomes available.
-		maxWait := multitenant.WaitForClusterStartTimeout.Get(&c.st.SV)
-		retryCfg := retry.Options{
-			InitialBackoff: 50 * time.Millisecond,
-			MaxBackoff:     1 * time.Second,
-		}
-
-		ctx, cancel := context.WithTimeout(ctx, maxWait)
-		defer cancel()
-
-		var (
-			err error
-			s   onDemandServer
-		)
-		for i := retry.StartWithCtx(ctx, retryCfg); i.Next(); {
-			s, err = c.getServer(ctx, name)
+		t := timeutil.NewTimer()
+		defer t.Stop()
+		t.Reset(multitenant.WaitForClusterStartTimeout.Get(&c.st.SV))
+		for {
+			s, waitCh, err := c.getServer(ctx, name)
 			if err == nil {
-				break
+				return s, nil
+			}
+			log.Infof(ctx, "waiting for server for %s to become available", name)
+			select {
+			case <-waitCh:
+			case <-t.C:
+				t.Read = true
+				log.Infof(ctx, "timed out waiting for server for %s to become available", name)
+				return nil, err
 			}
 		}
-		return s, err
 	})
 	if err != nil {
 		return nil, err
