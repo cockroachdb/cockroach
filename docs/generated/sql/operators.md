@@ -556,6 +556,8 @@
 <tr><td>oid <code>||</code> <a href="string.html">string</a></td><td><a href="string.html">string</a></td></tr>
 <tr><td>pg_lsn <code>||</code> pg_lsn</td><td>pg_lsn</td></tr>
 <tr><td>pg_lsn <code>||</code> <a href="string.html">string</a></td><td><a href="string.html">string</a></td></tr>
+<tr><td>refcursor <code>||</code> refcursor</td><td>refcursor</td></tr>
+<tr><td>refcursor <code>||</code> <a href="string.html">string</a></td><td><a href="string.html">string</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>||</code> <a href="bool.html">bool</a></td><td><a href="string.html">string</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>||</code> box2d</td><td><a href="string.html">string</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>||</code> <a href="date.html">date</a></td><td><a href="string.html">string</a></td></tr>
@@ -569,6 +571,7 @@
 <tr><td><a href="string.html">string</a> <code>||</code> jsonb</td><td><a href="string.html">string</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>||</code> oid</td><td><a href="string.html">string</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>||</code> pg_lsn</td><td><a href="string.html">string</a></td></tr>
+<tr><td><a href="string.html">string</a> <code>||</code> refcursor</td><td><a href="string.html">string</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>||</code> <a href="string.html">string</a></td><td><a href="string.html">string</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>||</code> <a href="string.html">string[]</a></td><td><a href="string.html">string[]</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>||</code> <a href="time.html">time</a></td><td><a href="string.html">string</a></td></tr>
