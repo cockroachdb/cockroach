@@ -204,6 +204,7 @@ on-lock-updated req=reqRes1 txn=txn1 key=k2 status=committed
 finish req=reqRes1
 ----
 [-] finish reqRes1: finishing request
+[7] sequence req2: latch table conflict with ‹00000000-0000-0000-0000-000000000000› on ‹"k2"› for 0.000s
 [7] sequence req2: scanning lock table for conflicting locks
 [7] sequence req2: sequencing complete, returned guard
 
@@ -314,6 +315,7 @@ on-lock-updated req=reqRes2 txn=txn2 key=k status=committed
 finish req=reqRes2
 ----
 [-] finish reqRes2: finishing request
+[13] sequence req3: latch table conflict with ‹00000000-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [13] sequence req3: scanning lock table for conflicting locks
 [13] sequence req3: sequencing complete, returned guard
 
@@ -471,6 +473,7 @@ on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 finish req=reqRes1
 ----
 [-] finish reqRes1: finishing request
+[4] sequence req2: latch table conflict with ‹00000000-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [4] sequence req2: scanning lock table for conflicting locks
 [4] sequence req2: sequencing complete, returned guard
 
@@ -690,6 +693,7 @@ on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 finish req=reqRes1
 ----
 [-] finish reqRes1: finishing request
+[8] sequence req2: latch table conflict with ‹00000000-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [8] sequence req2: scanning lock table for conflicting locks
 [8] sequence req2: sequencing complete, returned guard
 
@@ -847,6 +851,7 @@ on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 finish req=reqRes1
 ----
 [-] finish reqRes1: finishing request
+[4] sequence req2: latch table conflict with ‹00000000-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [4] sequence req2: scanning lock table for conflicting locks
 [4] sequence req2: sequencing complete, returned guard
 

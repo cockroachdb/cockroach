@@ -1197,6 +1197,8 @@ func testTxnContentionEventsTableWithDroppedInfo(
 				}
 
 				if !strings.Contains(indexName, expectedIndex) {
+					fmt.Println(indexName)
+					fmt.Println(expectedIndex)
 					return fmt.Errorf("indexName should contain %s: %s, %s, %s, %s", expectedIndex, dbName, schemaName, tableName, indexName)
 				}
 			}

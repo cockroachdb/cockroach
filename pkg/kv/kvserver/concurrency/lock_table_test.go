@@ -1123,7 +1123,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 			// cancellation, the code makes sure to release latches when returning
 			// early due to error. Otherwise other requests will get stuck and
 			// group.Wait() will not return until the test times out.
-			lg, err = e.lm.Acquire(context.Background(), item.request.LatchSpans, poison.Policy_Error, item.request.BaFmt)
+			lg, err = e.lm.Acquire(context.Background(), item.request.LatchSpans, poison.Policy_Error, item.request.BaFmt, nil)
 			if err != nil {
 				return err
 			}
@@ -1279,19 +1279,22 @@ type workloadExecutor struct {
 
 func newWorkLoadExecutor(items []workloadItem, concurrency int) *workloadExecutor {
 	const maxLocks = 100000
-	ltImpl := newLockTable(
-		maxLocks, roachpb.RangeID(3), hlc.NewClockForTesting(nil), cluster.MakeTestingClusterSettings(),
-	)
+	clock := hlc.NewClockForTesting(nil)
+	settings := cluster.MakeTestingClusterSettings()
+	ltImpl := newLockTable(maxLocks, roachpb.RangeID(3), clock, settings)
 	ltImpl.enabled = true
 	lt := maybeWrapInVerifyingLockTable(ltImpl)
-	return &workloadExecutor{
-		lm:           spanlatch.Manager{},
+	ex := &workloadExecutor{
 		lt:           lt,
 		items:        items,
 		transactions: make(map[uuid.UUID]*transactionState),
 		doneWork:     make(chan *workItem),
 		concurrency:  concurrency,
 	}
+	ex.lm = spanlatch.Make(
+		nil /* stopper */, nil /* slowReqs */, settings, nil /* latchWaitDurations */, clock,
+	)
+	return ex
 }
 
 func (e *workloadExecutor) acquireLock(txn *roachpb.Transaction, toAcq lockToAcquire) error {
@@ -1803,7 +1806,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 	firstIter := true
 	ctx := context.Background()
 	for {
-		if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans, poison.Policy_Error, item.BaFmt); err != nil {
+		if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans, poison.Policy_Error, item.BaFmt, nil); err != nil {
 			doneCh <- err
 			return
 		}
@@ -1850,7 +1853,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 		return
 	}
 	// Release locks.
-	if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans, poison.Policy_Error, item.BaFmt); err != nil {
+	if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans, poison.Policy_Error, item.BaFmt, nil); err != nil {
 		doneCh <- err
 		return
 	}
@@ -1980,15 +1983,15 @@ func BenchmarkLockTable(b *testing.B) {
 						var numRequestsWaited uint64
 						var numScanCalls uint64
 						const maxLocks = 100000
-						lt := newLockTable(
-							maxLocks,
-							roachpb.RangeID(3),
-							hlc.NewClockForTesting(nil),
-							cluster.MakeTestingClusterSettings(),
+						clock := hlc.NewClockForTesting(nil)
+						settings := cluster.MakeTestingClusterSettings()
+						lm := spanlatch.Make(
+							nil /* stopper */, nil /* slowReqs */, settings, nil /* latchWaitDurations */, clock,
 						)
+						lt := newLockTable(maxLocks, roachpb.RangeID(3), clock, settings)
 						lt.enabled = true
 						env := benchEnv{
-							lm:                &spanlatch.Manager{},
+							lm:                &lm,
 							lt:                lt,
 							numRequestsWaited: &numRequestsWaited,
 							numScanCalls:      &numScanCalls,
