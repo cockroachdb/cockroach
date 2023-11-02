@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/redact"
 )
 
@@ -77,6 +78,8 @@ type serverController struct {
 	// a tenant routing error to the incoming client.
 	sendSQLRoutingError func(ctx context.Context, conn net.Conn, tenantName roachpb.TenantName)
 
+	tenantWaiter *singleflight.Group
+
 	// draining is set when the surrounding server starts draining, and
 	// prevents further creation of new tenant servers.
 	draining syncutil.AtomicBool
@@ -127,6 +130,7 @@ func newServerController(
 		tenantServerCreator: tenantServerCreator,
 		sendSQLRoutingError: sendSQLRoutingError,
 		watcher:             watcher,
+		tenantWaiter:        singleflight.NewGroup("tenant server poller", "poll"),
 		drainCh:             make(chan struct{}),
 	}
 	c.orchestrator = newServerOrchestrator(parentStopper, c)
