@@ -26,7 +26,7 @@ type latchManagerImpl struct {
 }
 
 func (m *latchManagerImpl) Acquire(ctx context.Context, req Request) (latchGuard, *Error) {
-	lg, err := m.m.Acquire(ctx, req.LatchSpans, req.PoisonPolicy, req.BaFmt)
+	lg, err := m.m.Acquire(ctx, req.LatchSpans, req.PoisonPolicy, req.BaFmt, req.Txn)
 	if err != nil {
 		return nil, kvpb.NewError(err)
 	}
@@ -34,7 +34,7 @@ func (m *latchManagerImpl) Acquire(ctx context.Context, req Request) (latchGuard
 }
 
 func (m *latchManagerImpl) AcquireOptimistic(req Request) latchGuard {
-	lg := m.m.AcquireOptimistic(req.LatchSpans, req.PoisonPolicy, req.BaFmt)
+	lg := m.m.AcquireOptimistic(req.LatchSpans, req.PoisonPolicy, req.BaFmt, req.Txn)
 	return lg
 }
 

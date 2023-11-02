@@ -59,7 +59,7 @@ func (s *ColBatchDirectScan) Init(ctx context.Context) {
 	}
 	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(
 		s.Ctx, s.flowCtx, "colbatchdirectscan", s.processorID,
-		&s.ContentionEventsListener, &s.ScanStatsListener, &s.TenantConsumptionListener,
+		&s.contentionEventsListener, &s.ScanStatsListener, &s.TenantConsumptionListener,
 	)
 	firstBatchLimit := cFetcherFirstBatchLimit(s.limitHint, s.spec.MaxKeysPerRow)
 	err := s.fetcher.SetupNextFetch(
@@ -160,6 +160,11 @@ func (s *ColBatchDirectScan) GetBatchRequestsIssued() int64 {
 // decoding time done by the cFetcherWrapper.
 func (s *ColBatchDirectScan) GetKVCPUTime() time.Duration {
 	return s.cpuStopWatch.Elapsed()
+}
+
+// GetContentionTime is part of the colexecop.KVReader interface.
+func (s *ColBatchDirectScan) GetContentionTime() time.Duration {
+	return s.contentionEventsListener.GetContentionTime()
 }
 
 // Release implements the execreleasable.Releasable interface.

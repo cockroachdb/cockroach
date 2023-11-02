@@ -28,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -153,6 +155,7 @@ type Guard struct {
 	// checking of conflicts, and waiting.
 	snap        *snapshot
 	acquireTime int64
+	txnID       uuid.UUID
 }
 
 func (lg *Guard) latches(s spanset.SpanScope, a spanset.SpanAccess) []latch {
@@ -243,9 +246,13 @@ func newGuard(spans *spanset.SpanSet, pp poison.Policy, baFmt redact.SafeFormatt
 //
 // It returns a Guard which must be provided to Release.
 func (m *Manager) Acquire(
-	ctx context.Context, spans *spanset.SpanSet, pp poison.Policy, baFmt redact.SafeFormatter,
+	ctx context.Context,
+	spans *spanset.SpanSet,
+	pp poison.Policy,
+	baFmt redact.SafeFormatter,
+	txn *roachpb.Transaction,
 ) (*Guard, error) {
-	lg, snap := m.sequence(spans, pp, baFmt)
+	lg, snap := m.sequence(spans, pp, baFmt, txn)
 	defer snap.close()
 
 	err := m.wait(ctx, lg, snap)
@@ -269,9 +276,9 @@ func (m *Manager) Acquire(
 // The method returns a Guard which must be provided to the
 // CheckOptimisticNoConflicts, Release methods.
 func (m *Manager) AcquireOptimistic(
-	spans *spanset.SpanSet, pp poison.Policy, baFmt redact.SafeFormatter,
+	spans *spanset.SpanSet, pp poison.Policy, baFmt redact.SafeFormatter, txn *roachpb.Transaction,
 ) *Guard {
-	lg, snap := m.sequence(spans, pp, baFmt)
+	lg, snap := m.sequence(spans, pp, baFmt, txn)
 	lg.snap = &snap
 	return lg
 }
@@ -381,9 +388,12 @@ func (m *Manager) WaitUntilAcquired(ctx context.Context, lg *Guard) (*Guard, err
 // unlocks the manager. The role of the method is to sequence latch acquisition
 // attempts.
 func (m *Manager) sequence(
-	spans *spanset.SpanSet, pp poison.Policy, baFmt redact.SafeFormatter,
+	spans *spanset.SpanSet, pp poison.Policy, baFmt redact.SafeFormatter, txn *roachpb.Transaction,
 ) (*Guard, snapshot) {
 	lg := newGuard(spans, pp, baFmt)
+	if txn != nil {
+		lg.txnID = txn.ID
+	}
 
 	m.mu.Lock()
 	snap := m.snapshotLocked(spans)
@@ -576,11 +586,7 @@ func (m *Manager) waitForSignal(
 	wait, held *latch,
 ) error {
 	tBegin := timeutil.Now()
-	defer func() {
-		if m.latchWaitDurations != nil {
-			m.latchWaitDurations.RecordValue(int64(timeutil.Since(tBegin)))
-		}
-	}()
+	defer m.logWaitTime(ctx, tBegin, held.g.txnID)
 	log.Eventf(ctx, "waiting to acquire %s latch %s, held by %s latch %s", waitType, wait, heldType, held)
 	poisonCh := held.g.poison.signalChan()
 	t.Reset(base.SlowRequestThreshold)
@@ -622,6 +628,21 @@ func (m *Manager) waitForSignal(
 			// latches and never release them.
 			return &kvpb.NodeUnavailableError{}
 		}
+	}
+}
+
+// logWaitTime records the amount of time spent waiting for a latch held by the
+// transaction with the given ID.
+func (m *Manager) logWaitTime(ctx context.Context, startTime time.Time, txnID uuid.UUID) {
+	if m.latchWaitDurations != nil {
+		// Track the wait time in the "per-store" metrics.
+		m.latchWaitDurations.RecordValue(int64(timeutil.Since(startTime)))
+	}
+	sp := tracing.SpanFromContext(ctx)
+	if sp != nil {
+		// Track the wait time in the "per-query" metrics.
+		waitTime := timeutil.Since(startTime)
+		sp.NotifyListeners(&kvpb.LatchWaitEvent{TxnID: &txnID, Duration: waitTime})
 	}
 }
 

@@ -483,6 +483,15 @@ func (sp *Span) RecordStructured(item Structured) {
 	sp.i.RecordStructured(item)
 }
 
+// NotifyListeners passes the given Structured payload to any registered
+// event listeners without recording it.
+func (sp *Span) NotifyListeners(item Structured) {
+	if sp.detectUseAfterFinish() {
+		return
+	}
+	sp.i.NotifyListeners(item)
+}
+
 // SetTag adds a tag to the span. If there is a pre-existing tag set for the
 // key, it is overwritten.
 func (sp *Span) SetTag(key string, value attribute.Value) {

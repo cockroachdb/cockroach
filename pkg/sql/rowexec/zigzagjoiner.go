@@ -336,6 +336,9 @@ func newZigzagJoiner(
 
 	collectingStats := false
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
+		if flowTxn := flowCtx.EvalCtx.Txn; flowTxn != nil {
+			z.contentionEventsListener.Init(flowTxn.ID())
+		}
 		collectingStats = true
 		z.ExecStatsForTrace = z.execStatsForTrace
 	}
