@@ -205,12 +205,12 @@ func setAdmissionControl(ctx context.Context, t test.Test, c cluster.Cluster, en
 	}
 }
 
-// usingRuntimeAssertions returns true if calls to `t.Cockroach()` for
+// UsingRuntimeAssertions returns true if calls to `t.Cockroach()` for
 // this test will return the cockroach build with runtime
 // assertions. Note that calling this function only makes sense if the
 // test uploads cockroach using `t.Cockroach` (instead of calling
 // t.StandardCockroach or t.RuntimeAssertionsCockroach directly).
-func usingRuntimeAssertions(t test.Test) bool {
+func UsingRuntimeAssertions(t test.Test) bool {
 	return t.Cockroach() == t.RuntimeAssertionsCockroach()
 }
 
@@ -219,7 +219,7 @@ func usingRuntimeAssertions(t test.Test) bool {
 // A scheduled backup will not begin at the start of the roachtest.
 func maybeUseMemoryBudget(t test.Test, budget int) option.StartOpts {
 	startOpts := option.DefaultStartOptsNoBackups()
-	if usingRuntimeAssertions(t) {
+	if UsingRuntimeAssertions(t) {
 		// When running tests with runtime assertions enabled, increase
 		// SQL's memory budget to avoid 'budget exceeded' failures.
 		startOpts.RoachprodOpts.ExtraArgs = append(
