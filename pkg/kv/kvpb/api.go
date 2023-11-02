@@ -2358,7 +2358,13 @@ func (r *IsSpanEmptyResponse) IsEmpty() bool {
 
 // SafeFormat implements redact.SafeFormatter.
 func (c *ContentionEvent) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("conflicted with %s on %s for %.3fs", c.TxnMeta.ID, c.Key, c.Duration.Seconds())
+	prefix := "conflict"
+	if c.IsLatch {
+		prefix = "latch table conflict"
+	}
+	w.Printf("%s with %s on %s for %.3fs",
+		prefix, c.TxnMeta.ID, c.Key, c.Duration.Seconds(),
+	)
 }
 
 // String implements fmt.Stringer.
