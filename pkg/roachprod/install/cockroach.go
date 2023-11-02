@@ -99,8 +99,7 @@ func argExists(args []string, target string) int {
 
 // StartOpts houses the options needed by Start().
 type StartOpts struct {
-	Target     StartTarget
-	Sequential bool
+	Target StartTarget
 	// ExtraArgs are extra arguments used when starting the node. Multiple
 	// arguments should be passed as separate items in the slice. For example:
 	//   Instead of: []string{"--flag foo bar"}
@@ -378,60 +377,49 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 		}
 	}
 
-	nodes := c.TargetNodes()
-	var parallelism = 0
-	if startOpts.Sequential {
-		parallelism = 1
-	}
-
 	l.Printf("%s: starting nodes", c.Name)
-
-	// SSH retries are disabled by passing nil RunRetryOpts
-	if err := c.Parallel(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
+	// For single node non-virtual clusters, `init` can be skipped
+	// because during the c.StartNode call above, the
+	// `--start-single-node` flag will handle all of this for us.
+	shouldInit := startOpts.Target == StartDefault && !c.useStartSingleNode() && !startOpts.SkipInit
+	for _, node := range c.Nodes {
 		// NB: if cockroach started successfully, we ignore the output as it is
 		// some harmless start messaging.
 		res, err := c.startNode(ctx, l, node, startOpts)
 		if err != nil || res.Err != nil {
 			// If err is non-nil, then this will not be retried, but if res.Err is non-nil, it will be.
-			return res, errors.CombineErrors(err, res.Err)
+			return errors.CombineErrors(err, res.Err)
 		}
-
 		// We reserve a few special operations (bootstrapping, and setting
 		// cluster settings) to the InitTarget.
 		if startOpts.Target == StartDefault {
 			if startOpts.GetInitTarget() != node || startOpts.SkipInit {
-				return res, nil
+				continue
 			}
 		}
-
-		// For single node non-virtual clusters, this can be skipped
-		// because during the c.StartNode call above, the
-		// `--start-single-node` flag will handle all of this for us.
-		shouldInit := startOpts.Target == StartDefault && !c.useStartSingleNode()
 		if shouldInit {
-			if initRes, err := c.initializeCluster(ctx, l, node); err != nil || initRes.Err != nil {
+			if res, err = c.initializeCluster(ctx, l, node); err != nil || res.Err != nil {
 				// If err is non-nil, then this will not be retried, but if res.Err is non-nil, it will be.
-				return initRes, errors.CombineErrors(err, res.Err)
+				return errors.CombineErrors(err, res.Err)
 			}
 		}
+	}
 
-		if startOpts.GetInitTarget() == node {
-			if err := c.waitForDefaultTargetCluster(ctx, l, startOpts); err != nil {
-				return res, errors.Wrap(err, "failed to wait for default target cluster")
-			}
-			c.createAdminUserForSecureCluster(ctx, l, startOpts)
-			return c.setClusterSettings(ctx, l, node, startOpts.VirtualClusterName)
+	if shouldInit {
+		if err := c.waitForDefaultTargetCluster(ctx, l, startOpts); err != nil {
+			return errors.Wrap(err, "failed to wait for default target cluster")
+		}
+		c.createAdminUserForSecureCluster(ctx, l, startOpts)
+		if err = c.setClusterSettings(ctx, l, startOpts.GetInitTarget(), startOpts.VirtualClusterName); err != nil {
+			return err
 		}
 
-		return res, err
-	}, WithConcurrency(parallelism)); err != nil {
-		return err
+		// Only after a successful cluster initialization should we attempt to schedule backups.
+		if startOpts.ScheduleBackups && shouldInit && config.CockroachDevLicense != "" {
+			return c.createFixedBackupSchedule(ctx, l, startOpts.ScheduleBackupArgs)
+		}
 	}
 
-	// Only after a successful cluster initialization should we attempt to schedule backups.
-	if startOpts.ScheduleBackups && !startOpts.SkipInit && config.CockroachDevLicense != "" {
-		return c.createFixedBackupSchedule(ctx, l, startOpts.ScheduleBackupArgs)
-	}
 	return nil
 }
 
@@ -1076,7 +1064,7 @@ func (c *SyncedCluster) createAdminUserForSecureCluster(
 	retryOpts := retry.Options{MaxRetries: 20}
 	if err := retryOpts.Do(ctx, func(ctx context.Context) error {
 		results, err := c.ExecSQL(
-			ctx, l, c.Nodes[:1], startOpts.VirtualClusterName, startOpts.SQLInstance, []string{
+			ctx, l, Nodes{startOpts.GetInitTarget()}, startOpts.VirtualClusterName, startOpts.SQLInstance, []string{
 				"-e", stmts,
 			})
 
@@ -1101,11 +1089,11 @@ func (c *SyncedCluster) createAdminUserForSecureCluster(
 
 func (c *SyncedCluster) setClusterSettings(
 	ctx context.Context, l *logger.Logger, node Node, virtualCluster string,
-) (*RunResultDetails, error) {
+) error {
 	l.Printf("%s: setting cluster settings", c.Name)
 	cmd, err := c.generateClusterSettingCmd(ctx, l, node, virtualCluster)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	res, err := c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("set-cluster-settings"))
@@ -1115,7 +1103,12 @@ func (c *SyncedCluster) setClusterSettings(
 			l.Printf(out)
 		}
 	}
-	return res, err
+
+	if res != nil && res.Err != nil {
+		err = errors.CombineErrors(err, res.Err)
+	}
+
+	return err
 }
 
 func (c *SyncedCluster) generateClusterSettingCmd(
