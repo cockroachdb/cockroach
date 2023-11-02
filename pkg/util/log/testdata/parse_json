@@ -74,10 +74,17 @@ log format=json
 ----
 logpb.Entry{Severity:2, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"‹hello world›", Tags:"‹long=2,noval,s1›", Counter:0x0, Redactable:true, Channel:1, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
+# Expected to receive only two records that were decoded before hitting corrupted lines. Decoding stops when first error
+# occurred and returns partial response.
 log format=json
 {"channel_numeric":2,"channel":"HEALTH","timestamp":"1136214245.654321000","version":"v999.0.0","severity_numeric":3,"severity":"ERROR","goroutine":11,"file":"util/log/format_json_test.go","line":123,"entry_counter":0,"redactable":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"message":"hello ‹world›"}
+{"channel_numeric":3,"channel":"HEALTH","timestamp":"1136214245.654321000","version":"v999.0.0","severity_numeric":3,"severity":"ERROR","goroutine":11,"file":"util/log/format_json_test.go","line":123,"entry_counter":0,"redactable":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"message":"hello ‹world›"}
+a
+b
+{"channel_numeric":4,"channel":"HEALTH","timestamp":"1136214245.654321000","version":"v999.0.0","severity_numeric":3,"severity":"ERROR","goroutine":11,"file":"util/log/format_json_test.go","line":123,"entry_counter":0,"redactable":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"message":"hello ‹world›"}
 ----
 logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"hello ‹world›", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
+logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"hello ‹world›", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:3, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 subtest end
 
