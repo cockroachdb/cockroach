@@ -13,12 +13,15 @@ package server
 import (
 	"context"
 	"net"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -69,6 +72,9 @@ func (c *serverController) sqlMux(
 		}
 
 		s, err := c.getServer(ctx, tenantName)
+		if err != nil && c.shouldWaitForTenantServer(tenantName) {
+			s, err = c.waitForTenantServer(ctx, tenantName)
+		}
 		if err != nil {
 			log.Warningf(ctx, "unable to find server for tenant %q: %v", tenantName, err)
 			c.sendSQLRoutingError(ctx, conn, tenantName)
@@ -80,6 +86,65 @@ func (c *serverController) sqlMux(
 	default:
 		return errors.AssertionFailedf("programming error: missing case %v", status.State)
 	}
+}
+
+// shouldWaitForTenantServer returns true if the serverController
+// should wait for the tenant to become active when routing a
+// connection.
+func (c *serverController) shouldWaitForTenantServer(name roachpb.TenantName) bool {
+	// We never wait for the system tenant because if it isn't
+	// available, something is very wrong.
+	if name == catconstants.SystemTenantName {
+		return false
+	}
+
+	// For now, we only ever wait on connections to the default
+	// tenant. The default tenant name is validated at the time it
+	// is set. While it is possible that this was deleted before,
+	// that would have to happen from an authorized user.
+	//
+	// TODO(ssd): We can remove this restriction once we plumb the
+	// tenant watcher into the server controller. That will allow
+	// us to query the known set of tenants without hitting the
+	// DB.
+	if name != roachpb.TenantName(multitenant.DefaultTenantSelect.Get(&c.st.SV)) {
+		return false
+	}
+
+	return multitenant.WaitForClusterStart.Get(&c.st.SV)
+}
+
+func (c *serverController) waitForTenantServer(
+	ctx context.Context, name roachpb.TenantName,
+) (onDemandServer, error) {
+	// TODO(ssd): This polling will happen for every inbound
+	// connection that happens during tenant startup. Ideally, we
+	// could avoid this polling by having the tenant controller
+	// hand us a channel that it will close when the tenant
+	// becomes available. Further, it might be nice to just have 1
+	// thing doing the waiting so if we get a flood of new
+	// connections for the same tenant we have have 1 waiter per
+	// tenant.
+	maxWait := multitenant.WaitForClusterStartTimeout.Get(&c.st.SV)
+	retryCfg := retry.Options{
+		InitialBackoff: 50 * time.Millisecond,
+		MaxBackoff:     1 * time.Second,
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, maxWait)
+	defer cancel()
+	var (
+		err error
+		s   onDemandServer
+	)
+
+	for i := retry.StartWithCtx(ctx, retryCfg); i.Next(); {
+		s, err = c.getServer(ctx, name)
+		if err == nil {
+			break
+		}
+	}
+	return s, err
 }
 
 func (t *systemServerWrapper) handleCancel(
