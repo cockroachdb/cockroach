@@ -117,34 +117,40 @@ func (c *serverController) shouldWaitForTenantServer(name roachpb.TenantName) bo
 func (c *serverController) waitForTenantServer(
 	ctx context.Context, name roachpb.TenantName,
 ) (onDemandServer, error) {
-	// TODO(ssd): This polling will happen for every inbound
-	// connection that happens during tenant startup. Ideally, we
-	// could avoid this polling by having the tenant controller
-	// hand us a channel that it will close when the tenant
-	// becomes available. Further, it might be nice to just have 1
-	// thing doing the waiting so if we get a flood of new
-	// connections for the same tenant we have have 1 waiter per
-	// tenant.
-	maxWait := multitenant.WaitForClusterStartTimeout.Get(&c.st.SV)
-	retryCfg := retry.Options{
-		InitialBackoff: 50 * time.Millisecond,
-		MaxBackoff:     1 * time.Second,
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, maxWait)
-	defer cancel()
-	var (
-		err error
-		s   onDemandServer
-	)
-
-	for i := retry.StartWithCtx(ctx, retryCfg); i.Next(); {
-		s, err = c.getServer(ctx, name)
-		if err == nil {
-			break
+	// Note that requests that come in after the first request may
+	// time out in less time than the
+	// WaitForClusterStartTimeout. This seems fine for now since
+	// cluster startup should be relatively quick and if it isn't
+	// often waiting longer isn't going to help.
+	s, _, err := c.tenantWaiter.Do(ctx, string(name), func(ctx context.Context) (interface{}, error) {
+		// TODO(ssd): Ideally, we could avoid this polling by having
+		// the tenant controller hand us a channel that it will close
+		// when the tenant becomes available.
+		maxWait := multitenant.WaitForClusterStartTimeout.Get(&c.st.SV)
+		retryCfg := retry.Options{
+			InitialBackoff: 50 * time.Millisecond,
+			MaxBackoff:     1 * time.Second,
 		}
+
+		ctx, cancel := context.WithTimeout(ctx, maxWait)
+		defer cancel()
+
+		var (
+			err error
+			s   onDemandServer
+		)
+		for i := retry.StartWithCtx(ctx, retryCfg); i.Next(); {
+			s, err = c.getServer(ctx, name)
+			if err == nil {
+				break
+			}
+		}
+		return s, err
+	})
+	if err != nil {
+		return nil, err
 	}
-	return s, err
+	return s.(onDemandServer), nil
 }
 
 func (t *systemServerWrapper) handleCancel(
