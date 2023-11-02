@@ -109,8 +109,8 @@ type ColIndexJoin struct {
 
 	// tracingSpan is created when the stats should be collected for the query
 	// execution, and it will be finished when closing the operator.
-	tracingSpan *tracing.Span
-	execstats.ContentionEventsListener
+	tracingSpan              *tracing.Span
+	contentionEventsListener execstats.ContentionEventsListener
 	execstats.ScanStatsListener
 	execstats.TenantConsumptionListener
 	mu struct {
@@ -142,7 +142,7 @@ func (s *ColIndexJoin) Init(ctx context.Context) {
 	}
 	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(
 		s.Ctx, s.flowCtx, "colindexjoin", s.processorID,
-		&s.ContentionEventsListener, &s.ScanStatsListener, &s.TenantConsumptionListener,
+		&s.contentionEventsListener, &s.ScanStatsListener, &s.TenantConsumptionListener,
 	)
 	s.Input.Init(s.Ctx)
 }
@@ -417,6 +417,11 @@ func (s *ColIndexJoin) GetKVCPUTime() time.Duration {
 	return s.cf.cpuStopWatch.Elapsed()
 }
 
+// GetContentionTime is part of the colexecop.KVReader interface.
+func (s *ColIndexJoin) GetContentionTime() time.Duration {
+	return s.contentionEventsListener.GetContentionTime()
+}
+
 // UsedStreamer is part of the colexecop.KVReader interface.
 func (s *ColIndexJoin) UsedStreamer() bool {
 	return s.usesStreamer
@@ -580,6 +585,7 @@ func NewColIndexJoin(
 		)
 	}
 
+	shouldCollectStats := execstats.ShouldCollectStats(ctx, flowCtx.CollectStats)
 	fetcher := cFetcherPool.Get().(*cFetcher)
 	fetcher.cFetcherArgs = cFetcherArgs{
 		cFetcherMemoryLimit,
@@ -588,7 +594,7 @@ func NewColIndexJoin(
 		0, /* estimatedRowCount */
 		flowCtx.TraceKV,
 		false, /* singleUse */
-		execstats.ShouldCollectStats(ctx, flowCtx.CollectStats),
+		shouldCollectStats,
 		false, /* alwaysReallocate */
 	}
 	if err = fetcher.Init(
@@ -630,6 +636,11 @@ func NewColIndexJoin(
 		// enqueued requests) alone might exceed the budget leading to the
 		// Streamer erroring out in Enqueue().
 		op.mem.inputBatchSizeLimit = cFetcherMemoryLimit
+	}
+	if shouldCollectStats {
+		if flowTxn := flowCtx.EvalCtx.Txn; flowTxn != nil {
+			op.contentionEventsListener.Init(flowTxn.ID())
+		}
 	}
 
 	return op, nil

@@ -49,8 +49,8 @@ type colBatchScanBase struct {
 	ignoreMisplannedRanges bool
 	// tracingSpan is created when the stats should be collected for the query
 	// execution, and it will be finished when closing the operator.
-	tracingSpan *tracing.Span
-	execstats.ContentionEventsListener
+	tracingSpan              *tracing.Span
+	contentionEventsListener execstats.ContentionEventsListener
 	execstats.ScanStatsListener
 	execstats.TenantConsumptionListener
 	mu struct {
@@ -224,7 +224,7 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 	}
 	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(
 		s.Ctx, s.flowCtx, "colbatchscan", s.processorID,
-		&s.ContentionEventsListener, &s.ScanStatsListener, &s.TenantConsumptionListener,
+		&s.contentionEventsListener, &s.ScanStatsListener, &s.TenantConsumptionListener,
 	)
 	limitBatches := !s.parallelize
 	if err := s.cf.StartScan(
@@ -290,6 +290,11 @@ func (s *ColBatchScan) GetKVCPUTime() time.Duration {
 	return s.cf.cpuStopWatch.Elapsed()
 }
 
+// GetContentionTime is part of the colexecop.KVReader interface.
+func (s *ColBatchScan) GetContentionTime() time.Duration {
+	return s.contentionEventsListener.GetContentionTime()
+}
+
 // Release implements the execreleasable.Releasable interface.
 func (s *ColBatchScan) Release() {
 	s.colBatchScanBase.Release()
@@ -341,17 +346,23 @@ func NewColBatchScan(
 		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 	)
 	fetcher := cFetcherPool.Get().(*cFetcher)
+	shouldCollectStats := execstats.ShouldCollectStats(ctx, flowCtx.CollectStats)
 	fetcher.cFetcherArgs = cFetcherArgs{
 		execinfra.GetWorkMemLimit(flowCtx),
 		estimatedRowCount,
 		flowCtx.TraceKV,
 		true, /* singleUse */
-		execstats.ShouldCollectStats(ctx, flowCtx.CollectStats),
+		shouldCollectStats,
 		false, /* alwaysReallocate */
 	}
 	if err = fetcher.Init(fetcherAllocator, kvFetcher, tableArgs); err != nil {
 		fetcher.Release()
 		return nil, nil, err
+	}
+	if shouldCollectStats {
+		if flowTxn := flowCtx.EvalCtx.Txn; flowTxn != nil {
+			base.contentionEventsListener.Init(flowTxn.ID())
+		}
 	}
 	return &ColBatchScan{
 		colBatchScanBase: base,

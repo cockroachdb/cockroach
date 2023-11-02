@@ -31,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -263,7 +265,7 @@ func (m *managerImpl) sequenceReqWithGuard(
 	// them.
 	if shouldWaitOnLatchesWithoutAcquiring(g.Req) {
 		log.Event(ctx, "waiting on latches without acquiring")
-		return nil, m.lm.WaitFor(ctx, g.Req.LatchSpans, g.Req.PoisonPolicy, g.Req.BaFmt)
+		return nil, m.lm.WaitFor(ctx, g.Req.LatchSpans, g.Req.PoisonPolicy, g.Req.BaFmt, g.Req.Txn)
 	}
 
 	// Provide the manager with an opportunity to intercept the request. It
@@ -369,6 +371,15 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 		// If necessary, wait in the txnWaitQueue for the pushee transaction to
 		// expire or to move to a finalized state.
 		t := req.Requests[0].GetPushTxn()
+		tBegin := timeutil.Now()
+		defer func() {
+			sp := tracing.SpanFromContext(ctx)
+			if sp != nil {
+				// Track the wait time in the "per-query" metrics.
+				waitTime := timeutil.Since(tBegin)
+				sp.NotifyListeners(&kvpb.LatchWaitEvent{TxnID: &t.PusheeTxn.ID, Duration: waitTime})
+			}
+		}()
 		resp, err := m.twq.MaybeWaitForPush(ctx, t, req.WaitPolicy)
 		if err != nil {
 			return nil, err

@@ -3683,6 +3683,21 @@ message ContentionEvent {
                                          (gogoproto.stdduration) = true];
 }
 
+// LatchWaitEvent indicates that a request had to wait to acquire a latch.
+// This may indicate contention, but can also happen in the normal course of
+// operation (e.g. QueryIntent requests).
+message LatchWaitEvent {
+  // TxnID is the ID of the blocking request's transaction. It is used to
+  // distinguish self-induced from contention induced latch wait time.
+  bytes txn_id = 1 [
+    (gogoproto.customname) = "TxnID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+  // Duration spent waiting to acquire a latch.
+  google.protobuf.Duration duration = 2 [(gogoproto.nullable) = false,
+                                         (gogoproto.stdduration) = true];
+}
+
 // ScanStats is a message that tracks miscellaneous statistics of all Gets,
 // Scans, and ReverseScans in a single BatchResponse.
 message ScanStats {
