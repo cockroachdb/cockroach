@@ -1348,10 +1348,7 @@ func TestQuantileOps(t *testing.T) {
 			if intSqMult0 != 0 {
 				t.Errorf("test case %d incorrect intSqMult0 %v expected 0", i, intSqMult0)
 			}
-			fixed, err := tc.q.fixMalformed()
-			if err != nil {
-				t.Errorf("test case %d has an unexpected error: %s", i, err)
-			}
+			fixed := tc.q.fixMalformed()
 			if !reflect.DeepEqual(fixed, tc.fixed) {
 				t.Errorf("test case %d incorrect fixed %v expected %v", i, fixed, tc.fixed)
 			}
@@ -1410,15 +1407,116 @@ func TestQuantileOpsRandom(t *testing.T) {
 			if intSqMult0 != 0 {
 				t.Errorf("seed %v quantile %v incorrect intSqMult0 %v expected 0", seed, q, intSqMult0)
 			}
-			fixed, err := q.fixMalformed()
-			if err != nil {
-				t.Errorf("seed %v quantile %v had an unexpected error: %s", seed, q, err)
-			}
+			fixed := q.fixMalformed()
 			intSqFixed := fixed.integrateSquared()
 			// This seems like it should run into floating point errors, but it hasn't
 			// yet, so yay?
 			if math.Abs(intSqFixed-intSq) > delta {
 				t.Errorf("seed %v quantile %v incorrect intSqFixed %v expected %v", seed, q, intSqFixed, intSq)
+			}
+		})
+	}
+}
+
+// TestQuantileInvalid tests the quantile.invalid() method.
+func TestQuantileInvalid(t *testing.T) {
+	testCases := []struct {
+		q       quantile
+		invalid bool
+	}{
+		// Valid quantiles.
+		{
+			q: zeroQuantile,
+		},
+		{
+			q: quantile{{0, 100}, {1, 200}},
+		},
+		{
+			q: quantile{{0, 100}, {0, 200}, {0, 200}, {0.5, 300}, {0.5, 300}, {0.5, 400}, {1, 400}},
+		},
+		{
+			q: quantile{{0, -811}, {0.125, -811}, {0.125, -813}, {0.25, -813}, {0.25, -815}, {1, -821}, {1, -721}},
+		},
+		{
+			q: quantile{{0, 102}, {0.125, 102.25}, {0.25, 202.5}, {0.375, 302.75}, {0.375, 202.75}, {0.5, 103}, {0.625, 103.25}, {0.75, 3.5}, {0.875, 3.75}, {0.875, 103.75}, {0.875, 403.75}, {1, 104}},
+		},
+		// Invalid quantiles with NaN.
+		{
+			q:       quantile{{0, 100}, {1, math.NaN()}},
+			invalid: true,
+		},
+		{
+			q:       quantile{{0, math.NaN()}, {1, 200}},
+			invalid: true,
+		},
+		{
+			q:       quantile{{0, 100}, {0, 200}, {0, 200}, {0.5, 300}, {0.5, 300}, {0.5, 400}, {1, math.NaN()}},
+			invalid: true,
+		},
+		{
+			q:       quantile{{0, 100}, {0, 200}, {0, 200}, {0.5, 300}, {0.5, 300}, {0.5, math.NaN()}, {1, math.NaN()}},
+			invalid: true,
+		},
+		{
+			q:       quantile{{0, math.NaN()}, {0.125, -811}, {0.125, -813}, {0.25, -813}, {0.25, -815}, {1, -821}, {1, -721}},
+			invalid: true,
+		},
+		{
+			q:       quantile{{0, math.NaN()}, {0.125, math.NaN()}, {0.125, -813}, {0.25, -813}, {0.25, -815}, {1, -821}, {1, -721}},
+			invalid: true,
+		},
+		{
+			q:       quantile{{0, 102}, {0.125, 102.25}, {0.25, math.NaN()}, {0.375, 302.75}, {0.375, 202.75}, {0.5, 103}, {0.625, 103.25}, {0.75, 3.5}, {0.875, 3.75}, {0.875, 103.75}, {0.875, 403.75}, {1, 104}},
+			invalid: true,
+		},
+		{
+			q:       quantile{{0, 102}, {0.125, 102.25}, {0.25, math.NaN()}, {0.375, 302.75}, {0.375, math.NaN()}, {0.5, 103}, {0.625, math.NaN()}, {0.75, 3.5}, {0.875, 3.75}, {0.875, math.NaN()}, {0.875, 403.75}, {1, 104}},
+			invalid: true,
+		},
+		// Invalid quantiles with Inf.
+		{
+			q:       quantile{{0, 100}, {1, math.Inf(1)}},
+			invalid: true,
+		},
+		{
+			q:       quantile{{0, math.Inf(1)}, {1, 200}},
+			invalid: true,
+		},
+		{
+			q:       quantile{{0, 100}, {0, 200}, {0, 200}, {0.5, 300}, {0.5, 300}, {0.5, 400}, {1, math.Inf(1)}},
+			invalid: true,
+		},
+		{
+			q:       quantile{{0, 100}, {0, 200}, {0, 200}, {0.5, 300}, {0.5, 300}, {0.5, math.Inf(1)}, {1, math.Inf(1)}},
+			invalid: true,
+		},
+		{
+			q:       quantile{{0, 100}, {1, math.Inf(-1)}},
+			invalid: true,
+		},
+		{
+			q:       quantile{{0, math.Inf(-1)}, {1, 200}},
+			invalid: true,
+		},
+		{
+			q:       quantile{{0, 100}, {0, 200}, {0, 200}, {0.5, 300}, {0.5, 300}, {0.5, 400}, {1, math.Inf(-1)}},
+			invalid: true,
+		},
+		{
+			q:       quantile{{0, 100}, {0, 200}, {0, 200}, {0.5, 300}, {0.5, 300}, {0.5, math.Inf(-1)}, {1, math.Inf(-1)}},
+			invalid: true,
+		},
+		// Invalid quantiles with NaN and Inf.
+		{
+			q:       quantile{{0, math.Inf(-1)}, {0.125, 102.25}, {0.25, math.NaN()}, {0.375, 302.75}, {0.375, math.Inf(1)}, {0.5, 103}, {0.625, 103.25}, {0.75, math.NaN()}, {0.875, math.Inf(1)}, {0.875, math.Inf(-1)}, {0.875, 403.75}, {1, 104}},
+			invalid: true,
+		},
+	}
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			invalid := tc.q.isInvalid()
+			if invalid != tc.invalid {
+				t.Errorf("test case %d expected invalid to be %v, but was %v", i, tc.invalid, invalid)
 			}
 		})
 	}
