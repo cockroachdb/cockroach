@@ -13,7 +13,6 @@ package bootstrap
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -40,23 +39,16 @@ func TestSupportedReleases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	expected := make(map[roachpb.Version]struct{})
-	earliest := clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
-	latest := clusterversion.ByKey(clusterversion.BinaryVersionKey)
-	var incumbent roachpb.Version
-	for _, v := range clusterversion.ListBetween(earliest, latest) {
-		if v.Major != incumbent.Major || v.Minor != incumbent.Minor {
-			incumbent = roachpb.Version{
-				Major: v.Major,
-				Minor: v.Minor,
-			}
-			expected[incumbent] = struct{}{}
-		}
+	// Verify that the current version has an entry.
+	require.Contains(t, initialValuesFactoryByKey, clusterversion.Latest)
+
+	// Verify that all previously supported versions have an entry.
+	for _, key := range clusterversion.SupportedPreviousReleases() {
+		require.Contains(t, initialValuesFactoryByKey, key)
 	}
-	expected[latest] = struct{}{}
-	actual := make(map[roachpb.Version]struct{})
+
+	// Verify that all entries work.
 	for k := range initialValuesFactoryByKey {
-		actual[clusterversion.ByKey(k)] = struct{}{}
 		opts := InitialValuesOpts{
 			DefaultZoneConfig:       zonepb.DefaultZoneConfigRef(),
 			DefaultSystemZoneConfig: zonepb.DefaultZoneConfigRef(),
@@ -69,10 +61,6 @@ func TestSupportedReleases(t *testing.T) {
 		_, _, err = opts.GenerateInitialValues()
 		require.NoErrorf(t, err, "error generating initial values for non-system codec in version %s", k)
 	}
-	require.Truef(t, reflect.DeepEqual(actual, expected),
-		"expected supported releases %v, actual %v\n"+
-			"see comments in test definition if this message appears",
-		expected, actual)
 }
 
 func TestInitialValuesToString(t *testing.T) {
