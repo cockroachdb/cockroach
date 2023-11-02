@@ -48,7 +48,6 @@ type allocationBenchSpec struct {
 	nodes, cpus int
 	load        allocBenchLoad
 
-	nodeAttrs   map[int]string
 	startRecord time.Duration
 	samples     int
 }
@@ -81,8 +80,6 @@ type kvAllocBenchEventRunner struct {
 	insertCount int
 
 	name string
-
-	replFactor int
 }
 
 var (
@@ -154,19 +151,8 @@ func (r kvAllocBenchEventRunner) run(ctx context.Context, c cluster.Cluster, t t
 		return err
 	}
 
-	if r.replFactor == 0 {
-		r.replFactor = 3
-	}
-
 	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
-
-	// Set the replication factor of the database to match the spec.
-	stmt := fmt.Sprintf("alter database %s configure zone using num_replicas=%d",
-		name, r.replFactor)
-	if _, err = db.ExecContext(ctx, stmt); err != nil {
-		return err
-	}
 
 	runCmd := fmt.Sprintf(
 		"./workload run kv --db=%s --read-percent=%d --min-block-bytes=%d --max-block-bytes=%d --max-rate=%d",
@@ -294,10 +280,6 @@ func setupAllocationBench(
 	for i := 1; i <= spec.nodes; i++ {
 		// Don't start a backup schedule as this test reports to roachperf.
 		startOpts := option.DefaultStartOptsNoBackups()
-		if attr, ok := spec.nodeAttrs[i]; ok {
-			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
-				fmt.Sprintf("--attrs=%s", attr))
-		}
 		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 			"--vmodule=store_rebalancer=2,allocator=2,replicate_queue=2")
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))

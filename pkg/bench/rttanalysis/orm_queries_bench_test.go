@@ -615,6 +615,83 @@ END;
 		ORDER BY typ.oid, att.attnum;
 		`,
 		},
+
+		{
+			Name:  "asyncpg types",
+			Setup: buildNTypes(8),
+			Stmt: `
+        SELECT
+            t.oid                           AS oid,
+            ns.nspname                      AS ns,
+            t.typname                       AS name,
+            t.typtype                       AS kind,
+            (CASE WHEN t.typtype = 'd' THEN
+                (WITH RECURSIVE typebases(oid, depth) AS (
+                    SELECT
+                        t2.typbasetype      AS oid,
+                        0                   AS depth
+                    FROM
+                        pg_type t2
+                    WHERE
+                        t2.oid = t.oid
+
+                    UNION ALL
+
+                    SELECT
+                        t2.typbasetype      AS oid,
+                        tb.depth + 1        AS depth
+                    FROM
+                        pg_type t2,
+                        typebases tb
+                    WHERE
+                       tb.oid = t2.oid
+                       AND t2.typbasetype != 0
+               ) SELECT oid FROM typebases ORDER BY depth DESC LIMIT 1)
+
+               ELSE NULL
+            END)                            AS basetype,
+            t.typelem                       AS elemtype,
+            elem_t.typdelim                 AS elemdelim,
+            range_t.rngsubtype              AS range_subtype,
+            (CASE WHEN t.typtype = 'c' THEN
+                (SELECT
+                    array_agg(ia.atttypid ORDER BY ia.attnum)
+                FROM
+                    pg_attribute ia
+                    INNER JOIN pg_class c
+                        ON (ia.attrelid = c.oid)
+                WHERE
+                    ia.attnum > 0 AND NOT ia.attisdropped
+                    AND c.reltype = t.oid)
+
+                ELSE NULL
+            END)                            AS attrtypoids,
+            (CASE WHEN t.typtype = 'c' THEN
+                (SELECT
+                    array_agg(ia.attname::text ORDER BY ia.attnum)
+                FROM
+                    pg_attribute ia
+                    INNER JOIN pg_class c
+                        ON (ia.attrelid = c.oid)
+                WHERE
+                    ia.attnum > 0 AND NOT ia.attisdropped
+                    AND c.reltype = t.oid)
+
+                ELSE NULL
+            END)                            AS attrnames
+        FROM
+            pg_catalog.pg_type AS t
+            INNER JOIN pg_catalog.pg_namespace ns ON (
+                ns.oid = t.typnamespace)
+            LEFT JOIN pg_type elem_t ON (
+                t.typlen = -1 AND
+                t.typelem != 0 AND
+                t.typelem = elem_t.oid
+            )
+            LEFT JOIN pg_range range_t ON (
+                t.oid = range_t.rngtypid
+            )`,
+		},
 	})
 }
 
@@ -622,6 +699,14 @@ func buildNTables(n int) string {
 	b := strings.Builder{}
 	for i := 0; i < n; i++ {
 		b.WriteString(fmt.Sprintf("CREATE TABLE t%d(a int primary key, b int);\n", i))
+	}
+	return b.String()
+}
+
+func buildNTypes(n int) string {
+	b := strings.Builder{}
+	for i := 0; i < n; i++ {
+		b.WriteString(fmt.Sprintf("CREATE TYPE t%d AS (a int, b int);\n", i))
 	}
 	return b.String()
 }
