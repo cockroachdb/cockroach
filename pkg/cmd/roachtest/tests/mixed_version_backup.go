@@ -26,6 +26,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -64,6 +66,9 @@ const (
 	// probability that we will attempt to restore a backup in
 	// mixed-version state.
 	mixedVersionRestoreProbability = 0.5
+
+	// probability that we will attempt to run an AOST restore.
+	restoreFromAOSTProbability = 0.5
 
 	// string label added to the names of backups taken while the cluster is
 	// upgrading.
@@ -377,6 +382,10 @@ type (
 		// in the `contents` field.
 		tables   []string
 		contents []tableContents
+
+		// restoreAOST contains the AOST used in restore, if non-empty. It also
+		// determines the system time used to grab fingerprints.
+		restoreAOST string
 	}
 
 	fullBackup struct {
@@ -981,6 +990,68 @@ func (bc *backupCollection) encryptionOption() *encryptionPassphrase {
 		}
 	}
 
+	return nil
+}
+
+func (bc *backupCollection) withRevisionHistory() bool {
+	for _, option := range bc.options {
+		if _, ok := option.(revisionHistory); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// maybeUseRestoreAOST potentially picks a restore AOST between the
+// full backup end time and the last incremental backup end time.
+//
+// We don't bother choosing an AOST before the full backup endtime since the
+// restore may fail. We lack good observability for choosing a valid AOST within
+// the revision history full backup.
+func (bc *backupCollection) maybeUseRestoreAOST(
+	l *logger.Logger, rng *rand.Rand, fullBackupEndTime, lastBackupEndTime string,
+) error {
+	// TODO(msbutler): pick AOST restore for non revision history backups by
+	// randomly choosing a backup end time.
+	if !bc.withRevisionHistory() || rng.Float64() > restoreFromAOSTProbability {
+		return nil
+	}
+
+	parseAOST := func(aost string) (hlc.Timestamp, error) {
+		d, _, err := apd.NewFromString(aost)
+		if err != nil {
+			return hlc.Timestamp{}, err
+		}
+		ts, err := hlc.DecimalToHLC(d)
+		if err != nil {
+			return hlc.Timestamp{}, err
+		}
+		return ts, nil
+	}
+
+	min, err := parseAOST(fullBackupEndTime)
+	if err != nil {
+		return err
+	}
+	max, err := parseAOST(lastBackupEndTime)
+	if err != nil {
+		return err
+	}
+
+	// Choose a random AOST between min and max with the following approach:
+	// divide the interval between min and max over 100 bins and randomly choose a
+	// bin. Randomly choosing a bin is more reproducible than randomly picking a
+	// time between min and max.
+	interval := max.WallTime - min.WallTime
+	binCount := int64(100)
+	bin := rng.Int63n(binCount)
+
+	restoreAOST := hlc.Timestamp{
+		WallTime: (bin*interval)/binCount + min.WallTime,
+	}
+
+	l.Printf("preparing for an AOST restore at %s, between full backup end time %s and last incremental backup end time %s", restoreAOST.GoTime(), min.GoTime(), max.GoTime())
+	bc.restoreAOST = restoreAOST.AsOfSystemTime()
 	return nil
 }
 
@@ -1846,12 +1917,13 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 	internalSystemJobs bool,
 ) (*backupCollection, error) {
 	var collection backupCollection
-	var timestamp string
+	var latestIncBackupEndTime string
+	var fullBackupEndTime string
 
 	// Create full backup.
 	if err := d.testUtils.runJobOnOneOf(ctx, l, fullBackupSpec.Execute.Nodes, func() error {
 		var err error
-		collection, _, err = d.runBackup(
+		collection, fullBackupEndTime, err = d.runBackup(
 			ctx, l, rng, fullBackupSpec.Plan.Nodes, fullBackupSpec.PauseProbability, fullBackup{backupNamePrefix}, internalSystemJobs,
 		)
 		return err
@@ -1866,7 +1938,7 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 		d.randomWait(l, rng)
 		if err := d.testUtils.runJobOnOneOf(ctx, l, incBackupSpec.Execute.Nodes, func() error {
 			var err error
-			collection, timestamp, err = d.runBackup(
+			collection, latestIncBackupEndTime, err = d.runBackup(
 				ctx, l, rng, incBackupSpec.Plan.Nodes, incBackupSpec.PauseProbability, incrementalBackup{collection: collection, incNum: i + 1}, internalSystemJobs,
 			)
 			return err
@@ -1875,7 +1947,15 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 		}
 	}
 
-	return d.saveContents(ctx, l, rng, &collection, timestamp)
+	if err := collection.maybeUseRestoreAOST(l, rng, fullBackupEndTime, latestIncBackupEndTime); err != nil {
+		return nil, err
+	}
+
+	fingerprintAOST := latestIncBackupEndTime
+	if collection.restoreAOST != "" {
+		fingerprintAOST = collection.restoreAOST
+	}
+	return d.saveContents(ctx, l, rng, &collection, fingerprintAOST)
 }
 
 // sentinelFilePath returns the path to the file that prevents job
@@ -2173,9 +2253,10 @@ func (bc *backupCollection) verifyBackupCollection(
 		optionsStr = fmt.Sprintf(" WITH %s", strings.Join(restoreOptions, ", "))
 	}
 	restoreStmt := fmt.Sprintf(
-		"%s FROM LATEST IN '%s'%s",
-		restoreCmd, bc.uri(), optionsStr,
+		"%s FROM LATEST IN '%s'%s %s",
+		restoreCmd, bc.uri(), aostFor(bc.restoreAOST), optionsStr,
 	)
+	l.Printf("Running restore: %s", restoreStmt)
 	var jobID int
 	if err := d.testUtils.QueryRow(ctx, rng, restoreStmt).Scan(&jobID); err != nil {
 		return fmt.Errorf("backup %s: error in restore statement: %w", bc.name, err)
