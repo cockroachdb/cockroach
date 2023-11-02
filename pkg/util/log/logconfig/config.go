@@ -29,8 +29,10 @@ import (
 // specified in a configuration.
 const DefaultFileFormat = `crdb-v2`
 
-// DefaultStderrFormat is the entry format for stderr sinks
-// when not specified in a configuration.
+// DefaultStderrFormat is the entry format for stderr sinks.
+// NB: The format for stderr is always set to `crdb-v2-tty`,
+// and cannot be changed. We enforce this in the validation step.
+// See: https://www.cockroachlabs.com/docs/stable/configure-logs#output-to-stderr
 const DefaultStderrFormat = `crdb-v2-tty`
 
 // DefaultFluentFormat is the entry format for fluent sinks
