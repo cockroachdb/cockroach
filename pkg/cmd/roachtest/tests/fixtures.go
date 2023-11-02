@@ -49,8 +49,8 @@ func registerFixtures(r registry.Registry) {
 	// this.
 	//
 	// Example invocation:
-	// roachtest --local run generate-fixtures --debug --cockroach ./cockroach \
-	//   --build-tag v22.1.0-beta.3 tag:fixtures
+	//   FIXTURE_VERSION=v20.2.0-beta.1 roachtest --local run generate-fixtures \
+	//     --debug --cockroach ./cockroach --suite fixtures
 	runFixtures := func(
 		ctx context.Context,
 		t test.Test,

@@ -32,7 +32,7 @@ source $root/build/teamcity/util/roachtest_util.sh
 # NB(3): If you make changes here, you should probably make the same change in
 # build/teamcity-weekly-roachtest.sh
 timeout -s INT $((7800*60)) build/teamcity-roachtest-invoke.sh \
-  tag:weekly \
+  --suite:weekly \
   --cluster-id "${TC_BUILD_ID}" \
   --zones "us-central1-b,us-west1-b,europe-west2-b" \
   --artifacts=/artifacts \
