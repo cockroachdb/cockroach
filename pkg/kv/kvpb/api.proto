@@ -3575,6 +3575,13 @@ message ContentionEvent {
                                          (gogoproto.stdduration) = true];
 }
 
+// LatchWaitEvent is a message that will be attached to BatchResponses
+// indicating the time spent waiting to acquire a latch.
+message LatchWaitEvent {
+  google.protobuf.Duration duration = 1 [(gogoproto.nullable) = false,
+                                         (gogoproto.stdduration) = true];
+}
+
 // ScanStats is a message that tracks miscellaneous statistics of all Gets,
 // Scans, and ReverseScans in a single BatchResponse.
 message ScanStats {

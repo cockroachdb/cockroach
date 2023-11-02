@@ -12,6 +12,7 @@ package spanlatch
 
 import (
 	"context"
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -561,6 +563,7 @@ func (m *Manager) waitForSignal(
 	wait, held *latch,
 ) error {
 	log.Eventf(ctx, "waiting to acquire %s latch %s, held by %s latch %s", waitType, wait, heldType, held)
+	defer maybeLogWaitTime(ctx, timeutil.Now())
 	poisonCh := held.g.poison.signalChan()
 	for {
 		select {
@@ -601,6 +604,14 @@ func (m *Manager) waitForSignal(
 			// latches and never release them.
 			return &kvpb.NodeUnavailableError{}
 		}
+	}
+}
+
+func maybeLogWaitTime(ctx context.Context, startTime time.Time) {
+	sp := tracing.SpanFromContext(ctx)
+	if sp != nil {
+		waitTime := timeutil.Since(startTime)
+		sp.NotifyListeners(&kvpb.LatchWaitEvent{Duration: waitTime})
 	}
 }
 

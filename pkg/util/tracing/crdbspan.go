@@ -1051,6 +1051,16 @@ func (s *crdbSpan) recordStructured(item Structured) {
 	s.notifyEventListeners(item)
 }
 
+// notifyListeners passes the given Structured event to any registered listeners
+// without recording it. This is useful for events that only need to accumulate
+// some metric, e.g. request latency.
+func (s *crdbSpan) notifyListeners(item Structured) {
+	if s.recordingType() == tracingpb.RecordingOff {
+		return
+	}
+	s.notifyEventListeners(item)
+}
+
 // memorySizable is implemented by log records and structured events for
 // exposing their in-memory size. This size is used to put caps on the payloads
 // accumulated by a span.
