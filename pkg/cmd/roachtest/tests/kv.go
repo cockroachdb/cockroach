@@ -924,13 +924,13 @@ func measureQPS(
 			db := db
 			go func() {
 				defer wg.Done()
-				var v uint64
+				var v float64
 				if err := db.QueryRowContext(
 					ctx, `SELECT value FROM crdb_internal.node_metrics WHERE name = 'sql.insert.count'`,
 				).Scan(&v); err != nil {
 					t.Fatal(err)
 				}
-				atomic.AddUint64(&value, v)
+				atomic.AddUint64(&value, uint64(v))
 			}()
 		}
 		wg.Wait()
