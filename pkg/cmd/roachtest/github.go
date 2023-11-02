@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -139,6 +140,7 @@ func (g *githubIssues) createPostRequest(
 	spec *registry.TestSpec,
 	firstFailure failure,
 	message string,
+	metamorphicBuild bool,
 ) (issues.PostRequest, error) {
 	var mention []string
 	var projColID int
@@ -205,9 +207,10 @@ func (g *githubIssues) createPostRequest(
 	artifacts := fmt.Sprintf("/%s", testName)
 
 	clusterParams := map[string]string{
-		roachtestPrefix("cloud"): spec.Cluster.Cloud,
-		roachtestPrefix("cpu"):   fmt.Sprintf("%d", spec.Cluster.CPUs),
-		roachtestPrefix("ssd"):   fmt.Sprintf("%d", spec.Cluster.SSDs),
+		roachtestPrefix("cloud"):            spec.Cluster.Cloud,
+		roachtestPrefix("cpu"):              fmt.Sprintf("%d", spec.Cluster.CPUs),
+		roachtestPrefix("ssd"):              fmt.Sprintf("%d", spec.Cluster.SSDs),
+		roachtestPrefix("metamorphicBuild"): fmt.Sprintf("%t", metamorphicBuild),
 	}
 	// Emit CPU architecture only if it was specified; otherwise, it's captured below, assuming cluster was created.
 	if spec.Cluster.Arch != "" {
@@ -256,7 +259,7 @@ func (g *githubIssues) MaybePost(t *testImpl, l *logger.Logger, message string) 
 		return nil
 	}
 
-	postRequest, err := g.createPostRequest(t.Name(), t.start, t.end, t.spec, t.firstFailure(), message)
+	postRequest, err := g.createPostRequest(t.Name(), t.start, t.end, t.spec, t.firstFailure(), message, tests.UsingRuntimeAssertions(t))
 	if err != nil {
 		return err
 	}
