@@ -232,6 +232,10 @@ func TestErrorRedaction(t *testing.T) {
 			expect: "conflicting locks on ",
 		},
 		{
+			err:    &WriteIntentError{},
+			expect: "conflicting locks on ",
+		},
+		{
 			err:    &WriteTooOldError{},
 			expect: "WriteTooOldError: write at timestamp 0,0 too old; must write at or above 0,0",
 		},

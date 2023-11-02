@@ -506,13 +506,13 @@ func runBackupProcessor(
 							return nil
 						})
 					if exportRequestErr != nil {
-						if lockErr, ok := pErr.GetDetail().(*kvpb.LockConflictError); ok {
+						if lockErr, ok := pErr.GetDetail().(*kvpb.WriteIntentError); ok {
 							span.lastTried = timeutil.Now()
 							span.attempts++
 							todo <- span
 							// TODO(dt): send a progress update to update job progress to note
 							// the intents being hit.
-							log.VEventf(ctx, 1, "retrying ExportRequest for span %s; encountered LockConflictError: %s", span.span, lockErr.Error())
+							log.VEventf(ctx, 1, "retrying ExportRequest for span %s; encountered WriteIntentError: %s", span.span, lockErr.Error())
 							span = spanAndTime{}
 							continue
 						}

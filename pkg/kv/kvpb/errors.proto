@@ -297,39 +297,24 @@ message TransactionStatusError {
   optional string msg_redactable = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
 }
 
-// A LockConflictError indicates that one or more locks belonging
-// to another transaction were encountered, leading to a read/write or
-// write/write conflict. The keys at which the locks were encountered
-// are set, as are the txn metas for the locks' transactions.
+// A LockConflictError indicates that one or more locks belonging to
+// another transaction were encountered, leading to a read/write or
+// write/write lock conflict which prevented kvserver-local request
+// evaluation from completing. The keys at which the locks were
+// encountered are set, as are the txn metas for the locks'
+// transactions.
 //
-// LockConflictErrors are used at two different levels of the system. In
-// both cases, they have the same meaning — that an intent or lock (an
-// intent is a form of replicated lock) is preventing an operation from
-// completing.
+// LockConflictErrors are returned from MVCC during request evaluation
+// when a request finds a conflicting lock. A LockConflictError is
+// propagated up through the Replica to the corresponding lock table and
+// passed to its AddDiscoveredLock method. This informs the lock table
+// about the lock(s) and allows the request to handle the conflicts
+// through a combination of waiting and pushing in the concurrency
+// manager. See concurrency_control.go for an explanation and diagram of
+// the flow.
 //
-// First, they are returned from MVCC during request evaluation when a
-// request finds a conflicting lock. A LockConflictError is propagated
-// up through the Replica to the corresponding lock table and passed to
-// its AddDiscoveredLock method. This informs the lock table about the
-// lock(s) and allows the request to handle the conflicts through a
-// combination of waiting and pushing in the concurrency manager. See
-// concurrency_control.go for an explanation and diagram of the flow.
-//
-// Second, LockConflictErrors are returned from the concurrency manager
-// for intents/locks that conflict with a request and are not handled.
-// This is typically because the request was configured with an Error
-// wait policy instead of a Block wait policy, so it is opting to fail
-// fast on conflicting locks instead of waiting for a lock to be
-// released. These errors make their way back up from KV to SQL, where
-// they are converted to a LockNotAvailable error.
-//
-// Note that the KV client is free to send more requests after a
-// LockConflictError. This is not generally allowed after other errors
-// because of fears over the ambiguity of the side-effects of failed
-// requests (in particular, the timestamps at which intents might have
-// been written). LockConflictError is a special case as we ensure
-// there's no ambiguity; the error carries a WriteTimestamp that's the
-// upper bound of the timestamps intents were written at.
+// Unlike WriteIntentError, LockConflictError is never returned from the
+// kvserver. Instead, it is only used internally by concurrency control.
 message LockConflictError {
   repeated roachpb.Lock locks = 1 [(gogoproto.nullable) = false];
   reserved 2;
@@ -338,9 +323,44 @@ message LockConflictError {
   // which were discovered under old leases to the lock table.
   optional int64 lease_sequence = 3 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.LeaseSequence"];
+  reserved 4;
+}
+
+// A WriteIntentError indicates that one or more locks belonging to
+// another transaction were encountered, leading to a read/write or
+// write/write lock conflict which prevented the kvserver from handling
+// a request and returning a response to the kvclient. The keys at which
+// the locks were encountered are set, as are the txn metas for the
+// locks' transactions.
+//
+// WriteIntentErrors are returned from the concurrency manager to the
+// kvclient for intents/locks that conflict with a request and are not
+// handled by the kvserver. This is typically because the request was
+// configured with an Error wait policy instead of a Block wait policy,
+// so it is opting to fail fast on conflicting locks instead of waiting
+// for a lock to be released. Alternatively, the error may be because of
+// a lock timeout or a lock wait-queue length limit. These errors make
+// their way back up from KV to SQL, where they are converted to a
+// LockNotAvailable error.
+//
+// Note that the KV client is free to send more requests after a
+// WriteIntentError. This is not generally allowed after other errors
+// because of fears over the ambiguity of the side-effects of failed
+// requests (in particular, the timestamps at which intents might have
+// been written). WriteIntentError is a special case as we ensure
+// there's no ambiguity; the error carries a WriteTimestamp that's the
+// upper bound of the timestamps intents were written at.
+//
+// NOTE: the name of the error refers to "intents", but the error is
+// returned for any conflicting lock, regardless of locking strength.
+// The naming is an artifact of a time when intents were the only form
+// of lock, and renames have proven difficult (see #113271). One day
+// we'll be smart enough to pull it off.
+message WriteIntentError {
+  repeated roachpb.Lock locks = 1 [(gogoproto.nullable) = false];
+  reserved 2, 3;
   enum Reason {
-    // The reason for the LockConflictError is unspecified. This will
-    // always be the case for errors returned from MVCC.
+    // The reason for the WriteIntentError is unspecified.
     REASON_UNSPECIFIED = 0;
     // The request used an Error wait policy because it did not want to
     // wait on locks and it encountered a conflicting lock.
@@ -352,9 +372,7 @@ message LockConflictError {
     // already equal to or exceeding the configured maximum.
     REASON_LOCK_WAIT_QUEUE_MAX_LENGTH_EXCEEDED = 3;
   }
-  // The reason for the error. Applies to LockConflictErrors that are
-  // returned from the concurrency manager (the second use described
-  // above).
+  // The reason for the error.
   optional Reason reason = 4 [(gogoproto.nullable) = false];
 }
 
