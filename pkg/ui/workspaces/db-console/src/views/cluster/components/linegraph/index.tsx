@@ -52,6 +52,7 @@ import { isSecondaryTenant } from "src/redux/tenants";
 import { Tooltip } from "antd";
 import "antd/lib/tooltip/style";
 import { MonitoringIcon } from "src/views/shared/components/icons/monitoring";
+import { unique } from "src/util/arrays";
 
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
@@ -402,14 +403,15 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
           </>
         );
       } else if (data?.results?.length > 1) {
+        const metrics = unique(data.results.map(m => m.query.name));
         tt = (
           <>
             {tt}
             {addLines}
             Metrics:
             <ul>
-              {data.results.map(m => (
-                <li key={m.query.name}>{m.query.name}</li>
+              {metrics.map(m => (
+                <li key={m}>{m}</li>
               ))}
             </ul>
           </>
