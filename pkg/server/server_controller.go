@@ -91,7 +91,7 @@ type serverController struct {
 	watcher *tenantcapabilitieswatcher.Watcher
 
 	mu struct {
-		syncutil.Mutex
+		syncutil.RWMutex
 
 		// servers maps tenant names to the server for that tenant.
 		//
