@@ -1990,7 +1990,8 @@ func (l *Lease) Equal(that interface{}) bool {
 }
 
 // MakeLock makes a lock with the given txn, key, and strength.
-// This is suitable for use when constructing LockConflictError.
+// This is suitable for use when constructing a LockConflictError or
+// WriteIntentError.
 func MakeLock(txn *enginepb.TxnMeta, key Key, str lock.Strength) Lock {
 	var l Lock
 	l.Txn = *txn

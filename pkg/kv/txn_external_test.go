@@ -428,7 +428,7 @@ func testTxnNegotiateAndSendDoesNotBlock(t *testing.T, multiRange, strict, route
 				if err := store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 					// Issue a bounded-staleness read over the keys. If using strict
 					// bounded staleness, use an error wait policy so that we'll hear an
-					// error (LockConflictError) under conditions that would otherwise
+					// error (WriteIntentError) under conditions that would otherwise
 					// cause us to block on an intent. Otherwise, allow the request to be
 					// redirected to the leaseholder and to block on intents.
 					ba := &kvpb.BatchRequest{}
