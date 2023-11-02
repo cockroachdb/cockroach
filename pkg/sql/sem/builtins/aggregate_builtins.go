@@ -46,12 +46,24 @@ func init() {
 	}
 }
 
-// allMaxMinAggregateTypes contains extra types that aren't in
-// types.Scalar that the max/min aggregate functions are defined on.
-var allMaxMinAggregateTypes = append(
-	[]*types.T{types.AnyCollatedString, types.AnyEnum},
-	types.Scalar...,
-)
+// allMaxMinAggregateTypes contains extra types that aren't in types.Scalar that
+// the max/min aggregate functions are defined on. It also excludes REFCURSOR,
+// which isn't supported for max/min.
+var allMaxMinAggregateTypes = getAllMaxMinAggregateTypes()
+
+func getAllMaxMinAggregateTypes() []*types.T {
+	allTypes := make([]*types.T, 0, len(types.Scalar)+1)
+	allTypes = append(allTypes, types.AnyCollatedString)
+	allTypes = append(allTypes, types.AnyEnum)
+	for _, typ := range types.Scalar {
+		if typ.Family() == types.RefCursorFamily {
+			// REFCURSOR does not support max/min aggregates.
+			continue
+		}
+		allTypes = append(allTypes, typ)
+	}
+	return allTypes
+}
 
 // aggregates are a special class of builtin functions that are wrapped
 // at execution in a bucketing layer to combine (aggregate) the result
