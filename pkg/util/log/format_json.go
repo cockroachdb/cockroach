@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"sort"
 	"strconv"
 	"strings"
@@ -523,10 +524,10 @@ type jsonCommon struct {
 type JSONEntry struct {
 	jsonCommon
 
-	//Channel         Channel  `json:"channel,omitempty"`
+	// Channel         Channel  `json:"channel,omitempty"`
 	ChannelNumeric int64  `json:"channel_numeric,omitempty"`
 	Timestamp      string `json:"timestamp,omitempty"`
-	//Severity        Severity `json:"severity,omitempty"`
+	// Severity        Severity `json:"severity,omitempty"`
 	SeverityNumeric int64  `json:"severity_numeric,omitempty"`
 	Goroutine       int64  `json:"goroutine,omitempty"`
 	File            string `json:"file,omitempty"`
@@ -545,10 +546,10 @@ type JSONEntry struct {
 type JSONCompactEntry struct {
 	jsonCommon
 
-	//Channel         Channel  `json:"C,omitempty"`
+	// Channel         Channel  `json:"C,omitempty"`
 	ChannelNumeric int64  `json:"c,omitempty"`
 	Timestamp      string `json:"t,omitempty"`
-	//Severity        Severity `json:"sev,omitempty"`
+	// Severity        Severity `json:"sev,omitempty"`
 	SeverityNumeric int64  `json:"s,omitempty"`
 	Goroutine       int64  `json:"g,omitempty"`
 	File            string `json:"f,omitempty"`
@@ -652,12 +653,19 @@ func (e *JSONCompactEntry) toEntry(entry *JSONEntry) {
 }
 
 // Decode decodes the next log entry into the provided protobuf message.
-func (d *entryDecoderJSON) Decode(entry *logpb.Entry) error {
+func (d *entryDecoderJSON) Decode(entry *logpb.Entry) (err error) {
+	defer func() {
+		// Wrap all errors except EOF as a malformed entries to make it easier to
+		// handle this type of error later on.
+		if err != nil && err != io.EOF {
+			err = errors.CombineErrors(ErrMalformedLogEntry, err)
+		}
+	}()
 	var rp *redactablePackage
 	var e JSONEntry
 	if d.compact {
 		var compact JSONCompactEntry
-		err := d.decoder.Decode(&compact)
+		err = d.decoder.Decode(&compact)
 		if err != nil {
 			return err
 		}
@@ -668,7 +676,7 @@ func (d *entryDecoderJSON) Decode(entry *logpb.Entry) error {
 			return err
 		}
 	}
-	rp, err := e.populate(entry, d)
+	rp, err = e.populate(entry, d)
 	if err != nil {
 		return err
 	}

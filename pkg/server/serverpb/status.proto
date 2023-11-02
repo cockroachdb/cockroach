@@ -668,6 +668,9 @@ message LogsRequest {
 message LogEntriesResponse {
   repeated cockroach.util.log.Entry entries = 1
       [ (gogoproto.nullable) = false ];
+  // parse_errors contains list of errors that occurred during retrieving individual log entries
+  // that don't prevent to return at least partial response.
+  repeated string parse_errors = 2;
 }
 
 message LogFilesListRequest {

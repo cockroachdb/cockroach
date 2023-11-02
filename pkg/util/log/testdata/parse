@@ -274,3 +274,20 @@ logpb.Entry{Severity:1, Time:1610826557073282000, Goroutine:14, File:"server/nod
 
 
 subtest end
+
+subtest corrupted_log
+
+# Check that entries after corrupted line is parsed.
+log
+.
+I210116 17:49:17.073282-020000 14 server/node.go:464 ⋮ [-] 23  started with engine type ‹2›
+.
+.
+.
+I210116 19:49:17.073282 14 server/node.go:464 ⋮ [-] 23  last line
+----
+logpb.Entry{Severity:1, Time:1610826557073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
+logpb.Entry{Severity:1, Time:1610826557073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"last line", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
+
+
+subtest end
