@@ -72,6 +72,17 @@ func registerPgjdbc(r registry.Registry) {
 			}
 		}
 
+		if UsingRuntimeAssertions(t) {
+			// This test assumes that multiple_active_portals_enabled is false, but through
+			// metamorphic constants, it is possible for them to be enabled.
+			if _, err = db.ExecContext(ctx, "SET multiple_active_portals_enabled=false"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = db.ExecContext(ctx, "ALTER DATABASE defaultdb SET multiple_active_portals_enabled=false"); err != nil {
+				t.Fatal(err)
+			}
+		}
+
 		t.Status("cloning pgjdbc and installing prerequisites")
 		// Report the latest tag, but do not use it. The newest versions produces output that breaks our xml parser,
 		// and we want to pin to the working version for now.

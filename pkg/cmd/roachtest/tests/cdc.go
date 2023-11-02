@@ -619,7 +619,10 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster) cdcTester
 
 	settings.Env = append(settings.Env, envVars...)
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
+	// Allow cockroach with runtime assertions enabled unless this is a
+	// performance test.
+	cockroach := t.Cockroach()
+	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, t.L(), startOpts, settings, tester.crdbNodes)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", tester.workloadNode)
 	tester.startGrafana()

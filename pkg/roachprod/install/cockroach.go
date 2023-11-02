@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -911,12 +912,30 @@ func (c *SyncedCluster) generateStartFlagsKV(node Node, startOpts StartOpts) []s
 	return args
 }
 
+var maxSQLMemoryRE = regexp.MustCompile(`^--max-sql-memory=(\d+)%$`)
+
 // generateStartFlagsSQL generates `cockroach start` and `cockroach mt
 // start-sql` arguments that are relevant for the SQL layers, used by both KV
 // and storage layers.
 func (c *SyncedCluster) generateStartFlagsSQL(node Node, startOpts StartOpts) []string {
 	var args []string
-	args = append(args, fmt.Sprintf("--max-sql-memory=%d%%", c.maybeScaleMem(25)))
+	formatArg := func(m int) string {
+		return fmt.Sprintf("--max-sql-memory=%d%%", c.maybeScaleMem(m))
+	}
+
+	if idx := argExists(startOpts.ExtraArgs, "--max-sql-memory"); idx == -1 {
+		args = append(args, formatArg(25))
+	} else {
+		arg := startOpts.ExtraArgs[idx]
+		matches := maxSQLMemoryRE.FindStringSubmatch(arg)
+		mem, err := strconv.ParseInt(matches[1], 10, 64)
+		if err != nil {
+			panic(fmt.Sprintf("invalid --max-sql-memory parameter: %s", arg))
+		}
+
+		startOpts.ExtraArgs[idx] = formatArg(int(mem))
+	}
+
 	if startOpts.Target == StartServiceForVirtualCluster {
 		args = append(args, "--store", c.InstanceStoreDir(node, startOpts.VirtualClusterName, startOpts.SQLInstance))
 	}

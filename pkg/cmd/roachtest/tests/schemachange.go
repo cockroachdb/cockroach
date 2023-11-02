@@ -341,7 +341,9 @@ func makeIndexAddTpccTest(
 }
 
 func registerSchemaChangeBulkIngest(r registry.Registry) {
-	r.Add(makeSchemaChangeBulkIngestTest(r, 5, 100000000, time.Minute*20))
+	// Allow a long running time to account for runs that use a
+	// cockroach build with runtime assertions enabled.
+	r.Add(makeSchemaChangeBulkIngestTest(r, 5, 100000000, time.Minute*60))
 }
 
 func makeSchemaChangeBulkIngestTest(

@@ -132,6 +132,7 @@ func TestCreatePostRequest(t *testing.T) {
 		clusterCreationFailed   bool
 		loadTeamsFailed         bool
 		localSSD                bool
+		metamorphicBuild        bool
 		extraLabels             []string
 		arch                    vm.CPUArch
 		failure                 failure
@@ -140,55 +141,59 @@ func TestCreatePostRequest(t *testing.T) {
 		expectedSkipTestFailure bool
 		expectedParams          map[string]string
 	}{
-		{true, false, false, false, nil, "", createFailure(errors.New("other")), true, false, false,
+		{true, false, false, false, false, nil, "", createFailure(errors.New("other")), true, false, false,
 			prefixAll(map[string]string{
-				"cloud":     "gce",
-				"encrypted": "false",
-				"fs":        "ext4",
-				"ssd":       "0",
-				"cpu":       "4",
-				"arch":      "amd64",
-				"localSSD":  "false",
+				"cloud":            "gce",
+				"encrypted":        "false",
+				"fs":               "ext4",
+				"ssd":              "0",
+				"cpu":              "4",
+				"arch":             "amd64",
+				"localSSD":         "false",
+				"metamorphicBuild": "false",
 			}),
 		},
-		{true, false, false, true, nil, vm.ArchARM64, createFailure(errClusterProvisioningFailed), true, false, true,
+		{true, false, false, true, true, nil, vm.ArchARM64, createFailure(errClusterProvisioningFailed), true, false, true,
 			prefixAll(map[string]string{
-				"cloud":     "gce",
-				"encrypted": "false",
-				"fs":        "ext4",
-				"ssd":       "0",
-				"cpu":       "4",
-				"arch":      "arm64",
-				"localSSD":  "true",
+				"cloud":            "gce",
+				"encrypted":        "false",
+				"fs":               "ext4",
+				"ssd":              "0",
+				"cpu":              "4",
+				"arch":             "arm64",
+				"localSSD":         "true",
+				"metamorphicBuild": "true",
 			}),
 		},
 		// Assert that release-blocker label doesn't exist when
 		// !nonReleaseBlocker and issue is an SSH flake. Also ensure that
 		// in the event of a failed cluster creation, nil `vmOptions` and
 		// `clusterImpl` are not dereferenced
-		{false, true, false, false, nil, "", createFailure(rperrors.ErrSSH255), true, false, true,
+		{false, true, false, false, false, nil, "", createFailure(rperrors.ErrSSH255), true, false, true,
 			prefixAll(map[string]string{
-				"cloud": "gce",
-				"ssd":   "0",
-				"cpu":   "4",
+				"cloud":            "gce",
+				"ssd":              "0",
+				"cpu":              "4",
+				"metamorphicBuild": "false",
 			}),
 		},
 		//Simulate failure loading TEAMS.yaml
-		{true, false, true, false, nil, "", createFailure(errors.New("other")), false, false, false, nil},
+		{true, false, true, false, false, nil, "", createFailure(errors.New("other")), false, false, false, nil},
 		//Error during post test assertions
-		{true, false, false, false, nil, "", createFailure(errDuringPostAssertions), false, false, false, nil},
+		{true, false, false, false, false, nil, "", createFailure(errDuringPostAssertions), false, false, false, nil},
 		//Error during dns operation
-		{true, false, false, false, nil, "", createFailure(gce.ErrDNSOperation), true, false, true, nil},
+		{true, false, false, false, false, nil, "", createFailure(gce.ErrDNSOperation), true, false, true, nil},
 		// Assert that extra labels in the test spec are added to the issue.
-		{true, false, false, false, []string{"foo-label"}, "", createFailure(errors.New("other")), true, false, false,
+		{true, false, false, false, false, []string{"foo-label"}, "", createFailure(errors.New("other")), true, false, false,
 			prefixAll(map[string]string{
-				"cloud":     "gce",
-				"encrypted": "false",
-				"fs":        "ext4",
-				"ssd":       "0",
-				"cpu":       "4",
-				"arch":      "amd64",
-				"localSSD":  "false",
+				"cloud":            "gce",
+				"encrypted":        "false",
+				"fs":               "ext4",
+				"ssd":              "0",
+				"cpu":              "4",
+				"arch":             "amd64",
+				"localSSD":         "false",
+				"metamorphicBuild": "false",
 			}),
 		},
 	}
@@ -239,10 +244,10 @@ func TestCreatePostRequest(t *testing.T) {
 
 			if c.loadTeamsFailed {
 				// Assert that if TEAMS.yaml cannot be loaded then function errors.
-				_, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message")
+				_, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message", c.metamorphicBuild)
 				assert.Error(t, err, "Expected an error in createPostRequest when loading teams fails, but got nil")
 			} else {
-				req, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message")
+				req, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message", c.metamorphicBuild)
 				assert.NoError(t, err, "Expected no error in createPostRequest")
 
 				r := &issues.Renderer{}

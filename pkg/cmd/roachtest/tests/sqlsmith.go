@@ -21,10 +21,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
@@ -98,9 +100,9 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 		rng, seed := randutil.NewTestRand()
 		t.L().Printf("seed: %d", seed)
 
-		// With 50% chance use the cockroach-short binary that was compiled with
-		// --crdb_test build tag.
-		maybeUseBuildWithEnabledAssertions(ctx, t, c, rng, 0.5 /* eaProb */)
+		c.SetRandomSeed(rng.Int63())
+		c.Put(ctx, t.Cockroach(), "./cockroach")
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 		setupFunc, ok := setups[setupName]
 		if !ok {

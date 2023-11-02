@@ -135,7 +135,10 @@ func UploadVersion(
 	newVersion *Version,
 ) (string, error) {
 	dstBinary := BinaryPathForVersion(t, newVersion)
-	srcBinary := t.Cockroach()
+	// Run with standard binary as older versions retrieved through roachprod stage
+	// are not currently available with crdb_test enabled.
+	// TODO(DarrylWong): Compile older versions with crdb_test flag.
+	srcBinary := t.StandardCockroach()
 
 	overrideBinary, isOverriden := t.VersionsBinaryOverride()[newVersion.String()]
 	if isOverriden {
