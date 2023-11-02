@@ -59,11 +59,17 @@ func (v Version) String() string { return redact.StringWithoutMarkers(v) }
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (v Version) SafeFormat(p redact.SafePrinter, _ rune) {
-	if v.Internal == 0 {
+	if v.IsFinal() {
 		p.Printf("%d.%d", v.Major, v.Minor)
 		return
 	}
 	p.Printf("%d.%d-%d", v.Major, v.Minor, v.Internal)
+}
+
+// IsFinal returns true if this is a final version (as opposed to a
+// transitional internal version during upgrade).
+func (v Version) IsFinal() bool {
+	return v.Internal == 0
 }
 
 // PrettyPrint returns the value in a format that makes it apparent whether or
