@@ -3267,6 +3267,7 @@ Support status: [reserved](#support-status)
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | entries | [cockroach.util.log.Entry](#cockroach.server.serverpb.LogEntriesResponse-cockroach.util.log.Entry) | repeated |  | [reserved](#support-status) |
+| parse_errors | [string](#cockroach.server.serverpb.LogEntriesResponse-string) | repeated | parse_errors contains list of errors that occurred during retrieving individual log entries that don't prevent to return at least partial response. | [reserved](#support-status) |
 
 
 
@@ -3317,6 +3318,7 @@ Support status: [reserved](#support-status)
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | entries | [cockroach.util.log.Entry](#cockroach.server.serverpb.LogEntriesResponse-cockroach.util.log.Entry) | repeated |  | [reserved](#support-status) |
+| parse_errors | [string](#cockroach.server.serverpb.LogEntriesResponse-string) | repeated | parse_errors contains list of errors that occurred during retrieving individual log entries that don't prevent to return at least partial response. | [reserved](#support-status) |
 
 
 

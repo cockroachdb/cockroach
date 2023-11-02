@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/kr/pretty"
 )
@@ -119,7 +120,7 @@ func TestJsonDecode(t *testing.T) {
 				for {
 					var e logpb.Entry
 					if err := d.Decode(&e); err != nil {
-						if err == io.EOF {
+						if err == io.EOF || errors.Is(err, ErrMalformedLogEntry) {
 							break
 						}
 						td.Fatalf(t, "error while decoding: %v", err)
