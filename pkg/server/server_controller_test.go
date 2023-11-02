@@ -124,6 +124,37 @@ func TestServerControllerStopStart(t *testing.T) {
 	shouldConnectSoon()
 }
 
+// TestServerControllerWaitForDefaultTenant tests that the server SQL
+// controller knows how to wait for the default cluster.
+func TestServerControllerWaitForDefaultCluster(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	sqlRunner := sqlutils.MakeSQLRunner(db)
+	sqlRunner.Exec(t, "SET CLUSTER SETTING server.controller.mux_virtual_cluster_wait.enabled = true")
+
+	tryConnect := func() error {
+		conn, err := s.SystemLayer().SQLConnE(serverutils.DBName("cluster:hello"))
+		if err != nil {
+			return err
+		}
+		defer func() { _ = conn.Close() }()
+		return conn.Ping()
+	}
+
+	sqlRunner.Exec(t, "CREATE TENANT hello")
+	sqlRunner.Exec(t, "ALTER VIRTUAL CLUSTER hello START SERVICE SHARED")
+	sqlRunner.Exec(t, "SET CLUSTER SETTING server.controller.default_target_cluster = 'hello'")
+	require.NoError(t, tryConnect())
+}
+
 func TestSQLErrorUponInvalidTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
