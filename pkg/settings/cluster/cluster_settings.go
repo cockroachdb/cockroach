@@ -128,10 +128,14 @@ func (s *Settings) MakeUpdater() settings.Updater {
 // supported versions respectively. The cluster version setting is not
 // initialized.
 func MakeClusterSettings() *Settings {
+	return MakeClusterSettingsWithVersions(clusterversion.Latest.Version(), clusterversion.MinSupported.Version())
+}
+
+func MakeClusterSettingsWithVersions(latest, minSupported roachpb.Version) *Settings {
 	s := &Settings{}
 
 	sv := &s.SV
-	s.Version = clusterversion.MakeVersionHandle(&s.SV)
+	s.Version = clusterversion.MakeVersionHandle(&s.SV, latest, minSupported)
 	sv.Init(context.TODO(), s.Version)
 	return s
 }
@@ -159,12 +163,7 @@ func MakeTestingClusterSettings() *Settings {
 func MakeTestingClusterSettingsWithVersions(
 	binaryVersion, binaryMinSupportedVersion roachpb.Version, initializeVersion bool,
 ) *Settings {
-	s := &Settings{}
-
-	sv := &s.SV
-	s.Version = clusterversion.MakeVersionHandleWithOverride(
-		&s.SV, binaryVersion, binaryMinSupportedVersion)
-	sv.Init(context.TODO(), s.Version)
+	s := MakeClusterSettingsWithVersions(binaryVersion, binaryMinSupportedVersion)
 
 	if initializeVersion {
 		// Initialize cluster version to specified binaryVersion.
@@ -182,7 +181,7 @@ func TestingCloneClusterSettings(st *Settings) *Settings {
 	result := &Settings{
 		ExternalIODir: st.ExternalIODir,
 	}
-	result.Version = clusterversion.MakeVersionHandleWithOverride(
+	result.Version = clusterversion.MakeVersionHandle(
 		&result.SV, st.Version.BinaryVersion(), st.Version.BinaryMinSupportedVersion(),
 	)
 	result.SV.TestingCopyForServer(&st.SV, result.Version)
