@@ -818,7 +818,7 @@ func (c *transientCluster) waitForSQLReadiness(
 		case <-ctx.Done():
 			return errors.CombineErrors(errors.Newf("context cancellation while waiting for server %d to become ready", idx), ctx.Err())
 		case <-c.servers[idx].Stopper().ShouldQuiesce():
-			return errors.Newf("server %s shut down prematurely", idx)
+			return errors.Newf("server %d shut down prematurely", idx)
 		case <-c.stopper.ShouldQuiesce():
 			return errors.Newf("demo cluster shut down prematurely while waiting for server %d to become ready", idx)
 		default:
