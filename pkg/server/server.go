@@ -1235,7 +1235,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		// https://github.com/cockroachdb/cockroach/issues/84585 is
 		// implemented.
 		func(ctx context.Context, name roachpb.TenantName) error {
-			d, err := sc.getServer(ctx, name)
+			d, _, err := sc.getServer(ctx, name)
 			if err != nil {
 				return err
 			}

@@ -105,6 +105,10 @@ type serverController struct {
 		// nextServerIdx is the index to provide to the next call to
 		// newServerFn.
 		nextServerIdx int
+
+		// newServerCh is closed anytime a server is added to
+		// the servers list.
+		newServerCh chan struct{}
 	}
 }
 
@@ -138,6 +142,7 @@ func newServerController(
 		catconstants.SystemTenantName: c.orchestrator.makeServerStateForSystemTenant(systemTenantNameContainer, systemServer),
 	}
 	c.mu.testArgs = make(map[roachpb.TenantName]base.TestSharedProcessTenantArgs)
+	c.mu.newServerCh = make(chan struct{})
 	parentStopper.AddCloser(c)
 	return c
 }
