@@ -951,6 +951,10 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"SET experimental_enable_temp_tables = true;",
 			"CREATE TEMPORARY TABLE t7 (i INT);  -- expect to skip this line",
 			"CREATE TEMP TABLE t7 (i INT);  -- ditto",
+			"CREATE TABLE t10 (i INT NOT NULL, j INT NOT NULL, k INT NOT NULL, PRIMARY KEY (i, k) USING HASH WITH (bucket_count=3));",
+			"INSERT INTO t10 VALUES (0, 1, 2);",
+			"ALTER TABLE t10 ALTER PRIMARY KEY USING COLUMNS (i, k) USING HASH;  -- expect to be rewritten to have `DROP COLUMN IF EXISTS old-shard-col` appended to it",
+			"ALTER TABLE t10 ALTER PRIMARY KEY USING COLUMNS (j) USING HASH;  -- expect to not be rewritten because old-shard-col is used",
 		},
 	}
 
