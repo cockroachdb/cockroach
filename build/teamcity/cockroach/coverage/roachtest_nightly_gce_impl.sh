@@ -19,10 +19,9 @@ echo "$GOOGLE_EPHEMERAL_CREDENTIALS" > creds.json
 gcloud auth activate-service-account --key-file=creds.json
 export ROACHPROD_USER=teamcity
 
-# See build/teamcity/util/roachtest_util.sh.
+# Values taken from build/teamcity/util/roachtest_util.sh.
 PARALLELISM=16
 CPUQUOTA=1024
-FILTER="tag:aws tag:default"
 
 build/teamcity-roachtest-invoke.sh \
   --metamorphic-encryption-probability=0.5 \
@@ -36,4 +35,5 @@ build/teamcity-roachtest-invoke.sh \
   --artifacts-literal="${LITERAL_ARTIFACTS_DIR:-}" \
   --slack-token="${SLACK_TOKEN:-}" \
   --go-cover \
-  ${TESTS:-} ${FILTER}
+  --suite nightly \
+  ${TESTS:-}
