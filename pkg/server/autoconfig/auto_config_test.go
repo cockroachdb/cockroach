@@ -12,12 +12,16 @@ package autoconfig_test
 
 import (
 	"context"
+	gosql "database/sql"
+	"math"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/autoconfig"
 	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/acprovider"
 	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/autoconfigpb"
@@ -43,6 +47,15 @@ type testProvider struct {
 type testTask struct {
 	task autoconfigpb.Task
 	seen bool
+}
+
+var endProfileTask = autoconfigpb.Task{
+	TaskID:      autoconfigpb.TaskID(math.MaxUint64),
+	Description: "end of configuration profile",
+	MinVersion:  clusterversion.TestingBinaryVersion,
+	Payload: &autoconfigpb.Task_SimpleSQL{
+		SimpleSQL: &autoconfigpb.SimpleSQL{},
+	},
 }
 
 var testTasks = []testTask{
@@ -85,6 +98,7 @@ var testTasks = []testTask{
 			},
 		},
 	}},
+	{task: endProfileTask},
 }
 
 func (p *testProvider) EnvUpdate() <-chan struct{} {
@@ -93,7 +107,12 @@ func (p *testProvider) EnvUpdate() <-chan struct{} {
 }
 
 func (p *testProvider) ActiveEnvironments() []autoconfigpb.EnvironmentID {
-	return []autoconfigpb.EnvironmentID{testEnvID}
+	p.Lock()
+	defer p.Unlock()
+	if len(p.tasks) > 0 {
+		return []autoconfigpb.EnvironmentID{testEnvID}
+	}
+	return nil
 }
 
 func (p *testProvider) Pop(
@@ -161,6 +180,7 @@ func TestAutoConfig(t *testing.T) {
 	provider.notifyCh <- struct{}{}
 
 	ctx := context.Background()
+	noWait := time.Duration(0)
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109462),
 
@@ -168,6 +188,9 @@ func TestAutoConfig(t *testing.T) {
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			AutoConfig: &autoconfig.TestingKnobs{
 				Provider: provider,
+			},
+			Server: &server.TestingKnobs{
+				AutoConfigProfileStartupWaitTime: &noWait,
 			},
 		},
 	})
@@ -224,4 +247,109 @@ SELECT value FROM system.job_info WHERE job_id = $1 AND info_key = $2 LIMIT 1`,
 	t.Logf("check that the effects of the first tasks are visible")
 	err = sqlDB.QueryRowContext(ctx, `SELECT count(*) FROM system.bar`).Scan(&unused)
 	require.NoError(t, err)
+}
+
+func TestAutoConfigWaitAtStartupTimesOut(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	provider := &testProvider{
+		t:          t,
+		notifyCh:   make(chan struct{}, 1),
+		peekWaitCh: make(chan struct{}),
+		tasks: []testTask{
+			{task: autoconfigpb.Task{
+				TaskID:      123,
+				Description: "test task that takes longer than the maxWait",
+				MinVersion:  clusterversion.TestingBinaryVersion,
+				Payload: &autoconfigpb.Task_SimpleSQL{
+					SimpleSQL: &autoconfigpb.SimpleSQL{
+						UsernameProto: username.NodeUserName().EncodeProto(),
+						TransactionalStatements: []string{
+							"SELECT pg_sleep(300)",
+						},
+					},
+				},
+			}},
+			{task: endProfileTask},
+		},
+	}
+	provider.notifyCh <- struct{}{}
+	close(provider.peekWaitCh)
+
+	ctx := context.Background()
+	shortWait := 50 * time.Millisecond
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109462),
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			AutoConfig: &autoconfig.TestingKnobs{
+				Provider: provider,
+			},
+			Server: &server.TestingKnobs{
+				AutoConfigProfileStartupWaitTime: &shortWait,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	// To keep us honest, assert that the task hasn't been
+	// completed even though server startup has returned.
+	taskRef := autoconfig.InfoKeyTaskRef{Environment: testEnvID, Task: provider.tasks[0].task.TaskID}
+	completionMarker := taskRef.EncodeCompletionMarkerKey()
+	var result bool
+	err := sqlDB.QueryRowContext(ctx, `SELECT true FROM system.job_info WHERE job_id = $1 AND info_key = $2 LIMIT 1`,
+		jobs.AutoConfigRunnerJobID,
+		completionMarker).Scan(&result)
+	require.Error(t, err, gosql.ErrNoRows)
+}
+
+func TestAutoConfigWaitAtStartup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	provider := &testProvider{
+		t:          t,
+		notifyCh:   make(chan struct{}, 1),
+		peekWaitCh: make(chan struct{}),
+		tasks: []testTask{
+			{task: autoconfigpb.Task{
+				TaskID:      123,
+				Description: "create-test-table",
+				MinVersion:  clusterversion.TestingBinaryVersion,
+				Payload: &autoconfigpb.Task_SimpleSQL{
+					SimpleSQL: &autoconfigpb.SimpleSQL{
+						UsernameProto: username.NodeUserName().EncodeProto(),
+						TransactionalStatements: []string{
+							"SELECT pg_sleep(1)",
+							"CREATE TABLE system.t (pk int primary key)",
+							"INSERT INTO system.t VALUES (1)",
+						},
+					},
+				},
+			}},
+			{task: endProfileTask},
+		},
+	}
+	provider.notifyCh <- struct{}{}
+	close(provider.peekWaitCh)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109462),
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			AutoConfig: &autoconfig.TestingKnobs{
+				Provider: provider,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	// The side-effects of the profile execution should be
+	// immediately visible.
+	var value int
+	err := sqlDB.QueryRow("SELECT pk FROM system.t").Scan(&value)
+	require.NoError(t, err)
+	require.Equal(t, 1, value)
 }
