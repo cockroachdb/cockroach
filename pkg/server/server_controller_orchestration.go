@@ -176,7 +176,10 @@ func (c *serverController) createServerEntryLocked(
 	if err != nil {
 		return nil, err
 	}
+
 	c.mu.servers[tenantName] = entry
+	close(c.mu.newServerCh)
+	c.mu.newServerCh = make(chan struct{})
 	return entry, nil
 }
 
