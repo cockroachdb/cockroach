@@ -21,15 +21,20 @@ import (
 // tenant name.
 func (c *serverController) getServer(
 	ctx context.Context, tenantName roachpb.TenantName,
-) (onDemandServer, error) {
+) (onDemandServer, <-chan struct{}, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if e, ok := c.mu.servers[tenantName]; ok {
 		if so, isReady := e.getServer(); isReady {
-			return so.(onDemandServer), nil
+			return so.(onDemandServer), c.mu.newServerCh, nil
+		} else {
+			// If we have a server but it isn't ready yet,
+			// return the startedOrStopped entry for the
+			// channel for the caller to poll on.
+			return nil, e.startedOrStopped(), errors.Mark(errors.Newf("server for tenant %q not ready", tenantName), errNoTenantServerRunning)
 		}
 	}
-	return nil, errors.Mark(errors.Newf("no server for tenant %q", tenantName), errNoTenantServerRunning)
+	return nil, c.mu.newServerCh, errors.Mark(errors.Newf("no server for tenant %q", tenantName), errNoTenantServerRunning)
 }
 
 type noTenantServerRunning struct{}
