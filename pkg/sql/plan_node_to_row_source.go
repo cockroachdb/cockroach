@@ -126,6 +126,9 @@ func (p *planNodeToRowSource) Init(
 		return err
 	}
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
+		if txn := p.params.p.Txn(); txn != nil {
+			p.contentionEventsListener.Init(txn.ID())
+		}
 		p.ExecStatsForTrace = p.execStatsForTrace
 	}
 	return nil

@@ -3739,6 +3739,9 @@ message ContentionEvent {
   // Duration spent contending against the other transaction.
   google.protobuf.Duration duration = 3 [(gogoproto.nullable) = false,
                                          (gogoproto.stdduration) = true];
+  // IsLatch, if true, indicates that the contention event was due to waiting to
+  // acquire a latch.
+  bool is_latch = 4;
 }
 
 // ScanStats is a message that tracks miscellaneous statistics of all Gets,
