@@ -1299,6 +1299,16 @@ func (expr *FuncExpr) TypeCheck(
 		}
 	}
 
+	if overloadImpl.Type == BuiltinRoutine && (def.Name == "min" || def.Name == "max") {
+		// Special case: for REFCURSOR, we disallow min/max during type-checking
+		// despite having overloads for REFCURSOR. This maintains compatibility with
+		// postgres without having to add special checks in optimizer rules for
+		// REFCURSOR.
+		if len(s.typedExprs) > 0 && s.typedExprs[0].ResolvedType().Family() == types.RefCursorFamily {
+			return nil, pgerror.Newf(pgcode.UndefinedFunction, "function %s(refcursor) does not exist", def.Name)
+		}
+	}
+
 	if overloadImpl.Type == ProcedureRoutine && semaCtx.Properties.IsSet(RejectProcedures) {
 		return nil, errors.WithHint(
 			pgerror.Newf(
