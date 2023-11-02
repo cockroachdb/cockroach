@@ -122,7 +122,7 @@ func TestTenantStreamingFailback(t *testing.T) {
 	newTenantConn := func(t *testing.T, srv serverutils.ApplicationLayerInterface, tenantName string) *gosql.DB {
 		var conn *gosql.DB
 		testutils.SucceedsSoon(t, func() error {
-			db, err := srv.SQLConnE(fmt.Sprintf("cluster:%s", tenantName))
+			db, err := srv.SQLConnE(serverutils.DBName(fmt.Sprintf("cluster:%s", tenantName)))
 			if err != nil {
 				return err
 			}
@@ -739,7 +739,7 @@ func waitUntilTenantServerStopped(
 	// 	return nil
 	// })
 	testutils.SucceedsSoon(t, func() error {
-		db, err := srv.SQLConnE(fmt.Sprintf("cluster:%s", tenantName))
+		db, err := srv.SQLConnE(serverutils.DBName(fmt.Sprintf("cluster:%s", tenantName)))
 		if err != nil {
 			return err
 		}

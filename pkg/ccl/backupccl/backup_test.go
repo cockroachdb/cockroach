@@ -1018,7 +1018,7 @@ func backupAndRestore(
 ) {
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
-	storageConn := tc.SystemLayer(0).SQLConn(t, "")
+	storageConn := tc.SystemLayer(0).SQLConn(t)
 	storageSQLDB := sqlutils.MakeSQLRunner(storageConn)
 	storageSQLDB.Exec(t, "SET DATABASE=defaultdb")
 	{
@@ -3396,7 +3396,7 @@ func TestBackupJobFailsInRestoredTenant(t *testing.T) {
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 	})
 	require.NoError(t, err)
-	t10Sql := sqlutils.MakeSQLRunner(t10.SQLConn(t, ""))
+	t10Sql := sqlutils.MakeSQLRunner(t10.SQLConn(t))
 	potentialPausePoints := []string{
 		"backup.after.write_first_checkpoint",
 		"backup.after.details_has_checkpoint",
@@ -3418,7 +3418,7 @@ func TestBackupJobFailsInRestoredTenant(t *testing.T) {
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 	})
 	require.NoError(t, err)
-	t20Sql := sqlutils.MakeSQLRunner(t20.SQLConn(t, ""))
+	t20Sql := sqlutils.MakeSQLRunner(t20.SQLConn(t))
 	t20Sql.Exec(t, `RESUME JOB $1`, backupJobID)
 	jobutils.WaitForJobToFail(t, t20Sql, jobspb.JobID(backupJobID))
 }

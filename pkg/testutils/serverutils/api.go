@@ -174,26 +174,15 @@ type ApplicationLayerInterface interface {
 	// The concrete type is *nodedialer.Dialer.
 	NodeDialer() interface{}
 
-	// SQLConn returns a handle to the server's SQL interface, opened
-	// with the 'root' user.
+	// SQLConn returns a handle to the server's SQL interface, opened with the
+	// 'root' user if no user option is passed. If no database name option is
+	// passed, DefaultDatabaseName is used.
 	// The connection is closed automatically when the server is stopped.
 	// Beware that each call returns a separate, new connection object.
-	//
-	// For the second argument use catalogkeys.DefaultDatabaseName or
-	// catconstants.SystemDatabaseName when in doubt. An empty
-	// string results in DefaultDatabaseName being used.
-	SQLConn(t TestFataler, dbName string) *gosql.DB
+	SQLConn(t TestFataler, opts ...SQLConnOption) *gosql.DB
 
-	// SQLConnE is like SQLConn but it allows the test to check the error.
-	SQLConnE(dbName string) (*gosql.DB, error)
-
-	// SQLConnForUser is like SQLConn but allows the test to specify a
-	// username.
-	SQLConnForUser(t TestFataler, userName, dbName string) *gosql.DB
-
-	// SQLConnForUserE is like SQLConnForUser but it allows the test to
-	// check the error.
-	SQLConnForUserE(userName, dbName string) (*gosql.DB, error)
+	// SQLConnE is like SQLConn, but it allows the test to check the error.
+	SQLConnE(opts ...SQLConnOption) (*gosql.DB, error)
 
 	// DB returns a handle to the cluster's KV interface.
 	DB() *kv.DB
