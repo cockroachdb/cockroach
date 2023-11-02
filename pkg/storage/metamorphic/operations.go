@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -266,6 +267,56 @@ func (m mvccInitPutOp) run(ctx context.Context) string {
 	txn.Sequence++
 
 	_, err := storage.MVCCInitPut(ctx, writer, m.key, txn.ReadTimestamp, m.value, false, storage.MVCCWriteOptions{Txn: txn})
+	if err != nil {
+		if writeTooOldErr := (*kvpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
+			txn.WriteTimestamp.Forward(writeTooOldErr.ActualTimestamp)
+			// Update the txn's lock spans to account for this intent being written.
+			addKeyToLockSpans(txn, m.key)
+		}
+		return fmt.Sprintf("error: %s", err)
+	}
+
+	// Update the txn's lock spans to account for this intent being written.
+	addKeyToLockSpans(txn, m.key)
+	return "ok"
+}
+
+type mvccCheckForAcquireLockOp struct {
+	m        *metaTestRunner
+	writer   readWriterID
+	key      roachpb.Key
+	txn      txnID
+	strength lock.Strength
+}
+
+func (m mvccCheckForAcquireLockOp) run(ctx context.Context) string {
+	txn := m.m.getTxn(m.txn)
+	txn.Sequence++
+	writer := m.m.getReadWriter(m.writer)
+
+	err := storage.MVCCCheckForAcquireLock(ctx, writer, txn, m.strength, m.key, 64)
+	if err != nil {
+		return fmt.Sprintf("error: %s", err)
+	}
+
+	// Update the txn's lock spans to account for this intent being written.
+	return "ok"
+}
+
+type mvccAcquireLockOp struct {
+	m        *metaTestRunner
+	writer   readWriterID
+	key      roachpb.Key
+	txn      txnID
+	strength lock.Strength
+}
+
+func (m mvccAcquireLockOp) run(ctx context.Context) string {
+	txn := m.m.getTxn(m.txn)
+	txn.Sequence++
+	writer := m.m.getReadWriter(m.writer)
+
+	err := storage.MVCCAcquireLock(ctx, writer, txn, m.strength, m.key, nil, 64)
 	if err != nil {
 		if writeTooOldErr := (*kvpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
 			txn.WriteTimestamp.Forward(writeTooOldErr.ActualTimestamp)
@@ -935,6 +986,63 @@ var opGenerators = []opGenerator{
 			operandTransaction,
 			operandUnusedMVCCKey,
 			operandValue,
+		},
+		weight: 50,
+	},
+	{
+		name: "mvcc_acquire_lock",
+		generate: func(ctx context.Context, m *metaTestRunner, args ...string) mvccOp {
+			writer := readWriterID(args[0])
+			txn := txnID(args[1])
+			key := m.txnKeyGenerator.parse(args[2])
+			strength := lock.Shared
+			if m.floatGenerator.parse(args[3]) < 0.5 {
+				strength = lock.Exclusive
+			}
+
+			// Track this write in the txn generator. This ensures the batch will be
+			// committed before the transaction is committed
+			m.txnGenerator.trackTransactionalWrite(writer, txn, key.Key, nil)
+			return &mvccAcquireLockOp{
+				m:        m,
+				writer:   writer,
+				key:      key.Key,
+				txn:      txn,
+				strength: strength,
+			}
+		},
+		operands: []operandType{
+			operandReadWriter,
+			operandTransaction,
+			operandMVCCKey,
+			operandFloat,
+		},
+		weight: 50,
+	},
+	{
+		name: "mvcc_check_for_acquire_lock",
+		generate: func(ctx context.Context, m *metaTestRunner, args ...string) mvccOp {
+			writer := readWriterID(args[0])
+			txn := txnID(args[1])
+			key := m.txnKeyGenerator.parse(args[2])
+			strength := lock.Shared
+			if m.floatGenerator.parse(args[3]) < 0.5 {
+				strength = lock.Exclusive
+			}
+
+			return &mvccCheckForAcquireLockOp{
+				m:        m,
+				writer:   writer,
+				key:      key.Key,
+				txn:      txn,
+				strength: strength,
+			}
+		},
+		operands: []operandType{
+			operandReadWriter,
+			operandTransaction,
+			operandMVCCKey,
+			operandFloat,
 		},
 		weight: 50,
 	},
