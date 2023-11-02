@@ -218,6 +218,11 @@ func (ex *connExecutor) recordStatementSummary(
 	// encountered while collecting query-level statistics.
 	if queryLevelStatsOk {
 		for _, ev := range queryLevelStats.ContentionEvents {
+			if ev.IsLatch && !planner.SessionData().RegisterLatchWaitContentionEvents {
+				// This event should be included in the trace and contention time
+				// metrics, but not registered with the *_contention_events tables.
+				continue
+			}
 			contentionEvent := contentionpb.ExtendedContentionEvent{
 				BlockingEvent:            ev,
 				WaitingTxnID:             planner.txn.ID(),

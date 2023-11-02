@@ -151,9 +151,13 @@ debug-latch-manager
 write count: 1
  read count: 1
 
+debug-advance-clock ts=123
+----
+
 finish req=req3
 ----
 [-] finish req3: finishing request
+[3] sequence req4: latch conflict with 00000003-0000-0000-0000-000000000000 on ‹"k"› for 123.000s
 [3] sequence req4: scanning lock table for conflicting locks
 [3] sequence req4: sequencing complete, returned guard
 
@@ -226,13 +230,13 @@ debug-advance-clock ts=123
 on-txn-updated txn=txn2 status=pending ts=18,1
 ----
 [-] update txn: increasing timestamp of txn2
-[2] sequence req5: resolving intent ‹"k"› for txn 00000002 with PENDING status and clock observation {1 246.000000000,0}
+[2] sequence req5: resolving intent ‹"k"› for txn 00000002 with PENDING status and clock observation {1 369.000000000,0}
 [2] sequence req5: lock wait-queue event: done waiting
 [2] sequence req5: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"k"› for 123.000s
 [2] sequence req5: acquiring latches
 [2] sequence req5: scanning lock table for conflicting locks
 [2] sequence req5: sequencing complete, returned guard
-[3] sequence req6: resolving intent ‹"k"› for txn 00000002 with PENDING status and clock observation {1 246.000000000,1}
+[3] sequence req6: resolving intent ‹"k"› for txn 00000002 with PENDING status and clock observation {1 369.000000000,1}
 [3] sequence req6: lock wait-queue event: done waiting
 [3] sequence req6: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"k"› for 123.000s
 [3] sequence req6: acquiring latches
