@@ -504,20 +504,16 @@ type entryDecoderV2 struct {
 // Decode decodes the next log entry into the provided protobuf message.
 func (d *entryDecoderV2) Decode(entry *logpb.Entry) (err error) {
 	defer func() {
-		switch r := recover().(type) {
-		case nil: // do nothing
-		case error:
-			err = errors.Wrapf(r, "decoding on line %d", d.lines)
-		default:
-			panic(r)
+		if err != nil && !errors.Is(err, io.EOF) {
+			err = errors.Wrapf(err, "decoding on line %d", d.lines)
 		}
 	}()
-	frag, atEOF := d.peekNextFragment()
-	if atEOF {
-		return io.EOF
+	frag, err := d.peekNextFragment()
+	if err != nil {
+		return err
 	}
 	d.popFragment()
-	if err := d.initEntryFromFirstLine(entry, frag); err != nil {
+	if err = d.initEntryFromFirstLine(entry, frag); err != nil {
 		return err
 	}
 
@@ -527,12 +523,16 @@ func (d *entryDecoderV2) Decode(entry *logpb.Entry) (err error) {
 
 	// While the entry has additional lines, collect the full message.
 	for {
-		frag, atEOF := d.peekNextFragment()
-		if atEOF || !frag.isContinuation() {
+		frag, err = d.peekNextFragment()
+		if err != nil || !frag.isContinuation() {
+			// Ignore this error as it is relevant to the next line and we don't
+			// know if it is continuation line or not.
 			break
 		}
 		d.popFragment()
-		d.addContinuationFragmentToEntry(entry, &entryMsg, frag)
+		if err = d.addContinuationFragmentToEntry(entry, &entryMsg, frag); err != nil {
+			return err
+		}
 	}
 
 	r := redactablePackage{
@@ -548,7 +548,7 @@ func (d *entryDecoderV2) Decode(entry *logpb.Entry) (err error) {
 
 func (d *entryDecoderV2) addContinuationFragmentToEntry(
 	entry *logpb.Entry, entryMsg *bytes.Buffer, frag entryDecoderV2Fragment,
-) {
+) error {
 	switch frag.getContinuation() {
 	case '+':
 		entryMsg.WriteByte('\n')
@@ -568,25 +568,26 @@ func (d *entryDecoderV2) addContinuationFragmentToEntry(
 			entryMsg.Write(frag.getMsg())
 		}
 	default:
-		panic(errors.Errorf("unexpected continuation character %c", frag.getContinuation()))
+		return errors.Wrapf(ErrMalformedLogEntry, "unexpected continuation character %c", frag.getContinuation())
 	}
+	return nil
 }
 
 // peekNextFragment populates the nextFragment buffer by reading from the
 // underlying reader a line at a time until a valid line is reached.
-// It will panic if a malformed log line is discovered. It permits the first
+// It returns error if malformed log line is discovered. It permits the first
 // line in the decoder to be malformed and it will skip that line. Upon EOF,
 // if there is no text left to consume, the atEOF return value will be true.
-func (d *entryDecoderV2) peekNextFragment() (_ entryDecoderV2Fragment, atEOF bool) {
+func (d *entryDecoderV2) peekNextFragment() (entryDecoderV2Fragment, error) {
 	for d.nextFragment == nil {
 		d.lines++
 		nextLine, err := d.reader.ReadBytes('\n')
-		if isEOF := errors.Is(err, io.EOF); isEOF {
+		if errors.Is(err, io.EOF) {
 			if len(nextLine) == 0 {
-				return nil, true
+				return nil, err
 			}
 		} else if err != nil {
-			panic(err)
+			return nil, err
 		}
 		nextLine = bytes.TrimSuffix(nextLine, []byte{'\n'})
 		m := entryREV2.FindSubmatch(nextLine)
@@ -594,11 +595,11 @@ func (d *entryDecoderV2) peekNextFragment() (_ entryDecoderV2Fragment, atEOF boo
 			if d.lines == 1 { // allow non-matching lines if we've never seen a line
 				continue
 			}
-			panic(errors.New("malformed log entry"))
+			return nil, ErrMalformedLogEntry
 		}
 		d.nextFragment = m
 	}
-	return d.nextFragment, false
+	return d.nextFragment, nil
 }
 
 func (d *entryDecoderV2) popFragment() {
