@@ -57,7 +57,8 @@ func FirstUpgradeFromRelease(
 	var batch catalog.DescriptorIDSet
 	const batchSize = 1000
 	if err := all.ForEachDescriptor(func(desc catalog.Descriptor) error {
-		if !desc.GetPostDeserializationChanges().HasChanges() {
+		changes := desc.GetPostDeserializationChanges()
+		if !changes.HasChanges() || (changes.Len() == 1 && changes.Contains(catalog.SetModTimeToMVCCTimestamp)) {
 			return nil
 		}
 		batch.Add(desc.GetID())
@@ -89,9 +90,6 @@ func upgradeDescriptors(
 		}
 		b := txn.KV().NewBatch()
 		for _, mut := range muts {
-			if !mut.GetPostDeserializationChanges().HasChanges() {
-				continue
-			}
 			key := catalogkeys.MakeDescMetadataKey(d.Codec, mut.GetID())
 			b.CPut(key, mut.DescriptorProto(), mut.GetRawBytesInStorage())
 		}

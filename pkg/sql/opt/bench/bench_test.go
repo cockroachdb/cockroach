@@ -2039,6 +2039,23 @@ var slowSchemas = []string{
 			PRIMARY KEY (region, id)
 		);
 	`,
+	`
+		CREATE TABLE multi_col_pk_no_indexes (
+			region STRING NOT NULL,
+			id INT NOT NULL,
+			c1 INT NOT NULL, c2 INT NOT NULL, c3 INT NOT NULL, c4 INT NOT NULL, c5 INT NOT NULL,
+			c6 INT NOT NULL, c7 INT NOT NULL, c8 INT NOT NULL, c9 INT NOT NULL, c10 INT NOT NULL,
+			c11 INT NOT NULL, c12 INT NOT NULL, c13 INT NOT NULL, c14 INT NOT NULL, c15 INT NOT NULL,
+			c16 INT NOT NULL, c17 INT NOT NULL, c18 INT NOT NULL, c19 INT NOT NULL, c20 INT NOT NULL,
+			c21 INT NOT NULL, c22 INT NOT NULL, c23 INT NOT NULL, c24 INT NOT NULL, c25 INT NOT NULL,
+			c26 INT NOT NULL, c27 INT NOT NULL, c28 INT NOT NULL, c29 INT NOT NULL, c30 INT NOT NULL,
+			c31 INT NOT NULL, c32 INT NOT NULL, c33 INT NOT NULL, c34 INT NOT NULL, c35 INT NOT NULL,
+			c36 INT NOT NULL, c37 INT NOT NULL, c38 INT NOT NULL, c39 INT NOT NULL, c40 INT NOT NULL,
+			c41 INT NOT NULL, c42 INT NOT NULL, c43 INT NOT NULL, c44 INT NOT NULL, c45 INT NOT NULL,
+			c46 INT NOT NULL, c47 INT NOT NULL, c48 INT NOT NULL, c49 INT NOT NULL, c50 INT NOT NULL,
+			PRIMARY KEY (region, id)
+		);
+	`,
 }
 
 var slowQueries = [...]benchQuery{
@@ -2245,6 +2262,56 @@ var slowQueries = [...]benchQuery{
 			WHERE t1.c1 IN ($1, $2, $3) AND t1.c2 IN ($4, $5, $6) AND t1.c3 IN ($7, $8, $9)
     `,
 		args: []interface{}{10, 20, 30, 40, 50, 60, 70, 80, 90},
+	},
+	{
+		name: "slow-query-5",
+		query: `
+			SELECT *
+			FROM multi_col_pk_no_indexes AS t1
+			LEFT JOIN multi_col_pk_no_indexes AS t2 ON t2.region = $3 AND t1.c1 = t2.id
+			LEFT JOIN multi_col_pk_no_indexes AS t3 ON t3.region = $3 AND t2.id = t3.c1 AND t2.region = t3.region
+			LEFT JOIN multi_col_pk_no_indexes AS t4 ON t4.region = $3 AND t2.id = t4.c1 AND t2.region = t4.region
+			LEFT JOIN multi_col_pk_no_indexes AS t5 ON t5.region = $3 AND t4.c1 = t5.id
+			LEFT JOIN multi_col_pk_no_indexes AS t6 ON t6.region = $3 AND t2.id = t6.c1 AND t2.region = t6.region
+			LEFT JOIN multi_col_pk_no_indexes AS t7 ON t7.region = $3 AND t1.c1 = t7.id
+			LEFT JOIN multi_col_pk_no_indexes AS t8 ON t8.region = $3 AND t1.c1 = t8.id
+			LEFT JOIN multi_col_pk_no_indexes AS t9 ON t9.region = $3 AND t1.c1 = t9.id
+			LEFT JOIN multi_col_pk_no_indexes AS t10 ON t10.region = $3 AND t9.id = t10.c1 AND t9.region = t10.region
+			LEFT JOIN multi_col_pk_no_indexes AS t11 ON t11.region = $3 AND t10.c1 = t11.id
+			LEFT JOIN multi_col_pk_no_indexes AS t12 ON t12.region = $3 AND t1.id = t12.c1 AND t1.region = t12.region
+			LEFT JOIN multi_col_pk_no_indexes AS t13 ON t13.region = $3 AND t12.c1 = t13.id
+			LEFT JOIN multi_col_pk_no_indexes AS t14 ON t14.region = $3 AND t1.id = t14.c1 AND t1.region = t14.region
+			LEFT JOIN multi_col_pk_no_indexes AS t15 ON t15.region = $3 AND t1.id = t15.c1 AND t1.region = t15.region
+			LEFT JOIN multi_col_pk_no_indexes AS t16 ON t16.region = $3 AND t1.id = t16.c1 AND t1.region = t16.region
+			LEFT JOIN multi_col_pk_no_indexes AS t17 ON t17.region = $3 AND t1.c1 = t17.id
+			LEFT JOIN multi_col_pk_no_indexes AS t18 ON t18.region = $3 AND t1.c1 = t18.id
+			LEFT JOIN multi_col_pk_no_indexes AS t19 ON t19.region = $3 AND t1.id = t19.c1 AND t1.region = t19.region
+			LEFT JOIN multi_col_pk_no_indexes AS t20 ON t20.region = $3 AND t19.id = t20.c1 AND t19.region = t20.region 
+			LEFT JOIN multi_col_pk_no_indexes AS t21 ON t21.region = $3 AND t20.id = t21.c1 AND t20.region = t21.region
+			LEFT JOIN multi_col_pk_no_indexes AS t22 ON t22.region = $3 AND t21.c1 = t22.id
+			LEFT JOIN multi_col_pk_no_indexes AS t23 ON t23.region = $3 AND t19.id = t23.c9 AND t19.region = t23.region
+			LEFT JOIN multi_col_pk_no_indexes AS t24 ON t24.region = $3 AND t23.c1 = t24.id
+			LEFT JOIN multi_col_pk_no_indexes AS t25 ON t25.region = $3 AND t23.c1 = t25.id
+			LEFT JOIN multi_col_pk_no_indexes AS t26 ON t26.region = $3 AND t26.c1 = t23.id AND t26.region = t23.region
+			LEFT JOIN multi_col_pk_no_indexes AS t27 ON t27.region = $3 AND t26.c1 = t27.id
+			LEFT JOIN multi_col_pk_no_indexes AS t28 ON t28.region = $3 AND t28.c1 = t19.id AND t28.region = t19.region
+			LEFT JOIN multi_col_pk_no_indexes AS t29 ON t29.region = $3 AND t28.c1 = t29.id
+			LEFT JOIN multi_col_pk_no_indexes AS t30 ON t30.region = $3 AND t28.c1 = t30.id
+			LEFT JOIN multi_col_pk_no_indexes AS t31 ON t31.region = $3 AND t31.c1 = t28.id AND t31.region = t28.region
+			LEFT JOIN multi_col_pk_no_indexes AS t32 ON t32.region = $3 AND t31.c1 = t32.id
+			LEFT JOIN multi_col_pk_no_indexes AS t33 ON t33.region = $3 AND t33.c1 = t19.id AND t33.region = t19.region
+			LEFT JOIN multi_col_pk_no_indexes AS t34 ON t34.region = $3 AND t33.c1 = t34.id
+			LEFT JOIN multi_col_pk_no_indexes AS t35 ON t35.region = $3 AND t35.c1 = t33.id AND t35.region = t33.region
+			LEFT JOIN multi_col_pk_no_indexes AS t36 ON t36.region = $3 AND t35.c1 = t36.id
+			LEFT JOIN multi_col_pk_no_indexes AS t37 ON t37.region = $3 AND t37.c1 = t19.id AND t37.region = t19.region
+			LEFT JOIN multi_col_pk_no_indexes AS t38 ON t38.region = $3 AND t37.c1 = t38.id
+			LEFT JOIN multi_col_pk_no_indexes AS t39 ON t39.region = $3 AND t37.c1 = t39.id
+			LEFT JOIN multi_col_pk_no_indexes AS t40 ON t40.region = $3 AND t37.c1 = t40.id
+			LEFT JOIN multi_col_pk_no_indexes AS t41 ON t41.region = $3 AND t41.c1 = t37.id AND t41.region = t37.region
+			LEFT JOIN multi_col_pk_no_indexes AS t42 ON t42.region = $3 AND t41.c1 = t42.id
+			WHERE t1.id = $1 AND t1.c2 = $2 AND t1.region = $3;
+    `,
+		args: []interface{}{10001, 5, "'east'"},
 	},
 }
 
