@@ -191,7 +191,7 @@ func testProposalsWithInjectedLeaseIndexAndReproposalError(t *testing.T, pipelin
 
 	cfg := TestStoreConfig(hlc.NewClockForTesting(nil))
 
-	var injectedReproposalErrors atomic.Int32
+	var injectedReproposalErrors atomic.Int64
 	{
 		var mu syncutil.Mutex
 		seen := map[string]int{} // access from proposal buffer under raftMu
@@ -212,7 +212,7 @@ func testProposalsWithInjectedLeaseIndexAndReproposalError(t *testing.T, pipelin
 		}
 	}
 
-	var insertedIllegalLeaseIndex atomic.Int32
+	var insertedIllegalLeaseIndex atomic.Int64
 	{
 		var mu syncutil.Mutex
 		seen := map[string]int{}
@@ -254,8 +254,8 @@ func testProposalsWithInjectedLeaseIndexAndReproposalError(t *testing.T, pipelin
 		key = append(key, "-testing"...)
 		return key
 	}
-	var observedAsyncWriteFailures atomic.Int32
-	var observedReproposalErrors atomic.Int32
+	var observedAsyncWriteFailures atomic.Int64
+	var observedReproposalErrors atomic.Int64
 	const iters = 300
 	expectations := map[string]int{}
 	for i := 0; i < iters; i++ {
@@ -338,19 +338,29 @@ func testProposalsWithInjectedLeaseIndexAndReproposalError(t *testing.T, pipelin
 		require.NoError(t, err)
 		require.EqualValues(t, exp, n)
 	}
+
 	t.Logf("observed %d async write restarts, observed %d/%d injected aborts, %d injected illegal lease applied indexes",
 		observedAsyncWriteFailures.Load(), observedReproposalErrors.Load(), injectedReproposalErrors.Load(), insertedIllegalLeaseIndex.Load())
+	t.Logf("commands reproposed (unchanged): %d", tc.store.metrics.RaftCommandsReproposed.Count())
+	t.Logf("commands reproposed (new LAI): %d", tc.store.metrics.RaftCommandsReproposedLAI.Count())
+
 	if pipelined {
 		// If we did pipelined writes, if we needed to repropose and injected an
 		// error, this should surface as an async write failure instead.
 		require.Zero(t, observedReproposalErrors.Load())
-	}
-	if !pipelined {
+		require.Equal(t, injectedReproposalErrors.Load(), observedAsyncWriteFailures.Load())
+	} else {
 		// If we're not pipelined, we shouldn't be able to get an async write
 		// failure. This isn't testing anything about reproposals per se, rather
 		// it's validation that we're truly not doing pipelined writes.
 		require.Zero(t, observedAsyncWriteFailures.Load())
+		// All the injected reproposal errors should manifest to the transaction.
+		require.Equal(t, injectedReproposalErrors.Load(), observedReproposalErrors.Load())
 	}
+	// All incorrect lease indices should manifest either as a reproposal, or a
+	// failed reproposal (when an error is injected).
+	require.Equal(t, insertedIllegalLeaseIndex.Load(),
+		tc.store.metrics.RaftCommandsReproposedLAI.Count()+injectedReproposalErrors.Load())
 }
 
 func checkNoLeakedTraceSpans(t *testing.T, store *Store) {
