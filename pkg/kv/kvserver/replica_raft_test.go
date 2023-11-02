@@ -206,6 +206,7 @@ func testProposalsWithInjectedLeaseIndexAndReproposalError(t *testing.T, pipelin
 			if !shouldInject(0.2, seen[key]) {
 				return nil
 			}
+			injectedReproposalErrors.Add(1)
 			t.Logf("inserting reproposal error for %s (seen %d times)", key, seen[key])
 			return errors.Errorf("injected error")
 		}
