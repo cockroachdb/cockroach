@@ -12,85 +12,43 @@ package tests
 
 import (
 	"context"
+	"math/rand"
+	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/testutils/release"
-	"github.com/stretchr/testify/require"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/errors"
 )
 
 // runIndexUpgrade runs a test that creates an index before a version upgrade,
 // and modifies it in a mixed version setting. It aims to test the changes made
 // to index encodings done to allow secondary indexes to respect column families.
-func runIndexUpgrade(
-	ctx context.Context, t test.Test, c cluster.Cluster, predecessorVersionStr string,
-) {
-	firstExpected := [][]int{
-		{2, 3, 4},
-		{6, 7, 8},
-		{10, 11, 12},
-		{14, 15, 17},
+func runIndexUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
+	firstExpected := [][]string{
+		{"2", "3", "4"},
+		{"6", "7", "8"},
+		{"10", "11", "12"},
+		{"14", "15", "17"},
 	}
-	secondExpected := [][]int{
-		{2, 3, 4},
-		{6, 7, 8},
-		{10, 11, 12},
-		{14, 15, 17},
-		{21, 25, 25},
+	secondExpected := [][]string{
+		{"2", "3", "4"},
+		{"6", "7", "8"},
+		{"10", "11", "12"},
+		{"14", "15", "17"},
+		{"21", "25", "25"},
 	}
 
-	roachNodes := c.All()
-	predecessorVersion := clusterupgrade.MustParseVersion(predecessorVersionStr)
-	u := newVersionUpgradeTest(c,
-		uploadAndStart(roachNodes, predecessorVersion),
-		waitForUpgradeStep(roachNodes),
-
-		// Fill the cluster with data.
-		createDataStep(),
-
-		// Upgrade one of the nodes.
-		binaryUpgradeStep(c.Node(1), clusterupgrade.CurrentVersion()),
-
-		// Modify index data from that node.
-		modifyData(1,
-			`INSERT INTO t VALUES (13, 14, 15, 16)`,
-			`UPDATE t SET w = 17 WHERE y = 14`,
-		),
-
-		// Ensure all nodes see valid index data.
-		verifyTableData(1, firstExpected),
-		verifyTableData(2, firstExpected),
-		verifyTableData(3, firstExpected),
-
-		// Upgrade the rest of the cluster.
-		binaryUpgradeStep(c.Node(2), clusterupgrade.CurrentVersion()),
-		binaryUpgradeStep(c.Node(3), clusterupgrade.CurrentVersion()),
-
-		// Finalize the upgrade.
-		allowAutoUpgradeStep(1),
-		waitForUpgradeStep(roachNodes),
-
-		// Modify some more data now that the cluster is upgraded.
-		modifyData(1,
-			`INSERT INTO t VALUES (20, 21, 22, 23)`,
-			`UPDATE t SET w = 25, z = 25 WHERE y = 21`,
-		),
-
-		// Ensure all nodes see valid index data.
-		verifyTableData(1, secondExpected),
-		verifyTableData(2, secondExpected),
-		verifyTableData(3, secondExpected),
+	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(),
+		mixedversion.NeverUseFixtures, mixedversion.AlwaysUseLatestPredecessors,
 	)
-
-	u.run(ctx, t)
-}
-
-func createDataStep() versionStep {
-	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		conn := u.conn(ctx, t, 1)
-		if _, err := conn.Exec(`
+	mvt.OnStartup(
+		"fill the cluster with data",
+		func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
+			if err := h.Exec(r, `
 CREATE TABLE t (
 	x INT PRIMARY KEY, y INT, z INT, w INT,
 	INDEX i (y) STORING (z, w),
@@ -98,40 +56,85 @@ CREATE TABLE t (
 );
 INSERT INTO t VALUES (1, 2, 3, 4), (5, 6, 7, 8), (9, 10, 11, 12);
 `); err != nil {
-			t.Fatal(err)
-		}
-	}
+				return err
+			}
+			return nil
+		})
+
+	mvt.InMixedVersion(
+		"modify and verify index data while in a mixed version state",
+		func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
+			node, db := h.RandomDB(r, h.Context().ToVersionNodes)
+			l.Printf("connecting to n%d", node)
+
+			if _, err := db.Exec(`DELETE FROM t WHERE x = 13`); err != nil {
+				return err
+			}
+			if _, err := db.Exec(`INSERT INTO t VALUES (13, 14, 15, 16)`); err != nil {
+				return err
+			}
+			if _, err := db.Exec(`UPDATE t SET w = 17 WHERE y = 14`); err != nil {
+				return err
+			}
+			if err := verifyTableData(ctx, c, l, 1, firstExpected); err != nil {
+				return err
+			}
+			if err := verifyTableData(ctx, c, l, 2, firstExpected); err != nil {
+				return err
+			}
+			if err := verifyTableData(ctx, c, l, 3, firstExpected); err != nil {
+				return err
+			}
+			return nil
+		},
+	)
+
+	mvt.AfterUpgradeFinalized(
+		"modify more data after the upgade and verify data",
+		func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
+			if err := h.Exec(r, `DELETE FROM t WHERE x = 20`); err != nil {
+				return err
+			}
+			if err := h.Exec(r, `INSERT INTO t VALUES (20, 21, 22, 23)`); err != nil {
+				return err
+			}
+			if err := h.Exec(r, `UPDATE t SET w = 25, z = 25 WHERE y = 21`); err != nil {
+				return err
+			}
+			if err := verifyTableData(ctx, c, l, 1, secondExpected); err != nil {
+				return err
+			}
+			if err := verifyTableData(ctx, c, l, 2, secondExpected); err != nil {
+				return err
+			}
+			if err := verifyTableData(ctx, c, l, 3, secondExpected); err != nil {
+				return err
+			}
+			return nil
+		},
+	)
+
+	mvt.Run()
 }
 
-func modifyData(node int, sql ...string) versionStep {
-	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		// Write some data into the table.
-		conn := u.conn(ctx, t, node)
-		for _, s := range sql {
-			if _, err := conn.Exec(s); err != nil {
-				t.Fatal(err)
-			}
-		}
+func verifyTableData(
+	ctx context.Context, c cluster.Cluster, l *logger.Logger, node int, expected [][]string,
+) (retErr error) {
+	conn := c.Conn(ctx, l, node)
+	defer func() { retErr = errors.CombineErrors(retErr, conn.Close()) }()
+	rows, err := conn.Query(`SELECT y, z, w FROM t@i ORDER BY y`)
+	if err != nil {
+		return err
 	}
-}
-
-func verifyTableData(node int, expected [][]int) versionStep {
-	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		conn := u.conn(ctx, t, node)
-		rows, err := conn.Query(`SELECT y, z, w FROM t@i ORDER BY y`)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var y, z, w int
-		count := 0
-		for ; rows.Next(); count++ {
-			if err := rows.Scan(&y, &z, &w); err != nil {
-				t.Fatal(err)
-			}
-			found := []int{y, z, w}
-			require.Equal(t, found, expected[count])
-		}
+	defer func() { retErr = errors.CombineErrors(retErr, rows.Close()) }()
+	actual, err := sqlutils.RowsToStrMatrix(rows)
+	if err != nil {
+		return err
 	}
+	if !reflect.DeepEqual(actual, expected) {
+		return errors.Errorf("expected %v, got %v", expected, actual)
+	}
+	return nil
 }
 
 func registerSecondaryIndexesMultiVersionCluster(r registry.Registry) {
@@ -142,11 +145,7 @@ func registerSecondaryIndexesMultiVersionCluster(r registry.Registry) {
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			predV, err := release.LatestPredecessor(t.BuildVersion())
-			if err != nil {
-				t.Fatal(err)
-			}
-			runIndexUpgrade(ctx, t, c, predV)
+			runIndexUpgrade(ctx, t, c)
 		},
 	})
 }
