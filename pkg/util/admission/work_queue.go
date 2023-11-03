@@ -1944,7 +1944,7 @@ func (q *StoreWorkQueue) Admit(
 	// point. These statistics are used to maintain the underlying linear
 	// models (modeling relation between physical log writes and total L0
 	// growth, which includes the state machine application).
-	q.updateStoreStatsAfterWorkDone(1, storeWorkDoneInfo, false)
+	q.updateStoreStatsAfterWorkDone(1, storeWorkDoneInfo, false, false)
 	return h, nil
 }
 
@@ -2072,7 +2072,7 @@ func (q *StoreWorkQueue) AdmittedWorkDone(h StoreWorkHandle, doneInfo StoreWorkD
 	if !h.UseAdmittedWorkDone() {
 		return nil // nothing to do
 	}
-	q.updateStoreStatsAfterWorkDone(1, doneInfo, false)
+	q.updateStoreStatsAfterWorkDone(1, doneInfo, false, true)
 	additionalTokens := q.granters[h.workClass].storeWriteDone(h.writeTokens, doneInfo)
 	q.q[h.workClass].adjustTenantUsed(h.tenantID, additionalTokens)
 	return nil
@@ -2082,7 +2082,7 @@ func (q *StoreWorkQueue) AdmittedWorkDone(h StoreWorkHandle, doneInfo StoreWorkD
 // can (a) adjust remaining tokens, (b) account for this in the per-work token
 // estimation model.
 func (q *StoreWorkQueue) BypassedWorkDone(workCount int64, doneInfo StoreWorkDoneInfo) {
-	q.updateStoreStatsAfterWorkDone(uint64(workCount), doneInfo, true)
+	q.updateStoreStatsAfterWorkDone(uint64(workCount), doneInfo, true, false)
 	// Since we have no control over such work, we choose to count it as
 	// regularWorkClass.
 	additionalTokensTaken := q.granters[admissionpb.RegularWorkClass].storeWriteDone(0 /* originalTokens */, doneInfo)
@@ -2100,7 +2100,7 @@ func (q *StoreWorkQueue) StatsToIgnore(ingestStats pebble.IngestOperationStats, 
 }
 
 func (q *StoreWorkQueue) updateStoreStatsAfterWorkDone(
-	workCount uint64, doneInfo StoreWorkDoneInfo, bypassed bool,
+	workCount uint64, doneInfo StoreWorkDoneInfo, bypassed bool, aboveRaft bool,
 ) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -2111,6 +2111,11 @@ func (q *StoreWorkQueue) updateStoreStatsAfterWorkDone(
 		q.mu.stats.aux.bypassedCount += workCount
 		q.mu.stats.aux.writeBypassedAccountedBytes += uint64(doneInfo.WriteBytes)
 		q.mu.stats.aux.ingestedBypassedAccountedBytes += uint64(doneInfo.IngestedBytes)
+	}
+	if aboveRaft {
+		q.mu.stats.aboveRaftStats.workCount += workCount
+		q.mu.stats.aboveRaftStats.writeAccountedBytes += uint64(doneInfo.WriteBytes)
+		q.mu.stats.aboveRaftStats.ingestedAccountedBytes += uint64(doneInfo.IngestedBytes)
 	}
 }
 
