@@ -389,7 +389,7 @@ func TestLockTableBasic(t *testing.T) {
 				if s[0] == 'r' {
 					durability = lock.Replicated
 				}
-				strength := ScanLockStrength(t, d)
+				strength := scanLockStrength(t, d)
 				acq := roachpb.MakeLockAcquisition(
 					req.Txn.TxnMeta, roachpb.Key(key), durability, strength, req.Txn.IgnoredSeqNums,
 				)
@@ -476,7 +476,7 @@ func TestLockTableBasic(t *testing.T) {
 				leaseSeq := roachpb.LeaseSequence(seq)
 				str := lock.Intent // default replicated locks to write intents
 				if d.HasArg("strength") {
-					str = ScanLockStrength(t, d)
+					str = scanLockStrength(t, d)
 				}
 				foundLock.Strength = str
 
@@ -509,7 +509,7 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				var key string
 				d.ScanArgs(t, "k", &key)
-				strength := ScanLockStrength(t, d)
+				strength := scanLockStrength(t, d)
 				ok, txn, err := g.IsKeyLockedByConflictingTxn(roachpb.Key(key), strength)
 				if err != nil {
 					return err.Error()
@@ -781,7 +781,7 @@ func ScanIsoLevel(t *testing.T, d *datadriven.TestData) isolation.Level {
 	}
 }
 
-func ScanLockStrength(t *testing.T, d *datadriven.TestData) lock.Strength {
+func scanLockStrength(t *testing.T, d *datadriven.TestData) lock.Strength {
 	var strS string
 	d.ScanArgs(t, "strength", &strS)
 	return GetStrength(t, d, strS)
