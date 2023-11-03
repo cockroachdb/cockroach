@@ -55,7 +55,7 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 		}
 		return NewUniquenessConstraintViolationError(ctx, tableDesc, kv.Key, v.ActualValue)
 
-	case *kvpb.LockConflictError:
+	case *kvpb.WriteIntentError:
 		key := v.Locks[0].Key
 		decodeKeyFn := func() (tableName string, indexName string, colNames []string, values []string, err error) {
 			codec, index, err := decodeKeyCodecAndIndex(tableDesc, key)
@@ -79,17 +79,17 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 // key-value fetch to a user friendly SQL error.
 func ConvertFetchError(spec *fetchpb.IndexFetchSpec, err error) error {
 	var errs struct {
-		lc *kvpb.LockConflictError
+		wi *kvpb.WriteIntentError
 		bs *kvpb.MinTimestampBoundUnsatisfiableError
 	}
 	switch {
-	case errors.As(err, &errs.lc):
-		key := errs.lc.Locks[0].Key
+	case errors.As(err, &errs.wi):
+		key := errs.wi.Locks[0].Key
 		decodeKeyFn := func() (tableName string, indexName string, colNames []string, values []string, err error) {
 			colNames, values, err = decodeKeyValsUsingSpec(spec, key)
 			return spec.TableName, spec.IndexName, colNames, values, err
 		}
-		return newLockNotAvailableError(errs.lc.Reason, decodeKeyFn)
+		return newLockNotAvailableError(errs.wi.Reason, decodeKeyFn)
 
 	case errors.As(err, &errs.bs):
 		return pgerror.WithCandidateCode(
@@ -160,11 +160,11 @@ func decodeKeyValsUsingSpec(
 // acquire a lock. It uses an IndexFetchSpec for the corresponding index (the
 // fetch columns in the spec are not used).
 func newLockNotAvailableError(
-	reason kvpb.LockConflictError_Reason,
+	reason kvpb.WriteIntentError_Reason,
 	decodeKeyFn func() (tableName string, indexName string, colNames []string, values []string, err error),
 ) error {
 	baseMsg := "could not obtain lock on row"
-	if reason == kvpb.LockConflictError_REASON_LOCK_TIMEOUT {
+	if reason == kvpb.WriteIntentError_REASON_LOCK_TIMEOUT {
 		baseMsg = "canceling statement due to lock timeout on row"
 	}
 	tableName, indexName, colNames, values, err := decodeKeyFn()
