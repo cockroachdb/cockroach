@@ -868,26 +868,28 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 	defer log.VEvent(ctx, 2, "exiting coordinator main loop")
 	defer w.s.waitGroup.Done()
 	for {
-		if err := w.waitForRequests(ctx); err != nil {
-			w.s.results.setError(err)
+		if shouldExit := w.waitForRequests(ctx); shouldExit {
 			return
 		}
 
-		var atLeastBytes int64
-		// The higher the value of priority is, the lower the actual priority of
-		// spilling. Use the maximum value by default.
-		spillingPriority := math.MaxInt64
 		w.s.requestsToServe.Lock()
-		if !w.s.requestsToServe.emptyLocked() {
-			// If we already have minTargetBytes set on the first request to be
-			// issued, then use that.
-			atLeastBytes = w.s.requestsToServe.nextLocked().minTargetBytes
-			// The first request has the highest urgency among all current
-			// requests to serve, so we use its priority to spill everything
-			// with less urgency when necessary to free up the budget.
-			spillingPriority = w.s.requestsToServe.nextLocked().priority()
-		}
+		// The coordinator goroutine is the only one that removes requests from
+		// w.s.requestsToServe, so we can keep the reference to next request
+		// without holding the lock.
+		//
+		// Note that it's possible that by the time we get into
+		// issueRequestsForAsyncProcessing() another request with higher urgency
+		// is added; however, this is not a problem - we wait for available
+		// budget here on a best-effort basis.
+		nextReq := w.s.requestsToServe.nextLocked()
 		w.s.requestsToServe.Unlock()
+		// If we already have minTargetBytes set on the first request to be
+		// issued, then use that.
+		atLeastBytes := nextReq.minTargetBytes
+		// The first request has the highest urgency among all current requests
+		// to serve, so we use its priority to spill everything with less
+		// urgency when necessary to free up the budget.
+		spillingPriority := nextReq.priority()
 
 		avgResponseSize, shouldExit := w.getAvgResponseSize()
 		if shouldExit {
@@ -944,7 +946,8 @@ func (w *workerCoordinator) logStatistics(ctx context.Context) {
 }
 
 // waitForRequests blocks until there is at least one request to be served.
-func (w *workerCoordinator) waitForRequests(ctx context.Context) error {
+// Boolean indicating whether the coordinator should exit is returned.
+func (w *workerCoordinator) waitForRequests(ctx context.Context) (shouldExit bool) {
 	w.s.requestsToServe.Lock()
 	defer w.s.requestsToServe.Unlock()
 	if w.s.requestsToServe.emptyLocked() {
@@ -952,21 +955,21 @@ func (w *workerCoordinator) waitForRequests(ctx context.Context) error {
 		// Check if the Streamer has been canceled or closed while we were
 		// waiting.
 		if ctx.Err() != nil {
-			return ctx.Err()
+			w.s.results.setError(ctx.Err())
+			return true
 		}
 		w.s.mu.Lock()
-		shouldExit := w.s.results.error() != nil || w.s.mu.done
+		shouldExit = w.s.results.error() != nil || w.s.mu.done
 		w.s.mu.Unlock()
 		if shouldExit {
-			return nil
+			return true
 		}
-		if buildutil.CrdbTestBuild {
-			if w.s.requestsToServe.emptyLocked() {
-				panic(errors.AssertionFailedf("unexpectedly zero requests to serve after waiting "))
-			}
+		if w.s.requestsToServe.emptyLocked() {
+			w.s.results.setError(errors.AssertionFailedf("unexpectedly zero requests to serve after waiting"))
+			return true
 		}
 	}
-	return nil
+	return false
 }
 
 func (w *workerCoordinator) getAvgResponseSize() (avgResponseSize int64, shouldExit bool) {
