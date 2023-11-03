@@ -101,7 +101,7 @@ func checkVersion(
 	minVersion := activeVersion.Version
 	if tenantID, isTenant := roachpb.ClientTenantFromContext(ctx); isTenant &&
 		!roachpb.IsSystemTenantID(tenantID.ToUint64()) {
-		minVersion = version.BinaryMinSupportedVersion()
+		minVersion = version.MinSupportedVersion()
 	}
 	if peerVersion.Less(minVersion) {
 		return errors.Errorf(
@@ -164,7 +164,7 @@ func (hs *HeartbeatService) Ping(ctx context.Context, request *PingRequest) (*Pi
 	response := PingResponse{
 		Pong:                           request.Ping,
 		ServerTime:                     hs.clock.Now().UnixNano(),
-		ServerVersion:                  hs.version.BinaryVersion(),
+		ServerVersion:                  hs.version.LatestVersion(),
 		ClusterName:                    hs.clusterName,
 		DisableClusterNameVerification: hs.disableClusterNameVerification,
 	}

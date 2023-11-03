@@ -66,11 +66,11 @@ import (
 //     running at cluster version 20.1 (which is necessary when a 20.1 cluster is
 //     upgraded to 20.2).
 //
-//     BinaryMinSupportedVersion                        BinaryVersion
+//     MinSupportedVersion                         LatestVersion
 //     |                                           |
 //     v...........................................v
-//     (possible range of active
-//     cluster versions)
+//     possible range of active
+//     cluster versions
 //
 // Versions are used in many checks to prevent issues due to operator error. The
 // main one of interest here is that RPC connections between nodes (including

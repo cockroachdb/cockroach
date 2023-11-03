@@ -506,7 +506,7 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replic
 		}
 
 		// Migrate into RaftReplicaID. This migration can be removed once the
-		// BinaryMinSupportedVersion is >= 23.1, and we can assert that
+		// MinSupportedVersion is >= 23.1, and we can assert that
 		// repl.ReplicaID != 0 always holds.
 
 		if descReplicaID != 0 {

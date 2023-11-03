@@ -1484,8 +1484,8 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		inspectedDiskState, err := inspectEngines(
 			ctx,
 			s.engines,
-			s.cfg.Settings.Version.BinaryVersion(),
-			s.cfg.Settings.Version.BinaryMinSupportedVersion(),
+			s.cfg.Settings.Version.LatestVersion(),
+			s.cfg.Settings.Version.MinSupportedVersion(),
 		)
 		if err != nil {
 			return err

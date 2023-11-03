@@ -362,7 +362,7 @@ func runSingleHeartbeat(
 	request := &PingRequest{
 		OriginAddr:      opts.AdvertiseAddr,
 		TargetNodeID:    k.NodeID,
-		ServerVersion:   opts.Settings.Version.BinaryVersion(),
+		ServerVersion:   opts.Settings.Version.LatestVersion(),
 		LocalityAddress: opts.LocalityAddresses,
 		ClusterID:       &clusterID,
 		OriginNodeID:    opts.NodeID.Get(),

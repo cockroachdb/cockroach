@@ -1232,18 +1232,18 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		// sequence (so now some stores have v21.2, but others v22.1) you are
 		// expected to run v22.1 again (hopefully without the crash this time) which
 		// would then rewrite all the stores.
-		if v := cfg.Settings.Version; storeClusterVersion.Less(v.BinaryMinSupportedVersion()) {
-			if storeClusterVersion.Major < clusterversion.DevOffset && v.BinaryVersion().Major >= clusterversion.DevOffset {
+		if v := cfg.Settings.Version; storeClusterVersion.Less(v.MinSupportedVersion()) {
+			if storeClusterVersion.Major < clusterversion.DevOffset && v.LatestVersion().Major >= clusterversion.DevOffset {
 				return nil, errors.Errorf(
 					"store last used with cockroach non-development version v%s "+
 						"cannot be opened by development version v%s",
-					storeClusterVersion, v.BinaryVersion(),
+					storeClusterVersion, v.LatestVersion(),
 				)
 			}
 			return nil, errors.Errorf(
 				"store last used with cockroach version v%s "+
 					"is too old for running version v%s (which requires data from v%s or later)",
-				storeClusterVersion, v.BinaryVersion(), v.BinaryMinSupportedVersion(),
+				storeClusterVersion, v.LatestVersion(), v.MinSupportedVersion(),
 			)
 		}
 		opts.ErrorIfNotExists = true
@@ -1288,7 +1288,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		storeClusterVersion = cfg.Settings.Version.ActiveVersionOrEmpty(ctx).Version
 		if storeClusterVersion == (roachpb.Version{}) {
 			// If there is no active version, use the minimum supported version.
-			storeClusterVersion = cfg.Settings.Version.BinaryMinSupportedVersion()
+			storeClusterVersion = cfg.Settings.Version.MinSupportedVersion()
 		}
 	}
 
