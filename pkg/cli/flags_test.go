@@ -1396,27 +1396,47 @@ func TestSQLPodStorageDefaults(t *testing.T) {
 
 	defer initCLIDefaults()
 
-	expectedDefaultDir, err := base.GetAbsoluteStorePath("",
-		fmt.Sprintf("cockroach-data-tenant-%d", os.Getpid()))
+	expectedDefaultDir, err := base.GetAbsoluteStorePath("", "cockroach-data-tenant-9")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for _, td := range []struct {
-		args      []string
-		storePath string
-	}{{[]string{"mt", "start-sql", "--tenant-id", "9"}, expectedDefaultDir},
-		{[]string{"mt", "start-sql", "--tenant-id", "9", "--store", "/tmp/data"}, "/tmp/data"},
+		args        []string
+		storePath   string
+		expectedErr string
+	}{
+		{
+			args:      []string{"mt", "start-sql", "--tenant-id", "9"},
+			storePath: expectedDefaultDir,
+		},
+		{
+			args:      []string{"mt", "start-sql", "--tenant-id", "9", "--store", "/tmp/data"},
+			storePath: "/tmp/data",
+		},
+		{
+			args:      []string{"mt", "start-sql", "--tenant-id-file", "foo", "--store", "/tmp/data"},
+			storePath: "/tmp/data",
+		},
+		{
+			args:        []string{"mt", "start-sql", "--tenant-id-file", "foo"},
+			expectedErr: "--store must be explicitly supplied when using --tenant-id-file",
+		},
 	} {
 		t.Run(strings.Join(td.args, ","), func(t *testing.T) {
 			initCLIDefaults()
 			f := mtStartSQLCmd.Flags()
 			require.NoError(t, f.Parse(td.args))
-			require.NoError(t, mtStartSQLCmd.PersistentPreRunE(mtStartSQLCmd, td.args))
-			assert.Equal(t, td.storePath, serverCfg.Stores.Specs[0].Path)
-			for _, s := range serverCfg.Stores.Specs {
-				assert.Zero(t, s.BallastSize.InBytes)
-				assert.Zero(t, s.BallastSize.Percent)
+			err := mtStartSQLCmd.PersistentPreRunE(mtStartSQLCmd, td.args)
+			if td.expectedErr == "" {
+				require.NoError(t, err)
+				assert.Equal(t, td.storePath, serverCfg.Stores.Specs[0].Path)
+				for _, s := range serverCfg.Stores.Specs {
+					assert.Zero(t, s.BallastSize.InBytes)
+					assert.Zero(t, s.BallastSize.Percent)
+				}
+			} else {
+				require.EqualError(t, err, td.expectedErr)
 			}
 		})
 	}
