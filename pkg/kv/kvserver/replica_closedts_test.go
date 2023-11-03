@@ -772,7 +772,7 @@ func TestNonBlockingReadsAtResolvedTimestamp(t *testing.T) {
 
 			// Issue a transactional scan over the keys at the resolved timestamp on
 			// the same store. Use an error wait policy so that we'll hear an error
-			// (LockConflictError) under conditions that would otherwise cause us to
+			// (WriteIntentError) under conditions that would otherwise cause us to
 			// block on an intent. Send to a specific store instead of through a
 			// DistSender so that we'll hear an error (NotLeaseholderError) if the
 			// request would otherwise be redirected to the leaseholder.
@@ -814,7 +814,7 @@ func TestNonBlockingReadsWithServerSideBoundedStalenessNegotiation(t *testing.T)
 		return func(ctx context.Context) error {
 			// Issue a bounded-staleness read (a read with a MinTimestampBound)
 			// over the keys. Use an error wait policy so that we'll hear an error
-			// (LockConflictError) under conditions that would otherwise cause us
+			// (WriteIntentError) under conditions that would otherwise cause us
 			// to block on an intent. Send to a specific store instead of through
 			// a DistSender so that we'll hear an error (NotLeaseholderError) if
 			// the request would otherwise be redirected to the leaseholder.

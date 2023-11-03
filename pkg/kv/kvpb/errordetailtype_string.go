@@ -16,7 +16,7 @@ func _() {
 	_ = x[TransactionPushErrType-6]
 	_ = x[TransactionRetryErrType-7]
 	_ = x[TransactionStatusErrType-8]
-	_ = x[LockConflictErrType-9]
+	_ = x[WriteIntentErrType-9]
 	_ = x[WriteTooOldErrType-10]
 	_ = x[OpRequiresTxnErrType-11]
 	_ = x[ConditionFailedErrType-12]
@@ -41,6 +41,7 @@ func _() {
 	_ = x[MinTimestampBoundUnsatisfiableErrType-42]
 	_ = x[RefreshFailedErrType-43]
 	_ = x[MVCCHistoryMutationErrType-44]
+	_ = x[LockConflictErrType-45]
 	_ = x[CommunicationErrType-22]
 	_ = x[InternalErrType-25]
 }
@@ -63,8 +64,8 @@ func (i ErrorDetailType) String() string {
 		return "TransactionRetryErrType"
 	case TransactionStatusErrType:
 		return "TransactionStatusErrType"
-	case LockConflictErrType:
-		return "LockConflictErrType"
+	case WriteIntentErrType:
+		return "WriteIntentErrType"
 	case WriteTooOldErrType:
 		return "WriteTooOldErrType"
 	case OpRequiresTxnErrType:
@@ -113,6 +114,8 @@ func (i ErrorDetailType) String() string {
 		return "RefreshFailedErrType"
 	case MVCCHistoryMutationErrType:
 		return "MVCCHistoryMutationErrType"
+	case LockConflictErrType:
+		return "LockConflictErrType"
 	case CommunicationErrType:
 		return "CommunicationErrType"
 	case InternalErrType:

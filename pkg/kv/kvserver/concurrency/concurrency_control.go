@@ -402,7 +402,7 @@ type Request struct {
 	// level of quality-of-service under severe per-key contention. If set
 	// to a non-zero value and an existing lock wait-queue is already equal
 	// to or exceeding this length, the request will be rejected eagerly
-	// with a LockConflictError instead of entering the queue and waiting.
+	// with a WriteIntentError instead of entering the queue and waiting.
 	MaxLockWaitQueueLength int
 
 	// AdmissionHeader is the header in the request's BatchRequest. It is plumbed
