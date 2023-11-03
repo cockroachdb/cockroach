@@ -111,7 +111,8 @@ func (n *Network) CreateNode() (*Node, error) {
 		return nil, err
 	}
 	node := &Node{Server: server, Listener: ln, Registry: metric.NewRegistry()}
-	node.Gossip = gossip.NewTest(0, n.Stopper, node.Registry)
+	tn := gossip.NewTestNetwork()
+	node.Gossip = tn.StartGossip(0, n.Stopper, node.Registry)
 	gossip.RegisterGossipServer(server, node.Gossip)
 	n.Stopper.AddCloser(stop.CloserFn(server.Stop))
 	_ = n.Stopper.RunAsyncTask(ctx, "node-wait-quiesce", func(context.Context) {
@@ -126,7 +127,7 @@ func (n *Network) CreateNode() (*Node, error) {
 // StartNode initializes a gossip instance for the simulation node and
 // starts it.
 func (n *Network) StartNode(node *Node) error {
-	node.Gossip.Start(node.Addr(), node.Addresses, n.RPCContext)
+	node.Gossip.Start(node.Addr(), node.Addresses)
 	node.Gossip.EnableSimulationCycler(true)
 	n.nodeIDAllocator++
 	node.Gossip.NodeID.Set(context.TODO(), n.nodeIDAllocator)

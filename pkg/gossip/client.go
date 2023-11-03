@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -70,7 +69,7 @@ var logFailedStartEvery = log.Every(5 * time.Second)
 // the client is sent on the disconnected channel. This method starts client
 // processing in a goroutine and returns immediately.
 func (c *client) startLocked(
-	g *Gossip, disconnected chan *client, rpcCtx *rpc.Context, stopper *stop.Stopper,
+	g *Gossip, disconnected chan *client, stopper *stop.Stopper,
 ) {
 	// Add a placeholder for the new outgoing connection because we may not know
 	// the ID of the node we're connecting to yet. This will be resolved in
@@ -95,22 +94,15 @@ func (c *client) startLocked(
 			disconnected <- c
 		}()
 
-		stream, err := func() (Gossip_GossipClient, error) {
-			// Note: avoid using `grpc.WithBlock` here. This code is already
-			// asynchronous from the caller's perspective, so the only effect of
-			// `WithBlock` here is blocking shutdown - at the time of this writing,
-			// that ends ups up making `kv` tests take twice as long.
-			conn, err := rpcCtx.GRPCUnvalidatedDial(c.addr.String()).Connect(ctx)
-			if err != nil {
-				return nil, err
-			}
-			stream, err := NewGossipClient(conn).Gossip(ctx)
+		stream, err := func() (EndpointClient, error) {
+			stream, err := g.dialer.Connect(ctx, stopper, c.addr)
 			if err != nil {
 				return nil, err
 			}
 			if err := c.requestGossip(g, stream); err != nil {
 				return nil, err
 			}
+
 			return stream, nil
 		}()
 		if err != nil {
@@ -153,7 +145,7 @@ func (c *client) close() {
 // requestGossip requests the latest gossip from the remote server by
 // supplying a map of this node's knowledge of other nodes' high water
 // timestamps.
-func (c *client) requestGossip(g *Gossip, stream Gossip_GossipClient) error {
+func (c *client) requestGossip(g *Gossip, remote EndpointClient) error {
 	nodeAddr, highWaterStamps := func() (util.UnresolvedAddr, map[roachpb.NodeID]int64) {
 		g.mu.RLock()
 		defer g.mu.RUnlock()
@@ -170,12 +162,12 @@ func (c *client) requestGossip(g *Gossip, stream Gossip_GossipClient) error {
 	c.clientMetrics.BytesSent.Inc(bytesSent)
 	c.nodeMetrics.BytesSent.Inc(bytesSent)
 
-	return stream.Send(args)
+	return remote.Send(args)
 }
 
 // sendGossip sends the latest gossip to the remote server, based on
 // the remote server's notion of other nodes' high water timestamps.
-func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient, firstReq bool) error {
+func (c *client) sendGossip(g *Gossip, remote EndpointClient, firstReq bool) error {
 	g.mu.Lock()
 	delta := g.mu.is.delta(c.remoteHighWaterStamps)
 	if firstReq {
@@ -205,7 +197,7 @@ func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient, firstReq bool
 		c.nodeMetrics.InfosSent.Inc(infosSent)
 
 		if log.V(1) {
-			ctx := c.AnnotateCtx(stream.Context())
+			ctx := c.AnnotateCtx(context.TODO())
 			if c.peerID != 0 {
 				log.Infof(ctx, "sending %s to n%d (%s)", extractKeys(args.Delta), c.peerID, c.addr)
 			} else {
@@ -213,7 +205,7 @@ func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient, firstReq bool
 			}
 		}
 		g.mu.Unlock()
-		return stream.Send(&args)
+		return remote.Send(&args)
 	}
 	g.mu.Unlock()
 	return nil
@@ -292,7 +284,7 @@ func (c *client) handleResponse(ctx context.Context, g *Gossip, reply *Response)
 func (c *client) gossip(
 	ctx context.Context,
 	g *Gossip,
-	stream Gossip_GossipClient,
+	remote EndpointClient,
 	stopper *stop.Stopper,
 	wg *sync.WaitGroup,
 ) error {
@@ -319,7 +311,7 @@ func (c *client) gossip(
 
 			initCh := initCh
 			for init := true; ; init = false {
-				reply, err := stream.Recv()
+				reply, err := remote.Recv()
 				if err != nil {
 					return err
 				}
@@ -377,7 +369,7 @@ func (c *client) gossip(
 		case <-initTimer.C:
 			maybeRegister()
 		case <-sendGossipChan:
-			if err := c.sendGossip(g, stream, count == 0); err != nil {
+			if err := c.sendGossip(g, remote, count == 0); err != nil {
 				return err
 			}
 			count++

@@ -125,7 +125,7 @@ func TestReplicaLeaseStatus(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			cache :=
 				liveness.NewCache(
-					gossip.NewTest(roachpb.NodeID(1), stopper, metric.NewRegistry()),
+					gossip.NewTest(roachpb.NodeID(1), stopper, metric.NewRegistry(), nil),
 					clock,
 					cluster.MakeTestingClusterSettings(),
 					nil,

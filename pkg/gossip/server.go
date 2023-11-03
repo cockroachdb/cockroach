@@ -105,6 +105,12 @@ func (s *server) GetNodeMetrics() *Metrics {
 // The received delta is combined with the infostore, and this
 // node's own gossip is returned to requesting client.
 func (s *server) Gossip(stream Gossip_GossipServer) error {
+	ctx, cancel := context.WithCancel(s.AnnotateCtx(stream.Context()))
+	defer cancel()
+	return s.GossipInternal(ctx, stream)
+}
+
+func (s *server) GossipInternal(ctx context.Context, stream EndpointServer) error {
 	args, err := stream.Recv()
 	if err != nil {
 		return err
@@ -113,8 +119,6 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 		return errors.Errorf("gossip connection refused from different cluster %s", args.ClusterID)
 	}
 
-	ctx, cancel := context.WithCancel(s.AnnotateCtx(stream.Context()))
-	defer cancel()
 	syncChan := make(chan struct{}, 1)
 	send := func(reply *Response) error {
 		select {
@@ -139,7 +143,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 	errCh := make(chan error, 1)
 
 	if err := s.stopper.RunAsyncTask(ctx, "gossip receiver", func(ctx context.Context) {
-		errCh <- s.gossipReceiver(ctx, &args, send, stream.Recv)
+		errCh <- s.gossipReceiver(ctx, &args, stream)
 	}); err != nil {
 		return err
 	}
@@ -203,8 +207,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 func (s *server) gossipReceiver(
 	ctx context.Context,
 	argsPtr **Request,
-	senderFn func(*Response) error,
-	receiverFn func() (*Request, error),
+	endpoint EndpointServer,
 ) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -226,6 +229,7 @@ func (s *server) gossipReceiver(
 			// connection to it or to forward it elsewhere.
 			log.Infof(ctx, "received initial cluster-verification connection from %s", args.Addr)
 		} else if !nodeIdentified {
+			log.Infof(ctx, "received %+v", args)
 			nodeIdentified = true
 
 			// Decide whether or not we can accept the incoming connection
@@ -284,7 +288,7 @@ func (s *server) gossipReceiver(
 				}
 
 				s.mu.Unlock()
-				err := senderFn(reply)
+				err := endpoint.Send(reply)
 				s.mu.Lock()
 				// Naively, we would return err here unconditionally, but that
 				// introduces a race. Specifically, the client may observe the
@@ -320,7 +324,7 @@ func (s *server) gossipReceiver(
 		}
 
 		s.mu.Unlock()
-		err = senderFn(reply)
+		err = endpoint.Send(reply)
 		s.mu.Lock()
 		if err != nil {
 			return err
@@ -331,7 +335,7 @@ func (s *server) gossipReceiver(
 		}
 
 		s.mu.Unlock()
-		recvArgs, err := receiverFn()
+		recvArgs, err := endpoint.Recv()
 		s.mu.Lock()
 		if err != nil {
 			return err

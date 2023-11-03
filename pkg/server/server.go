@@ -311,15 +311,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	nodeTombStorage, decommissionCheck := getPingCheckDecommissionFn(engines)
 
-	g := gossip.New(
-		cfg.AmbientCtx,
-		cfg.ClusterIDContainer,
-		nodeIDContainer,
-		stopper,
-		nodeRegistry,
-		cfg.Locality,
-	)
-
 	tenantCapabilitiesTestingKnobs, _ := cfg.TestingKnobs.TenantCapabilitiesTestingKnobs.(*tenantcapabilities.TestingKnobs)
 	authorizer := tenantcapabilitiesauthorizer.New(cfg.Settings, tenantCapabilitiesTestingKnobs)
 	rpcCtxOpts := rpc.ServerContextOptionsFromBaseConfig(cfg.BaseConfig.Config)
@@ -363,6 +354,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		// be established.
 		return rpc.VerifyDialback(ctx, rpcContext, req, resp, cfg.Locality, &rpcContext.Settings.SV)
 	}
+
+	g := gossip.New(
+		cfg.AmbientCtx,
+		cfg.ClusterIDContainer,
+		nodeIDContainer,
+		stopper,
+		nodeRegistry,
+		cfg.Locality,
+		gossip.GRPCDialer{Context: rpcContext},
+	)
 
 	appRegistry.AddMetricStruct(rpcContext.Metrics())
 
@@ -1834,7 +1835,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	advAddrU := util.NewUnresolvedAddr("tcp", s.cfg.AdvertiseAddr)
 
 	// We're going to need to start gossip before we spin up Node below.
-	s.gossip.Start(advAddrU, filtered, s.rpcContext)
+	s.gossip.Start(advAddrU, filtered)
 	log.Event(ctx, "started gossip")
 
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
