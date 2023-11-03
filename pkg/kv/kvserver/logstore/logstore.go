@@ -364,6 +364,10 @@ var valPool = sync.Pool{
 	New: func() interface{} { return &roachpb.Value{} },
 }
 
+var mvccStatsPool = sync.Pool{
+	New: func() interface{} { return &enginepb.MVCCStats{} },
+}
+
 // logAppend adds the given entries to the raft log. Takes the previous log
 // state, and returns the updated state. It's the caller's responsibility to
 // maintain exclusive access to the raft log for the duration of the method
@@ -382,10 +386,10 @@ func logAppend(
 	if len(entries) == 0 {
 		return prev, nil
 	}
-	var diff enginepb.MVCCStats
-	opts := storage.MVCCWriteOptions{
-		Stats: &diff,
-	}
+	diff := mvccStatsPool.Get().(*enginepb.MVCCStats)
+	diff.Reset()
+	defer mvccStatsPool.Put(diff)
+	opts := storage.MVCCWriteOptions{Stats: diff}
 	value := valPool.Get().(*roachpb.Value)
 	value.RawBytes = value.RawBytes[:0]
 	defer valPool.Put(value)
