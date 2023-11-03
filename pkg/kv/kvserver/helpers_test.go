@@ -400,6 +400,12 @@ func (r *Replica) QuotaReleaseQueueLen() int {
 	return len(r.mu.quotaReleaseQueue)
 }
 
+func (r *Replica) NumPendingProposals() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.numPendingProposalsRLocked()
+}
+
 func (r *Replica) IsFollowerActiveSince(
 	ctx context.Context, followerID roachpb.ReplicaID, threshold time.Duration,
 ) bool {
