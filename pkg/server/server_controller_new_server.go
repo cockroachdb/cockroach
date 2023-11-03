@@ -188,7 +188,7 @@ func makeSharedProcessTenantServerConfig(
 	// have to run all known migrations since then. So initialize
 	// the version setting to the minimum supported version.
 	if err := clusterversion.Initialize(
-		ctx, st.Version.BinaryMinSupportedVersion(), &st.SV,
+		ctx, st.Version.MinSupportedVersion(), &st.SV,
 	); err != nil {
 		return BaseConfig{}, SQLConfig{}, err
 	}
