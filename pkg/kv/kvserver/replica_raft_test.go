@@ -164,21 +164,12 @@ func testProposalsWithInjectedLeaseIndexAndReproposalError(t *testing.T, pipelin
 	isOurCommand := func(ba *kvpb.BatchRequest) (_ string, ok bool) {
 		if ba == nil {
 			return "", false // not local proposal
-		}
-		var inc *kvpb.IncrementRequest
-		for i := range ba.Requests {
-			if inc = ba.Requests[i].GetIncrement(); inc != nil {
-				break
-			}
-		}
-		if inc == nil {
+		} else if inc, found := ba.GetArg(kvpb.Increment); !found {
 			return "", false
+		} else if key := string(inc.(*kvpb.IncrementRequest).Key); strings.HasSuffix(key, "-testing") {
+			return key, true
 		}
-		key := string(inc.Key)
-		if !strings.HasSuffix(key, "-testing") {
-			return "", false
-		}
-		return key, true
+		return "", false
 	}
 
 	rnd, seed := randutil.NewPseudoRand()
