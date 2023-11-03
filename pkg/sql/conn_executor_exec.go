@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -1048,9 +1047,10 @@ func (ex *connExecutor) execStmtInOpenState(
 	var releaseHomeRegionSavepoint *tree.ReleaseSavepoint
 	enforceHomeRegion := p.EnforceHomeRegion()
 	_, isSelectStmt := stmt.AST.(*tree.Select)
+	isAOST := p.extendedEvalCtx.AsOfSystemTime != nil
 	// TODO(sql-sessions): ensure this is not broken for pausable portals.
 	// https://github.com/cockroachdb/cockroach/issues/99408
-	if enforceHomeRegion && ex.state.mu.txn.IsOpen() && isSelectStmt {
+	if enforceHomeRegion && ex.state.mu.txn.IsOpen() && isSelectStmt && isAOST && !isPausablePortal() {
 		// Create a savepoint at a point before which rows were read so that we can
 		// roll back to it, which will allow the txn to be modified with a
 		// historical timestamp (so that the locality-optimized ops used for error
@@ -1200,23 +1200,25 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 		return errors.AssertionFailedf(
 			"cannot handle AOST clause without a transaction",
 		)
-	} else if execinfra.IsDynamicQueryHasNoHomeRegionError(ex.state.mu.autoRetryReason) {
-		asOfClause := tree.AsOfClause{Expr: followerReadTimestampExpr}
-		// Set the timestamp used by current_timestamp().
-		asOf, err := p.EvalAsOfTimestamp(ctx, asOfClause, asof.OptionAllowBoundedStaleness)
-		if err != nil {
-			return errors.AssertionFailedf(
-				"problem evaluating follower read timestamp for enforce_home_region dynamic error checking",
-			)
-		}
-		// Set up AOST in the txn so re-running of the query with different possible
-		// home regions does not have to read rows from remote regions.
-		p.extendedEvalCtx.SetTxnTimestamp(asOf.Timestamp.GoTime())
-		if err := ex.state.setHistoricalTimestamp(ctx, asOf.Timestamp); err != nil {
-			// If the table was just created, we may not be able to set a historical
-			// timestamp.
-			return execinfra.MaybeGetNonRetryableDynamicQueryHasNoHomeRegionError(ex.state.mu.autoRetryReason)
-		}
+		/*
+			} else if execinfra.IsDynamicQueryHasNoHomeRegionError(ex.state.mu.autoRetryReason) {
+				asOfClause := tree.AsOfClause{Expr: followerReadTimestampExpr}
+				// Set the timestamp used by current_timestamp().
+				asOf, err := p.EvalAsOfTimestamp(ctx, asOfClause, asof.OptionAllowBoundedStaleness)
+				if err != nil {
+					return errors.AssertionFailedf(
+						"problem evaluating follower read timestamp for enforce_home_region dynamic error checking",
+					)
+				}
+				// Set up AOST in the txn so re-running of the query with different possible
+				// home regions does not have to read rows from remote regions.
+				p.extendedEvalCtx.SetTxnTimestamp(asOf.Timestamp.GoTime())
+				if err := ex.state.setHistoricalTimestamp(ctx, asOf.Timestamp); err != nil {
+					// If the table was just created, we may not be able to set a historical
+					// timestamp.
+					return execinfra.MaybeGetNonRetryableDynamicQueryHasNoHomeRegionError(ex.state.mu.autoRetryReason)
+				}
+		*/
 	}
 	asOf, err := p.isAsOf(ctx, stmt)
 	if err != nil {
