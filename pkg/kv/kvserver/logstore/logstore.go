@@ -360,12 +360,13 @@ var nonBlockingSyncWaiterCallbackPool = sync.Pool{
 	New: func() interface{} { return new(nonBlockingSyncWaiterCallback) },
 }
 
-var valPool = sync.Pool{
-	New: func() interface{} { return &roachpb.Value{} },
-}
-
-var mvccStatsPool = sync.Pool{
-	New: func() interface{} { return &enginepb.MVCCStats{} },
+var logAppendPool = sync.Pool{
+	New: func() interface{} {
+		return new(struct {
+			roachpb.Value
+			enginepb.MVCCStats
+		})
+	},
 }
 
 // logAppend adds the given entries to the raft log. Takes the previous log
@@ -386,13 +387,17 @@ func logAppend(
 	if len(entries) == 0 {
 		return prev, nil
 	}
-	diff := mvccStatsPool.Get().(*enginepb.MVCCStats)
-	diff.Reset()
-	defer mvccStatsPool.Put(diff)
-	opts := storage.MVCCWriteOptions{Stats: diff}
-	value := valPool.Get().(*roachpb.Value)
+
+	v := logAppendPool.Get().(*struct {
+		roachpb.Value
+		enginepb.MVCCStats
+	})
+	defer logAppendPool.Put(v)
+	value, diff := &v.Value, &v.MVCCStats
 	value.RawBytes = value.RawBytes[:0]
-	defer valPool.Put(value)
+	diff.Reset()
+
+	opts := storage.MVCCWriteOptions{Stats: diff}
 	for i := range entries {
 		ent := &entries[i]
 		key := keys.RaftLogKeyFromPrefix(raftLogPrefix, kvpb.RaftIndex(ent.Index))
