@@ -35,7 +35,7 @@ import (
 // causing a livelock. This livelock is not possible after #108190 because
 // refresh requests now declare isolated keys and go through the lock table
 // where they can push a lower-priority request. In this particular example,
-// when the refresh encounters the intent, it returns a LockConflictError, which
+// when the refresh encounters the intent, it returns a WriteIntentError, which
 // is handled and a lock is added to the lock table; then, when the refresh
 // request retries, it pushes the lower-priority lock-holder's timestamp and
 // succeeds.
