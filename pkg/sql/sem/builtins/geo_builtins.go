@@ -1127,11 +1127,18 @@ var geoBuiltins = map[string]builtinDefinition{
 				{Name: "geohash", Typ: types.String},
 				{Name: "precision", Typ: types.Int},
 			},
+			CalledOnNullInput: true,
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if tree.DNull.Compare(evalCtx, args[0]) == 0{
+					return tree.DNull, nil
+				}
 				g := tree.MustBeDString(args[0])
-				p := tree.MustBeDInt(args[1])
-				ret, err := geo.ParseGeometryPointFromGeoHash(string(g), int(p))
+				p := -1
+				if tree.DNull.Compare(evalCtx, args[1]) != 0{
+					p = int(tree.MustBeDInt(args[1]))
+				}
+				ret, err := geo.ParseGeometryPointFromGeoHash(string(g), p)
 				if err != nil {
 					return nil, err
 				}
@@ -1169,11 +1176,18 @@ var geoBuiltins = map[string]builtinDefinition{
 				{Name: "geohash", Typ: types.String},
 				{Name: "precision", Typ: types.Int},
 			},
+			CalledOnNullInput: true,
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if tree.DNull.Compare(evalCtx, args[0]) == 0{
+					return tree.DNull, nil
+				}
 				g := tree.MustBeDString(args[0])
-				p := tree.MustBeDInt(args[1])
-				bbox, err := geo.ParseCartesianBoundingBoxFromGeoHash(string(g), int(p))
+				p := -1
+				if tree.DNull.Compare(evalCtx, args[1]) != 0{
+					p = int(tree.MustBeDInt(args[1]))
+				}
+				bbox, err := geo.ParseCartesianBoundingBoxFromGeoHash(string(g), p)
 				if err != nil {
 					return nil, err
 				}
