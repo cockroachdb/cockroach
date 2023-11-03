@@ -2982,8 +2982,6 @@ func (kl *keyLocks) acquireLock(
 		panic("lockTable bug")
 	}
 
-	// TODO(arul): add a test for unreplicated locks as well where this assertion
-	// is triggered.
 	if buildutil.CrdbTestBuild && kl.isLocked() {
 		// If lock(s) are already held on this key by other transactions, sanity
 		// check that the lock acquisition is compatible.
