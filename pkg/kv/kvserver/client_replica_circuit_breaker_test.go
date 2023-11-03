@@ -673,10 +673,12 @@ func TestReplicaCircuitBreaker_ExemptRequests(t *testing.T) {
 		})
 	}
 
-	// Restore the breaker via the probe.
+	// Restore the breaker via the probe, and wait for any pending (re)proposals
+	// from previous tests to be flushed.
 	resumeHeartbeats()
 	tc.SetProbeEnabled(n1, true)
 	tc.UntripsSoon(t, tc.Write, n1)
+	tc.WaitForProposals(t, n1)
 
 	// Lose quorum (liveness stays intact).
 	tc.SetSlowThreshold(10 * time.Millisecond)
@@ -883,6 +885,19 @@ func (cbt *circuitBreakerTest) UntripsSoon(t *testing.T, method func(idx int) er
 			t.Fatalf("saw unexpected error %+v", err)
 		}
 		return err
+	})
+}
+
+func (cbt *circuitBreakerTest) WaitForProposals(t *testing.T, idx int) {
+	t.Helper()
+	testutils.SucceedsSoon(t, func() error {
+		t.Helper()
+
+		repl := cbt.repls[idx].Replica
+		if n := repl.NumPendingProposals(); n > 0 {
+			return errors.Errorf("%d pending proposals", n)
+		}
+		return nil
 	})
 }
 
