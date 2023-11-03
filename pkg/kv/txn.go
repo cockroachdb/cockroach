@@ -1612,10 +1612,10 @@ func (txn *Txn) Active() bool {
 //
 // In step-wise execution, reads operate at a snapshot established at
 // the last step, instead of the latest write if not yet enabled.
-func (txn *Txn) Step(ctx context.Context) error {
+func (txn *Txn) Step(ctx context.Context, allowReadTimestampStep bool) error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	return txn.mu.sender.Step(ctx)
+	return txn.mu.sender.Step(ctx, allowReadTimestampStep)
 }
 
 // GetReadSeqNum gets the read sequence number for this transaction.

@@ -2077,10 +2077,11 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 
 		log.VEventf(ctx, 2, "executing cascade for constraint %s", plan.cascades[i].FKName)
 
-		// We place a sequence point before every cascade, so
-		// that each subsequent cascade can observe the writes
-		// by the previous step.
-		if err := planner.Txn().Step(ctx); err != nil {
+		// We place a sequence point before every cascade, so that each subsequent
+		// cascade can observe the writes by the previous step. However, The
+		// external read timestamp is not allowed to advance, since the checks are
+		// run as part of the same statement as the corresponding mutations.
+		if err := planner.Txn().Step(ctx, false /* allowReadTimestampStep */); err != nil {
 			recv.SetError(err)
 			return false
 		}
@@ -2149,8 +2150,10 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 	}
 
 	// We place a sequence point before the checks, so that they observe the
-	// writes of the main query and/or any cascades.
-	if err := planner.Txn().Step(ctx); err != nil {
+	// writes of the main query and/or any cascades. However, The external read
+	// timestamp is not allowed to advance, since the checks are run as part of
+	// the same statement as the corresponding mutations.
+	if err := planner.Txn().Step(ctx, false /* allowReadTimestampStep */); err != nil {
 		recv.SetError(err)
 		return false
 	}

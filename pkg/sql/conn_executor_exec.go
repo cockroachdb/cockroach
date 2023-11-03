@@ -973,15 +973,18 @@ func (ex *connExecutor) execStmtInOpenState(
 	// gets enabled once for all SQL statements executed "underneath".
 	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)
 	prevSeqNum := ex.state.mu.txn.GetReadSeqNum()
+	delegatedFromOuterTxn := ex.executorType == executorTypeInternal && ex.extraTxnState.fromOuterTxn
+	var origTs hlc.Timestamp
 	defer func() {
 		_ = ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode)
 
 		// If this is an internal executor that is running on behalf of an outer
 		// txn, then we need to step back the txn so that the outer executor uses
 		// the proper sequence number.
-		if ex.executorType == executorTypeInternal && ex.extraTxnState.fromOuterTxn {
-			err := ex.state.mu.txn.SetReadSeqNum(prevSeqNum)
-			retEv, retPayload, retErr = makeErrEvent(err)
+		if delegatedFromOuterTxn {
+			if err := ex.state.mu.txn.SetReadSeqNum(prevSeqNum); err != nil {
+				retEv, retPayload, retErr = makeErrEvent(err)
+			}
 		}
 	}()
 
@@ -991,8 +994,26 @@ func (ex *connExecutor) execStmtInOpenState(
 	// placed. There are also sequencing point after every stage of
 	// constraint checks and cascading actions at the _end_ of a
 	// statement's execution.
-	if err := ex.state.mu.txn.Step(ctx); err != nil {
+	//
+	// If this is an internal executor running on behalf of an outer txn, then we
+	// also need to make sure the external read snapshot is not bumped. Normally,
+	// that happens whenever a READ COMMITTED txn is stepped.
+	if buildutil.CrdbTestBuild && delegatedFromOuterTxn {
+		origTs = ex.state.mu.txn.ReadTimestamp()
+	}
+	if err := ex.state.mu.txn.Step(ctx, !delegatedFromOuterTxn /* allowReadTimestampStep */); err != nil {
 		return makeErrEvent(err)
+	}
+	if buildutil.CrdbTestBuild && delegatedFromOuterTxn {
+		newTs := ex.state.mu.txn.ReadTimestamp()
+		if newTs != origTs {
+			// This should never happen. If it does, it means that the internal
+			// executor incorrectly moved the txn's read timestamp forward.
+			return nil, nil, errors.AssertionFailedf(
+				"internal executor advanced the txn read timestamp. origTs=%s, newTs=%s",
+				origTs, newTs,
+			)
+		}
 	}
 
 	if isPausablePortal() {
@@ -1410,7 +1431,7 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 	// stepping mode back to what it was.
 	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)
 	if prevSteppingMode == kv.SteppingEnabled {
-		if err := ex.state.mu.txn.Step(ctx); err != nil {
+		if err := ex.state.mu.txn.Step(ctx, true /* allowReadTimestampStep */); err != nil {
 			return err
 		}
 	} else {

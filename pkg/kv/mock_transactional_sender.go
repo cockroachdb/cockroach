@@ -226,7 +226,7 @@ func (m *MockTransactionalSender) Active() bool {
 func (m *MockTransactionalSender) DisablePipelining() error { return nil }
 
 // Step is part of the TxnSender interface.
-func (m *MockTransactionalSender) Step(_ context.Context) error {
+func (m *MockTransactionalSender) Step(context.Context, bool) error {
 	// At least one test (e.g sql/TestPortalsDestroyedOnTxnFinish) requires
 	// the ability to run simple statements that do not access storage,
 	// and that requires a non-panicky Step().
