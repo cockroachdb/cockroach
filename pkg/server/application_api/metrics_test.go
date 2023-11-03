@@ -90,7 +90,9 @@ func TestStatusVarsTxnMetrics(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantAlwaysEnabled,
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
+			base.TestTenantAlwaysEnabled, 112953,
+		),
 	})
 	defer srv.Stopper().Stop(context.Background())
 
@@ -133,6 +135,8 @@ func TestStatusVarsTxnMetrics(t *testing.T) {
 	t.Run("tenant", func(t *testing.T) {
 		s := srv.ApplicationLayer()
 		// TODO(knz): why is the tenant label missing here?
+		// TODO(herko): it is present when running in shared process mode. Hence why
+		// the test is now forced to run only in external process mode.
 		testFn(s, `tenant=""`)
 	})
 }

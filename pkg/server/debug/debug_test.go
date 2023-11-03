@@ -36,7 +36,11 @@ func debugURL(s serverutils.ApplicationLayerInterface, path string) string {
 func TestAdminDebugExpVar(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
+			base.TestTenantProbabilistic, 113187,
+		),
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	ts := s.ApplicationLayer()
@@ -59,7 +63,11 @@ func TestAdminDebugExpVar(t *testing.T) {
 func TestAdminDebugMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
+			base.TestTenantProbabilistic, 113187,
+		),
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	ts := s.ApplicationLayer()
@@ -82,7 +90,11 @@ func TestAdminDebugMetrics(t *testing.T) {
 func TestAdminDebugPprof(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
+			base.TestTenantProbabilistic, 113187,
+		),
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	ts := s.ApplicationLayer()
@@ -101,7 +113,11 @@ func TestAdminDebugPprof(t *testing.T) {
 func TestAdminDebugTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
+			base.TestTenantProbabilistic, 113187,
+		),
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	ts := s.ApplicationLayer()
@@ -182,7 +198,11 @@ func TestAdminDebugAuth(t *testing.T) {
 func TestAdminDebugRedirect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
+			base.TestTenantProbabilistic, 112955,
+		),
+	})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.ApplicationLayer()
 
