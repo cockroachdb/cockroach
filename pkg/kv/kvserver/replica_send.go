@@ -1136,8 +1136,28 @@ func (r *Replica) collectSpans(
 			latchGuess += len(et.(*kvpb.EndTxnRequest).LockSpans) - 1
 		}
 		latchSpans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, latchGuess)
-		// TODO(arul): Use the correct locking strength here.
-		lockSpans.Reserve(lock.Intent, len(ba.Requests))
+
+		// TODO(arul): might be worth evaluating whether there's sufficient benefit
+		// to this accurate counting or not. An alternative would be to estimate
+		// len(ba.Requests) for each of the supported lock strengths
+		// (lock.None, lcok.Shared, lock.Exclusive, lock.Intent).
+		var numLockSpansPerStr [lock.NumLockStrength]int
+		for _, union := range ba.Requests {
+			inner := union.GetInner()
+			if kvpb.IsReadOnly(inner) {
+				numLockSpansPerStr[lock.None]++
+			} else {
+				if readOnlyReq, ok := inner.(kvpb.LockingReadRequest); ok {
+					str, _ := readOnlyReq.KeyLocking()
+					numLockSpansPerStr[str]++
+				} else {
+					numLockSpansPerStr[lock.Intent]++
+				}
+			}
+		}
+		for str, numLockSpans := range numLockSpansPerStr {
+			lockSpans.Reserve(lock.Strength(str), numLockSpans)
+		}
 	} else {
 		latchSpans.Reserve(spanset.SpanReadOnly, spanset.SpanGlobal, len(ba.Requests))
 		lockSpans.Reserve(lock.None, len(ba.Requests))
