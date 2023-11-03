@@ -129,17 +129,11 @@ func ShouldStartDefaultTestTenant(
 		return base.InternalNonDefaultDecision(baseArg, true /* enabled */, shared /* shared */)
 	}
 
-	// Obey the env override if present.
-	if str, present := envutil.EnvString("COCKROACH_TEST_TENANT", 0); present {
-		v, err := strconv.ParseBool(str)
-		if err != nil {
-			panic(err)
+	if decision, override := testTenantDecisionFromEnvironment(baseArg, shared); override {
+		if decision.TestTenantAlwaysEnabled() {
+			t.Log(defaultTestTenantMessage(decision.SharedProcessMode()) + "\n(override via COCKROACH_TEST_TENANT)")
 		}
-		if v {
-			t.Log(defaultTestTenantMessage(shared) + "\n(override via COCKROACH_TEST_TENANT)")
-			return base.InternalNonDefaultDecision(baseArg, true /* enabled */, shared /* shared */)
-		}
-		return base.InternalNonDefaultDecision(baseArg, false /* enabled */, false /* shared */)
+		return decision
 	}
 
 	if globalDefaultSelectionOverride.isSet {
@@ -168,6 +162,50 @@ func ShouldStartDefaultTestTenant(
 		return base.InternalNonDefaultDecision(baseArg, true /* enable */, shared /* shared */)
 	}
 	return base.InternalNonDefaultDecision(baseArg, false /* enable */, false /* shared */)
+}
+
+const (
+	// COCKROACH_TEST_TENANT controls whether a secondary tenant
+	// is used by a TestServer-based test.
+	//
+	// - false disables the use of tenants;
+	//
+	// - true forces the use of tenants, randomly deciding between
+	//   an external or shared process tenant;
+	//
+	// - shared forces the use of a tenant, always starting a
+	//   shared process tenant;
+	//
+	// - external forces the use of a tenant, always starting a
+	//   separate process tenant.
+	testTenantEnabledEnvVar = "COCKROACH_TEST_TENANT"
+
+	testTenantModeEnabledShared   = "shared"
+	testTenantModeEnabledExternal = "external"
+)
+
+func testTenantDecisionFromEnvironment(
+	baseArg base.DefaultTestTenantOptions, shared bool,
+) (base.DefaultTestTenantOptions, bool) {
+	if str, present := envutil.EnvString(testTenantEnabledEnvVar, 0); present {
+		v, err := strconv.ParseBool(str)
+		if err == nil {
+			if v {
+				return base.InternalNonDefaultDecision(baseArg, true /* enabled */, shared /* shared */), true
+			}
+			return base.InternalNonDefaultDecision(baseArg, false /* enabled */, false /* shared */), true
+		}
+
+		switch str {
+		case testTenantModeEnabledShared:
+			return base.InternalNonDefaultDecision(baseArg, true /* enabled */, true /* shared */), true
+		case testTenantModeEnabledExternal:
+			return base.InternalNonDefaultDecision(baseArg, true /* enabled */, false /* shared */), true
+		default:
+			panic(fmt.Sprintf("invalid value for %s: %s", testTenantEnabledEnvVar, str))
+		}
+	}
+	return baseArg, false
 }
 
 // globalDefaultSelectionOverride is used when an entire package needs
