@@ -13,6 +13,15 @@ new-txn name=txn4 ts=10,1 epoch=0
 new-txn name=txn5 ts=10,1 epoch=0
 ----
 
+new-txn name=txn6 ts=10,1 epoch=0
+----
+
+new-txn name=txn7 ts=11,1 epoch=0 iso=read-committed
+----
+
+new-txn name=txn8 ts=10,1 epoch=0
+----
+
 # -----------------------------------------------------------------------------
 # Ensure releasing the first of multiple shared lock holders results in correct
 # pushes.
@@ -180,3 +189,191 @@ on-txn-updated txn=txn3 status=committed
 finish req=req5
 ----
 [-] finish req5: finishing request
+
+# ------------------------------------------------------------------------------
+# Ensure that when an intent is pushed out of the way by a non-locking read, but
+# there is still a shared lock on the key, the non-locking read is able to
+# proceed. Serves as a regression test for the bug identified in
+# https://github.com/cockroachdb/cockroach/issues/112608; prior to the fix, the
+# non-locking read could end up waiting indefinitely.
+# ------------------------------------------------------------------------------
+
+new-request name=req6 txn=txn6 ts=10,1
+  put key=a value=v
+----
+
+sequence req=req6
+----
+[6] sequence req6: sequencing request
+[6] sequence req6: acquiring latches
+[6] sequence req6: scanning lock table for conflicting locks
+[6] sequence req6: sequencing complete, returned guard
+
+on-lock-acquired req=req6 key=a dur=r str=intent
+----
+[-] acquire lock: txn 00000006 @ ‹a›
+
+finish req=req6
+----
+[-] finish req6: finishing request
+
+new-request name=req7 txn=txn6 ts=10,1
+  get key=a str=shared
+----
+
+sequence req=req7
+----
+[7] sequence req7: sequencing request
+[7] sequence req7: acquiring latches
+[7] sequence req7: scanning lock table for conflicting locks
+[7] sequence req7: sequencing complete, returned guard
+
+on-lock-acquired req=req7 key=a dur=u str=shared
+----
+[-] acquire lock: txn 00000006 @ ‹a›
+
+finish req=req7
+----
+[-] finish req7: finishing request
+
+debug-lock-table
+----
+num=1
+ lock: "a"
+  holder: txn: 00000006-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+# Note that txn7 is read-committed, so it can push the timestamp of intents as
+# if it was high priority.
+new-request name=req8 txn=txn7 ts=10,1
+  get key=a
+----
+
+sequence req=req8
+----
+[8] sequence req8: sequencing request
+[8] sequence req8: acquiring latches
+[8] sequence req8: scanning lock table for conflicting locks
+[8] sequence req8: sequencing complete, returned guard
+
+handle-lock-conflict-error req=req8 lease-seq=1
+  lock txn=txn6 key=a
+----
+[9] handle lock conflict error req8: handled conflicting locks on ‹"a"›, released latches
+
+debug-lock-table
+----
+num=1
+ lock: "a"
+  holder: txn: 00000006-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent], unrepl [(str: Shared seq: 0)]
+
+sequence req=req8
+----
+[10] sequence req8: re-sequencing request
+[10] sequence req8: acquiring latches
+[10] sequence req8: scanning lock table for conflicting locks
+[10] sequence req8: waiting in lock wait-queues
+[10] sequence req8: lock wait-queue event: wait for (distinguished) txn 00000006 holding lock @ key ‹"a"› (queuedLockingRequests: 0, queuedReaders: 1)
+[10] sequence req8: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
+[10] sequence req8: pushing timestamp of txn 00000006 above 11.000000000,1
+[10] sequence req8: pusher pushed pushee to 11.000000000,2
+[10] sequence req8: resolving intent ‹"a"› for txn 00000006 with PENDING status and clock observation {1 123.000000000,5}
+[10] sequence req8: lock wait-queue event: done waiting
+[10] sequence req8: conflicted with ‹00000006-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
+[10] sequence req8: acquiring latches
+[10] sequence req8: scanning lock table for conflicting locks
+[10] sequence req8: sequencing complete, returned guard
+
+finish req=req8
+----
+[-] finish req8: finishing request
+
+# ------------------------------------------------------------------------------
+# Similar test to the one above, except this time there's both a non-locking
+# read and shared locking request waiting on the intent. When the non-locking
+# read pushes the intent out of its way, the shared locking request should also
+# be allowed to proceed (as we stop tracking the intent in the lock table).
+# However, the shared locking request should re-discover the intent.
+# ------------------------------------------------------------------------------
+
+new-request name=req9 txn=txn8 ts=10,1
+  get key=a str=shared
+----
+
+sequence req=req9
+----
+[11] sequence req9: sequencing request
+[11] sequence req9: acquiring latches
+[11] sequence req9: scanning lock table for conflicting locks
+[11] sequence req9: sequencing complete, returned guard
+
+handle-lock-conflict-error req=req9 lease-seq=1
+  lock txn=txn6 key=a
+----
+[12] handle lock conflict error req9: handled conflicting locks on ‹"a"›, released latches
+
+debug-lock-table
+----
+num=1
+ lock: "a"
+  holder: txn: 00000006-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent], unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: false req: 9, strength: Shared, txn: 00000008-0000-0000-0000-000000000000
+
+sequence req=req9
+----
+[13] sequence req9: re-sequencing request
+[13] sequence req9: acquiring latches
+[13] sequence req9: scanning lock table for conflicting locks
+[13] sequence req9: waiting in lock wait-queues
+[13] sequence req9: lock wait-queue event: wait for (distinguished) txn 00000006 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
+[13] sequence req9: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[13] sequence req9: pushing txn 00000006 to abort
+[13] sequence req9: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+debug-lock-table
+----
+num=1
+ lock: "a"
+  holder: txn: 00000006-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent], unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 9, strength: Shared, txn: 00000008-0000-0000-0000-000000000000
+   distinguished req: 9
+
+# Note that txn7 is read-committed, so it can push the timestamp of intents as
+# if it was high priority.
+new-request name=req10 txn=txn7 ts=10,1
+  get key=a
+----
+
+sequence req=req10
+----
+[13] sequence req9: lock wait-queue event: done waiting
+[13] sequence req9: conflicted with ‹00000006-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
+[13] sequence req9: acquiring latches
+[13] sequence req9: scanning lock table for conflicting locks
+[13] sequence req9: sequencing complete, returned guard
+[14] sequence req10: sequencing request
+[14] sequence req10: acquiring latches
+[14] sequence req10: scanning lock table for conflicting locks
+[14] sequence req10: waiting in lock wait-queues
+[14] sequence req10: lock wait-queue event: wait for txn 00000006 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 1)
+[14] sequence req10: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
+[14] sequence req10: pushing timestamp of txn 00000006 above 11.000000000,1
+[14] sequence req10: resolving intent ‹"a"› for txn 00000006 with PENDING status and clock observation {1 123.000000000,8}
+[14] sequence req10: lock wait-queue event: done waiting
+[14] sequence req10: conflicted with ‹00000006-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
+[14] sequence req10: acquiring latches
+[14] sequence req10: scanning lock table for conflicting locks
+[14] sequence req10: sequencing complete, returned guard
+
+debug-lock-table
+----
+num=1
+ lock: "a"
+  holder: txn: 00000006-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: false req: 9, strength: Shared, txn: 00000008-0000-0000-0000-000000000000
+
+finish req=req10
+----
+[-] finish req10: finishing request

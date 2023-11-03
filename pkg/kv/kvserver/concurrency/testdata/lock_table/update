@@ -386,6 +386,12 @@ new-lock-table maxlocks=10000
 new-txn txn=txn1 ts=10 epoch=1 seq=1
 ----
 
+new-txn txn=txn2 ts=12,1 epoch=0
+----
+
+new-txn txn=txn3 ts=14,1 epoch=0
+----
+
 new-request r=req1 txn=txn1 ts=10 spans=exclusive@a
 ----
 
@@ -489,3 +495,69 @@ num=1
 update txn=txn1 ts=10 epoch=1 span=a ignored-seqs=1
 ----
 num=0
+
+# ------------------------------------------------------------------------------
+# Tests where both an exclusive lock and a (replicated) intent exists on a key,
+# and the intent is forgotten because of a lock update, we correctly let some
+# waiting requests through.
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req5 txn=txn1 ts=10 spans=exclusive@a
+----
+
+scan r=req5
+----
+start-waiting: false
+
+acquire r=req5 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 10)]
+
+new-request r=req6 txn=txn2 ts=10 spans=none@a
+----
+
+scan r=req6
+----
+start-waiting: true
+
+add-discovered k=a durability=r strength=intent txn=txn1 r=req6
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 10)]
+   waiting readers:
+    req: 2, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 2
+
+new-request r=req7 txn=txn3 ts=10 spans=shared@a
+----
+
+scan r=req7
+----
+start-waiting: true
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 10)]
+   waiting readers:
+    req: 2, txn: 00000000-0000-0000-0000-000000000002
+   queued locking requests:
+    active: true req: 3, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 2
+
+update txn=txn1 ts=11,0 epoch=0 span=a
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 10)]
+   queued locking requests:
+    active: true req: 3, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 3
