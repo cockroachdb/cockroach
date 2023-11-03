@@ -6244,4 +6244,16 @@ SELECT ST_Extent(ST_PointFromGeoHash(NULL::TEXT, 1::INT4)::GEOMETRY);
 ----
 NULL
 
+# X min > X max
+query T
+SELECT ST_AsEWKT(ST_MakeEnvelope(8.0::FLOAT8, 2.0::FLOAT8, 5.0::FLOAT8, 4.0::FLOAT8)::GEOMETRY);
+----
+POLYGON ((8 2, 8 4, 5 4, 5 2, 8 2))
+
+# Y min > Y max
+query T
+SELECT ST_AsEWKT(ST_MakeEnvelope(5.0::FLOAT8, 4.0::FLOAT8, 8.0::FLOAT8, 2.0::FLOAT8)::GEOMETRY);
+----
+POLYGON ((5 4, 5 2, 8 2, 8 4, 5 4))
+
 subtest end

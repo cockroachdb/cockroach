@@ -7878,12 +7878,16 @@ func stEnvelopeFromArgs(args tree.Datums) (tree.Datum, error) {
 	if len(args) > 4 {
 		srid = int(tree.MustBeDInt(args[4]))
 	}
+	coords := []float64{
+		xmin, ymin,
+		xmin, ymax,
+		xmax, ymax,
+		xmax, ymin,
+		xmin, ymin,
+	}
 
 	extent, err := geo.MakeGeometryFromGeomT(
-		geom.NewBounds(geom.XY).
-			Set(xmin, ymin, xmax, ymax).
-			Polygon().
-			SetSRID(srid),
+		geom.NewPolygonFlat(geom.XY, coords, []int{len(coords)}).SetSRID(srid),
 	)
 	if err != nil {
 		return nil, err
