@@ -177,7 +177,7 @@ func (tc *testContext) Start(ctx context.Context, t testing.TB, stopper *stop.St
 func (tc *testContext) StartWithStoreConfig(
 	ctx context.Context, t testing.TB, stopper *stop.Stopper, cfg StoreConfig,
 ) {
-	tc.StartWithStoreConfigAndVersion(ctx, t, stopper, cfg, cfg.Settings.Version.BinaryVersion())
+	tc.StartWithStoreConfigAndVersion(ctx, t, stopper, cfg, cfg.Settings.Version.LatestVersion())
 }
 
 // StartWithStoreConfigAndVersion is like StartWithStoreConfig but additionally

@@ -56,7 +56,7 @@ func TestHeartbeatReply(t *testing.T) {
 
 	request := &PingRequest{
 		Ping:          "testPing",
-		ServerVersion: st.Version.BinaryVersion(),
+		ServerVersion: st.Version.LatestVersion(),
 	}
 	response, err := heartbeat.Ping(context.Background(), request)
 	if err != nil {
@@ -140,7 +140,7 @@ func TestManualHeartbeat(t *testing.T) {
 
 	request := &PingRequest{
 		Ping:          "testManual",
-		ServerVersion: st.Version.BinaryVersion(),
+		ServerVersion: st.Version.LatestVersion(),
 	}
 	manualHeartbeat.ready <- nil
 	ctx := context.Background()
@@ -196,7 +196,7 @@ func TestClusterIDCompare(t *testing.T) {
 			request := &PingRequest{
 				Ping:          "testPing",
 				ClusterID:     &td.clientClusterID,
-				ServerVersion: st.Version.BinaryVersion(),
+				ServerVersion: st.Version.LatestVersion(),
 			}
 			_, err := heartbeat.Ping(context.Background(), request)
 			if td.expectError && err == nil {
@@ -241,7 +241,7 @@ func TestNodeIDCompare(t *testing.T) {
 			request := &PingRequest{
 				Ping:          "testPing",
 				TargetNodeID:  td.clientNodeID,
-				ServerVersion: st.Version.BinaryVersion(),
+				ServerVersion: st.Version.LatestVersion(),
 			}
 			_, err := heartbeat.Ping(context.Background(), request)
 			if td.expectError && err == nil {
@@ -274,7 +274,7 @@ func TestTenantVersionCheck(t *testing.T) {
 
 	request := &PingRequest{
 		Ping:          "testPing",
-		ServerVersion: st.Version.BinaryMinSupportedVersion(),
+		ServerVersion: st.Version.MinSupportedVersion(),
 	}
 	const failedRE = `version compatibility check failed on ping request:` +
 		` cluster requires at least version .*, but peer has version .*`

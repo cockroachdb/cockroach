@@ -1646,7 +1646,7 @@ func checkBackupManifestVersionCompatability(
 
 	// We support restoring a backup that was taken on a cluster with a cluster
 	// version >= the earliest binary version that we can interoperate with.
-	minimumRestoreableVersion := version.BinaryMinSupportedVersion()
+	minimumRestoreableVersion := version.MinSupportedVersion()
 	currentActiveVersion := version.ActiveVersion(ctx)
 
 	for i := range mainBackupManifests {
@@ -1869,10 +1869,10 @@ func doRestorePlan(
 		// Validate that we aren't in the middle of an upgrade. To avoid unforseen
 		// issues, we want to avoid full cluster restores if it is possible that an
 		// upgrade is in progress. We also check this during Resume.
-		binaryVersion := p.ExecCfg().Settings.Version.BinaryVersion()
+		latestVersion := p.ExecCfg().Settings.Version.LatestVersion()
 		clusterVersion := p.ExecCfg().Settings.Version.ActiveVersion(ctx).Version
-		if clusterVersion.Less(binaryVersion) {
-			return clusterRestoreDuringUpgradeErr(clusterVersion, binaryVersion)
+		if clusterVersion.Less(latestVersion) {
+			return clusterRestoreDuringUpgradeErr(clusterVersion, latestVersion)
 		}
 	}
 

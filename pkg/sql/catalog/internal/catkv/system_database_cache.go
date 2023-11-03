@@ -68,7 +68,7 @@ func NewSystemDatabaseCache(codec keys.SQLCodec, settings *cluster.Settings) *Sy
 		}
 		return nil
 	})
-	c.mu.m[settings.Version.BinaryVersion()] = &warm
+	c.mu.m[settings.Version.LatestVersion()] = &warm
 	return c
 }
 

@@ -69,8 +69,8 @@ type TestingKnobs struct {
 	// Case 1:
 	// ------
 	// If the test has not overridden the
-	// `cluster.Settings.Version.BinaryMinSupportedVersion`, then the cluster will
-	// be bootstrapped at `binaryMinSupportedVersion`  (if this server is the one
+	// `cluster.Settings.Version.MinSupportedVersion`, then the cluster will be
+	// bootstrapped at `minSupportedVersion`  (if this server is the one
 	// bootstrapping the cluster). After all the servers in the test cluster have
 	// been started, `SET CLUSTER SETTING version = BinaryVersionOverride` will be
 	// run to step through the upgrades until the specified override.
@@ -78,9 +78,9 @@ type TestingKnobs struct {
 	// Case 2:
 	// ------
 	// If the test has overridden the
-	// `cluster.Settings.Version.BinaryMinSupportedVersion` then it is not safe
-	// for us to bootstrap at `binaryMinSupportedVersion` as it might be less than
-	// the overridden minimum supported version. Furthermore, we do not have the
+	// `cluster.Settings.Version.MinSupportedVersion` then it is not safe for us
+	// to bootstrap at `minSupportedVersion` as it might be less than the
+	// overridden minimum supported version. Furthermore, we do not have the
 	// initial cluster data (system tables etc.) to bootstrap at the overridden
 	// minimum supported version. In this case we bootstrap at
 	// `BinaryVersionOverride` and populate the cluster with initial data
