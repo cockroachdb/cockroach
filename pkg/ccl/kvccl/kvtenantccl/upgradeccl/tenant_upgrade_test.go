@@ -271,9 +271,9 @@ func TestTenantUpgrade(t *testing.T) {
 		v1,
 		false, // initializeVersion
 	)
-	// Initialize the version to the BinaryMinSupportedVersion.
+	// Initialize the version to the MinSupportedVersion.
 	require.NoError(t, clusterversion.Initialize(ctx,
-		clusterversion.TestingBinaryMinSupportedVersion, &settings.SV))
+		clusterversion.MinSupported.Version(), &settings.SV))
 
 	t.Log("starting server")
 	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
@@ -429,7 +429,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 		v0,
 		false, // initializeVersion
 	)
-	// Initialize the version to the BinaryMinSupportedVersion.
+	// Initialize the version to the MinSupportedVersion.
 	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		Settings:          settings,
