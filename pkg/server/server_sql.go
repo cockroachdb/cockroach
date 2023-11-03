@@ -520,7 +520,7 @@ func (r *refreshInstanceSessionListener) OnSessionDeleted(
 				r.cfg.AdvertiseAddr,
 				r.cfg.SQLAdvertiseAddr,
 				r.cfg.Locality,
-				r.cfg.Settings.Version.BinaryVersion(),
+				r.cfg.Settings.Version.LatestVersion(),
 				nodeID,
 			); err != nil {
 				log.Warningf(ctx, "failed to update instance with new session ID: %v", err)
@@ -1511,7 +1511,7 @@ func (s *SQLServer) preStart(
 					s.cfg.AdvertiseAddr,
 					s.cfg.SQLAdvertiseAddr,
 					s.distSQLServer.Locality,
-					s.execCfg.Settings.Version.BinaryVersion(),
+					s.execCfg.Settings.Version.LatestVersion(),
 					nodeID,
 				)
 			}
@@ -1522,7 +1522,7 @@ func (s *SQLServer) preStart(
 				s.cfg.AdvertiseAddr,
 				s.cfg.SQLAdvertiseAddr,
 				s.distSQLServer.Locality,
-				s.execCfg.Settings.Version.BinaryVersion(),
+				s.execCfg.Settings.Version.LatestVersion(),
 			)
 		})
 	if err != nil {
@@ -1660,20 +1660,20 @@ func (s *SQLServer) preStart(
 		}); err != nil {
 		return err
 	}
-	if s.execCfg.Settings.Version.BinaryVersion().Less(tenantActiveVersion.Version) {
+	if s.execCfg.Settings.Version.LatestVersion().Less(tenantActiveVersion.Version) {
 		return errors.WithHintf(errors.Newf("preventing SQL server from starting because its binary version "+
 			"is too low for the tenant active version: server binary version = %v, tenant active version = %v",
-			s.execCfg.Settings.Version.BinaryVersion(), tenantActiveVersion.Version),
+			s.execCfg.Settings.Version.LatestVersion(), tenantActiveVersion.Version),
 			"use a tenant binary whose version is at least %v", tenantActiveVersion.Version)
 	}
 
 	// Prevent the server from starting if its minimum supported binary version is too high
 	// for the tenant cluster version.
-	if tenantActiveVersion.Version.Less(s.execCfg.Settings.Version.BinaryMinSupportedVersion()) {
+	if tenantActiveVersion.Version.Less(s.execCfg.Settings.Version.MinSupportedVersion()) {
 		return errors.WithHintf(errors.Newf("preventing SQL server from starting because its executable "+
 			"version is too new to run the current active logical version of the virtual cluster"),
 			"finalize the virtual cluster version to at least %v or downgrade the"+
-				"executable version to at most %v", s.execCfg.Settings.Version.BinaryMinSupportedVersion(), tenantActiveVersion.Version,
+				"executable version to at most %v", s.execCfg.Settings.Version.MinSupportedVersion(), tenantActiveVersion.Version,
 		)
 	}
 

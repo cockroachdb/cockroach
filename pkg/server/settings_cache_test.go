@@ -117,8 +117,8 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 		inspectState, err := inspectEngines(
 			context.Background(),
 			s.Engines(),
-			s.ClusterSettings().Version.BinaryVersion(),
-			s.ClusterSettings().Version.BinaryMinSupportedVersion(),
+			s.ClusterSettings().Version.LatestVersion(),
+			s.ClusterSettings().Version.MinSupportedVersion(),
 		)
 		require.NoError(t, err)
 

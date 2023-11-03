@@ -136,39 +136,39 @@ func MakeClusterSettings() *Settings {
 	return s
 }
 
-// MakeTestingClusterSettings returns a Settings object that has its binary and
-// minimum supported versions set to the baked in binary version. It also
-// initializes the cluster version setting to the binary version.
+// MakeTestingClusterSettings returns a Settings object that is initialized with
+// the latest version.
 //
 // It is typically used for testing or one-off situations in which a Settings
 // object is needed, but cluster settings don't play a crucial role.
 func MakeTestingClusterSettings() *Settings {
 	return MakeTestingClusterSettingsWithVersions(
-		clusterversion.TestingBinaryVersion,
-		clusterversion.TestingBinaryVersion,
+		clusterversion.Latest.Version(),
+		clusterversion.Latest.Version(),
 		true /* initializeVersion */)
 }
 
 // MakeTestingClusterSettingsWithVersions returns a Settings object that has its
-// binary and minimum supported versions set to the provided versions.
-// It also can also initialize the cluster version setting to the specified
-// binaryVersion.
+// latest and minimum supported versions set to the provided versions.
 //
-// It is typically used in tests that want to override the default binary and
+// It can optionally initialize the cluster version setting to the specified
+// latestVersion.
+//
+// It is typically used in tests that want to override the binary's latest and
 // minimum supported versions.
 func MakeTestingClusterSettingsWithVersions(
-	binaryVersion, binaryMinSupportedVersion roachpb.Version, initializeVersion bool,
+	latestVersion, minSupportedVersion roachpb.Version, initializeVersion bool,
 ) *Settings {
 	s := &Settings{}
 
 	sv := &s.SV
 	s.Version = clusterversion.MakeVersionHandleWithOverride(
-		&s.SV, binaryVersion, binaryMinSupportedVersion)
+		&s.SV, latestVersion, minSupportedVersion)
 	sv.Init(context.TODO(), s.Version)
 
 	if initializeVersion {
-		// Initialize cluster version to specified binaryVersion.
-		if err := clusterversion.Initialize(context.TODO(), binaryVersion, &s.SV); err != nil {
+		// Initialize cluster version to specified latestVersion.
+		if err := clusterversion.Initialize(context.TODO(), latestVersion, &s.SV); err != nil {
 			log.Fatalf(context.TODO(), "unable to initialize version: %s", err)
 		}
 	}
@@ -183,7 +183,7 @@ func TestingCloneClusterSettings(st *Settings) *Settings {
 		ExternalIODir: st.ExternalIODir,
 	}
 	result.Version = clusterversion.MakeVersionHandleWithOverride(
-		&result.SV, st.Version.BinaryVersion(), st.Version.BinaryMinSupportedVersion(),
+		&result.SV, st.Version.LatestVersion(), st.Version.MinSupportedVersion(),
 	)
 	result.SV.TestingCopyForServer(&st.SV, result.Version)
 	return result

@@ -1703,7 +1703,7 @@ func (s *statusServer) Profile(
 	// If the request has a SenderVersion, then ensure the current node has the
 	// same server version before collecting a profile.
 	if req.SenderServerVersion != nil {
-		serverVersion := s.st.Version.BinaryVersion()
+		serverVersion := s.st.Version.LatestVersion()
 		if !serverVersion.Equal(*req.SenderServerVersion) {
 			return nil, errors.Newf("server version of the node being profiled %s != sender version %s",
 				serverVersion.String(), req.SenderServerVersion.String())

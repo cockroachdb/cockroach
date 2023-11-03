@@ -231,11 +231,11 @@ func restoreMidSchemaChange(
 		// option to ensure the restore is successful on development branches. This
 		// is because, while the backups were generated on release branches and have
 		// versions such as 22.2 in their manifest, the development branch will have
-		// a BinaryMinSupportedVersion offset by the clusterversion.DevOffset
-		// described in `pkg/clusterversion/cockroach_versions.go`. This will mean
-		// that the manifest version is always less than the
-		// BinaryMinSupportedVersion which will in turn fail the restore unless we
-		// pass in the specified option to elide the compatability check.
+		// a MinSupportedVersion offset by the clusterversion.DevOffset described in
+		// `pkg/clusterversion/cockroach_versions.go`. This will mean that the
+		// manifest version is always less than the MinSupportedVersion which will
+		// in turn fail the restore unless we pass in the specified option to elide
+		// the compatibility check.
 		restoreQuery := "RESTORE defaultdb.* FROM LATEST IN $1 WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION"
 		if isClusterRestore {
 			restoreQuery = "RESTORE FROM LATEST IN $1 WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION"
