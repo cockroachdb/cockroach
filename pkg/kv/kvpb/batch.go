@@ -855,6 +855,9 @@ func (ba BatchRequest) SafeFormat(s redact.SafePrinter, _ rune) {
 	if ba.WaitPolicy != lock.WaitPolicy_Block {
 		s.Printf(", [wait-policy: %s]", ba.WaitPolicy)
 	}
+	if ba.LockTimeout != 0 {
+		s.Printf(", [lock-timeout: %s]", ba.LockTimeout)
+	}
 	if ba.AmbiguousReplayProtection {
 		s.Printf(", [protect-ambiguous-replay]")
 	}
@@ -870,6 +873,12 @@ func (ba BatchRequest) SafeFormat(s redact.SafePrinter, _ rune) {
 			s.Printf(", max_ts_bound: %s", cfg.MaxTimestampBound)
 		}
 		s.Printf("]")
+	}
+	if ba.MaxSpanRequestKeys != 0 || ba.TargetBytes != 0 {
+		s.Printf(", [max_span_request_keys: %d], [target_bytes: %d]", ba.MaxSpanRequestKeys, ba.TargetBytes)
+	}
+	if ba.AllowEmpty {
+		s.Print(", [allow-empty]")
 	}
 }
 
