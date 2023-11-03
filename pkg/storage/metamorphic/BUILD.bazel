@@ -16,6 +16,7 @@ go_library(
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/storage",
