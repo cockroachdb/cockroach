@@ -14,15 +14,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/maps"
 	"golang.org/x/sync/errgroup"
@@ -31,7 +28,6 @@ import (
 const (
 	dnsManagedZone           = "roachprod-managed"
 	dnsDomain                = "roachprod-managed.crdb.io"
-	dnsServer                = "ns-cloud-a1.googledomains.com"
 	dnsMaxResults            = 1000
 	dnsMaxConcurrentRequests = 4
 )
@@ -42,20 +38,10 @@ var _ vm.DNSProvider = &dnsProvider{}
 
 // dnsProvider implements the vm.DNSProvider interface.
 type dnsProvider struct {
-	resolver *net.Resolver
 }
 
 func NewDNSProvider() vm.DNSProvider {
-	resolver := new(net.Resolver)
-	resolver.StrictErrors = true
-	resolver.Dial = func(ctx context.Context, network, address string) (net.Conn, error) {
-		dialer := net.Dialer{}
-		// Prefer TCP over UDP. This is necessary because the DNS server
-		// will return a truncated response if the response is too large
-		// for a UDP packet, resulting in a "server misbehaving" error.
-		return dialer.DialContext(ctx, "tcp", dnsServer+":53")
-	}
-	return &dnsProvider{resolver: resolver}
+	return &dnsProvider{}
 }
 
 // CreateRecords implements the vm.DNSProvider interface.
@@ -104,11 +90,7 @@ func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord
 			return markDNSOperationError(errors.Wrapf(err, "output: %s", out))
 		}
 	}
-	// The DNS records are not immediately available after creation. We wait until
-	// they are available before returning. This is necessary because the records
-	// are required for starting servers. The waiting period should usually be
-	// short (less than 30 seconds).
-	return n.waitForRecordsAvailable(ctx, records...)
+	return nil
 }
 
 // LookupSRVRecords implements the vm.DNSProvider interface.
@@ -184,31 +166,24 @@ func (n *dnsProvider) Domain() string {
 func (n *dnsProvider) lookupSRVRecords(
 	ctx context.Context, service, proto, name string,
 ) ([]vm.DNSRecord, error) {
-	var err error
-	var cName string
-	var srvRecords []*net.SRV
-	err = retry.WithMaxAttempts(ctx, retry.Options{}, 10, func() error {
-		cName, srvRecords, err = n.resolver.LookupSRV(ctx, service, proto, name)
-		if dnsError := (*net.DNSError)(nil); errors.As(err, &dnsError) {
-			// We ignore some errors here as they are likely due to the record name not
-			// existing. The net.LookupSRV function tends to return "server misbehaving"
-			// and "no such host" errors when no record entries are found. Hence, making
-			// the errors ambiguous and not useful. The errors are not exported, so we
-			// have to check the error message.
-			if dnsError.Err != "server misbehaving" && dnsError.Err != "no such host" && !dnsError.IsNotFound {
-				return markDNSOperationError(dnsError)
-			}
-		}
-		return nil
-	})
+	target := name
+	if service != "" || proto != "" {
+		target = "_" + service + "._" + proto + "." + name
+	}
+	records, err := n.listSRVRecords(ctx, target, dnsMaxResults)
+	filteredRecords := make([]vm.DNSRecord, 0, len(records))
 	if err != nil {
 		return nil, err
 	}
-	records := make([]vm.DNSRecord, len(srvRecords))
-	for i, srvRecord := range srvRecords {
-		records[i] = vm.CreateSRVRecord(cName, *srvRecord)
+	for _, record := range records {
+		// Filter out records that do not match the full target name. This is
+		// necessary because the gcloud command does partial matching.
+		if record.Name != target {
+			continue
+		}
+		filteredRecords = append(filteredRecords, record)
 	}
-	return records, nil
+	return filteredRecords, nil
 }
 
 // listSRVRecords returns all SRV records that match the given filter from Google Cloud DNS.
@@ -257,48 +232,6 @@ func (n *dnsProvider) listSRVRecords(
 		}
 	}
 	return records, nil
-}
-
-// waitForRecordsAvailable waits for the DNS records to become available on the
-// DNS server through a standard net tools lookup.
-func (n *dnsProvider) waitForRecordsAvailable(ctx context.Context, records ...vm.DNSRecord) error {
-	type recordKey struct {
-		name string
-		data string
-	}
-	trimName := func(name string) string {
-		return strings.TrimSuffix(name, ".")
-	}
-	notAvailable := make(map[recordKey]struct{})
-	for _, record := range records {
-		notAvailable[recordKey{
-			name: trimName(record.Name),
-			data: record.Data,
-		}] = struct{}{}
-	}
-
-	for attempts := 0; attempts < 30; attempts++ {
-		for key := range notAvailable {
-			foundRecords, err := n.lookupSRVRecords(ctx, "", "", key.name)
-			if err != nil {
-				return err
-			}
-			for _, foundRecord := range foundRecords {
-				delete(notAvailable, recordKey{
-					name: trimName(foundRecord.Name),
-					data: foundRecord.Data,
-				})
-			}
-		}
-		if len(notAvailable) == 0 {
-			return nil
-		}
-		time.Sleep(2 * time.Second)
-	}
-	return markDNSOperationError(
-		errors.Newf("waiting for DNS records to become available: %d out of %d records not available",
-			len(notAvailable), len(records)),
-	)
 }
 
 // markDNSOperationError should be used to mark any external DNS API or Google
