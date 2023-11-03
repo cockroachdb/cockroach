@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"reflect"
 	"testing"
 	"time"
 
@@ -325,4 +326,97 @@ func TestTransientClusterMultitenant(t *testing.T) {
 		log.Infof(ctx, "test succeeded")
 		t.Log("test succeeded")
 	})
+}
+
+// Ensure that demo clusters are started with privileged tenants.
+func TestTenantCapabilities(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// This test is too slow to complete under the race detector, sometimes.
+	skip.UnderRace(t)
+
+	defer TestingForceRandomizeDemoPorts()()
+
+	demoCtx := newDemoCtx()
+	demoCtx.NumNodes = 1
+	demoCtx.Multitenant = true
+
+	securityassets.ResetLoader()
+	certsDir := t.TempDir()
+
+	ctx := context.Background()
+
+	// Set up the transient cluster.
+	c := transientCluster{
+		demoCtx:           demoCtx,
+		stopper:           stop.NewStopper(),
+		demoDir:           certsDir,
+		stickyVFSRegistry: server.NewStickyVFSRegistry(),
+		infoLog:           log.Infof,
+		warnLog:           log.Warningf,
+		shoutLog:          log.Ops.Shoutf,
+	}
+	// Stop the cluster when the test exits, including when it fails.
+	// This also calls the Stop() method on the stopper, and thus
+	// cancels everything controlled by the stopper.
+	defer c.Close(ctx)
+
+	require.NoError(t, c.generateCerts(ctx, certsDir))
+	require.NoError(t, c.Start(ctx))
+
+	// Also ensure the context gets canceled when the stopper
+	// terminates above.
+	var cancel func()
+	ctx, cancel = c.stopper.WithCancelOnQuiesce(ctx)
+	defer cancel()
+
+	url, err := c.getNetworkURLForServer(ctx, 0, false /* includeAppName */, forSystemTenant)
+	require.NoError(t, err)
+	sqlConnCtx := clisqlclient.Context{}
+	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.ToPQ().String())
+	defer func() {
+		require.NoError(t, conn.Close())
+	}()
+
+	sqlExecCtx := clisqlexec.Context{}
+	cols, rows, err := sqlExecCtx.RunQuery(
+		context.Background(),
+		conn,
+		clisqlclient.MakeQuery(`SHOW TENANT $1 WITH CAPABILITIES`, demoTenantName),
+		false, /* showMoreChars */
+	)
+	require.NoError(t, err)
+
+	expectedCols := []string{
+		"id",
+		"name",
+		"data_state",
+		"service_mode",
+		"capability_name",
+		"capability_value",
+	}
+	if !reflect.DeepEqual(expectedCols, cols) {
+		t.Fatalf("expected:\n%v\ngot:\n%v", expectedCols, cols)
+	}
+
+	expectedRows := [][]string{
+		{`2`, `demoapp`, `ready`, `shared`, `can_admin_relocate_range`, `true`},
+		{`2`, `demoapp`, `ready`, `shared`, `can_admin_scatter`, `true`},
+		{`2`, `demoapp`, `ready`, `shared`, `can_admin_split`, `true`},
+		{`2`, `demoapp`, `ready`, `shared`, `can_admin_unsplit`, `true`},
+		{`2`, `demoapp`, `ready`, `shared`, `can_check_consistency`, `true`},
+		{`2`, `demoapp`, `ready`, `shared`, `can_debug_process`, `true`},
+		{`2`, `demoapp`, `ready`, `shared`, `can_use_nodelocal_storage`, `true`},
+		{`2`, `demoapp`, `ready`, `shared`, `can_view_node_info`, `true`},
+		{`2`, `demoapp`, `ready`, `shared`, `can_view_tsdb_metrics`, `true`},
+		{`2`, `demoapp`, `ready`, `shared`, `exempt_from_rate_limiting`, `true`},
+		{`2`, `demoapp`, `ready`, `shared`, `span_config_bounds`, `{}`},
+	}
+	if !reflect.DeepEqual(expectedRows, rows) {
+		t.Fatalf("expected:\n%v\ngot:\n%v", expectedRows, rows)
+	}
+
+	log.Infof(ctx, "test succeeded")
+	t.Log("test succeeded")
 }
