@@ -69,7 +69,7 @@ func TestTxnWithStepping(t *testing.T) {
 				return errors.AssertionFailedf("expected no value, got %v", got)
 			}
 		}
-		if err := txn.KV().Step(ctx); err != nil {
+		if err := txn.KV().Step(ctx, true /* allowReadTimestampStep */); err != nil {
 			return err
 		}
 		{
