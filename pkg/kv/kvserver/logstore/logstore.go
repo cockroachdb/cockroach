@@ -360,8 +360,13 @@ var nonBlockingSyncWaiterCallbackPool = sync.Pool{
 	New: func() interface{} { return new(nonBlockingSyncWaiterCallback) },
 }
 
-var valPool = sync.Pool{
-	New: func() interface{} { return &roachpb.Value{} },
+var logAppendPool = sync.Pool{
+	New: func() interface{} {
+		return new(struct {
+			roachpb.Value
+			enginepb.MVCCStats
+		})
+	},
 }
 
 // logAppend adds the given entries to the raft log. Takes the previous log
@@ -382,13 +387,21 @@ func logAppend(
 	if len(entries) == 0 {
 		return prev, nil
 	}
-	var diff enginepb.MVCCStats
-	opts := storage.MVCCWriteOptions{
-		Stats: &diff,
-	}
-	value := valPool.Get().(*roachpb.Value)
+
+	// NB: the Value and MVCCStats lifetime is this function, so we coalesce their
+	// allocation into the same pool.
+	// TODO(pavelkalinnikov): figure out why they escape into the heap, and find a
+	// way to avoid the pool.
+	v := logAppendPool.Get().(*struct {
+		roachpb.Value
+		enginepb.MVCCStats
+	})
+	defer logAppendPool.Put(v)
+	value, diff := &v.Value, &v.MVCCStats
 	value.RawBytes = value.RawBytes[:0]
-	defer valPool.Put(value)
+	diff.Reset()
+
+	opts := storage.MVCCWriteOptions{Stats: diff}
 	for i := range entries {
 		ent := &entries[i]
 		key := keys.RaftLogKeyFromPrefix(raftLogPrefix, kvpb.RaftIndex(ent.Index))
