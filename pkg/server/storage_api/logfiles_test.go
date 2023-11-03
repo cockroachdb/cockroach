@@ -80,6 +80,9 @@ func TestStatusLocalLogs(t *testing.T) {
 	time.Sleep(sleepBuffer)
 	timestampEWI := timeutil.Now().UnixNano()
 
+	// Ensure all log lines above are written to disk.
+	log.FlushFiles()
+
 	var wrapper serverpb.LogFilesListResponse
 	if err := srvtestutils.GetStatusJSONProto(ts, "logfiles/local", &wrapper); err != nil {
 		t.Fatal(err)
@@ -152,7 +155,7 @@ func TestStatusLocalLogs(t *testing.T) {
 		if testCase.StartTimestamp > 0 {
 			fmt.Fprintf(&url, "&start_time=%d", testCase.StartTimestamp)
 		}
-		if testCase.StartTimestamp > 0 {
+		if testCase.EndTimestamp > 0 {
 			fmt.Fprintf(&url, "&end_time=%d", testCase.EndTimestamp)
 		}
 		if len(testCase.Pattern) > 0 {
