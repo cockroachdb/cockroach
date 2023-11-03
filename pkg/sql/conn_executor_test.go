@@ -425,23 +425,36 @@ func TestHalloweenProblemAvoidance(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
-	if _, err := db.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (x FLOAT);
-`); err != nil {
-		t.Fatal(err)
+	for _, s := range []string{
+		`SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true;`,
+		`SET CLUSTER SETTING sql.txn.snapshot_isolation_syntax.enabled = true;`,
+		`CREATE DATABASE t;`,
+		`CREATE TABLE t.test (x FLOAT);`,
+	} {
+		if _, err := db.Exec(s); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	if _, err := db.Exec(
-		`INSERT INTO t.test(x) SELECT generate_series(1, $1)::FLOAT`,
-		numRows); err != nil {
-		t.Fatal(err)
-	}
-
-	// Now slightly modify the values in duplicate rows.
-	// We choose a float +0.1 to ensure that none of the derived
-	// values become duplicate of already-present values.
-	if _, err := db.Exec(`
+	for _, isoLevel := range []tree.IsolationLevel{
+		tree.ReadCommittedIsolation,
+		tree.SnapshotIsolation,
+		tree.SerializableIsolation,
+	} {
+		t.Run(isoLevel.String(), func(t *testing.T) {
+			if _, err := db.Exec("DELETE FROM t.test"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.Exec(
+				`INSERT INTO t.test(x) SELECT generate_series(1, $1)::FLOAT`,
+				numRows); err != nil {
+				t.Fatal(err)
+			}
+			// Now slightly modify the values in duplicate rows.
+			// We choose a float +0.1 to ensure that none of the derived
+			// values become duplicate of already-present values.
+			q := fmt.Sprintf(`
+BEGIN TRANSACTION ISOLATION LEVEL %s;
 INSERT INTO t.test(x)
     -- the if ensures that no row is processed two times.
 SELECT IF(x::INT::FLOAT = x,
@@ -451,20 +464,23 @@ SELECT IF(x::INT::FLOAT = x,
        + 0.1
   FROM t.test
   -- the function used here is implemented by using the internal executor.
-  WHERE has_table_privilege('root', ((x+.1)/(x+1) + 1)::int::oid, 'INSERT') IS NULL
-`); err != nil {
-		t.Fatal(err)
-	}
+  WHERE has_table_privilege('root', ((x+.1)/(x+1) + 1)::int::oid, 'INSERT') IS NULL;
+COMMIT;`, isoLevel.String())
+			if _, err := db.Exec(q); err != nil {
+				t.Fatal(err)
+			}
 
-	// Finally verify that no rows has been operated on more than once.
-	row := db.QueryRow(`SELECT count(DISTINCT x) FROM t.test`)
-	var cnt int
-	if err := row.Scan(&cnt); err != nil {
-		t.Fatal(err)
-	}
+			// Finally verify that no rows has been operated on more than once.
+			row := db.QueryRow(`SELECT count(DISTINCT x) FROM t.test`)
+			var cnt int
+			if err := row.Scan(&cnt); err != nil {
+				t.Fatal(err)
+			}
 
-	if cnt != 2*numRows {
-		t.Fatalf("expected %d rows in final table, got %d", 2*numRows, cnt)
+			if cnt != 2*numRows {
+				t.Fatalf("expected %d rows in final table, got %d", 2*numRows, cnt)
+			}
+		})
 	}
 }
 
