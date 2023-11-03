@@ -22,13 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -344,56 +342,6 @@ func registerImportTPCH(r registry.Registry) {
 			},
 		})
 	}
-}
-
-func successfulImportStep(warehouses, nodeID int) versionStep {
-	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		u.c.Run(ctx, u.c.Node(nodeID), tpccImportCmd(warehouses))
-	}
-}
-
-func runImportMixedVersion(
-	ctx context.Context, t test.Test, c cluster.Cluster, warehouses int, predVersion string,
-) {
-	roachNodes := c.All()
-
-	t.Status("starting csv servers")
-
-	predecessorVersion := clusterupgrade.MustParseVersion(predVersion)
-	u := newVersionUpgradeTest(c,
-		uploadAndStartFromCheckpointFixture(roachNodes, predecessorVersion),
-		waitForUpgradeStep(roachNodes),
-		preventAutoUpgradeStep(1),
-
-		// Upgrade some of the nodes.
-		binaryUpgradeStep(c.Node(1), clusterupgrade.CurrentVersion()),
-		binaryUpgradeStep(c.Node(2), clusterupgrade.CurrentVersion()),
-
-		successfulImportStep(warehouses, 1 /* nodeID */),
-	)
-	u.run(ctx, t)
-}
-
-func registerImportMixedVersion(r registry.Registry) {
-	r.Add(registry.TestSpec{
-		Name:  "import/mixed-versions",
-		Owner: registry.OwnerSQLQueries,
-		// Mixed-version support was added in 21.1.
-		Cluster:          r.MakeClusterSpec(4),
-		CompatibleClouds: registry.AllExceptAWS,
-		Suites:           registry.Suites(registry.Nightly),
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			predV, err := release.LatestPredecessor(t.BuildVersion())
-			if err != nil {
-				t.Fatal(err)
-			}
-			warehouses := 100
-			if c.IsLocal() {
-				warehouses = 10
-			}
-			runImportMixedVersion(ctx, t, c, warehouses, predV)
-		},
-	})
 }
 
 func registerImportDecommissioned(r registry.Registry) {
