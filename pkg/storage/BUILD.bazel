@@ -173,6 +173,7 @@ go_test(
         "//pkg/util",
         "//pkg/util/admission",
         "//pkg/util/encoding",
+        "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/iterutil",
         "//pkg/util/leaktest",

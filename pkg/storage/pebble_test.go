@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math/rand"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1519,4 +1521,75 @@ func TestConvertFilesToBatchAndCommit(t *testing.T) {
 		return state
 	}
 	require.Equal(t, outputState(engs[ingestEngine]), outputState(engs[batchEngine]))
+}
+
+func TestCompactionConcurrencyEnvVars(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	maxProcsBefore := runtime.GOMAXPROCS(0)
+	defer runtime.GOMAXPROCS(maxProcsBefore)
+
+	type testCase struct {
+		maxProcs             int
+		rocksDBConcurrency   string
+		cockroachConcurrency string
+		want                 int
+	}
+	cases := []testCase{
+		// Defaults
+		{32, "", "", 3},
+		{4, "", "", 3},
+		{3, "", "", 2},
+		{2, "", "", 1},
+		{1, "", "", 1},
+		// Old COCKROACH_ROCKSDB_CONCURRENCY env var is set. The user-provided
+		// value includes 1 slot for flushes, so resulting compaction
+		// concurrency is n-1.
+		{32, "4", "", 3},
+		{4, "4", "", 3},
+		{2, "4", "", 3},
+		{1, "4", "", 3},
+		{32, "8", "", 7},
+		{4, "8", "", 7},
+		{2, "8", "", 7},
+		{1, "8", "", 7},
+		// New COCKROACH_CONCURRENT_COMPACTIONS env var is set.
+		{32, "", "4", 4},
+		{4, "", "4", 4},
+		{2, "", "4", 4},
+		{1, "", "4", 4},
+		{32, "", "8", 8},
+		{4, "", "8", 8},
+		{2, "", "8", 8},
+		{1, "", "8", 8},
+		// Both settings are set; COCKROACH_CONCURRENT_COMPACTIONS supersedes
+		// COCKROACH_ROCKSDB_CONCURRENCY.
+		{32, "8", "4", 4},
+		{4, "1", "4", 4},
+		{2, "2", "4", 4},
+		{1, "5", "4", 4},
+		{32, "1", "8", 8},
+		{4, "2", "8", 8},
+		{2, "4", "8", 8},
+		{1, "1", "8", 8},
+	}
+	for _, tc := range cases {
+		t.Run(fmt.Sprintf("GOMAXPROCS=%d,old=%q,new=%q", tc.maxProcs, tc.rocksDBConcurrency, tc.cockroachConcurrency),
+			func(t *testing.T) {
+				runtime.GOMAXPROCS(tc.maxProcs)
+
+				if tc.rocksDBConcurrency == "" {
+					defer envutil.TestUnsetEnv(t, "COCKROACH_ROCKSDB_CONCURRENCY")()
+				} else {
+					defer envutil.TestSetEnv(t, "COCKROACH_ROCKSDB_CONCURRENCY", tc.rocksDBConcurrency)()
+				}
+				if tc.cockroachConcurrency == "" {
+					defer envutil.TestUnsetEnv(t, "COCKROACH_CONCURRENT_COMPACTIONS")()
+				} else {
+					defer envutil.TestSetEnv(t, "COCKROACH_CONCURRENT_COMPACTIONS", tc.cockroachConcurrency)()
+				}
+				require.Equal(t, tc.want, getMaxConcurrentCompactions())
+			})
+	}
 }
