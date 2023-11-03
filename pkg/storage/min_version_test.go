@@ -130,14 +130,14 @@ func TestMinVersion_IsNotEncrypted(t *testing.T) {
 		EncryptionAtRest(nil))
 	require.NoError(t, err)
 	defer p.Close()
-	require.NoError(t, p.SetMinVersion(st.Version.BinaryVersion()))
+	require.NoError(t, p.SetMinVersion(st.Version.LatestVersion()))
 
 	// Reading the file directly through the unencrypted MemFS should
 	// succeed and yield the correct version.
 	v, ok, err := getMinVersion(fs, "")
 	require.NoError(t, err)
 	require.True(t, ok)
-	require.Equal(t, st.Version.BinaryVersion(), v)
+	require.Equal(t, st.Version.LatestVersion(), v)
 }
 
 func fauxNewEncryptedEnvFunc(

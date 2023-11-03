@@ -465,7 +465,7 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// We're going to be migrating from the BinaryMinSupportedVersion to imaginary future versions.
+	// We're going to be migrating from the MinSupportedVersion to imaginary future versions.
 	current := clusterversion.TestingBinaryMinSupportedVersion
 	versions := []roachpb.Version{current}
 	for i := int32(1); i <= 4; i++ {

@@ -69,10 +69,10 @@ func TestBootstrapCluster(t *testing.T) {
 	defer e.Close()
 
 	initCfg := initServerCfg{
-		binaryMinSupportedVersion: clusterversion.TestingBinaryMinSupportedVersion,
-		binaryVersion:             clusterversion.TestingBinaryVersion,
-		defaultSystemZoneConfig:   *zonepb.DefaultZoneConfigRef(),
-		defaultZoneConfig:         *zonepb.DefaultSystemZoneConfigRef(),
+		minSupportedVersion:     clusterversion.TestingBinaryMinSupportedVersion,
+		latestVersion:           clusterversion.TestingBinaryVersion,
+		defaultSystemZoneConfig: *zonepb.DefaultZoneConfigRef(),
+		defaultZoneConfig:       *zonepb.DefaultSystemZoneConfigRef(),
 	}
 	if _, err := bootstrapCluster(ctx, []storage.Engine{e}, initCfg); err != nil {
 		t.Fatal(err)
@@ -252,10 +252,10 @@ func TestCorruptedClusterID(t *testing.T) {
 
 	cv := clusterversion.TestingClusterVersion
 	initCfg := initServerCfg{
-		binaryMinSupportedVersion: clusterversion.TestingBinaryMinSupportedVersion,
-		binaryVersion:             clusterversion.TestingBinaryVersion,
-		defaultSystemZoneConfig:   *zonepb.DefaultZoneConfigRef(),
-		defaultZoneConfig:         *zonepb.DefaultSystemZoneConfigRef(),
+		minSupportedVersion:     clusterversion.TestingBinaryMinSupportedVersion,
+		latestVersion:           clusterversion.TestingBinaryVersion,
+		defaultSystemZoneConfig: *zonepb.DefaultZoneConfigRef(),
+		defaultZoneConfig:       *zonepb.DefaultSystemZoneConfigRef(),
 	}
 	if _, err := bootstrapCluster(ctx, []storage.Engine{e}, initCfg); err != nil {
 		t.Fatal(err)

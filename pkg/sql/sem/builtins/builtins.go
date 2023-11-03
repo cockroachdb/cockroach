@@ -4937,7 +4937,7 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				v := evalCtx.Settings.Version.BinaryVersion().String()
+				v := evalCtx.Settings.Version.LatestVersion().String()
 				return tree.NewDString(v), nil
 			},
 			Info:       "Returns the version of CockroachDB this node is running.",

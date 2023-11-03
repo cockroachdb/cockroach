@@ -8455,7 +8455,7 @@ func TestRestoringAcrossVersions(t *testing.T) {
 		// Bump the version down to outside our MinBinarySupportedVersion, and write
 		// it back out. This makes it ineligible for restore because of our restore
 		// version policy.
-		minSupportedVersion := tc.ApplicationLayer(0).ClusterSettings().Version.BinaryMinSupportedVersion()
+		minSupportedVersion := tc.ApplicationLayer(0).ClusterSettings().Version.MinSupportedVersion()
 		minSupportedVersion.Major -= 1
 		setManifestClusterVersion(minSupportedVersion)
 
@@ -8469,8 +8469,8 @@ func TestRestoringAcrossVersions(t *testing.T) {
 		// Bump the version down to the min supported binary version, and write it
 		// back out. This makes it eligible for restore because of our restore
 		// version policy.
-		minBinaryVersion := tc.ApplicationLayer(0).ClusterSettings().Version.BinaryMinSupportedVersion()
-		setManifestClusterVersion(minBinaryVersion)
+		minSupportedVersion := tc.ApplicationLayer(0).ClusterSettings().Version.MinSupportedVersion()
+		setManifestClusterVersion(minSupportedVersion)
 		sqlDB.Exec(t, `RESTORE DATABASE r1 FROM 'nodelocal://1/cross_version'`)
 		sqlDB.Exec(t, `DROP DATABASE r1`)
 	})

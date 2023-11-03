@@ -44,7 +44,7 @@ the specific fields should not be considered too much. They do
 not relate directly to the executable version!
 
 Instead, each `cockroach` executable has a range of supported
-cluster versions (in the code: `minBinaryVersion` ... `binaryVersion`).
+cluster versions (in the code: `minSupportedVersion` ... `latestVersion`).
 If a `cockroach` command observes a cluster version earlier than its
 minimum supported version, or later than its maximum supported
 version, it terminates.

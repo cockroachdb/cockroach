@@ -462,7 +462,7 @@ func bootstrapCluster(
 	}
 
 	// We use our binary version to bootstrap the cluster.
-	bootstrapVersion := clusterversion.ClusterVersion{Version: initCfg.binaryVersion}
+	bootstrapVersion := clusterversion.ClusterVersion{Version: initCfg.latestVersion}
 	if err := kvstorage.WriteClusterVersionToEngines(ctx, engines, bootstrapVersion); err != nil {
 		return nil, err
 	}
@@ -493,20 +493,20 @@ func bootstrapCluster(
 				Codec:                   keys.SystemSQLCodec,
 			}
 			for _, v := range bootstrap.VersionsWithInitialValues() {
-				if initCfg.binaryVersion == clusterversion.ByKey(v) {
+				if initCfg.latestVersion == clusterversion.ByKey(v) {
 					initialValuesOpts.OverrideKey = v
 					break
 				}
 			}
 			if initialValuesOpts.OverrideKey == 0 {
-				if initCfg.binaryVersion.Less(clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)) {
+				if initCfg.latestVersion.Less(clusterversion.MinSupported.Version()) {
 					// As an exception, we tolerate tests creating older versions; we just
 					// use the minimum supported version.
 					// TODO(radu): should we make sure there are no upgrades for versions
 					// earlier than this still registered?
-					initialValuesOpts.OverrideKey = clusterversion.BinaryMinSupportedVersionKey
+					initialValuesOpts.OverrideKey = clusterversion.MinSupported
 				} else {
-					return nil, errors.AssertionFailedf("cannot bootstrap at version %s", initCfg.binaryVersion)
+					return nil, errors.AssertionFailedf("cannot bootstrap at version %s", initCfg.latestVersion)
 				}
 			}
 
@@ -536,7 +536,7 @@ func bootstrapCluster(
 
 	// Note that we wrote initcfg.binaryVersion, that will always be the version
 	// that inspectEngines determines.
-	return inspectEngines(ctx, engines, initCfg.binaryVersion, initCfg.binaryMinSupportedVersion)
+	return inspectEngines(ctx, engines, initCfg.latestVersion, initCfg.minSupportedVersion)
 }
 
 // NewNode returns a new instance of Node.
@@ -634,7 +634,7 @@ func (n *Node) start(
 		Locality:        locality,
 		LocalityAddress: localityAddress,
 		ClusterName:     clusterName,
-		ServerVersion:   n.storeCfg.Settings.Version.BinaryVersion(),
+		ServerVersion:   n.storeCfg.Settings.Version.LatestVersion(),
 		BuildTag:        build.GetInfo().Tag,
 		StartedAt:       n.startedAt,
 		HTTPAddress:     util.MakeUnresolvedAddr(httpAddr.Network(), httpAddr.String()),

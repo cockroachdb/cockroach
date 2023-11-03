@@ -118,8 +118,8 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 		slinstance.DefaultHeartBeat.Override(ctx, &s.SV, heartbeatOverride)
 	}
 
-	// Initialize the version to the BinaryMinSupportedVersion so that
-	// we can perform upgrades.
+	// Initialize the version to the MinSupportedVersion so that we can perform
+	// upgrades.
 	settings := cluster.MakeTestingClusterSettingsWithVersions(bv, msv, false /* initializeVersion */)
 	disableBackgroundTasks(settings)
 	require.NoError(t, clusterversion.Initialize(ctx, msv, &settings.SV))
