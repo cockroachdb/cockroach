@@ -62,11 +62,11 @@ func TestMakeMetricsAndRegisterOnVersionChangeCallback(t *testing.T) {
 }
 
 func BenchmarkClusterVersionSettingIsActive(b *testing.B) {
-	s := cluster.MakeTestingClusterSettingsWithVersions(clusterversion.TestingBinaryVersion, clusterversion.TestingBinaryMinSupportedVersion, true)
+	s := cluster.MakeTestingClusterSettings()
 	ctx := context.Background()
 	active := true
 	for i := 0; i < b.N; i++ {
-		active = s.Version.IsActive(ctx, clusterversion.VCurrent_Start) && active
+		active = s.Version.IsActive(ctx, clusterversion.Latest) && active
 	}
 	require.True(b, active)
 }
