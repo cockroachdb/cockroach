@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -646,6 +647,14 @@ func (b *inOrderResultsBuffer) spill(
 	//
 	// Iterate in reverse order so that the results with higher priority values
 	// are spilled first (this could matter if the query has a LIMIT).
+	defer func(origAtLeastBytes int64, origSpilled int) {
+		if b.numSpilled != origSpilled {
+			log.VEventf(ctx, 2,
+				"spilled %d results to release %d bytes (asked for %d bytes)",
+				b.numSpilled-origSpilled, origAtLeastBytes-atLeastBytes, origAtLeastBytes,
+			)
+		}
+	}(atLeastBytes, b.numSpilled)
 	for idx := len(b.buffered) - 1; idx >= 0; idx-- {
 		if r := &b.buffered[idx]; !r.onDisk && r.Position > spillingPriority {
 			diskResultID, err := b.diskBuffer.Serialize(ctx, &b.buffered[idx].Result)
