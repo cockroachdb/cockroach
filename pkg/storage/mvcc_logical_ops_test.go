@@ -37,36 +37,36 @@ func TestMVCCOpLogWriter(t *testing.T) {
 	defer ol.Close()
 
 	// Write a value and an intent.
-	if err := MVCCPut(ctx, ol, testKey1, hlc.Timestamp{Logical: 1}, value1, MVCCWriteOptions{}); err != nil {
+	if _, err := MVCCPut(ctx, ol, testKey1, hlc.Timestamp{Logical: 1}, value1, MVCCWriteOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	txn1ts := makeTxn(*txn1, hlc.Timestamp{Logical: 2})
-	if err := MVCCPut(ctx, ol, testKey1, txn1ts.ReadTimestamp, value2, MVCCWriteOptions{Txn: txn1ts}); err != nil {
+	if _, err := MVCCPut(ctx, ol, testKey1, txn1ts.ReadTimestamp, value2, MVCCWriteOptions{Txn: txn1ts}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Write a value and an intent on local keys.
 	localKey := keys.MakeRangeIDPrefix(1)
-	if err := MVCCPut(ctx, ol, localKey, hlc.Timestamp{Logical: 1}, value1, MVCCWriteOptions{}); err != nil {
+	if _, err := MVCCPut(ctx, ol, localKey, hlc.Timestamp{Logical: 1}, value1, MVCCWriteOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(ctx, ol, localKey, txn1ts.ReadTimestamp, value2, MVCCWriteOptions{Txn: txn1ts}); err != nil {
+	if _, err := MVCCPut(ctx, ol, localKey, txn1ts.ReadTimestamp, value2, MVCCWriteOptions{Txn: txn1ts}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Update the intents and write another.
 	txn1ts.Sequence++
 	txn1ts.WriteTimestamp = hlc.Timestamp{Logical: 3}
-	if err := MVCCPut(ctx, ol, testKey1, txn1ts.ReadTimestamp, value2, MVCCWriteOptions{Txn: txn1ts}); err != nil {
+	if _, err := MVCCPut(ctx, ol, testKey1, txn1ts.ReadTimestamp, value2, MVCCWriteOptions{Txn: txn1ts}); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(ctx, ol, localKey, txn1ts.ReadTimestamp, value2, MVCCWriteOptions{Txn: txn1ts}); err != nil {
+	if _, err := MVCCPut(ctx, ol, localKey, txn1ts.ReadTimestamp, value2, MVCCWriteOptions{Txn: txn1ts}); err != nil {
 		t.Fatal(err)
 	}
 	// Set the txn timestamp to a larger value than the intent.
 	txn1LargerTS := makeTxn(*txn1, hlc.Timestamp{Logical: 4})
 	txn1LargerTS.WriteTimestamp = hlc.Timestamp{Logical: 4}
-	if err := MVCCPut(ctx, ol, testKey2, txn1LargerTS.ReadTimestamp, value3, MVCCWriteOptions{Txn: txn1LargerTS}); err != nil {
+	if _, err := MVCCPut(ctx, ol, testKey2, txn1LargerTS.ReadTimestamp, value3, MVCCWriteOptions{Txn: txn1LargerTS}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -91,7 +91,7 @@ func TestMVCCOpLogWriter(t *testing.T) {
 	// Write another intent, push it, then abort it.
 	txn2 := makeTxn(*txn2, hlc.Timestamp{Logical: 5})
 	txn2.IsoLevel = isolation.ReadCommitted
-	if err := MVCCPut(ctx, ol, testKey3, txn2.ReadTimestamp, value4, MVCCWriteOptions{Txn: txn2}); err != nil {
+	if _, err := MVCCPut(ctx, ol, testKey3, txn2.ReadTimestamp, value4, MVCCWriteOptions{Txn: txn2}); err != nil {
 		t.Fatal(err)
 	}
 	txn2Pushed := *txn2
@@ -112,7 +112,7 @@ func TestMVCCOpLogWriter(t *testing.T) {
 	}
 
 	// Write an inline value. This should be ignored by the log.
-	if err := MVCCPut(ctx, ol, testKey6, hlc.Timestamp{}, value6, MVCCWriteOptions{}); err != nil {
+	if _, err := MVCCPut(ctx, ol, testKey6, hlc.Timestamp{}, value6, MVCCWriteOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
