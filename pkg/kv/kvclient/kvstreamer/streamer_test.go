@@ -679,7 +679,7 @@ ALTER TABLE t SPLIT AT SELECT generate_series(1, 30000, 3000);
 
 	// The meat of the test - run the query that performs an index join to fetch
 	// all rows via the streamer, both in the OutOfOrder and InOrder modes. Each
-	// time assert that the number of BatchRequests issued is in low hundreds
+	// time assert that the number of BatchRequests issued is in double digits
 	// (if not, then the streamer was extremely suboptimal).
 	kvGRPCCallsRegex := regexp.MustCompile(`KV gRPC calls: (\d+,)`)
 	for inOrder := range []bool{false, true} {
@@ -695,7 +695,7 @@ ALTER TABLE t SPLIT AT SELECT generate_series(1, 30000, 3000);
 					break
 				}
 			}
-			require.Greater(t, 300, gRPCCalls, rows)
+			require.Greater(t, 100, gRPCCalls, rows)
 		}
 	}
 }
