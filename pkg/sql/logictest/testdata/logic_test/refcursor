@@ -636,10 +636,10 @@ SELECT max(y) FROM t;
 
 # Any-type-matching window functions are allowed.
 query TTTT rowsort
-SELECT lag(x) OVER w, lead(x) OVER w, first_value(x) OVER w, last_value(x) OVER w FROM t WINDOW w AS ();
+SELECT lag(x) OVER w, lead(x) OVER w, first_value(x) OVER w, last_value(x) OVER w FROM t WINDOW w AS (ORDER BY x);
 ----
-NULL  baz   foo  baz
-foo   NULL  foo  baz
+NULL  foo   baz  baz
+baz   NULL  baz  foo
 
 # TODO(#113651): Window functions should work with REFCURSOR[].
 statement error pgcode 42883 pq: unknown signature
