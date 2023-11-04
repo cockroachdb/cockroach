@@ -67,6 +67,11 @@ func AlterPrimaryKeyCorrectZoneConfigTest(
 			}
 
 			runCheck := false
+			sql.SecondaryTenantsMultiRegionAbstractionsEnabled.Override(
+				ctx,
+				&params.Settings.SV,
+				true,
+			)
 			params.Knobs = base.TestingKnobs{
 				SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 					BackfillChunkSize: chunkSize,
