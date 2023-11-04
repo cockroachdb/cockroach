@@ -13,12 +13,10 @@
 package team
 
 import (
+	_ "embed"
 	"io"
-	"os"
-	"path/filepath"
+	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/build/bazel"
-	"github.com/cockroachdb/cockroach/pkg/internal/reporoot"
 	"github.com/cockroachdb/errors"
 	"gopkg.in/yaml.v2"
 )
@@ -83,28 +81,14 @@ func (m Map) GetAliasesForPurpose(alias Alias, purpose Purpose) ([]Alias, bool) 
 	return sl, true
 }
 
+//go:generate cp ../../../TEAMS.yaml TEAMS.yaml
+
+//go:embed TEAMS.yaml
+var teamsYaml string
+
 // DefaultLoadTeams loads teams from the repo root's TEAMS.yaml.
 func DefaultLoadTeams() (Map, error) {
-	var path string
-	if os.Getenv("BAZEL_TEST") != "" {
-		runfiles, err := bazel.RunfilesPath()
-		if err != nil {
-			return nil, err
-		}
-		path = filepath.Join(runfiles, "TEAMS.yaml")
-	} else {
-		root := reporoot.GetFor(".", "TEAMS.yaml")
-		if root == "" {
-			return nil, errors.New("TEAMS.yaml not found")
-		}
-		path = filepath.Join(root, "TEAMS.yaml")
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = f.Close() }()
-	return LoadTeams(f)
+	return LoadTeams(strings.NewReader(teamsYaml))
 }
 
 // Purpose determines which alias to return for a given team via
