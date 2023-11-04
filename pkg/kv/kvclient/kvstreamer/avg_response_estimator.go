@@ -32,8 +32,9 @@ type avgResponseEstimator struct {
 const (
 	// TODO(yuzefovich): use the optimizer-driven estimates.
 	initialAvgResponseSize = 1 << 10 // 1KiB
-	// This value was determined using tpchvec/bench test on all TPC-H queries.
-	defaultAvgResponseSizeMultiple = 1.5
+	// This value was determined using tpchvec/bench test on all TPC-H queries
+	// as well as the query in TestStreamerVaryingResponseSizes.
+	defaultAvgResponseSizeMultiple = 3.0
 )
 
 // streamerAvgResponseSizeMultiple determines the multiple used when calculating
