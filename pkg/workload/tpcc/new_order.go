@@ -212,7 +212,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 	d.oEntryD = timeutil.Now()
 
 	err := crdbpgx.ExecuteTx(
-		ctx, n.mcp.Get(), n.config.txOpts,
+		ctx, n.mcp.Get(), pgx.TxOptions{},
 		func(tx pgx.Tx) error {
 			// Select the district tax rate and next available order number, bumping it.
 			var dNextOID int

@@ -87,7 +87,7 @@ func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 	olDeliveryD := timeutil.Now()
 
 	err := crdbpgx.ExecuteTx(
-		ctx, del.mcp.Get(), del.config.txOpts,
+		ctx, del.mcp.Get(), pgx.TxOptions{},
 		func(tx pgx.Tx) error {
 			// 2.7.4.2. For each district:
 			dIDoIDPairs := make(map[int]int)
