@@ -1284,7 +1284,7 @@ var varGen = map[string]sessionVar{
 			}
 			if f < 0 || f > 1 {
 				return pgerror.Newf(pgcode.InvalidParameterValue,
-					"%f is out of range for similarity_threshold")
+					"%.2f is out of range for similarity_threshold", f)
 			}
 			m.SetTrigramSimilarityThreshold(f)
 			return nil
