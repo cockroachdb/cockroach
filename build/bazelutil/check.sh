@@ -44,6 +44,7 @@ pkg/util/log/channels.go://go:generate go run gen/main.go logpb/log.proto loggin
 pkg/util/log/channels.go://go:generate go run gen/main.go logpb/log.proto severity.go severity/severity_generated.go
 pkg/util/log/sinks.go://go:generate mockgen -package=log -destination=mocks_generated_test.go --mock_names=TestingLogSink=MockLogSink . TestingLogSink
 pkg/util/timeutil/zoneinfo.go://go:generate go run gen/main.go
+pkg/internal/team/team.go://go:generate cp ../../../TEAMS.yaml TEAMS.yaml
 "
 
 EXISTING_CRDB_TEST_BUILD_CONSTRAINTS="
