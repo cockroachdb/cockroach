@@ -1,5 +1,5 @@
 statement ok
-SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true
+SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true
 
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED

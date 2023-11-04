@@ -88,7 +88,7 @@ func TestReadCommittedStmtRetry(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	codec = s.ApplicationLayer().Codec()
 
-	_, err := sqlDB.Exec(`SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true`)
+	_, err := sqlDB.Exec(`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true`)
 	require.NoError(t, err)
 
 	// Create a table with three rows. Note that k is not the primary key,
@@ -168,7 +168,7 @@ func TestReadCommittedVolatileUDF(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	_, err := sqlDB.Exec(`SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true`)
+	_, err := sqlDB.Exec(`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true`)
 	require.NoError(t, err)
 
 	_, err = sqlDB.Exec(`CREATE TABLE kv (k TEXT PRIMARY KEY, v INT) WITH (sql_stats_automatic_collection_enabled = false);`)
