@@ -97,7 +97,7 @@ func (s *stockLevel) run(ctx context.Context, wID int) (interface{}, error) {
 	}
 
 	if err := crdbpgx.ExecuteTx(
-		ctx, s.mcp.Get(), s.config.txOpts,
+		ctx, s.mcp.Get(), pgx.TxOptions{},
 		func(tx pgx.Tx) error {
 			var dNextOID int
 			if err := s.selectDNextOID.QueryRowTx(

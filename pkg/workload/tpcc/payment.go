@@ -190,7 +190,7 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
 	}
 
 	if err := crdbpgx.ExecuteTx(
-		ctx, p.mcp.Get(), p.config.txOpts,
+		ctx, p.mcp.Get(), pgx.TxOptions{},
 		func(tx pgx.Tx) error {
 			var wName, dName string
 			// Update warehouse with payment
