@@ -15,6 +15,9 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math"
+	"regexp"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -25,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -43,6 +48,7 @@ func getStreamer(
 		s.Stopper(),
 		kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), rootTxn.GetLeafTxnInputState(ctx)),
 		cluster.MakeTestingClusterSettings(),
+		nil, /* sd */
 		lock.WaitPolicy(0),
 		limitBytes,
 		acc,
@@ -95,6 +101,7 @@ func TestStreamerLimitations(t *testing.T) {
 				s.Stopper(),
 				kv.NewTxn(ctx, s.DB(), s.NodeID()),
 				cluster.MakeTestingClusterSettings(),
+				nil, /* sd */
 				lock.WaitPolicy(0),
 				math.MaxInt64, /* limitBytes */
 				nil,           /* acc */
@@ -631,5 +638,64 @@ func TestStreamerMemoryAccounting(t *testing.T) {
 			}
 			require.Equal(t, expectedUsed, acc.Used())
 		})
+	}
+}
+
+// TestStreamerVaryingResponseSizes verifies that the Streamer handles the
+// responses of vastly variable sizes reasonably well. It is a regression test
+// for #113729.
+func TestStreamerVaryingResponseSizes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStress(t, "the test is too memory intensive")
+	skip.UnderRace(t, "the test is too memory intensive")
+
+	// Start a cluster with large --max-sql-memory parameter since we'll be
+	// inserting relatively large amount of data.
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		SQLMemoryPoolSize: 1 << 30, /* 1GiB */
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	runner := sqlutils.MakeSQLRunner(db)
+	// Create a table with 10 ranges, with 3k rows in each. Within each range,
+	// first 1k rows are relatively small, then next 1k rows are medium, and
+	// the last 1k rows are large.
+	runner.Exec(t, `
+CREATE TABLE t (
+	k INT PRIMARY KEY,
+	v STRING,
+	blob STRING,
+	INDEX t_v_idx (v ASC)
+);
+
+INSERT INTO t SELECT 3000 * (i // 1000) + i % 1000, '1', repeat('a', 600 + i % 200) FROM generate_series(1, 10000) AS g(i);
+INSERT INTO t SELECT 3000 * (i // 1000) + i % 1000 + 1000, '1', repeat('a', 3000 + i % 1000) FROM generate_series(1, 10000) AS g(i);
+INSERT INTO t SELECT 3000 * (i // 1000) + i % 1000 + 2000, '1', repeat('a', 20000 + i) FROM generate_series(1, 10000) AS g(i);
+
+ALTER TABLE t SPLIT AT SELECT generate_series(1, 30000, 3000);
+`)
+
+	// The meat of the test - run the query that performs an index join to fetch
+	// all rows via the streamer, both in the OutOfOrder and InOrder modes. Each
+	// time assert that the number of BatchRequests issued is in low hundreds
+	// (if not, then the streamer was extremely suboptimal).
+	kvGRPCCallsRegex := regexp.MustCompile(`KV gRPC calls: (\d+,)`)
+	for inOrder := range []bool{false, true} {
+		runner.Exec(t, `SET streamer_always_maintain_ordering = $1;`, inOrder)
+		for i := 0; i < 2; i++ {
+			var gRPCCalls int
+			var err error
+			rows := runner.QueryStr(t, `EXPLAIN ANALYZE SELECT length(blob) FROM t@t_v_idx WHERE v = '1';`)
+			for _, row := range rows {
+				if matches := kvGRPCCallsRegex.FindStringSubmatch(row[0]); len(matches) > 0 {
+					gRPCCalls, err = strconv.Atoi(strings.ReplaceAll(matches[1], ",", ""))
+					require.NoError(t, err)
+					break
+				}
+			}
+			require.Greater(t, 300, gRPCCalls, rows)
+		}
 	}
 }
