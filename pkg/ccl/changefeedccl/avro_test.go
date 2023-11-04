@@ -464,6 +464,7 @@ func TestAvroSchema(t *testing.T) {
 			`INTERVAL`:          `["null","string"]`,
 			`JSONB`:             `["null","string"]`,
 			`PG_LSN`:            `["null","string"]`,
+			`REFCURSOR`:         `["null","string"]`,
 			`STRING`:            `["null","string"]`,
 			`STRING COLLATE fr`: `["null","string"]`,
 			`TIME`:              `["null",{"type":"long","logicalType":"time-micros"}]`,

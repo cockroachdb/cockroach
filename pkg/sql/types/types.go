@@ -541,6 +541,7 @@ var (
 		Uuid,
 		INet,
 		PGLSN,
+		RefCursor,
 		Time,
 		TimeTZ,
 		Jsonb,

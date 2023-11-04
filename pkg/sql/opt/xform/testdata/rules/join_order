@@ -3456,3 +3456,30 @@ inner-join (hash)
  │         └── columns: x:1!null y:2!null
  └── filters
       └── x:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+
+# Regression test for #113632 - inferring an equality for a REFCURSOR[] column
+# should not cause an internal error.
+exec-ddl
+CREATE TABLE t113632 (k INT PRIMARY KEY, v REFCURSOR[]);
+----
+
+opt disable=(EliminateJoinUnderProjectLeft,EliminateJoinUnderProjectRight)
+SELECT * FROM t113632 t1 INNER JOIN t113632 t2 ON t1.k = t2.k;
+----
+inner-join (merge)
+ ├── columns: k:1!null v:2 k:5!null v:6
+ ├── left ordering: +1
+ ├── right ordering: +5
+ ├── key: (5)
+ ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1), (2)==(6), (6)==(2)
+ ├── scan t113632 [as=t1]
+ │    ├── columns: t1.k:1!null t1.v:2
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── ordering: +1
+ ├── scan t113632 [as=t2]
+ │    ├── columns: t2.k:5!null t2.v:6
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(6)
+ │    └── ordering: +5
+ └── filters (true)

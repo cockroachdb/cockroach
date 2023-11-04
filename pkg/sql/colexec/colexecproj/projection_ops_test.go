@@ -135,6 +135,10 @@ func TestRandomComparisons(t *testing.T) {
 			// TODO(jordan): #40354 tracks failure to compare infinite dates.
 			continue
 		}
+		if typ.Family() == types.RefCursorFamily {
+			// REFCURSOR doesn't support comparison operations.
+			continue
+		}
 		typs := []*types.T{typ, typ, types.Bool}
 		bytesFixedLength := 0
 		if typ.Family() == types.UuidFamily {
