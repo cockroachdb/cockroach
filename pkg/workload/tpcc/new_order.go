@@ -302,7 +302,8 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 					SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_%02[1]d
 					FROM stock
 					WHERE (s_i_id, s_w_id) IN (%[2]s)
-					ORDER BY s_i_id`,
+					ORDER BY s_i_id
+					FOR UPDATE`,
 					d.dID, strings.Join(stockIDs, ", "),
 				),
 			)
