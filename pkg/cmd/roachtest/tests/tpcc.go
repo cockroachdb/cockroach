@@ -97,7 +97,9 @@ type tpccOptions struct {
 	// is running, but that feels like jamming too much into the tpcc setup.
 	Start func(context.Context, test.Test, cluster.Cluster)
 	// SkipPostRunCheck, if set, skips post TPC-C run checks.
-	SkipPostRunCheck              bool
+	SkipPostRunCheck bool
+	// ExpensiveChecks, if set, runs expensive post TPC-C run checks.
+	ExpensiveChecks               bool
 	DisableDefaultScheduledBackup bool
 }
 
@@ -168,7 +170,8 @@ func setupTPCC(
 			return
 		}
 
-		require.NoError(t, WaitFor3XReplication(ctx, t, c.Conn(ctx, t.L(), crdbNodes[0])))
+		require.NoError(t, enableIsolationLevels(ctx, t, db))
+		require.NoError(t, WaitFor3XReplication(ctx, t, db))
 
 		estimatedSetupTimeStr := ""
 		if opts.EstimatedSetupTime != 0 {
@@ -289,7 +292,8 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 
 	if !opts.SkipPostRunCheck {
 		c.Run(ctx, workloadNode, fmt.Sprintf(
-			"./cockroach workload check tpcc --warehouses=%d {pgurl:1}", opts.Warehouses))
+			"./cockroach workload check tpcc --warehouses=%d --expensive-checks=%t {pgurl:1}",
+			opts.Warehouses, opts.ExpensiveChecks))
 	}
 
 	// Check no errors from metrics.
@@ -561,8 +565,29 @@ func registerTPCC(r registry.Registry) {
 			})
 		},
 	})
-	mixedHeadroomSpec := r.MakeClusterSpec(5, spec.CPU(16), spec.RandomlyUseZfs())
+	r.Add(registry.TestSpec{
+		Name:              "tpcc/headroom/isolation-level=read-committed/" + headroomSpec.String(),
+		Owner:             registry.OwnerTestEng,
+		CompatibleClouds:  registry.AllExceptAWS,
+		Suites:            registry.Suites(registry.Nightly),
+		Tags:              registry.Tags(`default`),
+		Cluster:           headroomSpec,
+		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), c.Cloud(), c.Spec())
+			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
+			t.L().Printf("computed headroom warehouses of %d\n", headroomWarehouses)
+			runTPCC(ctx, t, c, tpccOptions{
+				Warehouses:   headroomWarehouses,
+				ExtraRunArgs: "--isolation-level=read_committed",
+				Duration:     120 * time.Minute,
+				SetupType:    usingImport,
+			})
+		},
+	})
 
+	mixedHeadroomSpec := r.MakeClusterSpec(5, spec.CPU(16), spec.RandomlyUseZfs())
 	r.Add(registry.TestSpec{
 		// mixed-headroom is similar to w=headroom, but with an additional
 		// node and on a mixed version cluster which runs its long-running
@@ -585,7 +610,6 @@ func registerTPCC(r registry.Registry) {
 
 	// N.B. Multiple upgrades may require a released version < 22.2.x, which wasn't built for ARM64.
 	mixedHeadroomMultiUpgradesSpec := r.MakeClusterSpec(5, spec.CPU(16), spec.RandomlyUseZfs(), spec.Arch(vm.ArchAMD64))
-
 	r.Add(registry.TestSpec{
 		// run the same mixed-headroom test, but going back two versions
 		Name:              "tpcc/mixed-headroom/multiple-upgrades/" + mixedHeadroomMultiUpgradesSpec.String(),
@@ -600,6 +624,7 @@ func registerTPCC(r registry.Registry) {
 			runTPCCMixedHeadroom(ctx, t, c, 2)
 		},
 	})
+
 	r.Add(registry.TestSpec{
 		Name:              "tpcc-nowait/nodes=3/w=1",
 		Owner:             registry.OwnerTestEng,
@@ -610,13 +635,33 @@ func registerTPCC(r registry.Registry) {
 		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
-				Warehouses:   1,
-				Duration:     10 * time.Minute,
-				ExtraRunArgs: "--wait=false",
-				SetupType:    usingImport,
+				Warehouses:      1,
+				Duration:        10 * time.Minute,
+				ExtraRunArgs:    "--wait=false",
+				SetupType:       usingImport,
+				ExpensiveChecks: true,
 			})
 		},
 	})
+	r.Add(registry.TestSpec{
+		Name:              "tpcc-nowait/isolation-level=read-committed/nodes=3/w=1",
+		Owner:             registry.OwnerTestEng,
+		Cluster:           r.MakeClusterSpec(4, spec.CPU(16)),
+		CompatibleClouds:  registry.AllExceptAWS,
+		Suites:            registry.Suites(registry.Nightly),
+		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runTPCC(ctx, t, c, tpccOptions{
+				Warehouses:      1,
+				Duration:        10 * time.Minute,
+				ExtraRunArgs:    "--wait=false --isolation-level=read_committed",
+				SetupType:       usingImport,
+				ExpensiveChecks: true,
+			})
+		},
+	})
+
 	r.Add(registry.TestSpec{
 		Name:             "weekly/tpcc/headroom",
 		Owner:            registry.OwnerTestEng,
