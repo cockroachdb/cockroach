@@ -560,6 +560,7 @@ func NewColIndexJoin(
 			flowCtx.Stopper(),
 			txn,
 			flowCtx.EvalCtx.Settings,
+			flowCtx.EvalCtx.SessionData(),
 			spec.LockingWaitPolicy,
 			spec.LockingStrength,
 			streamerBudgetLimit,
