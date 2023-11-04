@@ -385,7 +385,8 @@ func (ibm *IndexBackfillMerger) merge(
 			}
 		}
 		return nil
-	})
+	},
+		isql.WithPriority(admissionpb.BulkNormalPri))
 
 	return err
 }
