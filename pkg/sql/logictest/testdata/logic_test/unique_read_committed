@@ -1,7 +1,7 @@
 # LogicTest: !local-mixed-23.1
 
 statement ok
-SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true
+SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true
 
 statement ok
 SET experimental_enable_unique_without_index_constraints = true

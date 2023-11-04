@@ -308,7 +308,7 @@ sql.ttl.default_delete_rate_limit	integer	0	default delete rate limit (rows per 
 sql.ttl.default_select_batch_size	integer	500	default amount of rows to select in a single query during a TTL job	application
 sql.ttl.default_select_rate_limit	integer	0	default select rate limit (rows per second) per node for each TTL job. Use 0 to signify no rate limit.	application
 sql.ttl.job.enabled	boolean	true	whether the TTL job is enabled	application
-sql.txn.read_committed_syntax.enabled	boolean	false	set to true to allow transactions to use the READ COMMITTED isolation level if specified by BEGIN/SET commands	application
+sql.txn.read_committed_isolation.enabled	boolean	false	set to true to allow transactions to use the READ COMMITTED isolation level if specified by BEGIN/SET commands	application
 sql.txn_fingerprint_id_cache.capacity	integer	100	the maximum number of txn fingerprint IDs stored	application
 storage.max_sync_duration	duration	20s	maximum duration for disk operations; any operations that take longer than this setting trigger a warning log entry or process crash	system-visible
 storage.max_sync_duration.fatal.enabled	boolean	true	if true, fatal the process when a disk operation exceeds storage.max_sync_duration	application
