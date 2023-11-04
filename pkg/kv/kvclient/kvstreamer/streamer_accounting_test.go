@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -95,6 +96,7 @@ func TestStreamerMemoryAccounting(t *testing.T) {
 			s.AppStopper(),
 			kv.NewLeafTxn(ctx, s.DB(), s.DistSQLPlanningNodeID(), leafInputState),
 			cluster.MakeTestingClusterSettings(),
+			&sessiondata.SessionData{},
 			lock.WaitPolicy(0),
 			math.MaxInt64,
 			&acc,
