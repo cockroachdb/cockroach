@@ -126,7 +126,7 @@ type NodeLevelStats struct {
 	MvccRangeKeySkippedPointsGroupedByNode          map[base.SQLInstanceID]int64
 	NetworkMessagesGroupedByNode                    map[base.SQLInstanceID]int64
 	ContentionTimeGroupedByNode                     map[base.SQLInstanceID]time.Duration
-	RUEstimateGroupedByNode                         map[base.SQLInstanceID]int64
+	RUEstimateGroupedByNode                         map[base.SQLInstanceID]float64
 	CPUTimeGroupedByNode                            map[base.SQLInstanceID]time.Duration
 }
 
@@ -158,7 +158,7 @@ type QueryLevelStats struct {
 	NetworkMessages                    int64
 	ContentionTime                     time.Duration
 	ContentionEvents                   []kvpb.ContentionEvent
-	RUEstimate                         int64
+	RUEstimate                         float64
 	CPUTime                            time.Duration
 	SqlInstanceIds                     map[base.SQLInstanceID]struct{}
 	Regions                            []string
@@ -310,7 +310,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		MvccRangeKeySkippedPointsGroupedByNode:          make(map[base.SQLInstanceID]int64),
 		NetworkMessagesGroupedByNode:                    make(map[base.SQLInstanceID]int64),
 		ContentionTimeGroupedByNode:                     make(map[base.SQLInstanceID]time.Duration),
-		RUEstimateGroupedByNode:                         make(map[base.SQLInstanceID]int64),
+		RUEstimateGroupedByNode:                         make(map[base.SQLInstanceID]float64),
 		CPUTimeGroupedByNode:                            make(map[base.SQLInstanceID]time.Duration),
 	}
 	var errs error
@@ -340,7 +340,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		a.nodeLevelStats.MvccRangeKeyContainedPointsGroupedByNode[instanceID] += int64(stats.KV.RangeKeyContainedPoints.Value())
 		a.nodeLevelStats.MvccRangeKeySkippedPointsGroupedByNode[instanceID] += int64(stats.KV.RangeKeySkippedPoints.Value())
 		a.nodeLevelStats.ContentionTimeGroupedByNode[instanceID] += stats.KV.ContentionTime.Value()
-		a.nodeLevelStats.RUEstimateGroupedByNode[instanceID] += int64(stats.Exec.ConsumedRU.Value())
+		a.nodeLevelStats.RUEstimateGroupedByNode[instanceID] += float64(stats.Exec.ConsumedRU.Value())
 		a.nodeLevelStats.CPUTimeGroupedByNode[instanceID] += stats.Exec.CPUTime.Value()
 	}
 
@@ -395,7 +395,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 				}
 			}
 			if v.FlowStats.ConsumedRU.HasValue() {
-				a.nodeLevelStats.RUEstimateGroupedByNode[instanceID] += int64(v.FlowStats.ConsumedRU.Value())
+				a.nodeLevelStats.RUEstimateGroupedByNode[instanceID] += float64(v.FlowStats.ConsumedRU.Value())
 			}
 		}
 	}
