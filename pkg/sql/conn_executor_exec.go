@@ -1990,8 +1990,8 @@ func populateQueryLevelStats(
 			if costController := cfg.DistSQLSrv.TenantCostController; costController != nil {
 				if costCfg := costController.GetCostConfig(); costCfg != nil {
 					networkEgressRUEstimate := costCfg.PGWireEgressCost(topLevelStats.networkEgressEstimate)
-					ih.queryLevelStatsWithErr.Stats.RUEstimate += int64(networkEgressRUEstimate)
-					ih.queryLevelStatsWithErr.Stats.RUEstimate += int64(cpuStats.EndCollection(ctx))
+					ih.queryLevelStatsWithErr.Stats.RUEstimate += float64(networkEgressRUEstimate)
+					ih.queryLevelStatsWithErr.Stats.RUEstimate += cpuStats.EndCollection(ctx)
 				}
 			}
 		}
