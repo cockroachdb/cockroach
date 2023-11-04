@@ -2148,6 +2148,15 @@ func (c *clusterImpl) StopE(
 	if c.spec.NodeCount == 0 {
 		return nil // unit tests
 	}
+	if c.goCoverDir != "" {
+		// Never kill processes if we're trying to collect coverage; use SIGUSR1
+		// which dumps coverage data and exits.
+		if stopOpts.RoachprodOpts.Sig == 9 {
+			stopOpts.RoachprodOpts.Sig = 10 // SIGUSR1
+			stopOpts.RoachprodOpts.Wait = true
+			stopOpts.RoachprodOpts.MaxWait = 10
+		}
+	}
 	c.setStatusForClusterOpt("stopping", stopOpts.RoachtestOpts.Worker, nodes...)
 	defer c.clearStatusForClusterOpt(stopOpts.RoachtestOpts.Worker)
 	return errors.Wrap(roachprod.Stop(ctx, l, c.MakeNodes(nodes...), stopOpts.RoachprodOpts), "cluster.StopE")
