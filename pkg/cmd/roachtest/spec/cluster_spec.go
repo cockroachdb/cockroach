@@ -171,9 +171,17 @@ func getGCEOpts(
 	localSSD bool,
 	RAID0 bool,
 	terminateOnMigration bool,
+	minCPUPlatform string,
+	arch vm.CPUArch,
 ) vm.ProviderOpts {
 	opts := gce.DefaultProviderOpts()
 	opts.MachineType = machineType
+	if arch == vm.ArchARM64 {
+		// ARM64 machines don't support minCPUPlatform.
+		opts.MinCPUPlatform = ""
+	} else if minCPUPlatform != "" {
+		opts.MinCPUPlatform = minCPUPlatform
+	}
 	if volumeSize != 0 {
 		opts.PDVolumeSize = volumeSize
 	}
@@ -252,7 +260,7 @@ func (s *ClusterSpec) RoachprodOpts(
 			// based on the cloud and CPU count.
 			switch s.Cloud {
 			case AWS:
-				machineType, selectedArch = AWSMachineType(s.CPUs, s.Mem, arch)
+				machineType, selectedArch = AWSMachineType(s.CPUs, s.Mem, s.PreferLocalSSD && s.VolumeSize == 0, arch)
 			case GCE:
 				machineType, selectedArch = GCEMachineType(s.CPUs, s.Mem, arch)
 			case Azure:
@@ -317,7 +325,9 @@ func (s *ClusterSpec) RoachprodOpts(
 			createVMOpts.SSDOpts.UseLocalSSD)
 	case GCE:
 		providerOpts = getGCEOpts(machineType, zones, s.VolumeSize, ssdCount,
-			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration)
+			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
+			"" /* minCPUPlatform */, vm.ParseArch(createVMOpts.Arch),
+		)
 	case Azure:
 		providerOpts = getAzureOpts(machineType, zones)
 	}
