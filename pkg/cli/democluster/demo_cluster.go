@@ -444,6 +444,12 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 
 			ie := c.firstServer.InternalExecutor().(isql.Executor)
 
+			// Grant full capabilities.
+			_, err = ie.Exec(ctx, "tenant-grant-capabilities", nil, fmt.Sprintf("ALTER VIRTUAL CLUSTER %s GRANT ALL CAPABILITIES", demoTenantName))
+			if err != nil {
+				return err
+			}
+
 			if !c.demoCtx.DisableServerController {
 				// Select the default tenant.
 				// Choose the tenant to use when no tenant is specified on a
