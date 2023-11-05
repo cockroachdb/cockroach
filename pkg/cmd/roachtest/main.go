@@ -20,15 +20,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq" // register postgres driver
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 )
 
 // Note that the custom exit codes below are not exposed when running
@@ -51,28 +49,6 @@ const (
 	// and other runner-related logs (i.e. cluster creation logs) will be written.
 	runnerLogsDir = "_runner-logs"
 )
-
-// Only used if passed otherwise refer to ClusterSpec.
-// If a new flag is added here it should also be added to createFlagsOverride().
-func parseCreateOpts(flags *pflag.FlagSet, opts *vm.CreateOpts) {
-	// roachprod create flags
-	flags.DurationVar(&opts.Lifetime,
-		"lifetime", opts.Lifetime, "Lifetime of the cluster")
-	flags.BoolVar(&opts.SSDOpts.UseLocalSSD,
-		"roachprod-local-ssd", opts.SSDOpts.UseLocalSSD, "Use local SSD")
-	flags.StringVar(&opts.SSDOpts.FileSystem,
-		"filesystem", opts.SSDOpts.FileSystem, "The underlying file system(ext4/zfs).")
-	flags.BoolVar(&opts.SSDOpts.NoExt4Barrier,
-		"local-ssd-no-ext4-barrier", opts.SSDOpts.NoExt4Barrier,
-		`Mount the local SSD with the "-o nobarrier" flag. `+
-			`Ignored if --local-ssd=false is specified.`)
-	flags.IntVarP(&overrideNumNodes,
-		"nodes", "n", -1, "Total number of nodes")
-	flags.IntVarP(&opts.OsVolumeSize,
-		"os-volume-size", "", opts.OsVolumeSize, "OS disk volume size in GB")
-	flags.BoolVar(&opts.GeoDistributed,
-		"geo", opts.GeoDistributed, "Create geo-distributed cluster")
-}
 
 func main() {
 	cobra.EnableCommandSorting = false
@@ -120,7 +96,7 @@ Examples:
    roachtest list --suite weekly --owner kv
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r := makeTestRegistry(cloud)
+			r := makeTestRegistry(roachtestflags.Cloud)
 			tests.RegisterTests(&r)
 
 			filter, err := makeTestFilter(args)
@@ -146,11 +122,7 @@ Examples:
 			return nil
 		},
 	}
-	addSuiteAndOwnerFlags(listCmd)
-	listCmd.Flags().BoolVar(
-		&onlyBenchmarks, "bench", false, "Restricts to benchmarks")
-	listCmd.Flags().StringVar(
-		&cloud, "cloud", spec.GCE, "Restricts tests to those compatible with the given cloud (local, aws, azure, gce, or all)")
+	roachtestflags.AddListFlags(listCmd.Flags())
 
 	var runCmd = &cobra.Command{
 		// Don't display usage when tests fail.
@@ -183,6 +155,7 @@ the cluster nodes on start.
 			return runTests(tests.RegisterTests, filter)
 		},
 	}
+	roachtestflags.AddRunFlags(runCmd.Flags())
 
 	var benchCmd = &cobra.Command{
 		// Don't display usage when tests fail.
@@ -194,7 +167,7 @@ the cluster nodes on start.
 			if err := initRunFlagsBinariesAndLibraries(cmd); err != nil {
 				return err
 			}
-			onlyBenchmarks = true
+			roachtestflags.OnlyBenchmarks = true
 			filter, err := makeTestFilter(args)
 			if err != nil {
 				return err
@@ -204,12 +177,7 @@ the cluster nodes on start.
 			return runTests(tests.RegisterTests, filter)
 		},
 	}
-
-	addRunFlags(runCmd)
-	addBenchFlags(benchCmd)
-
-	parseCreateOpts(runCmd.Flags(), &overrideOpts)
-	overrideFlagset = runCmd.Flags()
+	roachtestflags.AddRunFlags(benchCmd.Flags())
 
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(runCmd)
@@ -263,7 +231,7 @@ func testsToRun(
 		if s.Skip == "" || runSkipped {
 			notSkipped = append(notSkipped, s)
 		} else {
-			if print && teamCity {
+			if print && roachtestflags.TeamCity {
 				fmt.Fprintf(os.Stdout, "##teamcity[testIgnored name='%s' message='%s']\n",
 					s.Name, TeamCityEscape(s.Skip))
 			}
@@ -284,7 +252,7 @@ func testsToRun(
 			if matches, r := filter.Matches(&s); !matches {
 				reason := filter.MatchFailReasonString(r)
 				// This test matches the "relaxed" filter but not the original filter.
-				if teamCity {
+				if roachtestflags.TeamCity {
 					fmt.Fprintf(os.Stdout, "##teamcity[testIgnored name='%s' message='%s']\n", s.Name, reason)
 				}
 				fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, "0.00s", reason)
@@ -359,7 +327,7 @@ func selectSpecs(
 	for _, i := range selectedIdxs {
 		for j := p; j < i; j++ {
 			s := specs[j]
-			if print && teamCity {
+			if print && roachtestflags.TeamCity {
 				fmt.Fprintf(os.Stdout, "##teamcity[testIgnored name='%s' message='excluded via sampling']\n",
 					s.Name)
 			}
