@@ -6219,3 +6219,41 @@ statement ok
 SET testing_optimizer_disable_rule_probability = 0
 
 subtest end
+
+
+subtest regressions
+
+# Regression test for #111157
+query T
+SELECT ST_Extent(ST_GeomFromGeoHash('C'::TEXT, NULL::INT4)::GEOMETRY);
+----
+BOX(-135 45,-90 90)
+
+query T
+SELECT ST_Extent(ST_GeomFromGeoHash(NULL::TEXT, 1::INT4)::GEOMETRY);
+----
+NULL
+
+query T
+SELECT ST_Extent(ST_PointFromGeoHash('C'::TEXT, NULL::INT4)::GEOMETRY);
+----
+BOX(-112.5 67.5,-112.5 67.5)
+
+query T
+SELECT ST_Extent(ST_PointFromGeoHash(NULL::TEXT, 1::INT4)::GEOMETRY);
+----
+NULL
+
+# X min > X max
+query T
+SELECT ST_AsEWKT(ST_MakeEnvelope(8.0::FLOAT8, 2.0::FLOAT8, 5.0::FLOAT8, 4.0::FLOAT8)::GEOMETRY);
+----
+POLYGON ((8 2, 8 4, 5 4, 5 2, 8 2))
+
+# Y min > Y max
+query T
+SELECT ST_AsEWKT(ST_MakeEnvelope(5.0::FLOAT8, 4.0::FLOAT8, 8.0::FLOAT8, 2.0::FLOAT8)::GEOMETRY);
+----
+POLYGON ((5 4, 5 2, 8 2, 8 4, 5 4))
+
+subtest end

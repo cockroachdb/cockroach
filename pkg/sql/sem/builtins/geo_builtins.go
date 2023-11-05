@@ -1127,11 +1127,18 @@ var geoBuiltins = map[string]builtinDefinition{
 				{Name: "geohash", Typ: types.String},
 				{Name: "precision", Typ: types.Int},
 			},
-			ReturnType: tree.FixedReturnType(types.Geometry),
+			CalledOnNullInput: true,
+			ReturnType:        tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
 				g := tree.MustBeDString(args[0])
-				p := tree.MustBeDInt(args[1])
-				ret, err := geo.ParseGeometryPointFromGeoHash(string(g), int(p))
+				p := -1
+				if args[1] != tree.DNull {
+					p = int(tree.MustBeDInt(args[1]))
+				}
+				ret, err := geo.ParseGeometryPointFromGeoHash(string(g), p)
 				if err != nil {
 					return nil, err
 				}
@@ -1169,11 +1176,18 @@ var geoBuiltins = map[string]builtinDefinition{
 				{Name: "geohash", Typ: types.String},
 				{Name: "precision", Typ: types.Int},
 			},
-			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+			CalledOnNullInput: true,
+			ReturnType:        tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
 				g := tree.MustBeDString(args[0])
-				p := tree.MustBeDInt(args[1])
-				bbox, err := geo.ParseCartesianBoundingBoxFromGeoHash(string(g), int(p))
+				p := -1
+				if args[1] != tree.DNull {
+					p = int(tree.MustBeDInt(args[1]))
+				}
+				bbox, err := geo.ParseCartesianBoundingBoxFromGeoHash(string(g), p)
 				if err != nil {
 					return nil, err
 				}
@@ -7864,12 +7878,16 @@ func stEnvelopeFromArgs(args tree.Datums) (tree.Datum, error) {
 	if len(args) > 4 {
 		srid = int(tree.MustBeDInt(args[4]))
 	}
+	coords := []float64{
+		xmin, ymin,
+		xmin, ymax,
+		xmax, ymax,
+		xmax, ymin,
+		xmin, ymin,
+	}
 
 	extent, err := geo.MakeGeometryFromGeomT(
-		geom.NewBounds(geom.XY).
-			Set(xmin, ymin, xmax, ymax).
-			Polygon().
-			SetSRID(srid),
+		geom.NewPolygonFlat(geom.XY, coords, []int{len(coords)}).SetSRID(srid),
 	)
 	if err != nil {
 		return nil, err
