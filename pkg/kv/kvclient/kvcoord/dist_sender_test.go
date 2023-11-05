@@ -1663,9 +1663,9 @@ func TestEvictCacheOnError(t *testing.T) {
 		},
 	}
 
-	rangeMismachErr := kvpb.NewRangeKeyMismatchError(
+	rangeMismatchErr := kvpb.NewRangeKeyMismatchError(
 		context.Background(), nil, nil, &lhs, nil /* lease */)
-	rangeMismachErr.AppendRangeInfo(context.Background(), roachpb.RangeInfo{Desc: rhs, Lease: roachpb.Lease{}})
+	rangeMismatchErr.AppendRangeInfo(context.Background(), roachpb.RangeInfo{Desc: rhs, Lease: roachpb.Lease{}})
 
 	testCases := []struct {
 		canceledCtx            bool
@@ -1674,7 +1674,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		shouldClearReplica     bool
 	}{
 		{false, errors.New(errString), false, false},      // non-retryable replica error
-		{false, rangeMismachErr, false, false},            // RangeKeyMismatch replica error
+		{false, rangeMismatchErr, false, false},           // RangeKeyMismatch replica error
 		{false, &kvpb.RangeNotFoundError{}, false, false}, // RangeNotFound replica error
 		{false, nil, false, false},                        // RPC error
 		{true, nil, false, false},                         // canceled context
@@ -4550,6 +4550,169 @@ func TestDistSenderSlowLogMessage(t *testing.T) {
 		act := s.RedactableString()
 		require.EqualValues(t, exp, act)
 	}
+}
+
+// TestErrorIndexOnRangeSplit verifies that in case divideAndSendBatchToRanges
+// is called recursively due to a stale range descriptor and the error is
+// encountered during that recursive call, the error index is set correctly to
+// point to the request in the original batch. It is a regression test for
+// #111481.
+func TestErrorIndexOnRangeSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+	keyC := roachpb.Key("c")
+	splitKey := keys.MustAddr(keyC)
+	newSplitKey := keys.MustAddr(keyB)
+
+	ctx := context.Background()
+	tr := tracing.NewTracer()
+	stopper := stop.NewStopper(stop.WithTracer(tr))
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClockForTesting(nil)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
+	g := makeGossip(t, stopper, rpcContext)
+
+	// We start out with two ranges split at splitKey. This is needed so that
+	// we don't hit the fast-path in divideAndSendBatchToRanges where only a
+	// single range is touched.
+	repls := []roachpb.ReplicaDescriptor{
+		{
+			NodeID:  1,
+			StoreID: 1,
+		},
+		{
+			NodeID:  1,
+			StoreID: 1,
+		},
+	}
+	initDescs := []roachpb.RangeDescriptor{
+		{
+			RangeID:          roachpb.RangeID(1),
+			Generation:       1,
+			StartKey:         roachpb.RKeyMin,
+			EndKey:           splitKey,
+			InternalReplicas: repls,
+		},
+		{
+			RangeID:          roachpb.RangeID(2),
+			Generation:       1,
+			StartKey:         splitKey,
+			EndKey:           roachpb.RKeyMax,
+			InternalReplicas: repls,
+		},
+	}
+	// We'll send a BatchRequest touching the original two ranges, which is so
+	// that it is split into two parallel BatchRequests, then on the one
+	// touching the first range we'll inject a range key mismatch error to
+	// simulate a range split. Thus, after the injected split we'll have three
+	// ranges with split points at newSplitKey and splitKey.
+	splitDescs := []roachpb.RangeDescriptor{
+		{
+			RangeID:          roachpb.RangeID(1),
+			Generation:       2,
+			StartKey:         roachpb.RKeyMin,
+			EndKey:           newSplitKey,
+			InternalReplicas: repls,
+		},
+		{
+			RangeID:          roachpb.RangeID(3),
+			Generation:       2,
+			StartKey:         newSplitKey,
+			EndKey:           splitKey,
+			InternalReplicas: repls,
+		},
+		{
+			RangeID:          roachpb.RangeID(2),
+			Generation:       2,
+			StartKey:         splitKey,
+			EndKey:           roachpb.RKeyMax,
+			InternalReplicas: repls,
+		},
+	}
+
+	initialRDB := mockRangeDescriptorDBForDescs(initDescs...)
+	splitRDB := mockRangeDescriptorDBForDescs(splitDescs...)
+
+	var rc *rangecache.RangeCache
+	var wg sync.WaitGroup
+	var once sync.Once
+	wg.Add(2)
+	waitThenSwitchToSplitDesc := func() {
+		// Wait for both partial requests to be sent.
+		wg.Done()
+		wg.Wait()
+		// Switch out the RangeDescriptorDB.
+		once.Do(func() { rc.TestingSetDB(splitRDB) })
+	}
+
+	transportFn := func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+		rep := ba.CreateReply()
+		switch ba.ClientRangeInfo.DescriptorGeneration {
+		case 1:
+			waitThenSwitchToSplitDesc()
+			// We have two parallel batches: one with 2 requests and another
+			// with 1 request. Do nothing for the latter.
+			if len(ba.Requests) != 2 {
+				return rep, nil
+			}
+			// For the batch with 2 requests we inject an error to simulate a
+			// stale range cache.
+			rangeMismatchErr := kvpb.NewRangeKeyMismatchError(ctx, nil, nil, &splitDescs[0], nil /* lease */)
+			rangeMismatchErr.AppendRangeInfo(context.Background(), roachpb.RangeInfo{Desc: splitDescs[1], Lease: roachpb.Lease{}})
+			rep.Error = kvpb.NewError(rangeMismatchErr)
+			return rep, nil
+		case 2:
+			// We'll receive a few batches, all with 1 Get. Find the one
+			// targeting keyB and simulate it encountering an error (that could
+			// occur for InitPuts).
+			if len(ba.Requests) != 1 {
+				require.Fail(t, "unexpected number of requests in a batch")
+			}
+			if ba.Requests[0].GetGet().Key.Equal(keyB) {
+				rep.Error = kvpb.NewError(&kvpb.ConditionFailedError{})
+				// This is the zeroth request in a batch with 1 request.
+				rep.Error.SetErrorIndex(0)
+			}
+			return rep, nil
+		default:
+			require.Fail(t, "unexpected desc generation")
+			return nil, nil
+		}
+	}
+
+	cfg := DistSenderConfig{
+		AmbientCtx:        log.AmbientContext{Tracer: tr},
+		Clock:             clock,
+		NodeDescs:         g,
+		RPCContext:        rpcContext,
+		RangeDescriptorDB: initialRDB,
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(transportFn),
+		},
+		Settings: cluster.MakeTestingClusterSettings(),
+	}
+
+	ds := NewDistSender(cfg)
+	rc = ds.rangeCache
+
+	ba := &kvpb.BatchRequest{}
+	// Issue a BatchRequest such that it touches the original two ranges, and
+	// then the last request gets an error injected.
+	ba.Add(kvpb.NewGet(keyA), kvpb.NewGet(keyC), kvpb.NewGet(keyB))
+	// Inconsistent read because otherwise the batch will ask to be re-sent in a
+	// txn when split.
+	ba.ReadConsistency = kvpb.INCONSISTENT
+
+	_, pErr := ds.Send(ctx, ba)
+	require.NotNil(t, pErr)
+	require.NotNil(t, pErr.Index)
+	// This is the crux of the test - the error should have the position of
+	// Get(keyB) request from the original batch.
+	require.Equal(t, int32(2), pErr.Index.Index)
 }
 
 // Test the following scenario: the DistSender sends a request that results in a
