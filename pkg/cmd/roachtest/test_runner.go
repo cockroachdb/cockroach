@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
@@ -139,8 +140,8 @@ func newTestRunner(cr *clusterRegistry, stopper *stop.Stopper) *testRunner {
 		stopper: stopper,
 		cr:      cr,
 	}
-	r.config.skipClusterWipeOnAttach = !clusterWipe
-	r.config.disableIssue = disableIssue
+	r.config.skipClusterWipeOnAttach = !roachtestflags.ClusterWipe
+	r.config.disableIssue = roachtestflags.DisableIssue
 	r.workersMu.workers = make(map[string]*workerStatus)
 	return r
 }
@@ -389,7 +390,7 @@ func (r *testRunner) Run(
 // N.B. currently this value is hardcoded per cloud provider.
 func numConcurrentClusterCreations() int {
 	var res int
-	if cloud == "aws" {
+	if roachtestflags.Cloud == "aws" {
 		// AWS has ridiculous API calls limits, so we're going to create one cluster
 		// at a time. Internally, roachprod has throttling for the calls required to
 		// create a single cluster.
@@ -747,7 +748,7 @@ func (r *testRunner) runWorker(
 					// when tests opted-in to metamorphic testing, encryption will
 					// be enabled according to the probability passed to
 					// --metamorphic-encryption-probability
-					c.encAtRest = prng.Float64() < encryptionProbability
+					c.encAtRest = prng.Float64() < roachtestflags.EncryptionProbability
 				}
 
 				// Set initial cluster settings for this test.
@@ -960,7 +961,7 @@ func (r *testRunner) runTest(
 		if s.Skip != "" {
 			// When skipping a test, we should not report ##teamcity[testStarted...] or ##teamcity[testFinished...]
 			// service messages else the test will be reported as having run twice.
-			if teamCity {
+			if roachtestflags.TeamCity {
 				shout(ctx, l, stdout, "##teamcity[testIgnored name='%s' message='%s' duration='%d']\n",
 					s.Name, TeamCityEscape(s.Skip), t.duration().Milliseconds())
 			}
@@ -969,7 +970,7 @@ func (r *testRunner) runTest(
 			// Delaying the ##teamcity[testStarted...] service message until the test is finished allows us to branch
 			// separately for skipped tests. The duration of the test is passed to ##teamcity[testFinished...] for
 			// accurate reporting in the TC UI.
-			if teamCity {
+			if roachtestflags.TeamCity {
 				shout(ctx, l, stdout, "##teamcity[testStarted name='%s' flowId='%s']", t.Name(), testRunID)
 			}
 
@@ -977,7 +978,7 @@ func (r *testRunner) runTest(
 			if t.Failed() {
 				output := fmt.Sprintf("%s\ntest artifacts and logs in: %s", t.failureMsg(), t.ArtifactsDir())
 
-				if teamCity {
+				if roachtestflags.TeamCity {
 					// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
 					// TeamCity regards the test as successful.
 					shout(ctx, l, stdout, "##teamcity[testFailed name='%s' details='%s' flowId='%s']",
@@ -993,13 +994,13 @@ func (r *testRunner) runTest(
 				shout(ctx, l, stdout, "--- PASS: %s (%s)", testRunID, durationStr)
 			}
 
-			if teamCity {
+			if roachtestflags.TeamCity {
 				shout(ctx, l, stdout, "##teamcity[testFinished name='%s' flowId='%s' duration='%d']",
 					t.Name(), testRunID, t.duration().Milliseconds())
 			}
 		}
 
-		if teamCity {
+		if roachtestflags.TeamCity {
 			// Zip the artifacts. This improves the TeamCity UX where we can navigate
 			// through zip files just fine, but we can't download subtrees of the
 			// artifacts storage. By zipping we get this capability as we can just
