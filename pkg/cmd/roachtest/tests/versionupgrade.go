@@ -153,7 +153,7 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// TODO(renato): stage different workload binaries for the
 			// releases being used in the test and use the appropriate
 			// binary in this step.
-			if !tc.FromVersion.IsCurrent() && !tc.ToVersion.IsCurrent() {
+			if !tc.ToVersion.IsCurrent() {
 				l.Printf("skipping this step -- only supported when current version is involved")
 				return nil
 			}
