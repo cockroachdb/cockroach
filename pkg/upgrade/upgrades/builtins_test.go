@@ -50,10 +50,14 @@ func TestIsAtLeastVersionBuiltin(t *testing.T) {
 	// Check that the builtin returns false when comparing against the new
 	// version because we are still on the bootstrap version.
 	sqlDB.CheckQueryResults(t, "SELECT crdb_internal.is_at_least_version('"+v+"')", [][]string{{"false"}})
+	sqlDB.CheckQueryResults(t, "SELECT crdb_internal.release_series(version) FROM [SHOW CLUSTER SETTING version]",
+		[][]string{{clusterversion.MinSupported.ReleaseSeries().String()}})
 
 	// Run the upgrade.
 	sqlDB.Exec(t, "SET CLUSTER SETTING version = $1", v)
 
 	// It should now return true.
 	sqlDB.CheckQueryResultsRetry(t, "SELECT crdb_internal.is_at_least_version('"+v+"')", [][]string{{"true"}})
+	sqlDB.CheckQueryResults(t, "SELECT crdb_internal.release_series(version) FROM [SHOW CLUSTER SETTING version]",
+		[][]string{{clusterversion.Latest.ReleaseSeries().String()}})
 }

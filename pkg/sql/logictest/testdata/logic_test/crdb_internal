@@ -638,9 +638,9 @@ select crdb_internal.get_vmodule()
 ·
 
 query T
-select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
+SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-1000023.2
+24.1
 
 query ITTT colnames,rowsort
 select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
@@ -792,9 +792,9 @@ SELECT * FROM crdb_internal.check_consistency(true, b'\x02', b'\x04')
 
 # Anyone can see the executable version.
 query T
-select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
+SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-1000023.2
+24.1
 
 user root
 

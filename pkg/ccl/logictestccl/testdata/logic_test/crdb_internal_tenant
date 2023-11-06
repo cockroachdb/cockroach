@@ -398,9 +398,9 @@ select crdb_internal.get_vmodule()
 ·
 
 query T
-select regexp_replace(regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', ''), '10000', '');
+SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-23.2
+24.1
 
 query ITTT colnames,rowsort
 select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
@@ -488,9 +488,9 @@ select * from crdb_internal.gossip_alerts
 
 # Anyone can see the executable version.
 query T
-select regexp_replace(regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', ''), '10000', '');
+SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-23.2
+24.1
 
 user root
 
