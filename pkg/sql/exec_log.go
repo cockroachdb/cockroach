@@ -300,7 +300,7 @@ func (p *planner) maybeLogStatementInternal(
 			txnID = p.txn.ID().String()
 		}
 
-		if telemetryMetrics.shouldEmitLog(telemetryMetrics.timeNow(), txnID, forceLog, stmtCount) {
+		if telemetryMetrics.shouldEmitStatementLog(telemetryMetrics.timeNow(), txnID, forceLog, stmtCount) {
 			var queryLevelStats execstats.QueryLevelStats
 			if stats, ok := p.instrumentation.GetQueryLevelStats(); ok {
 				queryLevelStats = *stats

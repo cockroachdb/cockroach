@@ -461,7 +461,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		idxRecommendationsCache: idxrecommendations.NewIndexRecommendationsCache(cfg.Settings),
 	}
 
-	telemetryLoggingMetrics := newTelemetryLoggingmetrics(cfg.TelemetryLoggingTestingKnobs, cfg.Settings)
+	telemetryLoggingMetrics := newTelemetryLoggingMetrics(cfg.TelemetryLoggingTestingKnobs, cfg.Settings)
 	telemetryLoggingMetrics.registerOnTelemetrySamplingModeChange(cfg.Settings)
 	s.TelemetryLoggingMetrics = telemetryLoggingMetrics
 
