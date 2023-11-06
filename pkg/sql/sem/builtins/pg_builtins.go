@@ -1370,6 +1370,27 @@ var pgBuiltins = map[string]builtinDefinition{
 	// Note that this function was removed from Postgres in version 10.
 	"pg_is_xlog_replay_paused": makeNotUsableFalseBuiltin(),
 
+	// pg_encoding_max_length returns the maximum length of a given encoding. For CRDB's use case,
+	// we only support UTF8; so, this will return the max_length of UTF8 - which is 4.
+	// https://github.com/postgres/postgres/blob/master/src/common/wchar.c
+	"pg_encoding_max_length": makeBuiltin(
+		tree.FunctionProperties{},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "encoding", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if cmp, err := args[0].CompareError(evalCtx, DatEncodingUTFId); err != nil {
+					return tree.DNull, err
+				} else if cmp == 0 {
+					return tree.NewDInt(4), nil
+				}
+				return tree.DNull, nil
+			},
+			Info:       notUsableInfo,
+			Volatility: volatility.Immutable,
+		},
+	),
+
 	// Access Privilege Inquiry Functions allow users to query object access
 	// privileges programmatically. Each function has a number of variants,
 	// which differ based on their function signatures. These signatures have
@@ -2115,7 +2136,7 @@ var pgBuiltins = map[string]builtinDefinition{
 					return tree.NewDInt(64), nil
 				case oid.T_numeric:
 					if typmod != -1 {
-						// This logics matches the postgres implementation
+						// This logic matches the postgres implementation
 						// of how to calculate the precision based on the typmod
 						// https://github.com/postgres/postgres/blob/d84ffffe582b8e036a14c6bc2378df29167f3a00/src/backend/catalog/information_schema.sql#L109
 						return tree.NewDInt(((typmod - 4) >> 16) & 65535), nil
@@ -2180,6 +2201,97 @@ var pgBuiltins = map[string]builtinDefinition{
 			},
 			Info:       "Returns the scale of the given type with type modifier",
 			Volatility: volatility.Immutable,
+		},
+	),
+
+	// https://github.com/postgres/postgres/blob/master/src/backend/catalog/information_schema.sql
+	"information_schema._pg_char_octet_length": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "typid", Typ: types.Oid},
+				{Name: "typmod", Typ: types.Int4},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Body: `SELECT
+						 CASE WHEN $1 IN (25, 1042, 1043) /* text, char, varchar */
+			            THEN CASE WHEN $2 = -1 /* default typmod */
+														THEN CAST(2^30 AS integer)
+			                    	ELSE information_schema._pg_char_max_length($1, $2) *
+			                           pg_catalog.pg_encoding_max_length((SELECT encoding FROM pg_catalog.pg_database WHERE datname = pg_catalog.current_database()))
+			                 END
+			            ELSE null
+			       END`,
+			Info:              notUsableInfo,
+			Volatility:        volatility.Immutable,
+			CalledOnNullInput: true,
+			Language:          tree.RoutineLangSQL,
+		},
+	),
+
+	// NOTE: this could be defined as a user-defined function, like
+	// it is in Postgres:
+	// https://github.com/postgres/postgres/blob/master/src/backend/catalog/information_schema.sql
+	// CREATE FUNCTION _pg_datetime_precision(typid oid, typmod int4) RETURNS integer
+	//     LANGUAGE sql
+	//     IMMUTABLE
+	//     PARALLEL SAFE
+	//     RETURNS NULL ON NULL INPUT
+	// RETURN
+	//   CASE WHEN $1 IN (1082) /* date */
+	// 						THEN 0
+	// 	 			WHEN $1 IN (1083, 1114, 1184, 1266) /* time, timestamp, same + tz */
+	// 						THEN CASE WHEN $2 < 0 THEN 6 ELSE $2 END
+	// 				WHEN $1 IN (1186) /* interval */
+	// 						THEN CASE WHEN $2 < 0 OR $2 & 0xFFFF = 0xFFFF THEN 6 ELSE $2 & 0xFFFF END
+	// 				ELSE null
+	// END;
+	"information_schema._pg_datetime_precision": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "typid", Typ: types.Oid},
+				{Name: "typmod", Typ: types.Int4},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				typid := args[0].(*tree.DOid).Oid
+				typmod := *args[1].(*tree.DInt)
+				if typid == oid.T_date {
+					return tree.DZero, nil
+				} else if typid == oid.T_time || typid == oid.T_timestamp || typid == oid.T_timestamptz || typid == oid.T_timetz {
+					if typmod < 0 {
+						return tree.NewDInt(6), nil
+					}
+					return tree.NewDInt(typmod), nil
+				} else if typid == oid.T_interval {
+					if typmod < 0 || (typmod&0xFFFF) == 0xFFFF {
+						return tree.NewDInt(6), nil
+					}
+					return tree.NewDInt(typmod & 0xFFFF), nil
+				}
+				return tree.DNull, nil
+			},
+			Info:       notUsableInfo,
+			Volatility: volatility.Immutable,
+		},
+	),
+
+	// https://github.com/postgres/postgres/blob/master/src/backend/catalog/information_schema.sql
+	"information_schema._pg_interval_type": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "typid", Typ: types.Oid},
+				{Name: "typmod", Typ: types.Int4},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Body: `SELECT
+						 CASE WHEN $1 IN (1186) /* interval */
+			 								THEN pg_catalog.upper(substring(pg_catalog.format_type($1, $2), 'interval[()0-9]* #"%#"', '#')) 
+			        		ELSE null
+  			     END`,
+			Info:              notUsableInfo,
+			Volatility:        volatility.Immutable,
+			CalledOnNullInput: true,
+			Language:          tree.RoutineLangSQL,
 		},
 	),
 

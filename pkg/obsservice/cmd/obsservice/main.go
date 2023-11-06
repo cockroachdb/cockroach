@@ -85,7 +85,8 @@ from one or more CockroachDB clusters.`,
 
 		// Run the event ingestion in the background.
 		eventRouter := router.NewEventRouter(map[obspb.EventType]obslib.EventConsumer{
-			obspb.EventlogEvent: &obsutil.StdOutConsumer{},
+			obspb.EventlogEvent:               &obsutil.StdOutConsumer{},
+			obspb.StatementInsightsStatsEvent: &obsutil.StdOutConsumer{},
 		})
 		ingester := ingest.MakeEventIngester(ctx, eventRouter, nil)
 

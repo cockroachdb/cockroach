@@ -11,7 +11,8 @@ syntax = "proto3";
 package cockroach.obspb;
 
 import "gogoproto/gogo.proto";
-
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 import "obsservice/obspb/opentelemetry-proto/logs/v1/logs.proto";
 import "obsservice/obspb/opentelemetry-proto/common/v1/common.proto";
 import "obsservice/obspb/opentelemetry-proto/resource/v1/resource.proto";
@@ -35,4 +36,108 @@ message Event {
 
   // The LogRecord containing the specific event information.
   opentelemetry.proto.logs.v1.LogRecord log_record = 3;
+}
+
+message StatementInsightsStatistics {
+  enum Status {
+    Completed = 0;
+    Failed = 1;
+  }
+
+  enum Problem {
+    // This statement execution was not itself problematic, but it happened in
+    // the same transaction as another problematic statement.
+    None = 0;
+
+    // This statement execution was slow, either above a fixed latency threshold
+    // or detected as an anomaly.
+    SlowExecution = 1;
+
+    // This statement execution failed completely, due to contention, resource
+    // saturation, or syntax errors.
+    FailedExecution = 2;
+  }
+
+  enum Cause {
+    // We have not identified specific reasons why this statement was slow.
+    // We will not explicitly use this zero value; it is here defensively.
+    Unset = 0;
+
+    // This statement was slow because we picked the wrong plan, possibly due to
+    // outdated statistics, the statement using different literals or search
+    // conditions, or a change in the database schema.
+    PlanRegression = 1;
+
+    // This statement was slow because a good plan was not available, whether
+    // due to outdated statistics or missing indexes.
+    SuboptimalPlan = 2;
+
+    // This statement was slow because of contention.
+    HighContention = 3;
+
+    // This statement was slow because of being retried multiple times, again due
+    // to contention. The "high" threshold may be configured by the
+    // `sql.insights.high_retry_count.threshold` cluster setting.
+    HighRetryCount = 4;
+  }
+
+  bytes id = 1 [(gogoproto.customname) = "ID"];
+  uint64 fingerprint_id = 2 [(gogoproto.customname) = "FingerprintID"];
+  bytes transaction_id = 3 [(gogoproto.customname) = "TransactionID"];
+  uint64 txn_fingerprint_id = 4 [(gogoproto.customname) = "TxnFingerprintID"];
+  bytes session_id = 5 [(gogoproto.customname) = "SessionID"];
+  string query = 6;
+  Status status = 7;
+  google.protobuf.Timestamp start_time = 8 [(gogoproto.stdtime) = true];
+  google.protobuf.Timestamp end_time = 9 [(gogoproto.stdtime) = true];
+  bool full_scan = 10;
+  bool implicit_txn = 11;
+  string user = 12;
+  string user_priority = 13;
+  string application_name = 14;
+  string database = 15;
+  string plan_gist = 16;
+  int64 rows_read = 17;
+  int64 rows_written = 18;
+  int64 retries = 19;
+  string auto_retry_reason = 20;
+  // Nodes is the ordered list of nodes ids on which the statement was executed.
+  repeated int64 nodes = 21;
+  google.protobuf.Duration contention = 22 [(gogoproto.stdduration) = true];
+  repeated string index_recommendations = 23;
+  Problem problem = 24;
+  repeated Cause causes = 25;
+  int64 cpu_sql_nanos = 26 [(gogoproto.customname) = "CPUSQLNanos"];
+  string error_code = 27;
+  // IdleLatSeconds is the time spent in seconds in an open transaction waiting
+  // for the client to send the statement.
+  double idle_lat_seconds = 28;
+  // ParseLat is the time in seconds to transform the SQL string into an AST.
+  double parse_lat_seconds = 29;
+  // PlanLatSeconds is the time spent in seconds to transform the AST into a logical query plan.
+  double plan_lat_seconds = 30;
+  // RunLatSeconds is the time in seconds to run the query and fetch/compute the result rows.
+  double run_lat_seconds = 31;
+  // ServiceLatSeconds is the time in seconds to service the query, from start of parse to end of execute.
+  double service_lat_seconds = 32;
+  repeated ContentionEvent contention_events = 33 [(gogoproto.nullable) = true];
+}
+
+message ContentionEvent {
+  // Key is the key that this and the other transaction conflicted on.
+  bytes key = 1;
+  string pretty_key = 2;
+  bytes id = 3 [(gogoproto.customname) = "BlockingTxnID"];
+  uint64 blocking_txn_fingerprint_id = 4 [(gogoproto.customname) = "BlockingTxnFingerprintID"];
+  // Duration spent contending against the other transaction.
+  google.protobuf.Duration duration = 5 [(gogoproto.stdduration) = true];
+  bytes waiting_txn_id = 6 [(gogoproto.customname) = "WaitingTxnID"];
+  uint64 waiting_txn_fingerprint_id = 7 [(gogoproto.customname) = "WaitingTxnFingerprintID"];
+  google.protobuf.Timestamp collection_ts = 8 [(gogoproto.stdtime) = true];
+  uint64 waiting_stmt_fingerprint_id = 9 [(gogoproto.customname) = "WaitingStmtFingerprintID"];
+  bytes waiting_stmt_id = 10 [(gogoproto.customname) = "WaitingStmtID"];
+  string database_name = 11;
+  string schema_name = 12;
+  string index_name = 13;
+  string table_name = 14;
 }

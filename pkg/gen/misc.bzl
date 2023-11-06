@@ -6,6 +6,7 @@ MISC_SRCS = [
     "//pkg/ccl/backupccl:restore_memory_monitoring_generated_test.go",
     "//pkg/ccl/backupccl:restore_mid_schema_change_generated_test.go",
     "//pkg/ccl/kvccl/kvtenantccl/upgradeinterlockccl:generated_test.go",
+    "//pkg/internal/team:TEAMS.yaml",
     "//pkg/kv/kvpb:batch_generated.go",
     "//pkg/kv/kvserver/concurrency:keylocks_interval_btree.go",
     "//pkg/kv/kvserver/concurrency:keylocks_interval_btree_test.go",

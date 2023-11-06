@@ -888,3 +888,115 @@ select nameconcatoid(repeat('a', 62), 2), length(nameconcatoid(repeat('a', 62), 
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_2  63
 
 subtest end
+
+subtest information_schema._pg_char_octet_length
+
+query I
+SELECT information_schema._pg_char_octet_length(25, -1)
+----
+1073741824
+
+query I
+SELECT information_schema._pg_char_octet_length(25, NULL)
+----
+NULL
+
+statement ok
+CREATE TYPE u AS (ufoo char, ubar int);
+
+query TTI colnames
+SELECT a.attname,
+       t.typname,
+       information_schema._pg_char_octet_length(a.atttypid,a.atttypmod)
+FROM pg_attribute a
+JOIN pg_type t
+ON a.atttypid = t.oid
+WHERE a.attname = 'ufoo'
+ORDER BY a.attname
+----
+attname  typname  information_schema._pg_char_octet_length
+ufoo     bpchar   4
+
+statement ok
+DROP TYPE u;
+
+subtest end
+
+subtest pg_encoding_max_length
+
+query I
+SELECT pg_encoding_max_length(6)
+----
+4
+
+query I
+SELECT pg_encoding_max_length(1)
+----
+NULL
+
+subtest end
+
+subtest information_schema._pg_datetime_precision
+
+query I
+select information_schema._pg_datetime_precision(1082, -1);
+----
+0
+
+query I
+select information_schema._pg_datetime_precision(1083, -1);
+----
+6
+
+query I
+select information_schema._pg_datetime_precision(1083, 5);
+----
+5
+
+query I
+select information_schema._pg_datetime_precision(1186, -1);
+----
+6
+
+query I
+select information_schema._pg_datetime_precision(1186, 5);
+----
+5
+
+query I
+select information_schema._pg_datetime_precision(1086, 5);
+----
+NULL
+
+query I
+select information_schema._pg_datetime_precision(1186, NULL);
+----
+NULL
+
+subtest end
+
+subtest information_schema._pg_interval_type
+
+query T
+SELECT information_schema._pg_interval_type(1, 0);
+----
+NULL
+
+statement ok
+CREATE TYPE u AS (ufoo interval, ubar interval HOUR TO MINUTE);
+
+query TTT colnames
+SELECT a.attname,
+       t.typname,
+       information_schema._pg_interval_type(a.atttypid, a.atttypmod)
+FROM pg_attribute a
+JOIN pg_type t
+ON a.atttypid = t.oid
+WHERE a.attname IN ('ufoo', 'ubar')
+ORDER BY a.attname
+----
+attname  typname   information_schema._pg_interval_type
+ubar     interval  NULL
+ufoo     interval  NULL
+
+subtest end
