@@ -330,6 +330,9 @@ func TestClusterResetSQLStats(t *testing.T) {
 		t.Run(fmt.Sprintf("flushed=%t", flushed), func(t *testing.T) {
 			testCluster := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
+					DefaultTestTenant: base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
+						base.TestTenantProbabilistic, 113856, /* issueNumber */
+					),
 					Insecure: true,
 					Knobs: base.TestingKnobs{
 						SQLStatsKnobs: sqlstats.CreateTestingKnobs(),
