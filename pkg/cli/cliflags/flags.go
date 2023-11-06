@@ -1673,8 +1673,15 @@ necessary to support CockroachDB.
 	ZipIncludeRangeInfo = FlagInfo{
 		Name: "include-range-info",
 		Description: `
-Include information about each individual range in nodes/*/ranges/*.json files.
-For large clusters, this can dramatically increase debug zip size/file count.
+Include one file per node with information about the KV ranges stored on that node, 
+in nodes/{node ID}/ranges.json. This information can be vital when debugging issues 
+that involve the KV storage layer, such as data placement, load balancing, performance 
+or other behaviors. In certain situations, on large clusters with large numbers of ranges, 
+these files can be omitted if and only if the issue being investigated is already known to
+be in another layer of the system (for example, an error message about an unsupported 
+feature or incompatible value in a SQL schema change or statement). Note however many 
+higher-level issues are ultimately related to the underlying KV storage layer described 
+by these files so only set this to false if directed to do so by Cockroach Labs support.
 `,
 	}
 
