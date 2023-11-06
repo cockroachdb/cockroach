@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -28,8 +29,17 @@ import (
 // table. The generation of the plan diagram and persistence to the info table
 // are done asynchronously and this method does not block on their completion.
 func StorePlanDiagram(
-	ctx context.Context, stopper *stop.Stopper, p *sql.PhysicalPlan, db isql.DB, jobID jobspb.JobID,
+	ctx context.Context,
+	stopper *stop.Stopper,
+	p *sql.PhysicalPlan,
+	db isql.DB,
+	jobID jobspb.JobID,
+	cv clusterversion.Handle,
 ) {
+	if !cv.IsActive(ctx, clusterversion.V23_1) {
+		return
+	}
+
 	if err := stopper.RunAsyncTask(ctx, "jobs-store-plan-diagram", func(ctx context.Context) {
 		var cancel func()
 		ctx, cancel = stopper.WithCancelOnQuiesce(ctx)
