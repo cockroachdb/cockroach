@@ -69,6 +69,7 @@ type (
 		summarized     bool
 		description    string
 		seed           int64
+		testContext    *Context
 		binaryVersions []roachpb.Version
 		// Cluster versions before and after the failure occurred. Before
 		// each step is executed, the test runner will cache each node's
@@ -176,7 +177,7 @@ func (tr *testRunner) run() (retErr error) {
 			return fmt.Errorf("background step `%s` returned error: %w", event.Name, event.Err)
 
 		case err := <-tr.monitor.Err():
-			return tr.testFailure(err.Error(), tr.logger)
+			return tr.testFailure(err.Error(), tr.logger, nil)
 		}
 	}
 }
@@ -248,7 +249,7 @@ func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 // background or not.
 func (tr *testRunner) runSingleStep(ctx context.Context, ss singleStep, l *logger.Logger) error {
 	tr.logStep("STARTING", ss, l)
-	tr.logVersions(l)
+	tr.logVersions(l, ss.context)
 	start := timeutil.Now()
 	defer func() {
 		prefix := fmt.Sprintf("FINISHED [%s]", timeutil.Since(start))
@@ -305,14 +306,14 @@ func (tr *testRunner) stepError(err error, step singleStep, l *logger.Logger) er
 		step.impl.ID(), step.impl.Description(), err,
 	)
 
-	return tr.testFailure(desc, l)
+	return tr.testFailure(desc, l, &step.context)
 }
 
 // testFailure generates a `testFailure` with the given
 // description. It logs the error to the logger passed, and renames
 // the underlying file to include the "FAILED" prefix to help in
 // debugging.
-func (tr *testRunner) testFailure(desc string, l *logger.Logger) error {
+func (tr *testRunner) testFailure(desc string, l *logger.Logger, testContext *Context) error {
 	clusterVersionsBefore := tr.clusterVersions
 	var clusterVersionsAfter atomic.Value
 	if tr.connCacheInitialized() {
@@ -326,6 +327,7 @@ func (tr *testRunner) testFailure(desc string, l *logger.Logger) error {
 	tf := &testFailure{
 		description:           desc,
 		seed:                  tr.seed,
+		testContext:           testContext,
 		binaryVersions:        loadAtomicVersions(tr.binaryVersions),
 		clusterVersionsBefore: loadAtomicVersions(clusterVersionsBefore),
 		clusterVersionsAfter:  loadAtomicVersions(clusterVersionsAfter),
@@ -385,15 +387,20 @@ func (tr *testRunner) logStep(prefix string, step singleStep, l *logger.Logger) 
 // logVersions writes the current cached versions of the binary and
 // cluster versions on each node. The cached versions should exist for
 // all steps but the first one (when we start the cluster itself).
-func (tr *testRunner) logVersions(l *logger.Logger) {
+func (tr *testRunner) logVersions(l *logger.Logger, testContext Context) {
 	binaryVersions := loadAtomicVersions(tr.binaryVersions)
 	clusterVersions := loadAtomicVersions(tr.clusterVersions)
+	releasedVersions := make([]*clusterupgrade.Version, 0, len(testContext.CockroachNodes))
+	for _, node := range testContext.CockroachNodes {
+		releasedVersions = append(releasedVersions, testContext.NodeVersion(node))
+	}
 
 	if binaryVersions == nil || clusterVersions == nil {
 		return
 	}
 
-	l.Printf("binary versions: %s", formatVersions(binaryVersions))
+	l.Printf("released versions: %s", formatVersions(releasedVersions))
+	l.Printf("logical binary versions: %s", formatVersions(binaryVersions))
 	l.Printf("cluster versions: %s", formatVersions(clusterVersions))
 }
 
@@ -618,27 +625,34 @@ func (tf *testFailure) Error() string {
 	if tf.summarized {
 		return tf.description
 	}
-
 	tf.summarized = true
-	debugInfo := func(label, value string) string {
-		return fmt.Sprintf("%-40s%s", label+":", value)
+
+	var lines []string
+	debugInfo := func(label, value string) {
+		lines = append(lines, fmt.Sprintf("%-40s%s", label+":", value))
 	}
-	seedInfo := debugInfo("test random seed", strconv.FormatInt(tf.seed, 10))
-	binaryVersions := debugInfo("binary versions", formatVersions(tf.binaryVersions))
-	clusterVersionsBefore := debugInfo(
+
+	debugInfo("test random seed", strconv.FormatInt(tf.seed, 10))
+
+	if tf.testContext != nil {
+		releasedVersions := make([]*clusterupgrade.Version, 0, len(tf.testContext.CockroachNodes))
+		for _, node := range tf.testContext.CockroachNodes {
+			releasedVersions = append(releasedVersions, tf.testContext.NodeVersion(node))
+		}
+		debugInfo("released versions", formatVersions(releasedVersions))
+	}
+
+	debugInfo("logical binary versions", formatVersions(tf.binaryVersions))
+	debugInfo(
 		"cluster versions before failure",
 		formatVersions(tf.clusterVersionsBefore),
 	)
-	var clusterVersionsAfter string
+
 	if cv := tf.clusterVersionsAfter; cv != nil {
-		clusterVersionsBefore += "\n"
-		clusterVersionsAfter = debugInfo("cluster versions after failure", formatVersions(cv))
+		debugInfo("cluster versions after failure", formatVersions(cv))
 	}
 
-	return fmt.Sprintf(
-		"%s\n%s\n%s\n%s%s",
-		tf.description, seedInfo, binaryVersions, clusterVersionsBefore, clusterVersionsAfter,
-	)
+	return strings.Join(lines, "\n")
 }
 
 func renameFailedLogger(l *logger.Logger) error {
@@ -691,13 +705,14 @@ func waitForChannel(ch chan error, desc string, l *logger.Logger) {
 	}
 }
 
-func formatVersions(versions []roachpb.Version) string {
+func formatVersions[T fmt.Stringer](versions []T) string {
 	var pairs []string
-	for idx, version := range versions {
-		pairs = append(pairs, fmt.Sprintf("%d: %s", idx+1, version))
+	for idx, v := range versions {
+		nodeLabel := fmt.Sprintf("n%d:", idx+1)
+		pairs = append(pairs, fmt.Sprintf("%-5s%-12s", nodeLabel, v.String()))
 	}
 
-	return fmt.Sprintf("[%s]", strings.Join(pairs, ", "))
+	return strings.Join(pairs, " ")
 }
 
 // isContextCanceled returns a boolean indicating whether the context
