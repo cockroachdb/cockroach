@@ -1,4 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("@rules_pkg//:pkg.bzl", "pkg_tar")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_push", "oci_tarball")
 
 go_library(
     name = "obsservice_lib",
@@ -28,5 +30,43 @@ go_library(
 go_binary(
     name = "obsservice",
     embed = [":obsservice_lib"],
+    visibility = ["//visibility:public"],
+)
+
+# TODO(abarganier): Find the better bazel-way to accomplish this.
+# For now, we just target a file within the working directory. This was done because targeting files
+# in the $CRDB_ROOT/artifacts directory from here is not easy to achieve. This is a hack too use during
+# the prototyping phase. Figuring out a better solution is left as a TODO.
+pkg_tar(
+    name = "tar",
+    srcs = ["artifact_obsservice"],
+    mode = "0755",
+    package_dir = "/usr/bin",
+    visibility = ["//visibility:public"],
+)
+
+# TODO(abarganier): How do we pass CLI args to an OCI image? Traditional docker methods are a struggle here.
+# Consider using a plain old Dockerfile, but for now, using default values for CLI flags don't block us. For
+# now, we're stuck with the defaults used by CLI flags such as `--otlp-addr` and `--sink-pgurl`.
+oci_image(
+    name = "image",
+    base = "@debian-slim",
+    cmd = ["/usr/bin/artifact_obsservice"],
+    tars = [":tar"],
+    visibility = ["//visibility:public"],
+)
+
+oci_tarball(
+    name = "tar_image",
+    image = ":image",
+    repo_tags = ["obsservice:latest"],
+    visibility = ["//visibility:public"],
+)
+
+oci_push(
+    name = "push_image",
+    image = ":image",
+    remote_tags = ["latest"],
+    repository = "localhost:5000/obsservice",
     visibility = ["//visibility:public"],
 )
