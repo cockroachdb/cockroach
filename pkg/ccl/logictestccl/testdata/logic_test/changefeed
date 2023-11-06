@@ -65,3 +65,20 @@ query TT
 SELECT user_name, description FROM [SHOW CHANGEFEED JOBS]
 ----
 testuser  CREATE CHANGEFEED FOR TABLE t INTO 'null://sink' WITH OPTIONS (initial_scan = 'only')
+
+subtest disable_changefeed_replication
+
+query T
+SHOW disable_changefeed_replication
+----
+off
+
+statement ok
+SET disable_changefeed_replication TO true
+
+query T
+SHOW disable_changefeed_replication
+----
+on
+
+subtest end

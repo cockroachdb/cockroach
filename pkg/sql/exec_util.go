@@ -3682,6 +3682,10 @@ func (m *sessionDataMutator) SetOptimizerUseProvidedOrderingFix(val bool) {
 	m.data.OptimizerUseProvidedOrderingFix = val
 }
 
+func (m *sessionDataMutator) SetDisableChangefeedReplication(val bool) {
+	m.data.DisableChangefeedReplication = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
