@@ -78,10 +78,18 @@ var devOffsetKeyStart = func() Key {
 // a dev branch.
 const DevOffset = 1_000_000
 
-// maybeDevOffset applies DevOffset to the major version, if appropriate.
-func maybeDevOffset(key Key, v roachpb.Version) roachpb.Version {
+// maybeApplyDevOffset applies DevOffset to the major version, if appropriate.
+func maybeApplyDevOffset(key Key, v roachpb.Version) roachpb.Version {
 	if key >= devOffsetKeyStart {
 		v.Major += DevOffset
+	}
+	return v
+}
+
+// removeDevOffset removes DevOffset from the given version, if it was applied.
+func removeDevOffset(v roachpb.Version) roachpb.Version {
+	if v.Major > DevOffset {
+		v.Major -= DevOffset
 	}
 	return v
 }

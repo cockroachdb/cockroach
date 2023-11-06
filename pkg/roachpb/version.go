@@ -66,8 +66,10 @@ func (v Version) SafeFormat(p redact.SafePrinter, _ rune) {
 	p.Printf("%d.%d-%d", v.Major, v.Minor, v.Internal)
 }
 
-// IsFinal returns true if this is a final version (as opposed to a
-// transitional internal version during upgrade).
+// IsFinal returns true if this is a final version (as opposed to a transitional
+// internal version during upgrade).
+//
+// A version is final iff Internal = 0.
 func (v Version) IsFinal() bool {
 	return v.Internal == 0
 }
