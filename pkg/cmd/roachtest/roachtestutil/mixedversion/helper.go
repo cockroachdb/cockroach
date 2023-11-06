@@ -103,7 +103,7 @@ func (h *Helper) Background(
 			}
 
 			desc := fmt.Sprintf("error in background function %s: %s", name, err)
-			return h.runner.testFailure(desc, bgLogger)
+			return h.runner.testFailure(desc, bgLogger, nil)
 		}
 
 		return nil
