@@ -562,6 +562,15 @@ oci_register_toolchains(
     crane_version = LATEST_CRANE_VERSION,
 )
 
+load("@rules_oci//oci:pull.bzl", "oci_pull")
+
+# https://hub.docker.com/layers/library/debian/stable-slim/images/sha256-cd763f86078e1b4daea9de030256224caf9fb3b3c54e381c08ade14ccfb4baa3?context=explore
+oci_pull(
+    name = "debian-slim",
+    digest = "sha256:cd763f86078e1b4daea9de030256224caf9fb3b3c54e381c08ade14ccfb4baa3",
+    image = "debian",
+)
+
 ##############################
 # end rules_oci dependencies #
 ##############################
