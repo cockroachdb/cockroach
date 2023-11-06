@@ -48,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -691,10 +690,6 @@ type destroyState struct {
 	// If not set, Destroy() only wipes the cluster.
 	owned bool
 
-	// alloc is set if owned is set. If set, it represents resources in a
-	// QuotaPool that need to be released when the cluster is destroyed.
-	alloc *quotapool.IntAlloc
-
 	mu struct {
 		syncutil.Mutex
 		loggerClosed bool
@@ -733,7 +728,6 @@ type clusterConfig struct {
 	username     string
 	localCluster bool
 	useIOBarrier bool
-	alloc        *quotapool.IntAlloc
 	// Specifies CPU architecture which may require a custom AMI and cockroach binary.
 	arch vm.CPUArch
 	// Specifies the OS which may require a custom AMI and cockroach binary.
@@ -853,10 +847,6 @@ func (f *clusterFactory) newCluster(
 		}
 		return c, nil, nil
 	}
-	// Ensure an allocation is specified.
-	if cfg.alloc == nil {
-		return nil, nil, errors.New("no allocation specified; cfg.alloc must be set")
-	}
 
 	if cfg.localCluster {
 		// Local clusters never expire.
@@ -884,9 +874,6 @@ func (f *clusterFactory) newCluster(
 	// that each create attempt gets a unique cluster name.
 	createVMOpts, providerOpts, err := cfg.spec.RoachprodOpts(params)
 	if err != nil {
-		// We must release the allocation because cluster creation is not possible at this point.
-		cfg.alloc.Release()
-
 		return nil, nil, err
 	}
 	if cfg.spec.Cloud != spec.Local {
@@ -937,7 +924,6 @@ func (f *clusterFactory) newCluster(
 			os:         cfg.os,
 			destroyState: destroyState{
 				owned: true,
-				alloc: cfg.alloc,
 			},
 			l: l,
 		}
@@ -963,14 +949,8 @@ func (f *clusterFactory) newCluster(
 		}
 
 		l.PrintfCtx(ctx, "cluster creation failed, cleaning up in case it was partially created: %s", err)
-		// Set the alloc to nil so that Destroy won't release it.
-		// This is ugly, but given that the alloc is created very far away from this code
-		// (when selecting the test) it's the best we can do for now.
-		c.destroyState.alloc = nil
 		c.Destroy(ctx, closeLogger, l)
 		if i >= maxAttempts {
-			// Here we have to release the alloc, as we are giving up.
-			cfg.alloc.Release()
 			return nil, nil, err
 		}
 		// Try again to create the cluster.
@@ -1074,10 +1054,6 @@ func (c *clusterImpl) StopCockroachGracefullyOnNode(
 // Save marks the cluster as "saved" so that it doesn't get destroyed.
 func (c *clusterImpl) Save(ctx context.Context, msg string, l *logger.Logger) {
 	l.PrintfCtx(ctx, "saving cluster %s for debugging (--debug specified)", c)
-	// TODO(andrei): should we extend the cluster here? For how long?
-	if c.destroyState.owned && c.destroyState.alloc != nil { // we won't have an alloc for an unowned cluster
-		c.destroyState.alloc.Freeze()
-	}
 	c.r.markClusterAsSaved(c, msg)
 	c.destroyState.mu.Lock()
 	c.destroyState.mu.saved = true
@@ -1686,13 +1662,6 @@ func (c *clusterImpl) doDestroy(ctx context.Context, l *logger.Logger) <-chan st
 				l.ErrorfCtx(ctx, "error destroying cluster %s: %s", c, err)
 			} else {
 				l.PrintfCtx(ctx, "destroying cluster %s... done", c)
-			}
-			if c.destroyState.alloc != nil {
-				// We should usually have an alloc here, but if we're getting into this
-				// code path while retrying cluster creation, we don't want the alloc
-				// to be released (as we're going to retry cluster creation) and it will
-				// be nil here.
-				c.destroyState.alloc.Release()
 			}
 		} else {
 			l.PrintfCtx(ctx, "wiping cluster %s", c)
