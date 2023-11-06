@@ -113,7 +113,7 @@ func startDistIngestion(
 		return errors.Wrap(err, "failed to update job progress")
 	}
 	jobsprofiler.StorePlanDiagram(ctx, execCtx.ExecCfg().DistSQLSrv.Stopper, planner.initialPlan, execCtx.ExecCfg().InternalDB,
-		ingestionJob.ID())
+		ingestionJob.ID(), execCtx.ExecCfg().Settings.Version)
 
 	replanOracle := sql.ReplanOnCustomFunc(
 		measurePlanChange,
@@ -463,7 +463,7 @@ func (p *replicationFlowPlanner) constructPlanGenerator(
 		if !p.createdInitialPlan() {
 			// Only persist the initial plan as it's the only plan that actually gets
 			// executed.
-			if err := persistStreamIngestionPartitionSpecs(ctx, execCtx.ExecCfg(), ingestionJobID, streamIngestionSpecs); err != nil {
+			if err := persistStreamIngestionPartitionSpecs(ctx, execCtx.ExecCfg(), ingestionJobID, streamIngestionSpecs, execCtx.ExecCfg().Settings.Version); err != nil {
 				return nil, nil, err
 			}
 		}

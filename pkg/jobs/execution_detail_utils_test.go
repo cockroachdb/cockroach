@@ -51,7 +51,7 @@ func TestReadWriteListExecutionDetailFiles(t *testing.T) {
 			// Generate random data of size between 15 bytes and 5 MiB.
 			data := make([]byte, 15+rand.Intn(5*1024*1024-15))
 			randutil.ReadTestdataBytes(rng, data)
-			err := WriteExecutionDetailFile(ctx, filename, data, txn, jobspb.JobID(123))
+			err := WriteExecutionDetailFile(ctx, filename, data, txn, jobspb.JobID(123), ts.ClusterSettings().Version)
 			if err != nil {
 				return err
 			}
@@ -59,11 +59,11 @@ func TestReadWriteListExecutionDetailFiles(t *testing.T) {
 		}
 
 		// Write a binpb format file.
-		return WriteProtobinExecutionDetailFile(ctx, "testproto", msg, txn, jobspb.JobID(123))
+		return WriteProtobinExecutionDetailFile(ctx, "testproto", msg, txn, jobspb.JobID(123), ts.ClusterSettings().Version)
 	}))
 
 	// List the files.
-	listedFiles, err := ListExecutionDetailFiles(ctx, ts.InternalDB().(isql.DB), jobspb.JobID(123))
+	listedFiles, err := ListExecutionDetailFiles(ctx, ts.InternalDB().(isql.DB), jobspb.JobID(123), ts.ClusterSettings().Version)
 	require.NoError(t, err)
 	require.ElementsMatch(t, append(filenames,
 		"testproto~cockroach.sql.jobs.jobspb.BackupDetails.binpb.txt",
@@ -76,7 +76,7 @@ func TestReadWriteListExecutionDetailFiles(t *testing.T) {
 				// Skip the text version of the binpb file.
 				continue
 			}
-			readData, err := ReadExecutionDetailFile(ctx, filename, txn, jobspb.JobID(123))
+			readData, err := ReadExecutionDetailFile(ctx, filename, txn, jobspb.JobID(123), s.ClusterSettings().Version)
 			require.NoError(t, err)
 			if strings.HasSuffix(filename, "binpb") {
 				// For the binpb file, unmarshal the data and compare it to the original message.

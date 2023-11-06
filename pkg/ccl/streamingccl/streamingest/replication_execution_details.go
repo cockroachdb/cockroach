@@ -16,6 +16,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -104,7 +105,11 @@ func constructSpanFrontierExecutionDetails(
 // - The snapshot of the frontier tracking how far each span has been replicated
 // up to.
 func generateSpanFrontierExecutionDetailFile(
-	ctx context.Context, execCfg *sql.ExecutorConfig, ingestionJobID jobspb.JobID, skipBehindBy bool,
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	ingestionJobID jobspb.JobID,
+	skipBehindBy bool,
+	cv clusterversion.Handle,
 ) error {
 	return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		var sb bytes.Buffer
@@ -112,7 +117,7 @@ func generateSpanFrontierExecutionDetailFile(
 
 		// Read the StreamIngestionPartitionSpecs to get a mapping from spans to
 		// their source and destination SQL instance IDs.
-		specs, err := jobs.ReadChunkedFileToJobInfo(ctx, replicationPartitionInfoFilename, txn, ingestionJobID)
+		specs, err := jobs.ReadChunkedFileToJobInfo(ctx, replicationPartitionInfoFilename, txn, ingestionJobID, cv)
 		if err != nil {
 			return err
 		}
@@ -124,7 +129,7 @@ func generateSpanFrontierExecutionDetailFile(
 
 		// Now, read the latest snapshot of the frontier that tells us what
 		// timestamp each span has been replicated up to.
-		frontierEntries, err := jobs.ReadChunkedFileToJobInfo(ctx, frontierEntriesFilename, txn, ingestionJobID)
+		frontierEntries, err := jobs.ReadChunkedFileToJobInfo(ctx, frontierEntriesFilename, txn, ingestionJobID, cv)
 		if err != nil {
 			return err
 		}
@@ -157,7 +162,7 @@ func generateSpanFrontierExecutionDetailFile(
 		if err := w.Flush(); err != nil {
 			return err
 		}
-		return jobs.WriteExecutionDetailFile(ctx, filename, sb.Bytes(), txn, ingestionJobID)
+		return jobs.WriteExecutionDetailFile(ctx, filename, sb.Bytes(), txn, ingestionJobID, cv)
 	})
 }
 
@@ -170,6 +175,7 @@ func persistStreamIngestionPartitionSpecs(
 	execCfg *sql.ExecutorConfig,
 	ingestionJobID jobspb.JobID,
 	streamIngestionSpecs map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
+	cv clusterversion.Handle,
 ) error {
 	err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		specs := make([]*execinfrapb.StreamIngestionPartitionSpec, 0)
@@ -183,7 +189,7 @@ func persistStreamIngestionPartitionSpecs(
 		if err != nil {
 			return err
 		}
-		return jobs.WriteChunkedFileToJobInfo(ctx, replicationPartitionInfoFilename, specBytes, txn, ingestionJobID)
+		return jobs.WriteChunkedFileToJobInfo(ctx, replicationPartitionInfoFilename, specBytes, txn, ingestionJobID, cv)
 	})
 	if knobs := execCfg.StreamingTestingKnobs; knobs != nil && knobs.AfterPersistingPartitionSpecs != nil {
 		knobs.AfterPersistingPartitionSpecs()

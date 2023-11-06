@@ -99,7 +99,7 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 		case <-p.timer.Ch():
 			p.timer.MarkRead()
 			p.timer.Reset(streamingccl.StreamReplicationStreamLivenessTrackFrequency.Get(execCfg.SV()))
-			progress, err := replicationutils.LoadReplicationProgress(ctx, execCfg.InternalDB, p.job.ID())
+			progress, err := replicationutils.LoadReplicationProgress(ctx, execCfg.InternalDB, p.job.ID(), execCfg.Settings.Version)
 			if knobs := execCfg.StreamingTestingKnobs; knobs != nil && knobs.AfterResumerJobLoad != nil {
 				err = knobs.AfterResumerJobLoad(err)
 			}

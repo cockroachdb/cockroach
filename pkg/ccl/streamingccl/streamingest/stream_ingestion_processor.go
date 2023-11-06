@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -318,6 +319,7 @@ func newStreamIngestionDataProcessor(
 		cutoverProvider: &cutoverFromJobProgress{
 			jobID: jobspb.JobID(spec.JobID),
 			db:    flowCtx.Cfg.DB,
+			cv:    flowCtx.Cfg.Settings.Version,
 		},
 		buffer:           &streamIngestionBuffer{},
 		cutoverCh:        make(chan struct{}),
@@ -1245,10 +1247,11 @@ type cutoverProvider interface {
 type cutoverFromJobProgress struct {
 	db    isql.DB
 	jobID jobspb.JobID
+	cv    clusterversion.Handle
 }
 
 func (c *cutoverFromJobProgress) cutoverReached(ctx context.Context) (bool, error) {
-	ingestionProgress, err := replicationutils.LoadIngestionProgress(ctx, c.db, c.jobID)
+	ingestionProgress, err := replicationutils.LoadIngestionProgress(ctx, c.db, c.jobID, c.cv)
 	if err != nil {
 		return false, err
 	}
