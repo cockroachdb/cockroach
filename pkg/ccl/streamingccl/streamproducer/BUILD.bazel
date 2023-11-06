@@ -79,7 +79,6 @@ go_test(
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobsprotectedts",
         "//pkg/keys",
-        "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
