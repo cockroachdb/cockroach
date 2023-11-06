@@ -418,7 +418,6 @@ func (r *testRunner) allocateCluster(
 	lopt loggingOpt,
 	t registry.TestSpec,
 	arch vm.CPUArch,
-	alloc *quotapool.IntAlloc,
 	wStatus *workerStatus,
 ) (*clusterImpl, *vm.CreateOpts, error) {
 	wStatus.SetStatus(fmt.Sprintf("creating cluster (arch=%q)", arch))
@@ -472,7 +471,6 @@ func (r *testRunner) allocateCluster(
 		artifactsDir: lopt.artifactsDir,
 		username:     clustersOpt.user,
 		localCluster: clustersOpt.typ == localCluster,
-		alloc:        alloc,
 		arch:         arch,
 	}
 	return clusterFactory.newCluster(ctx, cfg, wStatus.SetStatus, lopt.tee)
@@ -543,6 +541,17 @@ func (r *testRunner) runWorker(
 		}
 	}()
 
+	var alloc *quotapool.IntAlloc
+	defer func() {
+		// Release any quota, in case we exit from the loop from an error path.
+		if alloc != nil {
+			if alloc.Acquired() > 0 {
+				l.PrintfCtx(ctx, "Releasing quota for %s CPUs", alloc.String())
+			}
+			qp.Release(alloc)
+		}
+	}()
+
 	// Loop until there's no more work in the pool, we get interrupted, or an
 	// error occurs.
 	for {
@@ -558,48 +567,64 @@ func (r *testRunner) runWorker(
 		}
 
 		wStatus.SetTest(nil /* test */, testToRunRes{})
-		testToRun, err := r.getWork(ctx, work, qp, c, interrupt, l)
-		if err != nil {
-			// Problem selecting a test, bail out.
-			return err
-		}
 
-		// If we are reusing a cluster, wipe it.
-		if testToRun.canReuseCluster {
-			err := c.WipeForReuse(ctx, l, testToRun.spec.Cluster)
-			if err != nil {
-				shout(ctx, l, stdout, "Unable to reuse cluster: %s due to: %s. Will attempt to create a fresh one",
-					c.Name(), err)
-				// N.B. we do not count reuse attempt error toward clusterCreateErr.
-				// Let's attempt to create a fresh cluster.
-				testToRun.canReuseCluster = false
-				// We need an allocation quota to start a new cluster; steal it from the
-				// old cluster before we destroy it (we know the cluster configurations
-				// will be identical).
-				testToRun.alloc = c.destroyState.alloc
-				c.destroyState.alloc = nil
+		testToRun := testToRunRes{noWork: true}
+		if c != nil {
+			// Try to reuse cluster.
+			testToRun = work.selectTestForCluster(ctx, c.spec, r.cr)
+			if !testToRun.noWork {
+				// We found a test to run on this cluster. Wipe the cluster.
+				if err := c.WipeForReuse(ctx, l, testToRun.spec.Cluster); err != nil {
+					shout(ctx, l, stdout, "Unable to reuse cluster: %s due to: %s. Will attempt to create a fresh one",
+						c.Name(), err)
+					// We do not count reuse attempt error toward clusterCreateErr. Let's
+					// destroy the cluster and attempt to create a fresh cluster for the
+					// selected test.
+					//
+					// We don't release the quota allocation - the new cluster will be
+					// identical.
+					testToRun.canReuseCluster = false
+					// We use a context that can't be canceled for the Destroy().
+					c.Destroy(context.Background(), closeLogger, l)
+					wStatus.SetCluster(nil)
+					c = nil
+				}
 			}
 		}
 
-		// If we are not reusing a cluster (this includes the noWork case), destroy it.
-		if c != nil && !testToRun.canReuseCluster {
-			wStatus.SetStatus("destroying cluster")
-			// We failed to find a test that can take advantage of this cluster. So
-			// we're going to release it, which will deallocate its resources.
-			if testToRun.noWork {
-				l.PrintfCtx(ctx, "No more tests. Destroying %s.", c)
-			} else {
-				l.PrintfCtx(ctx, "No tests that can reuse cluster %s found. Destroying.", c)
-			}
-			// We use a context that can't be canceled for the Destroy().
-			c.Destroy(context.Background(), closeLogger, l)
-			wStatus.SetCluster(nil)
-			c = nil
-		}
-
+		// We could not find a test that can reuse the cluster. Destroy the cluster
+		// and search for a new test.
 		if testToRun.noWork {
-			shout(ctx, l, stdout, "no work remaining; runWorker is bailing out...")
-			return nil
+			if c != nil {
+				wStatus.SetStatus("destroying cluster")
+				// We failed to find a test that can take advantage of this cluster. So
+				// we're going to release it, which will deallocate its resources.
+				l.PrintfCtx(ctx, "No tests that can reuse cluster %s found. Destroying.", c)
+				// We use a context that can't be canceled for the Destroy().
+				c.Destroy(context.Background(), closeLogger, l)
+				wStatus.SetCluster(nil)
+				c = nil
+			}
+
+			// At this point, any previous cluster was destroyed; release any
+			// associated quota allocation.
+			if alloc != nil {
+				if alloc.Acquired() > 0 {
+					l.PrintfCtx(ctx, "Releasing quota for %s CPUs", alloc.String())
+				}
+				qp.Release(alloc)
+				alloc = nil
+			}
+
+			var err error
+			testToRun, alloc, err = work.selectTest(ctx, qp, l)
+			if err != nil {
+				return err
+			}
+			if testToRun.noWork {
+				shout(ctx, l, stdout, "No work remaining; runWorker is bailing out...")
+				return nil
+			}
 		}
 
 		// From this point onward, c != nil iff we are reusing the cluster.
@@ -628,7 +653,7 @@ func (r *testRunner) runWorker(
 		// TODO(radu): the arch is not guaranteed and another arch can be selected
 		// (in RoachprodOpts). All the code below using arch is incorrect in this
 		// case.
-		if err = VerifyLibraries(testToRun.spec.NativeLibs, arch); err != nil {
+		if err := VerifyLibraries(testToRun.spec.NativeLibs, arch); err != nil {
 			shout(ctx, l, stdout, "Library verification failed: %s", err)
 			return err
 		}
@@ -642,7 +667,7 @@ func (r *testRunner) runWorker(
 			wStatus.SetTest(nil /* test */, testToRun)
 			c, vmCreateOpts, clusterCreateErr = r.allocateCluster(
 				ctx, clusterFactory, clustersOpt, lopt,
-				testToRun.spec, arch, testToRun.alloc, wStatus)
+				testToRun.spec, arch, wStatus)
 			if clusterCreateErr != nil {
 				atomic.AddInt32(&r.numClusterErrs, 1)
 				shout(ctx, l, stdout, "Unable to create (or reuse) cluster for test %s due to: %s.",
@@ -827,6 +852,8 @@ func (r *testRunner) runWorker(
 				getPerfArtifacts(ctx, c, t)
 			}
 			if clustersOpt.debugMode == DebugKeepAlways {
+				alloc.Freeze()
+				alloc = nil
 				c.Save(ctx, "cluster saved since --debug-always set", l)
 				c = nil
 			}
@@ -1416,37 +1443,6 @@ func (r *testRunner) generateReport() string {
 		msg = "PASS"
 	}
 	return msg
-}
-
-// getWork selects the next test to run and creates a suitable cluster for it if
-// need be. If a new cluster needs to be created, the method blocks until there
-// are enough resources available to run it.
-// getWork takes in a cluster; if not nil, tests that can reuse it are
-// preferred. If a test that can reuse it is not found (or if there's no more
-// work), the cluster is destroyed (and so its resources are released).
-func (r *testRunner) getWork(
-	ctx context.Context,
-	work *workPool,
-	qp *quotapool.IntPool,
-	c *clusterImpl,
-	interrupt <-chan struct{},
-	l *logger.Logger,
-) (testToRunRes, error) {
-
-	select {
-	case <-interrupt:
-		return testToRunRes{}, fmt.Errorf("interrupted")
-	default:
-	}
-
-	testToRun, err := work.getTestToRun(ctx, c, qp, r.cr)
-	if err != nil {
-		return testToRunRes{}, err
-	}
-	if !testToRun.noWork {
-		l.PrintfCtx(ctx, "Selected test: %s run: %d.", testToRun.spec.Name, testToRun.runNum)
-	}
-	return testToRun, nil
 }
 
 // addWorker updates the bookkeeping for one more worker.
