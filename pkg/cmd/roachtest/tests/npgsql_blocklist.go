@@ -64,7 +64,6 @@ var npgsqlBlocklist = blocklist{
 	`Npgsql.Tests.CommandTests(Multiplexing).Multiple_statements_with_dependencies`:                                                               "unknown",
 	`Npgsql.Tests.CommandTests(Multiplexing).Non_standards_conforming_strings`:                                                                    "unknown",
 	`Npgsql.Tests.CommandTests(Multiplexing).Positional_parameters_are_not_supported_with_legacy_batching`:                                        "unknown",
-	`Npgsql.Tests.CommandTests(Multiplexing).Reuse_command_with_different_parameter_placeholder_types`:                                            "flaky",
 	`Npgsql.Tests.CommandTests(NonMultiplexing).Cursor_statement`:                                                                                 "unknown",
 	`Npgsql.Tests.CommandTests(NonMultiplexing).ExecuteNonQuery_Throws_PostgresException(False)`:                                                  "unknown",
 	`Npgsql.Tests.CommandTests(NonMultiplexing).ExecuteNonQuery_Throws_PostgresException(True)`:                                                   "unknown",
