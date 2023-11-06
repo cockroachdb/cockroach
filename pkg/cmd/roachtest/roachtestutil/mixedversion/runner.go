@@ -185,7 +185,7 @@ func (tr *testRunner) run() (retErr error) {
 // recursively in the case of sequentialRunStep and concurrentRunStep.
 func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 	if ss, ok := step.(singleStep); ok {
-		if ss.ID() > tr.plan.startClusterID {
+		if ss.impl.ID() > tr.plan.startClusterID {
 			// update the runner's view of the cluster's binary and cluster
 			// versions before every non-initialization `singleStep` is
 			// executed
@@ -232,7 +232,7 @@ func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 			return err
 		}
 
-		if stopChan := ss.Background(); stopChan != nil {
+		if stopChan := ss.impl.Background(); stopChan != nil {
 			tr.startBackgroundStep(ss, stepLogger, stopChan)
 			return nil
 		}
@@ -256,7 +256,7 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss singleStep, l *logge
 	}()
 
 	if err := panicAsError(l, func() error {
-		return ss.Run(ctx, l, tr.cluster, tr.newHelper(ctx, l))
+		return ss.impl.Run(ctx, l, tr.cluster, tr.newHelper(ctx, l, ss.context))
 	}); err != nil {
 		if isContextCanceled(ctx) {
 			l.Printf("step terminated (context canceled)")
@@ -276,7 +276,7 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss singleStep, l *logge
 }
 
 func (tr *testRunner) startBackgroundStep(ss singleStep, l *logger.Logger, stopChan shouldStop) {
-	stop := tr.background.Start(ss.Description(), func(ctx context.Context) error {
+	stop := tr.background.Start(ss.impl.Description(), func(ctx context.Context) error {
 		return tr.runSingleStep(ctx, ss, l)
 	})
 
@@ -302,7 +302,7 @@ func (tr *testRunner) startBackgroundStep(ss singleStep, l *logger.Logger, stopC
 // happened *while* the cluster version was updating).
 func (tr *testRunner) stepError(err error, step singleStep, l *logger.Logger) error {
 	desc := fmt.Sprintf("mixed-version test failure while running step %d (%s): %s",
-		step.ID(), step.Description(), err,
+		step.impl.ID(), step.impl.Description(), err,
 	)
 
 	return tr.testFailure(desc, l)
@@ -379,7 +379,7 @@ func (tr *testRunner) teardown(stepsChan chan error, testFailed bool) {
 
 func (tr *testRunner) logStep(prefix string, step singleStep, l *logger.Logger) {
 	dashes := strings.Repeat("-", 10)
-	l.Printf("%[1]s %s (%d): %s %[1]s", dashes, prefix, step.ID(), step.Description())
+	l.Printf("%[1]s %s (%d): %s %[1]s", dashes, prefix, step.impl.ID(), step.impl.Description())
 }
 
 // logVersions writes the current cached versions of the binary and
@@ -402,8 +402,8 @@ func (tr *testRunner) logVersions(l *logger.Logger) {
 // easy to go from the IDs displayed in the test plan to the
 // corresponding output of that step.
 func (tr *testRunner) loggerFor(step singleStep) (*logger.Logger, error) {
-	name := invalidChars.ReplaceAllString(strings.ToLower(step.Description()), "")
-	name = fmt.Sprintf("%d_%s", step.ID(), name)
+	name := invalidChars.ReplaceAllString(strings.ToLower(step.impl.Description()), "")
+	name = fmt.Sprintf("%d_%s", step.impl.ID(), name)
 
 	prefix := path.Join(logPrefix, name)
 	return prefixedLogger(tr.logger, prefix)
@@ -477,11 +477,14 @@ func (tr *testRunner) connCacheInitialized() bool {
 	return tr.connCache.cache != nil
 }
 
-func (tr *testRunner) newHelper(ctx context.Context, l *logger.Logger) *Helper {
+func (tr *testRunner) newHelper(
+	ctx context.Context, l *logger.Logger, testContext Context,
+) *Helper {
 	return &Helper{
-		ctx:        ctx,
-		runner:     tr,
-		stepLogger: l,
+		ctx:         ctx,
+		runner:      tr,
+		stepLogger:  l,
+		testContext: &testContext,
 	}
 }
 
