@@ -107,7 +107,7 @@ func startDistIngestion(
 		defer recv.Release()
 
 		jobsprofiler.StorePlanDiagram(ctx, execCtx.ExecCfg().DistSQLSrv.Stopper, p, execCtx.ExecCfg().InternalDB,
-			ingestionJob.ID())
+			ingestionJob.ID(), execCtx.ExecCfg().Settings.Version)
 
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *execCtx.ExtendedEvalContext()
