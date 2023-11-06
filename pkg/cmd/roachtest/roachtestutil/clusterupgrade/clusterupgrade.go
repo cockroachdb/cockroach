@@ -43,7 +43,7 @@ var (
 // provides convenient utility function to pretty print versions and
 // check whether this is the current version being tested.
 type Version struct {
-	*version.Version
+	version.Version
 }
 
 // String returns the string representation of this version. For
@@ -65,17 +65,17 @@ func (v *Version) String() string {
 // IsCurrent returns whether this version corresponds to the current
 // version being tested.
 func (v *Version) IsCurrent() bool {
-	return v.Version.Compare(CurrentVersion().Version) == 0
+	return v.Version.Compare(&CurrentVersion().Version) == 0
 }
 
 // CurrentVersion returns the version associated with the current
 // build.
 func CurrentVersion() *Version {
 	if TestBuildVersion != nil {
-		return &Version{TestBuildVersion} // test-only
+		return &Version{*TestBuildVersion} // test-only
 	}
 
-	return &Version{version.MustParse(build.BinaryVersion())}
+	return &Version{*version.MustParse(build.BinaryVersion())}
 }
 
 // MustParseVersion parses the version string given (with or without
@@ -86,7 +86,7 @@ func MustParseVersion(v string) *Version {
 		versionStr = "v" + v
 	}
 
-	return &Version{version.MustParse(versionStr)}
+	return &Version{*version.MustParse(versionStr)}
 }
 
 // BinaryVersion returns the binary version running on the node
