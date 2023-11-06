@@ -178,13 +178,11 @@ var (
 		10_000,      // larger backups (a few GiB when using 128 KiB payloads)
 	}
 
-	largeBankPayload         = 128 << 10 // 128 KiB
 	bankPossiblePayloadBytes = []int{
-		0,                // workload default
-		9,                // 1 random byte (`initial-` + 1)
-		500,              // 5x default at the time of writing
-		16 << 10,         // 16 KiB
-		largeBankPayload, // 128 KiB
+		0,        // workload default
+		9,        // 1 random byte (`initial-` + 1)
+		500,      // 5x default at the time of writing
+		16 << 10, // 16 KiB
 	}
 
 	possibleNumIncrementalBackups = []int{
@@ -2510,8 +2508,8 @@ func registerBackupMixedVersion(r registry.Registry) {
 			// for the cluster used in this test without overloading it,
 			// which can make the backups take much longer to finish.
 			const numWarehouses = 100
-			bankInit, bankRun := bankWorkloadCmd(testRNG, roachNodes)
-			tpccInit, tpccRun := tpccWorkloadCmd(testRNG, numWarehouses, roachNodes)
+			bankInit, bankRun := bankWorkloadCmd(t.L(), testRNG, roachNodes)
+			tpccInit, tpccRun := tpccWorkloadCmd(t.L(), testRNG, numWarehouses, roachNodes)
 
 			mvt.OnStartup("set short job interval", backupTest.setShortJobIntervals)
 			mvt.OnStartup("take backup in previous version", backupTest.maybeTakePreviousVersionBackup)
@@ -2544,7 +2542,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 }
 
 func tpccWorkloadCmd(
-	testRNG *rand.Rand, numWarehouses int, roachNodes option.NodeListOption,
+	l *logger.Logger, testRNG *rand.Rand, numWarehouses int, roachNodes option.NodeListOption,
 ) (init *roachtestutil.Command, run *roachtestutil.Command) {
 	init = roachtestutil.NewCommand("./cockroach workload init tpcc").
 		MaybeOption(testRNG.Intn(2) == 0, "families").
@@ -2554,25 +2552,16 @@ func tpccWorkloadCmd(
 		Arg("{pgurl%s}", roachNodes).
 		Flag("warehouses", numWarehouses).
 		Option("tolerate-errors")
+	l.Printf("tpcc init: %s", init)
+	l.Printf("tpcc run: %s", run)
 	return init, run
 }
 
 func bankWorkloadCmd(
-	testRNG *rand.Rand, roachNodes option.NodeListOption,
+	l *logger.Logger, testRNG *rand.Rand, roachNodes option.NodeListOption,
 ) (init *roachtestutil.Command, run *roachtestutil.Command) {
 	bankPayload := bankPossiblePayloadBytes[testRNG.Intn(len(bankPossiblePayloadBytes))]
 	bankRows := bankPossibleRows[testRNG.Intn(len(bankPossibleRows))]
-	// A small number of rows with large payloads will typically
-	// lead to really large ranges that may cause the test to fail
-	// (e.g., `split failed... cannot find valid split key`). We
-	// avoid this combination.
-	//
-	// TODO(renato): consider reintroducing this combination when
-	// #102284 is fixed.
-	for bankPayload == largeBankPayload && bankRows == fewBankRows {
-		bankPayload = bankPossiblePayloadBytes[testRNG.Intn(len(bankPossiblePayloadBytes))]
-		bankRows = bankPossibleRows[testRNG.Intn(len(bankPossibleRows))]
-	}
 
 	init = roachtestutil.NewCommand("./cockroach workload init bank").
 		Flag("rows", bankRows).
@@ -2582,7 +2571,8 @@ func bankWorkloadCmd(
 	run = roachtestutil.NewCommand("./cockroach workload run bank").
 		Arg("{pgurl%s}", roachNodes).
 		Option("tolerate-errors")
-
+	l.Printf("bank init: %s", init)
+	l.Printf("bank run: %s", run)
 	return init, run
 }
 
