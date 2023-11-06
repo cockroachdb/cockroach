@@ -48,9 +48,13 @@ go_library(
         "@com_github_spf13_pflag//:pflag",
         "@io_opentelemetry_go_otel//attribute",
         "@io_opentelemetry_go_otel//codes",
+        "@io_opentelemetry_go_otel_exporters_otlp_otlptrace//:otlptrace",
         "@io_opentelemetry_go_otel_sdk//trace",
         "@io_opentelemetry_go_otel_trace//:trace",
         "@org_golang_x_exp//slices",
+        "@io_opentelemetry_go_proto_otlp//collector/trace/v1:trace",
+        "@io_opentelemetry_go_proto_otlp//trace/v1:trace",
+        "@org_golang_google_protobuf//proto",
     ],
 )
 
