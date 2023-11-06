@@ -110,7 +110,7 @@ func (c *serverController) shouldWaitForTenantServer(name roachpb.TenantName) bo
 		return false
 	}
 
-	return multitenant.WaitForClusterStart.Get(&c.st.SV)
+	return multitenant.WaitForClusterStartTimeout.Get(&c.st.SV) > 0
 }
 
 func (c *serverController) waitForTenantServer(

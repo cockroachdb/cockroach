@@ -43,22 +43,12 @@ var VerifyTenantService = settings.RegisterBoolSetting(
 	settings.WithName(DefaultClusterSelectSettingName+".check_service.enabled"),
 )
 
-// WaitForClusterStart, if enabled, instructs the tenant controller to
-// wait up to WaitForClusterStartTimeout for the defuault virtual
-// cluster to have an active SQL server.
-var WaitForClusterStart = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"server.controller.mux_virtual_cluster_wait.enabled",
-	"wait up to server.controller_mux_virtual_cluster_wait.timeout for the default virtual cluster to become available for SQL connections",
-	false,
-)
-
-// WaitForClusterStartTimeout is the amoutn of time the the tenant
+// WaitForClusterStartTimeout is the amount of time the tenant
 // controller will wait for the default virtual cluster to have an
-// active SQL server, if WaitForClusterStart is true.
+// active SQL server.
 var WaitForClusterStartTimeout = settings.RegisterDurationSetting(
 	settings.SystemOnly,
 	"server.controller.mux_virtual_cluster_wait.timeout",
-	"amount of time to wait for a default virtual cluster to become available when serving SQL connections",
+	"amount of time to wait for a default virtual cluster to become available when serving SQL connections (0 to disable)",
 	10*time.Second,
 )
