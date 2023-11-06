@@ -83,6 +83,9 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 	hs, err := r.mu.stateLoader.LoadHardState(ctx, r.store.TODOEngine())
 	// For uninitialized ranges, membership is unknown at this point.
 	if raft.IsEmptyHardState(hs) || err != nil {
+		if err != nil {
+			r.reportRaftStorageError(err)
+		}
 		return raftpb.HardState{}, raftpb.ConfState{}, err
 	}
 	cs := r.mu.state.Desc.Replicas().ConfState()
@@ -97,7 +100,11 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 //
 // Entries can return log entries that are not yet stable in durable storage.
 func (r *replicaRaftStorage) Entries(lo, hi uint64, maxBytes uint64) ([]raftpb.Entry, error) {
-	return r.TypedEntries(kvpb.RaftIndex(lo), kvpb.RaftIndex(hi), maxBytes)
+	entries, err := r.TypedEntries(kvpb.RaftIndex(lo), kvpb.RaftIndex(hi), maxBytes)
+	if err != nil {
+		r.reportRaftStorageError(err)
+	}
+	return entries, err
 }
 
 func (r *replicaRaftStorage) TypedEntries(
@@ -128,6 +135,9 @@ const invalidLastTerm = 0
 // Term implements the raft.Storage interface.
 func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 	term, err := r.TypedTerm(kvpb.RaftIndex(i))
+	if err != nil {
+		r.reportRaftStorageError(err)
+	}
 	return uint64(term), err
 }
 
@@ -166,6 +176,9 @@ func (r *Replica) raftLastIndexRLocked() kvpb.RaftIndex {
 // LastIndex requires that r.mu is held for reading.
 func (r *replicaRaftStorage) LastIndex() (uint64, error) {
 	index, err := r.TypedLastIndex()
+	if err != nil {
+		r.reportRaftStorageError(err)
+	}
 	return uint64(index), err
 }
 
@@ -190,6 +203,9 @@ func (r *Replica) raftFirstIndexRLocked() kvpb.RaftIndex {
 // FirstIndex requires that r.mu is held for reading.
 func (r *replicaRaftStorage) FirstIndex() (uint64, error) {
 	index, err := r.TypedFirstIndex()
+	if err != nil {
+		r.reportRaftStorageError(err)
+	}
 	return uint64(index), err
 }
 
@@ -235,6 +251,15 @@ func (r *replicaRaftStorage) Snapshot() (raftpb.Snapshot, error) {
 			Term:  uint64(r.mu.state.RaftAppliedIndexTerm),
 		},
 	}, nil
+}
+
+var raftStorageErrorLogger = log.Every(30 * time.Second)
+
+func (r *replicaRaftStorage) reportRaftStorageError(err error) {
+	if raftStorageErrorLogger.ShouldLog() {
+		log.Errorf(r.raftCtx, "error in raft.Storage %v", err)
+	}
+	r.store.metrics.RaftStorageError.Inc(1)
 }
 
 // raftSnapshotLocked requires that r.mu is held for writing.
