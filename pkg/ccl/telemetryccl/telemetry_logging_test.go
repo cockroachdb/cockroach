@@ -291,7 +291,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 		},
 	}
 
-	sql.TelemetryMaxEventFrequency.Override(context.Background(), &testCluster.Server(0).ApplicationLayer().ClusterSettings().SV, 10)
+	sql.TelemetryMaxStatementEventFrequency.Override(context.Background(), &testCluster.Server(0).ApplicationLayer().ClusterSettings().SV, 10)
 
 	// Run all the queries, one after the previous one is finished.
 	var jobID int
