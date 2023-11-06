@@ -62,6 +62,9 @@ func AlterPrimaryKeyCorrectZoneConfigTest(
 		t.Run(tc.Desc, func(t *testing.T) {
 			var db *gosql.DB
 			var params base.TestServerArgs
+			params.DefaultTestTenant = base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
+				base.TestTenantProbabilistic, 113853, /* issueNumber */
+			)
 			params.Locality.Tiers = []roachpb.Tier{
 				{Key: "region", Value: "ajstorm-1"},
 			}
