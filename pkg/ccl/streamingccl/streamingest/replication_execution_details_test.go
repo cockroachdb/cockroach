@@ -344,7 +344,7 @@ func TestEndToEndFrontierExecutionDetailFile(t *testing.T) {
 
 	ingestionJobID := jobspb.JobID(123)
 	require.NoError(t, persistStreamIngestionPartitionSpecs(ctx, &execCfg,
-		ingestionJobID, streamIngestionsSpecs))
+		ingestionJobID, streamIngestionsSpecs, execCfg.Settings.Version))
 
 	// Now, let's persist some frontier entries.
 	frontierEntries := execinfrapb.FrontierEntries{ResolvedSpans: []jobspb.ResolvedSpan{
@@ -369,9 +369,9 @@ func TestEndToEndFrontierExecutionDetailFile(t *testing.T) {
 	frontierBytes, err := protoutil.Marshal(&frontierEntries)
 	require.NoError(t, err)
 	require.NoError(t, execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return jobs.WriteChunkedFileToJobInfo(ctx, frontierEntriesFilename, frontierBytes, txn, ingestionJobID)
+		return jobs.WriteChunkedFileToJobInfo(ctx, frontierEntriesFilename, frontierBytes, txn, ingestionJobID, execCfg.Settings.Version)
 	}))
-	require.NoError(t, generateSpanFrontierExecutionDetailFile(ctx, &execCfg, ingestionJobID, true /* skipBehindBy */))
+	require.NoError(t, generateSpanFrontierExecutionDetailFile(ctx, &execCfg, ingestionJobID, true /* skipBehindBy */, execCfg.Settings.Version))
 	files := listExecutionDetails(t, srv, ingestionJobID)
 	require.Len(t, files, 1)
 	data, err := checkExecutionDetails(t, srv, ingestionJobID, files[0])

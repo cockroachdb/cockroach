@@ -165,7 +165,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 RETURNING id;`, firstID).Scan(&secondID))
 	// Insert the job payload and progress into the `system.job_info` table.
 	err := tc.Server(0).InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		infoStorage := jobs.InfoStorageForJob(txn, secondID)
+		infoStorage := jobs.InfoStorageForJob(txn, secondID, tc.Server(0).ClusterSettings().Version)
 		if err := infoStorage.WriteLegacyPayload(ctx, firstPayload); err != nil {
 			return err
 		}

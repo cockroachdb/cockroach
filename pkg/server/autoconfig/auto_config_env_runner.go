@@ -146,7 +146,7 @@ func (r *envRunner) maybeRunNextTask(
 
 	err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (resErr error) {
 		// Re-check if there any other started task already.
-		otherTaskID, _, err := getCurrentlyStartedTaskID(ctx, txn, r.envID)
+		otherTaskID, _, err := getCurrentlyStartedTaskID(ctx, txn, r.envID, execCfg.Settings.Version)
 		if err != nil {
 			return err
 		}
@@ -161,7 +161,7 @@ func (r *envRunner) maybeRunNextTask(
 		}
 
 		// Find the latest completed task.
-		lastTaskID, err := getLastCompletedTaskID(ctx, txn, r.envID)
+		lastTaskID, err := getLastCompletedTaskID(ctx, txn, r.envID, execCfg.Settings.Version)
 		if err != nil {
 			return err
 		}
@@ -190,7 +190,7 @@ func (r *envRunner) maybeRunNextTask(
 		// maybeWaitForCurrentTaskJob(), which is an optimization. Storing
 		// the job ID is not strictly required for sequencing the tasks.
 		if err := writeStartMarker(ctx, txn,
-			InfoKeyTaskRef{Environment: r.envID, Task: nextTaskID}, jobID); err != nil {
+			InfoKeyTaskRef{Environment: r.envID, Task: nextTaskID}, jobID, execCfg.Settings.Version); err != nil {
 			return errors.Wrapf(err, "unable to write start marker for task %d", nextTaskID)
 		}
 
@@ -219,7 +219,7 @@ func (r *envRunner) maybeWaitForCurrentTaskJob(
 
 	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		var err error
-		prevTaskID, prevJobID, err = getCurrentlyStartedTaskID(ctx, txn, r.envID)
+		prevTaskID, prevJobID, err = getCurrentlyStartedTaskID(ctx, txn, r.envID, execCfg.Settings.Version)
 		return err
 	}); err != nil {
 		return errors.Wrap(err, "checking latest task job")

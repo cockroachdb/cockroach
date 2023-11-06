@@ -68,11 +68,11 @@ func TestReadWriteChunkedFileToJobInfo(t *testing.T) {
 				randutil.ReadTestdataBytes(rng, tt.data)
 			}
 			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-				err := WriteChunkedFileToJobInfo(ctx, tt.name, tt.data, txn, jobspb.JobID(123))
+				err := WriteChunkedFileToJobInfo(ctx, tt.name, tt.data, txn, jobspb.JobID(123), s.ClusterSettings().Version)
 				if err != nil {
 					return err
 				}
-				got, err := ReadChunkedFileToJobInfo(ctx, tt.name, txn, jobspb.JobID(123))
+				got, err := ReadChunkedFileToJobInfo(ctx, tt.name, txn, jobspb.JobID(123), s.ClusterSettings().Version)
 				if err != nil {
 					return err
 				}
@@ -133,7 +133,7 @@ func TestOverwriteChunkingWithVariableLengths(t *testing.T) {
 			tt.data = generateData(tt.numChunks)
 			// Write the first file, this will generate a certain number of chunks.
 			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-				return WriteChunkedFileToJobInfo(ctx, tt.name, tt.data, txn, jobspb.JobID(123))
+				return WriteChunkedFileToJobInfo(ctx, tt.name, tt.data, txn, jobspb.JobID(123), s.ClusterSettings().Version)
 			}))
 
 			// Overwrite the file with fewer chunks, this should delete the extra
@@ -144,11 +144,11 @@ func TestOverwriteChunkingWithVariableLengths(t *testing.T) {
 					tt.data = generateData(lessChunks)
 					var got []byte
 					require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-						err := WriteChunkedFileToJobInfo(ctx, tt.name, tt.data, txn, jobspb.JobID(123))
+						err := WriteChunkedFileToJobInfo(ctx, tt.name, tt.data, txn, jobspb.JobID(123), s.ClusterSettings().Version)
 						if err != nil {
 							return err
 						}
-						got, err = ReadChunkedFileToJobInfo(ctx, tt.name, txn, jobspb.JobID(123))
+						got, err = ReadChunkedFileToJobInfo(ctx, tt.name, txn, jobspb.JobID(123), s.ClusterSettings().Version)
 						return err
 					}))
 					require.Equal(t, tt.data, got)
@@ -162,11 +162,11 @@ func TestOverwriteChunkingWithVariableLengths(t *testing.T) {
 				tt.data = generateData(moreChunks)
 				var got []byte
 				require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-					err := WriteChunkedFileToJobInfo(ctx, tt.name, tt.data, txn, jobspb.JobID(123))
+					err := WriteChunkedFileToJobInfo(ctx, tt.name, tt.data, txn, jobspb.JobID(123), s.ClusterSettings().Version)
 					if err != nil {
 						return err
 					}
-					got, err = ReadChunkedFileToJobInfo(ctx, tt.name, txn, jobspb.JobID(123))
+					got, err = ReadChunkedFileToJobInfo(ctx, tt.name, txn, jobspb.JobID(123), s.ClusterSettings().Version)
 					return err
 				}))
 				require.Equal(t, tt.data, got)

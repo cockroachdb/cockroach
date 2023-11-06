@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler/profilerconstants"
@@ -29,8 +30,17 @@ import (
 // table. The generation of the plan diagram and persistence to the info table
 // are done asynchronously and this method does not block on their completion.
 func StorePlanDiagram(
-	ctx context.Context, stopper *stop.Stopper, p *sql.PhysicalPlan, db isql.DB, jobID jobspb.JobID,
+	ctx context.Context,
+	stopper *stop.Stopper,
+	p *sql.PhysicalPlan,
+	db isql.DB,
+	jobID jobspb.JobID,
+	cv clusterversion.Handle,
 ) {
+	if !cv.IsActive(ctx, clusterversion.V23_1) {
+		return
+	}
+
 	if err := stopper.RunAsyncTask(ctx, "jobs-store-plan-diagram", func(ctx context.Context) {
 		var cancel func()
 		ctx, cancel = stopper.WithCancelOnQuiesce(ctx)
@@ -45,7 +55,7 @@ func StorePlanDiagram(
 			}
 
 			dspKey := profilerconstants.MakeDSPDiagramInfoKey(timeutil.Now().UnixNano())
-			infoStorage := jobs.InfoStorageForJob(txn, jobID)
+			infoStorage := jobs.InfoStorageForJob(txn, jobID, cv)
 			return infoStorage.Write(ctx, dspKey, []byte(diagURL.String()))
 		})
 		// Don't log the error if the context has been canceled. This will likely be
@@ -70,9 +80,13 @@ func StorePerNodeProcessorProgressFraction(
 	db isql.DB,
 	jobID jobspb.JobID,
 	perComponentProgress map[execinfrapb.ComponentID]float32,
+	cv clusterversion.Handle,
 ) {
+	if !cv.IsActive(ctx, clusterversion.V23_1) {
+		return
+	}
 	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		infoStorage := jobs.InfoStorageForJob(txn, jobID)
+		infoStorage := jobs.InfoStorageForJob(txn, jobID, cv)
 		for componentID, fraction := range perComponentProgress {
 			key := profilerconstants.MakeNodeProcessorProgressInfoKey(componentID.FlowID.String(),
 				componentID.SQLInstanceID.String(), componentID.ID)

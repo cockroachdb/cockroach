@@ -1124,10 +1124,12 @@ func FormatRetriableExecutionErrorLogToStringArray(
 }
 
 // GetJobTraceID returns the current trace ID of the job from the job progress.
-func GetJobTraceID(ctx context.Context, db isql.DB, jobID jobspb.JobID) (tracingpb.TraceID, error) {
+func GetJobTraceID(
+	ctx context.Context, db isql.DB, jobID jobspb.JobID, cv clusterversion.Handle,
+) (tracingpb.TraceID, error) {
 	var traceID tracingpb.TraceID
 	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		jobInfo := InfoStorageForJob(txn, jobID)
+		jobInfo := InfoStorageForJob(txn, jobID, cv)
 		progressBytes, exists, err := jobInfo.GetLegacyProgress(ctx)
 		if err != nil {
 			return err
@@ -1151,14 +1153,14 @@ func GetJobTraceID(ctx context.Context, db isql.DB, jobID jobspb.JobID) (tracing
 // LoadJobProgress returns the job progress from the info table. Note that the
 // progress can be nil if none is recorded.
 func LoadJobProgress(
-	ctx context.Context, db isql.DB, jobID jobspb.JobID,
+	ctx context.Context, db isql.DB, jobID jobspb.JobID, cv clusterversion.Handle,
 ) (*jobspb.Progress, error) {
 	var (
 		progressBytes []byte
 		exists        bool
 	)
 	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		infoStorage := InfoStorageForJob(txn, jobID)
+		infoStorage := InfoStorageForJob(txn, jobID, cv)
 		var err error
 		progressBytes, exists, err = infoStorage.GetLegacyProgress(ctx)
 		return err

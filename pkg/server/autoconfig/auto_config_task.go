@@ -78,7 +78,7 @@ func (r *taskRunner) OnFailOrCancel(ctx context.Context, execCtx interface{}, jo
 	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return markTaskComplete(ctx, txn,
 			InfoKeyTaskRef{Environment: r.envID, Task: r.task.TaskID},
-			[]byte("task error"))
+			[]byte("task error"), execCfg.Settings.Version)
 	}); err != nil {
 		return err
 	}
@@ -180,7 +180,7 @@ func execSimpleSQL(
 		log.Infof(ctx, "finished executing txn statements")
 		return markTaskComplete(ctx, txn,
 			InfoKeyTaskRef{Environment: envID, Task: taskID},
-			[]byte("task success"))
+			[]byte("task success"), execCfg.Settings.Version)
 	})
 }
 
