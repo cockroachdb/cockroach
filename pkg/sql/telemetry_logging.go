@@ -27,7 +27,7 @@ import (
 // are logged to the telemetry channel.
 const defaultMaxEventFrequency = 8
 
-var TelemetryMaxEventFrequency = settings.RegisterIntSetting(
+var TelemetryMaxStatementEventFrequency = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"sql.telemetry.query_sampling.max_event_frequency",
 	"the max event frequency at which we sample executions for telemetry, "+
@@ -108,7 +108,7 @@ type TelemetryLoggingMetrics struct {
 	skippedQueryCount atomic.Uint64
 }
 
-func newTelemetryLoggingmetrics(
+func newTelemetryLoggingMetrics(
 	knobs *TelemetryLoggingTestingKnobs, st *cluster.Settings,
 ) *TelemetryLoggingMetrics {
 	t := TelemetryLoggingMetrics{Knobs: knobs, st: st}
@@ -195,7 +195,7 @@ func (t *TelemetryLoggingMetrics) timeNow() time.Time {
 	return timeutil.Now()
 }
 
-// shouldEmitLog returns true if the stmt should be logged to telemetry. The last emitted time
+// shouldEmitStatementLog returns true if the stmt should be logged to telemetry. The last emitted time
 // tracked by telemetry logging metrics will be updated to the given time if any of the following
 // are met:
 //   - The telemetry mode is set to "transaction" AND the stmt is the first in
@@ -203,10 +203,10 @@ func (t *TelemetryLoggingMetrics) timeNow() time.Time {
 //     of time has elapsed.
 //   - The telemetry mode is set to "statement" AND the required amount of time has elapsed
 //   - The txn is not being tracked and the stmt is being forced to log.
-func (t *TelemetryLoggingMetrics) shouldEmitLog(
+func (t *TelemetryLoggingMetrics) shouldEmitStatementLog(
 	newTime time.Time, txnExecutionID string, force bool, stmtPosInTxn int,
 ) (shouldEmit bool) {
-	maxEventFrequency := TelemetryMaxEventFrequency.Get(&t.st.SV)
+	maxEventFrequency := TelemetryMaxStatementEventFrequency.Get(&t.st.SV)
 	requiredTimeElapsed := time.Second / time.Duration(maxEventFrequency)
 	isTxnMode := telemetrySamplingMode.Get(&t.st.SV) == telemetryModeTransaction
 	txnsLimit := int(telemetryTrackedTxnsLimit.Get(&t.st.SV))
