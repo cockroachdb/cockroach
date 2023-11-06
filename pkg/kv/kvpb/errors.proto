@@ -694,52 +694,6 @@ message RefreshFailedError {
   optional storage.enginepb.TxnMeta conflicting_txn = 4;
 }
 
-// ErrorDetail is a union type containing all available errors.
-message ErrorDetail {
-  reserved 15, 19, 20, 21, 22, 23, 24, 25, 29, 30, 33;
-  oneof value {
-    NotLeaseHolderError not_lease_holder = 1;
-    RangeNotFoundError range_not_found = 2;
-    RangeKeyMismatchError range_key_mismatch = 3;
-    ReadWithinUncertaintyIntervalError read_within_uncertainty_interval = 4;
-    TransactionAbortedError transaction_aborted = 5;
-    TransactionPushError transaction_push = 6;
-    TransactionRetryError transaction_retry = 7;
-    TransactionStatusError transaction_status = 8;
-    LockConflictError lock_conflict = 9;
-    WriteTooOldError write_too_old = 10;
-    OpRequiresTxnError op_requires_txn = 11;
-    ConditionFailedError condition_failed = 12;
-    LeaseRejectedError lease_rejected = 13;
-    NodeUnavailableError node_unavailable = 14;
-    // TODO(kaneda): Following three are added to preserve the type when
-    // converting Go errors from/to proto Errors. Revisit this design.
-    RaftGroupDeletedError raft_group_deleted = 16;
-    ReplicaCorruptionError replica_corruption = 17;
-    ReplicaTooOldError replica_too_old = 18;
-    AmbiguousResultError ambiguous_result = 26;
-    StoreNotFoundError store_not_found = 27;
-    // The following three are ErrorDetails (and proto messages) because they
-    // needs to be communicated from the TxnCoordSender and Txn to the upper
-    // layers through the Sender interface.
-    TransactionRetryWithProtoRefreshError transaction_retry_with_proto_refresh = 28;
-    IntegerOverflowError integer_overflow = 31;
-    UnsupportedRequestError unsupported_request = 32;
-    BatchTimestampBeforeGCError timestamp_before = 34;
-    TxnAlreadyEncounteredErrorError txn_already_encountered_error = 35;
-    IntentMissingError intent_missing = 36;
-    MergeInProgressError merge_in_progress = 37;
-    RangeFeedRetryError rangefeed_retry = 38;
-    IndeterminateCommitError indeterminate_commit = 39;
-    InvalidLeaseError invalid_lease_error = 40;
-    OptimisticEvalConflictsError optimistic_eval_conflicts = 41;
-    MinTimestampBoundUnsatisfiableError min_timestamp_bound_unsatisfiable = 42;
-    RefreshFailedError refresh_failed_error = 43;
-    MVCCHistoryMutationError mvcc_history_mutation = 44
-      [(gogoproto.customname) = "MVCCHistoryMutation"];
-  }
-}
-
 // TransactionRestart indicates how an error should be handled in a
 // transactional context.
 enum TransactionRestart {
