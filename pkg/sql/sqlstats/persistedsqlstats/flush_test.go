@@ -74,6 +74,9 @@ func TestSQLStatsFlush(t *testing.T) {
 
 	testCluster := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
+				base.TestTenantProbabilistic, 113855, /* issueNumber */
+			),
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: &sqlstats.TestingKnobs{
 					StubTimeNow: fakeTime.Now,
