@@ -186,11 +186,25 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	// beginning of the test, and to make sure they aren't closed on server
 	// shutdown. Then we can pass the listeners to the second invocation. Alas,
 	// this requires some refactoring that remains out of scope for now.
-	if err := tc.AddAndStartServerE(newServerArgs); err != nil && !testutils.IsError(err, `address already in use`) {
+	if err := tc.AddAndStartServerE(newServerArgs); err != nil {
+		if testutils.IsError(err, `address already in use`) {
+			// TODO(baptist): The real solution is to use
+			// listenerutil.ReusableListener. That requires some additional
+			// refactoring of the Gossip network code.  Alternatively if the Gossip
+			// networking is refactored to not require real TCP connections this will
+			// be much easier to test.
+			skip.WithIssue(t, 114036)
+			return
+		}
 		t.Fatal(err)
 	}
 
-	tc.WaitForNStores(t, tc.NumServers(), tc.Server(1).GossipI().(*gossip.Gossip))
+	// Wait until we have seen the gossip record for the new store.
+	testutils.SucceedsSoon(t, func() error {
+		g := tc.Server(1).GossipI().(*gossip.Gossip)
+		_, err := g.GetInfo(gossip.MakeStoreDescKey(4))
+		return err
+	})
 
 	// Ensure that all servers still running are responsive. If the two remaining
 	// original nodes don't refresh their connection to the address of the first
