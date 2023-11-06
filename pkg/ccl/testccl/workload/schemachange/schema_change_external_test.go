@@ -79,7 +79,7 @@ func TestWorkload(t *testing.T) {
 		printRows(tdb.Query(t, "SELECT id, encode(descriptor, 'hex') FROM system.descriptor"))
 		printRows(tdb.Query(t, "SELECT * FROM system.namespace"))
 		tdb.Exec(t, "BACKUP DATABASE schemachange TO 'nodelocal://1/backup'")
-		t.Logf("backup in %s", dir)
+		t.Logf("backup and tracing data in %s", dir)
 	}()
 
 	pgURL, cleanup := sqlutils.PGUrl(t, tc.Server(0).AdvSQLAddr(), t.Name(), url.User("testuser"))
@@ -89,7 +89,16 @@ func TestWorkload(t *testing.T) {
 	require.NoError(t, wl.Flags().Parse([]string{
 		"--concurrency", strconv.Itoa(concurrency),
 		"--verbose", "2",
+		"--trace-file", dir + "/schemachange.otlp.tar.gz",
 	}))
+
+	// Validate our flags (which initializes tracing).
+	require.NoError(t, wl.(workload.Hookser).Hooks().Validate())
+
+	// Defer the PostRun hook which will dump recorded spans to disk.
+	defer func() {
+		require.NoError(t, wl.(workload.Hookser).Hooks().PostRun(0))
+	}()
 
 	ql, err := wl.Ops(ctx, []string{pgURL.String()}, reg)
 	require.NoError(t, err)

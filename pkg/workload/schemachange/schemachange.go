@@ -35,8 +35,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/spf13/pflag"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // This workload executes batches of schema changes asynchronously. Each
@@ -89,6 +89,7 @@ type schemaChange struct {
 	fkChildInvalidPct               int
 	declarativeSchemaChangerPct     int
 	declarativeSchemaMaxStmtsPerTxn int
+	traceFilePath                   string
 }
 
 var schemaChangeMeta = workload.Meta{
@@ -114,6 +115,8 @@ var schemaChangeMeta = workload.Meta{
 			`Percentage of times that a sequence is owned by column upon creation.`)
 		s.flags.StringVar(&s.logFilePath, `txn-log`, "",
 			`If provided, transactions will be written to this file in JSON form`)
+		s.flags.StringVar(&s.traceFilePath, `trace-file`, "",
+			`The file to write OTeL traces to. Defaults to schemachange-workload.{timestamp}.otlp.tar.gz`)
 		s.flags.IntVar(&s.fkParentInvalidPct, `fk-parent-invalid-pct`, defaultFkParentInvalidPct,
 			`Percentage of times to choose an invalid parent column in a fk constraint.`)
 		s.flags.IntVar(&s.fkChildInvalidPct, `fk-child-invalid-pct`, defaultFkChildInvalidPct,
@@ -156,7 +159,11 @@ func (s *schemaChange) Ops(
 	// Initialize tracing ahead of everything else. The Ops function is used for
 	// managing the life cycle of this workload so we keep tracing localized to
 	// this function.
-	tracerProvider := sdktrace.NewTracerProvider()
+	traceProvider, err := s.initTraceProvider()
+	if err != nil {
+		return workload.QueryLoad{}, nil
+	}
+
 	tracer := tracerProvider.Tracer("schemachange")
 
 	// NB: The schemaChange.Ops span ends when this function returns, NOT when
@@ -797,6 +804,23 @@ func (l *atomicLog) printLn(message string) {
 	defer l.mu.Unlock()
 
 	_, _ = l.mu.log.Write(append([]byte(message), '\n'))
+}
+
+func (s *schemaChange) initTraceProvider() (*sdktrace.TraceProvider, error) {
+	path := s.traceFilePath
+	if path == "" {
+		// TODO(chrisseto): Before merge ensure this default output is to a
+		// location that is easily accessed from CI and when running locally.
+		path = fmt.Sprintf("schemachange-workload.%s.otlp.tar.gz", timeutil.Now().Format("20060102150405"))
+	}
+
+	// NB: otlptrace is usually used to connect to an HTTP or gRPC server, hence
+	// the context. OTLPFileClient writes to a file, so there's no use in adding a timeout to this context.
+	exporter, err := otlptrace.New(context.Background(), &OTLPFileClient{Path: path})
+	if err != nil {
+		return err
+	}
+	return sdktrace.NewTracerProvider(sdktrace.WithBatcher(exporter)), nil
 }
 
 // initJsonLogFile opens the file denoted by filePath and sets s.logFile on success.

@@ -11,15 +11,23 @@
 package schemachange
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"fmt"
+	"os"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/trace"
+	coltracepb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 // EndSpan is a helper for ending a span and annotating it with error
@@ -73,4 +81,105 @@ func (*PGXTracer) TraceQueryEnd(ctx context.Context, conn *pgx.Conn, data pgx.Tr
 		attribute.String("command_tag", data.CommandTag.String()),
 	)
 	EndSpan(span, data.Err)
+}
+
+// OTLPFileClient is a [otlptrace.Client] that "uploads" spans to .tar.gz file
+// instead of sending them to a remote server.
+//
+// The .tar.gz format is unfortunately bespoke as no equivalent format exists.
+// The closest is the OTLP JSONNL format [1]. At the time of writing, the OTeL
+// SDK used by cockroachdb produces incorrectly keyed jsonpb output due to a
+// backwards incompatible change in the OTLP proto files [2]. As the binary
+// representation can be correctly interpreted, this .tar.gz format was settled
+// on. Future authors should feel free to modify this format or adopt other
+// standards, should they be available.
+//
+// [1]: https://opentelemetry.io/docs/specs/otel/protocol/file-exporter/
+// [2]: https://github.com/open-telemetry/opentelemetry-proto/blob/v0.15.0/opentelemetry/proto/trace/v1/trace.proto#L55-L82
+type OTLPFileClient struct {
+	// Path is the path to the tar.gz file that spans will be written to.
+	Path string
+
+	mu   sync.Mutex
+	file *os.File
+	gzip *gzip.Writer
+	tar  *tar.Writer
+}
+
+var _ otlptrace.Client = &OTLPFileClient{}
+
+// Start implements otlptrace.Client.
+func (c *OTLPFileClient) Start(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.file != nil {
+		return nil
+	}
+
+	var err error
+	c.file, err = os.OpenFile(c.Path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0660)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	c.gzip = gzip.NewWriter(c.file)
+	c.tar = tar.NewWriter(c.gzip)
+
+	return nil
+}
+
+// Stop implements otlptrace.Client.
+func (c *OTLPFileClient) Stop(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if err := c.tar.Close(); err != nil {
+		return errors.WithStack(err)
+	}
+
+	if err := c.gzip.Close(); err != nil {
+		return errors.WithStack(err)
+	}
+
+	if err := c.file.Close(); err != nil {
+		return errors.WithStack(err)
+	}
+
+	return nil
+}
+
+// UploadTraces implements otlptrace.Client.
+func (c *OTLPFileClient) UploadTraces(ctx context.Context, protoSpans []*tracepb.ResourceSpans) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.file == nil {
+		return errors.New(".Start not called")
+	}
+
+	// NB: google's proto.Marshal is intentionally used here. For some reason,
+	// gogo proto panics when touching these messages. OTLP distributes
+	// precompiled protobufs, which may need to be worked around to get gogo
+	// proto working.
+	out, err := proto.Marshal(&coltracepb.ExportTraceServiceRequest{
+		ResourceSpans: protoSpans,
+	})
+	if err != nil {
+		return err
+	}
+
+	if err := c.tar.WriteHeader(&tar.Header{
+		Name: "ExportTraceServiceRequest",
+		Mode: 0600,
+		Size: int64(len(out)),
+	}); err != nil {
+		return err
+	}
+
+	if _, err := c.tar.Write(out); err != nil {
+		return err
+	}
+
+	return nil
 }
