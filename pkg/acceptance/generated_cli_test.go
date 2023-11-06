@@ -60,20 +60,6 @@ func TestDockerCLI_test_cluster_name(t *testing.T) {
 	runTestDockerCLI(t, "test_cluster_name", "../cli/interactive_tests/test_cluster_name.tcl")
 }
 
-func TestDockerCLI_test_connect(t *testing.T) {
-	s := log.Scope(t)
-	defer s.Close(t)
-
-	runTestDockerCLI(t, "test_connect", "../cli/interactive_tests/test_connect.tcl")
-}
-
-func TestDockerCLI_test_connect_cmd(t *testing.T) {
-	s := log.Scope(t)
-	defer s.Close(t)
-
-	runTestDockerCLI(t, "test_connect_cmd", "../cli/interactive_tests/test_connect_cmd.tcl")
-}
-
 func TestDockerCLI_test_contextual_help(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
