@@ -72,7 +72,11 @@ func (t testWrapper) Cockroach() string {
 	return "./dummy-path/to/cockroach"
 }
 
-func (t testWrapper) CockroachShort() string {
+func (t testWrapper) StandardCockroach() string {
+	return "./dummy-path/to/cockroach"
+}
+
+func (t testWrapper) RuntimeAssertionsCockroach() string {
 	return "./dummy-path/to/cockroach-short"
 }
 

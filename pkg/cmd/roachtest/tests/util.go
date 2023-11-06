@@ -15,14 +15,12 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -207,31 +205,27 @@ func setAdmissionControl(ctx context.Context, t test.Test, c cluster.Cluster, en
 	}
 }
 
-// maybeUseBuildWithEnabledAssertions stages the cockroach-short binary with
-// enabled assertions with eaProb probability if that binary is available,
-// otherwise stages the regular cockroach binary, and starts the cluster.
-func maybeUseBuildWithEnabledAssertions(
-	ctx context.Context, t test.Test, c cluster.Cluster, rng *rand.Rand, eaProb float64,
-) {
-	if rng.Float64() < eaProb {
-		// Check whether the cockroach-short binary is available.
-		if t.CockroachShort() != "" {
-			randomSeed := rng.Int63()
-			t.Status(
-				"using cockroach-short binary compiled with --crdb_test "+
-					"build tag and COCKROACH_RANDOM_SEED=", randomSeed,
-			)
-			c.Put(ctx, t.CockroachShort(), "./cockroach")
-			// We need to ensure that all nodes in the cluster start with the
-			// same random seed (if not, some assumptions can be violated - for
-			// example that coldata.BatchSize() values are the same on all
-			// nodes).
-			settings := install.MakeClusterSettings()
-			settings.Env = append(settings.Env, fmt.Sprintf("COCKROACH_RANDOM_SEED=%d", randomSeed))
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
-			return
-		}
+// UsingRuntimeAssertions returns true if calls to `t.Cockroach()` for
+// this test will return the cockroach build with runtime
+// assertions. Note that calling this function only makes sense if the
+// test uploads cockroach using `t.Cockroach` (instead of calling
+// t.StandardCockroach or t.RuntimeAssertionsCockroach directly).
+func UsingRuntimeAssertions(t test.Test) bool {
+	return t.Cockroach() == t.RuntimeAssertionsCockroach()
+}
+
+// maybeUseMemoryBudget returns a StartOpts with the specified --max-sql-memory
+// if runtime assertions are enabled, and the default values otherwise.
+// A scheduled backup will not begin at the start of the roachtest.
+func maybeUseMemoryBudget(t test.Test, budget int) option.StartOpts {
+	startOpts := option.DefaultStartOptsNoBackups()
+	if UsingRuntimeAssertions(t) {
+		// When running tests with runtime assertions enabled, increase
+		// SQL's memory budget to avoid 'budget exceeded' failures.
+		startOpts.RoachprodOpts.ExtraArgs = append(
+			startOpts.RoachprodOpts.ExtraArgs,
+			fmt.Sprintf("--max-sql-memory=%d%%", budget),
+		)
 	}
-	c.Put(ctx, t.Cockroach(), "./cockroach")
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+	return startOpts
 }
