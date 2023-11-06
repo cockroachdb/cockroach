@@ -131,7 +131,7 @@ func validateCorpusFile(
 //     a version bump).
 func runDeclSchemaChangeCompatMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 	currentVersion := clusterupgrade.CurrentVersion()
-	predecessorVersionStr, err := release.LatestPredecessor(currentVersion.Version)
+	predecessorVersionStr, err := release.LatestPredecessor(&currentVersion.Version)
 	if err != nil {
 		t.Fatal(err)
 	}

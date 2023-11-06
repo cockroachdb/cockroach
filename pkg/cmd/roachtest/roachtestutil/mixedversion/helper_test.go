@@ -77,8 +77,7 @@ func TestClusterVersionAtLeast(t *testing.T) {
 			runner := testTestRunner()
 			runner.clusterVersions = clusterVersions
 
-			h := runner.newHelper(ctx, nilLogger)
-			h.testContext = &Context{Finalizing: false} // do not attempt to query cluster version
+			h := runner.newHelper(ctx, nilLogger, Context{Finalizing: false})
 
 			supportedFeature, err := h.ClusterVersionAtLeast(rng, tc.minVersion)
 			if tc.expectedErr == "" {
