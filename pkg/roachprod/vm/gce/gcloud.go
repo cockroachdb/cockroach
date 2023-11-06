@@ -984,9 +984,12 @@ func (p *Provider) Create(
 		if len(providerOpts.Zones) == 0 {
 			zones = []string{"us-central1-a"}
 		} else {
+			supportedT2ARegions := []string{"us-central1", "asia-southeast1", "europe-west4"}
 			for _, zone := range providerOpts.Zones {
-				if !strings.HasPrefix(zone, "us-central1-") {
-					return errors.New("T2A instances are not supported outside of us-central1")
+				for _, region := range supportedT2ARegions {
+					if !strings.HasPrefix(zone, region) {
+						return errors.Newf("T2A instances are not supported outside of [%s]", strings.Join(supportedT2ARegions, ","))
+					}
 				}
 			}
 		}
