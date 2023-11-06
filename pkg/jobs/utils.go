@@ -210,12 +210,18 @@ func isJobInfoTableDoesNotExistError(err error) bool {
 // txn is pushed to a higher timestamp at which the upgrade will have completed
 // and the table/column will be visible. The longer term fix is being tracked in
 // https://github.com/cockroachdb/cockroach/issues/106764.
-func MaybeGenerateForcedRetryableError(ctx context.Context, txn *kv.Txn, err error) error {
-	if err != nil && isJobTypeColumnDoesNotExistError(err) {
+func MaybeGenerateForcedRetryableError(
+	ctx context.Context, txn *kv.Txn, err error, cv clusterversion.Handle,
+) error {
+	if err == nil || !cv.IsActive(ctx, clusterversion.V23_1) {
+		return err
+	}
+
+	if isJobTypeColumnDoesNotExistError(err) {
 		return txn.GenerateForcedRetryableErr(ctx, "synthetic error "+
 			"to push timestamp to after the `job_type` upgrade has run")
 	}
-	if err != nil && isJobInfoTableDoesNotExistError(err) {
+	if isJobInfoTableDoesNotExistError(err) {
 		return txn.GenerateForcedRetryableErr(ctx, "synthetic error "+
 			"to push timestamp to after the `job_info` upgrade has run")
 	}

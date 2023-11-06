@@ -28,24 +28,34 @@ import (
 // with the string passed to the linker in the root Makefile.
 const TimeFormat = "2006/01/02 15:04:05"
 
+// These variables are initialized by Bazel via the linker -X flag
+// when compiling release binaries.
 var (
-	// These variables are initialized by Bazel via the linker -X flag
-	// when compiling release binaries.
 	utcTime          string // Build time in UTC (year/month/day hour:min:sec)
 	rev              string // SHA-1 of this build (git rev-parse)
 	buildTagOverride string
-	cgoCompiler      = cgoVersion()
 	cgoTargetTriple  string
-	platform         = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
-	// Distribution is changed by the CCL init-time hook in non-APL builds.
-	Distribution      = "OSS"
-	typ               string // Type of this build: <empty>, "development", or "release"
-	channel           string
+	typ              string // Type of this build: <empty>, "development", or "release"
+	channel          string
+)
+
+// Distribution is changed by the CCL init-time hook in non-APL builds.
+var Distribution = "OSS"
+
+var (
+	cgoCompiler       = cgoVersion()
+	platform          = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
 	envChannel        = envutil.EnvOrDefaultString("COCKROACH_CHANNEL", "unknown")
 	enabledAssertions = buildutil.CrdbTestBuild
+)
+
+var (
 	//go:embed version.txt
-	cockroachVersion string
-	binaryVersion    = computeBinaryVersion(cockroachVersion, rev)
+	versionTxt       string
+	parsedVersionTxt *version.Version = parseCockroachVersion(versionTxt)
+	binaryVersion    string           = computeBinaryVersion(buildTagOverride, parsedVersionTxt, rev)
+	// binaryVersionTestingOverride is modified by TestingOverrideVersion.
+	binaryVersionTestingOverride string
 )
 
 const (
@@ -64,36 +74,52 @@ func SeemsOfficial() bool {
 	return channel == DefaultTelemetryChannel || channel == FIPSTelemetryChannel
 }
 
-func computeBinaryVersion(versionTxt, revision string) string {
-	if buildTagOverride != "" {
-		return buildTagOverride
-	}
+func parseCockroachVersion(versionTxt string) *version.Version {
 	txt := strings.TrimSuffix(versionTxt, "\n")
 	v, err := version.Parse(txt)
 	if err != nil {
 		panic(fmt.Errorf("could not parse version.txt: %w", err))
 	}
-	if IsRelease() {
-		return v.String()
-	}
-	if revision != "" {
-		return fmt.Sprintf("%s-dev-%s", v.String(), revision)
-	}
-	return fmt.Sprintf("%s-dev", v.String())
+	return v
 }
 
-// BinaryVersion returns the version prefix, patch number and metadata of the current build.
+func computeBinaryVersion(
+	buildTagOverride string, parsedVersionTxt *version.Version, revision string,
+) string {
+	if buildTagOverride != "" {
+		return buildTagOverride
+	}
+	if IsRelease() {
+		return parsedVersionTxt.String()
+	}
+	if revision != "" {
+		return fmt.Sprintf("%s-dev-%s", parsedVersionTxt.String(), revision)
+	}
+	return fmt.Sprintf("%s-dev", parsedVersionTxt.String())
+}
+
+// BinaryVersion returns the version prefix, patch number and metadata of the
+// current build.
 func BinaryVersion() string {
+	if binaryVersionTestingOverride != "" {
+		return binaryVersionTestingOverride
+	}
 	return binaryVersion
 }
 
 // BinaryVersionPrefix returns the version prefix of the current build.
 func BinaryVersionPrefix() string {
-	v, err := version.Parse(binaryVersion)
+	v, err := version.Parse(BinaryVersion())
 	if err != nil {
 		return "dev"
 	}
 	return fmt.Sprintf("v%d.%d", v.Major(), v.Minor())
+}
+
+// BranchReleaseSeries returns tha major and minor in version.txt, without
+// allowing for any overrides.
+func BranchReleaseSeries() (major, minor int) {
+	return parsedVersionTxt.Major(), parsedVersionTxt.Minor()
 }
 
 func init() {
@@ -161,7 +187,7 @@ func GetInfo() Info {
 	}
 	return Info{
 		GoVersion:         runtime.Version(),
-		Tag:               binaryVersion,
+		Tag:               BinaryVersion(),
 		Time:              utcTime,
 		Revision:          rev,
 		CgoCompiler:       cgoCompiler,
@@ -178,9 +204,9 @@ func GetInfo() Info {
 // TestingOverrideVersion allows tests to override the binary version
 // reported by cockroach.
 func TestingOverrideVersion(v string) func() {
-	prevBinaryVersion := binaryVersion
-	binaryVersion = v
-	return func() { binaryVersion = prevBinaryVersion }
+	prevOverride := binaryVersionTestingOverride
+	binaryVersionTestingOverride = v
+	return func() { binaryVersionTestingOverride = prevOverride }
 }
 
 // MakeIssueURL produces a URL to a CockroachDB issue.
