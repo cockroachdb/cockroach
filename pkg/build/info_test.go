@@ -74,9 +74,10 @@ func TestComputeBinaryVersion(t *testing.T) {
 			defer func() { typ = oldBuildType }()
 
 			if tc.panicExpected {
-				require.Panics(t, func() { computeBinaryVersion(tc.versionTxt, tc.revision) })
+				require.Panics(t, func() { parseCockroachVersion(tc.versionTxt) })
 			} else {
-				actualVersion := computeBinaryVersion(tc.versionTxt, tc.revision)
+				v := parseCockroachVersion(tc.versionTxt)
+				actualVersion := computeBinaryVersion("" /* buildTagOverride */, v, tc.revision)
 				require.Equal(t, tc.expectedVersion, actualVersion)
 			}
 		})
