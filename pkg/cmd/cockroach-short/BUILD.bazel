@@ -5,6 +5,9 @@ go_library(
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/cockroach-short",
     visibility = ["//visibility:private"],
+    x_defs = {
+        "github.com/cockroachdb/cockroach/pkg/build.binaryName": "cockroach-short",
+    },
     deps = [
         "//pkg/ccl",
         "//pkg/cli",

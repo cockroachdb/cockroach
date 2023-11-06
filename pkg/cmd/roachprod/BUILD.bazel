@@ -9,6 +9,9 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod",
     visibility = ["//visibility:private"],
+    x_defs = {
+        "github.com/cockroachdb/cockroach/pkg/build.binaryName": "roachprod",
+    },
     deps = [
         "//pkg/build",
         "//pkg/cmd/roachprod/grafana",
