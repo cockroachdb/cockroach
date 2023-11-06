@@ -116,7 +116,11 @@ type executionDetailsBuilder struct {
 
 // makeJobProfilerExecutionDetailsBuilder returns an instance of an executionDetailsBuilder.
 func makeJobProfilerExecutionDetailsBuilder(
-	srv serverpb.SQLStatusServer, db isql.DB, jobID jobspb.JobID, registry *jobs.Registry, cv clusterversion.Handle,
+	srv serverpb.SQLStatusServer,
+	db isql.DB,
+	jobID jobspb.JobID,
+	registry *jobs.Registry,
+	cv clusterversion.Handle,
 ) executionDetailsBuilder {
 	e := executionDetailsBuilder{
 		srv: srv, db: db, jobID: jobID, registry: registry, cv: cv,
