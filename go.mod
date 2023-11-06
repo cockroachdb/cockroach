@@ -223,6 +223,7 @@ require (
 	go.opentelemetry.io/otel/exporters/zipkin v1.0.0-RC3
 	go.opentelemetry.io/otel/sdk v1.3.0
 	go.opentelemetry.io/otel/trace v1.3.0
+	go.opentelemetry.io/proto/otlp v0.11.0
 	golang.org/x/perf v0.0.0-20230113213139-801c7ef9e5c5
 	golang.org/x/term v0.10.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -392,7 +393,6 @@ require (
 	go.mongodb.org/mongo-driver v1.5.1 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.3.0 // indirect
-	go.opentelemetry.io/proto/otlp v0.11.0 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.7.0 // indirect
 	go.uber.org/zap v1.19.0 // indirect
@@ -416,7 +416,7 @@ require (
 	github.com/muesli/reflow v0.3.0 // indirect
 	// The indicated commit is required on top of v1.0.0-RC3 because
 	// it fixes an import comment that otherwise breaks our prereqs tool.
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.3.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.3.0
 	google.golang.org/grpc/examples v0.0.0-20210324172016-702608ffae4d // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 )
