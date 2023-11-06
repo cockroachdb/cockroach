@@ -54,7 +54,6 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/intsets",
         "//pkg/util/log",
-        "//pkg/util/log/logcrash",
         "//pkg/util/mon",
         "//pkg/util/protoutil",
         "//pkg/util/stop",
