@@ -152,26 +152,6 @@ var (
 )
 
 type (
-	// Context wraps the context passed to predicate functions that
-	// dictate when a mixed-version hook will run during a test
-	Context struct {
-		// FromVersion is the version the nodes are migrating from.
-		FromVersion *clusterupgrade.Version
-		// FromVersionNodes are the nodes that are currently running
-		// `FromVersion`.
-		FromVersionNodes option.NodeListOption
-		// ToVersion is the version the nodes are migrating to.
-		ToVersion *clusterupgrade.Version
-		// ToVersionNodes are the nodes that are currently running
-		// `ToVersion`.
-		ToVersionNodes option.NodeListOption
-		// Finalizing indicates whether the cluster version is in the
-		// process of upgrading (i.e., all nodes in the cluster have been
-		// upgraded to a certain version, and the migrations are being
-		// executed).
-		Finalizing bool
-	}
-
 	// userFunc is the signature for user-provided functions that run at
 	// various points in the test (synchronously or in the background).
 	// These functions run on the test runner node itself; i.e., any
@@ -202,10 +182,9 @@ type (
 	// series of steps to be run sequentially or concurrently).
 	testStep interface{}
 
-	// singleStep represents steps that implement the pieces on top of
-	// which a mixed-version test is built. In other words, they are not
-	// composed by other steps and hence can be directly executed.
-	singleStep interface {
+	// singleStepProtocol is the set of functions that single step
+	// implementations need to provide.
+	singleStepProtocol interface {
 		// ID returns a unique ID associated with the step, making it easy
 		// to reference test output with the exact step it relates to
 		ID() int
@@ -223,6 +202,14 @@ type (
 		Background() shouldStop
 		// Run implements the actual functionality of the step.
 		Run(context.Context, *logger.Logger, cluster.Cluster, *Helper) error
+	}
+
+	// singleStep represents steps that implement the pieces on top of
+	// which a mixed-version test is built. In other words, they are not
+	// composed by other steps and hence can be directly executed.
+	singleStep struct {
+		context Context            // the context the step runs in
+		impl    singleStepProtocol // the concrete implementation of the step
 	}
 
 	hooks []versionUpgradeHook
@@ -447,7 +434,7 @@ func (t *Test) InMixedVersion(desc string, fn userFunc) {
 			numUpgradedNodes = t.prng.Intn(len(t.crdbNodes)) + 1
 		}
 
-		return len(testContext.ToVersionNodes) == numUpgradedNodes
+		return len(testContext.NodesInNextVersion()) == numUpgradedNodes
 	}
 
 	t.hooks.AddMixedVersion(versionUpgradeHook{name: desc, predicate: predicate, fn: fn})
@@ -560,14 +547,16 @@ func (t *Test) plan() (*TestPlan, error) {
 		return nil, err
 	}
 
+	initialRelease := previousReleases[0]
 	planner := testPlanner{
-		versions:  append(previousReleases, clusterupgrade.CurrentVersion()),
-		options:   t.options,
-		rt:        t.rt,
-		crdbNodes: t.crdbNodes,
-		hooks:     t.hooks,
-		prng:      t.prng,
-		bgChans:   t.bgChans,
+		versions:       append(previousReleases, clusterupgrade.CurrentVersion()),
+		currentContext: newInitialContext(initialRelease, t.crdbNodes),
+		options:        t.options,
+		rt:             t.rt,
+		crdbNodes:      t.crdbNodes,
+		hooks:          t.hooks,
+		prng:           t.prng,
+		bgChans:        t.bgChans,
 	}
 
 	return planner.Plan(), nil
@@ -632,7 +621,7 @@ func (t *Test) numUpgrades() int {
 func latestPredecessorHistory(
 	_ *rand.Rand, v *clusterupgrade.Version, n int,
 ) ([]*clusterupgrade.Version, error) {
-	history, err := release.LatestPredecessorHistory(v.Version, n)
+	history, err := release.LatestPredecessorHistory(&v.Version, n)
 	if err != nil {
 		return nil, err
 	}
@@ -645,7 +634,7 @@ func latestPredecessorHistory(
 func randomPredecessorHistory(
 	rng *rand.Rand, v *clusterupgrade.Version, n int,
 ) ([]*clusterupgrade.Version, error) {
-	history, err := release.RandomPredecessorHistory(rng, v.Version, n)
+	history, err := release.RandomPredecessorHistory(rng, &v.Version, n)
 	if err != nil {
 		return nil, err
 	}
@@ -845,11 +834,10 @@ func (s finalizeUpgradeStep) Run(
 // runHookStep is a step used to run a user-provided hook (i.e.,
 // callbacks passed to `OnStartup`, `InMixedVersion`, or `AfterTest`).
 type runHookStep struct {
-	id          int
-	testContext Context
-	prng        *rand.Rand
-	hook        versionUpgradeHook
-	stopChan    shouldStop
+	id       int
+	prng     *rand.Rand
+	hook     versionUpgradeHook
+	stopChan shouldStop
 }
 
 func (s runHookStep) ID() int                { return s.id }
@@ -862,7 +850,6 @@ func (s runHookStep) Description() string {
 func (s runHookStep) Run(
 	ctx context.Context, l *logger.Logger, c cluster.Cluster, h *Helper,
 ) error {
-	h.SetContext(&s.testContext)
 	return s.hook.fn(ctx, l, s.prng, h)
 }
 
@@ -913,6 +900,13 @@ func (s concurrentRunStep) Description() string {
 	return fmt.Sprintf("%s concurrently", s.label)
 }
 
+// newSingleStep creates a `singleStep` struct for the implementation
+// passed, making sure to copy the context so that any modifications
+// made to it do not affect this step's view of the context.
+func newSingleStep(context *Context, impl singleStepProtocol) singleStep {
+	return singleStep{context: context.clone(), impl: impl}
+}
+
 // prefixedLogger returns a logger instance off of the given `l`
 // parameter, and adds a prefix to everything logged by the retured
 // logger.
@@ -940,7 +934,7 @@ func (h hooks) Filter(testContext Context) hooks {
 // steps that are not meant to be run in the background, or contain
 // one stop channel (`shouldStop`) for each hook.
 func (h hooks) AsSteps(
-	label string, idGen func() int, prng *rand.Rand, testContext Context, stopChans []shouldStop,
+	label string, idGen func() int, prng *rand.Rand, testContext *Context, stopChans []shouldStop,
 ) []testStep {
 	steps := make([]testStep, 0, len(h))
 	stopChanFor := func(j int) shouldStop {
@@ -952,13 +946,12 @@ func (h hooks) AsSteps(
 
 	for j, hook := range h {
 		hookPrng := rngFromRNG(prng)
-		steps = append(steps, runHookStep{
-			id:          idGen(),
-			prng:        hookPrng,
-			hook:        hook,
-			stopChan:    stopChanFor(j),
-			testContext: testContext,
-		})
+		steps = append(steps, newSingleStep(testContext, runHookStep{
+			id:       idGen(),
+			prng:     hookPrng,
+			hook:     hook,
+			stopChan: stopChanFor(j),
+		}))
 	}
 
 	if len(steps) <= 1 {
@@ -984,23 +977,23 @@ func (th *testHooks) AddAfterUpgradeFinalized(hook versionUpgradeHook) {
 	th.afterUpgradeFinalized = append(th.afterUpgradeFinalized, hook)
 }
 
-func (th *testHooks) StartupSteps(idGen func() int, testContext Context) []testStep {
+func (th *testHooks) StartupSteps(idGen func() int, testContext *Context) []testStep {
 	return th.startup.AsSteps(startupLabel, idGen, th.prng, testContext, nil)
 }
 
 func (th *testHooks) BackgroundSteps(
-	idGen func() int, testContext Context, stopChans []shouldStop,
+	idGen func() int, testContext *Context, stopChans []shouldStop,
 ) []testStep {
 	return th.background.AsSteps(backgroundLabel, idGen, th.prng, testContext, stopChans)
 }
 
-func (th *testHooks) MixedVersionSteps(testContext Context, idGen func() int) []testStep {
+func (th *testHooks) MixedVersionSteps(testContext *Context, idGen func() int) []testStep {
 	return th.mixedVersion.
-		Filter(testContext).
+		Filter(*testContext).
 		AsSteps(mixedVersionLabel, idGen, th.prng, testContext, nil)
 }
 
-func (th *testHooks) AfterUpgradeFinalizedSteps(idGen func() int, testContext Context) []testStep {
+func (th *testHooks) AfterUpgradeFinalizedSteps(idGen func() int, testContext *Context) []testStep {
 	return th.afterUpgradeFinalized.AsSteps(afterTestLabel, idGen, th.prng, testContext, nil)
 }
 

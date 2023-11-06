@@ -58,7 +58,18 @@ func (h *Helper) QueryRow(rng *rand.Rand, query string, args ...interface{}) *go
 // The query and the node picked are logged in the logs of the step
 // that calls this function.
 func (h *Helper) Exec(rng *rand.Rand, query string, args ...interface{}) error {
-	node, db := h.RandomDB(rng, h.runner.crdbNodes)
+	return h.ExecWithGateway(rng, h.runner.crdbNodes, query, args...)
+}
+
+// ExecWithGateway is like Exec, but allows the caller to specify the
+// set of nodes that should be used as gateway. Especially useful in
+// combination with Context methods, for example:
+//
+//	h.ExecWithGateway(rng, h.Context().NodesInNextVersion(), "SELECT 1")
+func (h *Helper) ExecWithGateway(
+	rng *rand.Rand, nodes option.NodeListOption, query string, args ...interface{},
+) error {
+	node, db := h.RandomDB(rng, nodes)
 	h.stepLogger.Printf("running SQL statement:\n%s\nArgs: %v\nNode: %d", query, args, node)
 	_, err := db.ExecContext(h.ctx, query, args...)
 	return err
@@ -66,12 +77,6 @@ func (h *Helper) Exec(rng *rand.Rand, query string, args ...interface{}) error {
 
 func (h *Helper) Connect(node int) *gosql.DB {
 	return h.runner.conn(node)
-}
-
-// SetContext should be called by steps that need access to the test
-// context, as that is only visible to them.
-func (h *Helper) SetContext(c *Context) {
-	h.testContext = c
 }
 
 // Context returns the test context associated with a certain step. It

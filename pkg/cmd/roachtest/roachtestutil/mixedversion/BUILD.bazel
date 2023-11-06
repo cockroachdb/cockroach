@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "mixedversion",
     srcs = [
+        "context.go",
         "helper.go",
         "mixedversion.go",
         "planner.go",
@@ -22,6 +23,7 @@ go_library(
         "//pkg/roachprod/vm",
         "//pkg/testutils/release",
         "//pkg/util/ctxgroup",
+        "//pkg/util/intsets",
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
@@ -33,6 +35,7 @@ go_library(
 go_test(
     name = "mixedversion_test",
     srcs = [
+        "context_test.go",
         "helper_test.go",
         "mixedversion_test.go",
         "planner_test.go",
@@ -47,6 +50,7 @@ go_test(
         "//pkg/roachpb",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
+        "//pkg/util/intsets",
         "//pkg/util/version",
         "@com_github_stretchr_testify//require",
     ],

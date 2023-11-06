@@ -81,5 +81,6 @@ func (tss testSingleStep) Run(
 }
 
 func newTestStep(f func() error) singleStep {
-	return testSingleStep{runFunc: f}
+	initialVersion := parseVersions([]string{predecessorVersion})[0]
+	return newSingleStep(newInitialContext(initialVersion, nodes), testSingleStep{runFunc: f})
 }

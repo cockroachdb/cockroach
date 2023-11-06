@@ -2083,10 +2083,10 @@ func (mvb *mixedVersionBackup) planAndRunBackups(
 	l.Printf("current context: %#v", tc)
 
 	onPrevious := labeledNodes{
-		Nodes: tc.FromVersionNodes, Version: sanitizeVersionForBackup(tc.FromVersion),
+		Nodes: tc.NodesInPreviousVersion(), Version: sanitizeVersionForBackup(tc.FromVersion),
 	}
 	onNext := labeledNodes{
-		Nodes: tc.ToVersionNodes, Version: sanitizeVersionForBackup(tc.ToVersion),
+		Nodes: tc.NodesInNextVersion(), Version: sanitizeVersionForBackup(tc.ToVersion),
 	}
 	onRandom := labeledNodes{Nodes: mvb.roachNodes, Version: "random node"}
 	defaultPauseProbability := 0.2
@@ -2124,7 +2124,7 @@ func (mvb *mixedVersionBackup) planAndRunBackups(
 		},
 	}
 
-	if len(tc.FromVersionNodes) > 0 {
+	if tc.MixedBinary() {
 		const numCollections = 2
 		rng.Shuffle(len(collectionSpecs), func(i, j int) {
 			collectionSpecs[i], collectionSpecs[j] = collectionSpecs[j], collectionSpecs[i]
