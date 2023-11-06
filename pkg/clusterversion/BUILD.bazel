@@ -16,6 +16,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/clusterversion",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/build",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/util/envutil",
@@ -39,6 +40,7 @@ go_test(
     args = ["-test.timeout=55s"],
     embed = [":clusterversion"],
     deps = [
+        "//pkg/build",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",

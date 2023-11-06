@@ -11,8 +11,10 @@
 package clusterversion
 
 import (
+	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/redact"
@@ -92,6 +94,15 @@ func TestKeyConstants(t *testing.T) {
 	require.Equal(t, PreviousRelease, supported[len(supported)-1])
 }
 
+func TestFinalVersion(t *testing.T) {
+	if finalVersion >= 0 {
+		require.False(t, developmentBranch, "final version set but developmentBranch is still set")
+		require.Equal(t, Latest, finalVersion, "finalVersion must match the minted latest version")
+	} else {
+		require.False(t, Latest.IsFinal(), "finalVersion not set but Latest is final")
+	}
+}
+
 func TestVersionFormat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -146,4 +157,16 @@ func TestClusterVersionPrettyPrint(t *testing.T) {
 			t.Errorf("expected %s, got %q", test.exp, actual)
 		}
 	}
+}
+
+func TestReleaseSeries(t *testing.T) {
+	require.Equal(t, fmt.Sprintf("v%s", Latest.ReleaseSeries()), build.BinaryVersionPrefix())
+	if Latest.IsFinal() {
+		require.True(t, Latest.Version() == Latest.ReleaseSeries())
+	} else {
+		require.True(t, removeDevOffset(Latest.Version()).Less(Latest.ReleaseSeries()))
+	}
+	require.Equal(t, PreviousRelease.ReleaseSeries(), removeDevOffset(PreviousRelease.Version()))
+	require.Equal(t, (PreviousRelease - 1).ReleaseSeries(), removeDevOffset(PreviousRelease.Version()))
+	require.Equal(t, MinSupported.ReleaseSeries(), removeDevOffset(MinSupported.Version()))
 }

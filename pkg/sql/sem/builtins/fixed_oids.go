@@ -2510,6 +2510,7 @@ var builtinOidsArray = []string{
 	2539: `pg_encoding_max_length(encoding: int) -> int`,
 	2540: `information_schema._pg_datetime_precision(typid: oid, typmod: int4) -> int`,
 	2541: `information_schema._pg_interval_type(typid: oid, typmod: int4) -> string`,
+	2542: `crdb_internal.release_series(version: string) -> string`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
