@@ -436,7 +436,6 @@ func newInternalPlanner(
 	p.extendedEvalCtx.Sequence = p
 	p.extendedEvalCtx.Tenant = p
 	p.extendedEvalCtx.Regions = p
-	p.extendedEvalCtx.JoinTokenCreator = p
 	p.extendedEvalCtx.Gossip = p
 	p.extendedEvalCtx.JobsProfiler = p
 	p.extendedEvalCtx.ClusterID = execCfg.NodeInfo.LogicalClusterID()

@@ -173,8 +173,6 @@ type Context struct {
 	// Regions stores information about regions.
 	Regions RegionOperator
 
-	JoinTokenCreator JoinTokenCreator
-
 	Gossip GossipOperator
 
 	PreparedStatementState PreparedStatementState

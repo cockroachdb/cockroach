@@ -55,16 +55,6 @@ func (a kvAuth) AuthStream() grpc.StreamServerInterceptor { return a.streamInter
 func (a kvAuth) unaryInterceptor(
 	ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	// Allow unauthenticated requests for the inter-node CA public key as part
-	// of the Add/Join protocol. RFC: https://github.com/cockroachdb/cockroach/pull/51991
-	if info.FullMethod == "/cockroach.server.serverpb.Admin/RequestCA" {
-		return handler(ctx, req)
-	}
-	// Allow unauthenticated requests for the inter-node CA bundle as part
-	// of the Add/Join protocol. RFC: https://github.com/cockroachdb/cockroach/pull/51991
-	if info.FullMethod == "/cockroach.server.serverpb.Admin/RequestCertBundle" {
-		return handler(ctx, req)
-	}
 
 	// Perform authentication and authz selection.
 	authnRes, authz, err := a.authenticateAndSelectAuthzRule(ctx)
