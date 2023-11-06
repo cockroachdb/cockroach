@@ -186,7 +186,16 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	// beginning of the test, and to make sure they aren't closed on server
 	// shutdown. Then we can pass the listeners to the second invocation. Alas,
 	// this requires some refactoring that remains out of scope for now.
-	if err := tc.AddAndStartServerE(newServerArgs); err != nil && !testutils.IsError(err, `address already in use`) {
+	if err := tc.AddAndStartServerE(newServerArgs); err != nil {
+		if testutils.IsError(err, `address already in use`) {
+			// TODO(baptist): The real solution is to use
+			// listenerutil.ReusableListener. That requires some additional
+			// refactoring of the Gossip network code.  Alternatively if the Gossip
+			// networking is refactored to not require real TCP connections this will
+			// be much easier to test.
+			t.Skip("test can't restart the server due to reused port not available")
+			return
+		}
 		t.Fatal(err)
 	}
 
