@@ -142,7 +142,11 @@ func (tr *InfoKeyTaskRef) decodeInternal(prefix, infoKey string) error {
 // writeStartMarker writes a start marker for the given task ID and
 // also writes its job ID into the value part.
 func writeStartMarker(
-	ctx context.Context, txn isql.Txn, taskRef InfoKeyTaskRef, jobID jobspb.JobID, cv clusterversion.Handle,
+	ctx context.Context,
+	txn isql.Txn,
+	taskRef InfoKeyTaskRef,
+	jobID jobspb.JobID,
+	cv clusterversion.Handle,
 ) error {
 	infoStorage := jobs.InfoStorageForJob(txn, jobs.AutoConfigRunnerJobID, cv)
 	return infoStorage.Write(ctx,
@@ -209,7 +213,11 @@ func getLastCompletedTaskID(
 // markTaskCompletes transactionally removes the task's start marker
 // and creates a completion marker.
 func markTaskComplete(
-	ctx context.Context, txn isql.Txn, taskRef InfoKeyTaskRef, completionValue []byte, cv clusterversion.Handle,
+	ctx context.Context,
+	txn isql.Txn,
+	taskRef InfoKeyTaskRef,
+	completionValue []byte,
+	cv clusterversion.Handle,
 ) error {
 	infoStorage := jobs.InfoStorageForJob(txn, jobs.AutoConfigRunnerJobID, cv)
 

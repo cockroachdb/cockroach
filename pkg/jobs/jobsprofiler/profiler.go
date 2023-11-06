@@ -37,6 +37,10 @@ func StorePlanDiagram(
 	jobID jobspb.JobID,
 	cv clusterversion.Handle,
 ) {
+	if !cv.IsActive(ctx, clusterversion.V23_1) {
+		return
+	}
+
 	if err := stopper.RunAsyncTask(ctx, "jobs-store-plan-diagram", func(ctx context.Context) {
 		var cancel func()
 		ctx, cancel = stopper.WithCancelOnQuiesce(ctx)
@@ -78,6 +82,9 @@ func StorePerNodeProcessorProgressFraction(
 	perComponentProgress map[execinfrapb.ComponentID]float32,
 	cv clusterversion.Handle,
 ) {
+	if !cv.IsActive(ctx, clusterversion.V23_1) {
+		return
+	}
 	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		infoStorage := jobs.InfoStorageForJob(txn, jobID, cv)
 		for componentID, fraction := range perComponentProgress {
