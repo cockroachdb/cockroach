@@ -637,7 +637,7 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 			respStatement, exists := actualResponseStatsMap[respQuery]
 			require.True(t, exists, "Expected statement '%s' not found in response: %v", respQuery, responseToJSON(resp))
 
-			actualCount := respStatement.Stats.Count
+			actualCount := respStatement.Stats.FirstAttemptCount
 			actualFullScan := respStatement.Key.KeyData.FullScan
 			actualDistSQL := respStatement.Key.KeyData.DistSQL
 			actualFailed := respStatement.Key.KeyData.Failed
