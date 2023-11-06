@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
@@ -89,11 +90,16 @@ func (d fakeExecResumer) CollectProfile(_ context.Context, _ interface{}) error 
 // checkForPlanDiagram is a method used in tests to wait for the existence of a
 // DSP diagram for the provided jobID.
 func checkForPlanDiagrams(
-	ctx context.Context, t *testing.T, db isql.DB, jobID jobspb.JobID, expectedNumDiagrams int,
+	ctx context.Context,
+	t *testing.T,
+	db isql.DB,
+	jobID jobspb.JobID,
+	expectedNumDiagrams int,
+	cv clusterversion.Handle,
 ) {
 	testutils.SucceedsSoon(t, func() error {
 		return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			infoStorage := jobs.InfoStorageForJob(txn, jobID)
+			infoStorage := jobs.InfoStorageForJob(txn, jobID, cv)
 			var found int
 			err := infoStorage.Iterate(ctx, profilerconstants.DSPDiagramInfoKeyPrefix,
 				func(infoKey string, value []byte) error {
@@ -134,8 +140,9 @@ func TestShowJobsWithExecutionDetails(t *testing.T) {
 				p := sql.PhysicalPlan{}
 				infra := physicalplan.NewPhysicalInfrastructure(uuid.FastMakeV4(), base.SQLInstanceID(1))
 				p.PhysicalInfrastructure = infra
-				jobsprofiler.StorePlanDiagram(ctx, s.Stopper(), &p, s.InternalDB().(isql.DB), j.ID())
-				checkForPlanDiagrams(ctx, t, s.InternalDB().(isql.DB), j.ID(), 1)
+				jobsprofiler.StorePlanDiagram(ctx, s.Stopper(), &p, s.InternalDB().(isql.DB), j.ID(),
+					s.ClusterSettings().Version)
+				checkForPlanDiagrams(ctx, t, s.InternalDB().(isql.DB), j.ID(), 1, s.ClusterSettings().Version)
 				return nil
 			},
 		}
@@ -185,8 +192,8 @@ func TestReadWriteProfilerExecutionDetails(t *testing.T) {
 					p := sql.PhysicalPlan{}
 					infra := physicalplan.NewPhysicalInfrastructure(uuid.FastMakeV4(), base.SQLInstanceID(1))
 					p.PhysicalInfrastructure = infra
-					jobsprofiler.StorePlanDiagram(ctx, s.Stopper(), &p, s.InternalDB().(isql.DB), j.ID())
-					checkForPlanDiagrams(ctx, t, s.InternalDB().(isql.DB), j.ID(), 1)
+					jobsprofiler.StorePlanDiagram(ctx, s.Stopper(), &p, s.InternalDB().(isql.DB), j.ID(), s.ClusterSettings().Version)
+					checkForPlanDiagrams(ctx, t, s.InternalDB().(isql.DB), j.ID(), 1, s.ClusterSettings().Version)
 					isRunning <- struct{}{}
 					<-continueRunning
 					return nil
@@ -348,8 +355,9 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 				p := sql.PhysicalPlan{}
 				infra := physicalplan.NewPhysicalInfrastructure(uuid.FastMakeV4(), base.SQLInstanceID(1))
 				p.PhysicalInfrastructure = infra
-				jobsprofiler.StorePlanDiagram(ctx, s.Stopper(), &p, s.InternalDB().(isql.DB), j.ID())
-				checkForPlanDiagrams(ctx, t, s.InternalDB().(isql.DB), j.ID(), expectedDiagrams)
+				jobsprofiler.StorePlanDiagram(ctx, s.Stopper(), &p, s.InternalDB().(isql.DB), j.ID(),
+					execCfg.Settings.Version)
+				checkForPlanDiagrams(ctx, t, s.InternalDB().(isql.DB), j.ID(), expectedDiagrams, s.ClusterSettings().Version)
 				writtenDiagram <- struct{}{}
 				<-continueCh
 				if err := execCfg.JobRegistry.CheckPausepoint("fakeresumer.pause"); err != nil {

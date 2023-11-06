@@ -1193,13 +1193,13 @@ func checkTraceFiles(
 
 	recordings := make([][]byte, 0)
 	execCfg := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
-	edFiles, err := jobs.ListExecutionDetailFiles(ctx, execCfg.InternalDB, jobID)
+	edFiles, err := jobs.ListExecutionDetailFiles(ctx, execCfg.InternalDB, jobID, execCfg.Settings.Version)
 	require.NoError(t, err)
 	require.Len(t, edFiles, expectedNumFiles)
 
 	require.NoError(t, execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		for _, f := range edFiles {
-			data, err := jobs.ReadExecutionDetailFile(ctx, f, txn, jobID)
+			data, err := jobs.ReadExecutionDetailFile(ctx, f, txn, jobID, execCfg.Settings.Version)
 			if err != nil {
 				return err
 			}
@@ -3691,7 +3691,7 @@ func TestLoadJobProgress(t *testing.T) {
 	_, err := r.CreateJobWithTxn(ctx, rec, 7, nil)
 	require.NoError(t, err)
 
-	p, err := jobs.LoadJobProgress(ctx, s.InternalDB().(isql.DB), 7)
+	p, err := jobs.LoadJobProgress(ctx, s.InternalDB().(isql.DB), 7, s.ClusterSettings().Version)
 	require.NoError(t, err)
 	require.Equal(t, []float32{7.1}, p.GetDetails().(*jobspb.Progress_Import).Import.ReadProgress)
 }

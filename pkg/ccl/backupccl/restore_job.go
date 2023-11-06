@@ -2544,7 +2544,7 @@ func (r *restoreResumer) CollectProfile(ctx context.Context, execCtx interface{}
 		aggStatsCopy = r.mu.perNodeAggregatorStats.DeepCopy()
 	}()
 	return bulkutil.FlushTracingAggregatorStats(ctx, r.job.ID(),
-		p.ExecCfg().InternalDB, aggStatsCopy)
+		p.ExecCfg().InternalDB, aggStatsCopy, p.ExecCfg().Settings.Version)
 }
 
 // dropDescriptors implements the OnFailOrCancel logic.
