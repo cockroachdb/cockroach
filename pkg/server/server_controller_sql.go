@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -120,7 +121,8 @@ func (c *serverController) waitForTenantServer(
 	// in less time than the WaitForClusterStartTimeout. This seems fine for
 	// now since cluster startup should be relatively quick and if it isn't,
 	// waiting longer isn't going to help.
-	s, _, err := c.tenantWaiter.Do(ctx, string(name), func(ctx context.Context) (interface{}, error) {
+	opts := singleflight.DoOpts{Stop: c.stopper, InheritCancelation: false}
+	futureRes, _ := c.tenantWaiter.DoChan(ctx, string(name), opts, func(ctx context.Context) (interface{}, error) {
 		t := timeutil.NewTimer()
 		defer t.Stop()
 		t.Reset(multitenant.WaitForClusterStartTimeout.Get(&c.st.SV))
@@ -139,10 +141,11 @@ func (c *serverController) waitForTenantServer(
 			}
 		}
 	})
-	if err != nil {
-		return nil, err
+	res := futureRes.WaitForResult(ctx)
+	if res.Err != nil {
+		return nil, res.Err
 	}
-	return s.(onDemandServer), nil
+	return res.Val.(onDemandServer), nil
 }
 
 func (t *systemServerWrapper) handleCancel(
