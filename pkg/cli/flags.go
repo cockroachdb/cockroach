@@ -1334,9 +1334,22 @@ func mtStartSQLFlagsInit(cmd *cobra.Command) error {
 	// Override default store for mt to use a per tenant store directory.
 	fs := cliflagcfg.FlagSetForCmd(cmd)
 	if !fs.Changed(cliflags.Store.Name) {
-		// We assume that we only need to change top level store as temp dir configs are
-		// initialized when start is executed and temp dirs inherit path from first store.
-		serverCfg.Stores.Specs[0].Path += fmt.Sprintf("-tenant-%d", os.Getpid())
+		// If the tenant-id-file flag was supplied, this means that we don't
+		// have a tenant ID during process startup, so we can't construct the
+		// default store name. In that case, explicitly require that the
+		// store is supplied.
+		if fs.Lookup(cliflags.TenantIDFile.Name).Value.String() != "" {
+			return errors.Newf(
+				"--%s must be explicitly supplied when using --%s",
+				cliflags.Store.Name,
+				cliflags.TenantIDFile.Name,
+			)
+		}
+		// We assume that we only need to change top level store as temp dir
+		// configs are initialized when start is executed and temp dirs inherit
+		// path from first store.
+		tenantID := fs.Lookup(cliflags.TenantID.Name).Value.String()
+		serverCfg.Stores.Specs[0].Path += "-tenant-" + tenantID
 	}
 
 	// In standalone SQL servers, we do not generate a ballast file,
