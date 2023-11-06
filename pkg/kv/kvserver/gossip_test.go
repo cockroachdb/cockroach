@@ -186,7 +186,10 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	// beginning of the test, and to make sure they aren't closed on server
 	// shutdown. Then we can pass the listeners to the second invocation. Alas,
 	// this requires some refactoring that remains out of scope for now.
-	if err := tc.AddAndStartServerE(newServerArgs); err != nil && !testutils.IsError(err, `address already in use`) {
+	if err := tc.AddAndStartServerE(newServerArgs); err != nil {
+		if testutils.IsError(err, `address already in use`) {
+			return
+		}
 		t.Fatal(err)
 	}
 
