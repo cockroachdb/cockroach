@@ -26,16 +26,21 @@ message SSTableMetricsInfo {
   uint64 approximate_span_bytes = 4 [(gogoproto.customname) = "ApproximateSpanBytes"];
 }
 
+// StorageInternalKeyMetrics contains metrics that correspond to the fields in
+// pebble.KeyStatistics.
 message StorageInternalKeysMetrics {
-  // level is the lsm tree level the metrics are found.
+  // Level is the lsm tree level the metrics are found. It is set to -1 for
+  // the aggregate stats across all levels.
   int32 level = 1;
-  uint64 snapshot_pinned_keys = 2 [(gogoproto.customname) = "SnapshotPinnedKeys"];
-  uint64 snapshot_pinnedKeys_bytes = 3 [(gogoproto.customname) = "SnapshotPinnedKeysBytes"];
-  uint64 point_key_delete_count = 4 [(gogoproto.customname) = "PointKeyDeleteCount"];
-  uint64 point_key_set_count = 5 [(gogoproto.customname) = "PointKeySetCount"];
-  uint64 range_delete_count = 6 [(gogoproto.customname) = "RangeDeleteCount"];
-  uint64 range_key_set_count = 7 [(gogoproto.customname) = "RangeKeySetCount"];
-  uint64 range_key_delete_count = 8 [(gogoproto.customname) = "RangeKeyDeleteCount"];
+  uint64 snapshot_pinned_keys = 2;
+  uint64 snapshot_pinned_keys_bytes = 3;
+  uint64 point_key_delete_count = 4;
+  uint64 point_key_set_count = 5;
+  uint64 range_delete_count = 6;
+  uint64 range_key_set_count = 7;
+  uint64 range_key_delete_count = 8;
+  uint64 point_key_delete_is_latest_count = 9;
+  uint64 point_key_set_is_latest_count = 10;
 }
 
 // SSTUserProperties contains the user-added properties of a single sstable.
