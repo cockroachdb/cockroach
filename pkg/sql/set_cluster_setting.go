@@ -617,6 +617,16 @@ func setVersionSetting(
 			return err
 		}
 		return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			// Run the upgrade transaction as high-priority to prevent it from
+			// getting pushed by other high-priority transactions like SQL lease
+			// acquisition (see sql/catalog/lease), which may read from the key.
+			// Without this, it is possible for the upgrade transaction to be
+			// starved and prevented from committing (#95227), which can stall
+			// the upgrade process.
+			if err := txn.KV().SetUserPriority(roachpb.MaxUserPriority); err != nil {
+				return err
+			}
+
 			// Confirm if the version has actually changed on us.
 			datums, err := txn.QueryRowEx(
 				ctx, "retrieve-prev-setting", txn.KV(),
