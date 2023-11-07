@@ -21,8 +21,7 @@ import (
 )
 
 func TestMakeTestRegistry(t *testing.T) {
-	r := makeTestRegistry(spec.AWS)
-	require.Equal(t, spec.AWS, r.cloud)
+	r := makeTestRegistry()
 
 	s := r.MakeClusterSpec(100, spec.Geo(), spec.CPU(12),
 		spec.PreferLocalSSD())
@@ -52,7 +51,7 @@ func TestMakeTestRegistry(t *testing.T) {
 // TestPrometheusMetricParser tests that the registry.PromSub()
 // helper properly converts a string into a metric name that Prometheus can read.
 func TestPrometheusMetricParser(t *testing.T) {
-	r := makeTestRegistry(spec.AWS)
+	r := makeTestRegistry()
 	f := r.PromFactory()
 
 	rawName := "restore/nodes=4/duration"
