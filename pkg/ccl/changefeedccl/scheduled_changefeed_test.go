@@ -58,7 +58,7 @@ type testHelper struct {
 	sqlDB            *sqlutils.SQLRunner
 	server           serverutils.TestServerInterface
 	executeSchedules func() error
-	createdSchedules []int64
+	createdSchedules []jobspb.ScheduleID
 }
 
 func newTestHelper(t *testing.T) (*testHelper, func()) {
@@ -101,14 +101,16 @@ func (h *testHelper) clearSchedules(t *testing.T) {
 	sep := ""
 	for _, id := range h.createdSchedules {
 		sb.WriteString(sep)
-		sb.WriteString(strconv.FormatInt(id, 10))
+		sb.WriteString(strconv.FormatInt(int64(id), 10))
 		sep = ", "
 	}
 	h.sqlDB.Exec(t, fmt.Sprintf("DELETE FROM %s WHERE schedule_id IN (%s)",
 		h.env.ScheduledJobsTableName(), sb.String()))
 }
 
-func (h *testHelper) waitForSuccessfulScheduledJob(t *testing.T, scheduleID int64) int64 {
+func (h *testHelper) waitForSuccessfulScheduledJob(
+	t *testing.T, scheduleID jobspb.ScheduleID,
+) int64 {
 	query := "SELECT id FROM " + h.env.SystemJobsTableName() +
 		" WHERE status=$1 AND created_by_type=$2 AND created_by_id=$3"
 	var jobID int64

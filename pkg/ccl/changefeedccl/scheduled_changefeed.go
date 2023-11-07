@@ -218,7 +218,7 @@ func extractChangefeedStatement(sj *jobs.ScheduledJob) (*annotatedChangefeedStat
 			CreateChangefeed: stmt,
 			CreatedByInfo: &jobs.CreatedByInfo{
 				Name: jobs.CreatedByScheduledJobs,
-				ID:   sj.ScheduleID(),
+				ID:   int64(sj.ScheduleID()),
 			},
 		}, nil
 	}
@@ -393,7 +393,7 @@ func makeChangefeedSchedule(
 func dryRunCreateChangefeed(
 	ctx context.Context,
 	p sql.PlanHookState,
-	scheduleID int64,
+	scheduleID jobspb.ScheduleID,
 	createChangefeedNode *tree.CreateChangefeed,
 ) error {
 	sp, err := p.ExtendedEvalContext().Txn.CreateSavepoint(ctx)
@@ -406,7 +406,7 @@ func dryRunCreateChangefeed(
 			CreateChangefeed: createChangefeedNode,
 			CreatedByInfo: &jobs.CreatedByInfo{
 				Name: jobs.CreatedByScheduledJobs,
-				ID:   scheduleID,
+				ID:   int64(scheduleID),
 			},
 		}
 		changefeedFn, err := planCreateChangefeed(ctx, p, annotated)

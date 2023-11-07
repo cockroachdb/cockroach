@@ -805,14 +805,8 @@ func (sc *SchemaChanger) validateConstraints(
 				defer func() { collection.ReleaseAll(ctx) }()
 				if ck := c.AsCheck(); ck != nil {
 					if err := validateCheckInTxn(
-						ctx, txn, &semaCtx, evalCtx.SessionData(), desc, ck.GetExpr(),
+						ctx, txn, &semaCtx, evalCtx.SessionData(), desc, ck,
 					); err != nil {
-						if ck.IsNotNullColumnConstraint() {
-							// TODO (lucy): This should distinguish between constraint
-							// validation errors and other types of unexpected errors, and
-							// return a different error code in the former case
-							err = errors.Wrap(err, "validation of NOT NULL constraint failed")
-						}
 						return err
 					}
 				} else if c.AsForeignKey() != nil {
@@ -2604,7 +2598,7 @@ func runSchemaChangesInTxn(
 		if check := c.AsCheck(); check != nil {
 			if check.GetConstraintValidity() == descpb.ConstraintValidity_Validating {
 				if err := validateCheckInTxn(
-					ctx, planner.InternalSQLTxn(), &planner.semaCtx, planner.SessionData(), tableDesc, check.GetExpr(),
+					ctx, planner.InternalSQLTxn(), &planner.semaCtx, planner.SessionData(), tableDesc, check,
 				); err != nil {
 					return err
 				}
@@ -2704,7 +2698,7 @@ func validateCheckInTxn(
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
 	tableDesc *tabledesc.Mutable,
-	checkExpr string,
+	checkToValidate catalog.CheckConstraint,
 ) error {
 	var syntheticDescs []catalog.Descriptor
 	if tableDesc.Version > tableDesc.ClusterVersion().Version {
@@ -2715,12 +2709,20 @@ func validateCheckInTxn(
 		syntheticDescs,
 		func() error {
 			violatingRow, formattedCkExpr, err := validateCheckExpr(ctx, semaCtx, txn, sessionData,
-				checkExpr, tableDesc, 0 /* indexIDForValidation */)
+				checkToValidate.GetExpr(), tableDesc, 0 /* indexIDForValidation */)
 			if err != nil {
 				return err
 			}
 			if len(violatingRow) > 0 {
-				return newCheckViolationErr(formattedCkExpr, tableDesc.AccessibleColumns(), violatingRow)
+				if checkToValidate.IsNotNullColumnConstraint() {
+					notNullCol, err := catalog.MustFindColumnByID(tableDesc, checkToValidate.GetReferencedColumnID(0))
+					if err != nil {
+						return err
+					}
+					return newNotNullViolationErr(notNullCol.GetName(), tableDesc.AccessibleColumns(), violatingRow)
+				} else {
+					return newCheckViolationErr(formattedCkExpr, tableDesc.AccessibleColumns(), violatingRow)
+				}
 			}
 			return nil
 		})

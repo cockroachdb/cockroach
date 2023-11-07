@@ -47,14 +47,14 @@ func loadSchedules(
 ) (scheduleDetails, error) {
 	scheduleID := spec.scheduleID
 	s := scheduleDetails{}
-	if scheduleID == 0 {
+	if scheduleID == jobspb.InvalidScheduleID {
 		return s, errors.Newf("Schedule ID expected, none found")
 	}
 
 	execCfg := p.ExecCfg()
 	env := sql.JobSchedulerEnv(execCfg.JobsKnobs())
 	schedules := jobs.ScheduledJobTxn(p.InternalSQLTxn())
-	schedule, err := schedules.Load(ctx, env, int64(scheduleID))
+	schedule, err := schedules.Load(ctx, env, scheduleID)
 	if err != nil {
 		return s, err
 	}
@@ -471,7 +471,7 @@ func processFullBackupRecurrence(
 			s.fullJob.ScheduleLabel(),
 			incRecurrence,
 			*s.fullJob.ScheduleDetails(),
-			jobs.InvalidScheduleID,
+			jobspb.InvalidScheduleID,
 			s.fullArgs.UpdatesLastBackupMetric,
 			s.incStmt,
 			s.fullArgs.ChainProtectedTimestampRecords,
@@ -614,7 +614,7 @@ func processNextRunNow(
 
 type alterBackupScheduleSpec struct {
 	// Schedule specific properties that get evaluated.
-	scheduleID           uint64
+	scheduleID           jobspb.ScheduleID
 	recurrence           string
 	fullBackupRecurrence string
 	fullBackupAlways     bool
@@ -635,7 +635,7 @@ func makeAlterBackupScheduleSpec(
 ) (*alterBackupScheduleSpec, error) {
 	exprEval := p.ExprEvaluator(alterBackupScheduleOp)
 	spec := &alterBackupScheduleSpec{
-		scheduleID: alterStmt.ScheduleID,
+		scheduleID: jobspb.ScheduleID(alterStmt.ScheduleID),
 	}
 	var err error
 	observed := make(map[string]interface{})

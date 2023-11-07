@@ -1802,7 +1802,7 @@ func TestVirtualPTSTable(t *testing.T) {
 
 		rec := jobsprotectedts.MakeRecord(
 			uuid.MakeV4(),
-			sj.ScheduleID(),
+			int64(sj.ScheduleID()),
 			tc.Server(0).Clock().Now(),
 			[]roachpb.Span{},
 			jobsprotectedts.Schedules,

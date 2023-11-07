@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -108,12 +109,12 @@ func verifySQLStatsCompactionScheduleCreatedOnStartup(t *testing.T, helper *test
 }
 
 func getSQLStatsCompactionSchedule(t *testing.T, helper *testHelper) *jobs.ScheduledJob {
-	var jobID int64
+	var scheduleID jobspb.ScheduleID
 	helper.sqlDB.
 		QueryRow(t, `SELECT schedule_id FROM system.scheduled_jobs WHERE schedule_name = 'sql-stats-compaction'`).
-		Scan(&jobID)
+		Scan(&scheduleID)
 	schedules := jobs.ScheduledJobDB(helper.server.InternalDB().(isql.DB))
-	sj, err := schedules.Load(context.Background(), helper.env, jobID)
+	sj, err := schedules.Load(context.Background(), helper.env, scheduleID)
 	require.NoError(t, err)
 	require.NotNil(t, sj)
 	return sj

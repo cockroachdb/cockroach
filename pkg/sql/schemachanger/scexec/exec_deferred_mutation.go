@@ -30,7 +30,7 @@ type deferredState struct {
 	databaseRoleSettingsToDelete []databaseRoleSettingToDelete
 	schemaChangerJob             *jobs.Record
 	schemaChangerJobUpdates      map[jobspb.JobID]schemaChangerJobUpdate
-	scheduleIDsToDelete          []int64
+	scheduleIDsToDelete          []jobspb.ScheduleID
 	statsToRefresh               catalog.DescriptorIDSet
 	indexesToSplitAndScatter     []indexesToSplitAndScatter
 	gcJobs
@@ -71,7 +71,7 @@ func (s *deferredState) AddIndexForMaybeSplitAndScatter(
 		})
 }
 
-func (s *deferredState) DeleteSchedule(scheduleID int64) {
+func (s *deferredState) DeleteSchedule(scheduleID jobspb.ScheduleID) {
 	s.scheduleIDsToDelete = append(s.scheduleIDsToDelete, scheduleID)
 }
 

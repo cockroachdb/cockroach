@@ -236,7 +236,7 @@ func TestJobSchedulerDaemonGetWaitPeriod(t *testing.T) {
 }
 
 type recordScheduleExecutor struct {
-	executed []int64
+	executed []jobspb.ScheduleID
 }
 
 func (n *recordScheduleExecutor) ExecuteJob(
@@ -338,7 +338,7 @@ func TestJobSchedulerCanBeDisabledWhileSleeping(t *testing.T) {
 
 // We expect the first 2 jobs to be executed.
 type expectedRun struct {
-	id      int64
+	id      jobspb.ScheduleID
 	nextRun interface{} // Interface to support nullable nextRun
 }
 
@@ -377,7 +377,7 @@ func TestJobSchedulerDaemonProcessesJobs(t *testing.T) {
 	// Create few, one-off schedules.
 	const numJobs = 5
 	scheduleRunTime := h.env.Now().Add(time.Hour)
-	var scheduleIDs []int64
+	var scheduleIDs []jobspb.ScheduleID
 	schedules := ScheduledJobDB(h.cfg.DB)
 	for i := 0; i < numJobs; i++ {
 		schedule := h.newScheduledJob(t, "test_job", "SELECT 42")
@@ -421,7 +421,7 @@ func TestJobSchedulerDaemonHonorsMaxJobsLimit(t *testing.T) {
 	// Create few, one-off schedules.
 	const numJobs = 5
 	scheduleRunTime := h.env.Now().Add(time.Hour)
-	var scheduleIDs []int64
+	var scheduleIDs []jobspb.ScheduleID
 	schedules := ScheduledJobDB(h.cfg.DB)
 	for i := 0; i < numJobs; i++ {
 		schedule := h.newScheduledJob(t, "test_job", "SELECT 42")

@@ -348,7 +348,7 @@ type DescriptorMetadataUpdater interface {
 	DeleteDatabaseRoleSettings(ctx context.Context, dbID descpb.ID) error
 
 	// DeleteSchedule deletes the given schedule.
-	DeleteSchedule(ctx context.Context, id int64) error
+	DeleteSchedule(ctx context.Context, id jobspb.ScheduleID) error
 
 	// UpdateTTLScheduleLabel updates the schedule_name for the TTL Scheduled Job
 	// of the given table.
