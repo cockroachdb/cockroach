@@ -740,6 +740,7 @@ func constructStreamIngestionPlanSpecs(
 		StreamAddresses:         topology.StreamAddresses(),
 		SubscribingSQLInstances: subscribingSQLInstances,
 		Checkpoint:              checkpoint,
+		PartitionSpecs:          repackagePartitionSpecs(streamIngestionSpecs),
 	}
 
 	return streamIngestionSpecs, streamIngestionFrontierSpec, nil

@@ -711,7 +711,7 @@ func TestStreamingAutoReplan(t *testing.T) {
 	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_frequency", time.Millisecond*500)
 
 	// Don't allow inter node lag replanning to affect the test.
-	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.inter_node_lag", 0)
+	serverutils.SetClusterSetting(t, c.DestCluster, "physical_replication.consumer.node_lag_replanning_threshold", 0)
 
 	// Begin the job on a single source node.
 	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
@@ -806,14 +806,14 @@ func TestStreamingReplanOnLag(t *testing.T) {
 	require.Greater(t, len(clientAddresses), 1)
 
 	// Configure the ingestion job to replan eagerly based on node lagging.
-	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.inter_node_lag", time.Second)
+	serverutils.SetClusterSetting(t, c.DestCluster, "physical_replication.consumer.node_lag_replanning_threshold", time.Second)
 	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_frequency", time.Millisecond*500)
 
 	// The ingestion job should eventually retry because it detects a lagging node.
 	require.ErrorContains(t, <-retryErrorChan, ErrNodeLagging.Error())
 
 	// Prevent continuous replanning to reduce test runtime.
-	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.inter_node_lag", time.Minute*10)
+	serverutils.SetClusterSetting(t, c.DestCluster, "physical_replication.consumer.node_lag_replanning_threshold", time.Minute*10)
 	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_frequency", time.Minute*10)
 	close(turnOffReplanning)
 

@@ -174,6 +174,19 @@ func generateSpanFrontierExecutionDetailFile(
 	})
 }
 
+func repackagePartitionSpecs(
+	streamIngestionSpecs map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
+) execinfrapb.StreamIngestionPartitionSpecs {
+	specs := make([]*execinfrapb.StreamIngestionPartitionSpec, 0)
+	partitionSpecs := execinfrapb.StreamIngestionPartitionSpecs{Specs: specs}
+	for _, d := range streamIngestionSpecs {
+		for _, partitionSpec := range d.PartitionSpecs {
+			partitionSpecs.Specs = append(partitionSpecs.Specs, &partitionSpec)
+		}
+	}
+	return partitionSpecs
+}
+
 // persistStreamIngestionPartitionSpecs persists all
 // StreamIngestionPartitionSpecs in a serialized form to the job_info table.
 // This information is used when the Resumer is requested to construct a
@@ -185,22 +198,18 @@ func persistStreamIngestionPartitionSpecs(
 	streamIngestionSpecs map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
 	cv clusterversion.Handle,
 ) error {
-	err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		specs := make([]*execinfrapb.StreamIngestionPartitionSpec, 0)
-		partitionSpecs := execinfrapb.StreamIngestionPartitionSpecs{Specs: specs}
-		for _, d := range streamIngestionSpecs {
-			for _, partitionSpec := range d.PartitionSpecs {
-				partitionSpecs.Specs = append(partitionSpecs.Specs, &partitionSpec)
-			}
-		}
-		specBytes, err := protoutil.Marshal(&partitionSpecs)
-		if err != nil {
-			return err
-		}
+	partitionSpecs := repackagePartitionSpecs(streamIngestionSpecs)
+	specBytes, err := protoutil.Marshal(&partitionSpecs)
+	if err != nil {
+		return err
+	}
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return jobs.WriteChunkedFileToJobInfo(ctx, replicationPartitionInfoFilename, specBytes, txn, ingestionJobID, cv)
-	})
+	}); err != nil {
+		return err
+	}
 	if knobs := execCfg.StreamingTestingKnobs; knobs != nil && knobs.AfterPersistingPartitionSpecs != nil {
 		knobs.AfterPersistingPartitionSpecs()
 	}
-	return err
+	return nil
 }

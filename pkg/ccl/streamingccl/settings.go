@@ -109,11 +109,10 @@ var ReplanFrequency = settings.RegisterDurationSetting(
 
 var InterNodeLag = settings.RegisterDurationSetting(
 	settings.SystemOnly,
-	"stream_replication.inter_node_lag",
+	"physical_replication.consumer.node_lag_replanning_threshold",
 	"the maximum difference in lag tolerated across two destination nodes; if 0, disabled",
 	0,
 	settings.NonNegativeDuration,
-	settings.WithName("physical_replication.consumer.inter_node_lag"),
 )
 
 // DumpFrontierEntries controls the frequency at which we persist the entries in
