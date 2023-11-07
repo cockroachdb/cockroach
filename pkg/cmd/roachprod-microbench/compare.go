@@ -124,7 +124,7 @@ func (c *compare) publishToGoogleSheets(
 		}
 		url, err := c.service.CreateSheet(c.ctx, sheetName, *metricMap, "old", "new")
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "failed to create sheet for %s", pkgGroup)
 		}
 		log.Printf("Generated sheet for %s: %s\n", sheetName, url)
 		sheets[pkgGroup] = url
