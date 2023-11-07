@@ -251,7 +251,7 @@ func (e *exprColumnCollector) VisitPre(expr tree.Expr) (recurse bool, newExpr tr
 }
 
 // valuesViolateUniqueConstraints determines if any unique constraints (including primary
-// constraints and constraint expressions) that  will be violated upon inserting
+// constraints and constraint expressions) that will be violated upon inserting
 // the specified rows into the specified table.
 func (og *operationGenerator) valuesViolateUniqueConstraints(
 	ctx context.Context,
@@ -262,50 +262,7 @@ func (og *operationGenerator) valuesViolateUniqueConstraints(
 	rows [][]string,
 ) (bool, codesWithConditions, error) {
 	var generatedCodes codesWithConditions
-	constraints, err := og.scanStringArrayRows(ctx, tx, `
-    WITH tab_json AS (
-                    SELECT crdb_internal.pb_to_json(
-                            'desc',
-                            descriptor
-                           )->'table' AS t
-                      FROM system.descriptor
-                     WHERE id = $1::REGCLASS
-                  ),
-         columns_json AS (
-                        SELECT json_array_elements(t->'columns') AS c FROM tab_json
-                      ),
-         columns AS (
-                    SELECT (c->>'id')::INT8 AS col_id,
-                           IF(
-                            (c->'inaccessible')::BOOL,
-                            c->>'computeExpr',
-                            c->>'name'
-                           ) AS expr
-                      FROM columns_json
-                 ),
-         indexes_json AS (
-                         SELECT json_array_elements(t->'indexes') AS idx
-                           FROM tab_json
-                         UNION ALL SELECT t->'primaryIndex' FROM tab_json
-                      ),
-         unique_indexes AS (
-                            SELECT idx->'name' AS name,
-                                   json_array_elements(
-                                    idx->'keyColumnIds'
-                                   )::STRING::INT8 AS col_id
-                              FROM indexes_json
-                             WHERE (idx->'unique')::BOOL
-                        ),
-         index_exprs AS (
-                        SELECT name, expr
-                          FROM unique_indexes AS idx
-                               INNER JOIN columns AS c ON idx.col_id = c.col_id
-                     )
-  SELECT ARRAY['(' || array_to_string(array_agg(expr), ', ') || ')'] AS final_expr
-    FROM index_exprs
-   WHERE expr != 'rowid'
-GROUP BY name;
-`, tableName.String())
+	constraints, err := getUniqueConstraintsForTable(ctx, tx, tableName.String())
 	if err != nil {
 		return false, nil, og.checkAndAdjustForUnknownSchemaErrors(err)
 	}
@@ -367,7 +324,7 @@ GROUP BY name;
 		}
 		// Next validate the uniqueness of both constraints and index expressions.
 		for constraintIdx, constraint := range constraints {
-			nonTupleConstraint := constraint[0]
+			nonTupleConstraint := constraint
 			if len(nonTupleConstraint) > 2 &&
 				nonTupleConstraint[0] == '(' &&
 				nonTupleConstraint[len(nonTupleConstraint)-1] == ')' {
@@ -380,12 +337,12 @@ GROUP BY name;
 
 			tupleSelectQuery := strings.Builder{}
 			tupleSelectQuery.WriteString("SELECT array[(")
-			tupleSelectQuery.WriteString(constraint[0])
+			tupleSelectQuery.WriteString(constraint)
 			tupleSelectQuery.WriteString(")::STRING] FROM (VALUES(")
 
 			query := strings.Builder{}
 			columns := strings.Builder{}
-			t, err := parser.ParseExpr(constraint[0])
+			t, err := parser.ParseExpr(constraint)
 			if err != nil {
 				return false, nil, err
 			}
@@ -394,10 +351,10 @@ GROUP BY name;
 			query.WriteString("SELECT COUNT (*) > 0 FROM (SELECT * FROM ")
 			query.WriteString(tableName.String())
 			query.WriteString(" WHERE ")
-			query.WriteString(constraint[0])
+			query.WriteString(constraint)
 			query.WriteString("= ( SELECT ")
 			query.WriteString(" ")
-			query.WriteString(constraint[0])
+			query.WriteString(constraint)
 			query.WriteString(" FROM (VALUES( ")
 			colIdx := 0
 			for col := range collector.columnsObserved {
@@ -574,9 +531,12 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 	columns []string,
 	colInfos []column,
 	row []string,
-) (bool, codesWithConditions, codesWithConditions, error) {
-	var expectedErrors codesWithConditions
-	var potentialErrors codesWithConditions
+) (
+	isInvalidInsert bool,
+	expectedErrCodes codesWithConditions,
+	potentialErrCodes codesWithConditions,
+	err error,
+) {
 	// Put values to be inserted into a column name to value map to simplify lookups.
 	columnsToValues := map[string]string{}
 	for i := 0; i < len(columns); i++ {
@@ -660,17 +620,17 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 			if !isValidGenerationError(pgErr.Code) {
 				return err
 			}
-			expectedErrors = expectedErrors.append(pgcode.MakeCode(pgErr.Code))
+			expectedErrCodes = expectedErrCodes.append(pgcode.MakeCode(pgErr.Code))
 		}
 		if isNull && !isNullable && !nullViolationAdded {
 			nullViolationAdded = true
-			expectedErrors = expectedErrors.append(pgcode.NotNullViolation)
+			expectedErrCodes = expectedErrCodes.append(pgcode.NotNullViolation)
 		}
 		// Re-run the another variant in case we have NULL values in arithmetic
 		// of expression, the evaluation order can differ depending on how variables
 		// get bound during the actual insert.
 		if err == nil && isNull {
-			if _, err := og.scanBool(ctx, evalTx, queryEvalOrderCheck.String()); err != nil {
+			if _, err = og.scanBool(ctx, evalTx, queryEvalOrderCheck.String()); err != nil {
 				var pgErr *pgconn.PgError
 				if !errors.As(err, &pgErr) {
 					_ = evalTx.Rollback(ctx)
@@ -679,7 +639,7 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 				// Note: Invalid errors are allowed, since this is a heuristic. We replaced
 				// random NULL values with zero.
 				if isValidGenerationError(pgErr.Code) {
-					potentialErrors = potentialErrors.append(pgcode.MakeCode(pgErr.Code))
+					potentialErrCodes = potentialErrCodes.append(pgcode.MakeCode(pgErr.Code))
 				}
 			}
 		}
@@ -698,70 +658,28 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 		if !colInfo.generated {
 			continue
 		}
-		err := validateExpression(colInfo.generatedExpression, colInfo.typ.SQLString(), colInfo.nullable, false)
+		err = validateExpression(colInfo.generatedExpression, colInfo.typ.SQLString(), colInfo.nullable, false)
 		if err != nil {
 			return false, nil, nil, err
 		}
 	}
 	// Any bad generated expression means we don't have to bother with indexes next,
 	// since we expect the insert to fail earlier.
-	if expectedErrors == nil {
+	if expectedErrCodes == nil {
 		// Validate unique constraint expressions that are backed by indexes.
-		constraints, err := og.scanStringArrayRows(ctx, tx, `
-WITH tab_json AS (
-                    SELECT crdb_internal.pb_to_json(
-                            'desc',
-                            descriptor
-                           )->'table' AS t
-                      FROM system.descriptor
-                     WHERE id = $1::REGCLASS
-                  ),
-         columns_json AS (
-                        SELECT json_array_elements(t->'columns') AS c FROM tab_json
-                      ),
-         columns AS (
-                    SELECT (c->>'id')::INT8 AS col_id,
-                           IF(
-                            (c->'inaccessible')::BOOL,
-                            c->>'computeExpr',
-                            c->>'name'
-                           ) AS expr
-                      FROM columns_json
-                 ),
-         indexes_json AS (
-                         SELECT json_array_elements(t->'indexes') AS idx
-                           FROM tab_json
-                         UNION ALL SELECT t->'primaryIndex' FROM tab_json
-                      ),
-         unique_indexes AS (
-                            SELECT idx->'name' AS name,
-                                   json_array_elements(
-                                    idx->'keyColumnIds'
-                                   )::STRING::INT8 AS col_id
-                              FROM indexes_json
-                        ),
-         index_exprs AS (
-                        SELECT name, expr
-                          FROM unique_indexes AS idx
-                               INNER JOIN columns AS c ON idx.col_id = c.col_id
-                     )
-  SELECT ARRAY['(' || array_to_string(array_agg(expr), ', ') || ')'] AS final_expr
-    FROM index_exprs
-   WHERE expr != 'rowid'
-GROUP BY name;
-		`, tableName.String())
+		constraints, err := getUniqueConstraintsForTable(ctx, tx, tableName.String())
 		if err != nil {
 			return false, nil, nil, og.checkAndAdjustForUnknownSchemaErrors(err)
 		}
 
 		for _, constraint := range constraints {
-			err := validateExpression(constraint[0], "STRING", true, true)
+			err = validateExpression(constraint, "STRING", true, true)
 			if err != nil {
 				return false, nil, nil, err
 			}
 		}
 	}
-	return len(expectedErrors) > 0, expectedErrors, potentialErrors, nil
+	return len(expectedErrCodes) > 0, expectedErrCodes, potentialErrCodes, nil
 }
 
 // generateColumn generates values for columns that are generated.
@@ -1096,13 +1014,15 @@ SELECT count(*) FROM %s
 		return true, nil
 	}
 
-	numJoinRows, err := og.scanInt(ctx, tx, fmt.Sprintf(`
+	q := fmt.Sprintf(`
 	  SELECT count(*)
 	    FROM %s as t1
 		  LEFT JOIN %s as t2
 				     ON t1.%s = t2.%s
 			WHERE t2.%s IS NOT NULL
-`, childTable.String(), parentTable.String(), childColumn.name, parentColumn.name, parentColumn.name))
+`, childTable.String(), parentTable.String(), tree.NameString(childColumn.name), tree.NameString(parentColumn.name), tree.NameString(parentColumn.name))
+
+	numJoinRows, err := og.scanInt(ctx, tx, q)
 	if err != nil {
 		return false, err
 	}
@@ -1194,7 +1114,7 @@ func (og *operationGenerator) violatesFkConstraints(
 			}
 
 			violation, err := og.violatesFkConstraintsHelper(
-				ctx, tx, columnNameToIndexMap, parentTableSchema, parentTableName, parentColumnName, tableName.String(), childColumnName, parentAndChildAreSame, row, rows,
+				ctx, tx, columnNameToIndexMap, parentTableSchema, parentTableName, parentColumnName, childColumnName, tableName, parentAndChildAreSame, row, rows,
 			)
 			if err != nil {
 				return false, err
@@ -1214,7 +1134,8 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 	ctx context.Context,
 	tx pgx.Tx,
 	columnNameToIndexMap map[string]int,
-	parentTableSchema, parentTableName, parentColumn, childTableName, childColumn string,
+	parentTableSchema, parentTableName, parentColumn, childColumn string,
+	childTableName *tree.TableName,
 	parentAndChildAreSameTable bool,
 	row []string,
 	allRows [][]string,
@@ -1268,11 +1189,12 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 		checkSharedParentChildRows = fmt.Sprintf("false = ANY (ARRAY [%s]) AND",
 			strings.Join(parentAndChildSameQueryColumns, ","))
 	}
-	return og.scanBool(ctx, tx, fmt.Sprintf(`
+	q := fmt.Sprintf(`
 	    SELECT %s count(*) = 0 from %s.%s
 	    WHERE %s = (%s)
 	`,
-		checkSharedParentChildRows, parentTableSchema, parentTableName, parentColumn, childValue))
+		checkSharedParentChildRows, parentTableSchema, parentTableName, tree.NameString(parentColumn), childValue)
+	return og.scanBool(ctx, tx, q)
 }
 
 func (og *operationGenerator) columnIsInDroppingIndex(
@@ -1693,4 +1615,74 @@ func (og *operationGenerator) databaseHasTablesWithPartitioning(
 		fmt.Sprintf(`SELECT count(*)> 0 FROM %s.crdb_internal.partitions`,
 			database),
 	)
+}
+
+// getUniqueConstraintsForTable returns the set of expressions associated with unique indexes
+// in the specified tableName.
+func getUniqueConstraintsForTable(
+	ctx context.Context, tx pgx.Tx, tableName string,
+) (constraints []string, err error) {
+	q := `
+WITH tab_json AS (
+                    SELECT crdb_internal.pb_to_json(
+                            'desc',
+                            descriptor
+                           )->'table' AS t
+                      FROM system.descriptor
+                     WHERE id = $1::REGCLASS
+                  ),
+         columns_json AS (
+                        SELECT json_array_elements(t->'columns') AS c FROM tab_json
+                      ),
+         columns AS (
+                    SELECT (c->>'id')::INT8 AS col_id,
+                           IF(
+                            (c->'inaccessible')::BOOL,
+                            c->>'computeExpr',
+                            quote_ident(c->>'name')
+                           ) AS expr
+                      FROM columns_json
+                 ),
+         indexes_json AS (
+                         SELECT json_array_elements(t->'indexes') AS idx
+                           FROM tab_json
+                         UNION ALL SELECT t->'primaryIndex' FROM tab_json
+                      ),
+         unique_indexes AS (
+                            SELECT idx->'name' AS name,
+                                   json_array_elements(
+                                    idx->'keyColumnIds'
+                                   )::STRING::INT8 AS col_id
+                              FROM indexes_json
+															WHERE (idx->'unique')::BOOL
+                        ),
+         index_exprs AS (
+                        SELECT name, expr
+                          FROM unique_indexes AS idx
+                               INNER JOIN columns AS c ON idx.col_id = c.col_id
+                     )
+      SELECT '(' || array_to_string(array_agg(expr), ', ') || ')' AS final_expr                    
+      FROM index_exprs                                                                                       
+      WHERE expr != 'rowid'                                                                          
+      GROUP BY name; 
+		`
+	rows, err := tx.Query(ctx, q, tableName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var constraint string
+		err = rows.Scan(&constraint)
+		if err != nil {
+			return nil, err
+		}
+		constraints = append(constraints, constraint)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return constraints, nil
 }

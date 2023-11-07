@@ -455,7 +455,7 @@ func (og *operationGenerator) alterTableLocality(ctx context.Context, tx pgx.Tx)
 			// existing crdb_region column, but it is nullable, and therefore
 			// cannot be used as the implicit partitioning column.
 			if !columnForAsUsed {
-				columnNames, err := og.getTableColumns(ctx, tx, tableName.String(), true)
+				columnNames, err := og.getTableColumns(ctx, tx, tableName, true)
 				if err != nil {
 					return "", err
 				}
@@ -921,7 +921,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		return nil, err
 	}
 
-	columnNames, err := og.getTableColumns(ctx, tx, tableName.String(), true)
+	columnNames, err := og.getTableColumns(ctx, tx, tableName, true)
 	if err != nil {
 		return nil, err
 	}
@@ -2820,7 +2820,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 			),
 			pgcode.UndefinedTable), nil
 	}
-	allColumns, err := og.getTableColumns(ctx, tx, tableName.String(), false)
+	allColumns, err := og.getTableColumns(ctx, tx, tableName, false)
 	nonGeneratedCols := allColumns
 	if err != nil {
 		return nil, errors.Wrapf(err, "error getting table columns for insert row")
@@ -2877,9 +2877,9 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 			// We will be pessimistic and assume that other column related errors can
 			// be hit, since the function above fails only on generated columns. But,
 			// there maybe index expressions with the exact same problem.
-			stmt.expectedExecErrors.add(pgcode.NumericValueOutOfRange)
-			stmt.expectedExecErrors.add(pgcode.FloatingPointException)
-			stmt.expectedExecErrors.add(pgcode.NotNullViolation)
+			stmt.potentialExecErrors.add(pgcode.NumericValueOutOfRange)
+			stmt.potentialExecErrors.add(pgcode.FloatingPointException)
+			stmt.potentialExecErrors.add(pgcode.NotNullViolation)
 			anyInvalidInserts = true
 		}
 	}
@@ -3083,7 +3083,7 @@ func (s *opStmt) executeStmt(ctx context.Context, tx pgx.Tx, og *operationGenera
 					errRunInTxnRbkSentinel)
 			}
 			return errors.Mark(
-				og.WrapWithErrorState(errors.Wrap(err, "***UNEXPECTED ERROR; Received a non pg error."), s),
+				og.WrapWithErrorState(errors.Wrap(err, "***UNEXPECTED ERROR from %s; Received a non pg error."), s),
 				errRunInTxnFatalSentinel,
 			)
 		}
@@ -3175,10 +3175,10 @@ type column struct {
 }
 
 func (og *operationGenerator) getTableColumns(
-	ctx context.Context, tx pgx.Tx, tableName string, shuffle bool,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, shuffle bool,
 ) ([]column, error) {
 	q := fmt.Sprintf(`
-    WITH tab_json AS (
+   WITH tab_json AS (
                     SELECT crdb_internal.pb_to_json(
                             'desc',
                             descriptor
@@ -3194,7 +3194,7 @@ func (og *operationGenerator) getTableColumns(
                          c->>'name' AS column_name
                     FROM columns_json
                  )
-  SELECT show_columns.column_name,
+  SELECT quote_ident(show_columns.column_name),
          show_columns.data_type,
          show_columns.is_nullable,
          columns.generation_expression IS NOT NULL AS is_generated,
@@ -3205,9 +3205,10 @@ func (og *operationGenerator) getTableColumns(
 `, tableName)
 	rows, err := tx.Query(ctx, q, tableName)
 	if err != nil {
-		return nil, errors.Wrapf(err, "getting table columns from %s", tableName)
+		return nil, errors.Wrapf(err, "getting table columns from %s", tableName.String())
 	}
 	defer rows.Close()
+
 	var typNames []string
 	var ret []column
 	for rows.Next() {
@@ -4146,7 +4147,7 @@ func (og *operationGenerator) selectStmt(ctx context.Context, tx pgx.Tx) (stmt *
 			allTableExists = false
 			continue
 		}
-		colInfo, err := og.getTableColumns(ctx, tx, tableName.String(), false)
+		colInfo, err := og.getTableColumns(ctx, tx, tableName, false)
 		if err != nil {
 			return nil, err
 		}
@@ -4169,10 +4170,10 @@ func (og *operationGenerator) selectStmt(ctx context.Context, tx pgx.Tx) (stmt *
 		}
 		col := colInfos[tableIdx][og.randIntn(len(colInfos[tableIdx]))]
 		if colIdx != 0 {
-			selectColumns.WriteString(",")
+			selectColumns.WriteString(", ")
 		}
 		selectColumns.WriteString(fmt.Sprintf("t%d.", tableIdx))
-		selectColumns.WriteString(tree.NameString(col.name))
+		selectColumns.WriteString(col.name)
 		selectColumns.WriteString(" AS ")
 		selectColumns.WriteString(fmt.Sprintf("col%d", colIdx))
 	}
@@ -4195,7 +4196,7 @@ func (og *operationGenerator) selectStmt(ctx context.Context, tx pgx.Tx) (stmt *
 		selectQuery.WriteString(fmt.Sprintf("t%d ", idx))
 	}
 	if maxRowsToConsume > 0 {
-		selectQuery.WriteString(fmt.Sprintf(" FETCH FIRST %d ROWS ONLY", maxRowsToConsume))
+		selectQuery.WriteString(fmt.Sprintf("FETCH FIRST %d ROWS ONLY", maxRowsToConsume))
 	}
 	// Setup a statement with the query and a call back to validate the result
 	// set.
