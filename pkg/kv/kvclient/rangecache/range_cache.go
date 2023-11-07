@@ -260,6 +260,18 @@ func (rc *RangeCache) stringLocked() string {
 	return buf.String()
 }
 
+// sortedReplicaSets is a cached view of sorted descriptors for this
+// EvictionToken. The computation of the best leaseholder for a range can be
+// expensive, so we lazy compute and cache it. There are two ReplicaSets stored
+// for each EvictionToken, once with a leaseholder first order, and the other
+// using "follower read" sorting.
+type sortedReplicaSets struct {
+	mu          syncutil.RWMutex
+	expiration  time.Time
+	leaseholder roachpb.ReplicaSet
+	follower    roachpb.ReplicaSet
+}
+
 // EvictionToken holds eviction state between calls to Lookup.
 type EvictionToken struct {
 	// rdc is the cache that produced this token - and that will be modified by
@@ -274,6 +286,10 @@ type EvictionToken struct {
 	desc     *roachpb.RangeDescriptor
 	lease    *roachpb.Lease
 	closedts roachpb.RangeClosedTimestampPolicy
+	// sorted is an optimization to store the list of sorted RepicaSets for both
+	// leaseholder and follower reads. The sorting of this list shows up in hot
+	// path analysis.
+	sorted *sortedReplicaSets
 
 	// speculativeDesc, if not nil, is the descriptor that should replace desc if
 	// desc proves to be stale - i.e. speculativeDesc is inserted in the cache
@@ -295,6 +311,41 @@ type EvictionToken struct {
 	speculativeDesc *roachpb.RangeDescriptor
 }
 
+// SortedReplicas returns a list of sorted replicas for this token.
+func (et *EvictionToken) SortedReplicas(
+	follower bool,
+	validFor time.Duration,
+	compute func() (roachpb.ReplicaSet, roachpb.ReplicaSet, error),
+) (roachpb.ReplicaSet, error) {
+	now := timeutil.Now()
+
+	et.sorted.mu.Lock()
+	defer et.sorted.mu.Unlock()
+	if now.After(et.sorted.expiration) {
+		// refresh the sorted lists
+		leaseholder, nearest, err := compute()
+		if err != nil {
+			return roachpb.ReplicaSet{}, err
+		}
+		et.sorted.leaseholder, et.sorted.follower = leaseholder, nearest
+		et.sorted.expiration = now.Add(validFor)
+	}
+	if follower {
+		return et.sorted.follower, nil
+	} else {
+		return et.sorted.leaseholder, nil
+	}
+}
+
+// clearSortedReplicas is called any time the EvictionToken changes since the
+// previous cached list can no longer be used. By bumping the expiration time to
+// now, the next request will recreate the cached lists.
+func (et *EvictionToken) clearSortedReplicas() {
+	et.sorted.mu.Lock()
+	defer et.sorted.mu.Unlock()
+	et.sorted.expiration = timeutil.Now()
+}
+
 func (rc *RangeCache) makeEvictionToken(
 	entry *CacheEntry, speculativeDesc *roachpb.RangeDescriptor,
 ) EvictionToken {
@@ -314,6 +365,7 @@ func (rc *RangeCache) makeEvictionToken(
 		lease:           entry.leaseEvenIfSpeculative(),
 		closedts:        entry.closedts,
 		speculativeDesc: speculativeDesc,
+		sorted:          &sortedReplicaSets{},
 	}
 }
 
@@ -415,6 +467,7 @@ func (et *EvictionToken) syncRLocked(
 	}
 	et.desc = cachedEntry.Desc()
 	et.lease = cachedEntry.leaseEvenIfSpeculative()
+	et.clearSortedReplicas()
 	return true, cachedEntry, rawEntry
 }
 
@@ -490,6 +543,7 @@ func (et *EvictionToken) SyncTokenAndMaybeUpdateCache(
 	// range descriptor/lease information available in the RangeCache.
 	et.desc = newEntry.Desc()
 	et.lease = newEntry.leaseEvenIfSpeculative()
+	et.clearSortedReplicas()
 	return updatedLeaseholder
 }
 
@@ -550,6 +604,7 @@ func (et *EvictionToken) EvictLease(ctx context.Context) {
 	et.desc = newEntry.Desc()
 	et.lease = newEntry.leaseEvenIfSpeculative()
 	et.rdc.swapEntryLocked(ctx, rawEntry, newEntry)
+	et.clearSortedReplicas()
 }
 
 func descsCompatible(a, b *roachpb.RangeDescriptor) bool {
