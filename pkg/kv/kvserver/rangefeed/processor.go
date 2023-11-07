@@ -18,7 +18,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -27,16 +30,29 @@ import (
 )
 
 const (
-	// defaultPushTxnsInterval is the default interval at which a Processor will
-	// push all transactions in the unresolvedIntentQueue that are above the age
-	// specified by PushTxnsAge.
-	defaultPushTxnsInterval = 250 * time.Millisecond
-	// defaultPushTxnsAge is the default age at which a Processor will begin to
-	// consider a transaction old enough to push.
-	defaultPushTxnsAge = 10 * time.Second
 	// defaultCheckStreamsInterval is the default interval at which a Processor
 	// will check all streams to make sure they have not been canceled.
 	defaultCheckStreamsInterval = 1 * time.Second
+)
+
+var (
+	// defaultPushTxnsInterval is the default interval at which a Processor will
+	// push all transactions in the unresolvedIntentQueue that are above the age
+	// specified by PushTxnsAge.
+	defaultPushTxnsInterval = envutil.EnvOrDefaultDuration(
+		"COCKROACH_RANGEFEED_PUSH_TXNS_INTERVAL", 250*time.Millisecond)
+	// defaultPushTxnsAge is the default age at which a Processor will begin to
+	// consider a transaction old enough to push.
+	defaultPushTxnsAge = envutil.EnvOrDefaultDuration(
+		"COCKROACH_RANGEFEED_PUSH_TXNS_AGE", 10*time.Second)
+	// PushTxnsEnabled can be used to disable rangefeed txn pushes, typically to
+	// temporarily alleviate contention.
+	PushTxnsEnabled = settings.RegisterBoolSetting(
+		settings.SystemOnly,
+		"kv.rangefeed.push_txns.enabled",
+		"periodically push txn write timestamps to advance rangefeed resolved timestamps",
+		true,
+	)
 )
 
 // newErrBufferCapacityExceeded creates an error that is returned to subscribers
@@ -51,9 +67,10 @@ func newErrBufferCapacityExceeded() *kvpb.Error {
 // Config encompasses the configuration required to create a Processor.
 type Config struct {
 	log.AmbientContext
-	Clock   *hlc.Clock
-	RangeID roachpb.RangeID
-	Span    roachpb.RSpan
+	Clock    *hlc.Clock
+	Settings *cluster.Settings
+	RangeID  roachpb.RangeID
+	Span     roachpb.RSpan
 
 	TxnPusher TxnPusher
 	// PushTxnsInterval specifies the interval at which a Processor will push
@@ -358,9 +375,9 @@ func (p *Processor) run(
 
 		// Check whether any unresolved intents need a push.
 		case <-txnPushTickerC:
-			// Don't perform transaction push attempts until the resolved
-			// timestamp has been initialized.
-			if !p.rts.IsInit() {
+			// Don't perform transaction push attempts if disabled or until the
+			// resolved timestamp has been initialized.
+			if !PushTxnsEnabled.Get(&p.Settings.SV) || !p.rts.IsInit() {
 				continue
 			}
 
