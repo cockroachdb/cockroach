@@ -104,9 +104,8 @@ func newPebbleIterator(
 ) (*pebbleIterator, error) {
 	p := pebbleIterPool.Get().(*pebbleIterator)
 	p.reusable = false // defensive
-	p.init(nil, opts, durability, parent)
-	// TODO(sumeer): fix after bumping to latest Pebble.
-	iter, err := handle.NewIter(&p.options)
+	p.init(ctx, nil, opts, durability, parent)
+	iter, err := handle.NewIterWithContext(ctx, &p.options)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +121,7 @@ func newPebbleIteratorByCloning(
 	var err error
 	p := pebbleIterPool.Get().(*pebbleIterator)
 	p.reusable = false // defensive
-	p.init(nil, opts, durability, cloneCtx.engine)
+	p.init(ctx, nil, opts, durability, cloneCtx.engine)
 	p.iter, err = cloneCtx.rawIter.CloneWithContext(ctx, pebble.CloneOptions{
 		IterOptions:      &p.options,
 		RefreshBatchView: true,
@@ -140,7 +139,7 @@ func newPebbleSSTIterator(
 ) (*pebbleIterator, error) {
 	p := pebbleIterPool.Get().(*pebbleIterator)
 	p.reusable = false // defensive
-	p.init(nil, opts, StandardDurability, nil)
+	p.init(context.Background(), nil, opts, StandardDurability, nil)
 
 	var externalIterOpts []pebble.ExternalIterOption
 	if forwardOnly {
@@ -161,6 +160,7 @@ func newPebbleSSTIterator(
 // reconfiguring the given iter. It is valid to pass a nil iter and then create
 // p.iter using p.options, to avoid redundant reconfiguration via SetOptions().
 func (p *pebbleIterator) init(
+	ctx context.Context,
 	iter pebbleiter.Iterator,
 	opts IterOptions,
 	durability DurabilityRequirement,
@@ -175,7 +175,7 @@ func (p *pebbleIterator) init(
 		parent:             statsReporter,
 		reusable:           p.reusable,
 	}
-	p.setOptions(opts, durability)
+	p.setOptions(ctx, opts, durability)
 	p.inuse = true // after setOptions(), so panic won't cause reader to panic too
 }
 
@@ -195,14 +195,14 @@ func (p *pebbleIterator) initReuseOrCreate(
 	statsReporter *Pebble,
 ) error {
 	if iter != nil && !clone {
-		p.init(iter, opts, durability, statsReporter)
+		p.init(ctx, iter, opts, durability, statsReporter)
 		return nil
 	}
 
-	p.init(nil, opts, durability, statsReporter)
+	p.init(ctx, nil, opts, durability, statsReporter)
 	if iter == nil {
 		// TODO(sumeer): fix after bumping to latest Pebble.
-		innerIter, err := handle.NewIter(&p.options)
+		innerIter, err := handle.NewIterWithContext(ctx, &p.options)
 		if err != nil {
 			return err
 		}
@@ -222,8 +222,10 @@ func (p *pebbleIterator) initReuseOrCreate(
 }
 
 // setOptions updates the options for a pebbleIterator. If p.iter is non-nil, it
-// updates the options on the existing iterator too.
-func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequirement) {
+// updates the options on the existing iterator too, and set the context.
+func (p *pebbleIterator) setOptions(
+	ctx context.Context, opts IterOptions, durability DurabilityRequirement,
+) {
 	if !opts.Prefix && len(opts.UpperBound) == 0 && len(opts.LowerBound) == 0 {
 		panic("iterator must set prefix or upper bound or lower bound")
 	}
@@ -336,6 +338,7 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 	// Set the new iterator options. We unconditionally do so, since Pebble will
 	// optimize noop changes as needed, and it may affect batch write visibility.
 	if p.iter != nil {
+		p.iter.SetContext(ctx)
 		p.iter.SetOptions(&p.options)
 	}
 }

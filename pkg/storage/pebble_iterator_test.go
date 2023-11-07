@@ -165,7 +165,7 @@ func TestPebbleIterator_SkipPointIfOutsideTimeBounds(t *testing.T) {
 		max, err := hlc.ParseTimestamp(maxStr)
 		require.NoError(t, err)
 
-		iter.setOptions(IterOptions{
+		iter.setOptions(context.Background(), IterOptions{
 			LowerBound:   []byte{0x00}, // so setOptions doesn't complain
 			MinTimestamp: min,
 			MaxTimestamp: max,
