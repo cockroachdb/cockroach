@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/raft/v3/raftpb"
@@ -129,7 +130,7 @@ func (d *replicaDecoder) retrieveLocalProposals() (anyLocal bool) {
 		// this slice until we saw a local proposal under a populated
 		// b.r.mu.proposalQuota. We can bring it back.
 		if d.r.mu.proposalQuota != nil {
-			d.r.mu.quotaReleaseQueue = append(d.r.mu.quotaReleaseQueue, alloc)
+			d.r.mu.proposalQuotaAndDelayTracker.enqueueAlloc(alloc, timeutil.Now())
 		}
 	}
 	return anyLocal
