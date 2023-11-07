@@ -42,10 +42,6 @@ go_test(
         "tenant_migration_test.go",
         "tenant_vars_test.go",
     ],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
     data = glob(["testdata/**"]),
     embed = [":serverccl"],
     exec_properties = {"Pool": "large"},

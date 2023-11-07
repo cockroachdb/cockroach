@@ -15,7 +15,6 @@ go_library(
 go_test(
     name = "identmap_test",
     srcs = ["ident_map_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":identmap"],
     deps = ["@com_github_stretchr_testify//assert"],
 )

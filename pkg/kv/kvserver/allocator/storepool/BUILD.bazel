@@ -36,7 +36,6 @@ go_test(
         "override_store_pool_test.go",
         "store_pool_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":storepool"],
     deps = [
         "//pkg/kv/kvserver/liveness",

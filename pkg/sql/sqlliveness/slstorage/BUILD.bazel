@@ -53,7 +53,6 @@ go_test(
         "slstorage_internal_test.go",
         "slstorage_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":slstorage"],
     deps = [
         "//pkg/base",

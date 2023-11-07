@@ -12,6 +12,5 @@ go_test(
     name = "version_test",
     size = "small",
     srcs = ["version_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":version"],
 )

@@ -60,7 +60,6 @@ exports_files(
 go_test(
     name = "parser_test",
     srcs = ["parser_test.go"],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     deps = [
         ":plpgparser",

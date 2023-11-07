@@ -16,7 +16,6 @@ go_test(
     name = "timeofday_test",
     size = "small",
     srcs = ["time_of_day_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":timeofday"],
     deps = ["//pkg/util/duration"],
 )

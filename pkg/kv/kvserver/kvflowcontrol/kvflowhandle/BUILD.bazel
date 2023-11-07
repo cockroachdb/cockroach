@@ -28,7 +28,6 @@ go_library(
 go_test(
     name = "kvflowhandle_test",
     srcs = ["kvflowhandle_test.go"],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     deps = [
         ":kvflowhandle",

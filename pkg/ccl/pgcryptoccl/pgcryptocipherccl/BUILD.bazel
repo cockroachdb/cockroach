@@ -25,7 +25,6 @@ go_test(
         "cipher_test.go",
         "padding_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":pgcryptocipherccl"],
     tags = ["ccl_test"],
     deps = [

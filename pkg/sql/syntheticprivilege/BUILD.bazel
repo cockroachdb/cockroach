@@ -27,7 +27,6 @@ go_library(
 go_test(
     name = "syntheticprivilege_test",
     srcs = ["synthetic_privilege_registry_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":syntheticprivilege"],
     deps = ["@com_github_stretchr_testify//require"],
 )

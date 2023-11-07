@@ -19,7 +19,6 @@ go_library(
 go_test(
     name = "cdcutils_test",
     srcs = ["throttle_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":cdcutils"],
     tags = ["ccl_test"],
     deps = [

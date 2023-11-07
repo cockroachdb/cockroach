@@ -10,6 +10,5 @@ go_library(
 go_test(
     name = "cycle_test",
     srcs = ["detector_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":cycle"],
 )

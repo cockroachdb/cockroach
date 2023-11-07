@@ -23,7 +23,6 @@ go_test(
         "doc_test.go",
         "task_test.go",
     ],
-    args = ["-test.timeout=55s"],
     deps = [
         ":apply",
         "//pkg/kv/kvpb",

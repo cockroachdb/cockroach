@@ -106,7 +106,6 @@ go_test(
         "stream_ingestion_manager_test.go",
         "stream_ingestion_processor_test.go",
     ],
-    args = ["-test.timeout=895s"],
     data = glob(["testdata/**"]),
     embed = [":streamingest"],
     shard_count = 16,

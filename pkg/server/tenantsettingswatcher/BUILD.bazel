@@ -46,7 +46,6 @@ go_test(
         "row_decoder_test.go",
         "watcher_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":tenantsettingswatcher"],
     deps = [
         "//pkg/base",

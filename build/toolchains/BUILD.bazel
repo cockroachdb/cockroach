@@ -522,13 +522,6 @@ config_setting(
 )
 
 config_setting(
-    name = "use_ci_timeouts",
-    values = {
-        "define": "use_ci_timeouts=true",
-    },
-)
-
-config_setting(
     name = "is_linux_amd64_no_force_build_cdeps",
     constraint_values = [
         "@io_bazel_rules_go//go/toolchain:linux",

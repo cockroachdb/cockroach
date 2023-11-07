@@ -115,7 +115,6 @@ go_test(
     name = "serverpb_test",
     size = "medium",
     srcs = ["admin_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":serverpb"],
     deps = ["@com_github_stretchr_testify//assert"],
 )

@@ -52,7 +52,6 @@ go_test(
         "latlng_test.go",
         "parse_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":geo"],
     deps = [
         "//pkg/geo/geographiclib",

@@ -32,7 +32,6 @@ go_test(
         "node_size_test.go",
         "notify_queue_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":quotapool"],
     deps = [
         "//pkg/testutils",

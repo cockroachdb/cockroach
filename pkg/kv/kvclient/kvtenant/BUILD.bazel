@@ -61,7 +61,6 @@ go_test(
         "tenant_scan_range_descriptors_test.go",
         "tenant_trace_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":kvtenant"],
     deps = [
         "//pkg/base",

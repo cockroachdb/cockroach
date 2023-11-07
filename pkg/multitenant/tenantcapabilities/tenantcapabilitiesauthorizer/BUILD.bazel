@@ -27,7 +27,6 @@ go_library(
 go_test(
     name = "tenantcapabilitiesauthorizer_test",
     srcs = ["authorizer_test.go"],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":tenantcapabilitiesauthorizer"],
     deps = [

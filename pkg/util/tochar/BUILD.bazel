@@ -26,7 +26,6 @@ go_test(
         "cache_test.go",
         "tochar_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":tochar"],
     deps = [

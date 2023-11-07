@@ -18,7 +18,6 @@ go_library(
 go_test(
     name = "comprules_test",
     srcs = ["rules_test.go"],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":comprules"],
     deps = [

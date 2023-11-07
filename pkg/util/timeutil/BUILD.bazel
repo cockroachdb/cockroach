@@ -40,7 +40,6 @@ go_test(
         "timeout_error_test.go",
         "timer_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":timeutil"],
     deps = [
         "//pkg/util/leaktest",

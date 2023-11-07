@@ -32,7 +32,6 @@ go_test(
     name = "colencoding_test",
     size = "small",
     srcs = ["value_encoding_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":colencoding"],
     deps = [
         "//pkg/col/coldata",

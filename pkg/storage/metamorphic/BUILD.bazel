@@ -42,10 +42,6 @@ go_test(
         "meta_test.go",
         "parser_test.go",
     ],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
     data = glob(["testdata/**"]),
     embed = [":metamorphic"],
     exec_properties = {"Pool": "large"},

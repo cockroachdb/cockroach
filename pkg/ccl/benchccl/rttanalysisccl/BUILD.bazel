@@ -7,10 +7,6 @@ go_test(
         "bench_test.go",
         "multi_region_bench_test.go",
     ],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
     data = glob(["testdata/**"]),
     exec_properties = {"Pool": "large"},
     shard_count = 16,

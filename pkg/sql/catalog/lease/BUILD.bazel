@@ -80,7 +80,6 @@ go_test(
         "lease_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=895s"],
     embed = [":lease"],
     exec_properties = {"Pool": "large"},
     shard_count = 4,

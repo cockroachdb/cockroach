@@ -20,7 +20,6 @@ go_library(
 go_test(
     name = "ttlbase_test",
     srcs = ["ttl_helpers_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":ttlbase"],
     deps = [
         "//pkg/sql/catalog/catenumpb",

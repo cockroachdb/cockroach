@@ -42,7 +42,6 @@ go_test(
         "intent_resolver_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":intentresolver"],
     deps = [
         "//pkg/base",

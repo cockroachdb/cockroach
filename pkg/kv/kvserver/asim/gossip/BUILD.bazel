@@ -25,7 +25,6 @@ go_test(
         "exchange_test.go",
         "gossip_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":gossip"],
     deps = [
         "//pkg/kv/kvserver/allocator/storepool",

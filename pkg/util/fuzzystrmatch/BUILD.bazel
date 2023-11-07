@@ -17,6 +17,5 @@ go_test(
         "leven_test.go",
         "soundex_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":fuzzystrmatch"],
 )

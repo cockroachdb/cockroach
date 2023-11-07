@@ -6,7 +6,6 @@ go_test(
         "main_test.go",
         "tenant_upgrade_test.go",
     ],
-    args = ["-test.timeout=295s"],
     shard_count = 4,
     tags = ["ccl_test"],
     deps = [
