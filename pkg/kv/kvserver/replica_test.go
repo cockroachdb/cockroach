@@ -14768,3 +14768,94 @@ func TestReplayWithBumpedTimestamp(t *testing.T) {
 
 	wg.Wait()
 }
+
+// TestLockAcquisition1PCInteractions ensures transactions (regardless of
+// isolation level) that acquire replicated locks do not commit using one phase
+// commit.
+func TestLockAcquisitions1PCInteractions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	run := func(
+		t *testing.T,
+		acquireReplicated bool,
+		iso isolation.Level,
+		external bool,
+		replicatedAcquisitionInETBatch bool,
+	) {
+		store, err := s.GetStores().(*Stores).GetStore(1)
+		require.NoError(t, err)
+		attemptedOnePCBefore := store.Metrics().OnePhaseCommitSuccess.Count() +
+			store.Metrics().OnePhaseCommitFailure.Count()
+
+		// Perform a range split between key A and B.
+		keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+		_, _, err = s.SplitRange(keyB)
+		require.NoError(t, err)
+
+		// Write a value to a key A and B.
+		_, err = kvDB.Inc(ctx, keyA, 1)
+		require.Nil(t, err)
+		_, err = kvDB.Inc(ctx, keyB, 1)
+		require.Nil(t, err)
+
+		// Create a new transaction.
+		txn := kvDB.NewTxn(ctx, "test")
+		err = txn.SetIsoLevel(iso)
+		require.NoError(t, err)
+
+		// Perform one or more "for update" gets. This should acquire unreplicated,
+		// exclusive locks on the keys.
+		b := txn.NewBatch()
+		lockDur := kvpb.BestEffort
+		if acquireReplicated {
+			lockDur = kvpb.GuaranteedDurability
+		}
+		if external {
+			// Ensure the txn record is anchored on a key in the same range as the one
+			// we will send the EndTxn request to. This is required for us to consider
+			// attempting a 1PC.
+			b.GetForUpdate(keyA, kvpb.BestEffort)
+			b.GetForUpdate(keyB, lockDur)
+		} else {
+			b.GetForUpdate(keyA, lockDur)
+		}
+		err = txn.Run(ctx, b)
+		require.NoError(t, err)
+
+		// Update the locked value and commit in a single batch. This should not
+		// attempt the one-phase commit fast-path.
+		b = txn.NewBatch()
+		if replicatedAcquisitionInETBatch {
+			b.GetForUpdate(keyA, kvpb.GuaranteedDurability)
+		}
+		b.Inc(keyA, 1)
+		err = txn.CommitInBatch(ctx, b)
+		require.NoError(t, err)
+
+		attemptedOnePCAfter := store.Metrics().OnePhaseCommitSuccess.Count() +
+			store.Metrics().OnePhaseCommitFailure.Count()
+
+		if acquireReplicated || replicatedAcquisitionInETBatch {
+			require.Equal(t, attemptedOnePCAfter, attemptedOnePCBefore)
+		} else {
+			// TODO(arul): possible flake w node liveness heartbeat
+			require.Greater(t, attemptedOnePCAfter, attemptedOnePCBefore)
+		}
+	}
+
+	testutils.RunTrueAndFalse(t, "replicated", func(t *testing.T, acquireReplicated bool) {
+		isolation.RunEachLevel(t, func(t *testing.T, iso isolation.Level) {
+			testutils.RunTrueAndFalse(t, "external", func(t *testing.T, external bool) {
+				testutils.RunTrueAndFalse(t, "replicatedAcquisitionInETBatch",
+					func(t *testing.T, replicatedAcquisitionInETBatch bool) {
+						run(t, acquireReplicated, iso, external, replicatedAcquisitionInETBatch)
+					})
+			})
+		})
+	})
+}
