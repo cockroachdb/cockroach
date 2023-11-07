@@ -268,6 +268,10 @@ func RestartNodesWithNewBinary(
 		if err != nil {
 			return err
 		}
+		// Never run init steps when restarting -- these should already
+		// have happened by the time the cluster was first bootstrapped
+		// and trying to run them again just adds noise to the logs.
+		startOpts.RoachprodOpts.SkipInit = true
 		if err := StartWithSettings(
 			ctx, l, c, c.Node(node), startOpts, append(settings, install.BinaryOption(binary))...,
 		); err != nil {
