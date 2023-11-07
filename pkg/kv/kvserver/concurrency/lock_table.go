@@ -3386,29 +3386,28 @@ func (kl *keyLocks) recomputeWaitQueues(st *cluster.Settings) {
 			break
 		}
 		removed := false
-		if qlr.active {
-			// A queued locking request, that's actively waiting, no longer conflicts
-			// with locks on this key -- it can be allowed to proceed. There's two
-			// cases:
-			// 1. If it's a transactional request, it needs to acquire a claim by
-			// holding its place in the lock wait queue while marking itself as
-			// inactive.
-			// 2. Non-transactional requests do not acquire claims, so they can be
-			// removed from the wait queue.
-			if qlr.guard.txn == nil {
-				kl.removeLockingRequest(curr)
-				removed = true
-			} else {
-				qlr.active = false // mark as inactive
-				if qlr.guard == kl.distinguishedWaiter {
-					// A new distinguished waiter will be selected by informActiveWaiters.
-					kl.distinguishedWaiter = nil
-				}
-				qlr.guard.mu.Lock()
-				qlr.guard.doneActivelyWaitingAtLock()
-				qlr.guard.mu.Unlock()
+		if qlr.guard.txn == nil {
+			// We're dealing with a queued non-transactional locking request that no
+			// longer conflicts with locks/claims on this key. As non-transactional
+			// requests do not acquire claims, the request can be removed from the
+			// wait queue.
+			kl.removeLockingRequest(curr)
+			removed = true
+		} else if qlr.active {
+			// A transactional locking request that no longer conflicts with
+			// locks/claims on this key but is actively waiting. It no longer needs to
+			// do so, but before it can proceed, it must acquire a (possibly joint)
+			// claim. It does so by marking itself as inactive.
+			qlr.active = false // mark as inactive
+			if qlr.guard == kl.distinguishedWaiter {
+				// A new distinguished waiter will be selected by informActiveWaiters.
+				kl.distinguishedWaiter = nil
 			}
+			qlr.guard.mu.Lock()
+			qlr.guard.doneActivelyWaitingAtLock()
+			qlr.guard.mu.Unlock()
 		}
+
 		// Locking requests conflict with both the lock holder(s) and other lower
 		// sequence numbered locking requests in the lock's wait queue, so we may
 		// need to update strongestMode before moving on with our iteration.
