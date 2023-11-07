@@ -2239,6 +2239,8 @@ func (ds *DistSender) sendToReplicas(
 	ctx context.Context, ba *kvpb.BatchRequest, routing rangecache.EvictionToken, withCommit bool,
 ) (*kvpb.BatchResponse, error) {
 
+	desc := routing.Desc()
+
 	// If this request can be sent to a follower to perform a consistent follower
 	// read under the closed timestamp, promote its routing policy to NEAREST.
 	// If we don't know the closed timestamp policy, we ought to optimistically
@@ -2252,56 +2254,59 @@ func (ds *DistSender) sendToReplicas(
 		ba = ba.ShallowCopy()
 		ba.RoutingPolicy = kvpb.RoutingPolicy_NEAREST
 	}
-	// Filter the replicas to only those that are relevant to the routing policy.
+
+	// The cacheDuration is set to the RPCHeartbeatTimeout since that is generally
+	// how fast we want to react to changes in the system. This could safely be
+	// tuned higher if it still shows up in hot path analysis. On a leaseholder or
+	// replica configuration change the cache is also invalidated.
+	cacheDuration := base.DefaultRPCHeartbeatTimeout
+	// Generate or load the cached descriptors based on whether we are routing to
+	// NEAREST or LEASEHOLDER.
 	// NB: When changing leaseholder policy constraint_status_report should be
 	// updated appropriately.
-	var replicaFilter ReplicaSliceFilter
-	switch ba.RoutingPolicy {
-	case kvpb.RoutingPolicy_LEASEHOLDER:
-		replicaFilter = OnlyPotentialLeaseholders
-	case kvpb.RoutingPolicy_NEAREST:
-		replicaFilter = AllExtantReplicas
-	default:
-		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
-	}
-	desc := routing.Desc()
-	leaseholder := routing.Leaseholder()
-	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, leaseholder, replicaFilter)
+	replicas, err := routing.SortedReplicas(
+		ba.RoutingPolicy == kvpb.RoutingPolicy_NEAREST,
+		cacheDuration,
+		func() (roachpb.ReplicaSet, roachpb.ReplicaSet, error) {
+			leaseholder := routing.Leaseholder()
+			leaseholderSet, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, leaseholder, OnlyPotentialLeaseholders)
+			if err != nil {
+				return roachpb.ReplicaSet{}, roachpb.ReplicaSet{}, err
+			}
+
+			// Rearrange the replicas so that they're ordered according to the routing
+			// policy.
+			// First order by latency, then move the leaseholder to the front of the
+			// list, if it is known.
+			if !ds.dontReorderReplicas {
+				leaseholderSet.OptimizeReplicaOrder(ds.st, ds.nodeIDGetter(), ds.HealthFunc(), ds.latencyFunc, ds.locality)
+			}
+
+			idx := -1
+			if leaseholder != nil {
+				idx = leaseholderSet.Find(leaseholder.ReplicaID)
+			}
+			if idx != -1 {
+				leaseholderSet.MoveToFront(idx)
+			} else {
+				// The leaseholder node's info must have been missing from gossip when we
+				// created replicas.
+				log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not known")
+			}
+
+			// Order by latency.
+			followerSet, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, leaseholder, AllExtantReplicas)
+			if err != nil {
+				return roachpb.ReplicaSet{}, roachpb.ReplicaSet{}, err
+			}
+			log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not required")
+			followerSet.OptimizeReplicaOrder(ds.st, ds.nodeIDGetter(), ds.HealthFunc(), ds.latencyFunc, ds.locality)
+
+			// Convert to ReplicaSet, we no longer need any of the sorting information.
+			return leaseholderSet.AsReplicaSet(), followerSet.AsReplicaSet(), nil
+		})
 	if err != nil {
 		return nil, err
-	}
-
-	// Rearrange the replicas so that they're ordered according to the routing
-	// policy.
-	var leaseholderFirst bool
-	switch ba.RoutingPolicy {
-	case kvpb.RoutingPolicy_LEASEHOLDER:
-		// First order by latency, then move the leaseholder to the front of the
-		// list, if it is known.
-		if !ds.dontReorderReplicas {
-			replicas.OptimizeReplicaOrder(ds.st, ds.nodeIDGetter(), ds.healthFunc, ds.latencyFunc, ds.locality)
-		}
-
-		idx := -1
-		if leaseholder != nil {
-			idx = replicas.Find(leaseholder.ReplicaID)
-		}
-		if idx != -1 {
-			replicas.MoveToFront(idx)
-			leaseholderFirst = true
-		} else {
-			// The leaseholder node's info must have been missing from gossip when we
-			// created replicas.
-			log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not known")
-		}
-
-	case kvpb.RoutingPolicy_NEAREST:
-		// Order by latency.
-		log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not required")
-		replicas.OptimizeReplicaOrder(ds.st, ds.nodeIDGetter(), ds.healthFunc, ds.latencyFunc, ds.locality)
-
-	default:
-		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
 	}
 
 	opts := SendOptions{
@@ -2309,7 +2314,7 @@ func (ds *DistSender) sendToReplicas(
 		metrics:                &ds.metrics,
 		dontConsiderConnHealth: ds.dontConsiderConnHealth,
 	}
-	transport, err := ds.transportFactory(opts, ds.nodeDialer, replicas.AsReplicaSet())
+	transport, err := ds.transportFactory(opts, ds.nodeDialer, replicas)
 	if err != nil {
 		return nil, err
 	}
@@ -2621,6 +2626,7 @@ func (ds *DistSender) sendToReplicas(
 					// have a sufficient closed timestamp. In response, we should
 					// immediately redirect to the leaseholder, without a backoff
 					// period.
+					leaseholderFirst := routing.Leaseholder() != nil && replicas.First().ReplicaID == routing.Leaseholder().ReplicaID
 					intentionallySentToFollower := first && !leaseholderFirst
 					// See if we want to backoff a little before the next attempt. If
 					// the lease info we got is stale and we were intending to send to
