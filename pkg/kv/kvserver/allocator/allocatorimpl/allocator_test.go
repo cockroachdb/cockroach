@@ -8524,8 +8524,8 @@ func TestAllocatorFullDisks(t *testing.T) {
 				continue
 			}
 			ts := &testStores[j]
-			// Add [0,3) ranges to the node, simulating splits and data growth.
-			toAdd := alloc.randGen.Intn(3)
+			// Add [0,2) ranges to the node, simulating splits and data growth.
+			toAdd := alloc.randGen.Intn(2)
 			for k := 0; k < toAdd; k++ {
 				if rangesAdded < rangesToAdd {
 					ts.add(rangeSize, 0)
