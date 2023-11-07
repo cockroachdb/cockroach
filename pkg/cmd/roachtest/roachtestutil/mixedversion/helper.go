@@ -36,6 +36,15 @@ func (h *Helper) RandomDB(prng *rand.Rand, nodes option.NodeListOption) (int, *g
 	return node, h.Connect(node)
 }
 
+// Query performs `db.QueryContext` on a randomly picked database node. The
+// query and the node picked are logged in the logs of the step that calls this
+// function.
+func (h *Helper) Query(rng *rand.Rand, query string, args ...interface{}) (*gosql.Rows, error) {
+	node, db := h.RandomDB(rng, h.runner.crdbNodes)
+	h.stepLogger.Printf("running SQL statement:\n%s\nArgs: %v\nNode: %d", query, args, node)
+	return db.QueryContext(h.ctx, query, args...)
+}
+
 // QueryRow performs `db.QueryRowContext` on a randomly picked
 // database node. The query and the node picked are logged in the logs
 // of the step that calls this function.
