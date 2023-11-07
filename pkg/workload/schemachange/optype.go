@@ -252,7 +252,7 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 
 var opWeights = []int{
 	// Non-DDL
-	insertRow:  0, // Disabled and tracked with #91863
+	insertRow:  10,
 	selectStmt: 10,
 	validate:   2, // validate twice more often
 
