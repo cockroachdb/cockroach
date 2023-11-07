@@ -208,7 +208,7 @@ func (p *pebbleBatch) NewMVCCIterator(
 	}
 
 	if iter.iter != nil {
-		iter.setOptions(opts, StandardDurability)
+		iter.setOptions(ctx, opts, StandardDurability)
 	} else {
 		if err := iter.initReuseOrCreate(
 			ctx, handle, p.iter, p.iterUsed, opts, StandardDurability, p.parent); err != nil {
@@ -249,7 +249,7 @@ func (p *pebbleBatch) NewEngineIterator(
 	}
 
 	if iter.iter != nil {
-		iter.setOptions(opts, StandardDurability)
+		iter.setOptions(ctx, opts, StandardDurability)
 	} else {
 		if err := iter.initReuseOrCreate(
 			ctx, handle, p.iter, p.iterUsed, opts, StandardDurability, p.parent); err != nil {
