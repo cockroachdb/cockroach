@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
@@ -204,7 +205,7 @@ func (g *githubIssues) createPostRequest(
 	artifacts := fmt.Sprintf("/%s", testName)
 
 	clusterParams := map[string]string{
-		roachtestPrefix("cloud"):            spec.Cluster.Cloud,
+		roachtestPrefix("cloud"):            roachtestflags.Cloud,
 		roachtestPrefix("cpu"):              fmt.Sprintf("%d", spec.Cluster.CPUs),
 		roachtestPrefix("ssd"):              fmt.Sprintf("%d", spec.Cluster.SSDs),
 		roachtestPrefix("metamorphicBuild"): fmt.Sprintf("%t", metamorphicBuild),
@@ -240,7 +241,7 @@ func (g *githubIssues) createPostRequest(
 		Artifacts:            artifacts,
 		ExtraLabels:          labels,
 		ExtraParams:          clusterParams,
-		HelpCommand:          generateHelpCommand(testName, issueClusterName, spec.Cluster.Cloud, start, end),
+		HelpCommand:          generateHelpCommand(testName, issueClusterName, roachtestflags.Cloud, start, end),
 	}, nil
 }
 

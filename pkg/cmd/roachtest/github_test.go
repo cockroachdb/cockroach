@@ -83,7 +83,7 @@ func TestShouldPost(t *testing.T) {
 		{false, 1, "token", "master", true, ""},
 	}
 
-	reg := makeTestRegistry(spec.GCE)
+	reg := makeTestRegistry()
 	for _, c := range testCases {
 		t.Setenv("GITHUB_API_TOKEN", c.envGithubAPIToken)
 		t.Setenv("TC_BUILD_BRANCH", c.envTcBuildBranch)
@@ -184,7 +184,7 @@ func TestCreatePostRequest(t *testing.T) {
 		{true, false, false, false, false, "", createFailure(gce.ErrDNSOperation), true, false, true, nil},
 	}
 
-	reg := makeTestRegistry(spec.GCE)
+	reg := makeTestRegistry()
 	for idx, c := range testCases {
 		t.Run(fmt.Sprintf("%d", idx+1), func(t *testing.T) {
 			clusterSpec := reg.MakeClusterSpec(1, spec.Arch(c.arch))

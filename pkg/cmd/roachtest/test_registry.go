@@ -24,8 +24,7 @@ import (
 )
 
 type testRegistryImpl struct {
-	m     map[string]*registry.TestSpec
-	cloud string
+	m map[string]*registry.TestSpec
 
 	promRegistry *prometheus.Registry
 }
@@ -33,9 +32,8 @@ type testRegistryImpl struct {
 var _ registry.Registry = (*testRegistryImpl)(nil)
 
 // makeTestRegistry constructs a testRegistryImpl and configures it with opts.
-func makeTestRegistry(cloud string) testRegistryImpl {
+func makeTestRegistry() testRegistryImpl {
 	return testRegistryImpl{
-		cloud:        cloud,
 		m:            make(map[string]*registry.TestSpec),
 		promRegistry: prometheus.NewRegistry(),
 	}
@@ -59,7 +57,7 @@ func (r *testRegistryImpl) Add(spec registry.TestSpec) {
 // MakeClusterSpec makes a cluster spec. It should be used over `spec.MakeClusterSpec`
 // because this method also adds options baked into the registry.
 func (r *testRegistryImpl) MakeClusterSpec(nodeCount int, opts ...spec.Option) spec.ClusterSpec {
-	return spec.MakeClusterSpec(r.cloud, nodeCount, opts...)
+	return spec.MakeClusterSpec(nodeCount, opts...)
 }
 
 const testNameRE = "^[a-zA-Z0-9-_=/,]+$"
@@ -128,8 +126,4 @@ func (r testRegistryImpl) AllTests() []registry.TestSpec {
 		return tests[i].Name < tests[j].Name
 	})
 	return tests
-}
-
-func (r testRegistryImpl) Cloud() string {
-	return r.cloud
 }
