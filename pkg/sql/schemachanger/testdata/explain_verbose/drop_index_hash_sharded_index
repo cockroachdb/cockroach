@@ -19,7 +19,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   ├── • PreviousTransactionPrecedence dependency from PUBLIC Column:{DescID: 104, ColumnID: 3}
 │       │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: PUBLIC->WRITE_ONLY"
 │       │   │   │
-│       │   │   └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│       │   │   └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
 │       │   │         rule: "secondary indexes containing column as key reach write-only before column"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 104, Name: crdb_internal_j_shard_16, ColumnID: 3}
@@ -34,10 +34,10 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   └── • PreviousTransactionPrecedence dependency from PUBLIC ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}
 │       │   │         rule: "ColumnNotNull transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
 │       │   │
-│       │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│       │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
 │       │   │   │ PUBLIC → VALIDATED
 │       │   │   │
-│       │   │   └── • PreviousTransactionPrecedence dependency from PUBLIC SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│       │   │   └── • PreviousTransactionPrecedence dependency from PUBLIC SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
 │       │   │         rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
 │       │   │
 │       │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
@@ -95,7 +95,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │   │   │   ├── • ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}
 │   │   │   │     VALIDATED → PUBLIC
 │   │   │   │
-│   │   │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│   │   │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
 │   │   │   │     VALIDATED → PUBLIC
 │   │   │   │
 │   │   │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
@@ -119,7 +119,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   ├── • PreviousTransactionPrecedence dependency from PUBLIC Column:{DescID: 104, ColumnID: 3}
 │       │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: PUBLIC->WRITE_ONLY"
 │       │   │   │
-│       │   │   └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│       │   │   └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
 │       │   │         rule: "secondary indexes containing column as key reach write-only before column"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 104, Name: crdb_internal_j_shard_16, ColumnID: 3}
@@ -134,10 +134,10 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   └── • PreviousTransactionPrecedence dependency from PUBLIC ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}
 │       │   │         rule: "ColumnNotNull transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
 │       │   │
-│       │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│       │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
 │       │   │   │ PUBLIC → VALIDATED
 │       │   │   │
-│       │   │   └── • PreviousTransactionPrecedence dependency from PUBLIC SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│       │   │   └── • PreviousTransactionPrecedence dependency from PUBLIC SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
 │       │   │         rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
 │       │   │
 │       │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
@@ -227,34 +227,34 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
     │   │   │   │     rule: "column no longer public before dependents"
     │   │   │   │
-    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
     │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
     │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
     │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
-    │   │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
     │   │   │   │ VALIDATED → DELETE_ONLY
     │   │   │   │
-    │   │   │   └── • PreviousTransactionPrecedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │   └── • PreviousTransactionPrecedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
     │   │   │         rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY"
     │   │   │
     │   │   ├── • IndexName:{DescID: 104, Name: idx, IndexID: 2}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │   ├── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
     │   │   │   │     rule: "index no longer public before index name"
     │   │   │   │
-    │   │   │   └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │   └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
     │   │   │         rule: "index no longer public before dependents, excluding columns"
     │   │   │
     │   │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
@@ -337,7 +337,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
         │   │   │     rule: "dependents removed before column"
         │   │   │
-        │   │   └── • Precedence dependency from ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+        │   │   └── • Precedence dependency from ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
         │   │         rule: "indexes containing column reach absent before column"
         │   │
         │   ├── • ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}
@@ -346,7 +346,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
         │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
         │   │         rule: "column no longer public before dependents"
         │   │
-        │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+        │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
@@ -358,7 +358,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
         │   │   │     rule: "dependents removed before index"
         │   │   │
-        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
         │   │   │     rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: idx, IndexID: 2}
@@ -367,7 +367,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
         │   └── • IndexData:{DescID: 104, IndexID: 2}
         │       │ PUBLIC → ABSENT
         │       │
-        │       └── • Precedence dependency from ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+        │       └── • Precedence dependency from ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
         │             rule: "index removed before garbage collection"
         │
         └── • 5 Mutation operations

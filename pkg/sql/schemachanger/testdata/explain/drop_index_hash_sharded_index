@@ -12,7 +12,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
  │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 104, Name: crdb_internal_j_shard_16, ColumnID: 3}
  │         │    ├── PUBLIC → VALIDATED  ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}
- │         │    ├── PUBLIC → VALIDATED  SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+ │         │    ├── PUBLIC → VALIDATED  SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
  │         │    ├── PUBLIC → VALIDATED  CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
  │         │    └── PUBLIC → ABSENT     ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_j_shard_16, ConstraintID: 2}
  │         └── 6 Mutation operations
@@ -28,7 +28,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 104, ColumnID: 3}
  │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 104, Name: crdb_internal_j_shard_16, ColumnID: 3}
  │    │    │    ├── VALIDATED  → PUBLIC ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}
- │    │    │    ├── VALIDATED  → PUBLIC SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+ │    │    │    ├── VALIDATED  → PUBLIC SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
  │    │    │    ├── VALIDATED  → PUBLIC CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
  │    │    │    └── ABSENT     → PUBLIC ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_j_shard_16, ConstraintID: 2}
  │    │    └── 1 Mutation operation
@@ -38,7 +38,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
  │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 104, Name: crdb_internal_j_shard_16, ColumnID: 3}
  │         │    ├── PUBLIC → VALIDATED  ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}
- │         │    ├── PUBLIC → VALIDATED  SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+ │         │    ├── PUBLIC → VALIDATED  SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
  │         │    ├── PUBLIC → VALIDATED  CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
  │         │    └── PUBLIC → ABSENT     ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_j_shard_16, ConstraintID: 2}
  │         └── 8 Mutation operations
@@ -58,7 +58,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
-      │    │    ├── VALIDATED  → DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+      │    │    ├── VALIDATED  → DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
       │    │    ├── PUBLIC     → ABSENT      IndexName:{DescID: 104, Name: idx, IndexID: 2}
       │    │    └── VALIDATED  → ABSENT      CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
       │    └── 10 Mutation operations
@@ -76,7 +76,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
            ├── 4 elements transitioning toward ABSENT
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104, ColumnID: 3}
            │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}
-           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}
            │    └── PUBLIC      → ABSENT IndexData:{DescID: 104, IndexID: 2}
            └── 5 Mutation operations
                 ├── MakeIndexAbsent {"IndexID":2,"TableID":104}

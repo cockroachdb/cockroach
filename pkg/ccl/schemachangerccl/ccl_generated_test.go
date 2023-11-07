@@ -18,31 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func TestBackup_ccl_create_index(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index", newCluster)
-}
-func TestEndToEndSideEffects_ccl_create_index(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	sctest.EndToEndSideEffects(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index", newCluster)
-}
-func TestGenerateSchemaChangeCorpus_ccl_create_index(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	sctest.GenerateSchemaChangeCorpus(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index", newCluster)
-}
-func TestPause_ccl_create_index(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	sctest.Pause(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index", newCluster)
-}
-func TestRollback_ccl_create_index(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	sctest.Rollback(t, "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index", newCluster)
-}
 func TestBackup_ccl_drop_database_multiregion_primary_region(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

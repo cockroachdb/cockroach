@@ -1395,6 +1395,7 @@ a  b  k
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
 
+skipif config local-mixed-22.2-23.1
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -1405,6 +1406,19 @@ CREATE TABLE public.t (
   CONSTRAINT t_pkey PRIMARY KEY (k ASC),
   UNIQUE INDEX t_a_key (a ASC),
   INDEX t_idx_b_k (b ASC, k ASC)
+)
+
+onlyif config local-mixed-22.2-23.1
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  k INT8 NOT NULL AS (a + b) VIRTUAL,
+  CONSTRAINT t_pkey PRIMARY KEY (k ASC),
+  INDEX t_idx_b_k (b ASC, k ASC),
+  UNIQUE INDEX t_a_key (a ASC)
 )
 
 query III colnames,rowsort
@@ -1431,6 +1445,7 @@ a  b  k
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (b, k);
 
+skipif config local-mixed-22.2-23.1
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -1442,6 +1457,20 @@ CREATE TABLE public.t (
   UNIQUE INDEX t_k_key (k ASC),
   UNIQUE INDEX t_a_key (a ASC),
   INDEX t_idx_b_k (b ASC, k ASC)
+)
+
+onlyif config local-mixed-22.2-23.1
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  k INT8 NOT NULL AS (a + b) VIRTUAL,
+  CONSTRAINT t_pkey PRIMARY KEY (b ASC, k ASC),
+  INDEX t_idx_b_k (b ASC, k ASC),
+  UNIQUE INDEX t_a_key (a ASC),
+  UNIQUE INDEX t_k_key (k ASC)
 )
 
 query III colnames,rowsort
@@ -1475,6 +1504,7 @@ a  b  k
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 
+skipif config local-mixed-22.2-23.1
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -1487,6 +1517,21 @@ CREATE TABLE public.t (
   UNIQUE INDEX t_k_key (k ASC),
   UNIQUE INDEX t_a_key (a ASC),
   INDEX t_idx_b_k (b ASC, k ASC)
+)
+
+onlyif config local-mixed-22.2-23.1
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  k INT8 NOT NULL AS (a + b) VIRTUAL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX t_idx_b_k (b ASC, k ASC),
+  UNIQUE INDEX t_a_key (a ASC),
+  UNIQUE INDEX t_k_key (k ASC),
+  UNIQUE INDEX t_b_k_key (b ASC, k ASC)
 )
 
 query III colnames,rowsort

@@ -178,7 +178,8 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 		in.apply(b.Add)
 		tempIn.apply(b.AddTransient)
 		newPrimaryIndexElem = in.primary
-		sourcePrimaryIndexElem = in.primary
+		// We canuse the existing PK for backfilling
+		sourcePrimaryIndexElem = out.primary
 	} else {
 		// We ARE dropping the rowid column => swap indexes twice and drop column.
 		unionColumns := append(inColumns[:len(inColumns):len(inColumns)], indexColumnSpec{
@@ -701,6 +702,7 @@ func recreateAllSecondaryIndexes(
 			}
 		}
 		in, temp := makeSwapIndexSpec(b, out, sourcePrimaryIndex.IndexID, inColumns)
+		in.secondary.RecreateSourceIndexID = idx.IndexID
 		out.apply(b.Drop)
 		in.apply(b.Add)
 		temp.apply(b.AddTransient)
