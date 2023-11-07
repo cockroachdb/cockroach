@@ -1,0 +1,15 @@
+# Test verifies that sst could be added to the feed and will be handled by rangefeed
+# by splitting it into values.
+create-feed startKey=a endKey=z
+----
+
+put k=b v=1
+add-sst ts=sstTs
+ k=a v=4
+ k=b v=5
+ k=c v=6
+----
+key=a, val=4, ts=sstTs
+key=b, val=1, ts=ts1
+key=b, val=5, ts=sstTs
+key=c, val=6, ts=sstTs
