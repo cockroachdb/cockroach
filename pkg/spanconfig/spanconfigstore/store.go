@@ -186,6 +186,9 @@ func (s *Store) getFallbackConfig() roachpb.SpanConfig {
 	if conf := FallbackConfigOverride.Get(&s.settings.SV).(*roachpb.SpanConfig); !conf.IsEmpty() {
 		return *conf
 	}
+	if s.knobs != nil && s.knobs.OverrideFallbackConf != nil {
+		return s.knobs.OverrideFallbackConf(s.fallback)
+	}
 	return s.fallback
 }
 
@@ -206,13 +209,26 @@ func (s *Store) ForEachOverlappingSpanConfig(
 ) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.mu.spanConfigStore.forEachOverlapping(span, func(sp roachpb.Span, conf roachpb.SpanConfig) error {
+	foundNoOverlapping := true
+	err := s.mu.spanConfigStore.forEachOverlapping(span, func(sp roachpb.Span, conf roachpb.SpanConfig) error {
+		foundNoOverlapping = false
 		config, err := s.getSpanConfigForKeyRLocked(ctx, roachpb.RKey(sp.Key))
 		if err != nil {
 			return err
 		}
 		return f(sp, config)
 	})
+	if err != nil {
+		return err
+	}
+	if foundNoOverlapping {
+		config, err := s.getSpanConfigForKeyRLocked(ctx, roachpb.RKey(span.Key))
+		if err != nil {
+			return err
+		}
+		return f(span, config)
+	}
+	return nil
 }
 
 // Clone returns a copy of the Store.
