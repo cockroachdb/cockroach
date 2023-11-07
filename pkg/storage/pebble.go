@@ -2197,33 +2197,30 @@ func (p *Pebble) ScanStorageInternalKeys(
 	if err != nil {
 		return []enginepb.StorageInternalKeysMetrics{}, err
 	}
-
-	var metrics []enginepb.StorageInternalKeysMetrics
-
-	for level := 0; level < 7; level++ {
-		metrics = append(metrics, enginepb.StorageInternalKeysMetrics{
-			Level:                   int32(level),
-			SnapshotPinnedKeys:      uint64(stats.Levels[level].SnapshotPinnedKeys),
-			SnapshotPinnedKeysBytes: stats.Levels[level].SnapshotPinnedKeysBytes,
-			PointKeyDeleteCount:     uint64(stats.Levels[level].KindsCount[pebble.InternalKeyKindDelete]),
-			PointKeySetCount:        uint64(stats.Levels[level].KindsCount[pebble.InternalKeyKindSet]),
-			RangeDeleteCount:        uint64(stats.Levels[level].KindsCount[pebble.InternalKeyKindRangeDelete]),
-			RangeKeySetCount:        uint64(stats.Levels[level].KindsCount[pebble.InternalKeyKindRangeKeySet]),
-			RangeKeyDeleteCount:     uint64(stats.Levels[level].KindsCount[pebble.InternalKeyKindRangeKeyDelete]),
-		})
+	setMetricsFromStats := func(
+		level int, stats *pebble.KeyStatistics, m *enginepb.StorageInternalKeysMetrics) {
+		*m = enginepb.StorageInternalKeysMetrics{
+			Level:                       int32(level),
+			SnapshotPinnedKeys:          uint64(stats.SnapshotPinnedKeys),
+			SnapshotPinnedKeysBytes:     stats.SnapshotPinnedKeysBytes,
+			PointKeyDeleteCount:         uint64(stats.KindsCount[pebble.InternalKeyKindDelete]),
+			PointKeySetCount:            uint64(stats.KindsCount[pebble.InternalKeyKindSet]),
+			RangeDeleteCount:            uint64(stats.KindsCount[pebble.InternalKeyKindRangeDelete]),
+			RangeKeySetCount:            uint64(stats.KindsCount[pebble.InternalKeyKindRangeKeySet]),
+			RangeKeyDeleteCount:         uint64(stats.KindsCount[pebble.InternalKeyKindRangeKeyDelete]),
+			PointKeyDeleteIsLatestCount: uint64(stats.LatestKindsCount[pebble.InternalKeyKindDelete]),
+			PointKeySetIsLatestCount:    uint64(stats.LatestKindsCount[pebble.InternalKeyKindSet]),
+		}
 	}
-
-	metrics = append(metrics, enginepb.StorageInternalKeysMetrics{
-		Level:                   -1,
-		SnapshotPinnedKeys:      uint64(stats.Accumulated.SnapshotPinnedKeys),
-		SnapshotPinnedKeysBytes: stats.Accumulated.SnapshotPinnedKeysBytes,
-		PointKeyDeleteCount:     uint64(stats.Accumulated.KindsCount[pebble.InternalKeyKindDelete]),
-		PointKeySetCount:        uint64(stats.Accumulated.KindsCount[pebble.InternalKeyKindSet]),
-		RangeDeleteCount:        uint64(stats.Accumulated.KindsCount[pebble.InternalKeyKindRangeDelete]),
-		RangeKeySetCount:        uint64(stats.Accumulated.KindsCount[pebble.InternalKeyKindRangeKeySet]),
-		RangeKeyDeleteCount:     uint64(stats.Accumulated.KindsCount[pebble.InternalKeyKindRangeKeyDelete]),
-	})
-
+	var metrics []enginepb.StorageInternalKeysMetrics
+	for level := 0; level < 7; level++ {
+		var m enginepb.StorageInternalKeysMetrics
+		setMetricsFromStats(level, &stats.Levels[level], &m)
+		metrics = append(metrics, m)
+	}
+	var m enginepb.StorageInternalKeysMetrics
+	setMetricsFromStats(-1 /* level */, &stats.Accumulated, &m)
+	metrics = append(metrics, m)
 	return metrics, nil
 }
 
