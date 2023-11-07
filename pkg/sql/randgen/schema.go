@@ -172,6 +172,8 @@ func RandCreateTableWithColumnIndexNumberGeneratorAndName(
 	normalColDefs := columnDefs
 	for i := nNormalColumns; i < nColumns; i++ {
 		columnDef := randComputedColumnTableDef(rng, normalColDefs, tableIdx, colSuffix(i))
+		//columnDef.Name.Format(fmtCtx)
+		//columnDef.Name = tree.Name(fmtCtx.CloseAndGetString())
 		columnDefs = append(columnDefs, columnDef)
 		defs = append(defs, columnDef)
 	}
@@ -464,7 +466,7 @@ func GenerateRandInterestingTable(db *gosql.DB, dbName, tableName string) error 
 // randColumnTableDef produces a random ColumnTableDef for a non-computed
 // column, with a random type and nullability.
 func randColumnTableDef(rng *rand.Rand, tableIdx int, colSuffix string) *tree.ColumnTableDef {
-	g := randident.NewNameGenerator(&nameGenCfg, rng, fmt.Sprintf("col%d_", tableIdx))
+	g := randident.NewNameGenerator(&nameGenCfg, rng, fmt.Sprintf("col%d", tableIdx))
 	colName := g.GenerateOne(colSuffix)
 	columnDef := &tree.ColumnTableDef{
 		// We make a unique name for all columns by prefixing them with the table

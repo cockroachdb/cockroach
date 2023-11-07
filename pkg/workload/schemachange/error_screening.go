@@ -574,9 +574,12 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 	columns []string,
 	colInfos []column,
 	row []string,
-) (bool, codesWithConditions, codesWithConditions, error) {
-	var expectedErrors codesWithConditions
-	var potentialErrors codesWithConditions
+) (
+	isInvalidInsert bool,
+	expectedErrCodes codesWithConditions,
+	potentialErrCodes codesWithConditions,
+	err error,
+) {
 	// Put values to be inserted into a column name to value map to simplify lookups.
 	columnsToValues := map[string]string{}
 	for i := 0; i < len(columns); i++ {
@@ -589,6 +592,7 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 			return err
 		}
 		query := strings.Builder{}
+
 		query.WriteString("SELECT ((")
 		query.WriteString(expr)
 		query.WriteString(")::")
@@ -660,11 +664,11 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 			if !isValidGenerationError(pgErr.Code) {
 				return err
 			}
-			expectedErrors = expectedErrors.append(pgcode.MakeCode(pgErr.Code))
+			expectedErrCodes = expectedErrCodes.append(pgcode.MakeCode(pgErr.Code))
 		}
 		if isNull && !isNullable && !nullViolationAdded {
 			nullViolationAdded = true
-			expectedErrors = expectedErrors.append(pgcode.NotNullViolation)
+			expectedErrCodes = expectedErrCodes.append(pgcode.NotNullViolation)
 		}
 		// Re-run the another variant in case we have NULL values in arithmetic
 		// of expression, the evaluation order can differ depending on how variables
@@ -679,7 +683,7 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 				// Note: Invalid errors are allowed, since this is a heuristic. We replaced
 				// random NULL values with zero.
 				if isValidGenerationError(pgErr.Code) {
-					potentialErrors = potentialErrors.append(pgcode.MakeCode(pgErr.Code))
+					potentialErrCodes = potentialErrCodes.append(pgcode.MakeCode(pgErr.Code))
 				}
 			}
 		}
@@ -705,9 +709,9 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 	}
 	// Any bad generated expression means we don't have to bother with indexes next,
 	// since we expect the insert to fail earlier.
-	if expectedErrors == nil {
+	if expectedErrCodes == nil {
 		// Validate unique constraint expressions that are backed by indexes.
-		constraints, err := og.scanStringArrayRows(ctx, tx, `
+		q := fmt.Sprint(`
 WITH tab_json AS (
                     SELECT crdb_internal.pb_to_json(
                             'desc',
@@ -724,7 +728,7 @@ WITH tab_json AS (
                            IF(
                             (c->'inaccessible')::BOOL,
                             c->>'computeExpr',
-                            c->>'name'
+                            quote_ident(c->>'name')
                            ) AS expr
                       FROM columns_json
                  ),
@@ -745,23 +749,38 @@ WITH tab_json AS (
                           FROM unique_indexes AS idx
                                INNER JOIN columns AS c ON idx.col_id = c.col_id
                      )
-  SELECT ARRAY['(' || array_to_string(array_agg(expr), ', ') || ')'] AS final_expr
-    FROM index_exprs
-   WHERE expr != 'rowid'
-GROUP BY name;
-		`, tableName.String())
+      SELECT '(' || array_to_string(array_agg(expr), ', ') || ')' AS final_expr                    
+      FROM index_exprs                                                                                       
+      WHERE expr != 'rowid'                                                                          
+      GROUP BY name; 
+		`)
+		rows, err := tx.Query(ctx, q, tableName.String())
+		defer rows.Close()
 		if err != nil {
 			return false, nil, nil, og.checkAndAdjustForUnknownSchemaErrors(err)
 		}
 
+		var constraints []string
+		for rows.Next() {
+			var constraint string
+			err := rows.Scan(&constraint)
+			if err != nil {
+				return false, nil, nil, og.checkAndAdjustForUnknownSchemaErrors(err)
+			}
+			constraints = append(constraints, constraint)
+		}
+		if err := rows.Err(); err != nil {
+			return false, nil, nil, og.checkAndAdjustForUnknownSchemaErrors(err)
+		}
+
 		for _, constraint := range constraints {
-			err := validateExpression(constraint[0], "STRING", true, true)
+			err := validateExpression(constraint, "STRING", true, true)
 			if err != nil {
 				return false, nil, nil, err
 			}
 		}
 	}
-	return len(expectedErrors) > 0, expectedErrors, potentialErrors, nil
+	return len(expectedErrCodes) > 0, expectedErrCodes, potentialErrCodes, nil
 }
 
 // generateColumn generates values for columns that are generated.
@@ -1194,7 +1213,7 @@ func (og *operationGenerator) violatesFkConstraints(
 			}
 
 			violation, err := og.violatesFkConstraintsHelper(
-				ctx, tx, columnNameToIndexMap, parentTableSchema, parentTableName, parentColumnName, tableName.String(), childColumnName, parentAndChildAreSame, row, rows,
+				ctx, tx, columnNameToIndexMap, parentTableSchema, parentTableName, parentColumnName, childColumnName, tableName, parentAndChildAreSame, row, rows,
 			)
 			if err != nil {
 				return false, err
@@ -1214,7 +1233,8 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 	ctx context.Context,
 	tx pgx.Tx,
 	columnNameToIndexMap map[string]int,
-	parentTableSchema, parentTableName, parentColumn, childTableName, childColumn string,
+	parentTableSchema, parentTableName, parentColumn, childColumn string,
+	childTableName *tree.TableName,
 	parentAndChildAreSameTable bool,
 	row []string,
 	allRows [][]string,

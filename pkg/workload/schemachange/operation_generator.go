@@ -455,7 +455,7 @@ func (og *operationGenerator) alterTableLocality(ctx context.Context, tx pgx.Tx)
 			// existing crdb_region column, but it is nullable, and therefore
 			// cannot be used as the implicit partitioning column.
 			if !columnForAsUsed {
-				columnNames, err := og.getTableColumns(ctx, tx, tableName.String(), true)
+				columnNames, err := og.getTableColumns(ctx, tx, tableName, true)
 				if err != nil {
 					return "", err
 				}
@@ -921,7 +921,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		return nil, err
 	}
 
-	columnNames, err := og.getTableColumns(ctx, tx, tableName.String(), true)
+	columnNames, err := og.getTableColumns(ctx, tx, tableName, true)
 	if err != nil {
 		return nil, err
 	}
@@ -2820,7 +2820,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 			),
 			pgcode.UndefinedTable), nil
 	}
-	allColumns, err := og.getTableColumns(ctx, tx, tableName.String(), false)
+	allColumns, err := og.getTableColumns(ctx, tx, tableName, false)
 	nonGeneratedCols := allColumns
 	if err != nil {
 		return nil, errors.Wrapf(err, "error getting table columns for insert row")
@@ -3175,39 +3175,23 @@ type column struct {
 }
 
 func (og *operationGenerator) getTableColumns(
-	ctx context.Context, tx pgx.Tx, tableName string, shuffle bool,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, shuffle bool,
 ) ([]column, error) {
 	q := fmt.Sprintf(`
-    WITH tab_json AS (
-                    SELECT crdb_internal.pb_to_json(
-                            'desc',
-                            descriptor
-                           )->'table' AS t
-                      FROM system.descriptor
-                     WHERE id = $1::REGCLASS
-                  ),
-         columns_json AS (
-                        SELECT json_array_elements(t->'columns') AS c FROM tab_json
-                      ),
-         columns AS (
-                  SELECT c->>'computeExpr' AS generation_expression,
-                         c->>'name' AS column_name
-                    FROM columns_json
-                 )
-  SELECT show_columns.column_name,
-         show_columns.data_type,
-         show_columns.is_nullable,
-         columns.generation_expression IS NOT NULL AS is_generated,
-         COALESCE(columns.generation_expression, '') as generated_expression
-    FROM [SHOW COLUMNS FROM %s] AS show_columns, columns
-   WHERE show_columns.column_name != 'rowid'
-         AND show_columns.column_name = columns.column_name
-`, tableName)
-	rows, err := tx.Query(ctx, q, tableName)
-	if err != nil {
-		return nil, errors.Wrapf(err, "getting table columns from %s", tableName)
-	}
+	SELECT quote_ident(column_name),
+			   pg_type.typname AS data_type,
+		     is_nullable::BOOLEAN,
+		     (column_default IS NOT NULL) AS is_generated,
+	       generation_expression
+	FROM information_schema.columns
+	JOIN pg_type ON pg_type.oid = information_schema.columns.udt_name::regtype
+	WHERE table_schema = '%s' AND table_name = '%s' AND column_name != 'rowid'
+	`, tableName.SchemaName, tableName.ObjectName)
+	rows, err := tx.Query(ctx, q)
 	defer rows.Close()
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting table columns from %s", tableName.String())
+	}
 	var typNames []string
 	var ret []column
 	for rows.Next() {
@@ -3217,6 +3201,8 @@ func (og *operationGenerator) getTableColumns(
 		if err != nil {
 			return nil, err
 		}
+		//c.name = tree.NameString(c.name)
+
 		if c.name != "rowid" {
 			typNames = append(typNames, typName)
 			ret = append(ret, c)
@@ -4146,7 +4132,7 @@ func (og *operationGenerator) selectStmt(ctx context.Context, tx pgx.Tx) (stmt *
 			allTableExists = false
 			continue
 		}
-		colInfo, err := og.getTableColumns(ctx, tx, tableName.String(), false)
+		colInfo, err := og.getTableColumns(ctx, tx, tableName, false)
 		if err != nil {
 			return nil, err
 		}

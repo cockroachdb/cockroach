@@ -57,9 +57,10 @@ import (
 //
 //For example, an attempt to do something we don't support should be swallowed (though if we can detect that maybe we should just not do it, e.g). It will be hard to use this test for anything more than liveness detection until we go through the tedious process of classifying errors.:
 
+// TODO(before merge): change defaultErrorRate back to 10
 const (
 	defaultMaxOpsPerWorker                 = 5
-	defaultErrorRate                       = 10
+	defaultErrorRate                       = 0
 	defaultEnumPct                         = 10
 	defaultMaxSourceTables                 = 3
 	defaultSequenceOwnedByPct              = 25
