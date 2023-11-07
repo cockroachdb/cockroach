@@ -169,7 +169,7 @@ func main() {
 	ssh.InsecureIgnoreHostKey = true
 	cmd := makeRoachprodMicrobenchCommand()
 	if err := cmd.Execute(); err != nil {
-		log.Printf("ERROR: %v", err)
+		log.Printf("ERROR: %+v", err)
 		os.Exit(1)
 	}
 }
