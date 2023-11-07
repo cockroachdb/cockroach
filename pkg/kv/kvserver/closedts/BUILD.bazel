@@ -18,7 +18,6 @@ go_library(
 go_test(
     name = "closedts_test",
     srcs = ["policy_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":closedts"],
     deps = [
         "//pkg/roachpb",

@@ -4,10 +4,6 @@ go_test(
     name = "5node_test",
     size = "enormous",
     srcs = ["generated_test.go"],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
     data = [
         "//c-deps:libgeos",  # keep
         "//pkg/sql/opt/exec/execbuilder:testdata",  # keep

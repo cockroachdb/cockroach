@@ -25,7 +25,6 @@ go_test(
         "constant_eval_test.go",
         "normalize_test.go",
     ],
-    args = ["-test.timeout=295s"],
     deps = [
         ":normalize",
         "//pkg/settings/cluster",

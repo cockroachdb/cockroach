@@ -23,6 +23,5 @@ go_library(
 go_test(
     name = "spanconfigsqltranslator_test",
     srcs = ["sqltranslator_test.go"],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
 )

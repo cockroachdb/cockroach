@@ -23,7 +23,6 @@ go_library(
 go_test(
     name = "compengine_test",
     srcs = ["sketch_test.go"],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":compengine"],
     deps = [

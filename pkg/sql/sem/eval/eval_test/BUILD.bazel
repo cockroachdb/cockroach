@@ -7,7 +7,6 @@ go_test(
         "eval_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=55s"],
     data = ["//pkg/sql/sem/eval:testdata"],
     deps = [
         "//pkg/base",

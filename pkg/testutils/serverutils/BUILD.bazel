@@ -141,7 +141,6 @@ go_test(
         "conditional_wrap_test.go",
         "test_url_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":serverutils"],
     deps = [
         "//pkg/base",

@@ -21,7 +21,6 @@ go_library(
 go_test(
     name = "backuputils_test",
     srcs = ["memory_backed_quota_pool_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":backuputils"],
     tags = ["ccl_test"],
     deps = [

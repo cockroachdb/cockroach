@@ -355,10 +355,6 @@ go_test(
         "txn_recovery_integration_test.go",
         "txn_wait_queue_test.go",
     ],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
     data = glob(["testdata/**"]),
     embed = [":kvserver"],
     exec_properties = {"Pool": "large"},

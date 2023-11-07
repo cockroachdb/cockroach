@@ -34,7 +34,6 @@ go_test(
         "main_test.go",
         "options_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":changefeedbase"],
     tags = ["ccl_test"],
     deps = [

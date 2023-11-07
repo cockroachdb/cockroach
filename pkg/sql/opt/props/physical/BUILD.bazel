@@ -29,7 +29,6 @@ go_test(
         "distribution_test.go",
         "required_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":physical"],
     deps = [
         "//pkg/config/zonepb",

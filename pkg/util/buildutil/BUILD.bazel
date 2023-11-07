@@ -33,7 +33,6 @@ genrule(
 go_test(
     name = "buildutil_test",
     srcs = ["crdb_test_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":buildutil"],  # keep
     deps = [
         "//pkg/build/bazel",

@@ -15,7 +15,6 @@ go_library(
 go_test(
     name = "service_test",
     srcs = ["service_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":service"],
     deps = [
         "//pkg/util/leaktest",

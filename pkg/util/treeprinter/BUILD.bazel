@@ -11,6 +11,5 @@ go_test(
     name = "treeprinter_test",
     size = "small",
     srcs = ["tree_printer_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":treeprinter"],
 )

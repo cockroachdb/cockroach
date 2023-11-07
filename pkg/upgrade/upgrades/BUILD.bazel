@@ -118,7 +118,6 @@ go_test(
         "system_rbr_indexes_test.go",
         "upgrades_test.go",
     ],
-    args = ["-test.timeout=895s"],
     data = glob(["testdata/**"]),
     embed = [":upgrades"],
     shard_count = 16,

@@ -19,7 +19,6 @@ go_library(
 go_test(
     name = "distribution_test",
     srcs = ["distribution_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":distribution"],
     deps = [
         "//pkg/settings/cluster",

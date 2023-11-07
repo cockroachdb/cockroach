@@ -23,7 +23,6 @@ go_test(
         "main_test.go",
         "session_protected_ts_test.go",
     ],
-    args = ["-test.timeout=295s"],
     deps = [
         ":sessionprotectedts",
         "//pkg/base",

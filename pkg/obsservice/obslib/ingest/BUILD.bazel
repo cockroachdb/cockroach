@@ -21,7 +21,6 @@ go_test(
         "ingest_integration_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":ingest"],
     deps = [

@@ -50,7 +50,6 @@ go_test(
         "row_number_test.go",
         "scan_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":ordering"],
     deps = [
         "//pkg/settings/cluster",

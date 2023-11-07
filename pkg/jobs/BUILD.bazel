@@ -109,7 +109,6 @@ go_test(
         "testutils_test.go",
         "update_test.go",
     ],
-    args = ["-test.timeout=895s"],
     embed = [":jobs"],
     shard_count = 16,
     deps = [

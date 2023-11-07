@@ -12,6 +12,5 @@ go_test(
     name = "stringarena_test",
     size = "small",
     srcs = ["arena_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":stringarena"],
 )

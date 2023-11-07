@@ -31,7 +31,6 @@ go_library(
 go_test(
     name = "tpch_test",
     srcs = ["random_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":tpch"],
     deps = [
         "//pkg/util/bufalloc",

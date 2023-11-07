@@ -14,7 +14,6 @@ go_library(
 go_test(
     name = "queue_test",
     srcs = ["mem_queue_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":queue"],
     deps = [
         "//pkg/util/leaktest",

@@ -42,7 +42,6 @@ go_test(
         "cloud_io_test.go",
         "uris_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":cloud"],
     deps = [
         "//pkg/util/ioctx",

@@ -26,7 +26,7 @@ bazel test pkg/util/tracing:all --test_env=GOTRACEBACK=all '--test_filter=TestSt
 exec
 dev test //pkg/testutils --timeout=10s
 ----
-bazel test pkg/testutils:all --test_env=GOTRACEBACK=all --test_timeout=15 --test_arg -test.timeout=10s --test_output errors --build_event_binary_file=/tmp/path
+bazel test pkg/testutils:all --test_env=GOTRACEBACK=all --test_timeout=10 --test_output errors --build_event_binary_file=/tmp/path
 
 exec
 dev test pkg/util/tracing -- -s
@@ -139,7 +139,7 @@ exec
 dev test pkg/spanconfig/spanconfigstore --timeout 30s --test-args '-test.timeout=0.5s'
 ----
 bazel info workspace --color=no
-bazel test pkg/spanconfig/spanconfigstore:all --test_env=GOTRACEBACK=all --test_timeout=35 --test_arg -test.timeout=30s --test_arg -test.outputdir=crdb-checkout --sandbox_writable_path=crdb-checkout --test_arg -test.timeout=0.5s --test_output errors --build_event_binary_file=/tmp/path
+bazel test pkg/spanconfig/spanconfigstore:all --test_env=GOTRACEBACK=all --test_timeout=30 --test_arg -test.outputdir=crdb-checkout --sandbox_writable_path=crdb-checkout --test_arg -test.timeout=0.5s --test_output errors --build_event_binary_file=/tmp/path
 
 exec
 dev test pkg/spanconfig/spanconfigstore -- --test_arg '-test.timeout=0.5s'
@@ -149,7 +149,7 @@ bazel test pkg/spanconfig/spanconfigstore:all --test_env=GOTRACEBACK=all --test_
 exec
 dev test pkg/spanconfig/spanconfigstore --timeout=40s -- --test_arg '-test.timeout=0.5s'
 ----
-bazel test pkg/spanconfig/spanconfigstore:all --test_env=GOTRACEBACK=all --test_timeout=45 --test_arg -test.timeout=40s --test_output errors --test_arg -test.timeout=0.5s --build_event_binary_file=/tmp/path
+bazel test pkg/spanconfig/spanconfigstore:all --test_env=GOTRACEBACK=all --test_timeout=40 --test_output errors --test_arg -test.timeout=0.5s --build_event_binary_file=/tmp/path
 
 exec
 dev test pkg/spanconfig/spanconfigstore --stress

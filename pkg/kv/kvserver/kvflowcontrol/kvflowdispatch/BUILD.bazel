@@ -24,7 +24,6 @@ go_library(
 go_test(
     name = "kvflowdispatch_test",
     srcs = ["kvflowdispatch_test.go"],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":kvflowdispatch"],
     deps = [

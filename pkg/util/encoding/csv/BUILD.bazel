@@ -19,7 +19,6 @@ go_test(
         "reader_test.go",
         "writer_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":csv"],
     deps = [
         "//pkg/util/log",

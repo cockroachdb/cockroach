@@ -51,7 +51,6 @@ go_test(
         "azure_kms_test.go",
         "azure_storage_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":azure"],
     deps = [
         "//pkg/base",

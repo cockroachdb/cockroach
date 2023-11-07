@@ -32,7 +32,6 @@ go_test(
         "replica_rankings_test.go",
         "store_rebalancer_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":storerebalancer"],
     deps = [
         "//pkg/kv/kvserver",

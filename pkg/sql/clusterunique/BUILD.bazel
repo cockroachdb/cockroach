@@ -18,7 +18,6 @@ go_library(
 go_test(
     name = "clusterunique_test",
     srcs = ["id_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":clusterunique"],
     deps = [
         "//pkg/util/uint128",

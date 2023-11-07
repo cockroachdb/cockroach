@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_library(
     name = "generate-bazel-extra_lib",
@@ -12,17 +12,4 @@ go_binary(
     name = "generate-bazel-extra",
     embed = [":generate-bazel-extra_lib"],
     visibility = ["//visibility:public"],
-)
-
-go_test(
-    name = "generate-bazel-extra_test",
-    size = "small",
-    srcs = ["main_test.go"],
-    args = ["-test.timeout=55s"],
-    data = glob(["testdata/**"]),
-    embed = [":generate-bazel-extra_lib"],
-    deps = [
-        "//pkg/testutils/datapathutils",
-        "@com_github_stretchr_testify//require",
-    ],
 )

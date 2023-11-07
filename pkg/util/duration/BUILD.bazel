@@ -28,7 +28,6 @@ go_test(
         "duration_test.go",
         "parse_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":duration"],
     deps = [
         "//pkg/sql/types",

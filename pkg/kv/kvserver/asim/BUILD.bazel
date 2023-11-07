@@ -23,7 +23,6 @@ go_library(
 go_test(
     name = "asim_test",
     srcs = ["asim_test.go"],
-    args = ["-test.timeout=295s"],
     deps = [
         ":asim",
         "//pkg/kv/kvserver/asim/config",

@@ -31,7 +31,6 @@ go_library(
 go_test(
     name = "isolation_test",
     srcs = ["levels_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":isolation"],
     deps = ["@com_github_stretchr_testify//require"],
 )

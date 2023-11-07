@@ -15,7 +15,6 @@ go_library(
 go_test(
     name = "tenanttokenbucket_test",
     srcs = ["tenant_token_bucket_test.go"],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":tenanttokenbucket"],
     tags = ["ccl_test"],

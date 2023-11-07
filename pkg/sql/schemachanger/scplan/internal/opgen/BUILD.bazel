@@ -102,7 +102,6 @@ go_test(
     name = "opgen_test",
     size = "small",
     srcs = ["register_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":opgen"],
     deps = ["//pkg/sql/schemachanger/scpb"],
 )

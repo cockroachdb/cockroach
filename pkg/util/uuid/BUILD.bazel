@@ -29,7 +29,6 @@ go_test(
         "sql_test.go",
         "uuid_test.go",
     ],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":uuid"],
     deps = [

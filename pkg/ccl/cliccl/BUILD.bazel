@@ -52,7 +52,6 @@ go_test(
         "ear_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":cliccl"],
     tags = ["ccl_test"],
     deps = [

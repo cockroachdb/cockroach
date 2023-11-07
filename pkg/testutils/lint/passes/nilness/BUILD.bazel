@@ -15,7 +15,6 @@ go_library(
 go_test(
     name = "nilness_test",
     srcs = ["nilness_test.go"],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]) + [
         "@go_sdk//:files",
     ],

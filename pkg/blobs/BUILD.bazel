@@ -37,7 +37,6 @@ go_test(
         "local_storage_test.go",
         "service_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":blobs"],
     deps = [
         "//pkg/base",

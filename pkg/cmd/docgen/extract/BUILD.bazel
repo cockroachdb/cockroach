@@ -21,6 +21,5 @@ go_test(
     name = "extract_test",
     size = "small",
     srcs = ["extract_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":extract"],
 )

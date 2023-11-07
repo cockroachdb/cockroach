@@ -75,7 +75,6 @@ go_test(
         "replication_stream_test.go",
         "stream_event_batcher_test.go",
     ],
-    args = ["-test.timeout=895s"],
     embed = [":streamproducer"],
     tags = ["ccl_test"],
     deps = [

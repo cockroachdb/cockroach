@@ -18,7 +18,6 @@ go_test(
     name = "githubpost_test",
     size = "small",
     srcs = ["githubpost_test.go"],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]) + [
         "//:TEAMS.yaml",
         "//.github:CODEOWNERS",

@@ -25,7 +25,6 @@ go_test(
     name = "fmtsafe_test",
     size = "small",
     srcs = ["fmtsafe_test.go"],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]) + [
         "@go_sdk//:files",
     ],

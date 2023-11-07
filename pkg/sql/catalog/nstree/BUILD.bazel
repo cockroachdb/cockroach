@@ -41,7 +41,6 @@ go_test(
         "map_test.go",
         "set_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":nstree"],
     deps = [

@@ -55,7 +55,6 @@ go_test(
         "update_releases_test.go",
         "update_versions_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob([
         "templates/**",
         "testdata/**",

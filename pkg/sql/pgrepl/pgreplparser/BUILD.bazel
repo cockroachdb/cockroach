@@ -62,7 +62,6 @@ go_test(
         "lexer_test.go",
         "parser_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":pgreplparser"],
     deps = [

@@ -15,7 +15,6 @@ go_library(
 go_test(
     name = "lockspanset_test",
     srcs = ["lockspanset_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":lockspanset"],
     deps = [
         "//pkg/kv/kvserver/concurrency/lock",

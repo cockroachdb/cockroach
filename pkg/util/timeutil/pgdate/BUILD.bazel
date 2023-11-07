@@ -39,7 +39,6 @@ go_test(
         "parsing_test.go",
         "pgdate_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":pgdate"],
     deps = [
         "//pkg/util/timeutil",

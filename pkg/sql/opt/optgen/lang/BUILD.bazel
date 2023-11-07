@@ -33,7 +33,6 @@ go_test(
         "parser_test.go",
         "scanner_test.go",
     ],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":lang"],
     deps = [

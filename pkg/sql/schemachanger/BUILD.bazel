@@ -31,10 +31,6 @@ go_test(
         "schemachanger_test.go",
         ":test_gen",  # keep
     ],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
     data = glob(["testdata/**"]) + [
         "//pkg/sql/logictest:testdata",
     ],

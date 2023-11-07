@@ -32,7 +32,6 @@ go_test(
         "template_test.go",
         "util_test.go",
     ],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":execgen"],
     deps = [

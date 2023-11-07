@@ -27,7 +27,6 @@ go_test(
         "main_test.go",
         "system_config_watcher_test.go",
     ],
-    args = ["-test.timeout=295s"],
     deps = [
         ":systemconfigwatcher",
         "//pkg/base",

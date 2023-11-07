@@ -69,7 +69,6 @@ go_test(
         "store_test.go",
         "version_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":loqrecovery"],
     deps = [

@@ -17,7 +17,6 @@ go_test(
     name = "floatcmp_test",
     size = "small",
     srcs = ["floatcmp_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":floatcmp"],
     deps = ["//pkg/util/leaktest"],
 )

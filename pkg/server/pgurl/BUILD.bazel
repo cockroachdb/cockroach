@@ -21,7 +21,6 @@ go_library(
 go_test(
     name = "pgurl_test",
     srcs = ["pgurl_test.go"],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":pgurl"],
     deps = [

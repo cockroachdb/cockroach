@@ -15,7 +15,6 @@ go_library(
 go_test(
     name = "serverrules_test",
     srcs = ["metric_rules_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":serverrules"],
     deps = [
         "//pkg/util/leaktest",

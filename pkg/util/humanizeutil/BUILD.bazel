@@ -24,7 +24,6 @@ go_test(
         "duration_test.go",
         "humanize_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":humanizeutil"],
     deps = [
         "//pkg/util/leaktest",

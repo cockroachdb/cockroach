@@ -15,7 +15,6 @@ go_library(
 go_test(
     name = "listenerutil_test",
     srcs = ["listener_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":listenerutil"],
     deps = [
         "//pkg/util/ctxgroup",

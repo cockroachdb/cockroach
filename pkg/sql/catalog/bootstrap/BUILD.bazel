@@ -50,7 +50,6 @@ go_test(
         "main_test.go",
         "splits_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":bootstrap"],
     deps = [

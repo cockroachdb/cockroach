@@ -19,7 +19,6 @@ go_library(
 go_test(
     name = "tenantcostmodel_test",
     srcs = ["settings_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":tenantcostmodel"],
     deps = [
         "//pkg/util/leaktest",

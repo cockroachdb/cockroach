@@ -41,7 +41,6 @@ go_test(
         "iter_bench_test.go",
         "iter_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":raftlog"],
     deps = [
         "//pkg/keys",

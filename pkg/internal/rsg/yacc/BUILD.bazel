@@ -16,7 +16,6 @@ go_test(
     name = "yacc_test",
     size = "small",
     srcs = ["parse_test.go"],
-    args = ["-test.timeout=55s"],
     data = ["//pkg/sql/parser:sql.y"],
     embed = [":yacc"],
     deps = [

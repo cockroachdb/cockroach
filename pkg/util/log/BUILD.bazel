@@ -161,7 +161,6 @@ go_test(
         "trace_test.go",
         ":mock_logsink",  # keep
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":log"],
     deps = [

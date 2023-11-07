@@ -22,7 +22,6 @@ go_library(
 go_test(
     name = "seqexpr_test",
     srcs = ["sequence_test.go"],
-    args = ["-test.timeout=295s"],
     deps = [
         ":seqexpr",
         "//pkg/sql/catalog/descpb",

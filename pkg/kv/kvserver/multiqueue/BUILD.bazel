@@ -16,7 +16,6 @@ go_test(
     name = "multiqueue_test",
     size = "small",
     srcs = ["multi_queue_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":multiqueue"],
     deps = [
         "//pkg/testutils",

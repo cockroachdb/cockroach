@@ -7,7 +7,6 @@ go_test(
         "propagation_test.go",
         "settings_test.go",
     ],
-    args = ["-test.timeout=295s"],
     shard_count = 6,
     deps = [
         "//pkg/base",

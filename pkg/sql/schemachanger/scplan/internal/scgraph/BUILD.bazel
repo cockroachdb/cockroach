@@ -32,7 +32,6 @@ go_test(
         "dep_edge_tree_test.go",
         "graph_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":scgraph"],
     deps = [
         "//pkg/sql/catalog/descpb",

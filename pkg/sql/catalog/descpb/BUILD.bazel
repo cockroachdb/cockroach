@@ -39,7 +39,6 @@ go_test(
     name = "descpb_test",
     size = "small",
     srcs = ["structured_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":descpb"],
 )
 

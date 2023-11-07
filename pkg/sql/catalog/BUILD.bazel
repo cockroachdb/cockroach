@@ -58,7 +58,6 @@ go_test(
         "table_col_map_test.go",
         "table_col_set_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":catalog"],
     deps = [
         "//pkg/sql/catalog/colinfo",

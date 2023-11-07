@@ -21,7 +21,6 @@ go_library(
 go_test(
     name = "spanstatsconsumer_test",
     srcs = ["span_stats_consumer_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":spanstatsconsumer"],
     deps = [
         "//pkg/roachpb",

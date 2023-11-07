@@ -29,7 +29,6 @@ go_test(
         "unweighted_finder_test.go",
         "weighted_finder_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":split"],
     deps = [

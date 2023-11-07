@@ -7,7 +7,6 @@ go_test(
         "extended_protocol_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     deps = [
         "//pkg/base",

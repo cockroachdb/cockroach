@@ -13,7 +13,6 @@ go_library(
 go_test(
     name = "slidingwindow_test",
     srcs = ["sliding_window_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":slidingwindow"],
     deps = ["@com_github_stretchr_testify//require"],
 )

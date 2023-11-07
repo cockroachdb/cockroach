@@ -37,7 +37,6 @@ go_library(
 go_test(
     name = "exprutil_test",
     srcs = ["evaluator_test.go"],
-    args = ["-test.timeout=295s"],
     deps = [
         ":exprutil",
         "//pkg/settings/cluster",

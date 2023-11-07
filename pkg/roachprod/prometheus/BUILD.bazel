@@ -19,7 +19,6 @@ go_library(
 go_test(
     name = "prometheus_test",
     srcs = ["prometheus_test.go"],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":prometheus"],
     deps = [

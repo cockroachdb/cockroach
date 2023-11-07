@@ -45,7 +45,6 @@ go_test(
         "main_test.go",
         "scanner_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":kvfeed"],
     tags = ["ccl_test"],
     deps = [

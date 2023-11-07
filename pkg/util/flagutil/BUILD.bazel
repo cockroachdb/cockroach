@@ -16,7 +16,6 @@ go_test(
     name = "flagutil_test",
     size = "small",
     srcs = ["flagutil_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":flagutil"],
     deps = [
         "//pkg/util/log",

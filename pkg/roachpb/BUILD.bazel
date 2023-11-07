@@ -71,7 +71,6 @@ go_test(
         "tenant_test.go",
         "version_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":roachpb"],
     deps = [
         "//pkg/cli/exit",

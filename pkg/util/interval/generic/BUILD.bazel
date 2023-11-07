@@ -20,7 +20,6 @@ go_test(
     name = "generic_test",
     size = "large",
     srcs = [":example_interval_btree_test.go"],
-    args = ["-test.timeout=895s"],
     embed = [":generic"],
     shard_count = 16,
     deps = [
