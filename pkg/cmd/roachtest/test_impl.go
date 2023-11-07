@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -151,6 +152,7 @@ func (t *testImpl) Cockroach() string {
 		return t.StandardCockroach()
 	}
 	t.randomCockroachOnce.Do(func() {
+		t.l.Printf("GLOBAL SEED: %d", roachtestflags.GlobalSeed)
 		assertionsEnabledProbability := 0.5
 		// If the user specified a custom seed to be used with runtime
 		// assertions, assume they want to run the test with assertions
