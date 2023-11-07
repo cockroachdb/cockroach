@@ -263,6 +263,13 @@ func (rc *RangeCache) stringLocked() string {
 // replaced with a new Entry. Other concurrent requests will only learn about
 // the new entry if they hit an error and need to retry. An EvictionToken is
 // created by calling LookupWithEvictionToken with an empty EvictionToken.
+type sortedReplicaSets struct {
+	valid       bool
+	leaseholder roachpb.ReplicaSet
+	follower    roachpb.ReplicaSet
+}
+
+// EvictionToken holds eviction state between calls to Lookup.
 type EvictionToken struct {
 	// rdc is the cache that produced this token - and that will be modified by
 	// Evict, EvictAndReplace, EvictLease or SyncTokenAndMaybeUpdateCache.
@@ -276,6 +283,58 @@ type EvictionToken struct {
 	// descriptor changes in a non-compatible way, this EvictionToken must be
 	// discarded and a new one retrieved from the RangeCache.
 	entry *cacheEntry
+}
+
+// SortedReplicas returns a list of sorted replicas for this token.
+func (et *EvictionToken) SortedReplicas(
+	ctx context.Context,
+	isFollower bool,
+	compute func(ctx context.Context, desc *roachpb.RangeDescriptor, leaseholder *roachpb.ReplicaDescriptor) (roachpb.ReplicaSet, roachpb.ReplicaSet, error),
+) (roachpb.ReplicaSet, bool) {
+	if !et.entry.sorted.valid {
+		rdc := et.rdc
+		rdc.rangeCache.Lock()
+		defer rdc.rangeCache.Unlock()
+
+		cachedEntry, rawEntry := et.rdc.getCachedRLocked(ctx, et.entry.desc.StartKey, false /* inverted */)
+		if cachedEntry == nil {
+			et.clear()
+			return roachpb.ReplicaSet{}, false
+		}
+		leaseholder, follower, err := compute(ctx, &cachedEntry.desc, &cachedEntry.lease.Replica)
+		if err != nil {
+			return roachpb.ReplicaSet{}, false
+		}
+
+		sorted := sortedReplicaSets{
+			valid:       true,
+			leaseholder: leaseholder,
+			follower:    follower,
+		}
+
+		newEntry := cacheEntry{
+			desc:            cachedEntry.desc,
+			speculativeDesc: cachedEntry.speculativeDesc,
+			lease:           cachedEntry.lease,
+			closedts:        cachedEntry.closedts,
+			sorted:          sorted,
+		}
+		rdc.swapEntryLocked(ctx, rawEntry, &newEntry)
+
+		// If the descriptor changed, we still cache the result, but invalidate
+		// the eviction token. The user needs to get a fresh eviction token.
+		if !descsCompatible(&cachedEntry.desc, et.Desc()) {
+			et.clear()
+			return roachpb.ReplicaSet{}, false
+		}
+		et.entry = cachedEntry
+	}
+
+	if isFollower {
+		return et.entry.sorted.follower, true
+	} else {
+		return et.entry.sorted.leaseholder, true
+	}
 }
 
 func (et EvictionToken) String() string {
@@ -906,6 +965,7 @@ func tryLookupImpl(
 		lease: roachpb.Lease{},
 		// We don't know the closed timestamp policy.
 		closedts: UnknownClosedTimestampPolicy,
+		sorted:   sortedReplicaSets{valid: false},
 	}
 	// speculativeDesc comes from intents. Being uncommitted, it is speculative.
 	// We reset its generation to indicate this fact and allow it to be easily
@@ -1116,6 +1176,7 @@ func (rc *RangeCache) insertLocked(ctx context.Context, rs ...roachpb.RangeInfo)
 			desc:     r.Desc,
 			lease:    r.Lease,
 			closedts: r.ClosedTimestampPolicy,
+			sorted:   sortedReplicaSets{valid: false},
 		}
 	}
 	return rc.insertLockedInner(ctx, entries)
@@ -1290,6 +1351,10 @@ type cacheEntry struct {
 	lease roachpb.Lease
 	// closedts indicates the range's closed timestamp policy.
 	closedts roachpb.RangeClosedTimestampPolicy
+	// sorted is an optimization to store the list of sorted RepicaSets for both
+	// leaseholder and follower reads. The sorting of this list shows up in hot
+	// path analysis.
+	sorted sortedReplicaSets
 }
 
 // DescSpeculative returns true if the descriptor in the entry is "speculative"
@@ -1472,6 +1537,7 @@ func (e *cacheEntry) maybeUpdate(
 		lease:    e.lease,
 		desc:     e.desc,
 		closedts: e.closedts,
+		sorted:   e.sorted,
 	}
 
 	updatedLease = false
@@ -1529,6 +1595,12 @@ func (e *cacheEntry) maybeUpdate(
 		updatedLease = false
 	}
 
+	// If we updated either the lease or the descriptor, we don't trust our
+	// sortedReplicaSets anymore. Let them recompute on next use.
+	if updatedLease || updatedDesc {
+		newEntry.sorted = sortedReplicaSets{valid: false}
+	}
+
 	return updatedLease || updatedDesc, updatedLease, newEntry
 }
 
@@ -1541,6 +1613,7 @@ func (e *cacheEntry) evictLeaseholder(
 	return true, &cacheEntry{
 		desc:     e.desc,
 		closedts: e.closedts,
+		sorted:   sortedReplicaSets{valid: false},
 	}
 }
 
