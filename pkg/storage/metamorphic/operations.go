@@ -1040,7 +1040,7 @@ var opGenerators = []opGenerator{
 		operands: []operandType{
 			operandReadWriter,
 			operandTransaction,
-			operandMVCCKey,
+			operandUnusedMVCCKey,
 			operandFloat,
 			operandFloat,
 		},
