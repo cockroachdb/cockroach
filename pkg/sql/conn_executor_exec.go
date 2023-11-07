@@ -990,16 +990,28 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	// Then we create a sequencing point.
 	//
-	// This is not the only place where a sequencing point is
-	// placed. There are also sequencing point after every stage of
-	// constraint checks and cascading actions at the _end_ of a
-	// statement's execution.
+	// This is not the only place where a sequencing point is placed. There are
+	// also sequencing point after every stage of constraint checks and cascading
+	// actions at the _end_ of a statement's execution.
 	//
 	// If this is an internal executor running on behalf of an outer txn, then we
-	// also need to make sure the external read snapshot is not bumped. Normally,
+	// also need to make sure the external read timestamp is not bumped. Normally,
 	// that happens whenever a READ COMMITTED txn is stepped.
-	if buildutil.CrdbTestBuild && delegatedFromOuterTxn {
-		origTs = ex.state.mu.txn.ReadTimestamp()
+	//
+	// Under test builds, we add a few extra assertions to ensure that the
+	// external read timestamp does not change if it shouldn't, and that we use
+	// the correct isolation level for internal operations.
+	if buildutil.CrdbTestBuild {
+		if delegatedFromOuterTxn {
+			origTs = ex.state.mu.txn.ReadTimestamp()
+		} else if ex.executorType == executorTypeInternal {
+			if level := ex.state.mu.txn.IsoLevel(); level != isolation.Serializable {
+				return nil, nil, errors.AssertionFailedf(
+					"internal operation is not using SERIALIZABLE isolation; found=%s",
+					level,
+				)
+			}
+		}
 	}
 	if err := ex.state.mu.txn.Step(ctx, !delegatedFromOuterTxn /* allowReadTimestampStep */); err != nil {
 		return makeErrEvent(err)
