@@ -93,6 +93,8 @@ var canaryRetryOptions = retry.Options{
 	MaxRetries:     10,
 }
 
+var alwaysRetry = func(res *install.RunResultDetails) bool { return true }
+
 // repeatRunE is the same function as c.RunE but with an automatic retry loop.
 func repeatRunE(
 	ctx context.Context,
@@ -102,24 +104,8 @@ func repeatRunE(
 	operation string,
 	args ...string,
 ) error {
-	var lastError error
-	for attempt, r := 0, retry.StartWithCtx(ctx, canaryRetryOptions); r.Next(); {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if t.Failed() {
-			return fmt.Errorf("test has failed")
-		}
-		attempt++
-		t.L().Printf("attempt %d - %s", attempt, operation)
-		lastError = c.RunE(ctx, node, args...)
-		if lastError != nil {
-			t.L().Printf("error - retrying: %s", lastError)
-			continue
-		}
-		return nil
-	}
-	return errors.Wrapf(lastError, "all attempts failed for %s", operation)
+	t.L().Printf("attempting - %s", operation)
+	return c.RunEExt(ctx, node, args, install.WithRetryOpts(canaryRetryOptions), install.WithRetryFn(alwaysRetry))
 }
 
 // repeatRunWithDetailsSingleNode is the same function as c.RunWithDetailsSingleNode but with an
@@ -132,27 +118,8 @@ func repeatRunWithDetailsSingleNode(
 	operation string,
 	args ...string,
 ) (install.RunResultDetails, error) {
-	var (
-		lastResult install.RunResultDetails
-		lastError  error
-	)
-	for attempt, r := 0, retry.StartWithCtx(ctx, canaryRetryOptions); r.Next(); {
-		if ctx.Err() != nil {
-			return lastResult, ctx.Err()
-		}
-		if t.Failed() {
-			return lastResult, fmt.Errorf("test has failed")
-		}
-		attempt++
-		t.L().Printf("attempt %d - %s", attempt, operation)
-		lastResult, lastError = c.RunWithDetailsSingleNode(ctx, t.L(), node, args...)
-		if lastError != nil {
-			t.L().Printf("error - retrying: %s", lastError)
-			continue
-		}
-		return lastResult, nil
-	}
-	return lastResult, errors.Wrapf(lastError, "all attempts failed for %s", operation)
+	t.L().Printf("attempting - %s", operation)
+	return c.RunWithDetailsSingleNodeExt(ctx, t.L(), node, args, install.WithRetryOpts(canaryRetryOptions), install.WithRetryFn(alwaysRetry))
 }
 
 // repeatGitCloneE is the same function as c.GitCloneE but with an automatic

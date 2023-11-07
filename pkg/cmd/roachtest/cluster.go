@@ -2148,19 +2148,31 @@ func (c *clusterImpl) Wipe(ctx context.Context, preserveCerts bool, nodes ...opt
 	}
 }
 
-// Run a command on the specified nodes and call test.Fatal if there is an error.
 func (c *clusterImpl) Run(ctx context.Context, node option.NodeListOption, args ...string) {
-	err := c.RunE(ctx, node, args...)
+	c.RunExt(ctx, node, args)
+}
+
+// Run a command on the specified nodes and call test.Fatal if there is an error.
+func (c *clusterImpl) RunExt(
+	ctx context.Context, node option.NodeListOption, args []string, opts ...install.RunOption,
+) {
+	err := c.RunEExt(ctx, node, args, opts...)
 	if err != nil {
 		c.t.Fatal(err)
 	}
+}
+
+func (c *clusterImpl) RunE(ctx context.Context, node option.NodeListOption, args ...string) error {
+	return c.RunEExt(ctx, node, args)
 }
 
 // RunE runs a command on the specified node, returning an error. The output
 // will be redirected to a file which is logged via the cluster-wide logger in
 // case of an error. Logs will sort chronologically. Failing invocations will
 // have an additional marker file with a `.failed` extension instead of `.log`.
-func (c *clusterImpl) RunE(ctx context.Context, nodes option.NodeListOption, args ...string) error {
+func (c *clusterImpl) RunEExt(
+	ctx context.Context, nodes option.NodeListOption, args []string, opts ...install.RunOption,
+) error {
 	if len(args) == 0 {
 		return errors.New("No command passed")
 	}
@@ -2173,7 +2185,7 @@ func (c *clusterImpl) RunE(ctx context.Context, nodes option.NodeListOption, arg
 	cmd := strings.Join(args, " ")
 	c.t.L().Printf("running cmd `%s` on nodes [%v]; details in %s.log", roachprod.TruncateString(cmd, 30), nodes, logFile)
 	l.Printf("> %s", cmd)
-	if err := roachprod.Run(ctx, l, c.MakeNodes(nodes), "", "", c.IsSecure(), l.Stdout, l.Stderr, args); err != nil {
+	if err := roachprod.Run(ctx, l, c.MakeNodes(nodes), "", "", c.IsSecure(), l.Stdout, l.Stderr, args, opts...); err != nil {
 		if err := ctx.Err(); err != nil {
 			l.Printf("(note: incoming context was canceled: %s)", err)
 			return err
@@ -2191,26 +2203,46 @@ func (c *clusterImpl) RunE(ctx context.Context, nodes option.NodeListOption, arg
 	return nil
 }
 
+func (c *clusterImpl) RunWithDetailsSingleNode(
+	ctx context.Context, testLogger *logger.Logger, nodes option.NodeListOption, args ...string,
+) (install.RunResultDetails, error) {
+	return c.RunWithDetailsSingleNodeExt(ctx, testLogger, nodes, args)
+}
+
 // RunWithDetailsSingleNode is just like RunWithDetails but used when 1) operating
 // on a single node AND 2) an error from roachprod itself would be treated the same way
 // you treat an error from the command. This makes error checking easier / friendlier
 // and helps us avoid code replication.
-func (c *clusterImpl) RunWithDetailsSingleNode(
-	ctx context.Context, testLogger *logger.Logger, nodes option.NodeListOption, args ...string,
+func (c *clusterImpl) RunWithDetailsSingleNodeExt(
+	ctx context.Context,
+	testLogger *logger.Logger,
+	nodes option.NodeListOption,
+	args []string,
+	opts ...install.RunOption,
 ) (install.RunResultDetails, error) {
 	if len(nodes) != 1 {
 		return install.RunResultDetails{}, errors.Newf("RunWithDetailsSingleNode received %d nodes. Use RunWithDetails if you need to run on multiple nodes.", len(nodes))
 	}
-	results, err := c.RunWithDetails(ctx, testLogger, nodes, args...)
+	results, err := c.RunWithDetailsExt(ctx, testLogger, nodes, args, opts...)
 	return results[0], errors.CombineErrors(err, results[0].Err)
+}
+
+func (c *clusterImpl) RunWithDetails(
+	ctx context.Context, testLogger *logger.Logger, nodes option.NodeListOption, args ...string,
+) ([]install.RunResultDetails, error) {
+	return c.RunWithDetailsExt(ctx, testLogger, nodes, args)
 }
 
 // RunWithDetails runs a command on the specified nodes, returning the results
 // details and a `roachprod` error. The output will be redirected to a file which is logged
 // via the cluster-wide logger in case of an error. Failing invocations will have
 // an additional marker file with a `.failed` extension instead of `.log`.
-func (c *clusterImpl) RunWithDetails(
-	ctx context.Context, testLogger *logger.Logger, nodes option.NodeListOption, args ...string,
+func (c *clusterImpl) RunWithDetailsExt(
+	ctx context.Context,
+	testLogger *logger.Logger,
+	nodes option.NodeListOption,
+	args []string,
+	opts ...install.RunOption,
 ) ([]install.RunResultDetails, error) {
 	if len(args) == 0 {
 		return nil, errors.New("No command passed")
@@ -2229,7 +2261,7 @@ func (c *clusterImpl) RunWithDetails(
 	}
 
 	l.Printf("> %s", cmd)
-	results, err := roachprod.RunWithDetails(ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "" /* processTag */, c.IsSecure(), args)
+	results, err := roachprod.RunWithDetails(ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "" /* processTag */, c.IsSecure(), args, opts...)
 
 	var logFileFull string
 	if l.File != nil {

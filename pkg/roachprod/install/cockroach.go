@@ -386,7 +386,7 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 
 	l.Printf("%s: starting nodes", c.Name)
 
-	// SSH retries are disabled by passing nil RunRetryOpts
+	// SSH retries are disabled by passing nil RetryOpts
 	if err := c.Parallel(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
 		// NB: if cockroach started successfully, we ignore the output as it is
 		// some harmless start messaging.
@@ -585,7 +585,7 @@ func (c *SyncedCluster) ExecSQL(
 			ssh.Escape(args)
 
 		return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("run-sql"))
-	}, WithDisplay(display), WithWaitOnFail())
+	}, WithDisplay(display), WithFailSlow(true))
 
 	return results, err
 }

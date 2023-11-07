@@ -105,7 +105,7 @@ func NewSyncedCluster(
 var ErrAfterRetry = errors.New("error occurred after retries")
 
 // The first retry is after 5s, the second and final is after 25s
-var defaultRetryOpt = retry.Options{
+var DefaultRetryOpt = &retry.Options{
 	InitialBackoff: 5 * time.Second,
 	Multiplier:     5,
 	MaxBackoff:     1 * time.Minute,
@@ -113,42 +113,26 @@ var defaultRetryOpt = retry.Options{
 	MaxRetries: 2,
 }
 
-type RunRetryOpts struct {
-	retry.Options
-	shouldRetryFn func(*RunResultDetails) bool
-}
-
-func newRunRetryOpts(
-	retryOpts retry.Options, shouldRetryFn func(*RunResultDetails) bool,
-) *RunRetryOpts {
-	return &RunRetryOpts{
-		Options:       retryOpts,
-		shouldRetryFn: shouldRetryFn,
-	}
-}
-
-var DefaultSSHRetryOpts = newRunRetryOpts(defaultRetryOpt, func(res *RunResultDetails) bool { return errors.Is(res.Err, rperrors.ErrSSH255) })
+var DefaultShouldRetryFn = func(res *RunResultDetails) bool { return errors.Is(res.Err, rperrors.ErrSSH255) }
 
 // defaultSCPRetry won't retry if the error output contains any of the following
 // substrings, in which cases retries are unlikely to help.
 var noScpRetrySubstrings = []string{"no such file or directory", "permission denied", "connection timed out"}
-var defaultSCPRetry = newRunRetryOpts(defaultRetryOpt,
-	func(res *RunResultDetails) bool {
-		out := strings.ToLower(res.Output(false))
-		for _, s := range noScpRetrySubstrings {
-			if strings.Contains(out, s) {
-				return false
-			}
+var defaulSCPShouldRetryFn = func(res *RunResultDetails) bool {
+	out := strings.ToLower(res.Output(false))
+	for _, s := range noScpRetrySubstrings {
+		if strings.Contains(out, s) {
+			return false
 		}
-		return true
-	},
-)
+	}
+	return true
+}
 
 // runWithMaybeRetry will run the specified function `f` at least once, or only
 // once if `runRetryOpts` is nil
 //
-// Any RunResultDetails containing a non nil err from `f` is passed to `runRetryOpts.shouldRetryFn` which,
-// if it returns true, will result in `f` being retried using the `retryOpts`
+// Any RunResultDetails containing a non nil err from `f` is passed to `shouldRetryFn` which,
+// if it returns true, will result in `f` being retried using the `RetryOpts`
 // If the `shouldRetryFn` is not specified (nil), then retries will be performed
 // regardless of the previous result / error.
 //
@@ -161,7 +145,8 @@ var defaultSCPRetry = newRunRetryOpts(defaultRetryOpt,
 func runWithMaybeRetry(
 	ctx context.Context,
 	l *logger.Logger,
-	retryOpts *RunRetryOpts,
+	retryOpts *retry.Options,
+	shouldRetryFn func(*RunResultDetails) bool,
 	f func(ctx context.Context) (*RunResultDetails, error),
 ) (*RunResultDetails, error) {
 	if retryOpts == nil {
@@ -176,7 +161,7 @@ func runWithMaybeRetry(
 	var res = &RunResultDetails{}
 	var cmdErr, err error
 
-	for r := retry.StartWithCtx(ctx, retryOpts.Options); r.Next(); {
+	for r := retry.StartWithCtx(ctx, *retryOpts); r.Next(); {
 		res, err = f(ctx)
 		if err != nil {
 			// non retryable roachprod error
@@ -185,7 +170,7 @@ func runWithMaybeRetry(
 		res.Attempt = r.CurrentAttempt() + 1
 		if res.Err != nil {
 			cmdErr = errors.CombineErrors(cmdErr, res.Err)
-			if retryOpts.shouldRetryFn == nil || retryOpts.shouldRetryFn(res) {
+			if shouldRetryFn == nil || shouldRetryFn(res) {
 				l.Printf("encountered [%v] on attempt %v of %v", res.Err, r.CurrentAttempt()+1, retryOpts.MaxRetries+1)
 				continue
 			}
@@ -208,7 +193,8 @@ func runWithMaybeRetry(
 func scpWithRetry(
 	ctx context.Context, l *logger.Logger, src, dest string,
 ) (*RunResultDetails, error) {
-	return runWithMaybeRetry(ctx, l, defaultSCPRetry, func(ctx context.Context) (*RunResultDetails, error) { return scp(l, src, dest) })
+	return runWithMaybeRetry(ctx, l, DefaultRetryOpt, defaulSCPShouldRetryFn,
+		func(ctx context.Context) (*RunResultDetails, error) { return scp(l, src, dest) })
 }
 
 // Host returns the public IP of a node.
@@ -553,7 +539,7 @@ fi`,
 		)
 
 		return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("kill"))
-	}, WithDisplay(display), WithRetryOpts(nil)) // Disable SSH Retries
+	}, WithDisplay(display), WithRetryDisabled()) // Disable SSH Retries
 }
 
 // Wipe TODO(peter): document
@@ -1247,7 +1233,7 @@ func (c *SyncedCluster) Run(
 	stdout, stderr io.Writer,
 	nodes Nodes,
 	title, cmd string,
-	opts ...ParallelOption,
+	opts ...RunOption,
 ) error {
 	// Stream output if we're running the command on only 1 node.
 	stream := len(nodes) == 1
@@ -1255,7 +1241,7 @@ func (c *SyncedCluster) Run(
 	if !stream {
 		display = fmt.Sprintf("%s:%v: %s", c.Name, nodes, title)
 	}
-
+	defaultOpts := []RunOption{WithDisplay(display)}
 	results, _, err := c.ParallelE(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
 		opts := RunCmdOptions{
 			combinedOut:             !stream,
@@ -1265,7 +1251,7 @@ func (c *SyncedCluster) Run(
 		}
 		result, err := c.runCmdOnSingleNode(ctx, l, node, cmd, opts)
 		return result, err
-	}, append(opts, WithDisplay(display))...)
+	}, append(defaultOpts, opts...)...)
 
 	if err != nil {
 		return err
@@ -1324,11 +1310,12 @@ func processResults(results []*RunResultDetails, stream bool, stdout io.Writer) 
 }
 
 // RunWithDetails runs a command on the specified nodes and returns results details and an error.
-// This will wait for all commands to complete before returning unless encountering a roachprod error.
+// By default, this will wait for all commands to complete before returning unless encountering a roachprod error.
 func (c *SyncedCluster) RunWithDetails(
-	ctx context.Context, l *logger.Logger, nodes Nodes, title, cmd string,
+	ctx context.Context, l *logger.Logger, nodes Nodes, title, cmd string, opts ...RunOption,
 ) ([]RunResultDetails, error) {
 	display := fmt.Sprintf("%s:%v: %s", c.Name, nodes, title)
+	defaultOpts := []RunOption{WithDisplay(display), WithFailSlow(true)}
 
 	// Failing slow here allows us to capture the output of all nodes even if one fails with a command error.
 	resultPtrs, _, err := c.ParallelE(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
@@ -1339,7 +1326,7 @@ func (c *SyncedCluster) RunWithDetails(
 		}
 		result, err := c.runCmdOnSingleNode(ctx, l, node, cmd, opts)
 		return result, err
-	}, WithDisplay(display), WithWaitOnFail())
+	}, append(defaultOpts, opts...)...)
 
 	if err != nil {
 		return nil, err
@@ -1353,35 +1340,6 @@ func (c *SyncedCluster) RunWithDetails(
 		}
 	}
 	return results, nil
-}
-
-var roachprodRetryOptions = retry.Options{
-	InitialBackoff: 10 * time.Second,
-	Multiplier:     2,
-	MaxBackoff:     5 * time.Minute,
-	MaxRetries:     10,
-}
-
-// RepeatRun is the same function as c.Run, but with an automatic retry loop.
-func (c *SyncedCluster) RepeatRun(
-	ctx context.Context, l *logger.Logger, stdout, stderr io.Writer, nodes Nodes, title,
-	cmd string,
-) error {
-	var lastError error
-	for attempt, r := 0, retry.StartWithCtx(ctx, roachprodRetryOptions); r.Next(); {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		attempt++
-		l.Printf("attempt %d - %s", attempt, title)
-		lastError = c.Run(ctx, l, stdout, stderr, nodes, title, cmd)
-		if lastError != nil {
-			l.Printf("error - retrying: %s", lastError)
-			continue
-		}
-		return nil
-	}
-	return errors.Wrapf(lastError, "all attempts failed for %s", title)
 }
 
 // Wait TODO(peter): document
@@ -1407,7 +1365,7 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 		res.Err = errors.New("timed out after 5m")
 		l.Printf("  %2d: %v", node, res.Err)
 		return res, nil
-	}, WithDisplay(display), WithRetryOpts(nil))
+	}, WithDisplay(display), WithRetryDisabled())
 
 	if err != nil {
 		return err
@@ -2731,48 +2689,11 @@ func scp(l *logger.Logger, src, dest string) (*RunResultDetails, error) {
 	return res, nil
 }
 
-type ParallelOptions struct {
-	concurrency int
-	display     string
-	retryOpts   *RunRetryOpts
-	// waitOnFail will cause the Parallel function to wait for all nodes to
-	// finish when encountering a command error on any node. The default
-	// behaviour is to exit immediately on the first error, in which case the
-	// slice of ParallelResults will only contain the one error result.
-	waitOnFail bool
-}
-
-type ParallelOption func(result *ParallelOptions)
-
-func WithConcurrency(concurrency int) ParallelOption {
-	return func(result *ParallelOptions) {
-		result.concurrency = concurrency
-	}
-}
-
-func WithRetryOpts(retryOpts *RunRetryOpts) ParallelOption {
-	return func(result *ParallelOptions) {
-		result.retryOpts = retryOpts
-	}
-}
-
-func WithWaitOnFail() ParallelOption {
-	return func(result *ParallelOptions) {
-		result.waitOnFail = true
-	}
-}
-
-func WithDisplay(display string) ParallelOption {
-	return func(result *ParallelOptions) {
-		result.display = display
-	}
-}
-
 // Parallel runs a user-defined function across the nodes in the
 // cluster. If any of the commands fail, Parallel will log each failure
 // and return an error.
 //
-// A user may also pass in a RunRetryOpts to control how the function is retried
+// A user may also pass in a RetryOpts to control how the function is retried
 // in the case of a failure.
 //
 // See ParallelE for more information.
@@ -2781,7 +2702,7 @@ func (c *SyncedCluster) Parallel(
 	l *logger.Logger,
 	nodes Nodes,
 	fn func(ctx context.Context, n Node) (*RunResultDetails, error),
-	opts ...ParallelOption,
+	opts ...RunOption,
 ) error {
 	results, hasError, err := c.ParallelE(ctx, l, nodes, fn, opts...)
 	// `err` is an unexpected roachprod error, which we return immediately.
@@ -2816,7 +2737,7 @@ type ParallelResult struct {
 //
 // By default, this will fail fast if a command error occurs on any node, and return
 // a slice containing all results up to that point, along with a boolean indicating
-// that at least one error occurred. If `WithWaitOnFail()` is passed in, then the function
+// that at least one error occurred. If `WithFailSlow(true)` is passed in, then the function
 // will wait for all invocations to complete before returning.
 //
 // ParallelE only returns an error for roachprod itself, not any command errors run
@@ -2828,7 +2749,7 @@ type ParallelResult struct {
 // The function returns pointers to *RunResultDetails as we may enrich
 // the result with retry information (attempt number, wrapper error).
 //
-// RunRetryOpts controls the retry behavior in the case that
+// RetryOpts controls the retry behavior in the case that
 // the function fails, but returns a nil error. A non-nil error returned by the
 // function denotes a roachprod error and will not be retried regardless of the
 // retry options.
@@ -2838,19 +2759,23 @@ func (c *SyncedCluster) ParallelE(
 	l *logger.Logger,
 	nodes Nodes,
 	fn func(ctx context.Context, n Node) (*RunResultDetails, error),
-	opts ...ParallelOption,
+	opts ...RunOption,
 ) ([]*RunResultDetails, bool, error) {
-	options := ParallelOptions{retryOpts: DefaultSSHRetryOpts}
+	// Default options, which can be overridden by those passed in
+	options := RunOptions{
+		RetryOptions:  DefaultRetryOpt,
+		ShouldRetryFn: DefaultShouldRetryFn,
+	}
 	for _, opt := range opts {
 		opt(&options)
 	}
 
 	count := len(nodes)
-	if options.concurrency == 0 || options.concurrency > count {
-		options.concurrency = count
+	if options.Concurrency == 0 || options.Concurrency > count {
+		options.Concurrency = count
 	}
-	if config.MaxConcurrency > 0 && options.concurrency > config.MaxConcurrency {
-		options.concurrency = config.MaxConcurrency
+	if config.MaxConcurrency > 0 && options.Concurrency > config.MaxConcurrency {
+		options.Concurrency = config.MaxConcurrency
 	}
 
 	completed := make(chan ParallelResult, count)
@@ -2871,7 +2796,7 @@ func (c *SyncedCluster) ParallelE(
 			defer wg.Done()
 			// This is rarely expected to return an error, but we fail fast in case.
 			// Command errors, which are far more common, will be contained within the result.
-			res, err := runWithMaybeRetry(groupCtx, l, options.retryOpts, func(ctx context.Context) (*RunResultDetails, error) { return fn(ctx, nodes[i]) })
+			res, err := runWithMaybeRetry(groupCtx, l, options.RetryOptions, options.ShouldRetryFn, func(ctx context.Context) (*RunResultDetails, error) { return fn(ctx, nodes[i]) })
 			if err != nil {
 				errorChannel <- err
 				return
@@ -2882,7 +2807,7 @@ func (c *SyncedCluster) ParallelE(
 		index++
 	}
 
-	for index < options.concurrency {
+	for index < options.Concurrency {
 		startNext()
 	}
 
@@ -2894,7 +2819,7 @@ func (c *SyncedCluster) ParallelE(
 
 	var writer ui.Writer
 	out := l.Stdout
-	if options.display == "" {
+	if options.Display == "" {
 		out = io.Discard
 	}
 
@@ -2903,7 +2828,7 @@ func (c *SyncedCluster) ParallelE(
 		ticker = time.NewTicker(100 * time.Millisecond)
 	} else {
 		ticker = time.NewTicker(1000 * time.Millisecond)
-		fmt.Fprintf(out, "%s", options.display)
+		fmt.Fprintf(out, "%s", options.Display)
 		if l.File != nil {
 			fmt.Fprintf(out, "\n")
 		}
@@ -2928,7 +2853,7 @@ func (c *SyncedCluster) ParallelE(
 				n++
 				if r.Err != nil { // Command error
 					hasError = true
-					if !options.waitOnFail {
+					if !options.FailSlow {
 						groupCancel()
 						return results, true, nil
 					}
@@ -2946,7 +2871,7 @@ func (c *SyncedCluster) ParallelE(
 		}
 
 		if !config.Quiet && l.File == nil {
-			fmt.Fprint(&writer, options.display)
+			fmt.Fprint(&writer, options.Display)
 			fmt.Fprintf(&writer, " %d/%d", n, count)
 			if !done {
 				fmt.Fprintf(&writer, " %s", spinner[spinnerIdx%len(spinner)])

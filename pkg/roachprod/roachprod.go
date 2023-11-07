@@ -360,7 +360,7 @@ func Run(
 	secure bool,
 	stdout, stderr io.Writer,
 	cmdArray []string,
-	opts ...install.ParallelOption,
+	opts ...install.RunOption,
 ) error {
 	if err := LoadClusters(); err != nil {
 		return err
@@ -387,6 +387,7 @@ func RunWithDetails(
 	clusterName, SSHOptions, processTag string,
 	secure bool,
 	cmdArray []string,
+	opts ...install.RunOption,
 ) ([]install.RunResultDetails, error) {
 	if err := LoadClusters(); err != nil {
 		return nil, err
@@ -403,7 +404,7 @@ func RunWithDetails(
 	}
 
 	cmd := strings.TrimSpace(strings.Join(cmdArray, " "))
-	return c.RunWithDetails(ctx, l, c.Nodes, TruncateString(cmd, 30), cmd)
+	return c.RunWithDetails(ctx, l, c.Nodes, TruncateString(cmd, 30), cmd, opts...)
 }
 
 // SQL runs `cockroach sql` on a remote cluster. If a single node is passed,
