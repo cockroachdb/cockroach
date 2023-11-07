@@ -105,7 +105,7 @@ type TelemetryLoggingMetrics struct {
 	Knobs *TelemetryLoggingTestingKnobs
 
 	// skippedQueryCount is used to produce the count of non-sampled queries.
-	skippedQueryCount uint64
+	skippedQueryCount atomic.Uint64
 }
 
 func newTelemetryLoggingmetrics(
@@ -275,9 +275,9 @@ func (t *TelemetryLoggingMetrics) isTracing(_ *tracing.Span, tracingEnabled bool
 }
 
 func (t *TelemetryLoggingMetrics) resetSkippedQueryCount() (res uint64) {
-	return atomic.SwapUint64(&t.skippedQueryCount, 0)
+	return t.skippedQueryCount.Swap(0)
 }
 
 func (t *TelemetryLoggingMetrics) incSkippedQueryCount() {
-	atomic.AddUint64(&t.skippedQueryCount, 1)
+	t.skippedQueryCount.Add(1)
 }
