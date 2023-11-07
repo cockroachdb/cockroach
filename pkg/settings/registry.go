@@ -222,7 +222,6 @@ var retiredSettings = map[InternalKey]struct{}{
 	"jobs.trace.force_dump_mode":                               {},
 	"timeseries.storage.30m_resolution_ttl":                    {},
 	"server.cpu_profile.enabled":                               {},
-	"kv.rangefeed.catchup_scan_concurrency":                    {},
 	"changefeed.lagging_ranges_threshold":                      {},
 	"changefeed.lagging_ranges_polling_rate":                   {},
 	"trace.jaeger.agent":                                       {},
