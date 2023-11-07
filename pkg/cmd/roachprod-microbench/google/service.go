@@ -93,12 +93,24 @@ func (srv *Service) CreateSheet(
 	sort.Sort(sort.Reverse(sort.StringSlice(sheetNames)))
 
 	// Raw data sheets.
-	sheetInfos := make([]rawSheetInfo, len(metricMap))
-	for idx, sheetName := range sheetNames {
-		m := metricMap[sheetName]
-		sh, info := srv.createRawSheet(m, oldID, newID, idx)
-		s.Sheets = append(s.Sheets, sh)
-		sheetInfos[idx] = info
+	sheetInfos, idx := make([]rawSheetInfo, 0, len(metricMap)), 0
+	for _, sheetName := range sheetNames {
+		metric := metricMap[sheetName]
+		// Compute comparisons for each benchmark present in both runs.
+		comparisons := make(map[string]*model.Comparison)
+		for name := range metric.BenchmarkEntries {
+			comparison := metric.ComputeComparison(name, oldID, newID)
+			if comparison != nil {
+				comparisons[name] = comparison
+			}
+		}
+		// Only generate a sheet if there are comparisons to show.
+		if len(comparisons) != 0 {
+			sh, info := srv.createRawSheet(metric, comparisons, oldID, newID, idx)
+			s.Sheets = append(s.Sheets, sh)
+			sheetInfos = append(sheetInfos, info)
+			idx++
+		}
 	}
 
 	// Pivot table overview sheet. Place in front.
@@ -137,7 +149,7 @@ type rawSheetInfo struct {
 //	| Benchmark2 |               15588 |             15717.6 |  ~      | (p=0.841 n=5+5) |
 //	                                          ...
 func (srv *Service) createRawSheet(
-	metric *model.Metric, oldID, newID string, tIdx int,
+	metric *model.Metric, comparisons map[string]*model.Comparison, oldID, newID string, tIdx int,
 ) (*sheets.Sheet, rawSheetInfo) {
 	sheetID := sheetIDForTable(tIdx)
 	runs := []string{oldID, newID}
@@ -181,15 +193,6 @@ func (srv *Service) createRawSheet(
 
 		numCols = int64(len(vals))
 		data = append(data, &sheets.RowData{Values: vals})
-	}
-
-	// Compute comparisons for each benchmark present in both runs.
-	comparisons := make(map[string]*model.Comparison)
-	for name := range metric.BenchmarkEntries {
-		comparison := metric.ComputeComparison(name, oldID, newID)
-		if comparison != nil {
-			comparisons[name] = comparison
-		}
 	}
 
 	// Sort comparisons by delta, or the benchmark name if no delta is available.
