@@ -2281,21 +2281,16 @@ func (ds *DistSender) sendToReplicas(
 		ba = ba.ShallowCopy()
 		ba.RoutingPolicy = kvpb.RoutingPolicy_NEAREST
 	}
-	desc := routing.Desc()
-	leaseholder := routing.Leaseholder()
-	leaserholderSet, followerSet, err := ds.computeSortedReplicas(ctx, desc, leaseholder)
-	if err != nil {
+	// Generate or load the cached descriptors based on whether we are routing to
+	// NEAREST or LEASEHOLDER.
+	// NB: When changing leaseholder policy constraint_status_report should be
+	// updated appropriately.
+	var leaseholderFirst = ba.RoutingPolicy == kvpb.RoutingPolicy_LEASEHOLDER
+	replicas, stillValid := routing.SortedReplicas(ctx, leaseholderFirst, ds.computeSortedReplicas)
+	if !stillValid {
 		return nil, newSendError(errors.New("Unable to compute the sorted replica list"))
 	}
-	// Generate the cached descriptors based on whether we are routing to
-	// NEAREST or LEASEHOLDER.
-	leaseholderFirst := ba.RoutingPolicy == kvpb.RoutingPolicy_LEASEHOLDER
-	var replicas roachpb.ReplicaSet
-	if leaseholderFirst {
-		replicas = leaserholderSet
-	} else {
-		replicas = followerSet
-	}
+	desc := routing.Desc()
 
 	opts := SendOptions{
 		class:                  rpc.ConnectionClassForKey(desc.RSpan().Key, ba.ConnectionClass),
