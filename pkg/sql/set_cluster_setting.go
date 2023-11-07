@@ -617,6 +617,28 @@ func setVersionSetting(
 			return err
 		}
 		return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			// Run the version bump inside the upgrade as high priority, since
+			// lease manager ends up reading the version row (with high priority)
+			// inside the settings table when refreshing leases. On larger clusters
+			// or with a large number of descriptors it's possible for normal
+			// transactions to be starved  (#95227).
+			// This is safe because we expected this transaction only do the following:
+			// 1) We expect this transaction to only read and write to the
+			//    version key in the system.settings table. It will also do high
+			//    priority reads from the system.namespace and system.descriptor tables
+			//    because the WithSkipDescriptorCache below (this will push out schema
+			//    changes during the upgrade).
+			// 2) Reads from the system.sql_instances table to confirm all SQL servers
+			//    have been upgraded in multi-tenant environments.
+			// 3) Other transactions will use a normal priority and get pushed out by
+			//    this one, if they involve schema changes on the system database
+			//    descriptor (highly unlikely).
+			// 4) There is a potential danger to conflict with lease renewal of the
+			//		settings table and the upgrade, but to avoid this, we intentionally
+			//		force the internal executor to avoid leased descriptors.
+			if err := txn.KV().SetUserPriority(roachpb.MaxUserPriority); err != nil {
+				return err
+			}
 			// Confirm if the version has actually changed on us.
 			datums, err := txn.QueryRowEx(
 				ctx, "retrieve-prev-setting", txn.KV(),
@@ -664,7 +686,17 @@ func setVersionSetting(
 				return err
 			}
 			return err
-		})
+		},
+			// We will intentionally skip the leasing layer to update the
+			// system.settings table to avoid a deadlock with the leasing layer.
+			// The leasing layer will read the version key in system.settings with
+			// a high priority before any renewal. The update code above will need a
+			// lease on system.settings and potentially system.sqlinstances. If any of
+			// leases required expire, we could deadlock with the renewal being
+			// blocked on the version key. To get around this, we will force the
+			// transaction to directly make round trips to read descriptors instead
+			// of using the leasing cache.
+			isql.WithSkipDescriptorCache())
 	}
 
 	// If we're here, we know we aren't in a transaction because we don't
