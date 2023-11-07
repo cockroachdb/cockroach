@@ -411,6 +411,9 @@ func predictHistogram(
 	// Construct a linear regression model of quantile functions over time, and
 	// use it to predict a quantile function at the given time.
 	yₙ, r2 := quantileSimpleLinearRegression(createdAts, quantiles, forecastAt)
+	if yₙ.isInvalid() {
+		return histogram{}, errors.Newf("predicted histogram contains overflow values")
+	}
 	yₙ = yₙ.fixMalformed()
 	log.VEventf(
 		ctx, 3, "forecast for table %v columns %v predicted quantile %v R² %v",
