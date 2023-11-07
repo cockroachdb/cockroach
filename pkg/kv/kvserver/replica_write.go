@@ -817,6 +817,10 @@ func isOnePhaseCommit(ba *kvpb.BatchRequest) bool {
 	}
 	arg, _ := ba.GetArg(kvpb.EndTxn)
 	etArg := arg.(*kvpb.EndTxnRequest)
+	if etArg.Disable1PC {
+		// TODO(arul): add a comment and some validation with et.Require1PC.
+		return false
+	}
 	if retry, _, _ := batcheval.IsEndTxnTriggeringRetryError(ba.Txn, etArg.Deadline); retry {
 		return false
 	}

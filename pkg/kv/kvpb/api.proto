@@ -958,6 +958,10 @@ message EndTxnRequest {
   // from the TxnCoordSender on a failed heartbeat. It should only be set to
   // true when commit=false.
   bool poison = 9;
+
+  // Disables the transaction from attempting 1 phase commit. Cannot be used in
+  // conjunction with the Require1PC flag.
+  bool disable_1pc = 11 [(gogoproto.customname) = "Disable1PC"];
   reserved 7, 8, 10;
 }
 

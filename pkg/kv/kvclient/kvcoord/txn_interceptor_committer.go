@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -129,11 +130,12 @@ var parallelCommitsEnabled = settings.RegisterBoolSetting(
 // In all cases, the interceptor abstracts away the details of this from all
 // interceptors above it in the coordinator interceptor stack.
 type txnCommitter struct {
-	st      *cluster.Settings
-	stopper *stop.Stopper
-	wrapped lockedSender
-	metrics *TxnMetrics
-	mu      sync.Locker
+	st         *cluster.Settings
+	stopper    *stop.Stopper
+	wrapped    lockedSender
+	metrics    *TxnMetrics
+	mu         sync.Locker
+	disable1PC bool
 }
 
 // SendLocked implements the lockedSender interface.
@@ -142,6 +144,7 @@ func (tc *txnCommitter) SendLocked(
 ) (*kvpb.BatchResponse, *kvpb.Error) {
 	// If the batch does not include an EndTxn request, pass it through.
 	rArgs, hasET := ba.GetArg(kvpb.EndTxn)
+	tc.maybeDisable1PC(ba)
 	if !hasET {
 		return tc.wrapped.SendLocked(ctx, ba)
 	}
@@ -163,6 +166,7 @@ func (tc *txnCommitter) SendLocked(
 		return nil, kvpb.NewError(errors.AssertionFailedf("client must not assign Key to EndTxn"))
 	}
 	et.Key = ba.Txn.Key
+	et.Disable1PC = tc.disable1PC // disable the 1PC optimization, if necessary
 
 	// Determine whether the commit request can be run in parallel with the rest
 	// of the requests in the batch. If not, move the in-flight writes currently
@@ -542,6 +546,57 @@ func makeTxnCommitExplicitLocked(
 		return pErr.GoError()
 	}
 	return nil
+}
+
+// maybeDisable1PC checks if the supplied batch would require us to disable 1PC
+// when it's time to commit the transaction. {Read committed,snapshot} isolation
+// transactions that have acquired one or more replicated {shared, exclusive}
+// locks are not allowed to commit using 1PC; everyone else, if they're able to,
+// is.
+//
+// Any replicated lock (as it isn't best effort) acquired by a read
+// committed/snapshot isolation transaction must be held until and provide
+// protection up till the transaction's commit timestamp. We ensure this by
+// bumping the timestamp cache for all locked keys when resolving locks. It's
+// worth considering external and local locks separately for a {read committed,
+// snapshot} isolation transaction that hits the 1PC optimization separately:
+//
+// - External locks: 1PC transactions do not write a transaction record. This
+// means if any of its external locks are resolved by another transaction
+// they'll be resolved as if the transaction were aborted, thus not providing us
+// protection until the transaction's commit timestamp.
+// - Local locks: we have all the information to locally resolve replicated
+// locks and bump the timestamp cache correctly if we're only dealing with local
+// replicated locks. However, the mechanics of 1PC transactions prevent us from
+// hitting it in the common case, where we're acquiring a replicated lock and
+// writing to the same key. 1PC transactions work by stripping the batch of its
+// EndTxnRequest and running it as a non-transactional batch. This means that
+// without some elbow grease, 1PC is bound to fail when it discovers its own
+// replicated lock. For now, we disable 1PC on the client for local locks as
+// well -- this can be optimized in the future.
+// TODO(arul): file an issue about improving things for local locks.
+func (tc *txnCommitter) maybeDisable1PC(ba *kvpb.BatchRequest) {
+	if tc.disable1PC {
+		return // already disabled; early return
+	}
+	// Disabling 1PC does not apply if we're dealing with a non-transactional
+	// batch...
+	if ba.Txn == nil ||
+		// ...OR if we're dealing with serializable transactions.
+		!ba.Txn.IsoLevel.ToleratesWriteSkew() {
+		return
+	}
+	for _, req := range ba.Requests {
+		if readOnlyReq, ok := req.GetInner().(kvpb.LockingReadRequest); ok {
+			_, dur := readOnlyReq.KeyLocking()
+			if dur == lock.Replicated {
+				// {Read committed, snapshot} isolation transaction that's trying to
+				// acquire a replicated lock.
+				tc.disable1PC = true
+				return
+			}
+		}
+	}
 }
 
 // setWrapped implements the txnInterceptor interface.
