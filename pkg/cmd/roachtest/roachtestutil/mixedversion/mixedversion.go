@@ -702,7 +702,6 @@ func (s startStep) Run(ctx context.Context, l *logger.Logger, c cluster.Cluster,
 	}
 
 	startOpts := option.DefaultStartOptsNoBackups()
-	startOpts.RoachprodOpts.Sequential = false
 	clusterSettings := append(
 		append([]install.ClusterSettingOption{}, defaultClusterSettings...),
 		install.BinaryOption(binaryPath),
