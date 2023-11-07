@@ -1047,13 +1047,9 @@ SELECT COALESCE(
 func (og *operationGenerator) constraintExists(
 	ctx context.Context, tx pgx.Tx, constraintName string,
 ) (bool, error) {
-	return og.scanBool(ctx, tx, fmt.Sprintf(`
-	SELECT EXISTS(
-	        SELECT *
-	          FROM pg_catalog.pg_constraint
-	           WHERE conname = '%s'
-	       );
-	`, constraintName))
+	return og.scanBool(ctx, tx, `SELECT EXISTS(
+		SELECT * FROM pg_catalog.pg_constraint WHERE conname = $1
+	 )`, constraintName)
 }
 
 func (og *operationGenerator) rowsSatisfyFkConstraint(
