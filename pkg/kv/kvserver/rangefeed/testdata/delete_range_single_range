@@ -1,0 +1,18 @@
+# Test verifies that delete range is correctly delivered to the feed.
+
+# Start feed and ensure we processed initial checkpoint
+create-feed startKey=b endKey=x
+----
+
+put k=b v=1
+put k=p v=2
+del-range start=a end=z
+put k=b v=3 ts=lastTs
+# Dump key ordered by timestamp to better see where range del is.
+# We should see range being truncated to the boundary of the feed.
+options sortByTime
+----
+key=b, val=1, ts=ts1
+key=p, val=2, ts=ts2
+key=b, endKey=x
+key=b, val=3, ts=lastTs
