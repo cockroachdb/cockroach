@@ -36,7 +36,7 @@ import (
 // name in the system.scheduled_job table containing the data for the field.
 // Do not manipulate these fields directly, use methods in the ScheduledJob.
 type scheduledJobRecord struct {
-	ScheduleID      int64                     `col:"schedule_id"`
+	ScheduleID      jobspb.ScheduleID         `col:"schedule_id"`
 	ScheduleLabel   string                    `col:"schedule_name"`
 	Owner           username.SQLUsername      `col:"owner"`
 	NextRun         time.Time                 `col:"next_run"`
@@ -46,9 +46,6 @@ type scheduledJobRecord struct {
 	ExecutorType    string                    `col:"executor_type"`
 	ExecutionArgs   jobspb.ExecutionArguments `col:"execution_args"`
 }
-
-// InvalidScheduleID is a constant indicating the schedule ID is not valid.
-const InvalidScheduleID int64 = 0
 
 // ScheduledJob  is a representation of the scheduled job.
 // This struct can marshal/unmarshal changes made to the underlying system.scheduled_job table.
@@ -79,7 +76,7 @@ func NewScheduledJob(env scheduledjobs.JobSchedulerEnv) *ScheduledJob {
 // scheduledJobNotFoundError is returned from load when the scheduled job does
 // not exist.
 type scheduledJobNotFoundError struct {
-	scheduleID int64
+	scheduleID jobspb.ScheduleID
 }
 
 // Error makes scheduledJobNotFoundError an error.
@@ -103,11 +100,11 @@ func ScheduledJobTxn(txn isql.Txn) ScheduledJobStorage {
 
 type ScheduledJobStorage interface {
 	// Load loads scheduled job record from the database.
-	Load(ctx context.Context, env scheduledjobs.JobSchedulerEnv, id int64) (*ScheduledJob, error)
+	Load(ctx context.Context, env scheduledjobs.JobSchedulerEnv, id jobspb.ScheduleID) (*ScheduledJob, error)
 
 	// DeleteByID removes this schedule with the given ID.
 	// If an error is returned, it is callers responsibility to handle it (e.g. rollback transaction).
-	DeleteByID(ctx context.Context, env scheduledjobs.JobSchedulerEnv, id int64) error
+	DeleteByID(ctx context.Context, env scheduledjobs.JobSchedulerEnv, id jobspb.ScheduleID) error
 
 	// Create persists this schedule in the system.scheduled_jobs table.
 	// Sets j.scheduleID to the ID of the newly created schedule.
@@ -125,7 +122,7 @@ type ScheduledJobStorage interface {
 }
 
 // ScheduleID returns schedule ID.
-func (j *ScheduledJob) ScheduleID() int64 {
+func (j *ScheduledJob) ScheduleID() jobspb.ScheduleID {
 	return j.rec.ScheduleID
 }
 
@@ -308,7 +305,7 @@ func (j *ScheduledJob) InitFromDatums(datums []tree.Datum, cols []colinfo.Result
 			if !ok {
 				return errors.Newf("expected %q to be %T got %T", col.Name, dint, datum)
 			}
-			j.rec.ScheduleID = int64(*dint)
+			j.rec.ScheduleID = jobspb.ScheduleID(*dint)
 
 		case "schedule_name":
 			dstring, ok := datum.(*tree.DString)
@@ -394,7 +391,7 @@ func (j *ScheduledJob) InitFromDatums(datums []tree.Datum, cols []colinfo.Result
 type scheduledJobStorageDB struct{ db isql.DB }
 
 func (s scheduledJobStorageDB) DeleteByID(
-	ctx context.Context, env scheduledjobs.JobSchedulerEnv, id int64,
+	ctx context.Context, env scheduledjobs.JobSchedulerEnv, id jobspb.ScheduleID,
 ) error {
 	return s.run(ctx, func(ctx context.Context, txn scheduledJobStorageTxn) error {
 		return txn.DeleteByID(ctx, env, id)
@@ -402,7 +399,7 @@ func (s scheduledJobStorageDB) DeleteByID(
 }
 
 func (s scheduledJobStorageDB) Load(
-	ctx context.Context, env scheduledjobs.JobSchedulerEnv, id int64,
+	ctx context.Context, env scheduledjobs.JobSchedulerEnv, id jobspb.ScheduleID,
 ) (*ScheduledJob, error) {
 	var j *ScheduledJob
 	if err := s.run(ctx, func(
@@ -449,7 +446,7 @@ func (s scheduledJobStorageDB) Update(ctx context.Context, j *ScheduledJob) erro
 type scheduledJobStorageTxn struct{ txn isql.Txn }
 
 func (s scheduledJobStorageTxn) DeleteByID(
-	ctx context.Context, env scheduledjobs.JobSchedulerEnv, id int64,
+	ctx context.Context, env scheduledjobs.JobSchedulerEnv, id jobspb.ScheduleID,
 ) error {
 	_, err := s.txn.ExecEx(
 		ctx,
@@ -466,7 +463,7 @@ func (s scheduledJobStorageTxn) DeleteByID(
 }
 
 func (s scheduledJobStorageTxn) Load(
-	ctx context.Context, env scheduledjobs.JobSchedulerEnv, id int64,
+	ctx context.Context, env scheduledjobs.JobSchedulerEnv, id jobspb.ScheduleID,
 ) (*ScheduledJob, error) {
 	row, cols, err := s.txn.QueryRowExWithCols(ctx, "lookup-schedule", s.txn.KV(),
 		sessiondata.RootUserSessionDataOverride,

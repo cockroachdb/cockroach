@@ -366,7 +366,7 @@ func (e *scheduledBackupExecutor) backupSucceeded(
 		e.metrics.RpoMetric.Update(details.(jobspb.BackupDetails).EndTime.GoTime().Unix())
 	}
 
-	if args.UnpauseOnSuccess == jobs.InvalidScheduleID {
+	if args.UnpauseOnSuccess == jobspb.InvalidScheduleID {
 		return nil
 	}
 
@@ -390,7 +390,7 @@ func (e *scheduledBackupExecutor) backupSucceeded(
 	}
 
 	// Clear UnpauseOnSuccess; caller updates schedule.
-	args.UnpauseOnSuccess = jobs.InvalidScheduleID
+	args.UnpauseOnSuccess = jobspb.InvalidScheduleID
 	any, err := pbtypes.MarshalAny(args)
 	if err != nil {
 		return errors.Wrap(err, "marshaling args")
@@ -424,7 +424,7 @@ func extractBackupStatement(sj *jobs.ScheduledJob) (*annotatedBackupStatement, e
 			Backup: backupStmt,
 			CreatedByInfo: &jobs.CreatedByInfo{
 				Name: jobs.CreatedByScheduledJobs,
-				ID:   sj.ScheduleID(),
+				ID:   int64(sj.ScheduleID()),
 			},
 		}, nil
 	}

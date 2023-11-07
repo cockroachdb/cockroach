@@ -180,7 +180,7 @@ func NotifyJobTermination(
 	jobID jobspb.JobID,
 	jobStatus Status,
 	jobDetails jobspb.Details,
-	scheduleID int64,
+	scheduleID jobspb.ScheduleID,
 ) error {
 	if env == nil {
 		env = scheduledjobs.ProdJobSchedulerEnv

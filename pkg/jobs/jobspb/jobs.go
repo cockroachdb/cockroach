@@ -10,7 +10,16 @@
 
 package jobspb
 
-import "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+)
+
+// JobID is the ID of a job.
+type JobID = catpb.JobID
+
+// InvalidJobID is the zero value for JobID corresponding to no job.
+const InvalidJobID = catpb.InvalidJobID
 
 // ToText implements the ProtobinExecutionDetailFile interface.
 func (t *TraceData) ToText() []byte {
