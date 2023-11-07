@@ -18,10 +18,13 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -85,7 +88,7 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 		// Execution: `line` must be executed in both clusters with the same error
 		// code.
 		_, errLegacy := legacyConn.ExecContext(ctx, line)
-		if pgcode.MakeCode(string(getPQErrCode(errLegacy))) == pgcode.FeatureNotSupported {
+		if pgcode.MakeCode(string(getPQErrCode(errLegacy))) == pgcode.FeatureNotSupported && !containsCommit(line) {
 			continue
 		}
 		_, errDeclarative := declarativeConn.ExecContext(ctx, line)
@@ -103,6 +106,19 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 			}
 		}
 	}
+}
+
+func containsCommit(line string) bool {
+	stmts, err := parser.Parse(line)
+	if err != nil {
+		return false
+	}
+	for _, stmt := range stmts {
+		if _, ok := stmt.AST.(*tree.CommitTransaction); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // currentDatabaseExist returns false if current database (tracked by session
@@ -154,6 +170,7 @@ func modifyBlacklistedStmt(
 		modifyAlterPKWithRowIDCol,
 		modifySetDeclarativeSchemaChangerMode,
 		modifyCreateTempTable,
+		modifyAlterPKWithSamePKColsButDifferentSharding,
 	} {
 		var m bool
 		parsedLine, m = lm(ctx, t, parsedLine, legacyConn)
@@ -163,6 +180,142 @@ func modifyBlacklistedStmt(
 		t.Logf("Comparator testing framework modifies line %q to %q", line, parsedLine.String())
 	}
 	return parsedLine.StringWithFlags(tree.FmtSimple | tree.FmtTagDollarQuotes)
+}
+
+// modifyAlterPKWithSamePKColsButDifferentSharding modifies any ALTER PK stmt in
+// `line` if the current/old primary index is hash-sharded and the new primary
+// index is also hash-sharded on the same key columns (but with a different
+// "bucket_count") by appending a `DROP COLUMN IF EXISTS
+// crdb_intenral_old_cols_shard` to it, so that legacy schema changer will
+// converge to declarative schema changer (in which ALTER PK will already drop
+// the old shard column).
+// The returned boolean indicates if such a modification happened.
+func modifyAlterPKWithSamePKColsButDifferentSharding(
+	ctx context.Context, t *testing.T, parsedStmts statements.Statements, conn *gosql.Conn,
+) (statements.Statements, bool) {
+	// getPKShardingInfo retrieve all sharding related information from table
+	// `name`'s PK.
+	getPKShardingInfo := func(name *tree.UnresolvedObjectName) (isSharded bool, shardColName string, shardBuckets int, columnNames []string) {
+		var shardingExists bool
+		row := conn.QueryRowContext(ctx, fmt.Sprintf(
+			`
+SELECT (crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) -> 'table' -> 'primaryIndex' -> 'sharded') ? 'isSharded' AS sharded
+FROM system.descriptor 
+WHERE id = '%v'::REGCLASS
+`, name.String()))
+		require.NoError(t, row.Scan(&shardingExists))
+		if !shardingExists {
+			return isSharded, shardColName, shardBuckets, columnNames
+		}
+
+		row = conn.QueryRowContext(ctx, fmt.Sprintf(
+			`
+WITH sharded AS
+ (SELECT (crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) -> 'table' -> 'primaryIndex' -> 'sharded') AS sharded 
+  FROM system.descriptor 
+  WHERE id = '%v'::REGCLASS)          
+SELECT sharded ->> 'isSharded' as "isSharded",
+       sharded ->> 'name' as "shardColName",
+       sharded ->> 'shardBuckets' as "shardBuckets"
+FROM sharded;`, name.String()))
+		require.NoError(t, row.Scan(&isSharded, &shardColName, &shardBuckets))
+
+		rows, err := conn.QueryContext(ctx, fmt.Sprintf(
+			`    
+SELECT jsonb_array_elements(crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) -> 'table' -> 'primaryIndex' -> 'sharded' -> 'columnNames')
+FROM system.descriptor
+WHERE id = '%v'::REGCLASS;`, name.String()))
+		require.NoError(t, err)
+		rowsAsStr, err := sqlutils.RowsToStrMatrix(rows)
+		require.NoError(t, err)
+		for _, rowAsStr := range rowsAsStr {
+			columnNames = append(columnNames, strings.Trim(rowAsStr[0], `"`))
+		}
+
+		return isSharded, shardColName, shardBuckets, columnNames
+	}
+
+	// needsToDropOldShardColFn is a helper to determine if we need to drop the old
+	// shard column from the old PK after altering to the new PK.
+	// Currently, we do if both the old and new PK are hash-sharded on the same
+	// columns with different shard buckets.
+	needsToDropOldShardColFn := func(
+		tableName *tree.UnresolvedObjectName, newPKColumns tree.IndexElemList, newPKShardingDef *tree.ShardedIndexDef, newPKStorageParams tree.StorageParams,
+	) (needsToDrop bool, oldShardColToDrop string) {
+		// Two helpers to determine if two shard buckets are the same and if two
+		// list of columns are the same.
+		sameShardBuckets := func(
+			currShardBuckets int32, newPKShardingDef *tree.ShardedIndexDef, newPKStorageParams tree.StorageParams,
+		) bool {
+			semaCtx := tree.MakeSemaContext()
+			evalCtx := eval.Context{
+				Settings: cluster.MakeTestingClusterSettings(),
+			}
+			newShardBuckets, err := tabledesc.EvalShardBucketCount(ctx, &semaCtx, &evalCtx, newPKShardingDef.ShardBuckets, newPKStorageParams)
+			if err != nil {
+				panic(errors.AssertionFailedf("programming error: cannot get new PK's shard buckets"))
+			}
+			return currShardBuckets == newShardBuckets
+		}
+		sameColumns := func(colNames []string, columns tree.IndexElemList) bool {
+			if len(colNames) != len(columns) {
+				return false
+			}
+			for i := range colNames {
+				if colNames[i] != columns[i].Column.String() {
+					return false
+				}
+			}
+			return true
+		}
+
+		if newPKShardingDef == nil {
+			return false, ""
+		}
+		isSharded, shardColName, shardBuckets, columnNames := getPKShardingInfo(tableName)
+		if !isSharded {
+			return false, ""
+		}
+		if !sameColumns(columnNames, newPKColumns) || sameShardBuckets(int32(shardBuckets), newPKShardingDef, newPKStorageParams) {
+			return false, ""
+		}
+		return true, shardColName
+	}
+
+	var newParsedStmts statements.Statements
+	var modified bool
+	for _, parsedStmt := range parsedStmts {
+		newParsedStmts = append(newParsedStmts, parsedStmt)
+		var tableName *tree.UnresolvedObjectName
+		var shardColName string
+		var needsToDropOldShardCol bool
+		switch ast := parsedStmt.AST.(type) {
+		case *tree.AlterTable:
+			tableName = ast.Table
+			for _, cmd := range ast.Cmds {
+				switch cmd := cmd.(type) {
+				case *tree.AlterTableAlterPrimaryKey:
+					needsToDropOldShardCol, shardColName = needsToDropOldShardColFn(ast.Table, cmd.Columns, cmd.Sharded, cmd.StorageParams)
+				case *tree.AlterTableAddConstraint:
+					if alterTableAddPK, ok := cmd.ConstraintDef.(*tree.UniqueConstraintTableDef); ok &&
+						alterTableAddPK.PrimaryKey {
+						needsToDropOldShardCol, shardColName = needsToDropOldShardColFn(ast.Table, alterTableAddPK.Columns, alterTableAddPK.Sharded, alterTableAddPK.StorageParams)
+					}
+				}
+			}
+		}
+		if needsToDropOldShardCol {
+			// Both old and new PK are sharded, and they have the same columns, and they have different bucket_count,
+			// then we need to drop the old shard column.
+			parsedCommit, err := parser.ParseOne("commit")
+			require.NoError(t, err)
+			parsedDropRowID, err := parser.ParseOne(fmt.Sprintf("ALTER TABLE %v DROP COLUMN IF EXISTS %v", tableName, shardColName))
+			require.NoError(t, err)
+			newParsedStmts = append(newParsedStmts, parsedCommit, parsedDropRowID)
+			modified = true
+		}
+	}
+	return newParsedStmts, modified
 }
 
 // modifySetDeclarativeSchemaChangerMode skips stmts that attempt to alter
@@ -359,7 +512,8 @@ func requireNoErrOrSameErrCode(t *testing.T, line string, errLegacy, errDeclarat
 		t.Fatalf("executing statement %q results in non-PQ error:  legacy=%v, declarative=%v ", line, errLegacy, errDeclarative)
 	}
 	if errLegacyPQCode != errDeclarativePQCode {
-		t.Fatalf("executing statement %q results in different error code: legacy=%v, declarative=%v", line, errLegacyPQCode, errDeclarativePQCode)
+		t.Fatalf("executing statement %q results in different error code: legacy=%v (%v), declarative=%v (%v)", line,
+			errLegacyPQCode.Name(), errLegacyPQCode, errDeclarativePQCode.Name(), errDeclarativePQCode)
 	}
 }
 
