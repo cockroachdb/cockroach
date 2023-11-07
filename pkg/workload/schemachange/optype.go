@@ -300,6 +300,7 @@ var opDeclarativeVersion = map[opType]clusterversion.Key{
 	alterTypeDropValue:                clusterversion.BinaryMinSupportedVersionKey,
 	createIndex:                       clusterversion.BinaryMinSupportedVersionKey,
 	createSequence:                    clusterversion.BinaryMinSupportedVersionKey,
+	createSchema:                      clusterversion.V23_2,
 	dropIndex:                         clusterversion.BinaryMinSupportedVersionKey,
 	dropSchema:                        clusterversion.BinaryMinSupportedVersionKey,
 	dropSequence:                      clusterversion.BinaryMinSupportedVersionKey,
