@@ -1320,6 +1320,95 @@ num=1
     active: false req: 68, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
     active: false req: 69, strength: Shared, txn: 00000000-0000-0000-0000-000000000004
 
+# ------------------------------------------------------------------------------
+# Regression test for
+# https://github.com/cockroachdb/cockroach/issues/113924#issuecomment-1799057694.
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req70 txn=txn1 ts=10 spans=intent@a
+----
+
+scan r=req70
+----
+start-waiting: false
+
+new-request r=req71 txn=none ts=10 spans=intent@a
+----
+
+scan r=req71
+----
+start-waiting: false
+
+add-discovered r=req71 txn=txn2 k=a durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: repl [Shared]
+   queued locking requests:
+    active: false req: 71, strength: Intent, txn: none
+
+scan r=req70
+----
+start-waiting: true
+
+new-request r=req72 txn=txn3 ts=10 spans=shared@a
+----
+
+scan r=req72
+----
+start-waiting: true
+
+new-request r=req73 txn=none ts=10 spans=shared@a
+----
+
+scan r=req73
+----
+start-waiting: true
+
+new-request r=req74 txn=none ts=10 spans=intent@a
+----
+
+scan r=req74
+----
+start-waiting: true
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: repl [Shared]
+   queued locking requests:
+    active: true req: 70, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 71, strength: Intent, txn: none
+    active: true req: 72, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 73, strength: Shared, txn: none
+    active: true req: 74, strength: Intent, txn: none
+   distinguished req: 70
+
+release txn=txn2 span=a
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 70, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 71, strength: Intent, txn: none
+    active: true req: 72, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 73, strength: Shared, txn: none
+    active: true req: 74, strength: Intent, txn: none
+   distinguished req: 72
+
+dequeue r=req70
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 72, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 74, strength: Intent, txn: none
+   distinguished req: 74
 
 # TODO(arul): (non-exhaustive list) of shared lock state transitions that aren't
 # currently supported (and we need to add support for):
