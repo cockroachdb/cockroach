@@ -252,7 +252,8 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 
 var opWeights = []int{
 	// Non-DDL
-	insertRow:  0, // Disabled and tracked with #91863
+	// TODO(before merge): crank this back down to 10
+	insertRow:  500,
 	selectStmt: 10,
 	validate:   2, // validate twice more often
 
@@ -284,7 +285,7 @@ var opWeights = []int{
 	createIndex:                       1,
 	createSchema:                      1,
 	createSequence:                    1,
-	createTable:                       1,
+	createTable:                       200, // TODO(before merge): same comment as above
 	createTableAs:                     1,
 	createTypeEnum:                    1,
 	createView:                        1,
