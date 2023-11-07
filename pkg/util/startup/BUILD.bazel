@@ -24,7 +24,6 @@ go_test(
         "retry_test.go",
         "startup_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":startup"],
     deps = [
         "//pkg/base",

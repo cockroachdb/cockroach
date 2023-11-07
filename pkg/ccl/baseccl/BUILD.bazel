@@ -21,7 +21,6 @@ go_test(
     name = "baseccl_test",
     size = "small",
     srcs = ["encryption_spec_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":baseccl"],
     tags = ["ccl_test"],
     deps = ["//pkg/util/leaktest"],

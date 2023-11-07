@@ -39,7 +39,6 @@ go_test(
         "scrub_test.go",
         "zone_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":partitionccl"],
     tags = ["ccl_test"],
     deps = [

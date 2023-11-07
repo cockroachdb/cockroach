@@ -29,7 +29,6 @@ go_library(
 go_test(
     name = "bulk_test",
     srcs = ["tracing_aggregator_test.go"],
-    args = ["-test.timeout=295s"],
     deps = [
         ":bulk",
         "//pkg/ccl/backupccl/backuppb",

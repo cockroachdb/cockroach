@@ -17,7 +17,6 @@ go_test(
     name = "unimplemented_test",
     size = "small",
     srcs = ["unimplemented_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":unimplemented"],
     deps = [
         "//pkg/build",

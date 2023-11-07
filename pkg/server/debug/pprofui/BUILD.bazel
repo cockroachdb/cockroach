@@ -29,7 +29,6 @@ go_test(
     name = "pprofui_test",
     size = "small",
     srcs = ["server_test.go"],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":pprofui"],
     deps = [

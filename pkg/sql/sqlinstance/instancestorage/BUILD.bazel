@@ -60,7 +60,6 @@ go_test(
         "main_test.go",
         "row_codec_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":instancestorage"],
     deps = [
         "//pkg/base",

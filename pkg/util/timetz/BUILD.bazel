@@ -19,7 +19,6 @@ go_test(
     name = "timetz_test",
     size = "small",
     srcs = ["timetz_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":timetz"],
     deps = [
         "//pkg/util/timeofday",

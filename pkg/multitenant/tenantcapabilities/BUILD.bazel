@@ -41,7 +41,6 @@ stringer(
 go_test(
     name = "tenantcapabilities_test",
     srcs = ["values_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":tenantcapabilities"],
     deps = [
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",

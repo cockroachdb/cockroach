@@ -15,7 +15,6 @@ go_library(
 go_test(
     name = "leaktestcall_test",
     srcs = ["leaktestcall_test.go"],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]) + [
         "@go_sdk//:files",
     ],

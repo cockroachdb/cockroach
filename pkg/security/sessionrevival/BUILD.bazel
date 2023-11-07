@@ -19,7 +19,6 @@ go_library(
 go_test(
     name = "sessionrevival_test",
     srcs = ["token_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":sessionrevival"],
     deps = [
         "//pkg/security/username",

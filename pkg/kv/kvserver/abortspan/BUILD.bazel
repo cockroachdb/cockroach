@@ -21,7 +21,6 @@ go_test(
     name = "abortspan_test",
     size = "small",
     srcs = ["abortspan_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":abortspan"],
     deps = [
         "//pkg/keys",

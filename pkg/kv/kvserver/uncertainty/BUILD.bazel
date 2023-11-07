@@ -23,7 +23,6 @@ go_test(
         "compute_test.go",
         "interval_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":uncertainty"],
     deps = [
         "//pkg/kv/kvpb",

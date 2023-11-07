@@ -15,7 +15,6 @@ go_library(
 go_test(
     name = "release_test",
     srcs = ["releases_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":release"],
     deps = [
         "//pkg/util/version",

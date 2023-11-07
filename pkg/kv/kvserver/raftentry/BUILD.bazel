@@ -27,7 +27,6 @@ go_test(
         "cache_test.go",
         "ring_buffer_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":raftentry"],
     deps = [
         "//pkg/kv/kvpb",

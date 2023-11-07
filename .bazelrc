@@ -52,7 +52,7 @@ test:test --test_env=TZ=
 test:race --test_timeout=1200,6000,18000,72000
 
 # CI uses a custom timeout for enormous targets.
-test:use_ci_timeouts --test_timeout=60,300,900,900 --define=use_ci_timeouts=true
+test:use_ci_timeouts --test_timeout=60,300,900,900
 # CI should always run with `--config=ci`.
 build:cibase --lintonbuild
 # Set `-test.v` in Go tests.

@@ -20,7 +20,6 @@ go_test(
         "fsm_test.go",
         "match_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":fsm"],
     deps = ["@com_github_stretchr_testify//require"],
 )

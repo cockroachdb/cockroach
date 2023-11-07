@@ -52,7 +52,6 @@ go_library(
 go_test(
     name = "loqrecoverypb_test",
     srcs = ["recovery_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":loqrecoverypb"],
     deps = [
         "//pkg/roachpb",

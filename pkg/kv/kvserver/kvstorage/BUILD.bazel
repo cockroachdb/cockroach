@@ -38,7 +38,6 @@ go_test(
         "cluster_version_test.go",
         "datadriven_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":kvstorage"],
     deps = [

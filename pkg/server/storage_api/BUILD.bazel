@@ -25,7 +25,6 @@ go_test(
         "rangelog_test.go",
         "ranges_test.go",
     ],
-    args = ["-test.timeout=295s"],
     deps = [
         "//pkg/base",
         "//pkg/build",

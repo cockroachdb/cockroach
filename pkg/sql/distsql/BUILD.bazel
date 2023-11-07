@@ -49,7 +49,6 @@ go_test(
         "setup_flow_after_drain_test.go",
         "vectorized_panic_propagation_test.go",
     ],
-    args = ["-test.timeout=895s"],
     embed = [":distsql"],
     deps = [
         "//pkg/base",

@@ -16,7 +16,6 @@ go_library(
 go_test(
     name = "echotest_test",
     srcs = ["echotest_test.go"],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":echotest"],
     deps = ["//pkg/testutils/datapathutils"],

@@ -730,10 +730,6 @@ go_test(
         "zone_config_test.go",
         "zone_test.go",
     ],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
     data = glob(["testdata/**"]) + [
         "//c-deps:libgeos",
         "//pkg/sql:information_schema.go",

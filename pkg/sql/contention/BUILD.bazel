@@ -44,7 +44,6 @@ go_test(
         "resolver_test.go",
         "utils_test.go",
     ],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":contention"],
     deps = [

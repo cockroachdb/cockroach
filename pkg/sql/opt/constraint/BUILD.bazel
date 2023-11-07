@@ -36,7 +36,6 @@ go_test(
         "span_test.go",
         "spans_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":constraint"],
     deps = [
         "//pkg/settings/cluster",

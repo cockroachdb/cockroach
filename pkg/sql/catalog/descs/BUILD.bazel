@@ -86,7 +86,6 @@ go_test(
         "txn_external_test.go",
         "txn_with_executor_datadriven_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":descs"],
     deps = [

@@ -40,7 +40,6 @@ go_test(
         "planner_test.go",
         "quarantine_pool_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":kvprober"],
     deps = [
         "//pkg/base",

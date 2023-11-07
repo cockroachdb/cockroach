@@ -15,7 +15,6 @@ go_test(
     name = "hash_test",
     size = "small",
     srcs = ["hash_test.go"],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]) + [
         "@go_sdk//:files",
     ],

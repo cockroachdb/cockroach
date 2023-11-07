@@ -53,7 +53,6 @@ go_test(
         "projection_test.go",
         "rowfetcher_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":cdcevent"],
     tags = ["ccl_test"],
     deps = [

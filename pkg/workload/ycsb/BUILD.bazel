@@ -37,7 +37,6 @@ go_test(
         "main_test.go",
         "zipfgenerator_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":ycsb"],
     shard_count = 16,
     deps = [

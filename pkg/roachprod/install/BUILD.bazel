@@ -56,7 +56,6 @@ go_test(
         "staging_test.go",
         "start_template_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":install"],
     deps = [

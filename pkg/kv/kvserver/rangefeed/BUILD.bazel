@@ -62,7 +62,6 @@ go_test(
         "scheduler_test.go",
         "task_test.go",
     ],
-    args = ["-test.timeout=895s"],
     embed = [":rangefeed"],
     deps = [
         "//pkg/base",

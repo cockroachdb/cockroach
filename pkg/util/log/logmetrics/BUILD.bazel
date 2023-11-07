@@ -17,7 +17,6 @@ go_library(
 go_test(
     name = "logmetrics_test",
     srcs = ["metrics_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":logmetrics"],
     deps = [
         "//pkg/util/leaktest",

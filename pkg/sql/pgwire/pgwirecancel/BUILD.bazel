@@ -15,7 +15,6 @@ go_test(
         "cancel_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":pgwirecancel"],
     deps = [
         "//pkg/base",

@@ -35,7 +35,6 @@ go_test(
         "fixture_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=55s"],
     tags = ["ccl_test"],
     deps = [
         ":workloadccl",

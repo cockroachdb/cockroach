@@ -22,7 +22,6 @@ go_test(
     name = "codeowners_test",
     size = "small",
     srcs = ["codeowners_test.go"],
-    args = ["-test.timeout=55s"],
     data = [
         "//:TEAMS.yaml",
         "//.github:CODEOWNERS",

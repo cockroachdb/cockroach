@@ -15,7 +15,6 @@ go_test(
     name = "randutil_test",
     size = "small",
     srcs = ["rand_test.go"],
-    args = ["-test.timeout=55s"],
     deps = [
         ":randutil",
         "//pkg/util/log",

@@ -16,7 +16,6 @@ go_test(
     name = "envutil_test",
     size = "small",
     srcs = ["env_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":envutil"],
     deps = ["@com_github_stretchr_testify//require"],
 )

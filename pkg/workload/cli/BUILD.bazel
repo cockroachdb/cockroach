@@ -80,7 +80,6 @@ go_test(
     name = "cli_test",
     size = "small",
     srcs = ["format_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":cli"],
     deps = [
         "//pkg/util/leaktest",

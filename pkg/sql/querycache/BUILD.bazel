@@ -24,7 +24,6 @@ go_test(
     name = "querycache_test",
     size = "small",
     srcs = ["query_cache_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":querycache"],
     deps = [
         "//pkg/sql/opt/memo",

@@ -113,7 +113,6 @@ go_test(
         "statement_tree_test.go",
         "union_test.go",
     ],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":optbuilder"],
     deps = [

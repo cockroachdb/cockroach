@@ -27,7 +27,6 @@ go_test(
         "allocator_test.go",
         "reset_maybe_reallocate_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":colmem"],
     deps = [
         "//pkg/col/coldata",

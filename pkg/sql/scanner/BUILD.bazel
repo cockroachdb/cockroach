@@ -20,7 +20,6 @@ go_test(
         "scan_test.go",
         ":gen-token-names",  # keep
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":scanner"],
     deps = [

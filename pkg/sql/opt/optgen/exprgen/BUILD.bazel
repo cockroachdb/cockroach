@@ -33,7 +33,6 @@ go_test(
     name = "exprgen_test",
     size = "small",
     srcs = ["expr_gen_test.go"],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     deps = [
         "//pkg/sql/opt/testutils/opttester",

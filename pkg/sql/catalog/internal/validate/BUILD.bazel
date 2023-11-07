@@ -28,7 +28,6 @@ go_test(
         "helpers_test.go",
         "schema_changer_state_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":validate"],
     deps = [
         "//pkg/clusterversion",

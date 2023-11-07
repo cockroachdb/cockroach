@@ -16,6 +16,5 @@ go_test(
     name = "exit_test",
     size = "small",
     srcs = ["codes_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":exit"],
 )

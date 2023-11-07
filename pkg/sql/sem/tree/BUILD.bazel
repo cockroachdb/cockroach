@@ -213,7 +213,6 @@ go_test(
         "typing_test.go",
         "var_expr_test.go",
     ],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]) + ["//pkg/sql/parser:sql.y"],
     embed = [":tree"],
     deps = [

@@ -28,7 +28,6 @@ go_test(
     name = "doctor_test",
     size = "small",
     srcs = ["doctor_test.go"],
-    args = ["-test.timeout=55s"],
     deps = [
         ":doctor",
         "//pkg/clusterversion",

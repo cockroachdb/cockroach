@@ -28,7 +28,6 @@ go_library(
 go_test(
     name = "sqlstatsutil_test",
     srcs = ["json_encoding_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":sqlstatsutil"],
     deps = [
         "//pkg/sql/appstatspb",

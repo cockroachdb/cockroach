@@ -26,7 +26,6 @@ go_test(
         "insights_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":insights"],
     deps = [
         "//pkg/base",

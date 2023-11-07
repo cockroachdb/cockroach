@@ -37,7 +37,6 @@ go_test(
         "cockroach_versions_test.go",
         "setting_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":clusterversion"],
     deps = [
         "//pkg/build",

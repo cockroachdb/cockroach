@@ -21,7 +21,6 @@ go_library(
 go_test(
     name = "cast_test",
     srcs = ["cast_test.go"],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":cast"],
     deps = [

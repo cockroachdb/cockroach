@@ -22,7 +22,6 @@ go_test(
         "metrics_test.go",
         "tracker_test.go",
     ],
-    args = ["-test.timeout=295s"],
     deps = [
         ":metrics",
         "//pkg/kv/kvpb",

@@ -21,7 +21,6 @@ go_library(
 go_test(
     name = "regions_test",
     srcs = ["region_provider_test.go"],
-    args = ["-test.timeout=295s"],
     deps = [
         ":regions",
         "//pkg/keys",

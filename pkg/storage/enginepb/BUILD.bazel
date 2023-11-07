@@ -64,7 +64,6 @@ go_test(
         "mvcc3_test.go",
         "mvcc_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":enginepb"],
     deps = [
         "//pkg/kv/kvserver/concurrency/isolation",

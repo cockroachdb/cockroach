@@ -61,7 +61,6 @@ go_test(
         "rangefeed_mock_test.go",
         ":mock_rangefeed",  # keep
     ],
-    args = ["-test.timeout=295s"],
     embed = [":rangefeed"],
     deps = [
         "//pkg/base",

@@ -51,7 +51,6 @@ go_test(
         "settings_test.go",
         "validation_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":settings"],
     deps = [
         "//pkg/testutils",

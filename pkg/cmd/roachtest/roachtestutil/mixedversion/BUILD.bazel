@@ -38,7 +38,6 @@ go_test(
         "planner_test.go",
         "runner_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":mixedversion"],
     deps = [
         "//pkg/cmd/roachtest/cluster",

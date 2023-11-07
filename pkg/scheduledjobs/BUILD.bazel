@@ -24,7 +24,6 @@ go_library(
 go_test(
     name = "scheduledjobs_test",
     srcs = ["rewrite_cron_expr_test.go"],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":scheduledjobs"],
     deps = [

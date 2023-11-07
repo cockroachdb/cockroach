@@ -117,7 +117,6 @@ genrule(
 go_test(
     name = "scpb_test",
     srcs = ["element_collection_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":scpb"],
     deps = ["@com_github_stretchr_testify//require"],
 )

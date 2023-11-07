@@ -67,7 +67,6 @@ go_test(
         "builder_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=895s"],
     data = glob(["testdata/**"]),
     deps = [
         ":scbuild",

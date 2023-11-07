@@ -20,7 +20,6 @@ go_library(
 go_test(
     name = "option_test",
     srcs = ["connection_options_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":option"],
     deps = ["@com_github_stretchr_testify//require"],
 )

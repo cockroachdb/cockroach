@@ -14,6 +14,5 @@ go_test(
         "example_pq_test.go",
         "heap_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":heap"],
 )

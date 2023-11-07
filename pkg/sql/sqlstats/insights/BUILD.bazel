@@ -49,7 +49,6 @@ go_test(
         "sink_test.go",
         "store_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":insights"],
     deps = [

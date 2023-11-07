@@ -3,7 +3,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 go_test(
     name = "cloudimpltests_test",
     srcs = ["main_test.go"],
-    args = ["-test.timeout=295s"],
     deps = [
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

@@ -30,7 +30,6 @@ go_test(
     name = "docs-issue-generation_test",
     size = "small",
     srcs = ["docs_issue_generation_test.go"],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":docs-issue-generation_lib"],
     deps = [

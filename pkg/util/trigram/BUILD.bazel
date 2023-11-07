@@ -10,7 +10,6 @@ go_library(
 go_test(
     name = "trigram_test",
     srcs = ["trigram_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":trigram"],
     deps = ["@com_github_stretchr_testify//assert"],
 )

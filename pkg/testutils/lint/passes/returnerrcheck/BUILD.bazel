@@ -18,7 +18,6 @@ go_test(
     name = "returnerrcheck_test",
     size = "small",
     srcs = ["returnerrcheck_test.go"],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]) + [
         "@go_sdk//:files",
     ],

@@ -19,7 +19,6 @@ go_test(
         "precomputedrand_test.go",
         "random_test.go",
     ],
-    args = ["-test.timeout=55s"],
     deps = [
         ":workloadimpl",
         "//pkg/util/timeutil",

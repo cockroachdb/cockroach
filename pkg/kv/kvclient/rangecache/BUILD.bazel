@@ -28,7 +28,6 @@ go_test(
     name = "rangecache_test",
     size = "small",
     srcs = ["range_cache_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":rangecache"],
     deps = [
         "//pkg/keys",
