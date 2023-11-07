@@ -617,6 +617,14 @@ func setVersionSetting(
 			return err
 		}
 		return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			// Run the version bump inside the upgrade as high priority, since
+			// lease manager ends up locking the version row inside the settings
+			// table when refreshing leases. On larger clusters or with a large number
+			// of descriptors its possible for normal transactions to be starved
+			// (#95227)
+			if err := txn.KV().SetUserPriority(roachpb.MaxUserPriority); err != nil {
+				return err
+			}
 			// Confirm if the version has actually changed on us.
 			datums, err := txn.QueryRowEx(
 				ctx, "retrieve-prev-setting", txn.KV(),
