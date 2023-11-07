@@ -356,6 +356,7 @@ go_library(
         "//pkg/server/autoconfig/acprovider",
         "//pkg/server/pgurl",
         "//pkg/server/serverpb",
+        "//pkg/server/settingswatcher",
         "//pkg/server/status/statuspb",
         "//pkg/server/telemetry",
         "//pkg/settings",
