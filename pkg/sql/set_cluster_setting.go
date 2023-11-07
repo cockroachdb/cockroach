@@ -617,6 +617,24 @@ func setVersionSetting(
 			return err
 		}
 		return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			// Run the version bump inside the upgrade as high priority, since
+			// lease manager ends up reading the version row (with high priority)
+			// inside the settings table when refreshing leases. On larger clusters
+			// or with a large number of descriptors its possible for normal
+			// transactions to be starved  (#95227).
+			// This is safe because we expected this transaction only do the following:
+			// 1) We expect this transaction to only read and write to the
+			//    version key in the system.settings table.
+			// 2) Reads from the system.sql_instances table to confirm all SQL servers
+			//    have been upgraded in multi-tenant environments.
+			// 3) Other transactions will use a normal priority and get pushed out by
+			//    this one.
+			// 4) There is a potential danger to conflict with lease renewal of the
+			//    settings table and the upgrade, but to avoid this, we intentionally
+			//		force the internal executor to avoid leased descriptors.
+			if err := txn.KV().SetUserPriority(roachpb.MaxUserPriority); err != nil {
+				return err
+			}
 			// Confirm if the version has actually changed on us.
 			datums, err := txn.QueryRowEx(
 				ctx, "retrieve-prev-setting", txn.KV(),
@@ -664,7 +682,8 @@ func setVersionSetting(
 				return err
 			}
 			return err
-		})
+		},
+			isql.WithSkipDescriptorCache())
 	}
 
 	// If we're here, we know we aren't in a transaction because we don't
