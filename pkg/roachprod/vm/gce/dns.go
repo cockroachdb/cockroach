@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/maps"
 	"golang.org/x/sync/errgroup"
@@ -38,16 +39,27 @@ var _ vm.DNSProvider = &dnsProvider{}
 
 // dnsProvider implements the vm.DNSProvider interface.
 type dnsProvider struct {
+	recordsCache struct {
+		mu      syncutil.RWMutex
+		records map[string][]vm.DNSRecord
+	}
 }
 
 func NewDNSProvider() vm.DNSProvider {
-	return &dnsProvider{}
+	return &dnsProvider{
+		recordsCache: struct {
+			mu      syncutil.RWMutex
+			records map[string][]vm.DNSRecord
+		}{records: make(map[string][]vm.DNSRecord)},
+	}
 }
 
 // CreateRecords implements the vm.DNSProvider interface.
 func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord) error {
 	recordsByName := make(map[string][]vm.DNSRecord)
 	for _, record := range records {
+		// Ensure we use the normalised name for grouping records.
+		record.Name = n.normaliseName(record.Name)
 		recordsByName[record.Name] = append(recordsByName[record.Name], record)
 	}
 
@@ -89,6 +101,7 @@ func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord
 		if err != nil {
 			return markDNSOperationError(errors.Wrapf(err, "output: %s", out))
 		}
+		n.updateCache(name, recordGroup)
 	}
 	return nil
 }
@@ -123,6 +136,7 @@ func (n *dnsProvider) DeleteRecordsByName(ctx context.Context, names ...string) 
 			if err != nil {
 				return markDNSOperationError(errors.Wrapf(err, "output: %s", out))
 			}
+			n.clearCacheEntry(name)
 			return nil
 		})
 	}
@@ -170,19 +184,25 @@ func (n *dnsProvider) lookupSRVRecords(
 	if service != "" || proto != "" {
 		target = "_" + service + "._" + proto + "." + name
 	}
+	// Check the cache first.
+	if cachedRecords, ok := n.getCache(target); ok {
+		return cachedRecords, nil
+	}
+	// Lookup the records, if no records are found in the cache.
 	records, err := n.listSRVRecords(ctx, target, dnsMaxResults)
 	filteredRecords := make([]vm.DNSRecord, 0, len(records))
 	if err != nil {
 		return nil, err
 	}
 	for _, record := range records {
-		// Filter out records that do not match the full target name. This is
-		// necessary because the gcloud command does partial matching.
-		if record.Name != target {
+		// Filter out records that do not match the full normalised target name.
+		// This is necessary because the gcloud command does partial matching.
+		if n.normaliseName(record.Name) != n.normaliseName(target) {
 			continue
 		}
 		filteredRecords = append(filteredRecords, record)
 	}
+	n.updateCache(target, filteredRecords)
 	return filteredRecords, nil
 }
 
@@ -232,6 +252,32 @@ func (n *dnsProvider) listSRVRecords(
 		}
 	}
 	return records, nil
+}
+
+func (n *dnsProvider) updateCache(name string, records []vm.DNSRecord) {
+	n.recordsCache.mu.Lock()
+	defer n.recordsCache.mu.Unlock()
+	n.recordsCache.records[n.normaliseName(name)] = records
+}
+
+func (n *dnsProvider) getCache(name string) ([]vm.DNSRecord, bool) {
+	n.recordsCache.mu.RLock()
+	defer n.recordsCache.mu.RUnlock()
+	records, ok := n.recordsCache.records[n.normaliseName(name)]
+	return records, ok
+}
+
+func (n *dnsProvider) clearCacheEntry(name string) {
+	n.recordsCache.mu.Lock()
+	defer n.recordsCache.mu.Unlock()
+	delete(n.recordsCache.records, n.normaliseName(name))
+}
+
+// normaliseName removes the trailing dot from a DNS name if it exists.
+// This is necessary because depending on where the name originates from, it
+// may or may not have a trailing dot.
+func (n *dnsProvider) normaliseName(name string) string {
+	return strings.TrimSuffix(name, ".")
 }
 
 // markDNSOperationError should be used to mark any external DNS API or Google
