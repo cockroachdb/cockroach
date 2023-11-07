@@ -51,7 +51,6 @@ go_test(
         "setup_test.go",
         "sqlsmith_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = ["//c-deps:libgeos"],
     embed = [":sqlsmith"],
     deps = [

@@ -57,7 +57,6 @@ go_test(
         "lock_waiter_test.go",
         "locking_test.go",
     ],
-    args = ["-test.timeout=295s"],
     deps = [
         ":lock",
         "//pkg/kv/kvserver/concurrency/isolation",

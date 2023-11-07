@@ -19,6 +19,5 @@ go_test(
     name = "pretty_test",
     size = "small",
     srcs = ["pretty_test.go"],
-    args = ["-test.timeout=55s"],
     deps = [":pretty"],
 )

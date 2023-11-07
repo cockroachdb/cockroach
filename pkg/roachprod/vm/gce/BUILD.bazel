@@ -28,7 +28,6 @@ go_test(
     name = "gce_test",
     size = "small",
     srcs = ["gcloud_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":gce"],
     deps = ["@com_github_stretchr_testify//assert"],
 )

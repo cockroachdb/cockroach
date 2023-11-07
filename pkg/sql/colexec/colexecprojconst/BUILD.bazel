@@ -43,7 +43,6 @@ go_library(
 go_test(
     name = "colexecprojconst_test",
     srcs = ["projection_ops_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":colexecprojconst"],
     deps = [
         "//pkg/sql/colexecop",

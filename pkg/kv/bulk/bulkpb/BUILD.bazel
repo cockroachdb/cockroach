@@ -50,7 +50,6 @@ go_library(
 go_test(
     name = "bulkpb_test",
     srcs = ["ingestion_performance_stats_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":bulkpb"],
     deps = [
         "//pkg/roachpb",

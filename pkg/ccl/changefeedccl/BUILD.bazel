@@ -203,10 +203,6 @@ go_test(
         "testfeed_test.go",
         "validations_test.go",
     ],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
     embed = [":changefeedccl"],
     exec_properties = {"Pool": "large"},
     shard_count = 16,

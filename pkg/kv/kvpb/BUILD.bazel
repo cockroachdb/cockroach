@@ -63,7 +63,6 @@ go_test(
         "replica_unavailable_error_test.go",
         "string_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":kvpb"],
     deps = [

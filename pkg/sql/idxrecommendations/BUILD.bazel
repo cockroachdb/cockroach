@@ -24,7 +24,6 @@ go_test(
         "idx_recommendations_cache_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
     deps = [
         ":idxrecommendations",
         "//pkg/base",

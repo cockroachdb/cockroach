@@ -27,7 +27,6 @@ go_test(
     name = "testutils_test",
     size = "small",
     srcs = ["scalar_vars_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":testutils"],
     deps = [
         "//pkg/sql/opt",

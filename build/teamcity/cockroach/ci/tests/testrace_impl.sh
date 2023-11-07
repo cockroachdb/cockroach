@@ -32,8 +32,7 @@ do
             fi
             $(bazel info bazel-bin --config=ci)/pkg/cmd/bazci/bazci_/bazci -- test --config=ci --config=race "$test" \
                                 --test_env=COCKROACH_LOGIC_TESTS_SKIP=true \
-                                --test_env=GOMAXPROCS=8 \
-                                --test_arg=-test.timeout="${go_timeout}s"
+                                --test_env=GOMAXPROCS=8
         done
     done
 done

@@ -52,7 +52,6 @@ go_library(
 go_test(
     name = "randgen_test",
     srcs = ["template_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":randgen"],
     deps = [
         "//pkg/sql/catalog/desctestutils",

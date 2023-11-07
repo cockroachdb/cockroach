@@ -21,7 +21,6 @@ go_test(
     name = "tracker_test",
     size = "small",
     srcs = ["tracker_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":tracker"],
     deps = [
         "//pkg/testutils/skip",

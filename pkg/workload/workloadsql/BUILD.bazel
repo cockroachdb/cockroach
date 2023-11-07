@@ -31,7 +31,6 @@ go_test(
         "sliceslice_test.go",
         "workloadsql_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":workloadsql"],
     deps = [
         "//pkg/base",

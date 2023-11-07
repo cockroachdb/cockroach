@@ -22,7 +22,6 @@ go_library(
 go_test(
     name = "produce_test",
     srcs = ["producer_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":produce"],
     deps = [
         "//pkg/obsservice/obslib/transform",

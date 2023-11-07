@@ -29,7 +29,6 @@ go_test(
         "initial_test.go",
         "stateloader_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":stateloader"],
     deps = [
         "//pkg/kv/kvpb",

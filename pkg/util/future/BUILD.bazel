@@ -16,7 +16,6 @@ go_library(
 go_test(
     name = "future_test",
     srcs = ["future_test.go"],
-    args = ["-test.timeout=295s"],
     deps = [
         ":future",
         "//pkg/testutils",

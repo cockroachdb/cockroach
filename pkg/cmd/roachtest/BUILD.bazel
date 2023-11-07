@@ -86,7 +86,6 @@ go_test(
         "test_test.go",
         "zip_util_test.go",
     ],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":roachtest_lib"],
     deps = [

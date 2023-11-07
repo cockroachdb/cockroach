@@ -17,7 +17,6 @@ go_library(
 go_test(
     name = "username_test",
     srcs = ["username_test.go"],
-    args = ["-test.timeout=295s"],
     deps = [
         ":username",
         "//pkg/testutils",

@@ -67,7 +67,6 @@ go_test(
         "schema_test.go",
         "types_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":randgen"],
     deps = [
         "//pkg/base",

@@ -31,7 +31,6 @@ go_test(
         "file_table_storage_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
     deps = [
         ":userfile",
         "//pkg/base",

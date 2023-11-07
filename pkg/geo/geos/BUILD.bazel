@@ -67,7 +67,6 @@ go_test(
     name = "geos_test",
     size = "small",
     srcs = ["geos_test.go"],
-    args = ["-test.timeout=55s"],
     data = ["//c-deps:libgeos"],
     embed = [":geos"],
     deps = [

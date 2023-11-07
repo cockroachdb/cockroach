@@ -18,7 +18,6 @@ go_test(
     name = "generate-bazel-extra_test",
     size = "small",
     srcs = ["main_test.go"],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":generate-bazel-extra_lib"],
     deps = [

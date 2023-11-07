@@ -40,7 +40,6 @@ go_test(
         "nulls_test.go",
         "vec_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":coldata"],
     deps = [
         "//pkg/col/coldatatestutils",

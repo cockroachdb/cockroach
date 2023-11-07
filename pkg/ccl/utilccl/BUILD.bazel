@@ -36,7 +36,6 @@ go_test(
         "license_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":utilccl"],
     tags = ["ccl_test"],
     deps = [
