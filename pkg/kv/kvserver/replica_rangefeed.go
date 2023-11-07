@@ -273,8 +273,10 @@ func (r *Replica) RangeFeed(
 	// Register the stream with a catch-up iterator.
 	var catchUpIter *rangefeed.CatchUpIterator
 	if usingCatchUpIter {
+		// Pass context.Background() since the context where the iter will be used
+		// is different.
 		catchUpIter, err = rangefeed.NewCatchUpIterator(
-			ctx, r.store.TODOEngine(), rSpan.AsRawSpanWithNoLocals(),
+			context.Background(), r.store.TODOEngine(), rSpan.AsRawSpanWithNoLocals(),
 			args.Timestamp, iterSemRelease, pacer)
 		if err != nil {
 			r.raftMu.Unlock()

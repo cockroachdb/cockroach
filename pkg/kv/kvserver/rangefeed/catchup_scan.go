@@ -135,6 +135,9 @@ type outputEventFn func(e *kvpb.RangeFeedEvent) error
 // For example, with MVCC range tombstones [a-f)@5 and [a-f)@3 overlapping point
 // keys a@6, a@4, and b@2, the emitted order is [a-f)@3,[a-f)@5,a@4,a@6,b@2 because
 // the start key "a" is ordered before all of the timestamped point keys.
+//
+// TODO(sumeer): ctx is not used for SeekGE and Next. Fix by adding a method
+// to SimpleMVCCIterator to replace the context.
 func (i *CatchUpIterator) CatchUpScan(
 	ctx context.Context, outputFn outputEventFn, withDiff bool,
 ) error {
