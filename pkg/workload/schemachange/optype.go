@@ -252,7 +252,7 @@ var opWeights = []int{
 	// DDL Operations
 	alterTableAddColumn:               1,
 	alterTableDropConstraint:          0, // TODO(spaskob): unimplemented
-	alterTableAddConstraintForeignKey: 0, // Disabled and tracked with #91195
+	alterTableAddConstraintForeignKey: 1, // Disabled and tracked with #91195
 	alterDatabaseAddRegion:            1,
 	alterDatabaseAddSuperRegion:       0, // Disabled and tracked with #111299
 	alterDatabaseDropSuperRegion:      0, // Disabled and tracked with #111299
