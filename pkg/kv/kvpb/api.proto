@@ -952,12 +952,16 @@ message EndTxnRequest {
   // reliably for these transactions - a TransactionStatusError might be
   // returned instead if 1PC execution fails.
   bool require_1pc = 6 [(gogoproto.customname) = "Require1PC"];
+  // Disables the transaction from attempting 1 phase commit. Cannot be used in
+  // conjunction with the Require1PC flag.
+  bool disable_1pc = 11 [(gogoproto.customname) = "Disable1PC"];
   // True to indicate that lock spans should be resolved with poison=true.
   // This is used when the transaction is being aborted independently of the
   // main thread of client operation, as in the case of an asynchronous abort
   // from the TxnCoordSender on a failed heartbeat. It should only be set to
   // true when commit=false.
   bool poison = 9;
+
   reserved 7, 8, 10;
 }
 

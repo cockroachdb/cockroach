@@ -3055,7 +3055,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			allIsoLevels: &expect{
 				expServerRefresh:  true,
-				expOnePhaseCommit: true,
+				expOnePhaseCommit: false,
 			},
 		},
 		{
@@ -3083,7 +3083,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			allIsoLevels: &expect{
 				expServerRefresh:  true,
-				expOnePhaseCommit: true,
+				expOnePhaseCommit: false,
 			},
 		},
 		{
@@ -3118,7 +3118,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 		},
 		{
-			name: "write too old with (replicateed) exclusive locking read after prior read",
+			name: "write too old with (replicated) exclusive locking read after prior read",
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
 				return db.Put(ctx, "a", "put")
 			},
@@ -3132,19 +3132,19 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				isolation.Serializable: {
 					expClientRefreshSuccess:        true,
 					expClientAutoRetryAfterRefresh: true,
-					expOnePhaseCommit:              true,
+					expOnePhaseCommit:              false,
 				},
 				// Client-side refresh of prior reads after write-write conflict.
 				isolation.Snapshot: {
 					expClientRefreshSuccess:        true,
 					expClientAutoRetryAfterRefresh: true,
-					expOnePhaseCommit:              true,
+					expOnePhaseCommit:              false,
 				},
 				// Server-side refresh after write-write conflict. Prior reads performed
 				// in earlier batches (from earlier read snapshots) are not refreshed.
 				isolation.ReadCommitted: {
 					expServerRefresh:  true,
-					expOnePhaseCommit: true,
+					expOnePhaseCommit: false,
 				},
 			},
 		},
@@ -3194,19 +3194,19 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				isolation.Serializable: {
 					expClientRefreshSuccess:        true,
 					expClientAutoRetryAfterRefresh: true,
-					expOnePhaseCommit:              true,
+					expOnePhaseCommit:              false,
 				},
 				// Client-side refresh of prior reads after write-write conflict.
 				isolation.Snapshot: {
 					expClientRefreshSuccess:        true,
 					expClientAutoRetryAfterRefresh: true,
-					expOnePhaseCommit:              true,
+					expOnePhaseCommit:              false,
 				},
 				// Server-side refresh after write-write conflict. Prior reads performed
 				// in earlier batches (from earlier read snapshots) are not refreshed.
 				isolation.ReadCommitted: {
 					expServerRefresh:  true,
-					expOnePhaseCommit: true,
+					expOnePhaseCommit: false,
 				},
 			},
 		},
@@ -3237,7 +3237,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			allIsoLevels: &expect{
 				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
-				expOnePhaseCommit:              true,
+				expOnePhaseCommit:              false,
 			},
 		},
 		{
@@ -3267,7 +3267,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			allIsoLevels: &expect{
 				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
-				expOnePhaseCommit:              true,
+				expOnePhaseCommit:              false,
 			},
 		},
 		{
@@ -3297,7 +3297,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			allIsoLevels: &expect{
 				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
-				expOnePhaseCommit:              true,
+				expOnePhaseCommit:              false,
 			},
 		},
 		{
@@ -3327,7 +3327,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			allIsoLevels: &expect{
 				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
-				expOnePhaseCommit:              true,
+				expOnePhaseCommit:              false,
 			},
 		},
 		{
@@ -3361,7 +3361,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			allIsoLevels: &expect{
 				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
-				expOnePhaseCommit:              true,
+				expOnePhaseCommit:              false,
 			},
 		},
 		{
@@ -3395,7 +3395,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			allIsoLevels: &expect{
 				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
-				expOnePhaseCommit:              true,
+				expOnePhaseCommit:              false,
 			},
 		},
 		{
@@ -3429,7 +3429,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			allIsoLevels: &expect{
 				expClientRefreshSuccess:        true,
 				expClientAutoRetryAfterRefresh: true,
-				expOnePhaseCommit:              true,
+				expOnePhaseCommit:              false,
 			},
 		},
 		{
