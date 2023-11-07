@@ -76,7 +76,7 @@ func newCompare(config compareConfig) (*compare, error) {
 func defaultCompareConfig() compareConfig {
 	return compareConfig{
 		slackUser:    "microbench",
-		slackChannel: "aptt-community-service-team",
+		slackChannel: "perf-ops",
 	}
 }
 
