@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -43,20 +44,20 @@ func TestServerController(t *testing.T) {
 	sc := s.TenantController().ServerController().(*serverController)
 	ts := s.SystemLayer().(*testServer)
 
-	d, err := sc.getServer(ctx, "system")
+	d, _, err := sc.getServer(ctx, "system")
 	require.NoError(t, err)
 	if d.(*systemServerWrapper).server != ts.topLevelServer {
 		t.Fatal("expected wrapped system server")
 	}
 
-	d, err = sc.getServer(ctx, "somename")
+	d, _, err = sc.getServer(ctx, "somename")
 	require.Nil(t, d)
 	require.Error(t, err, `no tenant found with name "somename"`)
 
 	_, err = db.Exec("CREATE TENANT hello; ALTER TENANT hello START SERVICE SHARED")
 	require.NoError(t, err)
 
-	_, err = sc.getServer(ctx, "hello")
+	_, _, err = sc.getServer(ctx, "hello")
 	// TODO(knz): We're not really expecting an error here.
 	// The actual error seen will exist as long as in-memory
 	// servers use the standard KV connector.
@@ -122,6 +123,39 @@ func TestServerControllerStopStart(t *testing.T) {
 	shouldFailToConnectSoon()
 	sqlRunner.Exec(t, "ALTER VIRTUAL CLUSTER hello START SERVICE SHARED")
 	shouldConnectSoon()
+}
+
+// TestServerControllerWaitForDefaultTenant tests that the server SQL
+// controller knows how to wait for the default cluster.
+func TestServerControllerWaitForDefaultCluster(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	sqlRunner := sqlutils.MakeSQLRunner(db)
+	if util.RaceEnabled {
+		sqlRunner.Exec(t, "SET CLUSTER SETTING server.controller.mux_virtual_cluster_wait.timeout = '1m'")
+	}
+
+	tryConnect := func() error {
+		conn, err := s.SystemLayer().SQLConnE(serverutils.DBName("cluster:hello"))
+		if err != nil {
+			return err
+		}
+		defer func() { _ = conn.Close() }()
+		return conn.Ping()
+	}
+
+	sqlRunner.Exec(t, "CREATE TENANT hello")
+	sqlRunner.Exec(t, "ALTER VIRTUAL CLUSTER hello START SERVICE SHARED")
+	sqlRunner.Exec(t, "SET CLUSTER SETTING server.controller.default_target_cluster = 'hello'")
+	require.NoError(t, tryConnect())
 }
 
 func TestSQLErrorUponInvalidTenant(t *testing.T) {

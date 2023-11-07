@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/redact"
 )
 
@@ -77,6 +78,8 @@ type serverController struct {
 	// a tenant routing error to the incoming client.
 	sendSQLRoutingError func(ctx context.Context, conn net.Conn, tenantName roachpb.TenantName)
 
+	tenantWaiter *singleflight.Group
+
 	// draining is set when the surrounding server starts draining, and
 	// prevents further creation of new tenant servers.
 	draining syncutil.AtomicBool
@@ -88,7 +91,7 @@ type serverController struct {
 	watcher *tenantcapabilitieswatcher.Watcher
 
 	mu struct {
-		syncutil.Mutex
+		syncutil.RWMutex
 
 		// servers maps tenant names to the server for that tenant.
 		//
@@ -102,6 +105,10 @@ type serverController struct {
 		// nextServerIdx is the index to provide to the next call to
 		// newServerFn.
 		nextServerIdx int
+
+		// newServerCh is closed anytime a server is added to
+		// the servers list.
+		newServerCh chan struct{}
 	}
 }
 
@@ -127,6 +134,7 @@ func newServerController(
 		tenantServerCreator: tenantServerCreator,
 		sendSQLRoutingError: sendSQLRoutingError,
 		watcher:             watcher,
+		tenantWaiter:        singleflight.NewGroup("tenant server poller", "poll"),
 		drainCh:             make(chan struct{}),
 	}
 	c.orchestrator = newServerOrchestrator(parentStopper, c)
@@ -134,6 +142,7 @@ func newServerController(
 		catconstants.SystemTenantName: c.orchestrator.makeServerStateForSystemTenant(systemTenantNameContainer, systemServer),
 	}
 	c.mu.testArgs = make(map[roachpb.TenantName]base.TestSharedProcessTenantArgs)
+	c.mu.newServerCh = make(chan struct{})
 	parentStopper.AddCloser(c)
 	return c
 }

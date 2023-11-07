@@ -4046,7 +4046,7 @@ func (s *systemAdminServer) ListTenants(
 
 	tenantList := make([]*serverpb.Tenant, 0, len(tenantNames))
 	for _, tenantName := range tenantNames {
-		server, err := s.server.serverController.getServer(ctx, tenantName)
+		server, _, err := s.server.serverController.getServer(ctx, tenantName)
 		if err != nil {
 			if errors.Is(err, errNoTenantServerRunning) {
 				// The service for this tenant is not started yet. This is not

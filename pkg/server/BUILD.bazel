@@ -331,6 +331,7 @@ go_library(
         "//pkg/util/stop",
         "//pkg/util/strutil",
         "//pkg/util/syncutil",
+        "//pkg/util/syncutil/singleflight",
         "//pkg/util/sysutil",
         "//pkg/util/timeutil",
         "//pkg/util/timeutil/ptp",
