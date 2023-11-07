@@ -21,16 +21,19 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -39,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -46,12 +50,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/hintdetail"
 	"github.com/cockroachdb/redact"
@@ -616,22 +622,49 @@ func setVersionSetting(
 		if err != nil {
 			return err
 		}
-		return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			// Confirm if the version has actually changed on us.
-			datums, err := txn.QueryRowEx(
-				ctx, "retrieve-prev-setting", txn.KV(),
-				sessiondata.RootUserSessionDataOverride,
-				"SELECT value FROM system.settings WHERE name = $1", setting.InternalKey(),
-			)
+		return db.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// On complex clusters with a large number of descriptors (> 500) and
+			// multi-region nodes (> 9), normal priority transactions reading/updating
+			// the version row can be starved. This is due to the lease manager reading
+			// the version row at high priority, when refreshing leases (#95227), with
+			// a complex cluster this traffic will continuous.
+			// Run the version bump inside the upgrade as a high priority txn to avoid
+			// being starved out by the lease manager.
+			// Run the version bump inside the upgrade as high priority, since
+			// lease manager ends up reading the version row (with high priority)
+			// inside the settings table when refreshing leases. On complex clusters
+			// (multi-region with high latency) or with a large number of descriptors
+			// ( >500) it's possible for normal transactions to be starved by continuous
+			// lease traffic.
+			// This is safe from deadlocks / starvation because we expected this
+			// transaction only do the following:
+			// 1) We expect this transaction to only read and write to the
+			//    version key in the system.settings table.
+			// 2) Reads from the system.sql_instances table to confirm all SQL servers
+			//    have been upgraded in multi-tenant environments.
+			// 3) Other transactions will use a normal priority and get pushed out by
+			//    this one, if they involve schema changes on the system database
+			//    descriptor (highly unlikely).
+			if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
+				return err
+			}
+
+			// Fetch the existing version setting and see if its
+			// been modified.
+			codec := db.(*InternalDB).server.cfg.Codec
+			decoder := settingswatcher.MakeRowDecoder(codec)
+			indexPrefix := codec.IndexPrefix(keys.SettingsTableID, uint32(1))
+			key := encoding.EncodeUvarintAscending(encoding.EncodeStringAscending(indexPrefix, "version"), uint64(0))
+			row, err := txn.Get(ctx, key)
 			if err != nil {
 				return err
 			}
-			if len(datums) > 0 {
-				dStr, ok := datums[0].(*tree.DString)
-				if !ok {
-					return errors.AssertionFailedf("existing version value is not a string, got %T", datums[0])
+			if row.Value != nil {
+				_, val, _, err := decoder.DecodeRow(roachpb.KeyValue{Key: row.Key, Value: *row.Value}, nil /* alloc */)
+				if err != nil {
+					return err
 				}
-				oldRawValue := []byte(string(*dStr))
+				oldRawValue := []byte(val.Value)
 				if bytes.Equal(oldRawValue, rawValue) {
 					return nil
 				}
@@ -645,22 +678,46 @@ func setVersionSetting(
 					return nil
 				}
 			}
-			// Only if the version has increased, alter the setting.
-			if _, err = txn.ExecEx(
-				ctx, "update-setting", txn.KV(),
-				sessiondata.RootUserSessionDataOverride,
-				`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
-				setting.InternalKey(), string(rawValue), setting.Typ(),
-			); err != nil {
+			// Encode the setting value to write out the updated version.
+			var tuple []byte
+			if tuple, err = valueside.Encode(tuple,
+				valueside.MakeColumnIDDelta(descpb.ColumnID(encoding.NoColumnID),
+					systemschema.SettingsTable.PublicColumns()[1].GetID()),
+				tree.NewDString(string(rawValue)),
+				nil); err != nil {
 				return err
 			}
-
+			if tuple, err = valueside.Encode(tuple,
+				valueside.MakeColumnIDDelta(systemschema.SettingsTable.PublicColumns()[1].GetID(),
+					systemschema.SettingsTable.PublicColumns()[2].GetID()),
+				tree.MustMakeDTimestamp(timeutil.Now(), time.Microsecond),
+				nil); err != nil {
+				return err
+			}
+			if tuple, err = valueside.Encode(tuple,
+				valueside.MakeColumnIDDelta(systemschema.SettingsTable.PublicColumns()[2].GetID(),
+					systemschema.SettingsTable.PublicColumns()[3].GetID()),
+				tree.NewDString(setting.Typ()),
+				nil); err != nil {
+				return err
+			}
+			newValue := &roachpb.Value{}
+			newValue.SetTuple(tuple)
+			if row.Value != nil {
+				if err := txn.CPut(ctx, row.Key, newValue, row.Value.TagAndDataBytes()); err != nil {
+					return err
+				}
+			} else {
+				if err := txn.Put(ctx, row.Key, newValue); err != nil {
+					return err
+				}
+			}
 			// Perform any necessary post-setting validation. This is used in
 			// the tenant upgrade interlock to ensure that the set of sql
 			// servers present at the time of the settings update, matches the
 			// set that was present when the fence bump occurred (see comment in
 			// upgrademanager.Migrate() for more details).
-			if err = postSettingValidate(ctx, txn.KV()); err != nil {
+			if err = postSettingValidate(ctx, txn); err != nil {
 				return err
 			}
 			return err
