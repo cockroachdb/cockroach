@@ -1936,6 +1936,7 @@ func (c *clusterImpl) StartE(
 	// Set the same seed on every node, to be used by builds with
 	// runtime assertions enabled.
 	setUnlessExists("COCKROACH_RANDOM_SEED", c.cockroachRandomSeed())
+	l.Printf("ROACHTEST COCKROACH_RANDOM_SEED: %d", c.cockroachRandomSeed())
 
 	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
 	// Remove in v23.2.
