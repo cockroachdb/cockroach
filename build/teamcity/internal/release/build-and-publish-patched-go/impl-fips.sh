@@ -11,7 +11,7 @@ GO_VERSION=1.21.3
 yum install git golang golang-bin openssl openssl-devel -y
 cat /etc/os-release
 go version
-openssl version
+openssl version -a
 git config --global user.name "golang-fips ci"
 git config --global user.email "<>"
 

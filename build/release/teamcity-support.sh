@@ -96,9 +96,9 @@ verify_docker_image(){
       echo "ERROR: Go version '$go_version' does not contain 'fips'"
       error=1
     fi
-    openssl_version_output=$(docker run --platform="$docker_platform" "$img" shell -c "openssl version")
-    if [[ $openssl_version_output != *"FIPS"* ]]; then
-      echo "ERROR: openssl version '$openssl_version_output' does not contain 'FIPS'"
+    openssl_version_output=$(docker run --platform="$docker_platform" "$img" shell -c "openssl version -f")
+    if [[ $openssl_version_output != *"FIPS_VERSION"* ]]; then
+      echo "ERROR: openssl version '$openssl_version_output' does not contain 'FIPS_VERSION'"
       error=1
     fi
   fi
