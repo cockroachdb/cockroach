@@ -105,14 +105,10 @@ func grpcTransportFactoryImpl(
 ) (Transport, error) {
 	transport := grpcTransportPool.Get().(*grpcTransport)
 	// Grab the saved slice memory from grpcTransport.
-	replicas := transport.replicas
-
 	descriptors := rs.Descriptors()
-	if cap(replicas) < len(descriptors) {
-		replicas = make([]roachpb.ReplicaDescriptor, len(descriptors))
-	} else {
-		replicas = replicas[:len(descriptors)]
-	}
+	// TODO(baptist): Remove this copy once transport no longer modifies replicas.
+	replicas := make([]roachpb.ReplicaDescriptor, len(descriptors))
+	copy(replicas, descriptors)
 
 	// We'll map the index of the replica descriptor in its slice to its health.
 	var health util.FastIntMap
@@ -125,7 +121,6 @@ func grpcTransportFactoryImpl(
 			health.Set(i, healthUnhealthy)
 		}
 	}
-
 	*transport = grpcTransport{
 		opts:          opts,
 		nodeDialer:    nodeDialer,
