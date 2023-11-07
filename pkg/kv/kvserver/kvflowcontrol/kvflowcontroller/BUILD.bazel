@@ -29,7 +29,6 @@ go_library(
 go_test(
     name = "kvflowcontroller_test",
     srcs = ["kvflowcontroller_test.go"],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":kvflowcontroller"],
     deps = [

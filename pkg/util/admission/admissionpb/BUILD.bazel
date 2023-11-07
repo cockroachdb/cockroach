@@ -39,7 +39,6 @@ go_proto_library(
 go_test(
     name = "admissionpb_test",
     srcs = ["io_threshold_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":admissionpb"],
     deps = ["@com_github_stretchr_testify//require"],
 )

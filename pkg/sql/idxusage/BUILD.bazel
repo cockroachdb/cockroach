@@ -28,7 +28,6 @@ go_test(
         "index_usage_stats_rec_test.go",
         "local_index_usage_stats_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":idxusage"],
     deps = [
         "//pkg/roachpb",

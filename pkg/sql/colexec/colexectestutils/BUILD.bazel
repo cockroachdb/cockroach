@@ -48,7 +48,6 @@ go_test(
         "main_test.go",
         "utils_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":colexectestutils"],
     deps = [
         "//pkg/col/coldata",

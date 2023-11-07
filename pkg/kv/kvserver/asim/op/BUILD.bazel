@@ -26,7 +26,6 @@ go_library(
 go_test(
     name = "op_test",
     srcs = ["controller_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":op"],
     deps = [
         "//pkg/kv/kvserver/allocator",

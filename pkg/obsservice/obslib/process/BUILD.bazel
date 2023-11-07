@@ -24,7 +24,6 @@ go_test(
         "mem_queue_processor_test.go",
         "processor_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":process"],
     deps = [
         "//pkg/obsservice/obslib/queue",

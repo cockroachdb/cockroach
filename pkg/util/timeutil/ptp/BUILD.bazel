@@ -63,7 +63,6 @@ go_library(
 go_test(
     name = "ptp_test",
     srcs = ["ptp_clock_linux_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":ptp"],
     deps = select({
         "@io_bazel_rules_go//go/platform:android": [

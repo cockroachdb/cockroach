@@ -7,7 +7,6 @@ go_test(
         "gc_job_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
     exec_properties = {"Pool": "large"},
     shard_count = 2,
     deps = [

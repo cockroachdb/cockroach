@@ -4,7 +4,6 @@ go_test(
     name = "testshout_test",
     size = "small",
     srcs = ["shout_test.go"],
-    args = ["-test.timeout=55s"],
     deps = [
         "//pkg/util/log",
         "//pkg/util/log/logconfig",

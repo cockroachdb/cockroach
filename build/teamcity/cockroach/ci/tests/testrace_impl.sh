@@ -20,7 +20,6 @@ do
     do
         size="${kv%%:*}"
         timeout="${kv#*:}"
-        go_timeout=$(($timeout - 5))
         tests=$(bazel query "attr(size, $size, kind("go_test", tests($pkg)))" --output=label)
         # Run affected tests.
         for test in $tests
@@ -32,8 +31,8 @@ do
             fi
             $(bazel info bazel-bin --config=ci)/pkg/cmd/bazci/bazci_/bazci -- test --config=ci --config=race "$test" \
                                 --test_env=COCKROACH_LOGIC_TESTS_SKIP=true \
-                                --test_env=GOMAXPROCS=8 \
-                                --test_arg=-test.timeout="${go_timeout}s"
+                                --test_timeout $timeout \
+                                --test_env=GOMAXPROCS=8
         done
     done
 done

@@ -47,7 +47,6 @@ go_test(
         "executor_test.go",
         "export_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":roachprod-microbench_lib"],
     deps = [

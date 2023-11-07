@@ -6,7 +6,6 @@ go_test(
         "azure_connection_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
     tags = ["ccl_test"],
     deps = [
         "//pkg/base",

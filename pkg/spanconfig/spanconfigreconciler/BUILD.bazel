@@ -31,6 +31,5 @@ go_library(
 go_test(
     name = "spanconfigreconciler_test",
     srcs = ["reconciler_test.go"],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
 )

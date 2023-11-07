@@ -58,7 +58,6 @@ go_test(
         "store_spec_test.go",
         "test_server_args_test.go",
     ],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":base"],
     deps = [

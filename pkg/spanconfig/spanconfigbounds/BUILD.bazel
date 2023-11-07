@@ -35,7 +35,6 @@ go_test(
         "data_driven_test.go",
         "helpers_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":spanconfigbounds"],
     deps = [

@@ -16,7 +16,6 @@ go_test(
     name = "dumpstore_test",
     size = "small",
     srcs = ["dumpstore_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":dumpstore"],
     deps = [
         "@com_github_stretchr_testify//assert",

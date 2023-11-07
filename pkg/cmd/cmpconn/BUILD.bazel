@@ -26,7 +26,6 @@ go_test(
     name = "cmpconn_test",
     size = "small",
     srcs = ["compare_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":cmpconn"],
     deps = [
         "@com_github_cockroachdb_apd_v3//:apd",

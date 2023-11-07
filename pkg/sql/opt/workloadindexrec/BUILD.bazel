@@ -20,7 +20,6 @@ go_library(
 go_test(
     name = "workloadindexrec_test",
     srcs = ["index_trie_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":workloadindexrec"],
     deps = ["//pkg/sql/sem/tree"],
 )

@@ -29,7 +29,6 @@ go_library(
 go_test(
     name = "replicationutils_test",
     srcs = ["utils_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":replicationutils"],
     tags = ["ccl_test"],
     deps = [

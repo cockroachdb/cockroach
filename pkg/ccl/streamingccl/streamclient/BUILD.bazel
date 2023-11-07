@@ -52,7 +52,6 @@ go_test(
         "partitioned_stream_client_test.go",
         "span_config_stream_client_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":streamclient"],
     tags = [
         "ccl_test",

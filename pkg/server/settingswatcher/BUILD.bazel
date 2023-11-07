@@ -46,7 +46,6 @@ go_test(
         "settings_watcher_external_test.go",
         "version_guard_test.go",
     ],
-    args = ["-test.timeout=295s"],
     deps = [
         ":settingswatcher",
         "//pkg/base",

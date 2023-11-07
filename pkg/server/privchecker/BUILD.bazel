@@ -32,7 +32,6 @@ go_test(
         "main_test.go",
         "privchecker_test.go",
     ],
-    args = ["-test.timeout=295s"],
     deps = [
         ":privchecker",
         "//pkg/base",

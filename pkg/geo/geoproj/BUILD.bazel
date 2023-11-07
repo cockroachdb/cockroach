@@ -51,7 +51,6 @@ go_test(
     name = "geoproj_test",
     size = "small",
     srcs = ["geoproj_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":geoproj"],
     deps = [
         "//pkg/geo/geoprojbase",

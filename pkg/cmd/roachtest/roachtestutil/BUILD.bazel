@@ -28,7 +28,6 @@ go_library(
 go_test(
     name = "roachtestutil_test",
     srcs = ["commandbuilder_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":roachtestutil"],
     deps = ["@com_github_stretchr_testify//require"],
 )

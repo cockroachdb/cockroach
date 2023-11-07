@@ -28,7 +28,6 @@ go_test(
         "filter_test.go",
         "test_spec_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":registry"],
     deps = [

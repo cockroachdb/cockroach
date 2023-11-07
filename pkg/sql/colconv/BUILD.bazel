@@ -30,7 +30,6 @@ go_library(
 go_test(
     name = "colconv_test",
     srcs = ["batch_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":colconv"],
     deps = [
         "//pkg/col/coldata",

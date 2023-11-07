@@ -65,7 +65,6 @@ go_test(
         "stream_data_test.go",
         "utils_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":flowinfra"],
     deps = [
         "//pkg/base",

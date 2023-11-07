@@ -24,7 +24,6 @@ go_test(
     name = "invertedexpr_test",
     size = "small",
     srcs = ["geo_expression_test.go"],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":invertedexpr"],
     deps = [

@@ -13,6 +13,5 @@ go_test(
         "example_test.go",
         "list_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":list"],
 )

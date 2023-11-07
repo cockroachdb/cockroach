@@ -14,7 +14,6 @@ go_library(
 go_test(
     name = "replicastats_test",
     srcs = ["replica_stats_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":replicastats"],
     deps = [
         "//pkg/roachpb",

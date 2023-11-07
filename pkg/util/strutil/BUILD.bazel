@@ -10,7 +10,6 @@ go_library(
 go_test(
     name = "strutil_test",
     srcs = ["util_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":strutil"],
     deps = ["@com_github_stretchr_testify//require"],
 )
