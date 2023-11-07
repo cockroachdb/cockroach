@@ -10,7 +10,10 @@
 
 package clusterversion
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
 
 // Key is a unique identifier for a version of CockroachDB.
 type Key int
@@ -650,32 +653,43 @@ const developmentBranch = true
 
 // finalVersion should be set on a release branch to the minted final cluster
 // version key, e.g. to V23_2 on the release-23.2 branch once it is minted.
-// Setting it has the effect of ensuring no versions are subsequently added.
+// Setting it has the effect of ensuring no versions are subsequently added (see
+// TestFinalVersion).
 const finalVersion Key = -1
-
-func init() {
-	if finalVersion >= 0 {
-		if Latest != finalVersion {
-			panic("latest version does not match final version")
-		}
-		if developmentBranch {
-			panic("final version set on development branch")
-		}
-	} else if Latest.IsFinal() {
-		panic("finalVersion not set but latetest version is final")
-	}
-}
 
 // Version returns the roachpb.Version corresponding to a key.
 func (k Key) Version() roachpb.Version {
 	version := versionTable[k]
-	return maybeDevOffset(k, version)
+	return maybeApplyDevOffset(k, version)
 }
 
-// IsFinal returns true if the key is a final version (as opposed to a
-// transitional internal version during upgrade).
+// IsFinal returns true if the key corresponds to a final version (as opposed to
+// a transitional internal version during upgrade).
 func (k Key) IsFinal() bool {
 	return k.Version().IsFinal()
+}
+
+// ReleaseSeries returns the final version for the release series the Key
+// belongs to. Specifically:
+//   - if the key corresponds to a final version (e.g. 23.2), the result is the
+//     same version; e.g. V23_2.ReleaseSeries() is v23.2.
+//   - if the key corresponds to a transitional upgrade version (e.g. v23.2-8),
+//     the result is the next final version (e.g. v24.1).
+//
+// Note that the result does not have any DevOffset applied.
+func (k Key) ReleaseSeries() roachpb.Version {
+	// Find the first key >= k that is a final version.
+	for k := k; k < numKeys; k++ {
+		if k.IsFinal() {
+			return removeDevOffset(k.Version())
+		}
+	}
+	// k is a dev version in the latest release series.
+	major, minor := build.BranchReleaseSeries()
+	return roachpb.Version{
+		Major: int32(major),
+		Minor: int32(minor),
+	}
 }
 
 func (k Key) String() string {
