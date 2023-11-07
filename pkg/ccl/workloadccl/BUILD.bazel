@@ -44,6 +44,7 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/settings/cluster",
         "//pkg/sql/stats",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
