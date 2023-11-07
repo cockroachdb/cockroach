@@ -320,9 +320,9 @@ for img in "${images[@]}"; do
     echo "ERROR: Build tag from 'cockroach version --build-tag' mismatch, expected '$build_name', got '$build_tag_output'"
     error=1
   fi
-  openssl_version_output=$(docker run --platform="linux/amd64" "$img" shell -c "openssl version")
-  if [[ $openssl_version_output != *"FIPS"* ]]; then
-    echo "ERROR: openssl version '$openssl_version_outpu' does not contain 'FIPS'"
+  openssl_version_output=$(docker run --platform="linux/amd64" "$img" shell -c "openssl version -f")
+  if [[ $openssl_version_output != *"FIPS_VERSION"* ]]; then
+    echo "ERROR: openssl version '$openssl_version_outpu' does not contain 'FIPS_VERSION'"
     error=1
   fi
 done
