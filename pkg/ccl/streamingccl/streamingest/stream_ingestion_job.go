@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
@@ -312,7 +313,7 @@ func ingestWithRetries(
 		log.Warningf(ctx, msgFmt, err)
 		updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationError,
 			fmt.Sprintf(msgFmt, err))
-		newReplicatedTime := loadReplicatedTime(ctx, execCtx.ExecCfg().InternalDB, ingestionJob)
+		newReplicatedTime := loadReplicatedTime(ctx, execCtx.ExecCfg().InternalDB, ingestionJob, execCtx.ExecCfg().Settings.Version)
 		if lastReplicatedTime.Less(newReplicatedTime) {
 			r.Reset()
 			lastReplicatedTime = newReplicatedTime
@@ -326,8 +327,8 @@ func ingestWithRetries(
 	return nil
 }
 
-func loadReplicatedTime(ctx context.Context, db isql.DB, ingestionJob *jobs.Job) hlc.Timestamp {
-	latestProgress, err := replicationutils.LoadIngestionProgress(ctx, db, ingestionJob.ID())
+func loadReplicatedTime(ctx context.Context, db isql.DB, ingestionJob *jobs.Job, cv clusterversion.Handle) hlc.Timestamp {
+	latestProgress, err := replicationutils.LoadIngestionProgress(ctx, db, ingestionJob.ID(), cv)
 	if err != nil {
 		log.Warningf(ctx, "error loading job progress: %s", err)
 		return hlc.Timestamp{}

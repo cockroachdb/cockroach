@@ -3698,7 +3698,7 @@ func TestLoadJobProgress(t *testing.T) {
 	_, err := r.CreateJobWithTxn(ctx, rec, 7, nil)
 	require.NoError(t, err)
 
-	p, err := jobs.LoadJobProgress(ctx, s.InternalDB().(isql.DB), 7)
+	p, err := jobs.LoadJobProgress(ctx, s.InternalDB().(isql.DB), 7, s.ClusterSettings().Version)
 	require.NoError(t, err)
 	require.Equal(t, []float32{7.1}, p.GetDetails().(*jobspb.Progress_Import).Import.ReadProgress)
 }

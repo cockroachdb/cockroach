@@ -384,7 +384,7 @@ func TestJobInfoUpgradeRegressionTests(t *testing.T) {
 	require.NoError(t, err)
 
 	err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		infoStorage := jobs.InfoStorageForJob(txn, jobID)
+		infoStorage := jobs.InfoStorageForJob(txn, jobID, execCfg.Settings.Version)
 		payloadBytes, _, err := infoStorage.Get(ctx, jobs.GetLegacyPayloadKey())
 		if err != nil {
 			return err

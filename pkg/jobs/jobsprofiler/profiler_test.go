@@ -82,7 +82,7 @@ func TestProfilerStorePlanDiagram(t *testing.T) {
 			testutils.SucceedsSoon(t, func() error {
 				var count int
 				err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-					infoStorage := jobs.InfoStorageForJob(txn, jobID)
+					infoStorage := jobs.InfoStorageForJob(txn, jobID, execCfg.Settings.Version)
 					return infoStorage.Iterate(ctx, "dsp-diag-url", func(infoKey string, value []byte) error {
 						count++
 						return nil

@@ -53,7 +53,7 @@ func StorePlanDiagram(
 			}
 
 			const infoKey = "dsp-diag-url-%d"
-			infoStorage := jobs.InfoStorageForJob(txn, jobID)
+			infoStorage := jobs.InfoStorageForJob(txn, jobID, cv)
 			return infoStorage.Write(ctx, fmt.Sprintf(infoKey, timeutil.Now().UnixNano()),
 				[]byte(diagURL.String()))
 		})

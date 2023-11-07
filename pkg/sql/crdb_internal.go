@@ -1064,7 +1064,7 @@ func populateSystemJobsTableRows(
 		params...,
 	)
 	if err != nil {
-		return matched, jobs.MaybeGenerateForcedRetryableError(ctx, p.Txn(), err)
+		return matched, jobs.MaybeGenerateForcedRetryableError(ctx, p.Txn(), err, p.execCfg.Settings.Version)
 	}
 
 	cleanup := func(ctx context.Context) {
@@ -1077,7 +1077,7 @@ func populateSystemJobsTableRows(
 	for {
 		hasNext, err := it.Next(ctx)
 		if !hasNext || err != nil {
-			return matched, jobs.MaybeGenerateForcedRetryableError(ctx, p.Txn(), err)
+			return matched, jobs.MaybeGenerateForcedRetryableError(ctx, p.Txn(), err, p.execCfg.Settings.Version)
 		}
 
 		currentRow := it.Cur()
