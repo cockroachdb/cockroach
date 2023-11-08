@@ -183,8 +183,8 @@ func TestDeterministicHookSeeds(t *testing.T) {
 
 	expectedData := [][]int{
 		{37, 94, 58, 5, 22},
-		{40, 30, 46, 88, 46},
-		{82, 35, 57, 54, 8},
+		{56, 88, 23, 85, 45},
+		{96, 91, 48, 85, 76},
 	}
 	const numRums = 50
 	for j := 0; j < numRums; j++ {
