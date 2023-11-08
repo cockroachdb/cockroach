@@ -20,6 +20,7 @@ package serverutils
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"net/url"
 	"strconv"
 	"time"
@@ -48,14 +49,26 @@ import (
 // If you see this message, the test server was configured to route SQL queries
 // to a virtual cluster (secondary tenant). If you are only seeing a test
 // failure when this message appears, there may be a problem specific to cluster
-// virtualization or multi-tenancy.
+// virtualization or multi-tenancy. A virtual cluster can be started either as a
+// shared process or as an external process. The problem may be specific to one
+// of these modes, so it is important to note which mode was used from the log
+// message.
 //
 // To investigate, consider using "COCKROACH_TEST_TENANT=true" to force-enable
 // just the virtual cluster in all runs (or, alternatively, "false" to
 // force-disable), or use "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true"
 // to disable all random test variables altogether.`
 
-const defaultTestTenantMessage = `automatically injected virtual cluster under test; see comment at top of test_server_shim.go for details.`
+var defaultTestTenantMessage = func(sharedProcess bool) string {
+	processModeMessage := "an external process"
+	if sharedProcess {
+		processModeMessage = "a shared process"
+	}
+	return fmt.Sprintf(
+		`automatically injected %s virtual cluster under test; see comment at top of test_server_shim.go for details.`,
+		processModeMessage,
+	)
+}
 
 var PreventStartTenantError = errors.New("attempting to manually start a virtual cluster while " +
 	"DefaultTestTenant is set to TestTenantProbabilisticOnly")
@@ -123,7 +136,7 @@ func ShouldStartDefaultTestTenant(
 			panic(err)
 		}
 		if v {
-			t.Log(defaultTestTenantMessage + "\n(override via COCKROACH_TEST_TENANT)")
+			t.Log(defaultTestTenantMessage(shared) + "\n(override via COCKROACH_TEST_TENANT)")
 			return base.InternalNonDefaultDecision(baseArg, true /* enabled */, shared /* shared */)
 		}
 		return base.InternalNonDefaultDecision(baseArg, false /* enabled */, false /* shared */)
@@ -139,7 +152,7 @@ func ShouldStartDefaultTestTenant(
 				t.Logf("cluster virtualization disabled in global scope due to issue: #%d (expected label: %s)", issueNum, label)
 			}
 		} else {
-			t.Log(defaultTestTenantMessage + "\n(override via TestingSetDefaultTenantSelectionOverride)")
+			t.Log(defaultTestTenantMessage(shared) + "\n(override via TestingSetDefaultTenantSelectionOverride)")
 		}
 		return override
 	}
@@ -149,7 +162,7 @@ func ShouldStartDefaultTestTenant(
 	// more often than not and that is what we want.
 	enabled := !util.ConstantWithMetamorphicTestBoolWithoutLogging("disable-test-tenant", false)
 	if enabled && t != nil {
-		t.Log(defaultTestTenantMessage)
+		t.Log(defaultTestTenantMessage(shared))
 	}
 	if enabled {
 		return base.InternalNonDefaultDecision(baseArg, true /* enable */, shared /* shared */)
