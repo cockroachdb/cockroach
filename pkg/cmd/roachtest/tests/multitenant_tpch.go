@@ -59,7 +59,7 @@ func runMultiTenantTPCH(
 		}
 		for queryNum := 1; queryNum <= tpch.NumQueries; queryNum++ {
 			cmd := fmt.Sprintf("./workload run tpch %s --secure "+
-				"--concurrency=1 --db=tpch --max-ops=%d --queries=%d",
+				"--concurrency=1 --db=tpch --max-ops=%d --queries=%d {pgurl:1}",
 				url, numRunsPerQuery, queryNum)
 			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1), cmd)
 			workloadOutput := result.Stdout + result.Stderr

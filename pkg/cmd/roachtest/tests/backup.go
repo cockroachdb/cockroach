@@ -335,11 +335,15 @@ func registerBackup(r registry.Registry) {
 			m := c.NewMonitor(ctx)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`running backup`)
+				pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(1))
+				if err != nil {
+					return err
+				}
 				// Tick once before starting the backup, and once after to capture the
 				// total elapsed time. This is used by roachperf to compute and display
 				// the average MB/sec per node.
 				tick()
-				c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
+				c.Run(ctx, c.Node(1), `./cockroach sql --insecure --url=`+pgurl+` -e "
 				BACKUP bank.bank TO 'gs://`+backupTestingBucket+`/`+dest+`?AUTH=implicit'"`)
 				tick()
 
