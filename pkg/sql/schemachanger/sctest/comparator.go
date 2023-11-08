@@ -80,8 +80,9 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 		// state. This step is to account for the known behavior difference between
 		// the two schema changers.
 		// Only run when not in a transaction (otherwise certain DDL combo can make
-		// sql queries issued during modification break; see commit message).
-		if !isInATransaction(ctx, t, legacyConn) && !syntaxError {
+		// sql queries issued during modification break; see commit message) and
+		// `line` is single DDL statement.
+		if !isInATransaction(ctx, t, legacyConn) && !syntaxError && singleDDLStmt(line) {
 			line = modifyBlacklistedStmt(ctx, t, line, legacyConn)
 		}
 
@@ -106,6 +107,14 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 			}
 		}
 	}
+}
+
+func singleDDLStmt(line string) bool {
+	parsedStmts, err := parser.Parse(line)
+	if err != nil {
+		return false
+	}
+	return len(parsedStmts) == 1 && parsedStmts[0].AST.StatementType() == tree.TypeDDL
 }
 
 func containsCommit(line string) bool {
