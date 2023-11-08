@@ -69,6 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
@@ -3585,7 +3586,7 @@ func (s *statusServer) SpanStats(
 		return nil, err
 	}
 
-	batchSize := int(roachpb.SpanStatsBatchLimit.Get(&s.st.SV))
+	batchSize := int(builtins.SpanStatsBatchLimit.Get(&s.st.SV))
 	return batchedSpanStats(ctx, req, s.sqlServer.tenantConnect.SpanStats, batchSize)
 }
 
@@ -3604,7 +3605,7 @@ func (s *systemStatusServer) SpanStats(
 		return nil, err
 	}
 
-	batchSize := int(roachpb.SpanStatsBatchLimit.Get(&s.st.SV))
+	batchSize := int(builtins.SpanStatsBatchLimit.Get(&s.st.SV))
 	return batchedSpanStats(ctx, req, s.getSpanStatsInternal, batchSize)
 }
 
