@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -104,11 +103,7 @@ func (cv *clusterVersionSetting) initialize(
 
 	// Return the serialized form of the new version.
 	newV := ClusterVersion{Version: version}
-	encoded, err := protoutil.Marshal(&newV)
-	if err != nil {
-		return err
-	}
-	cv.SetInternal(ctx, sv, encoded)
+	cv.SetInternal(ctx, sv, newV)
 	return nil
 }
 
@@ -131,18 +126,11 @@ func (cv *clusterVersionSetting) activeVersion(
 func (cv *clusterVersionSetting) activeVersionOrEmpty(
 	ctx context.Context, sv *settings.Values,
 ) ClusterVersion {
-	encoded := cv.GetInternal(sv)
-	if encoded == nil {
+	curVer := cv.GetInternal(sv)
+	if curVer == nil {
 		return ClusterVersion{}
 	}
-	var curVer ClusterVersion
-	// NB: our linter requires using protoutil.Unmarshal here, but it causes an
-	// unnecessary allocation. This and other uses in this file are exceptions.
-	// TODO(pavelkalinnikov): don't parse proto on each time reading this setting.
-	if err := curVer.Unmarshal(encoded.([]byte)); err != nil {
-		log.Fatalf(ctx, "%v", err)
-	}
-	return curVer
+	return curVer.(ClusterVersion)
 }
 
 // isActive returns true if the features of the supplied version key are active

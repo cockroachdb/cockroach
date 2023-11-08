@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -219,12 +220,7 @@ func (v *handleImpl) SetActiveVersion(ctx context.Context, cv ClusterVersion) er
 		return err
 	}
 
-	encoded, err := protoutil.Marshal(&cv)
-	if err != nil {
-		return err
-	}
-
-	v.setting.SetInternal(ctx, v.sv, encoded)
+	v.setting.SetInternal(ctx, v.sv, cv)
 	return nil
 }
 
@@ -272,8 +268,15 @@ func (cv ClusterVersion) SafeFormat(p redact.SafePrinter, _ rune) {
 	p.Print(cv.Version)
 }
 
-// ClusterVersionImpl implements the settings.ClusterVersionImpl interface.
-func (cv ClusterVersion) ClusterVersionImpl() {}
+// Encode the cluster version (using the protobuf encoding).
+func (cv ClusterVersion) Encode() []byte {
+	encoded, err := protoutil.Marshal(&cv)
+	if err != nil {
+		// Marshal should never fail.
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "error marshalling version"))
+	}
+	return encoded
+}
 
 var _ settings.ClusterVersionImpl = ClusterVersion{}
 

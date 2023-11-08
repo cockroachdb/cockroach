@@ -43,7 +43,14 @@ func init() {
 
 var _ settings.ClusterVersionImpl = &dummyVersion{}
 
-func (d *dummyVersion) ClusterVersionImpl() {}
+// Encode is part of the ClusterVersionImpl interface.
+func (d *dummyVersion) Encode() []byte {
+	encoded, err := d.Marshal()
+	if err != nil {
+		panic(err)
+	}
+	return encoded
+}
 
 // Unmarshal is part of the protoutil.Message interface.
 func (d *dummyVersion) Unmarshal(data []byte) error {
@@ -887,12 +894,8 @@ func TestSystemOnlyDisallowedOnVirtualCluster(t *testing.T) {
 func setDummyVersion(dv dummyVersion, vs *settings.VersionSetting, sv *settings.Values) error {
 	// This is a bit round about because the VersionSetting doesn't get updated
 	// through the updater, like most other settings. In order to set it, we set
-	// the internal encoded state by hand.
-	encoded, err := protoutil.Marshal(&dv)
-	if err != nil {
-		return err
-	}
-	vs.SetInternal(context.Background(), sv, encoded)
+	// the internal state by hand.
+	vs.SetInternal(context.Background(), sv, &dv)
 	return nil
 }
 
