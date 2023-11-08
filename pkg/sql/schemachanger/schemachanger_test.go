@@ -932,6 +932,7 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"RELEASE SAVEPOINT cockroach_restart;  -- move txn into DONE state",
 			"SELECT 1;  -- expect to be ignored",
 			"COMMIT;",
+			"CREATE TABLE t11 (i INT NOT NULL); ALTER TABLE t11 ALTER PRIMARY KEY USING COLUMNS (i); -- multi-statement implicit txn",
 
 			// statements that will be altered due to known behavioral differences in LSC vs DSC.
 			"ALTER TABLE t1 ADD COLUMN xyz INT DEFAULT 30, ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i; -- unimplemented in legacy schema changer; expect to skip this line",
