@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/workloadindexrec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -63,6 +64,18 @@ func init() {
 		registerBuiltin(k, v, tree.GeneratorClass, enforceClass)
 	}
 }
+
+const DefaultSpanStatsSpanLimit = 1000
+
+// SpanStatsBatchLimit registers the maximum number of spans allowed in a
+// span stats request payload.
+var SpanStatsBatchLimit = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"server.span_stats.span_batch_limit",
+	"the maximum number of spans allowed in a request payload for span statistics",
+	DefaultSpanStatsSpanLimit,
+	settings.PositiveInt,
+)
 
 func genProps() tree.FunctionProperties {
 	return tree.FunctionProperties{
@@ -3422,7 +3435,7 @@ func makeTableSpanStatsGenerator(
 		}
 	}
 
-	spanBatchLimit := roachpb.SpanStatsBatchLimit.Get(&evalCtx.Settings.SV)
+	spanBatchLimit := SpanStatsBatchLimit.Get(&evalCtx.Settings.SV)
 	return newTableSpanStatsIterator(evalCtx, dbId, tableId,
 		int(spanBatchLimit)), nil
 }

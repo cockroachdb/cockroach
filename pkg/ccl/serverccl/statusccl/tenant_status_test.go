@@ -207,7 +207,7 @@ func testTenantSpanStats(ctx context.Context, t *testing.T, helper serverccl.Ten
 		require.NoError(t, err)
 		require.Contains(t, res.SpanToStats, aSpan.String())
 		// Reset the span batch limit to default.
-		_, err = helper.HostCluster().ServerConn(0).Exec(`SET CLUSTER SETTING server.span_stats.span_batch_limit = $1`, roachpb.DefaultSpanStatsSpanLimit)
+		_, err = helper.HostCluster().ServerConn(0).Exec(`RESET CLUSTER SETTING server.span_stats.span_batch_limit`)
 		require.NoError(t, err)
 	})
 
