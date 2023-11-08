@@ -7,6 +7,7 @@ go_library(
         "concurrency_control.go",
         "concurrency_manager.go",
         "latch_manager.go",
+        "lock_conflicts.go",
         "lock_table.go",
         "lock_table_waiter.go",
         "metrics.go",
@@ -53,6 +54,7 @@ go_test(
     srcs = [
         "concurrency_manager_test.go",
         "datadriven_util_test.go",
+        "lock_conflicts_test.go",
         "lock_table_test.go",
         "lock_table_waiter_test.go",
         ":keylocks_interval_btree_test.go",  # keep

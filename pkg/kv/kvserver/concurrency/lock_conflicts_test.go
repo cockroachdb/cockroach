@@ -8,16 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package lock_test
+package concurrency_test
 
 import (
 	"context"
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -31,12 +32,12 @@ func makeTS(nanos int64) hlc.Timestamp {
 }
 
 func testCheckLockConflicts(
-	t *testing.T, desc string, m1, m2 lock.Mode, st *cluster.Settings, exp bool,
+	t *testing.T, desc string, m1, m2 lock.Mode, st *clustersettings.Settings, exp bool,
 ) {
 	t.Run(desc, func(t *testing.T) {
-		require.Equal(t, exp, lock.Conflicts(m1, m2, &st.SV))
+		require.Equal(t, exp, concurrency.LockConflicts(m1, m2, &st.SV))
 		// Test for symmetry -- things should work the other way around as well.
-		require.Equal(t, exp, lock.Conflicts(m2, m1, &st.SV))
+		require.Equal(t, exp, concurrency.LockConflicts(m2, m1, &st.SV))
 	})
 }
 
@@ -53,7 +54,7 @@ func TestCheckLockConflicts_NoneWithNone(t *testing.T) {
 	tsMid := makeTS(2)
 	tsAbove := makeTS(3)
 
-	st := cluster.MakeTestingClusterSettings()
+	st := clustersettings.MakeTestingClusterSettings()
 	for _, ts := range []hlc.Timestamp{tsBelow, tsMid, tsAbove} {
 		for _, iso1 := range isolation.Levels() {
 			for _, iso2 := range isolation.Levels() {
@@ -125,7 +126,7 @@ func TestCheckLockConflicts_NoneWithSharedUpdateIntent(t *testing.T) {
 			exp:  false,
 		},
 	}
-	st := cluster.MakeTestingClusterSettings()
+	st := clustersettings.MakeTestingClusterSettings()
 	for _, tc := range testCases {
 		for _, iso := range isolation.Levels() {
 			nonLockingRead := lock.MakeModeNone(ts, iso)
@@ -162,10 +163,10 @@ func TestCheckLockConflicts_NoneWithExclusive(t *testing.T) {
 				expConflicts := isoLock == isolation.Serializable &&
 					isoRead == isolation.Serializable && (readTS == tsLock || readTS == tsAbove)
 
-				st := cluster.MakeTestingClusterSettings()
+				st := clustersettings.MakeTestingClusterSettings()
 				// Test with the ExclusiveLocksBlockNonLockingReads cluster setting
 				// enabled.
-				lock.ExclusiveLocksBlockNonLockingReads.Override(ctx, &st.SV, true)
+				concurrency.ExclusiveLocksBlockNonLockingReads.Override(ctx, &st.SV, true)
 				testCheckLockConflicts(
 					t,
 					fmt.Sprintf("#%d non-locking read(%s) exclusive(%s)", i, isoRead, isoLock),
@@ -177,7 +178,7 @@ func TestCheckLockConflicts_NoneWithExclusive(t *testing.T) {
 
 				// Now, test with the ExclusiveLocksBlockNonLockingReads cluster setting
 				// disabled, and ensure the two lock modes do not conflict.
-				lock.ExclusiveLocksBlockNonLockingReads.Override(ctx, &st.SV, false)
+				concurrency.ExclusiveLocksBlockNonLockingReads.Override(ctx, &st.SV, false)
 				testCheckLockConflicts(
 					t,
 					fmt.Sprintf("#%d non-locking read(%s) exclusive(%s)", i, isoRead, isoLock),
@@ -225,7 +226,7 @@ func TestCheckLockConflicts_Shared(t *testing.T) {
 			exp:  true,
 		},
 	}
-	st := cluster.MakeTestingClusterSettings()
+	st := clustersettings.MakeTestingClusterSettings()
 	for _, tc := range testCases {
 		sharedLock := lock.MakeModeShared()
 		testCheckLockConflicts(
@@ -267,7 +268,7 @@ func TestCheckLockConflicts_Update(t *testing.T) {
 			exp:  true,
 		},
 	}
-	st := cluster.MakeTestingClusterSettings()
+	st := clustersettings.MakeTestingClusterSettings()
 	for _, tc := range testCases {
 		updateLock := lock.MakeModeUpdate()
 		testCheckLockConflicts(
@@ -330,7 +331,7 @@ func TestCheckLockConflicts_ExclusiveWithSharedUpdateIntent(t *testing.T) {
 			exp:  true,
 		},
 	}
-	st := cluster.MakeTestingClusterSettings()
+	st := clustersettings.MakeTestingClusterSettings()
 	for _, tc := range testCases {
 		for _, iso := range isolation.Levels() {
 			exclusiveLock := lock.MakeModeExclusive(ts, iso)
@@ -357,7 +358,7 @@ func TestCheckLockConflicts_ExclusiveWithExclusive(t *testing.T) {
 	tsLock := makeTS(2)
 	tsAbove := makeTS(3)
 
-	st := cluster.MakeTestingClusterSettings()
+	st := clustersettings.MakeTestingClusterSettings()
 	for _, ts := range []hlc.Timestamp{tsBelow, tsLock, tsAbove} {
 		for _, iso1 := range isolation.Levels() {
 			for _, iso2 := range isolation.Levels() {
@@ -390,7 +391,7 @@ func TestCheckLockConflicts_IntentWithIntent(t *testing.T) {
 	tsLock := makeTS(2)
 	tsAbove := makeTS(3)
 
-	st := cluster.MakeTestingClusterSettings()
+	st := clustersettings.MakeTestingClusterSettings()
 	for i, ts := range []hlc.Timestamp{tsBelow, tsLock, tsAbove} {
 		intent1 := lock.MakeModeIntent(tsLock)
 		intent2 := lock.MakeModeIntent(ts)
@@ -410,7 +411,7 @@ func TestCheckLockConflicts_Empty(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	tsLock := makeTS(2)
-	st := cluster.MakeTestingClusterSettings()
+	st := clustersettings.MakeTestingClusterSettings()
 	for _, mode := range []lock.Mode{
 		lock.MakeModeIntent(tsLock),
 		lock.MakeModeExclusive(tsLock, isolation.Serializable),

@@ -13,9 +13,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/concurrency/isolation",
-        "//pkg/settings",
         "//pkg/util/hlc",
-        "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],
 )
@@ -53,19 +51,12 @@ go_proto_library(
 
 go_test(
     name = "lock_test",
-    srcs = [
-        "lock_waiter_test.go",
-        "locking_test.go",
-    ],
+    srcs = ["lock_waiter_test.go"],
     deps = [
         ":lock",
-        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/roachpb",
-        "//pkg/settings/cluster",
         "//pkg/storage/enginepb",
         "//pkg/util/hlc",
-        "//pkg/util/leaktest",
-        "//pkg/util/log",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",

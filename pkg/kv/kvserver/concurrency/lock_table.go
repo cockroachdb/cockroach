@@ -717,7 +717,7 @@ func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
 		for e := l.holders.Front(); e != nil; e = e.Next() {
 			tl := e.Value
 			if !g.isSameTxn(tl.getLockHolderTxn()) &&
-				lock.Conflicts(tl.getLockMode(), makeLockMode(str, g.txnMeta(), g.ts), &g.lt.settings.SV) {
+				LockConflicts(tl.getLockMode(), makeLockMode(str, g.txnMeta(), g.ts), &g.lt.settings.SV) {
 				return true, tl.txn, nil // the key is locked by some other transaction; return it
 			}
 		}
@@ -764,7 +764,7 @@ func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
 			// KVNemesis.
 			return false, nil, MarkSkipLockedReplayError(errors.Errorf("SKIP LOCKED request should not find another waiting request from the same transaction"))
 		}
-		if lock.Conflicts(qqg.mode, makeLockMode(str, g.txnMeta(), g.ts), &g.lt.settings.SV) {
+		if LockConflicts(qqg.mode, makeLockMode(str, g.txnMeta(), g.ts), &g.lt.settings.SV) {
 			return true, nil, nil // the conflict isn't with a lock holder, nil is returned
 		}
 	}
@@ -2624,7 +2624,7 @@ func (kl *keyLocks) conflictsWithLockHolders(g *lockTableGuardImpl) bool {
 		// The held lock neither belongs to the request's transaction (which has
 		// special handling above) nor to a transaction that has been finalized.
 		// Check for conflicts.
-		if lock.Conflicts(tl.getLockMode(), g.curLockMode(), &g.lt.settings.SV) {
+		if LockConflicts(tl.getLockMode(), g.curLockMode(), &g.lt.settings.SV) {
 			return true
 		}
 	}
@@ -2792,7 +2792,7 @@ func (kl *keyLocks) shouldRequestActivelyWait(g *lockTableGuardImpl) bool {
 			// conflicting waiters; no need to actively wait here.
 			return false
 		}
-		if lock.Conflicts(qqg.mode, g.curLockMode(), &g.lt.settings.SV) {
+		if LockConflicts(qqg.mode, g.curLockMode(), &g.lt.settings.SV) {
 			return true
 		}
 	}
@@ -2922,7 +2922,7 @@ func (kl *keyLocks) isNonConflictingLock(g *lockTableGuardImpl) bool {
 			// optimistic evaluation attempt.
 			continue
 		}
-		if lock.Conflicts(tl.getLockMode(), g.curLockMode(), &g.lt.settings.SV) {
+		if LockConflicts(tl.getLockMode(), g.curLockMode(), &g.lt.settings.SV) {
 			return false // is not non-conflicting
 		}
 	}
@@ -3367,7 +3367,7 @@ func (kl *keyLocks) recomputeWaitQueues(st *cluster.Settings) {
 		reader := e.Value
 		curr := e
 		e = e.Next()
-		if !lock.Conflicts(reader.curLockMode(), strongestMode, &st.SV) {
+		if !LockConflicts(reader.curLockMode(), strongestMode, &st.SV) {
 			kl.removeReader(curr)
 		}
 	}
@@ -3382,7 +3382,7 @@ func (kl *keyLocks) recomputeWaitQueues(st *cluster.Settings) {
 		qlr := e.Value
 		curr := e
 		e = e.Next()
-		if lock.Conflicts(qlr.mode, strongestMode, &st.SV) {
+		if LockConflicts(qlr.mode, strongestMode, &st.SV) {
 			break
 		}
 		removed := false
@@ -3719,7 +3719,7 @@ func (kl *keyLocks) maybeReleaseCompatibleLockingRequests() {
 		if mode.Empty() {
 			mode = qg.mode
 		} else {
-			if lock.Conflicts(mode, qg.mode, &qg.guard.lt.settings.SV) {
+			if LockConflicts(mode, qg.mode, &qg.guard.lt.settings.SV) {
 				break
 			}
 			// NB: Once we add support for UPDATE locking strength, this logic
@@ -3773,7 +3773,7 @@ func (kl *keyLocks) testingAssertCompatibleLockMode(
 			// Holder belongs to a different transaction ...
 			if holder.getLockHolderTxn().ID != txn.ID &&
 				// ... which conflicts with the supplied lock mode.
-				lock.Conflicts(holderMode, m, &st.SV) {
+				LockConflicts(holderMode, m, &st.SV) {
 				return errors.AssertionFailedf(
 					"incompatibility detected; lock by transaction %s with strength %s incompatible with an "+
 						"already held lock by %s with strength %s",
