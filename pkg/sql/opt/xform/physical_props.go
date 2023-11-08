@@ -59,7 +59,7 @@ func BuildChildPhysicalProps(
 
 	// ScalarExprs don't support required physical properties; don't build
 	// physical properties for them.
-	if _, ok := parent.Child(nth).(opt.ScalarExpr); ok {
+	if opt.IsScalarOp(parent.Child(nth)) {
 		return mem.InternPhysicalProps(&childProps)
 	}
 
