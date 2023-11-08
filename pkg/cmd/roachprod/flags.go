@@ -334,8 +334,6 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 	}
 
 	for _, cmd := range []*cobra.Command{startCmd, startInstanceCmd} {
-		cmd.Flags().BoolVar(&startOpts.Sequential,
-			"sequential", startOpts.Sequential, "start nodes sequentially so node IDs match hostnames")
 		cmd.Flags().Int64Var(&startOpts.NumFilesLimit, "num-files-limit", startOpts.NumFilesLimit,
 			"limit the number of files that can be created by the cockroach process")
 	}

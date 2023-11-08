@@ -2972,8 +2972,8 @@ func (c *SyncedCluster) Init(ctx context.Context, l *logger.Logger, node Node) e
 		return errors.WithDetail(errors.CombineErrors(err, res.Err), "install.Init() failed: unable to initialize cluster.")
 	}
 
-	if res, err := c.setClusterSettings(ctx, l, node, ""); err != nil || (res != nil && res.Err != nil) {
-		return errors.WithDetail(errors.CombineErrors(err, res.Err), "install.Init() failed: unable to set cluster settings.")
+	if err := c.setClusterSettings(ctx, l, node, ""); err != nil {
+		return errors.WithDetail(err, "install.Init() failed: unable to set cluster settings.")
 	}
 
 	return nil
