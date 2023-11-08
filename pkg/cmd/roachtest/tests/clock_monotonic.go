@@ -38,10 +38,6 @@ func runClockMonotonicity(
 		t.Fatal(err)
 	}
 
-	if err := c.RunE(ctx, c.Node(1), "test -x ./cockroach"); err != nil {
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-	}
-	c.Wipe(ctx, false /* preserveCerts */)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 	db := c.Conn(ctx, t.L(), c.Spec().NodeCount)

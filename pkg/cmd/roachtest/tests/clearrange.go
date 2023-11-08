@@ -63,8 +63,6 @@ func registerClearRange(r registry.Registry) {
 }
 
 func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressiveChecks bool) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
-
 	t.Status("restoring fixture")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 	m := c.NewMonitor(ctx)

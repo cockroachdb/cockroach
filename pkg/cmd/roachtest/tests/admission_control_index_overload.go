@@ -48,7 +48,6 @@ func registerIndexOverload(r registry.Registry) {
 			crdbNodes := c.Spec().NodeCount - 1
 			workloadNode := c.Spec().NodeCount
 
-			c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), c.Range(1, crdbNodes))
 
 			{

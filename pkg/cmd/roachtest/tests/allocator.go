@@ -37,8 +37,6 @@ const allocatorStableSeconds = 120
 
 func registerAllocator(r registry.Registry) {
 	runAllocator := func(ctx context.Context, t test.Test, c cluster.Cluster, start int, maxStdDev float64) {
-		c.Put(ctx, t.Cockroach(), "./cockroach")
-
 		// Put away one node to be the stats collector.
 		nodes := c.Spec().NodeCount - 1
 
@@ -346,7 +344,6 @@ func runWideReplication(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatalf("9-node cluster required")
 	}
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = []string{"--vmodule=replicate_queue=6"}
 	settings := install.MakeClusterSettings()

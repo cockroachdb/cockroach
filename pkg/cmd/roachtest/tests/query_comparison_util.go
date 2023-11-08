@@ -94,8 +94,6 @@ func runQueryComparison(
 		}
 	}
 
-	c.Put(clusterCtx, t.Cockroach(), "./cockroach")
-
 	for i := 0; ; i++ {
 		if shouldExit() {
 			return

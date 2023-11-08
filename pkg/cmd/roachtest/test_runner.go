@@ -746,7 +746,7 @@ func (r *testRunner) runWorker(
 
 			var setupErr error
 			if c.spec.NodeCount > 0 { // skip during tests
-				setupErr = c.PutDefaultCockroach(ctx, l, t.Cockroach())
+				setupErr = c.PutCockroach(ctx, l, t)
 			}
 			if setupErr == nil {
 				setupErr = c.PutLibraries(ctx, "./lib", t.spec.NativeLibs)
@@ -955,7 +955,7 @@ func (r *testRunner) runTest(
 
 	s := t.Spec().(*registry.TestSpec)
 
-	grafanaAvailable := s.Cluster.Cloud == spec.GCE
+	grafanaAvailable := roachtestflags.Cloud == spec.GCE
 	if err := c.addLabels(map[string]string{VmLabelTestName: testRunID}); err != nil {
 		shout(ctx, l, stdout, "failed to add label to cluster [%s] - %s", c.Name(), err)
 		grafanaAvailable = false

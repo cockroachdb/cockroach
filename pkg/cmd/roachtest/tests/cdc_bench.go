@@ -260,7 +260,6 @@ func runCDCBenchScan(
 		t.Fatalf("unknown protocol %q", protocol)
 	}
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, nData)
 	m := c.NewMonitor(ctx, nData.Merge(nCoord))
 
@@ -432,7 +431,6 @@ func runCDCBenchWorkload(
 		t.Fatalf("unknown server type %q", server)
 	}
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, nData)
 	m := c.NewMonitor(ctx, nData.Merge(nCoord))
 

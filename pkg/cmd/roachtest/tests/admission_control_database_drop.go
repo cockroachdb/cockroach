@@ -32,7 +32,6 @@ func registerDatabaseDrop(r registry.Registry) {
 		10, /* nodeCount */
 		spec.CPU(8),
 		spec.VolumeSize(500),
-		spec.Cloud(spec.GCE),
 		spec.GCEMinCPUPlatform("Intel Ice Lake"),
 		spec.GCEVolumeType("pd-ssd"),
 		spec.GCEMachineType("n2-standard-8"),
@@ -197,7 +196,6 @@ func registerDatabaseDrop(r registry.Registry) {
 			// test and use disk snapshots?
 			runTPCE(ctx, t, c, tpceOptions{
 				start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 					startOpts := option.DefaultStartOptsNoBackups()
 					settings := install.MakeClusterSettings(install.NumRacksOption(crdbNodes))
 					if err := c.StartE(ctx, t.L(), startOpts, settings, c.Range(1, crdbNodes)); err != nil {

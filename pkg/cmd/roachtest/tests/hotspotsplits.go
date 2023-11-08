@@ -34,7 +34,6 @@ func registerHotSpotSplits(r registry.Registry) {
 		roachNodes := c.Range(1, c.Spec().NodeCount-1)
 		appNode := c.Node(c.Spec().NodeCount)
 
-		c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
 
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", appNode)

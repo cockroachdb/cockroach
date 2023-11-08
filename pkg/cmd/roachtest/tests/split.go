@@ -427,7 +427,6 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
 	workloadNode := c.Node(c.Spec().NodeCount)
 
-	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 	// We run this without metamorphic constants as the tests make
 	// incorrect assumptions about the absolute values of QPS.
@@ -550,6 +549,9 @@ func registerLargeRange(r registry.Registry) {
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
 		Timeout:          5 * time.Hour,
+		// Never run with runtime assertions as this makes this test take
+		// too long to complete.
+		CockroachBinary: registry.StandardCockroach,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLargeRangeSplits(ctx, t, c, size)
 		},
@@ -587,9 +589,6 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 	rows := size / rowEstimate
 	const minBytes = 16 << 20 // 16 MB
 
-	// Never run with runtime assertions as this makes this test take
-	// too long to complete.
-	c.Put(ctx, t.StandardCockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
 	numNodes := c.Spec().NodeCount
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1))

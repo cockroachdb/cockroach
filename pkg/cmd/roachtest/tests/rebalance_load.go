@@ -109,7 +109,6 @@ func registerRebalanceLoad(r registry.Registry) {
 			c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 			upgradeNodes(ctx, t, c, nodesToUpgrade, startOpts, clusterupgrade.CurrentVersion())
 		} else {
-			c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 			c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 		}
 

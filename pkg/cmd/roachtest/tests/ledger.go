@@ -39,7 +39,6 @@ func registerLedger(r registry.Registry) {
 			gatewayNodes := c.Range(1, nodes/3)
 			loadNode := c.Node(nodes + 1)
 
-			c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
 
 			// Don't start a scheduled backup on this perf sensitive roachtest that reports to roachperf.

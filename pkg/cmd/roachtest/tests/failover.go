@@ -227,7 +227,6 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 		failers = append(failers, failer)
 	}
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 9))
 
 	conn := c.Conn(ctx, t.L(), 1)
@@ -401,7 +400,6 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 7))
 
 	conn := c.Conn(ctx, t.L(), 1)
@@ -538,7 +536,6 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 3))
 
 	conn := c.Conn(ctx, t.L(), 1)
@@ -670,7 +667,6 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 7))
 
 	conn := c.Conn(ctx, t.L(), 1)
@@ -789,7 +785,6 @@ func runFailoverNonSystem(
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 6))
 
 	conn := c.Conn(ctx, t.L(), 1)
@@ -899,7 +894,6 @@ func runFailoverLiveness(
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 4))
 
 	conn := c.Conn(ctx, t.L(), 1)
@@ -1015,7 +1009,6 @@ func runFailoverSystemNonLiveness(
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 6))
 
 	conn := c.Conn(ctx, t.L(), 1)

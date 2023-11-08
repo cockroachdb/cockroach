@@ -57,13 +57,10 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 
 	var verboseStoreLogRe = "failed to transfer lease.*when draining.*no suitable transfer target found"
 
-	err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach", c.All())
-	require.NoError(t, err)
-
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 	run := func(db *gosql.DB, stmt string) {
-		_, err = db.ExecContext(ctx, stmt)
+		_, err := db.ExecContext(ctx, stmt)
 		require.NoError(t, err)
 
 		t.L().Printf("run: %s\n", stmt)
@@ -151,6 +148,6 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 
 	// Expect the drain timeout to expire.
 	t.Status("waiting for the drain timeout to elapse...")
-	err = m.WaitE()
+	err := m.WaitE()
 	require.Error(t, err)
 }

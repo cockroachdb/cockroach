@@ -48,7 +48,6 @@ func registerImportCancellation(r registry.Registry) {
 }
 
 func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload") // required for tpch
 	startOpts := maybeUseMemoryBudget(t, 50)
 	startOpts.RoachprodOpts.ScheduleBackups = true

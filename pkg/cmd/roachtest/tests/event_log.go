@@ -31,7 +31,6 @@ func runEventLog(ctx context.Context, t test.Test, c cluster.Cluster) {
 		NodeID roachpb.NodeID
 	}
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 	// Verify that "node joined" and "node restart" events are recorded whenever

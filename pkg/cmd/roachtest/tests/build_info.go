@@ -25,7 +25,6 @@ import (
 
 // RunBuildInfo is a test that sanity checks the build info.
 func RunBuildInfo(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 	var details serverpb.DetailsResponse
@@ -62,8 +61,6 @@ func RunBuildAnalyze(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// packages, so only run it on dedicated remote VMs.
 		t.Skip("local execution not supported")
 	}
-
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 
 	// 1. Check for executable stack.
 	//

@@ -18,7 +18,7 @@ import (
 // DefaultCockroachPath is the path where the binary passed to the
 // `--cockroach` flag will be made available in every node in the
 // cluster.
-const DefaultCockroachPath = "./cockroach-default"
+const DefaultCockroachPath = "./cockroach"
 
 // EnvAssertionsEnabledSeed is the name of the environment variable
 // that, when set, causes roachtest to use a binary with runtime

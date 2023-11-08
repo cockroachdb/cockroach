@@ -71,7 +71,6 @@ func registerFollowerReads(r registry.Registry) {
 				if c.Cloud() == spec.GCE && c.Spec().Arch == vm.ArchARM64 {
 					t.Skip("arm64 in GCE is available only in us-central1")
 				}
-				c.Put(ctx, t.Cockroach(), "./cockroach")
 				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 				topology := topologySpec{
 					multiRegion:       true,

@@ -92,7 +92,6 @@ func runDiskStalledDetection(
 	defer s.Cleanup(ctx)
 
 	t.Status("starting cluster")
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), startOpts, startSettings, c.Range(1, 3))
 
 	// Assert the process monotonic times are as expected.

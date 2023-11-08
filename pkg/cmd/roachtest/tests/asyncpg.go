@@ -46,7 +46,6 @@ func registerAsyncpg(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 
 		// This test assumes that multiple_active_portals_enabled is false, but through
 		// metamorphic constants, it is possible for them to be enabled. We disable
