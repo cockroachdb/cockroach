@@ -165,28 +165,32 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"crdb_internal.redact(last_error_redactable) as last_error_redactable",
 		},
 	},
-	"crdb_internal.cluster_locks": {
-		// `lock_key` column contains the txn lock key, which may contain
-		// sensitive row-level data.
-		// `lock_key_pretty` column contains the pretty-printed txn lock key,
-		// which may contain sensitive row-level data.
-		nonSensitiveCols: NonSensitiveColumns{
-			"range_id",
-			"table_id",
-			"database_name",
-			"schema_name",
-			"table_name",
-			"index_name",
-			"txn_id",
-			"ts",
-			"lock_strength",
-			"durability",
-			"granted",
-			"contended",
-			"duration",
-			"isolation_level",
-		},
-	},
+	// NOTE(seanc@): obtaining cluster_locks is an expensive query with marginal
+	// value to debugging efforts at this time.  Disable until such time as this
+	// can be put behind a debug zip flag.
+	//
+	// "crdb_internal.cluster_locks": {
+	// 	// `lock_key` column contains the txn lock key, which may contain
+	// 	// sensitive row-level data.
+	// 	// `lock_key_pretty` column contains the pretty-printed txn lock key,
+	// 	// which may contain sensitive row-level data.
+	// 	nonSensitiveCols: NonSensitiveColumns{
+	// 		"range_id",
+	// 		"table_id",
+	// 		"database_name",
+	// 		"schema_name",
+	// 		"table_name",
+	// 		"index_name",
+	// 		"txn_id",
+	// 		"ts",
+	// 		"lock_strength",
+	// 		"durability",
+	// 		"granted",
+	// 		"contended",
+	// 		"duration",
+	// 		"isolation_level",
+	// 	},
+	// },
 	"crdb_internal.cluster_queries": {
 		// `client_address` contains unredacted client IP addresses.
 		nonSensitiveCols: NonSensitiveColumns{
