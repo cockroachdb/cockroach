@@ -235,8 +235,8 @@ func TestKVNemesisSingleNode(t *testing.T) {
 		numSteps:                     defaultNumSteps,
 		concurrency:                  5,
 		seedOverride:                 0,
-		invalidLeaseAppliedIndexProb: 0.1,
-		injectReproposalErrorProb:    0.1,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
 	})
 }
 
@@ -263,8 +263,8 @@ func TestKVNemesisMultiNode(t *testing.T) {
 		numSteps:                     defaultNumSteps,
 		concurrency:                  5,
 		seedOverride:                 0,
-		invalidLeaseAppliedIndexProb: 0.1,
-		injectReproposalErrorProb:    0.1,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
 	})
 }
 
@@ -306,6 +306,16 @@ func testKVNemesisImpl(t *testing.T, cfg kvnemesisTestCfg) {
 	logger := newTBridge(t)
 	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: logger}
 	failures, err := RunNemesis(ctx, rng, env, config, cfg.concurrency, cfg.numSteps, dbs...)
+
+	for i := 0; i < cfg.numNodes; i++ {
+		t.Logf("[%d] proposed: %d", i,
+			tc.GetFirstStoreFromServer(t, i).Metrics().RaftCommandsProposed.Count())
+		t.Logf("[%d] reproposed unchanged: %d", i,
+			tc.GetFirstStoreFromServer(t, i).Metrics().RaftCommandsReproposed.Count())
+		t.Logf("[%d] reproposed with new LAI: %d", i,
+			tc.GetFirstStoreFromServer(t, i).Metrics().RaftCommandsReproposedLAI.Count())
+	}
+
 	require.NoError(t, err, `%+v`, err)
 	require.Zero(t, len(failures), "kvnemesis detected failures") // they've been logged already
 }
