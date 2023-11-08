@@ -1,0 +1,26 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.util.admission.admissionpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb";
+
+import "gogoproto/gogo.proto";
+
+// AdmissionWorkQueueStats is recorded for work items waiting in the admission
+// work queue.
+message AdmissionWorkQueueStats {
+  // Duration spent waiting.
+  int64 wait_duration_nanos = 1 [(gogoproto.casttype) = "time.Duration"];
+  // String representation of admission work kind.
+  string work_kind = 2;
+  // Set to true if deadline was exceeded.
+  bool deadline_exceeded = 3;
+}
