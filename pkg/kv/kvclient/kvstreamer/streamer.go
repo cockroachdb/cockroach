@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -220,13 +221,19 @@ func (r Result) Release(ctx context.Context) {
 type Streamer struct {
 	distSender *kvcoord.DistSender
 	stopper    *stop.Stopper
+	// sd can be nil in tests.
+	sd *sessiondata.SessionData
 
-	mode           OperationMode
-	hints          Hints
-	maxKeysPerRow  int32
-	budget         *budget
-	lockStrength   lock.Strength
-	lockDurability lock.Durability
+	mode          OperationMode
+	hints         Hints
+	maxKeysPerRow int32
+	// eagerMemUsageLimitBytes determines the maximum memory used from the
+	// budget at which point the streamer stops sending non-head-of-the-line
+	// requests eagerly.
+	eagerMemUsageLimitBytes int64
+	budget                  *budget
+	lockStrength            lock.Strength
+	lockDurability          lock.Durability
 
 	streamerStatistics
 
@@ -356,6 +363,8 @@ func max(a, b int64) int64 {
 // to interact with the account only after canceling the Streamer (because
 // memory accounts are not thread-safe).
 //
+// sd can be nil in tests in which case some reasonable defaults will be used.
+//
 // kvPairsRead should be incremented atomically with the sum of NumKeys
 // parameters of all received responses.
 //
@@ -366,6 +375,7 @@ func NewStreamer(
 	stopper *stop.Stopper,
 	txn *kv.Txn,
 	st *cluster.Settings,
+	sd *sessiondata.SessionData,
 	lockWaitPolicy lock.WaitPolicy,
 	limitBytes int64,
 	acc *mon.BoundAccount,
@@ -380,6 +390,7 @@ func NewStreamer(
 	s := &Streamer{
 		distSender:     distSender,
 		stopper:        stopper,
+		sd:             sd,
 		budget:         newBudget(acc, limitBytes),
 		lockStrength:   lockStrength,
 		lockDurability: lockDurability,
@@ -425,12 +436,29 @@ func (s *Streamer) Init(
 	mode OperationMode, hints Hints, maxKeysPerRow int, diskBuffer ResultDiskBuffer,
 ) {
 	s.mode = mode
+	// s.sd can be nil in tests, so use almost all the budget eagerly then.
+	eagerFraction := 0.9
 	if mode == OutOfOrder {
 		s.requestsToServe = newOutOfOrderRequestsProvider()
 		s.results = newOutOfOrderResultsBuffer(s.budget)
+		if s.sd != nil {
+			eagerFraction = s.sd.StreamerOutOfOrderEagerMemoryUsageFraction
+		}
 	} else {
 		s.requestsToServe = newInOrderRequestsProvider()
 		s.results = newInOrderResultsBuffer(s.budget, diskBuffer)
+		if s.sd != nil {
+			eagerFraction = s.sd.StreamerInOrderEagerMemoryUsageFraction
+		}
+	}
+	s.eagerMemUsageLimitBytes = int64(math.Ceil(float64(s.budget.limitBytes) * eagerFraction))
+	// Ensure some reasonable lower bound.
+	const minEagerMemUsage = 10 << 10 // 10KiB
+	if s.eagerMemUsageLimitBytes <= 0 {
+		// Protect from overflow.
+		s.eagerMemUsageLimitBytes = math.MaxInt64
+	} else if s.eagerMemUsageLimitBytes < minEagerMemUsage {
+		s.eagerMemUsageLimitBytes = minEagerMemUsage
 	}
 	if !hints.UniqueRequests {
 		panic(errors.AssertionFailedf("only unique requests are currently supported"))
@@ -1052,6 +1080,30 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 	)
 	var budgetIsExhausted bool
 	for !w.s.requestsToServe.emptyLocked() && maxNumRequestsToIssue > 0 && !budgetIsExhausted {
+		if !headOfLine && w.s.budget.mu.acc.Used() > w.s.eagerMemUsageLimitBytes {
+			// The next batch is not head-of-the-line, and the budget has used
+			// up more than eagerMemUsageLimitBytes bytes. At this point, we
+			// stop issuing "eager" requests, so we just exit.
+			//
+			// This exit will not lead to the streamer deadlocking because we
+			// already have at least one batch to serve, and at some point we'll
+			// get into this loop with headOfLine=true, so we'll always be
+			// issuing at least one batch, eventually.
+			//
+			// This behavior is helpful to prevent pathological behavior
+			// observed in #113729. Namely, if we issue too many batches eagerly
+			// in the InOrder mode, the buffered responses might consume most of
+			// our memory budget, and at some point we might regress to
+			// processing requests one batch with a single Get / Scan request at
+			// a time. We don't want to just drop already received responses
+			// (we've already discarded the original singleRangeBatches anyway),
+			// so this mechanism allows us to preserve a fraction of the budget
+			// to processing head-of-the-line batches.
+			//
+			// Similar pattern can occur in the OutOfOrder mode too although the
+			// degradation is not as severe as in the InOrder mode.
+			return nil
+		}
 		singleRangeReqs := w.s.requestsToServe.nextLocked()
 		availableBudget := w.s.budget.limitBytes - w.s.budget.mu.acc.Used()
 		// minTargetBytes is the minimum TargetBytes limit with which it makes
