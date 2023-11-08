@@ -405,7 +405,7 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 		}
 	}
 
-	if shouldInit {
+	if !startOpts.SkipInit {
 		if err := c.waitForDefaultTargetCluster(ctx, l, startOpts); err != nil {
 			return errors.Wrap(err, "failed to wait for default target cluster")
 		}
