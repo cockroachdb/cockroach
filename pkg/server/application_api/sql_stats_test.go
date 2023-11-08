@@ -510,6 +510,7 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 	if skip.Stress() {
 		additionalTimeout = additionalTimeoutUnderStress
 	}
+	skip.UnderStressRace(t, "test is too slow to run under race")
 
 	// Aug 30 2021 19:50:00 GMT+0000
 	aggregatedTs := int64(1630353000)
@@ -637,7 +638,7 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 			respStatement, exists := actualResponseStatsMap[respQuery]
 			require.True(t, exists, "Expected statement '%s' not found in response: %v", respQuery, responseToJSON(resp))
 
-			actualCount := respStatement.Stats.Count
+			actualCount := respStatement.Stats.FirstAttemptCount
 			actualFullScan := respStatement.Key.KeyData.FullScan
 			actualDistSQL := respStatement.Key.KeyData.DistSQL
 			actualFailed := respStatement.Key.KeyData.Failed
