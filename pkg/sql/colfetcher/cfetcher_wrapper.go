@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -41,13 +40,7 @@ var DirectScansEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.distsql.direct_columnar_scans.enabled",
 	"set to true to enable the 'direct' columnar scans in the KV layer",
-	directScansEnabledDefault,
-)
-
-var directScansEnabledDefault = util.ConstantWithMetamorphicTestBool(
-	"direct-scans-enabled",
-	// TODO(yuzefovich, 23.1): update the default to 'true' for multi-tenant
-	// setups.
+	// TODO(yuzefovich): make this metamorphic constant once #113816 is fixed.
 	false,
 )
 

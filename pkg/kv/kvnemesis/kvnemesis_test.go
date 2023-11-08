@@ -39,7 +39,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var defaultNumSteps = envutil.EnvOrDefaultInt("COCKROACH_KVNEMESIS_STEPS", 50)
+var defaultNumSteps = envutil.EnvOrDefaultInt("COCKROACH_KVNEMESIS_STEPS", 100)
 
 func (cfg kvnemesisTestCfg) testClusterArgs(tr *SeqTracker) base.TestClusterArgs {
 	storeKnobs := &kvserver.StoreTestingKnobs{
