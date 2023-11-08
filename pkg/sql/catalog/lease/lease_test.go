@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -2025,6 +2026,15 @@ func TestTableCreationPushesTxnsInRecentPast(t *testing.T) {
 
 	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				KVClient: &kvcoord.ClientTestingKnobs{
+					// Intentionally add latency so that the uncertainty
+					// limit is higher to reduce the risk of this test flaking.
+					LatencyFunc: func(id roachpb.NodeID) (time.Duration, bool) {
+						return time.Millisecond * 100, true
+					},
+				},
+			},
 			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(109385),
 		},
 		ReplicationMode: base.ReplicationManual,
