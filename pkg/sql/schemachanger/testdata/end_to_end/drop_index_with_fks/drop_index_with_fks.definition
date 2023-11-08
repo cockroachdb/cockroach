@@ -1,0 +1,61 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY, j INT, m INT);
+CREATE TABLE k (i INT PRIMARY KEY, j INT, m INT);
+CREATE UNIQUE INDEX idx ON t(j, i) USING HASH;
+CREATE UNIQUE INDEX idx2 ON k(j, i);
+INSERT INTO t VALUES (-1, -1), (-2, -2), (-3, -3);
+INSERT INTO k VALUES (-1, -1), (-2, -2), (-3, -3);
+CREATE TABLE t_ref(i INT PRIMARY KEY,
+                   j INT,
+                   CONSTRAINT "j_t_fk" FOREIGN KEY (j, i) REFERENCES
+                          t(j, i),
+                   CONSTRAINT "j_k_fk" FOREIGN KEY (j, i) REFERENCES
+                                                    k(j, i)
+                   );
+----
+
+# Intentionally, only add $stageKey+[1,2] into t, and
+# $stageKey+[0,1] into k to detect when the FK is officially
+# disabled. Beofre the first stage we expect it to be enabled
+# here.
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO t (i, j) VALUES($stageKey+1, $stageKey+1);
+INSERT INTO t (i, j) VALUES($stageKey + 2, $stageKey +2);
+INSERT INTO k (i, j) VALUES($stageKey, $stageKey);
+INSERT INTO k (i, j) VALUES($stageKey + 1, $stageKey +1);
+INSERT INTO t_ref(i, j) VALUES($stageKey + 1, $stageKey +1);
+----
+
+# Confirm the FK reference is enabled.
+stage-exec phase=PostCommitNonRevertiblePhase stage=1
+INSERT INTO t_ref (i, j) VALUES($stageKey, $stageKey);
+----
+pq: insert on table "t_ref" violates foreign key constraint .*
+
+# Confirm it was removed.
+stage-exec phase=PostCommitNonRevertiblePhase stage=2
+INSERT INTO t_ref (i, j) VALUES($stageKey, $stageKey);
+----
+
+
+
+# Each insert will be injected twice per stage for t and
+# k.
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*)=($successfulStageCount*2)+3 FROM t;
+SELECT count(*)=($successfulStageCount*2)+3 FROM k;
+SELECT count(*)=3 FROM t_ref;
+----
+true
+
+# For t_ref the first stage will only get a single insert.
+# The second stage can get two inserts, because the foreign
+# key ref is disabled.
+stage-query phase=PostCommitNonRevertiblePhase stage=2
+SELECT count(*)=3 FROM t_ref;
+---
+true
+
+test
+DROP INDEX idx CASCADE
+----
