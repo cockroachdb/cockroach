@@ -45,7 +45,6 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/util/leaktest",
-        "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",

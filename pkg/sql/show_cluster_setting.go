@@ -95,9 +95,9 @@ func (p *planner) getCurrentEncodedVersionSettingValue(
 						return errors.AssertionFailedf("no value found for version setting")
 					}
 
-					localRawVal := []byte(s.Get(&st.SV))
+					localVal := s.GetInternal(&st.SV)
 					if err := checkClusterSettingValuesAreEquivalent(
-						localRawVal, kvRawVal,
+						localVal.Encode(), kvRawVal,
 					); err != nil {
 						// NB: errors.Wrapf(nil, ...) returns nil.
 						// nolint:errwrap
