@@ -474,6 +474,18 @@ var (
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaOnePhaseCommitSuccess = metric.Metadata{
+		Name:        "txn.server_side.1PC.success",
+		Help:        "Number of batches that attempted to commit using 1PC and succeeded",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaOnePhaseCommitFailure = metric.Metadata{
+		Name:        "txn.server_side.1PC.failure",
+		Help:        "Number of batches that attempted to commit using 1PC and failed",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	//Ingest metrics
 	metaIngestCount = metric.Metadata{
@@ -2351,6 +2363,8 @@ type StoreMetrics struct {
 	ReadEvaluationServerSideRetryFailure                     *metric.Counter
 	ReadWithinUncertaintyIntervalErrorServerSideRetrySuccess *metric.Counter
 	ReadWithinUncertaintyIntervalErrorServerSideRetryFailure *metric.Counter
+	OnePhaseCommitSuccess                                    *metric.Counter
+	OnePhaseCommitFailure                                    *metric.Counter
 
 	// Storage (pebble) metrics. Some are named RocksDB which is what we used
 	// before pebble, and this name is kept for backwards compatibility despite
@@ -3028,6 +3042,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ReadEvaluationServerSideRetryFailure:                     metric.NewCounter(metaReadEvaluationServerSideRetryFailure),
 		ReadWithinUncertaintyIntervalErrorServerSideRetrySuccess: metric.NewCounter(metaReadWithinUncertaintyIntervalErrorServerSideRetrySuccess),
 		ReadWithinUncertaintyIntervalErrorServerSideRetryFailure: metric.NewCounter(metaReadWithinUncertaintyIntervalErrorServerSideRetryFailure),
+		OnePhaseCommitSuccess:                                    metric.NewCounter(metaOnePhaseCommitSuccess),
+		OnePhaseCommitFailure:                                    metric.NewCounter(metaOnePhaseCommitFailure),
 
 		// Pebble metrics.
 		//

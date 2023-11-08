@@ -503,9 +503,12 @@ func (r *Replica) evaluate1PC(
 	var batch storage.Batch
 	defer func() {
 		// Close the batch unless it's passed to the caller (when the evaluation
-		// succeeds).
+		// succeeds). Also increment metrics.
 		if onePCRes.success != onePCSucceeded {
 			batch.Close()
+			r.store.Metrics().OnePhaseCommitFailure.Inc(1)
+		} else {
+			r.store.Metrics().OnePhaseCommitSuccess.Inc(1)
 		}
 	}()
 
