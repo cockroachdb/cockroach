@@ -16,7 +16,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -86,7 +85,6 @@ func FlushTracingAggregatorStats(
 	jobID jobspb.JobID,
 	db isql.DB,
 	perNodeAggregatorStats ComponentAggregatorStats,
-	cv clusterversion.Handle,
 ) error {
 	return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		clusterWideAggregatorStats := make(map[string]TracingAggregatorEvent)
@@ -110,7 +108,7 @@ func FlushTracingAggregatorStats(
 					continue
 				}
 
-				if err := jobs.WriteProtobinExecutionDetailFile(ctx, filename, msg, txn, jobID, cv); err != nil {
+				if err := jobs.WriteProtobinExecutionDetailFile(ctx, filename, msg, txn, jobID); err != nil {
 					return err
 				}
 
@@ -137,6 +135,6 @@ func FlushTracingAggregatorStats(
 		}
 
 		filename := fmt.Sprintf("aggregatorstats.%s.txt", asOf)
-		return jobs.WriteExecutionDetailFile(ctx, filename, clusterWideSummary.Bytes(), txn, jobID, cv)
+		return jobs.WriteExecutionDetailFile(ctx, filename, clusterWideSummary.Bytes(), txn, jobID)
 	})
 }

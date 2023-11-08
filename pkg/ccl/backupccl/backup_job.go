@@ -274,7 +274,7 @@ func backup(
 					return nil
 				}
 				jobsprofiler.StorePerNodeProcessorProgressFraction(
-					ctx, execCtx.ExecCfg().InternalDB, job.ID(), prog, execCtx.ExecCfg().Settings.Version)
+					ctx, execCtx.ExecCfg().InternalDB, job.ID(), prog)
 			case <-ctx.Done():
 				return ctx.Err()
 			}
@@ -1964,7 +1964,7 @@ func (b *backupResumer) CollectProfile(ctx context.Context, execCtx interface{})
 		aggStatsCopy = b.mu.perNodeAggregatorStats.DeepCopy()
 	}()
 	return bulkutil.FlushTracingAggregatorStats(ctx, b.job.ID(),
-		p.ExecCfg().InternalDB, aggStatsCopy, p.ExecCfg().Settings.Version)
+		p.ExecCfg().InternalDB, aggStatsCopy)
 }
 
 func (b *backupResumer) deleteCheckpoint(
