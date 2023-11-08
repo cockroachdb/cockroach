@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -22,11 +23,43 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+)
+
+var SpanStatsNodeTimeout = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"server.span_stats.node.timeout",
+	"the duration allowed for a single node to return span stats data before"+
+		" the request is cancelled; if set to 0, there is no timeout",
+	time.Minute,
+	settings.NonNegativeDuration,
+)
+
+const defaultRangeStatsBatchLimit = 100
+
+// RangeStatsBatchLimit registers the maximum number of ranges to be batched
+// when fetching range stats for a span.
+var RangeStatsBatchLimit = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"server.span_stats.range_batch_limit",
+	"the maximum batch size when fetching ranges statistics for a span",
+	defaultRangeStatsBatchLimit,
+	settings.PositiveInt,
+)
+
+// RangeDescPageSize controls the page size when iterating through range
+// descriptors.
+var RangeDescPageSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"server.span_stats.range_desc_page_size",
+	"the page size when iterating through range descriptors",
+	100,
+	settings.IntInRange(5, 25000),
 )
 
 const MixedVersionErr = "span stats request - unable to service a mixed version request"
@@ -131,7 +164,7 @@ func (s *systemStatusServer) spanStatsFanOut(
 		res.Errors = append(res.Errors, errorMessage)
 	}
 
-	timeout := roachpb.SpanStatsNodeTimeout.Get(&s.st.SV)
+	timeout := SpanStatsNodeTimeout.Get(&s.st.SV)
 	if err := iterateNodes(
 		ctx,
 		s.serverIterator,
@@ -169,7 +202,7 @@ func (s *systemStatusServer) statsForSpan(
 
 	var descriptors []roachpb.RangeDescriptor
 	scanner := rangedesc.NewScanner(s.db)
-	pageSize := int(roachpb.RangeDescPageSize.Get(&s.st.SV))
+	pageSize := int(RangeDescPageSize.Get(&s.st.SV))
 	err := scanner.Scan(ctx, pageSize, func() {
 		// If the underlying txn fails and needs to be retried,
 		// clear the descriptors we've collected so far.
@@ -201,7 +234,7 @@ func (s *systemStatusServer) statsForSpan(
 			// Collect into fullyContainedKeys batch.
 			fullyContainedKeysBatch = append(fullyContainedKeysBatch, desc.StartKey.AsRawKey())
 			// If we've exceeded the batch limit, request range stats for the current batch.
-			if len(fullyContainedKeysBatch) > int(roachpb.RangeStatsBatchLimit.Get(&s.st.SV)) {
+			if len(fullyContainedKeysBatch) > int(RangeStatsBatchLimit.Get(&s.st.SV)) {
 				// Obtain stats for fully contained ranges via RangeStats.
 				fullyContainedKeysBatch, err = flushBatchedContainedKeys(ctx, s.rangeStatsFetcher, fullyContainedKeysBatch, spanStats)
 				if err != nil {
@@ -316,7 +349,7 @@ func (s *systemStatusServer) getSpansPerNode(
 ) (map[roachpb.NodeID][]roachpb.Span, error) {
 	// Mapping of node ids to spans with a replica on the node.
 	spansPerNode := make(map[roachpb.NodeID][]roachpb.Span)
-	pageSize := int(roachpb.RangeDescPageSize.Get(&s.st.SV))
+	pageSize := int(RangeDescPageSize.Get(&s.st.SV))
 	for _, span := range req.Spans {
 		nodeIDs, err := nodeIDsForSpan(ctx, s.db, span, pageSize)
 		if err != nil {
