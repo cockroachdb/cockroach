@@ -57,7 +57,7 @@ func registerKnex(r registry.Registry) {
 			c,
 			node,
 			"create sql database",
-			`./cockroach sql --insecure -e "CREATE DATABASE test"`,
+			`./cockroach sql -e "CREATE DATABASE test"`,
 		)
 		require.NoError(t, err)
 

@@ -78,8 +78,8 @@ type Cluster interface {
 
 	// SQL connection strings.
 
-	InternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string, sqlInstance int) ([]string, error)
-	ExternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string, sqlInstance int) ([]string, error)
+	InternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string, sqlInstance int, passwordAuth bool) ([]string, error)
+	ExternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string, sqlInstance int, passwordAuth bool) ([]string, error)
 
 	// SQL clients to nodes.
 

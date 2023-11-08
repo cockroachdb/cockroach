@@ -105,7 +105,7 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 	// declare itself ready before it's actually 100% ready. See:
 	// https://github.com/cockroachdb/cockroach/issues/34897#issuecomment-465089057
 	c.Run(ctx, c.Node(1), fmt.Sprintf(
-		`COCKROACH_CONNECT_TIMEOUT=120 ./cockroach sql --url=%s --insecure -e "DROP DATABASE IF EXISTS tinybank"`, pgurl))
+		`COCKROACH_CONNECT_TIMEOUT=120 ./cockroach sql --url=%s -e "DROP DATABASE IF EXISTS tinybank"`, pgurl))
 	c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank", "--db=tinybank",
 		"--payload-bytes=100", "--ranges=10", "--rows=800", "--seed=1", pgurl)
 

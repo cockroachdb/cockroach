@@ -933,7 +933,7 @@ func runSingleDecommission(
 		if err != nil {
 			t.Fatal(err)
 		}
-		cmd := fmt.Sprintf("./cockroach node drain --url=%s --self --insecure", pgurl)
+		cmd := fmt.Sprintf("./cockroach node drain --url=%s --self", pgurl)
 		if err := h.c.RunE(ctx, h.c.Node(target), cmd); err != nil {
 			return err
 		}

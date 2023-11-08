@@ -14,6 +14,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -257,15 +261,39 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 			if err != nil {
 				q.Fatal(err)
 			}
-			result, err := q.c.RunWithDetailsSingleNode(ctx, q.t.L(), q.c.Node(i),
-				"curl", "-s", fmt.Sprintf("http://%s/_status/ranges/local",
-					adminAddrs[0]))
+			sessionID, err := roachtestutil.GetSessionID(ctx, q.c, q.t.L(), q.c.Node(i))
 			if err != nil {
 				q.Fatal(err)
 			}
+			client := httputil.DefaultClient
+			url, err := url.Parse(fmt.Sprintf("https://%s/_status/ranges/local", adminAddrs[0]))
+			if err != nil {
+				q.Fatal(err)
+			}
+
+			var data []byte
+			func() {
+				req := &http.Request{
+					Method: "GET",
+					URL:    url,
+					Header: map[string][]string{
+						"Cookie": {sessionID},
+					},
+				}
+				response, err := client.Do(req)
+				if err != nil {
+					q.Fatal(err)
+				}
+				defer response.Body.Close()
+				data, err = io.ReadAll(response.Body)
+				if err != nil {
+					q.Fatal(err)
+				}
+			}()
+
 			// Persist the response to artifacts to aid debugging. See #75438.
 			_ = os.WriteFile(filepath.Join(q.t.ArtifactsDir(), fmt.Sprintf("status_ranges_n%d.json", i)),
-				[]byte(result.Stdout), 0644,
+				data, 0644,
 			)
 			// We need just a subset of the response. Make an ad-hoc
 			// struct with just the bits of interest.
@@ -286,7 +314,7 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 				} `json:"ranges"`
 			}
 			var details jsonOutput
-			if err := json.Unmarshal([]byte(result.Stdout), &details); err != nil {
+			if err := json.Unmarshal(data, &details); err != nil {
 				q.Fatal(err)
 			}
 			// Some sanity check.
@@ -385,13 +413,10 @@ func registerQuitTransfersLeases(r registry.Registry) {
 	// kill. If the drain is successful, the leases are transferred
 	// successfully even if if the process terminates non-gracefully.
 	registerTest("drain", "v20.1.0", func(ctx context.Context, t test.Test, c cluster.Cluster, nodeID int) {
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(nodeID))
-		if err != nil {
-			t.Fatal(err)
-		}
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(nodeID),
-			"./cockroach", "node", "drain", "--insecure", "--logtostderr=INFO",
-			fmt.Sprintf("--url=%s", pgurl),
+			"./cockroach", "node", "drain", "--logtostderr=INFO",
+			fmt.Sprintf("--port={pgport:%d}", nodeID),
+			"--certs-dir certs",
 		)
 		t.L().Printf("cockroach node drain:\n%s\n", result.Stdout+result.Stdout)
 		if err != nil {
@@ -432,13 +457,10 @@ func registerQuitTransfersLeases(r registry.Registry) {
 		// - we add one to bring the value back between 1 and NodeCount
 		//   inclusive.
 		otherNodeID := (nodeID % c.Spec().NodeCount) + 1
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(otherNodeID))
-		if err != nil {
-			t.Fatal(err)
-		}
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(otherNodeID),
-			"./cockroach", "node", "drain", "--insecure", "--logtostderr=INFO",
-			fmt.Sprintf("--url=%s", pgurl),
+			"./cockroach", "node", "drain", "--logtostderr=INFO",
+			fmt.Sprintf("--port={pgport:%d}", otherNodeID),
+			"--certs-dir certs",
 			fmt.Sprintf("%d", nodeID),
 		)
 		t.L().Printf("cockroach node drain:\n%s\n", result.Stdout+result.Stderr)

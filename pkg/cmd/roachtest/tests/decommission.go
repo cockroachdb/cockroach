@@ -206,11 +206,7 @@ func runDrainAndDecommission(
 		m.Go(func() error {
 			drain := func(id int) error {
 				t.Status(fmt.Sprintf("draining node %d", id))
-				pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(id))
-				if err != nil {
-					t.Fatal(err)
-				}
-				return c.RunE(ctx, c.Node(id), fmt.Sprintf("./cockroach node drain --insecure --url=%s", pgurl))
+				return c.RunE(ctx, c.Node(id), "./cockroach node drain --certs-dir=certs --port={pgport:1}")
 			}
 			return drain(id)
 		})
@@ -224,11 +220,7 @@ func runDrainAndDecommission(
 		id := nodes - 3
 		decom := func(id int) error {
 			t.Status(fmt.Sprintf("decommissioning node %d", id))
-			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(id))
-			if err != nil {
-				t.Fatal(err)
-			}
-			return c.RunE(ctx, c.Node(id), fmt.Sprintf("./cockroach node decommission --self --insecure --url=%s", pgurl))
+			return c.RunE(ctx, c.Node(id), "./cockroach node decommission --self --certs-dir=certs --port={pgport:1}")
 		}
 		return decom(id)
 	})
@@ -1136,13 +1128,9 @@ func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
 		m.Go(func(ctx context.Context) error {
 			decom := func(id int) error {
 				t.Status(fmt.Sprintf("decommissioning node %d", id))
-				pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(id))
-				if err != nil {
-					t.Fatal(err)
-				}
 				return c.RunE(ctx,
 					c.Node(id),
-					fmt.Sprintf("./cockroach node decommission %d --insecure --checks=skip --url=%s", id, pgurl),
+					fmt.Sprintf("./cockroach node decommission %d --checks=skip --certs-dir=certs --port={pgport:1}", id),
 				)
 			}
 			return decom(id)
@@ -1479,12 +1467,8 @@ func execCLI(
 ) (string, error) {
 	args := []string{"./cockroach"}
 	args = append(args, extraArgs...)
-	args = append(args, "--insecure")
-	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(runNode))
-	if err != nil {
-		t.Fatal(err)
-	}
-	args = append(args, fmt.Sprintf("--url=%s", pgurl))
+	args = append(args, "--port={pgport:1}")
+	args = append(args, "--certs-dir=certs")
 	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(runNode), args...)
 	t.L().Printf("%s\n", result.Stdout)
 	return result.Stdout, err

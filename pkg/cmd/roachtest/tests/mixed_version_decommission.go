@@ -156,7 +156,7 @@ func partialDecommissionStep(target, from int, binaryVersion *clusterupgrade.Ver
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		c := u.c
 		c.Run(ctx, c.Node(from), clusterupgrade.CockroachPathForVersion(t, binaryVersion), "node", "decommission",
-			"--wait=none", "--insecure", strconv.Itoa(target), "--port", fmt.Sprintf("{pgport:%d}", from))
+			"--wait=none", strconv.Itoa(target), "--port", fmt.Sprintf("{pgport:%d}", from))
 	}
 }
 
@@ -167,7 +167,7 @@ func recommissionAllStep(from int, binaryVersion *clusterupgrade.Version) versio
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		c := u.c
 		c.Run(ctx, c.Node(from), clusterupgrade.CockroachPathForVersion(t, binaryVersion), "node", "recommission",
-			"--insecure", c.All().NodeIDsString(), "--port", fmt.Sprintf("{pgport:%d}", from))
+			c.All().NodeIDsString(), "--port", fmt.Sprintf("{pgport:%d}", from))
 	}
 }
 
@@ -176,12 +176,8 @@ func recommissionAllStep(from int, binaryVersion *clusterupgrade.Version) versio
 func fullyDecommissionStep(target, from int, binaryVersion *clusterupgrade.Version) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		c := u.c
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(from))
-		if err != nil {
-			t.Fatal(err)
-		}
 		c.Run(ctx, c.Node(from), clusterupgrade.CockroachPathForVersion(t, binaryVersion), "node", "decommission",
-			"--wait=all", "--insecure", strconv.Itoa(target), fmt.Sprintf("--url=%s", pgurl))
+			"--wait=all", strconv.Itoa(target), "--port={pgport:1}", "--certs-dir=certs")
 
 		// If we are decommissioning a target node from the same node, the drain
 		// step will be skipped. In this case, we should not consider the step done

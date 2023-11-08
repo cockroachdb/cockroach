@@ -15,7 +15,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"net"
-	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -179,12 +179,20 @@ type checkGossipFunc func(map[string]gossip.Info) error
 // checkGossip fetches the gossip infoStore from each node and invokes the
 // given function. The test passes if the function returns 0 for every node,
 // retrying for up to the given duration.
-func (g *gossipUtil) check(ctx context.Context, c cluster.Cluster, f checkGossipFunc) error {
+func (g *gossipUtil) check(
+	ctx context.Context, c cluster.Cluster, f checkGossipFunc, l *logger.Logger,
+) error {
 	return retry.ForDuration(g.waitTime, func() error {
 		var infoStatus gossip.InfoStatus
 		for i := 1; i <= c.Spec().NodeCount; i++ {
 			url := g.urlMap[i] + `/_status/gossip/local`
-			if err := httputil.GetJSON(http.Client{}, url, &infoStatus); err != nil {
+			// runGossipRestartNodeOne restarts node 1. Just use node 2 for all tests
+			// to simplify things since using node 1 is arbitrary anyway.
+			client, err := roachtestutil.DefaultHttpClientWithSessionCookie(ctx, c, l, c.Node(2), url)
+			if err != nil {
+				return err
+			}
+			if err := httputil.GetJSON(client, url, &infoStatus); err != nil {
 				return errors.Wrapf(err, "failed to get gossip status from node %d", i)
 			}
 			if err := f(infoStatus.Infos); err != nil {
@@ -233,13 +241,13 @@ func (g *gossipUtil) checkConnectedAndFunctional(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) {
 	t.L().Printf("waiting for gossip to be connected\n")
-	if err := g.check(ctx, c, g.hasPeers(c.Spec().NodeCount)); err != nil {
+	if err := g.check(ctx, c, g.hasPeers(c.Spec().NodeCount), t.L()); err != nil {
 		t.Fatal(err)
 	}
-	if err := g.check(ctx, c, g.hasClusterID); err != nil {
+	if err := g.check(ctx, c, g.hasClusterID, t.L()); err != nil {
 		t.Fatal(err)
 	}
-	if err := g.check(ctx, c, g.hasSentinel); err != nil {
+	if err := g.check(ctx, c, g.hasSentinel, t.L()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -287,13 +295,13 @@ func runGossipPeerings(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	for i := 1; timeutil.Now().Before(deadline); i++ {
 		WaitForReady(ctx, t, c, c.All())
-		if err := g.check(ctx, c, g.hasPeers(c.Spec().NodeCount)); err != nil {
+		if err := g.check(ctx, c, g.hasPeers(c.Spec().NodeCount), t.L()); err != nil {
 			t.Fatal(err)
 		}
-		if err := g.check(ctx, c, g.hasClusterID); err != nil {
+		if err := g.check(ctx, c, g.hasClusterID, t.L()); err != nil {
 			t.Fatal(err)
 		}
-		if err := g.check(ctx, c, g.hasSentinel); err != nil {
+		if err := g.check(ctx, c, g.hasSentinel, t.L()); err != nil {
 			t.Fatal(err)
 		}
 		t.L().Printf("%d: OK\n", i)
@@ -429,10 +437,11 @@ SELECT count(replicas)
 	// connections. This will require node 1 to reach out to the other nodes in
 	// the cluster for gossip info.
 	err := c.RunE(ctx, c.Node(1),
-		` ./cockroach start --insecure --background --store={store-dir} `+
+		` ./cockroach start --background --store={store-dir} `+
 			`--log-dir={log-dir} --cache=10% --max-sql-memory=10% `+
 			`--listen-addr=:$[{pgport:1}+1000] --http-port=$[{pgport:1}+1] `+
 			`--join={pghost:1}:{pgport:1} `+
+			`--certs-dir=certs `+
 			`--advertise-addr={pghost:1}:$[{pgport:1}+1000] `+
 			`> {log-dir}/cockroach.stdout 2> {log-dir}/cockroach.stderr`)
 	if err != nil {
@@ -455,7 +464,7 @@ SELECT count(replicas)
 		if i != 1 {
 			return c.Conn(ctx, l, i)
 		}
-		urls, err := c.ExternalPGUrl(ctx, l, c.Node(1), "" /* tenant */, 0 /* sqlInstance */)
+		urls, err := c.ExternalPGUrl(ctx, l, c.Node(1), "" /* tenant */, 0 /* sqlInstance */, false)
 		if err != nil {
 			t.Fatal(err)
 		}

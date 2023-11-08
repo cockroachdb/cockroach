@@ -242,8 +242,8 @@ module PG::TestingHelpers
 			end
 
 			trace "Creating the test DB"
-			log_and_run @logfile, '/home/ubuntu/cockroach', 'sql', '--insecure', '-e', 'DROP DATABASE IF EXISTS test'
-			log_and_run @logfile, '/home/ubuntu/cockroach', 'sql', '--insecure', '-e', 'CREATE DATABASE test'
+			log_and_run @logfile, '/home/ubuntu/cockroach', 'sql', '-e', 'DROP DATABASE IF EXISTS test'
+			log_and_run @logfile, '/home/ubuntu/cockroach', 'sql', '-e', 'CREATE DATABASE test'
 
 		rescue => err
 			$stderr.puts "%p during test setup: %s" % [ err.class, err.message ]

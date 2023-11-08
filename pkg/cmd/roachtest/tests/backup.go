@@ -343,7 +343,7 @@ func registerBackup(r registry.Registry) {
 				// total elapsed time. This is used by roachperf to compute and display
 				// the average MB/sec per node.
 				tick()
-				c.Run(ctx, c.Node(1), `./cockroach sql --insecure --url=`+pgurl+` -e "
+				c.Run(ctx, c.Node(1), `./cockroach sql --url=`+pgurl+` -e "
 				BACKUP bank.bank TO 'gs://`+backupTestingBucket+`/`+dest+`?AUTH=implicit'"`)
 				tick()
 

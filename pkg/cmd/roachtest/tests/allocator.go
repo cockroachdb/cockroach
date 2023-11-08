@@ -463,7 +463,7 @@ FROM crdb_internal.kv_store_status
 	}
 	decom := func(id int) {
 		c.Run(ctx, c.Node(1),
-			fmt.Sprintf("./cockroach node decommission --insecure --url=%s --wait=none %d", pgurl, id))
+			fmt.Sprintf("./cockroach node decommission --url=%s --wait=none %d", pgurl, id))
 	}
 
 	// Decommission a node. The ranges should down-replicate to 7 replicas.

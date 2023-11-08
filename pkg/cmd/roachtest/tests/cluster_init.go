@@ -151,7 +151,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 		t.L().Printf("sending init command to node %d", initNode)
 		c.Run(ctx, c.Node(initNode),
-			fmt.Sprintf(`./cockroach init --insecure --port={pgport:%d}`, initNode))
+			fmt.Sprintf(`./cockroach init --port={pgport:%d}`, initNode))
 
 		// This will only succeed if 3 nodes joined the cluster.
 		err = WaitFor3XReplication(ctx, t, dbs[0])
@@ -160,7 +160,6 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 		execCLI := func(runNode int, extraArgs ...string) (string, error) {
 			args := []string{"./cockroach"}
 			args = append(args, extraArgs...)
-			args = append(args, "--insecure")
 			args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))
 			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(runNode), args...)
 			combinedOutput := result.Stdout + result.Stderr

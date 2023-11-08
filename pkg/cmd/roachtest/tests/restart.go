@@ -94,7 +94,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.Run(ctx, restartNode, fmt.Sprintf(`./cockroach sql --insecure --url=%s -e "%s"`, pgurl, tracedQ))
+	c.Run(ctx, restartNode, fmt.Sprintf(`./cockroach sql --url=%s -e "%s"`, pgurl, tracedQ))
 	if took := timeutil.Since(start); took > downDuration {
 		t.Fatalf(`expected to recover within %s took %s`, downDuration, took)
 	} else {

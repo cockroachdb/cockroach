@@ -125,7 +125,7 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 				}
 				return c.RunE(ctx,
 					c.Node(id),
-					fmt.Sprintf("./cockroach node drain %d --insecure --drain-wait=%s --url=%s", id, duration.String(), pgurl),
+					fmt.Sprintf("./cockroach node drain %d --drain-wait=%s --url=%s", id, duration.String(), pgurl),
 				)
 			}
 			return drain(id)

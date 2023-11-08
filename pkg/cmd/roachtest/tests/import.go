@@ -364,7 +364,7 @@ func registerImportDecommissioned(r registry.Registry) {
 			t.Fatal(err)
 		}
 		c.Run(ctx, c.Node(nodeToDecommission),
-			fmt.Sprintf(`./cockroach node decommission --insecure --self --wait=all --url=%s`, pgurl))
+			fmt.Sprintf(`./cockroach node decommission --self --wait=all --url=%s`, pgurl))
 
 		// Wait for a bit for node liveness leases to expire.
 		time.Sleep(10 * time.Second)

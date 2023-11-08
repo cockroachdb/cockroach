@@ -15,16 +15,20 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/errors"
 )
 
 func runStatusServer(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -43,8 +47,12 @@ func runStatusServer(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// Use a retry-loop when populating the maps because we might be trying to
 		// talk to the servers before they are responding to status requests
 		// (resulting in 404's).
+		client, err := roachtestutil.DefaultHttpClientWithSessionCookie(ctx, c, t.L(), c.Node(1), url)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if err := retry.ForDuration(10*time.Second, func() error {
-			return httputil.GetJSON(http.Client{}, url, &details)
+			return httputil.GetJSON(client, url, &details)
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -55,11 +63,26 @@ func runStatusServer(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// The status endpoints below may take a while to produce their answer, maybe more
 	// than the 3 second timeout of the default http client.
 	httpClient := httputil.NewClientWithTimeout(15 * time.Second)
+	sessionID, err := roachtestutil.GetSessionID(ctx, c, t.L(), c.Node(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	name, value, found := strings.Cut(sessionID, "=")
+	if !found {
+		t.Fatal(errors.New("Cookie not formatted correctly"))
+	}
 
 	// get performs an HTTP GET to the specified path for a specific node.
 	get := func(base, rel string) []byte {
-		url := base + rel
-		resp, err := httpClient.Get(context.TODO(), url)
+		url, err := url.Parse(base + rel)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = httputil.SetCookies(httpClient.Client, url, []*http.Cookie{{Name: name, Value: value}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := httpClient.Get(context.TODO(), url.String())
 		if err != nil {
 			t.Fatalf("could not GET %s - %s", url, err)
 		}
@@ -85,7 +108,11 @@ func runStatusServer(ctx context.Context, t test.Test, c cluster.Cluster) {
 		}
 		var details serverpb.DetailsResponse
 		for _, urlID := range urlIDs {
-			if err := httputil.GetJSON(http.Client{}, url+`/_status/details/`+urlID, &details); err != nil {
+			client, err := roachtestutil.DefaultHttpClientWithSessionCookie(ctx, c, t.L(), c.Node(1), url+`/_status/details/`+urlID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := httputil.GetJSON(client, url+`/_status/details/`+urlID, &details); err != nil {
 				t.Fatalf("unable to parse details - %s", err)
 			}
 			if details.NodeID != expectedNodeID {

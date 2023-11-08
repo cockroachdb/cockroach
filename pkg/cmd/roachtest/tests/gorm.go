@@ -109,7 +109,7 @@ func registerGORM(r registry.Registry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = c.RunE(ctx, node, fmt.Sprintf(`./cockroach sql -e "CREATE DATABASE gorm" --insecure --url=%s`, pgurl))
+		err = c.RunE(ctx, node, fmt.Sprintf(`./cockroach sql -e "CREATE DATABASE gorm" --url=%s`, pgurl))
 		require.NoError(t, err)
 
 		t.Status("downloading go dependencies for tests")
