@@ -136,7 +136,6 @@ func runCopyFromPG(ctx context.Context, t test.Test, c cluster.Cluster, sf int) 
 }
 
 func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int, atomic bool) {
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	startOpts := option.DefaultStartOpts()
 	// Enable the verbose logging on relevant files to have better understanding
 	// in case the test fails.

@@ -96,7 +96,7 @@ Examples:
    roachtest list --suite weekly --owner kv
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r := makeTestRegistry(roachtestflags.Cloud)
+			r := makeTestRegistry()
 			tests.RegisterTests(&r)
 
 			filter, err := makeTestFilter(args)

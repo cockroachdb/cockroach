@@ -619,10 +619,6 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster) cdcTester
 
 	settings.Env = append(settings.Env, envVars...)
 
-	// Allow cockroach with runtime assertions enabled unless this is a
-	// performance test.
-	cockroach := t.Cockroach()
-	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, t.L(), startOpts, settings, tester.crdbNodes)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", tester.workloadNode)
 	tester.startGrafana()
@@ -666,7 +662,6 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Run(ctx, c.All(), `mkdir -p logs`)
 
 	crdbNodes, workloadNode, kafkaNode := c.Range(1, c.Spec().NodeCount-1), c.Node(c.Spec().NodeCount), c.Node(c.Spec().NodeCount)
-	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
@@ -835,7 +830,6 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 // compatibility within a topic).
 func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 	crdbNodes, kafkaNode := c.Node(1), c.Node(1)
-	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 	kafka := kafkaManager{
 		t:     t,
@@ -951,7 +945,6 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	crdbNodes, kafkaNode := c.Range(1, lastCrdbNode), c.Node(c.Spec().NodeCount)
-	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 
 	kafka := kafkaManager{
@@ -1014,14 +1007,6 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 			t.Fatalf("%s: %s", f.desc, err.Error())
 		}
 	}
-}
-
-func skipLocalUnderArm64(cloud string) string {
-	if cloud == spec.Local && runtime.GOARCH == "arm64" {
-		// N.B. we also have to skip locally since amd64 emulation may not be available everywhere.
-		return "Skip under ARM64."
-	}
-	return ""
 }
 
 func registerCDC(r registry.Registry) {
@@ -1446,13 +1431,18 @@ func registerCDC(r registry.Registry) {
 		Owner:     `cdc`,
 		Benchmark: true,
 		// Only Kafka 3 supports Arm64, but the broker setup for Oauth used only works with Kafka 2
-		Skip:             skipLocalUnderArm64(r.Cloud()),
 		Cluster:          r.MakeClusterSpec(4, spec.Arch(vm.ArchAMD64)),
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			if c.Cloud() == spec.Local && runtime.GOARCH == "arm64" {
+				// N.B. We have to skip locally since amd64 emulation may not be available everywhere.
+				t.L().PrintfCtx(ctx, "Skipping test under ARM64")
+				return
+			}
+
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 

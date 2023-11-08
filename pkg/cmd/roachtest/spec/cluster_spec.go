@@ -80,10 +80,6 @@ const (
 // ClusterSpec represents a test's description of what its cluster needs to
 // look like. It becomes part of a clusterConfig when the cluster is created.
 type ClusterSpec struct {
-	// TODO(#104029): We should remove the Cloud field; the tests now specify
-	// their compatible clouds.
-	Cloud string
-
 	Arch      vm.CPUArch // CPU architecture; auto-chosen if left empty
 	NodeCount int
 	// CPUs is the number of CPUs per node.
@@ -125,8 +121,8 @@ type ClusterSpec struct {
 }
 
 // MakeClusterSpec makes a ClusterSpec.
-func MakeClusterSpec(cloud string, nodeCount int, opts ...Option) ClusterSpec {
-	spec := ClusterSpec{Cloud: cloud, NodeCount: nodeCount}
+func MakeClusterSpec(nodeCount int, opts ...Option) ClusterSpec {
+	spec := ClusterSpec{NodeCount: nodeCount}
 	defaultOpts := []Option{CPU(4), nodeLifetime(12 * time.Hour), ReuseAny()}
 	for _, o := range append(defaultOpts, opts...) {
 		o(&spec)
@@ -244,6 +240,8 @@ func getAzureOpts(machineType string, zones []string) vm.ProviderOpts {
 // does not depend on the test. It is used in conjunction with ClusterSpec to
 // determine the final configuration.
 type RoachprodClusterConfig struct {
+	Cloud string
+
 	// UseIOBarrierOnLocalSSD is set if we don't want to mount local SSDs with the
 	// `-o nobarrier` flag.
 	UseIOBarrierOnLocalSSD bool
@@ -296,25 +294,26 @@ func (s *ClusterSpec) RoachprodOpts(
 	if s.Lifetime != 0 {
 		createVMOpts.Lifetime = s.Lifetime
 	}
-	switch s.Cloud {
+	cloud := params.Cloud
+	switch cloud {
 	case Local:
-		createVMOpts.VMProviders = []string{s.Cloud}
+		createVMOpts.VMProviders = []string{cloud}
 		// remaining opts are not applicable to local clusters
 		return createVMOpts, nil, nil
 	case AWS, GCE, Azure:
-		createVMOpts.VMProviders = []string{s.Cloud}
+		createVMOpts.VMProviders = []string{cloud}
 	default:
-		return vm.CreateOpts{}, nil, errors.Errorf("unsupported cloud %v", s.Cloud)
+		return vm.CreateOpts{}, nil, errors.Errorf("unsupported cloud %v", cloud)
 	}
 
-	if s.Cloud != GCE && s.Cloud != AWS {
+	if cloud != GCE && cloud != AWS {
 		if s.VolumeSize != 0 {
-			return vm.CreateOpts{}, nil, errors.Errorf("specifying volume size is not yet supported on %s", s.Cloud)
+			return vm.CreateOpts{}, nil, errors.Errorf("specifying volume size is not yet supported on %s", cloud)
 		}
 	}
-	if s.Cloud != GCE {
+	if cloud != GCE {
 		if s.SSDs != 0 {
-			return vm.CreateOpts{}, nil, errors.Errorf("specifying SSD count is not yet supported on %s", s.Cloud)
+			return vm.CreateOpts{}, nil, errors.Errorf("specifying SSD count is not yet supported on %s", cloud)
 		}
 	}
 
@@ -323,7 +322,7 @@ func (s *ClusterSpec) RoachprodOpts(
 	ssdCount := s.SSDs
 
 	machineType := params.Defaults.MachineType
-	switch s.Cloud {
+	switch cloud {
 	case AWS:
 		if s.AWS.MachineType != "" {
 			machineType = s.AWS.MachineType
@@ -343,7 +342,7 @@ func (s *ClusterSpec) RoachprodOpts(
 			// If no machine type was specified, choose one
 			// based on the cloud and CPU count.
 			var err error
-			switch s.Cloud {
+			switch cloud {
 			case AWS:
 				machineType, selectedArch, err = SelectAWSMachineType(s.CPUs, s.Mem, preferLocalSSD && s.VolumeSize == 0, arch)
 			case GCE:
@@ -368,8 +367,8 @@ func (s *ClusterSpec) RoachprodOpts(
 		// - if no particular volume size is requested, and,
 		// - on AWS, if the machine type supports it.
 		// - on GCE, if the machine type is not ARM64.
-		if preferLocalSSD && s.VolumeSize == 0 && (s.Cloud != AWS || awsMachineSupportsSSD(machineType)) &&
-			(s.Cloud != GCE || selectedArch != vm.ArchARM64) {
+		if preferLocalSSD && s.VolumeSize == 0 && (cloud != AWS || awsMachineSupportsSSD(machineType)) &&
+			(cloud != GCE || selectedArch != vm.ArchARM64) {
 			// Ensure SSD count is at least 1 if UseLocalSSD is true.
 			if ssdCount == 0 {
 				ssdCount = 1
@@ -382,13 +381,13 @@ func (s *ClusterSpec) RoachprodOpts(
 	}
 
 	if s.FileSystem == Zfs {
-		if s.Cloud != GCE {
+		if cloud != GCE {
 			return vm.CreateOpts{}, nil, errors.Errorf(
-				"node creation with zfs file system not yet supported on %s", s.Cloud,
+				"node creation with zfs file system not yet supported on %s", cloud,
 			)
 		}
 		createVMOpts.SSDOpts.FileSystem = vm.Zfs
-	} else if s.RandomlyUseZfs && s.Cloud == GCE {
+	} else if s.RandomlyUseZfs && cloud == GCE {
 		rng, _ := randutil.NewPseudoRand()
 		if rng.Float64() <= 0.2 {
 			createVMOpts.SSDOpts.FileSystem = vm.Zfs
@@ -396,7 +395,7 @@ func (s *ClusterSpec) RoachprodOpts(
 	}
 
 	zonesStr := params.Defaults.Zones
-	switch s.Cloud {
+	switch cloud {
 	case AWS:
 		if s.AWS.Zones != "" {
 			zonesStr = s.AWS.Zones
@@ -414,13 +413,13 @@ func (s *ClusterSpec) RoachprodOpts(
 		}
 	}
 
-	if createVMOpts.Arch == string(vm.ArchFIPS) && !(s.Cloud == GCE || s.Cloud == AWS) {
+	if createVMOpts.Arch == string(vm.ArchFIPS) && !(cloud == GCE || cloud == AWS) {
 		return vm.CreateOpts{}, nil, errors.Errorf(
-			"FIPS not yet supported on %s", s.Cloud,
+			"FIPS not yet supported on %s", cloud,
 		)
 	}
 	var providerOpts vm.ProviderOpts
-	switch s.Cloud {
+	switch cloud {
 	case AWS:
 		providerOpts = getAWSOpts(machineType, zones, s.VolumeSize, s.AWS.VolumeThroughput,
 			createVMOpts.SSDOpts.UseLocalSSD)

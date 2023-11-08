@@ -30,7 +30,7 @@ func init() {
 }
 
 func makeRegistry(names ...string) testRegistryImpl {
-	r := makeTestRegistry(spec.GCE)
+	r := makeTestRegistry()
 	dummyRun := func(context.Context, test.Test, cluster.Cluster) {}
 
 	for _, name := range names {
@@ -38,7 +38,7 @@ func makeRegistry(names ...string) testRegistryImpl {
 			Name:             name,
 			Owner:            OwnerUnitTest,
 			Run:              dummyRun,
-			Cluster:          spec.MakeClusterSpec(spec.GCE, 0),
+			Cluster:          spec.MakeClusterSpec(0),
 			CompatibleClouds: registry.AllExceptAWS,
 			Suites:           registry.Suites(registry.Nightly),
 		})

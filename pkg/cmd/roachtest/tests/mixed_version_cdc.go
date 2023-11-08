@@ -131,7 +131,6 @@ func newCDCMixedVersionTester(
 	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
 	lastNode := c.Node(c.Spec().NodeCount)
 
-	c.Put(ctx, t.Cockroach(), "./cockroach", lastNode)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", lastNode)
 
 	return cdcMixedVersionTester{

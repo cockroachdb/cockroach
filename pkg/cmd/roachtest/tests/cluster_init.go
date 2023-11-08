@@ -31,8 +31,6 @@ import (
 )
 
 func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
-
 	// We start all nodes with the same join flags and then issue an "init"
 	// command to one of the nodes. We do this twice, since roachtest has some
 	// special casing for the first node in a cluster (the join flags of all nodes

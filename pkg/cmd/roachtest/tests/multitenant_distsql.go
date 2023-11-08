@@ -59,7 +59,6 @@ func runMultiTenantDistSQL(
 	bundle bool,
 	timeoutMillis int,
 ) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	// This test sets a smaller default range size than the default due to
 	// performance and resource limitations. We set the minimum range max bytes to
 	// 1 byte to bypass the guardrails.

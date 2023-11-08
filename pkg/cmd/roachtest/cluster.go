@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -620,10 +621,11 @@ type nodeSelector interface {
 
 // It is safe for concurrent use by multiple goroutines.
 type clusterImpl struct {
-	name string
-	tag  string
-	spec spec.ClusterSpec
-	t    test.Test
+	name  string
+	tag   string
+	cloud string
+	spec  spec.ClusterSpec
+	t     test.Test
 	// r is the registry tracking this cluster. Destroying the cluster will
 	// unregister it.
 	r *clusterRegistry
@@ -862,7 +864,9 @@ func (f *clusterFactory) newCluster(
 
 	providerOptsContainer := vm.CreateProviderOptionsContainer()
 
+	cloud := roachtestflags.Cloud
 	params := spec.RoachprodClusterConfig{
+		Cloud:                  cloud,
 		UseIOBarrierOnLocalSSD: cfg.useIOBarrier,
 		PreferredArch:          cfg.arch,
 	}
@@ -876,8 +880,8 @@ func (f *clusterFactory) newCluster(
 	if err != nil {
 		return nil, nil, err
 	}
-	if cfg.spec.Cloud != spec.Local {
-		providerOptsContainer.SetProviderOpts(cfg.spec.Cloud, providerOpts)
+	if cloud != spec.Local {
+		providerOptsContainer.SetProviderOpts(cloud, providerOpts)
 	}
 
 	if cfg.spec.UbuntuVersion.IsOverridden() {
@@ -916,6 +920,7 @@ func (f *clusterFactory) newCluster(
 		}
 
 		c := &clusterImpl{
+			cloud:      cloud,
 			name:       genName,
 			spec:       cfg.spec,
 			expiration: cfg.spec.Expiration(),
@@ -1749,16 +1754,25 @@ func (c *clusterImpl) PutE(
 	return errors.Wrap(roachprod.Put(ctx, l, c.MakeNodes(nodes...), src, dest, true /* useTreeDist */), "cluster.PutE")
 }
 
-// PutDefaultCockroach uploads the cockroach binary passed in the
-// command line to `test.DefaultCockroachPath` in every node in the
-// cluster. This binary is used by the test runner to collect failure
-// artifacts since tests are free to upload the cockroach binary they
-// use to any location they desire.
-func (c *clusterImpl) PutDefaultCockroach(
-	ctx context.Context, l *logger.Logger, cockroachPath string,
-) error {
-	c.status("uploading default cockroach binary to nodes")
-	return c.PutE(ctx, l, cockroachPath, test.DefaultCockroachPath, c.All())
+// PutCockroach checks if a test specifies a cockroach binary to upload to all
+// nodes in the cluster. By default, we randomly upload a binary with or without
+// runtime assertions enabled. Note that we upload to all nodes even if they
+// don't use the binary, so that the test runner can always fetch logs.
+func (c *clusterImpl) PutCockroach(ctx context.Context, l *logger.Logger, t *testImpl) error {
+	switch t.spec.CockroachBinary {
+	case registry.RandomizedCockroach:
+		if tests.UsingRuntimeAssertions(t) {
+			t.l.Printf("To reproduce the same set of metamorphic constants, run this test with %s=%d", test.EnvAssertionsEnabledSeed, c.cockroachRandomSeed())
+		}
+		return c.PutE(ctx, l, t.Cockroach(), test.DefaultCockroachPath, c.All())
+	case registry.StandardCockroach:
+		return c.PutE(ctx, l, t.StandardCockroach(), test.DefaultCockroachPath, c.All())
+	case registry.RuntimeAssertionsCockroach:
+		t.l.Printf("To reproduce the same set of metamorphic constants, run this test with %s=%d", test.EnvAssertionsEnabledSeed, c.cockroachRandomSeed())
+		return c.PutE(ctx, l, t.RuntimeAssertionsCockroach(), test.DefaultCockroachPath, c.All())
+	default:
+		return errors.Errorf("Specified cockroach binary does not exist.")
+	}
 }
 
 // PutLibraries inserts the specified libraries, by name, into all nodes on the cluster
@@ -2584,7 +2598,7 @@ func (c *clusterImpl) MakeNodes(opts ...option.Option) string {
 }
 
 func (c *clusterImpl) Cloud() string {
-	return c.spec.Cloud
+	return c.cloud
 }
 
 func (c *clusterImpl) IsLocal() bool {
@@ -2666,7 +2680,7 @@ func archForTest(ctx context.Context, l *logger.Logger, testSpec registry.TestSp
 		return testSpec.Cluster.Arch
 	}
 
-	if testSpec.Benchmark && testSpec.Cluster.Cloud != spec.Local {
+	if testSpec.Benchmark && roachtestflags.Cloud != spec.Local {
 		// TODO(srosenberg): enable after https://github.com/cockroachdb/cockroach/issues/104213
 		arch := vm.ArchAMD64
 		l.PrintfCtx(ctx, "Disabling arch randomization for benchmark; arch=%q, %s", arch, testSpec.Name)
