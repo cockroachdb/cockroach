@@ -576,6 +576,12 @@ func visitRanges(
 
 	// Iterate over all the ranges.
 	for {
+		// Check for context cancellation.
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		// Grab the next range.
 		rd, err := rangeStore.Next(ctx)
 		if err != nil {
 			return err
@@ -583,11 +589,6 @@ func visitRanges(
 		if rd.RangeID == 0 {
 			// We're done.
 			break
-		}
-
-		// Check for context cancellation.
-		if err := ctx.Err(); err != nil {
-			return err
 		}
 
 		newKey, err := resolver.resolveRange(ctx, &rd, cfg)
