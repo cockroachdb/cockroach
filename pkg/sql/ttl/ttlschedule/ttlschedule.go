@@ -152,7 +152,7 @@ func (s rowLevelTTLExecutor) ExecuteJob(
 	if _, err := createRowLevelTTLJob(
 		ctx,
 		&jobs.CreatedByInfo{
-			ID:   sj.ScheduleID(),
+			ID:   int64(sj.ScheduleID()),
 			Name: jobs.CreatedByScheduledJobs,
 		},
 		txn,

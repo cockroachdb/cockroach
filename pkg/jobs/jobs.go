@@ -71,6 +71,16 @@ type CreatedByInfo struct {
 	ID   int64
 }
 
+// ScheduleID return ID as a [jobspb.ScheduleID] iff Name is
+// [CreatedByScheduledJobs]. Otherwise it returns [jobspb.InvalidScheduleID],
+// the zero value.
+func (i *CreatedByInfo) ScheduleID() jobspb.ScheduleID {
+	if i.Name == CreatedByScheduledJobs {
+		return jobspb.ScheduleID(i.ID)
+	}
+	return jobspb.InvalidScheduleID
+}
+
 // Record bundles together the user-managed fields in jobspb.Payload.
 type Record struct {
 	JobID         jobspb.JobID

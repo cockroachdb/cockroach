@@ -103,7 +103,10 @@ func (s scheduledJobStorageTxn) loadCandidateScheduleForExecution(
 
 // lookupNumRunningJobs returns the number of running jobs for the specified schedule.
 func lookupNumRunningJobs(
-	ctx context.Context, scheduleID int64, env scheduledjobs.JobSchedulerEnv, txn isql.Txn,
+	ctx context.Context,
+	scheduleID jobspb.ScheduleID,
+	env scheduledjobs.JobSchedulerEnv,
+	txn isql.Txn,
 ) (int64, error) {
 	lookupStmt := fmt.Sprintf(
 		"SELECT count(*) FROM %s WHERE created_by_type = '%s' AND created_by_id = %d AND status IN %s",

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -42,6 +43,9 @@ type fixtureTestGen struct {
 	flags workload.Flags
 	val   string
 	empty string
+	// tableAutoStatsEnabled, if set, enables auto stats collection at the table
+	// level.
+	tableAutoStatsEnabled bool
 }
 
 func makeTestWorkload() workload.Flagser {
@@ -67,9 +71,13 @@ func init() {
 func (fixtureTestGen) Meta() workload.Meta     { return fixtureTestMeta }
 func (g fixtureTestGen) Flags() workload.Flags { return g.flags }
 func (g fixtureTestGen) Tables() []workload.Table {
+	schema := `(key INT PRIMARY KEY, value INT)`
+	if g.tableAutoStatsEnabled {
+		schema += ` WITH (sql_stats_automatic_collection_enabled = true)`
+	}
 	return []workload.Table{{
 		Name:   `fx`,
-		Schema: `(key INT PRIMARY KEY, value INT)`,
+		Schema: schema,
 		InitialRows: workload.Tuples(
 			fixtureTestGenRows,
 			func(rowIdx int) []interface{} {
@@ -182,26 +190,27 @@ func TestImportFixture(t *testing.T) {
 	stats.DefaultRefreshInterval = time.Millisecond
 	stats.DefaultAsOfTime = 10 * time.Millisecond
 
+	// Disable auto stats collection on all tables. This is needed because we
+	// run only one auto stats job at a time, and collecting auto stats on
+	// system tables can significantly delay the collection of stats on the
+	// fixture after the IMPORT is done.
+	st := cluster.MakeTestingClusterSettings()
+	stats.AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
+	stats.AutomaticStatisticsOnSystemTables.Override(ctx, &st.SV, false)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Occasionally, for some reason auto stats aren't collected within the
-		// retry window after the import is finished in multi-tenant setup, so
-		// for now we disable this config.
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110708),
+		Settings:          st,
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(base.TestTenantProbabilistic, 113916),
 	})
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=true`)
-
 	gen := makeTestWorkload()
+	// Enable auto stats only on the table being imported.
+	gen.(*fixtureTestGen).tableAutoStatsEnabled = true
 	flag := fmt.Sprintf(`val=%d`, timeutil.Now().UnixNano())
 	if err := gen.Flags().Parse([]string{"--" + flag}); err != nil {
 		t.Fatalf(`%+v`, err)
 	}
-	// Wait for the `ensureAllTables` unconditional auto stats to run before
-	// starting the test, so we don't hit a timing window where 2 sets of auto
-	// stats are collected.
-	time.Sleep(2 * time.Second)
 
 	const filesPerNode = 1
 

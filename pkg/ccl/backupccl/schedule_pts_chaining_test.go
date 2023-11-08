@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -37,7 +38,7 @@ import (
 // Returns schedule IDs for full and incremental schedules, plus a cleanup function.
 func (th *testHelper) createSchedules(
 	t *testing.T, backupStmt string, opts ...string,
-) (int64, int64, func()) {
+) (jobspb.ScheduleID, jobspb.ScheduleID, func()) {
 	backupOpts := ""
 	if len(opts) > 0 {
 		backupOpts = fmt.Sprintf(" WITH %s", strings.Join(opts, ", "))
@@ -80,7 +81,7 @@ func checkPTSRecord(
 		require.NoError(t, err)
 		return nil
 	}))
-	encodedScheduleID := []byte(strconv.FormatInt(schedule.ScheduleID(), 10))
+	encodedScheduleID := []byte(strconv.FormatInt(int64(schedule.ScheduleID()), 10))
 	require.Equal(t, encodedScheduleID, ptsRecord.Meta)
 	require.Equal(t, jobsprotectedts.GetMetaType(jobsprotectedts.Schedules), ptsRecord.MetaType)
 	require.Equal(t, timestamp, ptsRecord.Timestamp)

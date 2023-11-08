@@ -289,7 +289,7 @@ message BackupDetails {
   // to its path.
   string collection_URI = 8 [(gogoproto.customname) = "CollectionURI"];
 
-  int64 schedule_id = 12 [(gogoproto.customname) = "ScheduleID"];
+  int64 schedule_id = 12 [(gogoproto.customname) = "ScheduleID", (gogoproto.casttype) = "ScheduleID"];
 
   // SchedulePTSChainingRecord is used by scheduled backups to chain protected
   // timestamp records. For more details about the chaining scheme refer to the
