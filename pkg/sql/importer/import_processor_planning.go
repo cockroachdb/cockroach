@@ -270,7 +270,7 @@ func distImport(
 		}
 
 		execCfg := execCtx.ExecCfg()
-		jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, job.ID(), execCtx.ExecCfg().Settings.Version)
+		jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, job.ID())
 
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *evalCtx

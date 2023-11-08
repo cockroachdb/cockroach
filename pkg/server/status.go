@@ -3951,7 +3951,7 @@ func (s *statusServer) GetJobProfilerExecutionDetails(
 	execCfg := s.sqlServer.execCfg
 	var data []byte
 	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		data, err = jobs.ReadExecutionDetailFile(ctx, req.Filename, txn, jobID, execCfg.Settings.Version)
+		data, err = jobs.ReadExecutionDetailFile(ctx, req.Filename, txn, jobID)
 		return err
 	}); err != nil {
 		return nil, err
@@ -3972,7 +3972,7 @@ func (s *statusServer) ListJobProfilerExecutionDetails(
 
 	jobID := jobspb.JobID(req.JobId)
 	execCfg := s.sqlServer.execCfg
-	files, err := jobs.ListExecutionDetailFiles(ctx, execCfg.InternalDB, jobID, execCfg.Settings.Version)
+	files, err := jobs.ListExecutionDetailFiles(ctx, execCfg.InternalDB, jobID)
 	if err != nil {
 		return nil, err
 	}

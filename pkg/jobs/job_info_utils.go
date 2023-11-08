@@ -17,7 +17,6 @@ import (
 	"io"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/errors"
@@ -33,15 +32,10 @@ const finalChunkSuffix = "#_final"
 // chunks and so if the caller wishes to preserve history they must use a
 // unique filename.
 func WriteChunkedFileToJobInfo(
-	ctx context.Context,
-	filename string,
-	data []byte,
-	txn isql.Txn,
-	jobID jobspb.JobID,
-	cv clusterversion.Handle,
+	ctx context.Context, filename string, data []byte, txn isql.Txn, jobID jobspb.JobID,
 ) error {
 	finalChunkName := filename + finalChunkSuffix
-	jobInfo := InfoStorageForJob(txn, jobID, cv)
+	jobInfo := InfoStorageForJob(txn, jobID)
 
 	// Clear any existing chunks with the same filename before writing new chunks.
 	// We clear all rows that with info keys in [filename, filename#_final~).
@@ -87,12 +81,12 @@ func WriteChunkedFileToJobInfo(
 // ReadChunkedFileToJobInfo will stitch together all the chunks corresponding to
 // the filename and return the uncompressed data of the file.
 func ReadChunkedFileToJobInfo(
-	ctx context.Context, filename string, txn isql.Txn, jobID jobspb.JobID, cv clusterversion.Handle,
+	ctx context.Context, filename string, txn isql.Txn, jobID jobspb.JobID,
 ) ([]byte, error) {
 	buf := bytes.NewBuffer([]byte{})
 	// Iterate over all the chunks of the requested file and return the unzipped
 	// chunks of data.
-	jobInfo := InfoStorageForJob(txn, jobID, cv)
+	jobInfo := InfoStorageForJob(txn, jobID)
 	var lastInfoKey string
 	if err := jobInfo.Iterate(ctx, filename,
 		func(infoKey string, value []byte) error {

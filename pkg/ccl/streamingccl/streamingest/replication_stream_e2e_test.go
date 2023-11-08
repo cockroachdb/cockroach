@@ -1186,14 +1186,12 @@ func TestLoadProducerAndIngestionProgress(t *testing.T) {
 	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(replicationJobID))
 
 	srcDB := c.SrcSysServer.ExecutorConfig().(sql.ExecutorConfig).InternalDB
-	producerProgress, err := replicationutils.LoadReplicationProgress(ctx, srcDB, jobspb.JobID(producerJobID),
-		c.SrcSysServer.ExecutorConfig().(sql.ExecutorConfig).Settings.Version)
+	producerProgress, err := replicationutils.LoadReplicationProgress(ctx, srcDB, jobspb.JobID(producerJobID))
 	require.NoError(t, err)
 	require.Equal(t, jobspb.StreamReplicationProgress_NOT_FINISHED, producerProgress.StreamIngestionStatus)
 
 	destDB := c.DestSysServer.ExecutorConfig().(sql.ExecutorConfig).InternalDB
-	ingestionProgress, err := replicationutils.LoadIngestionProgress(ctx, destDB, jobspb.JobID(replicationJobID),
-		c.DestSysServer.ExecutorConfig().(sql.ExecutorConfig).Settings.Version)
+	ingestionProgress, err := replicationutils.LoadIngestionProgress(ctx, destDB, jobspb.JobID(replicationJobID))
 	require.NoError(t, err)
 	require.Equal(t, jobspb.Replicating, ingestionProgress.ReplicationStatus)
 }

@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler/profilerconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -47,19 +46,14 @@ func compressChunk(chunkBuf []byte) ([]byte, error) {
 // forms in the list of files displayed on the jobs' Advanced Debugging
 // DBConsole page.
 func WriteProtobinExecutionDetailFile(
-	ctx context.Context,
-	filename string,
-	msg protoutil.Message,
-	txn isql.Txn,
-	jobID jobspb.JobID,
-	cv clusterversion.Handle,
+	ctx context.Context, filename string, msg protoutil.Message, txn isql.Txn, jobID jobspb.JobID,
 ) error {
 	name := fmt.Sprintf("%s~%s.binpb", filename, proto.MessageName(msg))
 	b, err := protoutil.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	return WriteExecutionDetailFile(ctx, name, b, txn, jobID, cv)
+	return WriteExecutionDetailFile(ctx, name, b, txn, jobID)
 }
 
 // WriteExecutionDetailFile will chunk and write to the job_info table under the
@@ -70,15 +64,10 @@ func WriteProtobinExecutionDetailFile(
 // This method clears any existing file with the same filename before writing a
 // new one.
 func WriteExecutionDetailFile(
-	ctx context.Context,
-	filename string,
-	data []byte,
-	txn isql.Txn,
-	jobID jobspb.JobID,
-	cv clusterversion.Handle,
+	ctx context.Context, filename string, data []byte, txn isql.Txn, jobID jobspb.JobID,
 ) error {
 	return WriteChunkedFileToJobInfo(ctx,
-		profilerconstants.MakeProfilerExecutionDetailsChunkKeyPrefix(filename), data, txn, jobID, cv)
+		profilerconstants.MakeProfilerExecutionDetailsChunkKeyPrefix(filename), data, txn, jobID)
 }
 
 // ProtobinExecutionDetailFile interface encapsulates the methods that must be
@@ -109,7 +98,7 @@ func stringifyProtobinFile(filename string, fileContents []byte) ([]byte, error)
 // ReadExecutionDetailFile will stitch together all the chunks corresponding to the
 // filename and return the uncompressed data of the file.
 func ReadExecutionDetailFile(
-	ctx context.Context, filename string, txn isql.Txn, jobID jobspb.JobID, cv clusterversion.Handle,
+	ctx context.Context, filename string, txn isql.Txn, jobID jobspb.JobID,
 ) ([]byte, error) {
 	// TODO(adityamaru): If filename=all add logic to zip up all the files corresponding
 	// to the job's execution details and return the zipped bundle instead.
@@ -124,7 +113,6 @@ func ReadExecutionDetailFile(
 			profilerconstants.MakeProfilerExecutionDetailsChunkKeyPrefix(trimmedFilename),
 			txn,
 			jobID,
-			cv,
 		)
 		if err != nil {
 			return nil, err
@@ -137,18 +125,17 @@ func ReadExecutionDetailFile(
 		profilerconstants.MakeProfilerExecutionDetailsChunkKeyPrefix(filename),
 		txn,
 		jobID,
-		cv,
 	)
 }
 
 // ListExecutionDetailFiles lists all the files that have been generated as part
 // of a job's execution details.
 func ListExecutionDetailFiles(
-	ctx context.Context, db isql.DB, jobID jobspb.JobID, cv clusterversion.Handle,
+	ctx context.Context, db isql.DB, jobID jobspb.JobID,
 ) ([]string, error) {
 	var res []string
 	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		jobInfo := InfoStorageForJob(txn, jobID, cv)
+		jobInfo := InfoStorageForJob(txn, jobID)
 
 		// Iterate over all the files that have been stored as part of the job's
 		// execution details.
