@@ -235,8 +235,8 @@ func TestKVNemesisSingleNode(t *testing.T) {
 		numSteps:                     defaultNumSteps,
 		concurrency:                  5,
 		seedOverride:                 0,
-		invalidLeaseAppliedIndexProb: 0.1,
-		injectReproposalErrorProb:    0.1,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
 	})
 }
 
@@ -263,8 +263,8 @@ func TestKVNemesisMultiNode(t *testing.T) {
 		numSteps:                     defaultNumSteps,
 		concurrency:                  5,
 		seedOverride:                 0,
-		invalidLeaseAppliedIndexProb: 0.1,
-		injectReproposalErrorProb:    0.1,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
 	})
 }
 
