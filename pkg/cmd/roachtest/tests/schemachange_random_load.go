@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -97,7 +98,11 @@ func runSchemaChangeRandomLoad(
 
 	t.Status("starting cockroach nodes")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
-	c.Run(ctx, loadNode, "./workload init schemachange")
+	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Run(ctx, loadNode, fmt.Sprintf("./workload init schemachange '%s'", pgurl))
 
 	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1), "echo", "-n", "{store-dir}")
 	if err != nil {
@@ -113,6 +118,7 @@ func runSchemaChangeRandomLoad(
 		fmt.Sprintf("--max-ops %d", maxOps),
 		fmt.Sprintf("--concurrency %d", concurrency),
 		fmt.Sprintf("--txn-log %s", filepath.Join(storeDirectory, txnLogFile)),
+		fmt.Sprintf("{pgurl%s}", loadNode),
 	}
 	t.Status("running schemachange workload")
 	err = c.RunE(ctx, loadNode, runCmd...)

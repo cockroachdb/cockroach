@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/stretchr/testify/require"
@@ -101,7 +102,11 @@ func registerGORM(r registry.Registry) {
 		ignorelistName, ignoredFailures := "gormIgnorelist", gormIgnorelist
 		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s", version, blocklistName, ignorelistName)
 
-		err = c.RunE(ctx, node, `./cockroach sql -e "CREATE DATABASE gorm" --insecure`)
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(1))
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = c.RunE(ctx, node, fmt.Sprintf(`./cockroach sql -e "CREATE DATABASE gorm" --insecure --url=%s`, pgurl))
 		require.NoError(t, err)
 
 		t.Status("downloading go dependencies for tests")
@@ -122,7 +127,7 @@ func registerGORM(r registry.Registry) {
 			ctx,
 			node,
 			fmt.Sprintf(`cd %s && rm migrate_test.go &&
-				GORM_DIALECT="postgres" GORM_DSN="user=root password= dbname=gorm host=localhost port=26257 sslmode=disable"
+				GORM_DIALECT="postgres" GORM_DSN="user=root password= dbname=gorm host=localhost port={pgport:1} sslmode=disable"
 				go test -v ./... 2>&1 | %s/bin/go-junit-report > %s`,
 				gormTestPath, goPath, resultsPath),
 		)

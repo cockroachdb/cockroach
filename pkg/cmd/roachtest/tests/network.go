@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -133,9 +134,12 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 			if timeutil.Since(tStart) > 30*time.Second {
 				t.L().Printf("still waiting for leases to move")
 				// The leases have not moved yet, so display some progress.
-				dumpRangesCmd := fmt.Sprintf(`./cockroach sql --certs-dir %s -e 'TABLE crdb_internal.ranges'`, certsDir)
+				dumpRangesCmd := roachtestutil.NewCommand("./cockroach sql -e 'TABLE crdb_internal.ranges'").
+					Flag("certs-dir", certsDir).
+					Flag("port", "{pgport:1}").
+					String()
 				t.L().Printf("SQL: %s", dumpRangesCmd)
-				err := c.RunE(ctx, c.Node(1), dumpRangesCmd)
+				err = c.RunE(ctx, c.Node(1), dumpRangesCmd)
 				require.NoError(t, err)
 			}
 
@@ -249,7 +253,7 @@ SELECT $1::INT = ALL (
 		})
 
 		t.L().Printf("blocking networking on node 1...")
-		const netConfigCmd = `
+		netConfigCmd := fmt.Sprintf(`
 # ensure any failure fails the entire script.
 set -e;
 
@@ -258,11 +262,12 @@ sudo iptables -P INPUT ACCEPT;
 sudo iptables -P OUTPUT ACCEPT;
 
 # Drop any node-to-node crdb traffic.
-sudo iptables -A INPUT -p tcp --dport 26257 -j DROP;
-sudo iptables -A OUTPUT -p tcp --dport 26257 -j DROP;
+sudo iptables -A INPUT -p tcp --dport {pgport%s} -j DROP;
+sudo iptables -A OUTPUT -p tcp --dport {pgport%s} -j DROP;
 
 sudo iptables-save
-`
+`,
+			c.Node(expectedLeaseholder), c.Node(expectedLeaseholder))
 		t.L().Printf("partitioning using iptables; config cmd:\n%s", netConfigCmd)
 		require.NoError(t, c.RunE(ctx, c.Node(expectedLeaseholder), netConfigCmd))
 

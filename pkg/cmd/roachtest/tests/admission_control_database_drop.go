@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -93,7 +94,9 @@ func registerDatabaseDrop(r registry.Registry) {
 				runTPCE(ctx, t, c, tpceOptions{
 					start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 						settings := install.MakeClusterSettings(install.NumRacksOption(crdbNodes))
-						if err := c.StartE(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings, c.Range(1, crdbNodes)); err != nil {
+						startOpts := option.DefaultStartOptsNoBackups()
+						roachtestutil.SetDefaultSQLPort(c, startOpts.RoachprodOpts)
+						if err := c.StartE(ctx, t.L(), startOpts, settings, c.Range(1, crdbNodes)); err != nil {
 							t.Fatal(err)
 						}
 					},
@@ -195,6 +198,8 @@ func registerDatabaseDrop(r registry.Registry) {
 			runTPCE(ctx, t, c, tpceOptions{
 				start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					startOpts := option.DefaultStartOptsNoBackups()
+					roachtestutil.SetDefaultSQLPort(c, startOpts.RoachprodOpts)
+					roachtestutil.SetDefaultAdminUIPort(c, startOpts.RoachprodOpts)
 					settings := install.MakeClusterSettings(install.NumRacksOption(crdbNodes))
 					if err := c.StartE(ctx, t.L(), startOpts, settings, c.Range(1, crdbNodes)); err != nil {
 						t.Fatal(err)

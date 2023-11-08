@@ -292,7 +292,7 @@ const typeORMConfigJSON = `
     "name": "cockroachdb",
     "type": "cockroachdb",
     "host": "localhost",
-    "port": 26257,
+    "port": {pgport:1},
     "username": "root",
     "password": "",
     "database": "defaultdb"
