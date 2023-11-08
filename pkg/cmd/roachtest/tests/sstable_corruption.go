@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
@@ -41,8 +42,12 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// We don't really need tpcc, we just need a good amount of data. Enough
 			// to have multiple ranges, and some sstables with only table keys.
 			t.Status("importing tpcc fixture")
+			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+			if err != nil {
+				t.Fatal(err)
+			}
 			c.Run(ctx, workloadNode,
-				"./cockroach workload fixtures import tpcc --warehouses=100 --fks=false --checks=false")
+				"./cockroach workload fixtures import tpcc --warehouses=100 --fks=false --checks=false", pgurl)
 			return nil
 		})
 		m.Wait()
@@ -138,8 +143,9 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 			err := c.RunE(
 				ctx, workloadNode,
 				fmt.Sprintf(
-					"./cockroach workload run tpcc --warehouses=100 --tolerate-errors --duration %s",
+					"./cockroach workload run tpcc --warehouses=100 --tolerate-errors --duration %s {pgurl%s}",
 					timeout,
+					crdbNodes,
 				),
 			)
 

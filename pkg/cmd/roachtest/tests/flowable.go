@@ -170,7 +170,7 @@ grep "force-commit" . -lr | xargs sed -i 's/-- force-commit//g'`,
 }
 
 const flowableParams = `
-jdbc.url=jdbc:postgresql://127.0.0.1:26257/flowable?sslmode=disable
+jdbc.url=jdbc:postgresql://127.0.0.1:{pgport:1}/flowable?sslmode=disable
 jdbc.driver=org.postgresql.Driver
 jdbc.username=flowable
 jdbc.password
