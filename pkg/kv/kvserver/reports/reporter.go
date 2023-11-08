@@ -540,10 +540,6 @@ type rangeVisitor interface {
 	// The idea is that, if failed() returns true, the report that the visitor
 	// produces will be considered incomplete and not persisted.
 	failed() bool
-
-	// reset resets the visitor's state, preparing it for visit() calls starting
-	// at the first range. This is called on retriable errors during range iteration.
-	reset(ctx context.Context)
 }
 
 // visitorError is returned by visitRanges when one or more visitors failed.
