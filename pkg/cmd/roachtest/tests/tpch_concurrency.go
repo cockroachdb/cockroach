@@ -33,8 +33,9 @@ func registerTPCHConcurrency(r registry.Registry) {
 		c cluster.Cluster,
 		disableStreamer bool,
 	) {
-		// We run this test without runtime assertions as it uses too much memory
-		// budget. Even increasing the max to 80% still flaked.
+		// We run this test without runtime assertions as it pushes the VMs way
+		// past the overload point, so it cannot withstand any metamorphic
+		// perturbations.
 		c.Put(ctx, t.StandardCockroach(), "./cockroach", c.Range(1, numNodes-1))
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(numNodes))
 		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), c.Range(1, numNodes-1))
@@ -56,7 +57,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 
 	restartCluster := func(ctx context.Context, c cluster.Cluster, t test.Test) {
 		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(1, numNodes-1))
-		c.Start(ctx, t.L(), maybeUseMemoryBudget(t, 35), install.MakeClusterSettings(), c.Range(1, numNodes-1))
+		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), c.Range(1, numNodes-1))
 	}
 
 	// checkConcurrency returns an error if at least one node of the cluster
