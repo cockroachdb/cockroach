@@ -1291,6 +1291,8 @@ func (f *blackholeFailer) Cleanup(ctx context.Context) {
 }
 
 func (f *blackholeFailer) Fail(ctx context.Context, nodeID int) {
+	pgport := fmt.Sprintf("{pgport:%d}", nodeID)
+
 	// When dropping both input and output, make sure we drop packets in both
 	// directions for both the inbound and outbound TCP connections, such that we
 	// get a proper black hole. Only dropping one direction for both of INPUT and
@@ -1302,15 +1304,15 @@ func (f *blackholeFailer) Fail(ctx context.Context, nodeID int) {
 	// outages in the wild.
 	if f.input && f.output {
 		// Inbound TCP connections, both received and sent packets.
-		f.c.Run(ctx, f.c.Node(nodeID), `sudo iptables -A INPUT -p tcp --dport 26257 -j DROP`)
-		f.c.Run(ctx, f.c.Node(nodeID), `sudo iptables -A OUTPUT -p tcp --sport 26257 -j DROP`)
+		f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(`sudo iptables -A INPUT -p tcp --dport %s -j DROP`, pgport))
+		f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --sport %s -j DROP`, pgport))
 		// Outbound TCP connections, both sent and received packets.
-		f.c.Run(ctx, f.c.Node(nodeID), `sudo iptables -A OUTPUT -p tcp --dport 26257 -j DROP`)
-		f.c.Run(ctx, f.c.Node(nodeID), `sudo iptables -A INPUT -p tcp --sport 26257 -j DROP`)
+		f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --dport %s -j DROP`, pgport))
+		f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(`sudo iptables -A INPUT -p tcp --sport %s -j DROP`, pgport))
 	} else if f.input {
-		f.c.Run(ctx, f.c.Node(nodeID), `sudo iptables -A INPUT -p tcp --dport 26257 -j DROP`)
+		f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(`sudo iptables -A INPUT -p tcp --dport %s -j DROP`, pgport))
 	} else if f.output {
-		f.c.Run(ctx, f.c.Node(nodeID), `sudo iptables -A OUTPUT -p tcp --dport 26257 -j DROP`)
+		f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --dport %s -j DROP`, pgport))
 	}
 }
 
@@ -1321,6 +1323,8 @@ func (f *blackholeFailer) FailPartial(ctx context.Context, nodeID int, peerIDs [
 	require.NoError(f.t, err)
 
 	for _, peerIP := range peerIPs {
+		pgport := fmt.Sprintf("{pgport:%d}", nodeID)
+
 		// When dropping both input and output, make sure we drop packets in both
 		// directions for both the inbound and outbound TCP connections, such that
 		// we get a proper black hole. Only dropping one direction for both of INPUT
@@ -1333,20 +1337,20 @@ func (f *blackholeFailer) FailPartial(ctx context.Context, nodeID int, peerIDs [
 		if f.input && f.output {
 			// Inbound TCP connections, both received and sent packets.
 			f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(
-				`sudo iptables -A INPUT -p tcp -s %s --dport 26257 -j DROP`, peerIP))
+				`sudo iptables -A INPUT -p tcp -s %s --dport %s -j DROP`, peerIP, pgport))
 			f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(
-				`sudo iptables -A OUTPUT -p tcp -d %s --sport 26257 -j DROP`, peerIP))
+				`sudo iptables -A OUTPUT -p tcp -d %s --sport %s -j DROP`, peerIP, pgport))
 			// Outbound TCP connections, both sent and received packets.
 			f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(
-				`sudo iptables -A OUTPUT -p tcp -d %s --dport 26257 -j DROP`, peerIP))
+				`sudo iptables -A OUTPUT -p tcp -d %s --dport %s -j DROP`, peerIP, pgport))
 			f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(
-				`sudo iptables -A INPUT -p tcp -s %s --sport 26257 -j DROP`, peerIP))
+				`sudo iptables -A INPUT -p tcp -s %s --sport %s -j DROP`, peerIP, pgport))
 		} else if f.input {
 			f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(
-				`sudo iptables -A INPUT -p tcp -s %s --dport 26257 -j DROP`, peerIP))
+				`sudo iptables -A INPUT -p tcp -s %s --dport %s -j DROP`, peerIP, pgport))
 		} else if f.output {
 			f.c.Run(ctx, f.c.Node(nodeID), fmt.Sprintf(
-				`sudo iptables -A OUTPUT -p tcp -d %s --dport 26257 -j DROP`, peerIP))
+				`sudo iptables -A OUTPUT -p tcp -d %s --dport %s -j DROP`, peerIP, pgport))
 		}
 	}
 }
