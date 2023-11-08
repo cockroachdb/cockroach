@@ -2,7 +2,7 @@
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-vec-off multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-no-los
 
 statement ok
-SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true
+SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true
 
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
