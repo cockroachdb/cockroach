@@ -238,7 +238,7 @@ func (i InfoStorage) Write(ctx context.Context, infoKey string, value []byte) er
 		return errors.AssertionFailedf("missing value (infoKey %q)", infoKey)
 	}
 	if err := i.write(ctx, infoKey, value); err != nil {
-		return MaybeGenerateForcedRetryableError(ctx, i.txn.KV(), err, i.cv)
+		return MaybeGenerateForcedRetryableError(ctx, i.txn.KV(), err)
 	}
 	return nil
 }
