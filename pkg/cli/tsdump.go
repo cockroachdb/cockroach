@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient" // Added by Daniel Almeida to enable yaml to be created
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -39,11 +40,13 @@ var debugTimeSeriesDumpOpts = struct {
 	format       tsDumpFormat
 	from, to     timestampValue
 	clusterLabel string
+	yaml         string // Added by Daniel Almeida to enable yaml to be created
 }{
 	format:       tsDumpText,
 	from:         timestampValue{},
 	to:           timestampValue(timeutil.Now().Add(24 * time.Hour)),
 	clusterLabel: "",
+	yaml:         "/tmp/tsdump.yaml", // Added by Daniel Almeida to enable yaml to be created. Default location is /tmp/tsdump.yaml
 }
 
 var debugTimeSeriesDumpCmd = &cobra.Command{
@@ -75,6 +78,11 @@ will then convert it to the --format requested in the current invocation.
 			if convertFile != "" {
 				return errors.Errorf("input file is already in raw format")
 			}
+			err := createYAML() // Daniel Almeida function to create tsdump.yaml when creating tsdump in raw format only
+			if err != nil {
+				return err
+			}
+
 			// Special case, we don't go through the text output code.
 		case tsDumpCSV:
 			w = csvTSWriter{w: csv.NewWriter(os.Stdout)}
@@ -200,6 +208,44 @@ type tsWriter interface {
 type openMetricsWriter struct {
 	out    io.Writer
 	labels map[string]string
+}
+
+// Daniel Almeida function to obtain storeID to nodeID mappings when creating raw tsdump
+// We automatically create the tsdump.yaml whenever creating a raw tsdump, as this is required for loading raw time series data
+func createYAML() (resErr error) {
+	file, err := os.OpenFile(debugTimeSeriesDumpOpts.yaml, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	ctx := context.Background()
+	sqlConn, err := makeSQLClient(ctx, "tsdump-node-to-store-mapping", useSystemDb)
+	if err != nil {
+		return err
+	}
+	defer func() { resErr = errors.CombineErrors(resErr, sqlConn.Close()) }()
+
+	_, rows, err := sqlExecCtx.RunQuery(
+		ctx,
+		sqlConn,
+		clisqlclient.MakeQuery(`SELECT store_id || ': ' || node_id FROM crdb_internal.kv_store_status`), false)
+
+	if err != nil {
+		return err
+	}
+
+	var strStoreNodeID string
+	for _, row := range rows {
+		storeNodeID := row
+		strStoreNodeID = strings.Join(storeNodeID, " ")
+		strStoreNodeID += "\n"
+		_, err := file.WriteString(strStoreNodeID)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func makeOpenMetricsWriter(out io.Writer) *openMetricsWriter {
