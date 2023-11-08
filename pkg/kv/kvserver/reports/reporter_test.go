@@ -620,10 +620,6 @@ func (r *recordingRangeVisitor) failed() bool {
 	return false
 }
 
-func (r *recordingRangeVisitor) reset(ctx context.Context) {
-	r.rngs = nil
-}
-
 type visitorEntry struct {
 	newZone bool
 	rng     roachpb.RangeDescriptor
@@ -645,8 +641,4 @@ func (e *errorRangeVisitor) visitSameZone(context.Context, *roachpb.RangeDescrip
 
 func (e *errorRangeVisitor) failed() bool {
 	return e.errorReturned
-}
-
-func (e *errorRangeVisitor) reset(context.Context) {
-	e.errorReturned = false
 }
