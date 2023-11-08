@@ -5596,6 +5596,8 @@ standard_conforming_strings                                on
 statement_timeout                                          0
 streamer_always_maintain_ordering                          off
 streamer_enabled                                           on
+streamer_in_order_eager_memory_usage_fraction              0.5
+streamer_out_of_order_eager_memory_usage_fraction          0.8
 strict_ddl_atomicity                                       off
 stub_catalog_tables                                        on
 synchronize_seqscans                                       on

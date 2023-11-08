@@ -2814,6 +2814,54 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`streamer_in_order_eager_memory_usage_fraction`: {
+		GetStringVal: makeFloatGetStringValFn(`streamer_in_order_eager_memory_usage_fraction`),
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatFloatAsPostgresSetting(evalCtx.SessionData().StreamerInOrderEagerMemoryUsageFraction), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return "0.5"
+		},
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			// Note that we permit fractions above 1.0 to allow for disabling
+			// the "eager memory usage" limit.
+			if f < 0 {
+				return pgerror.New(pgcode.InvalidParameterValue, "streamer_in_order_eager_memory_usage_fraction must be non-negative")
+			}
+			m.SetStreamerInOrderEagerMemoryUsageFraction(f)
+			return nil
+		},
+	},
+
+	// CockroachDB extension.
+	`streamer_out_of_order_eager_memory_usage_fraction`: {
+		GetStringVal: makeFloatGetStringValFn(`streamer_out_of_order_eager_memory_usage_fraction`),
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatFloatAsPostgresSetting(evalCtx.SessionData().StreamerOutOfOrderEagerMemoryUsageFraction), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return "0.8"
+		},
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			// Note that we permit fractions above 1.0 to allow for disabling
+			// the "eager memory usage" limit.
+			if f < 0 {
+				return pgerror.New(pgcode.InvalidParameterValue, "streamer_out_of_order_eager_memory_usage_fraction must be non-negative")
+			}
+			m.SetStreamerOutOfOrderEagerMemoryUsageFraction(f)
+			return nil
+		},
+	},
+
+	// CockroachDB extension.
 	`multiple_active_portals_enabled`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`multiple_active_portals_enabled`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {

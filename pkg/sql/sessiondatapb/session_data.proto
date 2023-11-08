@@ -119,6 +119,14 @@ message SessionData {
   // This session variable is introduced as a possible workaround in case we
   // have more bugs like #113013.
   bool streamer_always_maintain_ordering = 27;
+  // StreamerInOrderEagerMemoryUsageFraction controls the fraction of the
+  // streamer's memory budget that might be used for issuing requests eagerly,
+  // in the InOrder mode.
+  double streamer_in_order_eager_memory_usage_fraction = 28;
+  // StreamerOutOfOrderEagerMemoryUsageFraction controls the fraction of the
+  // streamer's memory budget that might be used for issuing requests eagerly,
+  // in the OutOfOrder mode.
+  double streamer_out_of_order_eager_memory_usage_fraction = 29;
 }
 
 // DataConversionConfig contains the parameters that influence the output
