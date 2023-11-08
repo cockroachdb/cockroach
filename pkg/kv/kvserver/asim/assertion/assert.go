@@ -16,6 +16,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -300,10 +301,12 @@ func (sa StoreStatAssertion) String() string {
 }
 
 type ConformanceAssertion struct {
-	Underreplicated int
-	Overreplicated  int
-	Violating       int
-	Unavailable     int
+	Underreplicated           int
+	Overreplicated            int
+	ViolatingConstraints      int
+	Unavailable               int
+	ViolatingLeasePreferences int
+	LessPreferredLeases       int
 }
 
 // ConformanceAssertionSentinel declares a sentinel value which when any of the
@@ -311,24 +314,62 @@ type ConformanceAssertion struct {
 // reports value for that type of conformance.
 const ConformanceAssertionSentinel = -1
 
+func leasePreferenceReport(
+	ctx context.Context, h history.History,
+) (violating, lessPreferred []roachpb.ConformanceReportedRange) {
+	ranges := h.S.Ranges()
+	for _, r := range ranges {
+		if lhStore, ok := h.S.LeaseholderStore(r.RangeID()); ok {
+			storeDescriptor := lhStore.Descriptor()
+			spanConf := r.SpanConfig()
+			status := kvserver.CheckStoreAgainstLeasePreferences(
+				storeDescriptor.StoreID,
+				storeDescriptor.Attrs,
+				storeDescriptor.Node.Attrs,
+				storeDescriptor.Node.Locality,
+				spanConf.LeasePreferences,
+			)
+			switch status {
+			case kvserver.LeasePreferencesOK:
+			case kvserver.LeasePreferencesLessPreferred:
+				lessPreferred = append(lessPreferred, roachpb.ConformanceReportedRange{
+					RangeDescriptor: *r.Descriptor(),
+					Config:          *spanConf,
+				})
+			case kvserver.LeasePreferencesViolating:
+				violating = append(violating, roachpb.ConformanceReportedRange{
+					RangeDescriptor: *r.Descriptor(),
+					Config:          *spanConf,
+				})
+			default:
+				panic("unknown lease preference status type")
+			}
+		}
+	}
+
+	return
+}
+
 // Assert looks at a simulation run history and returns true if the
 // assertion holds and false if not. When the assertion does not hold, the
 // reason is also returned.
 func (ca ConformanceAssertion) Assert(
 	ctx context.Context, h history.History,
 ) (holds bool, reason string) {
-	report := h.S.Report()
+	replicaReport := h.S.Report()
+	leaseViolatingPrefs, leaseLessPrefs := leasePreferenceReport(ctx, h)
 	buf := strings.Builder{}
 	holds = true
 
-	unavailable, under, over, violating := len(report.Unavailable), len(report.UnderReplicated), len(report.OverReplicated), len(report.ViolatingConstraints)
+	unavailable, under, over, violatingConstraints := len(replicaReport.Unavailable), len(replicaReport.UnderReplicated), len(replicaReport.OverReplicated), len(replicaReport.ViolatingConstraints)
+	violatingLeases, lessPrefLeases := len(leaseViolatingPrefs), len(leaseLessPrefs)
 
 	maybeInitHolds := func() {
 		if holds {
 			holds = false
 			fmt.Fprintf(&buf, "  %s\n", ca)
-			fmt.Fprintf(&buf, "  actual unavailable=%d under=%d, over=%d violating=%d\n",
-				unavailable, under, over, violating,
+			fmt.Fprintf(&buf, "  actual unavailable=%d under=%d, over=%d violating=%d lease-violating=%d lease-less-preferred=%d\n",
+				unavailable, under, over, violatingConstraints, violatingLeases, lessPrefLeases,
 			)
 		}
 	}
@@ -337,25 +378,37 @@ func (ca ConformanceAssertion) Assert(
 		ca.Unavailable != unavailable {
 		maybeInitHolds()
 		buf.WriteString(PrintSpanConfigConformanceList(
-			"unavailable", report.Unavailable))
+			"unavailable", replicaReport.Unavailable))
 	}
 	if ca.Underreplicated != ConformanceAssertionSentinel &&
 		ca.Underreplicated != under {
 		maybeInitHolds()
 		buf.WriteString(PrintSpanConfigConformanceList(
-			"under replicated", report.UnderReplicated))
+			"under replicated", replicaReport.UnderReplicated))
 	}
 	if ca.Overreplicated != ConformanceAssertionSentinel &&
 		ca.Overreplicated != over {
 		maybeInitHolds()
 		buf.WriteString(PrintSpanConfigConformanceList(
-			"over replicated", report.OverReplicated))
+			"over replicated", replicaReport.OverReplicated))
 	}
-	if ca.Violating != ConformanceAssertionSentinel &&
-		ca.Violating != violating {
+	if ca.ViolatingConstraints != ConformanceAssertionSentinel &&
+		ca.ViolatingConstraints != violatingConstraints {
 		maybeInitHolds()
 		buf.WriteString(PrintSpanConfigConformanceList(
-			"violating constraints", report.ViolatingConstraints))
+			"violating constraints", replicaReport.ViolatingConstraints))
+	}
+	if ca.ViolatingLeasePreferences != ConformanceAssertionSentinel &&
+		ca.ViolatingLeasePreferences != violatingLeases {
+		maybeInitHolds()
+		buf.WriteString(PrintSpanConfigConformanceList(
+			"violating lease preferences", leaseViolatingPrefs))
+	}
+	if ca.LessPreferredLeases != ConformanceAssertionSentinel &&
+		ca.LessPreferredLeases != lessPrefLeases {
+		maybeInitHolds()
+		buf.WriteString(PrintSpanConfigConformanceList(
+			"less preferred preferences", leaseLessPrefs))
 	}
 
 	return holds, buf.String()
@@ -374,8 +427,14 @@ func (ca ConformanceAssertion) String() string {
 	if ca.Overreplicated != ConformanceAssertionSentinel {
 		fmt.Fprintf(&buf, "over=%d ", ca.Overreplicated)
 	}
-	if ca.Violating != ConformanceAssertionSentinel {
-		fmt.Fprintf(&buf, "violating=%d ", ca.Violating)
+	if ca.ViolatingConstraints != ConformanceAssertionSentinel {
+		fmt.Fprintf(&buf, "violating=%d ", ca.ViolatingConstraints)
+	}
+	if ca.ViolatingLeasePreferences != ConformanceAssertionSentinel {
+		fmt.Fprintf(&buf, "lease-violating=%d ", ca.ViolatingLeasePreferences)
+	}
+	if ca.LessPreferredLeases != ConformanceAssertionSentinel {
+		fmt.Fprintf(&buf, "lease-less-preferred=%d ", ca.LessPreferredLeases)
 	}
 	return buf.String()
 }

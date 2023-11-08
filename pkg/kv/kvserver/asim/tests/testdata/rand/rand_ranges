@@ -189,8 +189,8 @@ US
     └── [11 12 13 14 15]
 no events were scheduled
 sample2: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 
-  actual unavailable=0 under=0, over=9 violating=0
+  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+  actual unavailable=0 under=0, over=9 violating=0 lease-violating=0 lease-less-preferred=0
 over replicated:
   r120:000001{8921-9080} [(n8,s8):2, (n15,s15):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
   r133:000002{0988-1147} [(n3,s3):2, (n5,s5):3] applying ttl_seconds=0 num_replicas=1 num_voters=1
