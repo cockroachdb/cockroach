@@ -222,14 +222,38 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 		intIngestedAccountedBytes, adjustedIntLSMIngestedBytes, intWorkCount)
 
 	intL0TotalBytes := adjustedIntL0WriteBytes + adjustedIntL0IngestedBytes
-	if intWorkCount > 1 && intL0TotalBytes > 0 {
-		// Update the atAdmissionWorkTokens. NB: this is only used for requests
-		// that don't use replication flow control.
-		intAtAdmissionWorkTokens := intL0TotalBytes / intWorkCount
-		const alpha = 0.5
-		e.atAdmissionWorkTokens = int64(alpha*float64(intAtAdmissionWorkTokens) +
-			(1-alpha)*float64(e.atAdmissionWorkTokens))
-		e.atAdmissionWorkTokens = max(1, e.atAdmissionWorkTokens)
+	intAboveRaftWorkCount := int64(admissionStats.aboveRaftStats.workCount) -
+		int64(e.cumStoreAdmissionStats.aboveRaftStats.workCount)
+	intAboveRaftL0WriteAccountedBytes := int64(admissionStats.aboveRaftStats.writeAccountedBytes) -
+		int64(e.cumStoreAdmissionStats.aboveRaftStats.writeAccountedBytes)
+	intAboveRaftIngestedAccountedBytes := int64(admissionStats.aboveRaftStats.ingestedAccountedBytes) -
+		int64(e.cumStoreAdmissionStats.aboveRaftStats.ingestedAccountedBytes)
+	if intAboveRaftWorkCount > 1 && intL0TotalBytes > 0 {
+		// We don't know how many of the intL0TotalBytes (which is a stat derived
+		// from Pebble stats) are due to above-raft admission. So we simply apply
+		// the linear models to the stats we have and then use the modeled bytes
+		// to apportion part of intL0TotalBytes to above-raft.
+		totalEstimatedBytes :=
+			e.atDoneL0WriteTokensLinearModel.smoothedLinearModel.applyLinearModel(
+				intL0WriteAccountedBytes) +
+				e.atDoneL0IngestTokensLinearModel.smoothedLinearModel.applyLinearModel(
+					intIngestedAccountedBytes)
+		aboveRaftEstimatedBytes :=
+			e.atDoneL0WriteTokensLinearModel.smoothedLinearModel.applyLinearModel(
+				intAboveRaftL0WriteAccountedBytes) +
+				e.atDoneL0IngestTokensLinearModel.smoothedLinearModel.applyLinearModel(
+					intAboveRaftIngestedAccountedBytes)
+		if totalEstimatedBytes > 0 {
+			intL0BytesAboveRaft := int64(float64(intL0TotalBytes) *
+				(float64(aboveRaftEstimatedBytes) / float64(totalEstimatedBytes)))
+			// Update the atAdmissionWorkTokens. NB: this is only used for requests
+			// that don't use replication flow control.
+			intAtAdmissionWorkTokens := intL0BytesAboveRaft / intAboveRaftWorkCount
+			const alpha = 0.5
+			e.atAdmissionWorkTokens = int64(alpha*float64(intAtAdmissionWorkTokens) +
+				(1-alpha)*float64(e.atAdmissionWorkTokens))
+			e.atAdmissionWorkTokens = max(1, e.atAdmissionWorkTokens)
+		}
 	}
 	e.aux = perWorkTokensAux{
 		intWorkCount:              intWorkCount,
