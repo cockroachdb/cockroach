@@ -13,6 +13,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/keys",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverpb",
@@ -42,6 +43,7 @@ go_test(
     embed = [":kvstorage"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/keys",
         "//pkg/kv/kvserver/logstore",
         "//pkg/roachpb",

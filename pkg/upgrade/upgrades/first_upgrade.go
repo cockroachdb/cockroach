@@ -14,7 +14,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -42,7 +42,7 @@ var RunFirstUpgradePrecondition = envutil.EnvOrDefaultBool("COCKROACH_RUN_FIRST_
 // system.descriptor table, but in the future this may grow to
 // include other system tables as well.
 func FirstUpgradeFromRelease(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, _ clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	if !RunFirstUpgradePrecondition {
 		return nil
@@ -112,7 +112,7 @@ func upgradeDescriptors(
 // mainly checks descriptor validity, as that has historically been the main
 // source of problems.
 func FirstUpgradeFromReleasePrecondition(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, _ clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	// For performance reasons, we look back in time when performing
 	// a diagnostic query. If no corruptions were found back then, we assume that

@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -98,7 +99,7 @@ func TestGetEncoder(t *testing.T) {
 			storage := NewTestingStorage(
 				log.AmbientContext{}, nil, nil, nil, keys.SystemSQLCodec, nil, nil, systemschema.SqllivenessTable(), nil)
 
-			version := clusterversion.ClusterVersion{Version: clusterversion.ByKey(tc.version)}
+			version := clusterversionpb.ClusterVersion{Version: clusterversion.ByKey(tc.version)}
 			guard := settingswatcher.TestMakeVersionGuard(version)
 
 			checkCodec(t, tc.readCodec, storage.getReadCodec(&guard))

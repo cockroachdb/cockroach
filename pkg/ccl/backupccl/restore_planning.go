@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -969,7 +970,7 @@ func resolveTargetDB(
 // the set provided are omitted during the upgrade, instead of causing an error
 // to be returned.
 func maybeUpgradeDescriptors(
-	version clusterversion.ClusterVersion,
+	version clusterversionpb.ClusterVersion,
 	descs []catalog.Descriptor,
 	skipFKsWithNoMatchingTable bool,
 ) error {
@@ -1008,7 +1009,7 @@ func maybeUpgradeDescriptors(
 // upgrade, instead of causing an error to be returned.
 func maybeUpgradeDescriptorsInBackupManifests(
 	ctx context.Context,
-	version clusterversion.ClusterVersion,
+	version clusterversionpb.ClusterVersion,
 	backupManifests []backuppb.BackupManifest,
 	layerToIterFactory backupinfo.LayerToBackupManifestFileIterFactory,
 	skipFKsWithNoMatchingTable bool,

@@ -428,7 +428,7 @@ func (oc *optCatalog) CheckExecutionPrivilege(ctx context.Context, oid oid.Oid) 
 	// If the required cluster version is not active, revert to pre-23.2
 	// behavior without any privilege checks.
 	activeVersion := oc.planner.ExecCfg().Settings.Version.ActiveVersion(ctx)
-	if !activeVersion.IsActive(clusterversion.V23_2_GrantExecuteToPublic) {
+	if !clusterversion.V23_2_GrantExecuteToPublic.IsActive(activeVersion) {
 		return nil
 	}
 	desc, err := oc.planner.FunctionDesc(ctx, oid)

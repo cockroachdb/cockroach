@@ -14,7 +14,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -134,7 +134,7 @@ type SystemUpgrade struct {
 
 // SystemUpgradeFunc is used to perform kv-level upgrades. It should only be
 // run from the system tenant.
-type SystemUpgradeFunc func(context.Context, clusterversion.ClusterVersion, SystemDeps) error
+type SystemUpgradeFunc func(context.Context, clusterversionpb.ClusterVersion, SystemDeps) error
 
 // NewSystemUpgrade constructs a SystemUpgrade.
 func NewSystemUpgrade(
@@ -175,5 +175,5 @@ func NewPermanentSystemUpgrade(
 // Run kickstarts the actual upgrade process for system-level upgrades.
 func (m *SystemUpgrade) Run(ctx context.Context, v roachpb.Version, d SystemDeps) error {
 	ctx = logtags.AddTag(ctx, fmt.Sprintf("upgrade=%s", v), nil)
-	return m.fn(ctx, clusterversion.ClusterVersion{Version: v}, d)
+	return m.fn(ctx, clusterversionpb.ClusterVersion{Version: v}, d)
 }

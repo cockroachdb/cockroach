@@ -14,7 +14,7 @@ import (
 	"context"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -47,7 +47,7 @@ func MakeFakeMigrationForTestMigrationWithFailures() (
 ) {
 	expectedTableDescriptor = &atomic.Value{}
 	return func(
-		ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
+		ctx context.Context, cs clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 	) error {
 		row, err := d.InternalExecutor.QueryRow(ctx, "look-up-id", nil, /* txn */
 			`select id from system.namespace where name = $1`, "test_table")
@@ -102,7 +102,7 @@ func MakeFakeMigrationForTestMigrationWithFailuresMultipleAltersOnSameColumn() (
 ) {
 	expectedTableDescriptor = &atomic.Value{}
 	return func(
-		ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
+		ctx context.Context, cs clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 	) error {
 		row, err := d.InternalExecutor.QueryRow(ctx, "look-up-id", nil, /* txn */
 			`select id from system.namespace where name = $1`, "test_table")

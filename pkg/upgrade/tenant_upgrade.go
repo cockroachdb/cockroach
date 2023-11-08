@@ -14,7 +14,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -59,14 +59,14 @@ type TenantDeps struct {
 // to take a reference to the job running it for this purpose, but it was
 // removed because it was no longer used and because of testing complications.
 // It can be added back, though, if some upgrade needs it again.
-type TenantUpgradeFunc func(context.Context, clusterversion.ClusterVersion, TenantDeps) error
+type TenantUpgradeFunc func(context.Context, clusterversionpb.ClusterVersion, TenantDeps) error
 
 // PreconditionFunc is a function run without isolation before attempting an
 // upgrade that includes this upgrade. It is used to verify that the
 // required conditions for the upgrade to succeed are met. This can allow
 // users to fix any problems before "crossing the rubicon" and no longer
 // being able to upgrade.
-type PreconditionFunc func(context.Context, clusterversion.ClusterVersion, TenantDeps) error
+type PreconditionFunc func(context.Context, clusterversionpb.ClusterVersion, TenantDeps) error
 
 // TenantUpgrade is an implementation of Upgrade for tenant-level
 // upgrades. This is used for all upgrade which might affect the state of
@@ -133,13 +133,13 @@ func NewPermanentTenantUpgrade(
 // Run kick-starts the actual upgrade process for tenant-level upgrades.
 func (m *TenantUpgrade) Run(ctx context.Context, v roachpb.Version, d TenantDeps) error {
 	ctx = logtags.AddTag(ctx, fmt.Sprintf("upgrade=%s", v), nil)
-	return m.fn(ctx, clusterversion.ClusterVersion{Version: v}, d)
+	return m.fn(ctx, clusterversionpb.ClusterVersion{Version: v}, d)
 }
 
 // Precondition runs the precondition check if there is one and reports
 // any errors.
 func (m *TenantUpgrade) Precondition(
-	ctx context.Context, cv clusterversion.ClusterVersion, d TenantDeps,
+	ctx context.Context, cv clusterversionpb.ClusterVersion, d TenantDeps,
 ) error {
 	ctx = logtags.AddTag(ctx, fmt.Sprintf("upgrade=%s,precondition", cv), nil)
 	if m.precondition != nil {

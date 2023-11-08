@@ -15,7 +15,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -64,7 +64,7 @@ import (
 // table index into the regional by row index. It must run before servers can
 // read from the new index.
 func backfillRegionalByRowIndex(
-	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.TenantDeps,
+	ctx context.Context, _ clusterversionpb.ClusterVersion, deps upgrade.TenantDeps,
 ) error {
 	for _, migration := range migrations(deps.Codec) {
 		if err := migrateTableToRbrIndex(ctx, migration, deps); err != nil {
@@ -78,7 +78,7 @@ func backfillRegionalByRowIndex(
 // index. Deleting the old index bytes is not needed for correctness, but it
 // does save a few bytes and may avoid issues down the road.
 func cleanUpRegionalByTableIndex(
-	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.TenantDeps,
+	ctx context.Context, _ clusterversionpb.ClusterVersion, deps upgrade.TenantDeps,
 ) error {
 	for _, migration := range migrations(deps.Codec) {
 		if err := deleteOldIndex(ctx, migration, deps); err != nil {

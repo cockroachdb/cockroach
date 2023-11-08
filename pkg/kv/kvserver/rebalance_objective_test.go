@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -246,7 +247,7 @@ func TestRebalanceObjectiveManager(t *testing.T) {
 		st := cluster.MakeTestingClusterSettingsWithVersions(
 			clusterversion.TestingBinaryVersion,
 			clusterversion.ByKey(clusterversion.TODO_Delete_V22_2), false)
-		require.NoError(t, st.Version.SetActiveVersion(ctx, clusterversion.ClusterVersion{
+		require.NoError(t, st.Version.SetActiveVersion(ctx, clusterversionpb.ClusterVersion{
 			Version: clusterversion.ByKey(clusterversion.TODO_Delete_V22_2),
 		}))
 		LoadBasedRebalancingObjective.Override(ctx, &st.SV, int64(LBRebalancingCPU))
@@ -267,7 +268,7 @@ func TestRebalanceObjectiveManager(t *testing.T) {
 		// Update the active version to match the minimum version required for
 		// allowing CPU objective. This should trigger a callback and also
 		// update the objective to CPU.
-		require.NoError(t, st.Version.SetActiveVersion(ctx, clusterversion.ClusterVersion{
+		require.NoError(t, st.Version.SetActiveVersion(ctx, clusterversionpb.ClusterVersion{
 			Version: clusterversion.ByKey(clusterversion.TODO_Delete_V23_1AllocatorCPUBalancing),
 		}))
 		require.Equal(t, LBRebalancingCPU, manager.Objective())

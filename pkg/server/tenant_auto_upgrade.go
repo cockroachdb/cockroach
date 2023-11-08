@@ -14,7 +14,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -100,7 +100,7 @@ func (s *SQLServer) startAttemptTenantUpgrade(
 		tenantAutoUpgradeInfoCh = upgradeTestingKnobs.TenantAutoUpgradeInfo
 	}
 
-	var tenantClusterVersion clusterversion.ClusterVersion
+	var tenantClusterVersion clusterversionpb.ClusterVersion
 	if err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		tenantClusterVersion, err = s.settingsWatcher.GetClusterVersionFromStorage(ctx, txn)
 		return err

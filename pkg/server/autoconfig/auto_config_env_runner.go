@@ -174,7 +174,7 @@ func (r *envRunner) maybeRunNextTask(
 		}
 
 		// Can we even start this task? It may have a min version condition.
-		if !execCfg.Settings.Version.ActiveVersion(ctx).IsActiveVersion(nextTask.MinVersion) {
+		if !execCfg.Settings.Version.ActiveVersion(ctx).AtLeast(nextTask.MinVersion) {
 			log.Infof(ctx, "next task %d has min version requirement %v while cluster is at version %v; waiting...", nextTask.TaskID, nextTask.MinVersion, execCfg.Settings.Version.ActiveVersion(ctx))
 			waitSome = true
 			return nil

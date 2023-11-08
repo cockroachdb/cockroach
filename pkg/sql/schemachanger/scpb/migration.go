@@ -14,13 +14,14 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 )
 
 // HasDeprecatedElements returns if the target contains any element marked
 // for deprecation.
-func HasDeprecatedElements(version clusterversion.ClusterVersion, target Target) bool {
-	if version.IsActive(clusterversion.TODO_Delete_V23_1_SchemaChangerDeprecatedIndexPredicates) &&
+func HasDeprecatedElements(version clusterversionpb.ClusterVersion, target Target) bool {
+	if clusterversion.TODO_Delete_V23_1_SchemaChangerDeprecatedIndexPredicates.IsActive(version) &&
 		target.GetSecondaryIndexPartial() != nil {
 		return true
 	}
@@ -62,7 +63,7 @@ func migrateStatuses(
 
 // MigrateCurrentState migrates a current state by upgrading elements based
 // on the current version number.
-func MigrateCurrentState(version clusterversion.ClusterVersion, state *CurrentState) bool {
+func MigrateCurrentState(version clusterversionpb.ClusterVersion, state *CurrentState) bool {
 	// Nothing to do for empty states.
 	if state == nil {
 		return false
@@ -122,7 +123,7 @@ func checkForTableDataElement(target Target) (createID catid.DescID, existingID 
 // MigrateDescriptorState migrates descriptor state and applies any changes
 // relevant for the current cluster version.
 func MigrateDescriptorState(
-	version clusterversion.ClusterVersion, parentID catid.DescID, state *DescriptorState,
+	version clusterversionpb.ClusterVersion, parentID catid.DescID, state *DescriptorState,
 ) bool {
 	// Nothing to do for empty states.
 	if state == nil {

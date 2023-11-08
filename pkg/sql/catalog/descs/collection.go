@@ -16,7 +16,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -57,7 +57,7 @@ type Collection struct {
 	settings *cluster.Settings
 
 	// version used for validation
-	version clusterversion.ClusterVersion
+	version clusterversionpb.ClusterVersion
 
 	// virtualSchemas optionally holds the virtual schemas.
 	virtual virtualDescriptors

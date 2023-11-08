@@ -13,7 +13,7 @@ package upgrades
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -24,7 +24,7 @@ import (
 // createActivityUpdateJobMigration creates the job to update the
 // system.statement_activity and system.transaction_activity tables.
 func createActivityUpdateJobMigration(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, _ clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 
 	if d.TestingKnobs != nil && d.TestingKnobs.SkipUpdateSQLActivityJobBootstrap {

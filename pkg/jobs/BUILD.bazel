@@ -32,6 +32,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobsprofiler/profilerconstants",
         "//pkg/kv",

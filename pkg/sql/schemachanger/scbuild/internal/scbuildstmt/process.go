@@ -14,6 +14,7 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -98,7 +99,7 @@ func init() {
 			if checks.NumIn() != 3 ||
 				(checks.In(0) != statementType && !statementType.Implements(checks.In(0))) ||
 				checks.In(1) != reflect.TypeOf(sessiondatapb.UseNewSchemaChangerOff) ||
-				checks.In(2) != reflect.TypeOf((*clusterversion.ClusterVersion)(nil)).Elem() ||
+				checks.In(2) != reflect.TypeOf((*clusterversionpb.ClusterVersion)(nil)).Elem() ||
 				checks.NumOut() != 1 ||
 				checks.Out(0) != boolType {
 				panic(errors.AssertionFailedf("%v checks does not have a valid signature; got %v",
@@ -122,7 +123,7 @@ func init() {
 // elements) and panic with an unimplemented error.
 func IsFullySupportedWithFalsePositive(
 	n tree.Statement,
-	activeVersion clusterversion.ClusterVersion,
+	activeVersion clusterversionpb.ClusterVersion,
 	mode sessiondatapb.NewSchemaChangerMode,
 ) (ret bool) {
 	return isFullySupportedWithFalsePositiveInternal(supportedStatements, reflect.TypeOf(n),
@@ -137,7 +138,7 @@ func isFullySupportedWithFalsePositiveInternal(
 	stmtType reflect.Type,
 	stmtValue reflect.Value,
 	mode sessiondatapb.NewSchemaChangerMode,
-	activeVersion clusterversion.ClusterVersion,
+	activeVersion clusterversionpb.ClusterVersion,
 ) bool {
 	if mode == sessiondatapb.UseNewSchemaChangerOff {
 		return false
@@ -205,14 +206,14 @@ func getDeclarativeSchemaChangerModeForStmt(
 	return ret
 }
 
-var isV222Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversion.ClusterVersion) bool {
-	return activeVersion.IsActive(clusterversion.TODO_Delete_V22_2)
+var isV222Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversionpb.ClusterVersion) bool {
+	return clusterversion.TODO_Delete_V22_2.IsActive(activeVersion)
 }
 
-var isV231Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversion.ClusterVersion) bool {
-	return activeVersion.IsActive(clusterversion.V23_1)
+var isV231Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversionpb.ClusterVersion) bool {
+	return clusterversion.V23_1.IsActive(activeVersion)
 }
 
-var isV232Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversion.ClusterVersion) bool {
-	return activeVersion.IsActive(clusterversion.V23_2)
+var isV232Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversionpb.ClusterVersion) bool {
+	return clusterversion.V23_2.IsActive(activeVersion)
 }

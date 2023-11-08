@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -135,7 +136,7 @@ func newInitServer(
 type initState struct {
 	nodeID               roachpb.NodeID
 	clusterID            uuid.UUID
-	clusterVersion       clusterversion.ClusterVersion
+	clusterVersion       clusterversionpb.ClusterVersion
 	initializedEngines   []storage.Engine
 	uninitializedEngines []storage.Engine
 	initialSettingsKVs   []roachpb.KeyValue
@@ -522,7 +523,7 @@ func (s *initServer) attemptJoinTo(
 
 // DiskClusterVersion returns the cluster version synthesized from disk. This
 // is always non-zero since it falls back to the MinSupportedVersion.
-func (s *initServer) DiskClusterVersion() clusterversion.ClusterVersion {
+func (s *initServer) DiskClusterVersion() clusterversionpb.ClusterVersion {
 	return s.inspectedDiskState.clusterVersion
 }
 
@@ -544,7 +545,7 @@ func (s *initServer) initializeFirstStoreAfterJoin(
 	}
 
 	firstEngine := s.inspectedDiskState.uninitializedEngines[0]
-	clusterVersion := clusterversion.ClusterVersion{Version: *resp.ActiveVersion}
+	clusterVersion := clusterversionpb.ClusterVersion{Version: *resp.ActiveVersion}
 	if err := kvstorage.WriteClusterVersion(ctx, firstEngine, clusterVersion); err != nil {
 		return nil, err
 	}

@@ -22,7 +22,7 @@ import "sql/catalog/descpb/structured.proto";
 import "multitenant/mtinfopb/info.proto";
 import "sql/sessiondatapb/session_data.proto";
 import "util/hlc/timestamp.proto";
-import "clusterversion/cluster_version.proto";
+import "clusterversion/clusterversionpb/cluster_version.proto";
 import "google/protobuf/timestamp.proto";
 import "server/autoconfig/autoconfigpb/autoconfig.proto";
 import "util/tracing/tracingpb/recorded_span.proto";

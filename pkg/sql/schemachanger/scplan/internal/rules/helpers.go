@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
@@ -302,7 +302,7 @@ var (
 // ForEachElementInActiveVersion executes a function for each element supported within
 // the current active version.
 func ForEachElementInActiveVersion(
-	version clusterversion.ClusterVersion, fn func(element scpb.Element) error,
+	version clusterversionpb.ClusterVersion, fn func(element scpb.Element) error,
 ) error {
 	return scpb.ForEachElementType(func(e scpb.Element) error {
 		if screl.VersionSupportsElementUse(e, version) {

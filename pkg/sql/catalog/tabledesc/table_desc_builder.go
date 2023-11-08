@@ -11,7 +11,7 @@
 package tabledesc
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -154,7 +154,7 @@ func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges() (err error) {
 
 // RunRestoreChanges implements the catalog.DescriptorBuilder interface.
 func (tdb *tableDescriptorBuilder) RunRestoreChanges(
-	version clusterversion.ClusterVersion, descLookupFn func(id descpb.ID) catalog.Descriptor,
+	version clusterversionpb.ClusterVersion, descLookupFn func(id descpb.ID) catalog.Descriptor,
 ) (err error) {
 	// Upgrade FK representation
 	upgradedFK, err := maybeUpgradeForeignKeyRepresentation(

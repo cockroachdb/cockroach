@@ -13,7 +13,7 @@ package upgrades
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -38,7 +38,7 @@ CREATE INDEX completed_idx_v2 ON system.statement_diagnostics_requests (complete
 // stmtDiagForPlanGistMigration changes the schema of the
 // system.statement_diagnostics_requests table to support plan gist matching.
 func stmtDiagForPlanGistMigration(
-	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, cs clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	for _, op := range []operation{
 		{

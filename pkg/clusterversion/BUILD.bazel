@@ -1,5 +1,3 @@
-load("@rules_proto//proto:defs.bzl", "proto_library")
-load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -12,11 +10,11 @@ go_library(
         "testutils.go",
         "utilversions.go",
     ],
-    embed = [":clusterversion_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/clusterversion",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/util/envutil",
@@ -25,7 +23,6 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -40,6 +37,7 @@ go_test(
     embed = [":clusterversion"],
     deps = [
         "//pkg/build",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -49,28 +47,5 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",
-    ],
-)
-
-proto_library(
-    name = "clusterversion_proto",
-    srcs = ["cluster_version.proto"],
-    strip_import_prefix = "/pkg",
-    visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/roachpb:roachpb_proto",
-        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
-    ],
-)
-
-go_proto_library(
-    name = "clusterversion_go_proto",
-    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/clusterversion",
-    proto = ":clusterversion_proto",
-    visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/roachpb",
-        "@com_github_gogo_protobuf//gogoproto",
     ],
 )

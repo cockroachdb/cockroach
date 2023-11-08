@@ -116,6 +116,7 @@ go_library(
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/cloud/userfile",
         "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/config",
         "//pkg/configprofiles",
         "//pkg/docs",

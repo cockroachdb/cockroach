@@ -20,6 +20,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/docs",
         "//pkg/geo/geoindex",
         "//pkg/jobs/jobspb",
@@ -86,6 +87,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/geo/geoindex",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",

@@ -13,7 +13,7 @@ package upgrades
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -28,7 +28,7 @@ FAMILY "primary"
 `
 
 func alterExternalConnectionsTableAddOwnerIDColumn(
-	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, cs clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	ie := d.DB.Executor()
 
@@ -73,7 +73,7 @@ ALTER COLUMN owner_id SET NOT NULL
 `
 
 func backfillExternalConnectionsTableOwnerIDColumn(
-	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, cs clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	ie := d.DB.Executor()
 	for {

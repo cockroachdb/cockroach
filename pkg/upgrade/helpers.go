@@ -13,7 +13,7 @@ package upgrade
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -30,8 +30,8 @@ import (
 // to slot in fence versions for each cluster version. See top-level
 // documentation in pkg/clusterversion for more details.
 func FenceVersionFor(
-	ctx context.Context, cv clusterversion.ClusterVersion,
-) clusterversion.ClusterVersion {
+	ctx context.Context, cv clusterversionpb.ClusterVersion,
+) clusterversionpb.ClusterVersion {
 	if (cv.Internal % 2) != 0 {
 		log.Fatalf(ctx, "only even numbered internal versions allowed, found %s", cv.Version)
 	}

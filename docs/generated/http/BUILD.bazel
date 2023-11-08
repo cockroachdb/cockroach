@@ -2,7 +2,7 @@ genrule(
     name = "http",
     srcs = [
         "//pkg/build:build_proto",
-        "//pkg/clusterversion:clusterversion_proto",
+        "//pkg/clusterversion/clusterversionpb:clusterversionpb_proto",
         "//pkg/config/zonepb:zonepb_proto",
         "//pkg/geo/geoindex:geoindex_proto",
         "//pkg/geo/geopb:geopb_proto",

@@ -12,7 +12,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv",
     visibility = ["//pkg/sql/catalog:__subpackages__"],
     deps = [
-        "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/keys",

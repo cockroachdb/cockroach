@@ -16,6 +16,7 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -41,7 +42,7 @@ type walkCtx struct {
 	backRefs             catalog.DescriptorIDSet
 	commentReader        CommentGetter
 	zoneConfigReader     ZoneConfigGetter
-	clusterVersion       clusterversion.ClusterVersion
+	clusterVersion       clusterversionpb.ClusterVersion
 }
 
 // WalkDescriptor walks through the elements which are implicitly defined in
@@ -70,7 +71,7 @@ func WalkDescriptor(
 	ev ElementVisitor,
 	commentReader CommentGetter,
 	zoneConfigReader ZoneConfigGetter,
-	clusterVersion clusterversion.ClusterVersion,
+	clusterVersion clusterversionpb.ClusterVersion,
 ) (backRefs catalog.DescriptorIDSet) {
 	w := walkCtx{
 		ctx:                  ctx,
@@ -121,7 +122,7 @@ func (w *walkCtx) walkRoot() {
 	case catalog.TableDescriptor:
 		w.walkRelation(d)
 	case catalog.FunctionDescriptor:
-		if !w.clusterVersion.IsActive(clusterversion.V23_1) {
+		if !clusterversion.V23_1.IsActive(w.clusterVersion) {
 			panic(
 				scerrors.NotImplementedErrorf(
 					nil, // n
@@ -641,7 +642,7 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 			if idx.IsPartial() {
 				pp, err := w.newExpression(idx.GetPredicate())
 				onErrPanic(err)
-				if w.clusterVersion.IsActive(clusterversion.TODO_Delete_V23_1_SchemaChangerDeprecatedIndexPredicates) {
+				if clusterversion.TODO_Delete_V23_1_SchemaChangerDeprecatedIndexPredicates.IsActive(w.clusterVersion) {
 					sec.EmbeddedExpr = pp
 				} else {
 					w.ev(scpb.Status_PUBLIC, &scpb.SecondaryIndexPartial{
@@ -700,7 +701,7 @@ func (w *walkCtx) walkUniqueWithoutIndexConstraint(
 				c.GetName(), tbl.GetName(), tbl.GetID()))
 		}
 	}
-	if c.IsConstraintUnvalidated() && w.clusterVersion.IsActive(clusterversion.V23_1) {
+	if c.IsConstraintUnvalidated() && clusterversion.V23_1.IsActive(w.clusterVersion) {
 		uwi := &scpb.UniqueWithoutIndexConstraintUnvalidated{
 			TableID:      tbl.GetID(),
 			ConstraintID: c.GetConstraintID(),
@@ -737,7 +738,7 @@ func (w *walkCtx) walkCheckConstraint(tbl catalog.TableDescriptor, c catalog.Che
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "check constraint %q in table %q (%d)",
 			c.GetName(), tbl.GetName(), tbl.GetID()))
 	}
-	if c.IsConstraintUnvalidated() && w.clusterVersion.IsActive(clusterversion.V23_1) {
+	if c.IsConstraintUnvalidated() && clusterversion.V23_1.IsActive(w.clusterVersion) {
 		w.ev(scpb.Status_PUBLIC, &scpb.CheckConstraintUnvalidated{
 			TableID:      tbl.GetID(),
 			ConstraintID: c.GetConstraintID(),
@@ -770,7 +771,7 @@ func (w *walkCtx) walkCheckConstraint(tbl catalog.TableDescriptor, c catalog.Che
 func (w *walkCtx) walkForeignKeyConstraint(
 	tbl catalog.TableDescriptor, c catalog.ForeignKeyConstraint,
 ) {
-	if c.IsConstraintUnvalidated() && w.clusterVersion.IsActive(clusterversion.V23_1) {
+	if c.IsConstraintUnvalidated() && clusterversion.V23_1.IsActive(w.clusterVersion) {
 		w.ev(scpb.Status_PUBLIC, &scpb.ForeignKeyConstraintUnvalidated{
 			TableID:                 tbl.GetID(),
 			ConstraintID:            c.GetConstraintID(),

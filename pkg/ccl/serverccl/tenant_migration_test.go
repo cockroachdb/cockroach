@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -29,11 +30,11 @@ import (
 func TestValidateTargetTenantClusterVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	prev := clusterversion.ClusterVersion{Version: clusterversion.TestingBinaryMinSupportedVersion}
-	cur := clusterversion.ClusterVersion{Version: clusterversion.TestingBinaryVersion}
+	prev := clusterversionpb.ClusterVersion{Version: clusterversion.TestingBinaryMinSupportedVersion}
+	cur := clusterversionpb.ClusterVersion{Version: clusterversion.TestingBinaryVersion}
 	// In cases where we use prev as the binary version for the test, set the
 	// minimum supported version to prev's binary version - 1 Major version.
-	prevMsv := clusterversion.ClusterVersion{
+	prevMsv := clusterversionpb.ClusterVersion{
 		Version: roachpb.Version{
 			Major: prev.Version.Major - 1,
 			Minor: prev.Version.Minor,
@@ -43,7 +44,7 @@ func TestValidateTargetTenantClusterVersion(t *testing.T) {
 	var tests = []struct {
 		binaryVersion             roachpb.Version
 		binaryMinSupportedVersion roachpb.Version
-		targetClusterVersion      clusterversion.ClusterVersion
+		targetClusterVersion      clusterversionpb.ClusterVersion
 		expErrMatch               string // empty if expecting a nil error
 	}{
 		{
@@ -137,11 +138,11 @@ func TestValidateTargetTenantClusterVersion(t *testing.T) {
 func TestBumpTenantClusterVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	prev := clusterversion.ClusterVersion{Version: clusterversion.TestingBinaryMinSupportedVersion}
-	cur := clusterversion.ClusterVersion{Version: clusterversion.TestingBinaryVersion}
+	prev := clusterversionpb.ClusterVersion{Version: clusterversion.TestingBinaryMinSupportedVersion}
+	cur := clusterversionpb.ClusterVersion{Version: clusterversion.TestingBinaryVersion}
 	// In cases where we use prev as the binary version for the test, set the
 	// minimum supported version to prev's binary version - 1 Major version.
-	prevMsv := clusterversion.ClusterVersion{
+	prevMsv := clusterversionpb.ClusterVersion{
 		Version: roachpb.Version{
 			Major: prev.Version.Major - 1,
 			Minor: prev.Version.Minor,
@@ -149,11 +150,11 @@ func TestBumpTenantClusterVersion(t *testing.T) {
 	}
 
 	var tests = []struct {
-		binaryVersion           clusterversion.ClusterVersion
-		minSupportedVersion     clusterversion.ClusterVersion
-		initialClusterVersion   clusterversion.ClusterVersion
-		attemptedClusterVersion clusterversion.ClusterVersion
-		expectedClusterVersion  clusterversion.ClusterVersion
+		binaryVersion           clusterversionpb.ClusterVersion
+		minSupportedVersion     clusterversionpb.ClusterVersion
+		initialClusterVersion   clusterversionpb.ClusterVersion
+		attemptedClusterVersion clusterversionpb.ClusterVersion
+		expectedClusterVersion  clusterversionpb.ClusterVersion
 	}{
 		{
 			binaryVersion:           cur,

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
@@ -464,7 +465,7 @@ func invokeCreateChangefeed(ctx context.Context, createChangefeedFn sql.PlanHook
 
 // TODO(msbutler): move this function into scheduleBase and remove duplicate function in scheduled backups.
 func makeScheduleDetails(
-	opts map[string]string, clusterID uuid.UUID, version clusterversion.ClusterVersion,
+	opts map[string]string, clusterID uuid.UUID, version clusterversionpb.ClusterVersion,
 ) (jobspb.ScheduleDetails, error) {
 	var details jobspb.ScheduleDetails
 	if v, ok := opts[optOnExecFailure]; ok {

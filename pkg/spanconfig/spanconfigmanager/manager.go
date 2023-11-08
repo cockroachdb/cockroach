@@ -14,7 +14,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -120,7 +120,7 @@ func (m *Manager) run(ctx context.Context) {
 	checkReconciliationJobInterval.SetOnChange(&m.settings.SV, func(ctx context.Context) {
 		triggerJobCheck()
 	})
-	m.settings.Version.SetOnChange(func(_ context.Context, _ clusterversion.ClusterVersion) {
+	m.settings.Version.SetOnChange(func(_ context.Context, _ clusterversionpb.ClusterVersion) {
 		triggerJobCheck()
 	})
 

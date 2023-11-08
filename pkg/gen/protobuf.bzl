@@ -17,7 +17,7 @@ PROTOBUF_SRCS = [
     "//pkg/ccl/utilccl/licenseccl:licenseccl_go_proto",
     "//pkg/cloud/cloudpb:cloudpb_go_proto",
     "//pkg/cloud/externalconn/connectionpb:connectionpb_go_proto",
-    "//pkg/clusterversion:clusterversion_go_proto",
+    "//pkg/clusterversion/clusterversionpb:clusterversionpb_go_proto",
     "//pkg/cmd/roachprod/upgrade:upgrade_go_proto",
     "//pkg/config/zonepb:zonepb_go_proto",
     "//pkg/config:config_go_proto",

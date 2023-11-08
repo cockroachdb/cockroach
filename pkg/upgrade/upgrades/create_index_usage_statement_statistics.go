@@ -13,7 +13,7 @@ package upgrades
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -31,7 +31,7 @@ ON system.statement_statistics (indexes_usage)
 `
 
 func createIndexOnIndexUsageOnSystemStatementStatistics(
-	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, cs clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	for _, op := range []operation{
 		{

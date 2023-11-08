@@ -14,7 +14,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -35,7 +35,7 @@ func TestCollectChecksStoreInfo(t *testing.T) {
 	defer eng.Close()
 	v := roachpb.Version{Major: 21, Minor: 2}
 	if err := kvstorage.WriteClusterVersionToEngines(ctx, []storage.Engine{eng},
-		clusterversion.ClusterVersion{Version: v}); err != nil {
+		clusterversionpb.ClusterVersion{Version: v}); err != nil {
 		t.Fatalf("failed to populate test store cluster version: %v", err)
 	}
 

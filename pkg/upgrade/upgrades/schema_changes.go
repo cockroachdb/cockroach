@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -63,7 +63,7 @@ const waitForJobStatement = "SHOW JOBS WHEN COMPLETE VALUES ($1)"
 // an error if changes exist partially.
 func migrateTable(
 	ctx context.Context,
-	_ clusterversion.ClusterVersion,
+	_ clusterversionpb.ClusterVersion,
 	d upgrade.TenantDeps,
 	op operation,
 	storedTableID descpb.ID,
@@ -417,7 +417,7 @@ func onlyHasColumnFamily(
 // field for the system database descriptor. It should be called at the end
 // of any upgrade that creates or modifies the schema of any system table.
 func bumpSystemDatabaseSchemaVersion(
-	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, cs clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	return d.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		systemDBDesc, err := txn.Descriptors().MutableByName(txn.KV()).Database(ctx, catconstants.SystemDatabaseName)

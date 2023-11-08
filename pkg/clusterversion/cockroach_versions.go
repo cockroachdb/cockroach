@@ -12,6 +12,7 @@ package clusterversion
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -661,6 +662,12 @@ const finalVersion Key = -1
 func (k Key) Version() roachpb.Version {
 	version := versionTable[k]
 	return maybeApplyDevOffset(k, version)
+}
+
+// IsActive returns true if the features of the key are active at the running
+// version.
+func (k Key) IsActive(activeVersion clusterversionpb.ClusterVersion) bool {
+	return activeVersion.AtLeast(k.Version())
 }
 
 // IsFinal returns true if the key corresponds to a final version (as opposed to

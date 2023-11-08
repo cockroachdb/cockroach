@@ -10,6 +10,7 @@ go_library(
     visibility = ["//pkg/sql/schemachanger/scplan:__subpackages__"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/sql/schemachanger/rel",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan/internal/scgraph",

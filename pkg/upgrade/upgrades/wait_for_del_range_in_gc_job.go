@@ -13,7 +13,7 @@ package upgrades
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -31,7 +31,7 @@ import (
 // waitForDelRangeInGCJob ensures that any running GC jobs have adopted the new
 // DeleteRange protocol.
 func waitForDelRangeInGCJob(
-	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.TenantDeps,
+	ctx context.Context, _ clusterversionpb.ClusterVersion, deps upgrade.TenantDeps,
 ) error {
 	for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
 		if !storage.CanUseMVCCRangeTombstones(ctx, deps.Settings) {
@@ -101,7 +101,7 @@ GROUP BY id;
 // take forever, so we should detect them and give the user the opportunity
 // to unpause them with a clear error.
 func checkForPausedGCJobs(
-	ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
+	ctx context.Context, version clusterversionpb.ClusterVersion, deps upgrade.TenantDeps,
 ) (retErr error) {
 	jobIDs, err := collectJobIDsFromQuery(
 		ctx, deps.InternalExecutor, "check-for-paused-gc-jobs", `

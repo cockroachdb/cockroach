@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -199,7 +200,7 @@ func makeIndexDescriptor(
 		return nil, err
 	}
 
-	if !activeVersion.IsActive(clusterversion.V23_2) &&
+	if !clusterversion.V23_2.IsActive(activeVersion) &&
 		n.Invisibility.Value > 0.0 && n.Invisibility.Value < 1.0 {
 		return nil, unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
 	}
@@ -323,7 +324,7 @@ func checkIndexColumns(
 	columns tree.IndexElemList,
 	storing tree.NameList,
 	inverted bool,
-	version clusterversion.ClusterVersion,
+	version clusterversionpb.ClusterVersion,
 ) error {
 	for i, colDef := range columns {
 		lastCol := i == len(columns)-1
@@ -343,7 +344,7 @@ func checkIndexColumns(
 		}
 
 		// Checking if JSON Columns can be forward indexed for a given cluster version.
-		if col.GetType().Family() == types.JsonFamily && (!inverted || !lastCol) && !version.IsActive(clusterversion.V23_2) {
+		if col.GetType().Family() == types.JsonFamily && (!inverted || !lastCol) && !clusterversion.V23_2.IsActive(version) {
 			return errors.WithHint(
 				pgerror.Newf(
 					pgcode.InvalidTableDefinition,
@@ -501,7 +502,7 @@ func replaceExpressionElemsWithVirtualCols(
 	isInverted bool,
 	isNewTable bool,
 	semaCtx *tree.SemaContext,
-	version clusterversion.ClusterVersion,
+	version clusterversionpb.ClusterVersion,
 ) error {
 	findExistingExprIndexCol := func(expr string) (colName string, ok bool) {
 		for _, col := range desc.AllColumns() {
@@ -563,7 +564,7 @@ func replaceExpressionElemsWithVirtualCols(
 				)
 			}
 
-			if typ.Family() == types.JsonFamily && !version.IsActive(clusterversion.V23_2) {
+			if typ.Family() == types.JsonFamily && !clusterversion.V23_2.IsActive(version) {
 				return errors.WithHint(
 					pgerror.Newf(
 						pgcode.InvalidTableDefinition,

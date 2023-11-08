@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -83,7 +84,7 @@ func checkVersion(
 	ctx context.Context, version clusterversion.Handle, peerVersion roachpb.Version,
 ) error {
 	activeVersion := version.ActiveVersionOrEmpty(ctx)
-	if activeVersion == (clusterversion.ClusterVersion{}) {
+	if activeVersion == (clusterversionpb.ClusterVersion{}) {
 		// Cluster version has not yet been determined.
 		return nil
 	}

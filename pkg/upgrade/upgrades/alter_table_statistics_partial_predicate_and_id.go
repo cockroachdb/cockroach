@@ -13,7 +13,7 @@ package upgrades
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -27,7 +27,7 @@ ADD COLUMN IF NOT EXISTS "fullStatisticID" INT8
 FAMILY "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram"`
 
 func alterSystemTableStatisticsAddPartialPredicateAndID(
-	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, cs clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	op := operation{
 		name:           "add-table-statistics-partialPredicate-col",

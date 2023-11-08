@@ -14,7 +14,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -34,7 +34,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS privileges_path_user_id_key ON system.privileg
 `
 
 func alterSystemPrivilegesAddUserIDColumn(
-	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, cs clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	ie := d.DB.Executor()
 
@@ -90,7 +90,7 @@ ALTER COLUMN user_id SET NOT NULL
 `
 
 func backfillSystemPrivilegesUserIDColumn(
-	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, cs clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	ie := d.DB.Executor()
 	for {

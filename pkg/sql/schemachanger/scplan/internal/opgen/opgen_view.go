@@ -63,7 +63,7 @@ func init() {
 			),
 			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.View, md *opGenContext) *scop.CreateGCJobForTable {
-					if this.IsMaterialized && !md.ActiveVersion.IsActive(clusterversion.V23_1) {
+					if this.IsMaterialized && !clusterversion.V23_1.IsActive(md.ActiveVersion) {
 						return &scop.CreateGCJobForTable{
 							TableID:             this.ViewID,
 							DatabaseID:          databaseIDFromDroppedNamespaceTarget(md, this.ViewID),

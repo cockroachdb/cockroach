@@ -18,7 +18,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/sql/catalog",

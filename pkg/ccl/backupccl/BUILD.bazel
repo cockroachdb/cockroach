@@ -53,6 +53,7 @@ go_library(
         "//pkg/cloud/cloudpb",
         "//pkg/cloud/cloudprivilege",
         "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/featureflag",
         "//pkg/jobs",
         "//pkg/jobs/joberror",

@@ -13,7 +13,7 @@ package sql
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -27,7 +27,7 @@ func TestCheckClusterSettingValuesAreEquivalent(t *testing.T) {
 	encode := func(t *testing.T, s string) []byte {
 		v, err := roachpb.ParseVersion(s)
 		require.NoError(t, err)
-		cv := clusterversion.ClusterVersion{Version: v}
+		cv := clusterversionpb.ClusterVersion{Version: v}
 		data, err := protoutil.Marshal(&cv)
 		require.NoError(t, err)
 		return data

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -627,7 +628,7 @@ func (e *quorumRecoveryEnv) getOrCreateStore(
 			t.Fatalf("failed to populate test store ident: %v", err)
 		}
 		v := clusterversion.ByKey(clusterversion.BinaryVersionKey)
-		if err := kvstorage.WriteClusterVersionToEngines(ctx, []storage.Engine{eng}, clusterversion.ClusterVersion{Version: v}); err != nil {
+		if err := kvstorage.WriteClusterVersionToEngines(ctx, []storage.Engine{eng}, clusterversionpb.ClusterVersion{Version: v}); err != nil {
 			t.Fatalf("failed to populate test store cluster version: %v", err)
 		}
 		wrapped.engine = eng

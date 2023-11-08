@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -117,7 +118,7 @@ func safeToUpgradeTenant(
 	ctx context.Context,
 	codec keys.SQLCodec,
 	overrides cluster.OverridesInformer,
-	tenantClusterVersion clusterversion.ClusterVersion,
+	tenantClusterVersion clusterversionpb.ClusterVersion,
 ) (bool, error) {
 	if codec.ForSystemTenant() {
 		// Unconditionally run upgrades for the system tenant.
@@ -359,7 +360,7 @@ func (m *Manager) postToPauseChannelAndWaitForResume(ctx context.Context) {
 func (m *Manager) Migrate(
 	ctx context.Context,
 	user username.SQLUsername,
-	from, to clusterversion.ClusterVersion,
+	from, to clusterversionpb.ClusterVersion,
 	updateSystemVersionSetting sql.UpdateVersionSystemSettingHook,
 ) (returnErr error) {
 	// TODO(irfansharif): Should we inject every ctx here with specific labels
@@ -414,7 +415,7 @@ func (m *Manager) Migrate(
 	// that might be doomed to fail.
 	{
 		finalVersion := clusterVersions[len(clusterVersions)-1]
-		if err := validateTargetClusterVersion(ctx, m.deps.Cluster, clusterversion.ClusterVersion{Version: finalVersion}); err != nil {
+		if err := validateTargetClusterVersion(ctx, m.deps.Cluster, clusterversionpb.ClusterVersion{Version: finalVersion}); err != nil {
 			return err
 		}
 		if m.knobs.InterlockPausePoint == upgradebase.AfterFirstCheckForInstances {
@@ -521,7 +522,7 @@ func (m *Manager) Migrate(
 	for _, clusterVersion := range clusterVersions {
 		log.Infof(ctx, "stepping through %s", clusterVersion)
 
-		cv := clusterversion.ClusterVersion{Version: clusterVersion}
+		cv := clusterversionpb.ClusterVersion{Version: clusterVersion}
 
 		fenceVersion := upgrade.FenceVersionFor(ctx, cv)
 		if err := bumpClusterVersion(ctx, m.deps.Cluster, fenceVersion); err != nil {
@@ -614,7 +615,7 @@ func (m *Manager) Migrate(
 // bumpClusterVersion will invoke the BumpClusterVersion rpc on every node
 // until the cluster is stable.
 func bumpClusterVersion(
-	ctx context.Context, c upgrade.Cluster, clusterVersion clusterversion.ClusterVersion,
+	ctx context.Context, c upgrade.Cluster, clusterVersion clusterversionpb.ClusterVersion,
 ) error {
 	req := &serverpb.BumpClusterVersionRequest{ClusterVersion: &clusterVersion}
 	op := fmt.Sprintf("bump-cluster-version=%s", req.ClusterVersion.PrettyPrint())
@@ -629,7 +630,7 @@ func bumpClusterVersion(
 // bumpClusterVersion will invoke the ValidateTargetClusterVersion rpc on
 // every node until the cluster is stable.
 func validateTargetClusterVersion(
-	ctx context.Context, c upgrade.Cluster, clusterVersion clusterversion.ClusterVersion,
+	ctx context.Context, c upgrade.Cluster, clusterVersion clusterversionpb.ClusterVersion,
 ) error {
 	req := &serverpb.ValidateTargetClusterVersionRequest{ClusterVersion: &clusterVersion}
 	op := fmt.Sprintf("validate-cluster-version=%s", req.ClusterVersion.PrettyPrint())
@@ -828,7 +829,7 @@ func (m *Manager) getRunningMigrationJob(
 ) (found bool, jobID jobspb.JobID, _ error) {
 	// Wrap the version into a ClusterVersion so that the JSON looks like what the
 	// Payload proto has inside.
-	cv := clusterversion.ClusterVersion{Version: version}
+	cv := clusterversionpb.ClusterVersion{Version: version}
 	var query string
 	if m.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1JobInfoTableIsBackfilled) {
 		query = PostJobInfoTableQuery
@@ -888,7 +889,7 @@ func (m *Manager) checkPreconditions(ctx context.Context, versions []roachpb.Ver
 		if !ok {
 			continue
 		}
-		if err := tm.Precondition(ctx, clusterversion.ClusterVersion{Version: v}, upgrade.TenantDeps{
+		if err := tm.Precondition(ctx, clusterversionpb.ClusterVersion{Version: v}, upgrade.TenantDeps{
 			DB:               m.deps.DB,
 			Codec:            m.codec,
 			Settings:         m.settings,

@@ -13,7 +13,7 @@ package upgrades
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -58,7 +58,7 @@ FROM to_delete;
 `
 
 func deleteDescriptorsOfDroppedFunctions(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, _ clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	var maxID int64
 	if err := d.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {

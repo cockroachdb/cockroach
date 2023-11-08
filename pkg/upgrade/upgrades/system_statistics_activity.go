@@ -13,7 +13,7 @@ package upgrades
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -22,7 +22,7 @@ import (
 // systemStatementStatisticsActivityTableMigration creates the
 // system.statement_activity and system.transaction_activity table.
 func systemStatisticsActivityTableMigration(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, _ clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 
 	tables := []catalog.TableDescriptor{

@@ -14,7 +14,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -107,7 +107,7 @@ func (m *migrationServer) BumpClusterVersion(
 }
 
 func bumpClusterVersion(
-	ctx context.Context, st *cluster.Settings, newCV clusterversion.ClusterVersion, engines Engines,
+	ctx context.Context, st *cluster.Settings, newCV clusterversionpb.ClusterVersion, engines Engines,
 ) error {
 
 	versionSetting := st.Version

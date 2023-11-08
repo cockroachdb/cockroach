@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/redact"
@@ -106,7 +107,7 @@ func TestFinalVersion(t *testing.T) {
 func TestVersionFormat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	v := ClusterVersion{
+	v := clusterversionpb.ClusterVersion{
 		Version: roachpb.Version{
 			Major: 1,
 			Minor: 2,
@@ -130,8 +131,8 @@ func TestVersionFormat(t *testing.T) {
 func TestClusterVersionPrettyPrint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	cv := func(major, minor, patch, internal int32) ClusterVersion {
-		return ClusterVersion{
+	cv := func(major, minor, patch, internal int32) clusterversionpb.ClusterVersion {
+		return clusterversionpb.ClusterVersion{
 			Version: roachpb.Version{
 				Major:    major,
 				Minor:    minor,
@@ -142,7 +143,7 @@ func TestClusterVersionPrettyPrint(t *testing.T) {
 	}
 
 	tests := []struct {
-		cv  ClusterVersion
+		cv  clusterversionpb.ClusterVersion
 		exp string
 	}{
 		{cv(19, 2, 1, 5), "19.2-5"},

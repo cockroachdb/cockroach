@@ -15,6 +15,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -37,7 +38,7 @@ const (
 
 // Self is a convenience function for Validate called at the
 // ValidationLevelSelfOnly level and combining the resulting errors.
-func Self(version clusterversion.ClusterVersion, descriptors ...catalog.Descriptor) error {
+func Self(version clusterversionpb.ClusterVersion, descriptors ...catalog.Descriptor) error {
 	results := Validate(context.TODO(), version, nil, catalog.NoValidationTelemetry, catalog.ValidationLevelSelfOnly, descriptors...)
 	return results.CombinedError()
 }
@@ -52,7 +53,7 @@ func Self(version clusterversion.ClusterVersion, descriptors ...catalog.Descript
 // errors either as a slice or combined as one.
 func Validate(
 	ctx context.Context,
-	version clusterversion.ClusterVersion,
+	version clusterversionpb.ClusterVersion,
 	vd ValidationDereferencer,
 	telemetry catalog.ValidationTelemetry,
 	targetLevel catalog.ValidationLevel,
@@ -146,7 +147,7 @@ func Validate(
 // Lookups are performed on a best-effort basis. When a descriptor or namespace
 // entry cannot be found, the zero-value is returned, with no error.
 type ValidationDereferencer interface {
-	DereferenceDescriptors(ctx context.Context, version clusterversion.ClusterVersion, reqs []descpb.ID) ([]catalog.Descriptor, error)
+	DereferenceDescriptors(ctx context.Context, version clusterversionpb.ClusterVersion, reqs []descpb.ID) ([]catalog.Descriptor, error)
 	DereferenceDescriptorIDs(ctx context.Context, requests []descpb.NameInfo) ([]descpb.ID, error)
 }
 
@@ -158,7 +159,7 @@ type validationErrorAccumulator struct {
 	// Used to decorate errors with appropriate prefixes and telemetry keys.
 	catalog.ValidationTelemetry                         // set at initialization
 	targetLevel                 catalog.ValidationLevel // set at initialization
-	activeVersion               clusterversion.ClusterVersion
+	activeVersion               clusterversionpb.ClusterVersion
 	currentState                validationErrorAccumulatorState
 	currentLevel                catalog.ValidationLevel
 	currentDescriptor           catalog.Descriptor
@@ -213,7 +214,7 @@ func (vea *validationErrorAccumulator) validateDescriptorsAtLevel(
 
 // IsActive implements the ValidationErrorAccumulator interface.
 func (vea *validationErrorAccumulator) IsActive(version clusterversion.Key) bool {
-	return vea.activeVersion.IsActive(version)
+	return version.IsActive(vea.activeVersion)
 }
 
 func (vea *validationErrorAccumulator) reportDescGetterError(
@@ -402,7 +403,7 @@ func (cs *collectorState) addDirectReferences(desc catalog.Descriptor) error {
 // getMissingDescs fetches the descriptors which have corresponding IDs in the
 // state but which are otherwise missing.
 func (cs *collectorState) getMissingDescs(
-	ctx context.Context, vd ValidationDereferencer, version clusterversion.ClusterVersion,
+	ctx context.Context, vd ValidationDereferencer, version clusterversionpb.ClusterVersion,
 ) ([]catalog.Descriptor, error) {
 	reqs := make([]descpb.ID, 0, cs.referencedBy.Len())
 	for _, id := range cs.referencedBy.Ordered() {
@@ -438,7 +439,7 @@ func (cs *collectorState) getMissingDescs(
 func collectDescriptorsForValidation(
 	ctx context.Context,
 	vd ValidationDereferencer,
-	version clusterversion.ClusterVersion,
+	version clusterversionpb.ClusterVersion,
 	descriptors []catalog.Descriptor,
 ) (*validationDescGetterImpl, error) {
 	cs := collectorState{

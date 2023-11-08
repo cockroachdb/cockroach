@@ -16,6 +16,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -113,7 +114,7 @@ func Build(
 // makeState populates the declarative schema changer state returned by Build
 // with the targets and the statuses present in the builderState.
 func makeState(
-	version clusterversion.ClusterVersion, bs *builderState,
+	version clusterversionpb.ClusterVersion, bs *builderState,
 ) (s scpb.CurrentState, loggedTargets []scpb.Target) {
 	s = scpb.CurrentState{
 		TargetState: scpb.TargetState{
@@ -130,7 +131,7 @@ func makeState(
 			// cluster version.
 			return false
 		}
-		if maxVersion, exists := screl.MaxElementVersion(e); exists && version.IsActive(maxVersion) {
+		if maxVersion, exists := screl.MaxElementVersion(e); exists && maxVersion.IsActive(version) {
 			// Exclude the target which are no longer allowed at the active
 			// max version.
 			return false
@@ -143,7 +144,7 @@ func makeState(
 	// certain transitions and fences like the two version invariant.
 	// This only applies for cluster at or beyond version 23.2.
 	var descriptorIDsInSchemaChange catalog.DescriptorIDSet
-	if version.IsActive(clusterversion.V23_2) {
+	if clusterversion.V23_2.IsActive(version) {
 		for _, e := range bs.output {
 			if isElementAllowedInVersion(e.element) && e.metadata.IsLinkedToSchemaChange() {
 				descriptorIDsInSchemaChange.Add(screl.GetDescID(e.element))
@@ -178,7 +179,7 @@ func makeState(
 // by the declarative schema changer.
 // It is possible of false positive but never false negative.
 func IsFullySupportedWithFalsePositive(
-	statement tree.Statement, version clusterversion.ClusterVersion,
+	statement tree.Statement, version clusterversionpb.ClusterVersion,
 ) bool {
 	return scbuildstmt.IsFullySupportedWithFalsePositive(statement, version, sessiondatapb.UseNewSchemaChangerOn)
 }

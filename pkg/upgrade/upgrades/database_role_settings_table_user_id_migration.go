@@ -14,7 +14,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -35,7 +35,7 @@ STORING (settings)
 `
 
 func alterDatabaseRoleSettingsTableAddRoleIDColumn(
-	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, cs clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	for _, op := range []operation{
 		{
@@ -78,7 +78,7 @@ ALTER COLUMN role_id SET NOT NULL
 `
 
 func backfillDatabaseRoleSettingsTableRoleIDColumn(
-	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, cs clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	ie := d.DB.Executor()
 	for {

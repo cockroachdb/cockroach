@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -124,13 +125,13 @@ func TestVersionGuard(t *testing.T) {
 				false,
 			)
 			require.NoError(t, clusterversion.Initialize(ctx, clusterversion.ByKey(test.settingsVersion), &settings.SV))
-			settingVersion := clusterversion.ClusterVersion{Version: clusterversion.ByKey(test.settingsVersion)}
+			settingVersion := clusterversionpb.ClusterVersion{Version: clusterversion.ByKey(test.settingsVersion)}
 			require.NoError(t, settings.Version.SetActiveVersion(ctx, settingVersion))
 
 			if test.storageVersion == nil {
 				tDB.Exec(t, `DELETE FROM system.settings WHERE name = 'version'`)
 			} else {
-				storageVersion := clusterversion.ClusterVersion{Version: clusterversion.ByKey(*test.storageVersion)}
+				storageVersion := clusterversionpb.ClusterVersion{Version: clusterversion.ByKey(*test.storageVersion)}
 				marshaledVersion, err := protoutil.Marshal(&storageVersion)
 				require.NoError(t, err)
 				tDB.Exec(t, `

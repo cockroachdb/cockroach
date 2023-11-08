@@ -43,10 +43,10 @@ package clusterversion
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/redact"
 )
 
 // Initialize initializes the global cluster version. Before this method has
@@ -75,11 +75,11 @@ type Handle interface {
 	//
 	// ActiveVersion fatals if the cluster version setting has not been
 	// initialized (through `Initialize()`).
-	ActiveVersion(context.Context) ClusterVersion
+	ActiveVersion(context.Context) clusterversionpb.ClusterVersion
 
 	// ActiveVersionOrEmpty is like ActiveVersion, but returns an empty version
 	// if the active version was not initialized.
-	ActiveVersionOrEmpty(context.Context) ClusterVersion
+	ActiveVersionOrEmpty(context.Context) clusterversionpb.ClusterVersion
 
 	// IsActive returns true if the features of the supplied version key are
 	// active at the running version. In other words, if a particular version
@@ -138,13 +138,13 @@ type Handle interface {
 	// setting it to be active. This persisted version is also consulted during
 	// node restarts when initializing the cluster version, as seen by this
 	// node.
-	SetActiveVersion(context.Context, ClusterVersion) error
+	SetActiveVersion(context.Context, clusterversionpb.ClusterVersion) error
 
 	// SetOnChange installs a callback that's invoked when the active cluster
 	// version changes. The callback should avoid doing long-running or blocking
 	// work; it's called on the same goroutine handling all cluster setting
 	// updates.
-	SetOnChange(fn func(ctx context.Context, newVersion ClusterVersion))
+	SetOnChange(fn func(ctx context.Context, newVersion clusterversionpb.ClusterVersion))
 }
 
 // handleImpl is a concrete implementation of Handle. It mostly relegates to the
@@ -199,17 +199,19 @@ func newHandleImpl(
 }
 
 // ActiveVersion implements the Handle interface.
-func (v *handleImpl) ActiveVersion(ctx context.Context) ClusterVersion {
+func (v *handleImpl) ActiveVersion(ctx context.Context) clusterversionpb.ClusterVersion {
 	return v.setting.activeVersion(ctx, v.sv)
 }
 
 // ActiveVersionOrEmpty implements the Handle interface.
-func (v *handleImpl) ActiveVersionOrEmpty(ctx context.Context) ClusterVersion {
+func (v *handleImpl) ActiveVersionOrEmpty(ctx context.Context) clusterversionpb.ClusterVersion {
 	return v.setting.activeVersionOrEmpty(ctx, v.sv)
 }
 
 // SetActiveVersion implements the Handle interface.
-func (v *handleImpl) SetActiveVersion(ctx context.Context, cv ClusterVersion) error {
+func (v *handleImpl) SetActiveVersion(
+	ctx context.Context, cv clusterversionpb.ClusterVersion,
+) error {
 	// We only perform binary version validation here. SetActiveVersion is only
 	// called on cluster versions received from other nodes (where `SET CLUSTER
 	// SETTING version` was originally called). The stricter form of validation
@@ -229,7 +231,9 @@ func (v *handleImpl) SetActiveVersion(ctx context.Context, cv ClusterVersion) er
 }
 
 // SetOnChange implements the Handle interface.
-func (v *handleImpl) SetOnChange(fn func(ctx context.Context, newVersion ClusterVersion)) {
+func (v *handleImpl) SetOnChange(
+	fn func(ctx context.Context, newVersion clusterversionpb.ClusterVersion),
+) {
 	v.setting.SetOnChange(v.sv, func(ctx context.Context) {
 		fn(ctx, v.ActiveVersion(ctx))
 	})
@@ -248,42 +252,4 @@ func (v *handleImpl) LatestVersion() roachpb.Version {
 // MinSupportedVersion is part of the Handle interface.
 func (v *handleImpl) MinSupportedVersion() roachpb.Version {
 	return v.minSupportedVersion
-}
-
-// IsActiveVersion returns true if the features of the supplied version are
-// active at the running version.
-func (cv ClusterVersion) IsActiveVersion(v roachpb.Version) bool {
-	return !cv.Less(v)
-}
-
-// IsActive returns true if the features of the supplied version are active at
-// the running version.
-func (cv ClusterVersion) IsActive(versionKey Key) bool {
-	v := ByKey(versionKey)
-	return cv.IsActiveVersion(v)
-}
-
-func (cv ClusterVersion) String() string {
-	return redact.StringWithoutMarkers(cv)
-}
-
-// SafeFormat implements the redact.SafeFormatter interface.
-func (cv ClusterVersion) SafeFormat(p redact.SafePrinter, _ rune) {
-	p.Print(cv.Version)
-}
-
-// ClusterVersionImpl implements the settings.ClusterVersionImpl interface.
-func (cv ClusterVersion) ClusterVersionImpl() {}
-
-var _ settings.ClusterVersionImpl = ClusterVersion{}
-
-// EncodingFromVersionStr is a shorthand to generate an encoded cluster version
-// from a version string.
-func EncodingFromVersionStr(v string) ([]byte, error) {
-	newV, err := roachpb.ParseVersion(v)
-	if err != nil {
-		return nil, err
-	}
-	newCV := ClusterVersion{Version: newV}
-	return protoutil.Marshal(&newCV)
 }

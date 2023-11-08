@@ -13,7 +13,7 @@ package upgrades
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -39,7 +39,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS role_members_role_id_member_id_key ON system.r
 `
 
 func alterSystemRoleMembersAddIDColumns(
-	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, cs clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	for _, op := range []operation{
 		{
@@ -98,7 +98,7 @@ ALTER COLUMN member_id SET NOT NULL
 `
 
 func backfillSystemRoleMembersIDColumns(
-	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, cs clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	ie := d.DB.Executor()
 	for _, backfillStmt := range []string{backfillRoleIDColumnRoleMemberStmt, backfillMemberIDColumnRoleMembersStmt} {

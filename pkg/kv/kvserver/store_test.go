@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -280,7 +281,7 @@ func createTestStoreWithoutStart(
 	storeIdent := roachpb.StoreIdent{NodeID: 1, StoreID: 1}
 	cv := clusterversion.TestingClusterVersion
 	if opts.bootstrapVersion != (roachpb.Version{}) {
-		cv = clusterversion.ClusterVersion{Version: opts.bootstrapVersion}
+		cv = clusterversionpb.ClusterVersion{Version: opts.bootstrapVersion}
 	}
 	require.NoError(t, kvstorage.WriteClusterVersion(ctx, eng, cv))
 	if err := kvstorage.InitEngine(

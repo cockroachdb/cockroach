@@ -13,7 +13,7 @@ package schemaexpr
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -46,7 +46,7 @@ func ValidatePartialIndexPredicate(
 	e tree.Expr,
 	tn *tree.TableName,
 	semaCtx *tree.SemaContext,
-	version clusterversion.ClusterVersion,
+	version clusterversionpb.ClusterVersion,
 ) (string, error) {
 	expr, _, cols, err := DequalifyAndValidateExpr(
 		ctx,

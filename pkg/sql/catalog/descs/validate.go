@@ -13,7 +13,7 @@ package descs
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -112,7 +112,7 @@ var _ validate.ValidationDereferencer = &collectionBackedDereferencer{}
 // interface by leveraging the collection's uncommitted descriptors as well
 // as its storage cache.
 func (c collectionBackedDereferencer) DereferenceDescriptors(
-	ctx context.Context, version clusterversion.ClusterVersion, reqs []descpb.ID,
+	ctx context.Context, version clusterversionpb.ClusterVersion, reqs []descpb.ID,
 ) (ret []catalog.Descriptor, _ error) {
 	ret = make([]catalog.Descriptor, len(reqs))
 	fallbackReqs := make([]descpb.ID, 0, len(reqs))
@@ -191,7 +191,7 @@ func (tc *Collection) ensureValidationLevel(
 // Validation may be skipped depending on mode.
 func ValidateSelf(
 	desc catalog.Descriptor,
-	version clusterversion.ClusterVersion,
+	version clusterversionpb.ClusterVersion,
 	dvmp DescriptorValidationModeProvider,
 ) error {
 	if !dvmp.ValidateDescriptorsOnRead() && !dvmp.ValidateDescriptorsOnWrite() {

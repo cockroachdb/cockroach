@@ -19,6 +19,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/gossip",
         "//pkg/keys",
         "//pkg/kv",
@@ -74,6 +75,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/keys",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",

@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -1630,7 +1631,7 @@ func NewTableDesc(
 			}
 
 			// Version gates for enabling primary keys / unique indexes for JSONB columns
-			if col.Type.Family() == types.JsonFamily && (d.PrimaryKey.IsPrimaryKey || d.Unique.IsUnique) && !version.IsActive(clusterversion.V23_2) {
+			if col.Type.Family() == types.JsonFamily && (d.PrimaryKey.IsPrimaryKey || d.Unique.IsUnique) && !clusterversion.V23_2.IsActive(version) {
 				return nil, errors.WithHint(
 					pgerror.Newf(
 						pgcode.InvalidTableDefinition,
@@ -1829,7 +1830,7 @@ func NewTableDesc(
 			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Inverted, version); err != nil {
 				return nil, err
 			}
-			if !version.IsActive(clusterversion.V23_2) &&
+			if !clusterversion.V23_2.IsActive(version) &&
 				d.Invisibility.Value > 0.0 && d.Invisibility.Value < 1.0 {
 				return nil, unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
 			}
@@ -1948,7 +1949,7 @@ func NewTableDesc(
 			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Inverted, version); err != nil {
 				return nil, err
 			}
-			if !version.IsActive(clusterversion.V23_2) &&
+			if !clusterversion.V23_2.IsActive(version) &&
 				d.Invisibility.Value > 0.0 && d.Invisibility.Value < 1.0 {
 				return nil, unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
 			}
@@ -2441,7 +2442,7 @@ func newRowLevelTTLScheduledJob(
 	owner username.SQLUsername,
 	tblDesc *tabledesc.Mutable,
 	clusterID uuid.UUID,
-	clusterVersion clusterversion.ClusterVersion,
+	clusterVersion clusterversionpb.ClusterVersion,
 ) (*jobs.ScheduledJob, error) {
 	sj := jobs.NewScheduledJob(env)
 	sj.SetScheduleLabel(ttlbase.BuildScheduleLabel(tblDesc))
@@ -2479,7 +2480,7 @@ func CreateRowLevelTTLScheduledJob(
 	owner username.SQLUsername,
 	tblDesc *tabledesc.Mutable,
 	clusterID uuid.UUID,
-	version clusterversion.ClusterVersion,
+	version clusterversionpb.ClusterVersion,
 ) (*jobs.ScheduledJob, error) {
 	if !tblDesc.HasRowLevelTTL() {
 		return nil, errors.AssertionFailedf("CreateRowLevelTTLScheduledJob called with no .RowLevelTTL: %#v", tblDesc)

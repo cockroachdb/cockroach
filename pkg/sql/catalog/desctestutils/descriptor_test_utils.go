@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -32,7 +33,7 @@ var (
 // TestingGetDatabaseDescriptorWithVersion retrieves a database descriptor directly from
 // the kv layer.
 func TestingGetDatabaseDescriptorWithVersion(
-	kvDB *kv.DB, codec keys.SQLCodec, version clusterversion.ClusterVersion, database string,
+	kvDB *kv.DB, codec keys.SQLCodec, version clusterversionpb.ClusterVersion, database string,
 ) catalog.DatabaseDescriptor {
 	ctx := context.Background()
 	var desc catalog.Descriptor
@@ -70,7 +71,7 @@ func TestingGetDatabaseDescriptor(
 func TestingGetSchemaDescriptorWithVersion(
 	kvDB *kv.DB,
 	codec keys.SQLCodec,
-	version clusterversion.ClusterVersion,
+	version clusterversionpb.ClusterVersion,
 	dbID descpb.ID,
 	schemaName string,
 ) catalog.SchemaDescriptor {
@@ -116,7 +117,7 @@ func TestingGetSchemaDescriptor(
 func TestingGetTableDescriptorWithVersion(
 	kvDB *kv.DB,
 	codec keys.SQLCodec,
-	version clusterversion.ClusterVersion,
+	version clusterversionpb.ClusterVersion,
 	database string,
 	schema string,
 	table string,
@@ -198,7 +199,7 @@ func TestingGetFunctionDescriptor(
 func testingGetObjectDescriptor(
 	kvDB *kv.DB,
 	codec keys.SQLCodec,
-	version clusterversion.ClusterVersion,
+	version clusterversionpb.ClusterVersion,
 	database string,
 	schema string,
 	object string,
@@ -258,7 +259,7 @@ func lookupDescriptorID(
 
 func mustGetDescriptorByID(
 	ctx context.Context,
-	version clusterversion.ClusterVersion,
+	version clusterversionpb.ClusterVersion,
 	cr catkv.CatalogReader,
 	txn *kv.Txn,
 	id descpb.ID,

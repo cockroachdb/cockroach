@@ -12,7 +12,7 @@ syntax = "proto3";
 package cockroach.server.serverpb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/server/serverpb";
 
-import "clusterversion/cluster_version.proto";
+import "clusterversion/clusterversionpb/cluster_version.proto";
 import "roachpb/metadata.proto";
 
 // ValidateTargetClusterVersion is used to verify that the target node is

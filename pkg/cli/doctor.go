@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -78,7 +79,7 @@ tables are queried either from a live cluster or from an unzipped debug.zip.
 }
 
 type doctorFn = func(
-	version *clusterversion.ClusterVersion,
+	version *clusterversionpb.ClusterVersion,
 	descTable doctor.DescriptorTable,
 	namespaceTable doctor.NamespaceTable,
 	jobsTable doctor.JobsTable,
@@ -98,9 +99,9 @@ that may not exist on downlevel versions.
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			descs, ns, jobs, err := fromZipDir(args[0])
-			var version *clusterversion.ClusterVersion
+			var version *clusterversionpb.ClusterVersion
 			if len(args) == 2 {
-				version = &clusterversion.ClusterVersion{
+				version = &clusterversionpb.ClusterVersion{
 					Version: roachpb.MustParseVersion(args[1]),
 				}
 			}
@@ -150,7 +151,7 @@ var doctorRecreateClusterCmd = makeClusterCommand(runDoctorRecreate)
 var doctorRecreateZipDirCmd = makeZipDirCommand(runDoctorRecreate)
 
 func runDoctorRecreate(
-	_ *clusterversion.ClusterVersion,
+	_ *clusterversionpb.ClusterVersion,
 	descTable doctor.DescriptorTable,
 	namespaceTable doctor.NamespaceTable,
 	jobsTable doctor.JobsTable,
@@ -160,14 +161,14 @@ func runDoctorRecreate(
 }
 
 func runDoctorExamine(
-	version *clusterversion.ClusterVersion,
+	version *clusterversionpb.ClusterVersion,
 	descTable doctor.DescriptorTable,
 	namespaceTable doctor.NamespaceTable,
 	jobsTable doctor.JobsTable,
 	out io.Writer,
 ) (err error) {
 	if version == nil {
-		version = &clusterversion.ClusterVersion{
+		version = &clusterversionpb.ClusterVersion{
 			Version: clusterversion.DoctorBinaryVersion,
 		}
 	}

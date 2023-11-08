@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -491,7 +491,7 @@ func (s scheduledJobStorageTxn) Create(ctx context.Context, j *ScheduledJob) err
 	if j.rec.ScheduleDetails.ClusterID.Equal(uuid.UUID{}) {
 		return errors.New("scheduled job created without a cluster ID")
 	}
-	if j.rec.ScheduleDetails.CreationClusterVersion.Equal(clusterversion.ClusterVersion{}) {
+	if j.rec.ScheduleDetails.CreationClusterVersion.Equal(clusterversionpb.ClusterVersion{}) {
 		return errors.New("scheduled job created without a cluster version")
 	}
 	if !j.isDirty() {

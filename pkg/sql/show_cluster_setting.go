@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -81,7 +81,7 @@ func (p *planner) getCurrentEncodedVersionSettingValue(
 						// and utilized this hard-coded value instead. In 21.1, the builtin
 						// which creates tenants sets up the cluster version state. It also
 						// is set when the version is upgraded.
-						tenantDefaultVersion := clusterversion.ClusterVersion{
+						tenantDefaultVersion := clusterversionpb.ClusterVersion{
 							Version: roachpb.Version{Major: 20, Minor: 2},
 						}
 						encoded, err := protoutil.Marshal(&tenantDefaultVersion)
@@ -127,7 +127,7 @@ func checkClusterSettingValuesAreEquivalent(localRawVal, kvRawVal []byte) error 
 	if bytes.Equal(localRawVal, kvRawVal) {
 		return nil
 	}
-	type cv = clusterversion.ClusterVersion
+	type cv = clusterversionpb.ClusterVersion
 	maybeDecodeVersion := func(data []byte) (cv, any, bool) {
 		if len(data) == 0 {
 			return cv{}, data, false

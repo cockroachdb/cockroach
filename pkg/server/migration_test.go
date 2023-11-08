@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -40,14 +41,14 @@ func TestValidateTargetClusterVersion(t *testing.T) {
 	v := func(major, minor int32) roachpb.Version {
 		return roachpb.Version{Major: major, Minor: minor}
 	}
-	cv := func(major, minor int32) clusterversion.ClusterVersion {
-		return clusterversion.ClusterVersion{Version: v(major, minor)}
+	cv := func(major, minor int32) clusterversionpb.ClusterVersion {
+		return clusterversionpb.ClusterVersion{Version: v(major, minor)}
 	}
 
 	var tests = []struct {
 		binaryVersion             roachpb.Version
 		binaryMinSupportedVersion roachpb.Version
-		targetClusterVersion      clusterversion.ClusterVersion
+		targetClusterVersion      clusterversionpb.ClusterVersion
 		expErrMatch               string // empty if expecting a nil error
 	}{
 		{
@@ -117,15 +118,15 @@ func TestBumpClusterVersion(t *testing.T) {
 	v := func(major, minor int32) roachpb.Version {
 		return roachpb.Version{Major: major, Minor: minor}
 	}
-	cv := func(major, minor int32) clusterversion.ClusterVersion {
-		return clusterversion.ClusterVersion{Version: v(major, minor)}
+	cv := func(major, minor int32) clusterversionpb.ClusterVersion {
+		return clusterversionpb.ClusterVersion{Version: v(major, minor)}
 	}
 
 	var tests = []struct {
 		binaryVersion        roachpb.Version
-		activeClusterVersion clusterversion.ClusterVersion // akin to min supported binary version
-		bumpClusterVersion   clusterversion.ClusterVersion
-		expClusterVersion    clusterversion.ClusterVersion
+		activeClusterVersion clusterversionpb.ClusterVersion // akin to min supported binary version
+		bumpClusterVersion   clusterversionpb.ClusterVersion
+		expClusterVersion    clusterversionpb.ClusterVersion
 	}{
 		{
 			binaryVersion:        v(21, 1),

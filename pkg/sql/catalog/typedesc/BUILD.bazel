@@ -12,7 +12,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/sql/catalog",

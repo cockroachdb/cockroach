@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
@@ -571,10 +572,10 @@ Discarded live replicas: %d
 		return errors.Wrap(err, "failed to write recovery plan")
 	}
 
-	v := clusterversion.ClusterVersion{
+	v := clusterversionpb.ClusterVersion{
 		Version: plan.Version,
 	}
-	if v.IsActive(clusterversion.V23_1) {
+	if clusterversion.V23_1.IsActive(v) {
 		// No args means we collected connection info from cluster and need to
 		// preserve flags for subsequent invocation.
 		remoteArgs := getCLIClusterFlags(len(args) == 0, cmd, func(flag string) bool {

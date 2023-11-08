@@ -14,14 +14,14 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
 func sqlStatsTTLChange(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.SystemDeps,
+	ctx context.Context, _ clusterversionpb.ClusterVersion, d upgrade.SystemDeps,
 ) error {
 	tables := []string{
 		"system.statement_statistics",

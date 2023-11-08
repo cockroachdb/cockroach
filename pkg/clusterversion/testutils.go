@@ -10,6 +10,8 @@
 
 package clusterversion
 
+import "github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
+
 // TestingBinaryVersion is a binary version that tests can use when they don't
 // want to go through a Settings object.
 // TODO(radu): remove this.
@@ -22,6 +24,6 @@ var TestingBinaryMinSupportedVersion = MinSupported.Version()
 
 // TestingClusterVersion is a ClusterVersion that tests can use when they don't
 // want to go through a Settings object.
-var TestingClusterVersion = ClusterVersion{
+var TestingClusterVersion = clusterversionpb.ClusterVersion{
 	Version: TestingBinaryVersion,
 }

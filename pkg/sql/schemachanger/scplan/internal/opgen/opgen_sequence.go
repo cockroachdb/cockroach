@@ -57,7 +57,7 @@ func init() {
 			),
 			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.Sequence, md *opGenContext) *scop.CreateGCJobForTable {
-					if !md.ActiveVersion.IsActive(clusterversion.V23_1) {
+					if !clusterversion.V23_1.IsActive(md.ActiveVersion) {
 						return &scop.CreateGCJobForTable{
 							TableID:             this.SequenceID,
 							DatabaseID:          databaseIDFromDroppedNamespaceTarget(md, this.SequenceID),

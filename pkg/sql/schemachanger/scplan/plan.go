@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -39,7 +40,7 @@ type Params struct {
 	Ctx context.Context
 
 	// ActiveVersion contains the version currently active in the cluster.
-	ActiveVersion clusterversion.ClusterVersion
+	ActiveVersion clusterversionpb.ClusterVersion
 
 	// InRollback is used to indicate whether we've already been reverted.
 	// Note that when in rollback, there is no turning back and all work is
@@ -181,10 +182,10 @@ var minVersionForRules = rulesForReleases[len(rulesForReleases)-1].activeVersion
 // name may become public before the index is public (which was disallowed on older
 // versions).
 func GetRulesRegistryForRelease(
-	_ context.Context, activeVersion clusterversion.ClusterVersion,
+	_ context.Context, activeVersion clusterversionpb.ClusterVersion,
 ) *rules.Registry {
 	for _, r := range rulesForReleases {
-		if activeVersion.IsActive(r.activeVersion) {
+		if r.activeVersion.IsActive(activeVersion) {
 			return r.rulesRegistry
 		}
 	}
@@ -193,11 +194,11 @@ func GetRulesRegistryForRelease(
 
 // GetReleasesForRulesRegistries returns all the supported version
 // numbers within the rule's registry.
-func GetReleasesForRulesRegistries() []clusterversion.ClusterVersion {
-	supportedVersions := make([]clusterversion.ClusterVersion, 0, len(rulesForReleases))
+func GetReleasesForRulesRegistries() []clusterversionpb.ClusterVersion {
+	supportedVersions := make([]clusterversionpb.ClusterVersion, 0, len(rulesForReleases))
 	for _, r := range rulesForReleases {
 		supportedVersions = append(supportedVersions,
-			clusterversion.ClusterVersion{
+			clusterversionpb.ClusterVersion{
 				Version: clusterversion.ByKey(r.activeVersion),
 			})
 	}
@@ -207,14 +208,14 @@ func GetReleasesForRulesRegistries() []clusterversion.ClusterVersion {
 // getMinValidVersionForRules this returns either the current active version,
 // or the minimum version for the rules tht we support (which ever is greater)
 func getMinValidVersionForRules(
-	ctx context.Context, activeVersion clusterversion.ClusterVersion,
-) clusterversion.ClusterVersion {
-	if !activeVersion.IsActive(minVersionForRules) {
+	ctx context.Context, activeVersion clusterversionpb.ClusterVersion,
+) clusterversionpb.ClusterVersion {
+	if !minVersionForRules.IsActive(activeVersion) {
 		log.Warningf(ctx, "falling back to rules for minimum version (%v),"+
 			"active version was : %v",
 			minVersionForRules,
 			activeVersion)
-		return clusterversion.ClusterVersion{
+		return clusterversionpb.ClusterVersion{
 			Version: clusterversion.ByKey(minVersionForRules),
 		}
 	}
@@ -225,7 +226,7 @@ func getMinValidVersionForRules(
 //
 // TODO(postamar): remove once the release_22_2 ruleset is also removed
 func applyOpRules(
-	ctx context.Context, activeVersion clusterversion.ClusterVersion, g *scgraph.Graph,
+	ctx context.Context, activeVersion clusterversionpb.ClusterVersion, g *scgraph.Graph,
 ) (*scgraph.Graph, error) {
 	activeVersion = getMinValidVersionForRules(ctx, activeVersion)
 	registry := GetRulesRegistryForRelease(ctx, activeVersion)
@@ -233,7 +234,7 @@ func applyOpRules(
 }
 
 func applyDepRules(
-	ctx context.Context, activeVersion clusterversion.ClusterVersion, g *scgraph.Graph,
+	ctx context.Context, activeVersion clusterversionpb.ClusterVersion, g *scgraph.Graph,
 ) error {
 	activeVersion = getMinValidVersionForRules(ctx, activeVersion)
 	registry := GetRulesRegistryForRelease(ctx, activeVersion)
@@ -241,7 +242,7 @@ func applyDepRules(
 }
 
 func buildGraph(
-	ctx context.Context, activeVersion clusterversion.ClusterVersion, cs scpb.CurrentState,
+	ctx context.Context, activeVersion clusterversionpb.ClusterVersion, cs scpb.CurrentState,
 ) *scgraph.Graph {
 	g, err := opgen.BuildGraph(ctx, activeVersion, cs)
 	if err != nil {

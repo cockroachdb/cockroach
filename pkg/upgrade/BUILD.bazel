@@ -12,7 +12,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/upgrade",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/jobs",
         "//pkg/keys",
         "//pkg/keyvisualizer",

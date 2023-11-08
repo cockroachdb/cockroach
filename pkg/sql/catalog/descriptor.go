@@ -13,7 +13,7 @@ package catalog
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -92,7 +92,7 @@ type DescriptorBuilder interface {
 	// built from a deserialized protobuf obtained by restoring a backup.
 	// This is to compensate for the fact that these are not subject to cluster
 	// upgrade migrations
-	RunRestoreChanges(version clusterversion.ClusterVersion, descLookupFn func(id descpb.ID) Descriptor) error
+	RunRestoreChanges(version clusterversionpb.ClusterVersion, descLookupFn func(id descpb.ID) Descriptor) error
 
 	// StripDanglingBackReferences attempts to remove any back-references in the
 	// descriptor which are known to be dangling references. In other words, if

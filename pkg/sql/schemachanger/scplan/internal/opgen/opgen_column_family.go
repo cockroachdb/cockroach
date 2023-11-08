@@ -42,7 +42,7 @@ func init() {
 					// when the element reaches absent the column family has actually
 					// been removed. This would have been done via the last column
 					// type element referencing it.
-					if md.ActiveVersion.IsActive(clusterversion.V23_1) {
+					if clusterversion.V23_1.IsActive(md.ActiveVersion) {
 						return &scop.AssertColumnFamilyIsRemoved{
 							TableID:  this.TableID,
 							FamilyID: this.FamilyID,

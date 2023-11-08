@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -31,7 +32,7 @@ import (
 )
 
 func addRootUser(
-	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.TenantDeps,
+	ctx context.Context, _ clusterversionpb.ClusterVersion, deps upgrade.TenantDeps,
 ) error {
 	// Upsert the root user into the table. We intentionally override any existing entry.
 	const upsertRootStmt = `
@@ -87,7 +88,7 @@ func addRootToAdminRole(ctx context.Context, txn isql.Txn) error {
 }
 
 func optInToDiagnosticsStatReporting(
-	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.TenantDeps,
+	ctx context.Context, _ clusterversionpb.ClusterVersion, deps upgrade.TenantDeps,
 ) error {
 	// We're opting-out of the automatic opt-in. See discussion in updates.go.
 	if cluster.TelemetryOptOut {
@@ -100,7 +101,7 @@ func optInToDiagnosticsStatReporting(
 }
 
 func populateVersionSetting(
-	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.SystemDeps,
+	ctx context.Context, _ clusterversionpb.ClusterVersion, deps upgrade.SystemDeps,
 ) error {
 	var v roachpb.Version
 	if err := deps.DB.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -114,7 +115,7 @@ func populateVersionSetting(
 		v = clusterversion.TestingBinaryMinSupportedVersion
 	}
 
-	b, err := protoutil.Marshal(&clusterversion.ClusterVersion{Version: v})
+	b, err := protoutil.Marshal(&clusterversionpb.ClusterVersion{Version: v})
 	if err != nil {
 		return errors.Wrap(err, "while marshaling version")
 	}
@@ -133,7 +134,7 @@ func populateVersionSetting(
 }
 
 func initializeClusterSecret(
-	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.TenantDeps,
+	ctx context.Context, _ clusterversionpb.ClusterVersion, deps upgrade.TenantDeps,
 ) error {
 	_, err := deps.InternalExecutor.Exec(
 		ctx, "initializeClusterSecret", nil, /* txn */
@@ -143,7 +144,7 @@ func initializeClusterSecret(
 }
 
 func updateSystemLocationData(
-	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.TenantDeps,
+	ctx context.Context, _ clusterversionpb.ClusterVersion, deps upgrade.TenantDeps,
 ) error {
 	// See if the system.locations table already has data in it.
 	// If so, we don't want to do anything.
@@ -176,7 +177,7 @@ func updateSystemLocationData(
 }
 
 func createDefaultDbs(
-	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.TenantDeps,
+	ctx context.Context, _ clusterversionpb.ClusterVersion, deps upgrade.TenantDeps,
 ) error {
 	// Create the default databases. These are plain databases with
 	// default permissions. Nothing special happens if they exist

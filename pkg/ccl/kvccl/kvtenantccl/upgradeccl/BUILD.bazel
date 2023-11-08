@@ -12,6 +12,7 @@ go_test(
         "//pkg/base",
         "//pkg/ccl",
         "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/jobs",
         "//pkg/roachpb",
         "//pkg/security/securityassets",

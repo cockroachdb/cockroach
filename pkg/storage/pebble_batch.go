@@ -116,8 +116,9 @@ func newPebbleBatch(
 		// initialized. As a part of initializing a store, we use a Batch to
 		// write the store identifer key; this is written before any cluster
 		// version has been initialized.
-		mayWriteSizedDeletes: settings.Version.ActiveVersionOrEmpty(context.TODO()).
-			IsActive(clusterversion.V23_2_UseSizedPebblePointTombstones),
+		mayWriteSizedDeletes: clusterversion.V23_2_UseSizedPebblePointTombstones.IsActive(
+			settings.Version.ActiveVersionOrEmpty(context.TODO()),
+		),
 	}
 	return pb
 }

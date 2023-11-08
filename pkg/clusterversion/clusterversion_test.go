@@ -14,6 +14,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -35,7 +36,7 @@ func TestClusterVersionOnChange(t *testing.T) {
 		&cvs.VersionSetting)
 
 	handle := newHandleImpl(cvs, &sv, Latest.Version(), MinSupported.Version())
-	newCV := ClusterVersion{
+	newCV := clusterversionpb.ClusterVersion{
 		Version: roachpb.Version{
 			Major:    1,
 			Minor:    2,
@@ -46,8 +47,8 @@ func TestClusterVersionOnChange(t *testing.T) {
 	encoded, err := protoutil.Marshal(&newCV)
 	require.NoError(t, err)
 
-	var capturedV ClusterVersion
-	handle.SetOnChange(func(ctx context.Context, newVersion ClusterVersion) {
+	var capturedV clusterversionpb.ClusterVersion
+	handle.SetOnChange(func(ctx context.Context, newVersion clusterversionpb.ClusterVersion) {
 		capturedV = newVersion
 	})
 	cvs.SetInternal(ctx, &sv, encoded)

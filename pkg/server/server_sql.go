@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/inspectz/inspectzpb"
@@ -1649,7 +1650,7 @@ func (s *SQLServer) preStart(
 	// This check needs to run after the "version" setting is set in the
 	// "system.settings" table of this tenant. This includes both system
 	// and secondary tenants.
-	var tenantActiveVersion clusterversion.ClusterVersion
+	var tenantActiveVersion clusterversionpb.ClusterVersion
 	if err := startup.RunIdempotentWithRetry(ctx,
 		s.stopper.ShouldQuiesce(),
 		"sql get tenant version", func(ctx context.Context) error {

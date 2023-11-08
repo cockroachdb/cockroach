@@ -17,6 +17,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -70,7 +71,7 @@ type SettingsWatcher struct {
 		// storageClusterVersion is the cache of the storage cluster version
 		// inside secondary tenants. It will be uninitialized in a system
 		// tenant.
-		storageClusterVersion clusterversion.ClusterVersion
+		storageClusterVersion clusterversionpb.ClusterVersion
 
 		// Used by TestingRestart.
 		updateWait chan struct{}
@@ -437,7 +438,7 @@ func (s *SettingsWatcher) setLocked(
 	// instances, this code should no-op (either because we're in the system
 	// tenant, or because the new version <= old version).
 	if key == clusterversion.KeyVersionSetting && !s.codec.ForSystemTenant() {
-		var newVersion clusterversion.ClusterVersion
+		var newVersion clusterversionpb.ClusterVersion
 		oldVersion := s.settings.Version.ActiveVersionOrEmpty(ctx)
 		if err := protoutil.Unmarshal([]byte(val.Value), &newVersion); err != nil {
 			log.Warningf(ctx, "failed to set cluster version: %s", err.Error())
@@ -485,7 +486,7 @@ func (s *SettingsWatcher) updateOverrides(ctx context.Context) (updateCh <-chan 
 
 	for key, val := range newOverrides {
 		if key == clusterversion.KeyVersionSetting {
-			var newVersion clusterversion.ClusterVersion
+			var newVersion clusterversionpb.ClusterVersion
 			if err := protoutil.Unmarshal([]byte(val.Value), &newVersion); err != nil {
 				log.Warningf(ctx, "ignoring invalid cluster version: %s - %v\n"+
 					"Note: the lack of a refreshed storage cluster version in a secondary tenant may prevent tenant upgrade.",
@@ -566,16 +567,16 @@ func (s *SettingsWatcher) IsOverridden(settingKey settings.InternalKey) bool {
 // cluster is initialized in version 23.1 or later). In cases where the storage
 // cluster version is not initialized, we assume that it's running version 22.2,
 // the last version which did not properly initialize this value.
-func (s *SettingsWatcher) GetStorageClusterActiveVersion() clusterversion.ClusterVersion {
+func (s *SettingsWatcher) GetStorageClusterActiveVersion() clusterversionpb.ClusterVersion {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.mu.storageClusterVersion.Equal(clusterversion.ClusterVersion{Version: roachpb.Version{Major: 0, Minor: 0}}) {
+	if s.mu.storageClusterVersion.Equal(clusterversionpb.ClusterVersion{Version: roachpb.Version{Major: 0, Minor: 0}}) {
 		// If the storage cluster version is not initialized in the
 		// settingswatcher, it means that the storage cluster has not yet been
 		// upgraded to 23.1. As a result, assume that storage cluster is at
 		// version 22.2.
 		storageClusterVersion := roachpb.Version{Major: 22, Minor: 2, Internal: 0}
-		return clusterversion.ClusterVersion{Version: storageClusterVersion}
+		return clusterversionpb.ClusterVersion{Version: storageClusterVersion}
 	}
 	return s.mu.storageClusterVersion
 }
@@ -588,23 +589,23 @@ var errVersionSettingNotFound = errors.New("got nil value for tenant cluster ver
 // the given transaction.
 func (s *SettingsWatcher) GetClusterVersionFromStorage(
 	ctx context.Context, txn *kv.Txn,
-) (clusterversion.ClusterVersion, error) {
+) (clusterversionpb.ClusterVersion, error) {
 	indexPrefix := s.codec.IndexPrefix(keys.SettingsTableID, uint32(1))
 	key := encoding.EncodeUvarintAscending(encoding.EncodeStringAscending(indexPrefix, "version"), uint64(0))
 	row, err := txn.Get(ctx, key)
 	if err != nil {
-		return clusterversion.ClusterVersion{}, err
+		return clusterversionpb.ClusterVersion{}, err
 	}
 	if row.Value == nil {
-		return clusterversion.ClusterVersion{}, errVersionSettingNotFound
+		return clusterversionpb.ClusterVersion{}, errVersionSettingNotFound
 	}
 	_, val, _, err := s.dec.DecodeRow(roachpb.KeyValue{Key: row.Key, Value: *row.Value}, nil /* alloc */)
 	if err != nil {
-		return clusterversion.ClusterVersion{}, err
+		return clusterversionpb.ClusterVersion{}, err
 	}
-	var version clusterversion.ClusterVersion
+	var version clusterversionpb.ClusterVersion
 	if err := protoutil.Unmarshal([]byte(val.Value), &version); err != nil {
-		return clusterversion.ClusterVersion{}, err
+		return clusterversionpb.ClusterVersion{}, err
 	}
 	return version, nil
 }

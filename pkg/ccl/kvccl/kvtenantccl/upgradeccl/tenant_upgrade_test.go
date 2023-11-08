@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -482,7 +483,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 								v1,
 								upgrade.NoPrecondition,
 								func(
-									ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
+									ctx context.Context, version clusterversionpb.ClusterVersion, deps upgrade.TenantDeps,
 								) error {
 									t.Logf("v1 migration running")
 									return nil
@@ -492,7 +493,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 								v2,
 								upgrade.NoPrecondition,
 								func(
-									ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
+									ctx context.Context, version clusterversionpb.ClusterVersion, deps upgrade.TenantDeps,
 								) error {
 									t.Log("v2 migration starts running")
 									defer t.Log("v2 migration finishes running")

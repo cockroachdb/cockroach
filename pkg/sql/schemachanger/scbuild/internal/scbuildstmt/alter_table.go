@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -73,7 +74,7 @@ func init() {
 			if checks.NumIn() != 3 ||
 				(checks.In(0) != statementType && !statementType.Implements(checks.In(0))) ||
 				checks.In(1) != reflect.TypeOf(sessiondatapb.UseNewSchemaChangerOff) ||
-				checks.In(2) != reflect.TypeOf((*clusterversion.ClusterVersion)(nil)).Elem() ||
+				checks.In(2) != reflect.TypeOf((*clusterversionpb.ClusterVersion)(nil)).Elem() ||
 				checks.NumOut() != 1 ||
 				checks.Out(0) != boolType {
 				panic(errors.AssertionFailedf("%v checks does not have a valid signature; got %v",
@@ -90,7 +91,7 @@ func init() {
 func alterTableChecks(
 	n *tree.AlterTable,
 	mode sessiondatapb.NewSchemaChangerMode,
-	activeVersion clusterversion.ClusterVersion,
+	activeVersion clusterversionpb.ClusterVersion,
 ) bool {
 	// For ALTER TABLE stmt, we will need to further check whether each
 	// individual command is fully supported.
@@ -109,14 +110,14 @@ func alterTableChecks(
 func alterTableAlterPrimaryKeyChecks(
 	t *tree.AlterTableAlterPrimaryKey,
 	mode sessiondatapb.NewSchemaChangerMode,
-	activeVersion clusterversion.ClusterVersion,
+	activeVersion clusterversionpb.ClusterVersion,
 ) bool {
 	// Start supporting ALTER PRIMARY KEY (in general with fallback cases) from TODO_Delete_V22_2.
 	if !isV222Active(t, mode, activeVersion) {
 		return false
 	}
 	// Start supporting ALTER PRIMARY KEY USING HASH from V23_1.
-	if t.Sharded != nil && !activeVersion.IsActive(clusterversion.V23_1) {
+	if t.Sharded != nil && !clusterversion.V23_1.IsActive(activeVersion) {
 		return false
 	}
 	return true
@@ -125,7 +126,7 @@ func alterTableAlterPrimaryKeyChecks(
 func alterTableAddConstraintChecks(
 	t *tree.AlterTableAddConstraint,
 	mode sessiondatapb.NewSchemaChangerMode,
-	activeVersion clusterversion.ClusterVersion,
+	activeVersion clusterversionpb.ClusterVersion,
 ) bool {
 	// Start supporting ADD PRIMARY KEY from TODO_Delete_V22_2.
 	if d, ok := t.ConstraintDef.(*tree.UniqueConstraintTableDef); ok && d.PrimaryKey && t.ValidationBehavior == tree.ValidationDefault {

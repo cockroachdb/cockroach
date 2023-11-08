@@ -52,6 +52,7 @@ go_test(
         "//pkg/ccl/kvccl",
         "//pkg/ccl/utilccl/licenseccl",
         "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/jobs",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/liveness",

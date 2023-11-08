@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -60,7 +61,7 @@ func (th *testClusterWithHelpers) getVersionFromSelect(i int) string {
 		}
 		th.Fatalf("%d: %s (%T)", i, err, err)
 	}
-	var v clusterversion.ClusterVersion
+	var v clusterversionpb.ClusterVersion
 	if err := protoutil.Unmarshal([]byte(version), &v); err != nil {
 		th.Fatalf("%d: %s", i, err)
 	}
@@ -276,7 +277,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 			st := tc.Servers[i].ClusterSettings()
 			v := st.Version.ActiveVersion(ctx)
 			wantActive := isNoopUpdate
-			if isActive := v.IsActiveVersion(newVersion); isActive != wantActive {
+			if isActive := v.AtLeast(newVersion); isActive != wantActive {
 				return errors.Errorf("%d: v%s active=%t (wanted %t)", i, newVersion, isActive, wantActive)
 			}
 
@@ -430,7 +431,7 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 					v1,
 					upgrade.NoPrecondition,
 					func(
-						ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
+						ctx context.Context, version clusterversionpb.ClusterVersion, deps upgrade.TenantDeps,
 					) error {
 						return nil
 					}, "test"), true

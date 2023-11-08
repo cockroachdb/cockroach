@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -225,8 +226,8 @@ func onVersionReached(
 ) {
 	var once sync.Once
 
-	onVersionChanged := func(rpcContext context.Context, version clusterversion.ClusterVersion) {
-		if !version.IsActive(expect) {
+	onVersionChanged := func(rpcContext context.Context, version clusterversionpb.ClusterVersion) {
+		if !expect.IsActive(version) {
 			return
 		}
 		once.Do(do)

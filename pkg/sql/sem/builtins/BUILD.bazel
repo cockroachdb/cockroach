@@ -34,6 +34,7 @@ go_library(
         "//pkg/base",
         "//pkg/build",
         "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/config/zonepb",
         "//pkg/geo",
         "//pkg/geo/geogfn",

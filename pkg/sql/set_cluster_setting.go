@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -585,7 +585,7 @@ func setVersionSetting(
 		// utilized this hard-coded value instead. In 21.1, the builtin
 		// which creates tenants sets up the cluster version state. It also
 		// is set when the version is upgraded.
-		tenantDefaultVersion := clusterversion.ClusterVersion{
+		tenantDefaultVersion := clusterversionpb.ClusterVersion{
 			Version: roachpb.Version{Major: 20, Minor: 2},
 		}
 		// Pretend that the expected value was already there to allow us to
@@ -611,7 +611,7 @@ func setVersionSetting(
 	// Updates the version inside the system.settings table.
 	// If we are already at or above the target version, then this
 	// function is idempotent.
-	updateVersionSystemSetting := func(ctx context.Context, version clusterversion.ClusterVersion, postSettingValidate func(ctx context.Context, txn *kv.Txn) error) error {
+	updateVersionSystemSetting := func(ctx context.Context, version clusterversionpb.ClusterVersion, postSettingValidate func(ctx context.Context, txn *kv.Txn) error) error {
 		rawValue, err := protoutil.Marshal(&version)
 		if err != nil {
 			return err
@@ -635,7 +635,7 @@ func setVersionSetting(
 				if bytes.Equal(oldRawValue, rawValue) {
 					return nil
 				}
-				var oldValue clusterversion.ClusterVersion
+				var oldValue clusterversionpb.ClusterVersion
 				// If there is a pre-existing value, we ought to be able to decode it.
 				if err := protoutil.Unmarshal(oldRawValue, &oldValue); err != nil {
 					return errors.NewAssertionErrorWithWrappedErrf(err, "decoding previous version %s",
@@ -724,7 +724,7 @@ func runMigrationsAndUpgradeVersion(
 	value tree.Datum,
 	updateVersionSystemSetting UpdateVersionSystemSettingHook,
 ) error {
-	var from, to clusterversion.ClusterVersion
+	var from, to clusterversionpb.ClusterVersion
 
 	fromVersionVal := []byte(string(*prev.(*tree.DString)))
 	if err := protoutil.Unmarshal(fromVersionVal, &from); err != nil {
@@ -781,7 +781,7 @@ func toSettingString(
 		return "", errors.Errorf("cannot use %s %T value for protobuf setting", d.ResolvedType(), d)
 	case *settings.VersionSetting:
 		if s, ok := d.(*tree.DString); ok {
-			newRawVal, err := clusterversion.EncodingFromVersionStr(string(*s))
+			newRawVal, err := clusterversionpb.EncodingFromVersionStr(string(*s))
 			if err != nil {
 				return "", err
 			}

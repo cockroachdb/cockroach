@@ -11,7 +11,7 @@
 package funcdesc
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -107,7 +107,7 @@ func (fdb *functionDescriptorBuilder) RunPostDeserializationChanges() (err error
 
 // RunRestoreChanges implements the catalog.DescriptorBuilder interface.
 func (fdb *functionDescriptorBuilder) RunRestoreChanges(
-	version clusterversion.ClusterVersion, descLookupFn func(id descpb.ID) catalog.Descriptor,
+	version clusterversionpb.ClusterVersion, descLookupFn func(id descpb.ID) catalog.Descriptor,
 ) error {
 	// Upgrade the declarative schema changer state.
 	if scpb.MigrateDescriptorState(version, fdb.maybeModified.ParentID, fdb.maybeModified.DeclarativeSchemaChangerState) {

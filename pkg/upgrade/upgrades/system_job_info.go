@@ -13,7 +13,7 @@ package upgrades
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -23,7 +23,7 @@ import (
 
 // systemPrivilegesTableMigration creates the system.job_info table.
 func systemJobInfoTableMigration(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, _ clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	// Create the job_info table proper.
 	if err := createSystemTable(
@@ -57,7 +57,7 @@ ALTER TABLE system.jobs ALTER COLUMN payload DROP NOT NULL
 // alterPayloadColumnToNullable runs a schema change to drop the NOT NULL
 // constraint on the system.jobs payload column.
 func alterPayloadColumnToNullable(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, _ clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	_, err := d.InternalExecutor.ExecEx(ctx, "set-job-payload-nullable", nil,
 		sessiondata.NodeUserSessionDataOverride, alterPayloadToNullableQuery)

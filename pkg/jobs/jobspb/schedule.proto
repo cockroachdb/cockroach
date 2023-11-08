@@ -14,7 +14,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb";
 
 import "gogoproto/gogo.proto";
 import "google/protobuf/any.proto";
-import "clusterversion/cluster_version.proto";
+import "clusterversion/clusterversionpb/cluster_version.proto";
 
 
 // ScheduleDetails describes how to schedule and execute the job.

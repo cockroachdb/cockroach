@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -97,7 +98,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 							return nil, false
 						}
 						return upgrade.NewTenantUpgrade("test", v, upgrade.NoPrecondition, func(
-							ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
+							ctx context.Context, version clusterversionpb.ClusterVersion, deps upgrade.TenantDeps,
 						) error {
 							canResume := make(chan error)
 							select {
@@ -250,7 +251,7 @@ func TestPostJobInfoTableQueryDuplicateJobInfo(t *testing.T) {
 
 	ctx := context.Background()
 	targetCV := clusterversion.V23_2Start + 1
-	targetCVJSON, err := protoreflect.MessageToJSON(&clusterversion.ClusterVersion{Version: clusterversion.ByKey(targetCV)},
+	targetCVJSON, err := protoreflect.MessageToJSON(&clusterversionpb.ClusterVersion{Version: clusterversion.ByKey(targetCV)},
 		protoreflect.FmtFlags{EmitDefaults: false})
 	require.NoError(t, err)
 
@@ -271,7 +272,7 @@ func TestPostJobInfoTableQueryDuplicateJobInfo(t *testing.T) {
 			return nil, false
 		}
 		return upgrade.NewTenantUpgrade("test", v, upgrade.NoPrecondition, func(
-			ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
+			ctx context.Context, version clusterversionpb.ClusterVersion, deps upgrade.TenantDeps,
 		) error {
 			canResume := make(chan struct{})
 			upgradeStarted <- canResume
@@ -396,7 +397,7 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 							return nil, false
 						}
 						return upgrade.NewSystemUpgrade("test", cv, func(
-							ctx context.Context, version clusterversion.ClusterVersion, d upgrade.SystemDeps,
+							ctx context.Context, version clusterversionpb.ClusterVersion, d upgrade.SystemDeps,
 						) error {
 							return d.DB.KV().Migrate(ctx, desc.StartKey, desc.EndKey, cv)
 						}, upgrade.RestoreActionNotRequired("test")), true
@@ -477,7 +478,7 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 	// RegisterKVMigration the upgrades to update the map with run counts.
 	// There should definitely not be any concurrency of execution, so the race
 	// detector should not fire.
-	migrationRunCounts := make(map[clusterversion.ClusterVersion]int)
+	migrationRunCounts := make(map[clusterversionpb.ClusterVersion]int)
 
 	ctx := context.Background()
 	var active int32 // used to detect races
@@ -502,7 +503,7 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 					},
 					RegistryOverride: func(cv roachpb.Version) (upgradebase.Upgrade, bool) {
 						return upgrade.NewSystemUpgrade("test", cv, func(
-							ctx context.Context, version clusterversion.ClusterVersion, d upgrade.SystemDeps,
+							ctx context.Context, version clusterversionpb.ClusterVersion, d upgrade.SystemDeps,
 						) error {
 							if atomic.AddInt32(&active, 1) != 1 {
 								t.Error("unexpected concurrency")
@@ -586,7 +587,7 @@ func TestPauseMigration(t *testing.T) {
 							return nil, false
 						}
 						return upgrade.NewTenantUpgrade("test", cv, upgrade.NoPrecondition, func(
-							ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
+							ctx context.Context, version clusterversionpb.ClusterVersion, deps upgrade.TenantDeps,
 						) error {
 							canResume := make(chan error)
 							ch <- migrationEvent{
@@ -693,7 +694,7 @@ func TestPrecondition(t *testing.T) {
 	migrationErr.Store(true)
 	cf := func(run *int64, err *atomic.Value) upgrade.TenantUpgradeFunc {
 		return func(
-			context.Context, clusterversion.ClusterVersion, upgrade.TenantDeps,
+			context.Context, clusterversionpb.ClusterVersion, upgrade.TenantDeps,
 		) error {
 			atomic.AddInt64(run, 1)
 			if err.Load().(bool) {
@@ -720,7 +721,7 @@ func TestPrecondition(t *testing.T) {
 				case v1:
 					return upgrade.NewTenantUpgrade("v1", cv,
 						upgrade.PreconditionFunc(func(
-							ctx context.Context, cv clusterversion.ClusterVersion, td upgrade.TenantDeps,
+							ctx context.Context, cv clusterversionpb.ClusterVersion, td upgrade.TenantDeps,
 						) error {
 							return cf(&preconditionRun, &preconditionErr)(ctx, cv, td)
 						}),
@@ -827,7 +828,7 @@ func TestMigrationFailure(t *testing.T) {
 	// Pick a random version in to fail at
 	versions := clusterversion.ListBetween(startVersion, endVersion)
 	failVersion := versions[rand.Intn(len(versions))]
-	fenceVersion := upgrade.FenceVersionFor(ctx, clusterversion.ClusterVersion{Version: failVersion}).Version
+	fenceVersion := upgrade.FenceVersionFor(ctx, clusterversionpb.ClusterVersion{Version: failVersion}).Version
 	t.Logf("test will fail at version: %s", failVersion.String())
 
 	// Create a storage cluster for the tenant.
@@ -871,7 +872,7 @@ func TestMigrationFailure(t *testing.T) {
 				DontUseJobs: true,
 				RegistryOverride: func(cv roachpb.Version) (upgradebase.Upgrade, bool) {
 					if failUpgrade.Load() && cv == failVersion {
-						errorUpgrade := func(ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps) error {
+						errorUpgrade := func(ctx context.Context, version clusterversionpb.ClusterVersion, deps upgrade.TenantDeps) error {
 							return errors.New("the upgrade failed with some error!")
 						}
 						return upgrade.NewTenantUpgrade("test", cv, nil, errorUpgrade, upgrade.RestoreActionNotRequired("test")), true
@@ -886,7 +887,7 @@ func TestMigrationFailure(t *testing.T) {
 	watcher := tenant.SettingsWatcher().(*settingswatcher.SettingsWatcher)
 	testutils.SucceedsSoon(t, func() error {
 		storageVersion := watcher.GetStorageClusterActiveVersion()
-		if !storageVersion.IsActive(endVersionKey) {
+		if !endVersionKey.IsActive(storageVersion) {
 			return errors.Newf("expected storage version of at least %s found %s", endVersion.PrettyPrint(), storageVersion.PrettyPrint())
 		}
 		return nil
@@ -897,7 +898,7 @@ func TestMigrationFailure(t *testing.T) {
 		require.Equal(t, exp, got)
 	}
 	checkSettingVersion := func(t *testing.T, exp roachpb.Version) {
-		var settingVersion clusterversion.ClusterVersion
+		var settingVersion clusterversionpb.ClusterVersion
 		require.NoError(t, tenant.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			var err error
 			settingVersion, err = watcher.GetClusterVersionFromStorage(ctx, txn)

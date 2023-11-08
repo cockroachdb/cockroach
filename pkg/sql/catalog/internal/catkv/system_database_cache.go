@@ -11,7 +11,7 @@
 package catkv
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -74,7 +74,7 @@ func NewSystemDatabaseCache(codec keys.SQLCodec, settings *cluster.Settings) *Sy
 
 // lookupDescriptor looks for the corresponding descriptor entry in the cache.
 func (c *SystemDatabaseCache) lookupDescriptor(
-	_ clusterversion.ClusterVersion, id descpb.ID,
+	_ clusterversionpb.ClusterVersion, id descpb.ID,
 ) catalog.Descriptor {
 	switch id {
 	case keys.SystemPublicSchemaID:
@@ -90,7 +90,7 @@ func (c *SystemDatabaseCache) lookupDescriptor(
 // lookupDescriptorID looks for the corresponding descriptor name -> ID entry in
 // the cache.
 func (c *SystemDatabaseCache) lookupDescriptorID(
-	version clusterversion.ClusterVersion, key catalog.NameKey,
+	version clusterversionpb.ClusterVersion, key catalog.NameKey,
 ) (descpb.ID, hlc.Timestamp) {
 	if key.GetParentID() == descpb.InvalidID &&
 		key.GetParentSchemaID() == descpb.InvalidID &&
@@ -122,7 +122,7 @@ func (c *SystemDatabaseCache) lookupDescriptorID(
 // descriptors themselves are also completely ignored, see lookupDescriptor as
 // to why that is the case. Effectively, we only add system namespace entries to
 // the cache.
-func (c *SystemDatabaseCache) update(version clusterversion.ClusterVersion, in nstree.Catalog) {
+func (c *SystemDatabaseCache) update(version clusterversionpb.ClusterVersion, in nstree.Catalog) {
 	if c == nil {
 		return
 	}
@@ -149,7 +149,7 @@ func (c *SystemDatabaseCache) update(version clusterversion.ClusterVersion, in n
 // superfluous acquisitions of the write-lock: most of the time we expect there
 // to be no updates.
 func (c *SystemDatabaseCache) nameCandidatesForUpdate(
-	version clusterversion.ClusterVersion, in nstree.Catalog,
+	version clusterversionpb.ClusterVersion, in nstree.Catalog,
 ) []nstree.NamespaceEntry {
 	if c == nil {
 		// This should never happen, when c is nil this function should never

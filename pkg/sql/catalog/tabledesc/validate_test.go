@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -2931,7 +2932,7 @@ func TestValidateTableDesc(t *testing.T) {
 			clusterVersion := clusterversion.TestingClusterVersion
 			version := d.version
 			if version != 0 {
-				clusterVersion = clusterversion.ClusterVersion{
+				clusterVersion = clusterversionpb.ClusterVersion{
 					Version: clusterversion.ByKey(version),
 				}
 			}

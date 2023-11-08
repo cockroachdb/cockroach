@@ -16,7 +16,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -45,7 +45,7 @@ func NewRecord(version roachpb.Version, user username.SQLUsername, name string) 
 	return jobs.Record{
 		Description: name,
 		Details: jobspb.MigrationDetails{
-			ClusterVersion: &clusterversion.ClusterVersion{Version: version},
+			ClusterVersion: &clusterversionpb.ClusterVersion{Version: version},
 		},
 		Username:      user,
 		Progress:      jobspb.MigrationProgress{},

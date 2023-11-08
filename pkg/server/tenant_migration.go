@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradecluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -49,7 +50,7 @@ func newTenantMigrationServer(server *SQLServer) *TenantMigrationServer {
 func validateTargetClusterVersion(
 	ctx context.Context,
 	tenantVersion clusterversion.Handle,
-	targetCV *clusterversion.ClusterVersion,
+	targetCV *clusterversionpb.ClusterVersion,
 	instanceID base.SQLInstanceID,
 ) error {
 	if targetCV.Less(tenantVersion.MinSupportedVersion()) {
@@ -128,7 +129,7 @@ func (m *TenantMigrationServer) BumpClusterVersion(
 func bumpTenantClusterVersion(
 	ctx context.Context,
 	tenantCV clusterversion.Handle,
-	newCV clusterversion.ClusterVersion,
+	newCV clusterversionpb.ClusterVersion,
 	instanceID base.SQLInstanceID,
 ) error {
 	activeCV := tenantCV.ActiveVersion(ctx)

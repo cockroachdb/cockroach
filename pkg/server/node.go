@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -462,7 +463,7 @@ func bootstrapCluster(
 	}
 
 	// We use our binary version to bootstrap the cluster.
-	bootstrapVersion := clusterversion.ClusterVersion{Version: initCfg.latestVersion}
+	bootstrapVersion := clusterversionpb.ClusterVersion{Version: initCfg.latestVersion}
 	if err := kvstorage.WriteClusterVersionToEngines(ctx, engines, bootstrapVersion); err != nil {
 		return nil, err
 	}
@@ -2323,7 +2324,7 @@ func (n *Node) getVersionSettingWithUpdateCh(
 }
 
 func (n *Node) notifyClusterVersionChange(
-	ctx context.Context, activeVersion clusterversion.ClusterVersion,
+	ctx context.Context, activeVersion clusterversionpb.ClusterVersion,
 ) {
 	n.versionUpdateMu.Lock()
 	defer n.versionUpdateMu.Unlock()

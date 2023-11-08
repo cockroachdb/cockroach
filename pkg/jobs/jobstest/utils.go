@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -148,7 +149,7 @@ func GetJobsTableSchema(env scheduledjobs.JobSchedulerEnv) string {
 var DummyClusterID = uuid.UUID{1}
 
 // DummyClusterVersion is used while instantiating dummy schedules
-var DummyClusterVersion = clusterversion.ClusterVersion{Version: clusterversion.TestingBinaryVersion}
+var DummyClusterVersion = clusterversionpb.ClusterVersion{Version: clusterversion.TestingBinaryVersion}
 
 // AddDummyScheduleDetails augments passed in details with a dummy clusterID and CreationClusterVersion.
 func AddDummyScheduleDetails(details jobspb.ScheduleDetails) jobspb.ScheduleDetails {

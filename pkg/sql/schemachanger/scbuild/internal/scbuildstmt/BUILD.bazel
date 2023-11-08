@@ -34,6 +34,7 @@ go_library(
     visibility = ["//pkg/sql/schemachanger/scbuild:__subpackages__"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/docs",
         "//pkg/geo/geoindex",
         "//pkg/keys",

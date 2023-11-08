@@ -14,7 +14,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -223,7 +223,7 @@ var _ validate.ValidationDereferencer = Catalog{}
 // DereferenceDescriptors implements the validate.ValidationDereferencer
 // interface.
 func (c Catalog) DereferenceDescriptors(
-	ctx context.Context, version clusterversion.ClusterVersion, reqs []descpb.ID,
+	ctx context.Context, version clusterversionpb.ClusterVersion, reqs []descpb.ID,
 ) ([]catalog.Descriptor, error) {
 	ret := make([]catalog.Descriptor, len(reqs))
 	for i, id := range reqs {
@@ -251,7 +251,7 @@ func (c Catalog) DereferenceDescriptorIDs(
 // Validate delegates to validate.Validate.
 func (c Catalog) Validate(
 	ctx context.Context,
-	version clusterversion.ClusterVersion,
+	version clusterversionpb.ClusterVersion,
 	telemetry catalog.ValidationTelemetry,
 	targetLevel catalog.ValidationLevel,
 	descriptors ...catalog.Descriptor,
@@ -300,7 +300,7 @@ func (c Catalog) ValidateNamespaceEntry(key catalog.NameKey) error {
 // This is useful when we're validating many descriptors separately and we don't
 // want a corrupt descriptor to prevent validating the others.
 func (c Catalog) ValidateWithRecover(
-	ctx context.Context, version clusterversion.ClusterVersion, desc catalog.Descriptor,
+	ctx context.Context, version clusterversionpb.ClusterVersion, desc catalog.Descriptor,
 ) (ve catalog.ValidationErrors) {
 	defer func() {
 		if r := recover(); r != nil {

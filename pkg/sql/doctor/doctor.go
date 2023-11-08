@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -119,7 +120,7 @@ func processDescriptorTable(
 // Examine runs a suite of consistency checks over system tables.
 func Examine(
 	ctx context.Context,
-	version clusterversion.ClusterVersion,
+	version clusterversionpb.ClusterVersion,
 	descTable DescriptorTable,
 	namespaceTable NamespaceTable,
 	jobsTable JobsTable,
@@ -152,7 +153,7 @@ func Examine(
 // ExamineDescriptors runs a suite of checks over the descriptor table.
 func ExamineDescriptors(
 	ctx context.Context,
-	version clusterversion.ClusterVersion,
+	version clusterversionpb.ClusterVersion,
 	descTable DescriptorTable,
 	namespaceTable NamespaceTable,
 	jobsTable JobsTable,

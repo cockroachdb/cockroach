@@ -27,7 +27,7 @@ import (
 	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -1475,7 +1475,7 @@ type ExecutorConfig struct {
 // each step.
 type UpdateVersionSystemSettingHook func(
 	ctx context.Context,
-	version clusterversion.ClusterVersion,
+	version clusterversionpb.ClusterVersion,
 	validate func(ctx context.Context, txn *kv.Txn) error,
 ) error
 
@@ -1483,7 +1483,7 @@ type UpdateVersionSystemSettingHook func(
 type VersionUpgradeHook func(
 	ctx context.Context,
 	user username.SQLUsername,
-	from, to clusterversion.ClusterVersion,
+	from, to clusterversionpb.ClusterVersion,
 	updateSystemVersionSetting UpdateVersionSystemSettingHook,
 ) error
 

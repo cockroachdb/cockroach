@@ -13,6 +13,7 @@ package clusterversion
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -78,7 +79,7 @@ func registerClusterVersionSetting() *clusterVersionSetting {
 func (cv *clusterVersionSetting) initialize(
 	ctx context.Context, version roachpb.Version, sv *settings.Values,
 ) error {
-	if ver := cv.activeVersionOrEmpty(ctx, sv); ver != (ClusterVersion{}) {
+	if ver := cv.activeVersionOrEmpty(ctx, sv); ver != (clusterversionpb.ClusterVersion{}) {
 		// Allow initializing a second time as long as it's not regressing.
 		//
 		// This is useful in tests that use MakeTestingClusterSettings() which
@@ -103,7 +104,7 @@ func (cv *clusterVersionSetting) initialize(
 	}
 
 	// Return the serialized form of the new version.
-	newV := ClusterVersion{Version: version}
+	newV := clusterversionpb.ClusterVersion{Version: version}
 	encoded, err := protoutil.Marshal(&newV)
 	if err != nil {
 		return err
@@ -118,9 +119,9 @@ func (cv *clusterVersionSetting) initialize(
 // activeVersion fatals if the version has not been initialized.
 func (cv *clusterVersionSetting) activeVersion(
 	ctx context.Context, sv *settings.Values,
-) ClusterVersion {
+) clusterversionpb.ClusterVersion {
 	ver := cv.activeVersionOrEmpty(ctx, sv)
-	if ver == (ClusterVersion{}) {
+	if ver == (clusterversionpb.ClusterVersion{}) {
 		log.Fatalf(ctx, "version not initialized")
 	}
 	return ver
@@ -130,12 +131,12 @@ func (cv *clusterVersionSetting) activeVersion(
 // the active version was not initialized.
 func (cv *clusterVersionSetting) activeVersionOrEmpty(
 	ctx context.Context, sv *settings.Values,
-) ClusterVersion {
+) clusterversionpb.ClusterVersion {
 	encoded := cv.GetInternal(sv)
 	if encoded == nil {
-		return ClusterVersion{}
+		return clusterversionpb.ClusterVersion{}
 	}
-	var curVer ClusterVersion
+	var curVer clusterversionpb.ClusterVersion
 	// NB: our linter requires using protoutil.Unmarshal here, but it causes an
 	// unnecessary allocation. This and other uses in this file are exceptions.
 	// TODO(pavelkalinnikov): don't parse proto on each time reading this setting.
@@ -150,12 +151,12 @@ func (cv *clusterVersionSetting) activeVersionOrEmpty(
 func (cv *clusterVersionSetting) isActive(
 	ctx context.Context, sv *settings.Values, versionKey Key,
 ) bool {
-	return cv.activeVersion(ctx, sv).IsActive(versionKey)
+	return versionKey.IsActive(cv.activeVersion(ctx, sv))
 }
 
 // Decode is part of the VersionSettingImpl interface.
 func (cv *clusterVersionSetting) Decode(val []byte) (settings.ClusterVersionImpl, error) {
-	var clusterVersion ClusterVersion
+	var clusterVersion clusterversionpb.ClusterVersion
 	if err := clusterVersion.Unmarshal(val); err != nil {
 		return nil, err
 	}
@@ -166,7 +167,7 @@ func (cv *clusterVersionSetting) Decode(val []byte) (settings.ClusterVersionImpl
 func (cv *clusterVersionSetting) ValidateVersionUpgrade(
 	_ context.Context, sv *settings.Values, curRawProto, newRawProto []byte,
 ) error {
-	var newCV ClusterVersion
+	var newCV clusterversionpb.ClusterVersion
 	if err := newCV.Unmarshal(newRawProto); err != nil {
 		return err
 	}
@@ -175,7 +176,7 @@ func (cv *clusterVersionSetting) ValidateVersionUpgrade(
 		return err
 	}
 
-	var oldCV ClusterVersion
+	var oldCV clusterversionpb.ClusterVersion
 	if err := oldCV.Unmarshal(curRawProto); err != nil {
 		return err
 	}
@@ -211,7 +212,7 @@ func (cv *clusterVersionSetting) ValidateBinaryVersions(
 		}
 	}()
 
-	var ver ClusterVersion
+	var ver clusterversionpb.ClusterVersion
 	if err := ver.Unmarshal(rawProto); err != nil {
 		return err
 	}

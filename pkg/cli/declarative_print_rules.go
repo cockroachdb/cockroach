@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/errors"
@@ -38,7 +38,7 @@ a given corpus file.
 				return err
 			}
 			rules := scplan.GetRulesRegistryForRelease(ctx,
-				clusterversion.ClusterVersion{
+				clusterversionpb.ClusterVersion{
 					Version: version,
 				})
 			if rules == nil {

@@ -15,7 +15,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -50,7 +50,7 @@ func ValidateComputedColumnExpression(
 	tn *tree.TableName,
 	context tree.SchemaExprContext,
 	semaCtx *tree.SemaContext,
-	version clusterversion.ClusterVersion,
+	version clusterversionpb.ClusterVersion,
 ) (serializedExpr string, _ *types.T, _ error) {
 	if d.HasDefaultExpr() {
 		return "", nil, pgerror.Newf(

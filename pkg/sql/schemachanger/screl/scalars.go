@@ -12,6 +12,7 @@ package screl
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -103,7 +104,7 @@ func ContainsDescID(haystack scpb.Element, needle catid.DescID) (contains bool) 
 }
 
 // VersionSupportsElementUse checks if an element may be used at a given version.
-func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVersion) bool {
+func VersionSupportsElementUse(el scpb.Element, version clusterversionpb.ClusterVersion) bool {
 	switch el.(type) {
 	case *scpb.Database, *scpb.Schema, *scpb.View, *scpb.Sequence, *scpb.Table,
 		*scpb.AliasType, *scpb.ColumnFamily, *scpb.Column, *scpb.PrimaryIndex,
@@ -122,16 +123,16 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 		// These elements need v22.1 so they can be used without checking any version gates.
 		return true
 	case *scpb.IndexColumn, *scpb.EnumTypeValue, *scpb.TableZoneConfig:
-		return version.IsActive(clusterversion.TODO_Delete_V22_2)
+		return clusterversion.TODO_Delete_V22_2.IsActive(version)
 	case *scpb.DatabaseData, *scpb.TableData, *scpb.IndexData, *scpb.TablePartitioning,
 		*scpb.Function, *scpb.FunctionName, *scpb.FunctionVolatility, *scpb.FunctionLeakProof,
 		*scpb.FunctionNullInputBehavior, *scpb.FunctionBody, *scpb.FunctionParamDefaultExpression,
 		*scpb.ColumnNotNull, *scpb.CheckConstraintUnvalidated, *scpb.UniqueWithoutIndexConstraintUnvalidated,
 		*scpb.ForeignKeyConstraintUnvalidated, *scpb.IndexZoneConfig, *scpb.TableSchemaLocked, *scpb.CompositeType,
 		*scpb.CompositeTypeAttrType, *scpb.CompositeTypeAttrName:
-		return version.IsActive(clusterversion.V23_1)
+		return clusterversion.V23_1.IsActive(version)
 	case *scpb.SequenceOption:
-		return version.IsActive(clusterversion.V23_2)
+		return clusterversion.V23_2.IsActive(version)
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))
 	}

@@ -13,7 +13,7 @@ package catkv
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -53,7 +53,7 @@ type cachedCatalogReader struct {
 	systemDatabaseCache *SystemDatabaseCache
 
 	// version only needs to be set when systemDatabaseCache is set.
-	version clusterversion.ClusterVersion
+	version clusterversionpb.ClusterVersion
 }
 
 type byIDStateValue struct {
@@ -74,7 +74,7 @@ type byNameStateValue struct {
 // implementation, which is cached.
 func NewCatalogReader(
 	codec keys.SQLCodec,
-	version clusterversion.ClusterVersion,
+	version clusterversionpb.ClusterVersion,
 	systemDatabaseCache *SystemDatabaseCache,
 	maybeMonitor *mon.BytesMonitor,
 ) CatalogReader {

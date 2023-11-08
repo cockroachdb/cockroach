@@ -12,6 +12,7 @@ package funcdesc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
@@ -27,9 +28,9 @@ var schemaExprContextAllowingUDF = map[tree.SchemaExprContext]clusterversion.Key
 // case.
 // TODO(chengxiong): remove this function when we start allowing UDF references.
 func MaybeFailOnUDFUsage(
-	expr tree.TypedExpr, exprContext tree.SchemaExprContext, version clusterversion.ClusterVersion,
+	expr tree.TypedExpr, exprContext tree.SchemaExprContext, version clusterversionpb.ClusterVersion,
 ) error {
-	if supportedVersion, ok := schemaExprContextAllowingUDF[exprContext]; ok && version.IsActive(supportedVersion) {
+	if supportedVersion, ok := schemaExprContextAllowingUDF[exprContext]; ok && supportedVersion.IsActive(version) {
 		return nil
 	}
 	visitor := &tree.UDFDisallowanceVisitor{}

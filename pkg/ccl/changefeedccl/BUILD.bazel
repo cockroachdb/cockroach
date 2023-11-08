@@ -61,6 +61,7 @@ go_library(
         "//pkg/cloud/externalconn",
         "//pkg/cloud/externalconn/connectionpb",
         "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/docs",
         "//pkg/featureflag",
         "//pkg/geo",

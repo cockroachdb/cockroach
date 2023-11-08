@@ -16,6 +16,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
@@ -161,7 +162,7 @@ func visitStoreReplicas(
 	reader storage.Reader,
 	storeID roachpb.StoreID,
 	nodeID roachpb.NodeID,
-	targetVersion clusterversion.ClusterVersion,
+	targetVersion clusterversionpb.ClusterVersion,
 	send func(info loqrecoverypb.ReplicaInfo) error,
 ) error {
 	if err := kvstorage.IterateRangeDescriptorsFromDisk(ctx, reader, func(desc roachpb.RangeDescriptor) error {
@@ -186,7 +187,7 @@ func visitStoreReplicas(
 		}
 
 		var localIsLeaseholder bool
-		if targetVersion.IsActive(clusterversion.V23_1) {
+		if clusterversion.V23_1.IsActive(targetVersion) {
 			localIsLeaseholder = rstate.Lease != nil && rstate.Lease.Replica.StoreID == storeID
 		}
 

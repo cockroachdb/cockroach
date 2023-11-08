@@ -14,7 +14,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -300,7 +300,7 @@ func makeState(
 	jobID jobspb.JobID,
 	descriptorIDs []descpb.ID,
 	descriptors []catalog.Descriptor,
-	version clusterversion.ClusterVersion,
+	version clusterversionpb.ClusterVersion,
 ) (state scpb.CurrentState, err error) {
 	defer scerrors.StartEventf(
 		ctx,

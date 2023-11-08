@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -43,7 +44,9 @@ func GetUpgrade(key roachpb.Version) (upgradebase.Upgrade, bool) {
 }
 
 // NoTenantUpgradeFunc is a TenantUpgradeFunc that doesn't do anything.
-func NoTenantUpgradeFunc(context.Context, clusterversion.ClusterVersion, upgrade.TenantDeps) error {
+func NoTenantUpgradeFunc(
+	context.Context, clusterversionpb.ClusterVersion, upgrade.TenantDeps,
+) error {
 	return nil
 }
 

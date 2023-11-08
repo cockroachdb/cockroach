@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -4982,7 +4983,7 @@ value if you rely on the HLC for accuracy.`,
 					return nil, err
 				}
 				activeVersion := evalCtx.Settings.Version.ActiveVersionOrEmpty(ctx)
-				if activeVersion == (clusterversion.ClusterVersion{}) {
+				if activeVersion == (clusterversionpb.ClusterVersion{}) {
 					return nil, errors.AssertionFailedf("invalid uninitialized version")
 				}
 				if arg.LessEq(activeVersion.Version) {

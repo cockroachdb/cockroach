@@ -14,6 +14,7 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -51,13 +52,13 @@ func statementForDropJob(e scpb.Element, md *opGenContext) scop.StatementForDrop
 type opGenContext struct {
 	scpb.TargetState
 	Current         []scpb.Status
-	ActiveVersion   clusterversion.ClusterVersion
+	ActiveVersion   clusterversionpb.ClusterVersion
 	elementToTarget map[scpb.Element]int
 	InRollback      bool
 }
 
 func makeOpgenContext(
-	activeVersion clusterversion.ClusterVersion, cs scpb.CurrentState,
+	activeVersion clusterversionpb.ClusterVersion, cs scpb.CurrentState,
 ) opGenContext {
 	md := opGenContext{
 		ActiveVersion:   activeVersion,
@@ -173,7 +174,7 @@ func checkOpFunc(el scpb.Element, fn interface{}) (opType scop.Type, _ error) {
 // skip certain operations like backfills / validation.
 func checkIfDescriptorIsWithoutData(id descpb.ID, md *opGenContext) bool {
 	// Older versions did not emit the data element.
-	if !md.ActiveVersion.IsActive(clusterversion.V23_2) {
+	if !clusterversion.V23_2.IsActive(md.ActiveVersion) {
 		return false
 	}
 	doesDescriptorHaveData := false

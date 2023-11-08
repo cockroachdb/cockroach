@@ -19,6 +19,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
@@ -243,7 +244,7 @@ func (v NodeVars) TypeFilter(
 	if len(predicatesForTypeOf) == 0 {
 		panic(errors.AssertionFailedf("empty type predicate for %q", v.El))
 	}
-	cv := clusterversion.ClusterVersion{Version: clusterversion.ByKey(version)}
+	cv := clusterversionpb.ClusterVersion{Version: clusterversion.ByKey(version)}
 	var valuesForTypeOf []interface{}
 	_ = ForEachElementInActiveVersion(cv, func(e scpb.Element) error {
 		for _, p := range predicatesForTypeOf {

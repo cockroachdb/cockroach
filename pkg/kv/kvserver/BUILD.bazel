@@ -109,6 +109,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/docs",
@@ -365,6 +366,7 @@ go_test(
         "//pkg/ccl",
         "//pkg/cli/exit",
         "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/gossip",

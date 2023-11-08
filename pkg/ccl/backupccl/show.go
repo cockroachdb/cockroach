@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudcheck"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1298,7 +1299,7 @@ var backupShowerDoctor = backupShower{
 			cv = info.manifests[len(info.manifests)-1].ClusterVersion
 		}
 		ok, err := doctor.Examine(ctx,
-			clusterversion.ClusterVersion{Version: cv},
+			clusterversionpb.ClusterVersion{Version: cv},
 			descTable, namespaceTable,
 			nil,
 			false, /*validateJobs*/

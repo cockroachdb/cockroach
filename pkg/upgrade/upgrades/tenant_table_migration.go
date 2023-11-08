@@ -14,7 +14,7 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -38,7 +38,7 @@ const addTenantIndex1 = `CREATE UNIQUE INDEX tenants_name_idx ON system.public.t
 const addTenantIndex2 = `CREATE INDEX tenants_service_mode_idx ON system.public.tenants (service_mode ASC)`
 
 func extendTenantsTable(
-	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, cs clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	tenantsTableID, err := getTenantsTableID(ctx, d)
 	if err != nil || tenantsTableID == 0 {

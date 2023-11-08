@@ -18,7 +18,7 @@ proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build:build_proto",
-        "//pkg/clusterversion:clusterversion_proto",
+        "//pkg/clusterversion/clusterversionpb:clusterversionpb_proto",
         "//pkg/config/zonepb:zonepb_proto",
         "//pkg/gossip:gossip_proto",
         "//pkg/jobs/jobspb:jobspb_proto",
@@ -59,7 +59,7 @@ go_proto_library(
     deps = [
         "//pkg/base",  # keep
         "//pkg/build",
-        "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/config/zonepb",
         "//pkg/gossip",
         "//pkg/jobs/jobspb",

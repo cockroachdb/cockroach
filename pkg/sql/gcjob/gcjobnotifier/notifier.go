@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -147,7 +148,7 @@ func (n *Notifier) run(_ context.Context) {
 	var haveNotified syncutil.AtomicBool
 	versionSettingChanged := make(chan struct{}, 1)
 	versionBeingWaited := clusterversion.ByKey(clusterversion.TODO_Delete_V23_1_UseDelRangeInGCJob)
-	n.settings.Version.SetOnChange(func(ctx context.Context, newVersion clusterversion.ClusterVersion) {
+	n.settings.Version.SetOnChange(func(ctx context.Context, newVersion clusterversionpb.ClusterVersion) {
 		if !haveNotified.Get() &&
 			versionBeingWaited.LessEq(newVersion.Version) &&
 			!haveNotified.Swap(true) {

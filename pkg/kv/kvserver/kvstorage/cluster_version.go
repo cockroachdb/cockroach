@@ -16,6 +16,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -27,7 +28,7 @@ import (
 // WriteClusterVersion writes the given cluster version to the min version file
 // and to the store-local cluster version key.
 func WriteClusterVersion(
-	ctx context.Context, eng storage.Engine, cv clusterversion.ClusterVersion,
+	ctx context.Context, eng storage.Engine, cv clusterversionpb.ClusterVersion,
 ) error {
 	if cv.Less(clusterversion.ByKey(clusterversion.TODO_Delete_V23_1DeprecateClusterVersionKey)) {
 		// We no longer read this key, but older versions still do. Continue writing
@@ -53,7 +54,7 @@ func WriteClusterVersion(
 // At the time of writing this is used during bootstrap, initial server start
 // (to perhaps fill into additional stores), and during cluster version bumps.
 func WriteClusterVersionToEngines(
-	ctx context.Context, engines []storage.Engine, cv clusterversion.ClusterVersion,
+	ctx context.Context, engines []storage.Engine, cv clusterversionpb.ClusterVersion,
 ) error {
 	for _, eng := range engines {
 		if err := WriteClusterVersion(ctx, eng, cv); err != nil {
@@ -80,7 +81,7 @@ func SynthesizeClusterVersionFromEngines(
 	ctx context.Context,
 	engines []storage.Engine,
 	binaryVersion, binaryMinSupportedVersion roachpb.Version,
-) (clusterversion.ClusterVersion, error) {
+) (clusterversionpb.ClusterVersion, error) {
 	// Find the most recent bootstrap info.
 	type originVersion struct {
 		roachpb.Version
@@ -101,13 +102,13 @@ func SynthesizeClusterVersionFromEngines(
 	for _, eng := range engines {
 		engVer := eng.MinVersion()
 		if engVer == (roachpb.Version{}) {
-			return clusterversion.ClusterVersion{}, errors.AssertionFailedf("store %s has no version", eng)
+			return clusterversionpb.ClusterVersion{}, errors.AssertionFailedf("store %s has no version", eng)
 		}
 
 		// Avoid running a binary with a store that is too new. For example,
 		// restarting into 1.1 after having upgraded to 1.2 doesn't work.
 		if binaryVersion.Less(engVer) {
-			return clusterversion.ClusterVersion{}, errors.Errorf(
+			return clusterversionpb.ClusterVersion{}, errors.Errorf(
 				"cockroach version v%s is incompatible with data in store %s; use version v%s or later",
 				binaryVersion, eng, engVer)
 		}
@@ -126,7 +127,7 @@ func SynthesizeClusterVersionFromEngines(
 		minStoreVersion.Version = binaryMinSupportedVersion
 	}
 
-	cv := clusterversion.ClusterVersion{
+	cv := clusterversionpb.ClusterVersion{
 		Version: minStoreVersion.Version,
 	}
 	log.Eventf(ctx, "read clusterVersion %+v", cv)
@@ -134,7 +135,7 @@ func SynthesizeClusterVersionFromEngines(
 	if minStoreVersion.Version.Less(binaryMinSupportedVersion) {
 		// We now check for old versions before opening the store. This case should
 		// no longer be possible.
-		return clusterversion.ClusterVersion{}, errors.AssertionFailedf("store %s, last used with cockroach version v%s, "+
+		return clusterversionpb.ClusterVersion{}, errors.AssertionFailedf("store %s, last used with cockroach version v%s, "+
 			"is too old for running version v%s (which requires data from v%s or later)",
 			minStoreVersion.origin, minStoreVersion.Version, binaryVersion, binaryMinSupportedVersion)
 	}

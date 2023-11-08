@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -35,7 +36,7 @@ import (
 //	  ...
 //	}
 type VersionGuard struct {
-	activeVersion clusterversion.ClusterVersion
+	activeVersion clusterversionpb.ClusterVersion
 }
 
 // MakeVersionGuard constructs a version guard for the transaction.
@@ -43,7 +44,7 @@ func (s *SettingsWatcher) MakeVersionGuard(
 	ctx context.Context, txn *kv.Txn, maxGate clusterversion.Key,
 ) (VersionGuard, error) {
 	activeVersion := s.settings.Version.ActiveVersion(ctx)
-	if activeVersion.IsActive(maxGate) {
+	if maxGate.IsActive(activeVersion) {
 		return VersionGuard{activeVersion: activeVersion}, nil
 	}
 
@@ -85,10 +86,10 @@ func (s *SettingsWatcher) MakeVersionGuard(
 // IsActive returns true if the transaction should treat the version guard as
 // active.
 func (v *VersionGuard) IsActive(version clusterversion.Key) bool {
-	return v.activeVersion.IsActive(version)
+	return version.IsActive(v.activeVersion)
 }
 
 // TestMakeVersionGuard initializes a version guard at specific version.
-func TestMakeVersionGuard(activeVersion clusterversion.ClusterVersion) VersionGuard {
+func TestMakeVersionGuard(activeVersion clusterversionpb.ClusterVersion) VersionGuard {
 	return VersionGuard{activeVersion: activeVersion}
 }

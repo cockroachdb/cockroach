@@ -14,7 +14,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -85,7 +85,7 @@ func DequalifyAndValidateExprImpl(
 	semaCtx *tree.SemaContext,
 	maxVolatility volatility.V,
 	tn *tree.TableName,
-	version clusterversion.ClusterVersion,
+	version clusterversionpb.ClusterVersion,
 	getAllNonDropColumnsFn func() colinfo.ResultColumns,
 	columnLookupByNameFn func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T),
 ) (string, *types.T, catalog.TableColSet, error) {
@@ -146,7 +146,7 @@ func DequalifyAndValidateExpr(
 	semaCtx *tree.SemaContext,
 	maxVolatility volatility.V,
 	tn *tree.TableName,
-	version clusterversion.ClusterVersion,
+	version clusterversionpb.ClusterVersion,
 ) (string, *types.T, catalog.TableColSet, error) {
 	getAllNonDropColumnsFn := func() colinfo.ResultColumns {
 		return colinfo.ResultColumnsFromColumns(desc.GetID(), desc.NonDropColumns())
@@ -542,7 +542,7 @@ func ValidateTTLExpirationExpression(
 	semaCtx *tree.SemaContext,
 	tableName *tree.TableName,
 	ttl *catpb.RowLevelTTL,
-	version clusterversion.ClusterVersion,
+	version clusterversionpb.ClusterVersion,
 ) error {
 
 	if !ttl.HasExpirationExpr() {

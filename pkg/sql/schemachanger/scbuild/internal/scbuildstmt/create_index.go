@@ -85,7 +85,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		}
 	}
 	activeVersion := b.EvalCtx().Settings.Version.ActiveVersion(context.TODO())
-	if !activeVersion.IsActive(clusterversion.V23_2) &&
+	if !clusterversion.V23_2.IsActive(activeVersion) &&
 		n.Invisibility.Value > 0.0 && n.Invisibility.Value < 1.0 {
 		panic(unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported"))
 	}
@@ -388,7 +388,7 @@ func processColNodeType(
 			columnType.Type.String()))
 	} else if (!n.Inverted || !lastColIdx) &&
 		(!colinfo.ColumnTypeIsIndexable(columnType.Type) ||
-			(columnType.Type.Family() == types.JsonFamily && !version.IsActive(clusterversion.V23_2))) {
+			(columnType.Type.Family() == types.JsonFamily && !clusterversion.V23_2.IsActive(version))) {
 		// Otherwise, check if the column type is indexable.
 		panic(unimplemented.NewWithIssueDetailf(35730,
 			columnType.Type.DebugString(),

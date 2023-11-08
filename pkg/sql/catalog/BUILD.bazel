@@ -21,6 +21,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/config/zonepb",
         "//pkg/geo/geoindex",
         "//pkg/jobs/jobspb",

@@ -12,6 +12,7 @@ package loqrecovery
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -27,10 +28,10 @@ import (
 func MarshalReplicaInfo(replicaInfo loqrecoverypb.ClusterReplicaInfo) ([]byte, error) {
 	jsonpb := protoutil.JSONPb{Indent: "  "}
 
-	v := clusterversion.ClusterVersion{
+	v := clusterversionpb.ClusterVersion{
 		Version: replicaInfo.Version,
 	}
-	if v.IsActive(clusterversion.V23_1) {
+	if clusterversion.V23_1.IsActive(v) {
 		out, err := jsonpb.Marshal(&replicaInfo)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to marshal replica info")
@@ -87,10 +88,10 @@ type legacyPlan struct {
 func MarshalPlan(plan loqrecoverypb.ReplicaUpdatePlan) ([]byte, error) {
 	jsonpb := protoutil.JSONPb{Indent: "  "}
 
-	v := clusterversion.ClusterVersion{
+	v := clusterversionpb.ClusterVersion{
 		Version: plan.Version,
 	}
-	if v.IsActive(clusterversion.V23_1) {
+	if clusterversion.V23_1.IsActive(v) {
 		out, err := jsonpb.Marshal(&plan)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to marshal recovery plan")

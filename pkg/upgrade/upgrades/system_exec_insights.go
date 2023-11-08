@@ -13,14 +13,14 @@ package upgrades
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
 // systemExecInsightsTableMigration creates the system.insights table.
 func systemExecInsightsTableMigration(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, _ clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	if err := createSystemTable(ctx, d.DB.KV(), d.Settings, d.Codec, systemschema.TransactionExecInsightsTable); err != nil {
 		return err

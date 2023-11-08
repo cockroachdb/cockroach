@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -155,7 +156,7 @@ func (p *planner) createTenantInternal(
 	tid = roachpb.MustMakeTenantID(tenantID)
 
 	// Initialize the tenant's keyspace.
-	var tenantVersion clusterversion.ClusterVersion
+	var tenantVersion clusterversionpb.ClusterVersion
 	codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(tenantID))
 	var kvs []roachpb.KeyValue
 	var splits []roachpb.RKey
@@ -692,7 +693,7 @@ func updateTenantIDSequence(ctx context.Context, txn isql.Txn, newID uint64) err
 // to populate the system.settings table of the tenant implied by codec. This
 // bootstraps the cluster version for the new tenant.
 func generateTenantClusterSettingKV(
-	codec keys.SQLCodec, v clusterversion.ClusterVersion,
+	codec keys.SQLCodec, v clusterversionpb.ClusterVersion,
 ) (roachpb.KeyValue, error) {
 	encoded, err := protoutil.Marshal(&v)
 	if err != nil {

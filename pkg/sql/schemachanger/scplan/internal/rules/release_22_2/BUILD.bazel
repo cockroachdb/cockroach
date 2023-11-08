@@ -44,6 +44,7 @@ go_test(
     embed = [":release_22_2"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/schemachanger/rel",
         "//pkg/sql/schemachanger/scpb",

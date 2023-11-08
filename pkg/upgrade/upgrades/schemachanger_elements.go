@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -29,7 +29,7 @@ import (
 )
 
 func waitForSchemaChangerElementMigration(
-	ctx context.Context, clusterVersion clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, clusterVersion clusterversionpb.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	initialJobListQuery := fmt.Sprintf(`
 

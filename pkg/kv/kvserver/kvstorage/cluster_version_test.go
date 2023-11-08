@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -72,7 +73,7 @@ func TestStoresClusterVersionIncompatible(t *testing.T) {
 			engs := []storage.Engine{storage.NewDefaultInMemForTesting()}
 			defer engs[0].Close()
 			// Configure versions and write.
-			cv := clusterversion.ClusterVersion{Version: tc.engV}
+			cv := clusterversionpb.ClusterVersion{Version: tc.engV}
 			err := WriteClusterVersionToEngines(ctx, engs, cv)
 			if err == nil {
 				cv, err = SynthesizeClusterVersionFromEngines(ctx, engs, tc.binV, tc.minV)
@@ -131,7 +132,7 @@ func TestClusterVersionWriteSynthesize(t *testing.T) {
 	if initialCV, err := SynthesizeClusterVersionFromEngines(ctx, nil, binV, minV); err != nil {
 		t.Fatal(err)
 	} else {
-		expCV := clusterversion.ClusterVersion{
+		expCV := clusterversionpb.ClusterVersion{
 			Version: minV,
 		}
 		if !reflect.DeepEqual(initialCV, expCV) {
@@ -145,7 +146,7 @@ func TestClusterVersionWriteSynthesize(t *testing.T) {
 	if initialCV, err := SynthesizeClusterVersionFromEngines(ctx, e0, binV, minV); err != nil {
 		t.Fatal(err)
 	} else {
-		expCV := clusterversion.ClusterVersion{
+		expCV := clusterversionpb.ClusterVersion{
 			Version: minV,
 		}
 		if !reflect.DeepEqual(initialCV, expCV) {
@@ -156,7 +157,7 @@ func TestClusterVersionWriteSynthesize(t *testing.T) {
 	// Bump a version to something more modern (but supported by this binary).
 	// Note that there's still only one store.
 	{
-		cv := clusterversion.ClusterVersion{
+		cv := clusterversionpb.ClusterVersion{
 			Version: versionB,
 		}
 		if err := WriteClusterVersionToEngines(ctx, e0, cv); err != nil {
@@ -177,7 +178,7 @@ func TestClusterVersionWriteSynthesize(t *testing.T) {
 	// Use stores 0 and 1. It reads as minV because store 1 has no entry, lowering
 	// the use version to minV.
 	{
-		expCV := clusterversion.ClusterVersion{
+		expCV := clusterversionpb.ClusterVersion{
 			Version: minV,
 		}
 		if cv, err := SynthesizeClusterVersionFromEngines(ctx, e01, binV, minV); err != nil {
@@ -187,7 +188,7 @@ func TestClusterVersionWriteSynthesize(t *testing.T) {
 		}
 
 		// Write an updated Version to both stores.
-		cv := clusterversion.ClusterVersion{
+		cv := clusterversionpb.ClusterVersion{
 			Version: versionB,
 		}
 		if err := WriteClusterVersionToEngines(ctx, e01, cv); err != nil {
@@ -196,7 +197,7 @@ func TestClusterVersionWriteSynthesize(t *testing.T) {
 	}
 
 	// Third node comes along, for now it's alone. It has a lower use version.
-	cv := clusterversion.ClusterVersion{
+	cv := clusterversionpb.ClusterVersion{
 		Version: versionA,
 	}
 
@@ -206,7 +207,7 @@ func TestClusterVersionWriteSynthesize(t *testing.T) {
 
 	// Reading across all stores, we expect to pick up the lowest useVersion both
 	// from the third store.
-	expCV := clusterversion.ClusterVersion{
+	expCV := clusterversionpb.ClusterVersion{
 		Version: versionA,
 	}
 	if cv, err := SynthesizeClusterVersionFromEngines(ctx, e012, binV, minV); err != nil {

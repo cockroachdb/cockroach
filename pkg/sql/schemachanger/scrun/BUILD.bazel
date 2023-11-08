@@ -9,7 +9,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/kv/kvpb",

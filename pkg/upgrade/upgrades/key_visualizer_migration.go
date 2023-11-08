@@ -13,7 +13,7 @@ package upgrades
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -30,7 +30,7 @@ import (
 // keyVisualizerTablesMigration creates the system.span_stats_unique_keys, system.span_stats_buckets,
 // system.span_stats_samples, and system.span_stats_tenant_boundaries tables.
 func keyVisualizerTablesMigration(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.SystemDeps,
+	ctx context.Context, _ clusterversionpb.ClusterVersion, d upgrade.SystemDeps,
 ) error {
 
 	tables := []catalog.TableDescriptor{

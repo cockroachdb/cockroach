@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -202,7 +203,7 @@ func newRebalanceObjectiveManager(
 	LoadBasedRebalancingObjective.SetOnChange(&rom.st.SV, func(ctx context.Context) {
 		rom.maybeUpdateRebalanceObjective(rom.AnnotateCtx(ctx))
 	})
-	rom.st.Version.SetOnChange(func(ctx context.Context, _ clusterversion.ClusterVersion) {
+	rom.st.Version.SetOnChange(func(ctx context.Context, _ clusterversionpb.ClusterVersion) {
 		rom.maybeUpdateRebalanceObjective(rom.AnnotateCtx(ctx))
 	})
 	// Rather than caching each capacity locally, use the callback as a trigger

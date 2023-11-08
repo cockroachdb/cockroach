@@ -13,14 +13,14 @@ package upgrades
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
 func tenantIDSequenceForSystemTenant(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.SystemDeps,
+	ctx context.Context, _ clusterversionpb.ClusterVersion, d upgrade.SystemDeps,
 ) error {
 	return createSystemTable(ctx, d.DB.KV(), d.Settings, keys.SystemSQLCodec, systemschema.TenantIDSequence)
 }

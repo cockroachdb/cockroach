@@ -13,7 +13,7 @@ package catkv
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -56,7 +56,7 @@ var _ validate.ValidationDereferencer = &catalogReaderBackedDereferencer{}
 // DereferenceDescriptors implements the validate.ValidationDereferencer
 // interface.
 func (c catalogReaderBackedDereferencer) DereferenceDescriptors(
-	ctx context.Context, version clusterversion.ClusterVersion, reqs []descpb.ID,
+	ctx context.Context, version clusterversionpb.ClusterVersion, reqs []descpb.ID,
 ) ([]catalog.Descriptor, error) {
 	const isDescriptorRequired = false
 	read, err := c.cr.GetByIDs(ctx, c.txn, reqs, isDescriptorRequired, catalog.Any)

@@ -10,6 +10,7 @@ go_library(
     visibility = ["//pkg/sql/catalog:__subpackages__"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/clusterversion/clusterversionpb",
         "//pkg/keys",
         "//pkg/server/telemetry",
         "//pkg/sql/catalog",

@@ -13,7 +13,7 @@ package upgrades
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion/clusterversionpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -23,7 +23,7 @@ import (
 // createTaskSystemTables creates the system.task_payloads and
 // system.tenant_tasks tables.
 func createTaskSystemTables(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.SystemDeps,
+	ctx context.Context, _ clusterversionpb.ClusterVersion, d upgrade.SystemDeps,
 ) error {
 
 	tables := []catalog.TableDescriptor{

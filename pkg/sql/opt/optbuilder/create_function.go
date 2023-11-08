@@ -41,7 +41,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	}
 
 	activeVersion := b.evalCtx.Settings.Version.ActiveVersion(b.ctx)
-	if cf.IsProcedure && !activeVersion.IsActive(clusterversion.V23_2) {
+	if cf.IsProcedure && !clusterversion.V23_2.IsActive(activeVersion) {
 		panic(unimplemented.New("procedures", "procedures are not yet supported"))
 	}
 
@@ -124,7 +124,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	if !languageFound {
 		panic(pgerror.New(pgcode.InvalidFunctionDefinition, "no language specified"))
 	}
-	if language == tree.RoutineLangPLpgSQL && !activeVersion.IsActive(clusterversion.V23_2) {
+	if language == tree.RoutineLangPLpgSQL && !clusterversion.V23_2.IsActive(activeVersion) {
 		panic(unimplemented.New("PLpgSQL", "PLpgSQL is not supported until version 23.2"))
 	}
 
