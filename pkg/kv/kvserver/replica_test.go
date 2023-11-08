@@ -11222,9 +11222,14 @@ func TestReplicaAsyncIntentResolutionOn1PC(t *testing.T) {
 			Knobs: base.TestingKnobs{Store: &storeKnobs}})
 		defer s.Stopper().Stop(ctx)
 
+		store, err := s.GetStores().(*Stores).GetStore(1)
+		require.NoError(t, err)
+		successfulOnePCBefore := store.Metrics().OnePhaseCommitSuccess.Count()
+		failedOnePCBefore := store.Metrics().OnePhaseCommitFailure.Count()
+
 		// Perform a range split between key A and B.
 		keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
-		_, _, err := s.SplitRange(keyB)
+		_, _, err = s.SplitRange(keyB)
 		require.NoError(t, err)
 
 		// Write a value to a key A and B.
@@ -11248,11 +11253,17 @@ func TestReplicaAsyncIntentResolutionOn1PC(t *testing.T) {
 		require.NoError(t, err)
 
 		// Update the locked value and commit in a single batch. This should hit the
-		// one-phase commit fast-path and then release the "for update" lock(s).
+		// one-phase commit fast-path (verified below) and then release the
+		// "for update" lock(s).
 		b = txn.NewBatch()
 		b.Inc(keyA, 1)
 		err = txn.CommitInBatch(ctx, b)
 		require.NoError(t, err)
+
+		successfulOnePCAfter := store.Metrics().OnePhaseCommitSuccess.Count()
+		failedOnePCAfter := store.Metrics().OnePhaseCommitFailure.Count()
+		require.Equal(t, failedOnePCBefore, failedOnePCAfter)
+		require.Greater(t, successfulOnePCAfter, successfulOnePCBefore)
 
 		// If an external lock was acquired, we should see its resolution.
 		if external {
