@@ -2975,6 +2975,12 @@ func (kl *keyLocks) acquireLock(
 
 	kl.releaseLockingRequestsFromTxn(&acq.Txn)
 
+	// We may need to recompute wait queues after removing locking requests, as
+	// doing so could allow requests that were actively waiting previously to now
+	// proceed. Such cases are rare while lock promotion is disallowed, but still
+	// possible.
+	kl.recomputeWaitQueues(st)
+
 	// Sanity check that there aren't any waiting readers on this lock. There
 	// shouldn't be any, as the lock wasn't held.
 	if kl.waitingReaders.Len() > 0 {
