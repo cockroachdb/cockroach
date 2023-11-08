@@ -525,7 +525,7 @@ func (sf *streamIngestionFrontier) maybePersistFrontierEntries() error {
 	}
 
 	if err = sf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return jobs.WriteChunkedFileToJobInfo(ctx, frontierEntriesFilename, frontierBytes, txn, jobID, sf.EvalCtx.Settings.Version)
+		return jobs.WriteChunkedFileToJobInfo(ctx, frontierEntriesFilename, frontierBytes, txn, jobID)
 	}); err != nil {
 		return err
 	}

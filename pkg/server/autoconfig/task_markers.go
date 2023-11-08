@@ -16,7 +16,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -142,9 +141,9 @@ func (tr *InfoKeyTaskRef) decodeInternal(prefix, infoKey string) error {
 // writeStartMarker writes a start marker for the given task ID and
 // also writes its job ID into the value part.
 func writeStartMarker(
-	ctx context.Context, txn isql.Txn, taskRef InfoKeyTaskRef, jobID jobspb.JobID, cv clusterversion.Handle,
+	ctx context.Context, txn isql.Txn, taskRef InfoKeyTaskRef, jobID jobspb.JobID,
 ) error {
-	infoStorage := jobs.InfoStorageForJob(txn, jobs.AutoConfigRunnerJobID, cv)
+	infoStorage := jobs.InfoStorageForJob(txn, jobs.AutoConfigRunnerJobID)
 	return infoStorage.Write(ctx,
 		taskRef.EncodeStartMarkerKey(),
 		[]byte(strconv.FormatUint(uint64(jobID), 10)))
@@ -153,9 +152,9 @@ func writeStartMarker(
 // getCurrentlyStartedTaskID retrieves the ID of the last task which
 // has a start marker in job_info.
 func getCurrentlyStartedTaskID(
-	ctx context.Context, txn isql.Txn, env EnvironmentID, cv clusterversion.Handle,
+	ctx context.Context, txn isql.Txn, env EnvironmentID,
 ) (prevTaskID TaskID, prevJobID jobspb.JobID, err error) {
-	infoStorage := jobs.InfoStorageForJob(txn, jobs.AutoConfigRunnerJobID, cv)
+	infoStorage := jobs.InfoStorageForJob(txn, jobs.AutoConfigRunnerJobID)
 
 	if err := infoStorage.GetLast(ctx,
 		InfoKeyStartPrefix(env),
@@ -185,9 +184,9 @@ func getCurrentlyStartedTaskID(
 // getLastCompletedTaskID retrieves the task ID of the last task which
 // has a completion marker in job_info.
 func getLastCompletedTaskID(
-	ctx context.Context, txn isql.Txn, env EnvironmentID, cv clusterversion.Handle,
+	ctx context.Context, txn isql.Txn, env EnvironmentID,
 ) (lastTaskID TaskID, err error) {
-	infoStorage := jobs.InfoStorageForJob(txn, jobs.AutoConfigRunnerJobID, cv)
+	infoStorage := jobs.InfoStorageForJob(txn, jobs.AutoConfigRunnerJobID)
 
 	if err := infoStorage.GetLast(ctx,
 		InfoKeyCompletionPrefix(env),
@@ -209,9 +208,9 @@ func getLastCompletedTaskID(
 // markTaskCompletes transactionally removes the task's start marker
 // and creates a completion marker.
 func markTaskComplete(
-	ctx context.Context, txn isql.Txn, taskRef InfoKeyTaskRef, completionValue []byte, cv clusterversion.Handle,
+	ctx context.Context, txn isql.Txn, taskRef InfoKeyTaskRef, completionValue []byte,
 ) error {
-	infoStorage := jobs.InfoStorageForJob(txn, jobs.AutoConfigRunnerJobID, cv)
+	infoStorage := jobs.InfoStorageForJob(txn, jobs.AutoConfigRunnerJobID)
 
 	// Remove the start marker.
 	if err := infoStorage.Delete(ctx, taskRef.EncodeStartMarkerKey()); err != nil {

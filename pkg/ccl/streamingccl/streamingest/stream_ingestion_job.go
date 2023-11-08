@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
@@ -225,7 +224,7 @@ func ingestWithRetries(
 		}
 		status := redact.Sprintf("waiting before retrying error: %s", err)
 		updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationError, status)
-		newReplicatedTime := loadReplicatedTime(ctx, execCtx.ExecCfg().InternalDB, ingestionJob, execCtx.ExecCfg().Settings.Version)
+		newReplicatedTime := loadReplicatedTime(ctx, execCtx.ExecCfg().InternalDB, ingestionJob)
 		if lastReplicatedTime.Less(newReplicatedTime) {
 			r.Reset()
 			lastReplicatedTime = newReplicatedTime
@@ -242,10 +241,8 @@ func ingestWithRetries(
 	return nil
 }
 
-func loadReplicatedTime(
-	ctx context.Context, db isql.DB, ingestionJob *jobs.Job, cv clusterversion.Handle,
-) hlc.Timestamp {
-	latestProgress, err := replicationutils.LoadIngestionProgress(ctx, db, ingestionJob.ID(), cv)
+func loadReplicatedTime(ctx context.Context, db isql.DB, ingestionJob *jobs.Job) hlc.Timestamp {
+	latestProgress, err := replicationutils.LoadIngestionProgress(ctx, db, ingestionJob.ID())
 	if err != nil {
 		log.Warningf(ctx, "error loading job progress: %s", err)
 		return hlc.Timestamp{}
@@ -559,11 +556,11 @@ func (s *streamIngestionResumer) CollectProfile(ctx context.Context, execCtx int
 
 	var combinedErr error
 	if err := bulkutil.FlushTracingAggregatorStats(ctx, s.job.ID(),
-		p.ExecCfg().InternalDB, aggStatsCopy, p.ExecCfg().Settings.Version); err != nil {
+		p.ExecCfg().InternalDB, aggStatsCopy); err != nil {
 		combinedErr = errors.CombineErrors(combinedErr, errors.Wrap(err, "failed to flush aggregator stats"))
 	}
 	if err := generateSpanFrontierExecutionDetailFile(ctx, p.ExecCfg(),
-		s.job.ID(), false /* skipBehindBy */, p.ExecCfg().Settings.Version); err != nil {
+		s.job.ID(), false /* skipBehindBy */); err != nil {
 		combinedErr = errors.CombineErrors(combinedErr, errors.Wrap(err, "failed to generate span frontier execution details"))
 	}
 
