@@ -1,10 +1,5 @@
 # Test external IO ingress and egress.
 
-# Wait for initial 10K RUs to be granted.
-wait-for-event
-token-bucket-response
-----
-
 # Set up throttling at 1K RU/s.
 configure
 throttle: 1000
@@ -12,7 +7,7 @@ throttle: 1000
 
 # Perform external IO egress that triggers fetch of more RU and sets up
 # throttling.
-external-egress bytes=6144000
+external-egress bytes=1024000
 ----
 
 wait-for-event
@@ -21,7 +16,7 @@ token-bucket-response
 
 token-bucket
 ----
-4000.00 RU filling @ 1000.00 RU/s
+4000.00 RU filling @ 1000.00 RU/s (limited to 15000.00 RU)
 
 # Perform 1G bytes of external IO ingress, which should not affect RU.
 external-ingress bytes=1024000000000
@@ -29,7 +24,7 @@ external-ingress bytes=1024000000000
 
 token-bucket
 ----
-4000.00 RU filling @ 1000.00 RU/s
+4000.00 RU filling @ 1000.00 RU/s (limited to 15000.00 RU)
 
 # Block on external IO.
 external-egress bytes=6144000 label=e1
@@ -45,7 +40,7 @@ not-completed label=e1
 
 token-bucket
 ----
-4000.00 RU filling @ 1000.00 RU/s (6000.00 waiting RU)
+4000.00 RU filling @ 1000.00 RU/s (limited to 15000.00 RU) (6000.00 waiting RU)
 
 # Fill token bucket with an additional 2K RU, which should unblock the waiting
 # external IO operation.
@@ -59,4 +54,4 @@ await label=e1
 
 token-bucket
 ----
-0.00 RU filling @ 1000.00 RU/s
+0.00 RU filling @ 1000.00 RU/s (limited to 15000.00 RU)
