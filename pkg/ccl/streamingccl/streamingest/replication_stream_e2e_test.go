@@ -1278,6 +1278,67 @@ func TestStreamingRegionalConstraint(t *testing.T) {
 
 }
 
+func TestStreamingMismatchedMRDatabase(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderStressRace(t, "takes too long under stress race")
+
+	ctx := context.Background()
+	regions := []string{"mars", "venus", "mercury"}
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.SrcClusterTestRegions = regions
+	args.SrcNumNodes = 3
+
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	c.SrcTenantSQL.Exec(t, "CREATE DATABASE prim PRIMARY REGION mars")
+	c.SrcTenantSQL.Exec(t, "CREATE TABLE prim.x (id INT PRIMARY KEY, n INT)")
+	c.SrcTenantSQL.Exec(t, "INSERT INTO prim.x VALUES (1, 1)")
+
+	c.SrcTenantSQL.Exec(t, "CREATE DATABASE many PRIMARY REGION mars REGIONS = mars,mercury,venus")
+	c.SrcTenantSQL.Exec(t, "CREATE TABLE many.x (id INT PRIMARY KEY, n INT)")
+	c.SrcTenantSQL.Exec(t, "INSERT INTO many.x VALUES (1, 1)")
+
+	srcTime := c.SrcCluster.Server(0).Clock().Now()
+	c.Cutover(producerJobID, ingestionJobID, srcTime.GoTime(), false)
+
+	cleanupTenant := c.StartDestTenant(ctx, nil, 0)
+	defer func() {
+		require.NoError(t, cleanupTenant())
+	}()
+
+	// Check how MR primitives have replicated to non-mr stand by cluster
+	t.Run("mr db only with primary region", func(t *testing.T) {
+		var res string
+		c.DestTenantSQL.QueryRow(c.T, `SELECT create_statement FROM [SHOW CREATE DATABASE prim]`).Scan(&res)
+		require.Equal(t, "CREATE DATABASE prim PRIMARY REGION mars REGIONS = mars SURVIVE ZONE FAILURE", res)
+
+		var region string
+		c.DestTenantSQL.QueryRow(c.T, "SELECT region FROM [SHOW REGIONS FROM DATABASE prim];").Scan(&region)
+		require.Equal(t, "mars", region)
+
+		c.DestTenantSQL.Exec(t, "INSERT INTO prim.x VALUES (2, 2)")
+
+		c.DestTenantSQL.Exec(c.T, `ALTER DATABASE prim DROP REGION "mars"`)
+	})
+	t.Run("mr db with several regions", func(t *testing.T) {
+		var res string
+		c.DestTenantSQL.QueryRow(c.T, `SELECT create_statement FROM [SHOW CREATE DATABASE many]`).Scan(&res)
+		require.Equal(t, "CREATE DATABASE many PRIMARY REGION mars REGIONS = mars, mercury, venus SURVIVE ZONE FAILURE", res)
+
+		c.DestTenantSQL.Exec(t, "INSERT INTO many.x VALUES (2, 2)")
+
+		// As a sanity check, drop a region on the source and destination cluster.
+		c.SrcTenantSQL.ExecSucceedsSoon(c.T, `ALTER DATABASE many DROP REGION "venus"`)
+		c.DestTenantSQL.ExecSucceedsSoon(c.T, `ALTER DATABASE many DROP REGION "venus"`)
+	})
+}
+
 func checkLocalityRanges(
 	t *testing.T, sysSQL *sqlutils.SQLRunner, codec keys.SQLCodec, tableID uint32, region string,
 ) {
