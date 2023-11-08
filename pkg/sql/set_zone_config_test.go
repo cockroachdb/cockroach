@@ -156,7 +156,7 @@ func TestValidateZoneAttrsAndLocalitiesForSecondaryTenants(t *testing.T) {
 			err := yaml.UnmarshalStrict([]byte(tc.cfg), &zone)
 			require.NoError(t, err)
 
-			err = validateZoneLocalitiesForSecondaryTenants(ctx, getRegions, &zone, codec, settings)
+			err = validateZoneLocalitiesForSecondaryTenants(ctx, getRegions, zonepb.NewZoneConfig(), &zone, codec, settings)
 			if tc.errRe == "" || (anyConstraintAllowed && strings.HasPrefix(tc.errRe, "operation is disabled within a virtual cluster")) {
 				require.NoError(t, err)
 			} else {
@@ -312,7 +312,7 @@ func TestValidateZoneAttrsAndLocalitiesForSystemTenant(t *testing.T) {
 			t.Fatalf("#%d: expected parse err for %q; got success", i, tc.cfg)
 		}
 
-		err = validateZoneAttrsAndLocalitiesForSystemTenant(context.Background(), tc.nodes, &zone)
+		err = validateZoneAttrsAndLocalitiesForSystemTenant(context.Background(), tc.nodes, zonepb.NewZoneConfig(), &zone)
 		if err != nil && tc.expectErr == expectSuccess {
 			t.Errorf("#%d: expected success for %q; got %v", i, tc.cfg, err)
 		} else if err == nil && tc.expectErr == expectValidateErr {
