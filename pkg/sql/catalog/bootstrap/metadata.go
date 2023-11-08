@@ -538,16 +538,17 @@ func InitialZoneConfigKVs(
 	// .meta zone config entry with a shorter GC time.
 	metaRangeZoneConf.GC.TTLSeconds = 60 * 60 // 1h
 
-	// Some reporting tables have shorter GC times.
-	replicationConstraintStatsZoneConf := &zonepb.ZoneConfig{
-		GC: &zonepb.GCPolicy{TTLSeconds: int32(systemschema.ReplicationConstraintStatsTableTTL.Seconds())},
-	}
-	replicationStatsZoneConf := &zonepb.ZoneConfig{
-		GC: &zonepb.GCPolicy{TTLSeconds: int32(systemschema.ReplicationStatsTableTTL.Seconds())},
-	}
-	tenantUsageZoneConf := &zonepb.ZoneConfig{
-		GC: &zonepb.GCPolicy{TTLSeconds: int32(systemschema.TenantUsageTableTTL.Seconds())},
-	}
+	// Some reporting tables have shorter GC times. We must initialize them with
+	// NewZoneConfig so that they are configured to inherit constraints and
+	// lease preferences from the system database.
+	replicationConstraintStatsZoneConf := zonepb.NewZoneConfig()
+	replicationConstraintStatsZoneConf.GC = &zonepb.GCPolicy{TTLSeconds: int32(systemschema.ReplicationConstraintStatsTableTTL.Seconds())}
+
+	replicationStatsZoneConf := zonepb.NewZoneConfig()
+	replicationStatsZoneConf.GC = &zonepb.GCPolicy{TTLSeconds: int32(systemschema.ReplicationStatsTableTTL.Seconds())}
+
+	tenantUsageZoneConf := zonepb.NewZoneConfig()
+	tenantUsageZoneConf.GC = &zonepb.GCPolicy{TTLSeconds: int32(systemschema.TenantUsageTableTTL.Seconds())}
 
 	// Liveness zone config entry with a shorter GC time.
 	livenessZoneConf.GC.TTLSeconds = 10 * 60 // 10m
