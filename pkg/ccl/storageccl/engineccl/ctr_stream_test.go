@@ -11,6 +11,7 @@ package engineccl
 import (
 	"context"
 	"crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"strings"
 	"testing"
@@ -171,5 +172,64 @@ func TestFileCipherStreamCreator(t *testing.T) {
 	fs5.Encrypt(5, data)
 	if diff := pretty.Diff(data, testData); diff != nil {
 		t.Fatalf("%s\n%s", strings.Join(diff, "\n"), data)
+	}
+}
+
+func BenchmarkCTRBlockCipherStream(b *testing.B) {
+	for _, keySize := range []int{128, 192, 256} {
+		for _, blockSize := range []int{16, 1024, 10240} {
+			b.Run(fmt.Sprintf("key=%d,block=%d", keySize, blockSize), func(b *testing.B) {
+				keyBytes := make([]byte, keySize/8)
+				if _, err := rand.Read(keyBytes); err != nil {
+					panic(err)
+				}
+				var encType enginepbccl.EncryptionType
+				switch keySize {
+				case 128:
+					encType = enginepbccl.EncryptionType_AES128_CTR
+				case 192:
+					encType = enginepbccl.EncryptionType_AES192_CTR
+				case 256:
+					encType = enginepbccl.EncryptionType_AES256_CTR
+				default:
+					panic("unknown key size")
+				}
+				key := &enginepbccl.SecretKey{
+					Info: &enginepbccl.KeyInfo{
+						EncryptionType: encType,
+					},
+					Key: keyBytes,
+				}
+				nonce := make([]byte, ctrNonceSize)
+				if _, err := rand.Read(nonce); err != nil {
+					panic(err)
+				}
+				initCounterBytes := make([]byte, 4)
+				if _, err := rand.Read(initCounterBytes); err != nil {
+					panic(err)
+				}
+				// Endianness doesn't matter for converting this random number to an int.
+				initCounter := binary.LittleEndian.Uint32(initCounterBytes)
+				stream, err := newCTRBlockCipherStream(key, nonce, initCounter)
+				if err != nil {
+					panic(err)
+				}
+
+				// Benchmarks are fun! We're just going to encrypt a bunch of zeros
+				// and re-encrypt over the previous output because that doesn't matter
+				// to the speed :)
+				data := make([]byte, blockSize)
+				scratch := make([]byte, ctrBlockSize)
+				b.SetBytes(int64(blockSize))
+				b.ResetTimer()
+
+				for i := 0; i < b.N; i++ {
+					numCtrBlocks := blockSize / ctrBlockSize
+					for j := 0; j < numCtrBlocks; j++ {
+						stream.transform(uint64(j), data[j*ctrBlockSize:(j+1)*ctrBlockSize], scratch)
+					}
+				}
+			})
+		}
 	}
 }
