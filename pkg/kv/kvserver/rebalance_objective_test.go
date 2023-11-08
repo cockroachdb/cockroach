@@ -244,7 +244,7 @@ func TestRebalanceObjectiveManager(t *testing.T) {
 	// supported on this version.
 	t.Run("store cpu unsupported version", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettingsWithVersions(
-			clusterversion.TestingBinaryVersion,
+			clusterversion.Latest.Version(),
 			clusterversion.ByKey(clusterversion.TODO_Delete_V22_2), false)
 		require.NoError(t, st.Version.SetActiveVersion(ctx, clusterversion.ClusterVersion{
 			Version: clusterversion.ByKey(clusterversion.TODO_Delete_V22_2),

@@ -234,7 +234,7 @@ func setupMVCCPebble(b testing.TB, dir string, lBaseMaxBytes int64, readOnly boo
 func setupData(
 	ctx context.Context, b *testing.B, emk engineMaker, opts benchDataOptions,
 ) (storage.Engine, string) {
-	verStr := fmt.Sprintf("v%s", clusterversion.TestingBinaryVersion.String())
+	verStr := fmt.Sprintf("v%s", clusterversion.Latest.String())
 	orderStr := "linear"
 	if opts.randomKeyOrder {
 		orderStr = "random"

@@ -2532,15 +2532,15 @@ func TestStartableJobMixedVersion(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettingsWithVersions(
-		clusterversion.TestingBinaryVersion,
-		clusterversion.TestingBinaryMinSupportedVersion,
+		clusterversion.Latest.Version(),
+		clusterversion.MinSupported.Version(),
 		false, /* initializeVersion */
 	)
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Settings: st,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
-				BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
+				BinaryVersionOverride:          clusterversion.MinSupported.Version(),
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
 			},
 		},

@@ -280,7 +280,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 		ctx,
 		ltc.Eng,
 		initialValues,
-		clusterversion.TestingBinaryVersion,
+		clusterversion.Latest.Version(),
 		1, /* numStores */
 		splits,
 		ltc.Clock.PhysicalNow(),

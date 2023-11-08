@@ -29,8 +29,8 @@ import (
 func TestValidateTargetTenantClusterVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	prev := clusterversion.ClusterVersion{Version: clusterversion.TestingBinaryMinSupportedVersion}
-	cur := clusterversion.ClusterVersion{Version: clusterversion.TestingBinaryVersion}
+	prev := clusterversion.ClusterVersion{Version: clusterversion.MinSupported.Version()}
+	cur := clusterversion.ClusterVersion{Version: clusterversion.Latest.Version()}
 	// In cases where we use prev as the binary version for the test, set the
 	// minimum supported version to prev's binary version - 1 Major version.
 	prevMsv := clusterversion.ClusterVersion{
@@ -137,8 +137,8 @@ func TestValidateTargetTenantClusterVersion(t *testing.T) {
 func TestBumpTenantClusterVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	prev := clusterversion.ClusterVersion{Version: clusterversion.TestingBinaryMinSupportedVersion}
-	cur := clusterversion.ClusterVersion{Version: clusterversion.TestingBinaryVersion}
+	prev := clusterversion.ClusterVersion{Version: clusterversion.MinSupported.Version()}
+	cur := clusterversion.ClusterVersion{Version: clusterversion.Latest.Version()}
 	// In cases where we use prev as the binary version for the test, set the
 	// minimum supported version to prev's binary version - 1 Major version.
 	prevMsv := clusterversion.ClusterVersion{

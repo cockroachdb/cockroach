@@ -52,7 +52,7 @@ type testTask struct {
 var endProfileTask = autoconfigpb.Task{
 	TaskID:      autoconfigpb.TaskID(math.MaxUint64),
 	Description: "end of configuration profile",
-	MinVersion:  clusterversion.TestingBinaryVersion,
+	MinVersion:  clusterversion.Latest.Version(),
 	Payload: &autoconfigpb.Task_SimpleSQL{
 		SimpleSQL: &autoconfigpb.SimpleSQL{},
 	},
@@ -62,7 +62,7 @@ var testTasks = []testTask{
 	{task: autoconfigpb.Task{
 		TaskID:      123,
 		Description: "test task that creates a system table",
-		MinVersion:  clusterversion.TestingBinaryVersion,
+		MinVersion:  clusterversion.Latest.Version(),
 		Payload: &autoconfigpb.Task_SimpleSQL{
 			SimpleSQL: &autoconfigpb.SimpleSQL{
 				UsernameProto: username.NodeUserName().EncodeProto(),
@@ -80,7 +80,7 @@ var testTasks = []testTask{
 	{task: autoconfigpb.Task{
 		TaskID:      345,
 		Description: "test task that fails with an error",
-		MinVersion:  clusterversion.TestingBinaryVersion,
+		MinVersion:  clusterversion.Latest.Version(),
 		Payload: &autoconfigpb.Task_SimpleSQL{
 			SimpleSQL: &autoconfigpb.SimpleSQL{
 				TransactionalStatements: []string{"SELECT invalid"},
@@ -90,7 +90,7 @@ var testTasks = []testTask{
 	{task: autoconfigpb.Task{
 		TaskID:      456,
 		Description: "test task that creates another system table",
-		MinVersion:  clusterversion.TestingBinaryVersion,
+		MinVersion:  clusterversion.Latest.Version(),
 		Payload: &autoconfigpb.Task_SimpleSQL{
 			SimpleSQL: &autoconfigpb.SimpleSQL{
 				UsernameProto:           username.NodeUserName().EncodeProto(),
@@ -261,7 +261,7 @@ func TestAutoConfigWaitAtStartupTimesOut(t *testing.T) {
 			{task: autoconfigpb.Task{
 				TaskID:      123,
 				Description: "test task that takes longer than the maxWait",
-				MinVersion:  clusterversion.TestingBinaryVersion,
+				MinVersion:  clusterversion.Latest.Version(),
 				Payload: &autoconfigpb.Task_SimpleSQL{
 					SimpleSQL: &autoconfigpb.SimpleSQL{
 						UsernameProto: username.NodeUserName().EncodeProto(),
@@ -316,7 +316,7 @@ func TestAutoConfigWaitAtStartup(t *testing.T) {
 			{task: autoconfigpb.Task{
 				TaskID:      123,
 				Description: "create-test-table",
-				MinVersion:  clusterversion.TestingBinaryVersion,
+				MinVersion:  clusterversion.Latest.Version(),
 				Payload: &autoconfigpb.Task_SimpleSQL{
 					SimpleSQL: &autoconfigpb.SimpleSQL{
 						UsernameProto: username.NodeUserName().EncodeProto(),
